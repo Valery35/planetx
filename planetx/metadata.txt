@@ -1,0 +1,17 @@
+[general]
+name=PlanetX
+qgisMinimumVersion=3.40
+qgisMaximumVersion=4.99
+description=3D globe for QGIS: open terrain and imagery, smooth navigation, project layers on the Earth surface
+version=0.0.1
+author=ООО «Информ++»
+email=xbbster@gmail.com
+about=A 3D globe inside QGIS, in the spirit of Google Earth Pro.
+      Work in progress.
+      Developed with the support of Inform++ LLC (www.informpp.ru).
+tracker=https://github.com/Valery35/planetx/issues
+repository=https://github.com/Valery35/planetx
+tags=3d,globe,earth,terrain,navigation,google earth
+category=Web
+experimental=True
+deprecated=False

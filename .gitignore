@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+dist/
+build/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Записка к разовой поставке, в репозитории ей не место
+README-DELTA.txt
+
+# Промежуточные файлы сборки руководства
+doc/_header.tex
