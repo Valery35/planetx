@@ -127,24 +127,31 @@ class _Frame:
         # Меньший радиус даёт больший угол, отсечение остаётся осторожным.
         self.horizon = math.acos(min(1.0, B / dist)) if dist > B else math.pi
 
-    def visible(self, z, info):
+    def visible(self, z, info, low=0.0, high=0.0):
+        """Может ли тайл попасть в кадр.
+
+        low и high - наименьшая и наибольшая высота рельефа в тайле.
+        Вершина высотой high видна из-за горизонта ещё на угол
+        acos(B / (B + high)). Сфера тайла для пирамиды поднимается
+        на середину слоя высот и раздувается на половину его толщины.
+        """
         # Счёт развёрнут вручную: функция зовётся сотни раз за кадр.
         ex, ey, ez = self.eye_dir
         dx, dy, dz = info.direction
         cos = ex * dx + ey * dy + ez * dz
         angle = math.acos(-1.0 if cos < -1.0 else 1.0 if cos > 1.0 else cos)
-        if angle > self.horizon + info.alpha:
+        beyond = math.acos(B / (B + high)) if high > 0.0 else 0.0
+        if angle > self.horizon + info.alpha + beyond:
             return False
         if z <= 2:
             return True
-        cx, cy, cz = info.center
+        (cx, cy, cz), r = _lifted(info, low, high)
         px, py, pz = self.eye
         dx, dy, dz = cx - px, cy - py, cz - pz
         (rx, ry, rz), (ux, uy, uz), (bx, by, bz) = self.axes
         x = rx * dx + ry * dy + rz * dz
         y = ux * dx + uy * dy + uz * dz
         zc = bx * dx + by * dy + bz * dz
-        r = info.radius
         if zc > r:
             return False
         for a, b, c in self.planes:
@@ -152,39 +159,78 @@ class _Frame:
                 return False
         return True
 
-    def error(self, info):
-        d = math.dist(info.center, self.eye) - info.radius
+    def error(self, info, low=0.0, high=0.0):
+        center, radius = _lifted(info, low, high)
+        d = math.dist(center, self.eye) - radius
         if d <= MIN_DISTANCE:
             return math.inf
         return info.texel * self.focal / d
 
 
-def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL):
+def _lifted(info, low, high):
+    """Сфера тайла с рельефом: центр на середине слоя высот, радиус
+    больше на половину толщины слоя.
+
+    Полная высота гор в радиусе дробила бы до уровня 19 все тайлы
+    в пределах этой высоты от камеры. Толщина слоя в тайле в горах -
+    сотни метров, а не километры.
+    """
+    if low == 0.0 and high == 0.0:
+        return info.center, info.radius
+    mid = 0.5 * (low + high)
+    cx, cy, cz = info.center
+    dx, dy, dz = info.direction
+    return ((cx + dx * mid, cy + dy * mid, cz + dz * mid),
+            info.radius + 0.5 * (high - low))
+
+
+INFINITE_PRIORITY = 1.0e9  # приоритет тайла, внутри сферы которого глаз
+
+
+def priority(error, z):
+    """Приоритет загрузки - экранная ошибка, всегда конечная.
+
+    У тайла, внутри сферы которого стоит глаз, ошибка бесконечна.
+    Такие тайлы идут первыми, из них раньше грубые.
+    """
+    if math.isinf(error):
+        return INFINITE_PRIORITY - z
+    return error
+
+
+def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
+           heights=None):
     """Тайлы для кадра.
 
     ready(key) говорит, готов ли тайл к рисованию. Тайл уровня 0 должен
-    быть готов всегда, иначе кадру нечем закрыть Землю.
+    быть готов всегда, иначе кадру нечем закрыть Землю. heights(key)
+    даёт наименьшую и наибольшую высоту рельефа в тайле или осторожную
+    оценку этих высот. Без рельефа - None.
     """
     frame = _Frame(camera, threshold)
     want = {}
     keep = set()
     visited = [0]
 
-    def visit(key, info):
+    def range_of(key):
+        return heights(key) if heights is not None else (0.0, 0.0)
+
+    def visit(key, info, span):
         """Возвращает тайлы для рисования и признак полного покрытия."""
         visited[0] += 1
         z = key[0]
         keep.add(key)
-        error = frame.error(info)
+        error = frame.error(info, *span)
         is_ready = ready(key)
         if not is_ready:
-            want[key] = error
+            want[key] = priority(error, z)
         if z < max_level and error > threshold:
             kids = []
             for kid in children(key):
                 kid_info = tile_info(*kid)
-                if frame.visible(kid[0], kid_info):
-                    kids.append((kid, kid_info))
+                kid_span = range_of(kid)
+                if frame.visible(kid[0], kid_info, *kid_span):
+                    kids.append((kid, kid_info, kid_span))
             if not kids:
                 # Дети вместе покрывают тайл целиком, и каждое отсечение
                 # осторожное. Раз не виден ни один ребёнок, не виден
@@ -192,10 +238,17 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL):
                 keep.discard(key)
                 want.pop(key, None)
                 return [], True
+            if not is_ready and not any(ready(kid) for kid, _, _ in kids):
+                # Фронт загрузки. Ниже неготового тайла без готовых детей
+                # рисовать нечего, а просить его потомков рано: они
+                # понадобятся, только когда придёт он сам. Без этого
+                # правила камера у самой земли просила тысячи тайлов
+                # всех уровней сразу, начиная с самых глубоких.
+                return [], False
             draws = []
             complete = True
-            for kid, kid_info in kids:
-                kid_draw, kid_complete = visit(kid, kid_info)
+            for kid, kid_info, kid_span in kids:
+                kid_draw, kid_complete = visit(kid, kid_info, kid_span)
                 draws.extend(kid_draw)
                 complete = complete and kid_complete
             if complete:
@@ -204,5 +257,5 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL):
         return ([key], True) if is_ready else ([], False)
 
     root = (0, 0, 0)
-    draw, _ = visit(root, tile_info(*root))
+    draw, _ = visit(root, tile_info(*root), range_of(root))
     return Selection(draw, want, keep, visited[0])

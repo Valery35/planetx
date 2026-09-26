@@ -21,22 +21,23 @@
 там есть. Порядок запросов и отмену решает очередь
 из core/tile_queue.py.
 """
-import configparser
-import os
+import base64
 import time
 
 import numpy as np
-from qgis.core import QgsNetworkAccessManager
-from qgis.PyQt.QtCore import (QObject, QRunnable, QThreadPool, QTimer,
+from qgis.core import QgsApplication, QgsNetworkAccessManager
+from qgis.PyQt.QtCore import (QObject, QRunnable, Qt, QThreadPool, QTimer,
                               QUrl, pyqtSignal)
 from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
+from ..core import basemap
 from ..core.tile_queue import TileQueue
+from ..meta import plugin_version
 from ..qt_compat import enum, enum_int
 
-OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-MAX_PARALLEL = 2
+TERRARIUM_URL = ("https://s3.amazonaws.com/elevation-tiles-prod/terrarium/"
+                 "{z}/{x}/{y}.png")
 DECODE_THREADS = 2
 START_GAP = 0.015  # секунд между запусками запросов, около кадра
 # Метка запросов PlanetX, пользовательский атрибут запроса Qt.
@@ -47,13 +48,6 @@ CACHE_CONTROL = enum(QNetworkRequest, "Attribute",
                      "CacheLoadControlAttribute")
 PREFER_CACHE = enum(QNetworkRequest, "CacheLoadControl", "PreferCache")
 NO_ERROR = enum(QNetworkReply, "NetworkError", "NoError")
-
-
-def plugin_version():
-    meta = configparser.ConfigParser()
-    meta.read(os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                           "metadata.txt"), encoding="utf-8")
-    return meta.get("general", "version", fallback="0")
 
 
 USER_AGENT = "PlanetX/{} (+https://github.com/Valery35/planetx)".format(
@@ -101,15 +95,22 @@ def image_to_rgba(image):
     return rows[:, :w * 4].reshape(h, w, 4).copy()
 
 
-def decode_png(data):
-    """Байты PNG в массив RGBA или None, если картинка не читается.
+def decode_png(data, size=None):
+    """Байты PNG или JPEG в массив RGBA или None, если картинка
+    не читается.
 
+    size - сторона тайла в пикселях. Картинка другого размера, например
+    тайл 512 для экранов с высокой плотностью, пересчитывается.
     Вызывается в рабочем потоке. QImage в рабочем потоке допустим,
     в отличие от QPixmap.
     """
     image = QImage.fromData(data)
     if image.isNull():
         return None
+    if size and (image.width() != size or image.height() != size):
+        image = image.scaled(
+            size, size, enum(Qt, "AspectRatioMode", "IgnoreAspectRatio"),
+            enum(Qt, "TransformationMode", "SmoothTransformation"))
     return image_to_rgba(image)
 
 
@@ -127,16 +128,17 @@ class _DecodeTask(QRunnable):
     в рабочем потоке роняет QGIS, см. AGENTS.md.
     """
 
-    def __init__(self, key, data, sink, prepare):
+    def __init__(self, key, data, sink, prepare, size):
         super().__init__()
         self.key = key
         self.data = data
         self.sink = sink
         self.prepare = prepare
+        self.size = size
 
     def run(self):
         with np.errstate(all="ignore"):
-            rgba = decode_png(self.data)
+            rgba = decode_png(self.data, self.size)
             extra = None
             if rgba is not None and self.prepare is not None:
                 extra = self.prepare(self.key, rgba)
@@ -146,6 +148,7 @@ class _DecodeTask(QRunnable):
 class TileLoader(QObject):
     """Загрузка тайлов одного источника.
 
+    source - источник из core/basemap.py, по умолчанию OpenStreetMap.
     want просит тайл с приоритетом, retain снимает всё, что не входит
     в набор нужных. Сигнал loaded несёт ключ, массив RGBA и результат
     prepare(key, rgba), сигнал failed - ключ и текст ошибки. prepare
@@ -157,12 +160,12 @@ class TileLoader(QObject):
     # Очередь опустела, все ответы разобраны.
     idle = pyqtSignal()
 
-    def __init__(self, url=OSM_URL, max_parallel=MAX_PARALLEL, parent=None,
-                 prepare=None):
+    def __init__(self, source=None, parent=None, prepare=None, size=None):
         super().__init__(parent)
-        self.url = url
+        self.source = source or basemap.osm()
         self.prepare = prepare
-        self.queue = TileQueue(max_active=max_parallel)
+        self.size = size
+        self.queue = TileQueue(max_active=self.source.parallel)
         self.replies = {}
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(DECODE_THREADS)
@@ -226,9 +229,7 @@ class TileLoader(QObject):
         if key is None:
             return
         z, x, y = key
-        request = QNetworkRequest(QUrl(self.url.format(z=z, x=x, y=y)))
-        request.setAttribute(MARK, True)
-        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+        request = self._request(z, x, y)
         reply = QgsNetworkAccessManager.instance().get(request)
         self.last_start = time.monotonic()
         self.replies[key] = reply
@@ -238,6 +239,25 @@ class TileLoader(QObject):
         self.max_seen = max(self.max_seen, len(self.replies))
         if self.queue.waiting and not self.pump_timer.isActive():
             self.pump_timer.start(int(START_GAP * 1000) + 1)
+
+    def _request(self, z, x, y):
+        source = self.source
+        request = QNetworkRequest(QUrl(source.tile_url(z, x, y)))
+        request.setAttribute(MARK, True)
+        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+        for name, value in source.headers.items():
+            request.setRawHeader(name.encode(), value.encode())
+        if source.username:
+            pair = "{}:{}".format(source.username, source.password)
+            request.setRawHeader(b"Authorization", b"Basic "
+                                 + base64.b64encode(pair.encode()))
+        if source.authcfg:
+            # В PyQGIS запрос возвращается вторым значением.
+            result = QgsApplication.authManager().updateNetworkRequest(
+                request, source.authcfg)
+            if isinstance(result, tuple):
+                request = result[1]
+        return request
 
     def _finished(self, key, reply):
         self.replies.pop(key, None)
@@ -251,7 +271,7 @@ class TileLoader(QObject):
             self.from_cache[key] = bool(reply.attribute(FROM_CACHE))
             self.decoding[key] = True
             self.pool.start(_DecodeTask(key, bytes(reply.readAll()),
-                                        self.sink, self.prepare))
+                                        self.sink, self.prepare, self.size))
         reply.deleteLater()
         self._pump()
         self._check_idle()

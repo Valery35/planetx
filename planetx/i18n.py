@@ -27,6 +27,52 @@ EN = {
         "Coordinates in degrees, for example 58.0105, 56.2294.\n"
         "Enter starts the flight. The mouse interrupts it.",
     "Лететь": "Fly",
+    "О модуле": "About",
+    "О модуле PlanetX": "About PlanetX",
+    "Левая кнопка тянет Землю, после отпускания она вращается "
+    "по инерции.":
+        "The left button drags the Earth, after release it keeps "
+        "rotating by inertia.",
+    "Колесо приближает к точке под курсором.":
+        "The wheel zooms to the point under the cursor.",
+    "Средняя кнопка или левая с Shift поворачивают и наклоняют вид.":
+        "The middle button or the left one with Shift turns and tilts "
+        "the view.",
+    "Координаты в поле внизу окна запускают перелёт.":
+        "Coordinates in the field at the bottom of the window start "
+        "a flight.",
+    "Список внизу окна меняет подложку.":
+        "The list at the bottom of the window changes the base map.",
+    "Подложка OpenStreetMap: © участники OpenStreetMap.":
+        "OpenStreetMap base map: © OpenStreetMap contributors.",
+    "Рельеф: Mapzen Terrain Tiles, данные SRTM, GMTED, ETOPO1 и других "
+    "источников.":
+        "Terrain: Mapzen Terrain Tiles, data from SRTM, GMTED, ETOPO1 "
+        "and other sources.",
+    "Космоснимки и другие подложки берутся из подключений XYZ Tiles "
+    "в QGIS. Условия использования задаёт их владелец.":
+        "Satellite imagery and other base maps come from the XYZ Tiles "
+        "connections in QGIS. Their owners set the terms of use.",
+    "Исходный код": "Source code",
+    "Сообщить об ошибке": "Report a bug",
+    "Страница в каталоге QGIS": "QGIS plugin page",
+    "Трёхмерный глобус внутри QGIS в духе Google Earth. Рельеф, "
+    "атмосфера, подложки из подключений QGIS.":
+        "A 3D globe inside QGIS in the spirit of Google Earth. Terrain, "
+        "atmosphere, base maps from QGIS connections.",
+    "Управление": "Controls",
+    "Источники данных": "Data sources",
+    "Разработка при поддержке": "Developed with the support of",
+    "ООО «Информ++»": "Inform++ LLC",
+    "Лицензия GNU GPL версии 3.": "License GNU GPL version 3.",
+    "Источник картинки на глобусе. В списке OpenStreetMap "
+    "и подключения XYZ Tiles из обозревателя QGIS, кроме "
+    "подключений рельефа. Новое подключение появляется здесь "
+    "при следующем открытии окна.":
+        "Source of the globe imagery. The list holds OpenStreetMap "
+        "and the XYZ Tiles connections from the QGIS browser, except "
+        "terrain connections. A new connection appears here the next "
+        "time the window opens.",
     "Не удалось прочитать координаты: {text}":
         "Could not read coordinates: {text}",
     "{value} м": "{value} m",

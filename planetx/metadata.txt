@@ -2,12 +2,15 @@
 name=PlanetX
 qgisMinimumVersion=3.40
 qgisMaximumVersion=4.99
-description=3D globe for QGIS in the spirit of Google Earth: OpenStreetMap base map on the whole Earth, grab-the-Earth navigation with inertia, smooth zoom to the cursor and fly-to coordinates
-version=0.1.1
+description=3D globe for QGIS in the spirit of Google Earth: terrain, atmosphere, OpenStreetMap or satellite imagery from your XYZ connections, grab-the-Earth navigation with inertia and fly-to coordinates
+version=0.2.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
-      with the OpenStreetMap base map, from space down to single streets.
+      from space down to single streets, with terrain relief and hill
+      shading, a glowing atmosphere around the planet and sky at the
+      horizon. The base map is OpenStreetMap or any XYZ Tiles connection
+      set up in QGIS, for example satellite imagery.
       Drag the Earth with the left mouse button, it keeps rotating by
       inertia after release. The wheel zooms to the point under the cursor,
       the middle button or Shift with the left button turns and tilts
@@ -16,22 +19,27 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       landing smoothly.
       Tiles are chosen by screen-space error, the parent stays on screen
       until all its children are loaded, so the base map has no holes while
-      zooming. Tiles come through the QGIS network settings and cache.
+      zooming. The camera never goes below the terrain. Tiles come through
+      the QGIS network settings and cache.
       Requires OpenGL 3.3 and PyOpenGL, which ships with QGIS on Windows.
       Tested on QGIS 3.36 (Qt 5) and 4.0 (Qt 6).
-      Terrain, imagery sources and project layers on the globe are planned
-      for the next versions.
-      Base map © OpenStreetMap contributors.
+      Project layers on the globe are planned for the next versions.
+      Base map © OpenStreetMap contributors. Terrain: Mapzen Terrain Tiles
+      (SRTM, GMTED, ETOPO1 and other sources).
       Developed with the support of Inform++ LLC (www.informpp.ru).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
 homepage=https://github.com/Valery35/planetx
-tags=3d,globe,earth,google earth,openstreetmap,osm,navigation,web mercator,tiles,opengl
+tags=3d,globe,earth,google earth,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,web mercator,tiles,opengl
 category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.1.1 The PlanetX button is now on the Plugins toolbar. The Web
+changelog=0.2.0 Terrain relief with hill shading, the camera stays above
+      the ground. Atmosphere: glow around the planet, sky and haze at the
+      horizon. Base map list with OpenStreetMap and the XYZ Tiles
+      connections of QGIS, for example satellite imagery. About window.
+      0.1.1 The PlanetX button is now on the Plugins toolbar. The Web
       toolbar, where it was before, is hidden in QGIS by default.
       0.1.0 First release. Globe with the OpenStreetMap base map,
       grab-the-Earth navigation with inertia, zoom to the cursor, turn

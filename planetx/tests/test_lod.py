@@ -2,6 +2,7 @@
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Выбор тайлов по экранной ошибке."""
+import math
 import os
 import sys
 import time
@@ -178,6 +179,22 @@ class TestWant(unittest.TestCase):
                 self.assertGreaterEqual(sel.want[parent], priority)
                 self.assertLess(order.index(parent), order.index((z, x, y)))
 
+    def test_only_loading_front_is_wanted(self):
+        # У самой земли с готовыми уровнями 0-2 просятся только тайлы
+        # уровня 3. Раньше просились тысячи тайлов до уровня 19.
+        for cam in (view(*PERM, 500.0), view(*PERM, 400.0, 0.0, 80.0)):
+            sel = lod.select(cam, lambda key: key[0] <= 2)
+            self.assertEqual({k[0] for k in sel.want}, {3})
+            self.assertLess(len(sel.want), 20)
+
+    def test_priority_is_finite(self):
+        sel = lod.select(view(*PERM, 50.0), lambda key: key[0] <= 12)
+        self.assertTrue(sel.want)
+        for priority in sel.want.values():
+            self.assertLess(priority, lod.INFINITE_PRIORITY + 1)
+        self.assertGreater(lod.priority(math.inf, 3),
+                           lod.priority(math.inf, 4))
+
     def test_keep_covers_draw_and_want(self):
         sel = lod.select(view(*PERM, 2000.0, 30.0, 70.0), half_ready)
         self.assertTrue(set(sel.draw) <= sel.keep)
@@ -227,6 +244,55 @@ class TestScalarEcef(unittest.TestCase):
                 0.5 / (1 << z) * 360.0 - 180.0)
             self.assertLess(np.abs(np.array(info_lat.center) - exact).max(),
                             1e-6)
+
+
+class TestTerrainHeights(unittest.TestCase):
+
+    def test_peak_beyond_the_horizon_is_kept(self):
+        # Глаз в 1 км над экватором смотрит на восток вдоль земли.
+        # Отсечение считает горизонт по сфере радиуса B, на экваторе
+        # это 4.8° дуги с запасом. Вершина высотой 8 км видна ещё
+        # на 2.9° дальше. Тайл на 7.2° без высот отсекается, с высотой
+        # 8 км остаётся.
+        cam = view(0.0, 0.0, 1000.0, heading=90.0, tilt=89.0)
+
+        def covers(selection):
+            # Грубые предки уровней 0-5 накрывают точку всегда.
+            return any(tl.lonlat_to_tile(0.0, 7.2, z) == (x, y)
+                       for z, x, y in selection.keep if z >= 6)
+
+        self.assertFalse(covers(lod.select(cam, everything)))
+        mountains = lod.select(cam, everything,
+                               heights=lambda key: (0.0, 8000.0))
+        self.assertTrue(covers(mountains))
+
+    def test_coverage_holds_with_heights(self):
+        cam = view(*PERM, 2000.0, 30.0, 70.0)
+        counts = coverage(cam, lod.select(cam, half_ready,
+                                          heights=lambda key: (0.0, 3000.0)))
+        self.assertEqual(sorted(set(counts)), [1])
+
+    def test_mountains_do_not_explode_the_tree(self):
+        # Камера в 250 м над склоном на высоте 4 км. Склон 20 %: толщина
+        # слоя высот тайла - пятая часть его ширины. Сфера тайла
+        # поднимается к слою и раздувается на половину толщины.
+        # Склон ближе к камере, чем равнина, и деталей нужно больше.
+        # Замер 26 сентября 2026 года - в 1.38 раза. С размахом всей
+        # высоты гор в радиусе было в 2.4 раза. Порог - 1.5.
+        import math
+
+        def layer(key):
+            width = 40075016.0 * math.cos(math.radians(43.35)) \
+                / (1 << key[0])
+            thickness = min(4000.0, 0.2 * width)
+            return (4000.0 - thickness, 4000.0)
+
+        flat = lod.select(cm.Camera.look_at(43.35, 42.44, 500.0, tilt=60.0,
+                                            **SIZE), everything)
+        cam = cm.Camera.look_at(43.35, 42.44, 500.0, tilt=60.0, h=4000.0,
+                                **SIZE)
+        hills = lod.select(cam, everything, heights=layer)
+        self.assertLess(len(hills.draw), 1.5 * len(flat.draw))
 
 
 class TestSpeed(unittest.TestCase):

@@ -6,7 +6,8 @@
     qgis.bat --profiles-path %TEMP%\\planetx_qt5 --code tools\\qt5_check.py
 
 Сценарий берёт плагин из рабочей копии, открывает окно глобуса, ждёт
-загрузки, считает дыры, делает перелёт в Пермь и пишет итог в
+загрузки, считает дыры и тайлы высот, делает перелёт в Пермь, открывает
+окно «О модуле» и пишет итог в
 %TEMP%\\planetx_qt5.json. Потом закрывает QGIS. Профиль отдельный,
 профиль пользователя не трогается.
 """
@@ -110,6 +111,13 @@ def check_flight():
     result["flight_end"] = [pose.lat, pose.lon, pose.distance]
     result["flying"] = view.navigator.flight is not None
     result["frames"] = view.frame
+    result["heights"] = len(view.store.tiles)
+    result["sources"] = [s.name for s in _state["plugin"].window.sources]
+    from planetx.ui.about import AboutDialog
+    dialog = AboutDialog(_state["plugin"].window)
+    dialog.show()
+    result["about"] = dialog.windowTitle()
+    dialog.close()
     _state["plugin"].unload()
 
 

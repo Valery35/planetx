@@ -27,11 +27,11 @@ import math
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from .camera import orientation
+    from .camera import MAX_TERRAIN, orientation
     from .ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                             ray_intersect, surface_normal)
 except ImportError:  # headless-тесты
-    from camera import orientation
+    from camera import MAX_TERRAIN, orientation
     from ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                            ray_intersect, surface_normal)
 
@@ -49,24 +49,33 @@ PIN_FAIL = 0.5
 
 
 class Pose:
-    """Точка взгляда, расстояние, азимут и наклон в градусах."""
+    """Точка взгляда, расстояние, азимут и наклон в градусах.
 
-    __slots__ = ("lat", "lon", "distance", "heading", "tilt")
+    h - высота точки взгляда над эллипсоидом. terrain(lat, lon) - высота
+    рельефа или None. С рельефом точка взгляда при сдвиге садится
+    на рельеф.
+    """
 
-    def __init__(self, lat, lon, distance, heading=0.0, tilt=0.0):
+    __slots__ = ("lat", "lon", "distance", "heading", "tilt", "h",
+                 "terrain")
+
+    def __init__(self, lat, lon, distance, heading=0.0, tilt=0.0, h=0.0,
+                 terrain=None):
         self.lat = lat
         self.lon = lon
         self.distance = distance
         self.heading = heading
         self.tilt = tilt
+        self.h = h
+        self.terrain = terrain
 
     def copy(self):
         return Pose(self.lat, self.lon, self.distance, self.heading,
-                    self.tilt)
+                    self.tilt, self.h, self.terrain)
 
     def eye_rotation(self):
         rot = orientation(self.lat, self.lon, self.heading, self.tilt)
-        eye = geodetic_to_ecef(self.lat, self.lon) + rot[:, 2] \
+        eye = geodetic_to_ecef(self.lat, self.lon, self.h) + rot[:, 2] \
             * self.distance
         return eye, rot
 
@@ -77,6 +86,8 @@ class Pose:
         out = self.copy()
         out.lat = min(MAX_LAT, max(-MAX_LAT, lat))
         out.lon = (lon + 180.0) % 360.0 - 180.0
+        if out.terrain is not None:
+            out.h = out.terrain(out.lat, out.lon)
         return out
 
 
@@ -88,6 +99,56 @@ def roll(camera, pose):
 
 def altitude(eye):
     return float(ecef_to_geodetic(eye)[2])
+
+
+def clearance(eye, terrain=None):
+    """Высота глаза над рельефом под ним, без рельефа - над эллипсоидом."""
+    lat, lon, h = ecef_to_geodetic(eye)
+    ground = terrain(float(lat), float(lon)) if terrain is not None else 0.0
+    return float(h) - ground
+
+
+NEAREST_SHARES = (0.25, 0.5, 0.75)  # радиусы колец в долях зазора
+NEAREST_DIRECTIONS = 8
+M_PER_DEGREE = 111320.0
+FAR_CLEARANCE = 4.0 * MAX_TERRAIN  # выше этого зазора кольца не опрашиваются
+
+
+def nearest_terrain(eye, terrain=None):
+    """Оценка расстояния от глаза до ближайшей точки рельефа.
+
+    Под глазом рельеф на расстоянии зазора c. Точка рельефа дальше c
+    по горизонтали дальше c и по прямой, поэтому ближе может быть
+    только рельеф внутри круга радиуса c. Он опрашивается на трёх
+    кольцах по NEAREST_DIRECTIONS точек. Между точками опроса склон
+    может подойти ближе, запас на это даёт доля ближней плоскости
+    в camera.clip_range.
+    """
+    lat, lon, h = (float(v) for v in ecef_to_geodetic(eye))
+    if terrain is None:
+        return h
+    c = h - terrain(lat, lon)
+    if c <= 0.0:
+        return 0.0
+    if c > FAR_CLEARANCE:
+        # Рельеф не поднимается над дном больше MAX_TERRAIN. Опрос
+        # стоил 1.4 мс на кадр и из космоса ничего не менял.
+        return c - MAX_TERRAIN
+    best = c
+    per_lon = M_PER_DEGREE * max(math.cos(math.radians(lat)), 1e-6)
+    for share in NEAREST_SHARES:
+        r = share * c
+        for i in range(NEAREST_DIRECTIONS):
+            a = 2.0 * math.pi * i / NEAREST_DIRECTIONS
+            up = h - terrain(lat + r * math.cos(a) / M_PER_DEGREE,
+                             lon + r * math.sin(a) / per_lon)
+            if up > 0.0:
+                best = min(best, math.sqrt(r * r + up * up))
+            else:
+                # Склон выше глаза. По прямой между опросами он проходит
+                # высоту глаза на такой доле пути.
+                best = min(best, r * c / (c - up))
+    return best
 
 
 def focal(camera):
@@ -104,11 +165,45 @@ def pixel_at(camera, eye, rot, point):
                      camera.height / 2.0 - f * cam[1] / -cam[2]])
 
 
-def ground_under(camera, px, py):
-    """Точка эллипсоида под пикселем или None."""
+TERRAIN_STEPS = 8
+TERRAIN_TOLERANCE = 0.1  # метра
+
+
+def ground_under(camera, px, py, terrain=None):
+    """Точка поверхности под пикселем или None.
+
+    Без рельефа - точка эллипсоида. С рельефом ищется корень функции
+    «высота точки луча минус высота рельефа под ней» методом секущих.
+    Первые два приближения - эллипсоид и эллипсоид, раздутый на высоту
+    рельефа в первой точке. Простой подъём по раздутым эллипсоидам
+    сходился на косом луче над склоном медленно, 10 м ошибки за 4 шага.
+    У горизонта над горами точка может лечь на соседний склон, для
+    захвата и приближения этого хватает.
+    """
     origin, d = camera.ray(px, py)
-    t = ray_intersect(origin, d)
-    return None if t is None else origin + d * t
+    t0 = ray_intersect(origin, d)
+    if t0 is None:
+        return None
+    if terrain is None:
+        return origin + d * t0
+
+    def gap(t):
+        lat, lon, h = ecef_to_geodetic(origin + d * t)
+        return float(h) - terrain(float(lat), float(lon))
+
+    f0 = gap(t0)
+    lat, lon, _ = ecef_to_geodetic(origin + d * t0)
+    t1 = ray_intersect(origin, d, terrain(float(lat), float(lon)))
+    if t1 is None:
+        return origin + d * t0
+    f1 = gap(t1)
+    for _ in range(TERRAIN_STEPS):
+        if abs(f1) < TERRAIN_TOLERANCE or f1 == f0:
+            break
+        t0, t1, f0 = t1, t1 - f1 * (t1 - t0) / (f1 - f0), f1
+        t1 = max(t1, 0.0)
+        f1 = gap(t1)
+    return origin + d * t1
 
 
 def first_guess(camera, pose, point, px, py):
@@ -122,7 +217,7 @@ def first_guess(camera, pose, point, px, py):
     текущая поза.
     """
     pose.apply(camera)
-    q = ground_under(camera, px, py)
+    q = ground_under(camera, px, py, pose.terrain)
     if q is None:
         return pose
     a = q / np.linalg.norm(q)
@@ -193,28 +288,53 @@ def solve_pin(camera, pose, point, px, py):
     return current
 
 
+def allowed(pose):
+    """Глаз не ниже MIN_ALTITUDE над рельефом и не выше MAX_ALTITUDE."""
+    eye = pose.eye_rotation()[0]
+    return (clearance(eye, pose.terrain) >= MIN_ALTITUDE
+            and altitude(eye) <= MAX_ALTITUDE)
+
+
 def clamp_distance(pose, distance):
     """Ближайшее к distance расстояние, при котором высота глаза в рамках.
     """
     trial = pose.copy()
 
-    def height(d):
+    def fits(d):
         trial.distance = d
-        return altitude(trial.eye_rotation()[0])
+        return allowed(trial)
 
-    h = height(distance)
-    if MIN_ALTITUDE <= h <= MAX_ALTITUDE:
+    if fits(distance):
         return distance
     # Высота растёт с расстоянием. Делением пополам между текущим
     # расстоянием и желаемым находится расстояние на границе.
     inside, outside = pose.distance, distance
     for _ in range(60):
         mid = 0.5 * (inside + outside)
-        if MIN_ALTITUDE <= height(mid) <= MAX_ALTITUDE:
+        if fits(mid):
             inside = mid
         else:
             outside = mid
     return inside
+
+
+def lifted(pose):
+    """Поза, поднятая настолько, чтобы глаз был над рельефом с зазором.
+
+    Рельеф догружается, и точные высоты могут оказаться выше глаза.
+    Расстояние растёт, пока глаз не поднимется на MIN_ALTITUDE над
+    рельефом. Уже допустимая поза возвращается как есть.
+    """
+    if pose.terrain is None or allowed(pose):
+        return pose
+    out = pose.copy()
+    distance = max(out.distance, MIN_ALTITUDE)
+    for _ in range(40):
+        out.distance = distance
+        if allowed(out):
+            break
+        distance *= 1.25
+    return out
 
 
 def zoom(camera, pose, px, py, factor):
@@ -223,7 +343,7 @@ def zoom(camera, pose, px, py, factor):
     factor меньше 1 приближает. Возвращает новую позу или None, если
     под курсором нет Земли.
     """
-    point = ground_under(camera, px, py)
+    point = ground_under(camera, px, py, pose.terrain)
     if point is None:
         return None
     scaled = pose.copy()
@@ -241,11 +361,11 @@ def orbit(pose, d_heading, d_tilt):
     out.heading = (pose.heading + d_heading) % 360.0
     wanted = min(MAX_TILT, max(0.0, pose.tilt + d_tilt))
     out.tilt = wanted
-    if altitude(out.eye_rotation()[0]) < MIN_ALTITUDE:
+    if not allowed(out):
         low, high = min(pose.tilt, wanted), max(pose.tilt, wanted)
         for _ in range(50):
             out.tilt = 0.5 * (low + high)
-            if altitude(out.eye_rotation()[0]) < MIN_ALTITUDE:
+            if not allowed(out):
                 high = out.tilt
             else:
                 low = out.tilt
@@ -270,11 +390,35 @@ class Navigator:
         self.pose = pose
         pose.apply(self.camera)
 
+    def set_terrain(self, terrain):
+        """Подключить рельеф: функцию высоты (lat, lon) или None."""
+        pose = self.pose.copy()
+        pose.terrain = terrain
+        pose.h = terrain(pose.lat, pose.lon) if terrain is not None else 0.0
+        self.set_pose(lifted(pose))
+
+    def keep_clear(self):
+        """Поднять глаз над рельефом, если точные высоты пришли выше.
+
+        Точка взгляда тоже садится на уточнённый рельеф. Возвращает True,
+        если поза изменилась.
+        """
+        pose = self.pose
+        if pose.terrain is None:
+            return False
+        ground = pose.terrain(pose.lat, pose.lon)
+        if abs(ground - pose.h) < 0.01 and allowed(pose):
+            return False
+        out = pose.copy()
+        out.h = ground
+        self.set_pose(lifted(out))
+        return True
+
     # Захват
 
     def press(self, px, py, now):
         self.stop()
-        self.grab = ground_under(self.camera, px, py)
+        self.grab = ground_under(self.camera, px, py, self.pose.terrain)
         self.history = [(now, self.pose.lat, self.pose.lon)]
         return self.grab is not None
 
@@ -348,7 +492,11 @@ class Navigator:
         busy = False
         if self.flight is not None:
             start, flight = self.flight
-            self.set_pose(flight.pose_at(now - start))
+            pose = flight.pose_at(now - start)
+            pose.terrain = self.pose.terrain
+            if pose.terrain is not None:
+                pose.h = pose.terrain(pose.lat, pose.lon)
+            self.set_pose(lifted(pose))
             if now - start >= flight.duration:
                 self.flight = None
             else:

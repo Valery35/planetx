@@ -20,21 +20,24 @@ import numpy as np
 
 try:  # внутри плагина QGIS
     from .ellipsoid import A, geodetic_to_ecef, surface_normal
+    from .terrain import grid_shares, sample
 except ImportError:  # headless-тесты
     from ellipsoid import A, geodetic_to_ecef, surface_normal
+    from terrain import grid_shares, sample
 
 MAX_LAT = math.degrees(math.atan(math.sinh(math.pi)))
 MAX_LEVEL = 19
 MIN_SKIRT = 2.0
 
 TileMesh = namedtuple(
-    "TileMesh", "z x y segments center radius positions uv indices")
+    "TileMesh", "z x y segments center radius positions uv indices shade")
 TileMesh.__doc__ = """Сетка вершин одного тайла.
 
 center - центр в ECEF, float64. radius - радиус описанной сферы вокруг
 центра. positions - смещения вершин от центра, float32, форма (N, 3).
 uv - текстурные координаты, float32, v = 0 на северном краю. indices -
 общий для всех тайлов с тем же segments буфер индексов, uint16.
+shade - множитель яркости вершин от отмывки рельефа, float32, форма (N,).
 """
 
 
@@ -134,35 +137,91 @@ def index_buffer(seg):
     return out
 
 
-def grid_latlon(z, x, y):
+def grid_latlon(z, x, y, border=0):
     """Широта и долгота узлов сетки тайла, два массива (seg+1, seg+1).
 
     Узлы считаются от общего целого номера узла на уровне. Поэтому общий
     край соседних тайлов получает одни и те же числа до бита, в том числе
-    на линии смены дат.
+    на линии смены дат. border добавляет полосу узлов вокруг тайла,
+    она нужна для нормалей на краю.
     """
     seg = segments(z)
     total = (1 << z) * seg
-    gi = x * seg + np.arange(seg + 1)
-    gj = y * seg + np.arange(seg + 1)
+    idx = np.arange(-border, seg + border + 1)
+    gi = x * seg + idx
+    gj = y * seg + idx
     lon = (gi % total) / total * 360.0 - 180.0
     lat = lat_of_row(gj / total)
     return np.meshgrid(lat, lon, indexing="ij")
 
 
-def grid_ecef(z, x, y):
+def grid_ecef(z, x, y, heights=None):
     """Узлы сетки тайла в ECEF, float64, форма (seg+1, seg+1, 3)."""
-    return geodetic_to_ecef(*grid_latlon(z, x, y))
+    lat, lon = grid_latlon(z, x, y)
+    return geodetic_to_ecef(lat, lon, 0.0 if heights is None else heights)
 
 
-def tile_mesh(z, x, y):
-    """Сетка вершин тайла с юбкой."""
+# Свет отмывки: с северо-запада, 45° над горизонтом. Привязан к местности,
+# а не к камере, поэтому затенение считается один раз при сборке тайла.
+AMBIENT = 0.35
+LIGHT_ELEVATION = math.radians(45.0)
+SHADE_LIMITS = (0.4, 1.35)
+
+
+def shade(lat, lon, positions):
+    """Множитель яркости узлов по нормалям рельефа.
+
+    lat, lon, positions - узлы с полосой в один узел вокруг тайла. Нормаль
+    считается центральными разностями, поэтому соседние тайлы с одной
+    картой высот получают на общем краю одинаковое затенение. Ровная
+    местность даёт множитель 1.
+    """
+    east_t = positions[1:-1, 2:] - positions[1:-1, :-2]
+    north_t = positions[:-2, 1:-1] - positions[2:, 1:-1]
+    normal = np.cross(east_t, north_t)
+    normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
+    la = np.radians(lat[1:-1, 1:-1])
+    lo = np.radians(lon[1:-1, 1:-1])
+    east = np.stack([-np.sin(lo), np.cos(lo), np.zeros_like(lo)], axis=-1)
+    north = np.stack([-np.sin(la) * np.cos(lo), -np.sin(la) * np.sin(lo),
+                      np.cos(la)], axis=-1)
+    up = np.stack([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo),
+                   np.sin(la)], axis=-1)
+    flat = math.sin(LIGHT_ELEVATION)
+    across = math.cos(LIGHT_ELEVATION) / math.sqrt(2.0)
+    light = up * flat + (north - east) * across
+    lambert = np.clip((normal * light).sum(axis=-1), 0.0, 1.0)
+    value = (AMBIENT + (1.0 - AMBIENT) * lambert) \
+        / (AMBIENT + (1.0 - AMBIENT) * flat)
+    return np.clip(value, *SHADE_LIMITS)
+
+
+def tile_mesh(z, x, y, height_tile=None, exaggeration=1.0):
+    """Сетка вершин тайла с юбкой.
+
+    height_tile - тайл высот из core/terrain.py или None для гладкого
+    эллипсоида. Вершины поднимаются по нормали эллипсоида на высоту,
+    умноженную на exaggeration. Юбка опускается ещё на размах высот
+    тайла: у соседа высоты могут прийти с другого уровня.
+    """
     seg = segments(z)
     lat_grid, lon_grid = grid_latlon(z, x, y)
-    grid = geodetic_to_ecef(lat_grid, lon_grid).reshape(-1, 3)
     ring = _ring(seg)
+    if height_tile is None:
+        heights = np.zeros_like(lat_grid)
+        shading = np.ones((seg + 1) * (seg + 1))
+        spread = 0.0
+    else:
+        u, v = grid_shares(z, x, y, seg, border=1)
+        wide = sample(height_tile, u, v) * exaggeration
+        heights = wide[1:-1, 1:-1]
+        lat_w, lon_w = grid_latlon(z, x, y, border=1)
+        shading = shade(lat_w, lon_w,
+                        geodetic_to_ecef(lat_w, lon_w, wide)).ravel()
+        spread = float(heights.max() - heights.min())
+    grid = geodetic_to_ecef(lat_grid, lon_grid, heights).reshape(-1, 3)
     normals = surface_normal(lat_grid, lon_grid).reshape(-1, 3)[ring]
-    skirt = grid[ring] - normals * skirt_depth(z)
+    skirt = grid[ring] - normals * (skirt_depth(z) + spread)
     world = np.concatenate([grid, skirt])
 
     center = grid[(seg // 2) * (seg + 1) + seg // 2].copy()
@@ -172,9 +231,13 @@ def tile_mesh(z, x, y):
     u, v = np.meshgrid(np.arange(seg + 1) / seg, np.arange(seg + 1) / seg)
     uv = np.stack([u.ravel(), v.ravel()], axis=1)
     uv = np.concatenate([uv, uv[ring]]).astype(np.float32)
+    shading = np.concatenate([shading, shading[ring]]).astype(np.float32)
 
     return TileMesh(z, x, y, seg, center, radius,
-                    offsets.astype(np.float32), uv, index_buffer(seg))
+                    offsets.astype(np.float32), uv, index_buffer(seg),
+                    shading)
+
+
 
 
 def polar_cap_mesh(north, count=256):
@@ -206,5 +269,6 @@ def polar_cap_mesh(north, count=256):
     indices = tri.ravel().astype(np.uint16)
     indices.setflags(write=False)
     uv = np.zeros((len(world), 2), dtype=np.float32)
+    flat = np.ones(len(world), dtype=np.float32)
     return TileMesh(-1, 0, 0 if north else 1, count, center, radius,
-                    offsets.astype(np.float32), uv, indices)
+                    offsets.astype(np.float32), uv, indices, flat)

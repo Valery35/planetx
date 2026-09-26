@@ -31,6 +31,10 @@ MIN_NEAR = 0.5
 # Высота Эвереста с запасом. Рельеф за горизонтом эллипсоида виден
 # до расстояния горизонта этой высоты.
 MAX_TERRAIN = 9000.0
+# Ближняя плоскость в доле расстояния до ближайшего рельефа. Запас
+# на рельеф между точками опроса и на сетку тайла, собранную
+# из высот грубее тех, по которым считается расстояние.
+NEAR_SHARE = 0.5
 
 
 def enu(lat, lon):
@@ -72,18 +76,22 @@ def perspective(fov_y, aspect, near, far):
         [0.0, 0.0, -1.0, 0.0]])
 
 
-def clip_range(altitude):
-    """Ближняя и дальняя плоскости отсечения для высоты над эллипсоидом.
+def clip_range(altitude, nearest=None):
+    """Ближняя и дальняя плоскости отсечения.
 
-    Ближе высоты камеры поверхности эллипсоида нет, поэтому ближняя
-    плоскость берётся на 0.8 высоты. Дальняя стоит за горизонтом
-    на расстоянии, с которого ещё видна вершина высотой MAX_TERRAIN.
-    Отношение дальней к ближней не больше MAX_DEPTH_RATIO.
+    altitude - высота глаза над эллипсоидом. Дальняя плоскость стоит
+    за горизонтом на расстоянии, с которого ещё видна вершина высотой
+    MAX_TERRAIN. Без рельефа ближе высоты камеры поверхности нет,
+    и ближняя плоскость берётся на 0.8 высоты. С рельефом nearest -
+    расстояние до ближайшего рельефа, ближняя плоскость берётся
+    на NEAR_SHARE от него. Отношение дальней к ближней не больше
+    MAX_DEPTH_RATIO.
     """
     h = max(altitude, 1.0)
     far = math.sqrt(h * (2.0 * A + h)) + math.sqrt(
         MAX_TERRAIN * (2.0 * A + MAX_TERRAIN))
-    near = max(MIN_NEAR, 0.8 * h, far / MAX_DEPTH_RATIO)
+    close = 0.8 * h if nearest is None else NEAR_SHARE * nearest
+    near = max(MIN_NEAR, min(close, 0.8 * h), far / MAX_DEPTH_RATIO)
     return near, far
 
 
@@ -96,6 +104,9 @@ class Camera:
         self.width = int(width)
         self.height = int(height)
         self.fov_y = float(fov_y)
+        # Расстояние до ближайшего рельефа, от него считается ближняя
+        # плоскость. None - рельефа нет.
+        self.nearest = None
 
     @classmethod
     def look_at(cls, lat, lon, distance, heading=0.0, tilt=0.0, h=0.0,
@@ -125,7 +136,7 @@ class Camera:
         return float(ecef_to_geodetic(self.eye)[2])
 
     def projection(self):
-        near, far = clip_range(self.altitude())
+        near, far = clip_range(self.altitude(), self.nearest)
         return perspective(self.fov_y, self.aspect, near, far)
 
     def tile_model_view(self, center, scale=1.0):

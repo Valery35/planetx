@@ -6,6 +6,7 @@ import os
 
 from qgis.PyQt.QtGui import QIcon
 
+from .i18n import tr
 from .qt_compat import QAction
 
 ICON = os.path.join(os.path.dirname(__file__), "icon.svg")
@@ -15,6 +16,7 @@ class PlanetXPlugin:
     def __init__(self, iface):
         self.iface = iface
         self.action = None
+        self.about_action = None
         self.window = None
 
     def initGui(self):
@@ -24,6 +26,10 @@ class PlanetXPlugin:
         # Кнопка на панели модулей. Панель «Интернет» QGIS по умолчанию
         # прячет, и кнопка на ней не видна.
         self.iface.addToolBarIcon(self.action)
+        self.about_action = QAction(QIcon(ICON), tr("О модуле PlanetX"),
+                                    self.iface.mainWindow())
+        self.about_action.triggered.connect(self.about)
+        self.iface.addPluginToWebMenu("PlanetX", self.about_action)
 
     def _window_gone(self, window):
         # Ссылка снимается в момент закрытия. Закрытое окно Qt уничтожает
@@ -40,12 +46,19 @@ class PlanetXPlugin:
             self.iface.removePluginWebMenu("PlanetX", self.action)
             self.iface.removeToolBarIcon(self.action)
             self.action = None
+        if self.about_action is not None:
+            self.iface.removePluginWebMenu("PlanetX", self.about_action)
+            self.about_action = None
         # Загрузчик мог поставить обработчик запросов QGIS. Он общий для
         # всех запросов и после выгрузки плагина оставаться не должен.
         import sys
         loader = sys.modules.get(__package__ + ".net.loader")
         if loader is not None:
             loader.remove_user_agent()
+
+    def about(self):
+        from .ui.about import show_about
+        show_about(self.iface.mainWindow())
 
     def run(self):
         # Импорт здесь, а не наверху модуля. PyOpenGL и виджет OpenGL
@@ -54,7 +67,6 @@ class PlanetXPlugin:
             from .ui.window import GlobeWindow
         except ImportError as error:
             from qgis.PyQt.QtWidgets import QMessageBox
-            from .i18n import tr
             QMessageBox.warning(
                 self.iface.mainWindow(), "PlanetX",
                 tr("Для глобуса нужен модуль Python {name}. В этой сборке "

@@ -272,6 +272,13 @@ class TestClipRange(unittest.TestCase):
             horizon = math.sqrt(h * (2 * el.A + h))
             self.assertGreater(far, horizon)
 
+    def test_far_plane_follows_true_altitude(self):
+        # Глаз на 5 км в 50 м над склоном. Дальняя плоскость считается
+        # от высоты над эллипсоидом, иначе далёкие хребты срезаются.
+        near, far = cm.clip_range(5000.0, nearest=50.0)
+        self.assertGreater(far, math.sqrt(5000.0 * 2 * el.A))
+        self.assertLessEqual(near, cm.NEAR_SHARE * 50.0)
+
 
 if __name__ == "__main__":
     unittest.main()

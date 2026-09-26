@@ -177,6 +177,91 @@ class TestMesh(unittest.TestCase):
                          [64, 32, 16, 16, 16])
 
 
+def height_tile(z, x, y, fn):
+    """Тайл высот, высота - функция доли мира u, v."""
+    import terrain as tr
+    n = 1 << z
+    cols = (x + (np.arange(tr.SIZE) + 0.5) / tr.SIZE) / n
+    rows = (y + (np.arange(tr.SIZE) + 0.5) / tr.SIZE) / n
+    u, v = np.meshgrid(cols, rows)
+    heights = fn(u, v).astype(np.float32)
+    return tr.HeightTile(z, x, y, heights, float(heights.min()),
+                         float(heights.max()))
+
+
+class TestTerrainMesh(unittest.TestCase):
+
+    def setUp(self):
+        import terrain
+        self.tr = terrain
+        # Склон: высота растёт на юго-восток, 0-3000 м на тайл уровня 8.
+        self.z8 = (8, 160, 90)
+
+        def slope(u, v):
+            return ((u * 256 - 160) + (v * 256 - 90)) * 1500.0
+        self.slope = height_tile(*self.z8, slope)
+
+    def test_vertices_sit_at_sampled_heights(self):
+        mesh = tl.tile_mesh(10, 641, 361, self.slope)
+        side = mesh.segments + 1
+        pos = (mesh.center + mesh.positions.astype(np.float64))[:side * side]
+        _, _, h = el.ecef_to_geodetic(pos)
+        u, v = self.tr.grid_shares(10, 641, 361, mesh.segments)
+        expected = self.tr.sample(self.slope, u, v).ravel()
+        self.assertLess(np.abs(h - expected).max(), 0.01)
+
+    def test_neighbours_share_edges_with_same_heights(self):
+        a = tl.tile_mesh(10, 641, 361, self.slope)
+        b = tl.tile_mesh(10, 642, 361, self.slope)
+        side = a.segments + 1
+        pa = (a.center + a.positions.astype(np.float64))[:side * side]
+        pb = (b.center + b.positions.astype(np.float64))[:side * side]
+        east = pa.reshape(side, side, 3)[:, -1]
+        west = pb.reshape(side, side, 3)[:, 0]
+        self.assertLess(np.abs(east - west).max(), 0.01)
+        sa = a.shade[:side * side].reshape(side, side)[:, -1]
+        sb = b.shade[:side * side].reshape(side, side)[:, 0]
+        self.assertLess(np.abs(sa - sb).max(), 1e-5)
+
+    def test_flat_ground_is_not_shaded(self):
+        flat = height_tile(*self.z8, lambda u, v: np.zeros_like(u))
+        mesh = tl.tile_mesh(10, 641, 361, flat)
+        self.assertLess(np.abs(mesh.shade - 1.0).max(), 1e-4)
+        plain = tl.tile_mesh(10, 641, 361)
+        self.assertTrue(np.all(plain.shade == 1.0))
+
+    def test_slopes_face_the_light_or_not(self):
+        # Высота растёт на юго-восток: склон смотрит на северо-запад,
+        # к свету. Обратный склон смотрит на юго-восток, в тень.
+        lit = tl.tile_mesh(10, 641, 361, self.slope)
+        dark = tl.tile_mesh(10, 641, 361, height_tile(
+            *self.z8, lambda u, v: 3000.0 - ((u * 256 - 160)
+                                             + (v * 256 - 90)) * 1500.0))
+        # Уклон около 3 %, разница небольшая, но знак обязан быть верным.
+        self.assertGreater(float(np.median(lit.shade)), 1.005)
+        self.assertLess(float(np.median(dark.shade)), 0.995)
+        # Крутой склон, около 40 %, затенён заметно.
+        steep = tl.tile_mesh(10, 641, 361, height_tile(
+            *self.z8, lambda u, v: 20.0 * (3000.0 - ((u * 256 - 160)
+                                                     + (v * 256 - 90))
+                                          * 1500.0)))
+        self.assertLess(float(np.median(steep.shade)), 0.8)
+
+    def test_skirt_goes_below_the_height_spread(self):
+        mesh = tl.tile_mesh(10, 641, 361, self.slope)
+        side = mesh.segments + 1
+        pos = mesh.center + mesh.positions.astype(np.float64)
+        _, _, h_grid = el.ecef_to_geodetic(pos[:side * side])
+        _, _, h_skirt = el.ecef_to_geodetic(pos[side * side:])
+        spread = h_grid.max() - h_grid.min()
+        self.assertLess(h_skirt.max(), h_grid.max() - spread + 1.0)
+
+    def test_radius_covers_heights(self):
+        mesh = tl.tile_mesh(10, 641, 361, self.slope)
+        dist = np.linalg.norm(mesh.positions.astype(np.float64), axis=1)
+        self.assertLessEqual(dist.max(), mesh.radius + 1e-6)
+
+
 class TestPolarCap(unittest.TestCase):
 
     def test_cap_rim_and_pole(self):

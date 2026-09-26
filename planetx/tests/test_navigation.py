@@ -213,6 +213,96 @@ class TestOrbit(unittest.TestCase):
         self.assertGreater(n.pose.tilt, 0.0)
 
 
+def hills(lat, lon):
+    """Холмы до 3 км с периодом около 0.2°."""
+    return 1500.0 + 1500.0 * math.sin(lat * 31.0) * math.cos(lon * 23.0)
+
+
+class TestTerrain(unittest.TestCase):
+
+    def terrain_navigator(self, distance, tilt=0.0, terrain=hills):
+        n = navigator(distance, 30.0, tilt)
+        n.set_terrain(terrain)
+        return n
+
+    def test_ground_under_lies_on_terrain(self):
+        n = self.terrain_navigator(8000.0, 40.0)
+        rng = np.random.default_rng(8)
+        import ellipsoid as el
+        for _ in range(20):
+            px, py = on_earth(n.camera, rng)
+            point = nav.ground_under(n.camera, px, py, hills)
+            lat, lon, h = el.ecef_to_geodetic(point)
+            self.assertAlmostEqual(float(h), hills(float(lat), float(lon)),
+                                   delta=0.5)
+
+    def test_drag_over_hills_keeps_the_point(self):
+        n = self.terrain_navigator(5000.0, 30.0)
+        rng = np.random.default_rng(9)
+        t = 0.0
+        for _ in range(20):
+            px, py = on_earth(n.camera, rng)
+            n.press(px, py, t)
+            point = n.grab
+            qx, qy = px + rng.uniform(-100, 100), py + rng.uniform(-100, 100)
+            t += 0.02
+            if n.drag(qx, qy, t):
+                self.assertLess(np.linalg.norm(pixel(n.camera, point)
+                                               - [qx, qy]), 0.5)
+            n.release(t + 1.0)
+
+    def test_wheel_keeps_clear_of_terrain(self):
+        n = self.terrain_navigator(3000.0, 0.0)
+        for _ in range(30):
+            pose = nav.zoom(n.camera, n.pose, W / 2, H / 2, 0.5)
+            if pose is not None:
+                n.set_pose(pose)
+        self.assertGreaterEqual(nav.clearance(n.camera.eye, hills),
+                                nav.MIN_ALTITUDE - 0.5)
+        self.assertLess(nav.clearance(n.camera.eye, hills), 200.0)
+
+    def test_tilt_keeps_clear_of_terrain(self):
+        n = self.terrain_navigator(300.0, 0.0)
+        n.turn(0.0, 85.0)
+        self.assertGreaterEqual(nav.clearance(n.camera.eye, hills),
+                                nav.MIN_ALTITUDE - 0.5)
+
+    def test_nearest_terrain_on_steep_slope(self):
+        # Склон 45° к северу, глаз в 150 м над ним по отвесу. Ближайшая
+        # точка склона в 106 м. Ближняя плоскость от зазора 150 м
+        # срезала склон перед камерой в низком полёте у Эльбруса.
+        import ellipsoid as el
+        lat0, lon0 = 43.3, 42.4
+
+        def slope(lat, lon):
+            return 3000.0 + (lat - lat0) * nav.M_PER_DEGREE
+
+        eye = el.geodetic_to_ecef(lat0, lon0, 3150.0)
+        true = 150.0 / math.sqrt(2.0)
+        found = nav.nearest_terrain(eye, slope)
+        self.assertLessEqual(found, true * 1.02)
+        self.assertGreater(found, true * 0.9)
+        flat = nav.nearest_terrain(eye, lambda lat, lon: 3000.0)
+        self.assertAlmostEqual(flat, 150.0, delta=0.5)
+        self.assertAlmostEqual(nav.nearest_terrain(eye), 3150.0, delta=0.5)
+        # Высоко над рельефом кольца не опрашиваются, оценка осторожная.
+        high = el.geodetic_to_ecef(lat0, lon0, 100000.0)
+        self.assertAlmostEqual(nav.nearest_terrain(high, slope),
+                               97000.0 - nav.MAX_TERRAIN, delta=0.5)
+
+    def test_rising_terrain_lifts_the_camera(self):
+        heights = {"value": 0.0}
+        n = self.terrain_navigator(200.0, 0.0,
+                                   terrain=lambda lat, lon: heights["value"])
+        heights["value"] = 4000.0
+        self.assertTrue(n.keep_clear())
+        self.assertGreaterEqual(nav.clearance(n.camera.eye,
+                                              lambda a, b: 4000.0),
+                                nav.MIN_ALTITUDE - 0.5)
+        self.assertAlmostEqual(n.pose.h, 4000.0)
+        self.assertFalse(n.keep_clear())
+
+
 class TestInertia(unittest.TestCase):
 
     def flick(self, n, fps, until=3.0):

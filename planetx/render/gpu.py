@@ -21,7 +21,7 @@ from OpenGL.raw.GL.VERSION.GL_3_0 import glBindVertexArray as _bind_vao
 # Расширение анизотропной фильтрации. Константы не входят в ядро 3.3.
 TEXTURE_MAX_ANISOTROPY = 0x84FE
 MAX_TEXTURE_MAX_ANISOTROPY = 0x84FF
-STRIDE = 5 * 4  # x, y, z, u, v во float32
+STRIDE = 6 * 4  # x, y, z, u, v и множитель отмывки во float32
 
 
 class ShaderError(RuntimeError):
@@ -68,7 +68,8 @@ class GpuMesh:
 
     def __init__(self, mesh):
         data = np.ascontiguousarray(
-            np.concatenate([mesh.positions, mesh.uv], axis=1),
+            np.concatenate([mesh.positions, mesh.uv, mesh.shade[:, None]],
+                           axis=1),
             dtype=np.float32)
         indices = np.ascontiguousarray(mesh.indices)
         self.count = len(indices)
@@ -88,6 +89,9 @@ class GpuMesh:
         GL.glEnableVertexAttribArray(1)
         GL.glVertexAttribPointer(1, 2, GL.GL_FLOAT, GL.GL_FALSE, STRIDE,
                                  ctypes.c_void_p(3 * 4))
+        GL.glEnableVertexAttribArray(2)
+        GL.glVertexAttribPointer(2, 1, GL.GL_FLOAT, GL.GL_FALSE, STRIDE,
+                                 ctypes.c_void_p(5 * 4))
         GL.glBindVertexArray(0)
 
     def draw(self):
