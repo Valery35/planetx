@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="ocean" cx="38%" cy="32%" r="72%">
+      <stop offset="0" stop-color="#9ad8f7"/>
+      <stop offset="0.5" stop-color="#2f86c8"/>
+      <stop offset="1" stop-color="#0f3a73"/>
+    </radialGradient>
+    <clipPath id="disk">
+      <circle cx="64" cy="64" r="42"/>
+    </clipPath>
+  </defs>
+  <!-- Задняя половина орбит, за шаром -->
+  <g fill="none" stroke="#c96a00" stroke-width="7" stroke-linecap="round">
+    <path d="M 14 24 A 62 17 38 0 1 114 104" transform="rotate(0 64 64)"/>
+    <path d="M 114 24 A 62 17 -38 0 0 14 104"/>
+  </g>
+  <!-- Шар -->
+  <circle cx="64" cy="64" r="42" fill="url(#ocean)"/>
+  <g clip-path="url(#disk)">
+    <!-- Суша, условно -->
+    <path d="M 38 36 C 48 28 62 30 66 38 C 70 46 60 50 62 58 C 64 66 54 72 46 66 C 38 60 30 46 38 36 Z"
+          fill="#9ccc65" fill-opacity="0.9"/>
+    <path d="M 74 62 C 84 58 96 64 98 74 C 100 86 90 98 80 96 C 72 94 70 84 72 76 C 73 70 70 66 74 62 Z"
+          fill="#9ccc65" fill-opacity="0.9"/>
+    <!-- Сетка -->
+    <g fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="1.6">
+      <ellipse cx="64" cy="64" rx="15" ry="42"/>
+      <ellipse cx="64" cy="64" rx="31" ry="42"/>
+      <line x1="64" y1="22" x2="64" y2="106"/>
+      <ellipse cx="64" cy="64" rx="42" ry="10"/>
+      <line x1="22" y1="44" x2="106" y2="44"/>
+      <line x1="22" y1="84" x2="106" y2="84"/>
+    </g>
+  </g>
+  <circle cx="64" cy="64" r="42" fill="none" stroke="#0b2d5c" stroke-width="2"/>
+  <!-- Передняя половина орбит, перед шаром: вместе они дают X -->
+  <g fill="none" stroke="#ff9f1c" stroke-width="7" stroke-linecap="round">
+    <path d="M 14 24 A 62 17 38 0 0 114 104"/>
+    <path d="M 114 24 A 62 17 -38 0 1 14 104"/>
+  </g>
+</svg>

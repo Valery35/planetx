@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Точка входа QGIS."""
-
-
-def classFactory(iface):
-    from .plugin import PlanetXPlugin
-    return PlanetXPlugin(iface)
+"""Загрузка тайлов по сети через QGIS."""

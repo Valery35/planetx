@@ -2,16 +2,35 @@
 name=PlanetX
 qgisMinimumVersion=3.40
 qgisMaximumVersion=4.99
-description=3D globe for QGIS: open terrain and imagery, smooth navigation, project layers on the Earth surface
-version=0.0.1
+description=3D globe for QGIS in the spirit of Google Earth: OpenStreetMap base map on the whole Earth, grab-the-Earth navigation with inertia, smooth zoom to the cursor and fly-to coordinates
+version=0.1.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
-about=A 3D globe inside QGIS, in the spirit of Google Earth Pro.
-      Work in progress.
+about=A 3D globe in its own window inside QGIS. The whole Earth is shown
+      with the OpenStreetMap base map, from space down to single streets.
+      Drag the Earth with the left mouse button, it keeps rotating by
+      inertia after release. The wheel zooms to the point under the cursor,
+      the middle button or Shift with the left button turns and tilts
+      the view. Type coordinates in degrees and the camera flies there
+      along the van Wijk and Nuij path, rising over long distances and
+      landing smoothly.
+      Tiles are chosen by screen-space error, the parent stays on screen
+      until all its children are loaded, so the base map has no holes while
+      zooming. Tiles come through the QGIS network settings and cache.
+      Requires OpenGL 3.3 and PyOpenGL, which ships with QGIS on Windows.
+      Tested on QGIS 3.36 (Qt 5) and 4.0 (Qt 6).
+      Terrain, imagery sources and project layers on the globe are planned
+      for the next versions.
+      Base map © OpenStreetMap contributors.
       Developed with the support of Inform++ LLC (www.informpp.ru).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
-tags=3d,globe,earth,terrain,navigation,google earth
+homepage=https://github.com/Valery35/planetx
+tags=3d,globe,earth,google earth,openstreetmap,osm,navigation,web mercator,tiles,opengl
 category=Web
-experimental=True
+icon=icon.png
+experimental=False
 deprecated=False
+changelog=0.1.0 First release. Globe with the OpenStreetMap base map,
+      grab-the-Earth navigation with inertia, zoom to the cursor, turn
+      and tilt, fly-to coordinates.
