@@ -3,30 +3,32 @@
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Слои текущего проекта для глобуса и слежение за их изменениями.
 
-На глобусе те же слои, что на карте QGIS: включённые в дереве слоёв,
-в порядке отрисовки дерева, с учётом своего порядка слоёв, если он
-задан. Изменением считаются включение и выключение слоя, порядок,
-добавление и удаление слоя и перерисовка слоя QGIS. Перерисовку слой
-просит при правке данных и стиля.
+В списке глобуса все слои проекта в порядке отрисовки дерева слоёв,
+с учётом своего порядка слоёв, если он задан. Какие из них видны
+на глобусе, решают отметки списка, они хранятся в проекте. Изменением
+считаются порядок, добавление и удаление слоя и перерисовка слоя QGIS.
+Перерисовку слой просит при правке данных и стиля.
 """
 from qgis.core import QgsProject
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 ENTRY = "PlanetX"  # запись проекта с настройками глобуса
-PROJECT_LAYERS = "project_layers"  # показывать слои проекта
-AUTO_REFRESH = "auto_refresh"  # обновлять наложение без кнопки
+AUTO_REFRESH = "auto_refresh"  # обновлять глобус без кнопки
+SHOWN = "layers"  # номера слоёв, отмеченных в списке глобуса
 
 
-def project_layers(project=None):
-    """Включённые слои проекта сверху вниз, как их рисует карта."""
+def map_layers(project=None):
+    """Все годные слои проекта сверху вниз, как их рисует карта."""
     project = project or QgsProject.instance()
-    root = project.layerTreeRoot()
-    out = []
-    for layer in root.layerOrder():
-        node = root.findLayer(layer.id())
-        if node is not None and node.isVisible() and layer.isValid():
-            out.append(layer)
-    return out
+    return [layer for layer in project.layerTreeRoot().layerOrder()
+            if layer.isValid()]
+
+
+def visible_on_map(layer, project=None):
+    """Включён ли слой в дереве слоёв QGIS."""
+    project = project or QgsProject.instance()
+    node = project.layerTreeRoot().findLayer(layer.id())
+    return node is not None and node.isVisible()
 
 
 def read_flag(name, default, project=None):
@@ -40,6 +42,18 @@ def write_flag(name, value, project=None):
     project.writeEntryBool(ENTRY, name, bool(value))
 
 
+def read_shown(project=None):
+    """Отмеченные слои из проекта или None, если записи ещё нет."""
+    project = project or QgsProject.instance()
+    value, ok = project.readListEntry(ENTRY, SHOWN, [])
+    return set(value) if ok else None
+
+
+def write_shown(ids, project=None):
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, SHOWN, sorted(ids))
+
+
 class ProjectWatch(QObject):
     """Сигнал changed при любом изменении слоёв проекта.
 
@@ -50,6 +64,8 @@ class ProjectWatch(QObject):
     changed = pyqtSignal()
     # Проект открыт заново или очищен, настройки нужно перечитать.
     reloaded = pyqtSignal()
+    # Слой переименован: список нужно перерисовать, глобус - нет.
+    renamed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -60,7 +76,6 @@ class ProjectWatch(QObject):
         project.layersRemoved.connect(self._changed)
         project.readProject.connect(self._reloaded)
         project.cleared.connect(self._reloaded)
-        root.visibilityChanged.connect(self._changed)
         root.layerOrderChanged.connect(self._changed)
         root.customLayerOrderChanged.connect(self._changed)
         root.hasCustomLayerOrderChanged.connect(self._changed)
@@ -72,6 +87,7 @@ class ProjectWatch(QObject):
                 continue
             self._wired.add(layer.id())
             layer.repaintRequested.connect(self._changed)
+            layer.nameChanged.connect(self.renamed)
 
     def _added(self, layers):
         self._wire(layers)

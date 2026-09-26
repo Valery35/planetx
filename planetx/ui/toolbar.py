@@ -37,7 +37,7 @@ class ViewToolbar(QFrame):
         layout.setSpacing(2)
         self.refresh = self._button(
             QgsApplication.getThemeIcon("/mActionRefresh.svg"),
-            tr("Обновить слои проекта на глобусе"), self.refresh_clicked)
+            tr("Обновить глобус"), self.refresh_clicked)
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)
         self.adjustSize()
@@ -53,8 +53,8 @@ class ViewToolbar(QFrame):
         return button
 
     def set_dirty(self, dirty):
-        """Кнопка «Обновить слои» горит, пока слои проекта изменены."""
+        """Кнопка «Обновить» горит, пока глобус не показывает выбранное."""
         self.refresh.setStyleSheet(DIRTY_STYLE if dirty else "")
         self.refresh.setToolTip(tr(
-            "Обновить слои: слои проекта изменились") if dirty else tr(
-            "Обновить слои проекта на глобусе"))
+            "Обновить глобус: настройки или слои изменились") if dirty
+            else tr("Обновить глобус"))

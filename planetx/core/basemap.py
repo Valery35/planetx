@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Подложки: OpenStreetMap и подключения XYZ из настроек QGIS.
+"""Подложки: встроенные и подключения XYZ из настроек QGIS.
+
+Встроенных две. OpenStreetMap - карта. Esri World Imagery - космоснимки,
+подложка по умолчанию. В свойствах вида она названа примером подложки:
+пользователь может заменить её своими подключениями XYZ. Решение автора
+от 26 сентября 2026 года.
 
 Модуль не знает про Qt. Настройки QGIS читает окно и передаёт сюда
 словарь «имя подключения - поля подключения», как они лежат
@@ -14,6 +19,8 @@
 import re
 
 OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+ESRI_URL = ("https://server.arcgisonline.com/ArcGIS/rest/services/"
+            "World_Imagery/MapServer/tile/{z}/{y}/{x}")
 MAX_LEVEL = 19
 DEFAULT_MAX = 18  # zmax подключения, если поле пустое, как в QGIS
 START_LEVEL = 2  # уровни 0-START_LEVEL нужны до первого кадра
@@ -22,9 +29,13 @@ OTHER_PARALLEL = 4
 
 # Подписи известных источников по части адреса. Остальные подписываются
 # именем подключения.
+# Подпись Esri World Imagery - как в описании слоя в ArcGIS Online,
+# поле accessInformation, сверено 26 сентября 2026 года. Maxar там
+# переименован в Vantor. Ссылка ведёт на Esri Master License Agreement,
+# по нему слой лицензирован.
 KNOWN = (
     ("arcgisonline.com/ArcGIS/rest/services/World_Imagery",
-     "Esri, Maxar, Earthstar Geographics, GIS User Community",
+     "Esri, Vantor, Earthstar Geographics, and the GIS User Community",
      "https://www.esri.com/en-us/legal/terms/full-master-agreement"),
 )
 OSM_ATTRIBUTION = ("© OpenStreetMap contributors",
@@ -48,10 +59,12 @@ class Source:
     """
 
     __slots__ = ("name", "url", "max_level", "attribution", "headers",
-                 "authcfg", "username", "password", "parallel", "builtin")
+                 "authcfg", "username", "password", "parallel", "builtin",
+                 "example")
 
     def __init__(self, name, url, max_level=MAX_LEVEL, attribution=None,
-                 headers=None, authcfg="", login=None, builtin=False):
+                 headers=None, authcfg="", login=None, builtin=False,
+                 example=False):
         self.name = name
         self.url = url
         self.max_level = max_level
@@ -60,6 +73,8 @@ class Source:
         self.authcfg = authcfg
         self.username, self.password = login or (None, None)
         self.builtin = builtin
+        # Встроенный пример подложки, в свойствах вида он так и назван.
+        self.example = example
         self.parallel = OSM_PARALLEL if is_osm(url) else OTHER_PARALLEL
 
     def tile_url(self, z, x, y):
@@ -73,6 +88,18 @@ def is_osm(url):
 def osm():
     return Source("OpenStreetMap", OSM_URL, MAX_LEVEL, OSM_ATTRIBUTION,
                   builtin=True)
+
+
+def esri_imagery():
+    """Космоснимки Esri World Imagery, встроенный пример подложки."""
+    return Source("Esri World Imagery", ESRI_URL, MAX_LEVEL,
+                  attribution_for("", ESRI_URL), builtin=True,
+                  example=True)
+
+
+def builtins():
+    """Встроенные подложки. Первая в списке - подложка по умолчанию."""
+    return [esri_imagery(), osm()]
 
 
 def quadkey(z, x, y):
@@ -118,7 +145,7 @@ def from_settings(items):
     """Подложки из подключений XYZ QGIS.
 
     items - словарь «имя - словарь полей». Возвращает список Source
-    в порядке имён. Встроенный OpenStreetMap сюда не входит, подключение
+    в порядке имён. Встроенные подложки сюда не входят, подключение
     с тем же адресом пропускается.
     """
     out = []
@@ -127,7 +154,7 @@ def from_settings(items):
         url = str(fields.get("url") or "").strip()
         if str(fields.get("interpretation") or "").strip():
             continue
-        if not url or url == OSM_URL or not valid_url(url):
+        if not url or url in (OSM_URL, ESRI_URL) or not valid_url(url):
             continue
         if _level(fields.get("zmin", 0), 0) > START_LEVEL:
             continue

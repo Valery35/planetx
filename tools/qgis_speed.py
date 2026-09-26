@@ -37,6 +37,7 @@ DISTANCE = 20000.0
 TILT = 50.0
 SECTIONS = ("upload", "terrain", "select", "heights", "loader", "draw",
             "evict")
+LINES = ("borders", "rivers", "roads")  # все группы векторной основы
 
 
 class Speed(QObject):
@@ -52,7 +53,7 @@ class Speed(QObject):
         self.places = places
         self.index = first - 1
         self.rows = {}
-        self.saved = window.borders_on()
+        self.saved = window.line_groups()
         self.done = False
         self.view.frameSwapped.connect(self._frame)
         self.timer = QTimer(self)
@@ -89,7 +90,8 @@ class Speed(QObject):
         if self.index >= len(self.places):
             self.timer.stop()
             self.view.frameSwapped.disconnect(self._frame)
-            self.window.set_borders(self.saved)
+            self.window.set_line_groups(self.saved)
+            self.window.refresh()
             self.done = True
             return
         from planetx.core.navigation import Pose
@@ -99,7 +101,8 @@ class Speed(QObject):
         else:
             overlay = self.index % 2 == 0
             self.mode = "с наложением" if overlay else "без наложения"
-        self.window.set_borders(overlay)
+        self.window.set_line_groups(LINES if overlay else ())
+        self.window.refresh()
         lat, lon = self.places[self.index]
         store = self.view.store
         self.view.navigator.set_pose(Pose(lat, lon, DISTANCE, 0.0, TILT,

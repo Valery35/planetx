@@ -163,6 +163,48 @@ void main() {
 }
 """
 
+LABEL_VERTEX = """#version 330 core
+// Надпись: x, y - вершина в координатах экрана -1..1, их считает
+// процессор. Третье число - непрозрачность надписи, она гаснет
+// у горизонта.
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec2 a_uv;
+out vec2 v_uv;
+out float v_alpha;
+void main() {
+    v_uv = a_uv;
+    v_alpha = a_position.z;
+    gl_Position = vec4(a_position.xy, 0.0, 1.0);
+}
+"""
+
+LABEL_FRAGMENT = """#version 330 core
+// Атлас надписей с премноженной альфой, поэтому множится весь цвет.
+in vec2 v_uv;
+in float v_alpha;
+uniform sampler2D u_atlas;
+out vec4 frag_color;
+void main() {
+    frag_color = texture(u_atlas, v_uv) * v_alpha;
+}
+"""
+
+POINT_VERTEX = """#version 330 core
+// Проверочная точка пункта для запроса видимости, в координатах
+// экрана -1..1 с глубиной. Цвет не пишется.
+layout(location = 0) in vec3 a_position;
+void main() {
+    gl_Position = vec4(a_position, 1.0);
+}
+"""
+
+POINT_FRAGMENT = """#version 330 core
+out vec4 frag_color;
+void main() {
+    frag_color = vec4(1.0);
+}
+"""
+
 TILE_FRAGMENT = """#version 330 core
 in vec2 v_uv;
 in float v_shade;

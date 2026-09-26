@@ -23,11 +23,13 @@ from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
 from ..core.camera import Camera
 from ..core.ellipsoid import A, B
 from ..core.navigation import Navigator, Pose, altitude, nearest_terrain
+from ..core.places import PlaceStore, kinds_at
 from ..core.terrain import FLAT_LEVEL, HeightStore
 from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
                            tile_mesh)
 from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
+from .labels import Labels
 from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SHELL, SKY_FRAGMENT,
                       TILE_FRAGMENT, TILE_VERTEX)
 
@@ -204,6 +206,7 @@ class GlobeView(QOpenGLWidget):
         self._overlay_wanted = frozenset()
         self._overlay_at = 0.0
         self._drop_overlays = False
+        self._prune_overlays = False
         self._overlay_evicted = 0
         self.clear_texture = None
         self.meshes = {}
@@ -235,6 +238,15 @@ class GlobeView(QOpenGLWidget):
         # Небо, гало и дымка. Выключается для сравнения в замерах.
         self.atmosphere = True
         self.hole_counts = []
+        # Надписи пунктов: тайлы пунктов, их загрузчик и отрисовка.
+        # Загрузчик ставит окно, когда известен адрес тайлов.
+        self.places = PlaceStore()
+        self.place_loader = None
+        # Классы надписей для включённых групп векторной основы.
+        self.label_kinds = set()
+        self._places_wanted = frozenset()
+        self._places_at = 0.0
+        self.labels = Labels()
         self._context = None
 
     # Данные
@@ -246,6 +258,18 @@ class GlobeView(QOpenGLWidget):
         высот.
         """
         self.pending[key] = (rgba, mesh, level)
+        self.update()
+
+    def reset_places(self, max_level):
+        """Пункты заново, например на другом языке подписей."""
+        self.places = PlaceStore(max_level)
+        self._places_wanted = frozenset()
+        self._places_at = 0.0
+        self.update()
+
+    def add_places(self, key, places):
+        """Пришли пункты тайла векторной основы."""
+        self.places.add(key, places)
         self.update()
 
     def add_heights(self, tile):
@@ -302,7 +326,15 @@ class GlobeView(QOpenGLWidget):
         self._overlay_wanted = frozenset()
         self._overlay_at = 0.0
         if keep and overlay is not None:
-            self.overlay_stale = set(self.overlays) | self.overlay_empty
+            # Прежние картинки остаются только у тайлов, которые сейчас
+            # на экране. Остальные освобождаются в следующем кадре. Иначе
+            # при отдалении новые тайлы брали прежние картинки, и снятый
+            # слой мелькал до замены, нашлось 26 сентября 2026 года.
+            drawn = set(self.selection.draw) if self.selection else set()
+            self.overlay_empty &= drawn
+            self.overlay_stale = (set(self.overlays) & drawn) \
+                | self.overlay_empty
+            self._prune_overlays = True
         else:
             self._drop_overlays = True
         self.update()
@@ -484,6 +516,7 @@ class GlobeView(QOpenGLWidget):
         self.empty_vao = GL.glGenVertexArrays(1)
         # glGenQueries(1) в PyOpenGL отдаёт массив, а не число.
         self.hole_query = int(np.ravel(GL.glGenQueries(1))[0])
+        self.labels.init_gl()
         self._context = ctx
         ctx.aboutToBeDestroyed.connect(self.release_gl)
 
@@ -492,6 +525,7 @@ class GlobeView(QOpenGLWidget):
         if self._context is None:
             return
         self.makeCurrent()
+        self.labels.release_gl()
         self.build_pool.clear()
         self.build_pool.waitForDone(2000)
         for mesh in (list(self.meshes.values()) + self.caps
@@ -563,6 +597,14 @@ class GlobeView(QOpenGLWidget):
             self.overlay_empty.clear()
             self.overlay_stale.clear()
             self._drop_overlays = False
+            self._prune_overlays = False
+        if self._prune_overlays:
+            # Картинки в видеокарте в этот момент все прежние, новые
+            # грузятся ниже.
+            for key in [k for k in self.overlays
+                        if k not in self.overlay_stale]:
+                self._forget_overlay(key)
+            self._prune_overlays = False
         if self.overlay is None:
             self.overlay_pending.clear()
             return
@@ -589,8 +631,17 @@ class GlobeView(QOpenGLWidget):
         wanted = {}
         items = []
         keep = sel.keep
+        stale_set = self.overlay_stale
         for key in sel.draw:
-            found = overlay_window(key, self._overlay_ready)
+            if stale_set:
+                # Картинка прежнего наложения годится только своему
+                # тайлу. Часть её у предка показала бы снятый слой
+                # на тайле, которого при обновлении не было на экране.
+                found = overlay_window(
+                    key, lambda k, key=key: self._overlay_ready(k)
+                    and (k == key or k not in stale_set))
+            else:
+                found = overlay_window(key, self._overlay_ready)
             if found is None or found[0] in self.overlay_empty:
                 items.append((self.clear_texture, gpu.NO_OVERLAY))
             else:
@@ -609,6 +660,16 @@ class GlobeView(QOpenGLWidget):
             # Картинка прежнего отрисовщика заменяется раньше всех.
             wanted[key] = (MAX_ANCESTOR_DEPTH + 2.0 if stale
                            else urgency(key, found))
+        if stale_set:
+            # Прежняя картинка тайла, ушедшего с экрана, освобождается.
+            # При возврате к нему она показала бы снятый слой. Контекст
+            # OpenGL здесь текущий, это вызов из paintGL.
+            gone = stale_set.difference(sel.draw)
+            for key in gone:
+                if key in self.overlays:
+                    self._forget_overlay(key)
+            self.overlay_empty -= gone
+            stale_set -= gone
         keys = frozenset(wanted)
         stale = keys and now - self._overlay_at > 1.0
         changed = keys != self._overlay_wanted \
@@ -841,6 +902,10 @@ class GlobeView(QOpenGLWidget):
             self.hole_counts.append((self.frame, gaps, holes))
         if air:
             self._draw_sky()
+        if self.label_kinds and not self.show_holes:
+            self._draw_labels(sel)
+        else:
+            self.labels.count = 0
         self.drawn = len(sel.draw)
         self.drawn_levels = Counter(k[0] for k in sel.draw)
         self.draw_calls = len(items)
@@ -862,7 +927,8 @@ class GlobeView(QOpenGLWidget):
         if refill:
             # Кадр без движения пополняет запас текстур понемногу.
             self.pool.allocate(POOL_REFILL)
-        if moving or refill or self.built or self._drop_overlays or (
+        if moving or refill or self.built or self._drop_overlays \
+                or self.labels.pending or (
                 self.pending and any(k in sel.keep for k in self.pending)) \
                 or (self.overlay_pending and any(
                     k in sel.keep for k in self.overlay_pending)):
@@ -932,6 +998,26 @@ class GlobeView(QOpenGLWidget):
         gl.glDrawArrays(GL.GL_TRIANGLES, 0, 3)
         gl.glDepthMask(GL.GL_TRUE)
         gl.glDepthFunc(GL.GL_LESS)
+
+    def _draw_labels(self, sel):
+        """Надписи пунктов поверх кадра, с проверкой глубины."""
+        now = time.monotonic()
+        loader = self.place_loader
+        if loader is not None and now - self._places_at > LOADER_PERIOD:
+            wanted = {key: -key[0] for key in self.places.wanted(sel.draw)
+                      if key not in self.places.tiles}
+            keys = frozenset(wanted)
+            if keys != self._places_wanted or now - self._places_at > 1.0:
+                loader.want_many(wanted.items())
+                loader.retain(wanted)
+                self._places_wanted = keys
+                self._places_at = now
+        kinds = kinds_at(self.label_kinds, self.camera.altitude())
+        places = self.places.collect(sel.draw, kinds)
+        height_at = self.store.height_at if self.store.scale else None
+        self.labels.draw(self.camera, self.camera.projection(), places,
+                         height_at, self.store.version,
+                         self.devicePixelRatioF())
 
     def _underlay_items(self, keep):
         """Подстилка: тайлы уровня 2 на 3 км ниже поверхности.

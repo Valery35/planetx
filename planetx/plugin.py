@@ -4,10 +4,13 @@
 """Регистрация плагина в интерфейсе QGIS."""
 import os
 
+from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 
 from .i18n import tr
-from .qt_compat import QAction
+from .qt_compat import QAction, enum
+
+MINIMIZED = enum(Qt, "WindowState", "WindowMinimized")
 
 ICON = os.path.join(os.path.dirname(__file__), "icon.svg")
 ABOUT_ICON = os.path.join(os.path.dirname(__file__), "about.svg")
@@ -92,6 +95,12 @@ class PlanetXPlugin:
             window.closed.connect(
                 lambda window=window: self._window_gone(window))
             self.window = window
+        # Окно глобуса принадлежит главному окну QGIS, своей кнопки
+        # на панели задач Windows у него нет. Свёрнутое окно
+        # разворачивается значком PlanetX, show() одно этого не делает.
+        if self.window.isMinimized():
+            self.window.setWindowState(
+                self.window.windowState() & ~MINIMIZED)
         self.window.show()
         self.window.raise_()
         self.window.activateWindow()

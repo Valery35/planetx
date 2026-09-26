@@ -128,20 +128,25 @@ class _DecodeTask(QRunnable):
     в рабочем потоке роняет QGIS, см. AGENTS.md.
     """
 
-    def __init__(self, key, data, sink, prepare, size):
+    def __init__(self, key, data, sink, prepare, size, decode=None):
         super().__init__()
         self.key = key
         self.data = data
         self.sink = sink
         self.prepare = prepare
         self.size = size
+        self.decode = decode
 
     def run(self):
         with np.errstate(all="ignore"):
-            rgba = decode_png(self.data, self.size)
             extra = None
-            if rgba is not None and self.prepare is not None:
-                extra = self.prepare(self.key, rgba)
+            if self.decode is not None:
+                # Не картинка: ответ разбирает decode(key, байты).
+                rgba = self.decode(self.key, self.data)
+            else:
+                rgba = decode_png(self.data, self.size)
+                if rgba is not None and self.prepare is not None:
+                    extra = self.prepare(self.key, rgba)
         self.sink.done.emit(self.key, rgba, extra)
 
 
@@ -153,6 +158,10 @@ class TileLoader(QObject):
     в набор нужных. Сигнал loaded несёт ключ, массив RGBA и результат
     prepare(key, rgba), сигнал failed - ключ и текст ошибки. prepare
     выполняется в рабочем потоке и не должна трогать Qt и OpenGL.
+
+    decode(key, байты) заменяет раскодирование PNG, например для
+    векторных тайлов. Тогда loaded несёт её результат вместо массива.
+    None из decode - ошибка разбора.
     """
 
     loaded = pyqtSignal(object, object, object)
@@ -160,11 +169,13 @@ class TileLoader(QObject):
     # Очередь опустела, все ответы разобраны.
     idle = pyqtSignal()
 
-    def __init__(self, source=None, parent=None, prepare=None, size=None):
+    def __init__(self, source=None, parent=None, prepare=None, size=None,
+                 decode=None):
         super().__init__(parent)
         self.source = source or basemap.osm()
         self.prepare = prepare
         self.size = size
+        self.decode = decode
         self.queue = TileQueue(max_active=self.source.parallel)
         self.replies = {}
         self.pool = QThreadPool(self)
@@ -281,7 +292,8 @@ class TileLoader(QObject):
             self.from_cache[key] = bool(reply.attribute(FROM_CACHE))
             self.decoding[key] = True
             self.pool.start(_DecodeTask(key, bytes(reply.readAll()),
-                                        self.sink, self.prepare, self.size))
+                                        self.sink, self.prepare, self.size,
+                                        self.decode))
         reply.deleteLater()
         self._pump()
         self._check_idle()
@@ -289,7 +301,7 @@ class TileLoader(QObject):
     def _decoded(self, key, rgba, extra):
         self.decoding.pop(key, None)
         if rgba is None:
-            self.failed.emit(key, "PNG")
+            self.failed.emit(key, "PNG" if self.decode is None else "MVT")
         else:
             self.loaded.emit(key, rgba, extra)
         self._check_idle()

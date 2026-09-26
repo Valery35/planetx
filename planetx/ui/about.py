@@ -26,6 +26,8 @@ OSM = "https://www.openstreetmap.org/copyright"
 TERRAIN = ("https://github.com/tilezen/joerd/blob/master/docs/"
            "attribution.md")
 OPENFREEMAP = "https://openfreemap.org/"
+ESRI_TERMS = "https://www.esri.com/en-us/legal/terms/full-master-agreement"
+SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
 
 
@@ -58,9 +60,12 @@ def about_html():
         _link(OPENFREEMAP, tr("Векторная основа: OpenFreeMap, "
                               "© OpenMapTiles, © участники "
                               "OpenStreetMap.")),
-        html.escape(tr("Космоснимки и другие подложки берутся "
-                       "из подключений XYZ Tiles в QGIS. Условия "
-                       "использования задаёт их владелец.")),
+        _link(ESRI_TERMS, tr("Космоснимки Esri World Imagery - пример "
+                             "подложки, условия использования задаёт "
+                             "Esri.")),
+        html.escape(tr("Свои подложки берутся из подключений XYZ Tiles "
+                       "в QGIS, их условия задаёт владелец.")),
+        _link(SOURCES, tr("Источники данных и условия их использования")),
     ))
     links = " · ".join((
         _link(REPOSITORY, tr("Исходный код")),

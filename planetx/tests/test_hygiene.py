@@ -181,6 +181,22 @@ def secret_literals(source):
     return found
 
 
+SYMBOLS = {"QgsLineSymbol", "QgsFillSymbol", "QgsMarkerSymbol"}
+
+
+def symbol_from_layers(source):
+    """Символ QGIS из списка слоёв конструктором, например
+    QgsLineSymbol([слой]). В QGIS 3 слой оставался у Python и удалялся
+    дважды, QGIS 3.36 падал. Символ строится через createSimple."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call) and node.args \
+                and isinstance(node.func, ast.Name) \
+                and node.func.id in SYMBOLS:
+            found.append(node.lineno)
+    return found
+
+
 def bom(source):
     """Метка BOM в начале файла. Её пишет Set-Content в PowerShell 5.1."""
     return [1] if source.startswith("﻿") else []
@@ -262,6 +278,9 @@ class TestCodeRules(unittest.TestCase):
                  for p in self.paths}
         self.assertEqual(sorted(names & set(sys.stdlib_module_names)), [])
 
+    def test_no_symbol_built_from_layers(self):
+        self.assertEqual(scan(symbol_from_layers, self.paths), [])
+
     def test_core_does_not_import_qt(self):
         core = [p for p in self.paths
                 if os.sep + "core" + os.sep in p]
@@ -324,6 +343,11 @@ class TestGuardsCatch(unittest.TestCase):
                     'self.password = ""\n',
                     'secret = "abc"\n'):
             self.assertCatches(secret_literals, bad, good)
+
+    def test_symbol_guard(self):
+        self.assertCatches(
+            symbol_from_layers, "s = QgsLineSymbol([line])\n",
+            "s = QgsLineSymbol.createSimple(props)\n")
 
     def test_bom_guard(self):
         self.assertCatches(bom, "﻿# x\n", "# x\n")

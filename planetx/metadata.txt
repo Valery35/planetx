@@ -2,40 +2,52 @@
 name=PlanetX
 qgisMinimumVersion=3.40
 qgisMaximumVersion=4.99
-description=3D globe for QGIS in the spirit of Google Earth: terrain, atmosphere, OpenStreetMap or satellite imagery from your XYZ connections, grab-the-Earth navigation with inertia and fly-to coordinates
-version=0.2.0
+description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, grab-the-Earth navigation with inertia and fly-to coordinates
+version=0.3.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       from space down to single streets, with terrain relief and hill
       shading, a glowing atmosphere around the planet and sky at the
-      horizon. The base map is OpenStreetMap or any XYZ Tiles connection
-      set up in QGIS, for example satellite imagery.
+      horizon. Esri World Imagery opens by default as an example base map.
+      It can be switched to OpenStreetMap or any XYZ Tiles connection set
+      up in QGIS.
+      The Layers panel, as in Google Earth, adds borders, place names,
+      water names, roads with their numbers, railways, airports, rivers,
+      lakes, peaks and protected areas from OpenFreeMap vector tiles.
+      Labels stay upright, do not overlap and hide behind mountains and
+      the horizon. The label language follows QGIS or is chosen from
+      15 languages and local names.
+      Layers of the current project, vector and raster, lie on the globe
+      in the map order of QGIS.
       Drag the Earth with the left mouse button, it keeps rotating by
       inertia after release. The wheel zooms to the point under the cursor,
       the middle button or Shift with the left button turns and tilts
       the view. Type coordinates in degrees and the camera flies there
-      along the van Wijk and Nuij path, rising over long distances and
-      landing smoothly.
-      Tiles are chosen by screen-space error, the parent stays on screen
-      until all its children are loaded, so the base map has no holes while
-      zooming. The camera never goes below the terrain. Tiles come through
-      the QGIS network settings and cache.
+      along the van Wijk and Nuij path.
       Requires OpenGL 3.3 and PyOpenGL, which ships with QGIS on Windows.
       Tested on QGIS 3.36 (Qt 5) and 4.0 (Qt 6).
-      Project layers on the globe are planned for the next versions.
-      Base map © OpenStreetMap contributors. Terrain: Mapzen Terrain Tiles
-      (SRTM, GMTED, ETOPO1 and other sources).
+      Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User
+      Community. Map data © OpenStreetMap contributors, vector tiles
+      OpenFreeMap. Terrain: Mapzen Terrain Tiles (SRTM, GMTED, ETOPO1
+      and other sources).
       Developed with the support of Inform++ LLC (www.informpp.ru).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
 homepage=https://github.com/Valery35/planetx
-tags=3d,globe,earth,google earth,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,web mercator,tiles,opengl
+tags=3d,globe,earth,google earth,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,labels,vector tiles,opengl
 category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.2.0 Terrain relief with hill shading, the camera stays above
+changelog=0.3.0 Esri World Imagery by default. Project layers on the
+      globe in the QGIS map order. Layers panel as in Google Earth with
+      borders, place and water names, roads and road numbers, railways,
+      airports, rivers, lakes, peaks and protected areas. Labels in the
+      style of Google Earth with a choice of language. Terrain can be
+      switched off, vertical exaggeration. Refresh button and automatic
+      refresh. Own PlanetX toolbar.
+      0.2.0 Terrain relief with hill shading, the camera stays above
       the ground. Atmosphere: glow around the planet, sky and haze at the
       horizon. Base map list with OpenStreetMap and the XYZ Tiles
       connections of QGIS, for example satellite imagery. About window.

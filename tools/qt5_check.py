@@ -20,6 +20,13 @@ import traceback
 ROOT = r"C:\Dev\planetx"
 OUT = os.path.join(os.environ.get("TEMP", "."), "planetx_qt5.json")
 sys.path.insert(0, ROOT)
+# При падении QGIS стек Python всех потоков уходит в этот файл. Журнал
+# QGIS после падения пуст, другого следа не остаётся.
+import faulthandler  # noqa: E402
+
+CRASH = open(os.path.join(os.environ.get("TEMP", "."),
+                          "planetx_qt5_crash.txt"), "w", encoding="utf-8")
+faulthandler.enable(CRASH, all_threads=True)
 
 from qgis.core import Qgis, QgsApplication, QgsMessageLog  # noqa: E402
 from qgis.PyQt.QtCore import QT_VERSION_STR, QTimer  # noqa: E402
@@ -52,11 +59,15 @@ def _write():
 
 def _finish():
     _write()
-    QgsApplication.instance().exit(0)
+    # PLANETX_KEEP=1 оставляет QGIS открытым, чтобы прочитать сообщения.
+    if os.environ.get("PLANETX_KEEP") != "1":
+        QgsApplication.instance().exit(0)
 
 
 def _step(name, function, then=None, delay=0):
     def run():
+        CRASH.write("step %s\n" % name)
+        CRASH.flush()
         try:
             function()
         except (AttributeError, ImportError, KeyError, OSError,

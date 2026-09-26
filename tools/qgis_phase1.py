@@ -274,6 +274,7 @@ class Imagery(Watched):
         self.before = window.attribution.text()
         names = [s.name for s in window.sources]
         window.choose_basemap(names.index(IMAGERY))
+        window.refresh()
 
     def frame(self, t):
         view = self.view
@@ -417,7 +418,10 @@ class Acceptance(QObject):
         _script("qgis_open.py")["start"]()
         window = self.plugin.window
         self.basemap = window.basemap_index()
-        window.choose_basemap(0)
+        # Шаг открытия меряется на OpenStreetMap, как в фазе 0.
+        names = [source.name for source in window.sources]
+        window.choose_basemap(names.index("OpenStreetMap"))
+        window.refresh()
         window.showNormal()
         window.raise_()
         window.activateWindow()
@@ -447,6 +451,7 @@ class Acceptance(QObject):
             window = self.plugin.window
             if self.basemap is not None:
                 window.choose_basemap(self.basemap)
+                window.refresh()
             self.step = "готово"
             return
         name, begin, _, _ = self.steps[self.index]

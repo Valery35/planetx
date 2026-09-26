@@ -28,17 +28,15 @@ EN = {
         "Enter starts the flight. The mouse interrupts it.",
     "Лететь": "Fly",
     "О модуле": "About",
-    "Слои проекта": "Project layers",
     "Глобус": "Globe",
     "Свойства вида: двойной щелчок": "View properties: double click",
-    "Подложка: выбор в меню по правой кнопке, двойной щелчок открывает "
-    "свойства вида":
-        "Base map: choose it in the right-click menu, a double click opens "
-        "the view properties",
-    "Подложка · {name}": "Base map · {name}",
     "Подложка": "Base map",
     "{name} · {kind}": "{name} · {kind}",
-    "Подлететь: меню по правой кнопке": "Fly to: right-click menu",
+    "Отметка показывает слой на глобусе, видимость на карте QGIS "
+    "не меняется. Меню по правой кнопке - перелёт к слою.":
+        "The check shows the layer on the globe, its visibility on the "
+        "QGIS map does not change. The right-click menu flies to the "
+        "layer.",
     "Подлететь": "Fly to",
     "Свойства вида…": "View properties…",
     "растр": "raster",
@@ -47,38 +45,48 @@ EN = {
     "полигоны": "polygons",
     "таблица": "table",
     "слой": "layer",
-    "Включённые слои проекта поверх подложки, в том же порядке, что на "
-    "карте QGIS. Подписей нет. Когда слои меняются, глобус обновляет их "
-    "кнопкой «Обновить слои» или сам, если в свойствах вида включено "
-    "автоматическое обновление.":
-        "The checked project layers over the base map, in the same order "
-        "as on the QGIS map. There are no labels. When the layers change, "
-        "the globe updates them with the Refresh layers button, or by "
-        "itself if automatic update is on in the view properties.",
-    "Обновить слои: слои проекта изменились":
-        "Refresh layers: the project layers have changed",
-    "Обновить слои проекта на глобусе": "Refresh the project layers on the "
-                                        "globe",
+    "Обновить глобус: настройки или слои изменились":
+        "Refresh the globe: settings or layers have changed",
+    "Обновить глобус": "Refresh the globe",
     "Свойства вида": "View properties",
-    "Слои проекта изменились. Нажмите «Обновить слои».":
-        "The project layers have changed. Press Refresh layers.",
+    "Настройки или слои изменились. Глобус покажет их после кнопки "
+    "«Обновить».":
+        "Settings or layers have changed. The globe shows them after "
+        "the Refresh button.",
+    "Обновление": "Update",
     "Обновлять автоматически": "Update automatically",
-    "Слои проекта на глобусе обычно обновляются кнопкой «Обновить слои». "
-    "С этим флажком глобус перерисовывает их сам после каждой правки "
-    "данных, стиля, порядка или видимости слоёв. Удобно на лёгких данных, "
-    "на тяжёлых глобус будет часто перерисовывать наложение.":
-        "The project layers on the globe are usually updated with the "
-        "Refresh layers button. With this option the globe redraws them "
-        "after every change of data, style, order or visibility. Handy "
-        "for light data, with heavy data the globe will redraw often.",
-    "Границы и дороги": "Borders and roads",
-    "Границы стран и регионов, реки и дороги поверх подложки по векторным "
-    "тайлам OpenFreeMap. Линии ложатся на рельеф. Подписей нет.":
-        "Country and region borders, rivers and roads over the base map "
-        "from OpenFreeMap vector tiles. The lines follow the terrain. "
-        "There are no labels.",
-    "Границы и дороги не загрузились: {error}":
-        "Borders and roads failed to load: {error}",
+    "Населённые пункты": "Places",
+    "Границы": "Borders",
+    "Дороги": "Roads",
+    "Железные дороги": "Railways",
+    "Светлая линия с тёмным пунктиром. При отдалении пропадают вместе "
+    "с магистралями. Станционные и подъездные пути не рисуются.":
+        "A light line with a dark dash. When zooming out they disappear "
+        "together with motorways. Station and siding tracks are not "
+        "drawn.",
+    "Рельеф": "Terrain",
+    "Вертикальный масштаб": "Vertical exaggeration",
+    "Множитель высот рельефа. Больше 1 - горы и долины выразительнее, "
+    "равнинный рельеф становится заметен. Камера остаётся над поднятой "
+    "поверхностью. После смены глобус пересобирает поверхность "
+    "за несколько секунд.":
+        "Multiplier of terrain heights. Above 1 mountains and valleys "
+        "stand out more, and flat terrain becomes visible. The camera "
+        "stays above the raised surface. After a change the globe "
+        "rebuilds the surface within a few seconds.",
+    "Векторная основа не загрузилась: {error}":
+        "Vector base failed to load: {error}",
+    "Координаты в поле над списком слева запускают перелёт.":
+        "Coordinates in the field above the list on the left start "
+        "a flight.",
+    "Двойной щелчок по строке «Глобус» открывает свойства вида. В них "
+    "выбираются подложка, векторная основа и рельеф.":
+        "A double click on the Globe row opens the view properties. "
+        "There you choose the base map, the vector base and the terrain.",
+    "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
+    "OpenStreetMap.":
+        "Vector base: OpenFreeMap, © OpenMapTiles, © OpenStreetMap "
+        "contributors.",
     "О модуле PlanetX": "About PlanetX",
     "Левая кнопка тянет Землю, после отпускания она вращается "
     "по инерции.":
@@ -89,21 +97,22 @@ EN = {
     "Средняя кнопка или левая с Shift поворачивают и наклоняют вид.":
         "The middle button or the left one with Shift turns and tilts "
         "the view.",
-    "Координаты в поле внизу окна запускают перелёт.":
-        "Coordinates in the field at the bottom of the window start "
-        "a flight.",
-    "Список внизу окна меняет подложку.":
-        "The list at the bottom of the window changes the base map.",
     "Подложка OpenStreetMap: © участники OpenStreetMap.":
         "OpenStreetMap base map: © OpenStreetMap contributors.",
     "Рельеф: Mapzen Terrain Tiles, данные SRTM, GMTED, ETOPO1 и других "
     "источников.":
         "Terrain: Mapzen Terrain Tiles, data from SRTM, GMTED, ETOPO1 "
         "and other sources.",
-    "Космоснимки и другие подложки берутся из подключений XYZ Tiles "
-    "в QGIS. Условия использования задаёт их владелец.":
-        "Satellite imagery and other base maps come from the XYZ Tiles "
-        "connections in QGIS. Their owners set the terms of use.",
+    "Космоснимки Esri World Imagery - пример подложки, условия "
+    "использования задаёт Esri.":
+        "Esri World Imagery satellite imagery is an example base map, "
+        "Esri sets its terms of use.",
+    "Свои подложки берутся из подключений XYZ Tiles в QGIS, их условия "
+    "задаёт владелец.":
+        "Your own base maps come from the XYZ Tiles connections in QGIS, "
+        "their owners set the terms of use.",
+    "Источники данных и условия их использования":
+        "Data sources and their terms of use",
     "Исходный код": "Source code",
     "Сообщить об ошибке": "Report a bug",
     "Страница в каталоге QGIS": "QGIS plugin page",
@@ -116,20 +125,136 @@ EN = {
     "Разработка при поддержке": "Developed with the support of",
     "ООО «Информ++»": "Inform++ LLC",
     "Лицензия GNU GPL версии 3.": "License GNU GPL version 3.",
-    "Источник картинки на глобусе. В списке OpenStreetMap "
-    "и подключения XYZ Tiles из обозревателя QGIS, кроме "
-    "подключений рельефа. Новое подключение появляется здесь "
-    "при следующем открытии окна.":
-        "Source of the globe imagery. The list holds OpenStreetMap "
-        "and the XYZ Tiles connections from the QGIS browser, except "
-        "terrain connections. A new connection appears here the next "
-        "time the window opens.",
+    "Источник картинки на глобусе. Esri World Imagery - пример "
+    "подложки, условия её использования задаёт Esri. В списке также "
+    "OpenStreetMap и подключения XYZ Tiles из обозревателя QGIS, кроме "
+    "подключений рельефа. Новое подключение появляется здесь при "
+    "следующем открытии окна.":
+        "Source of the globe imagery. Esri World Imagery is an example "
+        "base map, Esri sets its terms of use. The list also holds "
+        "OpenStreetMap and the XYZ Tiles connections from the QGIS "
+        "browser, except terrain connections. A new connection appears "
+        "here the next time the window opens.",
+    "{name} - пример": "{name} - example",
     "Не удалось прочитать координаты: {text}":
         "Could not read coordinates: {text}",
     "{value} м": "{value} m",
     "{value} км": "{value} km",
     "Контекст OpenGL 3.3 недоступен: {version}":
         "OpenGL 3.3 context is unavailable: {version}",
+    "{name}, {ele} м":
+        "{name}, {ele} m",
+    "Слои":
+        "Layers",
+    "Границы и названия":
+        "Borders and names",
+    "Границы стран и областей и подписи на глобусе.":
+        "Country and region borders and labels on the globe.",
+    "Границы стран ярко-жёлтые, границы областей тонкие белые. Морские "
+    "границы не рисуются.":
+        "Country borders are bright yellow, region borders thin and white. "
+        "Maritime borders are not drawn.",
+    "Названия стран, областей, городов, посёлков и деревень. При "
+    "приближении появляются всё более мелкие пункты.":
+        "Names of countries, regions, cities, towns and villages. Smaller "
+        "places appear as you zoom in.",
+    "Названия водоёмов":
+        "Water names",
+    "Названия морей, озёр и водохранилищ, голубым курсивом.":
+        "Names of seas, lakes and reservoirs, in light blue italics.",
+    "Транспорт": "Transport",
+    "Дороги, их номера, железные дороги и аэропорты.":
+        "Roads, their numbers, railways and airports.",
+    "Магистрали жёлтые, главные дороги светло-жёлтые, остальные тонкие "
+    "белые. Над городом дороги закрывают подложку густой сеткой.":
+        "Motorways are yellow, main roads light yellow, other roads thin "
+        "and white. Over a city the roads cover the base map with a dense "
+        "grid.",
+    "Номера дорог":
+        "Road numbers",
+    "Таблички с номерами магистралей и главных дорог. Европейские маршруты "
+    "на зелёной табличке. Подписываются с высоты ниже 1000 км.":
+        "Number plates of motorways and main roads. European routes are on "
+        "a green plate. Labelled from altitudes below 1000 km.",
+    "Аэропорты":
+        "Airports",
+    "Названия аэропортов с квадратным значком, при приближении взлётные "
+    "полосы. Подписываются с высоты ниже 1000 км.":
+        "Airport names with a square mark, runways when zoomed in. "
+        "Labelled from altitudes below 1000 km.",
+    "Природа":
+        "Nature",
+    "Реки, вершины и охраняемые территории.":
+        "Rivers, peaks and protected areas.",
+    "Вершины":
+        "Peaks",
+    "Вершины и вулканы с высотой в метрах, треугольный значок. "
+    "Подписываются с высоты ниже 400 км.":
+        "Peaks and volcanoes with height in metres, a triangle mark. "
+        "Labelled from altitudes below 400 km.",
+    "Заповедники и нацпарки":
+        "Reserves and national parks",
+    "Заповедники, национальные парки и заказники, зелёный контур и "
+    "название. Названия видны ниже 3000 км, контур вместе "
+    "с магистралями.":
+        "Nature reserves, national parks and refuges, a green outline and a "
+        "name. Names are shown below 3000 km, the outline together with "
+        "motorways.",
+    "Высоты Mapzen Terrain Tiles поднимают поверхность и дают отмывку "
+    "склонов. Без рельефа Земля гладкая, высоты не загружаются. "
+    "Вертикальный масштаб - в свойствах вида.":
+        "Mapzen Terrain Tiles heights raise the surface and shade the "
+        "slopes. Without terrain the Earth is smooth and no heights are "
+        "loaded. Vertical exaggeration is in the view properties.",
+    "Без флажка глобус показывает новую подложку, масштаб рельефа и слои "
+    "проекта после кнопки «Обновить». С флажком он обновляется сам после "
+    "каждой смены настроек и каждой правки данных, стиля и порядка слоёв. "
+    "На тяжёлых слоях это частая перерисовка.":
+        "Without this option the globe shows a new base map, terrain "
+        "exaggeration and project layers after the Refresh button. With it "
+        "the globe updates itself after every change of settings and every "
+        "edit of layer data, style and order. With heavy layers this means "
+        "frequent redrawing.",
+    "Реки":
+        "Rivers",
+    "Узкие реки синими линиями. Появляются примерно с 600 м на пиксель.":
+        "Narrow rivers as blue lines. They appear from about 600 m per "
+        "pixel.",
+    "Водоёмы":
+        "Lakes and reservoirs",
+    "Берега озёр, водохранилищ и широких рек обведены синей линией. "
+    "Водохранилища в данных разрезаны на куски, и контур проходит и по "
+    "разрезам.":
+        "Shores of lakes, reservoirs and wide rivers are outlined in blue. "
+        "Reservoirs are split into pieces in the data, and the outline also "
+        "follows the cuts.",
+    "Подписи": "Labels",
+    "Язык": "Language",
+    "Как в QGIS": "As in QGIS",
+    "Местные названия": "Local names",
+    "Язык названий пунктов, водоёмов, вершин и других подписей глобуса. "
+    "«Как в QGIS» берёт язык интерфейса QGIS. Если названия на выбранном "
+    "языке нет, ставится название латиницей или местное. Подписи "
+    "меняются сразу.":
+        "Language of place, water, peak and other labels on the globe. "
+        "\"As in QGIS\" takes the QGIS interface language. If a name in "
+        "the chosen language is missing, the Latin or local name is shown. "
+        "Labels change at once.",
+    "русский": "Russian",
+    "английский": "English",
+    "немецкий": "German",
+    "французский": "French",
+    "испанский": "Spanish",
+    "итальянский": "Italian",
+    "португальский": "Portuguese",
+    "польский": "Polish",
+    "украинский": "Ukrainian",
+    "казахский": "Kazakh",
+    "турецкий": "Turkish",
+    "арабский": "Arabic",
+    "китайский": "Chinese",
+    "японский": "Japanese",
+    "корейский": "Korean",
 }
 
 _language = None
@@ -161,11 +286,16 @@ def set_language(code):
     _language = (code or "en")[:2].lower()
 
 
-def is_russian():
+def ui_language():
+    """Двухбуквенный код языка интерфейса QGIS."""
     global _language
     if _language is None:
         _language = _detect()
-    return _language == "ru"
+    return _language
+
+
+def is_russian():
+    return ui_language() == "ru"
 
 
 def tr(text, **values):

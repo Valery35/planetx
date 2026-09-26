@@ -99,11 +99,12 @@ class Acceptance(QObject):
         window = self.plugin.window
         names = [s.name for s in window.sources]
         self.saved = (window.basemap_index(),
-                      window.borders_on())
+                      window.line_groups())
         if IMAGERY not in names:
             raise RuntimeError("нет подключения " + IMAGERY)
         window.choose_basemap(names.index(IMAGERY))
-        window.set_borders(True)
+        window.set_line_groups(("borders", "rivers", "roads"))
+        window.refresh()
         window.showNormal()
         window.raise_()
         window.activateWindow()
@@ -184,7 +185,8 @@ class Acceptance(QObject):
             window = self.plugin.window
             if self.saved is not None:
                 window.choose_basemap(self.saved[0])
-                window.set_borders(self.saved[1])
+                window.set_line_groups(self.saved[1])
+                window.refresh()
             self.step = "готово"
             return
         name, begin, _, _ = self.steps[self.index]

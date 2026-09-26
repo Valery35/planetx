@@ -135,10 +135,11 @@ class TestStore(unittest.TestCase):
         far = (12, 3000, 3000)
         self.assertEqual(store.range_for(key), (0.0, 10.0))
         far_range = store.range_for(far)
+        cached = store._ranges[far][1]
         # Тайл высот в другом месте не трогает посчитанный размах.
         store.add(tr.make_tile(8, 180, 180,
                                encode(np.full((256, 256), 700.0))))
-        self.assertIs(store._ranges[far][1], far_range)
+        self.assertIs(store._ranges[far][1], cached)
         self.assertEqual(store.range_for(far), far_range)
         # Тайл высот точнее над key меняет его размах.
         store.add(tr.make_tile(4, 0, 0, encode(np.full((256, 256), 50.0))))
@@ -158,6 +159,65 @@ class TestStore(unittest.TestCase):
             nodes = tr.sample(tile, u, v)
             self.assertGreaterEqual(nodes.min(), low - 1e-6)
             self.assertLessEqual(nodes.max(), high + 1e-6)
+
+
+class TestScale(unittest.TestCase):
+    """Вертикальный масштаб рельефа и выключенный рельеф."""
+
+    def setUp(self):
+        self.store = tr.HeightStore()
+        self.tile = tr.make_tile(3, 4, 2, encode(
+            np.random.default_rng(7).uniform(0, 4000, (256, 256))))
+        self.store.add(self.tile)
+        self.key = (7, 70, 38)
+        self.lat, self.lon = 50.0, 20.0
+
+    def test_heights_and_ranges_follow_scale(self):
+        height = self.store.height_at(self.lat, self.lon)
+        low, high = self.store.range_for(self.key)
+        self.assertGreater(height, 0.0)
+        self.store.set_scale(2.5)
+        self.assertAlmostEqual(self.store.height_at(self.lat, self.lon),
+                               2.5 * height, places=6)
+        self.assertEqual(self.store.range_for(self.key),
+                         (2.5 * low, 2.5 * high))
+
+    def test_scaled_range_covers_scaled_mesh(self):
+        # Сфера тайла строится по размаху, вершины сетки с тем же
+        # масштабом обязаны лежать внутри него.
+        self.store.set_scale(4.0)
+        low, high = self.store.range_for(self.key)
+        mesh = tl.tile_mesh(*self.key, self.tile, exaggeration=4.0)
+        seg = mesh.segments
+        grid = (mesh.positions[:(seg + 1) ** 2].astype(np.float64)
+                + mesh.center)
+        lat, lon = tl.grid_latlon(*self.key)
+        flat = tl.geodetic_to_ecef(lat, lon, 0.0).reshape(-1, 3)
+        up = tl.surface_normal(lat, lon).reshape(-1, 3)
+        heights = ((grid - flat) * up).sum(axis=1)
+        self.assertGreaterEqual(heights.min(), low - 1.0)
+        self.assertLessEqual(heights.max(), high + 1.0)
+        self.assertGreater(heights.max(), 3.0 * self.tile.high / 4.0)
+
+    def test_scale_changes_version(self):
+        version = self.store.version
+        self.store.set_scale(2.0)
+        self.assertGreater(self.store.version, version)
+
+    def test_off_means_smooth_earth(self):
+        self.store.set_scale(0.0)
+        self.assertEqual(self.store.height_at(self.lat, self.lon), 0.0)
+        self.assertEqual(self.store.range_for(self.key), (0.0, 0.0))
+        self.assertEqual(self.store.for_mesh(self.key),
+                         (None, tr.FLAT_LEVEL))
+
+    def test_for_mesh(self):
+        self.assertEqual(tr.HeightStore().for_mesh(self.key), (None, -1))
+        tile, level = self.store.for_mesh(self.key)
+        self.assertIs(tile, self.tile)
+        self.assertEqual(level, 3)
+        # Сетка без рельефа не пересобирается ни от каких высот.
+        self.assertGreater(tr.FLAT_LEVEL, tr.MAX_LEVEL)
 
 
 if __name__ == "__main__":

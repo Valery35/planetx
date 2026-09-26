@@ -24,7 +24,9 @@ import time
 import numpy as np
 from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsExpressionContext, QgsExpressionContextUtils,
-                       QgsLineSymbol, QgsProject,
+                       QgsFillSymbol, QgsLineSymbol, QgsProject,
+                       QgsProperty, QgsSimpleLineSymbolLayer,
+                       QgsSymbolLayer,
                        QgsMapRendererParallelJob, QgsMapSettings,
                        QgsNetworkAccessManager, QgsRectangle,
                        QgsVectorTileBasicRenderer,
@@ -56,25 +58,141 @@ OPENFREEMAP_ATTRIBUTION = (
 LINE = QgsWkbTypes.GeometryType.LineGeometry
 PREMULTIPLIED = enum(QImage, "Format", "Format_RGBA8888_Premultiplied")
 
-# Группы линий векторной основы, их включают по отдельности.
-BORDERS, RIVERS, ROADS = "borders", "rivers", "roads"
-LINE_GROUPS = (BORDERS, RIVERS, ROADS)
+# Группы векторной основы, их включают по отдельности. Линии рисует
+# наложение, названия пунктов - надписи вида, render/labels.py.
+BORDERS, RIVERS, WATER, ROADS, RAILWAYS, PARKS, AIRPORTS = (
+    "borders", "rivers", "water", "roads", "railways", "parks", "airports")
+PLACES, WATER_NAMES, PEAKS, ROAD_REFS = (
+    "places", "water_names", "peaks", "road_refs")
+# Группы, у которых есть линии или контуры в наложении.
+LINE_GROUPS = (BORDERS, RIVERS, WATER, ROADS, RAILWAYS, PARKS, AIRPORTS)
+# Группы, у которых есть надписи, и их классы из core/places.py.
+LABEL_KINDS = {
+    PLACES: ("country", "capital", "city", "state", "town", "village"),
+    WATER_NAMES: ("water",),
+    PEAKS: ("peak",),
+    ROAD_REFS: ("road_ref",),
+    PARKS: ("park",),
+    AIRPORTS: ("airport",),
+}
+VECTOR_GROUPS = (BORDERS, PLACES, WATER_NAMES, ROADS, ROAD_REFS, RAILWAYS,
+                 AIRPORTS, RIVERS, WATER, PEAKS, PARKS)
 
-# Стиль линий: группа, слой схемы OpenMapTiles, условие, цвет RGBA,
-# толщина в пикселях картинки тайла, наименьший уровень.
+
+def label_kinds(groups):
+    """Классы надписей для включённых групп."""
+    return {kind for group in groups for kind in LABEL_KINDS.get(group, ())}
+
+POLYGON = QgsWkbTypes.GeometryType.PolygonGeometry
+BLUE = "70,130,230"  # вода, как слой «Водоёмы» Google Earth
+
+
+def _line(color, width, dash=None):
+    props = {"color": color, "width": str(width), "width_unit": "Pixel",
+             "capstyle": "round", "joinstyle": "round"}
+    if dash:
+        props.update({"use_custom_dash": "1", "customdash": dash,
+                      "customdash_unit": "Pixel", "capstyle": "flat"})
+    return props
+
+
+# Стиль: группа, слой схемы OpenMapTiles, условие, наименьший уровень,
+# геометрия и слои символа. Толщины - в пикселях картинки тайла. Цвета
+# и толщины сверены с Google Earth Pro 26 сентября 2026 года: страны
+# ярко-жёлтые, области тонкие белые, вода синяя с контуром водоёмов,
+# магистрали жёлтые, остальные дороги тонкие белые.
 LINE_STYLES = (
-    (BORDERS, "boundary", '"admin_level" = 2 AND "maritime" = 0',
-     "255,220,0,255", 2.0, 0),
-    (BORDERS, "boundary", '"admin_level" = 4 AND "maritime" = 0',
-     "255,220,0,190", 1.0, 4),
-    (RIVERS, "waterway", "\"class\" = 'river'", "120,190,255,220", 1.2, 8),
-    (ROADS, "transportation",
-     "\"class\" IN ('motorway', 'trunk', 'primary')",
-     "255,255,255,210", 1.2, 6),
-    (ROADS, "transportation",
-     "\"class\" IN ('secondary', 'tertiary', 'minor', 'service')",
-     "255,255,255,150", 0.8, 12),
+    (BORDERS, "boundary", '"admin_level" = 2 AND "maritime" = 0', 0,
+     LINE, [_line("255,255,0,255", 2.0)]),
+    # Общий отрезок границ несёт наименьший уровень. Граница Пермского
+    # края со Свердловской областью - ещё и граница федеральных
+    # округов, уровень 3. С одним уровнем 4 такие отрезки пропадали.
+    (BORDERS, "boundary", '"admin_level" IN (3, 4) AND "maritime" = 0',
+     3, LINE, [_line("255,255,255,150", 1.0)]),
+    (RIVERS, "waterway", "\"class\" = 'river'", 8, LINE,
+     [_line(BLUE + ",200", 1.0)]),
+    # Большая река в OpenStreetMap - полигон воды, Google Earth обводит
+    # её берега. Полигоны водохранилищ разрезаны на куски, и контур
+    # проходит и по разрезам, ось реки тоже идёт через воду. Заливка
+    # поверх осей пробовалась и не помогла: куски перекрываются,
+    # и шов виден разницей оттенков. 26 сентября 2026 года.
+    (WATER, "water", "\"class\" IN ('lake', 'river')", 6, POLYGON,
+     {"color": "0,0,0,0", "outline_color": BLUE + ",210",
+      "outline_width": "1.0", "outline_width_unit": "Pixel"}),
+    (ROADS, "transportation", "\"class\" IN ('motorway', 'trunk')", 6,
+     LINE, [_line("255,204,40,235", 1.5)]),
+    (ROADS, "transportation", "\"class\" = 'primary'", 8, LINE,
+     [_line("255,230,120,210", 1.1)]),
+    (ROADS, "transportation", "\"class\" IN ('secondary', 'tertiary')",
+     10, LINE, [_line("255,255,255,140", 0.8)]),
+    (ROADS, "transportation", "\"class\" IN ('minor', 'service')", 13,
+     LINE, [_line("255,255,255,110", 0.6)]),
+    # Заповедники, национальные парки и заказники: зелёный контур
+    # и едва заметная заливка, как слой «Парки» Google Earth. С уровня 6
+    # контур виден с тех же тайлов глобуса, что магистрали, примерно
+    # до 2500 км. С уровня 5 он оставался и с 5000 км, автор просил
+    # убирать заповедники дальше 3000 км, 27 сентября 2026 года.
+    (PARKS, "park",
+     "\"class\" IN ('national_park', 'nature_reserve', "
+     "'protected_area', 'wildlife_refuge')", 6, POLYGON,
+     {"color": "90,190,90,28", "outline_color": "110,200,110,200",
+      "outline_width": "1.0", "outline_width_unit": "Pixel"}),
+    (AIRPORTS, "aeroway", "\"class\" = 'runway'", 10, LINE,
+     [_line("215,215,215,230", 2.0)]),
 )
+
+
+# Железная дорога: светлая линия и тёмный пунктир поверх. Тёмная линия
+# с белым пунктиром терялась на тёмном лесу и была заметно тусклее
+# дорог. Вариант выбрал автор по снимкам трёх вариантов 27 сентября
+# 2026 года. Пути станций и подъездные пути с полем service
+# не рисуются.
+RAIL_FILTER = "\"class\" = 'rail' AND \"service\" IS NULL"
+RAIL_LINES = ((_line("235,235,235,245", 3.6), 3.6),
+              (_line("40,40,40,240", 1.8, "7;6"), 1.8))
+# В векторных тайлах OpenFreeMap железные дороги есть только с уровня 8.
+# Слой железных дорог берёт тайлы не грубее этого уровня и потому
+# рисует их и на тайлах глобуса уровня 7. Грубее уровня RAIL_FROM
+# слой не подключается. Магистрали со стилем от векторного уровня 6
+# QGIS рисует с того же тайла глобуса 7, и железные дороги пропадают
+# при отдалении вместе с ними. Уровень 6 давал их слишком далеко,
+# решение автора 27 сентября 2026 года.
+RAIL_ZMIN = 8
+RAIL_FROM = 7
+# Толщина линии падает при отдалении, иначе на уровне 6 сеть дорог
+# сливалась в сплошной узор. z - уровень тайла по масштабу отрисовки,
+# 559082264 - знаменатель масштаба уровня 0 при 96 точках на дюйм.
+RAIL_WIDTH = ("{} * min(1, max(0.4, "
+              "(log(2, 559082264 / @map_scale) - 5) / 4))")
+# Свойство толщины линии: в QGIS 4 областное имя, в QGIS 3 плоское.
+if hasattr(QgsSymbolLayer, "Property") and \
+        hasattr(QgsSymbolLayer.Property, "StrokeWidth"):
+    STROKE_WIDTH = QgsSymbolLayer.Property.StrokeWidth
+else:
+    STROKE_WIDTH = QgsSymbolLayer.PropertyStrokeWidth
+
+
+def railway_layer(tiles_url, max_zoom=14):
+    """Слой железных дорог OpenFreeMap, тайлы не грубее RAIL_ZMIN."""
+    uri = "type=xyz&url={}&zmin={}&zmax={}".format(tiles_url, RAIL_ZMIN,
+                                                   max_zoom)
+    layer = QgsVectorTileLayer(uri, "OpenFreeMap rail")
+    # Символ строится так же, как в _symbol. Конструктор
+    # QgsLineSymbol([слой]) в QGIS 3 не забирал слой символа у Python,
+    # слой удалялся дважды, и QGIS 3.36 падал при открытии глобуса,
+    # 27 сентября 2026 года.
+    symbol = _symbol(LINE, [props for props, _ in RAIL_LINES])
+    for index, (_, width) in enumerate(RAIL_LINES):
+        symbol.symbolLayer(index).setDataDefinedProperty(
+            STROKE_WIDTH, QgsProperty.fromExpression(
+                RAIL_WIDTH.format(width)))
+    style = QgsVectorTileBasicRendererStyle("rail", "transportation", LINE)
+    style.setSymbol(symbol)
+    style.setFilterExpression(RAIL_FILTER)
+    renderer = QgsVectorTileBasicRenderer()
+    renderer.setStyles([style])
+    layer.setRenderer(renderer)
+    return layer
 
 
 def openfreemap_layer(tiles_url, max_zoom=14, groups=LINE_GROUPS):
@@ -85,18 +203,25 @@ def openfreemap_layer(tiles_url, max_zoom=14, groups=LINE_GROUPS):
     return layer
 
 
+def _symbol(geometry, layers):
+    if geometry == POLYGON:
+        return QgsFillSymbol.createSimple(layers)
+    symbol = QgsLineSymbol.createSimple(layers[0])
+    for props in layers[1:]:
+        symbol.appendSymbolLayer(QgsSimpleLineSymbolLayer.create(props))
+    return symbol
+
+
 def set_line_groups(layer, groups):
     """Оставить в стиле слоя OpenFreeMap только линии групп groups."""
     styles = []
-    for index, (group, source, expression, color, width, zmin) in \
+    for index, (group, source, expression, zmin, geometry, layers) in \
             enumerate(LINE_STYLES):
         if group not in groups:
             continue
         style = QgsVectorTileBasicRendererStyle(
-            "line {}".format(index), source, LINE)
-        style.setSymbol(QgsLineSymbol.createSimple({
-            "color": color, "width": str(width), "width_unit": "Pixel",
-            "capstyle": "round", "joinstyle": "round"}))
+            "line {}".format(index), source, geometry)
+        style.setSymbol(_symbol(geometry, layers))
         style.setFilterExpression(expression)
         style.setMinZoomLevel(zmin)
         styles.append(style)
@@ -177,9 +302,11 @@ class LayerOverlay(QObject):
     failed = pyqtSignal(object, str)
     idle = pyqtSignal()
 
-    def __init__(self, layers, parent=None):
+    def __init__(self, layers, parent=None, min_levels=None):
         super().__init__(parent)
         self.layers = list(layers)
+        # Наименьший уровень тайла, с которого слой рисуется, по id слоя.
+        self.min_levels = dict(min_levels or {})
         self.crs = QgsCoordinateReferenceSystem("EPSG:3857")
         self.queue = TileQueue(max_active=MAX_JOBS)
         self.jobs = {}
@@ -233,7 +360,8 @@ class LayerOverlay(QObject):
 
     def _settings(self, key):
         settings = QgsMapSettings()
-        settings.setLayers(self.layers)
+        settings.setLayers([layer for layer in self.layers
+                            if key[0] >= self.min_levels.get(layer.id(), 0)])
         settings.setDestinationCrs(self.crs)
         settings.setExtent(QgsRectangle(*mercator_bounds(*key)))
         settings.setOutputSize(QSize(TILE_SIZE, TILE_SIZE))

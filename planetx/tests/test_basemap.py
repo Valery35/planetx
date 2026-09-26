@@ -18,13 +18,16 @@ TERRARIUM = ("https://s3.amazonaws.com/elevation-tiles-prod/terrarium/"
              "{z}/{x}/{y}.png")
 
 # Подключения, как их показал QGIS 4.0.3 26 сентября 2026 года,
-# и Esri World Imagery.
+# и Esri World Imagery с другим адресом сервиса. С адресом встроенной
+# подложки подключение пропускается, это проверяет
+# TestSettings.test_connection_with_builtin_url_is_skipped.
+ESRI_OTHER = ESRI.replace("//server.", "//services.")
 SETTINGS = {
     "OpenStreetMap": {"url": bm.OSM_URL, "zmin": "0", "zmax": "19",
                       "http-header": {}, "referer": "", "authcfg": ""},
     "Mapzen Global Terrain": {"url": TERRARIUM, "zmin": "0", "zmax": "15",
                               "interpretation": "terrariumterrain"},
-    "Esri World Imagery": {"url": ESRI, "zmin": "0", "zmax": "18"},
+    "Esri World Imagery": {"url": ESRI_OTHER, "zmin": "0", "zmax": "18"},
 }
 
 
@@ -102,6 +105,23 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(source.parallel, bm.OSM_PARALLEL)
         self.assertEqual(source.tile_url(1, 0, 1),
                          "https://tile.openstreetmap.org/1/0/1.png")
+        self.assertFalse(source.example)
+
+    def test_esri_example_is_default(self):
+        first = bm.builtins()[0]
+        self.assertEqual(first.name, "Esri World Imagery")
+        self.assertTrue(first.builtin and first.example)
+        self.assertEqual(first.parallel, bm.OTHER_PARALLEL)
+        self.assertIn("Esri", first.attribution[0])
+        self.assertEqual(
+            first.tile_url(3, 5, 2),
+            "https://server.arcgisonline.com/ArcGIS/rest/services/"
+            "World_Imagery/MapServer/tile/3/2/5")
+
+    def test_connection_with_builtin_url_is_skipped(self):
+        items = {"Моя Esri": {"url": bm.ESRI_URL, "zmin": "0",
+                              "zmax": "19"}}
+        self.assertEqual(bm.from_settings(items), [])
 
 
 if __name__ == "__main__":
