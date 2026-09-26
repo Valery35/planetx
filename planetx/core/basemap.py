@@ -39,23 +39,26 @@ class Source:
 
     attribution - пара «текст, ссылка», ссылка может быть пустой.
     headers - дополнительные заголовки запроса. authcfg - код настройки
-    проверки подлинности QGIS.
+    проверки подлинности QGIS. login - пара «имя, пароль» из подключения
+    или None.
+
+    Имя и пароль идут одной парой без значения по умолчанию. Параметр
+    password="" сканер каталога QGIS (Bandit, правило B107) принял
+    за пароль в коде и заблокировал выпуск 0.2.0.
     """
 
     __slots__ = ("name", "url", "max_level", "attribution", "headers",
                  "authcfg", "username", "password", "parallel", "builtin")
 
     def __init__(self, name, url, max_level=MAX_LEVEL, attribution=None,
-                 headers=None, authcfg="", username="", password="",
-                 builtin=False):
+                 headers=None, authcfg="", login=None, builtin=False):
         self.name = name
         self.url = url
         self.max_level = max_level
         self.attribution = attribution or (name, "")
         self.headers = dict(headers or {})
         self.authcfg = authcfg
-        self.username = username
-        self.password = password
+        self.username, self.password = login or (None, None)
         self.builtin = builtin
         self.parallel = OSM_PARALLEL if is_osm(url) else OTHER_PARALLEL
 
@@ -139,9 +142,9 @@ def from_settings(items):
         referer = str(fields.get("referer") or "").strip()
         if referer:
             headers["Referer"] = referer
+        user = str(fields.get("username") or "")
+        login = (user, str(fields.get("password") or "")) if user else None
         out.append(Source(
             name, url, top, attribution_for(name, url), headers,
-            str(fields.get("authcfg") or ""),
-            str(fields.get("username") or ""),
-            str(fields.get("password") or "")))
+            str(fields.get("authcfg") or ""), login))
     return out

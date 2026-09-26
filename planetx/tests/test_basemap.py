@@ -86,6 +86,16 @@ class TestSettings(unittest.TestCase):
                          {"X-Key": "1", "Referer": "https://r/"})
         self.assertEqual(source.attribution, ("x", ""))
 
+    def test_login(self):
+        items = {"with": {"url": "a/{z}/{x}/{y}", "username": "u",
+                          "password": "p"},
+                 "without": {"url": "b/{z}/{x}/{y}", "username": "",
+                             "password": ""}}
+        sources = {s.name: s for s in bm.from_settings(items)}
+        self.assertEqual((sources["with"].username,
+                          sources["with"].password), ("u", "p"))
+        self.assertIsNone(sources["without"].username)
+
     def test_osm(self):
         source = bm.osm()
         self.assertTrue(source.builtin)

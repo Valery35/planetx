@@ -138,6 +138,49 @@ def unused_imports(source):
                   if name not in used)
 
 
+SECRET_WORDS = ("pass", "pwd", "secret", "token")
+
+
+def _secret_name(name):
+    return any(word in (name or "").lower() for word in SECRET_WORDS)
+
+
+def _string(node):
+    return isinstance(node, ast.Constant) and isinstance(node.value, str)
+
+
+def secret_literals(source):
+    """Строка при имени вида password, правила Bandit B105-B107.
+
+    Каталог QGIS проверяет архив Bandit и блокирует выпуск при такой
+    находке, даже если строка пустая. Так был заблокирован выпуск 0.2.0.
+    Ловятся значение по умолчанию параметра, именованный аргумент вызова
+    и присваивание.
+    """
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.Lambda)):
+            args = node.args
+            pairs = list(zip(args.args[len(args.args)
+                                       - len(args.defaults):],
+                             args.defaults))
+            pairs += [(a, d) for a, d in zip(args.kwonlyargs,
+                                             args.kw_defaults) if d]
+            found += [d.lineno for a, d in pairs
+                      if _secret_name(a.arg) and _string(d)]
+        elif isinstance(node, ast.Call):
+            found += [k.value.lineno for k in node.keywords
+                      if _secret_name(k.arg) and _string(k.value)]
+        elif isinstance(node, ast.Assign) and _string(node.value):
+            for target in node.targets:
+                name = getattr(target, "id", None) \
+                    or getattr(target, "attr", None)
+                if _secret_name(name):
+                    found.append(node.lineno)
+    return found
+
+
 def bom(source):
     """Метка BOM в начале файла. Её пишет Set-Content в PowerShell 5.1."""
     return [1] if source.startswith("﻿") else []
@@ -200,6 +243,12 @@ class TestCodeRules(unittest.TestCase):
         plugin = [p for p in self.paths
                   if os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(unused_imports, plugin), [])
+
+    def test_no_secret_like_literals(self):
+        # В архив идут модули плагина без тестов, их и проверяет каталог.
+        plugin = [p for p in self.paths if p.startswith(PLUGIN)
+                  and os.sep + "tests" + os.sep not in p]
+        self.assertEqual(scan(secret_literals, plugin), [])
 
     def test_no_bom(self):
         texts = [os.path.join(ROOT, n) for n in os.listdir(ROOT)
@@ -266,6 +315,15 @@ class TestGuardsCatch(unittest.TestCase):
         self.assertCatches(unused_imports,
                            "import os\nimport sys\nsys.exit()\n",
                            "import os\nos.getcwd()\n")
+
+    def test_secret_literal_guard(self):
+        good = "def f(login=None):\n    user, password = login\n"
+        for bad in ('def f(password=""):\n    return password\n',
+                    'def f(*, api_token="x"):\n    return 1\n',
+                    'f(password="")\n',
+                    'self.password = ""\n',
+                    'secret = "abc"\n'):
+            self.assertCatches(secret_literals, bad, good)
 
     def test_bom_guard(self):
         self.assertCatches(bom, "﻿# x\n", "# x\n")
