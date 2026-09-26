@@ -66,7 +66,7 @@ PlanetX или из меню **Интернет → PlanetX**.
 
 ## Требования
 
-- QGIS 3.40 и новее, в том числе QGIS 4. Проверено на QGIS 3.36 с Qt 5
+- QGIS 3.36 и новее, в том числе QGIS 4. Проверено на QGIS 3.36 с Qt 5
   и на QGIS 4.0 с Qt 6.
 - Видеокарта с OpenGL 3.3.
 - Модуль Python PyOpenGL. В сборках QGIS для Windows он есть.

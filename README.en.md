@@ -69,7 +69,7 @@ or from **Web → PlanetX**.
 
 ## Requirements
 
-- QGIS 3.40 or newer, QGIS 4 included. Tested on QGIS 3.36 with Qt 5
+- QGIS 3.36 or newer, QGIS 4 included. Tested on QGIS 3.36 with Qt 5
   and on QGIS 4.0 with Qt 6.
 - A graphics card with OpenGL 3.3.
 - The PyOpenGL Python module. QGIS builds for Windows include it.

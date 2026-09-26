@@ -1,6 +1,6 @@
 [general]
 name=PlanetX
-qgisMinimumVersion=3.40
+qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, grab-the-Earth navigation with inertia and fly-to coordinates
 version=0.3.0
