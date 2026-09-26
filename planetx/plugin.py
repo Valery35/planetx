@@ -21,7 +21,9 @@ class PlanetXPlugin:
         self.action = QAction(QIcon(ICON), "PlanetX", self.iface.mainWindow())
         self.action.triggered.connect(self.run)
         self.iface.addPluginToWebMenu("PlanetX", self.action)
-        self.iface.addWebToolBarIcon(self.action)
+        # Кнопка на панели модулей. Панель «Интернет» QGIS по умолчанию
+        # прячет, и кнопка на ней не видна.
+        self.iface.addToolBarIcon(self.action)
 
     def _window_gone(self, window):
         # Ссылка снимается в момент закрытия. Закрытое окно Qt уничтожает
@@ -36,7 +38,7 @@ class PlanetXPlugin:
             self.window = None
         if self.action is not None:
             self.iface.removePluginWebMenu("PlanetX", self.action)
-            self.iface.removeWebToolBarIcon(self.action)
+            self.iface.removeToolBarIcon(self.action)
             self.action = None
         # Загрузчик мог поставить обработчик запросов QGIS. Он общий для
         # всех запросов и после выгрузки плагина оставаться не должен.

@@ -6,7 +6,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.1.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.1.1.
 
 The globe opens in its own window and shows the whole Earth with the
 OpenStreetMap base map, from space down to single streets.
@@ -31,8 +31,8 @@ Tiles come through the QGIS network settings and cache.
 ## Installation
 
 In QGIS open **Plugins → Manage and Install Plugins**, find PlanetX
-and install it. The globe opens from **Web → PlanetX** or with the button
-on the Web toolbar.
+and install it. The globe opens from **Web → PlanetX** or with the PlanetX
+button on the Plugins toolbar.
 
 ## Requirements
 
