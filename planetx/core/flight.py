@@ -138,6 +138,28 @@ class Flight:
         return pose
 
 
+FIT_MARGIN = 1.2  # запас вокруг охвата при перелёте к слою
+MIN_FIT_DISTANCE = 300.0  # метров, ближе к точечному слою не подлетаем
+M_PER_DEGREE = 111320.0
+
+
+def fit_view(west, south, east, north, fov_y, aspect):
+    """Точка взгляда и расстояние, с которых охват виден целиком.
+
+    Охват в градусах WGS84. Камера смотрит отвесно в середину охвата.
+    Ширина считается по средней широте. Расстояние - такое, чтобы
+    охват с запасом FIT_MARGIN поместился и по высоте, и по ширине
+    кадра, но не меньше MIN_FIT_DISTANCE.
+    """
+    lat = 0.5 * (south + north)
+    lon = 0.5 * (west + east)
+    height = (north - south) * M_PER_DEGREE
+    width = (east - west) * M_PER_DEGREE * math.cos(math.radians(lat))
+    half = math.tan(math.radians(fov_y) / 2.0)
+    distance = max(height, width / aspect) * FIT_MARGIN / (2.0 * half)
+    return lat, lon, max(distance, MIN_FIT_DISTANCE)
+
+
 def parse_latlon(text):
     """Широта и долгота из строки или None.
 

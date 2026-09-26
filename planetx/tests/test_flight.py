@@ -173,5 +173,33 @@ class TestParse(unittest.TestCase):
             self.assertIsNone(fl.parse_latlon(text), text)
 
 
+class TestFitView(unittest.TestCase):
+
+    def test_extent_fits_the_frame(self):
+        # Охват растра «В_top» у Соликамска и вытянутый охват.
+        import ellipsoid as el
+        for west, south, east, north in ((56.6973, 59.5166, 56.9287,
+                                          59.6038),
+                                         (40.0, 55.0, 60.0, 56.0)):
+            for width, height in ((1600, 900), (900, 1600)):
+                lat, lon, distance = fl.fit_view(
+                    west, south, east, north, 45.0, width / height)
+                cam = cm.Camera.look_at(lat, lon, distance, width=width,
+                                        height=height)
+                corners = np.array([el.geodetic_to_ecef(la, lo, 0.0)
+                                    for la in (south, north)
+                                    for lo in (west, east)])
+                px, front = cam.project(corners)
+                self.assertTrue(np.all(front))
+                self.assertTrue(np.all(px[:, 0] > 0), (west, width))
+                self.assertTrue(np.all(px[:, 0] < width))
+                self.assertTrue(np.all(px[:, 1] > 0))
+                self.assertTrue(np.all(px[:, 1] < height))
+
+    def test_point_layer_is_not_too_close(self):
+        _, _, distance = fl.fit_view(56.2, 58.0, 56.2, 58.0, 45.0, 1.5)
+        self.assertEqual(distance, fl.MIN_FIT_DISTANCE)
+
+
 if __name__ == "__main__":
     unittest.main()

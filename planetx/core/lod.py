@@ -198,39 +198,143 @@ def priority(error, z):
     return error
 
 
+class Memo:
+    """Память ошибок и видимости узлов для неподвижной камеры.
+
+    Ошибка тайла и то, виден ли он, зависят от камеры и высот, но не
+    от готовности тайлов. Во время загрузки камера стоит, а кадры идут
+    на каждый пришедший тайл. Память держит их между такими кадрами.
+    Она сбрасывается, когда меняется ключ: камера, порог или версия
+    высот, которую даёт вызывающий.
+    """
+
+    LIMIT = 100000
+
+    def __init__(self):
+        self.key = None
+        self.values = {}
+
+    def bind(self, camera, threshold, heights_version, added=()):
+        """Словарь для select с этой камерой и этими высотами.
+
+        added - ключи тайлов высот, пришедших с прошлого вызова. Если
+        камера та же, забываются только узлы под этими тайлами: их
+        размах высот мог измениться. Узлы грубее тайла высот берут
+        высоты уровня выше и не меняются. Если версия выросла не на
+        количество ключей в added, память сбрасывается целиком.
+        """
+        camera_key = (tuple(camera.eye), tuple(camera.rotation.ravel()),
+                      camera.width, camera.height, camera.fov_y, threshold)
+        if self.key is None or camera_key != self.key[0] \
+                or len(self.values) > self.LIMIT \
+                or heights_version - self.key[1] != len(added):
+            self.values = {}
+        elif added:
+            for hz, hx, hy in added:
+                for z, x, y in [k for k in self.values if k[0] >= hz]:
+                    shift = z - hz
+                    if (x >> shift, y >> shift) == (hx, hy):
+                        del self.values[(z, x, y)]
+        self.key = (camera_key, heights_version)
+        return self.values
+
+
+_MISSING = object()
+
+
 def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
-           heights=None):
+           heights=None, memo=None):
     """Тайлы для кадра.
 
     ready(key) говорит, готов ли тайл к рисованию. Тайл уровня 0 должен
     быть готов всегда, иначе кадру нечем закрыть Землю. heights(key)
     даёт наименьшую и наибольшую высоту рельефа в тайле или осторожную
-    оценку этих высот. Без рельефа - None.
+    оценку этих высот. Без рельефа - None. memo - словарь из Memo.bind
+    для этой камеры и этих высот или None.
     """
     frame = _Frame(camera, threshold)
     want = {}
     keep = set()
     visited = [0]
+    # Величины кадра в локальных переменных. Обход идёт по сотням узлов
+    # каждый кадр, обращение к атрибутам и вызов на узел стоили
+    # половину времени выбора. Счёт тот же, что в _Frame.visible,
+    # _Frame.error и _lifted, совпадение держит test_lod.TestFastPath.
+    px, py, pz = frame.eye
+    ex, ey, ez = frame.eye_dir
+    (rx, ry, rz), (ux, uy, uz), (bx, by, bz) = frame.axes
+    planes = frame.planes
+    horizon = frame.horizon
+    focal = frame.focal
+    acos = math.acos
+    sqrt = math.sqrt
+    cache = _cache
 
-    def range_of(key):
-        return heights(key) if heights is not None else (0.0, 0.0)
+    def probe(key, check):
+        """Экранная ошибка тайла или None, если он точно не виден.
 
-    def visit(key, info, span):
+        Поднятая к слою высот сфера и расстояние до глаза считаются
+        один раз и идут и на отсечение, и на ошибку.
+        """
+        info = cache.get(key)
+        if info is None:
+            info = tile_info(*key)
+        if heights is None:
+            low = high = 0.0
+        else:
+            low, high = heights(key)
+        dx, dy, dz = info.direction
+        if check:
+            cos = ex * dx + ey * dy + ez * dz
+            angle = acos(-1.0 if cos < -1.0 else 1.0 if cos > 1.0 else cos)
+            beyond = acos(B / (B + high)) if high > 0.0 else 0.0
+            if angle > horizon + info.alpha + beyond:
+                return None
+        cx, cy, cz = info.center
+        r = info.radius
+        if low != 0.0 or high != 0.0:
+            mid = 0.5 * (low + high)
+            cx += dx * mid
+            cy += dy * mid
+            cz += dz * mid
+            r += 0.5 * (high - low)
+        vx, vy, vz = cx - px, cy - py, cz - pz
+        if check and key[0] > 2:
+            zc = bx * vx + by * vy + bz * vz
+            if zc > r:
+                return None
+            sx = rx * vx + ry * vy + rz * vz
+            sy = ux * vx + uy * vy + uz * vz
+            for a, b, c in planes:
+                if a * sx + b * sy + c * zc < -r:
+                    return None
+        d = sqrt(vx * vx + vy * vy + vz * vz) - r
+        if d <= MIN_DISTANCE:
+            return math.inf
+        return info.texel * focal / d
+
+    def visit(key, error):
         """Возвращает тайлы для рисования и признак полного покрытия."""
         visited[0] += 1
-        z = key[0]
+        z, x, y = key
         keep.add(key)
-        error = frame.error(info, *span)
         is_ready = ready(key)
         if not is_ready:
             want[key] = priority(error, z)
         if z < max_level and error > threshold:
             kids = []
-            for kid in children(key):
-                kid_info = tile_info(*kid)
-                kid_span = range_of(kid)
-                if frame.visible(kid[0], kid_info, *kid_span):
-                    kids.append((kid, kid_info, kid_span))
+            z1, x2, y2 = z + 1, 2 * x, 2 * y
+            # Порядок детей тот же, что у children.
+            for kid in ((z1, x2, y2), (z1, x2 + 1, y2), (z1, x2, y2 + 1),
+                        (z1, x2 + 1, y2 + 1)):
+                if memo is None:
+                    kid_error = probe(kid, True)
+                else:
+                    kid_error = memo.get(kid, _MISSING)
+                    if kid_error is _MISSING:
+                        kid_error = memo[kid] = probe(kid, True)
+                if kid_error is not None:
+                    kids.append((kid, kid_error))
             if not kids:
                 # Дети вместе покрывают тайл целиком, и каждое отсечение
                 # осторожное. Раз не виден ни один ребёнок, не виден
@@ -238,7 +342,7 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
                 keep.discard(key)
                 want.pop(key, None)
                 return [], True
-            if not is_ready and not any(ready(kid) for kid, _, _ in kids):
+            if not is_ready and not any(ready(kid) for kid, _ in kids):
                 # Фронт загрузки. Ниже неготового тайла без готовых детей
                 # рисовать нечего, а просить его потомков рано: они
                 # понадобятся, только когда придёт он сам. Без этого
@@ -247,8 +351,8 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
                 return [], False
             draws = []
             complete = True
-            for kid, kid_info, kid_span in kids:
-                kid_draw, kid_complete = visit(kid, kid_info, kid_span)
+            for kid, kid_error in kids:
+                kid_draw, kid_complete = visit(kid, kid_error)
                 draws.extend(kid_draw)
                 complete = complete and kid_complete
             if complete:
@@ -257,5 +361,5 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
         return ([key], True) if is_ready else ([], False)
 
     root = (0, 0, 0)
-    draw, _ = visit(root, tile_info(*root), range_of(root))
+    draw, _ = visit(root, probe(root, False))
     return Selection(draw, want, keep, visited[0])

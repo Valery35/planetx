@@ -7,6 +7,7 @@
 контексте OpenGL. Устройство описано в AGENTS.md, раздел «Кадр».
 """
 import ctypes
+from collections import deque
 
 import numpy as np
 from OpenGL import GL
@@ -14,6 +15,8 @@ from OpenGL.error import GLError
 from OpenGL.raw.GL.VERSION.GL_1_1 import glBindTexture as _bind_texture
 from OpenGL.raw.GL.VERSION.GL_1_1 import glDrawElements as _draw_elements
 from OpenGL.raw.GL.VERSION.GL_1_1 import glGetError as _get_error
+from OpenGL.raw.GL.VERSION.GL_1_3 import glActiveTexture as _active_texture
+from OpenGL.raw.GL.VERSION.GL_2_0 import glUniform4f as _uniform4f
 from OpenGL.raw.GL.VERSION.GL_2_0 import \
     glUniformMatrix4fv as _uniform_matrix
 from OpenGL.raw.GL.VERSION.GL_3_0 import glBindVertexArray as _bind_vao
@@ -74,25 +77,20 @@ class GpuMesh:
         indices = np.ascontiguousarray(mesh.indices)
         self.count = len(indices)
         self.center = mesh.center
-        self.vao = GL.glGenVertexArrays(1)
-        self.vbo, self.ebo = GL.glGenBuffers(2)
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
-        GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
-                        GL.GL_STATIC_DRAW)
-        GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, self.ebo)
-        GL.glBufferData(GL.GL_ELEMENT_ARRAY_BUFFER, indices.nbytes, indices,
-                        GL.GL_STATIC_DRAW)
-        GL.glEnableVertexAttribArray(0)
-        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, STRIDE,
-                                 ctypes.c_void_p(0))
-        GL.glEnableVertexAttribArray(1)
-        GL.glVertexAttribPointer(1, 2, GL.GL_FLOAT, GL.GL_FALSE, STRIDE,
-                                 ctypes.c_void_p(3 * 4))
-        GL.glEnableVertexAttribArray(2)
-        GL.glVertexAttribPointer(2, 1, GL.GL_FLOAT, GL.GL_FALSE, STRIDE,
-                                 ctypes.c_void_p(5 * 4))
-        GL.glBindVertexArray(0)
+        # Сетка создаётся в кадре для каждого нового тайла, вызовы идут
+        # через gl без отпускания GIL, см. hold_gil.
+        self.vao = gl.gen_names("glGenVertexArrays", 1)[0]
+        self.vbo, self.ebo = gl.gen_names("glGenBuffers", 2)
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.buffer_data(GL.GL_ARRAY_BUFFER, data)
+        gl.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, self.ebo)
+        gl.buffer_data(GL.GL_ELEMENT_ARRAY_BUFFER, indices)
+        for index, size, offset in ((0, 3, 0), (1, 2, 3), (2, 1, 5)):
+            gl.glEnableVertexAttribArray(index)
+            gl.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
+                                     STRIDE, ctypes.c_void_p(offset * 4))
+        gl.glBindVertexArray(0)
 
     def draw(self):
         GL.glBindVertexArray(self.vao)
@@ -100,24 +98,221 @@ class GpuMesh:
                           ctypes.c_void_p(0))
 
     def delete(self):
-        GL.glDeleteVertexArrays(1, [self.vao])
-        GL.glDeleteBuffers(2, [self.vbo, self.ebo])
+        gl.delete_names("glDeleteVertexArrays", [self.vao])
+        gl.delete_names("glDeleteBuffers", [self.vbo, self.ebo])
 
 
-def draw_batch(items, mvps, u_mvp):
+NO_OVERLAY = (0.0, 0.0, 1.0)
+
+# Горячие вызовы, которые не отпускают GIL. Имя, возвращаемый тип,
+# типы аргументов. Имена - как у функций OpenGL.raw выше.
+_HOLD_GIL = (
+    ("_bind_texture", "glBindTexture", (ctypes.c_uint, ctypes.c_uint)),
+    ("_draw_elements", "glDrawElements",
+     (ctypes.c_uint, ctypes.c_int, ctypes.c_uint, ctypes.c_void_p)),
+    ("_uniform_matrix", "glUniformMatrix4fv",
+     (ctypes.c_int, ctypes.c_int, ctypes.c_ubyte, ctypes.c_void_p)),
+    ("_bind_vao", "glBindVertexArray", (ctypes.c_uint,)),
+    ("_active_texture", "glActiveTexture", (ctypes.c_uint,)),
+    ("_uniform4f", "glUniform4f",
+     (ctypes.c_int, ctypes.c_float, ctypes.c_float, ctypes.c_float,
+      ctypes.c_float)),
+)
+
+
+_F = ctypes.c_float
+_U = ctypes.c_uint
+_I = ctypes.c_int
+_P = ctypes.c_void_p
+# Вызовы кадра вне draw_batch: имя и типы аргументов. Указатели
+# передаются адресом массива NumPy, обёртки ниже берут сам массив.
+_FRAME_CALLS = (
+    ("glClearColor", (_F, _F, _F, _F)),
+    ("glClear", (_U,)),
+    ("glEnable", (_U,)),
+    ("glDisable", (_U,)),
+    ("glUseProgram", (_U,)),
+    ("glUniform1i", (_I, _I)),
+    ("glUniform1f", (_I, _F)),
+    ("glUniform2f", (_I, _F, _F)),
+    ("glUniform3f", (_I, _F, _F, _F)),
+    ("glUniform4f", (_I, _F, _F, _F, _F)),
+    ("glDepthFunc", (_U,)),
+    ("glDepthMask", (ctypes.c_ubyte,)),
+    ("glBindVertexArray", (_U,)),
+    ("glBindTexture", (_U, _U)),
+    ("glActiveTexture", (_U,)),
+    ("glDrawArrays", (_U, _I, _I)),
+    ("glPixelStorei", (_U, _I)),
+    ("glUniformMatrix3fv", (_I, _I, ctypes.c_ubyte, _P)),
+    ("glTexSubImage2D", (_U, _I, _I, _I, _I, _I, _U, _U, _P)),
+    # Выделение текстур в запас: оно идёт в кадрах без движения, то есть
+    # во время загрузки почти в каждом кадре.
+    ("glTexImage2D", (_U, _I, _I, _I, _I, _I, _U, _U, _P)),
+    ("glTexParameteri", (_U, _U, _I)),
+    ("glTexParameterf", (_U, _U, _F)),
+    ("glGenTextures", (_I, _P)),
+    # Сетки новых тайлов.
+    ("glGenVertexArrays", (_I, _P)),
+    ("glGenBuffers", (_I, _P)),
+    ("glDeleteVertexArrays", (_I, _P)),
+    ("glDeleteBuffers", (_I, _P)),
+    ("glBindBuffer", (_U, _U)),
+    ("glBufferData", (_U, ctypes.c_ssize_t, _P, _U)),
+    ("glEnableVertexAttribArray", (_U,)),
+    ("glVertexAttribPointer", (_U, _I, _U, ctypes.c_ubyte, _I, _P)),
+)
+
+
+class _FrameGL:
+    """Вызовы OpenGL кадра. До hold_gil - функции PyOpenGL."""
+
+    def __init__(self):
+        for name, _ in _FRAME_CALLS:
+            setattr(self, name, getattr(GL, name))
+        self.fast = False
+
+    def matrix3(self, location, transpose, matrix):
+        """glUniformMatrix3fv для массива 3×3 float32."""
+        if self.fast:
+            data = np.ascontiguousarray(matrix, dtype=np.float32)
+            self.glUniformMatrix3fv(location, 1, transpose, data.ctypes.data)
+        else:
+            GL.glUniformMatrix3fv(location, 1, transpose, matrix)
+
+    def gen_names(self, function, count):
+        """Имена новых объектов через glGen*, список чисел."""
+        if self.fast:
+            names = (ctypes.c_uint * count)()
+            getattr(self, function)(count, ctypes.addressof(names))
+            return [int(n) for n in names]
+        return [int(n) for n in np.ravel(getattr(GL, function)(count))]
+
+    def delete_names(self, function, names):
+        """Удалить объекты через glDelete*."""
+        if self.fast:
+            array = (ctypes.c_uint * len(names))(*names)
+            getattr(self, function)(len(names), ctypes.addressof(array))
+        else:
+            getattr(GL, function)(len(names), list(names))
+
+    def buffer_data(self, target, array):
+        """glBufferData из массива NumPy, GL_STATIC_DRAW."""
+        if self.fast:
+            self.glBufferData(target, array.nbytes, array.ctypes.data,
+                              GL.GL_STATIC_DRAW)
+        else:
+            GL.glBufferData(target, array.nbytes, array, GL.GL_STATIC_DRAW)
+
+    def gen_texture(self):
+        """Имя новой текстуры."""
+        if self.fast:
+            name = (ctypes.c_uint * 1)()
+            self.glGenTextures(1, ctypes.addressof(name))
+            return int(name[0])
+        return int(np.ravel(GL.glGenTextures(1))[0])
+
+    def tex_sub(self, level, size, rgba):
+        """glTexSubImage2D уровня квадратной текстуры RGBA из массива."""
+        if self.fast:
+            data = np.ascontiguousarray(rgba, dtype=np.uint8)
+            self.glTexSubImage2D(GL.GL_TEXTURE_2D, level, 0, 0, size, size,
+                                 GL.GL_RGBA, GL.GL_UNSIGNED_BYTE,
+                                 data.ctypes.data)
+        else:
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, level, 0, 0, size, size,
+                               GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, rgba)
+
+
+gl = _FrameGL()
+
+
+_RAW = {"_bind_texture": _bind_texture, "_draw_elements": _draw_elements,
+        "_uniform_matrix": _uniform_matrix, "_bind_vao": _bind_vao,
+        "_active_texture": _active_texture, "_uniform4f": _uniform4f}
+
+
+def release_gil():
+    """Вернуть вызовы OpenGL.raw и PyOpenGL, для сравнения в замерах."""
+    globals().update(_RAW)
+    for name, _ in _FRAME_CALLS:
+        setattr(gl, name, getattr(GL, name))
+    gl.fast = False
+
+
+def hold_gil(context):
+    """Перевести горячие вызовы кадра на указатели без отпускания GIL.
+
+    Функции ctypes, как у OpenGL.raw, отпускают GIL на время вызова.
+    Если в это время рабочий поток выполняет Python, главный поток ждёт
+    GIL обратно до интервала переключения, 5 мс. За кадр таких вызовов
+    сотни. Проверка 26 сентября 2026 года, tools/qgis_gil.py: при потоке
+    чистого Python участок отрисовки занял 1022 мс в медиане против
+    1.3 мс без него.
+
+    Указатели строятся через ctypes.PYFUNCTYPE, он не отпускает GIL.
+    Адреса даёт QOpenGLContext.getProcAddress текущего контекста.
+    Соглашение о вызове cdecl, на Windows x64 оно единственное. Если
+    адрес не получен, остаётся функция OpenGL.raw. Возвращает имена
+    переведённых функций.
+    """
+    done = []
+    for name, gl_name, argtypes in _HOLD_GIL:
+        address = context.getProcAddress(gl_name.encode())
+        address = int(address) if address is not None else 0
+        if not address:
+            continue
+        globals()[name] = ctypes.PYFUNCTYPE(None, *argtypes)(address)
+        done.append(gl_name)
+    fast = {}
+    for gl_name, argtypes in _FRAME_CALLS:
+        address = context.getProcAddress(gl_name.encode())
+        address = int(address) if address is not None else 0
+        if not address:
+            break
+        fast[gl_name] = ctypes.PYFUNCTYPE(None, *argtypes)(address)
+    else:
+        # Все или ни одного: у обёрток с указателями разные аргументы.
+        for gl_name, function in fast.items():
+            setattr(gl, gl_name, function)
+        gl.fast = True
+        done += list(fast)
+    return done
+
+
+def draw_batch(items, mvps, u_mvp, overlays=None, u_overlay_uv=-1):
     """Нарисовать набор сеток, у каждой своя текстура и матрица.
 
     items - пары (GpuMesh, текстура), mvps - массив (N, 4, 4) float32
-    по строкам, как его даёт Camera.tiles_mvp. Горячий путь кадра
-    идёт через функции OpenGL.raw без проверки ошибок после каждого
-    вызова. Замер 26 сентября 2026 года: glUniformMatrix4fv с проверкой
-    36 мкс, без неё 6 мкс. Ошибки ловит frame_errors раз в кадр.
+    по строкам, как его даёт Camera.tiles_mvp. overlays - пары
+    (текстура наложения, окно (сдвиг u, сдвиг v, масштаб)) по одной
+    на сетку. Текстура наложения идёт на блок 1, подложка на блок 0.
+    Без overlays блок 1 не трогается.
+
+    Горячий путь кадра идёт через функции OpenGL.raw без проверки ошибок
+    после каждого вызова. Замер 26 сентября 2026 года: glUniformMatrix4fv
+    с проверкой 36 мкс, без неё 6 мкс. Ошибки ловит frame_errors раз
+    в кадр. Привязка и окно наложения меняются, только когда отличаются
+    от прошлой сетки.
     """
     base = mvps.ctypes.data
     stride = mvps.strides[0]
     last_texture = None
+    last_overlay = None
+    last_window = None
     null = ctypes.c_void_p(0)
     for i, (mesh, texture) in enumerate(items):
+        if overlays is not None:
+            overlay, window = overlays[i]
+            if overlay != last_overlay:
+                _active_texture(GL.GL_TEXTURE1)
+                _bind_texture(GL.GL_TEXTURE_2D, overlay)
+                _active_texture(GL.GL_TEXTURE0)
+                last_overlay = overlay
+            if window != last_window:
+                _uniform4f(u_overlay_uv, window[0], window[1], window[2],
+                           0.0)
+                last_window = window
         if texture != last_texture:
             _bind_texture(GL.GL_TEXTURE_2D, texture)
             last_texture = texture
@@ -193,22 +388,25 @@ class TexturePool:
     def __init__(self, anisotropy, limit=256):
         self.anisotropy = anisotropy
         self.limit = limit
-        self.free = []
+        # Очередь, а не стек. Освобождённая только что текстура могла
+        # рисоваться в прошлом кадре, и запись в неё заставила бы драйвер
+        # ждать видеокарту. Берётся освобождённая раньше всех.
+        self.free = deque()
         self.levels = TILE_SIZE.bit_length()  # 256 -> 9 уровней
 
     def allocate(self, count):
         """Выделить count пустых текстур в запас."""
         for _ in range(count):
-            texture = GL.glGenTextures(1)
-            GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
+            texture = gl.gen_texture()
+            gl.glBindTexture(GL.GL_TEXTURE_2D, texture)
             for level in range(self.levels):
                 size = TILE_SIZE >> level
-                GL.glTexImage2D(GL.GL_TEXTURE_2D, level, GL.GL_RGBA8, size,
+                gl.glTexImage2D(GL.GL_TEXTURE_2D, level, GL.GL_RGBA8, size,
                                 size, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE,
                                 None)
             _texture_parameters(self.levels, self.anisotropy)
             self.free.append(texture)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
 
     def acquire(self, levels):
         """Текстура с картинкой тайла, из запаса, если он не пуст."""
@@ -216,14 +414,12 @@ class TexturePool:
                 and levels[0].shape[:2] == (TILE_SIZE, TILE_SIZE))
         if not fits or not self.free:
             return create_texture(levels, self.anisotropy)
-        texture = self.free.pop()
-        GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
-        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+        texture = self.free.popleft()
+        gl.glBindTexture(GL.GL_TEXTURE_2D, texture)
+        gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
         for level, rgba in enumerate(levels):
-            size = rgba.shape[0]
-            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, level, 0, 0, size, size,
-                               GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, rgba)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+            gl.tex_sub(level, rgba.shape[0], rgba)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
         return texture
 
     def release(self, texture):
@@ -235,21 +431,21 @@ class TexturePool:
     def delete_all(self):
         for texture in self.free:
             delete_texture(texture)
-        self.free = []
+        self.free = deque()
 
 
 def _texture_parameters(levels, anisotropy):
     """Фильтрация и края для привязанной текстуры тайла."""
-    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAX_LEVEL,
+    gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAX_LEVEL,
                        levels - 1)
-    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER,
+    gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER,
                        GL.GL_LINEAR_MIPMAP_LINEAR)
-    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER,
+    gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER,
                        GL.GL_LINEAR)
-    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S,
+    gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S,
                        GL.GL_CLAMP_TO_EDGE)
-    GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T,
+    gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T,
                        GL.GL_CLAMP_TO_EDGE)
     if anisotropy > 1.0:
-        GL.glTexParameterf(GL.GL_TEXTURE_2D, TEXTURE_MAX_ANISOTROPY,
+        gl.glTexParameterf(GL.GL_TEXTURE_2D, TEXTURE_MAX_ANISOTROPY,
                            anisotropy)

@@ -19,6 +19,10 @@ from collections import namedtuple
 import numpy as np
 
 MAX_LEVEL = 15
+# Уровень высот сетки, собранной без рельефа при выключенном рельефе.
+# Он глубже любого тайла высот, поэтому новые высоты такую сетку
+# не пересобирают.
+FLAT_LEVEL = MAX_LEVEL + 1
 SIZE = 256
 # Уровень высот для тайла подложки уровня z. 256 пикселей высот на 16
 # отрезков сетки дают 4 пикселя на отрезок уже при z - 2, поэтому
@@ -102,18 +106,42 @@ def mercator_share(lat, lon):
 
 
 class HeightStore:
-    """Загруженные тайлы высот и выбор лучшего для точки или тайла."""
+    """Загруженные тайлы высот и выбор лучшего для точки или тайла.
+
+    scale - вертикальный масштаб рельефа. Высоты и размахи отдаются
+    умноженными на него, 0 - рельеф выключен, Земля гладкая.
+    """
 
     RANGE_CACHE = 50000
 
     def __init__(self):
         self.tiles = {}
         self._ranges = {}
+        self.scale = 1.0
+        # Растёт с каждым добавленным тайлом и со сменой масштаба. По ней
+        # выбор тайлов понимает, что размахи высот могли измениться.
+        self.version = 0
+        # Ключи тайлов, добавленных после последнего take_added.
+        self.added = []
+
+    def set_scale(self, scale):
+        """Новый вертикальный масштаб. Меняет все высоты сразу."""
+        self.scale = float(scale)
+        self.version += 1
 
     def add(self, tile):
+        # Кэш размахов не сбрасывается. Размах помнит тайл высот, по
+        # которому посчитан, и пересчитывается, когда лучший тайл другой.
+        # Раньше каждый новый тайл высот сбрасывал весь кэш, и выбор
+        # тайлов заново считал размахи всех тайлов кадра.
         self.tiles[(tile.z, tile.x, tile.y)] = tile
-        # Размахи считались по более грубым тайлам, новый точнее.
-        self._ranges.clear()
+        self.version += 1
+        self.added.append((tile.z, tile.x, tile.y))
+
+    def take_added(self):
+        """Ключи тайлов, добавленных с прошлого вызова."""
+        added, self.added = self.added, []
+        return added
 
     def best(self, key):
         """Самый точный готовый тайл высот для тайла подложки key.
@@ -128,19 +156,32 @@ class HeightStore:
                 return tile
         return None
 
+    def for_mesh(self, key):
+        """Тайл высот для сетки тайла подложки key и его уровень.
+
+        Рельеф выключен - (None, FLAT_LEVEL). Высот нет - (None, -1).
+        Сетка пересобирается, когда уровень больше уровня её сборки.
+        """
+        if not self.scale:
+            return None, FLAT_LEVEL
+        tile = self.best(key)
+        return tile, -1 if tile is None else tile.z
+
     def wanted(self, key):
         """Ключ тайла высот, нужного тайлу подложки key."""
         return ancestor(key, height_level(key[0]))
 
     def height_at(self, lat, lon):
         """Высота рельефа в точке по самому точному готовому тайлу."""
+        if not self.scale:
+            return 0.0
         u, v = mercator_share(lat, lon)
         for zh in range(MAX_LEVEL, -1, -1):
             n = 1 << zh
             key = (zh, min(int(u * n), n - 1), min(int(v * n), n - 1))
             tile = self.tiles.get(key)
             if tile is not None:
-                return float(sample(tile, u, v))
+                return float(sample(tile, u, v)) * self.scale
         return 0.0
 
     def range_for(self, key):
@@ -154,12 +195,17 @@ class HeightStore:
         тайлов раздувает сферу тайла на половину размаха, и с грубой
         оценкой мелкие тайлы у камеры дробились бы без нужды.
         """
-        cached = self._ranges.get(key)
-        if cached is not None:
-            return cached
-        tile = self.best(key)
+        tile = self.best(key) if self.scale else None
         if tile is None:
             return (0.0, 0.0)
+        low, high = self._range(key, tile)
+        return (low * self.scale, high * self.scale)
+
+    def _range(self, key, tile):
+        """Размах высот тайла подложки key по тайлу высот, без масштаба."""
+        cached = self._ranges.get(key)
+        if cached is not None and cached[0] is tile:
+            return cached[1]
         z, x, y = key
         shift = z - tile.z
         if shift <= 0:
@@ -174,5 +220,5 @@ class HeightStore:
             result = (float(block.min()), float(block.max()))
         if len(self._ranges) > self.RANGE_CACHE:
             self._ranges.clear()
-        self._ranges[key] = result
+        self._ranges[key] = (tile, result)
         return result

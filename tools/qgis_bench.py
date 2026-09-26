@@ -205,7 +205,8 @@ def report():
               % (_pct(bench.before, 50), _pct(bench.before, 95)))
         print("от конца paintGL до frameSwapped, мс: медиана %.2f, 95-й %.2f"
               % (_pct(bench.after, 50), _pct(bench.after, 95)))
-    for name in ("upload", "select", "loader", "draw", "evict"):
+    for name in ("upload", "terrain", "select", "heights", "loader",
+                 "draw", "evict"):
         values = [s[name] for s in bench.sections]
         print("  %-7s медиана %.2f мс, 95-й процентиль %.2f мс"
               % (name, _pct(values, 50), _pct(values, 95)))

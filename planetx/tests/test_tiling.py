@@ -298,5 +298,40 @@ def tl_centre_latlon(mesh):
     return float(lat), (west + east) / 2.0
 
 
+class TestHoleMargin(unittest.TestCase):
+    """Полоса счётчика дыр у края диска покрывает просадку хорд."""
+
+    def measured_sag(self, z):
+        # Середины сторон и центры треугольников всех тайлов уровня,
+        # без юбки: у её треугольников вершины ниже поверхности.
+        low = 0.0
+        n = 1 << z
+        for x in range(n):
+            for y in range(n):
+                m = tl.tile_mesh(z, x, y)
+                p = m.positions.astype(np.float64) + m.center
+                hv = el.ecef_to_geodetic(p)[2]
+                tri = m.indices.reshape(-1, 3)
+                tri = tri[np.all(np.abs(hv[tri]) < 1.0, axis=1)]
+                for w in ((1 / 3, 1 / 3, 1 / 3), (0.5, 0.5, 0.0),
+                          (0.0, 0.5, 0.5), (0.5, 0.0, 0.5)):
+                    q = (p[tri[:, 0]] * w[0] + p[tri[:, 1]] * w[1]
+                         + p[tri[:, 2]] * w[2])
+                    low = min(low, float(np.min(el.ecef_to_geodetic(q)[2])))
+        return -low
+
+    def test_cell_sag_matches_mesh(self):
+        for z in (2, 3):
+            measured = self.measured_sag(z)
+            self.assertLessEqual(measured, tl.cell_sag(z) * 1.001, z)
+            self.assertGreater(measured, tl.cell_sag(z) * 0.95, z)
+
+    def test_margin_covers_level_2_and_underlay(self):
+        # Кадр без уровней глубже 2 бывает в новом окне, пока идёт
+        # загрузка. Полоса 10 км давала там ложные дыры, 26 сентября 2026.
+        self.assertGreater(tl.HOLE_MARGIN,
+                           tl.cell_sag(2) + tl.UNDERLAY_DEPTH)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -10,6 +10,10 @@ from .i18n import tr
 from .qt_compat import QAction
 
 ICON = os.path.join(os.path.dirname(__file__), "icon.svg")
+ABOUT_ICON = os.path.join(os.path.dirname(__file__), "about.svg")
+# Имя объекта панели. По нему QGIS запоминает, где пользователь её
+# поставил, и возвращает туда при следующем запуске.
+TOOLBAR = "PlanetXToolBar"
 
 
 class PlanetXPlugin:
@@ -17,19 +21,26 @@ class PlanetXPlugin:
         self.iface = iface
         self.action = None
         self.about_action = None
+        self.toolbar = None
         self.window = None
 
     def initGui(self):
         self.action = QAction(QIcon(ICON), "PlanetX", self.iface.mainWindow())
         self.action.triggered.connect(self.run)
         self.iface.addPluginToWebMenu("PlanetX", self.action)
-        # Кнопка на панели модулей. Панель «Интернет» QGIS по умолчанию
-        # прячет, и кнопка на ней не видна.
-        self.iface.addToolBarIcon(self.action)
-        self.about_action = QAction(QIcon(ICON), tr("О модуле PlanetX"),
+        self.about_action = QAction(QIcon(ABOUT_ICON),
+                                    tr("О модуле PlanetX"),
                                     self.iface.mainWindow())
         self.about_action.triggered.connect(self.about)
         self.iface.addPluginToWebMenu("PlanetX", self.about_action)
+        # Своя панель инструментов. Кнопка на общей панели модулей
+        # отдельно не передвигается, а своя панель перетаскивается
+        # мышью куда угодно. Панель «Интернет» QGIS по умолчанию прячет.
+        self.toolbar = self.iface.addToolBar("PlanetX")
+        self.toolbar.setObjectName(TOOLBAR)
+        self.toolbar.setToolTip("PlanetX")
+        self.toolbar.addAction(self.action)
+        self.toolbar.addAction(self.about_action)
 
     def _window_gone(self, window):
         # Ссылка снимается в момент закрытия. Закрытое окно Qt уничтожает
@@ -44,11 +55,14 @@ class PlanetXPlugin:
             self.window = None
         if self.action is not None:
             self.iface.removePluginWebMenu("PlanetX", self.action)
-            self.iface.removeToolBarIcon(self.action)
             self.action = None
         if self.about_action is not None:
             self.iface.removePluginWebMenu("PlanetX", self.about_action)
             self.about_action = None
+        if self.toolbar is not None:
+            self.iface.mainWindow().removeToolBar(self.toolbar)
+            self.toolbar.deleteLater()
+            self.toolbar = None
         # Загрузчик мог поставить обработчик запросов QGIS. Он общий для
         # всех запросов и после выгрузки плагина оставаться не должен.
         import sys

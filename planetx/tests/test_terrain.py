@@ -128,6 +128,22 @@ class TestStore(unittest.TestCase):
         # Мельче пикселя: пиксель 0 и сосед справа.
         self.assertEqual(store.range_for((12, 1, 1)), (0.0, 10.0))
 
+    def test_range_follows_finer_heights_without_full_reset(self):
+        store = tr.HeightStore()
+        store.add(ramp_tile(0, 0, 0))
+        key = (12, 1, 1)
+        far = (12, 3000, 3000)
+        self.assertEqual(store.range_for(key), (0.0, 10.0))
+        far_range = store.range_for(far)
+        # Тайл высот в другом месте не трогает посчитанный размах.
+        store.add(tr.make_tile(8, 180, 180,
+                               encode(np.full((256, 256), 700.0))))
+        self.assertIs(store._ranges[far][1], far_range)
+        self.assertEqual(store.range_for(far), far_range)
+        # Тайл высот точнее над key меняет его размах.
+        store.add(tr.make_tile(4, 0, 0, encode(np.full((256, 256), 50.0))))
+        self.assertEqual(store.range_for(key), (50.0, 50.0))
+
     def test_range_is_never_narrower_than_the_mesh(self):
         # Узлы сетки тайла лежат внутри размаха, иначе сфера тайла
         # не накрыла бы его вершины.

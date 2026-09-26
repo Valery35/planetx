@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Значок «О модуле»: буква i в круге, цвета логотипа PlanetX -->
+  <defs>
+    <radialGradient id="ocean" cx="38%" cy="32%" r="72%">
+      <stop offset="0" stop-color="#9ad8f7"/>
+      <stop offset="0.5" stop-color="#2f86c8"/>
+      <stop offset="1" stop-color="#0f3a73"/>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="28" fill="url(#ocean)" stroke="#0b2d5c" stroke-width="2"/>
+  <circle cx="32" cy="18" r="4.5" fill="#ffffff"/>
+  <rect x="27.5" y="26" width="9" height="24" rx="3" fill="#ffffff"/>
+</svg>

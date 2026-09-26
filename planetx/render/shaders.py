@@ -168,11 +168,18 @@ in vec2 v_uv;
 in float v_shade;
 in float v_depth;
 uniform sampler2D u_texture;
+// Наложение: картинка слоя QGIS с премноженной альфой. Координаты
+// в ней - u_overlay_uv.xy + u_overlay_uv.z * v_uv, это часть картинки
+// предка, пока своя не готова. Без наложения - прозрачная текстура.
+uniform sampler2D u_overlay;
+uniform vec4 u_overlay_uv;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
 void main() {
+    vec4 over = texture(u_overlay, u_overlay_uv.xy + u_overlay_uv.z * v_uv);
+    vec3 base = texture(u_texture, v_uv).rgb * (1.0 - over.a) + over.rgb;
     // Отмывка рельефа: множитель яркости, на равнине 1.
-    vec3 ground = clamp(texture(u_texture, v_uv).rgb * v_shade, 0.0, 1.0);
+    vec3 ground = clamp(base * v_shade, 0.0, 1.0);
     // Дымка: воздух между глазом и поверхностью.
     vec3 pass;
     // Белая подложка под дымкой остаётся белой: pass + (1 - pass) = 1.

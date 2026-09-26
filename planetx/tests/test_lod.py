@@ -295,6 +295,130 @@ class TestTerrainHeights(unittest.TestCase):
         self.assertLess(len(hills.draw), 1.5 * len(flat.draw))
 
 
+def reference_select(camera, ready, heights=None):
+    """Прежний обход через _Frame.visible и _Frame.error, образец."""
+    frame = lod._Frame(camera, lod.THRESHOLD)
+    want, keep = {}, set()
+
+    def span(key):
+        return heights(key) if heights is not None else (0.0, 0.0)
+
+    def visit(key):
+        z = key[0]
+        keep.add(key)
+        error = frame.error(lod.tile_info(*key), *span(key))
+        is_ready = ready(key)
+        if not is_ready:
+            want[key] = lod.priority(error, z)
+        if z < lod.MAX_LEVEL and error > lod.THRESHOLD:
+            kids = [k for k in lod.children(key)
+                    if frame.visible(k[0], lod.tile_info(*k), *span(k))]
+            if not kids:
+                keep.discard(key)
+                want.pop(key, None)
+                return [], True
+            if not is_ready and not any(ready(k) for k in kids):
+                return [], False
+            draws, complete = [], True
+            for kid in kids:
+                d, c = visit(kid)
+                draws.extend(d)
+                complete = complete and c
+            if complete:
+                return draws, True
+        return ([key], True) if is_ready else ([], False)
+
+    draw, _ = visit((0, 0, 0))
+    return draw, want, keep
+
+
+class TestFastPath(unittest.TestCase):
+    """Обход с величинами в локальных переменных совпадает с образцом."""
+
+    def test_same_selection(self):
+        def hills(key):
+            return (0.0, 3000.0) if key[0] % 2 else (200.0, 900.0)
+
+        for name, (lat, lon), distance, heading, tilt in CAMERAS:
+            cam = view(lat, lon, distance, heading, tilt)
+            for ready in (everything, half_ready, lambda k: k[0] <= 2):
+                for heights in (None, hills):
+                    sel = lod.select(cam, ready, heights=heights)
+                    draw, want, keep = reference_select(cam, ready, heights)
+                    self.assertEqual(sel.draw, draw, name)
+                    self.assertEqual(sel.keep, keep, name)
+                    # Расстояние считается через sqrt, а не math.dist,
+                    # приоритеты расходятся в последнем знаке.
+                    self.assertEqual(set(sel.want), set(want), name)
+                    for key, value in want.items():
+                        self.assertTrue(math.isclose(sel.want[key], value,
+                                                     rel_tol=1e-12), name)
+
+
+class TestMemo(unittest.TestCase):
+    """Память узлов не меняет выбор и сбрасывается при сдвиге камеры."""
+
+    def test_same_selection_while_tiles_arrive(self):
+        cam = view(*PERM, 2000.0, 30.0, 70.0)
+        memo = lod.Memo()
+        ready = set()
+        full = lod.select(cam, lambda k: True)
+        for step in range(6):
+            # Тайлы приходят, готовность меняется, камера стоит.
+            ready.update(k for k in full.keep if hash(k) % 6 == step)
+
+            def is_ready(k):
+                return k[0] <= 2 or k in ready
+
+            with_memo = lod.select(cam, is_ready,
+                                   memo=memo.bind(cam, lod.THRESHOLD, 0))
+            plain = lod.select(cam, is_ready)
+            self.assertEqual(with_memo.draw, plain.draw)
+            self.assertEqual(with_memo.want, plain.want)
+            self.assertEqual(with_memo.keep, plain.keep)
+
+    def test_partial_reset_when_heights_arrive(self):
+        # Высоты приходят по одному тайлу, камера стоит. Память забывает
+        # только узлы под пришедшим тайлом и даёт тот же выбор, что
+        # расчёт с нуля.
+        import numpy as np
+        import terrain as tr
+        cam = view(*PERM, 2000.0, 30.0, 70.0)
+        store = tr.HeightStore()
+        flat = np.zeros((256, 256, 4), dtype=np.uint8)
+        flat[..., 0] = 128  # высота 0 в кодировке Terrarium
+        store.add(tr.make_tile(0, 0, 0, flat))
+        memo = lod.Memo()
+        rng = np.random.default_rng(2)
+        for step in range(8):
+            values = memo.bind(cam, lod.THRESHOLD, store.version,
+                               store.take_added())
+            with_memo = lod.select(cam, everything, heights=store.range_for,
+                                   memo=values)
+            plain = lod.select(cam, everything, heights=store.range_for)
+            self.assertEqual(with_memo.draw, plain.draw, step)
+            self.assertEqual(with_memo.keep, plain.keep, step)
+            # Следующий тайл высот - над одним из нарисованных тайлов.
+            key = with_memo.draw[int(rng.integers(len(with_memo.draw)))]
+            hz = tr.height_level(key[0])
+            shift = key[0] - hz
+            hills = flat.copy()
+            hills[..., 0] = 128 + (step + 1) * 4  # высота растёт
+            store.add(tr.make_tile(hz, key[1] >> shift, key[2] >> shift,
+                                   hills))
+
+    def test_reset_on_camera_and_heights(self):
+        memo = lod.Memo()
+        cam = view(*PERM, 2000.0, 30.0, 70.0)
+        values = memo.bind(cam, lod.THRESHOLD, 0)
+        lod.select(cam, everything, memo=values)
+        self.assertTrue(values)
+        self.assertIs(memo.bind(cam, lod.THRESHOLD, 0), values)
+        self.assertIsNot(memo.bind(cam, lod.THRESHOLD, 1), values)
+        moved = view(*PERM, 2100.0, 30.0, 70.0)
+        self.assertEqual(memo.bind(moved, lod.THRESHOLD, 1), {})
+
+
 class TestSpeed(unittest.TestCase):
 
     def test_selection_fits_the_frame_budget(self):

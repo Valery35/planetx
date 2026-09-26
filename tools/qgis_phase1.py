@@ -273,7 +273,7 @@ class Imagery(Watched):
         view.hole_check = True
         self.before = window.attribution.text()
         names = [s.name for s in window.sources]
-        window.basemap.setCurrentIndex(names.index(IMAGERY))
+        window.choose_basemap(names.index(IMAGERY))
 
     def frame(self, t):
         view = self.view
@@ -416,8 +416,8 @@ class Acceptance(QObject):
     def _open_start(self):
         _script("qgis_open.py")["start"]()
         window = self.plugin.window
-        self.basemap = window.basemap.currentIndex()
-        window.basemap.setCurrentIndex(0)
+        self.basemap = window.basemap_index()
+        window.choose_basemap(0)
         window.showNormal()
         window.raise_()
         window.activateWindow()
@@ -446,7 +446,7 @@ class Acceptance(QObject):
             self.timer.stop()
             window = self.plugin.window
             if self.basemap is not None:
-                window.basemap.setCurrentIndex(self.basemap)
+                window.choose_basemap(self.basemap)
             self.step = "готово"
             return
         name, begin, _, _ = self.steps[self.index]

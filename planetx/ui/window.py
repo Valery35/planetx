@@ -1,52 +1,84 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Окно глобуса: вид OpenGL и строка состояния с подписью источника."""
+"""Окно глобуса по образцу 3D-сцены Isoliner3D.
+
+Слева панель: координаты, список источников и слоёв, строка состояния
+(ui/panel.py). Справа вид OpenGL, в его левом верхнем углу плавающая
+панель значков (ui/toolbar.py), в правом нижнем подпись источников.
+Окно связывает части и решает, панели только показывают.
+"""
 import html
 import os
+import sys
 import time
 
-from qgis.core import QgsSettings
-from qgis.PyQt.QtCore import Qt, pyqtSignal
+from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+                       QgsProject, QgsSettings)
+from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QLineEdit,
-                                 QPushButton, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import QLabel, QSplitter, QVBoxLayout, QWidget
 
 from ..core import basemap
-from ..core.flight import Flight, parse_latlon
+from ..core.flight import Flight, fit_view, parse_latlon
 from ..core.mipmap import mip_chain
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.tiling import tile_mesh
 from ..i18n import tr
 from ..net.loader import TERRARIUM_URL, TileLoader
+from ..net.overlay import (LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
+                           OPENFREEMAP_TILEJSON, LayerOverlay, fetch_json,
+                           openfreemap_layer, set_line_groups)
 from ..qt_compat import enum
 from ..render.view import GlobeView, start_keys
 from .about import show_about
+from .panel import LayerPanel
+from .project import (AUTO_REFRESH, PROJECT_LAYERS, ProjectWatch,
+                      project_layers, read_flag, write_flag)
+from .properties import SCALE_RANGE, PropertiesDialog
+from .toolbar import ViewToolbar
 
 TERRAIN_ATTRIBUTION = (
     '<a href="https://github.com/tilezen/joerd/blob/master/docs/'
     'attribution.md">Terrain: Mapzen, SRTM, GMTED, ETOPO1 and others</a>')
 XYZ_PREFIX = "connections/xyz/items/"
 BASEMAP_KEY = "PlanetX/basemap"  # имя выбранной подложки в настройках
+# Включена ли группа линий векторной основы, по группам.
+LINES_KEY = "PlanetX/lines/{}"
+RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
+SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 TILE_SIZE = 256
+# Интервал переключения GIL, пока открыто окно. Каждый вызов OpenGL
+# и PyQt из главного потока отпускает GIL и ждёт его обратно, пока
+# рабочий поток выполняет Python, до интервала переключения. При 5 мс
+# по умолчанию вращение с загрузкой наложения давало 53 кадра в худшую
+# секунду, при 1 мс - 59. Замер 26 сентября 2026 года, qgis_overlay.py.
+SWITCH_INTERVAL = 0.001
 STATUS_PERIOD = 0.25  # секунд между обновлениями строки состояния
 MESSAGE_TIME = 5.0  # секунд, сколько видно сообщение об ошибке ввода
 # Расстояние в конце перелёта - текущее, но не больше этого, метров.
 # Из космоса перелёт кончается на 2 км, от улицы к улице идёт на месте.
 FLIGHT_DISTANCE = 2000.0
+# Пауза после последней правки слоя до перерисовки наложения, мс.
+REFRESH_DELAY = 300
+PANEL_WIDTH = 300  # ширина левой панели при открытии, пикселей
+MARGIN = 8  # отступ панели значков и подписи от края вида
+ATTRIBUTION_STYLE = ("QLabel { background: rgba(255, 255, 255, 190); "
+                     "padding: 1px 4px; border-radius: 3px; }")
 
 
 def imagery_preparer(store):
     """Работа рабочего потока для тайла подложки.
 
-    Сетка вершин с лучшими высотами из store, уровни мипмапов и уровень
-    высот, с которым собрана сетка. Хранилище только читается, пишет
-    в него главный поток.
+    Сетка вершин с лучшими высотами из store, уровни мипмапов, уровень
+    высот, с которым собрана сетка, и масштаб рельефа. Хранилище только
+    читается, пишет в него главный поток.
     """
     def prepare(key, rgba):
-        heights = store.best(key)
-        mesh = tile_mesh(*key, heights)
-        return mesh, mip_chain(rgba), -1 if heights is None else heights.z
+        scale = store.scale
+        heights, level = store.for_mesh(key)
+        mesh = tile_mesh(*key, heights, exaggeration=scale)
+        return mesh, mip_chain(rgba), level, scale
     return prepare
 
 
@@ -63,7 +95,10 @@ def xyz_sources():
 
 
 def attribution_html(source):
-    text, link = source.attribution
+    return link_html(*source.attribution)
+
+
+def link_html(text, link):
     text = html.escape(text)
     if link:
         return '<a href="{}">{}</a>'.format(html.escape(link), text)
@@ -93,54 +128,72 @@ class GlobeWindow(QWidget):
         # Закрытое окно уничтожается вместе с контекстом OpenGL
         # и загрузчиком. Пункт меню открывает новое.
         self.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        # Интервал общий для всего Python в QGIS. Прежний возвращается
+        # при закрытии окна.
+        self._switch_interval = sys.getswitchinterval()
+        sys.setswitchinterval(min(self._switch_interval, SWITCH_INTERVAL))
         self.setWindowTitle("PlanetX")
         self.setWindowIcon(QIcon(os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "icon.svg")))
+
         self.view = GlobeView(self)
-        self.status = QLabel(self)
-        self.attribution = QLabel(self)
+        self.panel = LayerPanel(self)
+        self.place = self.panel.place
+        self.status = self.panel.status
+        self.toolbar = ViewToolbar(self.view)
+        self.toolbar.move(MARGIN, MARGIN)
+        self.attribution = QLabel(self.view)
         self.attribution.setOpenExternalLinks(True)
+        self.attribution.setStyleSheet(ATTRIBUTION_STYLE)
+        self.view.installEventFilter(self)
+        splitter = QSplitter(self)
+        splitter.addWidget(self.panel)
+        splitter.addWidget(self.view)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([PANEL_WIDTH, 1300])
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(splitter)
+
         self.sources = [basemap.osm()] + xyz_sources()
-        self.basemap = QComboBox(self)
-        for source in self.sources:
-            self.basemap.addItem(source.name)
-        self.basemap.setToolTip(tr(
-            "Источник картинки на глобусе. В списке OpenStreetMap "
-            "и подключения XYZ Tiles из обозревателя QGIS, кроме "
-            "подключений рельефа. Новое подключение появляется здесь "
-            "при следующем открытии окна."))
         names = [source.name for source in self.sources]
         saved = QgsSettings().value(BASEMAP_KEY, "")
         self.source = self.sources[names.index(saved)
                                    if saved in names else 0]
-        self.basemap.setCurrentIndex(self.sources.index(self.source))
-        self.basemap.currentIndexChanged.connect(self._choose)
-        self.place = QLineEdit(self)
-        self.place.setPlaceholderText(tr("Широта, долгота"))
-        self.place.setToolTip(tr(
-            "Координаты в градусах, например 58.0105, 56.2294.\n"
-            "Enter запускает перелёт. Перелёт прерывается мышью."))
-        self.place.setMaximumWidth(260)
-        self.place.returnPressed.connect(self.fly)
-        go = QPushButton(tr("Лететь"), self)
-        go.clicked.connect(self.fly)
-        about = QPushButton(tr("О модуле"), self)
-        about.clicked.connect(lambda: show_about(self))
+        self.panel.set_sources(names, self.sources.index(self.source))
+        self.overlay = None
+        self.overlay_error = ""
+        self._tilejson = None
+        self.ofm_layer = None
+        settings = QgsSettings()
+        self._groups = {group for group in LINE_GROUPS if settings.value(
+            LINES_KEY.format(group), True, type=bool)}
+        self._relief = settings.value(RELIEF_KEY, True, type=bool)
+        self._scale = min(max(settings.value(SCALE_KEY, 1.0, type=float),
+                              SCALE_RANGE[0]), SCALE_RANGE[1])
+        # Масштаб ставится до первой загрузки, сетки сразу собираются
+        # с ним.
+        self.view.set_relief(self._scale if self._relief else 0.0)
+        # Слои проекта: флажок и автообновление хранятся в проекте.
+        self._project = read_flag(PROJECT_LAYERS, True)
+        self.auto_refresh = read_flag(AUTO_REFRESH, False)
+        self.panel.set_checked(self.panel.project, self._project)
+        self.dirty = False
+        self.properties = None
         self.message = ("", 0.0)
+        self.refresh_timer = QTimer(self)
+        self.refresh_timer.setSingleShot(True)
+        self.refresh_timer.timeout.connect(
+            lambda: self._update_overlay(keep=True))
 
-        bottom = QHBoxLayout()
-        bottom.setContentsMargins(6, 2, 6, 2)
-        bottom.addWidget(self.basemap, 0)
-        bottom.addWidget(self.place, 0)
-        bottom.addWidget(go, 0)
-        bottom.addWidget(self.status, 1)
-        bottom.addWidget(self.attribution, 0)
-        bottom.addWidget(about, 0)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        layout.addWidget(self.view, 1)
-        layout.addLayout(bottom)
+        self.panel.fly_text.connect(self.fly)
+        self.panel.properties_requested.connect(self._show_properties)
+        self.panel.basemap_chosen.connect(self.choose_basemap)
+        self.panel.project_toggled.connect(self.set_project_layers)
+        self.panel.fly_to_layer.connect(self.fly_to_layer)
+        self.toolbar.refresh_clicked.connect(
+            lambda: self._update_overlay(keep=True))
+        self.toolbar.about_clicked.connect(lambda: show_about(self))
 
         self.errors = {}
         # Сетка вершин и мипмапы тайла считаются в рабочем потоке
@@ -157,26 +210,44 @@ class GlobeWindow(QWidget):
         self.terrain_errors = {}
         self.terrain_loader.failed.connect(self.terrain_errors.__setitem__)
         self.view.terrain_loader = self.terrain_loader
-        self.terrain_loader.want((0, 0, 0), 1.0)
+        if self._relief:
+            self.terrain_loader.want((0, 0, 0), 1.0)
         self._shown_at = 0.0
         self.view.changed.connect(self._frame_done)
         # Мелкие уровни важнее: они первыми закрывают весь шар.
         self.loader.want_many((key, -key[0]) for key in start_keys())
+        self.watch = ProjectWatch(self)
+        self.watch.changed.connect(self._project_changed)
+        self.watch.reloaded.connect(self._project_reloaded)
+        self.set_line_groups(self._groups)
         self._show_state()
 
-    def _start_loader(self):
-        """Загрузчик выбранной подложки и её подпись."""
-        self.loader = TileLoader(self.source, parent=self,
-                                 prepare=imagery_preparer(self.view.store),
-                                 size=TILE_SIZE)
-        self.loader.loaded.connect(self._loaded)
-        self.loader.failed.connect(self._failed)
-        self.view.loader = self.loader
-        self.attribution.setText(attribution_html(self.source)
-                                 + " · " + TERRAIN_ATTRIBUTION)
+    # Состояние, его же меняют проверочные скрипты.
 
-    def _choose(self, index):
-        """Смена подложки из списка."""
+    def basemap_index(self):
+        return self.sources.index(self.source)
+
+    def line_groups(self):
+        """Включённые группы линий векторной основы."""
+        return set(self._groups)
+
+    def project_layers_on(self):
+        return self._project
+
+    def relief_on(self):
+        return self._relief
+
+    def relief_scale(self):
+        return self._scale
+
+    def state(self):
+        """Состояние для окна свойств."""
+        return {"basemap": self.basemap_index(), "groups": self._groups,
+                "relief": self._relief, "scale": self._scale,
+                "auto": self.auto_refresh}
+
+    def choose_basemap(self, index):
+        """Смена подложки."""
         source = self.sources[index]
         if source is self.source:
             return
@@ -186,9 +257,186 @@ class GlobeWindow(QWidget):
         self.errors.clear()
         self.source = source
         QgsSettings().setValue(BASEMAP_KEY, source.name)
+        self.panel.set_basemap(index)
+        self._sync_properties()
         self._start_loader()
         self.view.change_source(source.max_level)
+        # Уровни 0-2 просятся сразу. Вид не рисует кадр, пока их нет,
+        # и сам их не попросит. Без этого смена подложки до прихода
+        # уровней 0-2 оставляла окно пустым, нашлось 26 сентября 2026.
+        self.loader.want_many((key, -key[0]) for key in start_keys())
         self._show_state()
+
+    def set_line_groups(self, groups):
+        """Включить группы линий векторной основы, остальные выключить.
+
+        Адрес тайлов OpenFreeMap меняется с каждой сборкой планеты, его
+        даёт TileJSON. Запрос асинхронный, слой добавляется по ответу.
+        Прежние картинки видны, пока их не заменят новые.
+        """
+        self._groups = set(groups) & set(LINE_GROUPS)
+        settings = QgsSettings()
+        for group in LINE_GROUPS:
+            settings.setValue(LINES_KEY.format(group), group in self._groups)
+        self._sync_properties()
+        if self._groups and self.ofm_layer is None \
+                and self._tilejson is None:
+            self._tilejson = fetch_json(OPENFREEMAP_TILEJSON,
+                                        self._tilejson_done)
+        if self.ofm_layer is not None:
+            set_line_groups(self.ofm_layer, self._groups)
+        self._update_overlay(keep=True)
+
+    def set_line_group(self, group, on):
+        groups = set(self._groups)
+        if on:
+            groups.add(group)
+        else:
+            groups.discard(group)
+        self.set_line_groups(groups)
+
+    def set_relief(self, on):
+        """Включить или выключить рельеф."""
+        self._relief = bool(on)
+        QgsSettings().setValue(RELIEF_KEY, self._relief)
+        self._apply_relief()
+
+    def set_relief_scale(self, scale):
+        """Вертикальный масштаб рельефа."""
+        self._scale = min(max(float(scale), SCALE_RANGE[0]), SCALE_RANGE[1])
+        QgsSettings().setValue(SCALE_KEY, self._scale)
+        self._apply_relief()
+
+    def _apply_relief(self):
+        self.view.set_relief(self._scale if self._relief else 0.0)
+        self._sync_properties()
+        self._show_attribution()
+
+    def set_project_layers(self, on):
+        self._project = bool(on)
+        write_flag(PROJECT_LAYERS, on)
+        self.panel.set_checked(self.panel.project, self._project)
+        self._update_overlay()
+
+    # Наложение.
+
+    def _start_loader(self):
+        """Загрузчик выбранной подложки и её подпись."""
+        self.loader = TileLoader(self.source, parent=self,
+                                 prepare=imagery_preparer(self.view.store),
+                                 size=TILE_SIZE)
+        self.loader.loaded.connect(self._loaded)
+        self.loader.failed.connect(self._failed)
+        self.view.loader = self.loader
+        self._show_attribution()
+
+    def _show_attribution(self):
+        parts = [attribution_html(self.source)]
+        if self._groups and self.ofm_layer is not None:
+            parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
+        if self._relief:
+            parts.append(TERRAIN_ATTRIBUTION)
+        self.attribution.setText(" · ".join(parts))
+        self._place_attribution()
+
+    def _place_attribution(self):
+        self.attribution.adjustSize()
+        self.attribution.move(
+            max(MARGIN, self.view.width() - self.attribution.width()
+                - MARGIN),
+            self.view.height() - self.attribution.height() - MARGIN)
+
+    def eventFilter(self, watched, event):
+        if watched is self.view and event.type() == enum(
+                QEvent, "Type", "Resize"):
+            self._place_attribution()
+        return super().eventFilter(watched, event)
+
+    def _tilejson_done(self, data, error):
+        self._tilejson = None
+        tiles = (data or {}).get("tiles") or []
+        if not tiles:
+            self.overlay_error = error or "TileJSON"
+            self._show_state()
+            return
+        self.overlay_error = ""
+        self.ofm_layer = openfreemap_layer(tiles[0],
+                                           int(data.get("maxzoom", 14)),
+                                           self._groups)
+        self._update_overlay()
+
+    def _update_overlay(self, keep=False):
+        """Собрать наложение заново из включённых источников.
+
+        Сверху слои проекта, как на карте QGIS, под ними векторная
+        основа. keep=True - прежние картинки видны, пока их не заменят
+        новые, так обновление после правки не мигает.
+        """
+        self.refresh_timer.stop()
+        visible = project_layers()
+        self.panel.set_layers(visible)
+        layers = list(visible) if self._project else []
+        if self._groups and self.ofm_layer is not None:
+            layers.append(self.ofm_layer)
+        if self.overlay is not None:
+            self.overlay.abort()
+            self.overlay.deleteLater()
+            self.overlay = None
+        if layers:
+            self.overlay = LayerOverlay(layers, parent=self)
+            self.overlay.loaded.connect(self.view.add_overlay)
+        self.view.set_overlay(self.overlay,
+                              keep=keep and self.overlay is not None)
+        self._mark_dirty(False)
+        self._show_attribution()
+
+    def _project_changed(self):
+        """Слои проекта изменились: обновить сразу или зажечь кнопку."""
+        if not self._project:
+            self.panel.set_layers(project_layers())
+            return
+        if self.auto_refresh:
+            self.refresh_timer.start(REFRESH_DELAY)
+        else:
+            self.panel.set_layers(project_layers())
+            self._mark_dirty(True)
+
+    def _project_reloaded(self):
+        """Открыт другой проект: его настройки глобуса."""
+        self.auto_refresh = read_flag(AUTO_REFRESH, False)
+        self._project = read_flag(PROJECT_LAYERS, True)
+        self.panel.set_checked(self.panel.project, self._project)
+        self._sync_properties()
+
+    def _mark_dirty(self, dirty):
+        self.dirty = dirty
+        self.toolbar.set_dirty(dirty)
+        self._show_state()
+
+    def _set_auto(self, on):
+        self.auto_refresh = bool(on)
+        write_flag(AUTO_REFRESH, on)
+        if on and self.dirty:
+            self._update_overlay(keep=True)
+
+    def _sync_properties(self):
+        if self.properties is not None:
+            self.properties.set_state(self.state())
+
+    def _show_properties(self):
+        if self.properties is None:
+            self.properties = PropertiesDialog(
+                [s.name for s in self.sources], self.state(), self)
+            self.properties.auto_changed.connect(self._set_auto)
+            self.properties.basemap_chosen.connect(self.choose_basemap)
+            self.properties.group_toggled.connect(self.set_line_group)
+            self.properties.relief_toggled.connect(self.set_relief)
+            self.properties.scale_changed.connect(self.set_relief_scale)
+        self.properties.show()
+        self.properties.raise_()
+        self.properties.activateWindow()
+
+    # Загрузка.
 
     def _heights(self, key, rgba, tile):
         self.terrain_errors.pop(key, None)
@@ -196,7 +444,10 @@ class GlobeWindow(QWidget):
 
     def _loaded(self, key, rgba, prepared):
         self.errors.pop(key, None)
-        mesh, levels, level = prepared
+        mesh, levels, level, scale = prepared
+        # Сетка, собранная до смены масштаба рельефа, пересобирается.
+        if scale != self.view.store.scale:
+            level = -1
         self.view.add_image(key, levels, mesh, level)
         # Пока уровни 0-2 не готовы, полных кадров нет и сигнала changed
         # тоже. Строка загрузки обновляется отсюда, с тем же ограничением.
@@ -218,18 +469,36 @@ class GlobeWindow(QWidget):
             self._shown_at = now
             self._show_state()
 
-    def fly(self):
+    # Перелёты.
+
+    def fly(self, text=None):
         """Перелёт к координатам из поля ввода."""
-        text = self.place.text()
+        text = self.place.text() if text is None else text
         target = parse_latlon(text)
         if target is None:
             self.message = (tr("Не удалось прочитать координаты: {text}",
                                text=text), time.monotonic())
             self._show_state()
             return
+        distance = min(self.view.navigator.pose.distance, FLIGHT_DISTANCE)
+        self._fly_to(target[0], target[1], distance)
+
+    def fly_to_layer(self, layer):
+        """Перелёт к охвату слоя, камера смотрит отвесно."""
+        wgs = QgsCoordinateReferenceSystem("EPSG:4326")
+        transform = QgsCoordinateTransform(layer.crs(), wgs,
+                                           QgsProject.instance())
+        box = transform.transformBoundingBox(layer.extent())
+        camera = self.view.camera
+        lat, lon, distance = fit_view(box.xMinimum(), box.yMinimum(),
+                                      box.xMaximum(), box.yMaximum(),
+                                      camera.fov_y, camera.aspect)
+        self._fly_to(lat, lon, distance)
+
+    def _fly_to(self, lat, lon, distance):
+        """Перелёт, в конце взгляд отвесный, север вверху."""
         navigator = self.view.navigator
-        distance = min(navigator.pose.distance, FLIGHT_DISTANCE)
-        flight = Flight(navigator.pose, *target, distance,
+        flight = Flight(navigator.pose, lat, lon, distance,
                         fov_y=self.view.camera.fov_y)
         navigator.start_flight(flight, time.monotonic())
         self.view.setFocus()
@@ -245,6 +514,11 @@ class GlobeWindow(QWidget):
         if self.errors:
             text = tr("Подложка не загрузилась: {error}",
                       error=next(iter(self.errors.values())))
+        elif self.overlay_error:
+            text = tr("Векторная основа не загрузилась: {error}",
+                      error=self.overlay_error)
+        elif self.dirty:
+            text = tr("Слои проекта изменились. Нажмите «Обновить слои».")
         elif done < len(keys):
             text = tr("Загрузка подложки: {done} из {total}",
                       done=done, total=len(keys))
@@ -260,6 +534,12 @@ class GlobeWindow(QWidget):
     def closeEvent(self, event):
         self.loader.abort()
         self.terrain_loader.abort()
+        if self.overlay is not None:
+            self.overlay.abort()
+        self.refresh_timer.stop()
+        if self.properties is not None:
+            self.properties.close()
+        sys.setswitchinterval(self._switch_interval)
         super().closeEvent(event)
         # Окно с WA_DeleteOnClose Qt уничтожает позже. Плагин узнаёт
         # о закрытии сразу, чтобы меню открыло новое окно, а не это.

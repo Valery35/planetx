@@ -197,7 +197,7 @@ class TileLoader(QObject):
         now = time.monotonic()
         for key, priority in items:
             self.queue.want(key, priority, now=now)
-        self._pump()
+        self._later()
 
     def retain(self, keys):
         """Снять ожидающие и активные запросы вне набора keys."""
@@ -209,7 +209,17 @@ class TileLoader(QObject):
                 reply.deleteLater()
             self.queue.done(key, ok=True)
             self.aborted.append(key)
-        self._pump()
+        self._later()
+
+    def _later(self):
+        """Запустить запросы после текущего кадра.
+
+        want_many и retain зовутся из paintGL. Запуск запроса стоит
+        главному потоку до нескольких миллисекунд. Между кадрами у него
+        есть время простоя, кадр от запуска не удлиняется.
+        """
+        if not self.pump_timer.isActive():
+            self.pump_timer.start(0)
 
     def busy(self):
         return len(self.queue) + len(self.decoding)

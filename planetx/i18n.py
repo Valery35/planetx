@@ -28,6 +28,57 @@ EN = {
         "Enter starts the flight. The mouse interrupts it.",
     "Лететь": "Fly",
     "О модуле": "About",
+    "Слои проекта": "Project layers",
+    "Глобус": "Globe",
+    "Свойства вида: двойной щелчок": "View properties: double click",
+    "Подложка: выбор в меню по правой кнопке, двойной щелчок открывает "
+    "свойства вида":
+        "Base map: choose it in the right-click menu, a double click opens "
+        "the view properties",
+    "Подложка · {name}": "Base map · {name}",
+    "Подложка": "Base map",
+    "{name} · {kind}": "{name} · {kind}",
+    "Подлететь: меню по правой кнопке": "Fly to: right-click menu",
+    "Подлететь": "Fly to",
+    "Свойства вида…": "View properties…",
+    "растр": "raster",
+    "точки": "points",
+    "линии": "lines",
+    "полигоны": "polygons",
+    "таблица": "table",
+    "слой": "layer",
+    "Включённые слои проекта поверх подложки, в том же порядке, что на "
+    "карте QGIS. Подписей нет. Когда слои меняются, глобус обновляет их "
+    "кнопкой «Обновить слои» или сам, если в свойствах вида включено "
+    "автоматическое обновление.":
+        "The checked project layers over the base map, in the same order "
+        "as on the QGIS map. There are no labels. When the layers change, "
+        "the globe updates them with the Refresh layers button, or by "
+        "itself if automatic update is on in the view properties.",
+    "Обновить слои: слои проекта изменились":
+        "Refresh layers: the project layers have changed",
+    "Обновить слои проекта на глобусе": "Refresh the project layers on the "
+                                        "globe",
+    "Свойства вида": "View properties",
+    "Слои проекта изменились. Нажмите «Обновить слои».":
+        "The project layers have changed. Press Refresh layers.",
+    "Обновлять автоматически": "Update automatically",
+    "Слои проекта на глобусе обычно обновляются кнопкой «Обновить слои». "
+    "С этим флажком глобус перерисовывает их сам после каждой правки "
+    "данных, стиля, порядка или видимости слоёв. Удобно на лёгких данных, "
+    "на тяжёлых глобус будет часто перерисовывать наложение.":
+        "The project layers on the globe are usually updated with the "
+        "Refresh layers button. With this option the globe redraws them "
+        "after every change of data, style, order or visibility. Handy "
+        "for light data, with heavy data the globe will redraw often.",
+    "Границы и дороги": "Borders and roads",
+    "Границы стран и регионов, реки и дороги поверх подложки по векторным "
+    "тайлам OpenFreeMap. Линии ложатся на рельеф. Подписей нет.":
+        "Country and region borders, rivers and roads over the base map "
+        "from OpenFreeMap vector tiles. The lines follow the terrain. "
+        "There are no labels.",
+    "Границы и дороги не загрузились: {error}":
+        "Borders and roads failed to load: {error}",
     "О модуле PlanetX": "About PlanetX",
     "Левая кнопка тянет Землю, после отпускания она вращается "
     "по инерции.":
