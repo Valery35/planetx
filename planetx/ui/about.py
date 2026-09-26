@@ -25,6 +25,7 @@ CATALOG = "https://plugins.qgis.org/plugins/planetx/"
 OSM = "https://www.openstreetmap.org/copyright"
 TERRAIN = ("https://github.com/tilezen/joerd/blob/master/docs/"
            "attribution.md")
+OPENFREEMAP = "https://openfreemap.org/"
 INFORM = "https://www.informpp.ru/"
 
 
@@ -45,14 +46,18 @@ def about_html():
         tr("Колесо приближает к точке под курсором."),
         tr("Средняя кнопка или левая с Shift поворачивают и наклоняют "
            "вид."),
-        tr("Координаты в поле внизу окна запускают перелёт."),
-        tr("Список внизу окна меняет подложку."),
+        tr("Координаты в поле над списком слева запускают перелёт."),
+        tr("Двойной щелчок по строке «Глобус» открывает свойства вида. "
+           "В них выбираются подложка, векторная основа и рельеф."),
     ))
     sources = _items((
         _link(OSM, tr("Подложка OpenStreetMap: © участники "
                       "OpenStreetMap.")),
         _link(TERRAIN, tr("Рельеф: Mapzen Terrain Tiles, данные SRTM, "
                           "GMTED, ETOPO1 и других источников.")),
+        _link(OPENFREEMAP, tr("Векторная основа: OpenFreeMap, "
+                              "© OpenMapTiles, © участники "
+                              "OpenStreetMap.")),
         html.escape(tr("Космоснимки и другие подложки берутся "
                        "из подключений XYZ Tiles в QGIS. Условия "
                        "использования задаёт их владелец.")),
