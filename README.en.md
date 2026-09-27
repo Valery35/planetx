@@ -6,7 +6,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.3.1.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.3.2.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -57,6 +57,13 @@ and atmosphere, from space down to single streets.
 - **Refresh.** A new base map, terrain exaggeration and project layers
   appear after the Refresh button in the corner of the view. Automatic
   refresh is switched on in the view properties.
+- **Map synchronization.** The link button in the corner of the view ties
+  the globe to the QGIS map window. The map leads the globe, the globe
+  leads the map or both follow each other, as chosen in the view
+  properties. Any map coordinate system works.
+- **Identify features.** In the Identify features mode a click on the
+  globe shows the coordinates and elevation of the point and the features
+  of the project layers checked on the globe.
 
 A double click on the Globe row opens the view properties. Tiles come
 through the QGIS network settings and cache. The About button in the

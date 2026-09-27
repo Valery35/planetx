@@ -203,6 +203,11 @@ class LayerPanel(QWidget):
 
         self.status = QLabel(self)
         self.status.setWordWrap(True)
+        # Высота на две строки: камера и точка под курсором. Когда точки
+        # нет, строка не сжимается и панель над ней не прыгает.
+        self.status.setMinimumHeight(
+            2 * self.status.fontMetrics().lineSpacing() + 2)
+        self.status.setAlignment(enum(Qt, "AlignmentFlag", "AlignTop"))
         self.status.setTextInteractionFlags(
             enum(Qt, "TextInteractionFlag", "TextSelectableByMouse"))
         layout = QVBoxLayout(self)

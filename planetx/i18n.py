@@ -16,8 +16,7 @@ EN = {
         "Loading base map: {done} of {total}",
     "Подложка не загрузилась: {error}":
         "Base map failed to load: {error}",
-    "Высота {height}, тайлов в кадре {count}":
-        "Altitude {height}, tiles in frame {count}",
+    "Обзор с высоты {height}": "View from {height}",
     "Для глобуса нужен модуль Python {name}. В этой сборке QGIS его нет.":
         "The globe needs the Python module {name}. This QGIS build "
         "does not have it.",
@@ -236,6 +235,36 @@ EN = {
         "Shores of lakes, reservoirs and wide rivers are outlined in blue. "
         "Reservoirs are split into pieces in the data, and the outline also "
         "follows the cuts.",
+    "значения в точке": "values at the point",
+    "{point}, высота {height} м": "{point}, elevation {height} m",
+    "Объекты": "Features",
+    "Объект": "Feature",
+    "Значение": "Value",
+    "Под точкой объектов нет": "No features at the point",
+    "Синхронизация с окном карты QGIS. Направление - в свойствах вида.":
+        "Synchronization with the QGIS map window. The direction is set "
+        "in the view properties.",
+    "Определить объекты. Щелчок по глобусу показывает координаты и высоту "
+    "точки и объекты слоёв проекта, отмеченных на глобусе.":
+        "Identify features. A click on the globe shows the coordinates and "
+        "elevation of the point and the features of the project layers "
+        "checked on the globe.",
+    "В обе стороны": "Both ways",
+    "Карта ведёт глобус": "Map leads the globe",
+    "Глобус ведёт карту": "Globe leads the map",
+    "Кто за кем следует, когда синхронизация включена значком в углу "
+    "вида. Карта ведёт глобус - сдвиг и масштаб карты переносят глобус "
+    "на тот же участок, наклон и поворот глобуса остаются. Глобус ведёт "
+    "карту - после остановки глобуса карта встаёт в его точку взгляда "
+    "в своей системе координат.":
+        "Which side follows which when synchronization is switched on with "
+        "the button in the corner of the view. Map leads the globe - "
+        "panning and zooming the map move the globe to the same area, the "
+        "tilt and heading of the globe stay. Globe leads the map - after "
+        "the globe stops, the map centres on its look-at point in the map "
+        "coordinate system.",
+    "Карта QGIS": "QGIS map",
+    "Синхронизация": "Synchronization",
     "Подписи": "Labels",
     "Язык": "Language",
     "Как в QGIS": "As in QGIS",

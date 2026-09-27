@@ -14,6 +14,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QFormLayout, QGroupBox, QVBoxLayout)
 
 from ..core.places import AS_QGIS, LABEL_LANGUAGES, LOCAL
+from ..core.sync import BOTH, GLOBE_TO_MAP, MAP_TO_GLOBE
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -47,13 +48,14 @@ class PropertiesDialog(QDialog):
     """Окно свойств. Сигналы несут новые значения.
 
     sources - подложки из core/basemap.py. state - словарь с ключами
-    basemap, relief, scale, language, auto.
+    basemap, relief, scale, language, sync, auto.
     """
 
     auto_changed = pyqtSignal(bool)
     basemap_chosen = pyqtSignal(int)
     scale_changed = pyqtSignal(float)
     language_chosen = pyqtSignal(str)
+    sync_chosen = pyqtSignal(str)
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -102,6 +104,24 @@ class PropertiesDialog(QDialog):
         labels = QGroupBox(tr("Подписи"), self)
         QFormLayout(labels).addRow(tr("Язык"), self.language)
 
+        self.sync = QComboBox(self)
+        self.directions = [
+            (BOTH, tr("В обе стороны")),
+            (MAP_TO_GLOBE, tr("Карта ведёт глобус")),
+            (GLOBE_TO_MAP, tr("Глобус ведёт карту"))]
+        self.sync.addItems([name for _, name in self.directions])
+        self.sync.setToolTip(tr(
+            "Кто за кем следует, когда синхронизация включена значком "
+            "в углу вида. Карта ведёт глобус - сдвиг и масштаб карты "
+            "переносят глобус на тот же участок, наклон и поворот "
+            "глобуса остаются. Глобус ведёт карту - после остановки "
+            "глобуса карта встаёт в его точку взгляда в своей системе "
+            "координат."))
+        self.sync.currentIndexChanged.connect(
+            lambda index: self.sync_chosen.emit(self.directions[index][0]))
+        canvas = QGroupBox(tr("Карта QGIS"), self)
+        QFormLayout(canvas).addRow(tr("Синхронизация"), self.sync)
+
         self.auto = QCheckBox(tr("Обновлять автоматически"), self)
         self.auto.setToolTip(tr(
             "Без флажка глобус показывает новую подложку, масштаб "
@@ -120,6 +140,7 @@ class PropertiesDialog(QDialog):
         layout.addWidget(base)
         layout.addWidget(relief)
         layout.addWidget(labels)
+        layout.addWidget(canvas)
         layout.addWidget(layers)
         layout.addStretch(1)
         layout.addWidget(buttons)
@@ -127,13 +148,17 @@ class PropertiesDialog(QDialog):
 
     def set_state(self, state):
         """Показать состояние окна. Сигналы при этом не идут."""
-        widgets = [self.basemap, self.scale, self.language, self.auto]
+        widgets = [self.basemap, self.scale, self.language, self.sync,
+                   self.auto]
         for widget in widgets:
             widget.blockSignals(True)
         self.basemap.setCurrentIndex(state["basemap"])
         codes = [code for code, _ in self.languages]
         self.language.setCurrentIndex(codes.index(state["language"])
                                       if state["language"] in codes else 0)
+        ways = [way for way, _ in self.directions]
+        self.sync.setCurrentIndex(ways.index(state["sync"])
+                                  if state["sync"] in ways else 0)
         self.scale.setValue(state["scale"])
         # Масштаб выключенного рельефа ни на что не влияет.
         self.scale.setEnabled(state["relief"])

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Синхронизация с картой: два звена цепи. -->
+  <g fill="none" stroke="#1d5fa8" stroke-width="2.6" stroke-linecap="round">
+    <rect x="1.8" y="8.6" width="12" height="6.8" rx="3.4"
+          transform="rotate(-45 7.8 12)"/>
+    <rect x="10.2" y="8.6" width="12" height="6.8" rx="3.4"
+          transform="rotate(-45 16.2 12)"/>
+  </g>
+</svg>

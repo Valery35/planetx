@@ -24,13 +24,6 @@ def map_layers(project=None):
             if layer.isValid()]
 
 
-def visible_on_map(layer, project=None):
-    """Включён ли слой в дереве слоёв QGIS."""
-    project = project or QgsProject.instance()
-    node = project.layerTreeRoot().findLayer(layer.id())
-    return node is not None and node.isVisible()
-
-
 def read_flag(name, default, project=None):
     project = project or QgsProject.instance()
     value, ok = project.readBoolEntry(ENTRY, name, default)

@@ -1,0 +1,167 @@
+# -*- coding: utf-8 -*-
+# PlanetX - трёхмерный глобус для QGIS.
+# Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
+"""Определение объектов щелчком по глобусу.
+
+Опрашиваются слои проекта, отмеченные на глобусе, решение автора
+от 27 сентября 2026 года. Точка щелчка переводится в систему координат
+каждого слоя. Допуск задаётся в пикселях экрана и переводится в метры
+по расстоянию от глаза до точки, потом в единицы слоя. Так он один
+на любом удалении, от космоса до улиц.
+"""
+import math
+
+from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
+                       QgsCoordinateTransform, QgsCsException,
+                       QgsExpression, QgsExpressionContext,
+                       QgsExpressionContextUtils, QgsFeatureRequest,
+                       QgsGeometry, QgsPointXY, QgsProject, QgsRasterLayer,
+                       QgsRectangle, QgsVectorLayer)
+from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtWidgets import (QDialog, QLabel, QTreeWidget,
+                                 QTreeWidgetItem, QVBoxLayout)
+
+from ..core.ellipsoid import A
+from ..i18n import tr
+from ..qt_compat import enum
+
+FEATURE_LIMIT = 50  # объектов на слой, не больше
+EXPAND_UP_TO = 5  # объекты раскрыты, если их всего не больше
+try:  # QGIS 3.30 и новее
+    RASTER_VALUE = Qgis.RasterIdentifyFormat.Value
+except AttributeError:  # QGIS 3.28 и старше
+    from qgis.core import QgsRaster
+    RASTER_VALUE = QgsRaster.IdentifyFormatValue
+
+
+def _layer_point(layer, lat, lon, metres):
+    """Точка и допуск в системе координат слоя или None."""
+    to_layer = QgsCoordinateTransform(
+        QgsCoordinateReferenceSystem("EPSG:4326"), layer.crs(),
+        QgsProject.instance())
+    dlon = math.degrees(metres / (A * max(math.cos(math.radians(lat)),
+                                          1e-6)))
+    try:
+        p = to_layer.transform(QgsPointXY(lon, lat))
+        q = to_layer.transform(QgsPointXY(min(lon + dlon, 180.0), lat))
+    except QgsCsException:
+        return None
+    radius = math.hypot(q.x() - p.x(), q.y() - p.y())
+    if not math.isfinite(radius):
+        return None
+    return p, radius
+
+
+def _title(layer, feature, expression):
+    context = QgsExpressionContext(
+        QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+    context.setFeature(feature)
+    value = expression.evaluate(context) if expression else None
+    return str(value) if value not in (None, "") else str(feature.id())
+
+
+def _vector(layer, lat, lon, metres):
+    """Объекты слоя под точкой: [(название, [(поле, значение)])]."""
+    found = _layer_point(layer, lat, lon, metres)
+    if found is None:
+        return []
+    p, radius = found
+    rect = QgsRectangle(p.x() - radius, p.y() - radius,
+                        p.x() + radius, p.y() + radius)
+    request = QgsFeatureRequest().setFilterRect(rect).setLimit(
+        FEATURE_LIMIT)
+    point = QgsGeometry.fromPointXY(p)
+    text = layer.displayExpression()
+    expression = QgsExpression(text) if text else None
+    names = layer.fields().names()
+    out = []
+    for feature in layer.getFeatures(request):
+        geometry = feature.geometry()
+        if geometry.isEmpty() or geometry.distance(point) > radius:
+            continue
+        values = [(name, feature[name]) for name in names]
+        out.append((_title(layer, feature, expression), values))
+    return out
+
+
+def _raster(layer, lat, lon):
+    """Значения каналов растра в точке: [(канал, значение)]."""
+    found = _layer_point(layer, lat, lon, 0.0)
+    if found is None or not layer.extent().contains(found[0]):
+        return []
+    result = layer.dataProvider().identify(found[0], RASTER_VALUE)
+    if not result.isValid():
+        return []
+    return [(layer.bandName(band), value)
+            for band, value in sorted(result.results().items())]
+
+
+def identify(layers, lat, lon, metres):
+    """Опрос слоёв: [(слой, [(название, [(поле, значение)])])].
+
+    У растра один «объект» - его значения в точке.
+    """
+    out = []
+    for layer in layers:
+        if isinstance(layer, QgsVectorLayer):
+            features = _vector(layer, lat, lon, metres)
+        elif isinstance(layer, QgsRasterLayer):
+            values = _raster(layer, lat, lon)
+            features = [(tr("значения в точке"), values)] if values else []
+        else:
+            features = []
+        if features:
+            out.append((layer, features))
+    return out
+
+
+def point_text(lat, lon, height=None, digits=6):
+    """Координаты точки и высота рельефа для окна и строки состояния."""
+    text = "{0:.{2}f}, {1:.{2}f}".format(lat, lon, digits)
+    if height is None:
+        return text
+    # Высоты рельефа не ниже нуля, дно моря прижато к нулю. Без max
+    # ещё не загруженная высота печаталась как «-0 м».
+    return tr("{point}, высота {height} м", point=text,
+              height="{:.0f}".format(max(height, 0.0)))
+
+
+def _value(value):
+    return "" if value is None else str(value)
+
+
+class IdentifyDialog(QDialog):
+    """Немодальное окно «Объекты»: точка и дерево слой - объект - поле."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Объекты"))
+        self.setModal(False)
+        self.point = QLabel(self)
+        self.point.setTextInteractionFlags(
+            enum(Qt, "TextInteractionFlag", "TextSelectableByMouse"))
+        self.tree = QTreeWidget(self)
+        self.tree.setColumnCount(2)
+        self.tree.setHeaderLabels([tr("Объект"), tr("Значение")])
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.point)
+        layout.addWidget(self.tree, 1)
+        self.resize(420, 360)
+
+    def show_result(self, text, found):
+        self.point.setText(text)
+        self.tree.clear()
+        total = sum(len(features) for _, features in found)
+        for layer, features in found:
+            top = QTreeWidgetItem(self.tree, [layer.name(), ""])
+            top.setExpanded(True)
+            for title, values in features:
+                item = QTreeWidgetItem(top, [title, ""])
+                item.setExpanded(total <= EXPAND_UP_TO)
+                for name, value in values:
+                    QTreeWidgetItem(item, [str(name), _value(value)])
+        if not found:
+            QTreeWidgetItem(self.tree, [tr("Под точкой объектов нет"), ""])
+        self.tree.resizeColumnToContents(0)
+        self.show()
+        self.raise_()

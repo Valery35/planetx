@@ -18,12 +18,16 @@ from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
 from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QLabel, QSplitter, QVBoxLayout, QWidget
+from qgis.utils import iface
 
 from ..core import basemap
+from ..core.ellipsoid import ecef_to_geodetic
 from ..core.flight import Flight, fit_view, parse_latlon
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                             place_text, search_url)
 from ..core.mipmap import mip_chain
+from ..core.navigation import focal, ground_under
+from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.tiling import tile_mesh
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
@@ -31,7 +35,8 @@ from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
 from ..core.places import Place as MarkPlace  # метка найденного места
 from ..i18n import tr, ui_language
 from ..net.loader import TERRARIUM_URL, TileLoader
-from ..net.overlay import (LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
+from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
+                           PLACES,
                            RAIL_FROM, RAILWAYS, VECTOR_GROUPS, label_kinds,
                            railway_layer,
                            OPENFREEMAP_TILEJSON, LayerOverlay, fetch_json,
@@ -39,10 +44,12 @@ from ..net.overlay import (LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
 from ..qt_compat import enum
 from ..render.view import GlobeView, start_keys
 from .about import show_about
+from .identify import IdentifyDialog, identify, point_text
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, ProjectWatch, map_layers, read_flag,
-                      read_shown, visible_on_map, write_flag, write_shown)
+                      read_shown, write_flag, write_shown)
 from .properties import SCALE_RANGE, PropertiesDialog
+from .sync import MapSync
 from .toolbar import ViewToolbar
 
 TERRAIN_ATTRIBUTION = (
@@ -52,9 +59,16 @@ XYZ_PREFIX = "connections/xyz/items/"
 BASEMAP_KEY = "PlanetX/basemap"  # имя выбранной подложки в настройках
 # Включена ли группа линий векторной основы, по группам.
 LINES_KEY = "PlanetX/lines/{}"
+# Группы панели «Слои», включённые при первом открытии. Решение автора
+# от 27 сентября 2026 года, рельеф включён отдельно.
+DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
+SYNC_KEY = "PlanetX/sync"  # направление синхронизации с картой
+# Допуск щелчка при определении объектов, логических пикселей.
+IDENTIFY_PIXELS = 5.0
+CURSOR_PERIOD = 60  # мс между пересчётами точки под курсором
 TILE_SIZE = 256
 # Интервал переключения GIL, пока открыто окно. Каждый вызов OpenGL
 # и PyQt из главного потока отпускает GIL и ждёт его обратно, пока
@@ -205,7 +219,7 @@ class GlobeWindow(QWidget):
         settings = QgsSettings()
         self._basemap = self.sources.index(self.source)
         self._groups = {group for group in VECTOR_GROUPS if settings.value(
-            LINES_KEY.format(group), True, type=bool)}
+            LINES_KEY.format(group), group in DEFAULT_GROUPS, type=bool)}
         self._relief = settings.value(RELIEF_KEY, True, type=bool)
         self._scale = min(max(settings.value(SCALE_KEY, 1.0, type=float),
                               SCALE_RANGE[0]), SCALE_RANGE[1])
@@ -251,6 +265,22 @@ class GlobeWindow(QWidget):
         self.panel.fly_to_layer.connect(self.fly_to_layer)
         self.toolbar.refresh_clicked.connect(self.refresh)
         self.toolbar.about_clicked.connect(lambda: show_about(self))
+        # Синхронизация с окном карты QGIS и определение объектов.
+        way = QgsSettings().value(SYNC_KEY, BOTH) or BOTH
+        self.sync = MapSync(self, iface.mapCanvas())
+        self.sync.set_direction(way if way in DIRECTIONS else BOTH)
+        self.toolbar.sync_toggled.connect(self.sync.set_enabled)
+        self.view.changed.connect(self.sync.globe_frame)
+        self.identifying = False
+        self.identified = None
+        self.toolbar.identify_toggled.connect(self._set_identify)
+        self.view.clicked.connect(self._clicked)
+        self._hover = None
+        self._cursor_text = ""
+        self._cursor_timer = QTimer(self)
+        self._cursor_timer.setSingleShot(True)
+        self._cursor_timer.timeout.connect(self._update_cursor)
+        self.view.hovered.connect(self._hovered)
 
         self.errors = {}
         # Сетка вершин и мипмапы тайла считаются в рабочем потоке
@@ -305,7 +335,13 @@ class GlobeWindow(QWidget):
         """Состояние для окна свойств."""
         return {"basemap": self._basemap, "groups": self._groups,
                 "relief": self._relief, "scale": self._scale,
-                "language": self._language, "auto": self.auto_refresh}
+                "language": self._language, "sync": self.sync.direction,
+                "auto": self.auto_refresh}
+
+    def set_sync_direction(self, way):
+        """Кто за кем следует при синхронизации с картой."""
+        self.sync.set_direction(way)
+        QgsSettings().setValue(SYNC_KEY, way)
 
     def set_label_language(self, code):
         """Язык подписей, сразу, без кнопки «Обновить».
@@ -378,13 +414,12 @@ class GlobeWindow(QWidget):
     def _read_shown(self):
         """Отметки слоёв из проекта.
 
-        В проекте без записи отмечены слои, видимые на карте QGIS.
+        В проекте без записи не отмечен ни один слой, решение автора
+        от 27 сентября 2026 года. Раньше отмечались слои, видимые на карте.
         """
         layers = map_layers()
         shown = read_shown()
-        if shown is None:
-            shown = {layer.id() for layer in layers if visible_on_map(layer)}
-        self._shown = shown
+        self._shown = shown if shown is not None else set()
         self._known = {layer.id() for layer in layers}
 
     # Переход выбранного состояния на глобус.
@@ -568,16 +603,9 @@ class GlobeWindow(QWidget):
     def _project_changed(self):
         """Слои проекта изменились: обновить сразу или зажечь кнопку.
 
-        Новый слой отмечается, если он виден на карте QGIS.
+        Новый слой на глобус сам не попадает, его отмечают в списке.
         """
-        layers = map_layers()
-        ids = {layer.id() for layer in layers}
-        added = [layer for layer in layers if layer.id() not in self._known]
-        self._known = ids
-        if added:
-            self._shown |= {layer.id() for layer in added
-                            if visible_on_map(layer)}
-            write_shown(self._shown)
+        self._known = {layer.id() for layer in map_layers()}
         # Перерисовка слоя меняет глобус, только если слой на нём.
         if self._applied_layers:
             self._layers_stale = True
@@ -611,6 +639,7 @@ class GlobeWindow(QWidget):
             self.properties.basemap_chosen.connect(self.choose_basemap)
             self.properties.scale_changed.connect(self.set_relief_scale)
             self.properties.language_chosen.connect(self.set_label_language)
+            self.properties.sync_chosen.connect(self.set_sync_direction)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()
@@ -644,6 +673,10 @@ class GlobeWindow(QWidget):
         между кадром и следующим paintGL.
         """
         now = time.monotonic()
+        # Под неподвижным курсором при движении камеры точка другая.
+        if getattr(self, "_hover", None) is not None \
+                and not self._cursor_timer.isActive():
+            self._cursor_timer.start(CURSOR_PERIOD)
         if now - self._shown_at >= STATUS_PERIOD:
             self._shown_at = now
             self._show_state()
@@ -760,13 +793,53 @@ class GlobeWindow(QWidget):
                                       camera.fov_y, camera.aspect)
         self._fly_to(lat, lon, distance)
 
-    def _fly_to(self, lat, lon, distance):
-        """Перелёт, в конце взгляд отвесный, север вверху."""
+    # Определение объектов.
+
+    def _set_identify(self, on):
+        self.identifying = bool(on)
+        self.view.setCursor(enum(Qt, "CursorShape", "WhatsThisCursor"
+                                 if on else "OpenHandCursor"))
+
+    def _clicked(self, px, py):
+        """Щелчок по глобусу: точка рельефа и объекты слоёв под ней."""
+        if not self.identifying:
+            return
+        view = self.view
+        camera = view.camera
+        point = ground_under(camera, px, py, view.navigator.pose.terrain)
+        if point is None:
+            return
+        lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
+        # Метров на пиксель кадра в точке щелчка.
+        metres = float(((point - camera.eye) ** 2).sum()) ** 0.5 \
+            / focal(camera)
+        tolerance = IDENTIFY_PIXELS * view.devicePixelRatioF() * metres
+        project = QgsProject.instance()
+        layers = [project.mapLayer(i) for i in self._applied_layers or ()]
+        found = identify([layer for layer in layers if layer is not None],
+                         lat, lon, tolerance)
+        scale = view.store.scale
+        height = h / scale if scale else None
+        self._mark("{:.5f}, {:.5f}".format(lat, lon), lat, lon)
+        if self.identified is None:
+            self.identified = IdentifyDialog(self)
+        self.identified.show_result(point_text(lat, lon, height), found)
+
+    def fly_view(self, lat, lon, distance):
+        """Перелёт с прежними азимутом и наклоном, для синхронизации."""
+        pose = self.view.navigator.pose
+        self._fly_to(lat, lon, distance, pose.heading, pose.tilt,
+                     focus=False)
+
+    def _fly_to(self, lat, lon, distance, heading=0.0, tilt=0.0,
+                focus=True):
+        """Перелёт, по умолчанию в конце взгляд отвесный, север вверху."""
         navigator = self.view.navigator
-        flight = Flight(navigator.pose, lat, lon, distance,
+        flight = Flight(navigator.pose, lat, lon, distance, heading, tilt,
                         fov_y=self.view.camera.fov_y)
         navigator.start_flight(flight, time.monotonic())
-        self.view.setFocus()
+        if focus:
+            self.view.setFocus()
         self.view.update()
 
     def _show_state(self):
@@ -792,12 +865,43 @@ class GlobeWindow(QWidget):
             text = tr("Контекст OpenGL 3.3 недоступен: {version}",
                       version=self.view.error)
         else:
-            text = tr("Высота {height}, тайлов в кадре {count}",
-                      height=distance_text(self.view.altitude()),
-                      count=self.view.drawn)
+            text = tr("Обзор с высоты {height}",
+                      height=distance_text(self.view.altitude()))
+            if self._cursor_text:
+                text += "\n" + self._cursor_text
         self.status.setText(text)
 
+    # Координаты под курсором.
+
+    def _hovered(self, px, py):
+        """Курсор сдвинулся. Точка считается не чаще раза в CURSOR_PERIOD."""
+        self._hover = None if px < 0 else (px, py)
+        if self._hover is None:
+            self._cursor_text = ""
+            self._show_state()
+        elif not self._cursor_timer.isActive():
+            self._cursor_timer.start(CURSOR_PERIOD)
+
+    def _update_cursor(self):
+        """Широта, долгота и высота рельефа под курсором."""
+        text = ""
+        if self._hover is not None:
+            view = self.view
+            point = ground_under(view.camera, *self._hover,
+                                 view.navigator.pose.terrain)
+            if point is not None:
+                lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
+                scale = view.store.scale
+                text = point_text(lat, lon, h / scale if scale else None,
+                                  digits=5)
+        if text != self._cursor_text:
+            self._cursor_text = text
+            self._show_state()
+
     def closeEvent(self, event):
+        self.sync.close()
+        if self.identified is not None:
+            self.identified.close()
         self.loader.abort()
         self.terrain_loader.abort()
         if self.place_loader is not None:

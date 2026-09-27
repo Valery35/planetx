@@ -64,6 +64,7 @@ DEGREES_PER_PIXEL = 0.25  # поворот и наклон мышью
 SECTIONS = ("upload", "terrain", "select", "heights", "loader", "draw",
             "evict")
 WHEEL_STEP = 0.8  # один щелчок колеса приближает на 20 %
+CLICK_PIXELS = 4.0  # логических пикселей, дальше - уже перетаскивание
 
 LEFT = enum(Qt, "MouseButton", "LeftButton")
 MIDDLE = enum(Qt, "MouseButton", "MiddleButton")
@@ -156,6 +157,11 @@ class GlobeView(QOpenGLWidget):
     """Глобус. Ресурсы OpenGL живут и умирают вместе с контекстом."""
 
     changed = pyqtSignal()
+    # Щелчок левой кнопкой без перетаскивания, пиксели кадра.
+    clicked = pyqtSignal(float, float)
+    # Курсор над видом без нажатых кнопок, пиксели кадра. Уход курсора
+    # из вида - (-1, -1).
+    hovered = pyqtSignal(float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -164,7 +170,9 @@ class GlobeView(QOpenGLWidget):
         self.camera = Camera.look_at(lat, lon, distance)
         self.navigator = Navigator(self.camera, Pose(lat, lon, distance))
         self.turning = None
-        self.setMouseTracking(False)
+        self._press = None  # пиксель нажатия левой кнопки
+        # Слежение за мышью без нажатия: координаты под курсором.
+        self.setMouseTracking(True)
         self.setCursor(enum(Qt, "CursorShape", "OpenHandCursor"))
         self.loader = None
         # Рельеф: хранилище высот, загрузчик Terrarium, уровень высот,
@@ -445,12 +453,18 @@ class GlobeView(QOpenGLWidget):
             self.navigator.stop_inertia()
             self.turning = (px, py)
         elif button == LEFT:
+            self._press = (px, py)
             if self.navigator.press(px, py, time.monotonic()):
                 self.setCursor(enum(Qt, "CursorShape", "ClosedHandCursor"))
         self.update()
 
     def mouseMoveEvent(self, event):
         px, py = self._pixel(event)
+        self.hovered.emit(px, py)
+        if self._press is not None and math.hypot(
+                px - self._press[0], py - self._press[1]) \
+                > CLICK_PIXELS * self.devicePixelRatioF():
+            self._press = None
         if self.turning is not None:
             x0, y0 = self.turning
             self.turning = (px, py)
@@ -463,10 +477,17 @@ class GlobeView(QOpenGLWidget):
             self.update()
 
     def mouseReleaseEvent(self, event):
+        press, self._press = self._press, None
+        if press is not None and event.button() == LEFT:
+            self.clicked.emit(*press)
         self.turning = None
         self.navigator.release(time.monotonic())
         self.setCursor(enum(Qt, "CursorShape", "OpenHandCursor"))
         self.update()
+
+    def leaveEvent(self, event):
+        self.hovered.emit(-1.0, -1.0)
+        super().leaveEvent(event)
 
     def wheelEvent(self, event):
         self._fit_camera()
