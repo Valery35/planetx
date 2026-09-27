@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.4.0
+version=0.4.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -50,7 +50,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.4.0 My Places as in Google Earth: placemarks, paths and
+changelog=0.4.1 A large polygon no longer hangs QGIS while it is drawn.
+      Arrow cursor over the globe, closed hand while dragging, cross for
+      the ruler, new placemark and identify.
+      0.4.0 My Places as in Google Earth: placemarks, paths and
       polygons drawn on the globe and saved in a shared file. Ruler with
       line, path, polygon and circle on the WGS84 ellipsoid, measurements
       saved to My Places. QGIS bookmarks and Save view with heading and

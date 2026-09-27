@@ -917,10 +917,12 @@ class GlobeWindow(QWidget):
         self.place_dialog.show()
         self.place_dialog.raise_()
         self._refresh_shapes()
+        self._tool_cursor()
 
     def _place_closed(self, *args):
         self.drawer.clear()
         self._refresh_shapes()
+        self._tool_cursor()
 
     def _save_place(self):
         shape = self.place_dialog.shape(rubber=False)
@@ -945,10 +947,12 @@ class GlobeWindow(QWidget):
         self.ruler_dialog.show()
         self.ruler_dialog.raise_()
         self._refresh_shapes()
+        self._tool_cursor()
 
     def _ruler_closed(self, *args):
         self.ruler.clear()
         self._refresh_shapes()
+        self._tool_cursor()
 
     def _save_ruler(self):
         """«Сохранить»: фигура линейки в «Мои метки» с измерением."""
@@ -1071,8 +1075,12 @@ class GlobeWindow(QWidget):
 
     def _set_identify(self, on):
         self.identifying = bool(on)
-        self.view.setCursor(enum(Qt, "CursorShape", "WhatsThisCursor"
-                                 if on else "OpenHandCursor"))
+        self._tool_cursor()
+
+    def _tool_cursor(self):
+        """Перекрестие, пока щелчок по глобусу что-то ставит или ищет."""
+        self.view.set_tool_cursor(self.identifying or self._ruler_open()
+                                  or self._place_open())
 
     def _clicked(self, px, py):
         """Щелчок по глобусу: точка линейки или опрос объектов под ней."""

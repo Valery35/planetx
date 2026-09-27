@@ -371,4 +371,31 @@ def save_view_check():
     result["save_view"] = out
 
 
+@check(500)
+def big_polygon():
+    import time
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    view = window.view
+    arrow = Qt.CursorShape.ArrowCursor
+    cross = Qt.CursorShape.CrossCursor
+    out = {"cursor_idle": int(view.cursor().shape() == arrow)}
+    window._open_place()
+    out["cursor_tool"] = int(view.cursor().shape() == cross)
+    dialog = window.place_dialog
+    dialog.tabs.setCurrentIndex(2)
+    d = window.drawer
+    for p in ((57.5, 55.5), (57.5, 57.0), (58.5, 57.0)):
+        d.add(*p)
+    start = time.perf_counter()
+    for i in range(10):
+        d.set_cursor((58.5, 55.5 + 0.01 * i))
+        view.repaint()
+    out["ten_moves_s"] = round(time.perf_counter() - start, 2)
+    window._save_place()
+    dialog.close()
+    out["cursor_after"] = int(view.cursor().shape() == arrow)
+    result["big_polygon"] = out
+
+
 QTimer.singleShot(3000, run)

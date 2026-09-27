@@ -90,6 +90,20 @@ class TestTriangulate(unittest.TestCase):
         self.assertEqual(len(tri), 12)
         self.assertAlmostEqual(self.area(p, tri), 3.0)
 
+    def test_fill_of_large_polygon_is_fast(self):
+        # Многоугольник 0.2° × 0.3° сгущается до 800 точек. Резка всего
+        # контура шла 1.1 с на каждое движение мыши, у больших - минуты,
+        # QGIS висел. Режутся только вершины, 27 сентября 2026 года.
+        import time
+        corners = [(58.0, 56.0), (58.0, 56.3), (58.2, 56.3), (58.2, 56.0)]
+        start = time.perf_counter()
+        ring, tri = ft.fill(corners)
+        self.assertLess(time.perf_counter() - start, 0.2)
+        self.assertEqual(len(tri), 6)
+        # Номера треугольников указывают на вершины в сгущённом контуре.
+        for i in tri:
+            self.assertIn(tuple(ring[i]), corners)
+
     def test_plane_of_small_polygon(self):
         xy = ft.plane([(58.0, 56.0), (58.0, 56.01), (58.01, 56.01)])
         # 0.01° долготы на 58° - около 590 м.

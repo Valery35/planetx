@@ -83,6 +83,30 @@ def densify(points, closed=False, step=STEP, max_points=MAX_POINTS):
     return np.vstack(out)
 
 
+def fill(points, step=STEP, max_points=MAX_POINTS):
+    """Сгущённый контур многоугольника и треугольники заливки.
+
+    Режутся только исходные вершины, номера переносятся на сгущённый
+    контур: вершина i стоит в нём в начале своей стороны. Резка всего
+    сгущённого контура шла 1.1 с на 800 точек при каждом движении мыши,
+    у больших многоугольников - минуты, QGIS висел, 27 сентября 2026
+    года. Точки между вершинами лежат на сторонах и в заливку не входят.
+    """
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    ring = densify(pts, closed=True, step=step, max_points=max_points)
+    starts = []
+    position = 0
+    for vertex in pts:
+        # Вершины стоят в контуре по порядку, каждая - первой точкой
+        # своей стороны, densify ставит их точно.
+        while position < len(ring) and not np.array_equal(ring[position],
+                                                          vertex):
+            position += 1
+        starts.append(position)
+    tri = triangulate(plane(pts))
+    return ring, np.asarray([starts[i] for i in tri], dtype=np.uint32)
+
+
 def lift(latlon, height_at=None):
     """Точки (широта, долгота) на рельефе в ECEF, float64 (n, 3)."""
     latlon = np.asarray(latlon, dtype=np.float64).reshape(-1, 2)

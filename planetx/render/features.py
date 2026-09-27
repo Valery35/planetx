@@ -16,8 +16,7 @@ import time
 import numpy as np
 from OpenGL import GL
 
-from ..core.features import (centered, densify, lift, plane, segments,
-                             triangulate)
+from ..core.features import centered, densify, fill, lift, segments
 from . import gpu
 from .shaders import (FEATURE_FRAGMENT, FEATURE_LINE_GEOMETRY,
                       FEATURE_VERTEX)
@@ -74,12 +73,13 @@ def build(shape, height_at=None):
     if shape.kind == "point" or len(shape.points) < 2:
         return None
     closed = shape.kind == "polygon" and len(shape.points) >= 3
-    ring = densify(shape.points, closed=closed)
-    center, offsets = centered(lift(ring, height_at))
-    lines = segments(len(ring), closed=closed)
     triangles = np.zeros(0, dtype=np.uint32)
     if closed and shape.fill is not None:
-        triangles = triangulate(plane(ring))
+        ring, triangles = fill(shape.points)
+    else:
+        ring = densify(shape.points, closed=closed)
+    center, offsets = centered(lift(ring, height_at))
+    lines = segments(len(ring), closed=closed)
     return center, offsets, lines, triangles
 
 
@@ -89,6 +89,10 @@ class Features:
     def __init__(self):
         self.shapes = []
         self.buffers = []  # по объектам, None у точки
+        # Собранные буферы по объекту: id объекта -> (объект, буферы).
+        # Пока тянется резинка, меняется только она, прочие объекты
+        # не пересобираются. Сборка стоит опроса высот на каждую точку.
+        self._built = {}
         self.version = None  # версия высот, по которой собраны буферы
         self.built_at = 0.0
         self.line_program = None
@@ -123,16 +127,32 @@ class Features:
         self.line_program = self.fill_program = None
 
     def _drop(self):
-        for item in self.buffers:
+        for _, item in self._built.values():
             if item is not None:
                 item.release()
+        self._built = {}
         self.buffers = []
 
     def _rebuild(self, height_at, version):
-        self._drop()
+        """Буферы по объектам. Новые высоты пересобирают все, иначе
+        собираются только новые объекты, ушедшие освобождаются."""
+        if version != self.version:
+            self._drop()
+        old = self._built
+        self._built = {}
+        self.buffers = []
         for shape in self.shapes:
-            built = build(shape, height_at)
-            self.buffers.append(_Buffers(*built) if built else None)
+            entry = old.pop(id(shape), None)
+            if entry is None or entry[0] is not shape:
+                if entry is not None and entry[1] is not None:
+                    entry[1].release()
+                built = build(shape, height_at)
+                entry = (shape, _Buffers(*built) if built else None)
+            self._built[id(shape)] = entry
+            self.buffers.append(entry[1])
+        for _, item in old.values():
+            if item is not None:
+                item.release()
         self.version = version
         self.built_at = time.monotonic()
         self.dirty = False

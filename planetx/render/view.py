@@ -174,7 +174,11 @@ class GlobeView(QOpenGLWidget):
         self._press = None  # пиксель нажатия левой кнопки
         # Слежение за мышью без нажатия: координаты под курсором.
         self.setMouseTracking(True)
-        self.setCursor(enum(Qt, "CursorShape", "OpenHandCursor"))
+        # Курсор в покое: стрелка, у инструментов - перекрестие. Ладонь
+        # была всюду и мешала целиться, решение автора 27 сентября 2026
+        # года. Сжатая ладонь - только пока Земля тянется.
+        self.tool_cursor = enum(Qt, "CursorShape", "ArrowCursor")
+        self.setCursor(self.tool_cursor)
         self.loader = None
         # Рельеф: хранилище высот, загрузчик Terrarium, уровень высот,
         # с которым собрана сетка каждого тайла, и пересборка сеток.
@@ -277,6 +281,12 @@ class GlobeView(QOpenGLWidget):
         """
         self.pending[key] = (rgba, mesh, level)
         self.update()
+
+    def set_tool_cursor(self, cross):
+        """Перекрестие у инструментов, иначе стрелка."""
+        self.tool_cursor = enum(Qt, "CursorShape",
+                                "CrossCursor" if cross else "ArrowCursor")
+        self.setCursor(self.tool_cursor)
 
     def set_shapes(self, shapes):
         """Свои объекты глобуса, core.features.Shape."""
@@ -473,8 +483,7 @@ class GlobeView(QOpenGLWidget):
             self.turning = (px, py)
         elif button == LEFT:
             self._press = (px, py)
-            if self.navigator.press(px, py, time.monotonic()):
-                self.setCursor(enum(Qt, "CursorShape", "ClosedHandCursor"))
+            self.navigator.press(px, py, time.monotonic())
         self.update()
 
     def mouseMoveEvent(self, event):
@@ -484,6 +493,8 @@ class GlobeView(QOpenGLWidget):
                 px - self._press[0], py - self._press[1]) \
                 > CLICK_PIXELS * self.devicePixelRatioF():
             self._press = None
+            if self.navigator.grab is not None:
+                self.setCursor(enum(Qt, "CursorShape", "ClosedHandCursor"))
         if self.turning is not None:
             x0, y0 = self.turning
             self.turning = (px, py)
@@ -501,7 +512,7 @@ class GlobeView(QOpenGLWidget):
             self.clicked.emit(*press)
         self.turning = None
         self.navigator.release(time.monotonic())
-        self.setCursor(enum(Qt, "CursorShape", "OpenHandCursor"))
+        self.setCursor(self.tool_cursor)
         self.update()
 
     def leaveEvent(self, event):
