@@ -197,6 +197,24 @@ def symbol_from_layers(source):
     return found
 
 
+def flat_property(source):
+    """Плоское имя свойства QGIS вида QgsSymbolLayer.PropertyStrokeWidth.
+
+    Проверка Qt 6 каталога считает его ошибкой перечисления, даже
+    в ветке для QGIS 3. Версия 0.4.2 получила отметку «Qt6 Check»
+    с крестиком, 27 сентября 2026 года.
+    """
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Attribute) \
+                and isinstance(node.value, ast.Name) \
+                and node.value.id.startswith("Qgs") \
+                and node.attr.startswith("Property") \
+                and node.attr[len("Property"):][:1].isupper():
+            found.append(node.lineno)
+    return found
+
+
 def bom(source):
     """Метка BOM в начале файла. Её пишет Set-Content в PowerShell 5.1."""
     return [1] if source.startswith("﻿") else []
@@ -281,6 +299,11 @@ class TestCodeRules(unittest.TestCase):
     def test_no_symbol_built_from_layers(self):
         self.assertEqual(scan(symbol_from_layers, self.paths), [])
 
+    def test_no_flat_qgis_property(self):
+        plugin = [p for p in self.paths if p.startswith(PLUGIN)
+                  and os.sep + "tests" + os.sep not in p]
+        self.assertEqual(scan(flat_property, plugin), [])
+
     def test_core_does_not_import_qt(self):
         core = [p for p in self.paths
                 if os.sep + "core" + os.sep in p]
@@ -348,6 +371,11 @@ class TestGuardsCatch(unittest.TestCase):
         self.assertCatches(
             symbol_from_layers, "s = QgsLineSymbol([line])\n",
             "s = QgsLineSymbol.createSimple(props)\n")
+
+    def test_flat_property_guard(self):
+        self.assertCatches(
+            flat_property, "w = QgsSymbolLayer.PropertyStrokeWidth\n",
+            "w = QgsSymbolLayer.Property.StrokeWidth\n")
 
     def test_bom_guard(self):
         self.assertCatches(bom, "﻿# x\n", "# x\n")

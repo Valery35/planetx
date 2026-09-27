@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.4.2
+version=0.4.3
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -50,7 +50,9 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.4.2 My Places is a folder right under the Globe row, as in
+changelog=0.4.3 The plugin passes the Qt 6 check of the QGIS plugin
+      repository. Nothing changes in the globe itself.
+      0.4.2 My Places is a folder right under the Globe row, as in
       Google Earth, shown even when empty. Its check box shows or hides
       all places, a double click on a place flies there. Save view is a
       button of its own and puts a placemark that restores the height,

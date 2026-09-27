@@ -165,11 +165,13 @@ RAIL_FROM = 7
 RAIL_WIDTH = ("{} * min(1, max(0.4, "
               "(log(2, 559082264 / @map_scale) - 5) / 4))")
 # Свойство толщины линии: в QGIS 4 областное имя, в QGIS 3 плоское.
+# Плоское имя читается строкой. Проверка Qt 6 каталога считает запись
+# QgsSymbolLayer.PropertyStrokeWidth ошибкой и в ветке для QGIS 3.
 if hasattr(QgsSymbolLayer, "Property") and \
         hasattr(QgsSymbolLayer.Property, "StrokeWidth"):
     STROKE_WIDTH = QgsSymbolLayer.Property.StrokeWidth
 else:
-    STROKE_WIDTH = QgsSymbolLayer.PropertyStrokeWidth
+    STROKE_WIDTH = getattr(QgsSymbolLayer, "PropertyStrokeWidth")
 
 
 def railway_layer(tiles_url, max_zoom=14):
