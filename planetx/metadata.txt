@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.4.1
+version=0.4.2
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -30,8 +30,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       My Places, as in Google Earth, keep placemarks, paths, polygons and
       measurements in a shared file of the QGIS profile. They are drawn
       by clicks right on the globe. The ruler measures lines, paths,
-      polygons and circles on the WGS84 ellipsoid. QGIS bookmarks fly the
-      globe, Save view makes a bookmark with heading and tilt.
+      polygons and circles on the WGS84 ellipsoid. Save view puts a
+      placemark that restores the height, heading and tilt.
       Type a place name or coordinates in the Search field and the
       camera flies there, the place found gets a red pin. The flight goes
       along the van Wijk and Nuij path.
@@ -50,7 +50,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.4.1 A large polygon no longer hangs QGIS while it is drawn.
+changelog=0.4.2 My Places is a folder right under the Globe row, as in
+      Google Earth, shown even when empty. Its check box shows or hides
+      all places, a double click on a place flies there. Save view is a
+      button of its own and puts a placemark that restores the height,
+      heading and tilt. The QGIS bookmarks menu is removed.
+      0.4.1 A large polygon no longer hangs QGIS while it is drawn.
       Arrow cursor over the globe, closed hand while dragging, cross for
       the ruler, new placemark and identify.
       0.4.0 My Places as in Google Earth: placemarks, paths and

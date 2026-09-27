@@ -9,6 +9,11 @@
 его слои можно добавить в проект.
 
 Запись идёт прямо в источник через dataProvider, без буфера правки.
+
+Сохранённый вид - точка на месте взгляда с полем view: расстояние
+до точки, азимут и наклон камеры. Закладки QGIS для этого не нужны,
+решение автора от 27 сентября 2026 года. Поле view появилось после 0.4.1,
+в прежний файл оно добавляется при открытии.
 """
 import os
 import time
@@ -29,7 +34,7 @@ TABLES = {"point": ("points", "Point"), "line": ("lines", "LineString"),
 FIELDS = (("name", "string"), ("description", "string"),
           ("color", "string"), ("width", "double"), ("fill", "string"),
           ("visible", "integer"), ("measure", "string"),
-          ("created", "string"))
+          ("created", "string"), ("view", "string"))
 # Цвета по умолчанию, как у Google Earth: жёлтая метка и линия, белый
 # контур многоугольника с полупрозрачной заливкой.
 DEFAULT_COLOR = {"point": (255, 214, 0, 255), "line": (255, 214, 0, 255),
@@ -74,6 +79,15 @@ def _points(kind, geometry):
     return [(p.y(), p.x()) for p in ring]
 
 
+def _view(text):
+    """Ракурс из поля view: (расстояние, азимут, наклон) или None."""
+    try:
+        view = tuple(float(v) for v in str(text or "").split(","))
+    except ValueError:
+        return None
+    return view if len(view) == 3 else None
+
+
 def _geometry(kind, points):
     xy = [QgsPointXY(lon, lat) for lat, lon in points]
     if kind == "point":
@@ -83,15 +97,32 @@ def _geometry(kind, points):
     return QgsGeometry.fromPolygonXY([xy + xy[:1]])
 
 
+def _add_missing(layer):
+    """Добавить в слой файла поля, которых в нём ещё нет.
+
+    Поле берётся из слоя в памяти, так его тип задаётся одинаково
+    в Qt 5 и Qt 6.
+    """
+    names = set(layer.fields().names())
+    missing = [(n, t) for n, t in FIELDS if n not in names]
+    if not missing:
+        return
+    spec = "&".join("field={}:{}".format(n, t) for n, t in missing)
+    memory = QgsVectorLayer("Point?" + spec, "fields", "memory")
+    if layer.dataProvider().addAttributes(list(memory.fields())):
+        layer.updateFields()
+
+
 class Place:
     """Метка из файла: ключ (вид, номер объекта), объект и видимость."""
 
-    def __init__(self, kind, fid, shape, visible, measure=""):
+    def __init__(self, kind, fid, shape, visible, measure="", view=None):
         self.kind = kind
         self.fid = fid
         self.shape = shape
         self.visible = visible
         self.measure = measure
+        self.view = view
 
     @property
     def key(self):
@@ -137,12 +168,14 @@ class MyPlaces(QObject):
             layer = QgsVectorLayer("{}|layername={}".format(self.path, table),
                                    table, "ogr")
             if layer.isValid():
+                _add_missing(layer)
                 self.layers[kind] = layer
         self._read()
 
     def _read(self):
         self.places = []
         for kind, layer in self.layers.items():
+            has_view = layer.fields().indexOf("view") >= 0
             for feature in layer.getFeatures():
                 points = _points(kind, feature.geometry())
                 if not points:
@@ -157,7 +190,8 @@ class MyPlaces(QObject):
                 self.places.append(Place(
                     kind, feature.id(), shape,
                     bool(feature["visible"] if feature["visible"] is not None
-                         else 1), str(feature["measure"] or "")))
+                         else 1), str(feature["measure"] or ""),
+                    _view(feature["view"]) if has_view else None))
         self.places.sort(key=lambda p: p.shape.name.lower())
         self.changed.emit()
 
@@ -170,8 +204,11 @@ class MyPlaces(QObject):
     def find(self, key):
         return next((p for p in self.places if p.key == key), None)
 
-    def add(self, shape, measure=""):
-        """Записать новую метку. Возвращает её ключ или None."""
+    def add(self, shape, measure="", view=None):
+        """Записать новую метку. Возвращает её ключ или None.
+
+        view - ракурс сохранённого вида: расстояние, азимут, наклон.
+        """
         layer = self.layers.get(shape.kind)
         if layer is None or not shape.points:
             return None
@@ -182,9 +219,12 @@ class MyPlaces(QObject):
                   "width": float(shape.width),
                   "fill": _color_text(shape.fill), "visible": 1,
                   "measure": measure,
-                  "created": time.strftime("%Y-%m-%d %H:%M:%S")}
+                  "created": time.strftime("%Y-%m-%d %H:%M:%S"),
+                  "view": ",".join(repr(float(v)) for v in view)
+                  if view else ""}
         for name, value in values.items():
-            feature[name] = value
+            if layer.fields().indexOf(name) >= 0:
+                feature[name] = value
         ok, added = layer.dataProvider().addFeatures([feature])
         self._read()
         return "{}:{}".format(shape.kind, added[0].id()) if ok else None

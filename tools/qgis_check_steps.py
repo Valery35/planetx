@@ -6,8 +6,8 @@
     qgis.bat --profiles-path %TEMP%\\planetx_stress --code
         tools\\qgis_check_steps.py
 
-QGIS пользователя не трогается, проект пустой, закладка создаётся
-в нём и не сохраняется. Итог пишется в %TEMP%\\planetx_steps.json,
+QGIS пользователя не трогается, проект пустой и не сохраняется.
+Итог пишется в %TEMP%\\planetx_steps.json,
 стек при падении - в %TEMP%\\planetx_steps_crash.txt. В конце QGIS
 закрывается.
 """
@@ -24,9 +24,7 @@ CRASH = open(os.path.join(TEMP, "planetx_steps_crash.txt"), "w",
              encoding="utf-8")
 faulthandler.enable(CRASH, all_threads=True)
 
-from qgis.core import (QgsApplication, QgsBookmark,  # noqa: E402
-                       QgsCoordinateReferenceSystem, QgsProject,
-                       QgsReferencedRectangle, QgsRectangle)
+from qgis.core import QgsApplication, QgsProject  # noqa: E402
 from qgis.PyQt.QtCore import QTimer  # noqa: E402
 from qgis.utils import iface  # noqa: E402
 
@@ -82,37 +80,16 @@ def open_globe():
     plugin.window.showNormal()
 
 
-@check(500)
-def bookmark_menu():
-    # Закладка в UTM 40N вокруг Перми, 10 × 6 км.
-    crs = QgsCoordinateReferenceSystem("EPSG:32640")
-    rect = QgsReferencedRectangle(
-        QgsRectangle(572000, 6426000, 582000, 6432000), crs)
-    manager = QgsProject.instance().bookmarkManager()
-    bookmark = QgsBookmark()
-    bookmark.setName("Пермь UTM")
-    bookmark.setExtent(rect)
-    manager.addBookmark(bookmark)
-    toolbar = state["window"].toolbar
-    menu = toolbar.bookmarks.menu()
-    toolbar._fill_bookmarks(menu)
-    actions = [a.text() for a in menu.actions() if a.text()]
-    result["bookmark_menu"] = actions
-    for action in menu.actions():
-        if action.text() == "Пермь UTM":
-            action.trigger()
-
-
-@check(100)
-def bookmark_flight():
-    flight = state["window"].view.navigator.flight
-    if flight is None:
-        result["bookmark_flight"] = None
-        return
-    end = flight[1].end
-    result["bookmark_flight"] = [round(end.lat, 4), round(end.lon, 4),
-                                 round(end.distance)]
-
+@check(200)
+def places_folder():
+    # «Мои метки» - папка сразу под «Глобусом», есть и пустая.
+    panel = state["window"].panel
+    result["places_folder"] = [
+        panel.list.indexOfTopLevelItem(panel.head),
+        panel.list.indexOfTopLevelItem(panel.places_group)]
+    result["geo_has_places"] = any(
+        panel.geo.topLevelItem(i).text(0) == panel.places_group.text(0)
+        for i in range(panel.geo.topLevelItemCount()))
 
 @check(8000)
 def shapes_set():
@@ -167,6 +144,26 @@ def places():
     group = window.panel.places_group
     result["panel_rows"] = group.childCount()
     result["view_shapes"] = len(window.view.features.shapes)
+    state["places_shown"] = result["view_shapes"]
+    # Флажок папки прячет все метки, запись после обхода строк.
+    from qgis.PyQt.QtCore import Qt
+    group.setCheckState(0, Qt.CheckState.Unchecked)
+    state["place_keys"] = keys
+
+
+@check(200)
+def places_after_folder():
+    from planetx.ui.myplaces import MyPlaces
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    store = window.myplaces
+    keys = state["place_keys"]
+    result["folder_hidden"] = [len(window.view.features.shapes),
+                               sum(p.visible for p in store.places)]
+    window.panel.places_group.setCheckState(0, Qt.CheckState.Checked)
+    QgsApplication.processEvents()
+    QgsApplication.processEvents()
+    result["folder_shown"] = len(window.view.features.shapes)
     store.set_visible(keys[1], False)
     result["after_hide"] = len(window.view.features.shapes)
     store.rename(keys[0], "Центр Перми")
@@ -345,7 +342,9 @@ def link_selection_check():
 
 @check(200)
 def save_view_check():
+    from planetx.core.features import Shape
     from planetx.core.navigation import Pose
+    from planetx.ui import myplaces
     import planetx.ui.window as wmod
     window = state["window"]
     nav = window.view.navigator
@@ -358,18 +357,45 @@ def save_view_check():
         window.save_view()
     finally:
         wmod.QInputDialog.getText = original
-    marks = [b for b in QgsProject.instance().bookmarkManager().bookmarks()
-             if b.name() == "Вид теста"]
-    out = {"bookmark": len(marks)}
+    views = [p for p in window.myplaces.places
+             if p.shape.name == "Вид теста"]
+    out = {"places": len(views),
+           "view": [round(v, 1) for v in views[-1].view]
+           if views and views[-1].view else None,
+           "bookmarks": len(QgsProject.instance().bookmarkManager()
+                            .bookmarks())}
     nav.set_pose(Pose(50.0, 40.0, 3.0e6))
-    if marks:
-        window.fly_to_bookmark(marks[0])
+    if views:
+        window.fly_to_place(views[-1])
         end = nav.flight[1].end if nav.flight else None
         out["pose"] = [round(end.lat, 4), round(end.lon, 4),
                        round(end.distance), round(end.heading, 1),
                        round(end.tilt, 1)] if end else None
+        window.myplaces.remove(views[-1].key)
+    # Файл 0.4.1 без поля view: поле добавляется при открытии.
+    old = os.path.join(TEMP, "planetx_old_places.gpkg")
+    if os.path.exists(old):
+        os.remove(old)
+    fields = myplaces.FIELDS
+    myplaces.FIELDS = tuple(f for f in fields if f[0] != "view")
+    try:
+        store = myplaces.MyPlaces(old)
+        store.load()
+        store.add(Shape("point", [(58.0, 56.0)], name="Старая"))
+        out["old_has_view"] = store.layers["point"].fields() \
+            .indexOf("view") >= 0
+    finally:
+        myplaces.FIELDS = fields
+    store = myplaces.MyPlaces(old)
+    store.load()
+    key = store.add(Shape("point", [(58.1, 56.1)], name="Новая"),
+                    view=(1000.0, 10.0, 20.0))
+    out["migrated_has_view"] = store.layers["point"].fields() \
+        .indexOf("view") >= 0
+    out["migrated"] = sorted((p.shape.name, p.view) for p in store.places)
+    out["migrated_key"] = key is not None
+    store.layers = {}
     result["save_view"] = out
-
 
 @check(500)
 def big_polygon():

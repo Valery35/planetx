@@ -9,14 +9,12 @@
 Окно связывает части и решает, панели только показывают.
 """
 import html
-import math
 import os
 import sys
 import time
 
-from qgis.core import (QgsBookmark, QgsCoordinateReferenceSystem,
-                       QgsCoordinateTransform, QgsCsException, QgsProject,
-                       QgsRectangle, QgsReferencedRectangle, QgsSettings)
+from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+                       QgsCsException, QgsProject, QgsRectangle, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import (QInputDialog, QLabel, QMessageBox,
@@ -24,13 +22,14 @@ from qgis.PyQt.QtWidgets import (QInputDialog, QLabel, QMessageBox,
 from qgis.utils import iface
 
 from ..core import basemap
-from ..core.ellipsoid import A, ecef_to_geodetic
+from ..core.ellipsoid import ecef_to_geodetic
+from ..core.features import Shape
 from ..core.flight import Flight, fit_view, parse_latlon
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                             place_text, search_url)
 from ..core.mipmap import mip_chain
 from ..core.navigation import focal, ground_under
-from ..core.sync import BOTH, DIRECTIONS, ground_size
+from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.tiling import tile_mesh
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
@@ -52,7 +51,7 @@ from .draw import PlaceDialog
 from .measure import Ruler, RulerDialog
 from .myplaces import MyPlaces
 from .panel import LayerPanel
-from .project import (AUTO_REFRESH, ENTRY, FOLLOW, ProjectWatch, map_layers,
+from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
                       visible_on_map, write_flag, write_shown)
 from .properties import SCALE_RANGE, PropertiesDialog
@@ -162,12 +161,6 @@ def places_decoder(languages):
 def heights_preparer(key, rgba):
     """Работа рабочего потока для тайла высот Terrarium."""
     return make_tile(*key, rgba)
-
-
-def _view_key(bookmark_id):
-    """Ключ ракурса закладки в проекте. Номер закладки QGIS бывает
-    в фигурных скобках, имя элемента XML такого не допускает."""
-    return "views/v" + "".join(c for c in bookmark_id if c.isalnum())
 
 
 def distance_text(metres):
@@ -282,7 +275,6 @@ class GlobeWindow(QWidget):
         self.panel.fly_to_layer.connect(self.fly_to_layer)
         self.toolbar.refresh_clicked.connect(self.refresh)
         self.toolbar.about_clicked.connect(lambda: show_about(self))
-        self.toolbar.bookmark_chosen.connect(self.fly_to_bookmark)
         self.toolbar.save_view_requested.connect(self.save_view)
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
         self.myplaces = MyPlaces(parent=self)
@@ -994,8 +986,15 @@ class GlobeWindow(QWidget):
                 self.myplaces.remove(key)
 
     def fly_to_place(self, place):
-        """Перелёт к метке: к точке или к охвату линии и многоугольника."""
+        """Перелёт к метке: к точке или к охвату линии и многоугольника.
+
+        Сохранённый вид возвращает расстояние, азимут и наклон.
+        """
         points = place.shape.points
+        if place.view is not None and len(points) == 1:
+            distance, heading, tilt = place.view
+            self._fly_to(points[0][0], points[0][1], distance, heading, tilt)
+            return
         if len(points) == 1:
             self._fly_to(points[0][0], points[0][1], SEARCH_MIN_DISTANCE)
             return
@@ -1006,57 +1005,20 @@ class GlobeWindow(QWidget):
                          QgsCoordinateReferenceSystem("EPSG:4326"))
 
     def save_view(self):
-        """Вид глобуса закладкой проекта QGIS.
+        """Вид глобуса меткой в «Моих метках», как в Google Earth.
 
-        Охват закладки - полоса вида на местности, её видит и карта.
-        Ракурс - точка взгляда, расстояние, азимут и наклон - пишется
-        в проект рядом, по номеру закладки.
+        Метка стоит в точке взгляда, ракурс - расстояние, азимут
+        и наклон - пишется в поле view.
         """
         name, ok = QInputDialog.getText(self, tr("Сохранить вид"),
                                         tr("Название"), text=tr("Вид"))
         if not ok:
             return
         pose = self.view.navigator.pose
-        camera = self.view.camera
-        width, height = ground_size(pose.distance, camera.fov_y,
-                                    camera.aspect)
-        dlat = math.degrees(height / 2.0 / A)
-        dlon = math.degrees(width / 2.0 / (A * max(
-            math.cos(math.radians(pose.lat)), 1e-6)))
-        rect = QgsRectangle(max(pose.lon - dlon, -180.0),
-                            max(pose.lat - dlat, -90.0),
-                            min(pose.lon + dlon, 180.0),
-                            min(pose.lat + dlat, 90.0))
-        bookmark = QgsBookmark()
-        bookmark.setName(name.strip() or tr("Вид"))
-        bookmark.setExtent(QgsReferencedRectangle(
-            rect, QgsCoordinateReferenceSystem("EPSG:4326")))
-        project = QgsProject.instance()
-        found = project.bookmarkManager().addBookmark(bookmark)
-        bookmark_id = found[0] if isinstance(found, tuple) else found
-        if bookmark_id:
-            project.writeEntry(ENTRY, _view_key(bookmark_id), ",".join(
-                repr(float(v)) for v in (pose.lat, pose.lon, pose.distance,
-                                         pose.heading, pose.tilt)))
-
-    def fly_to_bookmark(self, bookmark):
-        """Перелёт к закладке QGIS. Закладка, сохранённая глобусом,
-        возвращает ракурс целиком, прочие - охват в своей системе
-        координат."""
-        text, ok = QgsProject.instance().readEntry(
-            ENTRY, _view_key(bookmark.id()), "")
-        if ok and text:
-            try:
-                lat, lon, distance, heading, tilt = (
-                    float(v) for v in text.split(","))
-            except ValueError:
-                lat = None
-            if lat is not None:
-                self._fly_to(lat, lon, distance, heading, tilt)
-                return
-        extent = bookmark.extent()
-        self._fly_extent(extent, extent.crs())
-
+        shape = Shape("point", [(pose.lat, pose.lon)],
+                      name=name.strip() or tr("Вид"))
+        self.myplaces.add(shape, view=(pose.distance, pose.heading,
+                                       pose.tilt))
     def _fly_extent(self, extent, crs):
         """Перелёт к охвату в системе координат crs, взгляд отвесный."""
         wgs = QgsCoordinateReferenceSystem("EPSG:4326")

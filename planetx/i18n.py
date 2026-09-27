@@ -235,13 +235,10 @@ EN = {
         "Shores of lakes, reservoirs and wide rivers are outlined in blue. "
         "Reservoirs are split into pieces in the data, and the outline also "
         "follows the cuts.",
-    "Закладки проекта и закладки пользователя QGIS. Выбор закладки "
-    "запускает перелёт к её охвату.":
-        "Project bookmarks and QGIS user bookmarks. Choosing a bookmark "
-        "flies to its extent.",
-    "Проект": "Project",
-    "Пользователь": "User",
-    "Закладок нет": "No bookmarks",
+    "Сохранить вид. Точка взгляда становится меткой в «Моих метках», "
+    "перелёт к ней возвращает высоту, азимут и наклон.":
+        "Save view. The look-at point becomes a placemark in My Places, "
+        "flying to it restores the height, heading and tilt.",
     "Новая метка": "New placemark",
     "Новая метка, путь или многоугольник в «Мои метки».":
         "A new placemark, path or polygon in My Places.",
@@ -308,7 +305,6 @@ EN = {
         "The first click on the globe sets the centre of the circle, the "
         "second sets the radius.",
     "Сохранить измерение": "Save measurement",
-    "Сохранить вид…": "Save view…",
     "Сохранить вид": "Save view",
     "Вид": "View",
     "Слои как на карте QGIS": "Layers as on the QGIS map",
@@ -334,12 +330,14 @@ EN = {
         "Select the features found in the QGIS layers. The selection shows "
         "on the map, in the attribute table and on the globe.",
     "Мои метки": "My Places",
-    "Сохранённые метки, пути, многоугольники и измерения. Они хранятся "
-    "в общем файле профиля QGIS и видны в любом проекте. Меню по правой "
-    "кнопке - перелёт, переименование, удаление, слои меток в проекте.":
-        "Saved placemarks, paths, polygons and measurements. They are kept "
-        "in a shared file of the QGIS profile and are visible in any "
-        "project. The right-click menu flies there, renames, deletes and "
+    "Сохранённые метки, виды, пути, многоугольники и измерения. Они "
+    "хранятся в общем файле профиля QGIS и видны в любом проекте. "
+    "Двойной щелчок по метке переносит к ней. Меню по правой кнопке - "
+    "перелёт, переименование, удаление, слои меток в проекте.":
+        "Saved placemarks, views, paths, polygons and measurements. They "
+        "are kept in a shared file of the QGIS profile and are visible in "
+        "any project. Double-clicking a place flies there. The right-click "
+        "menu flies there, renames, deletes and "
         "adds the places layers to the project.",
     "Мои метки - точки": "My Places - points",
     "Мои метки - линии": "My Places - lines",

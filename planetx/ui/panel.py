@@ -3,24 +3,26 @@
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Левая панель окна глобуса: координаты, список, строка состояния.
 
-Устройство взято из 3D-сцены Isoliner3D. Список плоский. Первая строка
-«Глобус», двойной щелчок по ней открывает свойства вида. Дальше все
-слои проекта в порядке карты QGIS с типом слоя. Отметка слоя включает
-его на глобусе и не меняет видимость на карте. У слоя в меню
-«Подлететь».
+Устройство взято из 3D-сцены Isoliner3D. Первая строка списка «Глобус»,
+двойной щелчок по ней открывает свойства вида. Под ней папка «Мои
+метки», как в Google Earth. Она есть и пустая, двойной щелчок по метке
+переносит к ней. Дальше все слои проекта в порядке карты QGIS с типом
+слоя. Отметка слоя включает его на глобусе и не меняет видимость
+на карте. У слоя в меню «Подлететь».
 
 Внизу панель «Слои», как в Google Earth: векторная основа по группам,
 которые сворачиваются, и рельеф. Флажки в ней срабатывают сразу.
 
 Панель только показывает и сообщает сигналами, решает окно.
 """
-from qgis.core import QgsProject, QgsRasterLayer, QgsVectorLayer
+from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
+                       QgsVectorLayer)
 from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QFont
 from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
-                                 QListWidget, QListWidgetItem, QMenu,
-                                 QPushButton, QSplitter, QTreeWidget,
-                                 QTreeWidgetItem, QVBoxLayout, QWidget)
+                                 QListWidget, QMenu, QPushButton,
+                                 QSplitter, QTreeWidget, QTreeWidgetItem,
+                                 QVBoxLayout, QWidget)
 
 from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
@@ -151,13 +153,39 @@ class LayerPanel(QWidget):
         self.found.itemActivated.connect(
             lambda item: self.place_chosen.emit(self.found.row(item)))
 
-        self.list = QListWidget(self)
+        self.list = QTreeWidget(self)
+        self.list.setHeaderHidden(True)
         self.list.setContextMenuPolicy(
             enum(Qt, "ContextMenuPolicy", "CustomContextMenu"))
         self.list.customContextMenuRequested.connect(self._menu)
         self.list.itemDoubleClicked.connect(self._double_clicked)
         self.list.itemChanged.connect(self._changed)
-
+        self.head = QTreeWidgetItem(self.list, [tr("Глобус")])
+        bold = QFont(self.head.font(0))
+        bold.setBold(True)
+        self.head.setFont(0, bold)
+        self.head.setToolTip(0, tr("Свойства вида: двойной щелчок"))
+        # «Мои метки» - папка под «Глобусом», как в Google Earth.
+        self.places_group = QTreeWidgetItem(self.list, [tr("Мои метки")])
+        self.places_group.setIcon(
+            0, QgsApplication.getThemeIcon("/mIconFolder.svg"))
+        self.places_group.setToolTip(0, tr(
+            "Сохранённые метки, виды, пути, многоугольники и измерения. "
+            "Они хранятся в общем файле профиля QGIS и видны в любом "
+            "проекте. Двойной щелчок по метке переносит к ней. Меню "
+            "по правой кнопке - перелёт, переименование, удаление, слои "
+            "меток в проекте."))
+        self.places_group.setFlags(self.places_group.flags() | CHECKABLE
+                                   | TRISTATE)
+        self.places_group.setCheckState(0, CHECKED)
+        self.places_group.setExpanded(True)
+        # Флажок папки меняет все метки, каждая шлёт itemChanged. Метки
+        # переписываются в файл после того, как Qt обойдёт все строки,
+        # иначе список перестраивался бы посреди обхода.
+        self._place_states = {}
+        self._place_timer = QTimer(self)
+        self._place_timer.setSingleShot(True)
+        self._place_timer.timeout.connect(self._emit_places)
         self.geo = QTreeWidget(self)
         self.geo.setHeaderHidden(True)
         # Щелчок по группе меняет все её строки, каждая шлёт itemChanged.
@@ -167,19 +195,6 @@ class LayerPanel(QWidget):
         self._geo_timer.setSingleShot(True)
         self._geo_timer.timeout.connect(self._emit_geo)
         self.geo_items = {}
-        # «Мои метки» - первая группа, как в Google Earth.
-        self.places_group = QTreeWidgetItem(self.geo, [tr("Мои метки")])
-        self.places_group.setToolTip(0, tr(
-            "Сохранённые метки, пути, многоугольники и измерения. Они "
-            "хранятся в общем файле профиля QGIS и видны в любом "
-            "проекте. Меню по правой кнопке - перелёт, переименование, "
-            "удаление, слои меток в проекте."))
-        self.places_group.setFlags(self.places_group.flags() | CHECKABLE
-                                   | TRISTATE)
-        self.places_group.setExpanded(True)
-        self.geo.setContextMenuPolicy(
-            enum(Qt, "ContextMenuPolicy", "CustomContextMenu"))
-        self.geo.customContextMenuRequested.connect(self._geo_menu)
         # Последнее сообщённое окну состояние панели «Слои».
         self._relief = False
         self._groups = set()
@@ -261,15 +276,12 @@ class LayerPanel(QWidget):
         self._groups = set(groups)
 
     def _geo_changed(self, item):
-        key = item.data(0, PLACE_ROLE)
-        if key:
-            self.place_toggled.emit(key, item.checkState(0) == CHECKED)
-        elif item.data(0, LAYER_ROLE):
+        if item.data(0, LAYER_ROLE):
             self._geo_timer.start(0)
 
     def set_places(self, places):
         """Строки «Моих меток»: myplaces.Place. Сигналы при этом не идут."""
-        self.geo.blockSignals(True)
+        self.list.blockSignals(True)
         group = self.places_group
         group.takeChildren()
         for place in places:
@@ -280,28 +292,16 @@ class LayerPanel(QWidget):
                 item.setToolTip(0, place.measure)
             item.setFlags(item.flags() | CHECKABLE)
             item.setCheckState(0, CHECKED if place.visible else UNCHECKED)
+        if not places:
+            # Пустая папка отмечена, новая метка сразу видна.
+            group.setCheckState(0, CHECKED)
         group.setExpanded(True)
-        self.geo.blockSignals(False)
+        self.list.blockSignals(False)
 
-    def _geo_menu(self, point):
-        item = self.geo.itemAt(point)
-        if item is None:
-            return
-        menu = QMenu(self)
-        key = item.data(0, PLACE_ROLE)
-        if key:
-            for action, text in (("fly", tr("Подлететь")),
-                                 ("rename", tr("Переименовать…")),
-                                 ("remove", tr("Удалить"))):
-                menu.addAction(text).triggered.connect(
-                    lambda _=False, a=action: self.place_action.emit(a, key))
-        elif item is self.places_group:
-            menu.addAction(tr("Добавить слои меток в проект")).triggered \
-                .connect(lambda: self.place_action.emit("project", ""))
-        else:
-            return
-        menu.exec(self.geo.viewport().mapToGlobal(point))
-
+    def _emit_places(self):
+        states, self._place_states = self._place_states, {}
+        for key, on in states.items():
+            self.place_toggled.emit(key, on)
     def _emit_geo(self):
         groups = {key for key, item in self.geo_items.items()
                   if key != RELIEF and item.checkState(0) == CHECKED}
@@ -314,43 +314,46 @@ class LayerPanel(QWidget):
             self.geo_changed.emit(groups)
 
     def set_layers(self, layers, shown):
-        """Строка «Глобус» и слои проекта. shown - номера отмеченных.
+        """Слои проекта под «Глобусом» и «Моими метками». shown - номера
+        отмеченных.
 
         Сигналы при этом не идут.
         """
         self.list.blockSignals(True)
-        self.list.clear()
-        head = QListWidgetItem(tr("Глобус"))
-        head.setData(LAYER_ROLE, None)
-        bold = QFont(head.font())
-        bold.setBold(True)
-        head.setFont(bold)
-        head.setToolTip(tr("Свойства вида: двойной щелчок"))
-        self.list.addItem(head)
+        while self.list.topLevelItemCount() > 2:
+            self.list.takeTopLevelItem(2)
         for layer in layers:
-            item = QListWidgetItem(tr("{name} · {kind}", name=layer.name(),
-                                      kind=layer_kind(layer)))
-            item.setData(LAYER_ROLE, layer.id())
-            item.setToolTip(tr(
+            item = QTreeWidgetItem(self.list, [tr(
+                "{name} · {kind}", name=layer.name(),
+                kind=layer_kind(layer))])
+            item.setData(0, LAYER_ROLE, layer.id())
+            item.setToolTip(0, tr(
                 "Отметка показывает слой на глобусе, видимость на карте "
                 "QGIS не меняется. Меню по правой кнопке - перелёт "
                 "к слою."))
             item.setFlags(item.flags() | CHECKABLE)
-            item.setCheckState(CHECKED if layer.id() in shown
+            item.setCheckState(0, CHECKED if layer.id() in shown
                                else UNCHECKED)
-            self.list.addItem(item)
         self.list.blockSignals(False)
 
     # События списка.
 
     def _changed(self, item):
-        layer_id = item.data(LAYER_ROLE)
+        key = item.data(0, PLACE_ROLE)
+        if key:
+            self._place_states[key] = item.checkState(0) == CHECKED
+            self._place_timer.start(0)
+            return
+        layer_id = item.data(0, LAYER_ROLE)
         if layer_id:
             self.layer_toggled.emit(layer_id,
-                                    item.checkState() == CHECKED)
+                                    item.checkState(0) == CHECKED)
 
-    def _double_clicked(self, item):
-        if not item.data(LAYER_ROLE):
+    def _double_clicked(self, item, column=0):
+        key = item.data(0, PLACE_ROLE)
+        if key:
+            self.place_action.emit("fly", key)
+        elif item is self.head:
             self.properties_requested.emit()
 
     def _menu(self, point):
@@ -358,8 +361,18 @@ class LayerPanel(QWidget):
         if item is None:
             return
         menu = QMenu(self)
-        layer_id = item.data(LAYER_ROLE)
-        if layer_id:
+        key = item.data(0, PLACE_ROLE)
+        layer_id = item.data(0, LAYER_ROLE)
+        if key:
+            for action, text in (("fly", tr("Подлететь")),
+                                 ("rename", tr("Переименовать…")),
+                                 ("remove", tr("Удалить"))):
+                menu.addAction(text).triggered.connect(
+                    lambda _=False, a=action: self.place_action.emit(a, key))
+        elif item is self.places_group:
+            menu.addAction(tr("Добавить слои меток в проект")).triggered \
+                .connect(lambda: self.place_action.emit("project", ""))
+        elif layer_id:
             layer = QgsProject.instance().mapLayer(layer_id)
             if layer is None:
                 return
