@@ -14,8 +14,9 @@ from collections import Counter, deque
 
 import numpy as np
 from OpenGL import GL
-from qgis.PyQt.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal
-from qgis.PyQt.QtGui import QSurfaceFormat
+from qgis.PyQt.QtCore import (QObject, QRunnable, QThreadPool, Qt, QTimer,
+                              pyqtSignal)
+from qgis.PyQt.QtGui import QImage, QSurfaceFormat
 
 from ..core import lod
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
@@ -24,6 +25,7 @@ from ..core.camera import Camera
 from ..core.ellipsoid import A, B
 from ..core.navigation import Navigator, Pose, altitude, nearest_terrain
 from ..core.places import Place, PlaceStore, kinds_at
+from ..core.snapshot import letterbox
 from ..core.terrain import FLAT_LEVEL, HeightStore
 from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
                            tile_mesh)
@@ -66,6 +68,16 @@ SECTIONS = ("upload", "terrain", "select", "heights", "loader", "draw",
             "evict")
 WHEEL_STEP = 0.8  # один щелчок колеса приближает на 20 %
 CLICK_PIXELS = 4.0  # логических пикселей, дальше - уже перетаскивание
+# Снимок вида. Кадры снимка идут по таймеру, в них грузится больше
+# текстур: плавность движения не нужна, камера стоит.
+SHOT_PERIOD = 30  # мс между кадрами снимка
+SHOT_UPLOADS = 24
+SHOT_UPLOAD_TIME = 0.02
+SHOT_OVERLAY_UPLOADS = 8
+# Снимок готов, когда столько кадров подряд ничего не ждут. Ответы
+# запросов видимости надписей приходят через кадр.
+SHOT_SETTLE = 3
+PREVIEW_COLOR = (0.18, 0.18, 0.18)  # поля вокруг снимка в окне
 
 LEFT = enum(Qt, "MouseButton", "LeftButton")
 MIDDLE = enum(Qt, "MouseButton", "MiddleButton")
@@ -154,6 +166,20 @@ class _BuildTask(QRunnable):
         self.sink.done.emit(self.key, mesh, self.level, self.relief)
 
 
+class _Shot:
+    """Снимок в работе: размер, масштаб надписей, буфер кадра."""
+
+    def __init__(self, width, height, ratio):
+        self.width = width
+        self.height = height
+        self.ratio = ratio
+        self.fbo = None
+        self.buffers = []
+        # Кадров подряд без ожидания и просьба снять сейчас.
+        self.calm = 0
+        self.force = False
+
+
 class GlobeView(QOpenGLWidget):
     """Глобус. Ресурсы OpenGL живут и умирают вместе с контекстом."""
 
@@ -163,6 +189,10 @@ class GlobeView(QOpenGLWidget):
     # Курсор над видом без нажатых кнопок, пиксели кадра. Уход курсора
     # из вида - (-1, -1).
     hovered = pyqtSignal(float, float)
+    # Снимок: сколько тайлов, картинок и надписей он ещё ждёт.
+    shot_progress = pyqtSignal(int)
+    # Снимок готов: QImage или None при ошибке, всё ли загрузилось.
+    shot_done = pyqtSignal(object, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -270,6 +300,14 @@ class GlobeView(QOpenGLWidget):
         self._feature_marks = ([], None)
         self._marked = (None, None, [])
         self._context = None
+        self._overlay_missing = 0
+        # Сообщить загрузчикам, движется ли камера: функция с флагом
+        # или None. Ставит окно.
+        self.on_motion = None
+        # Снимок вида в работе, _Shot или None.
+        self.shot = None
+        self._shot_timer = QTimer(self)
+        self._shot_timer.timeout.connect(self._shot_frame)
 
     # Данные
 
@@ -473,6 +511,8 @@ class GlobeView(QOpenGLWidget):
         self.camera.height = max(1, int(round(self.height() * ratio)))
 
     def mousePressEvent(self, event):
+        if self.shot is not None:
+            return
         self._fit_camera()
         px, py = self._pixel(event)
         button = event.button()
@@ -487,6 +527,8 @@ class GlobeView(QOpenGLWidget):
         self.update()
 
     def mouseMoveEvent(self, event):
+        if self.shot is not None:
+            return
         px, py = self._pixel(event)
         self.hovered.emit(px, py)
         if self._press is not None and math.hypot(
@@ -507,6 +549,8 @@ class GlobeView(QOpenGLWidget):
             self.update()
 
     def mouseReleaseEvent(self, event):
+        if self.shot is not None:
+            return
         press, self._press = self._press, None
         if press is not None and event.button() == LEFT:
             self.clicked.emit(*press)
@@ -520,6 +564,8 @@ class GlobeView(QOpenGLWidget):
         super().leaveEvent(event)
 
     def wheelEvent(self, event):
+        if self.shot is not None:
+            return
         self._fit_camera()
         notches = event.angleDelta().y() / 120.0
         if notches:
@@ -587,6 +633,7 @@ class GlobeView(QOpenGLWidget):
         if self._context is None:
             return
         self.makeCurrent()
+        self._end_shot()
         self.labels.release_gl()
         self.features.release_gl()
         self.build_pool.clear()
@@ -618,7 +665,7 @@ class GlobeView(QOpenGLWidget):
         self._context = None
         self.doneCurrent()
 
-    def _upload(self, budget):
+    def _upload(self, budget, time_limit=UPLOAD_TIME):
         """Загрузить в видеокарту не больше budget ожидающих картинок.
 
         Первыми идут уровни 0-2, за ними тайлы, нужные прошлому кадру.
@@ -632,7 +679,7 @@ class GlobeView(QOpenGLWidget):
             # Хотя бы одна текстура за кадр, дальше - пока не вышло время.
             # Стартовые уровни 0-2 грузятся все сразу.
             if count and key not in START_KEYS \
-                    and time.perf_counter() - started > UPLOAD_TIME:
+                    and time.perf_counter() - started > time_limit:
                 break
             image, mesh, level = self.pending.pop(key)
             if key in self.textures:
@@ -650,7 +697,8 @@ class GlobeView(QOpenGLWidget):
             # Пока сетка ждала очереди, могли прийти высоты точнее.
             self._maybe_rebuild(key, level)
 
-    def _upload_overlays(self):
+    def _upload_overlays(self, count=OVERLAY_UPLOADS,
+                         time_limit=UPLOAD_TIME):
         """Картинки наложения в видеокарту, не больше OVERLAY_UPLOADS
         за кадр. Первыми идут тайлы, нужные прошлому кадру.
         """
@@ -675,8 +723,8 @@ class GlobeView(QOpenGLWidget):
         order = sorted(self.overlay_pending,
                        key=lambda k: (k not in keep, k[0]))
         started = time.perf_counter()
-        for count, key in enumerate(order[:OVERLAY_UPLOADS]):
-            if count and time.perf_counter() - started > UPLOAD_TIME:
+        for n, key in enumerate(order[:count]):
+            if n and time.perf_counter() - started > time_limit:
                 break
             levels = self.overlay_pending.pop(key)
             if key in self.overlays:
@@ -733,6 +781,7 @@ class GlobeView(QOpenGLWidget):
                     self._forget_overlay(key)
             self.overlay_empty -= gone
             stale_set -= gone
+        self._overlay_missing = len(wanted)
         keys = frozenset(wanted)
         stale = keys and now - self._overlay_at > 1.0
         changed = keys != self._overlay_wanted \
@@ -817,15 +866,7 @@ class GlobeView(QOpenGLWidget):
         # не нужен. Сбор набора стоил около 0.5 мс на кадр.
         if now - self._terrain_at <= LOADER_PERIOD:
             return
-        wanted = {}
-        # Высоты нужны и тайлам, которые подложка ждёт. Иначе у самой
-        # земли рисуется грубый предок, ему хватает грубых высот,
-        # и точные не просит никто.
-        for key in list(sel.draw) + list(sel.want):
-            height_key = self.store.wanted(key)
-            if height_key not in self.store.tiles:
-                wanted[height_key] = max(wanted.get(height_key, 0.0),
-                                         sel.want.get(key, 1.0))
+        wanted = self._height_needs(sel)
         keys = frozenset(wanted)
         stale = keys and now - self._terrain_at > 1.0
         changed = keys != self._terrain_wanted \
@@ -838,6 +879,21 @@ class GlobeView(QOpenGLWidget):
             self.terrain_loader.retain(wanted)
             self._terrain_wanted = keys
             self._terrain_at = now
+
+    def _height_needs(self, sel):
+        """Недостающие тайлы высот кадра и их приоритет.
+
+        Высоты нужны и тайлам, которые подложка ждёт. Иначе у самой
+        земли рисуется грубый предок, ему хватает грубых высот,
+        и точные не просит никто.
+        """
+        wanted = {}
+        for key in list(sel.draw) + list(sel.want):
+            height_key = self.store.wanted(key)
+            if height_key not in self.store.tiles:
+                wanted[height_key] = max(wanted.get(height_key, 0.0),
+                                         sel.want.get(key, 1.0))
+        return wanted
 
     def _evict(self, keep):
         """Вытеснить давно не нужные тайлы, уровни 0-2 не трогаются."""
@@ -854,12 +910,26 @@ class GlobeView(QOpenGLWidget):
                 self.pending.pop(key)
 
     def paintGL(self):
+        if self.shot is not None:
+            self._paint_preview()
+            return
+        self._fit_camera()
+        self._render(self.devicePixelRatioF())
+
+    def _render(self, ratio, shot=False):
+        """Кадр в текущий буфер кадра размером камеры.
+
+        ratio - пикселей кадра на логический пиксель, от него размер
+        надписей и толщина линий. shot - кадр снимка: загрузка больше,
+        сам вид кадры не заказывает. Возвращает количество тайлов,
+        картинок и надписей, которых кадр ещё ждёт, или None, если
+        рисовать нечего.
+        """
         started = time.perf_counter()
         # Процессорное время потока. Разница с общим временем кадра -
         # ожидание GIL или драйвера, по ней видно, считает поток или ждёт.
         cpu_started = time.thread_time()
         self.frame += 1
-        self._fit_camera()
         # Время шага навигатора видно снаружи, по нему проверочные
         # скрипты считают скорость перелёта.
         self.step_time = time.monotonic()
@@ -868,15 +938,30 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.drawn = 0
         if self.program is None or not self.ready():
-            return
+            return None
         # До первого полного кадра уровни 0-2 грузятся в видеокарту все
         # сразу, на них держится подстилка. Дальше - не больше
         # UPLOADS_PER_FRAME за кадр.
         missing = any(key not in self.textures for key in START_KEYS)
         budget = len(self.pending) if missing else UPLOADS_PER_FRAME
         marks = [time.perf_counter()]
-        self._upload(max(budget, UPLOADS_PER_FRAME))
-        self._upload_overlays()
+        # Камера движется: перелёт, тур, инерция, колесо, перетаскивание
+        # или поворот. Тогда кадр грузит одну текстуру и одну картинку
+        # слоя, загрузчики запускают запросы реже. Движение важнее
+        # загрузки.
+        motion = moving or self.navigator.grab is not None \
+            or self.turning is not None
+        if self.on_motion is not None:
+            self.on_motion(motion and not shot)
+        if shot:
+            self._upload(max(budget, SHOT_UPLOADS), SHOT_UPLOAD_TIME)
+            self._upload_overlays(SHOT_OVERLAY_UPLOADS, SHOT_UPLOAD_TIME)
+        elif motion and not missing:
+            self._upload(1, 0.0)
+            self._upload_overlays(1, 0.0)
+        else:
+            self._upload(max(budget, UPLOADS_PER_FRAME))
+            self._upload_overlays()
         self._swap_built()
         marks.append(time.perf_counter())
 
@@ -949,6 +1034,8 @@ class GlobeView(QOpenGLWidget):
         if self.overlay is not None and not self.show_holes:
             overlays = [(self.clear_texture, gpu.NO_OVERLAY)] * len(self.caps)
             overlays += self._overlay_items(sel, time.monotonic())
+        else:
+            self._overlay_missing = 0
         gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp,
                        overlays, self.u_overlay_uv)
         if overlays is not None:
@@ -968,11 +1055,11 @@ class GlobeView(QOpenGLWidget):
         if self.features.shapes and not self.show_holes:
             self.features.draw(
                 self.camera, self.store.height_at if self.store.scale
-                else None, self.store.version, self.devicePixelRatioF())
+                else None, self.store.version, ratio)
         if (self.label_kinds or self.search_mark is not None
                 or self.features.shapes) \
                 and not self.show_holes:
-            self._draw_labels(sel)
+            self._draw_labels(sel, ratio)
         else:
             self.labels.count = 0
         self.drawn = len(sel.draw)
@@ -996,7 +1083,9 @@ class GlobeView(QOpenGLWidget):
         if refill:
             # Кадр без движения пополняет запас текстур понемногу.
             self.pool.allocate(POOL_REFILL)
-        if moving or refill or self.built or self._drop_overlays \
+        if shot:
+            pass  # кадры снимка идут по таймеру
+        elif moving or refill or self.built or self._drop_overlays \
                 or self.labels.pending or (
                 self.pending and any(k in sel.keep for k in self.pending)) \
                 or (self.overlay_pending and any(
@@ -1010,6 +1099,146 @@ class GlobeView(QOpenGLWidget):
                                   draws=self.draw_calls,
                                   cpu=time.thread_time() - cpu_started))
         self.changed.emit()
+        return self._missing(sel) if shot else 0
+
+    def _missing(self, sel):
+        """Сколько тайлов, картинок и надписей кадр ещё ждёт."""
+        keep = sel.keep
+        count = len(sel.want) + len(self.built) + len(self.building)
+        count += sum(1 for k in self.pending if k in keep)
+        count += len(self.stale & keep)
+        if self.overlay is not None:
+            count += self._overlay_missing
+            count += sum(1 for k in self.overlay_pending if k in keep)
+        if self.terrain_loader is not None and self.store.scale:
+            count += len(self._height_needs(sel))
+        if self.place_loader is not None and self.label_kinds:
+            count += sum(1 for k in self.places.wanted(sel.draw)
+                         if k not in self.places.tiles)
+        if self.labels.pending:
+            count += 1
+        return count
+
+    # Снимок вида
+
+    def start_shot(self, width, height, ratio):
+        """Начать снимок вида размером width × height пикселей.
+
+        Камера останавливается, мышь её не двигает. Кадры снимка идут
+        по таймеру в невидимый буфер, пока всё нужное не загрузится.
+        Готовый снимок приходит сигналом shot_done. Окно тем временем
+        показывает снимок, вписанный в себя.
+        """
+        if self._context is None or self.program is None:
+            return False
+        self._end_shot()
+        self.navigator.stop()
+        self.shot = _Shot(int(width), int(height), float(ratio))
+        self._shot_timer.start(SHOT_PERIOD)
+        return True
+
+    def finish_shot(self):
+        """Снять сейчас, не дожидаясь загрузки."""
+        if self.shot is not None:
+            self.shot.force = True
+
+    def cancel_shot(self):
+        """Бросить снимок без результата."""
+        if self.shot is not None:
+            self.makeCurrent()
+            self._end_shot()
+            self.doneCurrent()
+            self.update()
+
+    def _end_shot(self):
+        """Освободить буфер снимка. Только при текущем контексте."""
+        self._shot_timer.stop()
+        shot, self.shot = self.shot, None
+        if shot is not None and shot.fbo is not None:
+            GL.glDeleteFramebuffers(1, [shot.fbo])
+            GL.glDeleteRenderbuffers(2, shot.buffers)
+
+    def _shot_buffer(self, shot):
+        """Буфер кадра снимка: цвет RGBA8 и глубина 24 бита."""
+        shot.fbo = int(np.ravel(GL.glGenFramebuffers(1))[0])
+        shot.buffers = [int(b) for b in np.ravel(GL.glGenRenderbuffers(2))]
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, shot.fbo)
+        for buffer, fmt, attach in (
+                (shot.buffers[0], GL.GL_RGBA8, GL.GL_COLOR_ATTACHMENT0),
+                (shot.buffers[1], GL.GL_DEPTH_COMPONENT24,
+                 GL.GL_DEPTH_ATTACHMENT)):
+            GL.glBindRenderbuffer(GL.GL_RENDERBUFFER, buffer)
+            GL.glRenderbufferStorage(GL.GL_RENDERBUFFER, fmt, shot.width,
+                                     shot.height)
+            GL.glFramebufferRenderbuffer(GL.GL_FRAMEBUFFER, attach,
+                                         GL.GL_RENDERBUFFER, buffer)
+        GL.glBindRenderbuffer(GL.GL_RENDERBUFFER, 0)
+        return GL.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER) \
+            == GL.GL_FRAMEBUFFER_COMPLETE
+
+    def _shot_frame(self):
+        """Кадр снимка по таймеру. Готовый снимок уходит сигналом."""
+        shot = self.shot
+        if shot is None or self._context is None:
+            self._shot_timer.stop()
+            return
+        self.makeCurrent()
+        try:
+            if shot.fbo is None and not self._shot_buffer(shot):
+                self._end_shot()
+                self.shot_done.emit(None, False)
+                return
+            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, shot.fbo)
+            GL.glViewport(0, 0, shot.width, shot.height)
+            self.camera.width = shot.width
+            self.camera.height = shot.height
+            missing = self._render(shot.ratio, shot=True)
+            if missing is None:
+                missing = 1
+            shot.calm = shot.calm + 1 if missing == 0 else 0
+            if shot.calm >= SHOT_SETTLE or shot.force:
+                image = self._read_shot(shot)
+                complete = missing == 0
+                self._end_shot()
+                self.shot_done.emit(image, complete)
+            else:
+                self.shot_progress.emit(missing)
+        finally:
+            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER,
+                                 self.defaultFramebufferObject())
+            self.doneCurrent()
+        self.update()
+
+    def _read_shot(self, shot):
+        """Пиксели буфера снимка в QImage, строки сверху вниз."""
+        GL.glPixelStorei(GL.GL_PACK_ALIGNMENT, 1)
+        data = GL.glReadPixels(0, 0, shot.width, shot.height, GL.GL_RGBA,
+                               GL.GL_UNSIGNED_BYTE)
+        rgba = np.frombuffer(data, dtype=np.uint8).reshape(
+            shot.height, shot.width, 4)[::-1].copy()
+        rgba[..., 3] = 255
+        image = QImage(rgba.data, shot.width, shot.height, 4 * shot.width,
+                       enum(QImage, "Format", "Format_RGBA8888"))
+        return image.copy()
+
+    def _paint_preview(self):
+        """Окно во время снимка: снимок, вписанный в окно."""
+        shot = self.shot
+        ratio = self.devicePixelRatioF()
+        width = max(1, int(round(self.width() * ratio)))
+        height = max(1, int(round(self.height() * ratio)))
+        GL.glClearColor(*PREVIEW_COLOR, 1.0)
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+        if shot.fbo is None:
+            return
+        x0, y0, x1, y1 = letterbox(shot.width, shot.height, width, height)
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, shot.fbo)
+        GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER,
+                             self.defaultFramebufferObject())
+        GL.glBlitFramebuffer(0, 0, shot.width, shot.height, x0, y0, x1, y1,
+                             GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER,
+                             self.defaultFramebufferObject())
 
     def _clear_overlay(self):
         """Прозрачное наложение на блоке 1, окно без сдвига."""
@@ -1068,7 +1297,7 @@ class GlobeView(QOpenGLWidget):
         gl.glDepthMask(GL.GL_TRUE)
         gl.glDepthFunc(GL.GL_LESS)
 
-    def _draw_labels(self, sel):
+    def _draw_labels(self, sel, ratio):
         """Надписи пунктов поверх кадра, с проверкой глубины."""
         now = time.monotonic()
         loader = self.place_loader
@@ -1092,8 +1321,7 @@ class GlobeView(QOpenGLWidget):
             places = self._marked[2]
         height_at = self.store.height_at if self.store.scale else None
         self.labels.draw(self.camera, self.camera.projection(), places,
-                         height_at, self.store.version,
-                         self.devicePixelRatioF())
+                         height_at, self.store.version, ratio)
 
     def _underlay_items(self, keep):
         """Подстилка: тайлы уровня 2 на 3 км ниже поверхности.

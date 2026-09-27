@@ -32,6 +32,7 @@
 """
 import ctypes
 import math
+import time
 from collections import deque
 
 import numpy as np
@@ -64,6 +65,13 @@ LIFT = 0.002
 MAX_TESTS = 32  # пунктов проверяется за кадр, не больше
 NO_HEIGHT = -2  # версия высот новой строки таблицы пунктов
 NEW_PER_FRAME = 24  # новых надписей растрируется за кадр, не больше
+# Новых пунктов размечается за кадр, не больше. Тайл с сотнями пунктов
+# размечался одним кадром до 69 мс, проезд тура над Екатеринбургом
+# 28 сентября 2026 года. Остальные пункты ждут следующих кадров.
+NEW_ROWS_PER_FRAME = 60
+# Растровка новых надписей за кадр, секунд, не больше. Одна надпись
+# с обводкой стоит 2-3 мс, 24 надписи давали кадр до 80 мс.
+RASTER_TIME = 0.004
 HEIGHTS_PER_FRAME = 80  # высот пунктов уточняется за кадр, не больше
 MAX_CANDIDATES = 600  # пунктов в окне, которые спорят за место
 # Зазор между надписями, логических пикселей. При 3 пикселях надписи
@@ -296,6 +304,7 @@ class Labels:
         self._tier = np.empty(0, dtype=np.int64)
         self._table_ratio = None
         self._list = None
+        self._more = False  # список пунктов размечен не весь
         self._rows = None
 
     # Ресурсы OpenGL.
@@ -401,13 +410,21 @@ class Labels:
             for row, place in enumerate(self._places):
                 self._size[row] = self._layout(place)
             self._table_ratio = self.ratio
+        self._more = False
         if places is self._list:
             return self._rows
-        rows = np.empty(len(places), dtype=np.int64)
-        for i, place in enumerate(places):
+        rows = []
+        budget = NEW_ROWS_PER_FRAME
+        for place in places:
             key = identity(place)
             row = self._row.get(key)
             if row is None:
+                if budget <= 0:
+                    # Пункт размечается в следующих кадрах, пока его
+                    # надписи нет.
+                    self._more = True
+                    continue
+                budget -= 1
                 row = len(self._keys)
                 self._grow(row + 1)
                 self._row[key] = row
@@ -417,8 +434,10 @@ class Labels:
                 self._size[row] = self._layout(place)
                 self._tier[row] = KIND[place.kind]
                 self._ver[row] = NO_HEIGHT
-            rows[i] = row
-        self._list = places
+            rows.append(row)
+        rows = np.asarray(rows, dtype=np.int64)
+        # Неполный список не запоминается, следующий кадр доразметит его.
+        self._list = None if self._more else places
         self._rows = rows
         return rows
 
@@ -490,6 +509,10 @@ class Labels:
             self._clear_atlas()
         self._collect()
         rows = self._rows_of(places)
+        if not len(rows):
+            self.shown = set()
+            self.pending = self._more
+            return 0
         points, normals = self._positions(rows, height_at, version)
         eye = camera.eye
         v = points - eye
@@ -511,6 +534,7 @@ class Labels:
         index = np.nonzero(inside)[0][:MAX_CANDIDATES]
         if not len(index):
             self.shown = set()
+            self.pending = self._more
             return 0
         keys = [self._keys[row] for row in rows[index]]
         # Проверочные точки: над пунктом на LIFT и ближе к глазу
@@ -530,7 +554,7 @@ class Labels:
                 if e is not None and not e[0]]
         if not keep:
             self.shown = set()
-            self.pending = unknown
+            self.pending = unknown or self._more
             return 0
         chosen_rows = rows[index[keep]]
         keys = [keys[n] for n in keep]
@@ -550,10 +574,12 @@ class Labels:
         quads = []
         shown = set()
         new = 0
+        raster_start = time.perf_counter()
         for n in chosen:
             place = self._places[chosen_rows[n]]
             if (place.kind, label_text(place)) not in self.entries:
-                if new >= NEW_PER_FRAME:
+                if new >= NEW_PER_FRAME or new and time.perf_counter() \
+                        - raster_start > RASTER_TIME:
                     self.pending = True
                     continue
                 new += 1
@@ -568,7 +594,7 @@ class Labels:
                           alpha[n]))
             shown.add(keys[n])
         self.shown = shown
-        self.pending = self.pending or unknown
+        self.pending = self.pending or unknown or self._more
         if quads:
             self._draw_quads(quads, camera.width, camera.height)
         self.count = len(quads)

@@ -41,14 +41,14 @@ from ..core.mipmap import mip_chain
 from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
-from .loader import CACHE_CONTROL, MARK, NO_ERROR, PREFER_CACHE
+from .loader import (CACHE_CONTROL, MARK, NO_ERROR, PREFER_CACHE,
+                     Throttle)
 
 TILE_SIZE = 256
 MAX_JOBS = 6  # отрисовок одновременно, считает QGIS в своих потоках
 # Подготовка картинки - Python и NumPy, она держит GIL. Один поток
 # делит GIL с главным меньше двух, а успевает сотни картинок в секунду.
 PREPARE_THREADS = 1
-START_GAP = 0.015  # секунд между запусками заданий, как у загрузчика
 
 OPENFREEMAP_TILEJSON = "https://tiles.openfreemap.org/planet"
 OPENFREEMAP_ATTRIBUTION = (
@@ -387,7 +387,7 @@ class LayerOverlay(QObject):
         return settings
 
     def _pump(self):
-        wait = self.last_start + START_GAP - time.monotonic()
+        wait = Throttle.wait(self.last_start)
         if wait > 0.0:
             if self.queue.waiting and not self.pump_timer.isActive():
                 self.pump_timer.start(int(wait * 1000) + 1)
@@ -401,8 +401,9 @@ class LayerOverlay(QObject):
         self.started_at[key] = time.perf_counter()
         job.start()
         self.last_start = time.monotonic()
+        Throttle.started()
         if self.queue.waiting and not self.pump_timer.isActive():
-            self.pump_timer.start(int(START_GAP * 1000) + 1)
+            self.pump_timer.start(int(Throttle.gap() * 1000) + 1)
 
     def _retire(self, job):
         QTimer.singleShot(0, lambda: self.retired.discard(job))
@@ -424,7 +425,7 @@ class LayerOverlay(QObject):
             self.preparing[key] = True
             self.pool.start(_PrepareTask(key, job.renderedImage(),
                                          self.sink))
-        self._pump()
+        self._later()
         self._check_idle()
 
     def _prepared(self, key, levels):

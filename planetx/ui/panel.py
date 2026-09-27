@@ -8,7 +8,9 @@
 метки», как в Google Earth. Она есть и пустая, двойной щелчок по метке
 переносит к ней. Дальше все слои проекта в порядке карты QGIS с типом
 слоя. Отметка слоя включает его на глобусе и не меняет видимость
-на карте. У слоя в меню «Подлететь».
+на карте. У слоя в меню «Подлететь», прозрачность и свойства слоя.
+Прозрачность - свойство самого слоя QGIS, карта и глобус показывают
+одно и то же, решение автора от 28 сентября 2026 года.
 
 Внизу панель «Слои», как в Google Earth: векторная основа по группам,
 которые сворачиваются, и рельеф. Флажки в ней срабатывают сразу.
@@ -19,11 +21,14 @@ from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsVectorLayer)
 from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QFont
-from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
-                                 QListWidget, QMenu, QPushButton,
-                                 QSplitter, QTreeWidget, QTreeWidgetItem,
-                                 QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
+                                 QLineEdit,
+                                 QListWidget, QMenu, QPushButton, QSlider,
+                                 QSplitter, QToolButton, QTreeWidget,
+                                 QTreeWidgetItem, QVBoxLayout, QWidget,
+                                 QWidgetAction)
 
+from ..core.placetree import is_folder
 from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
@@ -40,6 +45,8 @@ RELIEF = "relief"  # строка рельефа в панели «Слои»
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
+DRAG = enum(Qt, "ItemFlag", "ItemIsDragEnabled")
+DROP = enum(Qt, "ItemFlag", "ItemIsDropEnabled")
 
 
 def geo_tree():
@@ -108,6 +115,58 @@ def layer_kind(layer):
     return tr("слой")
 
 
+class PlaceTree(QTreeWidget):
+    """Верхний список. Метки и папки перетаскиваются мышью внутри
+    «Моих меток» и между папками, как в Google Earth. По порядку списка
+    идёт тур.
+
+    Сам Qt строки не переносит. Сигнал place_moved сообщает ключ метки
+    или папки, ключ папки назначения ("" - корень «Мои метки») и строку
+    в ней, перед которой встать. Список строится заново из файла меток.
+    """
+
+    place_moved = pyqtSignal(str, str, int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.group = None
+        self.setDragDropMode(enum(QAbstractItemView, "DragDropMode",
+                                  "InternalMove"))
+        self.setDropIndicatorShown(True)
+        root = self.invisibleRootItem()
+        root.setFlags(root.flags() & ~DROP)
+
+    def _is_holder(self, item):
+        """Корень «Мои метки» или папка: сюда можно положить."""
+        return item is not None and (
+            item is self.group or is_folder(item.data(0, PLACE_ROLE)))
+
+    def _key(self, item):
+        return "" if item is self.group else item.data(0, PLACE_ROLE)
+
+    def dropEvent(self, event):
+        pos = event.position().toPoint() if hasattr(event, "position") \
+            else event.pos()
+        target = self.itemAt(pos)
+        moved = self.currentItem()
+        where = self.dropIndicatorPosition()
+        above = enum(QAbstractItemView, "DropIndicatorPosition",
+                     "AboveItem")
+        on = enum(QAbstractItemView, "DropIndicatorPosition", "OnItem")
+        holder, index = None, None
+        if self._is_holder(target) and where == on:
+            holder, index = target, target.childCount()
+        elif target is not None and self._is_holder(target.parent()):
+            holder = target.parent()
+            index = holder.indexOfChild(target) \
+                + (0 if where == above else 1)
+        event.setDropAction(enum(Qt, "DropAction", "IgnoreAction"))
+        event.accept()
+        key = moved.data(0, PLACE_ROLE) if moved is not None else None
+        if key and holder is not None:
+            self.place_moved.emit(key, self._key(holder), index)
+
+
 class LayerPanel(QWidget):
 
     fly_text = pyqtSignal(str)
@@ -117,12 +176,21 @@ class LayerPanel(QWidget):
     properties_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
+    # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
+    opacity_changed = pyqtSignal(str, float)
+    layer_properties = pyqtSignal(object)
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
     relief_toggled = pyqtSignal(bool)
-    # «Мои метки»: ключ метки и флажок, действие над меткой и ключ.
-    place_toggled = pyqtSignal(str, bool)
+    # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
+    # меткой или папкой и ключ.
+    places_toggled = pyqtSignal(object)
     place_action = pyqtSignal(str, str)
+    # Метка или папка перетащена: ключ, папка назначения ("" - корень)
+    # и строка в ней, перед которой она встаёт.
+    place_moved = pyqtSignal(str, str, int)
+    # Папка раскрыта или свёрнута.
+    folder_expanded = pyqtSignal(str, bool)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -153,18 +221,29 @@ class LayerPanel(QWidget):
         self.found.itemActivated.connect(
             lambda item: self.place_chosen.emit(self.found.row(item)))
 
-        self.list = QTreeWidget(self)
+        self.list = PlaceTree(self)
+        # Кнопка тура под списком, как в Google Earth: активна у пути
+        # и у папки «Мои метки».
+        self.tour_button = QToolButton(self)
+        self.tour_button.setText("▶")
+        self.tour_button.setEnabled(False)
+        self.tour_button.clicked.connect(self._tour_clicked)
+        self.list.currentItemChanged.connect(self._tour_state)
         self.list.setHeaderHidden(True)
+        self.list.place_moved.connect(self.place_moved)
         self.list.setContextMenuPolicy(
             enum(Qt, "ContextMenuPolicy", "CustomContextMenu"))
         self.list.customContextMenuRequested.connect(self._menu)
         self.list.itemDoubleClicked.connect(self._double_clicked)
         self.list.itemChanged.connect(self._changed)
+        self.list.itemExpanded.connect(lambda item: self._expanded(item, 1))
+        self.list.itemCollapsed.connect(lambda item: self._expanded(item, 0))
         self.head = QTreeWidgetItem(self.list, [tr("Глобус")])
         bold = QFont(self.head.font(0))
         bold.setBold(True)
         self.head.setFont(0, bold)
         self.head.setToolTip(0, tr("Свойства вида: двойной щелчок"))
+        self.head.setFlags(self.head.flags() & ~DRAG & ~DROP)
         # «Мои метки» - папка под «Глобусом», как в Google Earth.
         self.places_group = QTreeWidgetItem(self.list, [tr("Мои метки")])
         self.places_group.setIcon(
@@ -172,11 +251,13 @@ class LayerPanel(QWidget):
         self.places_group.setToolTip(0, tr(
             "Сохранённые метки, виды, пути, многоугольники и измерения. "
             "Они хранятся в общем файле профиля QGIS и видны в любом "
-            "проекте. Двойной щелчок по метке переносит к ней. Меню "
-            "по правой кнопке - перелёт, переименование, удаление, слои "
-            "меток в проекте."))
-        self.places_group.setFlags(self.places_group.flags() | CHECKABLE
-                                   | TRISTATE)
+            "проекте. Двойной щелчок по метке переносит к ней. Метки "
+            "и папки перетаскиваются мышью. Меню по правой кнопке - тур, "
+            "новая папка, перелёт, переименование, удаление, слои меток "
+            "в проекте."))
+        self.places_group.setFlags((self.places_group.flags() | CHECKABLE
+                                    | TRISTATE) & ~DRAG)
+        self.list.group = self.places_group
         self.places_group.setCheckState(0, CHECKED)
         self.places_group.setExpanded(True)
         # Флажок папки меняет все метки, каждая шлёт itemChanged. Метки
@@ -228,8 +309,17 @@ class LayerPanel(QWidget):
         lower_layout.setContentsMargins(0, 4, 0, 0)
         lower_layout.addWidget(heading)
         lower_layout.addWidget(self.geo, 1)
+        upper = QWidget(self)
+        upper_layout = QVBoxLayout(upper)
+        upper_layout.setContentsMargins(0, 0, 0, 0)
+        upper_layout.setSpacing(2)
+        upper_layout.addWidget(self.list, 1)
+        tour_row = QHBoxLayout()
+        tour_row.addStretch(1)
+        tour_row.addWidget(self.tour_button)
+        upper_layout.addLayout(tour_row)
         split = QSplitter(enum(Qt, "Orientation", "Vertical"), self)
-        split.addWidget(self.list)
+        split.addWidget(upper)
         split.addWidget(lower)
         split.setStretchFactor(0, 3)
         split.setStretchFactor(1, 2)
@@ -250,6 +340,7 @@ class LayerPanel(QWidget):
         layout.addWidget(split, 1)
         layout.addWidget(self.status, 0)
         self.set_layers([], set())
+        self._tour_state()
 
     def _search_text(self, text):
         """Пустое поле поиска закрывает список и снимает метку."""
@@ -279,29 +370,104 @@ class LayerPanel(QWidget):
         if item.data(0, LAYER_ROLE):
             self._geo_timer.start(0)
 
-    def set_places(self, places):
-        """Строки «Моих меток»: myplaces.Place. Сигналы при этом не идут."""
+    def set_places(self, tree):
+        """Строки «Моих меток» по дереву MyPlaces.tree(): метки Place
+        и пары (Folder, дети). Сигналы при этом не идут."""
         self.list.blockSignals(True)
         group = self.places_group
         group.takeChildren()
-        for place in places:
-            item = QTreeWidgetItem(group, [place.shape.name
-                                           or tr("Без названия")])
-            item.setData(0, PLACE_ROLE, place.key)
-            if place.measure:
-                item.setToolTip(0, place.measure)
-            item.setFlags(item.flags() | CHECKABLE)
-            item.setCheckState(0, CHECKED if place.visible else UNCHECKED)
-        if not places:
+        self._fill(group, tree)
+        if not tree:
             # Пустая папка отмечена, новая метка сразу видна.
             group.setCheckState(0, CHECKED)
         group.setExpanded(True)
         self.list.blockSignals(False)
+        self._tour_state()
+
+    def _fill(self, parent, nodes):
+        folder_icon = QgsApplication.getThemeIcon("/mIconFolder.svg")
+        for node in nodes:
+            if isinstance(node, tuple):
+                folder, kids = node
+                item = QTreeWidgetItem(parent, [folder.name
+                                                or tr("Без названия")])
+                item.setData(0, PLACE_ROLE, folder.key)
+                item.setIcon(0, folder_icon)
+                item.setFlags(item.flags() | CHECKABLE | TRISTATE)
+                self._fill(item, kids)
+                if not kids:
+                    item.setCheckState(0, CHECKED if folder.visible
+                                       else UNCHECKED)
+                item.setExpanded(folder.expanded)
+                continue
+            item = QTreeWidgetItem(parent, [node.name or tr("Без названия")])
+            item.setData(0, PLACE_ROLE, node.key)
+            if node.measure:
+                item.setToolTip(0, node.measure)
+            item.setFlags((item.flags() | CHECKABLE) & ~DROP)
+            item.setCheckState(0, CHECKED if node.visible else UNCHECKED)
+
+    def select_place(self, key):
+        """Сделать строку метки или папки текущей и показать её."""
+        found = [None]
+
+        def look(parent):
+            for i in range(parent.childCount()):
+                child = parent.child(i)
+                if child.data(0, PLACE_ROLE) == key:
+                    found[0] = child
+                    return
+                look(child)
+        look(self.places_group)
+        if found[0] is not None:
+            self.list.setCurrentItem(found[0])
+            self.list.scrollToItem(found[0])
+
+    def current_folder(self):
+        """Папка для новой метки: выбранная папка или папка выбранной
+        метки, None - корень «Мои метки»."""
+        item = self.list.currentItem()
+        while item is not None and item is not self.places_group:
+            key = item.data(0, PLACE_ROLE)
+            if is_folder(key):
+                return key
+            item = item.parent()
+        return None
+
+    def _expanded(self, item, on):
+        key = item.data(0, PLACE_ROLE)
+        if is_folder(key):
+            self.folder_expanded.emit(key, bool(on))
+
+    def _tour_key(self, item):
+        """Что облетит кнопка тура: "" - все «Мои метки», ключ папки -
+        её метки, ключ пути - путь, None - нечего."""
+        if item is self.places_group:
+            return ""
+        key = item.data(0, PLACE_ROLE) if item is not None else None
+        if key and (is_folder(key) or key.startswith("line:")):
+            return key
+        return None
+
+    def _tour_state(self, *args):
+        key = self._tour_key(self.list.currentItem())
+        self.tour_button.setEnabled(key is not None)
+        self.tour_button.setToolTip(
+            tr("Тур по отмеченным «Моим меткам»") if key == ""
+            else tr("Тур по отмеченным меткам папки") if is_folder(key)
+            else tr("Тур вдоль выбранного пути") if key
+            else tr("Тур: выберите папку «Мои метки» или путь в ней"))
+
+    def _tour_clicked(self):
+        key = self._tour_key(self.list.currentItem())
+        if key is not None:
+            self.place_action.emit("tour", key)
 
     def _emit_places(self):
         states, self._place_states = self._place_states, {}
-        for key, on in states.items():
-            self.place_toggled.emit(key, on)
+        if states:
+            self.places_toggled.emit(states)
+
     def _emit_geo(self):
         groups = {key for key, item in self.geo_items.items()
                   if key != RELIEF and item.checkState(0) == CHECKED}
@@ -331,7 +497,7 @@ class LayerPanel(QWidget):
                 "Отметка показывает слой на глобусе, видимость на карте "
                 "QGIS не меняется. Меню по правой кнопке - перелёт "
                 "к слою."))
-            item.setFlags(item.flags() | CHECKABLE)
+            item.setFlags((item.flags() | CHECKABLE) & ~DRAG & ~DROP)
             item.setCheckState(0, CHECKED if layer.id() in shown
                                else UNCHECKED)
         self.list.blockSignals(False)
@@ -351,25 +517,69 @@ class LayerPanel(QWidget):
 
     def _double_clicked(self, item, column=0):
         key = item.data(0, PLACE_ROLE)
-        if key:
+        if key and not is_folder(key):
             self.place_action.emit("fly", key)
         elif item is self.head:
             self.properties_requested.emit()
 
+    def _opacity_action(self, menu, layer):
+        """Строка меню с ползунком прозрачности слоя."""
+        row = QWidget(menu)
+        box = QHBoxLayout(row)
+        box.setContentsMargins(8, 2, 8, 2)
+        slider = QSlider(enum(Qt, "Orientation", "Horizontal"), row)
+        slider.setRange(0, 100)
+        slider.setValue(int(round((1.0 - layer.opacity()) * 100)))
+        slider.setMinimumWidth(120)
+        value = QLabel(row)
+        row.setToolTip(tr(
+            "Прозрачность слоя QGIS. Она меняется и на карте, сквозь "
+            "прозрачный слой видна подложка и слои под ним."))
+
+        def moved(percent):
+            value.setText(tr("{value} %", value=percent))
+            self.opacity_changed.emit(layer.id(), 1.0 - percent / 100.0)
+        value.setText(tr("{value} %", value=slider.value()))
+        slider.valueChanged.connect(moved)
+        box.addWidget(QLabel(tr("Прозрачность"), row))
+        box.addWidget(slider, 1)
+        box.addWidget(value)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(row)
+        return action
+
     def _menu(self, point):
         item = self.list.itemAt(point)
-        if item is None:
-            return
         menu = QMenu(self)
+        if item is None:
+            # Пустое место под списком: папка в конец «Моих меток».
+            menu.addAction(tr("Новая папка")).triggered.connect(
+                lambda: self.place_action.emit("new_folder", ""))
+            menu.exec(self.list.viewport().mapToGlobal(point))
+            return
         key = item.data(0, PLACE_ROLE)
         layer_id = item.data(0, LAYER_ROLE)
+        if is_folder(key):
+            actions = [("tour", tr("Запустить тур")),
+                       ("new_folder", tr("Новая папка")),
+                       ("rename", tr("Переименовать…")),
+                       ("remove", tr("Удалить"))]
+        elif key:
+            actions = [("fly", tr("Подлететь"))]
+            if key.startswith("line:"):
+                actions.append(("tour", tr("Тур по пути")))
+            actions += [("new_folder_after", tr("Новая папка")),
+                        ("rename", tr("Переименовать…")),
+                        ("remove", tr("Удалить"))]
         if key:
-            for action, text in (("fly", tr("Подлететь")),
-                                 ("rename", tr("Переименовать…")),
-                                 ("remove", tr("Удалить"))):
+            for action, text in actions:
                 menu.addAction(text).triggered.connect(
                     lambda _=False, a=action: self.place_action.emit(a, key))
         elif item is self.places_group:
+            menu.addAction(tr("Запустить тур")).triggered.connect(
+                lambda: self.place_action.emit("tour", ""))
+            menu.addAction(tr("Новая папка")).triggered.connect(
+                lambda: self.place_action.emit("new_folder", ""))
             menu.addAction(tr("Добавить слои меток в проект")).triggered \
                 .connect(lambda: self.place_action.emit("project", ""))
         elif layer_id:
@@ -378,6 +588,10 @@ class LayerPanel(QWidget):
                 return
             menu.addAction(tr("Подлететь")).triggered.connect(
                 lambda _=False, layer=layer: self.fly_to_layer.emit(layer))
+            menu.addAction(self._opacity_action(menu, layer))
+            menu.addAction(tr("Свойства слоя…")).triggered.connect(
+                lambda _=False, layer=layer: self.layer_properties.emit(
+                    layer))
         else:
             menu.addAction(tr("Свойства вида…")).triggered.connect(
                 self.properties_requested)

@@ -4,8 +4,10 @@
 """Плавающая панель значков в левом верхнем углу вида.
 
 Устройство взято из 3D-сцены Isoliner3D. Сюда идут действия над видом:
-обновление, синхронизация с картой, определение объектов, линейка,
-новая метка и сохранение вида в «Мои метки».
+скрытие боковой панели, как в Google Earth, обновление, синхронизация
+с картой, определение объектов, линейка,
+новая метка, сохранение вида в «Мои метки», снимок вида в файл
+и в макет.
 """
 import os
 
@@ -26,6 +28,7 @@ DIRTY_STYLE = "QToolButton { background: #ff9f1c; border-radius: 3px; }"
 class ViewToolbar(QFrame):
     """Панель значков. Сигналы - по одному на кнопку."""
 
+    sidebar_clicked = pyqtSignal()
     refresh_clicked = pyqtSignal()
     about_clicked = pyqtSignal()
     sync_toggled = pyqtSignal(bool)
@@ -33,6 +36,8 @@ class ViewToolbar(QFrame):
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal()
+    snapshot_clicked = pyqtSignal()
+    layout_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -41,6 +46,9 @@ class ViewToolbar(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)
         layout.setSpacing(2)
+        self.sidebar = self._button(
+            QIcon(os.path.join(ROOT, "sidebar.svg")),
+            tr("Скрыть боковую панель"), self.sidebar_clicked)
         self.refresh = self._button(
             QgsApplication.getThemeIcon("/mActionRefresh.svg"),
             tr("Обновить глобус"), self.refresh_clicked)
@@ -67,6 +75,14 @@ class ViewToolbar(QFrame):
             tr("Сохранить вид. Точка взгляда становится меткой в «Моих "
                "метках», перелёт к ней возвращает высоту, азимут "
                "и наклон."), self.save_view_requested)
+        self._button(
+            QgsApplication.getThemeIcon("/mActionSaveMapAsImage.svg"),
+            tr("Снимок вида в файл PNG или JPEG, в том числе больше окна."),
+            self.snapshot_clicked)
+        self._button(
+            QgsApplication.getThemeIcon("/mActionNewLayout.svg"),
+            tr("Вид в макет QGIS неизменной картинкой, вставленной "
+               "в проект."), self.layout_clicked)
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)
         self.adjustSize()
@@ -84,6 +100,11 @@ class ViewToolbar(QFrame):
             button.clicked.connect(signal)
         self.layout().addWidget(button)
         return button
+
+    def set_sidebar(self, shown):
+        """Подсказка значка боковой панели по её состоянию."""
+        self.sidebar.setToolTip(tr("Скрыть боковую панель") if shown
+                                else tr("Показать боковую панель"))
 
     def set_dirty(self, dirty):
         """Кнопка «Обновить» горит, пока глобус не показывает выбранное."""

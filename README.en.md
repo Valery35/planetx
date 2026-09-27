@@ -6,7 +6,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.4.3.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.5.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -64,6 +64,17 @@ and atmosphere, from space down to single streets.
 - **Save view.** The Save view button in the corner of the view puts a
   placemark at the look-at point. A double click on it restores the
   height, heading and tilt of the globe.
+- **View snapshot.** The snapshot button in the corner of the view saves
+  the view to PNG or JPEG, larger than the window if needed. The globe
+  loads detailed tiles for that size, the source credits sit in the
+  corner of the snapshot.
+- **View to layout.** The layout button puts the view as a fixed picture
+  into a QGIS layout, an existing or a new one. The snapshot size follows
+  the picture size on the page and the output resolution of the layout.
+  The picture is embedded in the project.
+- **Layer transparency.** The menu of a project layer in the globe list
+  changes the transparency of the QGIS layer with a slider and opens the
+  layer properties. The transparency is shared with the map.
 - **Selection.** Features selected on the QGIS map are highlighted on the
   globe, features found by a click on the globe are selected on the map.
 - **Ruler.** Line, path, polygon and circle by clicks on the globe.
@@ -74,6 +85,11 @@ and atmosphere, from space down to single streets.
   folder under the Globe row, as in Google Earth. The places file is
   shared by the QGIS profile, so places are visible in any project.
   A double click on a place flies there.
+- **Tour.** Play tour in the menu of My Places or any of its folders
+  flies over the checked places in the list order, along a path the
+  camera travels the line. Places and folders are rearranged by
+  dragging. The bar at the bottom of the view pauses the tour and steps
+  between stops.
 - **Identify features.** In the Identify features mode a click on the
   globe shows the coordinates and elevation of the point and the features
   of the project layers checked on the globe.

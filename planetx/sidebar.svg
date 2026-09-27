@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Боковая панель: окно с закрашенной левой колонкой. -->
+  <rect x="2" y="4" width="20" height="16" rx="1.5" fill="#ffffff"
+        stroke="#1d5fa8" stroke-width="2"/>
+  <rect x="3" y="5" width="6" height="14" fill="#1d5fa8"/>
+</svg>

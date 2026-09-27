@@ -60,17 +60,27 @@ def run(index=0):
     function, delay = CHECKS[index]
     CRASH.write("step %s\n" % function.__name__)
     CRASH.flush()
+    again = None
     try:
-        function()
+        again = function()
     except (AttributeError, KeyError, RuntimeError, TypeError,
-            ValueError):
+            ValueError, OSError):
         result["errors"].append("%s: %s" % (
             function.__name__, traceback.format_exc().splitlines()[-1]))
+    if again:
+        # Шаг ждёт: повторяется через again мс.
+        QTimer.singleShot(again, lambda: run(index))
+        return
     QTimer.singleShot(delay, lambda: run(index + 1))
 
 
 @check(4000)
 def open_globe():
+    if os.environ.get("PLANETX_LABELS_FREE"):
+        # Сравнение: надписи без ограничений разметки и растровки.
+        from planetx.render import labels
+        labels.NEW_ROWS_PER_FRAME = 10 ** 6
+        labels.RASTER_TIME = 10.0
     from planetx.plugin import PlanetXPlugin
     plugin = PlanetXPlugin(iface)
     plugin.initGui()
@@ -90,6 +100,22 @@ def places_folder():
     result["geo_has_places"] = any(
         panel.geo.topLevelItem(i).text(0) == panel.places_group.text(0)
         for i in range(panel.geo.topLevelItemCount()))
+
+@check(200)
+def sidebar():
+    window = state["window"]
+    view = window.view
+    before = view.width()
+    window.toolbar.sidebar.click()
+    QgsApplication.processEvents()
+    out = {"hidden": window.panel.isHidden(), "wider": view.width() - before,
+           "tip": window.toolbar.sidebar.toolTip()}
+    window.toolbar.sidebar.click()
+    QgsApplication.processEvents()
+    out["shown_again"] = not window.panel.isHidden()
+    out["width_back"] = view.width() - before
+    result["sidebar"] = out
+
 
 @check(8000)
 def shapes_set():
@@ -121,6 +147,23 @@ def shapes_check():
     result["yellow_px"] = int(((r > 200) & (g > 200) & (b < 60)).sum())
     result["gl_errors"] = dict(view.gl_errors)
     result["labels"] = view.labels.count
+    from planetx.net.loader import Throttle
+    result["labels_state"] = {
+        "pending": view.labels.pending, "more": view.labels._more,
+        "moving": Throttle.moving, "kinds": sorted(view.label_kinds),
+        "place_tiles": len(view.places.tiles),
+        "place_busy": view.place_loader.busy()
+        if view.place_loader is not None else None,
+        "levels": dict(view.drawn_levels),
+        "base_busy": view.loader.busy() if view.loader else None,
+        "base_started": len(view.loader.started) if view.loader else None,
+        "base_active": len(view.loader.replies) if view.loader else None,
+        "pump_active": view.loader.pump_timer.isActive()
+        if view.loader else None,
+        "want": len(view.selection.want) if view.selection else None,
+        "errors": {str(k): v for k, v in list(
+            state["window"].errors.items())[:5]},
+        "source": state["window"].source.name}
     result["features_built"] = sum(1 for x in view.features.buffers if x)
 
 
@@ -340,6 +383,45 @@ def link_selection_check():
     result["link"] = out
 
 
+@check(1000)
+def layer_opacity():
+    from qgis.core import QgsRasterLayer
+    from qgis.PyQt.QtWidgets import QMenu, QSlider
+    from osgeo import gdal
+    window = state["window"]
+    layer = state["layer"]
+    menu = QMenu(window)
+    action = window.panel._opacity_action(menu, layer)
+    slider = action.defaultWidget().findChild(QSlider)
+    state["overlay_before"] = window.overlay
+    slider.setValue(40)
+    out = {"vector_opacity": round(layer.opacity(), 2),
+           "refresh_started": window.refresh_timer.isActive()}
+    # Растр: прозрачность слоя QGIS доходит до отрисовщика растра.
+    path = os.path.join(TEMP, "planetx_raster.tif")
+    ds = gdal.GetDriverByName("GTiff").Create(path, 4, 4, 1)
+    ds.SetGeoTransform((56.0, 0.1, 0.0, 58.2, 0.0, -0.1))
+    ds.GetRasterBand(1).Fill(100)
+    ds = None
+    raster = QgsRasterLayer(path, "Растр теста")
+    QgsProject.instance().addMapLayer(raster)
+    raster_slider = window.panel._opacity_action(menu, raster) \
+        .defaultWidget().findChild(QSlider)
+    raster_slider.setValue(70)
+    out["raster_opacity"] = [round(raster.opacity(), 2),
+                             round(raster.renderer().opacity(), 2)]
+    state["opacity"] = out
+
+
+@check(200)
+def layer_opacity_check():
+    window = state["window"]
+    out = state["opacity"]
+    out["overlay_redrawn"] = window.overlay is not state["overlay_before"]
+    out["dirty"] = window.dirty
+    result["opacity"] = out
+
+
 @check(200)
 def save_view_check():
     from planetx.core.features import Shape
@@ -424,4 +506,351 @@ def big_polygon():
     result["big_polygon"] = out
 
 
+
+SHOT_WAIT = 180.0  # секунд на загрузку тайлов снимка, не больше
+
+
+def _shot_begin(to_layout, setup):
+    import time
+    window = state["window"]
+    view = window.view
+    window._open_snapshot(to_layout)
+    dialog = window.shot_dialogs[to_layout]
+    setup(dialog)
+    done = []
+    view.shot_done.connect(
+        lambda image, complete: done.append(
+            (image.width(), image.height(), complete) if image is not None
+            else (0, 0, complete)))
+    view.hole_check = True
+    view.hole_counts = []
+    state["shot"] = {"dialog": dialog, "done": done,
+                     "started": time.monotonic()}
+    dialog._start()
+
+
+def _shot_wait():
+    """Ждать снимок. Возвращает мс до повтора или None, когда готов."""
+    import time
+    shot = state["shot"]
+    elapsed = time.monotonic() - shot["started"]
+    if not shot["done"] and elapsed < SHOT_WAIT:
+        return 1000
+    view = state["window"].view
+    counts = view.hole_counts[-1] if view.hole_counts else None
+    view.hole_check = False
+    out = {"done": shot["done"], "seconds": round(elapsed, 1),
+           "holes": list(counts[1:]) if counts else None,
+           "status": shot["dialog"].status.text(),
+           "gl_errors": dict(view.gl_errors),
+           "camera_back": [view.camera.width, view.camera.height]}
+    if not shot["done"]:
+        shot["dialog"].reject()
+    return out
+
+
+@check(500)
+def shot_file():
+    from planetx.core.navigation import Pose
+    import planetx.ui.snapshot as smod
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(58.0, 56.25, 30000.0, 20.0, 45.0))
+    path = os.path.join(TEMP, "planetx_shot.png")
+    if os.path.exists(path):
+        os.remove(path)
+    smod.QFileDialog.getSaveFileName = staticmethod(
+        lambda *args, **kwargs: (path, ""))
+
+    def setup(dialog):
+        dialog.keep.setChecked(False)
+        dialog.width_px.setValue(4000)
+        dialog.height_px.setValue(3000)
+    _shot_begin(False, setup)
+
+
+@check(1500)
+def shot_file_wait():
+    out = _shot_wait()
+    if isinstance(out, int):
+        return out
+    from qgis.PyQt.QtGui import QImage
+    path = os.path.join(TEMP, "planetx_shot.png")
+    image = QImage(path)
+    out["file"] = [image.width(), image.height()]
+    result["shot_file"] = out
+    return None
+
+
+@check(500)
+def shot_layout():
+    def setup(dialog):
+        dialog.layouts.setCurrentIndex(dialog.layouts.count() - 1)
+        dialog.width_mm.setValue(120.0)
+        dialog.dpi.setValue(200)
+    _shot_begin(True, setup)
+
+
+@check(1500)
+def shot_layout_wait():
+    out = _shot_wait()
+    if isinstance(out, int):
+        return out
+    from qgis.core import QgsLayoutExporter, QgsLayoutItemPicture
+    dialog = state["shot"]["dialog"]
+    layout = dialog.layout
+    if layout is not None:
+        pictures = [i for i in layout.items()
+                    if isinstance(i, QgsLayoutItemPicture)]
+        out["pictures"] = len(pictures)
+        out["picture_mm"] = [round(pictures[0].sizeWithUnits().width(), 1),
+                             round(pictures[0].sizeWithUnits().height(), 1)] \
+            if pictures else None
+        pdf = os.path.join(TEMP, "planetx_layout.pdf")
+        png = os.path.join(TEMP, "planetx_layout.png")
+        exporter = QgsLayoutExporter(layout)
+        out["pdf"] = int(exporter.exportToPdf(
+            pdf, QgsLayoutExporter.PdfExportSettings()))
+        settings = QgsLayoutExporter.ImageExportSettings()
+        settings.dpi = 72
+        exporter.exportToImage(png, settings)
+        out["pdf_bytes"] = os.path.getsize(pdf) if os.path.exists(pdf) \
+            else 0
+        from planetx.net.loader import image_to_rgba
+        from qgis.PyQt.QtGui import QImage
+        rgba = image_to_rgba(QImage(png)).astype(int)
+        # Лист белый, картинка глобуса - нет.
+        out["page_not_white"] = round(float(
+            (rgba[..., :3].sum(axis=2) < 700).mean()), 3)
+    result["shot_layout"] = out
+    return None
+
+
+
+@check(500)
+def tour_start():
+    from planetx.core.features import Shape
+    window = state["window"]
+    store = window.myplaces
+    for place in list(store.places):
+        if place.visible:
+            store.set_visible(place.key, False)
+    a = store.add(Shape("point", [(58.0, 56.25)], name="Тур 1"))
+    b = store.add(Shape("point", [(57.43, 56.94)], name="Тур 2"),
+                  view=(5000.0, 90.0, 50.0))
+    c = store.add(Shape("polygon", [(57.9, 56.0), (57.9, 56.2),
+                                    (58.0, 56.1)], name="Тур 3"))
+    # Перетаскивание «Тур 3» перед «Тур 2», как мышью в списке.
+    order = [p.key for p in store.places]
+    window.panel.place_moved.emit(c, "", order.index(b))
+    state["tour_keys"] = (a, b, c)
+    player = window.tour
+    player.bar.pause.setValue(0.5)
+    window._place_action("tour", "")
+    state["tour_seen"] = []
+    state["tour_paused"] = None
+    result["tour"] = {
+        "stops": [s.name for s in player.stops],
+        "bar_shown": player.bar.isVisible(),
+        "info": player.bar.info.text()}
+
+
+@check(500)
+def tour_wait():
+    import time
+    window = state["window"]
+    player = window.tour
+    seen = state["tour_seen"]
+    began = state.setdefault("tour_began", time.monotonic())
+    if player.tour is not None and player.playing:
+        if not seen or seen[-1] != player.index:
+            seen.append(player.index)
+    paused = state["tour_paused"]
+    if paused is None and player.index == 1 and player.playing:
+        player.toggle()  # пауза в полёте ко второй остановке
+        state["tour_paused"] = {"t": round(player.t, 2),
+                                "playing": player.playing,
+                                "flight": window.view.navigator.flight
+                                is not None, "at": time.monotonic()}
+        return 500
+    if paused and "resumed" not in paused \
+            and time.monotonic() - paused["at"] > 1.0:
+        paused["still"] = window.view.navigator.flight is None
+        player.toggle()
+        paused["resumed"] = player.playing
+        return 500
+    if (player.playing or paused is None or "resumed" not in paused) \
+            and time.monotonic() - began < 90:
+        return 500
+    pose = window.view.navigator.pose
+    out = result["tour"]
+    out["seen"] = seen
+    out["paused"] = {k: v for k, v in paused.items() if k != "at"} \
+        if paused else None
+    out["end_pose"] = [round(pose.lat, 3), round(pose.lon, 3),
+                       round(pose.distance), round(pose.heading, 1),
+                       round(pose.tilt, 1)]
+    out["seconds"] = round(time.monotonic() - began, 1)
+    out["ended_playing"] = player.playing
+    out["info_end"] = player.bar.info.text()
+    player.stop()
+    out["bar_after_stop"] = player.bar.isVisible()
+    for key in state["tour_keys"]:
+        window.myplaces.remove(key)
+    return None
+
+
+
+@check(500)
+def tour_path():
+    from planetx.core.features import Shape
+    window = state["window"]
+    store = window.myplaces
+    key = store.add(Shape("line", [(58.0, 56.0), (58.18, 56.0),
+                                   (58.18, 56.34)], name="Путь тура"))
+    panel = window.panel
+    group = panel.places_group
+    item = next(group.child(i) for i in range(group.childCount())
+                if group.child(i).data(0, panel_role()) == key)
+    panel.list.setCurrentItem(item)
+    out = {"button_on": panel.tour_button.isEnabled()}
+    panel.list.setCurrentItem(panel.head)
+    out["button_off_on_globe"] = not panel.tour_button.isEnabled()
+    panel.list.setCurrentItem(item)
+    panel.tour_button.click()
+    player = window.tour
+    out["stops"] = [type(s).__name__ for s in player.stops]
+    state["path_key"] = key
+    state["path_samples"] = []
+    result["tour_path"] = out
+
+
+def panel_role():
+    from planetx.ui.panel import PLACE_ROLE
+    return PLACE_ROLE
+
+
+@check(500)
+def tour_path_wait():
+    player = state["window"].tour
+    tour = player.tour
+    samples = state["path_samples"]
+    if tour is not None and player.playing \
+            and player.t > tour.glides[0] + 1.0:
+        pose = state["window"].view.navigator.pose
+        samples.append([round(player.t, 1), round(pose.lat, 4),
+                        round(pose.lon, 4), round(pose.heading, 1),
+                        round(pose.tilt, 1), round(pose.distance)])
+    if player.playing and len(samples) < 8:
+        return 1000
+    out = result["tour_path"]
+    out["samples"] = samples
+    close = [b for b in player.bar.findChildren(type(player.bar.play))
+             if b.text() == "✕"]
+    out["close_button"] = len(close)
+    if close:
+        close[0].click()
+    out["bar_after_close"] = player.bar.isVisible()
+    out["flight_after_close"] = state["window"].view.navigator.flight \
+        is not None
+    state["window"].myplaces.remove(state["path_key"])
+    return None
+
+
+@check(300)
+def folders():
+    from planetx.core.features import Shape
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    store = window.myplaces
+    panel = window.panel
+    out = {"table": store.folder_layer is not None
+           and store.folder_layer.isValid()}
+    f = store.add_folder("Папка F")
+    g = store.add_folder("Папка G", f)
+    p1 = store.add(Shape("point", [(58.0, 56.2)], name="p1"), folder=f)
+    p2 = store.add(Shape("point", [(58.1, 56.3)], name="p2"), folder=g)
+    p3 = store.add(Shape("line", [(58.0, 56.0), (58.1, 56.1)], name="p3"),
+                   folder=g)
+    state["folders"] = (f, g, p1, p2, p3)
+    out["in_g"] = [p.name for p in store.places_in(g)]
+    # Перетаскивание p1 в начало G и попытка положить F внутрь G.
+    panel.place_moved.emit(p1, g, 0)
+    out["in_g_after"] = [p.name for p in store.places_in(g)]
+    panel.place_moved.emit(f, g, 0)
+    out["f_parent"] = store.find(f).parent
+    # Строки панели: F в корне, в F - G, в G - три метки.
+    item_f = next(panel.places_group.child(i)
+                  for i in range(panel.places_group.childCount())
+                  if panel.places_group.child(i).text(0) == "Папка F")
+    out["panel_f"] = [item_f.child(i).text(0)
+                      for i in range(item_f.childCount())]
+    item_g = item_f.child(0)
+    out["panel_g"] = [item_g.child(i).text(0)
+                      for i in range(item_g.childCount())]
+    # Выбранная папка - папка новой метки.
+    panel.list.setCurrentItem(item_g.child(1))
+    out["current_folder"] = panel.current_folder() == g
+    out["tour_button_on_folder"] = None
+    panel.list.setCurrentItem(item_f)
+    out["tour_button_on_folder"] = panel.tour_button.isEnabled()
+    window._place_action("tour", f)
+    out["tour_stops"] = [type(s).__name__ + ":" + s.name
+                         for s in window.tour.stops]
+    window.tour.stop()
+    # Флажок папки F снимает все метки внутри, запись после обхода.
+    item_f.setCheckState(0, Qt.CheckState.Unchecked)
+    item_f.setExpanded(False)
+    result["folders"] = out
+
+
+@check(300)
+def folders_check():
+    from planetx.ui.myplaces import MyPlaces
+    window = state["window"]
+    store = window.myplaces
+    f, g, p1, p2, p3 = state["folders"]
+    out = result["folders"]
+    out["visible_after_uncheck"] = [store.find(k).visible
+                                    for k in (p1, p2, p3)]
+    again = MyPlaces(store.path)
+    again.load()
+    out["reread_expanded_f"] = again.find(f).expanded
+    out["reread_parent_g"] = again.find(g).parent == f
+    again.layers, again.folder_layer = {}, None
+    before = len(store.places)
+    store.remove(f)
+    out["removed_places"] = before - len(store.places)
+    out["folders_left"] = [x.key for x in store.folders if x.key in (f, g)]
+
+
+@check(300)
+def new_folder():
+    from planetx.core import placetree
+    from planetx.core.features import Shape
+    window = state["window"]
+    store = window.myplaces
+    p = store.add(Shape("point", [(58.0, 56.2)], name="под папкой"))
+    q = store.add(Shape("point", [(58.0, 56.3)], name="после"))
+    store.move(q, None, 0)
+    store.move(p, None, 0)  # p первая, q вторая
+    window._place_action("new_folder_after", p)
+    roots = [n.key for n in placetree.children(store.nodes(), None)]
+    new = window.panel.current_folder()
+    out = {"after_place": roots[:3] == [p, new, q],
+           "name": store.find(new).name if new else None}
+    window._place_action("new_folder", new)
+    inner = window.panel.current_folder()
+    out["inside_folder"] = store.find(inner).parent == new
+    for key in (new, p, q):
+        store.remove(key)
+    result["new_folder"] = out
+
+# Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
+# всегда. Без переменной идут все шаги.
+ONLY = os.environ.get("PLANETX_STEPS")
+if ONLY:
+    CHECKS[:] = [c for c in CHECKS if c[0].__name__ == "open_globe"
+                 or c[0].__name__ in ONLY.split(",")]
 QTimer.singleShot(3000, run)

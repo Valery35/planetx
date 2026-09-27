@@ -332,13 +332,15 @@ EN = {
     "Мои метки": "My Places",
     "Сохранённые метки, виды, пути, многоугольники и измерения. Они "
     "хранятся в общем файле профиля QGIS и видны в любом проекте. "
-    "Двойной щелчок по метке переносит к ней. Меню по правой кнопке - "
+    "Двойной щелчок по метке переносит к ней. Метки и папки "
+    "перетаскиваются мышью. Меню по правой кнопке - тур, новая папка, "
     "перелёт, переименование, удаление, слои меток в проекте.":
         "Saved placemarks, views, paths, polygons and measurements. They "
         "are kept in a shared file of the QGIS profile and are visible in "
-        "any project. Double-clicking a place flies there. The right-click "
-        "menu flies there, renames, deletes and "
-        "adds the places layers to the project.",
+        "any project. Double-clicking a place flies there. Places and "
+        "folders are moved by dragging. The right-click menu plays a "
+        "tour, makes a new folder, flies there, renames, deletes and adds "
+        "the places layers to the project.",
     "Мои метки - точки": "My Places - points",
     "Мои метки - линии": "My Places - lines",
     "Мои метки - многоугольники": "My Places - polygons",
@@ -407,6 +409,123 @@ EN = {
     "китайский": "Chinese",
     "японский": "Japanese",
     "корейский": "Korean",
+    "Скрыть боковую панель": "Hide sidebar",
+    "Показать боковую панель": "Show sidebar",
+    # Тур.
+
+    "Запустить тур": "Play tour",
+    " с": " s",
+    "Сколько секунд камера стоит на каждой остановке. Новая пауза "
+    "действует с перехода кнопками или с нового запуска тура.":
+        "How many seconds the camera stays at each stop. A new pause "
+        "applies from the next button step or a new start of the tour.",
+    "Остановка {n} из {count}: {name}": "Stop {n} of {count}: {name}",
+    "Предыдущая остановка": "Previous stop",
+    "Пауза": "Pause",
+    "Следующая остановка": "Next stop",
+    "Закончить тур": "End tour",
+    "Продолжить": "Continue",
+    "В туре нет остановок. Отметьте флажком метки в «Моих метках».":
+        "The tour has no stops. Check places in My Places.",
+    "Тур по пути": "Tour along the path",
+    "Тур вдоль выбранного пути": "Tour along the selected path",
+    "Тур по отмеченным «Моим меткам»": "Tour over the checked places",
+    "Тур: выберите папку «Мои метки» или путь в ней":
+        "Tour: select the My Places folder or a path in it",
+    "Тур по отмеченным меткам папки": "Tour over the checked places of "
+                                      "the folder",
+    "Новая папка": "New Folder",
+    "Удалить папку": "Delete folder",
+    "Удалить папку «{name}» со всем содержимым?":
+        "Delete folder “{name}” with all its contents?",
+
+    # Меню слоя проекта.
+    "Прозрачность": "Transparency",
+    "{value} %": "{value} %",
+    "Свойства слоя…": "Layer Properties…",
+    "Прозрачность слоя QGIS. Она меняется и на карте, сквозь прозрачный "
+    "слой видна подложка и слои под ним.":
+        "Transparency of the QGIS layer. It changes on the map too, the "
+        "base map and the layers below show through a transparent layer.",
+    # Снимок вида.
+    "Снимок вида": "View snapshot",
+    "Вид в макет": "View to layout",
+    "Снимок вида в файл PNG или JPEG, в том числе больше окна.":
+        "Snapshot of the view to a PNG or JPEG file, larger than the "
+        "window if needed.",
+    "Вид в макет QGIS неизменной картинкой, вставленной в проект.":
+        "The view into a QGIS layout as a fixed picture embedded in the "
+        "project.",
+    "Пропорции окна": "Window proportions",
+    "Высота снимка следует за шириной в пропорциях окна глобуса. Без "
+    "флажка снимок захватывает больше или меньше по сторонам, чем окно.":
+        "The snapshot height follows the width in the proportions of the "
+        "globe window. Without the check box the snapshot covers more or "
+        "less at the sides than the window.",
+    "Снять сейчас": "Take now",
+    "Не ждать остальных тайлов. На снимке останутся менее подробные "
+    "места.":
+        "Do not wait for the remaining tiles. Some places on the snapshot "
+        "stay less detailed.",
+    "Отмена": "Cancel",
+    "Ширина": "Width",
+    "Высота": "Height",
+    "Ширина снимка. Снимок шире окна берёт более подробные тайлы, надписи "
+    "и линии на нём крупнее в той же доле.":
+        "Snapshot width. A snapshot wider than the window takes more "
+        "detailed tiles, its labels and lines are larger in the same "
+        "proportion.",
+    "Высота снимка. Угол обзора по вертикали тот же, что у окна.":
+        "Snapshot height. The vertical field of view is the same as in the "
+        "window.",
+    "Новый макет": "New layout",
+    "Макет, в первый лист которого ляжет картинка вида. Новый макет "
+    "создаётся с листом по умолчанию.":
+        "The layout whose first page receives the view picture. A new "
+        "layout is created with the default page.",
+    "Ширина картинки на листе. Вместе с разрешением задаёт размер снимка "
+    "в пикселях и подробность тайлов.":
+        "Picture width on the page. Together with the resolution it sets "
+        "the snapshot size in pixels and the tile detail.",
+    "Высота картинки на листе. Угол обзора по вертикали тот же, что "
+    "у окна.":
+        "Picture height on the page. The vertical field of view is the "
+        "same as in the window.",
+    " dpi": " dpi",
+    "Разрешение вывода макета. Надписи на бумаге выходят того же размера, "
+    "что на экране. Большое разрешение дольше грузит тайлы.":
+        "Output resolution of the layout. Labels on paper come out the "
+        "same size as on screen. A high resolution loads tiles longer.",
+    "Макет": "Layout",
+    "Разрешение": "Resolution",
+    "Снимок {width} × {height} пикселей":
+        "Snapshot {width} × {height} pixels",
+    "Загрузка тайлов для снимка…": "Loading tiles for the snapshot…",
+    "Снимок ждёт загрузки: {count}": "Snapshot waits for loading: {count}",
+    " Часть тайлов не загрузилась, там менее подробный снимок.":
+        " Some tiles did not load, the imagery there is less detailed.",
+    "Вставить": "Insert",
+    "Сохранить…": "Save…",
+    "Глобус дорисовывает вид в нужном размере и ждёт загрузки подробных "
+    "тайлов. Камера на это время стоит.":
+        "The globe renders the view at the required size and waits for "
+        "the detailed tiles. The camera stays still meanwhile.",
+    "Выбрать файл PNG или JPEG и снять вид в нём. Глобус ждёт загрузки "
+    "подробных тайлов, камера на это время стоит.":
+        "Choose a PNG or JPEG file and take the view into it. The globe "
+        "waits for the detailed tiles, the camera stays still meanwhile.",
+    " пикс.": " px",
+    " мм": " mm",
+    "Изображения (*.png *.jpg *.jpeg)": "Images (*.png *.jpg *.jpeg)",
+    "Глобус ещё не готов к снимку.": "The globe is not ready for a "
+                                     "snapshot yet.",
+    "Видеокарта не создала буфер такого размера. Уменьшите снимок.":
+        "The graphics card did not create a buffer of this size. Make the "
+        "snapshot smaller.",
+    "Не удалось записать {path}": "Could not write {path}",
+    "Картинка вставлена в макет «{name}».":
+        "The picture is inserted into layout “{name}”.",
+    "Снимок сохранён: {path}": "Snapshot saved: {path}",
 }
 
 _language = None

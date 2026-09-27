@@ -14,6 +14,13 @@
 до точки, азимут и наклон камеры. Закладки QGIS для этого не нужны,
 решение автора от 27 сентября 2026 года. Поле view появилось после 0.4.1,
 в прежний файл оно добавляется при открытии.
+
+Папки лежат в таблице folders без геометрии: название, родитель,
+номер среди соседей, флажок и раскрыта ли папка. У метки поле folder -
+номер её папки, пусто - корень. Порядок меток и папок одного родителя
+задаёт поле position, по нему идёт и тур (core/placetree.py). Поля
+position и folder и таблица папок добавлены 28 сентября 2026 года,
+в прежний файл - при открытии.
 """
 import os
 import time
@@ -23,6 +30,7 @@ from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsProject, QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
+from ..core import placetree
 from ..core.features import Shape
 from ..i18n import tr
 from ..qt_compat import enum
@@ -34,7 +42,12 @@ TABLES = {"point": ("points", "Point"), "line": ("lines", "LineString"),
 FIELDS = (("name", "string"), ("description", "string"),
           ("color", "string"), ("width", "double"), ("fill", "string"),
           ("visible", "integer"), ("measure", "string"),
-          ("created", "string"), ("view", "string"))
+          ("created", "string"), ("view", "string"),
+          ("position", "integer"), ("folder", "integer"))
+FOLDER_TABLE = "folders"
+FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
+                 ("position", "integer"), ("visible", "integer"),
+                 ("expanded", "integer"))
 # Цвета по умолчанию, как у Google Earth: жёлтая метка и линия, белый
 # контур многоугольника с полупрозрачной заливкой.
 DEFAULT_COLOR = {"point": (255, 214, 0, 255), "line": (255, 214, 0, 255),
@@ -88,6 +101,23 @@ def _view(text):
     return view if len(view) == 3 else None
 
 
+def _int(value):
+    """Целое из поля или None, если поле пустое."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _folder_key(fid):
+    """Ключ папки по номеру, None и 0 - корень."""
+    return "{}:{}".format(placetree.FOLDER, fid) if fid else None
+
+
+def _folder_fid(key):
+    return int(key.split(":")[1]) if key else None
+
+
 def _geometry(kind, points):
     xy = [QgsPointXY(lon, lat) for lat, lon in points]
     if kind == "point":
@@ -97,14 +127,16 @@ def _geometry(kind, points):
     return QgsGeometry.fromPolygonXY([xy + xy[:1]])
 
 
-def _add_missing(layer):
-    """Добавить в слой файла поля, которых в нём ещё нет.
+def _add_missing(layer, fields=None):
+    """Добавить в слой файла поля, которых в нём ещё нет, None - поля
+    меток FIELDS на момент вызова.
 
     Поле берётся из слоя в памяти, так его тип задаётся одинаково
     в Qt 5 и Qt 6.
     """
+    fields = FIELDS if fields is None else fields
     names = set(layer.fields().names())
-    missing = [(n, t) for n, t in FIELDS if n not in names]
+    missing = [(n, t) for n, t in fields if n not in names]
     if not missing:
         return
     spec = "&".join("field={}:{}".format(n, t) for n, t in missing)
@@ -113,24 +145,52 @@ def _add_missing(layer):
         layer.updateFields()
 
 
+def _value(feature, layer, name):
+    """Значение поля или None, если поля в слое нет."""
+    return feature[name] if layer.fields().indexOf(name) >= 0 else None
+
+
 class Place:
     """Метка из файла: ключ (вид, номер объекта), объект и видимость."""
 
-    def __init__(self, kind, fid, shape, visible, measure="", view=None):
+    def __init__(self, kind, fid, shape, visible, measure="", view=None,
+                 position=None, folder=None):
         self.kind = kind
+        self.position = position
         self.fid = fid
         self.shape = shape
         self.visible = visible
         self.measure = measure
         self.view = view
+        self.folder = folder  # ключ папки или None - корень
 
     @property
     def key(self):
         return "{}:{}".format(self.kind, self.fid)
 
+    @property
+    def name(self):
+        return self.shape.name
+
+
+class Folder:
+    """Папка «Моих меток»."""
+
+    def __init__(self, fid, name, parent, position, visible, expanded):
+        self.fid = fid
+        self.name = name
+        self.parent = parent  # ключ папки-родителя или None - корень
+        self.position = position
+        self.visible = visible
+        self.expanded = expanded
+
+    @property
+    def key(self):
+        return _folder_key(self.fid)
+
 
 class MyPlaces(QObject):
-    """Файл «Моих меток» и список меток в памяти."""
+    """Файл «Моих меток», метки и папки в памяти."""
 
     changed = pyqtSignal()
 
@@ -138,26 +198,40 @@ class MyPlaces(QObject):
         super().__init__(parent)
         self.path = path or store_path()
         self.places = []
+        self.folders = []
         self.layers = {}
+        self.folder_layer = None
 
     # Файл.
 
+    def _write_table(self, table, uri, first):
+        options = QgsVectorFileWriter.SaveVectorOptions()
+        options.driverName = "GPKG"
+        options.layerName = table
+        if not first:
+            options.actionOnExistingFile = enum(
+                QgsVectorFileWriter, "ActionOnExistingFile",
+                "CreateOrOverwriteLayer")
+        memory = QgsVectorLayer(uri, table, "memory")
+        QgsVectorFileWriter.writeAsVectorFormatV3(
+            memory, self.path, QgsProject.instance().transformContext(),
+            options)
+
+    @staticmethod
+    def _spec(fields):
+        return "&".join("field={}:{}".format(n, t) for n, t in fields)
+
     def _create(self):
         os.makedirs(os.path.dirname(self.path), exist_ok=True)
-        fields = "&".join("field={}:{}".format(n, t) for n, t in FIELDS)
-        context = QgsProject.instance().transformContext()
         for n, (kind, (table, geometry)) in enumerate(TABLES.items()):
-            memory = QgsVectorLayer("{}?crs=EPSG:4326&{}".format(
-                geometry, fields), table, "memory")
-            options = QgsVectorFileWriter.SaveVectorOptions()
-            options.driverName = "GPKG"
-            options.layerName = table
-            if n:
-                options.actionOnExistingFile = enum(
-                    QgsVectorFileWriter, "ActionOnExistingFile",
-                    "CreateOrOverwriteLayer")
-            QgsVectorFileWriter.writeAsVectorFormatV3(memory, self.path,
-                                                      context, options)
+            self._write_table(table, "{}?crs=EPSG:4326&{}".format(
+                geometry, self._spec(FIELDS)), n == 0)
+        self._write_table(FOLDER_TABLE, "None?" + self._spec(FOLDER_FIELDS),
+                          False)
+
+    def _open(self, table):
+        return QgsVectorLayer("{}|layername={}".format(self.path, table),
+                              table, "ogr")
 
     def load(self):
         """Открыть файл, создать его при первом запуске, прочитать метки."""
@@ -165,17 +239,24 @@ class MyPlaces(QObject):
             self._create()
         self.layers = {}
         for kind, (table, _) in TABLES.items():
-            layer = QgsVectorLayer("{}|layername={}".format(self.path, table),
-                                   table, "ogr")
+            layer = self._open(table)
             if layer.isValid():
                 _add_missing(layer)
                 self.layers[kind] = layer
+        folders = self._open(FOLDER_TABLE)
+        if not folders.isValid():
+            # Файл до папок: таблица добавляется в него.
+            self._write_table(FOLDER_TABLE,
+                              "None?" + self._spec(FOLDER_FIELDS), False)
+            folders = self._open(FOLDER_TABLE)
+        if folders.isValid():
+            _add_missing(folders, FOLDER_FIELDS)
+            self.folder_layer = folders
         self._read()
 
     def _read(self):
         self.places = []
         for kind, layer in self.layers.items():
-            has_view = layer.fields().indexOf("view") >= 0
             for feature in layer.getFeatures():
                 points = _points(kind, feature.geometry())
                 if not points:
@@ -187,13 +268,55 @@ class MyPlaces(QObject):
                     fill=_color(feature["fill"], None) if kind == "polygon"
                     else None,
                     name=str(feature["name"] or ""))
+                visible = _int(feature["visible"])
                 self.places.append(Place(
                     kind, feature.id(), shape,
-                    bool(feature["visible"] if feature["visible"] is not None
-                         else 1), str(feature["measure"] or ""),
-                    _view(feature["view"]) if has_view else None))
-        self.places.sort(key=lambda p: p.shape.name.lower())
+                    bool(1 if visible is None else visible),
+                    str(feature["measure"] or ""),
+                    _view(_value(feature, layer, "view")),
+                    _int(_value(feature, layer, "position")),
+                    _folder_key(_int(_value(feature, layer, "folder")))))
+        self.folders = []
+        if self.folder_layer is not None:
+            for feature in self.folder_layer.getFeatures():
+                visible = _int(feature["visible"])
+                self.folders.append(Folder(
+                    feature.id(), str(feature["name"] or ""),
+                    _folder_key(_int(feature["parent"])),
+                    _int(feature["position"]),
+                    bool(1 if visible is None else visible),
+                    bool(_int(feature["expanded"]) or 0)))
+        # Метка или папка в папке, которой нет, стоит в корне.
+        known = {f.key for f in self.folders}
+        for place in self.places:
+            if place.folder not in known:
+                place.folder = None
+        for folder in self.folders:
+            if folder.parent not in known or folder.parent == folder.key:
+                folder.parent = None
+        order = {n.key: i for i, n in enumerate(placetree.walk(self.nodes()))}
+        self.places.sort(key=lambda p: order.get(p.key, 0))
         self.changed.emit()
+
+    def nodes(self):
+        """Узлы дерева для core/placetree.py."""
+        return ([placetree.Node(p.key, p.folder, p.position, p.name)
+                 for p in self.places]
+                + [placetree.Node(f.key, f.parent, f.position, f.name)
+                   for f in self.folders])
+
+    def tree(self, parent=None):
+        """Дети папки parent по порядку: (Folder, дети) или Place."""
+        by_key = {p.key: p for p in self.places}
+        by_key.update({f.key: f for f in self.folders})
+        out = []
+        for node in placetree.children(self.nodes(), parent):
+            item = by_key[node.key]
+            if placetree.is_folder(node.key):
+                out.append((item, self.tree(node.key)))
+            else:
+                out.append(item)
+        return out
 
     # Метки.
 
@@ -202,16 +325,27 @@ class MyPlaces(QObject):
         return [p.shape for p in self.places if p.visible]
 
     def find(self, key):
+        if placetree.is_folder(key):
+            return next((f for f in self.folders if f.key == key), None)
         return next((p for p in self.places if p.key == key), None)
 
-    def add(self, shape, measure="", view=None):
-        """Записать новую метку. Возвращает её ключ или None.
+    def places_in(self, folder=None):
+        """Метки папки folder и её вложенных папок по порядку списка."""
+        inside = set(placetree.descendants(self.nodes(), folder)) \
+            if folder else None
+        return [p for p in self.places if inside is None or p.key in inside]
 
-        view - ракурс сохранённого вида: расстояние, азимут, наклон.
+    def add(self, shape, measure="", view=None, folder=None):
+        """Записать новую метку в конец папки folder, None - корень.
+
+        Возвращает её ключ или None. view - ракурс сохранённого вида:
+        расстояние, азимут, наклон.
         """
         layer = self.layers.get(shape.kind)
         if layer is None or not shape.points:
             return None
+        if folder is not None and self.find(folder) is None:
+            folder = None
         feature = QgsFeature(layer.fields())
         feature.setGeometry(_geometry(shape.kind, shape.points))
         values = {"name": shape.name, "description": "",
@@ -221,7 +355,9 @@ class MyPlaces(QObject):
                   "measure": measure,
                   "created": time.strftime("%Y-%m-%d %H:%M:%S"),
                   "view": ",".join(repr(float(v)) for v in view)
-                  if view else ""}
+                  if view else "",
+                  "position": placetree.next_position(self.nodes(), folder),
+                  "folder": _folder_fid(folder)}
         for name, value in values.items():
             if layer.fields().indexOf(name) >= 0:
                 feature[name] = value
@@ -229,27 +365,105 @@ class MyPlaces(QObject):
         self._read()
         return "{}:{}".format(shape.kind, added[0].id()) if ok else None
 
-    def _change(self, key, name, value):
-        place = self.find(key)
-        if place is None:
-            return
-        layer = self.layers[place.kind]
-        index = layer.fields().indexOf(name)
-        layer.dataProvider().changeAttributeValues(
-            {place.fid: {index: value}})
+    def add_folder(self, name, parent=None, after=None):
+        """Новая папка в папке parent: в конце или сразу под узлом after
+        той же папки. Возвращает её ключ."""
+        layer = self.folder_layer
+        if layer is None:
+            return None
+        feature = QgsFeature(layer.fields())
+        for field, value in (
+                ("name", name), ("parent", _folder_fid(parent)),
+                ("position", placetree.next_position(self.nodes(), parent)),
+                ("visible", 1), ("expanded", 1)):
+            feature[field] = value
+        ok, added = layer.dataProvider().addFeatures([feature])
+        key = _folder_key(added[0].id()) if ok else None
+        siblings = [n.key for n in placetree.children(self.nodes(), parent)]
+        if key is not None and after in siblings:
+            self._read_quiet()
+            self.move(key, parent, siblings.index(after) + 1)
+            return key
         self._read()
+        return key
+
+    def _read_quiet(self):
+        """Перечитать файл без сигнала: следом идёт ещё правка."""
+        self.blockSignals(True)
+        try:
+            self._read()
+        finally:
+            self.blockSignals(False)
+
+    def _layer_of(self, key):
+        if placetree.is_folder(key):
+            return self.folder_layer
+        return self.layers.get(key.split(":")[0])
+
+    def _write(self, changes, read=True):
+        """Записать {ключ: {поле: значение}} одной правкой на слой."""
+        per_layer = {}
+        for key, values in changes.items():
+            layer = self._layer_of(key)
+            item = self.find(key)
+            if layer is None or item is None:
+                continue
+            attrs = {layer.fields().indexOf(n): v for n, v in values.items()
+                     if layer.fields().indexOf(n) >= 0}
+            if attrs:
+                per_layer.setdefault(id(layer), (layer, {}))[1][
+                    item.fid] = attrs
+        for layer, values in per_layer.values():
+            layer.dataProvider().changeAttributeValues(values)
+        if read:
+            self._read()
+
+    def move(self, key, parent, index):
+        """Перенести метку или папку в папку parent перед её ребёнком
+        номер index, как перетаскиванием мышью."""
+        plan = placetree.move_plan(self.nodes(), key, parent, index)
+        if not plan:
+            return
+        changes = {}
+        for item, (new_parent, position) in plan.items():
+            field = "parent" if placetree.is_folder(item) else "folder"
+            changes[item] = {field: _folder_fid(new_parent),
+                             "position": position}
+        self._write(changes)
+
+    def set_visible_many(self, states):
+        """Флажки меток и папок разом: {ключ: включена}."""
+        self._write({key: {"visible": 1 if on else 0}
+                     for key, on in states.items()})
 
     def set_visible(self, key, on):
-        self._change(key, "visible", 1 if on else 0)
+        self.set_visible_many({key: on})
+
+    def set_expanded(self, key, on):
+        """Раскрыта ли папка. Список не перестраивается."""
+        folder = self.find(key)
+        if folder is None or folder.expanded == bool(on):
+            return
+        folder.expanded = bool(on)
+        self._write({key: {"expanded": 1 if on else 0}}, read=False)
 
     def rename(self, key, name):
-        self._change(key, "name", name)
+        self._write({key: {"name": name}})
 
     def remove(self, key):
-        place = self.find(key)
-        if place is None:
-            return
-        self.layers[place.kind].dataProvider().deleteFeatures([place.fid])
+        """Удалить метку или папку со всем содержимым, как в Google Earth."""
+        keys = [key]
+        if placetree.is_folder(key):
+            keys += placetree.descendants(self.nodes(), key)
+        per_layer = {}
+        for item_key in keys:
+            layer = self._layer_of(item_key)
+            item = self.find(item_key)
+            if layer is not None and item is not None:
+                per_layer.setdefault(id(layer), (layer, []))[1].append(
+                    item.fid)
+        for layer, fids in per_layer.values():
+            layer.dataProvider().deleteFeatures(fids)
         self._read()
 
     def add_to_project(self):

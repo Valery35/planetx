@@ -43,6 +43,13 @@ TERRARIUM_URL = ("https://s3.amazonaws.com/elevation-tiles-prod/terrarium/"
                  "{z}/{x}/{y}.png")
 DECODE_THREADS = 2
 START_GAP = 0.015  # секунд между запусками запросов, около кадра
+# Пока камера движется, запросы всех загрузчиков и запуски картинок
+# слоёв идут не чаще раза в MOVING_GAP на всех вместе. Запуск стоит
+# главному потоку 2.5-11 мс. Проезд тура по пути 28 сентября 2026 года
+# давал паузы до 105 мс: каждый загрузчик слал свои запросы по своему
+# отсчёту, ответ сразу запускал следующий. Движение важнее загрузки,
+# решение автора: пусть загрузится не всё, кадр загрузку не ждёт.
+MOVING_GAP = 0.05
 # Метка запросов PlanetX, пользовательский атрибут запроса Qt.
 MARK = QNetworkRequest.Attribute(
     enum_int(enum(QNetworkRequest, "Attribute", "User")) + 71)
@@ -171,6 +178,35 @@ class _DecodeTask(QRunnable):
         self.sink.done.emit(self.key, rgba, extra)
 
 
+class Throttle:
+    """Общий отсчёт запусков для всех загрузчиков и картинок слоёв."""
+
+    moving = False
+    last = 0.0
+
+    @classmethod
+    def wait(cls, own_last):
+        """Секунд до разрешённого запуска, 0 и меньше - можно."""
+        now = time.monotonic()
+        wait = own_last + START_GAP - now
+        if cls.moving:
+            wait = max(wait, cls.last + MOVING_GAP - now)
+        return wait
+
+    @classmethod
+    def started(cls):
+        cls.last = time.monotonic()
+
+    @classmethod
+    def gap(cls):
+        return MOVING_GAP if cls.moving else START_GAP
+
+
+def set_moving(on):
+    """Камера движется: запуски реже. Зовёт вид в каждом кадре."""
+    Throttle.moving = bool(on)
+
+
 class TileLoader(QObject):
     """Загрузка тайлов одного источника.
 
@@ -282,7 +318,7 @@ class TileLoader(QObject):
         Остальные ждут таймера. Так get() главного потока не идут
         пачкой и не съедают кадр.
         """
-        wait = self.last_start + START_GAP - time.monotonic()
+        wait = Throttle.wait(self.last_start)
         if wait > 0.0:
             if self.queue.waiting and not self.pump_timer.isActive():
                 self.pump_timer.start(int(wait * 1000) + 1)
@@ -294,13 +330,14 @@ class TileLoader(QObject):
         request = self._request(z, x, y)
         reply = QgsNetworkAccessManager.instance().get(request)
         self.last_start = time.monotonic()
+        Throttle.started()
         self.replies[key] = reply
         reply.finished.connect(
             lambda key=key, reply=reply: self._finished(key, reply))
         self.started.append(key)
         self.max_seen = max(self.max_seen, len(self.replies))
         if self.queue.waiting and not self.pump_timer.isActive():
-            self.pump_timer.start(int(START_GAP * 1000) + 1)
+            self.pump_timer.start(int(Throttle.gap() * 1000) + 1)
 
     def _request(self, z, x, y):
         source = self.source
@@ -347,7 +384,8 @@ class TileLoader(QObject):
                                         self.size, self.decode,
                                         fill=self.fill))
         reply.deleteLater()
-        self._pump()
+        # Следующий запрос - через общий отсчёт, не сразу за ответом.
+        self._later()
         self._check_idle()
 
     def _decoded(self, key, rgba, extra):

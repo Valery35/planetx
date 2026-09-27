@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.4.3
+version=0.5.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -31,7 +31,9 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       measurements in a shared file of the QGIS profile. They are drawn
       by clicks right on the globe. The ruler measures lines, paths,
       polygons and circles on the WGS84 ellipsoid. Save view puts a
-      placemark that restores the height, heading and tilt.
+      placemark that restores the height, heading and tilt. Tours fly
+      over My Places and along paths. A snapshot of the view goes to a
+      file or into a QGIS layout.
       Type a place name or coordinates in the Search field and the
       camera flies there, the place found gets a red pin. The flight goes
       along the van Wijk and Nuij path.
@@ -50,7 +52,16 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.4.3 The plugin passes the Qt 6 check of the QGIS plugin
+changelog=0.5.0 Tours as in Google Earth: Play tour flies over the
+      checked places of My Places or a folder, a saved view restores its
+      height, heading and tilt, along a path the camera travels the line.
+      Folders in My Places with dragging of places and folders. View
+      snapshot to PNG or JPEG larger than the window, the view into a
+      QGIS layout as a picture embedded in the project. Transparency and
+      properties of project layers in the globe list. Hide sidebar
+      button. Camera motion goes first, tiles load less often while
+      moving.
+      0.4.3 The plugin passes the Qt 6 check of the QGIS plugin
       repository. Nothing changes in the globe itself.
       0.4.2 My Places is a folder right under the Globe row, as in
       Google Earth, shown even when empty. Its check box shows or hides
