@@ -6,7 +6,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.3.2.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.4.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -61,6 +61,19 @@ and atmosphere, from space down to single streets.
   the globe to the QGIS map window. The map leads the globe, the globe
   leads the map or both follow each other, as chosen in the view
   properties. Any map coordinate system works.
+- **Bookmarks.** The bookmarks button in the corner of the view opens a
+  menu with the project and user bookmarks of QGIS. Choosing a bookmark
+  flies to its extent. Save view makes a project bookmark with the
+  heading and tilt of the globe.
+- **Selection.** Features selected on the QGIS map are highlighted on the
+  globe, features found by a click on the globe are selected on the map.
+- **Ruler.** Line, path, polygon and circle by clicks on the globe.
+  Length, perimeter and area on the WGS84 ellipsoid. The measurement
+  is saved to My Places.
+- **My Places.** Placemarks, paths and polygons are drawn by clicks right
+  on the globe. They and the saved measurements sit in the first group of
+  the Layers panel. They are kept in a shared file of the QGIS profile
+  and are visible in any project.
 - **Identify features.** In the Identify features mode a click on the
   globe shows the coordinates and elevation of the point and the features
   of the project layers checked on the globe.

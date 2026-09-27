@@ -18,7 +18,7 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsGeometry, QgsPointXY, QgsProject, QgsRasterLayer,
                        QgsRectangle, QgsVectorLayer)
 from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import (QDialog, QLabel, QTreeWidget,
+from qgis.PyQt.QtWidgets import (QDialog, QLabel, QPushButton, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout)
 
 from ..core.ellipsoid import A
@@ -61,7 +61,7 @@ def _title(layer, feature, expression):
 
 
 def _vector(layer, lat, lon, metres):
-    """Объекты слоя под точкой: [(название, [(поле, значение)])]."""
+    """Объекты слоя под точкой: [(название, [(поле, значение)], номер)]."""
     found = _layer_point(layer, lat, lon, metres)
     if found is None:
         return []
@@ -80,7 +80,8 @@ def _vector(layer, lat, lon, metres):
         if geometry.isEmpty() or geometry.distance(point) > radius:
             continue
         values = [(name, feature[name]) for name in names]
-        out.append((_title(layer, feature, expression), values))
+        out.append((_title(layer, feature, expression), values,
+                    feature.id()))
     return out
 
 
@@ -97,9 +98,9 @@ def _raster(layer, lat, lon):
 
 
 def identify(layers, lat, lon, metres):
-    """Опрос слоёв: [(слой, [(название, [(поле, значение)])])].
+    """Опрос слоёв: [(слой, [(название, [(поле, значение)], номер)])].
 
-    У растра один «объект» - его значения в точке.
+    У растра один «объект» - его значения в точке, номер None.
     """
     out = []
     for layer in layers:
@@ -107,7 +108,8 @@ def identify(layers, lat, lon, metres):
             features = _vector(layer, lat, lon, metres)
         elif isinstance(layer, QgsRasterLayer):
             values = _raster(layer, lat, lon)
-            features = [(tr("значения в точке"), values)] if values else []
+            features = [(tr("значения в точке"), values, None)] \
+                if values else []
         else:
             features = []
         if features:
@@ -143,19 +145,36 @@ class IdentifyDialog(QDialog):
         self.tree = QTreeWidget(self)
         self.tree.setColumnCount(2)
         self.tree.setHeaderLabels([tr("Объект"), tr("Значение")])
+        self.select = QPushButton(tr("Выделить на карте"), self)
+        self.select.setToolTip(tr(
+            "Выделить найденные объекты в слоях QGIS. Выделение видно "
+            "на карте, в таблице атрибутов и на глобусе."))
+        self.select.clicked.connect(self._select_on_map)
+        self.found = []
         layout = QVBoxLayout(self)
         layout.addWidget(self.point)
         layout.addWidget(self.tree, 1)
+        layout.addWidget(self.select)
         self.resize(420, 360)
+
+    def _select_on_map(self):
+        """Выделение найденных объектов в их слоях, прежнее снимается."""
+        for layer, features in self.found:
+            ids = [fid for _, _, fid in features if fid is not None]
+            if ids:
+                layer.selectByIds(ids)
 
     def show_result(self, text, found):
         self.point.setText(text)
         self.tree.clear()
+        self.found = found
+        self.select.setEnabled(any(fid is not None for _, features in found
+                                   for _, _, fid in features))
         total = sum(len(features) for _, features in found)
         for layer, features in found:
             top = QTreeWidgetItem(self.tree, [layer.name(), ""])
             top.setExpanded(True)
-            for title, values in features:
+            for title, values, _ in features:
                 item = QTreeWidgetItem(top, [title, ""])
                 item.setExpanded(total <= EXPAND_UP_TO)
                 for name, value in values:

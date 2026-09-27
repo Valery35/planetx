@@ -229,3 +229,63 @@ void main() {
     frag_color = vec4(min(ground * pass + light, vec3(1.0)), 1.0);
 }
 """
+
+
+# Свои объекты: линии и заливка многоугольников. Вершина - смещение
+# от центра объекта в float32, u_mv - вид из глаза на центр, сдвиг
+# «центр - глаз» в нём посчитан в float64. Точка подтягивается к глазу
+# на долю u_pull расстояния. Сетка тайла собрана по высотам в своих
+# узлах, объект - по высотам в своих точках. Между узлами рельеф
+# тайла бывает выше линии, без подтяжки она тонет в склоне.
+FEATURE_VERTEX = """
+#version 330 core
+layout(location = 0) in vec3 a_position;
+uniform mat4 u_mv;
+uniform mat4 u_projection;
+uniform float u_pull;
+void main() {
+    vec4 eye = u_mv * vec4(a_position, 1.0);
+    eye.xyz *= 1.0 - u_pull;
+    gl_Position = u_projection * eye;
+}
+"""
+
+# Отрезок в полосу толщиной u_width пикселей кадра. OpenGL 3.3 Core
+# толстых линий не рисует. Концы продлены на полтолщины, так стыки
+# соседних отрезков закрыты. Отрезок за ближней плоскостью пропускается.
+FEATURE_LINE_GEOMETRY = """
+#version 330 core
+layout(lines) in;
+layout(triangle_strip, max_vertices = 4) out;
+uniform vec2 u_viewport;
+uniform float u_width;
+void main() {
+    vec4 a = gl_in[0].gl_Position;
+    vec4 b = gl_in[1].gl_Position;
+    if (a.w <= 0.0 || b.w <= 0.0) return;
+    vec2 half_size = 0.5 * u_viewport;
+    vec2 sa = a.xy / a.w * half_size;
+    vec2 sb = b.xy / b.w * half_size;
+    vec2 d = sb - sa;
+    float len = length(d);
+    d = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+    vec2 n = vec2(-d.y, d.x) * (0.5 * u_width);
+    vec2 e = d * (0.5 * u_width);
+    vec2 shift[4] = vec2[4](-e + n, -e - n, e + n, e - n);
+    for (int i = 0; i < 4; i++) {
+        vec4 p = i < 2 ? a : b;
+        gl_Position = vec4(p.xy + shift[i] / half_size * p.w, p.zw);
+        EmitVertex();
+    }
+    EndPrimitive();
+}
+"""
+
+FEATURE_FRAGMENT = """
+#version 330 core
+uniform vec4 u_color;
+out vec4 frag;
+void main() {
+    frag = u_color;
+}
+"""

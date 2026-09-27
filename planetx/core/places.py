@@ -33,8 +33,10 @@ LEVEL_OFFSET = 2
 # Столица страны идёт перед другими городами. Кроме населённых пунктов
 # подписываются воды, заповедники, вершины, аэропорты и номера дорог.
 # Класс «search» - временная метка найденного места, она важнее всех.
-CLASSES = ("search", "country", "capital", "city", "state", "water", "town",
-           "park", "peak", "airport", "road_ref", "village")
+# Класс «mark» - точечный объект глобуса, свой или из «Моих меток».
+CLASSES = ("search", "mark", "country", "capital", "city", "state",
+           "water", "town", "park", "peak", "airport", "road_ref",
+           "village")
 KIND = {name: index for index, name in enumerate(CLASSES)}
 PLACE_CLASSES = {"country", "capital", "city", "state", "town", "village"}
 

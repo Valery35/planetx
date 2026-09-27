@@ -43,14 +43,17 @@ def _compile(kind, source):
     return shader
 
 
-def build_program(vertex, fragment):
-    """Программа из двух шейдеров.
+def build_program(vertex, fragment, geometry=None):
+    """Программа из вершинного, фрагментного и, если дан, геометрического
+    шейдера.
 
     glValidateProgram не вызывается. В профиле Core он требует
     привязанного массива вершин и на части драйверов даёт ложный отказ.
     """
     shaders = [_compile(GL.GL_VERTEX_SHADER, vertex),
                _compile(GL.GL_FRAGMENT_SHADER, fragment)]
+    if geometry is not None:
+        shaders.append(_compile(GL.GL_GEOMETRY_SHADER, geometry))
     program = GL.glCreateProgram()
     for shader in shaders:
         GL.glAttachShader(program, shader)

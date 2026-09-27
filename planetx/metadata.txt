@@ -2,8 +2,8 @@
 name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
-description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, grab-the-Earth navigation with inertia and place search
-version=0.3.2
+description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
+version=0.4.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -25,7 +25,13 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       the middle button or Shift with the left button turns and tilts
       the view. The globe follows the QGIS map window or leads it, in any
       map coordinate system. A click in the Identify mode lists the
-      features of the project layers under the point.
+      features of the project layers under the point and selects them on
+      the map, selection on the map shows on the globe.
+      My Places, as in Google Earth, keep placemarks, paths, polygons and
+      measurements in a shared file of the QGIS profile. They are drawn
+      by clicks right on the globe. The ruler measures lines, paths,
+      polygons and circles on the WGS84 ellipsoid. QGIS bookmarks fly the
+      globe, Save view makes a bookmark with heading and tilt.
       Type a place name or coordinates in the Search field and the
       camera flies there, the place found gets a red pin. The flight goes
       along the van Wijk and Nuij path.
@@ -44,7 +50,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.3.2 Synchronization with the QGIS map window in any coordinate
+changelog=0.4.0 My Places as in Google Earth: placemarks, paths and
+      polygons drawn on the globe and saved in a shared file. Ruler with
+      line, path, polygon and circle on the WGS84 ellipsoid, measurements
+      saved to My Places. QGIS bookmarks and Save view with heading and
+      tilt. Selection both ways between the map and the globe. Layers as
+      on the QGIS map and new layers straight to the globe. Less detailed
+      imagery instead of gray tiles where detailed imagery is missing.
+      0.3.2 Synchronization with the QGIS map window in any coordinate
       system. Identify features by a click on the globe. Coordinates and
       elevation under the cursor in the status line. Borders, place names
       and terrain are on by default, other layers off.

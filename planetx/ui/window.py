@@ -9,25 +9,28 @@
 Окно связывает части и решает, панели только показывают.
 """
 import html
+import math
 import os
 import sys
 import time
 
-from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsProject, QgsSettings)
+from qgis.core import (QgsBookmark, QgsCoordinateReferenceSystem,
+                       QgsCoordinateTransform, QgsCsException, QgsProject,
+                       QgsRectangle, QgsReferencedRectangle, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QLabel, QSplitter, QVBoxLayout, QWidget
+from qgis.PyQt.QtWidgets import (QInputDialog, QLabel, QMessageBox,
+                                 QSplitter, QVBoxLayout, QWidget)
 from qgis.utils import iface
 
 from ..core import basemap
-from ..core.ellipsoid import ecef_to_geodetic
+from ..core.ellipsoid import A, ecef_to_geodetic
 from ..core.flight import Flight, fit_view, parse_latlon
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                             place_text, search_url)
 from ..core.mipmap import mip_chain
 from ..core.navigation import focal, ground_under
-from ..core.sync import BOTH, DIRECTIONS
+from ..core.sync import BOTH, DIRECTIONS, ground_size
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.tiling import tile_mesh
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
@@ -45,9 +48,13 @@ from ..qt_compat import enum
 from ..render.view import GlobeView, start_keys
 from .about import show_about
 from .identify import IdentifyDialog, identify, point_text
+from .draw import PlaceDialog
+from .measure import Ruler, RulerDialog
+from .myplaces import MyPlaces
 from .panel import LayerPanel
-from .project import (AUTO_REFRESH, ProjectWatch, map_layers, read_flag,
-                      read_shown, write_flag, write_shown)
+from .project import (AUTO_REFRESH, ENTRY, FOLLOW, ProjectWatch, map_layers,
+                      read_flag, read_shown, set_visible_on_map,
+                      visible_on_map, write_flag, write_shown)
 from .properties import SCALE_RANGE, PropertiesDialog
 from .sync import MapSync
 from .toolbar import ViewToolbar
@@ -69,6 +76,8 @@ SYNC_KEY = "PlanetX/sync"  # направление синхронизации �
 # Допуск щелчка при определении объектов, логических пикселей.
 IDENTIFY_PIXELS = 5.0
 CURSOR_PERIOD = 60  # мс между пересчётами точки под курсором
+SELECTION_DELAY = 300  # мс после смены выделения до перерисовки слоя
+NEW_SHOWN_KEY = "PlanetX/new_layers_shown"  # новые слои сразу на глобус
 TILE_SIZE = 256
 # Интервал переключения GIL, пока открыто окно. Каждый вызов OpenGL
 # и PyQt из главного потока отпускает GIL и ждёт его обратно, пока
@@ -155,6 +164,12 @@ def heights_preparer(key, rgba):
     return make_tile(*key, rgba)
 
 
+def _view_key(bookmark_id):
+    """Ключ ракурса закладки в проекте. Номер закладки QGIS бывает
+    в фигурных скобках, имя элемента XML такого не допускает."""
+    return "views/v" + "".join(c for c in bookmark_id if c.isalnum())
+
+
 def distance_text(metres):
     """Расстояние для строки состояния, метры или километры."""
     if metres < 10000.0:
@@ -235,6 +250,8 @@ class GlobeWindow(QWidget):
         # Слои проекта изменились с последнего обновления.
         self._layers_stale = False
         self.auto_refresh = read_flag(AUTO_REFRESH, False)
+        self.new_shown = settings.value(NEW_SHOWN_KEY, False, type=bool)
+        self.follow = False
         self._shown = set()
         self._known = set()
         self._read_shown()
@@ -265,6 +282,23 @@ class GlobeWindow(QWidget):
         self.panel.fly_to_layer.connect(self.fly_to_layer)
         self.toolbar.refresh_clicked.connect(self.refresh)
         self.toolbar.about_clicked.connect(lambda: show_about(self))
+        self.toolbar.bookmark_chosen.connect(self.fly_to_bookmark)
+        self.toolbar.save_view_requested.connect(self.save_view)
+        # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
+        self.myplaces = MyPlaces(parent=self)
+        self.myplaces.changed.connect(self._places_changed)
+        self.panel.place_toggled.connect(self.myplaces.set_visible)
+        self.panel.place_action.connect(self._place_action)
+        self.ruler = Ruler(self)
+        self.ruler.changed.connect(self._refresh_shapes)
+        self.ruler_dialog = None
+        self.toolbar.ruler_clicked.connect(self._open_ruler)
+        # Новая метка: тот же механизм точек, своё окно.
+        self.drawer = Ruler(self)
+        self.drawer.changed.connect(self._refresh_shapes)
+        self.place_dialog = None
+        self.toolbar.place_clicked.connect(self._open_place)
+        self.myplaces.load()
         # Синхронизация с окном карты QGIS и определение объектов.
         way = QgsSettings().value(SYNC_KEY, BOTH) or BOTH
         self.sync = MapSync(self, iface.mapCanvas())
@@ -307,6 +341,13 @@ class GlobeWindow(QWidget):
         self.watch.changed.connect(self._project_changed)
         self.watch.reloaded.connect(self._project_reloaded)
         self.watch.renamed.connect(self._show_layers)
+        # Выделение на карте: картинки слоя перерисовываются сразу,
+        # без кнопки «Обновить», QGIS рисует выделенное своим цветом.
+        self._selection_timer = QTimer(self)
+        self._selection_timer.setSingleShot(True)
+        self._selection_timer.timeout.connect(self._selection_redraw)
+        self.watch.selected.connect(self._selection_changed)
+        self.watch.legend.connect(self._legend_changed)
         self._show_layers()
         self.panel.set_geo(self._groups, self._relief)
         self.refresh()
@@ -336,6 +377,7 @@ class GlobeWindow(QWidget):
         return {"basemap": self._basemap, "groups": self._groups,
                 "relief": self._relief, "scale": self._scale,
                 "language": self._language, "sync": self.sync.direction,
+                "follow": self.follow, "new_shown": self.new_shown,
                 "auto": self.auto_refresh}
 
     def set_sync_direction(self, way):
@@ -400,7 +442,14 @@ class GlobeWindow(QWidget):
         self._changed()
 
     def set_layer_shown(self, layer_id, on):
-        """Отметка слоя проекта в списке глобуса."""
+        """Отметка слоя проекта в списке глобуса.
+
+        В режиме «как на карте QGIS» отметка включает и выключает слой
+        в дереве слоёв QGIS, глобус следует за деревом.
+        """
+        if self.follow:
+            set_visible_on_map(layer_id, on)
+            return
         if on:
             self._shown.add(layer_id)
         else:
@@ -418,6 +467,12 @@ class GlobeWindow(QWidget):
         от 27 сентября 2026 года. Раньше отмечались слои, видимые на карте.
         """
         layers = map_layers()
+        self.follow = read_flag(FOLLOW, False)
+        if self.follow:
+            self._shown = {layer.id() for layer in layers
+                           if visible_on_map(layer)}
+            self._known = {layer.id() for layer in layers}
+            return
         shown = read_shown()
         self._shown = shown if shown is not None else set()
         self._known = {layer.id() for layer in layers}
@@ -507,7 +562,7 @@ class GlobeWindow(QWidget):
         """Загрузчик выбранной подложки и её подпись."""
         self.loader = TileLoader(self.source, parent=self,
                                  prepare=imagery_preparer(self.view.store),
-                                 size=TILE_SIZE)
+                                 size=TILE_SIZE, fill=True)
         self.loader.loaded.connect(self._loaded)
         self.loader.failed.connect(self._failed)
         self.view.loader = self.loader
@@ -603,13 +658,53 @@ class GlobeWindow(QWidget):
     def _project_changed(self):
         """Слои проекта изменились: обновить сразу или зажечь кнопку.
 
-        Новый слой на глобус сам не попадает, его отмечают в списке.
+        Новый слой попадает на глобус, если так задано в свойствах вида.
+        По умолчанию его отмечают в списке.
         """
-        self._known = {layer.id() for layer in map_layers()}
+        layers = map_layers()
+        added = [layer.id() for layer in layers
+                 if layer.id() not in self._known]
+        self._known = {layer.id() for layer in layers}
+        if added and self.new_shown and not self.follow:
+            self._shown |= set(added)
+            write_shown(self._shown)
         # Перерисовка слоя меняет глобус, только если слой на нём.
         if self._applied_layers:
             self._layers_stale = True
         self._changed()
+
+    def _legend_changed(self):
+        """Видимость в дереве слоёв QGIS сменилась."""
+        if not self.follow:
+            return
+        self._shown = {layer.id() for layer in map_layers()
+                       if visible_on_map(layer)}
+        self._changed()
+
+    def set_follow(self, on):
+        """Режим «как на карте QGIS»: видимость слоёв на глобусе - из
+        дерева слоёв QGIS. Флажок хранится в проекте."""
+        self.follow = bool(on)
+        write_flag(FOLLOW, self.follow)
+        if self.follow:
+            self._legend_changed()
+        else:
+            write_shown(self._shown)
+            self._changed()
+
+    def set_new_shown(self, on):
+        """Новые слои проекта сразу на глобус. Настройка QGIS."""
+        self.new_shown = bool(on)
+        QgsSettings().setValue(NEW_SHOWN_KEY, self.new_shown)
+        self._sync_properties()
+
+    def _selection_changed(self, layer_id):
+        if layer_id in (self._applied_layers or ()):
+            self._selection_timer.start(SELECTION_DELAY)
+
+    def _selection_redraw(self):
+        if self.overlay is not None:
+            self._update_overlay(keep=True)
 
     def _project_reloaded(self):
         """Открыт другой проект: его настройки глобуса."""
@@ -640,6 +735,8 @@ class GlobeWindow(QWidget):
             self.properties.scale_changed.connect(self.set_relief_scale)
             self.properties.language_chosen.connect(self.set_label_language)
             self.properties.sync_chosen.connect(self.set_sync_direction)
+            self.properties.follow_changed.connect(self.set_follow)
+            self.properties.new_shown_changed.connect(self.set_new_shown)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()
@@ -783,10 +880,187 @@ class GlobeWindow(QWidget):
 
     def fly_to_layer(self, layer):
         """Перелёт к охвату слоя, камера смотрит отвесно."""
+        self._fly_extent(layer.extent(), layer.crs())
+
+    # «Мои метки».
+
+    def _places_changed(self):
+        self.panel.set_places(self.myplaces.places)
+        self._refresh_shapes()
+
+    def _refresh_shapes(self):
+        """На глобусе видимые «Мои метки» и фигура открытой линейки."""
+        shapes = self.myplaces.shapes()
+        if self._ruler_open():
+            shape = self.ruler.shape()
+            if shape is not None:
+                shapes.append(shape)
+        elif self._place_open():
+            shape = self.place_dialog.shape()
+            if shape is not None:
+                shapes.append(shape)
+        self.view.set_shapes(shapes)
+
+    # Новая метка.
+
+    def _place_open(self):
+        return self.place_dialog is not None and self.place_dialog.isVisible()
+
+    def _open_place(self):
+        if self._ruler_open():
+            self.ruler_dialog.close()
+        if self.place_dialog is None:
+            self.place_dialog = PlaceDialog(self.drawer, self)
+            self.place_dialog.save_requested.connect(self._save_place)
+            self.place_dialog.style_changed.connect(self._refresh_shapes)
+            self.place_dialog.finished.connect(self._place_closed)
+        self.place_dialog.show()
+        self.place_dialog.raise_()
+        self._refresh_shapes()
+
+    def _place_closed(self, *args):
+        self.drawer.clear()
+        self._refresh_shapes()
+
+    def _save_place(self):
+        shape = self.place_dialog.shape(rubber=False)
+        if shape is None:
+            return
+        self.myplaces.add(shape)
+        self.place_dialog.name.clear()
+        self.drawer.clear()
+
+    # Линейка.
+
+    def _ruler_open(self):
+        return self.ruler_dialog is not None and self.ruler_dialog.isVisible()
+
+    def _open_ruler(self):
+        if self._place_open():
+            self.place_dialog.close()
+        if self.ruler_dialog is None:
+            self.ruler_dialog = RulerDialog(self.ruler, self)
+            self.ruler_dialog.save_requested.connect(self._save_ruler)
+            self.ruler_dialog.finished.connect(self._ruler_closed)
+        self.ruler_dialog.show()
+        self.ruler_dialog.raise_()
+        self._refresh_shapes()
+
+    def _ruler_closed(self, *args):
+        self.ruler.clear()
+        self._refresh_shapes()
+
+    def _save_ruler(self):
+        """«Сохранить»: фигура линейки в «Мои метки» с измерением."""
+        titles = {"line": tr("Линия"), "path": tr("Путь"),
+                  "polygon": tr("Многоугольник"), "circle": tr("Круг")}
+        name, ok = QInputDialog.getText(
+            self, tr("Сохранить измерение"), tr("Название"),
+            text=titles[self.ruler.mode])
+        if not ok:
+            return
+        shape = self.ruler.shape(rubber=False, name=name.strip())
+        if shape is None:
+            return
+        self.myplaces.add(shape, measure=self.ruler_dialog.summary())
+        self.ruler.clear()
+
+    def _place_action(self, action, key):
+        """Действие меню «Моих меток»: перелёт, имя, удаление, проект."""
+        if action == "project":
+            self.myplaces.add_to_project()
+            return
+        place = self.myplaces.find(key)
+        if place is None:
+            return
+        if action == "fly":
+            self.fly_to_place(place)
+        elif action == "rename":
+            name, ok = QInputDialog.getText(
+                self, tr("Переименовать"), tr("Название"),
+                text=place.shape.name)
+            if ok:
+                self.myplaces.rename(key, name.strip())
+        elif action == "remove":
+            answer = QMessageBox.question(
+                self, tr("Удалить метку"),
+                tr("Удалить «{name}» из «Моих меток»?",
+                   name=place.shape.name or tr("Без названия")))
+            if answer == enum(QMessageBox, "StandardButton", "Yes"):
+                self.myplaces.remove(key)
+
+    def fly_to_place(self, place):
+        """Перелёт к метке: к точке или к охвату линии и многоугольника."""
+        points = place.shape.points
+        if len(points) == 1:
+            self._fly_to(points[0][0], points[0][1], SEARCH_MIN_DISTANCE)
+            return
+        lats = [p[0] for p in points]
+        lons = [p[1] for p in points]
+        self._fly_extent(QgsRectangle(min(lons), min(lats), max(lons),
+                                      max(lats)),
+                         QgsCoordinateReferenceSystem("EPSG:4326"))
+
+    def save_view(self):
+        """Вид глобуса закладкой проекта QGIS.
+
+        Охват закладки - полоса вида на местности, её видит и карта.
+        Ракурс - точка взгляда, расстояние, азимут и наклон - пишется
+        в проект рядом, по номеру закладки.
+        """
+        name, ok = QInputDialog.getText(self, tr("Сохранить вид"),
+                                        tr("Название"), text=tr("Вид"))
+        if not ok:
+            return
+        pose = self.view.navigator.pose
+        camera = self.view.camera
+        width, height = ground_size(pose.distance, camera.fov_y,
+                                    camera.aspect)
+        dlat = math.degrees(height / 2.0 / A)
+        dlon = math.degrees(width / 2.0 / (A * max(
+            math.cos(math.radians(pose.lat)), 1e-6)))
+        rect = QgsRectangle(max(pose.lon - dlon, -180.0),
+                            max(pose.lat - dlat, -90.0),
+                            min(pose.lon + dlon, 180.0),
+                            min(pose.lat + dlat, 90.0))
+        bookmark = QgsBookmark()
+        bookmark.setName(name.strip() or tr("Вид"))
+        bookmark.setExtent(QgsReferencedRectangle(
+            rect, QgsCoordinateReferenceSystem("EPSG:4326")))
+        project = QgsProject.instance()
+        found = project.bookmarkManager().addBookmark(bookmark)
+        bookmark_id = found[0] if isinstance(found, tuple) else found
+        if bookmark_id:
+            project.writeEntry(ENTRY, _view_key(bookmark_id), ",".join(
+                repr(float(v)) for v in (pose.lat, pose.lon, pose.distance,
+                                         pose.heading, pose.tilt)))
+
+    def fly_to_bookmark(self, bookmark):
+        """Перелёт к закладке QGIS. Закладка, сохранённая глобусом,
+        возвращает ракурс целиком, прочие - охват в своей системе
+        координат."""
+        text, ok = QgsProject.instance().readEntry(
+            ENTRY, _view_key(bookmark.id()), "")
+        if ok and text:
+            try:
+                lat, lon, distance, heading, tilt = (
+                    float(v) for v in text.split(","))
+            except ValueError:
+                lat = None
+            if lat is not None:
+                self._fly_to(lat, lon, distance, heading, tilt)
+                return
+        extent = bookmark.extent()
+        self._fly_extent(extent, extent.crs())
+
+    def _fly_extent(self, extent, crs):
+        """Перелёт к охвату в системе координат crs, взгляд отвесный."""
         wgs = QgsCoordinateReferenceSystem("EPSG:4326")
-        transform = QgsCoordinateTransform(layer.crs(), wgs,
-                                           QgsProject.instance())
-        box = transform.transformBoundingBox(layer.extent())
+        transform = QgsCoordinateTransform(crs, wgs, QgsProject.instance())
+        try:
+            box = transform.transformBoundingBox(extent)
+        except QgsCsException:
+            return
         camera = self.view.camera
         lat, lon, distance = fit_view(box.xMinimum(), box.yMinimum(),
                                       box.xMaximum(), box.yMaximum(),
@@ -801,7 +1075,14 @@ class GlobeWindow(QWidget):
                                  if on else "OpenHandCursor"))
 
     def _clicked(self, px, py):
-        """Щелчок по глобусу: точка рельефа и объекты слоёв под ней."""
+        """Щелчок по глобусу: точка линейки или опрос объектов под ней."""
+        tool = self.ruler if self._ruler_open() \
+            else self.drawer if self._place_open() else None
+        if tool is not None:
+            found = self._ground(px, py)
+            if found is not None:
+                tool.add(found[0], found[1])
+            return
         if not self.identifying:
             return
         view = self.view
@@ -824,6 +1105,16 @@ class GlobeWindow(QWidget):
         if self.identified is None:
             self.identified = IdentifyDialog(self)
         self.identified.show_result(point_text(lat, lon, height), found)
+
+    def _ground(self, px, py):
+        """Широта и долгота точки рельефа под пикселем или None."""
+        view = self.view
+        point = ground_under(view.camera, px, py,
+                             view.navigator.pose.terrain)
+        if point is None:
+            return None
+        lat, lon, _ = (float(v) for v in ecef_to_geodetic(point))
+        return lat, lon
 
     def fly_view(self, lat, lon, distance):
         """Перелёт с прежними азимутом и наклоном, для синхронизации."""
@@ -891,6 +1182,10 @@ class GlobeWindow(QWidget):
                                  view.navigator.pose.terrain)
             if point is not None:
                 lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
+                if self._ruler_open():
+                    self.ruler.set_cursor((lat, lon))
+                elif self._place_open():
+                    self.drawer.set_cursor((lat, lon))
                 scale = view.store.scale
                 text = point_text(lat, lon, h / scale if scale else None,
                                   digits=5)
@@ -902,6 +1197,10 @@ class GlobeWindow(QWidget):
         self.sync.close()
         if self.identified is not None:
             self.identified.close()
+        if self.ruler_dialog is not None:
+            self.ruler_dialog.close()
+        if self.place_dialog is not None:
+            self.place_dialog.close()
         self.loader.abort()
         self.terrain_loader.abort()
         if self.place_loader is not None:

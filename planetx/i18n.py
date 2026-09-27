@@ -235,6 +235,123 @@ EN = {
         "Shores of lakes, reservoirs and wide rivers are outlined in blue. "
         "Reservoirs are split into pieces in the data, and the outline also "
         "follows the cuts.",
+    "Закладки проекта и закладки пользователя QGIS. Выбор закладки "
+    "запускает перелёт к её охвату.":
+        "Project bookmarks and QGIS user bookmarks. Choosing a bookmark "
+        "flies to its extent.",
+    "Проект": "Project",
+    "Пользователь": "User",
+    "Закладок нет": "No bookmarks",
+    "Новая метка": "New placemark",
+    "Новая метка, путь или многоугольник в «Мои метки».":
+        "A new placemark, path or polygon in My Places.",
+    "Метка": "Placemark",
+    "Цвет": "Color",
+    "Толщина": "Width",
+    "Название в «Моих метках» и подпись точки на глобусе.":
+        "The name in My Places and the label of a point on the globe.",
+    "Цвет линии и контура. Заливка многоугольника того же цвета, "
+    "полупрозрачная.":
+        "The color of the line and outline. The polygon fill has the same "
+        "color, semi-transparent.",
+    "Толщина линии и контура в пикселях экрана. От масштаба не зависит.":
+        "The width of the line and outline in screen pixels. It does not "
+        "depend on the scale.",
+    "Записать объект в «Мои метки».": "Write the object to My Places.",
+    "Убрать поставленные точки.": "Remove the points placed.",
+    "Щелчок по глобусу ставит метку. Новый щелчок переносит её.":
+        "A click on the globe places the placemark. A new click moves it.",
+    "Линейка": "Ruler",
+    "Линейка. Длина, периметр и площадь на эллипсоиде, сохранение "
+    "измерения в «Мои метки».":
+        "Ruler. Length, perimeter and area on the ellipsoid, the "
+        "measurement is saved to My Places.",
+    "Линия": "Line",
+    "Путь": "Path",
+    "Многоугольник": "Polygon",
+    "Круг": "Circle",
+    "Длина": "Length",
+    "Периметр": "Perimeter",
+    "Площадь": "Area",
+    "Радиус": "Radius",
+    "Метры": "Meters",
+    "Километры": "Kilometers",
+    "Мили": "Miles",
+    "Морские мили": "Nautical miles",
+    "Кв. метры": "Square meters",
+    "Гектары": "Hectares",
+    "Кв. километры": "Square kilometers",
+    "Кв. мили": "Square miles",
+    "м": "m",
+    "км": "km",
+    "мили": "mi",
+    "мор. мили": "nmi",
+    "м²": "m²",
+    "га": "ha",
+    "км²": "km²",
+    "кв. мили": "sq mi",
+    "Сохранить": "Save",
+    "Очистить": "Clear",
+    "Сохранить фигуру в «Мои метки» вместе с измерением.":
+        "Save the shape to My Places together with the measurement.",
+    "Убрать точки линейки с глобуса.":
+        "Remove the ruler points from the globe.",
+    "Щелчками по глобусу отметьте начало и конец линии. Третий щелчок "
+    "начинает новую линию.":
+        "Click the globe at the start and the end of the line. A third "
+        "click starts a new line.",
+    "Щелчками по глобусу отметьте точки пути.":
+        "Click the globe at the points of the path.",
+    "Щелчками по глобусу отметьте вершины многоугольника.":
+        "Click the globe at the vertices of the polygon.",
+    "Первый щелчок по глобусу - центр круга, второй задаёт радиус.":
+        "The first click on the globe sets the centre of the circle, the "
+        "second sets the radius.",
+    "Сохранить измерение": "Save measurement",
+    "Сохранить вид…": "Save view…",
+    "Сохранить вид": "Save view",
+    "Вид": "View",
+    "Слои как на карте QGIS": "Layers as on the QGIS map",
+    "С флажком глобус показывает слои проекта, включённые в дереве слоёв "
+    "QGIS, и отметка в списке глобуса включает слой и на карте. Без "
+    "флажка отметки глобуса свои и карту не меняют. Флажок хранится "
+    "в проекте.":
+        "When checked, the globe shows the project layers switched on in "
+        "the QGIS layer tree, and a check mark in the globe list switches "
+        "the layer on the map too. When unchecked, the globe has its own "
+        "check marks and does not change the map. The option is stored in "
+        "the project.",
+    "Новые слои сразу на глобус": "New layers straight to the globe",
+    "С флажком слой, добавленный в проект, например результат обработки, "
+    "сразу отмечается на глобусе. Без флажка его отмечают в списке "
+    "глобуса.":
+        "When checked, a layer added to the project, such as a processing "
+        "result, is checked on the globe at once. When unchecked, it is "
+        "checked in the globe list by hand.",
+    "Выделить на карте": "Select on map",
+    "Выделить найденные объекты в слоях QGIS. Выделение видно на карте, "
+    "в таблице атрибутов и на глобусе.":
+        "Select the features found in the QGIS layers. The selection shows "
+        "on the map, in the attribute table and on the globe.",
+    "Мои метки": "My Places",
+    "Сохранённые метки, пути, многоугольники и измерения. Они хранятся "
+    "в общем файле профиля QGIS и видны в любом проекте. Меню по правой "
+    "кнопке - перелёт, переименование, удаление, слои меток в проекте.":
+        "Saved placemarks, paths, polygons and measurements. They are kept "
+        "in a shared file of the QGIS profile and are visible in any "
+        "project. The right-click menu flies there, renames, deletes and "
+        "adds the places layers to the project.",
+    "Мои метки - точки": "My Places - points",
+    "Мои метки - линии": "My Places - lines",
+    "Мои метки - многоугольники": "My Places - polygons",
+    "Без названия": "Untitled",
+    "Переименовать…": "Rename…",
+    "Удалить": "Delete",
+    "Добавить слои меток в проект": "Add the places layers to the project",
+    "Переименовать": "Rename",
+    "Название": "Name",
+    "Удалить метку": "Delete placemark",
+    "Удалить «{name}» из «Моих меток»?": "Delete \"{name}\" from My Places?",
     "значения в точке": "values at the point",
     "{point}, высота {height} м": "{point}, elevation {height} m",
     "Объекты": "Features",

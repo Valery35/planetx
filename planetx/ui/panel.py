@@ -35,6 +35,8 @@ CHECKED = enum(Qt, "CheckState", "Checked")
 UNCHECKED = enum(Qt, "CheckState", "Unchecked")
 TRISTATE = enum(Qt, "ItemFlag", "ItemIsAutoTristate")
 RELIEF = "relief"  # строка рельефа в панели «Слои»
+# Роль данных строки «Моих меток»: ключ метки «вид:номер».
+PLACE_ROLE = LAYER_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 
 
@@ -116,6 +118,9 @@ class LayerPanel(QWidget):
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
     relief_toggled = pyqtSignal(bool)
+    # «Мои метки»: ключ метки и флажок, действие над меткой и ключ.
+    place_toggled = pyqtSignal(str, bool)
+    place_action = pyqtSignal(str, str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -162,6 +167,19 @@ class LayerPanel(QWidget):
         self._geo_timer.setSingleShot(True)
         self._geo_timer.timeout.connect(self._emit_geo)
         self.geo_items = {}
+        # «Мои метки» - первая группа, как в Google Earth.
+        self.places_group = QTreeWidgetItem(self.geo, [tr("Мои метки")])
+        self.places_group.setToolTip(0, tr(
+            "Сохранённые метки, пути, многоугольники и измерения. Они "
+            "хранятся в общем файле профиля QGIS и видны в любом "
+            "проекте. Меню по правой кнопке - перелёт, переименование, "
+            "удаление, слои меток в проекте."))
+        self.places_group.setFlags(self.places_group.flags() | CHECKABLE
+                                   | TRISTATE)
+        self.places_group.setExpanded(True)
+        self.geo.setContextMenuPolicy(
+            enum(Qt, "ContextMenuPolicy", "CustomContextMenu"))
+        self.geo.customContextMenuRequested.connect(self._geo_menu)
         # Последнее сообщённое окну состояние панели «Слои».
         self._relief = False
         self._groups = set()
@@ -243,8 +261,46 @@ class LayerPanel(QWidget):
         self._groups = set(groups)
 
     def _geo_changed(self, item):
-        if item.data(0, LAYER_ROLE):
+        key = item.data(0, PLACE_ROLE)
+        if key:
+            self.place_toggled.emit(key, item.checkState(0) == CHECKED)
+        elif item.data(0, LAYER_ROLE):
             self._geo_timer.start(0)
+
+    def set_places(self, places):
+        """Строки «Моих меток»: myplaces.Place. Сигналы при этом не идут."""
+        self.geo.blockSignals(True)
+        group = self.places_group
+        group.takeChildren()
+        for place in places:
+            item = QTreeWidgetItem(group, [place.shape.name
+                                           or tr("Без названия")])
+            item.setData(0, PLACE_ROLE, place.key)
+            if place.measure:
+                item.setToolTip(0, place.measure)
+            item.setFlags(item.flags() | CHECKABLE)
+            item.setCheckState(0, CHECKED if place.visible else UNCHECKED)
+        group.setExpanded(True)
+        self.geo.blockSignals(False)
+
+    def _geo_menu(self, point):
+        item = self.geo.itemAt(point)
+        if item is None:
+            return
+        menu = QMenu(self)
+        key = item.data(0, PLACE_ROLE)
+        if key:
+            for action, text in (("fly", tr("Подлететь")),
+                                 ("rename", tr("Переименовать…")),
+                                 ("remove", tr("Удалить"))):
+                menu.addAction(text).triggered.connect(
+                    lambda _=False, a=action: self.place_action.emit(a, key))
+        elif item is self.places_group:
+            menu.addAction(tr("Добавить слои меток в проект")).triggered \
+                .connect(lambda: self.place_action.emit("project", ""))
+        else:
+            return
+        menu.exec(self.geo.viewport().mapToGlobal(point))
 
     def _emit_geo(self):
         groups = {key for key, item in self.geo_items.items()

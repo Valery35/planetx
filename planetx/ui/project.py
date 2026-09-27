@@ -10,11 +10,12 @@
 Перерисовку слой просит при правке данных и стиля.
 """
 from qgis.core import QgsProject
-from qgis.PyQt.QtCore import QObject, pyqtSignal
+from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 
 ENTRY = "PlanetX"  # запись проекта с настройками глобуса
 AUTO_REFRESH = "auto_refresh"  # обновлять глобус без кнопки
 SHOWN = "layers"  # номера слоёв, отмеченных в списке глобуса
+FOLLOW = "follow_legend"  # видимость на глобусе как в легенде QGIS
 
 
 def map_layers(project=None):
@@ -22,6 +23,21 @@ def map_layers(project=None):
     project = project or QgsProject.instance()
     return [layer for layer in project.layerTreeRoot().layerOrder()
             if layer.isValid()]
+
+
+def visible_on_map(layer, project=None):
+    """Включён ли слой в дереве слоёв QGIS."""
+    project = project or QgsProject.instance()
+    node = project.layerTreeRoot().findLayer(layer.id())
+    return node is not None and node.isVisible()
+
+
+def set_visible_on_map(layer_id, on, project=None):
+    """Включить или выключить слой в дереве слоёв QGIS."""
+    project = project or QgsProject.instance()
+    node = project.layerTreeRoot().findLayer(layer_id)
+    if node is not None:
+        node.setItemVisibilityChecked(bool(on))
 
 
 def read_flag(name, default, project=None):
@@ -59,12 +75,25 @@ class ProjectWatch(QObject):
     reloaded = pyqtSignal()
     # Слой переименован: список нужно перерисовать, глобус - нет.
     renamed = pyqtSignal()
+    # Выделение в векторном слое сменилось, номер слоя.
+    selected = pyqtSignal(str)
+    # Видимость в дереве слоёв QGIS сменилась.
+    legend = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         project = QgsProject.instance()
         root = project.layerTreeRoot()
         self._wired = set()
+        # Запросы перерисовки и смены выделения за один проход цикла
+        # событий. Перерисовка слоя, у которого в том же проходе сменилось
+        # выделение, - от выделения, а не от правки данных или стиля.
+        # QGIS шлёт её и до, и после сигнала выделения.
+        self._repainted = set()
+        self._selecting = set()
+        self._pass = QTimer(self)
+        self._pass.setSingleShot(True)
+        self._pass.timeout.connect(self._end_pass)
         project.layersAdded.connect(self._added)
         project.layersRemoved.connect(self._changed)
         project.readProject.connect(self._reloaded)
@@ -72,6 +101,7 @@ class ProjectWatch(QObject):
         root.layerOrderChanged.connect(self._changed)
         root.customLayerOrderChanged.connect(self._changed)
         root.hasCustomLayerOrderChanged.connect(self._changed)
+        root.visibilityChanged.connect(lambda *args: self.legend.emit())
         self._wire(project.mapLayers().values())
 
     def _wire(self, layers):
@@ -79,8 +109,29 @@ class ProjectWatch(QObject):
             if layer.id() in self._wired:
                 continue
             self._wired.add(layer.id())
-            layer.repaintRequested.connect(self._changed)
+            layer_id = layer.id()
+            layer.repaintRequested.connect(
+                lambda *args, lid=layer_id: self._repaint(lid))
             layer.nameChanged.connect(self.renamed)
+            if hasattr(layer, "selectionChanged"):
+                layer.selectionChanged.connect(
+                    lambda *args, lid=layer_id: self._selection(lid))
+
+    def _selection(self, layer_id):
+        self._selecting.add(layer_id)
+        self._pass.start(0)
+        self.selected.emit(layer_id)
+
+    def _repaint(self, layer_id):
+        self._repainted.add(layer_id)
+        self._pass.start(0)
+
+    def _end_pass(self):
+        changed = self._repainted - self._selecting
+        self._repainted = set()
+        self._selecting = set()
+        if changed:
+            self.changed.emit()
 
     def _added(self, layers):
         self._wire(layers)

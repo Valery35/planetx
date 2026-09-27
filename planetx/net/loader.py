@@ -23,6 +23,7 @@
 """
 import base64
 import time
+from collections import OrderedDict
 
 import numpy as np
 from qgis.core import QgsApplication, QgsNetworkAccessManager
@@ -32,6 +33,8 @@ from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
 from ..core import basemap
+from ..core.placeholder import (MAX_FILL_DEPTH, ancestor, crop_window,
+                                is_placeholder)
 from ..core.tile_queue import TileQueue
 from ..meta import plugin_version
 from ..qt_compat import enum, enum_int
@@ -48,6 +51,11 @@ CACHE_CONTROL = enum(QNetworkRequest, "Attribute",
                      "CacheLoadControlAttribute")
 PREFER_CACHE = enum(QNetworkRequest, "CacheLoadControl", "PreferCache")
 NO_ERROR = enum(QNetworkReply, "NetworkError", "NoError")
+HTTP_STATUS = enum(QNetworkRequest, "Attribute", "HttpStatusCodeAttribute")
+# Ответ раскодирования для заглушки вместо снимка, см. core/placeholder.
+MISSING = "missing"
+RECENT_TILES = 256  # байтов тайлов в памяти для вырезки, штук
+FILL_PRIORITY = 1.0e9  # предок для вырезки нужнее прочих тайлов
 
 
 USER_AGENT = "PlanetX/{} (+https://github.com/Valery35/planetx)".format(
@@ -95,12 +103,14 @@ def image_to_rgba(image):
     return rows[:, :w * 4].reshape(h, w, 4).copy()
 
 
-def decode_png(data, size=None):
+def decode_png(data, size=None, crop=None):
     """Байты PNG или JPEG в массив RGBA или None, если картинка
     не читается.
 
     size - сторона тайла в пикселях. Картинка другого размера, например
     тайл 512 для экранов с высокой плотностью, пересчитывается.
+    crop - окно (x0, y0, сторона) в картинке стороной size. Окно
+    вырезается и увеличивается со сглаживанием до size.
     Вызывается в рабочем потоке. QImage в рабочем потоке допустим,
     в отличие от QPixmap.
     """
@@ -110,6 +120,12 @@ def decode_png(data, size=None):
     if size and (image.width() != size or image.height() != size):
         image = image.scaled(
             size, size, enum(Qt, "AspectRatioMode", "IgnoreAspectRatio"),
+            enum(Qt, "TransformationMode", "SmoothTransformation"))
+    if crop is not None:
+        x0, y0, side = crop
+        full = size or image.width()
+        image = image.copy(x0, y0, side, side).scaled(
+            full, full, enum(Qt, "AspectRatioMode", "IgnoreAspectRatio"),
             enum(Qt, "TransformationMode", "SmoothTransformation"))
     return image_to_rgba(image)
 
@@ -128,7 +144,8 @@ class _DecodeTask(QRunnable):
     в рабочем потоке роняет QGIS, см. AGENTS.md.
     """
 
-    def __init__(self, key, data, sink, prepare, size, decode=None):
+    def __init__(self, key, data, sink, prepare, size, decode=None,
+                 fill=False, crop=None):
         super().__init__()
         self.key = key
         self.data = data
@@ -136,6 +153,8 @@ class _DecodeTask(QRunnable):
         self.prepare = prepare
         self.size = size
         self.decode = decode
+        self.fill = fill  # узнавать заглушку вместо снимка
+        self.crop = crop  # окно в картинке предка
 
     def run(self):
         with np.errstate(all="ignore"):
@@ -144,8 +163,10 @@ class _DecodeTask(QRunnable):
                 # Не картинка: ответ разбирает decode(key, байты).
                 rgba = self.decode(self.key, self.data)
             else:
-                rgba = decode_png(self.data, self.size)
-                if rgba is not None and self.prepare is not None:
+                rgba = decode_png(self.data, self.size, self.crop)
+                if self.fill and self.crop is None and is_placeholder(rgba):
+                    rgba = MISSING
+                elif rgba is not None and self.prepare is not None:
                     extra = self.prepare(self.key, rgba)
         self.sink.done.emit(self.key, rgba, extra)
 
@@ -162,6 +183,11 @@ class TileLoader(QObject):
     decode(key, байты) заменяет раскодирование PNG, например для
     векторных тайлов. Тогда loaded несёт её результат вместо массива.
     None из decode - ошибка разбора.
+
+    fill=True - снимок вместо заглушки. Тайл-заглушка или ответ 404
+    заменяется вырезкой из ближайшего предка с настоящим снимком,
+    см. core/placeholder.py. Байты последних RECENT_TILES тайлов
+    хранятся для вырезки, недостающего предка загрузчик просит сам.
     """
 
     loaded = pyqtSignal(object, object, object)
@@ -170,12 +196,17 @@ class TileLoader(QObject):
     idle = pyqtSignal()
 
     def __init__(self, source=None, parent=None, prepare=None, size=None,
-                 decode=None):
+                 decode=None, fill=False):
         super().__init__(parent)
         self.source = source or basemap.osm()
         self.prepare = prepare
         self.size = size
         self.decode = decode
+        self.fill = fill
+        self.recent = OrderedDict()  # ключ -> байты настоящего снимка
+        self.missing = set()  # тайлы без снимка
+        self.orphans = {}  # предок -> тайлы, ждущие вырезки из него
+        self.filled = 0  # тайлов, заменённых вырезкой из предка
         self.queue = TileQueue(max_active=self.source.parallel)
         self.replies = {}
         self.pool = QThreadPool(self)
@@ -211,7 +242,17 @@ class TileLoader(QObject):
         self._later()
 
     def retain(self, keys):
-        """Снять ожидающие и активные запросы вне набора keys."""
+        """Снять ожидающие и активные запросы вне набора keys.
+
+        Предок, из которого ждёт вырезки нужный тайл, остаётся.
+        """
+        keys = set(keys)
+        for parent in list(self.orphans):
+            self.orphans[parent] &= keys
+            if self.orphans[parent]:
+                keys.add(parent)
+            else:
+                del self.orphans[parent]
         for key in self.queue.retain(keys):
             reply = self.replies.pop(key, None)
             if reply is not None:
@@ -285,26 +326,84 @@ class TileLoader(QObject):
         self.last_user_agent = bytes(
             reply.request().rawHeader(b"User-Agent")).decode()
         if reply.error() != NO_ERROR:
-            self.queue.done(key, ok=False, now=time.monotonic())
-            self.failed.emit(key, reply.errorString())
+            if self.fill and reply.attribute(HTTP_STATUS) == 404:
+                # Тайла нет на сервере: как заглушка, снимок из предка.
+                self.queue.done(key, ok=True)
+                self._missing(key)
+            else:
+                self.queue.done(key, ok=False, now=time.monotonic())
+                self.failed.emit(key, reply.errorString())
         else:
             self.queue.done(key, ok=True)
             self.from_cache[key] = bool(reply.attribute(FROM_CACHE))
             self.decoding[key] = True
-            self.pool.start(_DecodeTask(key, bytes(reply.readAll()),
-                                        self.sink, self.prepare, self.size,
-                                        self.decode))
+            data = bytes(reply.readAll())
+            if self.fill:
+                self.recent[key] = data
+                self.recent.move_to_end(key)
+                while len(self.recent) > RECENT_TILES:
+                    self.recent.popitem(last=False)
+            self.pool.start(_DecodeTask(key, data, self.sink, self.prepare,
+                                        self.size, self.decode,
+                                        fill=self.fill))
         reply.deleteLater()
         self._pump()
         self._check_idle()
 
     def _decoded(self, key, rgba, extra):
         self.decoding.pop(key, None)
-        if rgba is None:
+        if isinstance(rgba, str) and rgba == MISSING:
+            self._missing(key)
+        elif rgba is None:
             self.failed.emit(key, "PNG" if self.decode is None else "MVT")
         else:
             self.loaded.emit(key, rgba, extra)
+            for child in self.orphans.pop(key, ()):
+                self._crop(child, key)
         self._check_idle()
+
+    # Снимок вместо заглушки.
+
+    def _missing(self, key):
+        """Снимка у тайла нет. Он и ждущие его тайлы ищут предка выше."""
+        self.recent.pop(key, None)
+        self.missing.add(key)
+        for child in self.orphans.pop(key, set()) | {key}:
+            self._fill(child)
+
+    def _fill(self, key):
+        """Вырезка для key из ближайшего предка с настоящим снимком.
+
+        Предок из памяти режется сразу, иначе он просится с высшим
+        приоритетом, и key ждёт его в orphans.
+        """
+        for depth in range(1, MAX_FILL_DEPTH + 1):
+            parent = ancestor(key, depth)
+            if parent[0] < 0:
+                break
+            if parent in self.missing:
+                continue
+            if parent in self.recent:
+                self._crop(key, parent)
+            else:
+                self.orphans.setdefault(parent, set()).add(key)
+                self.queue.want(parent, FILL_PRIORITY, now=time.monotonic())
+                self._later()
+            return
+        self.failed.emit(key, "no imagery")
+
+    def _crop(self, key, parent):
+        """Вырезать и увеличить окно key из картинки предка parent."""
+        data = self.recent.get(parent)
+        if data is None:
+            self._fill(key)
+            return
+        self.recent.move_to_end(parent)
+        crop = crop_window(key, key[0] - parent[0], self.size or 256)
+        self.decoding[key] = True
+        self.filled += 1
+        self.pool.start(_DecodeTask(key, data, self.sink, self.prepare,
+                                    self.size, crop=crop))
 
     def _check_idle(self):
         if not self.busy():

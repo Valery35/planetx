@@ -23,12 +23,13 @@ from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
 from ..core.camera import Camera
 from ..core.ellipsoid import A, B
 from ..core.navigation import Navigator, Pose, altitude, nearest_terrain
-from ..core.places import PlaceStore, kinds_at
+from ..core.places import Place, PlaceStore, kinds_at
 from ..core.terrain import FLAT_LEVEL, HeightStore
 from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
                            tile_mesh)
 from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
+from .features import Features
 from .labels import Labels
 from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SHELL, SKY_FRAGMENT,
                       TILE_FRAGMENT, TILE_VERTEX)
@@ -259,6 +260,10 @@ class GlobeView(QOpenGLWidget):
         # Список пунктов с меткой помнится вместе со списком без неё:
         # таблица надписей узнаёт прежний список по тождеству.
         self.search_mark = None
+        # Свои объекты: линии и многоугольники рисует Features, точки -
+        # надписи класса «mark».
+        self.features = Features()
+        self._feature_marks = ([], None)
         self._marked = (None, None, [])
         self._context = None
 
@@ -272,6 +277,20 @@ class GlobeView(QOpenGLWidget):
         """
         self.pending[key] = (rgba, mesh, level)
         self.update()
+
+    def set_shapes(self, shapes):
+        """Свои объекты глобуса, core.features.Shape."""
+        self.features.set_shapes(shapes)
+        self.update()
+
+    def _own_marks(self):
+        """Точечные объекты как надписи класса «mark»."""
+        shapes = self.features.shapes
+        if self._feature_marks[1] is not shapes:
+            self._feature_marks = ([
+                Place(-2 - i, name or "", "mark", 1, lat, lon)
+                for i, name, lat, lon in self.features.marks()], shapes)
+        return self._feature_marks[0]
 
     def set_search_mark(self, mark):
         """Поставить временную метку найденного места или снять, None."""
@@ -548,6 +567,7 @@ class GlobeView(QOpenGLWidget):
         # glGenQueries(1) в PyOpenGL отдаёт массив, а не число.
         self.hole_query = int(np.ravel(GL.glGenQueries(1))[0])
         self.labels.init_gl()
+        self.features.init_gl()
         self._context = ctx
         ctx.aboutToBeDestroyed.connect(self.release_gl)
 
@@ -557,6 +577,7 @@ class GlobeView(QOpenGLWidget):
             return
         self.makeCurrent()
         self.labels.release_gl()
+        self.features.release_gl()
         self.build_pool.clear()
         self.build_pool.waitForDone(2000)
         for mesh in (list(self.meshes.values()) + self.caps
@@ -933,7 +954,12 @@ class GlobeView(QOpenGLWidget):
             self.hole_counts.append((self.frame, gaps, holes))
         if air:
             self._draw_sky()
-        if (self.label_kinds or self.search_mark is not None) \
+        if self.features.shapes and not self.show_holes:
+            self.features.draw(
+                self.camera, self.store.height_at if self.store.scale
+                else None, self.store.version, self.devicePixelRatioF())
+        if (self.label_kinds or self.search_mark is not None
+                or self.features.shapes) \
                 and not self.show_holes:
             self._draw_labels(sel)
         else:
@@ -1047,9 +1073,11 @@ class GlobeView(QOpenGLWidget):
         kinds = kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
-        if mark is not None:
-            if self._marked[0] is not places or self._marked[1] is not mark:
-                self._marked = (places, mark, [mark] + places)
+        own = self._own_marks()
+        if mark is not None or own:
+            head = ([mark] if mark is not None else []) + own
+            if self._marked[0] is not places or self._marked[1] != head:
+                self._marked = (places, head, head + places)
             places = self._marked[2]
         height_at = self.store.height_at if self.store.scale else None
         self.labels.draw(self.camera, self.camera.projection(), places,

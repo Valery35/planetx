@@ -48,7 +48,7 @@ class PropertiesDialog(QDialog):
     """Окно свойств. Сигналы несут новые значения.
 
     sources - подложки из core/basemap.py. state - словарь с ключами
-    basemap, relief, scale, language, sync, auto.
+    basemap, relief, scale, language, sync, follow, new_shown, auto.
     """
 
     auto_changed = pyqtSignal(bool)
@@ -56,6 +56,8 @@ class PropertiesDialog(QDialog):
     scale_changed = pyqtSignal(float)
     language_chosen = pyqtSignal(str)
     sync_chosen = pyqtSignal(str)
+    follow_changed = pyqtSignal(bool)
+    new_shown_changed = pyqtSignal(bool)
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -119,8 +121,24 @@ class PropertiesDialog(QDialog):
             "координат."))
         self.sync.currentIndexChanged.connect(
             lambda index: self.sync_chosen.emit(self.directions[index][0]))
+        self.follow = QCheckBox(tr("Слои как на карте QGIS"), self)
+        self.follow.setToolTip(tr(
+            "С флажком глобус показывает слои проекта, включённые "
+            "в дереве слоёв QGIS, и отметка в списке глобуса включает "
+            "слой и на карте. Без флажка отметки глобуса свои и карту "
+            "не меняют. Флажок хранится в проекте."))
+        self.follow.toggled.connect(self.follow_changed)
+        self.new_shown = QCheckBox(tr("Новые слои сразу на глобус"), self)
+        self.new_shown.setToolTip(tr(
+            "С флажком слой, добавленный в проект, например результат "
+            "обработки, сразу отмечается на глобусе. Без флажка его "
+            "отмечают в списке глобуса."))
+        self.new_shown.toggled.connect(self.new_shown_changed)
         canvas = QGroupBox(tr("Карта QGIS"), self)
-        QFormLayout(canvas).addRow(tr("Синхронизация"), self.sync)
+        canvas_form = QFormLayout(canvas)
+        canvas_form.addRow(tr("Синхронизация"), self.sync)
+        canvas_form.addRow(self.follow)
+        canvas_form.addRow(self.new_shown)
 
         self.auto = QCheckBox(tr("Обновлять автоматически"), self)
         self.auto.setToolTip(tr(
@@ -149,7 +167,7 @@ class PropertiesDialog(QDialog):
     def set_state(self, state):
         """Показать состояние окна. Сигналы при этом не идут."""
         widgets = [self.basemap, self.scale, self.language, self.sync,
-                   self.auto]
+                   self.follow, self.new_shown, self.auto]
         for widget in widgets:
             widget.blockSignals(True)
         self.basemap.setCurrentIndex(state["basemap"])
@@ -163,5 +181,7 @@ class PropertiesDialog(QDialog):
         # Масштаб выключенного рельефа ни на что не влияет.
         self.scale.setEnabled(state["relief"])
         self.auto.setChecked(state["auto"])
+        self.follow.setChecked(state["follow"])
+        self.new_shown.setChecked(state["new_shown"])
         for widget in widgets:
             widget.blockSignals(False)

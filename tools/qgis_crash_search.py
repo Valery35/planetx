@@ -113,7 +113,29 @@ def step():
     QTimer.singleShot(STEP, step)
 
 
-if SCENARIO == "fetch":
+def exit_only():
+    """Вариант exit: проект, глобус по PLANETX_GLOBE, выход."""
+    project = os.environ.get("PLANETX_PROJECT")
+    if project:
+        mark("path %r exists %s" % (project, os.path.exists(project)))
+        from qgis.core import QgsProject
+        mark("project %s" % QgsProject.instance().read(project))
+    if os.environ.get("PLANETX_GLOBE", "1") == "1":
+        open_globe()
+    mark("waiting")
+
+    def leave():
+        if os.environ.get("PLANETX_UNLOAD", "1") == "1" and "plugin" in state:
+            state["plugin"].unload()
+            mark("unloaded")
+        mark("exit")
+        QgsApplication.instance().exit(0)
+    QTimer.singleShot(10000, leave)
+
+
+if SCENARIO == "exit":
+    QTimer.singleShot(3000, exit_only)
+elif SCENARIO == "fetch":
     QTimer.singleShot(3000, step)
 else:
     QTimer.singleShot(3000, open_globe)
