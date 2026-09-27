@@ -17,6 +17,16 @@ QGIS. Запросы идут через сетевые настройки и д
 | OpenStreetMap | карта, подложка на выбор | [ODbL и правила использования тайлов](https://www.openstreetmap.org/copyright) | © OpenStreetMap contributors |
 | OpenFreeMap | границы, реки, дороги, названия пунктов | [бесплатно, в том числе коммерчески, с подписью](https://openfreemap.org/) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors |
 | Mapzen Terrain Tiles | высоты рельефа | [условия по источникам высот](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) | Terrain: Mapzen, SRTM, GMTED, ETOPO1 and others |
+| Nominatim | поиск места по названию | [правила использования Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | © OpenStreetMap contributors, в окне «О модуле» |
+
+## Nominatim - поиск места
+
+Поле «Поиск» отправляет название места в Nominatim, геокодер
+OpenStreetMap. Правила сервиса соблюдаются в коде. Запрос уходит только
+по Enter или кнопке «Поиск», подсказок по мере ввода нет. Запросы идут
+не чаще одного в секунду. Заголовок `User-Agent` называет PlanetX
+и адрес хранилища. Ответы запоминаются до закрытия окна, повторный поиск
+того же слова в сеть не ходит. Координаты в поле разбираются без сети.
 
 ## Esri World Imagery - пример подложки
 

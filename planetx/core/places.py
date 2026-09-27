@@ -32,8 +32,9 @@ LEVEL_OFFSET = 2
 # Классы пунктов по порядку важности. Внутри класса важнее меньший rank.
 # Столица страны идёт перед другими городами. Кроме населённых пунктов
 # подписываются воды, заповедники, вершины, аэропорты и номера дорог.
-CLASSES = ("country", "capital", "city", "state", "water", "town", "park",
-           "peak", "airport", "road_ref", "village")
+# Класс «search» - временная метка найденного места, она важнее всех.
+CLASSES = ("search", "country", "capital", "city", "state", "water", "town",
+           "park", "peak", "airport", "road_ref", "village")
 KIND = {name: index for index, name in enumerate(CLASSES)}
 PLACE_CLASSES = {"country", "capital", "city", "state", "town", "village"}
 

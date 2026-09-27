@@ -35,6 +35,7 @@ CHECKED = enum(Qt, "CheckState", "Checked")
 UNCHECKED = enum(Qt, "CheckState", "Unchecked")
 TRISTATE = enum(Qt, "ItemFlag", "ItemIsAutoTristate")
 RELIEF = "relief"  # строка рельефа в панели «Слои»
+FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 
 
 def geo_tree():
@@ -106,6 +107,9 @@ def layer_kind(layer):
 class LayerPanel(QWidget):
 
     fly_text = pyqtSignal(str)
+    # Номер строки в списке найденных мест.
+    place_chosen = pyqtSignal(int)
+    search_cleared = pyqtSignal()
     properties_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
@@ -116,18 +120,31 @@ class LayerPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.place = QLineEdit(self)
-        self.place.setPlaceholderText(tr("Широта, долгота"))
+        self.place.setPlaceholderText(tr("Поиск"))
+        self.place.setClearButtonEnabled(True)
         self.place.setToolTip(tr(
-            "Координаты в градусах, например 58.0105, 56.2294.\n"
-            "Enter запускает перелёт. Перелёт прерывается мышью."))
+            "Название места или координаты в градусах, например Пермь "
+            "или 58.0105, 56.2294. Enter запускает поиск или перелёт. "
+            "Несколько найденных мест показываются списком ниже, "
+            "перелёт начинается щелчком по строке. Перелёт прерывается "
+            "мышью."))
         self.place.returnPressed.connect(
             lambda: self.fly_text.emit(self.place.text()))
-        go = QPushButton(tr("Лететь"), self)
+        self.place.textChanged.connect(self._search_text)
+        go = QPushButton(tr("Поиск"), self)
         go.clicked.connect(lambda: self.fly_text.emit(self.place.text()))
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.addWidget(self.place, 1)
         top.addWidget(go, 0)
+        # Найденные места. Список виден, пока в нём есть строки.
+        self.found = QListWidget(self)
+        self.found.setVisible(False)
+        self.found.setMaximumHeight(FOUND_HEIGHT)
+        self.found.itemClicked.connect(
+            lambda item: self.place_chosen.emit(self.found.row(item)))
+        self.found.itemActivated.connect(
+            lambda item: self.place_chosen.emit(self.found.row(item)))
 
         self.list = QListWidget(self)
         self.list.setContextMenuPolicy(
@@ -191,9 +208,24 @@ class LayerPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.addLayout(top)
+        layout.addWidget(self.found)
         layout.addWidget(split, 1)
         layout.addWidget(self.status, 0)
         self.set_layers([], set())
+
+    def _search_text(self, text):
+        """Пустое поле поиска закрывает список и снимает метку."""
+        if not text.strip():
+            self.set_found([])
+            self.search_cleared.emit()
+
+    def set_found(self, texts):
+        """Строки найденных мест. Пустой список прячет его."""
+        self.found.clear()
+        self.found.addItems(list(texts))
+        self.found.setVisible(bool(texts))
+        if texts:
+            self.found.setCurrentRow(0)
 
     def set_geo(self, groups, relief):
         """Флажки панели «Слои». Сигналы при этом не идут."""

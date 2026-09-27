@@ -21,11 +21,14 @@ from qgis.PyQt.QtWidgets import QLabel, QSplitter, QVBoxLayout, QWidget
 
 from ..core import basemap
 from ..core.flight import Flight, fit_view, parse_latlon
+from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
+                            place_text, search_url)
 from ..core.mipmap import mip_chain
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.tiling import tile_mesh
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
+from ..core.places import Place as MarkPlace  # метка найденного места
 from ..i18n import tr, ui_language
 from ..net.loader import TERRARIUM_URL, TileLoader
 from ..net.overlay import (LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
@@ -64,6 +67,11 @@ MESSAGE_TIME = 5.0  # секунд, сколько видно сообщение
 # Расстояние в конце перелёта - текущее, но не больше этого, метров.
 # Из космоса перелёт кончается на 2 км, от улицы к улице идёт на месте.
 FLIGHT_DISTANCE = 2000.0
+# Ближе этого к найденному месту камера не подлетает, метров. У вершины
+# охват - точка, и камера вставала в 300 м от неё.
+SEARCH_MIN_DISTANCE = 3000.0
+# Охват страны вроде России дал бы камеру за Луной.
+SEARCH_MAX_DISTANCE = 1.2e7
 # Пауза после последней правки слоя до перерисовки наложения, мс.
 REFRESH_DELAY = 300
 PANEL_WIDTH = 300  # ширина левой панели при открытии, пикселей
@@ -224,6 +232,18 @@ class GlobeWindow(QWidget):
         self.refresh_timer.timeout.connect(self.refresh)
 
         self.panel.fly_text.connect(self.fly)
+        self.panel.place_chosen.connect(self.fly_place)
+        self.panel.search_cleared.connect(self.clear_search)
+        # Поиск по названию: ответы по ключу (запрос, язык), запрос
+        # в работе, время последнего запроса, найденные места.
+        self._searched = {}
+        self._search_key = None
+        self._search_reply = None
+        self._search_at = -SEARCH_INTERVAL
+        self._found = []
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.timeout.connect(self._send_search)
         self.panel.properties_requested.connect(self._show_properties)
         self.panel.layer_toggled.connect(self.set_layer_shown)
         self.panel.geo_changed.connect(self.set_line_groups)
@@ -631,16 +651,102 @@ class GlobeWindow(QWidget):
     # Перелёты.
 
     def fly(self, text=None):
-        """Перелёт к координатам из поля ввода."""
+        """Поиск из поля ввода: координаты - перелёт, иначе Nominatim."""
         text = self.place.text() if text is None else text
         target = parse_latlon(text)
-        if target is None:
-            self.message = (tr("Не удалось прочитать координаты: {text}",
-                               text=text), time.monotonic())
+        if target is not None:
+            self.panel.set_found([])
+            self._found = []
+            self._mark(normalize(text), *target)
+            distance = min(self.view.navigator.pose.distance,
+                           FLIGHT_DISTANCE)
+            self._fly_to(target[0], target[1], distance)
+            return
+        query = normalize(text)
+        if query:
+            self._search(query)
+
+    # Поиск места по названию. Правила Nominatim: запрос только по Enter,
+    # не чаще раза в SEARCH_INTERVAL, ответы запоминаются до закрытия
+    # окна, заголовок PlanetX ставит обработчик запросов загрузчика.
+
+    def _search_language(self):
+        languages = label_languages(self._language)
+        return languages[0] if languages else None
+
+    def _search(self, query):
+        key = (query, self._search_language())
+        if key in self._searched:
+            self._show_found(key, self._searched[key])
+            return
+        self._search_key = key
+        self.message = (tr("Поиск: {text}", text=query), time.monotonic())
+        self._show_state()
+        wait = SEARCH_INTERVAL - (time.monotonic() - self._search_at)
+        self._search_timer.start(max(0, int(wait * 1000)))
+
+    def _send_search(self):
+        if self._search_reply is not None:
+            # Прежний запрос ещё идёт, новый ждёт его.
+            self._search_timer.start(int(SEARCH_INTERVAL * 1000))
+            return
+        key = self._search_key
+        self._search_at = time.monotonic()
+        self._search_reply = fetch_json(
+            search_url(*key),
+            lambda data, error: self._search_done(key, data, error))
+
+    def _search_done(self, key, data, error):
+        self._search_reply = None
+        if data is None:
+            self.message = (tr("Поиск не удался: {error}", error=error),
+                            time.monotonic())
             self._show_state()
             return
-        distance = min(self.view.navigator.pose.distance, FLIGHT_DISTANCE)
-        self._fly_to(target[0], target[1], distance)
+        places = parse_places(data)
+        self._searched[key] = places
+        if key == self._search_key:
+            self._show_found(key, places)
+
+    def _show_found(self, key, places):
+        """Перелёт к первому найденному месту, остальные - списком."""
+        self._found = places
+        self.panel.set_found([place_text(p) for p in places]
+                             if len(places) > 1 else [])
+        if not places:
+            self.message = (tr("Ничего не найдено: {text}", text=key[0]),
+                            time.monotonic())
+            self._show_state()
+            return
+        self.message = ("", 0.0)
+        self._show_state()
+        self._fly_place(places[0])
+
+    def fly_place(self, index):
+        """Перелёт к месту из списка найденных."""
+        if 0 <= index < len(self._found):
+            self._fly_place(self._found[index])
+
+    def clear_search(self):
+        """Поле поиска очищено: списка и метки больше нет."""
+        self._found = []
+        self._search_key = None
+        self.view.set_search_mark(None)
+
+    def _mark(self, name, lat, lon):
+        """Временная метка на месте, как у Google Earth. Одна на окно."""
+        self.view.set_search_mark(MarkPlace(-1, name, "search", 0, lat, lon))
+
+    def _fly_place(self, place):
+        """Метка и камера над местом, охват места целиком в кадре."""
+        self._mark(place.name, place.lat, place.lon)
+        distance = SEARCH_MIN_DISTANCE
+        if place.box is not None:
+            camera = self.view.camera
+            distance = min(max(fit_view(*place.box, camera.fov_y,
+                                        camera.aspect)[2],
+                               SEARCH_MIN_DISTANCE), SEARCH_MAX_DISTANCE)
+        self._fly_to(place.lat, place.lon, distance)
 
     def fly_to_layer(self, layer):
         """Перелёт к охвату слоя, камера смотрит отвесно."""

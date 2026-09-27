@@ -116,9 +116,10 @@ RU = {
     "c3.h": "Поворот и наклон",
     "c3.p": "Средняя кнопка или левая с Shift поворачивают и наклоняют "
             "вид, у горизонта видно небо.",
-    "c4.h": "Перелёт",
-    "c4.p": "Координаты в градусах и Enter. Камера поднимается "
-            "и плавно садится по пути van Wijk и Nuij.",
+    "c4.h": "Поиск",
+    "c4.p": "Название места или координаты и Enter. Камера "
+            "перелетает по пути van Wijk и Nuij, место отмечено "
+            "красной меткой.",
     "c5.h": "Обновление",
     "c5.p": "Новая подложка и слои проекта видны после кнопки "
             "«Обновить». Можно включить автоматическое обновление.",
@@ -235,9 +236,10 @@ EN = {
     "c3.h": "Turn and tilt",
     "c3.p": "The middle button or Shift with the left button turns and "
             "tilts the view, the sky shows at the horizon.",
-    "c4.h": "Fly to",
-    "c4.p": "Coordinates in degrees and Enter. The camera rises and "
-            "lands smoothly along the van Wijk and Nuij path.",
+    "c4.h": "Search",
+    "c4.p": "A place name or coordinates and Enter. The camera flies "
+            "along the van Wijk and Nuij path, the place gets a red "
+            "pin.",
     "c5.h": "Refresh",
     "c5.p": "A new base map and project layers appear after the Refresh "
             "button. Automatic refresh can be switched on.",

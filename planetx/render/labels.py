@@ -81,9 +81,12 @@ FADE_HIGH = 0.35
 
 # Вид надписи по классу: кегль в логических пикселях, жирный, курсив,
 # цвет с прозрачностью, размер значка и значок. Значок - точка «dot»,
-# треугольник вершины «peak», квадрат аэропорта «square» или табличка
-# номера дороги «shield». Без значка надпись стоит серединой на пункте.
+# треугольник вершины «peak», квадрат аэропорта «square», табличка
+# номера дороги «shield» или метка найденного места «pin». Без значка
+# надпись стоит серединой на пункте.
 STYLES = {
+    "search": (13, False, False, QColor(255, 255, 255, 250), 5.0,
+               "pin"),
     "country": (14, False, False, QColor(255, 244, 214, 235), 0.0, None),
     "capital": (13, False, False, QColor(255, 255, 255, 240), 3.0, "dot"),
     "city": (13, False, False, QColor(255, 255, 255, 235), 2.5, "dot"),
@@ -102,6 +105,7 @@ STYLES = {
 # остальные тёмные.
 SHIELD_E = QColor(30, 125, 70, 235)
 SHIELD = QColor(55, 58, 66, 235)
+PIN = QColor(219, 50, 54, 255)  # метка найденного места
 # Крупный город - город или столица с рангом OpenMapTiles не больше
 # BIG_RANK. Его надпись на BIG_STEP пикселей крупнее и полужирная,
 # иначе Пермь терялась среди окрестных деревень. Жирный шрифт
@@ -200,6 +204,11 @@ class _Style:
             painter.drawPolygon(QPolygonF([
                 QPointF(cx, cy - r), QPointF(cx + r, cy + r * 0.8),
                 QPointF(cx - r, cy + r * 0.8)]))
+        elif self.marker == "pin":
+            # Метка найденного места: красный круг с белым кольцом.
+            painter.setPen(QPen(QColor(255, 255, 255, 240), r * 0.45))
+            painter.setBrush(QBrush(PIN))
+            painter.drawEllipse(QRectF(cx - r, cy - r, 2.0 * r, 2.0 * r))
         elif self.marker == "square":
             painter.drawRect(QRectF(cx - r * 0.8, cy - r * 0.8,
                                     1.6 * r, 1.6 * r))

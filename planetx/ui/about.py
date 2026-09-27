@@ -26,6 +26,7 @@ OSM = "https://www.openstreetmap.org/copyright"
 TERRAIN = ("https://github.com/tilezen/joerd/blob/master/docs/"
            "attribution.md")
 OPENFREEMAP = "https://openfreemap.org/"
+NOMINATIM_POLICY = "https://operations.osmfoundation.org/policies/nominatim/"
 ESRI_TERMS = "https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
@@ -48,9 +49,10 @@ def about_html():
         tr("Колесо приближает к точке под курсором."),
         tr("Средняя кнопка или левая с Shift поворачивают и наклоняют "
            "вид."),
-        tr("Координаты в поле над списком слева запускают перелёт."),
+        tr("Поле «Поиск» слева вверху находит место по названию или "
+           "координатам и запускает перелёт."),
         tr("Двойной щелчок по строке «Глобус» открывает свойства вида. "
-           "В них выбираются подложка, векторная основа и рельеф."),
+           "В них выбираются подложка, масштаб рельефа и язык подписей."),
     ))
     sources = _items((
         _link(OSM, tr("Подложка OpenStreetMap: © участники "
@@ -63,6 +65,8 @@ def about_html():
         _link(ESRI_TERMS, tr("Космоснимки Esri World Imagery - пример "
                              "подложки, условия использования задаёт "
                              "Esri.")),
+        _link(NOMINATIM_POLICY, tr("Поиск мест: Nominatim, © участники "
+                                   "OpenStreetMap.")),
         html.escape(tr("Свои подложки берутся из подключений XYZ Tiles "
                        "в QGIS, их условия задаёт владелец.")),
         _link(SOURCES, tr("Источники данных и условия их использования")),

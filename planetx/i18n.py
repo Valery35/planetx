@@ -21,12 +21,18 @@ EN = {
     "Для глобуса нужен модуль Python {name}. В этой сборке QGIS его нет.":
         "The globe needs the Python module {name}. This QGIS build "
         "does not have it.",
-    "Широта, долгота": "Latitude, longitude",
-    "Координаты в градусах, например 58.0105, 56.2294.\n"
-    "Enter запускает перелёт. Перелёт прерывается мышью.":
-        "Coordinates in degrees, for example 58.0105, 56.2294.\n"
-        "Enter starts the flight. The mouse interrupts it.",
-    "Лететь": "Fly",
+    "Поиск": "Search",
+    "Название места или координаты в градусах, например Пермь или "
+    "58.0105, 56.2294. Enter запускает поиск или перелёт. Несколько "
+    "найденных мест показываются списком ниже, перелёт начинается "
+    "щелчком по строке. Перелёт прерывается мышью.":
+        "A place name or coordinates in degrees, for example Perm or "
+        "58.0105, 56.2294. Enter starts the search or the flight. Several "
+        "places found are listed below, a click on a row starts the "
+        "flight. The mouse interrupts the flight.",
+    "Поиск: {text}": "Searching: {text}",
+    "Поиск не удался: {error}": "Search failed: {error}",
+    "Ничего не найдено: {text}": "Nothing found: {text}",
     "О модуле": "About",
     "Глобус": "Globe",
     "Свойства вида: двойной щелчок": "View properties: double click",
@@ -76,13 +82,17 @@ EN = {
         "rebuilds the surface within a few seconds.",
     "Векторная основа не загрузилась: {error}":
         "Vector base failed to load: {error}",
-    "Координаты в поле над списком слева запускают перелёт.":
-        "Coordinates in the field above the list on the left start "
-        "a flight.",
+    "Поле «Поиск» слева вверху находит место по названию или "
+    "координатам и запускает перелёт.":
+        "The Search field at the top left finds a place by name or "
+        "coordinates and starts a flight.",
     "Двойной щелчок по строке «Глобус» открывает свойства вида. В них "
-    "выбираются подложка, векторная основа и рельеф.":
+    "выбираются подложка, масштаб рельефа и язык подписей.":
         "A double click on the Globe row opens the view properties. "
-        "There you choose the base map, the vector base and the terrain.",
+        "There you choose the base map, the terrain exaggeration and the "
+        "label language.",
+    "Поиск мест: Nominatim, © участники OpenStreetMap.":
+        "Place search: Nominatim, © OpenStreetMap contributors.",
     "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
     "OpenStreetMap.":
         "Vector base: OpenFreeMap, © OpenMapTiles, © OpenStreetMap "
@@ -136,8 +146,6 @@ EN = {
         "browser, except terrain connections. A new connection appears "
         "here the next time the window opens.",
     "{name} - пример": "{name} - example",
-    "Не удалось прочитать координаты: {text}":
-        "Could not read coordinates: {text}",
     "{value} м": "{value} m",
     "{value} км": "{value} km",
     "Контекст OpenGL 3.3 недоступен: {version}":
@@ -298,7 +306,11 @@ def is_russian():
     return ui_language() == "ru"
 
 
-def tr(text, **values):
-    """Перевод строки и подстановка значений в фигурные скобки."""
+def tr(text, /, **values):
+    """Перевод строки и подстановка значений в фигурные скобки.
+
+    Строка только позиционная, иначе подстановка {text} падала
+    с TypeError, 27 сентября 2026 года.
+    """
     out = text if is_russian() else EN.get(text, text)
     return out.format(**values) if values else out

@@ -6,7 +6,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.3.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.3.1.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -47,10 +47,13 @@ and atmosphere, from space down to single streets.
   and the point stays in place.
 - **Turn and tilt.** The middle button or Shift with the left button turns
   and tilts the view.
-- **Fly to.** Type coordinates in degrees in the field at the top left,
-  for example `58.0105, 56.2294`. The camera flies there along the van
-  Wijk and Nuij path. Over long distances it rises and then lands
-  smoothly.
+- **Search.** Type a place name in the Search field at the top left,
+  for example `Perm`, or coordinates in degrees, for example
+  `58.0105, 56.2294`. The camera flies there along the van Wijk and Nuij
+  path. Over long distances it rises and then lands smoothly. The place
+  found is marked with a red pin. If several places are found, the
+  others are listed below the field. Clearing the field removes the pin
+  and closes the list.
 - **Refresh.** A new base map, terrain exaggeration and project layers
   appear after the Refresh button in the corner of the view. Automatic
   refresh is switched on in the view properties.

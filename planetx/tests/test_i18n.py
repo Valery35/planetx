@@ -68,6 +68,12 @@ class TestSwitch(unittest.TestCase):
         i18n.set_language("en")
         self.assertEqual(i18n.tr("{value} км", value="12"), "12 km")
 
+    def test_text_placeholder(self):
+        # Подстановка с именем первого параметра tr падала TypeError.
+        i18n.set_language("ru")
+        self.assertEqual(i18n.tr("Поиск: {text}", text="Пермь"),
+                         "Поиск: Пермь")
+
 
 if __name__ == "__main__":
     unittest.main()

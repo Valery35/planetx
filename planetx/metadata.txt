@@ -2,8 +2,8 @@
 name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
-description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, grab-the-Earth navigation with inertia and fly-to coordinates
-version=0.3.0
+description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, grab-the-Earth navigation with inertia and place search
+version=0.3.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -23,7 +23,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Drag the Earth with the left mouse button, it keeps rotating by
       inertia after release. The wheel zooms to the point under the cursor,
       the middle button or Shift with the left button turns and tilts
-      the view. Type coordinates in degrees and the camera flies there
+      the view. Type a place name or coordinates in the Search field and the
+      camera flies there, the place found gets a red pin. The flight goes
       along the van Wijk and Nuij path.
       Requires OpenGL 3.3 and PyOpenGL, which ships with QGIS on Windows.
       Tested on QGIS 3.36 (Qt 5) and 4.0 (Qt 6).
@@ -40,7 +41,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.3.0 Esri World Imagery by default. Project layers on the
+changelog=0.3.1 Place search by name as in Google Earth, with a red pin
+      on the place found and a list of other matches. Search runs through
+      Nominatim.
+      0.3.0 Esri World Imagery by default. Project layers on the
       globe in the QGIS map order. Layers panel as in Google Earth with
       borders, place and water names, roads and road numbers, railways,
       airports, rivers, lakes, peaks and protected areas. Labels in the

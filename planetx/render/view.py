@@ -247,6 +247,11 @@ class GlobeView(QOpenGLWidget):
         self._places_wanted = frozenset()
         self._places_at = 0.0
         self.labels = Labels()
+        # Временная метка найденного места, Place класса «search» или None.
+        # Список пунктов с меткой помнится вместе со списком без неё:
+        # таблица надписей узнаёт прежний список по тождеству.
+        self.search_mark = None
+        self._marked = (None, None, [])
         self._context = None
 
     # Данные
@@ -258,6 +263,11 @@ class GlobeView(QOpenGLWidget):
         высот.
         """
         self.pending[key] = (rgba, mesh, level)
+        self.update()
+
+    def set_search_mark(self, mark):
+        """Поставить временную метку найденного места или снять, None."""
+        self.search_mark = mark
         self.update()
 
     def reset_places(self, max_level):
@@ -902,7 +912,8 @@ class GlobeView(QOpenGLWidget):
             self.hole_counts.append((self.frame, gaps, holes))
         if air:
             self._draw_sky()
-        if self.label_kinds and not self.show_holes:
+        if (self.label_kinds or self.search_mark is not None) \
+                and not self.show_holes:
             self._draw_labels(sel)
         else:
             self.labels.count = 0
@@ -1014,6 +1025,11 @@ class GlobeView(QOpenGLWidget):
                 self._places_at = now
         kinds = kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
+        mark = self.search_mark
+        if mark is not None:
+            if self._marked[0] is not places or self._marked[1] is not mark:
+                self._marked = (places, mark, [mark] + places)
+            places = self._marked[2]
         height_at = self.store.height_at if self.store.scale else None
         self.labels.draw(self.camera, self.camera.projection(), places,
                          height_at, self.store.version,
