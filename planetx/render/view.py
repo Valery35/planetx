@@ -79,6 +79,13 @@ SHOT_OVERLAY_UPLOADS = 8
 SHOT_SETTLE = 3
 PREVIEW_COLOR = (0.18, 0.18, 0.18)  # поля вокруг снимка в окне
 PUMP_PERIOD = 250  # мс, страховочный запуск загрузчиков без кадров
+# Загрузка считается вставшей, если вид ждёт тайлы, а столько секунд
+# ничего не приходило. Три такие остановки 28 сентября 2026 года
+# пользователь видел только как размытую картинку.
+STALL_SHOW = 5.0
+# Вершин своих объектов в видеокарте, больше - строка состояния
+# предупреждает. 29 провинций Афганистана - 22 тысячи.
+OBJECT_BUDGET = 200000
 
 LEFT = enum(Qt, "MouseButton", "LeftButton")
 MIDDLE = enum(Qt, "MouseButton", "MiddleButton")
@@ -194,6 +201,8 @@ class GlobeView(QOpenGLWidget):
     shot_progress = pyqtSignal(int)
     # Снимок готов: QImage или None при ошибке, всё ли загрузилось.
     shot_done = pyqtSignal(object, bool)
+    # Сменилось состояние загрузки: сколько ждёт, стоит ли загрузка.
+    load_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -304,6 +313,12 @@ class GlobeView(QOpenGLWidget):
         self._marked = (None, None, [])
         self._context = None
         self._overlay_missing = 0
+        # Состояние загрузки для строки состояния: сколько тайлов,
+        # картинок и надписей ждёт кадр, секунд без поступлений, когда
+        # что-то ждёт, и время последнего поступления.
+        self.load_missing = 0
+        self.load_stalled = 0.0
+        self.last_arrival = time.monotonic()
         # Сообщить загрузчикам, движется ли камера: функция с флагом
         # или None. Ставит окно.
         self.on_motion = None
@@ -321,7 +336,7 @@ class GlobeView(QOpenGLWidget):
         # вид ждёт тайлы, а загрузчик пуст, и подгоняет загрузчики.
         self._pump_timer = QTimer(self)
         self._pump_timer.setInterval(PUMP_PERIOD)
-        self._pump_timer.timeout.connect(self._pump_loaders)
+        self._pump_timer.timeout.connect(self._heartbeat)
         self._pump_timer.start()
 
     def _pump_loaders(self):
@@ -329,10 +344,37 @@ class GlobeView(QOpenGLWidget):
                        self.overlay):
             if loader is not None:
                 loader.pump_if_due()
+
+    def _heartbeat(self):
+        """Таймер вида: подгонка загрузчиков, кадр, если вид ждёт тайлы
+        при пустом загрузчике, и состояние загрузки. Подсчёт ждущего
+        стоит миллисекунды, после каждого кадра он отнимал у поворота
+        до трети кадров."""
+        self._pump_loaders()
         sel = self.selection
         if sel is not None and sel.want and self.loader is not None \
                 and not self.loader.busy() and self.shot is None:
             self.update()
+        self._check_load(sel)
+
+    def _check_load(self, sel):
+        """Сколько ждёт кадр и стоит ли загрузка, для строки состояния."""
+        if sel is None or self.shot is not None:
+            return
+        missing = self._missing(sel)
+        # Надписи ждут ответов проверок видимости, а не данных, вставшей
+        # считается только загрузка данных.
+        data = missing - (1 if self.labels.pending else 0)
+        idle = time.monotonic() - self.last_arrival
+        stalled = idle if data > 0 and idle > STALL_SHOW else 0.0
+        state = (missing, int(stalled))
+        if state != (self.load_missing, int(self.load_stalled)):
+            self.load_missing, self.load_stalled = missing, stalled
+            self.load_changed.emit()
+
+    def object_vertices(self):
+        """Вершин своих объектов в видеокарте."""
+        return self.features.vertex_count()
 
     # Данные
 
@@ -343,6 +385,7 @@ class GlobeView(QOpenGLWidget):
         высот.
         """
         self.pending[key] = (rgba, mesh, level)
+        self.last_arrival = time.monotonic()
         self.update()
 
     def set_tool_cursor(self, cross):
@@ -381,11 +424,13 @@ class GlobeView(QOpenGLWidget):
     def add_places(self, key, places):
         """Пришли пункты тайла векторной основы."""
         self.places.add(key, places)
+        self.last_arrival = time.monotonic()
         self.update()
 
     def add_heights(self, tile):
         """Пришёл тайл высот. Тайлы, которым он точнее, пересобираются."""
         self.store.add(tile)
+        self.last_arrival = time.monotonic()
         for key, level in list(self.mesh_levels.items()):
             self._maybe_rebuild(key, level)
         self.update()
@@ -456,6 +501,7 @@ class GlobeView(QOpenGLWidget):
         None - картинка пустая, линий на тайле нет.
         """
         self.overlay_stale.discard(key)
+        self.last_arrival = time.monotonic()
         if levels is None:
             self.overlay_empty.add(key)
             self.overlay_pending.pop(key, None)
@@ -1142,7 +1188,8 @@ class GlobeView(QOpenGLWidget):
                                   draws=self.draw_calls,
                                   cpu=time.thread_time() - cpu_started))
         self.changed.emit()
-        return self._missing(sel) if shot else 0
+        # Снимок ждёт и свои объекты: запись тура меняет треки к кадру.
+        return self._missing(sel) + int(bool(features_busy)) if shot else 0
 
     def _missing(self, sel):
         """Сколько тайлов, картинок и надписей кадр ещё ждёт."""

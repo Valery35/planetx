@@ -199,6 +199,8 @@ class TrackManager(QObject):
         self.moment = None  # секунды или None - треки целиком
         self._shapes = []
         self._last_step = None
+        # Момент держит запись тура, контроллер его не меняет.
+        self.held = False
         controller = iface.mapCanvas().temporalController() \
             if iface is not None else None
         self.controller = controller
@@ -273,6 +275,8 @@ class TrackManager(QObject):
 
     def _time_changed(self, *args):
         """Новый промежуток времени: сигнал контроллера даёт его сам."""
+        if self.held:
+            return
         span = args[0] if args else self._current_range()
         if self.controller is not None \
                 and enum_int(self.controller.navigationMode()) == 0:
@@ -281,6 +285,32 @@ class TrackManager(QObject):
         self._build()
         self._follow()
         self.changed.emit()
+
+    def data_span(self):
+        """Промежуток времени данных контроллера в секундах или None,
+        если контроллер выключен. По нему запись тура ведёт треки."""
+        controller = self.controller
+        if controller is None \
+                or enum_int(controller.navigationMode()) == 0:
+            return None
+        extents = controller.temporalExtents()
+        return seconds(extents.begin()), seconds(extents.end())
+
+    def set_moment(self, moment):
+        """Момент треков от шкалы записи тура, без камеры следом.
+
+        Камеру кадра ставит тур. Перелёт следом шёл бы по настенным
+        часам, и повтор записи дал бы другие позы.
+        """
+        self.held = True
+        self.moment = moment
+        self._build()
+        self.changed.emit()
+
+    def release(self):
+        """Конец записи: момент снова от контроллера."""
+        self.held = False
+        self._time_changed()
 
     def _build(self):
         shapes = []

@@ -36,6 +36,7 @@ class TourBar(QFrame):
     toggle = pyqtSignal()
     forward = pyqtSignal()
     close_clicked = pyqtSignal()
+    record = pyqtSignal()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -68,6 +69,15 @@ class TourBar(QFrame):
             "действует с перехода кнопками или с нового запуска тура."))
         layout.addWidget(QLabel(tr("Пауза"), self))
         layout.addWidget(self.pause)
+        self.rec = QToolButton(self)
+        self.rec.setText("⏺")
+        self.rec.setToolTip(tr(
+            "Записать тур кадрами PNG, 25 кадров в секунду тура, в размере "
+            "окна. Каждый кадр ждёт загрузки тайлов, поэтому запись идёт "
+            "дольше тура. Кадры с теми же номерами в папке заменяются."))
+        self.rec.setAutoRaise(True)
+        self.rec.clicked.connect(self.record)
+        layout.addWidget(self.rec)
         # Крестик справа, как у Google Earth, закрывает тур.
         close = QToolButton(self)
         close.setText("✕")
@@ -207,6 +217,19 @@ class TourPlayer(QObject):
             if self.t >= self.tour.arrivals[-1]:
                 self.t = self.tour.duration
         self._show()
+
+    def pause_for_record(self):
+        """Остановить показ перед записью, панель остаётся."""
+        if self.playing:
+            self.nav.stop()
+        self.playing = False
+
+    def show_recording(self, n, count):
+        """Панель во время записи: номер кадра."""
+        self.bar.info.setText(tr("Запись: кадр {n} из {count}", n=n,
+                                 count=count))
+        self.bar.adjustSize()
+        self.bar._place()
 
     def _show(self):
         stop = self.stops[self.index] if self.stops else None

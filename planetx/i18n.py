@@ -424,6 +424,21 @@ EN = {
     "Пауза": "Pause",
     "Следующая остановка": "Next stop",
     "Закончить тур": "End tour",
+    "Записать тур кадрами PNG, 25 кадров в секунду тура, в размере "
+    "окна. Каждый кадр ждёт загрузки тайлов, поэтому запись идёт "
+    "дольше тура. Кадры с теми же номерами в папке заменяются.":
+        "Record the tour as PNG frames, 25 frames per second of the tour, "
+        "at the window size. Each frame waits for tiles to load, so "
+        "recording takes longer than the tour. Frames with the same "
+        "numbers in the folder are replaced.",
+    "Запись: кадр {n} из {count}": "Recording: frame {n} of {count}",
+    "Папка для кадров тура": "Folder for tour frames",
+    "Запись тура прервана на кадре {n}.":
+        "Tour recording stopped at frame {n}.",
+    "Видеокарта не создала буфер размера окна.":
+        "The graphics card could not create a buffer of the window size.",
+    "Тур записан в {folder}. Кадров {count}, {fps} в секунду.":
+        "Tour recorded in {folder}. Frames {count}, {fps} per second.",
     "Продолжить": "Continue",
     "В туре нет остановок. Отметьте флажком метки в «Моих метках».":
         "The tour has no stops. Check places in My Places.",
@@ -498,6 +513,26 @@ EN = {
     "Убрать трек": "Remove track",
     "Слой больше не показывается треком.":
         "The layer is no longer shown as a track.",
+    # Состояние загрузки.
+    "загрузка стоит {seconds} с": "loading stalled for {seconds} s",
+    "загрузка {count}": "loading {count}",
+    "метки тяжёлые, {count} тыс. вершин":
+        "places are heavy, {count} thousand vertices",
+    # Сцена.
+    "Сцена - камера, время, слои на глобусе, настройки вида и выбранная "
+    "папка «Моих меток» с её туром. Сохраняется в файл и открывается "
+    "на другом компьютере.":
+        "A scene is the camera, time, layers on the globe, view settings "
+        "and the selected My Places folder with its tour. It saves to a "
+        "file and opens on another computer.",
+    "Сохранить сцену…": "Save Scene…",
+    "Открыть сцену…": "Open Scene…",
+    "Сохранить сцену": "Save Scene",
+    "Открыть сцену": "Open Scene",
+    "Сцена PlanetX (*{ext})": "PlanetX scene (*{ext})",
+    "Сцена сохранена: {path}": "Scene saved: {path}",
+    "Сцена открыта, слои не найдены: {names}":
+        "Scene opened, layers not found: {names}",
     # Меню слоя проекта.
     "Прозрачность": "Transparency",
     "{value} %": "{value} %",

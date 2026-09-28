@@ -1210,6 +1210,273 @@ def tracks_off():
     result["tracks"]["moment_kept_after_close"] = tracker.moment == before
     controller.setNavigationMode(_navigation_mode("Disabled"))
 
+
+@check(300)
+def load_status():
+    # Шаг 14: вставшая загрузка и тяжёлые метки видны в строке
+    # состояния, спокойный вид - без хвоста.
+    import time as _time
+    window = state["window"]
+    view = window.view
+    window.refresh()
+    view._heartbeat()
+    out = {"calm": window.status.text().split(chr(10))[0],
+           "missing": view.load_missing}
+    missing = view._missing
+    view._missing = lambda sel: 3
+    view.last_arrival = _time.monotonic() - 12.0
+    view._heartbeat()
+    out["stalled"] = window.status.text().split(chr(10))[0]
+    view._missing = missing
+    view.last_arrival = _time.monotonic()
+    view._heartbeat()
+    count = view.object_vertices
+    view.object_vertices = lambda: 250000
+    window._show_state()
+    out["heavy"] = window.status.text().split(chr(10))[0]
+    view.object_vertices = count
+    window._show_state()
+    result["load_status"] = out
+
+
+@check(7000)
+def stall_wait():
+    # Пауза дольше STALL_SHOW после idle_rewant.
+    return None
+
+
+@check(200)
+def stall_read():
+    window = state["window"]
+    result["stall_read"] = {"status": window.status.text().split(chr(10))[0],
+                            "stalled": window.view.load_stalled}
+
+
+SCENE_PATH = os.path.join(TEMP, "planetx_check.planetx")
+SCENE_EXPECT = os.path.join(TEMP, "planetx_scene_expect.json")
+
+
+@check(1500)
+def scene_save():
+    # Шаг 12, первый запуск: сцена в файл. Второй запуск - scene_open.
+    from qgis.core import (QgsDateTimeRange, QgsFeature, QgsGeometry,
+                           QgsInterval, QgsPointXY, QgsVectorFileWriter,
+                           QgsVectorLayer)
+    from qgis.PyQt.QtCore import QDateTime
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    gpkg = os.path.join(TEMP, "planetx_scene_layer.gpkg")
+    memory = QgsVectorLayer("Point?crs=EPSG:4326&field=name:string",
+                            "wells", "memory")
+    f = QgsFeature(memory.fields())
+    f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(56.25, 58.0)))
+    f["name"] = "w1"
+    memory.dataProvider().addFeatures([f])
+    options = QgsVectorFileWriter.SaveVectorOptions()
+    options.driverName = "GPKG"
+    options.layerName = "wells"
+    QgsVectorFileWriter.writeAsVectorFormatV3(
+        memory, gpkg, QgsProject.instance().transformContext(), options)
+    layer = QgsVectorLayer(gpkg + "|layername=wells", "Скважины сцены",
+                           "ogr")
+    QgsProject.instance().addMapLayer(layer)
+    window.set_layer_shown(layer.id(), True)
+    store = window.myplaces
+    folder = store.add_folder("Сцена теста")
+    store.add(Shape("point", [(58.01, 56.25)], name="Старт"),
+              view=(3000.0, 40.0, 50.0), folder=folder)
+    store.add(Shape("point", [(58.05, 56.35)], name="Финиш"),
+              folder=folder)
+    window.panel.select_place(folder)
+    controller = window.tracks.controller
+    base = QDateTime.fromString("2026-09-28T10:00:00", "yyyy-MM-ddTHH:mm:ss")
+    controller.setTemporalExtents(QgsDateTimeRange(base, base.addSecs(3600)))
+    controller.setFrameDuration(QgsInterval(300))
+    controller.setNavigationMode(_navigation_mode("Animated"))
+    controller.setCurrentFrameNumber(3)
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(58.02, 56.28, 15000.0, 25.0, 60.0))
+    ok = window.save_scene(SCENE_PATH)
+    expect = {"camera": [58.02, 56.28, 15000.0, 25.0, 60.0],
+              "frame": 3, "source": layer.source(),
+              "places": ["Старт", "Финиш"]}
+    with open(SCENE_EXPECT, "w", encoding="utf-8") as fh:
+        json.dump(expect, fh, ensure_ascii=False)
+    store.remove(folder)
+    result["scene_save"] = {"saved": ok,
+                            "size": os.path.getsize(SCENE_PATH)
+                            if os.path.exists(SCENE_PATH) else 0}
+
+
+@check(12000)
+def scene_open():
+    window = state["window"]
+    with open(SCENE_EXPECT, encoding="utf-8") as fh:
+        state["scene_expect"] = json.load(fh)
+    state["scene_key"] = window.open_scene(SCENE_PATH)
+
+
+@check(200)
+def scene_open_check():
+    window = state["window"]
+    expect = state["scene_expect"]
+    pose = window.view.navigator.pose
+    project = QgsProject.instance()
+    shown = [project.mapLayer(i) for i in window.shown_layers()]
+    key = state["scene_key"]
+    places = [p.name for p in window.myplaces.places_in(key)] if key \
+        else []
+    controller = window.tracks.controller
+    window._place_action("tour", key or "")
+    stops = [s.name for s in window.tour.stops]
+    window.tour.stop()
+    got = [round(pose.lat, 4), round(pose.lon, 4), round(pose.distance, 1),
+           round(pose.heading, 2), round(pose.tilt, 2)]
+    result["scene_open"] = {
+        "camera_same": got == [round(v, 4) if i < 2 else round(v, 1)
+                               if i == 2 else round(v, 2)
+                               for i, v in enumerate(expect["camera"])],
+        "camera": got,
+        "frame_same": controller.currentFrameNumber() == expect["frame"],
+        "layers": [l.source() for l in shown if l is not None],
+        "layer_same": any(l is not None and l.source() == expect["source"]
+                          for l in shown),
+        "places": places, "tour_stops": stops,
+        "status": window.status.text().split(chr(10))[0]}
+    if key:
+        window.myplaces.remove(key)
+
+
+@check(200)
+def scene_password():
+    # Пароль базы данных не уходит в файл сцены.
+    # Слой не создаётся: он пытался бы подключиться к серверу.
+    from planetx.ui.scene import clean_uri
+    uri = ("dbname='gis' host=db.example port=5432 user='geo' "
+           "password='s3cret' key='id' srid=4326 type=Point "
+           "table=\"public\".\"wells\" (geom)")
+    cleaned = clean_uri("postgres", uri)
+    result["scene_password"] = {"left": "s3cret" in cleaned,
+                                "user_kept": "geo" in cleaned,
+                                "file_same": clean_uri("ogr", "a.gpkg")
+                                == "a.gpkg"}
+
+
+RECORD_DIRS = [os.path.join(TEMP, "planetx_record_a"),
+               os.path.join(TEMP, "planetx_record_b")]
+RECORD_LIMIT = 600.0  # с на одну запись
+
+
+def _record(folder):
+    """Шаг 13: тур из двух остановок с растущим треком в папку."""
+    import shutil
+    import time as _time
+    from planetx.core.tour import Stop
+    window = state["window"]
+    if os.path.isdir(folder):
+        shutil.rmtree(folder)
+    os.makedirs(folder)
+    state["record_done"] = None
+    if "record_link" not in state:
+        state["record_link"] = window.recorder.done.connect(
+            lambda ok, text: state.__setitem__("record_done", (ok, text)))
+    window.tour.bar.pause.setValue(0.4)
+    window.tour.start([Stop("A", 58.00, 56.02, 9000.0, 10.0, 40.0),
+                       Stop("B", 58.03, 56.06, 7000.0, 40.0, 50.0)])
+    state["record_started"] = _time.monotonic()
+    state["record_began"] = window.record_tour(folder)
+
+
+@check(500)
+def record_setup():
+    from qgis.core import (QgsDateTimeRange, QgsFeature, QgsGeometry,
+                           QgsInterval, QgsPointXY, QgsVectorLayer)
+    from qgis.PyQt.QtCore import QDateTime
+    window = state["window"]
+    layer = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=t:datetime&field=obj:string",
+        "Трек записи", "memory")
+    base = QDateTime.fromString("2026-09-28T10:00:00", "yyyy-MM-ddTHH:mm:ss")
+    features = []
+    for i in range(7):
+        f = QgsFeature(layer.fields())
+        f.setGeometry(QgsGeometry.fromPointXY(
+            QgsPointXY(56.02 + 0.007 * i, 58.00 + 0.005 * i)))
+        f["t"] = base.addSecs(200 * i)
+        f["obj"] = "car"
+        features.append(f)
+    layer.dataProvider().addFeatures(features)
+    QgsProject.instance().addMapLayer(layer)
+    state["record_layer"] = layer
+    window.tracks.set_track(layer, {"time": "t", "object": "obj",
+                                    "color": [255, 80, 40, 255],
+                                    "follow": False})
+    controller = window.tracks.controller
+    controller.setTemporalExtents(QgsDateTimeRange(base, base.addSecs(1200)))
+    controller.setFrameDuration(QgsInterval(60))
+    controller.setNavigationMode(_navigation_mode("Animated"))
+    controller.setCurrentFrameNumber(0)
+    _record(RECORD_DIRS[0])
+
+
+def _record_wait(name):
+    import time as _time
+    window = state["window"]
+    spent = _time.monotonic() - state["record_started"]
+    if state["record_done"] is None and spent < RECORD_LIMIT:
+        return 1000
+    result.setdefault("record", {})[name] = {
+        "began": state["record_began"], "done": state["record_done"],
+        "seconds": round(spent, 1),
+        "status": window.status.text().split(chr(10))[0]}
+    return None
+
+
+@check(500)
+def record_wait_a():
+    return _record_wait("a")
+
+
+@check(500)
+def record_again():
+    _record(RECORD_DIRS[1])
+
+
+@check(500)
+def record_wait_b():
+    return _record_wait("b")
+
+
+@check(200)
+def record_check():
+    window = state["window"]
+    runs = []
+    for folder in RECORD_DIRS:
+        with open(os.path.join(folder, "frames.json"),
+                  encoding="utf-8") as fh:
+            data = json.load(fh)
+        pngs = sorted(n for n in os.listdir(folder) if n.endswith(".png"))
+        runs.append((data, pngs))
+    (a, pa), (b, pb) = runs
+    diff = max(max(abs(x - y) for x, y in zip(fa["pose"], fb["pose"]))
+               for fa, fb in zip(a["frames"], b["frames"]))
+    moments = [f["moment"] for f in a["frames"]]
+    out = result["record"]
+    out.update({
+        "fps": a["fps"], "count": [a["count"], b["count"]],
+        "png": [len(pa), len(pb)],
+        "size": [a["width"], a["height"]],
+        "incomplete": [len(a["incomplete"]), len(b["incomplete"])],
+        "pose_diff_max": diff,
+        "moments_same": moments == [f["moment"] for f in b["frames"]],
+        "moment_span_min": round((moments[-1] - moments[0]) / 60.0, 2),
+        "first_pose": [round(v, 4) for v in a["frames"][0]["pose"]],
+        "tracks_released": not window.tracks.held})
+    window.tracks.set_track(state["record_layer"], None)
+    window.tracks.controller.setNavigationMode(_navigation_mode("Disabled"))
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

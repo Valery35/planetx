@@ -35,6 +35,22 @@ calls = []
 frames = []
 state = {}
 
+FRAME_BUDGET = 55  # кадров в любом окне 1 с, критерий AGENTS.md
+
+
+def worst_second(frames):
+    """Наименьшее количество кадров в окне 1 с, окно от каждого кадра."""
+    worst = None
+    j = 0
+    for i, start in enumerate(frames):
+        while j < len(frames) and frames[j] < start + 1.0:
+            j += 1
+        if frames[-1] - start >= 1.0:
+            count = j - i
+            worst = count if worst is None else min(worst, count)
+    return worst
+
+
 
 def timed(owner, name, label):
     original = getattr(owner, name)
@@ -133,6 +149,9 @@ def finish():
         "p95_ms": round(1000 * intervals[int(len(intervals) * 0.95)], 1)
         if intervals else None,
         "gaps": sum(1 for x in intervals if x > GAP),
+        "worst_second": worst_second(ft),
+        "budget": "пройден" if (worst_second(ft) or 0) >= FRAME_BUDGET
+        else "нарушен",
         "calls": totals}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(result, fh, ensure_ascii=False, indent=1)

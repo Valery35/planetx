@@ -14,9 +14,10 @@ import os
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QSize, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QToolButton
+from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton
 
 from ..i18n import tr
+from ..qt_compat import enum
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 ICON_SIZE = QSize(20, 20)
@@ -37,6 +38,8 @@ class ViewToolbar(QFrame):
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal()
     snapshot_clicked = pyqtSignal()
+    scene_save_requested = pyqtSignal()
+    scene_open_requested = pyqtSignal()
     layout_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -83,6 +86,25 @@ class ViewToolbar(QFrame):
             QgsApplication.getThemeIcon("/mActionNewLayout.svg"),
             tr("Вид в макет QGIS неизменной картинкой, вставленной "
                "в проект."), self.layout_clicked)
+        # Сцена: вид целиком в файл и из файла.
+        scene = QToolButton(self)
+        scene.setIcon(QgsApplication.getThemeIcon("/mActionFileSave.svg"))
+        scene.setIconSize(ICON_SIZE)
+        scene.setAutoRaise(True)
+        scene.setToolTip(tr(
+            "Сцена - камера, время, слои на глобусе, настройки вида "
+            "и выбранная папка «Моих меток» с её туром. Сохраняется "
+            "в файл и открывается на другом компьютере."))
+        scene.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
+                                "InstantPopup"))
+        menu = QMenu(scene)
+        menu.addAction(tr("Сохранить сцену…")).triggered.connect(
+            self.scene_save_requested)
+        menu.addAction(tr("Открыть сцену…")).triggered.connect(
+            self.scene_open_requested)
+        scene.setMenu(menu)
+        self.layout().addWidget(scene)
+        self.scene = scene
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)
         self.adjustSize()

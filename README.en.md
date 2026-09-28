@@ -6,7 +6,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.5.2.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.6.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -88,8 +88,11 @@ and atmosphere, from space down to single streets.
 - **Tour.** Play tour in the menu of My Places or any of its folders
   flies over the checked places in the list order, along a path the
   camera travels the line. Places and folders are rearranged by
-  dragging. The bar at the bottom of the view pauses the tour and steps
-  between stops.
+  dragging. The bar at the bottom of the view pauses the tour, steps
+  between stops and records the tour as PNG frames for a video.
+- **Scenes.** The whole view - camera, time, layers, settings and a
+  places folder with its tour - saves to a file and opens on another
+  computer.
 - **Tracks.** A point layer with a time field shows as growing paths of
   its objects along the QGIS Temporal Controller. The camera can follow
   along the motion.

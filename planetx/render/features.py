@@ -138,6 +138,15 @@ class Features:
         self.locations = {}  # программа -> места переменных
         self.dirty = False
 
+    def vertex_count(self):
+        """Вершин собранных объектов, по контурам."""
+        total = 0
+        for _, geo, _, _ in self._built.values():
+            if geo is not None:
+                n = len(geo.ring)
+                total += 2 * n if len(geo.wall) or geo.stem else n
+        return total
+
     def set_shapes(self, shapes):
         """Новый набор объектов. Буферы пересоберутся в кадре."""
         self.shapes = list(shapes)

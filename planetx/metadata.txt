@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.5.2
+version=0.6.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -36,7 +36,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       file or into a QGIS layout. KML and KMZ open into My Places and a
       folder saves back to KML. Places rise above the ground and extend
       to it as walls and blocks. Point layers with a time field show as
-      growing tracks along the QGIS Temporal Controller.
+      growing tracks along the QGIS Temporal Controller. A scene saves
+      the whole view to a file, a tour records to PNG frames.
       Type a place name or coordinates in the Search field and the
       camera flies there, the place found gets a red pin. The flight goes
       along the van Wijk and Nuij path.
@@ -55,7 +56,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.5.2 Growing tracks: Track in the menu of a point layer shows
+changelog=0.6.0 Scenes: the whole view - camera, time, layers, settings
+      and a My Places folder with its tour - saves to a file and opens on
+      another computer. Database passwords stay out of the file. The
+      record button on the tour bar saves the tour as PNG frames for a
+      video, each frame waits for the tiles. The status line shows what
+      is still loading and when loading has stalled.
+      0.5.2 Growing tracks: Track in the menu of a point layer shows
       it as paths of its objects along the QGIS Temporal Controller, with
       the camera following along the motion if wanted. Labels no longer
       break drawing in QGIS 3.40 with an old PyOpenGL. No errors after the

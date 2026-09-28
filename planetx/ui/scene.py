@@ -1,0 +1,170 @@
+# -*- coding: utf-8 -*-
+# PlanetX - трёхмерный глобус для QGIS.
+# Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
+"""Сцена глобуса в файл и из файла (шаг 12).
+
+Снимок сцены берёт камеру, время временного контроллера, отмеченные
+на глобусе слои проекта, настройки вида и выбранную папку «Моих меток».
+Применение сцены ставит настройки, берёт слои из проекта или добавляет
+их по источнику, кладёт метки сцены в «Мои метки» новой папкой, ставит
+время и ведёт камеру в позу сцены.
+
+Пароль из источника слоя базы данных при сохранении вырезается, файл
+сцены передают другим людям. Ссылка authcfg на настройку подключения
+QGIS остаётся.
+"""
+from qgis.core import (QgsDataSourceUri, QgsDateTimeRange, QgsInterval,
+                       QgsProject, QgsRasterLayer, QgsVectorLayer)
+from qgis.PyQt.QtCore import QDateTime, Qt
+
+from ..core.kml import read_kml, write_kml
+from ..core.places import LABEL_LANGUAGES, LOCAL, AS_QGIS
+from ..core.scene import Scene
+from ..qt_compat import enum, enum_int
+
+# Поставщики, в источнике которых бывает пароль.
+DATABASES = ("postgres", "mssql", "oracle", "hana", "db2", "spatialite")
+
+
+def _iso(value):
+    return value.toString(enum(Qt, "DateFormat", "ISODate"))
+
+
+def _datetime(text):
+    return QDateTime.fromString(text or "", enum(Qt, "DateFormat",
+                                                 "ISODate"))
+
+
+def clean_uri(provider, source):
+    """Источник без пароля: у баз данных пароль вырезается."""
+    if provider in DATABASES:
+        uri = QgsDataSourceUri(source)
+        if uri.password():
+            uri.setPassword("")
+            source = uri.uri(False)
+    return source
+
+
+def clean_source(layer):
+    """Источник слоя без пароля."""
+    return clean_uri(layer.providerType(), layer.source())
+
+
+def capture(window, folder=None, name=""):
+    """Сцена с глобуса и текст KML её меток.
+
+    folder - ключ папки «Моих меток», метки и тур сцены, None - без
+    меток.
+    """
+    pose = window.view.navigator.pose
+    project = QgsProject.instance()
+    layers = []
+    for layer_id in sorted(window.shown_layers()):
+        layer = project.mapLayer(layer_id)
+        if layer is None:
+            continue
+        layers.append({"name": layer.name(),
+                       "provider": layer.providerType(),
+                       "source": clean_source(layer),
+                       "kind": "raster" if isinstance(layer, QgsRasterLayer)
+                       else "vector"})
+    time = None
+    controller = window.tracks.controller
+    if controller is not None:
+        extents = controller.temporalExtents()
+        time = {"mode": enum_int(controller.navigationMode()),
+                "start": _iso(extents.begin()), "end": _iso(extents.end()),
+                "frame": int(controller.currentFrameNumber()),
+                "step": float(controller.frameDuration().seconds())}
+    view = {"basemap": window.sources[window._basemap].name,
+            "relief": bool(window._relief), "scale": float(window._scale),
+            "groups": sorted(window._groups),
+            "language": window._language}
+    kml = ""
+    places = ""
+    if folder:
+        tree = window.myplaces.export_tree(folder)
+        places = tree.name
+        kml = write_kml(tree)
+    scene = Scene((pose.lat, pose.lon, pose.distance, pose.heading,
+                   pose.tilt), time, layers, view, places, name)
+    return scene, kml
+
+
+def _find_layer(entry):
+    for layer in QgsProject.instance().mapLayers().values():
+        if layer.providerType() == entry.get("provider") \
+                and clean_source(layer) == entry.get("source"):
+            return layer
+    return None
+
+
+def _add_layer(entry):
+    make = QgsRasterLayer if entry.get("kind") == "raster" \
+        else QgsVectorLayer
+    layer = make(entry["source"], entry.get("name") or "",
+                 entry.get("provider") or "ogr")
+    if not layer.isValid():
+        return None
+    QgsProject.instance().addMapLayer(layer)
+    return layer
+
+
+def _navigation_mode(number):
+    """Режим временного контроллера по номеру, QGIS 3 и 4."""
+    from qgis.core import Qgis, QgsTemporalNavigationObject
+    names = {0: ("Disabled", "NavigationOff"), 1: ("Animated", "Animated"),
+             2: ("FixedRange", "FixedRange"), 3: ("Movie", "Movie")}
+    new, old = names.get(int(number), names[0])
+    scoped = getattr(Qgis, "TemporalNavigationMode", None)
+    if scoped is not None and hasattr(scoped, new):
+        return getattr(scoped, new)
+    return getattr(QgsTemporalNavigationObject.NavigationMode, old)
+
+
+def apply(window, scene, kml=b""):
+    """Поставить сцену на глобус. Возвращает (ключ папки меток или None,
+    названия слоёв, которые не нашлись и не открылись)."""
+    view = scene.view
+    names = [source.name for source in window.sources]
+    if view.get("basemap") in names:
+        window.choose_basemap(names.index(view["basemap"]))
+    if "relief" in view:
+        window.set_relief(bool(view["relief"]))
+    if isinstance(view.get("scale"), (int, float)):
+        window.set_relief_scale(float(view["scale"]))
+    if isinstance(view.get("groups"), list):
+        window.set_line_groups(set(view["groups"]))
+    language = view.get("language")
+    if language in LABEL_LANGUAGES or language in (LOCAL, AS_QGIS):
+        window.set_label_language(language)
+    wanted, missing = set(), []
+    for entry in scene.layers:
+        layer = _find_layer(entry) or _add_layer(entry)
+        if layer is None:
+            missing.append(entry.get("name") or entry.get("source"))
+        else:
+            wanted.add(layer.id())
+    for layer in QgsProject.instance().mapLayers().values():
+        window.set_layer_shown(layer.id(), layer.id() in wanted)
+    key = None
+    if kml:
+        key = window.myplaces.import_tree(read_kml(kml, scene.places))
+    controller = window.tracks.controller
+    if scene.time and controller is not None:
+        start = _datetime(scene.time.get("start"))
+        end = _datetime(scene.time.get("end"))
+        if start.isValid() and end.isValid():
+            controller.setTemporalExtents(QgsDateTimeRange(start, end))
+        step = scene.time.get("step")
+        if isinstance(step, (int, float)) and step > 0:
+            controller.setFrameDuration(QgsInterval(float(step)))
+        controller.setNavigationMode(_navigation_mode(
+            scene.time.get("mode", 0)))
+        frame = scene.time.get("frame")
+        if isinstance(frame, int):
+            controller.setCurrentFrameNumber(frame)
+    window.refresh()
+    lat, lon, distance, heading, tilt = scene.camera
+    window._fly_to(lat, lon, distance, heading, tilt)
+    return key, missing

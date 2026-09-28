@@ -390,6 +390,16 @@ class Navigator:
         self.pose = pose
         pose.apply(self.camera)
 
+    def show(self, pose):
+        """Поставить позу кадра записи: на рельеф с зазором, как в
+        перелёте. Движение гасится."""
+        self.stop()
+        pose = pose.copy()
+        pose.terrain = self.pose.terrain
+        if pose.terrain is not None:
+            pose.h = pose.terrain(pose.lat, pose.lon)
+        self.set_pose(lifted(pose))
+
     def set_terrain(self, terrain):
         """Подключить рельеф: функцию высоты (lat, lon) или None."""
         pose = self.pose.copy()

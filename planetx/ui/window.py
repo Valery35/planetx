@@ -35,6 +35,7 @@ from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.kml import KmlError, read_file as read_kml_file, write_kml, \
     write_kmz
 from ..core.placetree import is_folder
+from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, Stop
 from ..core.tiling import tile_mesh
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
@@ -49,7 +50,7 @@ from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            OPENFREEMAP_TILEJSON, LayerOverlay, fetch_json,
                            openfreemap_layer, set_line_groups)
 from ..qt_compat import enum
-from ..render.view import GlobeView, start_keys
+from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import IdentifyDialog, identify, point_text
 from .draw import PlaceDialog
@@ -60,7 +61,9 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
                       visible_on_map, write_flag, write_shown)
 from .properties import SCALE_RANGE, PropertiesDialog
+from .record import TourRecorder
 from .placeprops import PlaceProperties
+from .scene import apply as apply_scene, capture as capture_scene
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
 from .track import TrackDialog, TrackManager
@@ -201,6 +204,7 @@ class GlobeWindow(QWidget):
 
         self.view = GlobeView(self)
         self.view.on_motion = set_moving
+        self.view.load_changed.connect(self._show_state)
         self.panel = LayerPanel(self)
         self.place = self.panel.place
         self.status = self.panel.status
@@ -326,8 +330,16 @@ class GlobeWindow(QWidget):
         self.tracks = TrackManager(self.view, self)
         self.tracks.changed.connect(self._refresh_shapes)
         self.panel.track_requested.connect(self._open_track)
+        self.toolbar.scene_save_requested.connect(self.save_scene)
+        self.toolbar.scene_open_requested.connect(self.open_scene)
         self.tour.message.connect(
             lambda text: setattr(self, "message", (text, time.monotonic())))
+        # Запись тура кадрами PNG по одной шкале с треками.
+        self.recorder = TourRecorder(self, self)
+        self.tour.bar.record.connect(self.record_tour)
+        self.tour.bar.close_clicked.connect(self.recorder.cancel)
+        self.recorder.progress.connect(self.tour.show_recording)
+        self.recorder.done.connect(self._recorded)
         # Синхронизация с окном карты QGIS и определение объектов.
         way = QgsSettings().value(SYNC_KEY, BOTH) or BOTH
         self.sync = MapSync(self, iface.mapCanvas())
@@ -953,6 +965,76 @@ class GlobeWindow(QWidget):
                 shapes.append(shape)
         self.view.set_shapes(shapes)
 
+    # Сцена.
+
+    def record_tour(self, folder=None):
+        """Записать показанный тур кадрами PNG в папку. Без folder -
+        выбор папки. Возвращает True, если запись началась."""
+        if self.recorder.active or not self.tour.stops:
+            return False
+        if folder is None:
+            folder = QFileDialog.getExistingDirectory(
+                self, tr("Папка для кадров тура"))
+            if not folder:
+                return False
+        self.tour.pause_for_record()
+        return self.recorder.start(self.tour.stops,
+                                   self.tour.bar.pause.value(), folder)
+
+    def _recorded(self, ok, text):
+        self.message = (text, time.monotonic())
+        self.tour._show()
+        self._show_state()
+
+    def save_scene(self, path=None):
+        """Сцена в файл. Метки и тур - выбранная папка «Моих меток»."""
+        folder = self.panel.current_folder()
+        if path is None:
+            name = self.myplaces.find(folder).name if folder else "PlanetX"
+            path, _ = QFileDialog.getSaveFileName(
+                self, tr("Сохранить сцену"), (name or "PlanetX") + EXTENSION,
+                tr("Сцена PlanetX (*{ext})", ext=EXTENSION))
+        if not path:
+            return False
+        name = os.path.splitext(os.path.basename(path))[0]
+        scene, kml = capture_scene(self, folder, name)
+        try:
+            with open(path, "wb") as fh:
+                fh.write(write_scene(scene, kml))
+        except OSError as error:
+            QMessageBox.warning(self, tr("Сохранить сцену"), tr(
+                "Файл не записан: {error}", error=str(error)))
+            return False
+        self.message = (tr("Сцена сохранена: {path}", path=path),
+                        time.monotonic())
+        self._show_state()
+        return True
+
+    def open_scene(self, path=None):
+        """Сцена из файла на глобус. Возвращает ключ папки её меток."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("Открыть сцену"), "",
+                tr("Сцена PlanetX (*{ext})", ext=EXTENSION))
+        if not path:
+            return None
+        try:
+            with open(path, "rb") as fh:
+                scene, kml = read_scene(fh.read())
+        except (OSError, SceneError) as error:
+            QMessageBox.warning(self, tr("Открыть сцену"), tr(
+                "Файл не прочитан: {error}", error=str(error)))
+            return None
+        key, missing = apply_scene(self, scene, kml)
+        if key is not None:
+            self.panel.select_place(key)
+        if missing:
+            self.message = (tr("Сцена открыта, слои не найдены: {names}",
+                               names=", ".join(missing)),
+                            time.monotonic())
+            self._show_state()
+        return key
+
     def _open_track(self, layer):
         """Окно «Трек» точечного слоя."""
         dialog = TrackDialog(layer, self.tracks.settings.get(layer.id()),
@@ -1327,9 +1409,33 @@ class GlobeWindow(QWidget):
         else:
             text = tr("Обзор с высоты {height}",
                       height=distance_text(self.view.altitude()))
+            text += self._load_text()
             if self._cursor_text:
                 text += "\n" + self._cursor_text
-        self.status.setText(text)
+            self.status.setText(text)
+            return
+        # Вставшая загрузка и тяжёлые метки видны и рядом с ошибкой или
+        # подсказкой «Обновить».
+        self.status.setText(text + self._load_text())
+
+    def _load_text(self):
+        """Хвост первой строки: загрузка, вставшая загрузка, объём меток.
+
+        Деградация видна, а не прячется в размытой картинке, решение
+        автора от 28 сентября 2026 года (шаг 14).
+        """
+        view = self.view
+        parts = []
+        if view.load_stalled:
+            parts.append(tr("загрузка стоит {seconds} с",
+                            seconds=int(view.load_stalled)))
+        elif view.load_missing:
+            parts.append(tr("загрузка {count}", count=view.load_missing))
+        vertices = view.object_vertices()
+        if vertices > OBJECT_BUDGET:
+            parts.append(tr("метки тяжёлые, {count} тыс. вершин",
+                            count=vertices // 1000))
+        return "".join(" · " + part for part in parts)
 
     # Координаты под курсором.
 
