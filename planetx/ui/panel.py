@@ -179,6 +179,8 @@ class LayerPanel(QWidget):
     # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
     opacity_changed = pyqtSignal(str, float)
     layer_properties = pyqtSignal(object)
+    # Трек точечного слоя: открыть окно настроек трека.
+    track_requested = pyqtSignal(object)
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
     relief_toggled = pyqtSignal(bool)
@@ -598,6 +600,11 @@ class LayerPanel(QWidget):
             menu.addAction(tr("Подлететь")).triggered.connect(
                 lambda _=False, layer=layer: self.fly_to_layer.emit(layer))
             menu.addAction(self._opacity_action(menu, layer))
+            if isinstance(layer, QgsVectorLayer) \
+                    and enum_int(layer.geometryType()) == 0:
+                menu.addAction(tr("Трек…")).triggered.connect(
+                    lambda _=False, layer=layer: self.track_requested.emit(
+                        layer))
             menu.addAction(tr("Свойства слоя…")).triggered.connect(
                 lambda _=False, layer=layer: self.layer_properties.emit(
                     layer))

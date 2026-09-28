@@ -63,6 +63,7 @@ from .properties import SCALE_RANGE, PropertiesDialog
 from .placeprops import PlaceProperties
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
+from .track import TrackDialog, TrackManager
 from .sync import MapSync
 from .toolbar import ViewToolbar
 
@@ -321,6 +322,10 @@ class GlobeWindow(QWidget):
         self.myplaces.load()
         # Тур по отмеченным «Моим меткам».
         self.tour = TourPlayer(self.view, self._tour_stops, self)
+        # Растущие треки точечных слоёв по времени контроллера QGIS.
+        self.tracks = TrackManager(self.view, self)
+        self.tracks.changed.connect(self._refresh_shapes)
+        self.panel.track_requested.connect(self._open_track)
         self.tour.message.connect(
             lambda text: setattr(self, "message", (text, time.monotonic())))
         # Синхронизация с окном карты QGIS и определение объектов.
@@ -702,6 +707,9 @@ class GlobeWindow(QWidget):
         По умолчанию его отмечают в списке.
         """
         layers = map_layers()
+        if self.tracks.settings:
+            # Точки трека могли измениться.
+            self.tracks.reload()
         added = [layer.id() for layer in layers
                  if layer.id() not in self._known]
         self._known = {layer.id() for layer in layers}
@@ -750,6 +758,7 @@ class GlobeWindow(QWidget):
         """Открыт другой проект: его настройки глобуса."""
         self.auto_refresh = read_flag(AUTO_REFRESH, False)
         self._read_shown()
+        self.tracks.load()
 
     def _mark_dirty(self, dirty):
         self.dirty = dirty
@@ -929,8 +938,11 @@ class GlobeWindow(QWidget):
         self._refresh_shapes()
 
     def _refresh_shapes(self):
-        """На глобусе видимые «Мои метки» и фигура открытой линейки."""
+        """На глобусе видимые «Мои метки», треки и фигура открытой
+        линейки."""
         shapes = self.myplaces.shapes()
+        if getattr(self, "tracks", None) is not None:
+            shapes += self.tracks.shapes()
         if self._ruler_open():
             shape = self.ruler.shape()
             if shape is not None:
@@ -940,6 +952,14 @@ class GlobeWindow(QWidget):
             if shape is not None:
                 shapes.append(shape)
         self.view.set_shapes(shapes)
+
+    def _open_track(self, layer):
+        """Окно «Трек» точечного слоя."""
+        dialog = TrackDialog(layer, self.tracks.settings.get(layer.id()),
+                             self)
+        if dialog.exec():
+            self.tracks.set_track(layer, None if dialog.removed
+                                  else dialog.settings())
 
     # Новая метка.
 
@@ -1344,6 +1364,7 @@ class GlobeWindow(QWidget):
 
     def closeEvent(self, event):
         self.sync.close()
+        self.tracks.close()
         if self.identified is not None:
             self.identified.close()
         if self.ruler_dialog is not None:

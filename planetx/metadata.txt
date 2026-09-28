@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.5.1
+version=0.5.2
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -35,7 +35,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       over My Places and along paths. A snapshot of the view goes to a
       file or into a QGIS layout. KML and KMZ open into My Places and a
       folder saves back to KML. Places rise above the ground and extend
-      to it as walls and blocks.
+      to it as walls and blocks. Point layers with a time field show as
+      growing tracks along the QGIS Temporal Controller.
       Type a place name or coordinates in the Search field and the
       camera flies there, the place found gets a red pin. The flight goes
       along the van Wijk and Nuij path.
@@ -54,7 +55,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.5.1 The base map no longer stops loading and stays blurred,
+changelog=0.5.2 Growing tracks: Track in the menu of a point layer shows
+      it as paths of its objects along the QGIS Temporal Controller, with
+      the camera following along the motion if wanted. Labels no longer
+      break drawing in QGIS 3.40 with an old PyOpenGL. No errors after the
+      globe is closed. A frame no longer stops on an OpenGL error left by
+      another plugin.
+      0.5.1 The base map no longer stops loading and stays blurred,
       the fault came in 0.5.0. The globe turns as smoothly with large
       places, such as the regions of a country from KML, as without them.
       Place properties as in Google Earth: name, description, colors,

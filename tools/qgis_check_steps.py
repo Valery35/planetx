@@ -1118,6 +1118,98 @@ def idle_rewant_check():
     out["frames_after"] = view.frame - out.pop("frame")
     result["idle_rewant"] = out
 
+
+def _navigation_mode(name):
+    """Режим временного контроллера: в QGIS 4 областное имя в Qgis."""
+    from qgis.core import Qgis, QgsTemporalNavigationObject
+    scoped = getattr(Qgis, "TemporalNavigationMode", None)
+    if scoped is not None and hasattr(scoped, name):
+        return getattr(scoped, name)
+    old = {"Animated": "Animated", "Disabled": "NavigationOff"}[name]
+    return getattr(QgsTemporalNavigationObject.NavigationMode, old)
+
+
+@check(1500)
+def tracks():
+    from qgis.core import (QgsDateTimeRange, QgsFeature, QgsGeometry,
+                           QgsInterval, QgsPointXY, QgsVectorLayer)
+    from qgis.PyQt.QtCore import QDateTime
+    window = state["window"]
+    layer = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=t:datetime&field=obj:string",
+        "Трек теста", "memory")
+    base = QDateTime.fromString("2026-09-28T10:00:00", "yyyy-MM-ddTHH:mm:ss")
+    rows = [("car", 0, 58.00, 56.00), ("car", 600, 58.05, 56.00),
+            ("car", 1200, 58.05, 56.10), ("elk", 300, 57.95, 56.20),
+            ("elk", 900, 57.95, 56.30)]
+    features = []
+    for obj, dt, lat, lon in rows:
+        f = QgsFeature(layer.fields())
+        f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
+        f["t"] = base.addSecs(dt)
+        f["obj"] = obj
+        features.append(f)
+    layer.dataProvider().addFeatures(features)
+    QgsProject.instance().addMapLayer(layer)
+    state["track_layer"] = layer
+    window.tracks.set_track(layer, {"time": "t", "object": "obj",
+                                    "color": [255, 80, 40, 255],
+                                    "follow": True})
+    controller = window.tracks.controller
+    controller.setTemporalExtents(QgsDateTimeRange(base, base.addSecs(1200)))
+    controller.setFrameDuration(QgsInterval(60))
+    controller.setNavigationMode(_navigation_mode("Animated"))
+    controller.setCurrentFrameNumber(4)  # 10:04-10:05
+    tracker = window.tracks
+    moment = tracker.moment
+    shapes = tracker.shapes()
+    flight = window.view.navigator.flight
+    from planetx.ui.track import seconds
+    out = {"moment_min": round((moment - seconds(base))
+                               / 60.0, 1) if moment is not None else None,
+           "shapes": sorted((s.kind, s.name, len(s.points))
+                            for s in shapes),
+           "glide": type(flight[1]).__name__ if flight else None,
+           "target": [round(flight[1].end.lat, 4), round(flight[1].end.lon,
+                                                         4),
+                      round(flight[1].end.heading, 1)] if flight else None,
+           "on_globe": sum(1 for s in window.view.features.shapes
+                           if s.name in ("car", "elk"))}
+    # Шаги анимации не должны перечитывать точки треков.
+    reloads = []
+    reload = tracker.reload
+    tracker.reload = lambda: reloads.append(1) or reload()
+    for _ in range(3):
+        controller.next()
+        QgsApplication.processEvents()
+    del tracker.reload
+    out["reloads_on_steps"] = len(reloads)
+    controller.setNavigationMode(_navigation_mode("Disabled"))
+    tracker._time_changed()
+    out["whole"] = sorted((s.kind, s.name, len(s.points))
+                          for s in tracker.shapes())
+    result["tracks"] = out
+
+
+@check(200)
+def tracks_off():
+    window = state["window"]
+    window.tracks.set_track(state["track_layer"], None)
+    result["tracks"]["after_remove"] = len(window.tracks.shapes())
+    # После close сигнал контроллера в менеджер треков не идёт: шаг
+    # времени не меняет его момент.
+    tracker = window.tracks
+    controller = tracker.controller
+    controller.setNavigationMode(_navigation_mode("Animated"))
+    controller.setCurrentFrameNumber(2)
+    QgsApplication.processEvents()
+    tracker.close()
+    before = tracker.moment
+    controller.setCurrentFrameNumber(7)
+    QgsApplication.processEvents()
+    result["tracks"]["moment_kept_after_close"] = tracker.moment == before
+    controller.setNavigationMode(_navigation_mode("Disabled"))
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

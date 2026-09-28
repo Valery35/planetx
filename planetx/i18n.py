@@ -475,6 +475,29 @@ EN = {
         "Fill color of the polygon, with its transparency. The wall down "
         "to the ground takes this color too.",
     "Заливка": "Fill",
+    # Треки.
+    "Трек…": "Track…",
+    "Трек: {name}": "Track: {name}",
+    "Поле с датой и временем точки. Годятся поля даты и времени, текст "
+    "в виде ISO 8601 и число секунд от 1970 года.":
+        "The field with the date and time of the point. Date and time "
+        "fields, ISO 8601 text and seconds since 1970 are accepted.",
+    "Время": "Time",
+    "Один объект": "One object",
+    "Поле, которое отличает объекты друг от друга, например номер машины. "
+    "У каждого объекта свой путь и своя метка.":
+        "The field that tells objects apart, for example a vehicle number. "
+        "Each object gets its own path and label.",
+    "Цвет пройденного пути.": "Color of the path travelled.",
+    "Камера следом": "Camera follows",
+    "Камера держит первый объект трека в центре, азимут - по ходу "
+    "движения. Расстояние и наклон меняются колесом и мышью.":
+        "The camera keeps the first object of the track in the center, "
+        "heading along the motion. Distance and tilt change with the wheel "
+        "and the mouse.",
+    "Убрать трек": "Remove track",
+    "Слой больше не показывается треком.":
+        "The layer is no longer shown as a track.",
     # Меню слоя проекта.
     "Прозрачность": "Transparency",
     "{value} %": "{value} %",
