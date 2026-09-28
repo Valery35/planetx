@@ -260,7 +260,11 @@ class Features:
         GL.glEnable(GL.GL_DEPTH_TEST)
         GL.glDepthMask(GL.GL_FALSE)
         GL.glEnable(GL.GL_BLEND)
-        GL.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        # Альфа кадра остаётся 1. С общим смешиванием полупрозрачная
+        # линия уменьшала её, окно Qt просвечивало чёрным, и белая
+        # сетка выходила тёмной, 29 сентября 2026 года.
+        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                               GL.GL_ZERO, GL.GL_ONE)
         try:
             self._draw_kinds(camera, projection, ratio)
         finally:

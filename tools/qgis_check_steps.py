@@ -15,6 +15,7 @@ import faulthandler
 import json
 import math
 import os
+import time
 import sys
 import traceback
 
@@ -1980,6 +1981,153 @@ def copy_paste():
     for f in [f for f in store.folders if f.name == "Копия исходник"]:
         store.remove(f.key)
     result["copy_paste"] = out
+
+
+@check(6000)
+def grid_space():
+    # Координатная сетка: из космоса шаг 30°, линии и подписи на глобусе.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(40.0, 60.0, 1.5e7, 0.0, 0.0))
+    window.set_extra("grid", True)
+    view.update()
+    result["grid"] = {
+        "space_lines": len(window.grid_shapes),
+        "space_labels": sorted(m.name for m in view.grid_marks)[:6],
+        "circles": [m.name for m in view.grid_marks
+                    if m.kind == "circle"]}
+
+
+@check(8000)
+def grid_near():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.grab().save(os.path.join(TEMP, "planetx_grid_space.png"))
+    view.navigator.set_pose(Pose(58.0105, 56.2294, 25000.0, 20.0, 45.0))
+    view.update()
+    QgsApplication.processEvents()
+    result["grid"]["near_lines"] = len(window.grid_shapes)
+    result["grid"]["near_labels"] = sorted(
+        m.name for m in view.grid_marks)[:6]
+
+
+@check(300)
+def grid_off():
+    window = state["window"]
+    window.grab().save(os.path.join(TEMP, "planetx_grid_near.png"))
+    window.set_extra("grid", False)
+    result["grid"]["off_lines"] = len(window.grid_shapes)
+    result["grid"]["off_on_globe"] = len(window.view.features.shapes)
+
+
+def _sky_points(view):
+    """Светлых пикселей в верхней пятой части кадра, где нет Земли."""
+    from planetx.net.loader import image_to_rgba
+    rgba = image_to_rgba(view.grabFramebuffer()).astype(int)
+    top = rgba[:rgba.shape[0] // 5, :, :3]
+    return int((top.max(axis=2) > 50).sum())
+
+
+@check(4000)
+def stars_on():
+    # Звёзды: из космоса вокруг Земли светлые точки, выключены - нет.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(20.0, 60.0, 3.0e7, 0.0, 0.0))
+    window.set_extra("stars", True)
+    view.update()
+
+
+@check(1500)
+def stars_off():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_stars.png"))
+    result["stars"] = {"drawn": view.stars.drawn,
+                       "sky_px_on": _sky_points(view)}
+    window.set_extra("stars", False)
+    view.update()
+
+
+@check(1500)
+def stars_low():
+    window = state["window"]
+    view = window.view
+    result["stars"]["drawn_off"] = view.stars.drawn
+    result["stars"]["sky_px_off"] = _sky_points(view)
+    from planetx.core.navigation import Pose
+    window.set_extra("stars", True)
+    view.navigator.set_pose(Pose(58.0, 56.2, 5000.0, 0.0, 80.0))
+    view.update()
+
+
+@check(300)
+def stars_low_check():
+    view = state["window"].view
+    result["stars"]["drawn_low"] = view.stars.drawn
+    result["stars"]["gl_errors"] = dict(view.gl_errors)
+
+
+@check(2000)
+def clouds_on():
+    # Облака NASA GIBS: картинки приходят, лежат на тайлах, подпись есть.
+    # В отдельном профиле ответы GIBS после первых 2 с встают, запросы
+    # висят без данных. В QGIS автора те же запросы идут ровно, 72 ответа
+    # за 14 с, 29 сентября 2026 года. Причина не найдена.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.set_extra("stars", False)
+    view.navigator.set_pose(Pose(50.0, 30.0, 8.0e6, 0.0, 0.0))
+    window.set_extra("clouds", True)
+    view.update()
+    # Моменты ответов от включения, с. У ответа из сети кэша нет.
+    loader = window.cloud_loader
+    started = time.monotonic()
+    state["cloud_times"] = []
+    own_finished = loader._finished
+
+    def finished(key, reply, own=own_finished):
+        own(key, reply)
+        state["cloud_times"].append(
+            (round(time.monotonic() - started, 1),
+             "cache" if loader.from_cache.get(key) else "net"))
+    loader._finished = finished
+
+
+@check(12000)
+def clouds_wait():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_clouds.png"))
+    result["clouds"] = {
+        "textures": len(view.clouds.textures),
+        "missing": view.clouds.missing,
+        "levels": sorted({k[0] for k in view.clouds.textures}),
+        "attribution": "NASA GIBS" in window.attribution.text(),
+        "url": window.cloud_loader.source.url[:90],
+        "started": len(window.cloud_loader.started),
+        "aborted": len(window.cloud_loader.aborted),
+        "answers": state["cloud_times"][:40]}
+    window.set_extra("clouds", False)
+    view.update()
+
+
+@check(1000)
+def clouds_off():
+    window = state["window"]
+    view = window.view
+    result["clouds"]["off_textures"] = len(view.clouds.textures)
+    result["clouds"]["off_loader"] = window.cloud_loader is None
+    result["clouds"]["off_attribution"] = \
+        "NASA GIBS" in window.attribution.text()
+    result["clouds"]["gl_errors"] = dict(view.gl_errors)
+    window.set_extra("stars", True)
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.

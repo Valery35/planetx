@@ -45,6 +45,9 @@ CHECKED = enum(Qt, "CheckState", "Checked")
 UNCHECKED = enum(Qt, "CheckState", "Unchecked")
 TRISTATE = enum(Qt, "ItemFlag", "ItemIsAutoTristate")
 RELIEF = "relief"  # строка рельефа в панели «Слои»
+# Строки раздела «Слои» под рельефом: сетка, звёзды, облака.
+GRID, STARS, CLOUDS = "grid", "stars", "clouds"
+EXTRAS = (GRID, STARS, CLOUDS)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
@@ -301,6 +304,8 @@ class LayerPanel(QWidget):
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
     relief_toggled = pyqtSignal(bool)
+    # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
+    extra_toggled = pyqtSignal(str, bool)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -428,6 +433,28 @@ class LayerPanel(QWidget):
         relief.setFlags(relief.flags() | CHECKABLE)
         relief.setCheckState(0, UNCHECKED)
         self.geo_items[RELIEF] = relief
+        self.extra_items = {}
+        self._extras = {}
+        for key, text, tip in (
+                (GRID, tr("Координатная сетка"), tr(
+                    "Параллели и меридианы с подписями градусов, как "
+                    "сетка Google Earth. Шаг сетки меняется с высотой "
+                    "камеры.")),
+                (STARS, tr("Звёзды"), tr(
+                    "Звёзды каталога ярких звёзд Йельского университета. "
+                    "Они видны из космоса и гаснут, когда камера "
+                    "опускается в атмосферу.")),
+                (CLOUDS, tr("Облака"), tr(
+                    "Облака по снимкам VIIRS из NASA GIBS за последние "
+                    "полные сутки. Они лежат полупрозрачной пеленой "
+                    "поверх снимка. Снег и лёд тоже белые и остаются "
+                    "видны."))):
+            item = QTreeWidgetItem(self.geo, [text])
+            item.setData(0, LAYER_ROLE, key)
+            item.setToolTip(0, tip)
+            item.setFlags(item.flags() | CHECKABLE)
+            item.setCheckState(0, UNCHECKED)
+            self.extra_items[key] = item
         self.geo.itemChanged.connect(self._geo_changed)
         # Слои проекта - свой список, отдельно от меток.
         self.layers = QTreeWidget(self)
@@ -504,6 +531,17 @@ class LayerPanel(QWidget):
         self.geo.blockSignals(False)
         self._relief = relief
         self._groups = set(groups)
+
+    def set_extras(self, states):
+        """Флажки сетки, звёзд и облаков {ключ: включён}. Сигналы
+        при этом не идут."""
+        self.geo.blockSignals(True)
+        for key, on in states.items():
+            if key in self.extra_items:
+                self.extra_items[key].setCheckState(
+                    0, CHECKED if on else UNCHECKED)
+                self._extras[key] = bool(on)
+        self.geo.blockSignals(False)
 
     def _geo_changed(self, item):
         if item.data(0, LAYER_ROLE):
@@ -618,6 +656,11 @@ class LayerPanel(QWidget):
         if groups != self._groups:
             self._groups = groups
             self.geo_changed.emit(groups)
+        for key, item in self.extra_items.items():
+            on = item.checkState(0) == CHECKED
+            if on != self._extras.get(key):
+                self._extras[key] = on
+                self.extra_toggled.emit(key, on)
 
     def set_layers(self, layers, shown):
         """Слои проекта под «Глобусом» и «Моими метками». shown - номера

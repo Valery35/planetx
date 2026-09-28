@@ -27,6 +27,8 @@ OSM = "https://www.openstreetmap.org/copyright"
 TERRAIN = ("https://github.com/tilezen/joerd/blob/master/docs/"
            "attribution.md")
 OPENFREEMAP = "https://openfreemap.org/"
+GIBS = ("https://www.earthdata.nasa.gov/engage/open-data-services-software/"
+        "earthdata-developer-portal/gibs-api")
 NOMINATIM_POLICY = "https://operations.osmfoundation.org/policies/nominatim/"
 ESRI_TERMS = "https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
@@ -62,6 +64,8 @@ def about_html():
            "из подключений XYZ Tiles QGIS."),
         tr("Раздел «Слои» с границами, названиями, дорогами, реками "
            "и вершинами, подписи на 15 языках."),
+        tr("Координатная сетка, звёзды и облака за последние полные "
+           "сутки."),
         tr("Слои текущего проекта на глобусе в порядке карты QGIS, "
            "синхронизация с окном карты и определение объектов."),
         tr("«Мои метки» с папками, метками, путями, многоугольниками "
@@ -107,6 +111,9 @@ def about_html():
         _link(ESRI_TERMS, tr("Космоснимки Esri World Imagery - пример "
                              "подложки, условия использования задаёт "
                              "Esri.")),
+        _link(GIBS, tr("Облака: NASA GIBS, снимки VIIRS.")),
+        html.escape(tr("Звёзды: каталог ярких звёзд Йельского "
+                       "университета.")),
         _link(NOMINATIM_POLICY, tr("Поиск мест: Nominatim, © участники "
                                    "OpenStreetMap.")),
         html.escape(tr("Свои подложки берутся из подключений XYZ Tiles "

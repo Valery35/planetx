@@ -111,6 +111,11 @@ EN = {
         "exaggeration.",
     "Поиск мест: Nominatim, © участники OpenStreetMap.":
         "Place search: Nominatim, © OpenStreetMap contributors.",
+    "Облака: NASA GIBS, снимки VIIRS.": "Clouds: NASA GIBS, VIIRS imagery.",
+    "Звёзды: каталог ярких звёзд Йельского университета.":
+        "Stars: the Yale Bright Star Catalogue.",
+    "Координатная сетка, звёзды и облака за последние полные сутки.":
+        "A coordinate grid, stars and clouds of the last complete day.",
     "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
     "OpenStreetMap.":
         "Vector base: OpenFreeMap, © OpenMapTiles, © OpenStreetMap "
@@ -144,6 +149,35 @@ EN = {
     "Исходный код": "Source code",
     "Страница модуля": "Plugin page",
     "Возможности": "Features",
+    "Координатная сетка": "Grid",
+    "Параллели и меридианы с подписями градусов, как "
+    "сетка Google Earth. Шаг сетки меняется с высотой "
+    "камеры.":
+        "Parallels and meridians with degree labels, as the Google Earth "
+        "grid. The grid step changes with the camera height.",
+    "Звёзды": "Stars",
+    "Звёзды каталога ярких звёзд Йельского университета. "
+    "Они видны из космоса и гаснут, когда камера "
+    "опускается в атмосферу.":
+        "Stars of the Yale Bright Star Catalogue. They show from space and "
+        "fade when the camera descends into the atmosphere.",
+    "Облака": "Clouds",
+    "Облака по снимкам VIIRS из NASA GIBS за последние "
+    "полные сутки. Они лежат полупрозрачной пеленой "
+    "поверх снимка. Снег и лёд тоже белые и остаются "
+    "видны.":
+        "Clouds from NASA GIBS VIIRS imagery of the last complete day. "
+        "They lie as a translucent veil over the imagery. Snow and ice "
+        "are white too and stay visible.",
+    "{angle} с. ш.": "{angle}N",
+    "{angle} ю. ш.": "{angle}S",
+    "{angle} в. д.": "{angle}E",
+    "{angle} з. д.": "{angle}W",
+    "Экватор": "Equator",
+    "Тропик Рака": "Tropic of Cancer",
+    "Тропик Козерога": "Tropic of Capricorn",
+    "Северный полярный круг": "Arctic Circle",
+    "Южный полярный круг": "Antarctic Circle",
     "Копировать": "Copy",
     "Вставить": "Paste",
     "KML в буфере обмена, меток {count}.":

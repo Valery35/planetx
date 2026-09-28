@@ -25,6 +25,8 @@ from PIL import Image
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMAGES = os.path.join(ROOT, "doc", "images")
 OUT = os.path.join(ROOT, "site", "planetx_landing.html")
+# Руководство PDF последнего выпуска, файл на языке страницы.
+PDF_URL = "https://github.com/Valery35/planetx/releases/latest/download/"
 WEB_WIDTH = 960  # пикселей, ширина снимка на странице
 WEB_QUALITY = 70  # качество JPEG
 
@@ -72,7 +74,7 @@ RU = {
     "cta.install": "Каталог модулей QGIS",
     "cta.code": "Исходный код",
     "cta.manual": "Руководство PDF",
-    "cta.manual.url": "https://github.com/Valery35/planetx/releases/latest/download/PlanetX.pdf",
+    "cta.manual.url": PDF_URL + "PlanetX.pdf",
     "idea.eyebrow": "Как устроен глобус",
     "idea.h2": "Своё окно, свой движок, данные из открытых источников",
     "idea.sub": "Глобус рисуется на OpenGL 3.3 собственным движком, "
@@ -96,7 +98,9 @@ RU = {
     "layers.sub": "Внизу слева, как в Google Earth, лежат группы "
                   "«Границы и названия», «Транспорт» и «Природа». "
                   "Данные берутся из векторных тайлов OpenFreeMap "
-                  "и ложатся по рельефу. Флажки срабатывают сразу.",
+                  "и ложатся по рельефу. Там же координатная сетка "
+                  "с экватором и тропиками, звёзды и облака NASA "
+                  "за последние полные сутки. Флажки срабатывают сразу.",
     "layers.fig": "Евразия с высоты 9000 км. Названия стран и городов, "
                   "границы стран жёлтые, границы областей тонкие белые.",
     "layers.c1.h": "Подписи как в Google Earth",
@@ -201,7 +205,7 @@ EN = {
     "cta.install": "QGIS plugin catalogue",
     "cta.code": "Source code",
     "cta.manual": "Manual PDF",
-    "cta.manual.url": "https://github.com/Valery35/planetx/releases/latest/download/PlanetX_en.pdf",
+    "cta.manual.url": PDF_URL + "PlanetX_en.pdf",
     "idea.eyebrow": "How the globe works",
     "idea.h2": "Its own window, its own engine, data from open sources",
     "idea.sub": "The globe is drawn with OpenGL 3.3 by its own engine "
@@ -225,7 +229,9 @@ EN = {
     "layers.sub": "At the bottom left, as in Google Earth, there are the "
                   "groups Borders and names, Transport and Nature. The "
                   "data come from OpenFreeMap vector tiles and follow the "
-                  "terrain. Check boxes take effect at once.",
+                  "terrain. The same panel holds a coordinate grid with "
+                  "the equator and tropics, stars and NASA clouds of the "
+                  "last complete day. Check boxes take effect at once.",
     "layers.fig": "Eurasia from 9000 km. Names of countries and cities, "
                   "country borders in yellow, region borders thin and "
                   "white.",
@@ -449,7 +455,8 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
     <a class="btn btn-ghost" data-i18n="cta.code"
        href="https://github.com/Valery35/planetx"></a>
     <a class="btn btn-ghost" data-i18n="cta.manual"
-       data-i18n-href="cta.manual.url" href="https://github.com/Valery35/planetx/releases/latest/download/PlanetX.pdf"></a>
+       data-i18n-href="cta.manual.url"
+       href="https://github.com/Valery35/planetx/releases/latest"></a>
   </div>
   <figure class="shot">
     <img alt="" src="@CAUCASUS@">

@@ -283,14 +283,16 @@ def hold_gil(context):
     return done
 
 
-def draw_batch(items, mvps, u_mvp, overlays=None, u_overlay_uv=-1):
+def draw_batch(items, mvps, u_mvp, overlays=None, u_overlay_uv=-1,
+               clouds=None, u_clouds_uv=-1):
     """Нарисовать набор сеток, у каждой своя текстура и матрица.
 
     items - пары (GpuMesh, текстура), mvps - массив (N, 4, 4) float32
     по строкам, как его даёт Camera.tiles_mvp. overlays - пары
     (текстура наложения, окно (сдвиг u, сдвиг v, масштаб)) по одной
     на сетку. Текстура наложения идёт на блок 1, подложка на блок 0.
-    Без overlays блок 1 не трогается.
+    Без overlays блок 1 не трогается. clouds - такие же пары для
+    облаков, блок 2.
 
     Горячий путь кадра идёт через функции OpenGL.raw без проверки ошибок
     после каждого вызова. Замер 26 сентября 2026 года: glUniformMatrix4fv
@@ -303,8 +305,21 @@ def draw_batch(items, mvps, u_mvp, overlays=None, u_overlay_uv=-1):
     last_texture = None
     last_overlay = None
     last_window = None
+    last_cloud = None
+    last_cloud_window = None
     null = ctypes.c_void_p(0)
     for i, (mesh, texture) in enumerate(items):
+        if clouds is not None:
+            cloud, cloud_window = clouds[i]
+            if cloud != last_cloud:
+                _active_texture(GL.GL_TEXTURE2)
+                _bind_texture(GL.GL_TEXTURE_2D, cloud)
+                _active_texture(GL.GL_TEXTURE0)
+                last_cloud = cloud
+            if cloud_window != last_cloud_window:
+                _uniform4f(u_clouds_uv, cloud_window[0], cloud_window[1],
+                           cloud_window[2], 0.0)
+                last_cloud_window = cloud_window
         if overlays is not None:
             overlay, window = overlays[i]
             if overlay != last_overlay:

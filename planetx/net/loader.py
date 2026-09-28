@@ -60,6 +60,8 @@ CACHE_CONTROL = enum(QNetworkRequest, "Attribute",
 PREFER_CACHE = enum(QNetworkRequest, "CacheLoadControl", "PreferCache")
 NO_ERROR = enum(QNetworkReply, "NetworkError", "NoError")
 HTTP_STATUS = enum(QNetworkRequest, "Attribute", "HttpStatusCodeAttribute")
+ALWAYS_NETWORK = enum(QNetworkRequest, "CacheLoadControl", "AlwaysNetwork")
+CACHE_SAVE = enum(QNetworkRequest, "Attribute", "CacheSaveControlAttribute")
 # Ответ раскодирования для заглушки вместо снимка, см. core/placeholder.
 MISSING = "missing"
 RECENT_TILES = 256  # байтов тайлов в памяти для вырезки, штук
@@ -233,9 +235,11 @@ class TileLoader(QObject):
     idle = pyqtSignal()
 
     def __init__(self, source=None, parent=None, prepare=None, size=None,
-                 decode=None, fill=False):
+                 decode=None, fill=False, cache=True):
         super().__init__(parent)
         self.source = source or basemap.osm()
+        # False - мимо дискового кэша QGIS, для ответов с no-store.
+        self.cache = cache
         self.prepare = prepare
         self.size = size
         self.decode = decode
@@ -361,7 +365,11 @@ class TileLoader(QObject):
         source = self.source
         request = QNetworkRequest(QUrl(source.tile_url(z, x, y)))
         request.setAttribute(MARK, True)
-        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+        if self.cache:
+            request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+        else:
+            request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
+            request.setAttribute(CACHE_SAVE, False)
         for name, value in source.headers.items():
             request.setRawHeader(name.encode(), value.encode())
         if source.username:

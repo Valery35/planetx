@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.9.0
+Version 0.10.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -178,10 +178,19 @@ take effect at once, without the Refresh button.
 | Transport | Roads, Road numbers, Railways, Airports |
 | Nature | Rivers, Lakes and reservoirs, Peaks, Reserves and national parks |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |
+| Grid | Parallels and meridians with labels, the equator, tropics and polar circles in yellow |
+| Stars | Stars brighter than magnitude 6 at their places in the sky |
+| Clouds | Clouds from NASA GIBS VIIRS imagery of the last complete day |
 
 The vector base comes from OpenFreeMap tiles. On the first opening
-borders, places and terrain are on. The tooltip of each row tells how
-the feature is drawn and from what height it is visible.
+borders, places, terrain and stars are on. The tooltip of each row
+tells how the feature is drawn and from what height it is visible.
+
+The grid step follows the camera height, from 30° from space to
+seconds near the ground. The stars stand where they stand over the
+Earth at this minute and fade when the camera goes below 150 km.
+Clouds lie as a veil over the imagery. Snow and ice get into the
+clouds too, they have the same colour.
 
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
@@ -560,7 +569,8 @@ the insertion.
 
 Imagery - Esri World Imagery, Esri sets the terms. Map data ©
 OpenStreetMap contributors. Vector tiles - OpenFreeMap. Terrain - Mapzen
-Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Place search -
+Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Clouds - NASA GIBS,
+VIIRS imagery. Stars - the Yale Bright Star Catalogue. Place search -
 Nominatim.
 
 The terms of all sources are described in [SOURCES.md](SOURCES.md).

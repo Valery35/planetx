@@ -215,11 +215,17 @@ uniform sampler2D u_texture;
 // предка, пока своя не готова. Без наложения - прозрачная текстура.
 uniform sampler2D u_overlay;
 uniform vec4 u_overlay_uv;
+// Облака поверх подложки и наложения, тоже с премноженной альфой
+// и окном в картинке предка, см. render/clouds.py.
+uniform sampler2D u_clouds;
+uniform vec4 u_clouds_uv;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
 void main() {
     vec4 over = texture(u_overlay, u_overlay_uv.xy + u_overlay_uv.z * v_uv);
     vec3 base = texture(u_texture, v_uv).rgb * (1.0 - over.a) + over.rgb;
+    vec4 cloud = texture(u_clouds, u_clouds_uv.xy + u_clouds_uv.z * v_uv);
+    base = base * (1.0 - cloud.a) + cloud.rgb;
     // Отмывка рельефа: множитель яркости, на равнине 1.
     vec3 ground = clamp(base * v_shade, 0.0, 1.0);
     // Дымка: воздух между глазом и поверхностью.

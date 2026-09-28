@@ -36,6 +36,8 @@ from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
 from .features import Features
 from .labels import Labels
+from .clouds import Clouds
+from .stars import Stars
 from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SHELL, SKY_FRAGMENT,
                       TILE_FRAGMENT, TILE_VERTEX)
 
@@ -323,6 +325,8 @@ class GlobeView(QOpenGLWidget):
         self.place_loader = None
         # Классы надписей для включённых групп векторной основы.
         self.label_kinds = set()
+        # Подписи координатной сетки, core.places.Place класса «grid».
+        self.grid_marks = []
         self._places_wanted = frozenset()
         self._places_at = 0.0
         self.labels = Labels()
@@ -333,6 +337,11 @@ class GlobeView(QOpenGLWidget):
         # Свои объекты: линии и многоугольники рисует Features, точки -
         # надписи класса «mark».
         self.features = Features()
+        self.stars = Stars()
+        self.show_stars = True
+        self.clouds = Clouds()
+        self.show_clouds = False
+        self._drop_clouds = False
         self._feature_marks = ([], None)
         self._marked = (None, None, [])
         self._context = None
@@ -811,6 +820,9 @@ class GlobeView(QOpenGLWidget):
                                                     "u_overlay_uv")
         self.clear_texture = gpu.create_texture(
             np.zeros((1, 1, 4), dtype=np.uint8))
+        self.u_clouds = GL.glGetUniformLocation(self.program, "u_clouds")
+        self.u_clouds_uv = GL.glGetUniformLocation(self.program,
+                                                   "u_clouds_uv")
         self.hole_program = gpu.build_program(HOLE_VERTEX, HOLE_FRAGMENT)
         self.hole_uniforms = uniforms(self.hole_program, (
             "u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes", "u_qc"))
@@ -821,6 +833,7 @@ class GlobeView(QOpenGLWidget):
         self.hole_query = int(np.ravel(GL.glGenQueries(1))[0])
         self.labels.init_gl()
         self.features.init_gl()
+        self.stars.init_gl()
         self._context = ctx
         ctx.aboutToBeDestroyed.connect(self.release_gl)
 
@@ -832,14 +845,17 @@ class GlobeView(QOpenGLWidget):
         self._end_shot()
         self.labels.release_gl()
         self.features.release_gl()
+        self.stars.release_gl()
         self.build_pool.clear()
         self.build_pool.waitForDone(2000)
         for mesh in (list(self.meshes.values()) + self.caps
                      + list(self.underlay_meshes.values())):
             mesh.delete()
         for texture in (list(self.textures.values())
-                        + list(self.overlays.values())):
+                        + list(self.overlays.values())
+                        + list(self.clouds.textures.values())):
             gpu.delete_texture(texture)
+        self.clouds.textures.clear()
         self.pool.delete_all()
         if self.clear_texture is not None:
             gpu.delete_texture(self.clear_texture)
@@ -1226,7 +1242,9 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glUseProgram(self.program)
         gpu.gl.glUniform1i(self.u_texture, 0)
         gpu.gl.glUniform1i(self.u_overlay, 1)
+        gpu.gl.glUniform1i(self.u_clouds, 2)
         self._clear_overlay()
+        self._clear_clouds()
         air = self.atmosphere and not self.show_holes
         air_uniforms(self.tile_air, self.camera, air)
 
@@ -1245,11 +1263,25 @@ class GlobeView(QOpenGLWidget):
             overlays += self._overlay_items(sel, time.monotonic())
         else:
             self._overlay_missing = 0
+        if self._drop_clouds:
+            # Контекст OpenGL здесь текущий, это вызов из paintGL.
+            self.clouds.drop(self.pool)
+            self._drop_clouds = False
+        clouds = None
+        if self.show_clouds and not self.show_holes:
+            self.clouds.upload(self.pool, self.frame)
+            clouds = [(self.clear_texture, gpu.NO_OVERLAY)] * len(self.caps)
+            clouds += self.clouds.items(sel.draw, self.clear_texture,
+                                        self.frame)
+        else:
+            self.clouds.missing = 0
         gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp,
-                       overlays, self.u_overlay_uv)
+                       overlays, self.u_overlay_uv, clouds, self.u_clouds_uv)
         if overlays is not None:
             # Подстилка идёт без наложения.
             self._clear_overlay()
+        if clouds is not None:
+            self._clear_clouds()
         if self.hole_check:
             # До подстилки: щели между тайлами. После: видимые дыры.
             gaps = self._count_holes()
@@ -1261,6 +1293,10 @@ class GlobeView(QOpenGLWidget):
             self.hole_counts.append((self.frame, gaps, holes))
         if air:
             self._draw_sky()
+        if self.show_stars and not self.show_holes:
+            self.stars.draw(self.camera, ratio)
+        else:
+            self.stars.drawn = 0
         features_busy = False
         if self.features.shapes and not self.show_holes:
             features_busy = self.features.draw(
@@ -1285,6 +1321,7 @@ class GlobeView(QOpenGLWidget):
         marks.append(time.perf_counter())
         self._evict(sel.keep)
         self._evict_overlays(sel.keep)
+        self.clouds.evict(self.pool, self.frame)
         # Неподвижность проверяется по самой камере: её двигает не только
         # навигатор, но и проверочные скрипты.
         pose = (tuple(self.camera.eye), tuple(self.camera.rotation.ravel()))
@@ -1301,7 +1338,9 @@ class GlobeView(QOpenGLWidget):
                 or self.labels.pending or (
                 self.pending and any(k in sel.keep for k in self.pending)) \
                 or (self.overlay_pending and any(
-                    k in sel.keep for k in self.overlay_pending)):
+                    k in sel.keep for k in self.overlay_pending)) \
+                or (self.show_clouds and (self.clouds.pending
+                                          or self.clouds.unasked)):
             self.update()
         marks.append(time.perf_counter())
         self.paint_span = (started, marks[-1])
@@ -1330,6 +1369,8 @@ class GlobeView(QOpenGLWidget):
                          if k not in self.places.tiles)
         if self.labels.pending:
             count += 1
+        if self.show_clouds:
+            count += self.clouds.missing + len(self.clouds.pending)
         return count
 
     # Снимок вида
@@ -1454,6 +1495,13 @@ class GlobeView(QOpenGLWidget):
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER,
                              self.defaultFramebufferObject())
 
+    def _clear_clouds(self):
+        """Прозрачные облака на блоке 2, окно без сдвига."""
+        gpu.gl.glActiveTexture(GL.GL_TEXTURE2)
+        gpu.gl.glBindTexture(GL.GL_TEXTURE_2D, self.clear_texture)
+        gpu.gl.glActiveTexture(GL.GL_TEXTURE0)
+        gpu.gl.glUniform4f(self.u_clouds_uv, *gpu.NO_OVERLAY, 0.0)
+
     def _clear_overlay(self):
         """Прозрачное наложение на блоке 1, окно без сдвига."""
         gpu.gl.glActiveTexture(GL.GL_TEXTURE1)
@@ -1492,6 +1540,25 @@ class GlobeView(QOpenGLWidget):
         GL.glGetQueryObjectuiv(self.hole_query, GL.GL_QUERY_RESULT, result)
         return int(result[0])
 
+    def set_clouds(self, on, loader=None):
+        """Показать облака с загрузчиком loader или скрыть их. Прежние
+        картинки освобождаются в следующем кадре."""
+        self.show_clouds = bool(on)
+        self.clouds.loader = loader
+        self._drop_clouds = True
+        self.update()
+
+    def add_clouds(self, key, levels):
+        """Пришла картинка облаков тайла снимка."""
+        self.clouds.add(key, levels)
+        self.last_arrival = time.monotonic()
+        self.update()
+
+    def set_stars(self, on):
+        """Показать или скрыть звёзды."""
+        self.show_stars = bool(on)
+        self.update()
+
     def _draw_sky(self):
         """Небо и гало там, где нет тайлов.
 
@@ -1527,7 +1594,7 @@ class GlobeView(QOpenGLWidget):
         kinds = kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
-        own = self._own_marks()
+        own = self._own_marks() + self.grid_marks
         if mark is not None or own:
             head = ([mark] if mark is not None else []) + own
             if self._marked[0] is not places or self._marked[1] != head:

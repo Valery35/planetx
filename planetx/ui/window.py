@@ -9,6 +9,7 @@
 Окно связывает части и решает, панели только показывают.
 """
 import html
+import math
 import os
 import sys
 import time
@@ -22,8 +23,9 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
-from ..core import basemap
+from ..core import basemap, clouds
 from ..core.ellipsoid import ecef_to_geodetic
+from ..core import graticule
 from ..core.features import Shape
 from ..core.flight import Flight, fit_view, parse_latlon
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
@@ -83,6 +85,14 @@ LINES_KEY = "PlanetX/lines/{}"
 # от 27 сентября 2026 года, рельеф включён отдельно.
 DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
+# Сетка, звёзды, облака: ключ настройки и умолчание. Звёзды включены,
+# как в Google Earth, сетка и облака выключены. Решение помощника от
+# 29 сентября 2026 года, его утверждает автор.
+EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False}
+EXTRA_KEY = "PlanetX/show_"  # + ключ строки
+GRID_COLOR = (220, 220, 220, 255)
+GRID_WIDTH = 1.0
+CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
 SYNC_KEY = "PlanetX/sync"  # направление синхронизации с картой
@@ -131,6 +141,12 @@ def imagery_preparer(store):
         mesh = tile_mesh(*key, heights, exaggeration=scale)
         return mesh, mip_chain(rgba), level, scale
     return prepare
+
+
+def prepare_clouds(key, rgba):
+    """Работа рабочего потока для тайла облаков: прозрачность
+    по белизне и уровни мипмапов."""
+    return mip_chain(clouds.cloud_rgba(rgba, key))
 
 
 def xyz_sources():
@@ -241,6 +257,7 @@ class GlobeWindow(QWidget):
         self.ofm_layer = None
         self.rail_layer = None
         self.place_loader = None
+        self.cloud_loader = None  # облака NASA GIBS, см. set_clouds
         # Настройки вида делятся на выбранные и действующие. Выбранные
         # показывают свойства вида и список слоёв. Действующие видны
         # на глобусе. Кнопка «Обновить» или автообновление переносят
@@ -403,6 +420,17 @@ class GlobeWindow(QWidget):
         self.watch.legend.connect(self._legend_changed)
         self._show_layers()
         self.panel.set_geo(self._groups, self._relief)
+        settings = QgsSettings()
+        self.extras = {key: settings.value(EXTRA_KEY + key, default,
+                                           type=bool)
+                       for key, default in EXTRA_DEFAULTS.items()}
+        self.panel.set_extras(self.extras)
+        self.panel.extra_toggled.connect(self.set_extra)
+        self.grid_shapes = []
+        self._grid_key = None
+        self.view.changed.connect(self._update_grid)
+        for key, on in self.extras.items():
+            self._apply_extra(key, on)
         self.refresh()
 
     # Выбранное состояние. Его же меняют проверочные скрипты, на глобус
@@ -475,6 +503,101 @@ class GlobeWindow(QWidget):
         else:
             groups.discard(group)
         self.set_line_groups(groups)
+
+    def set_extra(self, key, on):
+        """Сетка, звёзды или облака флажком раздела «Слои», сразу."""
+        self.extras[key] = bool(on)
+        QgsSettings().setValue(EXTRA_KEY + key, bool(on))
+        self.panel.set_extras({key: bool(on)})
+        self._apply_extra(key, bool(on))
+
+    def _apply_extra(self, key, on):
+        if key == "grid":
+            self._grid_key = None
+            self._update_grid()
+        elif key == "stars":
+            self.view.set_stars(on)
+        elif key == "clouds":
+            self.set_clouds(on)
+
+    def _update_grid(self):
+        """Сетка на глобусе. Строится заново, только когда меняется
+        шаг или точка взгляда уходит на шаг, а не каждый кадр."""
+        if not self.extras.get("grid"):
+            if self.grid_shapes or self.view.grid_marks:
+                self.grid_shapes = []
+                self.view.grid_marks = []
+                self._grid_key = None
+                self._refresh_shapes()
+            return
+        pose = self.view.navigator.pose
+        width = 2.0 * pose.distance * math.tan(
+            math.radians(self.view.camera.fov_y) / 2.0)
+        key = graticule.key(pose.lat, pose.lon, width)
+        if key == self._grid_key:
+            return
+        self._grid_key = key
+        step, found = graticule.lines(pose.lat, pose.lon, width)
+        self.grid_shapes = [Shape("line", points, color=GRID_COLOR,
+                                  width=GRID_WIDTH)
+                            for _, _, points in found]
+        self.grid_shapes += [
+            Shape("line", points, color=CIRCLE_COLOR, width=GRID_WIDTH)
+            for _, _, points in graticule.circles(pose.lat, pose.lon,
+                                                  width)]
+        marks = []
+        for n, (lat, lon, kind, value) in enumerate(
+                graticule.labels(pose.lat, pose.lon, width)):
+            marks.append(MarkPlace(-100000 - n, self._grid_text(
+                kind, value, step), "grid", 1, lat,
+                graticule.normal_lon(lon)))
+        names = self._circle_names()
+        for n, (lat, lon, name) in enumerate(
+                graticule.circle_labels(pose.lat, pose.lon, width)):
+            marks.append(MarkPlace(-200000 - n, names[name], "circle", 1,
+                                   lat, graticule.normal_lon(lon)))
+        self.view.grid_marks = marks
+        self._refresh_shapes()
+
+    @staticmethod
+    def _circle_names():
+        return {"equator": tr("Экватор"),
+                "cancer": tr("Тропик Рака"),
+                "capricorn": tr("Тропик Козерога"),
+                "arctic": tr("Северный полярный круг"),
+                "antarctic": tr("Южный полярный круг")}
+
+    def _grid_text(self, kind, value, step):
+        """Подпись линии сетки с полушарием."""
+        angle = graticule.angle_text(value, step)
+        if kind == "lat":
+            if abs(value) < 1e-9:
+                return angle
+            return tr("{angle} с. ш.", angle=angle) if value > 0 \
+                else tr("{angle} ю. ш.", angle=angle)
+        value = graticule.normal_lon(value)
+        if abs(value) < 1e-9 or abs(abs(value) - 180.0) < 1e-9:
+            return graticule.angle_text(abs(value), step)
+        return tr("{angle} в. д.", angle=angle) if value > 0 \
+            else tr("{angle} з. д.", angle=angle)
+
+    def set_clouds(self, on):
+        """Облака NASA GIBS: новый загрузчик на дату снимка или никакого."""
+        if self.cloud_loader is not None:
+            self.cloud_loader.abort()
+            self.cloud_loader.deleteLater()
+            self.cloud_loader = None
+        if on:
+            source = basemap.Source(
+                "NASA GIBS", clouds.url_template(time.time()),
+                clouds.MAX_LEVEL, clouds.ATTRIBUTION, builtin=True)
+            self.cloud_loader = TileLoader(source, parent=self,
+                                           prepare=prepare_clouds,
+                                           size=TILE_SIZE, cache=False)
+            self.cloud_loader.loaded.connect(
+                lambda key, rgba, levels: self.view.add_clouds(key, levels))
+        self.view.set_clouds(on, self.cloud_loader)
+        self._show_attribution()
 
     def set_relief(self, on):
         """Включить или выключить рельеф, сразу, флажком панели «Слои»."""
@@ -627,6 +750,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
         if self.view.store.scale:
             parts.append(TERRAIN_ATTRIBUTION)
+        if self.cloud_loader is not None:
+            parts.append(link_html(*clouds.ATTRIBUTION))
         self.attribution.setText(" · ".join(parts))
         self._place_attribution()
 
@@ -970,6 +1095,7 @@ class GlobeWindow(QWidget):
                   for p in self.myplaces.places if p.visible]
         if getattr(self, "tracks", None) is not None:
             shapes += self.tracks.shapes()
+        shapes += getattr(self, "grid_shapes", [])
         if self._ruler_open():
             shape = self.ruler.shape()
             if shape is not None:
@@ -1613,6 +1739,8 @@ class GlobeWindow(QWidget):
         self.terrain_loader.abort()
         if self.place_loader is not None:
             self.place_loader.abort()
+        if self.cloud_loader is not None:
+            self.cloud_loader.abort()
         if self.overlay is not None:
             self.overlay.abort()
         self.refresh_timer.stop()

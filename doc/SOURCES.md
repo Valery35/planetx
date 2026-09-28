@@ -17,6 +17,8 @@ QGIS. Запросы идут через сетевые настройки и д
 | OpenStreetMap | карта, подложка на выбор | [ODbL и правила использования тайлов](https://www.openstreetmap.org/copyright) | © OpenStreetMap contributors |
 | OpenFreeMap | границы, реки, дороги, названия пунктов | [бесплатно, в том числе коммерчески, с подписью](https://openfreemap.org/) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors |
 | Mapzen Terrain Tiles | высоты рельефа | [условия по источникам высот](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) | Terrain: Mapzen, SRTM, GMTED, ETOPO1 and others |
+| NASA GIBS, VIIRS SNPP Corrected Reflectance | облака, строка «Облака» | [данные NASA открыты, NASA просит указать источник](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | NASA GIBS, VIIRS |
+| Yale Bright Star Catalogue, 5-е издание | звёзды, строка «Звёзды» | каталог CDS V/50, условия CDS не сверены | нет |
 | Nominatim | поиск места по названию | [правила использования Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | © OpenStreetMap contributors, в окне «О модуле» |
 
 ## Nominatim - поиск места
