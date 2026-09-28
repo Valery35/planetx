@@ -27,15 +27,23 @@ except ImportError:  # headless-тесты
 
 STEP = 100.0  # метров между точками сгущения
 MAX_POINTS = 4000  # точек на линию или контур, не больше
+# Точек на объект глобуса, не больше. У мелкого объекта шаг остаётся
+# STEP, у крупного растёт. Сгущение до 4000 точек давало у 29 провинций
+# Афганистана 112 тысяч вершин вместо 2.5 тысяч, 28 сентября 2026 года.
+SHAPE_POINTS = 800
 
-Shape = namedtuple("Shape", "kind points color width fill name",
-                   defaults=((255, 255, 0, 255), 2.0, None, ""))
+Shape = namedtuple("Shape",
+                   "kind points color width fill name height extrude",
+                   defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
+                             False))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
 долгота) в градусах, у многоугольника без повтора первой. color -
 цвет линии RGBA 0-255, width - толщина в логических пикселях, fill -
-цвет заливки многоугольника RGBA или None. name - подпись.
+цвет заливки многоугольника RGBA или None. name - подпись. height -
+подъём над рельефом в метрах, как «относительно земли» у Google Earth.
+extrude - стена от объекта до земли, у точки - стойка.
 """
 
 
@@ -107,14 +115,80 @@ def fill(points, step=STEP, max_points=MAX_POINTS):
     return ring, np.asarray([starts[i] for i in tri], dtype=np.uint32)
 
 
-def lift(latlon, height_at=None):
-    """Точки (широта, долгота) на рельефе в ECEF, float64 (n, 3)."""
+def lift(latlon, height_at=None, offset=0.0, heights_at=None):
+    """Точки (широта, долгота) на рельефе плюс offset метров в ECEF,
+    float64 (n, 3).
+
+    heights_at - высоты массива точек одним вызовом, у него приоритет
+    перед height_at по одной точке.
+    """
     latlon = np.asarray(latlon, dtype=np.float64).reshape(-1, 2)
-    if height_at is None:
+    if heights_at is not None:
+        h = np.asarray(heights_at(latlon[:, 0], latlon[:, 1]),
+                       dtype=np.float64)
+    elif height_at is None:
         h = np.zeros(len(latlon))
     else:
         h = np.array([height_at(float(a), float(b)) for a, b in latlon])
-    return geodetic_to_ecef(latlon[:, 0], latlon[:, 1], h)
+    return geodetic_to_ecef(latlon[:, 0], latlon[:, 1], h + offset)
+
+
+Geometry = namedtuple("Geometry", "ring lines triangles wall stem")
+Geometry.__doc__ = """Контур объекта для видеокарты, от высот не зависит.
+
+ring - вершины (широта, долгота) после сгущения. lines, triangles,
+wall - индексы отрезков, заливки и стены. У выдавленного объекта
+вершины идут дважды: поднятые, потом на земле. stem - стойка точки.
+"""
+
+
+def geometry(shape):
+    """Контур объекта или None для точки без стойки и пустого объекта."""
+    height = float(shape.height or 0.0)
+    raised = bool(shape.extrude) and height > 0.0
+    empty = np.zeros(0, dtype=np.uint32)
+    if shape.kind == "point":
+        if not raised or not shape.points:
+            return None
+        ring = np.asarray(shape.points[:1], dtype=np.float64)
+        return Geometry(ring, np.array([0, 1], dtype=np.uint32), empty,
+                        empty, True)
+    if len(shape.points) < 2:
+        return None
+    closed = shape.kind == "polygon" and len(shape.points) >= 3
+    triangles = empty
+    if closed and shape.fill is not None:
+        ring, triangles = fill(shape.points, max_points=SHAPE_POINTS)
+    else:
+        ring = densify(shape.points, closed=closed, max_points=SHAPE_POINTS)
+    wall = walls(len(ring), closed=closed) if raised else empty
+    return Geometry(ring, segments(len(ring), closed=closed), triangles,
+                    wall, False)
+
+
+def vertices(geo, height, heights_at=None):
+    """Вершины контура в ECEF: поднятые, у стены и стойки ещё земля."""
+    top = lift(geo.ring, offset=height, heights_at=heights_at)
+    if len(geo.wall) or geo.stem:
+        return np.vstack([top, lift(geo.ring, heights_at=heights_at)])
+    return top
+
+
+def walls(n, closed=False):
+    """Треугольники стены между верхом и низом, uint32.
+
+    Вершины 0..n-1 - поднятая линия, n..2n-1 - те же точки на земле.
+    На отрезок - два треугольника.
+    """
+    if n < 2:
+        return np.zeros(0, dtype=np.uint32)
+    a = np.arange(n - 1, dtype=np.uint32)
+    b = a + 1
+    if closed:
+        a = np.append(a, n - 1).astype(np.uint32)
+        b = np.append(b, 0).astype(np.uint32)
+    quads = np.stack([a, b, b + n, a, b + n, a + n], axis=1)
+    return quads.astype(np.uint32).ravel()
 
 
 def centered(xyz):

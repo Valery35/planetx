@@ -73,14 +73,15 @@ def kinds_at(kinds, height):
     return {kind for kind in kinds
             if height <= MAX_HEIGHT.get(kind, height)}
 
-Place = namedtuple("Place", "id name kind rank lat lon info",
-                   defaults=(None,))
+Place = namedtuple("Place", "id name kind rank lat lon info lift",
+                   defaults=(None, 0.0))
 Place.__doc__ = """Подписываемый пункт: населённый пункт, область, вода,
 заповедник, вершина, аэропорт или номер дороги.
 
 id - номер объекта в тайле или 0. kind - класс из CLASSES. rank - ранг
 OpenMapTiles, меньше - важнее, без ранга 99. lat, lon в градусах.
-info - высота вершины в метрах, у остальных None.
+info - высота вершины в метрах, у остальных None. lift - подъём
+надписи над рельефом в метрах, у своих поднятых меток.
 """
 
 

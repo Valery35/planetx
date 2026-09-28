@@ -184,6 +184,42 @@ class HeightStore:
                 return float(sample(tile, u, v)) * self.scale
         return 0.0
 
+    def heights_at(self, lats, lons):
+        """Высоты рельефа в массиве точек, float64.
+
+        То же, что height_at по каждой точке, но тайл подбирается
+        для групп точек сразу. По одной точке в Python сборка 29
+        провинций Афганистана шла 4.7 с, 28 сентября 2026 года.
+        """
+        lats = np.asarray(lats, dtype=np.float64)
+        lons = np.asarray(lons, dtype=np.float64)
+        out = np.zeros(lats.shape)
+        if not self.scale or not lats.size:
+            return out
+        lat = np.clip(lats, -85.05112878, 85.05112878)
+        u = ((lons + 180.0) / 360.0) % 1.0
+        v = np.clip((1.0 - np.arcsinh(np.tan(np.radians(lat))) / math.pi)
+                    / 2.0, 0.0, 1.0)
+        left = np.ones(lats.shape, dtype=bool)
+        levels = {key[0] for key in self.tiles}
+        for zh in range(MAX_LEVEL, -1, -1):
+            if zh not in levels:
+                continue
+            n = 1 << zh
+            idx = np.nonzero(left)[0]
+            if not len(idx):
+                break
+            tx = np.minimum((u[idx] * n).astype(np.int64), n - 1)
+            ty = np.minimum((v[idx] * n).astype(np.int64), n - 1)
+            for x, y in set(zip(tx.tolist(), ty.tolist())):
+                tile = self.tiles.get((zh, x, y))
+                if tile is None:
+                    continue
+                pick = idx[(tx == x) & (ty == y)]
+                out[pick] = sample(tile, u[pick], v[pick])
+                left[pick] = False
+        return out * self.scale
+
     def range_for(self, key):
         """Наименьшая и наибольшая высота для тайла подложки key.
 

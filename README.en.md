@@ -6,7 +6,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.5.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.5.1.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -90,6 +90,10 @@ and atmosphere, from space down to single streets.
   camera travels the line. Places and folders are rearranged by
   dragging. The bar at the bottom of the view pauses the tour and steps
   between stops.
+- **Place properties.** Name, description, colors, height above ground
+  and extending to the ground. A path becomes a wall, a polygon a block.
+- **KML and KMZ.** Google Earth files open into My Places with folders,
+  styles and placemark views. A folder saves to KMZ or KML.
 - **Identify features.** In the Identify features mode a click on the
   globe shows the coordinates and elevation of the point and the features
   of the project layers checked on the globe.

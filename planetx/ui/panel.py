@@ -555,6 +555,8 @@ class LayerPanel(QWidget):
             # Пустое место под списком: папка в конец «Моих меток».
             menu.addAction(tr("Новая папка")).triggered.connect(
                 lambda: self.place_action.emit("new_folder", ""))
+            menu.addAction(tr("Открыть KML или KMZ…")).triggered.connect(
+                lambda: self.place_action.emit("import_kml", ""))
             menu.exec(self.list.viewport().mapToGlobal(point))
             return
         key = item.data(0, PLACE_ROLE)
@@ -562,13 +564,16 @@ class LayerPanel(QWidget):
         if is_folder(key):
             actions = [("tour", tr("Запустить тур")),
                        ("new_folder", tr("Новая папка")),
+                       ("import_kml", tr("Открыть KML или KMZ…")),
+                       ("export_kml", tr("Сохранить как KML…")),
                        ("rename", tr("Переименовать…")),
                        ("remove", tr("Удалить"))]
         elif key:
             actions = [("fly", tr("Подлететь"))]
             if key.startswith("line:"):
                 actions.append(("tour", tr("Тур по пути")))
-            actions += [("new_folder_after", tr("Новая папка")),
+            actions += [("properties", tr("Свойства…")),
+                        ("new_folder_after", tr("Новая папка")),
                         ("rename", tr("Переименовать…")),
                         ("remove", tr("Удалить"))]
         if key:
@@ -580,6 +585,10 @@ class LayerPanel(QWidget):
                 lambda: self.place_action.emit("tour", ""))
             menu.addAction(tr("Новая папка")).triggered.connect(
                 lambda: self.place_action.emit("new_folder", ""))
+            menu.addAction(tr("Открыть KML или KMZ…")).triggered.connect(
+                lambda: self.place_action.emit("import_kml", ""))
+            menu.addAction(tr("Сохранить как KML…")).triggered.connect(
+                lambda: self.place_action.emit("export_kml", ""))
             menu.addAction(tr("Добавить слои меток в проект")).triggered \
                 .connect(lambda: self.place_action.emit("project", ""))
         elif layer_id:

@@ -58,6 +58,29 @@ class TestLift(unittest.TestCase):
         self.assertLess(np.abs(back - xyz).max(), 0.01)
 
 
+class TestLiftAndWalls(unittest.TestCase):
+
+    def test_offset_above_terrain(self):
+        xyz = ft.lift([(58.0, 56.0)], lambda lat, lon: 150.0, offset=40.0)
+        self.assertAlmostEqual(float(el.ecef_to_geodetic(xyz[0])[2]),
+                               190.0, 3)
+
+    def test_wall_quads(self):
+        # Линия из трёх точек: два отрезка, по два треугольника.
+        tri = ft.walls(3)
+        self.assertEqual(len(tri), 12)
+        self.assertEqual(list(tri[:6]), [0, 1, 4, 0, 4, 3])
+        # Замкнутый контур добавляет стену от последней точки к первой.
+        closed = ft.walls(3, closed=True)
+        self.assertEqual(len(closed), 18)
+        self.assertEqual(list(closed[-6:]), [2, 0, 3, 2, 3, 5])
+        self.assertEqual(len(ft.walls(1)), 0)
+
+    def test_shape_defaults_on_ground(self):
+        shape = ft.Shape("line", [(58.0, 56.0), (58.1, 56.1)])
+        self.assertEqual((shape.height, shape.extrude), (0.0, False))
+
+
 class TestSegments(unittest.TestCase):
 
     def test_open_and_closed(self):

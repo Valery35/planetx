@@ -215,6 +215,25 @@ def flat_property(source):
     return found
 
 
+UNSAFE_XML = ("xml.etree", "xml.sax", "xml.dom", "lxml")
+
+
+def unsafe_xml(source):
+    """Модули XML, которые Bandit каталога QGIS считает опасными для
+    чужих файлов. KML читается через expat (core/kml.py)."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        names = []
+        if isinstance(node, ast.Import):
+            names = [alias.name for alias in node.names]
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            names = [node.module]
+        if any(n == bad or n.startswith(bad + ".") for n in names
+               for bad in UNSAFE_XML):
+            found.append(node.lineno)
+    return found
+
+
 def bom(source):
     """Метка BOM в начале файла. Её пишет Set-Content в PowerShell 5.1."""
     return [1] if source.startswith("﻿") else []
@@ -304,6 +323,11 @@ class TestCodeRules(unittest.TestCase):
                   and os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(flat_property, plugin), [])
 
+    def test_no_unsafe_xml(self):
+        plugin = [p for p in self.paths if p.startswith(PLUGIN)
+                  and os.sep + "tests" + os.sep not in p]
+        self.assertEqual(scan(unsafe_xml, plugin), [])
+
     def test_core_does_not_import_qt(self):
         core = [p for p in self.paths
                 if os.sep + "core" + os.sep in p]
@@ -376,6 +400,13 @@ class TestGuardsCatch(unittest.TestCase):
         self.assertCatches(
             flat_property, "w = QgsSymbolLayer.PropertyStrokeWidth\n",
             "w = QgsSymbolLayer.Property.StrokeWidth\n")
+
+    def test_unsafe_xml_guard(self):
+        for bad in ("import xml.etree.ElementTree as ET\n",
+                    "from xml.sax.saxutils import escape\n",
+                    "from xml.dom import minidom\n"):
+            self.assertCatches(unsafe_xml, bad,
+                               "from xml.parsers import expat\n")
 
     def test_bom_guard(self):
         self.assertCatches(bom, "﻿# x\n", "# x\n")

@@ -78,6 +78,7 @@ SHOT_OVERLAY_UPLOADS = 8
 # запросов видимости надписей приходят через кадр.
 SHOT_SETTLE = 3
 PREVIEW_COLOR = (0.18, 0.18, 0.18)  # поля вокруг снимка в окне
+PUMP_PERIOD = 250  # мс, страховочный запуск загрузчиков без кадров
 
 LEFT = enum(Qt, "MouseButton", "LeftButton")
 MIDDLE = enum(Qt, "MouseButton", "MiddleButton")
@@ -308,6 +309,28 @@ class GlobeView(QOpenGLWidget):
         self.shot = None
         self._shot_timer = QTimer(self)
         self._shot_timer.timeout.connect(self._shot_frame)
+        # Загрузчики запускают запросы после каждого показанного кадра:
+        # таймер запуска при частой перерисовке не срабатывает.
+        self.frameSwapped.connect(self._pump_loaders)
+        # Страховка без кадров. Просьбу тайлов вид шлёт загрузчику только
+        # в кадре, а кадры идут, пока приходят тайлы. Загрузчик опустел
+        # раньше новой просьбы - кадров нет, картинка стоит грубой.
+        # Нашлось 28 сентября 2026 года. Таймер заказывает кадр, если
+        # вид ждёт тайлы, а загрузчик пуст, и подгоняет загрузчики.
+        self._pump_timer = QTimer(self)
+        self._pump_timer.setInterval(PUMP_PERIOD)
+        self._pump_timer.timeout.connect(self._pump_loaders)
+        self._pump_timer.start()
+
+    def _pump_loaders(self):
+        for loader in (self.loader, self.terrain_loader, self.place_loader,
+                       self.overlay):
+            if loader is not None:
+                loader.pump_if_due()
+        sel = self.selection
+        if sel is not None and sel.want and self.loader is not None \
+                and not self.loader.busy() and self.shot is None:
+            self.update()
 
     # Данные
 
@@ -336,8 +359,9 @@ class GlobeView(QOpenGLWidget):
         shapes = self.features.shapes
         if self._feature_marks[1] is not shapes:
             self._feature_marks = ([
-                Place(-2 - i, name or "", "mark", 1, lat, lon)
-                for i, name, lat, lon in self.features.marks()], shapes)
+                Place(-2 - i, name or "", "mark", 1, lat, lon, None, lift)
+                for i, name, lat, lon, lift in self.features.marks()],
+                shapes)
         return self._feature_marks[0]
 
     def set_search_mark(self, mark):
@@ -1052,10 +1076,12 @@ class GlobeView(QOpenGLWidget):
             self.hole_counts.append((self.frame, gaps, holes))
         if air:
             self._draw_sky()
+        features_busy = False
         if self.features.shapes and not self.show_holes:
-            self.features.draw(
-                self.camera, self.store.height_at if self.store.scale
-                else None, self.store.version, ratio)
+            features_busy = self.features.draw(
+                self.camera, self.store.heights_at if self.store.scale
+                else None, self.store.version, ratio,
+                still=shot or not motion)
         if (self.label_kinds or self.search_mark is not None
                 or self.features.shapes) \
                 and not self.show_holes:
@@ -1086,6 +1112,7 @@ class GlobeView(QOpenGLWidget):
         if shot:
             pass  # кадры снимка идут по таймеру
         elif moving or refill or self.built or self._drop_overlays \
+                or features_busy \
                 or self.labels.pending or (
                 self.pending and any(k in sel.keep for k in self.pending)) \
                 or (self.overlay_pending and any(

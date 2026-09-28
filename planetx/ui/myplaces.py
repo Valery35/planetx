@@ -32,6 +32,7 @@ from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 from ..core import placetree
 from ..core.features import Shape
+from ..core.kml import KFolder, KPlace
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -43,7 +44,8 @@ FIELDS = (("name", "string"), ("description", "string"),
           ("color", "string"), ("width", "double"), ("fill", "string"),
           ("visible", "integer"), ("measure", "string"),
           ("created", "string"), ("view", "string"),
-          ("position", "integer"), ("folder", "integer"))
+          ("position", "integer"), ("folder", "integer"),
+          ("height", "double"), ("extrude", "integer"))
 FOLDER_TABLE = "folders"
 FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("position", "integer"), ("visible", "integer"),
@@ -109,6 +111,14 @@ def _int(value):
         return None
 
 
+def _float(value):
+    """Число из поля или 0, если поле пустое."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _folder_key(fid):
     """Ключ папки по номеру, None и 0 - корень."""
     return "{}:{}".format(placetree.FOLDER, fid) if fid else None
@@ -154,8 +164,9 @@ class Place:
     """Метка из файла: ключ (вид, номер объекта), объект и видимость."""
 
     def __init__(self, kind, fid, shape, visible, measure="", view=None,
-                 position=None, folder=None):
+                 position=None, folder=None, description=""):
         self.kind = kind
+        self.description = description
         self.position = position
         self.fid = fid
         self.shape = shape
@@ -267,7 +278,10 @@ class MyPlaces(QObject):
                     width=float(feature["width"] or DEFAULT_WIDTH),
                     fill=_color(feature["fill"], None) if kind == "polygon"
                     else None,
-                    name=str(feature["name"] or ""))
+                    name=str(feature["name"] or ""),
+                    height=max(_float(_value(feature, layer, "height")),
+                               0.0),
+                    extrude=bool(_int(_value(feature, layer, "extrude"))))
                 visible = _int(feature["visible"])
                 self.places.append(Place(
                     kind, feature.id(), shape,
@@ -275,7 +289,8 @@ class MyPlaces(QObject):
                     str(feature["measure"] or ""),
                     _view(_value(feature, layer, "view")),
                     _int(_value(feature, layer, "position")),
-                    _folder_key(_int(_value(feature, layer, "folder")))))
+                    _folder_key(_int(_value(feature, layer, "folder"))),
+                    str(feature["description"] or "")))
         self.folders = []
         if self.folder_layer is not None:
             for feature in self.folder_layer.getFeatures():
@@ -357,7 +372,9 @@ class MyPlaces(QObject):
                   "view": ",".join(repr(float(v)) for v in view)
                   if view else "",
                   "position": placetree.next_position(self.nodes(), folder),
-                  "folder": _folder_fid(folder)}
+                  "folder": _folder_fid(folder),
+                  "height": float(shape.height or 0.0),
+                  "extrude": int(bool(shape.extrude))}
         for name, value in values.items():
             if layer.fields().indexOf(name) >= 0:
                 feature[name] = value
@@ -431,6 +448,10 @@ class MyPlaces(QObject):
                              "position": position}
         self._write(changes)
 
+    def update(self, key, values):
+        """Свойства метки из окна свойств: {поле файла: значение}."""
+        self._write({key: values})
+
     def set_visible_many(self, states):
         """Флажки меток и папок разом: {ключ: включена}."""
         self._write({key: {"visible": 1 if on else 0}
@@ -465,6 +486,99 @@ class MyPlaces(QObject):
         for layer, fids in per_layer.values():
             layer.dataProvider().deleteFeatures(fids)
         self._read()
+
+    # KML и KMZ.
+
+    def import_tree(self, tree, parent=None):
+        """Записать дерево core.kml в папку parent новой папкой.
+
+        Папки создаются по одной, метки пишутся одной правкой на слой,
+        список перечитывается один раз. Возвращает ключ новой папки.
+        """
+        if self.folder_layer is None:
+            return None
+        per_kind = {}
+
+        def folder(node, parent_key, position):
+            layer = self.folder_layer
+            feature = QgsFeature(layer.fields())
+            for field, value in (
+                    ("name", node.name), ("parent", _folder_fid(parent_key)),
+                    ("position", position), ("visible", int(node.visible)),
+                    ("expanded", 0)):
+                feature[field] = value
+            ok, added = layer.dataProvider().addFeatures([feature])
+            if not ok:
+                return None
+            key = _folder_key(added[0].id())
+            for n, child in enumerate(node.children):
+                if isinstance(child, KFolder):
+                    folder(child, key, n)
+                else:
+                    per_kind.setdefault(child.kind, []).append(
+                        (child, key, n))
+            return key
+
+        top = folder(tree, parent, placetree.next_position(self.nodes(),
+                                                           parent))
+        stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        for kind, items in per_kind.items():
+            layer = self.layers.get(kind)
+            if layer is None:
+                continue
+            features = []
+            for place, key, position in items:
+                feature = QgsFeature(layer.fields())
+                feature.setGeometry(_geometry(kind, place.points))
+                values = {
+                    "name": place.name, "description": place.description,
+                    "color": _color_text(place.color),
+                    "width": float(place.width),
+                    "fill": _color_text(place.fill),
+                    "visible": int(place.visible), "measure": "",
+                    "created": stamp,
+                    "view": ",".join(repr(float(v)) for v in place.view)
+                    if place.view else "",
+                    "position": position, "folder": _folder_fid(key),
+                    "height": float(place.height or 0.0),
+                    "extrude": int(bool(place.extrude))}
+                for name, value in values.items():
+                    if layer.fields().indexOf(name) >= 0:
+                        feature[name] = value
+                features.append(feature)
+            layer.dataProvider().addFeatures(features)
+        # Новая папка раскрыта, вложенные - свёрнуты.
+        if top is not None:
+            self.folder_layer.dataProvider().changeAttributeValues(
+                {_folder_fid(top): {self.folder_layer.fields().indexOf(
+                    "expanded"): 1}})
+        self._read()
+        return top
+
+    def export_tree(self, folder=None):
+        """Папка folder (None - все «Мои метки») деревом core.kml."""
+        item = self.find(folder) if folder else None
+        root = KFolder(item.name if item else tr("Мои метки"),
+                       item.visible if item else True)
+
+        def fill(target, nodes):
+            for node in nodes:
+                if isinstance(node, tuple):
+                    sub, kids = node
+                    child = KFolder(sub.name, sub.visible)
+                    fill(child, kids)
+                    target.children.append(child)
+                else:
+                    shape = node.shape
+                    target.children.append(KPlace(
+                        shape.name, shape.kind, list(shape.points),
+                        color=shape.color, width=shape.width,
+                        fill=shape.fill, visible=node.visible,
+                        view=node.view, description=node.description
+                        or node.measure, height=shape.height,
+                        extrude=shape.extrude))
+        fill(root, self.tree(folder))
+        return root
 
     def add_to_project(self):
         """Добавить слои файла в текущий проект, общий файл тот же."""

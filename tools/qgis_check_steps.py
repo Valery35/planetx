@@ -106,6 +106,12 @@ def sidebar():
     window = state["window"]
     view = window.view
     before = view.width()
+    if os.environ.get("PLANETX_SIDEBAR_NOOP"):
+        # Разбор: только вложенный проход цикла событий, без щелчков.
+        QgsApplication.processEvents()
+        QgsApplication.processEvents()
+        result["sidebar"] = {"noop": True}
+        return None
     window.toolbar.sidebar.click()
     QgsApplication.processEvents()
     out = {"hidden": window.panel.isHidden(), "wider": view.width() - before,
@@ -133,6 +139,21 @@ def shapes_set():
         Shape("point", [(58.01, 56.25)], name="Точка"),
     ])
     result["gl_before"] = dict(view.gl_errors)
+    state["frame_at_set"] = view.frame
+    # Счёт вызовов страховочного запуска загрузчика подложки.
+    pumps = state["pumps"] = []
+    if view.loader is not None:
+        original = view.loader.pump_if_due
+        loader = view.loader
+
+        def counted():
+            from planetx.net.loader import Throttle
+            pumps.append((Throttle.moving, round(
+                Throttle.wait(loader.last_start), 3),
+                len(loader.queue.waiting), len(loader.queue.active)))
+            original()
+        view.loader.pump_if_due = counted
+    state["loader_at_set"] = view.loader
 
 
 @check(100)
@@ -163,7 +184,30 @@ def shapes_check():
         "want": len(view.selection.want) if view.selection else None,
         "errors": {str(k): v for k, v in list(
             state["window"].errors.items())[:5]},
-        "source": state["window"].source.name}
+        "source": state["window"].source.name,
+        "frames_since_set": view.frame - state.get("frame_at_set", 0),
+        "exposed": view.isVisible() and not view.visibleRegion().isEmpty(),
+        "minimized": state["window"].isMinimized(),
+        "active_window": QgsApplication.activeWindow() is state["window"],
+        "queue": repr(view.loader.queue.__dict__)[:500]
+        if view.loader else None,
+        "pump_remaining": view.loader.pump_timer.remainingTime()
+        if view.loader else None,
+        "pump_calls": len(state.get("pumps", [])),
+        "pump_samples": state.get("pumps", [])[-6:],
+        "heartbeat_active": view._pump_timer.isActive(),
+        "loader_same": view.loader is state.get("loader_at_set"),
+        "camera_size": [view.camera.width, view.camera.height],
+        "view_size": [view.width(), view.height()],
+        "pose": [round(view.navigator.pose.lat, 3),
+                 round(view.navigator.pose.lon, 3),
+                 round(view.navigator.pose.distance)],
+        "shot": view.shot is not None}
+    if view.loader is not None:
+        before = len(view.loader.started)
+        view.loader._pump()
+        result["labels_state"]["manual_pump_started"] = \
+            len(view.loader.started) - before
     result["features_built"] = sum(1 for x in view.features.buffers if x)
 
 
@@ -846,6 +890,233 @@ def new_folder():
     for key in (new, p, q):
         store.remove(key)
     result["new_folder"] = out
+
+
+@check(1000)
+def kml_io():
+    import zipfile
+    window = state["window"]
+    store = window.myplaces
+    sample = os.path.join(ROOT, "planetx", "tests", "test_kml.py")
+    # Образец KML берётся из теста разбора.
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("test_kml", sample)
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, os.path.join(ROOT, "planetx", "core"))
+    spec.loader.exec_module(module)
+    path = os.path.join(TEMP, "planetx_in.kmz")
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("doc.kml", module.SAMPLE)
+    before = len(store.places)
+    key = window.import_kml(None, path)
+    out = {"folder": store.find(key).name if key else None,
+           "added": len(store.places) - before,
+           "selected": window.panel.current_folder() == key,
+           "flight": window.view.navigator.flight is not None}
+    inside = store.places_in(key)
+    perm = next((p for p in inside if p.name == "Пермь"), None)
+    out["perm_view"] = list(perm.view) if perm and perm.view else None
+    out["perm_description"] = perm.description if perm else None
+    routes = [f for f in store.folders if f.name == "Маршруты"
+              and f.parent == key]
+    out["routes_hidden"] = bool(routes) and not routes[0].visible
+    out["path_color"] = next((list(p.shape.color) for p in inside
+                              if p.name == "Путь"), None)
+    exported = os.path.join(TEMP, "planetx_out.kml")
+    out["export_ok"] = window.export_kml(key, exported)
+    from planetx.core.kml import read_file
+    with open(exported, "rb") as fh:
+        again = read_file(fh.read())
+    out["export_places"] = len(again.places())
+    out["export_folders"] = [c.name for c in again.children
+                             if hasattr(c, "children")]
+    store.remove(key)
+    result["kml"] = out
+
+
+@check(6000)
+def extrude():
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    from planetx.ui.placeprops import PlaceProperties
+    window = state["window"]
+    store = window.myplaces
+    for place in list(store.places):
+        if place.visible:
+            store.set_visible(place.key, False)
+    # Разбор: PLANETX_EXTRUDE=flat - на земле, lift - поднятые без стен.
+    mode = os.environ.get("PLANETX_EXTRUDE", "wall")
+    lift = mode != "flat"
+    wall = mode == "wall"
+
+    def Shape(*args, **kwargs):  # noqa: N802
+        from planetx.core.features import Shape as Base
+        if not lift:
+            kwargs["height"] = 0.0
+        kwargs["extrude"] = kwargs.get("extrude", False) and wall
+        return Base(*args, **kwargs)
+    keys = [
+        store.add(Shape("polygon", [(58.00, 56.20), (58.00, 56.26),
+                                    (58.03, 56.26), (58.03, 56.20)],
+                        color=(255, 0, 255, 255), fill=(255, 0, 255, 90),
+                        name="Коробка", height=500.0, extrude=True)),
+        store.add(Shape("line", [(57.98, 56.15), (58.05, 56.30)],
+                        color=(0, 255, 255, 255), width=3.0, name="Стена",
+                        height=300.0, extrude=True)),
+        store.add(Shape("point", [(58.015, 56.17)], name="Мачта",
+                        height=200.0, extrude=True))]
+    state["extrude_keys"] = keys
+    if os.environ.get("PLANETX_NO_SHAPES"):
+        # Сравнение: тот же вид без поднятых объектов.
+        for key in keys:
+            store.set_visible(key, False)
+    # Окно свойств: высота стены 300 -> 400.
+    dialog = PlaceProperties(store.find(keys[1]), window)
+    dialog.height.setValue(400.0)
+    store.update(keys[1], dialog.values())
+    dialog.deleteLater()
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(58.015, 56.23, 9000.0, 20.0, 65.0))
+    result["extrude"] = {
+        "stored": [(round(store.find(k).shape.height), store.find(k)
+                    .shape.extrude) for k in keys]}
+
+
+@check(200)
+def extrude_check():
+    window = state["window"]
+    view = window.view
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_extrude.png"))
+    from planetx.net.loader import image_to_rgba
+    rgba = image_to_rgba(image).astype(int)
+    r, g, b = rgba[..., 0], rgba[..., 1], rgba[..., 2]
+    out = result["extrude"]
+    out["magenta_px"] = int(((r > 150) & (g < 110) & (b > 150)).sum())
+    out["cyan_px"] = int(((r < 110) & (g > 150) & (b > 150)).sum())
+    out["walls"] = sum(1 for item in view.features.buffers
+                       if item is not None and "walls" in item.index)
+    out["gl_errors"] = dict(view.gl_errors)
+    # Отрисовка объектов вручную: исключение посреди неё оставляло бы
+    # кадр с выключенной записью глубины.
+    from OpenGL.error import GLError
+    view.makeCurrent()
+    try:
+        view.features.dirty = True
+        view.features.draw(view.camera, view.store.heights_at,
+                           view.store.version, 1.0)
+        out["manual_draw"] = "ok"
+    except (GLError, TypeError, ValueError, AttributeError, KeyError,
+            IndexError) as error:
+        lines = traceback.format_exc().splitlines()
+        out["manual_draw"] = [line for line in lines
+                              if "File" in line or "err" in line.lower()
+                              or "description" in line][:14]
+    view.doneCurrent()
+    marks = [p for p in view._own_marks() if p.name == "Мачта"]
+    out["mark_lift"] = marks[0].lift if marks else None
+    from planetx.net.loader import Throttle
+    out["state"] = {"levels": dict(view.drawn_levels), "frame": view.frame,
+                    "moving": Throttle.moving,
+                    "flight": view.navigator.flight is not None,
+                    "base_busy": view.loader.busy() if view.loader else None,
+                    "base_active": len(view.loader.replies)
+                    if view.loader else None,
+                    "want": len(view.selection.want)
+                    if view.selection else None,
+                    "camera": [view.camera.width, view.camera.height],
+                    "errors": {str(k): v for k, v in list(
+                        window.errors.items())[:4]},
+                    "started": len(view.loader.started)
+                    if view.loader else None,
+                    "queue": repr(view.loader.queue.__dict__)[:600]
+                    if view.loader else None}
+    if view.loader is not None:
+        import time as _time
+        loader = view.loader
+        out["pump"] = {"timer_active": loader.pump_timer.isActive(),
+                       "remaining_ms": loader.pump_timer.remainingTime(),
+                       "since_last": round(_time.monotonic()
+                                           - loader.last_start, 3),
+                       "throttle_since": round(_time.monotonic()
+                                               - Throttle.last, 3),
+                       "wait": round(Throttle.wait(loader.last_start), 3)}
+        loader._pump()
+        out["pump"]["active_after_manual"] = len(loader.replies)
+    for key in state["extrude_keys"]:
+        window.myplaces.remove(key)
+
+
+@check(300)
+def pump_stall():
+    # Таймер запуска просрочен, а очередь событий не дала ему сработать.
+    # Загрузка вставала совсем, 28 сентября 2026 года. _later обязан
+    # запустить запрос без таймера.
+    import time as _time
+    from planetx.net.loader import Throttle
+    loader = state["window"].view.loader
+    moving = Throttle.moving
+    # Проверяется запуск без таймера, а не общий отсчёт движения.
+    Throttle.moving = False
+    loader.queue.want((15, 21600, 9800), 5.0, now=_time.monotonic())
+    loader.last_start = _time.monotonic() - 1.0
+    loader.pump_timer.start(1)
+    _time.sleep(0.02)
+    # Считаются вызовы запуска: число запросов упирается в предел
+    # одновременных, когда загрузчик занят.
+    calls = []
+    pump = loader._pump
+    loader._pump = lambda: calls.append(1) or pump()
+    try:
+        loader._later()
+    finally:
+        del loader._pump
+    # Показанный кадр запускает ждущий запрос, даже когда таймер
+    # запуска не срабатывает.
+    loader.queue.want((15, 21601, 9800), 5.0, now=_time.monotonic())
+    loader.last_start = _time.monotonic() - 1.0
+    loader.pump_timer.start(600000)
+    swap = []
+    loader._pump = lambda: swap.append(1) or pump()
+    try:
+        state["window"].view.frameSwapped.emit()
+    finally:
+        del loader._pump
+    Throttle.moving = moving
+    result["pump_stall"] = {"pumped": len(calls), "on_swap": len(swap),
+                            "moving_before": moving,
+                            "view_moving": state["window"].view.navigator
+                            .flight is not None}
+
+
+@check(2500)
+def idle_rewant():
+    # Вид ждёт тайлы, загрузчик пуст, просьба уже «отправлена» и кадров
+    # нет. Так картинка оставалась грубой, 28 сентября 2026 года.
+    import time as _time
+    from planetx.core.navigation import Pose
+    view = state["window"].view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(-33.9, 18.4, 30000.0))
+    view.repaint()
+    want = dict(view.selection.want) if view.selection else {}
+    view.loader.retain([])
+    view.loader.queue.waiting.clear()
+    view._wanted = frozenset(want)
+    view._wanted_at = _time.monotonic()
+    state["rewant"] = {"want": len(want),
+                       "started": len(view.loader.started),
+                       "frame": view.frame}
+
+
+@check(200)
+def idle_rewant_check():
+    view = state["window"].view
+    out = state["rewant"]
+    out["started_after"] = len(view.loader.started) - out.pop("started")
+    out["frames_after"] = view.frame - out.pop("frame")
+    result["idle_rewant"] = out
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.

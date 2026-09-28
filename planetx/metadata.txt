@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.5.0
+version=0.5.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -33,7 +33,9 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       polygons and circles on the WGS84 ellipsoid. Save view puts a
       placemark that restores the height, heading and tilt. Tours fly
       over My Places and along paths. A snapshot of the view goes to a
-      file or into a QGIS layout.
+      file or into a QGIS layout. KML and KMZ open into My Places and a
+      folder saves back to KML. Places rise above the ground and extend
+      to it as walls and blocks.
       Type a place name or coordinates in the Search field and the
       camera flies there, the place found gets a red pin. The flight goes
       along the van Wijk and Nuij path.
@@ -52,7 +54,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.5.0 Tours as in Google Earth: Play tour flies over the
+changelog=0.5.1 The base map no longer stops loading and stays blurred,
+      the fault came in 0.5.0. The globe turns as smoothly with large
+      places, such as the regions of a country from KML, as without them.
+      Place properties as in Google Earth: name, description, colors,
+      height above ground and extending to the ground, a path becomes a
+      wall and a polygon a block. Google Earth files: Open KML or KMZ puts
+      the file into My Places with folders, styles and views, Save as KML
+      writes a folder back.
+      0.5.0 Tours as in Google Earth: Play tour flies over the
       checked places of My Places or a folder, a saved view restores its
       height, heading and tilt, along a path the camera travels the line.
       Folders in My Places with dragging of places and folders. View

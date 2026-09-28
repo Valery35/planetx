@@ -17,8 +17,9 @@ from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsProject, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import (QInputDialog, QLabel, QMessageBox,
-                                 QSplitter, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QFileDialog, QInputDialog, QLabel,
+                                 QMessageBox, QSplitter, QVBoxLayout,
+                                 QWidget)
 from qgis.utils import iface
 
 from ..core import basemap
@@ -31,6 +32,8 @@ from ..core.mipmap import mip_chain
 from ..core.navigation import focal, ground_under
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
+from ..core.kml import KmlError, read_file as read_kml_file, write_kml, \
+    write_kmz
 from ..core.placetree import is_folder
 from ..core.tour import PathStop, Stop
 from ..core.tiling import tile_mesh
@@ -57,6 +60,7 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
                       visible_on_map, write_flag, write_shown)
 from .properties import SCALE_RANGE, PropertiesDialog
+from .placeprops import PlaceProperties
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
 from .sync import MapSync
@@ -1049,6 +1053,12 @@ class GlobeWindow(QWidget):
             if new is not None:
                 self.panel.select_place(new)
             return
+        if action == "import_kml":
+            self.import_kml(key or None)
+            return
+        if action == "export_kml":
+            self.export_kml(key or None)
+            return
         if action == "tour" and (not key or is_folder(key)):
             self.tour.start(self._tour_stops(key or None))
             return
@@ -1059,6 +1069,10 @@ class GlobeWindow(QWidget):
             self.fly_to_place(item)
         elif action == "tour":
             self.tour.start([self.place_stop(item, along=True)])
+        elif action == "properties":
+            dialog = PlaceProperties(item, self)
+            if dialog.exec():
+                self.myplaces.update(key, dialog.values())
         elif action == "rename":
             name, ok = QInputDialog.getText(
                 self, tr("Переименовать"), tr("Название"), text=item.name)
@@ -1077,6 +1091,61 @@ class GlobeWindow(QWidget):
             answer = QMessageBox.question(self, title, question)
             if answer == enum(QMessageBox, "StandardButton", "Yes"):
                 self.myplaces.remove(key)
+
+    def import_kml(self, parent=None, path=None):
+        """Открыть KML или KMZ в папку parent новой папкой и подлететь
+        к содержимому, как Google Earth."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("Открыть KML или KMZ"), "",
+                tr("KML и KMZ (*.kml *.kmz)"))
+        if not path:
+            return None
+        name = os.path.splitext(os.path.basename(path))[0]
+        try:
+            with open(path, "rb") as fh:
+                tree = read_kml_file(fh.read(), name)
+        except (OSError, KmlError) as error:
+            QMessageBox.warning(self, tr("Открыть KML или KMZ"), tr(
+                "Файл не прочитан: {error}", error=str(error)))
+            return None
+        places = tree.places()
+        if not places:
+            QMessageBox.information(self, tr("Открыть KML или KMZ"), tr(
+                "В файле нет точек, линий и многоугольников."))
+        key = self.myplaces.import_tree(tree, parent)
+        if key is not None:
+            self.panel.select_place(key)
+        points = [p for place in places for p in place.points]
+        if points:
+            lats = [p[0] for p in points]
+            lons = [p[1] for p in points]
+            camera = self.view.camera
+            lat, lon, distance = fit_view(min(lons), min(lats), max(lons),
+                                          max(lats), camera.fov_y,
+                                          camera.aspect)
+            self._fly_to(lat, lon, distance)
+        return key
+
+    def export_kml(self, folder=None, path=None):
+        """Сохранить папку folder (None - все «Мои метки») в KML или KMZ."""
+        tree = self.myplaces.export_tree(folder)
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self, tr("Сохранить как KML"), (tree.name or "PlanetX")
+                + ".kmz", tr("KMZ (*.kmz);;KML (*.kml)"))
+        if not path:
+            return False
+        data = write_kmz(tree) if path.lower().endswith(".kmz") \
+            else write_kml(tree).encode("utf-8")
+        try:
+            with open(path, "wb") as fh:
+                fh.write(data)
+        except OSError as error:
+            QMessageBox.warning(self, tr("Сохранить как KML"), tr(
+                "Файл не записан: {error}", error=str(error)))
+            return False
+        return True
 
     def place_stop(self, place, along=False):
         """Остановка над меткой: точка, охват линии и многоугольника.

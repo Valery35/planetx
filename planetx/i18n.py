@@ -439,6 +439,42 @@ EN = {
     "Удалить папку «{name}» со всем содержимым?":
         "Delete folder “{name}” with all its contents?",
 
+    # KML и KMZ.
+    "Открыть KML или KMZ…": "Open KML or KMZ…",
+    "Открыть KML или KMZ": "Open KML or KMZ",
+    "Сохранить как KML…": "Save as KML…",
+    "Сохранить как KML": "Save as KML",
+    "KML и KMZ (*.kml *.kmz)": "KML and KMZ (*.kml *.kmz)",
+    "KMZ (*.kmz);;KML (*.kml)": "KMZ (*.kmz);;KML (*.kml)",
+    "Файл не прочитан: {error}": "The file was not read: {error}",
+    "Файл не записан: {error}": "The file was not written: {error}",
+    "В файле нет точек, линий и многоугольников.":
+        "The file has no points, lines or polygons.",
+
+    # Свойства метки.
+    "Свойства…": "Properties…",
+    "Свойства: {name}": "Properties: {name}",
+    "Описание метки. Оно сохраняется в файле меток и уходит в KML.":
+        "Description of the place. It is kept in the places file and goes "
+        "to KML.",
+    "Описание": "Description",
+    " м": " m",
+    "Подъём над рельефом, как «относительно земли» в Google Earth. Ноль - "
+    "объект лежит на земле.":
+        "Height above the terrain, as relative to ground in Google Earth. "
+        "Zero lays the object on the ground.",
+    "Высота над землёй": "Height above ground",
+    "Выдавить до земли": "Extend to ground",
+    "Стена от поднятого объекта до земли, у точки - стойка. Работает при "
+    "высоте больше нуля.":
+        "A wall from the raised object down to the ground, a post for a "
+        "point. Works with a height above zero.",
+    "Цвет линии или контура.": "Color of the line or outline.",
+    "Цвет заливки многоугольника. Прозрачность задаётся здесь же. "
+    "Заливкой красится и стена до земли.":
+        "Fill color of the polygon, with its transparency. The wall down "
+        "to the ground takes this color too.",
+    "Заливка": "Fill",
     # Меню слоя проекта.
     "Прозрачность": "Transparency",
     "{value} %": "{value} %",

@@ -457,6 +457,7 @@ class Labels:
             for row in np.concatenate([new, old]):
                 place = self._places[row]
                 h = height_at(place.lat, place.lon) if height_at else 0.0
+                h += place.lift or 0.0
                 self._p[row] = geodetic_to_ecef(place.lat, place.lon, h)
                 self._ver[row] = version
         return self._p[rows], self._n[rows]

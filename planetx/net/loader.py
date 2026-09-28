@@ -50,6 +50,7 @@ START_GAP = 0.015  # секунд между запусками запросов
 # отсчёту, ответ сразу запускал следующий. Движение важнее загрузки,
 # решение автора: пусть загрузится не всё, кадр загрузку не ждёт.
 MOVING_GAP = 0.05
+STALL = 0.2  # секунд просрочки таймера запуска, дальше запуск без него
 # Метка запросов PlanetX, пользовательский атрибут запроса Qt.
 MARK = QNetworkRequest.Attribute(
     enum_int(enum(QNetworkRequest, "Attribute", "User")) + 71)
@@ -305,9 +306,26 @@ class TileLoader(QObject):
         want_many и retain зовутся из paintGL. Запуск запроса стоит
         главному потоку до нескольких миллисекунд. Между кадрами у него
         есть время простоя, кадр от запуска не удлиняется.
+
+        Таймер Qt на Windows бывает просрочен секундами, пока очередь
+        событий занята. Загрузка тогда вставала совсем, 28 сентября
+        2026 года. Просроченный дольше STALL таймер не ждётся.
         """
         if not self.pump_timer.isActive():
             self.pump_timer.start(0)
+        elif self.pump_timer.remainingTime() == 0 \
+                and time.monotonic() - self.last_start > STALL:
+            self._pump()
+
+    def pump_if_due(self):
+        """Запустить запрос, если он ждёт и общий отсчёт разрешает.
+
+        Зовёт вид после каждого показанного кадра. Пока вид
+        перерисовывается подряд, очередь сообщений Windows не пустеет,
+        и таймер запуска Qt не срабатывает секундами.
+        """
+        if self.queue.waiting and Throttle.wait(self.last_start) <= 0.0:
+            self._pump()
 
     def busy(self):
         return len(self.queue) + len(self.decoding)
@@ -384,8 +402,9 @@ class TileLoader(QObject):
                                         self.size, self.decode,
                                         fill=self.fill))
         reply.deleteLater()
-        # Следующий запрос - через общий отсчёт, не сразу за ответом.
-        self._later()
+        # Ответ сам запускает следующий запрос, общий отсчёт в _pump
+        # держит паузу. Одному таймеру загрузку не доверить, см. _later.
+        self._pump()
         self._check_idle()
 
     def _decoded(self, key, rgba, extra):

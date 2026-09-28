@@ -161,6 +161,30 @@ class TestStore(unittest.TestCase):
             self.assertLessEqual(nodes.max(), high + 1e-6)
 
 
+class TestHeightsAt(unittest.TestCase):
+
+    def test_matches_single_points(self):
+        store = tr.HeightStore()
+        store.add(ramp_tile(0, 0, 0))
+        store.add(ramp_tile(3, 5, 2))
+        store.add(ramp_tile(6, 42, 18))
+        rng = np.random.default_rng(3)
+        lats = np.concatenate([rng.uniform(-80, 80, 300),
+                               rng.uniform(56.5, 58.5, 300)])
+        lons = np.concatenate([rng.uniform(-179, 179, 300),
+                               rng.uniform(55.0, 57.5, 300)])
+        many = store.heights_at(lats, lons)
+        one = [store.height_at(a, b) for a, b in zip(lats, lons)]
+        self.assertLess(np.abs(many - np.array(one)).max(), 1e-6)
+
+    def test_flat_and_empty(self):
+        store = tr.HeightStore()
+        store.add(ramp_tile(0, 0, 0))
+        store.set_scale(0.0)
+        self.assertEqual(store.heights_at([10.0], [20.0]).tolist(), [0.0])
+        self.assertEqual(len(tr.HeightStore().heights_at([], [])), 0)
+
+
 class TestScale(unittest.TestCase):
     """Вертикальный масштаб рельефа и выключенный рельеф."""
 

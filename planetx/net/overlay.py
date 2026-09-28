@@ -41,7 +41,7 @@ from ..core.mipmap import mip_chain
 from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
-from .loader import (CACHE_CONTROL, MARK, NO_ERROR, PREFER_CACHE,
+from .loader import (CACHE_CONTROL, MARK, NO_ERROR, PREFER_CACHE, STALL,
                      Throttle)
 
 TILE_SIZE = 256
@@ -353,9 +353,26 @@ class LayerOverlay(QObject):
         want_many и retain зовутся из paintGL. Запуск запроса стоит
         главному потоку до нескольких миллисекунд. Между кадрами у него
         есть время простоя, кадр от запуска не удлиняется.
+
+        Таймер Qt на Windows бывает просрочен секундами, пока очередь
+        событий занята. Загрузка тогда вставала совсем, 28 сентября
+        2026 года. Просроченный дольше STALL таймер не ждётся.
         """
         if not self.pump_timer.isActive():
             self.pump_timer.start(0)
+        elif self.pump_timer.remainingTime() == 0 \
+                and time.monotonic() - self.last_start > STALL:
+            self._pump()
+
+    def pump_if_due(self):
+        """Запустить запрос, если он ждёт и общий отсчёт разрешает.
+
+        Зовёт вид после каждого показанного кадра. Пока вид
+        перерисовывается подряд, очередь сообщений Windows не пустеет,
+        и таймер запуска Qt не срабатывает секундами.
+        """
+        if self.queue.waiting and Throttle.wait(self.last_start) <= 0.0:
+            self._pump()
 
     def busy(self):
         return len(self.queue) + len(self.preparing)
@@ -425,7 +442,7 @@ class LayerOverlay(QObject):
             self.preparing[key] = True
             self.pool.start(_PrepareTask(key, job.renderedImage(),
                                          self.sink))
-        self._later()
+        self._pump()
         self._check_idle()
 
     def _prepared(self, key, levels):
