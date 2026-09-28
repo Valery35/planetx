@@ -658,21 +658,23 @@ class Labels:
 
         Готовность проверяется по последнему запросу пачки, ответы
         приходят по порядку. Неготовая пачка ждёт следующего кадра.
+        Ответ пишется в массив ctypes, а не через byref. PyOpenGL
+        до 3.1.10 на Python 3.12 не принимает byref.
         """
-        value = ctypes.c_uint(0)
+        value = (ctypes.c_uint * 1)()
         while self.batches:
             queries, keys, stamp = self.batches[0]
             glGetQueryObjectuiv(queries[-1], GL.GL_QUERY_RESULT_AVAILABLE,
-                                ctypes.byref(value))
-            if not value.value:
+                                value)
+            if not value[0]:
                 break
             self.batches.popleft()
             if len(self.hidden) > 20000:
                 self.hidden.clear()
             for query, key in zip(queries, keys):
                 glGetQueryObjectuiv(query, GL.GL_QUERY_RESULT,
-                                    ctypes.byref(value))
-                self.hidden[key] = (value.value == 0, stamp)
+                                    value)
+                self.hidden[key] = (value[0] == 0, stamp)
             self.free_queries.extend(queries)
 
     def _draw_quads(self, quads, width, height):

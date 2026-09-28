@@ -234,6 +234,20 @@ def unsafe_xml(source):
     return found
 
 
+def ctypes_byref(source):
+    """Указатель ctypes.byref в вызове OpenGL. PyOpenGL до 3.1.10
+    на Python 3.12 ищет обработчик типа _ctypes.CArgObject и не
+    находит его. QGIS 3.40.15 падал на запросах видимости надписей,
+    28 сентября 2026 года. Ответ пишется в массив (c_uint * 1)()."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Attribute) and node.attr == "byref":
+            found.append(node.lineno)
+        elif isinstance(node, ast.alias) and node.name == "byref":
+            found.append(getattr(node, "lineno", 1))
+    return found
+
+
 def bom(source):
     """Метка BOM в начале файла. Её пишет Set-Content в PowerShell 5.1."""
     return [1] if source.startswith("﻿") else []
@@ -328,6 +342,11 @@ class TestCodeRules(unittest.TestCase):
                   and os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(unsafe_xml, plugin), [])
 
+    def test_no_ctypes_byref(self):
+        plugin = [p for p in self.paths if p.startswith(PLUGIN)
+                  and os.sep + "tests" + os.sep not in p]
+        self.assertEqual(scan(ctypes_byref, plugin), [])
+
     def test_core_does_not_import_qt(self):
         core = [p for p in self.paths
                 if os.sep + "core" + os.sep in p]
@@ -407,6 +426,12 @@ class TestGuardsCatch(unittest.TestCase):
                     "from xml.dom import minidom\n"):
             self.assertCatches(unsafe_xml, bad,
                                "from xml.parsers import expat\n")
+
+    def test_byref_guard(self):
+        good = "v = (ctypes.c_uint * 1)()\nf(q, v)\n"
+        for bad in ("f(q, ctypes.byref(v))\n",
+                    "from ctypes import byref\nf(q, byref(v))\n"):
+            self.assertCatches(ctypes_byref, bad, good)
 
     def test_bom_guard(self):
         self.assertCatches(bom, "﻿# x\n", "# x\n")
