@@ -273,6 +273,8 @@ class GlobeView(QOpenGLWidget):
         self.frame_times = deque(maxlen=FRAMES_KEPT)
         self.sections = deque(maxlen=FRAMES_KEPT)
         self.gl_errors = Counter()
+        # Ошибки OpenGL, накопленные вне кадра: от Qt, между кадрами.
+        self.outside_errors = Counter()
         self.draw_calls = 0
         self._wanted = frozenset()
         self._wanted_at = 0.0
@@ -601,6 +603,7 @@ class GlobeView(QOpenGLWidget):
     # OpenGL
 
     def initializeGL(self):
+        self._take_outside_errors()
         ctx = self.context()
         fmt = ctx.format()
         self.gl_info = {
@@ -940,6 +943,18 @@ class GlobeView(QOpenGLWidget):
         self._fit_camera()
         self._render(self.devicePixelRatioF())
 
+    def _take_outside_errors(self):
+        """Забрать ошибки OpenGL, оставленные до кадра чужим кодом.
+
+        Функции PyOpenGL проверяют ошибку после вызова и поднимают любую
+        накопленную, даже чужую. Без указателей gpu.hold_gil первым таким
+        вызовом кадра был glClearColor, и кадр обрывался на ошибке 1280
+        до рисования. Так было в QGIS 4.0.2 у пользователя, 28 сентября
+        2026 года.
+        """
+        for code in gpu.frame_errors():
+            self.outside_errors[code] += 1
+
     def _render(self, ratio, shot=False):
         """Кадр в текущий буфер кадра размером камеры.
 
@@ -958,6 +973,7 @@ class GlobeView(QOpenGLWidget):
         # скрипты считают скорость перелёта.
         self.step_time = time.monotonic()
         moving = self.navigator.step(self.step_time)
+        self._take_outside_errors()
         gpu.gl.glClearColor(*(HOLE if self.show_holes else SPACE), 1.0)
         gpu.gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.drawn = 0
@@ -1254,6 +1270,7 @@ class GlobeView(QOpenGLWidget):
         ratio = self.devicePixelRatioF()
         width = max(1, int(round(self.width() * ratio)))
         height = max(1, int(round(self.height() * ratio)))
+        self._take_outside_errors()
         GL.glClearColor(*PREVIEW_COLOR, 1.0)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         if shot.fbo is None:

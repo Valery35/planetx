@@ -9,6 +9,8 @@
 считаются порядок, добавление и удаление слоя и перерисовка слоя QGIS.
 Перерисовку слой просит при правке данных и стиля.
 """
+from functools import partial
+
 from qgis.core import QgsProject
 from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 
@@ -66,8 +68,11 @@ def write_shown(ids, project=None):
 class ProjectWatch(QObject):
     """Сигнал changed при любом изменении слоёв проекта.
 
-    Живёт вместе с окном. Связи со слоями и проектом Qt рвёт сам,
-    когда объект уничтожается.
+    Живёт вместе с окном. Связи с проектом, деревом слоёв и слоями
+    идут через _link и снимаются по сигналу destroyed. Qt сам их
+    не снимает, у лямбды нет получателя. Без этого сигнал проекта
+    после закрытия окна обращался к удалённому объекту, QGIS 3.40.15
+    писал RuntimeError.
     """
 
     changed = pyqtSignal()
@@ -85,6 +90,8 @@ class ProjectWatch(QObject):
         project = QgsProject.instance()
         root = project.layerTreeRoot()
         self._wired = set()
+        self._links = []
+        self.destroyed.connect(partial(_unlink, self._links))
         # Запросы перерисовки и смены выделения за один проход цикла
         # событий. Перерисовка слоя, у которого в том же проходе сменилось
         # выделение, - от выделения, а не от правки данных или стиля.
@@ -94,15 +101,20 @@ class ProjectWatch(QObject):
         self._pass = QTimer(self)
         self._pass.setSingleShot(True)
         self._pass.timeout.connect(self._end_pass)
-        project.layersAdded.connect(self._added)
-        project.layersRemoved.connect(self._changed)
-        project.readProject.connect(self._reloaded)
-        project.cleared.connect(self._reloaded)
-        root.layerOrderChanged.connect(self._changed)
-        root.customLayerOrderChanged.connect(self._changed)
-        root.hasCustomLayerOrderChanged.connect(self._changed)
-        root.visibilityChanged.connect(lambda *args: self.legend.emit())
+        self._link(project.layersAdded, self._added)
+        self._link(project.layersRemoved, self._changed)
+        self._link(project.readProject, self._reloaded)
+        self._link(project.cleared, self._reloaded)
+        self._link(root.layerOrderChanged, self._changed)
+        self._link(root.customLayerOrderChanged, self._changed)
+        self._link(root.hasCustomLayerOrderChanged, self._changed)
+        self._link(root.visibilityChanged,
+                   lambda *args: self.legend.emit())
         self._wire(project.mapLayers().values())
+
+    def _link(self, signal, slot):
+        """Связь с чужим объектом, снимается вместе с этим объектом."""
+        self._links.append(signal.connect(slot))
 
     def _wire(self, layers):
         for layer in layers:
@@ -110,12 +122,12 @@ class ProjectWatch(QObject):
                 continue
             self._wired.add(layer.id())
             layer_id = layer.id()
-            layer.repaintRequested.connect(
-                lambda *args, lid=layer_id: self._repaint(lid))
-            layer.nameChanged.connect(self.renamed)
+            self._link(layer.repaintRequested,
+                       lambda *args, lid=layer_id: self._repaint(lid))
+            self._link(layer.nameChanged, self.renamed)
             if hasattr(layer, "selectionChanged"):
-                layer.selectionChanged.connect(
-                    lambda *args, lid=layer_id: self._selection(lid))
+                self._link(layer.selectionChanged,
+                           lambda *args, lid=layer_id: self._selection(lid))
 
     def _selection(self, layer_id):
         self._selecting.add(layer_id)
@@ -145,3 +157,14 @@ class ProjectWatch(QObject):
 
     def _changed(self, *args):
         self.changed.emit()
+
+
+def _unlink(links, *args):
+    """Снять связи уничтоженного ProjectWatch.
+
+    Связь с уже удалённым слоем Qt снял раньше, disconnect для неё
+    возвращает False и ничего не делает.
+    """
+    for link in links:
+        QObject.disconnect(link)
+    links.clear()

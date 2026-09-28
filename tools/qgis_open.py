@@ -117,6 +117,7 @@ def report():
           % (w, h, view.drawn, len(view.textures)))
     print("уровни в кадре:", dict(sorted(view.drawn_levels.items())))
     print("ошибок OpenGL за время окна:", dict(view.gl_errors) or 0)
+    print("ошибок OpenGL вне кадра:", dict(view.outside_errors) or 0)
     print("пикселей диска Земли: %d" % int(mask.sum()))
     print("пурпурных пикселей внутри диска: %d" % int((magenta & mask)
                                                       .sum()))

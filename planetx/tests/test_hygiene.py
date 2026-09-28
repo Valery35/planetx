@@ -248,6 +248,71 @@ def ctypes_byref(source):
     return found
 
 
+def outside_connect(source):
+    """Прямая связь с сигналом чужого объекта в ui/project.py.
+
+    ProjectWatch связывается с проектом, деревом слоёв и слоями только
+    через _link, связи снимаются вместе с ним. Прямая связь с лямбдой
+    переживала окно, QGIS 3.40.15 писал RuntimeError про удалённый
+    ProjectWatch, 28 сентября 2026 года.
+    """
+    tree = ast.parse(source)
+    allowed = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_link":
+            allowed.update(id(sub) for sub in ast.walk(node))
+    found = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "connect") or id(node) in allowed:
+            continue
+        root = node.func.value
+        while isinstance(root, ast.Attribute):
+            root = root.value
+        if not (isinstance(root, ast.Name) and root.id == "self"):
+            found.append(node.lineno)
+    return found
+
+
+GL_ENTRIES = ("initializeGL", "_render", "_paint_preview")
+
+
+def _gl_call(node):
+    """Вызов вида GL.x(...) или gpu.gl.x(...)."""
+    if not (isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)):
+        return False
+    owner = node.func.value
+    if isinstance(owner, ast.Name):
+        return owner.id == "GL"
+    return (isinstance(owner, ast.Attribute) and owner.attr == "gl"
+            and isinstance(owner.value, ast.Name)
+            and owner.value.id == "gpu")
+
+
+def outside_errors_late(source):
+    """Первый вызов OpenGL в начале кадра раньше сбора чужих ошибок.
+
+    PyOpenGL поднимает накопленную ошибку на первом проверяемом вызове.
+    В QGIS 4.0.2 у пользователя кадр обрывался на glClearColor
+    с ошибкой 1280, 28 сентября 2026 года. render/view.py.
+    """
+    found = []
+    for func in ast.walk(ast.parse(source)):
+        if not (isinstance(func, ast.FunctionDef)
+                and func.name in GL_ENTRIES):
+            continue
+        calls = [n for n in ast.walk(func) if isinstance(n, ast.Call)]
+        taken = [n.lineno for n in calls
+                 if isinstance(n.func, ast.Attribute)
+                 and n.func.attr == "_take_outside_errors"]
+        first = min((n.lineno for n in calls if _gl_call(n)), default=None)
+        if first is not None and (not taken or min(taken) > first):
+            found.append(first)
+    return found
+
+
 def bom(source):
     """Метка BOM в начале файла. Её пишет Set-Content в PowerShell 5.1."""
     return [1] if source.startswith("﻿") else []
@@ -347,6 +412,14 @@ class TestCodeRules(unittest.TestCase):
                   and os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(ctypes_byref, plugin), [])
 
+    def test_project_watch_links_through_link(self):
+        path = os.path.join(PLUGIN, "ui", "project.py")
+        self.assertEqual(scan(outside_connect, [path]), [])
+
+    def test_outside_gl_errors_taken_first(self):
+        path = os.path.join(PLUGIN, "render", "view.py")
+        self.assertEqual(scan(outside_errors_late, [path]), [])
+
     def test_core_does_not_import_qt(self):
         core = [p for p in self.paths
                 if os.sep + "core" + os.sep in p]
@@ -432,6 +505,26 @@ class TestGuardsCatch(unittest.TestCase):
         for bad in ("f(q, ctypes.byref(v))\n",
                     "from ctypes import byref\nf(q, byref(v))\n"):
             self.assertCatches(ctypes_byref, bad, good)
+
+    def test_outside_connect_guard(self):
+        good = ("def _link(self, signal, slot):\n"
+                "    self._links.append(signal.connect(slot))\n"
+                "self._pass.timeout.connect(self._end_pass)\n"
+                "self._link(root.visibilityChanged, self._legend)\n")
+        for bad in ("root.visibilityChanged.connect(lambda: 1)\n",
+                    "layer.nameChanged.connect(self.renamed)\n"):
+            self.assertCatches(outside_connect, bad, good)
+
+    def test_outside_errors_guard(self):
+        good = ("def _render(self):\n"
+                "    self._take_outside_errors()\n"
+                "    gpu.gl.glClearColor(0, 0, 0, 1)\n")
+        for bad in ("def _render(self):\n"
+                    "    gpu.gl.glClearColor(0, 0, 0, 1)\n"
+                    "    self._take_outside_errors()\n",
+                    "def initializeGL(self):\n"
+                    "    GL.glGetString(GL.GL_RENDERER)\n"):
+            self.assertCatches(outside_errors_late, bad, good)
 
     def test_bom_guard(self):
         self.assertCatches(bom, "﻿# x\n", "# x\n")

@@ -216,6 +216,7 @@ def report():
     print("текстур в памяти %d, масштаб экрана %.0f %%"
           % (len(view.textures), ratio * 100))
     print("ошибок OpenGL за время окна:", dict(view.gl_errors) or 0)
+    print("ошибок OpenGL вне кадра:", dict(view.outside_errors) or 0)
     errors = getattr(plugin, "_open_errors", None)
     if errors is not None:
         print("ошибок Python с открытия окна: %d, проба дошла: %s"
