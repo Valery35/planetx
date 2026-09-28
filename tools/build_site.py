@@ -71,6 +71,8 @@ RU = {
     "cta.release": "Скачать выпуск",
     "cta.install": "Каталог модулей QGIS",
     "cta.code": "Исходный код",
+    "cta.manual": "Руководство PDF",
+    "cta.manual.url": "https://github.com/Valery35/planetx/releases/latest/download/PlanetX.pdf",
     "idea.eyebrow": "Как устроен глобус",
     "idea.h2": "Своё окно, свой движок, данные из открытых источников",
     "idea.sub": "Глобус рисуется на OpenGL 3.3 собственным движком, "
@@ -198,6 +200,8 @@ EN = {
     "cta.release": "Download the release",
     "cta.install": "QGIS plugin catalogue",
     "cta.code": "Source code",
+    "cta.manual": "Manual PDF",
+    "cta.manual.url": "https://github.com/Valery35/planetx/releases/latest/download/PlanetX_en.pdf",
     "idea.eyebrow": "How the globe works",
     "idea.h2": "Its own window, its own engine, data from open sources",
     "idea.sub": "The globe is drawn with OpenGL 3.3 by its own engine "
@@ -444,6 +448,8 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
        href="https://plugins.qgis.org/plugins/planetx/"></a>
     <a class="btn btn-ghost" data-i18n="cta.code"
        href="https://github.com/Valery35/planetx"></a>
+    <a class="btn btn-ghost" data-i18n="cta.manual"
+       data-i18n-href="cta.manual.url" href="https://github.com/Valery35/planetx/releases/latest/download/PlanetX.pdf"></a>
   </div>
   <figure class="shot">
     <img alt="" src="@CAUCASUS@">
@@ -558,6 +564,10 @@ function apply(lang){
   document.querySelectorAll('[data-i18n-attr]').forEach(function(el){
     var value = d[el.getAttribute('data-i18n-attr')];
     if (value !== undefined) el.setAttribute('content', value);
+  });
+  document.querySelectorAll('[data-i18n-href]').forEach(function(el){
+    var value = d[el.getAttribute('data-i18n-href')];
+    if (value !== undefined) el.setAttribute('href', value);
   });
   document.querySelectorAll('.lang button').forEach(function(b){
     b.classList.toggle('on', b.getAttribute('data-lang') === lang);
