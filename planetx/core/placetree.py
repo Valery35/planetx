@@ -91,3 +91,19 @@ def next_position(nodes, parent):
     kids = children(nodes, parent)
     numbered = [n.position for n in kids if n.position is not None]
     return max(numbered + [len(kids) - 1]) + 1
+
+
+def numbered_name(base, names):
+    """Название «base N» для новой метки, как «Моя метка 3».
+
+    N - следующий номер после наибольшего среди названий вида
+    «base число». Удалённые номера в середине не занимаются заново,
+    так новая метка всегда встаёт последней по номеру.
+    """
+    prefix = base + " "
+    numbers = [0]
+    for name in names:
+        tail = name[len(prefix):] if name.startswith(prefix) else ""
+        if tail.isdigit():
+            numbers.append(int(tail))
+    return prefix + str(max(numbers) + 1)

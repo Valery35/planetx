@@ -104,6 +104,19 @@ def geo_tree():
     )
 
 
+# Значки строк «Моих меток» по виду объекта, из темы QGIS.
+PLACE_ICONS = {"point": "/mIconPointLayer.svg", "line": "/mIconLineLayer.svg",
+               "polygon": "/mIconPolygonLayer.svg"}
+VIEW_ICON = "/mIconCamera.svg"  # метка «Сохранить вид» с ракурсом
+
+
+def place_icon(place):
+    """Значок метки: сохранённый вид, точка, линия или многоугольник."""
+    name = VIEW_ICON if place.view \
+        else PLACE_ICONS.get(place.kind, PLACE_ICONS["point"])
+    return QgsApplication.getThemeIcon(name)
+
+
 def layer_kind(layer):
     """Тип слоя словами, как в списке 3D-сцены Isoliner3D."""
     if isinstance(layer, QgsRasterLayer):
@@ -404,6 +417,7 @@ class LayerPanel(QWidget):
                 continue
             item = QTreeWidgetItem(parent, [node.name or tr("Без названия")])
             item.setData(0, PLACE_ROLE, node.key)
+            item.setIcon(0, place_icon(node))
             if node.measure:
                 item.setToolTip(0, node.measure)
             item.setFlags((item.flags() | CHECKABLE) & ~DROP)

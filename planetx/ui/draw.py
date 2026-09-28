@@ -31,9 +31,12 @@ class PlaceDialog(QDialog):
     save_requested = pyqtSignal()
     style_changed = pyqtSignal()
 
-    def __init__(self, ruler, parent=None):
+    def __init__(self, ruler, namer=None, parent=None):
         super().__init__(parent)
         self.ruler = ruler
+        # namer(вид) - название новой метки с номером, как «Моя метка 3».
+        self.namer = namer
+        self.auto_name = ""
         self.setWindowTitle(tr("Новая метка"))
         self.setModal(False)
         self.tabs = QTabBar(self)
@@ -87,6 +90,18 @@ class PlaceDialog(QDialog):
         default = DEFAULT_COLOR["line" if mode == "path" else mode]
         self.color.setColor(QColor(*default))
         self.ruler.set_mode(mode)
+        self.reset_name()
+
+    def reset_name(self):
+        """Название с номером для нового объекта. Своё название,
+        введённое вручную, сменой вида не затирается."""
+        if self.namer is None:
+            return
+        text = self.name.text().strip()
+        if text and text != self.auto_name:
+            return
+        self.auto_name = self.namer(MODES[self.tabs.currentIndex()])
+        self.name.setText(self.auto_name)
 
     def _update(self):
         hints = {

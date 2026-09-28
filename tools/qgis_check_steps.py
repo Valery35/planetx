@@ -1477,6 +1477,58 @@ def record_check():
     window.tracks.set_track(state["record_layer"], None)
     window.tracks.controller.setNavigationMode(_navigation_mode("Disabled"))
 
+
+@check(500)
+def place_names():
+    # Названия новых меток с номером по виду и значки строк списка.
+    from planetx.core.features import Shape
+    from planetx.ui.panel import PLACE_ROLE
+    window = state["window"]
+    store = window.myplaces
+    before = {p.key for p in store.places}
+    window._open_place()
+    dialog = window.place_dialog
+    d = window.drawer
+    out = {}
+    dialog.tabs.setCurrentIndex(0)
+    first = dialog.name.text()
+    d.add(58.02, 56.2)
+    window._save_place()
+    out["point"] = [first, dialog.name.text()]
+    dialog.tabs.setCurrentIndex(1)
+    out["path"] = dialog.name.text()
+    dialog.name.setText("Свой путь")
+    dialog.tabs.setCurrentIndex(2)
+    out["own_kept"] = dialog.name.text()
+    dialog.name.clear()
+    dialog.tabs.setCurrentIndex(0)
+    out["after_clear"] = dialog.name.text()
+    window.place_dialog.close()
+    store.add(Shape("line", [(58.0, 56.1), (58.01, 56.2)], name="Линия"))
+    store.add(Shape("polygon", [(57.97, 56.1), (57.97, 56.2),
+                                (57.99, 56.15)], name="Поле"))
+    store.add(Shape("point", [(58.0, 56.3)], name="Вид"),
+              view=(3000.0, 0.0, 45.0))
+    icons = {}
+    group = window.panel.places_group
+
+    def look(parent):
+        for i in range(parent.childCount()):
+            child = parent.child(i)
+            key = child.data(0, PLACE_ROLE)
+            if key not in before and child.text(0) in (
+                    out["point"][0], "Линия", "Поле", "Вид"):
+                icons[child.text(0)] = child.icon(0).cacheKey() \
+                    if not child.icon(0).isNull() else None
+            look(child)
+    look(group)
+    out["icons_set"] = sum(1 for v in icons.values() if v is not None)
+    out["icons_distinct"] = len(set(icons.values()))
+    for p in list(store.places):
+        if p.key not in before:
+            store.remove(p.key)
+    result["place_names"] = out
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

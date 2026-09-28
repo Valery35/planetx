@@ -34,7 +34,7 @@ from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.kml import KmlError, read_file as read_kml_file, write_kml, \
     write_kmz
-from ..core.placetree import is_folder
+from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, Stop
 from ..core.tiling import tile_mesh
@@ -1052,7 +1052,8 @@ class GlobeWindow(QWidget):
         if self._ruler_open():
             self.ruler_dialog.close()
         if self.place_dialog is None:
-            self.place_dialog = PlaceDialog(self.drawer, self)
+            self.place_dialog = PlaceDialog(self.drawer, self._draw_name,
+                                            self)
             self.place_dialog.save_requested.connect(self._save_place)
             self.place_dialog.style_changed.connect(self._refresh_shapes)
             self.place_dialog.finished.connect(self._place_closed)
@@ -1072,7 +1073,18 @@ class GlobeWindow(QWidget):
             return
         self.myplaces.add(shape, folder=self.panel.current_folder())
         self.place_dialog.name.clear()
+        self.place_dialog.reset_name()
         self.drawer.clear()
+
+    def new_name(self, base):
+        """Название новой метки с номером, как «Моя метка 3»."""
+        return numbered_name(base, [p.name for p in
+                                    self.myplaces.places_in(None)])
+
+    def _draw_name(self, mode):
+        bases = {"point": tr("Моя метка"), "path": tr("Мой путь"),
+                 "polygon": tr("Мой многоугольник")}
+        return self.new_name(bases[mode])
 
     def set_sidebar(self, shown):
         """Показать или скрыть левую панель, вид занимает её место."""
@@ -1126,7 +1138,7 @@ class GlobeWindow(QWidget):
                   "polygon": tr("Многоугольник"), "circle": tr("Круг")}
         name, ok = QInputDialog.getText(
             self, tr("Сохранить измерение"), tr("Название"),
-            text=titles[self.ruler.mode])
+            text=self.new_name(titles[self.ruler.mode]))
         if not ok:
             return
         shape = self.ruler.shape(rubber=False, name=name.strip())
@@ -1289,13 +1301,14 @@ class GlobeWindow(QWidget):
         Метка стоит в точке взгляда, ракурс - расстояние, азимут
         и наклон - пишется в поле view.
         """
+        default = self.new_name(tr("Вид"))
         name, ok = QInputDialog.getText(self, tr("Сохранить вид"),
-                                        tr("Название"), text=tr("Вид"))
+                                        tr("Название"), text=default)
         if not ok:
             return
         pose = self.view.navigator.pose
         shape = Shape("point", [(pose.lat, pose.lon)],
-                      name=name.strip() or tr("Вид"))
+                      name=name.strip() or default)
         self.myplaces.add(shape, view=(pose.distance, pose.heading,
                                        pose.tilt),
                           folder=self.panel.current_folder())

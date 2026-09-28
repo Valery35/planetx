@@ -80,5 +80,19 @@ class TestMove(unittest.TestCase):
         self.assertEqual(pt.move_plan(tree(), "folder:1", None, 2), {})
 
 
+class TestNumberedName(unittest.TestCase):
+
+    def test_first_and_next(self):
+        self.assertEqual(pt.numbered_name("Моя метка", []), "Моя метка 1")
+        self.assertEqual(pt.numbered_name(
+            "Моя метка", ["Моя метка 1", "Моя метка 4", "Пермь"]),
+            "Моя метка 5")
+
+    def test_other_names_do_not_count(self):
+        names = ["Моя метка", "Моя метка 2a", "Мой путь 7", "Моя метка -3"]
+        self.assertEqual(pt.numbered_name("Моя метка", names),
+                         "Моя метка 1")
+
+
 if __name__ == "__main__":
     unittest.main()
