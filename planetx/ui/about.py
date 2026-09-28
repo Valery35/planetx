@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Окно «О модуле»: версия, управление, источники данных, ссылки.
+"""Окно «О модуле»: версия, возможности, управление, требования,
+источники данных, ссылки. Текст длинный и прокручивается.
 
 Модуль не импортирует OpenGL, окно открывается и там, где глобус
 работать не может.
@@ -12,7 +13,7 @@ import os
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon, QPixmap
 from qgis.PyQt.QtWidgets import (QDialog, QDialogButtonBox, QHBoxLayout,
-                                 QLabel, QVBoxLayout)
+                                 QLabel, QTextBrowser, QVBoxLayout)
 
 from ..i18n import tr
 from ..meta import plugin_version
@@ -46,6 +47,21 @@ def _items(rows):
 
 def about_html():
     """Текст окна в HTML. Отдельно от окна, чтобы его проверял тест."""
+    features = _items(html.escape(line) for line in (
+        tr("Космоснимки, рельеф с отмывкой склонов и атмосфера, подложки "
+           "из подключений XYZ Tiles QGIS."),
+        tr("Раздел «Слои» с границами, названиями, дорогами, реками "
+           "и вершинами, подписи на 15 языках."),
+        tr("Слои текущего проекта на глобусе в порядке карты QGIS, "
+           "синхронизация с окном карты и определение объектов."),
+        tr("«Мои метки» с папками, метками, путями, многоугольниками "
+           "и сохранёнными видами, чтение и запись KML и KMZ."),
+        tr("Линейка на эллипсоиде WGS84, подъём и выдавливание меток."),
+        tr("Туры по меткам и вдоль путей, запись тура кадрами PNG "
+           "для видео."),
+        tr("Растущие треки по «Временному контроллеру» QGIS."),
+        tr("Сцены в файл, снимок вида в файл и в макет QGIS."),
+    ))
     controls = _items(html.escape(line) for line in (
         tr("Левая кнопка тянет Землю, после отпускания она вращается "
            "по инерции."),
@@ -57,10 +73,18 @@ def about_html():
            "и отдаляет, левая с Ctrl поворачивает взгляд."),
         tr("Стрелки сдвигают вид, PageUp и PageDown приближают "
            "и отдаляют, N ставит север вверху, U даёт взгляд отвесно."),
+        tr("В правом верхнем углу вида кольцо компаса, джойстики взгляда "
+           "и сдвига и ползунок высоты. Они появляются, когда курсор "
+           "подходит к углу."),
         tr("Поле «Поиск» слева вверху находит место по названию или "
            "координатам и запускает перелёт."),
-        tr("Кнопка на заголовке «Слои» открывает свойства вида. В них "
-           "выбираются подложка и масштаб рельефа."),
+        tr("Значок «Свойства вида» на панели значков открывает "
+           "свойства вида. В них выбираются подложка и масштаб рельефа."),
+    ))
+    needs = _items(html.escape(line) for line in (
+        tr("QGIS 3.36 и новее, в том числе QGIS 4."),
+        tr("Видеокарта с OpenGL 3.3."),
+        tr("Модуль Python PyOpenGL. В сборках QGIS для Windows он есть."),
     ))
     sources = _items((
         _link(OSM, tr("Подложка OpenStreetMap: © участники "
@@ -91,7 +115,9 @@ def about_html():
         "<p>{}</p>".format(html.escape(tr(
             "Трёхмерный глобус внутри QGIS в духе Google Earth. Рельеф, "
             "атмосфера, подложки из подключений QGIS."))),
+        "<h3>{}</h3>".format(html.escape(tr("Возможности"))), features,
         "<h3>{}</h3>".format(html.escape(tr("Управление"))), controls,
+        "<h3>{}</h3>".format(html.escape(tr("Требования"))), needs,
         "<h3>{}</h3>".format(html.escape(tr("Источники данных"))), sources,
         "<p>{}</p>".format(links),
         "<p>{} {}</p>".format(
@@ -112,12 +138,11 @@ class AboutDialog(QDialog):
             96, 96, enum(Qt, "AspectRatioMode", "KeepAspectRatio"),
             enum(Qt, "TransformationMode", "SmoothTransformation")))
         logo.setAlignment(enum(Qt, "AlignmentFlag", "AlignTop"))
-        text = QLabel(about_html(), self)
-        text.setWordWrap(True)
+        text = QTextBrowser(self)
+        text.setHtml(about_html())
         text.setOpenExternalLinks(True)
-        text.setTextInteractionFlags(enum(
-            Qt, "TextInteractionFlag", "TextBrowserInteraction"))
-        text.setMinimumWidth(480)
+        text.setFrameShape(enum(QTextBrowser, "Shape", "NoFrame"))
+        text.setMinimumSize(560, 520)
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Close"), self)
         buttons.rejected.connect(self.reject)

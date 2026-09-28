@@ -7,7 +7,7 @@
 скрытие боковой панели, как в Google Earth, обновление, синхронизация
 с картой, определение объектов, линейка,
 новая метка, сохранение вида в «Мои метки», снимок вида в файл
-и в макет.
+и в макет, сцена, свойства вида и окно «О модуле».
 """
 import os
 
@@ -32,6 +32,7 @@ class ViewToolbar(QFrame):
     sidebar_clicked = pyqtSignal()
     refresh_clicked = pyqtSignal()
     about_clicked = pyqtSignal()
+    properties_clicked = pyqtSignal()
     sync_toggled = pyqtSignal(bool)
     save_view_requested = pyqtSignal()
     identify_toggled = pyqtSignal(bool)
@@ -105,6 +106,11 @@ class ViewToolbar(QFrame):
         scene.setMenu(menu)
         self.layout().addWidget(scene)
         self.scene = scene
+        self.properties = self._button(
+            QgsApplication.getThemeIcon("/mActionOptions.svg"),
+            tr("Свойства вида: подложка, масштаб рельефа, язык подписей, "
+               "связь с картой, обновление, органы навигации."),
+            self.properties_clicked)
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)
         self.adjustSize()

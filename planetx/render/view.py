@@ -696,13 +696,13 @@ class GlobeView(QOpenGLWidget):
             if point is None:
                 return
             lat, lon, _ = ecef_to_geodetic(point)
-            self._fly(float(lat), float(lon), pose.distance * DOUBLE_ZOOM,
+            self.fly_pose(float(lat), float(lon), pose.distance * DOUBLE_ZOOM,
                       pose.heading, pose.tilt)
         elif event.button() == RIGHT:
-            self._fly(pose.lat, pose.lon, pose.distance / DOUBLE_ZOOM,
+            self.fly_pose(pose.lat, pose.lon, pose.distance / DOUBLE_ZOOM,
                       pose.heading, pose.tilt)
 
-    def _fly(self, lat, lon, distance, heading, tilt):
+    def fly_pose(self, lat, lon, distance, heading, tilt):
         flight = Flight(self.navigator.pose, lat, lon, distance, heading,
                         tilt, fov_y=self.camera.fov_y)
         self.navigator.start_flight(flight, time.monotonic())
@@ -742,11 +742,11 @@ class GlobeView(QOpenGLWidget):
         elif named("Key_PageDown", "Key_Minus"):
             nav.wheel(*centre, 1.0 / WHEEL_STEP, time.monotonic())
         elif named("Key_N"):
-            self._fly(pose.lat, pose.lon, pose.distance, 0.0, pose.tilt)
+            self.fly_pose(pose.lat, pose.lon, pose.distance, 0.0, pose.tilt)
         elif named("Key_U"):
-            self._fly(pose.lat, pose.lon, pose.distance, pose.heading, 0.0)
+            self.fly_pose(pose.lat, pose.lon, pose.distance, pose.heading, 0.0)
         elif named("Key_R"):
-            self._fly(pose.lat, pose.lon, pose.distance, 0.0, 0.0)
+            self.fly_pose(pose.lat, pose.lon, pose.distance, 0.0, 0.0)
         elif named("Key_Space"):
             nav.stop()
         else:

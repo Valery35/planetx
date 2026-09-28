@@ -15,7 +15,7 @@
   У слоя в меню «Подлететь», прозрачность и свойства слоя. Прозрачность -
   свойство самого слоя QGIS, решение автора от 28 сентября 2026 года.
 - «Слои» - векторная основа по группам и рельеф, как панель «Слои»
-  Google Earth. Кнопка на заголовке открывает свойства вида.
+  Google Earth. Свойства вида открывает значок на панели значков вида.
 
 Панель только показывает и сообщает сигналами, решает окно.
 """
@@ -282,7 +282,6 @@ class LayerPanel(QWidget):
     # Номер строки в списке найденных мест.
     place_chosen = pyqtSignal(int)
     search_cleared = pyqtSignal()
-    properties_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
     # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
@@ -436,13 +435,6 @@ class LayerPanel(QWidget):
         tour_row.addStretch(1)
         tour_row.addWidget(self.tour_button)
         upper_layout.addLayout(tour_row)
-        properties = QToolButton(self)
-        properties.setIcon(QgsApplication.getThemeIcon("/mActionOptions.svg"))
-        properties.setAutoRaise(True)
-        properties.setToolTip(tr(
-            "Свойства вида: подложка, вертикальный масштаб рельефа, "
-            "автообновление."))
-        properties.clicked.connect(self.properties_requested)
         self.sections = [
             Section("places", tr("Метки"), upper, tr(
                 "Свернуть или развернуть «Мои метки»."), self),
@@ -451,7 +443,6 @@ class LayerPanel(QWidget):
             Section("base", tr("Слои"), self.geo, tr(
                 "Свернуть или развернуть векторную основу и рельеф."),
                 self)]
-        self.sections[2].add_button(properties)
         split = QSplitter(enum(Qt, "Orientation", "Vertical"), self)
         split.setChildrenCollapsible(False)
         for n, section in enumerate(self.sections):

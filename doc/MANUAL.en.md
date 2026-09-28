@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.7.0
+Version 0.8.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -58,6 +58,7 @@ dragged with the mouse.
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
+| View properties | Base map, terrain, labels, link with the map, update, navigation controls |
 | About | Controls, data sources, links |
 
 ### Status line
@@ -118,6 +119,25 @@ focus.
 | R | North up and look straight down |
 | Space | Stop inertia and flight |
 
+### On-screen controls
+
+The navigation controls stand in the top right corner of the view,
+as in Google Earth.
+
+| Control | What it does |
+|---|---|
+| Compass ring | Dragging turns the view. The letter N shows north |
+| Letter N | A click puts north up |
+| Stick inside the ring | While the button is held, the view looks toward the press |
+| Lower stick | While the button is held, the view moves toward the press |
+| Plus and minus | While the button is held, the camera zooms in or out smoothly |
+| Slider | The thumb stands at the camera height, dragging sets a new one |
+
+The speed of the sticks grows with the distance from the middle. The
+controls appear when the cursor comes near the corner of the view. The
+check box Navigation controls always on screen in the view properties
+keeps them all the time.
+
 ### Place search
 
 Type a place name into the Search field at the top of the panel, for
@@ -165,7 +185,7 @@ behind a mountain or beyond the horizon has no label.
 
 ### View properties
 
-The wrench button on the Layers header opens the View properties
+The View properties icon on the icon bar opens the View properties
 window. The window does not block work with the globe.
 
 | Group | Field | What it sets |
@@ -177,6 +197,7 @@ window. The window does not block work with the globe.
 | QGIS map | Layers as on the QGIS map | The globe shows the layers switched on in the QGIS legend |
 | QGIS map | New layers straight to the globe | A new project layer is checked on the globe at once |
 | Update | Update automatically | The globe refreshes after every change without the Refresh button |
+| Navigation | Navigation controls always on screen | The ring, sticks and slider stay all the time, not only near the corner |
 
 The default base map is Esri World Imagery, listed as an example. Esri
 sets its terms of use. OpenStreetMap comes next, then the XYZ Tiles
@@ -511,8 +532,6 @@ the insertion.
 - Project layers lie on the terrain as a picture, a layer cannot be
   raised or extruded by a field. Your own places have lift and extrusion.
 - Pictures of project layers are not filtered by the controller time.
-- There are no on-screen navigation controls of Google Earth, navigation
-  goes by mouse and keys.
 - Above latitude 85° the poles are covered with the ocean color, the Web
   Mercator tile grid ends there.
 - Recording a tour takes longer than the tour itself.

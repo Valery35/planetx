@@ -60,6 +60,7 @@ from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
                       visible_on_map, write_flag, write_shown)
+from .navpad import NavPad
 from .properties import SCALE_RANGE, PropertiesDialog
 from .record import TourRecorder
 from .placeprops import PlaceProperties
@@ -209,6 +210,8 @@ class GlobeWindow(QWidget):
         self.place = self.panel.place
         self.status = self.panel.status
         self.toolbar = ViewToolbar(self.view)
+        # Экранные органы навигации, как в Google Earth.
+        self.navpad = NavPad(self.view)
         self.toolbar.move(MARGIN, MARGIN)
         self.attribution = QLabel(self.view)
         self.attribution.setOpenExternalLinks(True)
@@ -284,7 +287,6 @@ class GlobeWindow(QWidget):
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._send_search)
-        self.panel.properties_requested.connect(self._show_properties)
         self.panel.layer_toggled.connect(self.set_layer_shown)
         self.panel.geo_changed.connect(self.set_line_groups)
         self.panel.relief_toggled.connect(self.set_relief)
@@ -298,6 +300,7 @@ class GlobeWindow(QWidget):
             lambda: self.set_sidebar(self.panel.isHidden()))
         self.set_sidebar(QgsSettings().value(SIDEBAR_KEY, True, type=bool))
         self.toolbar.about_clicked.connect(lambda: show_about(self))
+        self.toolbar.properties_clicked.connect(self._show_properties)
         self.toolbar.save_view_requested.connect(self.save_view)
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
         self.myplaces = MyPlaces(parent=self)
@@ -423,7 +426,7 @@ class GlobeWindow(QWidget):
                 "relief": self._relief, "scale": self._scale,
                 "language": self._language, "sync": self.sync.direction,
                 "follow": self.follow, "new_shown": self.new_shown,
-                "auto": self.auto_refresh}
+                "auto": self.auto_refresh, "nav": self.navpad.mode}
 
     def set_sync_direction(self, way):
         """Кто за кем следует при синхронизации с картой."""
@@ -802,6 +805,7 @@ class GlobeWindow(QWidget):
             self.properties.sync_chosen.connect(self.set_sync_direction)
             self.properties.follow_changed.connect(self.set_follow)
             self.properties.new_shown_changed.connect(self.set_new_shown)
+            self.properties.nav_chosen.connect(self.navpad.set_mode)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()

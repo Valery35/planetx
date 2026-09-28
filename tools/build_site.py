@@ -119,8 +119,8 @@ RU = {
                    "номера дорог и названия пунктов поверх космоснимка.",
     "controls.eyebrow": "Управление",
     "controls.h2": "Земля тянется мышью",
-    "controls.sub": "Навигация повторяет Google Earth. Кнопка "
-                    "на заголовке «Слои» открывает свойства вида, кнопка "
+    "controls.sub": "Навигация повторяет Google Earth. Значок "
+                    "«Свойства вида» открывает свойства вида, кнопка "
                     "«О модуле» напоминает управление и источники.",
     "g1": "Мышь и клавиатура",
     "c1.h": "Захват Земли",
@@ -141,6 +141,15 @@ RU = {
             "«Обновить». Можно включить автоматическое обновление.",
     "k1": "ЛКМ", "k2": "Колесо", "k3": "СКМ", "k4": "Enter",
     "k5": "Кнопка",
+    "c6.h": "Как в Google Earth",
+    "c6.p": "Двойной щелчок подлетает к точке, правая кнопка "
+            "приближает и отдаляет, Ctrl поворачивает взгляд. Стрелки, "
+            "PageUp, PageDown, N, U и R работают как в Google Earth.",
+    "c7.h": "Органы на экране",
+    "c7.p": "В правом верхнем углу вида кольцо компаса, джойстики "
+            "взгляда и сдвига и ползунок высоты. Они появляются, когда "
+            "курсор подходит к углу.",
+    "k6": "2×", "k7": "Угол",
     "fact1": "кадров в секунду при вращении глобуса, не меньше, "
              "в любую секунду замера.",
     "fact2": "языков подписей и местные названия.",
@@ -239,8 +248,8 @@ EN = {
                    "and place names over satellite imagery.",
     "controls.eyebrow": "Controls",
     "controls.h2": "Drag the Earth with the mouse",
-    "controls.sub": "Navigation follows Google Earth. The button on "
-                    "the Layers header opens the view properties, the About "
+    "controls.sub": "Navigation follows Google Earth. The View "
+                    "properties icon opens the view properties, the About "
                     "button lists the controls and the sources.",
     "g1": "Mouse and keyboard",
     "c1.h": "Grab the Earth",
@@ -261,6 +270,15 @@ EN = {
             "button. Automatic refresh can be switched on.",
     "k1": "Left", "k2": "Wheel", "k3": "Middle", "k4": "Enter",
     "k5": "Button",
+    "c6.h": "As in Google Earth",
+    "c6.p": "A double click flies to the point, the right button zooms "
+            "in and out, Ctrl looks around. Arrows, PageUp, PageDown, N, "
+            "U and R work as in Google Earth.",
+    "c7.h": "On-screen controls",
+    "c7.p": "The top right corner of the view holds the compass ring, "
+            "the look and move sticks and the height slider. They appear "
+            "when the cursor comes near the corner.",
+    "k6": "2×", "k7": "Corner",
     "fact1": "frames per second at least while the globe rotates, in "
              "every second of the measurement.",
     "fact2": "label languages and local names.",
@@ -289,7 +307,7 @@ CONTROLS = "".join(
     '<div class="tool"><div class="num" data-i18n="k{0}"></div>'
     '<div class="txt"><b data-i18n="c{0}.h"></b>'
     '<span data-i18n="c{0}.p"></span></div></div>'.format(i)
-    for i in range(1, 6))
+    for i in range(1, 8))
 
 PAGE = """<!-- ============================================================ -->
 <!-- PlanetX - лендинг для www.informpp.ru                          -->

@@ -1628,8 +1628,12 @@ def accordion():
     QgsApplication.processEvents()
     out["reopened"] = project.height() > project.header.sizeHint().height()
     asked = []
-    panel.properties_requested.connect(lambda: asked.append(1))
-    base.row.itemAt(1).widget().click()
+    window.properties = None
+    window._show_properties = lambda: asked.append(1)
+    window.toolbar.properties_clicked.disconnect()
+    window.toolbar.properties_clicked.connect(window._show_properties)
+    window.toolbar.properties.click()
+    out["header_buttons"] = base.row.count()
     out["properties_button"] = len(asked)
     flown = []
     panel.fly_to_layer.connect(lambda layer: flown.append(layer.name()))
@@ -1746,6 +1750,128 @@ def ge_nav():
     out["page_up_zooming"] = nav.zooming is not None
     nav.stop()
     result["ge_nav"] = out
+
+
+def _pad_reset():
+    from planetx.core.navigation import Pose
+    view = state["window"].view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.0105, 56.2294, 20000.0, 40.0, 30.0))
+    view._fit_camera()
+    view.navigator.pose.apply(view.camera)
+
+
+def _pad_press(name, x, y):
+    from qgis.PyQt.QtCore import Qt
+    pad = state["window"].navpad
+    left = _qt(Qt, "MouseButton", "LeftButton")
+    _send_mouse(pad, "MouseButtonPress", x, y, left, left)
+    state["pad_" + name] = state["window"].view.navigator.pose.copy()
+
+
+def _pad_release(x, y):
+    from qgis.PyQt.QtCore import Qt
+    pad = state["window"].navpad
+    _send_mouse(pad, "MouseButtonRelease", x, y,
+                _qt(Qt, "MouseButton", "LeftButton"),
+                _qt(Qt, "MouseButton", "NoButton"))
+
+
+@check(600)
+def navpad_plus():
+    from planetx.ui import navpad as ui
+    window = state["window"]
+    window.navpad.set_mode("always")
+    pad = window.navpad
+    view = window.view
+    result["navpad"] = {
+        "visible": pad.isVisible(),
+        "top_right": [view.width() - pad.x() - pad.width(), pad.y()]}
+    pad.grab().save(os.path.join(TEMP, "planetx_navpad.png"))
+    _pad_reset()
+    _pad_press("plus", *ui.PLUS)
+
+
+@check(600)
+def navpad_move():
+    from planetx.ui import navpad as ui
+    _pad_release(*ui.PLUS)
+    pose = state["window"].view.navigator.pose
+    result["navpad"]["plus_ratio"] = round(
+        pose.distance / state["pad_plus"].distance, 3)
+    _pad_reset()
+    _pad_press("move", ui.MOVE[0], ui.MOVE[1] - 20)
+
+
+@check(600)
+def navpad_look():
+    from planetx.ui import navpad as ui
+    _pad_release(ui.MOVE[0], ui.MOVE[1] - 20)
+    pose = state["window"].view.navigator.pose
+    start = state["pad_move"]
+    result["navpad"]["move_m"] = round(math.hypot(
+        (pose.lat - start.lat) * 111320.0,
+        (pose.lon - start.lon) * 111320.0
+        * math.cos(math.radians(start.lat))), 1)
+    _pad_reset()
+    _pad_press("look", ui.RING[0] + 12, ui.RING[1])
+
+
+@check(300)
+def navpad_ring():
+    from qgis.PyQt.QtCore import Qt
+    from planetx.ui import navpad as ui
+    _pad_release(ui.RING[0] + 12, ui.RING[1])
+    view = state["window"].view
+    nav = view.navigator
+    pad = state["window"].navpad
+    out = result["navpad"]
+    out["look_heading"] = round(nav.pose.heading - state["pad_look"].heading,
+                                2)
+    # Кольцо: от 90° (справа) к 120° по часовой.
+    _pad_reset()
+    left = _qt(Qt, "MouseButton", "LeftButton")
+    r = (ui.R_IN + ui.R_OUT) / 2.0
+    x0, y0 = ui.RING[0] + r, ui.RING[1]
+    a = math.radians(120.0)
+    x1, y1 = ui.RING[0] + r * math.sin(a), ui.RING[1] - r * math.cos(a)
+    _send_mouse(pad, "MouseButtonPress", x0, y0, left, left)
+    _send_mouse(pad, "MouseMove", x1, y1, _qt(Qt, "MouseButton", "NoButton"),
+                left)
+    _pad_release(x1, y1)
+    out["ring_heading"] = round(nav.pose.heading, 2)
+    # Буква N: азимут 40°, щелчок по ней - перелёт к северу.
+    _pad_reset()
+    n = math.radians(-40.0)
+    nx = ui.RING[0] + ui.R_NORTH * math.sin(n)
+    ny = ui.RING[1] - ui.R_NORTH * math.cos(n)
+    _send_mouse(pad, "MouseButtonPress", nx, ny, left, left)
+    _pad_release(nx, ny)
+    flight = nav.flight[1] if nav.flight else None
+    out["north_flight"] = flight.end.heading if flight else None
+    nav.stop()
+    # Ползунок: середина дорожки - расстояние slider_distance(0.5).
+    _pad_reset()
+    mid = (ui.TRACK[0] + ui.TRACK[1]) / 2.0
+    _send_mouse(pad, "MouseButtonPress", ui.CX, mid, left, left)
+    _pad_release(ui.CX, mid)
+    out["slider_distance"] = round(nav.pose.distance)
+    # Автоматический показ: у угла виден, вдали скрыт.
+    pad.set_mode("auto")
+    ratio = view.devicePixelRatioF()
+    view.hovered.emit((view.width() - 30) * ratio, 30 * ratio)
+    out["auto_near"] = pad.isVisible()
+    view.hovered.emit(100 * ratio, (view.height() - 100) * ratio)
+    out["auto_far"] = pad.isVisible()
+    pad.set_mode("always")
+    view.hovered.emit(100 * ratio, (view.height() - 100) * ratio)
+    out["always_far"] = pad.isVisible()
+    pad.set_mode("always")
+    _pad_reset()
+    view.update()
+    QgsApplication.processEvents()
+    state["window"].grab().save(os.path.join(TEMP, "planetx_navpad_view.png"))
+    pad.set_mode("auto")
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.

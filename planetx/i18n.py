@@ -40,10 +40,10 @@ EN = {
         "Collapse or expand the QGIS project layers.",
     "Свернуть или развернуть векторную основу и рельеф.":
         "Collapse or expand the vector base and terrain.",
-    "Свойства вида: подложка, вертикальный масштаб рельефа, "
-    "автообновление.":
-        "View properties: base map, vertical terrain scale, auto "
-        "refresh.",
+    "Свойства вида: подложка, масштаб рельефа, язык подписей, "
+    "связь с картой, обновление, органы навигации.":
+        "View properties: base map, terrain exaggeration, label language, "
+        "link with the map, update, navigation controls.",
     "Подложка": "Base map",
     "{name} · {kind}": "{name} · {kind}",
     "Отметка показывает слой на глобусе, видимость на карте QGIS "
@@ -104,10 +104,11 @@ EN = {
     "и отдаляют, N ставит север вверху, U даёт взгляд отвесно.":
         "Arrows move the view, PageUp and PageDown zoom in and out, N puts "
         "north up, U looks straight down.",
-    "Кнопка на заголовке «Слои» открывает свойства вида. В них "
-    "выбираются подложка и масштаб рельефа.":
-        "The button on the Layers header opens the view properties. There "
-        "you choose the base map and the terrain exaggeration.",
+    "Значок «Свойства вида» на панели значков открывает "
+    "свойства вида. В них выбираются подложка и масштаб рельефа.":
+        "The View properties icon on the icon bar opens the view "
+        "properties. There you choose the base map and the terrain "
+        "exaggeration.",
     "Поиск мест: Nominatim, © участники OpenStreetMap.":
         "Place search: Nominatim, © OpenStreetMap contributors.",
     "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
@@ -142,6 +143,64 @@ EN = {
         "Data sources and their terms of use",
     "Исходный код": "Source code",
     "Страница модуля": "Plugin page",
+    "Возможности": "Features",
+    "Требования": "Requirements",
+    "Космоснимки, рельеф с отмывкой склонов и атмосфера, подложки "
+    "из подключений XYZ Tiles QGIS.":
+        "Satellite imagery, terrain with hill shading and atmosphere, base "
+        "maps from QGIS XYZ Tiles connections.",
+    "Раздел «Слои» с границами, названиями, дорогами, реками "
+    "и вершинами, подписи на 15 языках.":
+        "The Layers section with borders, names, roads, rivers and peaks, "
+        "labels in 15 languages.",
+    "Слои текущего проекта на глобусе в порядке карты QGIS, "
+    "синхронизация с окном карты и определение объектов.":
+        "Layers of the current project on the globe in the QGIS map order, "
+        "synchronization with the map window and feature identification.",
+    "«Мои метки» с папками, метками, путями, многоугольниками "
+    "и сохранёнными видами, чтение и запись KML и KMZ.":
+        "My Places with folders, placemarks, paths, polygons and saved "
+        "views, reading and writing KML and KMZ.",
+    "Линейка на эллипсоиде WGS84, подъём и выдавливание меток.":
+        "Ruler on the WGS84 ellipsoid, lifting and extruding places.",
+    "Туры по меткам и вдоль путей, запись тура кадрами PNG "
+    "для видео.":
+        "Tours over places and along paths, recording a tour as PNG frames "
+        "for a video.",
+    "Растущие треки по «Временному контроллеру» QGIS.":
+        "Growing tracks along the QGIS Temporal Controller.",
+    "Сцены в файл, снимок вида в файл и в макет QGIS.":
+        "Scenes to a file, view snapshot to a file and into a QGIS layout.",
+    "В правом верхнем углу вида кольцо компаса, джойстики взгляда "
+    "и сдвига и ползунок высоты. Они появляются, когда курсор "
+    "подходит к углу.":
+        "The top right corner of the view holds the compass ring, the look "
+        "and move sticks and the height slider. They appear when the "
+        "cursor comes near the corner.",
+    "QGIS 3.36 и новее, в том числе QGIS 4.":
+        "QGIS 3.36 and newer, including QGIS 4.",
+    "Видеокарта с OpenGL 3.3.": "A graphics card with OpenGL 3.3.",
+    "Модуль Python PyOpenGL. В сборках QGIS для Windows он есть.":
+        "The Python module PyOpenGL. QGIS builds for Windows include it.",
+    "Кольцо поворачивает вид, буква N ставит север вверху. "
+    "Джойстик в кольце поворачивает взгляд, нижний сдвигает вид. "
+    "Ползунок задаёт высоту, плюс и минус приближают и отдаляют. "
+    "Показ органов выбирается в свойствах вида.":
+        "The ring turns the view, the letter N puts north up. The stick "
+        "inside the ring looks around, the lower one moves the view. The "
+        "slider sets the height, plus and minus zoom in and out. Showing "
+        "the controls is chosen in the view properties.",
+    "Органы навигации всегда на экране":
+        "Navigation controls always on screen",
+    "Кольцо компаса, джойстики и ползунок высоты в правом верхнем "
+    "углу вида, как в Google Earth. Без флажка они появляются, "
+    "когда курсор подходит к углу вида, с флажком видны всё "
+    "время.":
+        "The compass ring, the sticks and the height slider in the top "
+        "right corner of the view, as in Google Earth. Without the check "
+        "they appear when the cursor comes near the corner of the view, "
+        "with it they stay all the time.",
+    "Навигация": "Navigation",
     "Руководство": "Manual",
     "MANUAL.md": "MANUAL.en.md",
     "Сообщить об ошибке": "Report a bug",
