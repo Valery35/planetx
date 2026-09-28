@@ -144,6 +144,20 @@ EN = {
     "Исходный код": "Source code",
     "Страница модуля": "Plugin page",
     "Возможности": "Features",
+    "Копировать": "Copy",
+    "Вставить": "Paste",
+    "KML в буфере обмена, меток {count}.":
+        "KML in the clipboard, places {count}.",
+    "Вставка": "Pasted",
+    "В буфере обмена нет меток KML.": "The clipboard holds no KML places.",
+    "Вставлено меток {count}.": "Places pasted {count}.",
+    "Высота ползунком, как в Google Earth. Шкала логарифмическая, "
+    "у земли шаг - метры, выше - сотни метров и километры.":
+        "Height by slider, as in Google Earth. The scale is logarithmic, "
+        "near the ground the step is metres, higher up hundreds of metres "
+        "and kilometres.",
+    "Поверхность земли": "Ground",
+    "Космос": "Space",
     "Требования": "Requirements",
     "Космоснимки, рельеф с отмывкой склонов и атмосфера, подложки "
     "из подключений XYZ Tiles QGIS.":
@@ -202,7 +216,6 @@ EN = {
         "with it they stay all the time.",
     "Навигация": "Navigation",
     "Руководство": "Manual",
-    "MANUAL.md": "MANUAL.en.md",
     "Сообщить об ошибке": "Report a bug",
     "Страница в каталоге QGIS": "QGIS plugin page",
     "Трёхмерный глобус внутри QGIS в духе Google Earth. Рельеф, "
@@ -691,7 +704,7 @@ EN = {
     "Снимок ждёт загрузки: {count}": "Snapshot waits for loading: {count}",
     " Часть тайлов не загрузилась, там менее подробный снимок.":
         " Some tiles did not load, the imagery there is less detailed.",
-    "Вставить": "Insert",
+    "Вставить в макет": "Insert into layout",
     "Сохранить…": "Save…",
     "Глобус дорисовывает вид в нужном размере и ждёт загрузки подробных "
     "тайлов. Камера на это время стоит.":

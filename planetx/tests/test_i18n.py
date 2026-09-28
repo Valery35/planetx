@@ -34,6 +34,26 @@ def tr_literals():
     return out
 
 
+def i18n_source():
+    with open(os.path.join(PLUGIN, "i18n.py"), encoding="utf-8") as fh:
+        return fh.read()
+
+
+def repeated_keys(source):
+    """Ключи, записанные в литерале словаря EN больше одного раза."""
+    seen, out = set(), []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Assign) and any(
+                getattr(t, "id", "") == "EN" for t in node.targets) \
+                and isinstance(node.value, ast.Dict):
+            for key in node.value.keys:
+                if isinstance(key, ast.Constant):
+                    if key.value in seen:
+                        out.append(key.value)
+                    seen.add(key.value)
+    return out
+
+
 class TestCatalogue(unittest.TestCase):
 
     def test_literals_are_found(self):
@@ -46,6 +66,15 @@ class TestCatalogue(unittest.TestCase):
     def test_no_dead_entries(self):
         used = {t for _, t in tr_literals()}
         self.assertEqual(sorted(set(i18n.EN) - used), [])
+
+    def test_no_repeated_keys(self):
+        # Повтор ключа в словаре Python молча затирает первый перевод:
+        # «Вставить» было и «Insert» у макета, и «Paste» в меню меток.
+        self.assertEqual(repeated_keys(i18n_source()), [])
+
+    def test_repeated_key_is_caught(self):
+        sample = 'EN = {\n    "A": "a",\n    "B": "b",\n    "A": "c",\n}\n'
+        self.assertEqual(repeated_keys(sample), ["A"])
 
     def test_english_has_no_cyrillic(self):
         for text in i18n.EN.values():

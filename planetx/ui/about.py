@@ -10,12 +10,12 @@
 import html
 import os
 
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QUrl
 from qgis.PyQt.QtGui import QIcon, QPixmap
 from qgis.PyQt.QtWidgets import (QDialog, QDialogButtonBox, QHBoxLayout,
                                  QLabel, QTextBrowser, QVBoxLayout)
 
-from ..i18n import tr
+from ..i18n import is_russian, tr
 from ..meta import plugin_version
 from ..qt_compat import enum
 
@@ -32,8 +32,18 @@ ESRI_TERMS = "https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
 PAGE = "https://www.informpp.ru/главная-страница/qgis-planetx"
-# Руководство на языке интерфейса: имя файла переводится.
+# Руководство на языке интерфейса: PDF внутри модуля, его собирает
+# tools/build_manual.py. Без PDF - страница руководства в хранилище.
 MANUAL = REPOSITORY + "/blob/main/doc/"
+
+
+def manual_url():
+    """Адрес руководства на языке интерфейса."""
+    name = "PlanetX.pdf" if is_russian() else "PlanetX_en.pdf"
+    path = os.path.join(ROOT, "doc", name)
+    if os.path.exists(path):
+        return QUrl.fromLocalFile(path).toString()
+    return MANUAL + ("MANUAL.md" if is_russian() else "MANUAL.en.md")
 
 
 def _link(url, text):
@@ -105,7 +115,7 @@ def about_html():
     ))
     links = " · ".join((
         _link(PAGE, tr("Страница модуля")),
-        _link(MANUAL + tr("MANUAL.md"), tr("Руководство")),
+        _link(manual_url(), tr("Руководство")),
         _link(REPOSITORY, tr("Исходный код")),
         _link(ISSUES, tr("Сообщить об ошибке")),
         _link(CATALOG, tr("Страница в каталоге QGIS")),

@@ -157,7 +157,7 @@ class SnapshotDialog(QDialog):
         form.addRow("", self.keep)
         self.status = QLabel(self)
         self.status.setWordWrap(True)
-        self.start = QPushButton(tr("Вставить") if to_layout
+        self.start = QPushButton(tr("Вставить в макет") if to_layout
                                  else tr("Сохранить…"), self)
         self.start.setToolTip(tr(
             "Глобус дорисовывает вид в нужном размере и ждёт загрузки "

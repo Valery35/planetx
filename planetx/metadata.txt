@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.8.0
+version=0.9.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -43,9 +43,9 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       growing tracks along the QGIS Temporal Controller. A scene saves
       the whole view to a file, a tour records to PNG frames.
       Type a place name or coordinates in the Search field and the
-      camera flies there, the place found gets a red pin. The flight goes
-      along the van Wijk and Nuij path.
-      A manual in Russian and English opens from the About window.
+      camera flies there smoothly, the place found gets a red pin.
+      A PDF manual with pictures in Russian and English opens from the
+      About window.
       Requires OpenGL 3.3 and PyOpenGL, which ships with QGIS on Windows.
       Tested on QGIS 3.36 (Qt 5) and 4.0 (Qt 6).
       Imagery: Esri, Vantor, Earthstar Geographics, and the GIS User
@@ -61,7 +61,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.8.0 On-screen navigation controls as in Google Earth: the
+changelog=0.9.0 Copy and paste in My Places, as in Google Earth: places
+      and folders go to the clipboard as KML text, which can be edited in
+      a text editor and pasted back. The place properties window no longer
+      blocks the globe, changes show at once and a Ground - Space slider
+      sets the height. A PDF manual with pictures in Russian and English
+      ships with the plugin and opens from About.
+      0.8.0 On-screen navigation controls as in Google Earth: the
       compass ring with N, the look and move sticks and the height slider
       with plus and minus appear in the top right corner of the view. A
       check box in the view properties keeps them on screen. The view

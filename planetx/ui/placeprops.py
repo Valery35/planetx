@@ -4,20 +4,27 @@
 """Окно свойств метки из «Моих меток», как «Свойства» Google Earth.
 
 Название, описание, цвет и толщина линии, заливка многоугольника,
-подъём над землёй и стена до земли. Окно только собирает значения,
-записывает их окно глобуса через MyPlaces.update.
+подъём над землёй с ползунком «Поверхность земли - Космос» и стена
+до земли. Окно немодальное, вид глобуса можно крутить, пока оно
+открыто. Каждая правка сразу уходит сигналом changed как объект для
+предпросмотра. Записывает значения окно глобуса через MyPlaces.update
+по кнопке «OK», «Отмена» возвращает прежний вид. Решение автора
+от 29 сентября 2026 года.
 """
 from qgis.gui import QgsColorButton
+from qgis.PyQt.QtCore import Qt, pyqtSignal
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
-                                 QDoubleSpinBox, QFormLayout, QLineEdit,
-                                 QPlainTextEdit, QVBoxLayout)
+                                 QDoubleSpinBox, QFormLayout, QHBoxLayout,
+                                 QLabel, QLineEdit, QPlainTextEdit, QSlider,
+                                 QVBoxLayout, QWidget)
 
+from ..core.features import MAX_HEIGHT, height_share, share_height
 from ..i18n import tr
 from ..qt_compat import enum
 from .myplaces import DEFAULT_FILL
 
-MAX_HEIGHT = 100000.0  # метров подъёма, не больше
+SLIDER_STEPS = 1000  # делений ползунка высоты
 
 
 def _rgba(color):
@@ -29,18 +36,23 @@ def _color_text(rgba):
 
 
 class PlaceProperties(QDialog):
-    """Свойства метки place (myplaces.Place)."""
+    """Свойства метки place (myplaces.Place). changed несёт объект
+    core.features.Shape с правками для предпросмотра на глобусе."""
+
+    changed = pyqtSignal(object)
 
     def __init__(self, place, parent=None):
         super().__init__(parent)
         self.place = place
         shape = place.shape
+        self.setModal(False)
         self.setWindowTitle(tr("Свойства: {name}",
                                name=place.name or tr("Без названия")))
         form = QFormLayout()
         self.name = QLineEdit(place.name, self)
         self.name.setToolTip(tr("Название в «Моих метках» и подпись точки "
                                 "на глобусе."))
+        self.name.textChanged.connect(self._changed)
         form.addRow(tr("Название"), self.name)
         self.description = QPlainTextEdit(place.description, self)
         self.description.setToolTip(tr(
@@ -54,6 +66,7 @@ class PlaceProperties(QDialog):
             self.color.setAllowOpacity(True)
             self.color.setColor(QColor(*shape.color))
             self.color.setToolTip(tr("Цвет линии или контура."))
+            self.color.colorChanged.connect(self._changed)
             form.addRow(tr("Цвет"), self.color)
             self.width = QDoubleSpinBox(self)
             self.width.setRange(1.0, 10.0)
@@ -62,6 +75,7 @@ class PlaceProperties(QDialog):
             self.width.setToolTip(tr(
                 "Толщина линии и контура в пикселях экрана. От масштаба "
                 "не зависит."))
+            self.width.valueChanged.connect(self._changed)
             form.addRow(tr("Толщина"), self.width)
         if place.kind == "polygon":
             self.fill = QgsColorButton(self)
@@ -70,6 +84,7 @@ class PlaceProperties(QDialog):
             self.fill.setToolTip(tr(
                 "Цвет заливки многоугольника. Прозрачность задаётся "
                 "здесь же. Заливкой красится и стена до земли."))
+            self.fill.colorChanged.connect(self._changed)
             form.addRow(tr("Заливка"), self.fill)
         self.height = QDoubleSpinBox(self)
         self.height.setRange(0.0, MAX_HEIGHT)
@@ -79,12 +94,29 @@ class PlaceProperties(QDialog):
         self.height.setToolTip(tr(
             "Подъём над рельефом, как «относительно земли» в Google Earth. "
             "Ноль - объект лежит на земле."))
+        self.height.valueChanged.connect(self._height_typed)
         form.addRow(tr("Высота над землёй"), self.height)
+        self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
+        self.slider.setRange(0, SLIDER_STEPS)
+        self.slider.setValue(int(round(
+            height_share(self.height.value()) * SLIDER_STEPS)))
+        self.slider.setToolTip(tr(
+            "Высота ползунком, как в Google Earth. Шкала логарифмическая, "
+            "у земли шаг - метры, выше - сотни метров и километры."))
+        self.slider.valueChanged.connect(self._height_slid)
+        slider_row = QWidget(self)
+        row = QHBoxLayout(slider_row)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(QLabel(tr("Поверхность земли"), slider_row))
+        row.addWidget(self.slider, 1)
+        row.addWidget(QLabel(tr("Космос"), slider_row))
+        form.addRow("", slider_row)
         self.extrude = QCheckBox(tr("Выдавить до земли"), self)
         self.extrude.setChecked(bool(shape.extrude))
         self.extrude.setToolTip(tr(
             "Стена от поднятого объекта до земли, у точки - стойка. "
             "Работает при высоте больше нуля."))
+        self.extrude.toggled.connect(self._changed)
         form.addRow("", self.extrude)
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Ok")
@@ -94,6 +126,37 @@ class PlaceProperties(QDialog):
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(buttons)
+
+    def _height_typed(self, value):
+        self.slider.blockSignals(True)
+        self.slider.setValue(int(round(height_share(value) * SLIDER_STEPS)))
+        self.slider.blockSignals(False)
+        self._changed()
+
+    def _height_slid(self, position):
+        height = share_height(position / float(SLIDER_STEPS))
+        # Ниже 100 м - метры, выше - десятки метров, чтобы число было
+        # круглым.
+        height = round(height) if height < 100.0 else round(height, -1)
+        self.height.blockSignals(True)
+        self.height.setValue(height)
+        self.height.blockSignals(False)
+        self._changed()
+
+    def _changed(self, *args):
+        self.changed.emit(self.preview())
+
+    def preview(self):
+        """Объект метки с правками окна, для глобуса."""
+        values = {"name": self.name.text().strip(),
+                  "height": float(self.height.value()),
+                  "extrude": self.extrude.isChecked()}
+        if self.color is not None:
+            values["color"] = _rgba(self.color.color())
+            values["width"] = float(self.width.value())
+        if self.fill is not None:
+            values["fill"] = _rgba(self.fill.color())
+        return self.place.shape._replace(**values)
 
     def values(self):
         """Поля файла меток для MyPlaces.update."""

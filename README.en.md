@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.8.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.9.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -62,8 +62,7 @@ and atmosphere, from space down to single streets.
   height slider with plus and minus buttons.
 - **Search.** Type a place name in the Search field at the top left,
   for example `Perm`, or coordinates in degrees, for example
-  `58.0105, 56.2294`. The camera flies there along the van Wijk and Nuij
-  path. Over long distances it rises and then lands smoothly. The place
+  `58.0105, 56.2294`. The camera flies there. Over long distances it rises and then lands smoothly. The place
   found is marked with a red pin. If several places are found, the
   others are listed below the field. Clearing the field removes the pin
   and closes the list.
@@ -113,6 +112,9 @@ and atmosphere, from space down to single streets.
   and extending to the ground. A path becomes a wall, a polygon a block.
 - **KML and KMZ.** Google Earth files open into My Places with folders,
   styles and placemark views. A folder saves to KMZ or KML.
+- **Copy and paste.** Places and folders are copied to the clipboard
+  as KML text and pasted back, also after editing in a text editor and
+  from Google Earth.
 - **Identify features.** In the Identify features mode a click on the
   globe shows the coordinates and elevation of the point and the features
   of the project layers checked on the globe.
@@ -123,6 +125,8 @@ through the QGIS network settings and cache. The About button in the
 globe window lists the controls and the data sources.
 
 Everything is described in detail in the manual - [doc/MANUAL.en.md](doc/MANUAL.en.md).
+A PDF manual with pictures ships with the plugin and opens from the
+About window.
 
 ![Perm, roads and names](doc/images/perm.jpg)
 

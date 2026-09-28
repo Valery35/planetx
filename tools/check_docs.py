@@ -46,8 +46,9 @@ def main():
     for name in documents():
         text = read(name)
         base = os.path.dirname(os.path.join(ROOT, name))
-        for link in re.findall(r"\[[^\]]*\]\(([^)#:]+\.(?:md|jpg|png))\)",
-                               text):
+        links = re.findall(r"\[[^\]]*\]\(([^)#:]+\.(?:md|jpg|png))\)", text)
+        links += re.findall(r'<img src="([^":]+)"', text)
+        for link in links:
             if not os.path.exists(os.path.join(base, link)):
                 problems.append("%s ссылается на несуществующий %s"
                                 % (name, link))

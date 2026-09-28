@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.8.0
+Version 0.9.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -43,6 +43,8 @@ The panel is on the left, the globe view on the right. The icon bar
 sits in the top left corner of the view, the data source credits in the
 bottom right corner. The border between the panel and the view is
 dragged with the mouse.
+
+![The globe window over Perm](figures/en/window.jpg)
 
 ### Icon bar
 
@@ -124,6 +126,8 @@ focus.
 The navigation controls stand in the top right corner of the view,
 as in Google Earth.
 
+<img src="figures/en/navpad.png" width="90" alt="Navigation controls">
+
 | Control | What it does |
 |---|---|
 | Compass ring | Dragging turns the view. The letter N shows north |
@@ -153,8 +157,7 @@ example `Perm`, or coordinates in degrees, for example
 - The found place carries a red pin. Clearing the field removes the pin
   and closes the list.
 
-The flight follows the path of van Wijk and Nuij. Over a long distance
-the camera rises and lands smoothly. The mouse interrupts a flight.
+Over a long distance the camera rises and lands smoothly. The mouse interrupts a flight.
 
 ---
 
@@ -184,6 +187,8 @@ Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
 
 ### View properties
+
+<img src="figures/en/properties.png" width="240" alt="View properties">
 
 The View properties icon on the icon bar opens the View properties
 window. The window does not block work with the globe.
@@ -304,11 +309,11 @@ together, and the Del key deletes it after a question.
 
 | Where | Items |
 |---|---|
-| My Places | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Add the places layers to the project |
-| Folder | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Rename…, Delete |
-| Place | Fly to, Tour along the path, Properties…, New Folder, Rename…, Delete |
-| Several rows | Show selected, Hide selected, Delete selected |
-| Empty space | New Folder, Open KML or KMZ… |
+| My Places | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Copy, Paste, Add the places layers to the project |
+| Folder | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Copy, Paste, Rename…, Delete |
+| Place | Fly to, Tour along the path, Properties…, New Folder, Copy, Paste, Rename…, Delete |
+| Several rows | Copy, Show selected, Hide selected, Delete selected |
+| Empty space | New Folder, Open KML or KMZ…, Paste |
 
 Only paths have Tour along the path.
 
@@ -346,7 +351,12 @@ whole view back.
 
 ### Place properties
 
-The Properties… item opens the properties window.
+<img src="figures/en/placeprops.png" width="340" alt="Place properties">
+
+The Properties… item opens the properties window. The window does not
+block the globe, the view can be turned and zoomed. Each change shows
+on the globe at once. OK writes the changes to the place, Cancel
+brings the previous look back.
 
 | Field | What it sets |
 |---|---|
@@ -354,11 +364,21 @@ The Properties… item opens the properties window.
 | Description | Text of the placemark, it goes into KML too |
 | Color, Width | Color and width of the line and outline |
 | Fill | Fill color of the polygon and of the wall |
-| Height above ground | Lift of the object above the terrain in metres |
+| Height above ground | Lift of the object above the terrain in metres. The Ground - Space slider under the field sets it from the ground to 100 km |
 | Extend to ground | A wall from the object to the ground, a post for a placemark |
 
 Extending works with a height above zero. A path becomes a wall, a
 polygon becomes a block.
+
+### Copy and paste
+
+Copy or Ctrl+C puts the selected places and folders into the
+clipboard as KML text, as Google Earth does. The text can be pasted
+into a text editor, edited and copied back. Paste or Ctrl+V puts the
+places from the clipboard into a folder. On a place it is the folder
+of that place, on empty space the root of My Places. Folders from the
+clipboard come in as folders. KML copied in Google Earth pastes the
+same way.
 
 ### KML and KMZ
 

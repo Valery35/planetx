@@ -22,7 +22,7 @@
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsSettings, QgsVectorLayer)
 from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QFont
+from qgis.PyQt.QtGui import QFont, QKeySequence
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
@@ -206,6 +206,9 @@ class PlaceTree(QTreeWidget):
     places_moved = pyqtSignal(object, str, int)
     # Клавиша Del над выбранными строками.
     delete_pressed = pyqtSignal()
+    # Ctrl+C и Ctrl+V над списком меток.
+    copy_pressed = pyqtSignal()
+    paste_pressed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -246,6 +249,12 @@ class PlaceTree(QTreeWidget):
         if event.key() == enum(Qt, "Key", "Key_Delete") \
                 and self.selected_keys():
             self.delete_pressed.emit()
+            return
+        if event.matches(enum(QKeySequence, "StandardKey", "Copy")):
+            self.copy_pressed.emit()
+            return
+        if event.matches(enum(QKeySequence, "StandardKey", "Paste")):
+            self.paste_pressed.emit()
             return
         super().keyPressEvent(event)
 
@@ -345,6 +354,10 @@ class LayerPanel(QWidget):
         self.list.setHeaderHidden(True)
         self.list.place_moved.connect(self.place_moved)
         self.list.places_moved.connect(self.places_moved)
+        self.list.copy_pressed.connect(self._copy_selected)
+        self.list.paste_pressed.connect(
+            lambda: self.place_action.emit("paste",
+                                           self.current_folder() or ""))
         self.list.delete_pressed.connect(
             lambda: self.places_action.emit("remove",
                                             self.list.selected_keys()))
@@ -681,6 +694,8 @@ class LayerPanel(QWidget):
                 lambda: self.place_action.emit("new_folder", ""))
             menu.addAction(tr("Открыть KML или KMZ…")).triggered.connect(
                 lambda: self.place_action.emit("import_kml", ""))
+            menu.addAction(tr("Вставить")).triggered.connect(
+                lambda: self.place_action.emit("paste", ""))
             menu.exec(self.list.viewport().mapToGlobal(point))
             return
         key = item.data(0, PLACE_ROLE)
@@ -688,6 +703,7 @@ class LayerPanel(QWidget):
         if key in chosen and len(chosen) > 1:
             # Несколько строк: общее для всех.
             for action, text in (
+                    ("copy", tr("Копировать")),
                     ("show", tr("Показать выбранное")),
                     ("hide", tr("Скрыть выбранное")),
                     ("remove", tr("Удалить выбранное ({count})",
@@ -702,6 +718,8 @@ class LayerPanel(QWidget):
                        ("new_folder", tr("Новая папка")),
                        ("import_kml", tr("Открыть KML или KMZ…")),
                        ("export_kml", tr("Сохранить как KML…")),
+                       ("copy", tr("Копировать")),
+                       ("paste", tr("Вставить")),
                        ("rename", tr("Переименовать…")),
                        ("remove", tr("Удалить"))]
         elif key:
@@ -710,6 +728,8 @@ class LayerPanel(QWidget):
                 actions.append(("tour", tr("Тур по пути")))
             actions += [("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),
+                        ("copy", tr("Копировать")),
+                        ("paste", tr("Вставить")),
                         ("rename", tr("Переименовать…")),
                         ("remove", tr("Удалить"))]
         if key:
@@ -725,9 +745,26 @@ class LayerPanel(QWidget):
                 lambda: self.place_action.emit("import_kml", ""))
             menu.addAction(tr("Сохранить как KML…")).triggered.connect(
                 lambda: self.place_action.emit("export_kml", ""))
+            menu.addAction(tr("Копировать")).triggered.connect(
+                lambda: self.place_action.emit("copy", ""))
+            menu.addAction(tr("Вставить")).triggered.connect(
+                lambda: self.place_action.emit("paste", ""))
             menu.addAction(tr("Добавить слои меток в проект")).triggered \
                 .connect(lambda: self.place_action.emit("project", ""))
         menu.exec(self.list.viewport().mapToGlobal(point))
+
+    def _copy_selected(self):
+        """Ctrl+C: выделенные строки, без выделения - текущая, корень
+        «Мои метки» - все метки."""
+        chosen = self.list.selected_keys()
+        if chosen:
+            self.places_action.emit("copy", chosen)
+            return
+        item = self.list.currentItem()
+        if item is self.places_group:
+            self.place_action.emit("copy", "")
+        elif item is not None and item.data(0, PLACE_ROLE):
+            self.place_action.emit("copy", item.data(0, PLACE_ROLE))
 
     def _layer_double_clicked(self, item, column=0):
         layer = QgsProject.instance().mapLayer(item.data(0, LAYER_ROLE))

@@ -160,6 +160,16 @@ def _value(feature, layer, name):
     return feature[name] if layer.fields().indexOf(name) >= 0 else None
 
 
+def _kplace(place):
+    """Метка «Моих меток» как метка core.kml."""
+    shape = place.shape
+    return KPlace(shape.name, shape.kind, list(shape.points),
+                  color=shape.color, width=shape.width, fill=shape.fill,
+                  visible=place.visible, view=place.view,
+                  description=place.description or place.measure,
+                  height=shape.height, extrude=shape.extrude)
+
+
 class Place:
     """Метка из файла: ключ (вид, номер объекта), объект и видимость."""
 
@@ -506,11 +516,14 @@ class MyPlaces(QObject):
 
     # KML и KMZ.
 
-    def import_tree(self, tree, parent=None):
+    def import_tree(self, tree, parent=None, wrap=True):
         """Записать дерево core.kml в папку parent новой папкой.
 
         Папки создаются по одной, метки пишутся одной правкой на слой,
         список перечитывается один раз. Возвращает ключ новой папки.
+        wrap False - содержимое дерева ложится в parent само, без новой
+        папки, так идёт вставка из буфера обмена. Тогда возвращается
+        None.
         """
         if self.folder_layer is None:
             return None
@@ -536,8 +549,17 @@ class MyPlaces(QObject):
                         (child, key, n))
             return key
 
-        top = folder(tree, parent, placetree.next_position(self.nodes(),
-                                                           parent))
+        start = placetree.next_position(self.nodes(), parent)
+        if wrap:
+            top = folder(tree, parent, start)
+        else:
+            top = None
+            for n, child in enumerate(tree.children):
+                if isinstance(child, KFolder):
+                    folder(child, parent, start + n)
+                else:
+                    per_kind.setdefault(child.kind, []).append(
+                        (child, parent, start + n))
         stamp = time.strftime("%Y-%m-%d %H:%M:%S")
         for kind, items in per_kind.items():
             layer = self.layers.get(kind)
@@ -586,15 +608,21 @@ class MyPlaces(QObject):
                     fill(child, kids)
                     target.children.append(child)
                 else:
-                    shape = node.shape
-                    target.children.append(KPlace(
-                        shape.name, shape.kind, list(shape.points),
-                        color=shape.color, width=shape.width,
-                        fill=shape.fill, visible=node.visible,
-                        view=node.view, description=node.description
-                        or node.measure, height=shape.height,
-                        extrude=shape.extrude))
+                    target.children.append(_kplace(node))
         fill(root, self.tree(folder))
+        return root
+
+    def export_keys(self, keys, name="PlanetX"):
+        """Выделенные метки и папки деревом core.kml для буфера обмена.
+        Метки внутри выделенной папки идут с ней, а не второй раз."""
+        root = KFolder(name)
+        for key in placetree.top_keys(self.nodes(), keys):
+            if placetree.is_folder(key):
+                root.children.append(self.export_tree(key))
+            else:
+                place = self.find(key)
+                if place is not None:
+                    root.children.append(_kplace(place))
         return root
 
     def add_to_project(self):

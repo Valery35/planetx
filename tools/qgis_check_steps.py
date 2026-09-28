@@ -1873,6 +1873,114 @@ def navpad_ring():
     state["window"].grab().save(os.path.join(TEMP, "planetx_navpad_view.png"))
     pad.set_mode("auto")
 
+
+@check(300)
+def place_props_live():
+    # Окно свойств метки немодальное, правки видны на глобусе сразу,
+    # «Отмена» возвращает вид, «OK» пишет в файл. Ползунок высоты.
+    from planetx.core.features import Shape
+    window = state["window"]
+    store = window.myplaces
+    store.add(Shape("point", [(58.0, 56.2)], name="Свойства теста"))
+    place = [p for p in store.places if p.name == "Свойства теста"][0]
+    key = place.key
+
+    def on_globe():
+        return [s.height for s in window.view.features.shapes
+                if s.name in ("Свойства теста", "Свойства теста 2")]
+    out = {}
+    window._place_action("properties", key)
+    dialog = window.prop_dialogs[key]
+    out["modal"] = dialog.isModal()
+    out["visible"] = dialog.isVisible()
+    dialog.slider.setValue(500)
+    out["slider_height"] = dialog.height.value()
+    out["preview_height"] = on_globe()
+    dialog.name.setText("Свойства теста 2")
+    out["preview_names"] = sorted(s.name for s in window.view.features.shapes
+                                  if s.name.startswith("Свойства теста"))
+    dialog.reject()
+    QgsApplication.processEvents()
+    out["after_cancel"] = on_globe()
+    out["file_after_cancel"] = store.find(key).shape.height
+    window._place_action("properties", key)
+    dialog = window.prop_dialogs[key]
+    dialog.height.setValue(3600.0)
+    out["slider_for_3600"] = dialog.slider.value()
+    dialog.accept()
+    QgsApplication.processEvents()
+    saved = [p for p in store.places if p.name == "Свойства теста"][0]
+    out["file_after_ok"] = saved.shape.height
+    out["globe_after_ok"] = on_globe()
+    out["dialogs_left"] = len(window.prop_dialogs)
+    store.remove(saved.key)
+    result["place_props_live"] = out
+
+
+@check(300)
+def copy_paste():
+    # Копировать и вставить: KML в буфере обмена, правка текста как
+    # в блокноте, вставка в другую папку без обёртки, клавиши.
+    from qgis.PyQt.QtCore import QEvent, Qt
+    from qgis.PyQt.QtGui import QKeyEvent
+    from qgis.PyQt.QtWidgets import QApplication
+    from planetx.core.features import Shape
+    from planetx.ui.panel import PLACE_ROLE
+    window = state["window"]
+    store = window.myplaces
+    panel = window.panel
+    source = store.add_folder("Копия исходник")
+    store.add(Shape("point", [(58.0, 56.2)], name="Копия А"),
+              folder=source)
+    store.add(Shape("line", [(58.0, 56.2), (58.1, 56.3)], name="Копия Б",
+                    height=120.0, extrude=True), folder=source)
+    store.add(Shape("point", [(58.2, 56.4)], name="Копия В"))
+    single = [p.key for p in store.places if p.name == "Копия В"][0]
+    target = store.add_folder("Копия цель")
+    out = {}
+    panel.places_action.emit("copy", [source, single])
+    clip = QApplication.clipboard().text()
+    out["clip_is_kml"] = clip.startswith("<?xml") and "<kml" in clip
+    out["clip_names"] = [n for n in ("Копия исходник", "Копия А", "Копия Б",
+                                     "Копия В") if n in clip]
+    # Правка в блокноте: переименование и только текст в буфере.
+    QApplication.clipboard().setText(clip.replace("Копия А", "Правка А"))
+    panel.place_action.emit("paste", target)
+    inside = [p.name for p in store.places_in(target)]
+    out["pasted_names"] = sorted(inside)
+    out["pasted_folder"] = [f.name for f in store.folders
+                            if f.name == "Копия исходник"]
+    line = [p for p in store.places_in(target) if p.name == "Копия Б"]
+    out["line_kept"] = [line[0].shape.height, bool(line[0].shape.extrude)] \
+        if line else None
+    # Мусор в буфере - сообщение и ничего не вставлено.
+    count = len(store.places)
+    QApplication.clipboard().setText("не KML")
+    out["garbage_pasted"] = window.paste_places(None)
+    out["garbage_same_count"] = len(store.places) == count
+    # Ctrl+C по выделенной строке.
+    tree = panel.list
+    tree.clearSelection()
+
+    def look(parent):
+        for i in range(parent.childCount()):
+            child = parent.child(i)
+            if child.data(0, PLACE_ROLE) == single:
+                child.setSelected(True)
+            look(child)
+    look(panel.places_group)
+    mods = _qt(Qt, "KeyboardModifier", "ControlModifier")
+    QgsApplication.sendEvent(tree, QKeyEvent(
+        _qt(QEvent, "Type", "KeyPress"), _qt(Qt, "Key", "Key_C"), mods))
+    out["ctrl_c"] = "Копия В" in QApplication.clipboard().text() and \
+        "Копия А" not in QApplication.clipboard().text()
+    for key in (source, target, single):
+        if store.find(key) is not None:
+            store.remove(key)
+    for f in [f for f in store.folders if f.name == "Копия исходник"]:
+        store.remove(f.key)
+    result["copy_paste"] = out
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

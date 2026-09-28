@@ -15,11 +15,11 @@ import time
 
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsProject, QgsSettings)
-from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
+from qgis.PyQt.QtCore import QEvent, QMimeData, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import (QFileDialog, QInputDialog, QLabel,
-                                 QMessageBox, QSplitter, QVBoxLayout,
-                                 QWidget)
+from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
+                                 QLabel, QMessageBox, QSplitter,
+                                 QVBoxLayout, QWidget)
 from qgis.utils import iface
 
 from ..core import basemap
@@ -32,8 +32,8 @@ from ..core.mipmap import mip_chain
 from ..core.navigation import focal, ground_under
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
-from ..core.kml import KmlError, read_file as read_kml_file, write_kml, \
-    write_kmz
+from ..core.kml import KmlError, read_file as read_kml_file, read_kml, \
+    write_kml, write_kmz
 from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, Stop
@@ -86,6 +86,8 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
 SYNC_KEY = "PlanetX/sync"  # направление синхронизации с картой
+# Тип KML в буфере обмена, как у Google Earth. Рядом кладётся текст.
+KML_MIME = "application/vnd.google-earth.kml+xml"
 # Допуск щелчка при определении объектов, логических пикселей.
 IDENTIFY_PIXELS = 5.0
 CURSOR_PERIOD = 60  # мс между пересчётами точки под курсором
@@ -304,6 +306,9 @@ class GlobeWindow(QWidget):
         self.toolbar.save_view_requested.connect(self.save_view)
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
         self.myplaces = MyPlaces(parent=self)
+        # Открытые окна свойств меток и их правки для глобуса по ключу.
+        self.previews = {}
+        self.prop_dialogs = {}
         self.myplaces.changed.connect(self._places_changed)
         self.panel.places_toggled.connect(self.myplaces.set_visible_many)
         self.panel.folder_expanded.connect(self.myplaces.set_expanded)
@@ -960,7 +965,9 @@ class GlobeWindow(QWidget):
     def _refresh_shapes(self):
         """На глобусе видимые «Мои метки», треки и фигура открытой
         линейки."""
-        shapes = self.myplaces.shapes()
+        # Метка с открытым окном свойств показывается с правками окна.
+        shapes = [self.previews.get(p.key, p.shape)
+                  for p in self.myplaces.places if p.visible]
         if getattr(self, "tracks", None) is not None:
             shapes += self.tracks.shapes()
         if self._ruler_open():
@@ -1178,6 +1185,15 @@ class GlobeWindow(QWidget):
         if action == "import_kml":
             self.import_kml(key or None)
             return
+        if action == "copy":
+            self.copy_places([key] if key else [])
+            return
+        if action == "paste":
+            place = self.myplaces.find(key) if key else None
+            folder = key if is_folder(key) else (
+                place.folder if place is not None else None)
+            self.paste_places(folder)
+            return
         if action == "export_kml":
             self.export_kml(key or None)
             return
@@ -1192,9 +1208,7 @@ class GlobeWindow(QWidget):
         elif action == "tour":
             self.tour.start([self.place_stop(item, along=True)])
         elif action == "properties":
-            dialog = PlaceProperties(item, self)
-            if dialog.exec():
-                self.myplaces.update(key, dialog.values())
+            self._open_place_properties(item)
         elif action == "rename":
             name, ok = QInputDialog.getText(
                 self, tr("Переименовать"), tr("Название"), text=item.name)
@@ -1220,6 +1234,9 @@ class GlobeWindow(QWidget):
         keys = [k for k in keys if self.myplaces.find(k) is not None]
         if not keys:
             return
+        if action == "copy":
+            self.copy_places(keys)
+            return
         if action in ("show", "hide"):
             self.myplaces.set_visible_many(
                 {k: action == "show"
@@ -1235,6 +1252,78 @@ class GlobeWindow(QWidget):
                     count=len(keys)))
             if answer == enum(QMessageBox, "StandardButton", "Yes"):
                 self.myplaces.remove_many(keys)
+
+    def _open_place_properties(self, place):
+        """Немодальное окно свойств метки. Правки видны на глобусе
+        сразу, «OK» записывает их, «Отмена» возвращает прежний вид."""
+        key = place.key
+        dialog = self.prop_dialogs.get(key)
+        if dialog is None:
+            dialog = PlaceProperties(place, self)
+            dialog.setAttribute(enum(Qt, "WidgetAttribute",
+                                     "WA_DeleteOnClose"))
+            self.prop_dialogs[key] = dialog
+
+            def preview(shape, key=key):
+                self.previews[key] = shape
+                self._refresh_shapes()
+
+            def done(result, key=key, dialog=dialog):
+                self.prop_dialogs.pop(key, None)
+                self.previews.pop(key, None)
+                if result:
+                    self.myplaces.update(key, dialog.values())
+                else:
+                    self._refresh_shapes()
+            dialog.changed.connect(preview)
+            dialog.finished.connect(done)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def copy_places(self, keys):
+        """Метки и папки keys в буфер обмена текстом KML, как Google
+        Earth. Пустой keys - все «Мои метки». Текст открывается
+        в блокноте, правится и вставляется обратно."""
+        tree = self.myplaces.export_keys(keys) if keys \
+            else self.myplaces.export_tree(None)
+        text = write_kml(tree)
+        mime = QMimeData()
+        mime.setText(text)
+        mime.setData(KML_MIME, text.encode("utf-8"))
+        QApplication.clipboard().setMimeData(mime)
+        self.message = (tr("KML в буфере обмена, меток {count}.",
+                           count=len(tree.places())), time.monotonic())
+        self._show_state()
+        return text
+
+    def paste_places(self, folder=None):
+        """KML из буфера обмена в папку folder (None - корень «Моих
+        меток»). Содержимое ложится само, без новой папки. Возвращает
+        количество вставленных меток."""
+        mime = QApplication.clipboard().mimeData()
+        data = b""
+        if mime is not None and mime.hasFormat(KML_MIME):
+            data = bytes(mime.data(KML_MIME))
+        elif mime is not None and mime.hasText():
+            data = mime.text().encode("utf-8")
+        tree = None
+        if data.strip():
+            try:
+                tree = read_kml(data, tr("Вставка"))
+            except KmlError:
+                tree = None
+        if tree is None or not tree.children:
+            self.message = (tr("В буфере обмена нет меток KML."),
+                            time.monotonic())
+            self._show_state()
+            return 0
+        self.myplaces.import_tree(tree, folder, wrap=False)
+        count = len(tree.places())
+        self.message = (tr("Вставлено меток {count}.", count=count),
+                        time.monotonic())
+        self._show_state()
+        return count
 
     def import_kml(self, parent=None, path=None):
         """Открыть KML или KMZ в папку parent новой папкой и подлететь

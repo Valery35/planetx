@@ -133,5 +133,21 @@ class TestTriangulate(unittest.TestCase):
         self.assertAlmostEqual(abs(xy[1, 0] - xy[0, 0]), 590.0, delta=5.0)
 
 
+class TestHeightSlider(unittest.TestCase):
+
+    def test_ends_and_round_trip(self):
+        self.assertEqual(ft.height_share(0.0), 0.0)
+        self.assertAlmostEqual(ft.height_share(ft.MAX_HEIGHT), 1.0)
+        self.assertEqual(ft.height_share(-5.0), 0.0)
+        for h in (1.0, 36.0, 3600.0, 50000.0):
+            self.assertAlmostEqual(ft.share_height(ft.height_share(h)), h,
+                                   places=6)
+
+    def test_low_heights_get_room(self):
+        # Первая пятая ползунка - до 9 м, половина - до 316 м.
+        self.assertLess(ft.share_height(0.2), 10.0)
+        self.assertLess(ft.share_height(0.5), 320.0)
+
+
 if __name__ == "__main__":
     unittest.main()

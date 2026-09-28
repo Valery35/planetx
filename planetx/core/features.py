@@ -133,6 +133,23 @@ def lift(latlon, height_at=None, offset=0.0, heights_at=None):
     return geodetic_to_ecef(latlon[:, 0], latlon[:, 1], h + offset)
 
 
+MAX_HEIGHT = 100000.0  # метров подъёма метки, не больше
+
+
+def height_share(height):
+    """Место ползунка высоты от 0 (земля) до 1 (MAX_HEIGHT), шкала
+    логарифмическая, как ползунок «Поверхность земли - Космос» Google
+    Earth. Метры у земли и километры в небе ставятся одинаково точно."""
+    height = min(max(float(height), 0.0), MAX_HEIGHT)
+    return math.log10(height + 1.0) / math.log10(MAX_HEIGHT + 1.0)
+
+
+def share_height(share):
+    """Высота по месту ползунка, обратная height_share."""
+    share = min(max(float(share), 0.0), 1.0)
+    return (MAX_HEIGHT + 1.0) ** share - 1.0
+
+
 Geometry = namedtuple("Geometry", "ring lines triangles wall stem")
 Geometry.__doc__ = """Контур объекта для видеокарты, от высот не зависит.
 
