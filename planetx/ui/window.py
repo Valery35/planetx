@@ -308,6 +308,10 @@ class GlobeWindow(QWidget):
         self.panel.place_moved.connect(
             lambda key, parent, index: self.myplaces.move(
                 key, parent or None, index))
+        self.panel.places_moved.connect(
+            lambda keys, parent, index: self.myplaces.move_many(
+                keys, parent or None, index))
+        self.panel.places_action.connect(self._places_action)
         self.ruler = Ruler(self)
         self.ruler.changed.connect(self._refresh_shapes)
         self.ruler_dialog = None
@@ -1205,6 +1209,28 @@ class GlobeWindow(QWidget):
             answer = QMessageBox.question(self, title, question)
             if answer == enum(QMessageBox, "StandardButton", "Yes"):
                 self.myplaces.remove(key)
+
+    def _places_action(self, action, keys):
+        """Действие над несколькими выбранными строками «Моих меток»:
+        показать, скрыть, удалить."""
+        keys = [k for k in keys if self.myplaces.find(k) is not None]
+        if not keys:
+            return
+        if action in ("show", "hide"):
+            self.myplaces.set_visible_many(
+                {k: action == "show"
+                 for k in self.myplaces.with_contents(keys)})
+        elif action == "remove":
+            if len(keys) == 1:
+                self._place_action("remove", keys[0])
+                return
+            answer = QMessageBox.question(
+                self, tr("Удалить выбранное"), tr(
+                    "Удалить выбранное из «Моих меток»? Строк {count}, "
+                    "папки удаляются со всем содержимым.",
+                    count=len(keys)))
+            if answer == enum(QMessageBox, "StandardButton", "Yes"):
+                self.myplaces.remove_many(keys)
 
     def import_kml(self, parent=None, path=None):
         """Открыть KML или KMZ в папку parent новой папкой и подлететь

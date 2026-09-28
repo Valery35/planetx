@@ -30,6 +30,9 @@ NOMINATIM_POLICY = "https://operations.osmfoundation.org/policies/nominatim/"
 ESRI_TERMS = "https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
+PAGE = "https://www.informpp.ru/главная-страница/qgis-planetx"
+# Руководство на языке интерфейса: имя файла переводится.
+MANUAL = REPOSITORY + "/blob/main/doc/"
 
 
 def _link(url, text):
@@ -49,10 +52,15 @@ def about_html():
         tr("Колесо приближает к точке под курсором."),
         tr("Средняя кнопка или левая с Shift поворачивают и наклоняют "
            "вид."),
+        tr("Двойной щелчок левой кнопкой приближает к точке, правой - "
+           "отдаляет. Правая кнопка с перетаскиванием приближает "
+           "и отдаляет, левая с Ctrl поворачивает взгляд."),
+        tr("Стрелки сдвигают вид, PageUp и PageDown приближают "
+           "и отдаляют, N ставит север вверху, U даёт взгляд отвесно."),
         tr("Поле «Поиск» слева вверху находит место по названию или "
            "координатам и запускает перелёт."),
-        tr("Двойной щелчок по строке «Глобус» открывает свойства вида. "
-           "В них выбираются подложка, масштаб рельефа и язык подписей."),
+        tr("Кнопка на заголовке «Слои» открывает свойства вида. В них "
+           "выбираются подложка и масштаб рельефа."),
     ))
     sources = _items((
         _link(OSM, tr("Подложка OpenStreetMap: © участники "
@@ -72,6 +80,8 @@ def about_html():
         _link(SOURCES, tr("Источники данных и условия их использования")),
     ))
     links = " · ".join((
+        _link(PAGE, tr("Страница модуля")),
+        _link(MANUAL + tr("MANUAL.md"), tr("Руководство")),
         _link(REPOSITORY, tr("Исходный код")),
         _link(ISSUES, tr("Сообщить об ошибке")),
         _link(CATALOG, tr("Страница в каталоге QGIS")),

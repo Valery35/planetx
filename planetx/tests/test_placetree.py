@@ -80,6 +80,38 @@ class TestMove(unittest.TestCase):
         self.assertEqual(pt.move_plan(tree(), "folder:1", None, 2), {})
 
 
+class TestMany(unittest.TestCase):
+
+    def apply(self, nodes, plan):
+        return TestMove.apply(self, nodes, plan)
+
+    def test_top_keys_drop_inside_of_chosen_folder(self):
+        self.assertEqual(pt.top_keys(tree(), ["point:3", "folder:1",
+                                              "polygon:4"]),
+                         ["folder:1", "polygon:4"])
+
+    def test_chosen_go_together_in_list_order(self):
+        nodes = tree()
+        plan = pt.move_many_plan(nodes, ["polygon:4", "point:1"],
+                                 "folder:2", 1)
+        self.apply(nodes, plan)
+        self.assertEqual(keys(pt.children(nodes, "folder:2")),
+                         ["point:3", "point:1", "polygon:4"])
+        self.assertEqual(keys(pt.children(nodes, None)), ["folder:1"])
+
+    def test_index_counts_moved_siblings(self):
+        nodes = tree()
+        # a и d в конец корня: перед ними остаётся одна F1.
+        self.apply(nodes, pt.move_many_plan(nodes, ["point:1", "polygon:4"],
+                                            None, 3))
+        self.assertEqual(keys(pt.children(nodes, None)),
+                         ["folder:1", "point:1", "polygon:4"])
+
+    def test_folder_with_its_child_not_into_itself(self):
+        self.assertEqual(pt.move_many_plan(
+            tree(), ["folder:1", "point:1"], "folder:2", 0), {})
+
+
 class TestNumberedName(unittest.TestCase):
 
     def test_first_and_next(self):

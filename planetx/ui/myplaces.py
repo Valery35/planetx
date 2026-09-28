@@ -8,7 +8,7 @@
 в WGS84: точки, линии, многоугольники. Файл - обычный источник QGIS,
 его слои можно добавить в проект.
 
-Запись идёт прямо в источник через dataProvider, без буфера правки.
+Запись идёт в сам источник через dataProvider, без буфера правки.
 
 Сохранённый вид - точка на месте взгляда с полем view: расстояние
 до точки, азимут и наклон камеры. Закладки QGIS для этого не нужны,
@@ -438,7 +438,11 @@ class MyPlaces(QObject):
     def move(self, key, parent, index):
         """Перенести метку или папку в папку parent перед её ребёнком
         номер index, как перетаскиванием мышью."""
-        plan = placetree.move_plan(self.nodes(), key, parent, index)
+        self.move_many([key], parent, index)
+
+    def move_many(self, keys, parent, index):
+        """Перенести выбранные метки и папки подряд, одной правкой."""
+        plan = placetree.move_many_plan(self.nodes(), keys, parent, index)
         if not plan:
             return
         changes = {}
@@ -457,6 +461,16 @@ class MyPlaces(QObject):
         self._write({key: {"visible": 1 if on else 0}
                      for key, on in states.items()})
 
+    def with_contents(self, keys):
+        """Ключи вместе со всем содержимым выбранных папок."""
+        nodes = self.nodes()
+        out = []
+        for key in placetree.top_keys(nodes, keys):
+            out.append(key)
+            if placetree.is_folder(key):
+                out += placetree.descendants(nodes, key)
+        return out
+
     def set_visible(self, key, on):
         self.set_visible_many({key: on})
 
@@ -473,9 +487,12 @@ class MyPlaces(QObject):
 
     def remove(self, key):
         """Удалить метку или папку со всем содержимым, как в Google Earth."""
-        keys = [key]
-        if placetree.is_folder(key):
-            keys += placetree.descendants(self.nodes(), key)
+        self.remove_many([key])
+
+    def remove_many(self, chosen):
+        """Удалить выбранные метки и папки с содержимым, список
+        перечитывается один раз."""
+        keys = self.with_contents(chosen)
         per_layer = {}
         for item_key in keys:
             layer = self._layer_of(item_key)

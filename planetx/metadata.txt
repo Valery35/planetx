@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.6.1
+version=0.7.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -50,13 +50,20 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Developed with the support of Inform++ LLC (www.informpp.ru).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
-homepage=https://github.com/Valery35/planetx
+homepage=https://www.informpp.ru/главная-страница/qgis-planetx
 tags=3d,globe,earth,google earth,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,labels,vector tiles,opengl
 category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.6.1 My Places shows an icon of the kind before each name -
+changelog=0.7.0 Mouse and keys as in Google Earth: double click zooms to
+      a point, right drag zooms, Ctrl looks around, arrows, PageUp,
+      PageDown, N, U, R and Space. The left panel has collapsible
+      sections Places, Project layers and Layers. Several places are
+      selected with Ctrl and Shift, deleted with Del, shown, hidden and
+      dragged together. A double click on a project layer flies to it.
+      A manual in Russian and English opens from About.
+      0.6.1 My Places shows an icon of the kind before each name -
       placemark, path, polygon or saved view. A new placemark gets a
       numbered name at once, My placemark 1, My path 1, View 1, each kind
       counts on its own.

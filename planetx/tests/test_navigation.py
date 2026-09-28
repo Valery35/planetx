@@ -303,6 +303,46 @@ class TestTerrain(unittest.TestCase):
         self.assertFalse(n.keep_clear())
 
 
+class TestLookAndPan(unittest.TestCase):
+    """Взгляд по сторонам и сдвиг стрелками, как в Google Earth."""
+
+    def test_look_keeps_eye(self):
+        for distance, tilt in ((3000.0, 40.0), (2.0e5, 10.0), (500.0, 70.0)):
+            pose = nav.Pose(*PERM, distance, 30.0, tilt)
+            eye0, _ = pose.eye_rotation()
+            out = nav.look(pose, 20.0, 5.0)
+            self.assertIsNotNone(out)
+            eye1, _ = out.eye_rotation()
+            self.assertLess(float(np.linalg.norm(eye1 - eye0)),
+                            1e-3 * distance, (distance, tilt))
+            self.assertAlmostEqual(out.heading, 50.0)
+            self.assertAlmostEqual(out.tilt, tilt + 5.0)
+
+    def test_look_into_sky_is_refused(self):
+        pose = nav.Pose(*PERM, 3000.0, 0.0, 80.0)
+        self.assertIsNone(nav.look(pose, 0.0, 10.0))
+
+    def test_pan_moves_along_heading(self):
+        north = nav.pan(nav.Pose(*PERM, 1000.0, 0.0, 0.0), 1000.0, 0.0)
+        self.assertAlmostEqual((north.lat - PERM[0]) * nav.M_PER_DEGREE,
+                               1000.0, delta=1.0)
+        self.assertAlmostEqual(north.lon, PERM[1], places=9)
+        east = nav.pan(nav.Pose(*PERM, 1000.0, 90.0, 0.0), 1000.0, 0.0)
+        self.assertGreater(east.lon, PERM[1])
+        right = nav.pan(nav.Pose(*PERM, 1000.0, 0.0, 0.0), 0.0, 1000.0)
+        self.assertGreater(right.lon, PERM[1])
+
+    def test_zoom_now_keeps_point(self):
+        n = navigator(2.0e5, 20.0, 30.0)
+        n.pose.apply(n.camera)
+        point = nav.ground_under(n.camera, 1200.0, 400.0)
+        self.assertTrue(n.zoom_now(1200.0, 400.0, 0.5))
+        n.pose.apply(n.camera)
+        p = pixel(n.camera, point)
+        self.assertLess(float(np.linalg.norm(p - [1200.0, 400.0])), 0.01)
+        self.assertAlmostEqual(n.pose.distance, 1.0e5, delta=1.0)
+
+
 class TestInertia(unittest.TestCase):
 
     def flick(self, n, fps, until=3.0):

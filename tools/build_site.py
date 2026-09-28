@@ -7,18 +7,26 @@
 
 Пишет site/planetx_landing.html. Страница самодостаточная, снимки
 из doc/images встроены в файл, язык переключается без перезагрузки.
+Снимки ужимаются до WEB_WIDTH пикселей по ширине. Страница вставляется
+кодом в Google Сайты, и объём держится около объёма лендингов соседей,
+360-460 КБ. Ужатие делает Pillow из Python QGIS.
 Устройство и оформление взяты из лендинга Isoliner3D. Тексты обоих
 языков лежат здесь в одном месте, править лучше их, а не готовую
 страницу.
 """
 import base64
+import io
 import json
 import os
 import re
 
+from PIL import Image
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 IMAGES = os.path.join(ROOT, "doc", "images")
 OUT = os.path.join(ROOT, "site", "planetx_landing.html")
+WEB_WIDTH = 960  # пикселей, ширина снимка на странице
+WEB_QUALITY = 70  # качество JPEG
 
 
 def version():
@@ -28,8 +36,16 @@ def version():
 
 
 def image(name):
-    with open(os.path.join(IMAGES, name), "rb") as fh:
-        data = base64.b64encode(fh.read()).decode("ascii")
+    """Снимок в строке data: JPEG шириной не больше WEB_WIDTH."""
+    with Image.open(os.path.join(IMAGES, name)) as picture:
+        picture = picture.convert("RGB")
+        if picture.width > WEB_WIDTH:
+            height = round(picture.height * WEB_WIDTH / picture.width)
+            picture = picture.resize((WEB_WIDTH, height), Image.LANCZOS)
+        out = io.BytesIO()
+        picture.save(out, "JPEG", quality=WEB_QUALITY, optimize=True,
+                     progressive=True)
+    data = base64.b64encode(out.getvalue()).decode("ascii")
     return "data:image/jpeg;base64," + data
 
 
@@ -45,7 +61,7 @@ RU = {
     "nav.controls": "Управление",
     "hero.eyebrow": "Плагин QGIS · 3D-глобус",
     "hero.h1": "Вся Земля в окне QGIS, от космоса до улицы",
-    "hero.lead": "PlanetX открывает глобус в духе Google Earth прямо "
+    "hero.lead": "PlanetX открывает глобус в духе Google Earth "
                  "в QGIS. Космоснимки лежат на рельефе, вокруг планеты "
                  "светится атмосфера, границы, дороги и названия "
                  "включаются флажками. Слои текущего проекта ложатся "
@@ -82,7 +98,7 @@ RU = {
     "layers.fig": "Евразия с высоты 9000 км. Названия стран и городов, "
                   "границы стран жёлтые, границы областей тонкие белые.",
     "layers.c1.h": "Подписи как в Google Earth",
-    "layers.c1.p": "Надписи стоят прямо при любом повороте и наклоне "
+    "layers.c1.p": "Надписи остаются ровными при любом повороте и наклоне "
                    "и не налезают друг на друга. Пункт за горой или "
                    "за горизонтом не подписан. При приближении "
                    "появляются всё более мелкие пункты, вершины, "
@@ -103,8 +119,8 @@ RU = {
                    "номера дорог и названия пунктов поверх космоснимка.",
     "controls.eyebrow": "Управление",
     "controls.h2": "Земля тянется мышью",
-    "controls.sub": "Навигация повторяет Google Earth. Двойной щелчок "
-                    "по строке «Глобус» открывает свойства вида, кнопка "
+    "controls.sub": "Навигация повторяет Google Earth. Кнопка "
+                    "на заголовке «Слои» открывает свойства вида, кнопка "
                     "«О модуле» напоминает управление и источники.",
     "g1": "Мышь и клавиатура",
     "c1.h": "Захват Земли",
@@ -223,8 +239,8 @@ EN = {
                    "and place names over satellite imagery.",
     "controls.eyebrow": "Controls",
     "controls.h2": "Drag the Earth with the mouse",
-    "controls.sub": "Navigation follows Google Earth. A double click on "
-                    "the Globe row opens the view properties, the About "
+    "controls.sub": "Navigation follows Google Earth. The button on "
+                    "the Layers header opens the view properties, the About "
                     "button lists the controls and the sources.",
     "g1": "Mouse and keyboard",
     "c1.h": "Grab the Earth",

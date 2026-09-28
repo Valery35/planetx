@@ -13,6 +13,7 @@ QGIS пользователя не трогается, проект пустой
 """
 import faulthandler
 import json
+import math
 import os
 import sys
 import traceback
@@ -92,11 +93,12 @@ def open_globe():
 
 @check(200)
 def places_folder():
-    # «Мои метки» - папка сразу под «Глобусом», есть и пустая.
+    # «Мои метки» - единственный корень раздела «Метки», есть и пустая.
+    # Слои проекта - в своём разделе.
     panel = state["window"].panel
     result["places_folder"] = [
-        panel.list.indexOfTopLevelItem(panel.head),
-        panel.list.indexOfTopLevelItem(panel.places_group)]
+        panel.list.indexOfTopLevelItem(panel.places_group),
+        panel.list.topLevelItemCount()]
     result["geo_has_places"] = any(
         panel.geo.topLevelItem(i).text(0) == panel.places_group.text(0)
         for i in range(panel.geo.topLevelItemCount()))
@@ -759,8 +761,8 @@ def tour_path():
                 if group.child(i).data(0, panel_role()) == key)
     panel.list.setCurrentItem(item)
     out = {"button_on": panel.tour_button.isEnabled()}
-    panel.list.setCurrentItem(panel.head)
-    out["button_off_on_globe"] = not panel.tour_button.isEnabled()
+    panel.list.setCurrentItem(None)
+    out["button_off_without_choice"] = not panel.tour_button.isEnabled()
     panel.list.setCurrentItem(item)
     panel.tour_button.click()
     player = window.tour
@@ -1528,6 +1530,222 @@ def place_names():
         if p.key not in before:
             store.remove(p.key)
     result["place_names"] = out
+
+
+@check(500)
+def multi_select():
+    # Несколько выделенных строк «Моих меток»: перенос, скрытие,
+    # удаление клавишей Del. Корень выделен жирным шрифтом.
+    from qgis.PyQt.QtCore import QEvent, Qt
+    from qgis.PyQt.QtGui import QKeyEvent
+    from qgis.PyQt.QtWidgets import QMessageBox
+    from planetx.core.features import Shape
+    from planetx.ui import window as window_module
+    window = state["window"]
+    store = window.myplaces
+    panel = window.panel
+    tree = panel.list
+    count0 = len(store.places)
+    folder = store.add_folder("Выбор теста")
+    keys = []
+    for i in range(3):
+        store.add(Shape("point", [(58.0 + 0.01 * i, 56.2)],
+                        name="Выбор %d" % i))
+        keys.append([p.key for p in store.places
+                     if p.name == "Выбор %d" % i][0])
+    store.add(Shape("point", [(58.1, 56.3)], name="Внутри"), folder=folder)
+    out = {"root_bold": panel.places_group.font(0).bold(),
+           "root_icon": not panel.places_group.icon(0).isNull()}
+
+    from planetx.ui.panel import PLACE_ROLE
+
+    def select_role(chosen):
+        tree.clearSelection()
+
+        def look(parent):
+            for i in range(parent.childCount()):
+                child = parent.child(i)
+                if child.data(0, PLACE_ROLE) in chosen:
+                    child.setSelected(True)
+                look(child)
+        look(panel.places_group)
+    select_role([keys[2], keys[0]])
+    out["selected"] = tree.selected_keys() == [keys[0], keys[2]]
+    panel.places_moved.emit([keys[0], keys[2]], folder, 0)
+    inside = [p.name for p in store.places_in(folder)]
+    out["moved_into_folder"] = inside
+    panel.places_action.emit("hide", [folder])
+    out["hidden"] = sorted(p.name for p in store.places_in(folder)
+                           if not p.visible)
+    panel.places_action.emit("show", [folder])
+    asked = []
+    old = window_module.QMessageBox.question
+    window_module.QMessageBox.question = staticmethod(
+        lambda *a: asked.append(a[2]) or QMessageBox.StandardButton.Yes
+        if hasattr(QMessageBox, "StandardButton") else QMessageBox.Yes)
+    try:
+        select_role([folder, keys[1]])
+        tree.setFocus()
+        QgsApplication.sendEvent(tree, QKeyEvent(
+            QEvent.Type.KeyPress if hasattr(QEvent, "Type")
+            else QEvent.KeyPress, Qt.Key.Key_Delete if hasattr(Qt, "Key")
+            else Qt.Key_Delete, Qt.KeyboardModifier.NoModifier
+            if hasattr(Qt, "KeyboardModifier") else Qt.NoModifier))
+    finally:
+        window_module.QMessageBox.question = old
+    out["asked"] = len(asked)
+    out["left"] = len(store.places) - count0
+    out["folder_gone"] = store.find(folder) is None
+    result["multi_select"] = out
+
+
+@check(300)
+def accordion():
+    # Разделы панели сворачиваются, место отходит открытым разделам.
+    # Слои проекта лежат в своём списке, не в дереве меток.
+    from qgis.core import QgsVectorLayer
+    window = state["window"]
+    panel = window.panel
+    layer = QgsVectorLayer("Point?crs=EPSG:4326", "Слой раздела", "memory")
+    QgsProject.instance().addMapLayer(layer)
+    QgsApplication.processEvents()
+    places, project, base = panel.sections
+    out = {"titles": [s.header.text() for s in panel.sections],
+           "layer_in_own_list": any(
+               panel.layers.topLevelItem(i).text(0).startswith(
+                   "Слой раздела")
+               for i in range(panel.layers.topLevelItemCount())),
+           "tree_tops": panel.list.topLevelItemCount()}
+    before = [s.height() for s in panel.sections]
+    project.set_open(False)
+    QgsApplication.processEvents()
+    after = [s.height() for s in panel.sections]
+    out["heights_open"] = before
+    out["heights_project_closed"] = after
+    out["closed_is_header"] = after[1] <= project.header.sizeHint().height()
+    out["others_grew"] = after[0] + after[2] > before[0] + before[2]
+    project.set_open(True)
+    QgsApplication.processEvents()
+    out["reopened"] = project.height() > project.header.sizeHint().height()
+    asked = []
+    panel.properties_requested.connect(lambda: asked.append(1))
+    base.row.itemAt(1).widget().click()
+    out["properties_button"] = len(asked)
+    flown = []
+    panel.fly_to_layer.connect(lambda layer: flown.append(layer.name()))
+    row = next(panel.layers.topLevelItem(i)
+               for i in range(panel.layers.topLevelItemCount())
+               if panel.layers.topLevelItem(i).text(0).startswith(
+                   "Слой раздела"))
+    panel.layers.itemDoubleClicked.emit(row, 0)
+    out["double_click_flies"] = flown
+    panel.grab().save(os.path.join(TEMP, "planetx_panel.png"))
+    QgsProject.instance().removeMapLayer(layer.id())
+    result["accordion"] = out
+
+
+def _qt(owner, scope, name):
+    return getattr(getattr(owner, scope, owner), name)
+
+
+def _send_mouse(view, kind, x, y, button, buttons, mods=None):
+    from qgis.PyQt.QtCore import QEvent, QPoint, QPointF, Qt
+    from qgis.PyQt.QtGui import QMouseEvent
+    mods = mods if mods is not None else _qt(Qt, "KeyboardModifier",
+                                             "NoModifier")
+    event = QMouseEvent(_qt(QEvent, "Type", kind), QPointF(x, y),
+                        QPointF(view.mapToGlobal(QPoint(int(x), int(y)))),
+                        button, buttons, mods)
+    QgsApplication.sendEvent(view, event)
+
+
+def _send_key(view, name, mods=None):
+    from qgis.PyQt.QtCore import QEvent, Qt
+    from qgis.PyQt.QtGui import QKeyEvent
+    mods = mods if mods is not None else _qt(Qt, "KeyboardModifier",
+                                             "NoModifier")
+    QgsApplication.sendEvent(view, QKeyEvent(
+        _qt(QEvent, "Type", "KeyPress"), _qt(Qt, "Key", name), mods))
+
+
+@check(3000)
+def ge_nav():
+    # Навигация Google Earth: двойные щелчки, правая кнопка, Ctrl,
+    # клавиши. Вид - неподвижная поза над Пермью.
+    from qgis.PyQt.QtCore import Qt
+    from planetx.core.navigation import Pose, ground_under
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    view = state["window"].view
+    nav = view.navigator
+    left = _qt(Qt, "MouseButton", "LeftButton")
+    right = _qt(Qt, "MouseButton", "RightButton")
+    none = _qt(Qt, "MouseButton", "NoButton")
+    ctrl = _qt(Qt, "KeyboardModifier", "ControlModifier")
+    shift = _qt(Qt, "KeyboardModifier", "ShiftModifier")
+    ratio = view.devicePixelRatioF()
+    cx, cy = view.width() / 2.0, view.height() / 2.0
+
+    def reset():
+        nav.stop()
+        nav.set_pose(Pose(58.0105, 56.2294, 20000.0, 30.0, 40.0))
+        view._fit_camera()
+        nav.pose.apply(view.camera)
+
+    out = {}
+    reset()
+    x, y = cx + 150, cy - 60
+    point = ground_under(view.camera, x * ratio, y * ratio)
+    lat, lon, _ = ecef_to_geodetic(point)
+    _send_mouse(view, "MouseButtonDblClick", x, y, left, left)
+    flight = nav.flight[1] if nav.flight else None
+    out["double_left"] = None if flight is None else {
+        "distance": round(flight.end.distance, 1),
+        "to_point_m": round(math.hypot(
+            (flight.end.lat - float(lat)) * 111320.0,
+            (flight.end.lon - float(lon)) * 111320.0
+            * math.cos(math.radians(float(lat)))), 3),
+        "heading": flight.end.heading, "tilt": flight.end.tilt}
+    reset()
+    _send_mouse(view, "MouseButtonDblClick", x, y, right, right)
+    flight = nav.flight[1] if nav.flight else None
+    out["double_right"] = round(flight.end.distance, 1) if flight else None
+    reset()
+    _send_mouse(view, "MouseButtonPress", cx, cy, right, right)
+    _send_mouse(view, "MouseMove", cx, cy - 100, none, right)
+    _send_mouse(view, "MouseButtonRelease", cx, cy - 100, right, none)
+    out["right_drag_up"] = round(nav.pose.distance, 1)
+    reset()
+    eye0, _ = nav.pose.eye_rotation()
+    _send_mouse(view, "MouseButtonPress", cx, cy, left, left, ctrl)
+    _send_mouse(view, "MouseMove", cx + 50, cy - 20, none, left, ctrl)
+    _send_mouse(view, "MouseButtonRelease", cx + 50, cy - 20, left, none,
+                ctrl)
+    eye1, _ = nav.pose.eye_rotation()
+    out["ctrl_look"] = {"heading": round(nav.pose.heading, 3),
+                        "tilt": round(nav.pose.tilt, 3),
+                        "eye_moved_m": round(float(
+                            ((eye1 - eye0) ** 2).sum() ** 0.5), 3)}
+    reset()
+    view.setFocus()
+    _send_key(view, "Key_Up")
+    out["arrow_up_m"] = round(math.hypot(
+        (nav.pose.lat - 58.0105) * 111320.0,
+        (nav.pose.lon - 56.2294) * 111320.0
+        * math.cos(math.radians(58.0105))), 1)
+    reset()
+    _send_key(view, "Key_Left", shift)
+    out["shift_left_heading"] = round(nav.pose.heading, 3)
+    reset()
+    _send_key(view, "Key_R")
+    flight = nav.flight[1] if nav.flight else None
+    out["key_r"] = [flight.end.heading, flight.end.tilt] if flight else None
+    _send_key(view, "Key_Space")
+    out["space_stops"] = nav.flight is None
+    reset()
+    _send_key(view, "Key_PageUp")
+    out["page_up_zooming"] = nav.zooming is not None
+    nav.stop()
+    result["ge_nav"] = out
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.

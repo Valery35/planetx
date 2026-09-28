@@ -56,6 +56,18 @@ def descendants(nodes, folder):
     return [n.key for n in walk(nodes, folder)]
 
 
+def top_keys(nodes, keys):
+    """Выбранные ключи без тех, что лежат внутри выбранной папки, в
+    порядке списка. Папка и так переносится и удаляется с содержимым."""
+    chosen = set(keys)
+    inside = set()
+    for key in chosen:
+        if is_folder(key):
+            inside.update(descendants(nodes, key))
+    return [n.key for n in walk(nodes)
+            if n.key in chosen and n.key not in inside]
+
+
 def move_plan(nodes, key, parent, index):
     """Новые (родитель, номер) узлов после переноса key в parent перед
     его ребёнком номер index. index за концом - в конец.
@@ -64,21 +76,28 @@ def move_plan(nodes, key, parent, index):
     пустой словарь - переноса нет. Папку нельзя перенести в неё саму
     и в её потомков.
     """
+    return move_many_plan(nodes, [key], parent, index)
+
+
+def move_many_plan(nodes, keys, parent, index):
+    """То же для нескольких выбранных узлов. Они встают подряд в порядке
+    списка, вложенные в выбранную папку едут вместе с ней."""
     by_key = {n.key: n for n in nodes}
-    node = by_key.get(key)
-    if node is None or parent is not None and parent not in by_key:
+    if parent is not None and parent not in by_key:
         return {}
-    if is_folder(key) and (parent == key
-                           or parent in descendants(nodes, key)):
+    keys = top_keys(nodes, [k for k in keys if k in by_key])
+    if not keys:
         return {}
+    for key in keys:
+        if is_folder(key) and (parent == key
+                               or parent in descendants(nodes, key)):
+            return {}
+    moved = [by_key[k] for k in keys]
     siblings = children(nodes, parent)
     index = max(0, min(index, len(siblings)))
-    if node in siblings:
-        i = siblings.index(node)
-        if index > i:
-            index -= 1
-        siblings.pop(i)
-    siblings.insert(index, node)
+    index -= sum(1 for n in siblings[:index] if n in moved)
+    siblings = [n for n in siblings if n not in moved]
+    siblings[index:index] = moved
     plan = {}
     for n, item in enumerate(siblings):
         if item.parent != parent or item.position != n:

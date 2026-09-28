@@ -33,17 +33,26 @@ EN = {
     "Поиск не удался: {error}": "Search failed: {error}",
     "Ничего не найдено: {text}": "Nothing found: {text}",
     "О модуле": "About",
-    "Глобус": "Globe",
-    "Свойства вида: двойной щелчок": "View properties: double click",
+    "Метки": "Places",
+    "Слои проекта": "Project layers",
+    "Свернуть или развернуть «Мои метки».": "Collapse or expand My Places.",
+    "Свернуть или развернуть слои проекта QGIS.":
+        "Collapse or expand the QGIS project layers.",
+    "Свернуть или развернуть векторную основу и рельеф.":
+        "Collapse or expand the vector base and terrain.",
+    "Свойства вида: подложка, вертикальный масштаб рельефа, "
+    "автообновление.":
+        "View properties: base map, vertical terrain scale, auto "
+        "refresh.",
     "Подложка": "Base map",
     "{name} · {kind}": "{name} · {kind}",
     "Отметка показывает слой на глобусе, видимость на карте QGIS "
-    "не меняется. Меню по правой кнопке - перелёт к слою.":
+    "не меняется. Двойной щелчок переносит к слою, меню по правой "
+    "кнопке - перелёт, прозрачность и свойства.":
         "The check shows the layer on the globe, its visibility on the "
-        "QGIS map does not change. The right-click menu flies to the "
-        "layer.",
+        "QGIS map does not change. Double-clicking flies to the layer, the "
+        "right-click menu flies there, sets opacity and opens properties.",
     "Подлететь": "Fly to",
-    "Свойства вида…": "View properties…",
     "растр": "raster",
     "точки": "points",
     "линии": "lines",
@@ -85,11 +94,20 @@ EN = {
     "координатам и запускает перелёт.":
         "The Search field at the top left finds a place by name or "
         "coordinates and starts a flight.",
-    "Двойной щелчок по строке «Глобус» открывает свойства вида. В них "
-    "выбираются подложка, масштаб рельефа и язык подписей.":
-        "A double click on the Globe row opens the view properties. "
-        "There you choose the base map, the terrain exaggeration and the "
-        "label language.",
+    "Двойной щелчок левой кнопкой приближает к точке, правой - "
+    "отдаляет. Правая кнопка с перетаскиванием приближает "
+    "и отдаляет, левая с Ctrl поворачивает взгляд.":
+        "A left double click zooms in to the point, a right double click "
+        "zooms out. Dragging with the right button zooms in and out, the "
+        "left button with Ctrl looks around.",
+    "Стрелки сдвигают вид, PageUp и PageDown приближают "
+    "и отдаляют, N ставит север вверху, U даёт взгляд отвесно.":
+        "Arrows move the view, PageUp and PageDown zoom in and out, N puts "
+        "north up, U looks straight down.",
+    "Кнопка на заголовке «Слои» открывает свойства вида. В них "
+    "выбираются подложка и масштаб рельефа.":
+        "The button on the Layers header opens the view properties. There "
+        "you choose the base map and the terrain exaggeration.",
     "Поиск мест: Nominatim, © участники OpenStreetMap.":
         "Place search: Nominatim, © OpenStreetMap contributors.",
     "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
@@ -123,6 +141,9 @@ EN = {
     "Источники данных и условия их использования":
         "Data sources and their terms of use",
     "Исходный код": "Source code",
+    "Страница модуля": "Plugin page",
+    "Руководство": "Manual",
+    "MANUAL.md": "MANUAL.en.md",
     "Сообщить об ошибке": "Report a bug",
     "Страница в каталоге QGIS": "QGIS plugin page",
     "Трёхмерный глобус внутри QGIS в духе Google Earth. Рельеф, "
@@ -337,13 +358,23 @@ EN = {
     "хранятся в общем файле профиля QGIS и видны в любом проекте. "
     "Двойной щелчок по метке переносит к ней. Метки и папки "
     "перетаскиваются мышью. Меню по правой кнопке - тур, новая папка, "
-    "перелёт, переименование, удаление, слои меток в проекте.":
+    "перелёт, переименование, удаление, слои меток в проекте. Несколько "
+    "строк выделяются с Ctrl и Shift, выделенное удаляется клавишей Del.":
         "Saved placemarks, views, paths, polygons and measurements. They "
         "are kept in a shared file of the QGIS profile and are visible in "
         "any project. Double-clicking a place flies there. Places and "
         "folders are moved by dragging. The right-click menu plays a "
         "tour, makes a new folder, flies there, renames, deletes and adds "
-        "the places layers to the project.",
+        "the places layers to the project. Several rows are selected with "
+        "Ctrl and Shift, the Del key deletes the selection.",
+    "Показать выбранное": "Show selected",
+    "Скрыть выбранное": "Hide selected",
+    "Удалить выбранное ({count})": "Delete selected ({count})",
+    "Удалить выбранное": "Delete selected",
+    "Удалить выбранное из «Моих меток»? Строк {count}, папки удаляются "
+    "со всем содержимым.":
+        "Delete the selection from My Places? Rows {count}, folders are "
+        "deleted with all their contents.",
     "Мои метки - точки": "My Places - points",
     "Мои метки - линии": "My Places - lines",
     "Мои метки - многоугольники": "My Places - polygons",

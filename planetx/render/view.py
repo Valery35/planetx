@@ -23,7 +23,10 @@ from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
 from ..core.camera import Camera
 from ..core.ellipsoid import A, B
-from ..core.navigation import Navigator, Pose, altitude, nearest_terrain
+from ..core.ellipsoid import ecef_to_geodetic
+from ..core.flight import Flight
+from ..core.navigation import (Navigator, Pose, altitude, ground_under,
+                               nearest_terrain)
 from ..core.places import Place, PlaceStore, kinds_at
 from ..core.snapshot import letterbox
 from ..core.terrain import FLAT_LEVEL, HeightStore
@@ -89,7 +92,19 @@ OBJECT_BUDGET = 200000
 
 LEFT = enum(Qt, "MouseButton", "LeftButton")
 MIDDLE = enum(Qt, "MouseButton", "MiddleButton")
+RIGHT = enum(Qt, "MouseButton", "RightButton")
 SHIFT = enum(Qt, "KeyboardModifier", "ShiftModifier")
+CTRL = enum(Qt, "KeyboardModifier", "ControlModifier")
+
+# Навигация как в Google Earth, решение автора от 29 сентября 2026 года.
+# Величины - умолчания помощника, их назначает автор.
+DOUBLE_ZOOM = 0.4  # двойной щелчок приближает в 2.5 раза, правой - отдаляет
+RIGHT_ZOOM = 0.005  # правая кнопка: e^(0.005·200) = 2.7 раза на 200 пикселей
+LOOK_PER_PIXEL = 0.1  # градусов на логический пиксель, Ctrl с левой
+KEY_PAN = 0.05  # доля ширины видимой полосы на нажатие стрелки
+KEY_TURN = 3.0  # градусов на нажатие Shift и Ctrl со стрелками
+ARROWS = {"Key_Left": (-1, 0), "Key_Right": (1, 0), "Key_Up": (0, 1),
+          "Key_Down": (0, -1)}
 
 
 def surface_format():
@@ -212,12 +227,21 @@ class GlobeView(QOpenGLWidget):
         self.navigator = Navigator(self.camera, Pose(lat, lon, distance))
         self.turning = None
         self._press = None  # пиксель нажатия левой кнопки
+        # Взгляд по сторонам с Ctrl и приближение правой кнопкой:
+        # последний пиксель и точка, к которой идёт приближение.
+        self.looking = None
+        self.zoom_drag = None
+        # Стрелки и буквы навигации приходят виду, когда он в фокусе.
+        self.setFocusPolicy(enum(Qt, "FocusPolicy", "StrongFocus"))
         # Слежение за мышью без нажатия: координаты под курсором.
         self.setMouseTracking(True)
         # Курсор в покое: стрелка, у инструментов - перекрестие. Ладонь
         # была всюду и мешала целиться, решение автора 27 сентября 2026
         # года. Сжатая ладонь - только пока Земля тянется.
         self.tool_cursor = enum(Qt, "CursorShape", "ArrowCursor")
+        # Включён инструмент: опрос, линейка или рисование. Тогда второй
+        # щелчок двойного - обычный щелчок, точка инструмента.
+        self.tool_active = False
         self.setCursor(self.tool_cursor)
         self.loader = None
         # Рельеф: хранилище высот, загрузчик Terrarium, уровень высот,
@@ -392,6 +416,7 @@ class GlobeView(QOpenGLWidget):
         """Перекрестие у инструментов, иначе стрелка."""
         self.tool_cursor = enum(Qt, "CursorShape",
                                 "CrossCursor" if cross else "ArrowCursor")
+        self.tool_active = bool(cross)
         self.setCursor(self.tool_cursor)
 
     def set_shapes(self, shapes):
@@ -589,10 +614,17 @@ class GlobeView(QOpenGLWidget):
         px, py = self._pixel(event)
         button = event.button()
         shift = bool(event.modifiers() & SHIFT)
+        ctrl = bool(event.modifiers() & CTRL)
         if button == MIDDLE or (button == LEFT and shift):
             # Поворот не обрывает начатое приближение колесом.
             self.navigator.stop_inertia()
             self.turning = (px, py)
+        elif button == LEFT and ctrl:
+            self.navigator.stop()
+            self.looking = (px, py)
+        elif button == RIGHT:
+            self.navigator.stop()
+            self.zoom_drag = (px, py, py)
         elif button == LEFT:
             self._press = (px, py)
             self.navigator.press(px, py, time.monotonic())
@@ -609,7 +641,21 @@ class GlobeView(QOpenGLWidget):
             self._press = None
             if self.navigator.grab is not None:
                 self.setCursor(enum(Qt, "CursorShape", "ClosedHandCursor"))
-        if self.turning is not None:
+        if self.looking is not None:
+            x0, y0 = self.looking
+            self.looking = (px, py)
+            step = LOOK_PER_PIXEL / self.devicePixelRatioF()
+            self.navigator.look_around((px - x0) * step, (y0 - py) * step)
+            self.update()
+        elif self.zoom_drag is not None:
+            # Вверх - ближе, вниз - дальше, к точке нажатия.
+            x0, y0, last = self.zoom_drag
+            self.zoom_drag = (x0, y0, py)
+            factor = math.exp((py - last) * RIGHT_ZOOM
+                              / self.devicePixelRatioF())
+            self.navigator.zoom_now(x0, y0, factor)
+            self.update()
+        elif self.turning is not None:
             x0, y0 = self.turning
             self.turning = (px, py)
             # Угол на пиксель меряется в логических пикселях, иначе
@@ -627,8 +673,85 @@ class GlobeView(QOpenGLWidget):
         if press is not None and event.button() == LEFT:
             self.clicked.emit(*press)
         self.turning = None
+        self.looking = None
+        self.zoom_drag = None
         self.navigator.release(time.monotonic())
         self.setCursor(self.tool_cursor)
+        self.update()
+
+    def mouseDoubleClickEvent(self, event):
+        """Двойной щелчок левой - перелёт к точке с приближением, правой -
+        отдаление, как в Google Earth."""
+        if self.shot is not None:
+            return
+        if self.tool_active:
+            self.mousePressEvent(event)
+            return
+        self._fit_camera()
+        nav = self.navigator
+        pose = nav.pose
+        if event.button() == LEFT and not event.modifiers() & (SHIFT | CTRL):
+            px, py = self._pixel(event)
+            point = ground_under(self.camera, px, py, pose.terrain)
+            if point is None:
+                return
+            lat, lon, _ = ecef_to_geodetic(point)
+            self._fly(float(lat), float(lon), pose.distance * DOUBLE_ZOOM,
+                      pose.heading, pose.tilt)
+        elif event.button() == RIGHT:
+            self._fly(pose.lat, pose.lon, pose.distance / DOUBLE_ZOOM,
+                      pose.heading, pose.tilt)
+
+    def _fly(self, lat, lon, distance, heading, tilt):
+        flight = Flight(self.navigator.pose, lat, lon, distance, heading,
+                        tilt, fov_y=self.camera.fov_y)
+        self.navigator.start_flight(flight, time.monotonic())
+        self.update()
+
+    def keyPressEvent(self, event):
+        """Клавиши Google Earth. Стрелки сдвигают вид, с Shift
+        поворачивают и наклоняют, с Ctrl - взгляд по сторонам. PageUp,
+        PageDown, плюс и минус приближают и отдаляют. N - север вверху,
+        U - взгляд отвесно, R - то и другое, пробел останавливает."""
+        if self.shot is not None:
+            return
+        self._fit_camera()
+        key = event.key()
+        mods = event.modifiers()
+        nav = self.navigator
+        pose = nav.pose
+
+        def named(*names):
+            return any(key == enum(Qt, "Key", n) for n in names)
+
+        for name, (dx, dy) in ARROWS.items():
+            if key == enum(Qt, "Key", name):
+                if mods & CTRL:
+                    nav.look_around(dx * KEY_TURN, dy * KEY_TURN)
+                elif mods & SHIFT:
+                    nav.turn(dx * KEY_TURN, dy * KEY_TURN)
+                else:
+                    width = 2.0 * pose.distance * math.tan(
+                        math.radians(self.camera.fov_y) / 2.0)
+                    nav.pan_by(dy * KEY_PAN * width, dx * KEY_PAN * width)
+                self.update()
+                return
+        centre = (self.camera.width / 2.0, self.camera.height / 2.0)
+        if named("Key_PageUp", "Key_Plus", "Key_Equal"):
+            nav.wheel(*centre, WHEEL_STEP, time.monotonic())
+        elif named("Key_PageDown", "Key_Minus"):
+            nav.wheel(*centre, 1.0 / WHEEL_STEP, time.monotonic())
+        elif named("Key_N"):
+            self._fly(pose.lat, pose.lon, pose.distance, 0.0, pose.tilt)
+        elif named("Key_U"):
+            self._fly(pose.lat, pose.lon, pose.distance, pose.heading, 0.0)
+        elif named("Key_R"):
+            self._fly(pose.lat, pose.lon, pose.distance, 0.0, 0.0)
+        elif named("Key_Space"):
+            nav.stop()
+        else:
+            super().keyPressEvent(event)
+            return
         self.update()
 
     def leaveEvent(self, event):

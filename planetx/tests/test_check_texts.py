@@ -66,6 +66,12 @@ class TestProse(unittest.TestCase):
     def test_stop_word(self):
         self.assertIn("стоп-слово", findings("Это делается руками."))
 
+    def test_whole_stop_word(self):
+        self.assertIn("стоп-слово", findings("Глобус прямо в QGIS."))
+        for text in ("Прямой запрет.", "Прямого разрешения нет.",
+                     "Модуль берётся напрямую."):
+            self.assertEqual(findings(text), [], text)
+
     def test_stop_words_skipped_for_english(self):
         self.assertEqual(findings("руками", russian=False), [])
 

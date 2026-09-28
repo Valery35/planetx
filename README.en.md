@@ -3,10 +3,11 @@
 **English** · [Русский](README.md)
 
 [![Install in QGIS](https://img.shields.io/badge/Install%20in%20QGIS-blue.svg)](https://plugins.qgis.org/plugins/planetx/)
+[![Plugin page](https://img.shields.io/badge/Plugin%20page-0f766e.svg)](https://www.informpp.ru/%D0%B3%D0%BB%D0%B0%D0%B2%D0%BD%D0%B0%D1%8F-%D1%81%D1%82%D1%80%D0%B0%D0%BD%D0%B8%D1%86%D0%B0/qgis-planetx)
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.6.1.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.7.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -24,7 +25,9 @@ and atmosphere, from space down to single streets.
   the view properties. The camera stays at least 50 m above the terrain.
 - **Atmosphere.** A blue glow surrounds the planet. From a low altitude
   the sky is visible at the horizon, and distant mountains fade into haze.
-- **Layers panel.** At the bottom left, as in Google Earth, there are
+- **Left panel.** The sections Places, Project layers and Layers
+  collapse with a click on the header, as in Google Earth.
+- **Layers section.** As in Google Earth, it holds
   the groups Borders and names, Transport and Nature. They hold borders,
   places, water names, roads and road numbers, railways, airports,
   rivers, lakes, peaks, nature reserves and national parks. Check boxes
@@ -47,6 +50,13 @@ and atmosphere, from space down to single streets.
   and the point stays in place.
 - **Turn and tilt.** The middle button or Shift with the left button turns
   and tilts the view.
+- **Mouse and keys as in Google Earth.** A left double click flies to the
+  point and zooms in, a right double click zooms out. Dragging with the
+  right button up zooms in, down zooms out. Ctrl with the left button
+  looks around, the eye stays in place. Arrows move the view, with
+  Shift they turn and tilt, with Ctrl they look around. PageUp and
+  PageDown zoom, N puts north up, U looks straight down, R does both,
+  Space stops.
 - **Search.** Type a place name in the Search field at the top left,
   for example `Perm`, or coordinates in degrees, for example
   `58.0105, 56.2294`. The camera flies there along the van Wijk and Nuij
@@ -80,9 +90,9 @@ and atmosphere, from space down to single streets.
 - **Ruler.** Line, path, polygon and circle by clicks on the globe.
   Length, perimeter and area on the WGS84 ellipsoid. The measurement
   is saved to My Places.
-- **My Places.** Placemarks, paths and polygons are drawn by clicks right
+- **My Places.** Placemarks, paths and polygons are drawn by clicks
   on the globe. They, saved views and measurements sit in the My Places
-  folder under the Globe row, as in Google Earth. The places file is
+  folder of the Places section, as in Google Earth. The places file is
   shared by the QGIS profile, so places are visible in any project.
   A double click on a place flies there.
 - **Tour.** Play tour in the menu of My Places or any of its folders
@@ -104,9 +114,11 @@ and atmosphere, from space down to single streets.
   globe shows the coordinates and elevation of the point and the features
   of the project layers checked on the globe.
 
-A double click on the Globe row opens the view properties. Tiles come
+The button on the Layers header opens the view properties. Tiles come
 through the QGIS network settings and cache. The About button in the
 globe window lists the controls and the data sources.
+
+Everything is described in detail in the manual - [doc/MANUAL.en.md](doc/MANUAL.en.md).
 
 ![Perm, roads and names](doc/images/perm.jpg)
 

@@ -373,6 +373,58 @@ def orbit(pose, d_heading, d_tilt):
     return out
 
 
+def pan(pose, forward, right):
+    """Сдвинуть точку взгляда на forward метров по азимуту и right
+    метров вправо от него. Стрелки клавиатуры, как в Google Earth."""
+    h = math.radians(pose.heading)
+    north = forward * math.cos(h) - right * math.sin(h)
+    east = forward * math.sin(h) + right * math.cos(h)
+    cos_lat = max(math.cos(math.radians(pose.lat)), 1e-6)
+    return pose.moved_to(pose.lat + north / M_PER_DEGREE,
+                         pose.lon + east / (M_PER_DEGREE * cos_lat))
+
+
+LOOK_STEPS = 8  # приближений точки взгляда при повороте взгляда
+LOOK_TOLERANCE = 1e-6  # доля расстояния, при которой подбор закончен
+
+
+def look(pose, d_heading, d_tilt):
+    """Повернуть взгляд на d_heading и d_tilt градусов, глаз на месте.
+
+    Взгляд по сторонам в Google Earth - Ctrl с левой кнопкой и Ctrl со
+    стрелками. Азимут и наклон позы отсчитываются в точке взгляда, а она
+    сама зависит от них. Точка ищется простой итерацией: луч из глаза
+    по новому направлению до земли, в новой точке заново направление.
+    Возвращает None, если взгляд уходит в небо или выходит за наклон
+    MAX_TILT.
+    """
+    heading = (pose.heading + d_heading) % 360.0
+    tilt = pose.tilt + d_tilt
+    if tilt < 0.0 or tilt > MAX_TILT:
+        return None
+    eye, _ = pose.eye_rotation()
+    lat, lon, ground = pose.lat, pose.lon, pose.h
+    distance = pose.distance
+    for _ in range(LOOK_STEPS):
+        rot = orientation(lat, lon, heading, tilt)
+        t = ray_intersect(eye, -rot[:, 2], ground)
+        if t is None:
+            return None
+        point = eye - rot[:, 2] * t
+        new_lat, new_lon, _ = ecef_to_geodetic(point)
+        done = abs(t - distance) < LOOK_TOLERANCE * t
+        lat, lon, distance = float(new_lat), float(new_lon), float(t)
+        if pose.terrain is not None:
+            ground = pose.terrain(lat, lon)
+        if done:
+            break
+    out = pose.moved_to(lat, lon)
+    out.distance = distance
+    out.heading = heading
+    out.tilt = tilt
+    return out
+
+
 class Navigator:
     """Состояние навигации между событиями мыши."""
 
@@ -484,6 +536,30 @@ class Navigator:
         self.stop_inertia()
         self.flight = None
         self.set_pose(orbit(self.pose, d_heading, d_tilt))
+
+    def zoom_now(self, px, py, factor):
+        """Приближение без сглаживания: правая кнопка с перетаскиванием.
+        Точка под (px, py) остаётся на месте."""
+        self.stop()
+        pose = zoom(self.camera, self.pose, px, py, factor)
+        if pose is None:
+            return False
+        self.set_pose(pose)
+        return True
+
+    def look_around(self, d_heading, d_tilt):
+        """Взгляд по сторонам, глаз на месте."""
+        self.stop()
+        pose = look(self.pose, d_heading, d_tilt)
+        if pose is None:
+            return False
+        self.set_pose(pose)
+        return True
+
+    def pan_by(self, forward, right):
+        """Сдвиг точки взгляда в метрах, стрелки клавиатуры."""
+        self.stop()
+        self.set_pose(lifted(pan(self.pose, forward, right)))
 
     # Перелёт
 
