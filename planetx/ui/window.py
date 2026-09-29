@@ -57,6 +57,7 @@ from .about import show_about
 from .identify import IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
 from .legend import TemperatureLegend
+from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from .measure import Ruler, RulerDialog
 from .myplaces import MyPlaces
@@ -252,6 +253,11 @@ class GlobeWindow(QWidget):
         # Экранные органы навигации, как в Google Earth.
         self.navpad = NavPad(self.view)
         self.toolbar.move(MARGIN, MARGIN)
+        # Значок загрузки справа от панели значков.
+        self.spinner = LoadSpinner(self.view)
+        self.view.load_changed.connect(
+            lambda: self.spinner.set_state(self.view.load_missing,
+                                           self.view.load_stalled))
         self.attribution = QLabel(self.view)
         self.attribution.setOpenExternalLinks(True)
         self.attribution.setStyleSheet(ATTRIBUTION_STYLE)
@@ -827,6 +833,9 @@ class GlobeWindow(QWidget):
             max(MARGIN, self.view.width() - self.attribution.width()
                 - MARGIN),
             self.view.height() - self.attribution.height() - MARGIN)
+        bar = self.toolbar.geometry()
+        self.spinner.move(bar.right() + MARGIN,
+                          bar.center().y() - self.spinner.height() // 2)
         # Шкала - в левом нижнем углу. Узкий вид: над подписью.
         bottom = self.view.height() - MARGIN
         if self.attribution.x() < MARGIN + self.legend.width():

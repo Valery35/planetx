@@ -677,6 +677,8 @@ EN = {
     # Состояние загрузки.
     "загрузка стоит {seconds} с": "loading stalled for {seconds} s",
     "загрузка {count}": "loading {count}",
+    "Загрузка стоит {seconds} с": "Loading stalled for {seconds} s",
+    "Идёт загрузка: {count}": "Loading: {count}",
     "метки тяжёлые, {count} тыс. вершин":
         "places are heavy, {count} thousand vertices",
     # Сцена.

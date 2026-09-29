@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.13.0
+Version 0.14.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -79,6 +79,11 @@ The line also reports loading:
   200 thousand vertices, turning may become slow.
 - "The base map did not load" and "The vector base did not load" - the
   source answered with an error.
+
+While loading goes on, a blue icon spins to the right of the icon bar.
+A short load does not light it, it appears after half a second. When
+loading stalls, the icon turns orange. Its tooltip tells how much still
+waits.
 
 Messages of search, scenes, tours and recording stay for 5 seconds.
 

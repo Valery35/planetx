@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.13.0
+version=0.14.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -66,7 +66,9 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.13.0 Labels of vector project layers on the globe, like
+changelog=0.14.0 A spinning icon to the right of the icon bar shows
+      that loading goes on, it turns orange when loading stalls.
+      0.13.0 Labels of vector project layers on the globe, like
       city names: level at any turn and tilt, without overlaps, with
       the text, colour and size of the layer labels in QGIS.
       0.12.0 Land and sea temperature from NASA data in the
