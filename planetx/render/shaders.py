@@ -219,13 +219,23 @@ uniform vec4 u_overlay_uv;
 // и окном в картинке предка, см. render/clouds.py.
 uniform sampler2D u_clouds;
 uniform vec4 u_clouds_uv;
+// Температура моря и суши под наложением, так же, см. render/gibs.py.
+uniform sampler2D u_sea;
+uniform vec4 u_sea_uv;
+uniform sampler2D u_land;
+uniform vec4 u_land_uv;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
+vec3 lay(vec3 under, sampler2D image, vec4 uv) {
+    vec4 top = texture(image, uv.xy + uv.z * v_uv);
+    return under * (1.0 - top.a) + top.rgb;
+}
 void main() {
-    vec4 over = texture(u_overlay, u_overlay_uv.xy + u_overlay_uv.z * v_uv);
-    vec3 base = texture(u_texture, v_uv).rgb * (1.0 - over.a) + over.rgb;
-    vec4 cloud = texture(u_clouds, u_clouds_uv.xy + u_clouds_uv.z * v_uv);
-    base = base * (1.0 - cloud.a) + cloud.rgb;
+    vec3 base = texture(u_texture, v_uv).rgb;
+    base = lay(base, u_sea, u_sea_uv);
+    base = lay(base, u_land, u_land_uv);
+    base = lay(base, u_overlay, u_overlay_uv);
+    base = lay(base, u_clouds, u_clouds_uv);
     // Отмывка рельефа: множитель яркости, на равнине 1.
     vec3 ground = clamp(base * v_shade, 0.0, 1.0);
     // Дымка: воздух между глазом и поверхностью.

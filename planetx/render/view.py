@@ -36,7 +36,7 @@ from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
 from .features import Features
 from .labels import Labels
-from .clouds import Clouds
+from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
 from .sky import Sky
 from .stars import Stars
 from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SHELL, SKY_FRAGMENT,
@@ -341,9 +341,9 @@ class GlobeView(QOpenGLWidget):
         self.stars = Stars()
         self.sky = Sky()  # Млечный путь, строка «Звёзды»
         self.show_stars = True
-        self.clouds = Clouds()
-        self.show_clouds = False
-        self._drop_clouds = False
+        # Слои NASA GIBS: облака, температура моря и суши.
+        self.gibs = {name: GibsLayer(level)
+                     for name, level, _, _, _ in GIBS_LAYERS}
         self._feature_marks = ([], None)
         self._marked = (None, None, [])
         self._context = None
@@ -822,9 +822,12 @@ class GlobeView(QOpenGLWidget):
                                                     "u_overlay_uv")
         self.clear_texture = gpu.create_texture(
             np.zeros((1, 1, 4), dtype=np.uint8))
-        self.u_clouds = GL.glGetUniformLocation(self.program, "u_clouds")
-        self.u_clouds_uv = GL.glGetUniformLocation(self.program,
-                                                   "u_clouds_uv")
+        # Слой GIBS: (блок, место текстуры, место окна) в шейдере.
+        self.gibs_slots = {
+            name: (GL.GL_TEXTURE0 + unit,
+                   GL.glGetUniformLocation(self.program, sampler),
+                   GL.glGetUniformLocation(self.program, uv))
+            for name, _, unit, sampler, uv in GIBS_LAYERS}
         self.hole_program = gpu.build_program(HOLE_VERTEX, HOLE_FRAGMENT)
         self.hole_uniforms = uniforms(self.hole_program, (
             "u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes", "u_qc"))
@@ -856,10 +859,11 @@ class GlobeView(QOpenGLWidget):
                      + list(self.underlay_meshes.values())):
             mesh.delete()
         for texture in (list(self.textures.values())
-                        + list(self.overlays.values())
-                        + list(self.clouds.textures.values())):
+                        + [t for layer in self.gibs.values()
+                           for t in layer.textures.values()]):
             gpu.delete_texture(texture)
-        self.clouds.textures.clear()
+        for layer in self.gibs.values():
+            layer.textures.clear()
         self.pool.delete_all()
         if self.clear_texture is not None:
             gpu.delete_texture(self.clear_texture)
@@ -1246,9 +1250,10 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glUseProgram(self.program)
         gpu.gl.glUniform1i(self.u_texture, 0)
         gpu.gl.glUniform1i(self.u_overlay, 1)
-        gpu.gl.glUniform1i(self.u_clouds, 2)
+        for unit, sampler, _ in self.gibs_slots.values():
+            gpu.gl.glUniform1i(sampler, unit - GL.GL_TEXTURE0)
         self._clear_overlay()
-        self._clear_clouds()
+        self._clear_gibs()
         air = self.atmosphere and not self.show_holes
         air_uniforms(self.tile_air, self.camera, air)
 
@@ -1267,25 +1272,26 @@ class GlobeView(QOpenGLWidget):
             overlays += self._overlay_items(sel, time.monotonic())
         else:
             self._overlay_missing = 0
-        if self._drop_clouds:
-            # Контекст OpenGL здесь текущий, это вызов из paintGL.
-            self.clouds.drop(self.pool)
-            self._drop_clouds = False
-        clouds = None
-        if self.show_clouds and not self.show_holes:
-            self.clouds.upload(self.pool, self.frame)
-            clouds = [(self.clear_texture, gpu.NO_OVERLAY)] * len(self.caps)
-            clouds += self.clouds.items(sel.draw, self.clear_texture,
-                                        self.frame)
-        else:
-            self.clouds.missing = 0
-        gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp,
-                       overlays, self.u_overlay_uv, clouds, self.u_clouds_uv)
+        layers = []
         if overlays is not None:
-            # Подстилка идёт без наложения.
+            layers.append((GL.GL_TEXTURE1, self.u_overlay_uv, overlays))
+        clear = [(self.clear_texture, gpu.NO_OVERLAY)] * len(self.caps)
+        for name, layer in self.gibs.items():
+            if layer.dropping:
+                # Контекст OpenGL здесь текущий, это вызов из paintGL.
+                layer.drop(self.pool)
+            if layer.shown and not self.show_holes:
+                layer.upload(self.pool, self.frame)
+                unit, _, u_uv = self.gibs_slots[name]
+                layers.append((unit, u_uv, clear + layer.items(
+                    sel.draw, self.clear_texture, self.frame)))
+            else:
+                layer.missing = 0
+        gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp, layers)
+        if layers:
+            # Подстилка идёт без наложения и слоёв GIBS.
             self._clear_overlay()
-        if clouds is not None:
-            self._clear_clouds()
+            self._clear_gibs()
         if self.hole_check:
             # До подстилки: щели между тайлами. После: видимые дыры.
             gaps = self._count_holes()
@@ -1327,7 +1333,8 @@ class GlobeView(QOpenGLWidget):
         marks.append(time.perf_counter())
         self._evict(sel.keep)
         self._evict_overlays(sel.keep)
-        self.clouds.evict(self.pool, self.frame)
+        for layer in self.gibs.values():
+            layer.evict(self.pool, self.frame)
         # Неподвижность проверяется по самой камере: её двигает не только
         # навигатор, но и проверочные скрипты.
         pose = (tuple(self.camera.eye), tuple(self.camera.rotation.ravel()))
@@ -1345,8 +1352,8 @@ class GlobeView(QOpenGLWidget):
                 self.pending and any(k in sel.keep for k in self.pending)) \
                 or (self.overlay_pending and any(
                     k in sel.keep for k in self.overlay_pending)) \
-                or (self.show_clouds and (self.clouds.pending
-                                          or self.clouds.unasked)):
+                or any(layer.shown and (layer.pending or layer.unasked)
+                       for layer in self.gibs.values()):
             self.update()
         marks.append(time.perf_counter())
         self.paint_span = (started, marks[-1])
@@ -1375,8 +1382,9 @@ class GlobeView(QOpenGLWidget):
                          if k not in self.places.tiles)
         if self.labels.pending:
             count += 1
-        if self.show_clouds:
-            count += self.clouds.missing + len(self.clouds.pending)
+        for layer in self.gibs.values():
+            if layer.shown:
+                count += layer.missing + len(layer.pending)
         return count
 
     # Снимок вида
@@ -1501,12 +1509,13 @@ class GlobeView(QOpenGLWidget):
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER,
                              self.defaultFramebufferObject())
 
-    def _clear_clouds(self):
-        """Прозрачные облака на блоке 2, окно без сдвига."""
-        gpu.gl.glActiveTexture(GL.GL_TEXTURE2)
-        gpu.gl.glBindTexture(GL.GL_TEXTURE_2D, self.clear_texture)
+    def _clear_gibs(self):
+        """Прозрачные слои GIBS на своих блоках, окна без сдвига."""
+        for unit, _, u_uv in self.gibs_slots.values():
+            gpu.gl.glActiveTexture(unit)
+            gpu.gl.glBindTexture(GL.GL_TEXTURE_2D, self.clear_texture)
+            gpu.gl.glUniform4f(u_uv, *gpu.NO_OVERLAY, 0.0)
         gpu.gl.glActiveTexture(GL.GL_TEXTURE0)
-        gpu.gl.glUniform4f(self.u_clouds_uv, *gpu.NO_OVERLAY, 0.0)
 
     def _clear_overlay(self):
         """Прозрачное наложение на блоке 1, окно без сдвига."""
@@ -1546,17 +1555,18 @@ class GlobeView(QOpenGLWidget):
         GL.glGetQueryObjectuiv(self.hole_query, GL.GL_QUERY_RESULT, result)
         return int(result[0])
 
-    def set_clouds(self, on, loader=None):
-        """Показать облака с загрузчиком loader или скрыть их. Прежние
-        картинки освобождаются в следующем кадре."""
-        self.show_clouds = bool(on)
-        self.clouds.loader = loader
-        self._drop_clouds = True
+    def set_gibs(self, name, on, loader=None):
+        """Показать слой GIBS с загрузчиком loader или скрыть его.
+        Прежние картинки освобождаются в следующем кадре."""
+        layer = self.gibs[name]
+        layer.shown = bool(on)
+        layer.loader = loader
+        layer.dropping = True
         self.update()
 
-    def add_clouds(self, key, levels):
-        """Пришла картинка облаков тайла снимка."""
-        self.clouds.add(key, levels)
+    def add_gibs(self, name, key, levels):
+        """Пришла картинка тайла слоя GIBS."""
+        self.gibs[name].add(key, levels)
         self.last_arrival = time.monotonic()
         self.update()
 

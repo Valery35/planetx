@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.11.0
+Version 0.12.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -181,6 +181,7 @@ take effect at once, without the Refresh button.
 | Grid | Parallels and meridians with labels, the equator, tropics and polar circles in yellow |
 | Stars | Stars brighter than magnitude 6 and the Milky Way at their places in the sky |
 | Clouds | Clouds from NASA GIBS VIIRS imagery of the last complete day |
+| Temperature | Surface temperature of land by day over 8 days (MODIS) and of the sea over a day (GHRSST MUR) with a scale in degrees |
 
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
@@ -193,6 +194,12 @@ Milky Way image, about 10 MB, is downloaded when the stars are first
 shown and comes from the QGIS cache afterwards.
 Clouds lie as a veil over the imagery. Snow and ice get into the
 clouds too, they have the same colour.
+
+Temperature colours land and sea with their own scales, the scales in
+degrees Celsius are in the bottom left corner of the view. Land shows
+the temperature of the surface itself by day, not of the air, over 8
+days. Land may have gaps under clouds. Sea shows the water temperature
+near the surface over a day.
 
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
@@ -572,7 +579,7 @@ the insertion.
 Imagery - Esri World Imagery, Esri sets the terms. Map data ©
 OpenStreetMap contributors. Vector tiles - OpenFreeMap. Terrain - Mapzen
 Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Clouds - NASA GIBS,
-VIIRS imagery. Stars - the Yale Bright Star Catalogue. Milky Way -
+VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale Bright Star Catalogue. Milky Way -
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
 DR2: ESA/Gaia/DPAC. Place search - Nominatim.
 

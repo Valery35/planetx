@@ -2075,6 +2075,15 @@ def stars_low_check():
     result["stars"]["gl_errors"] = dict(view.gl_errors)
 
 
+def _gibs_report(window, name):
+    """Картинки, недостающие тайлы и уровни слоя GIBS вида."""
+    layer = window.view.gibs[name]
+    loader = window.gibs_loaders.get(name)
+    return {"textures": len(layer.textures), "missing": layer.missing,
+            "levels": sorted({k[0] for k in layer.textures}),
+            "started": len(loader.started) if loader else None}
+
+
 @check(2000)
 def clouds_on():
     # Облака NASA GIBS: картинки приходят, лежат на тайлах, подпись есть.
@@ -2088,18 +2097,6 @@ def clouds_on():
     view.navigator.set_pose(Pose(50.0, 30.0, 8.0e6, 0.0, 0.0))
     window.set_extra("clouds", True)
     view.update()
-    # Моменты ответов от включения, с. У ответа из сети кэша нет.
-    loader = window.cloud_loader
-    started = time.monotonic()
-    state["cloud_times"] = []
-    own_finished = loader._finished
-
-    def finished(key, reply, own=own_finished):
-        own(key, reply)
-        state["cloud_times"].append(
-            (round(time.monotonic() - started, 1),
-             "cache" if loader.from_cache.get(key) else "net"))
-    loader._finished = finished
 
 
 @check(12000)
@@ -2107,15 +2104,9 @@ def clouds_wait():
     window = state["window"]
     view = window.view
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_clouds.png"))
-    result["clouds"] = {
-        "textures": len(view.clouds.textures),
-        "missing": view.clouds.missing,
-        "levels": sorted({k[0] for k in view.clouds.textures}),
-        "attribution": "NASA GIBS" in window.attribution.text(),
-        "url": window.cloud_loader.source.url[:90],
-        "started": len(window.cloud_loader.started),
-        "aborted": len(window.cloud_loader.aborted),
-        "answers": state["cloud_times"][:40]}
+    result["clouds"] = _gibs_report(window, "clouds")
+    result["clouds"]["attribution"] = \
+        "NASA GIBS, VIIRS" in window.attribution.text()
     window.set_extra("clouds", False)
     view.update()
 
@@ -2124,12 +2115,51 @@ def clouds_wait():
 def clouds_off():
     window = state["window"]
     view = window.view
-    result["clouds"]["off_textures"] = len(view.clouds.textures)
-    result["clouds"]["off_loader"] = window.cloud_loader is None
+    result["clouds"]["off_textures"] = len(view.gibs["clouds"].textures)
+    result["clouds"]["off_loader"] = "clouds" not in window.gibs_loaders
     result["clouds"]["off_attribution"] = \
-        "NASA GIBS" in window.attribution.text()
+        "NASA GIBS, VIIRS" in window.attribution.text()
     result["clouds"]["gl_errors"] = dict(view.gl_errors)
     window.set_extra("stars", True)
+
+
+@check(2000)
+def temperature_on():
+    # Температура суши и моря NASA GIBS со шкалой в углу вида.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.set_pose(Pose(40.0, 20.0, 8.0e6, 0.0, 0.0))
+    window.set_extra("temperature", True)
+    view.update()
+
+
+@check(12000)
+def temperature_wait():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_temperature.png"))
+    window.grab().save(os.path.join(TEMP, "planetx_temperature_win.png"))
+    result["temperature"] = {
+        "sea": _gibs_report(window, "sea"),
+        "land": _gibs_report(window, "land"),
+        "legend": window.legend.isVisible(),
+        "attribution": "GHRSST" in window.attribution.text()}
+    window.set_extra("temperature", False)
+    view.update()
+
+
+@check(1000)
+def temperature_off():
+    window = state["window"]
+    view = window.view
+    out = result["temperature"]
+    out["off_textures"] = sum(len(view.gibs[n].textures)
+                              for n in ("sea", "land"))
+    out["off_legend"] = window.legend.isVisible()
+    out["off_loaders"] = sorted(window.gibs_loaders)
+    out["gl_errors"] = dict(view.gl_errors)
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.

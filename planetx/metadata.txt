@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.11.0
+version=0.12.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -15,8 +15,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       The Layers panel, as in Google Earth, adds borders, place names,
       water names, roads with their numbers, railways, airports, rivers,
       lakes, peaks and protected areas from OpenFreeMap vector tiles,
-      a coordinate grid, stars with the Milky Way and clouds from
-      NASA GIBS.
+      a coordinate grid, stars with the Milky Way, clouds and land and
+      sea temperature from NASA GIBS.
       Labels stay upright, do not overlap and hide behind mountains and
       the horizon. The label language follows QGIS or is chosen from
       15 languages and local names.
@@ -65,7 +65,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.11.0 The Milky Way behind the Earth, as in Google Earth,
+changelog=0.12.0 Land and sea temperature from NASA data in the
+      Layers panel, off by default. A scale in degrees Celsius is shown
+      in the bottom left corner of the view. The coordinate grid with
+      labels no longer breaks drawing with an error, the fault came in
+      0.10.0.
+      0.11.0 The Milky Way behind the Earth, as in Google Earth,
       from the NASA sky map. The sky image is downloaded once when the
       stars are first shown. Files of GitHub releases and other
       redirected tiles now load in QGIS 3.

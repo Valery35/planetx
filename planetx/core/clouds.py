@@ -84,11 +84,11 @@ def cloud_rgba(rgba, key=None):
     return out
 
 
-def source_key(key):
-    """Тайл снимка для тайла глобуса: сам тайл или предок уровня
-    MAX_LEVEL."""
+def source_key(key, max_level=MAX_LEVEL):
+    """Тайл источника для тайла глобуса: сам тайл или предок уровня
+    max_level."""
     z, x, y = key
-    if z <= MAX_LEVEL:
+    if z <= max_level:
         return key
-    shift = z - MAX_LEVEL
-    return MAX_LEVEL, x >> shift, y >> shift
+    shift = z - max_level
+    return max_level, x >> shift, y >> shift

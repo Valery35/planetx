@@ -47,7 +47,8 @@ TRISTATE = enum(Qt, "ItemFlag", "ItemIsAutoTristate")
 RELIEF = "relief"  # строка рельефа в панели «Слои»
 # Строки раздела «Слои» под рельефом: сетка, звёзды, облака.
 GRID, STARS, CLOUDS = "grid", "stars", "clouds"
-EXTRAS = (GRID, STARS, CLOUDS)
+TEMPERATURE = "temperature"
+EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
@@ -450,7 +451,12 @@ class LayerPanel(QWidget):
                     "Облака по снимкам VIIRS из NASA GIBS за последние "
                     "полные сутки. Они лежат полупрозрачной пеленой "
                     "поверх снимка. Снег и лёд тоже белые и остаются "
-                    "видны."))):
+                    "видны.")),
+                (TEMPERATURE, tr("Температура"), tr(
+                    "Температура поверхности по данным NASA GIBS: суша "
+                    "днём за 8 дней по MODIS, море за сутки по GHRSST "
+                    "MUR. Под облаками на суше бывают пропуски. Шкала "
+                    "в градусах стоит в левом нижнем углу вида."))):
             item = QTreeWidgetItem(self.geo, [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)

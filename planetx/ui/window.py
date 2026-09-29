@@ -23,7 +23,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
-from ..core import basemap, clouds, stars
+from ..core import basemap, clouds, stars, temperature
 from ..core.ellipsoid import ecef_to_geodetic
 from ..core import graticule
 from ..core.features import Shape
@@ -55,6 +55,7 @@ from ..qt_compat import enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import IdentifyDialog, identify, point_text
+from .legend import TemperatureLegend
 from .draw import PlaceDialog
 from .measure import Ruler, RulerDialog
 from .myplaces import MyPlaces
@@ -88,7 +89,8 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # Сетка, звёзды, облака: ключ настройки и умолчание. Звёзды включены,
 # как в Google Earth, сетка и облака выключены. Решение помощника от
 # 29 сентября 2026 года, его утверждает автор.
-EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False}
+EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
+                  "temperature": False}
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
@@ -147,6 +149,24 @@ def prepare_clouds(key, rgba):
     """Работа рабочего потока для тайла облаков: прозрачность
     по белизне и уровни мипмапов."""
     return mip_chain(clouds.cloud_rgba(rgba, key))
+
+
+def prepare_temperature(key, rgba):
+    """Работа рабочего потока для тайла температуры: раскраска GIBS
+    с непрозрачностью и уровни мипмапов."""
+    return mip_chain(temperature.overlay_rgba(rgba))
+
+
+def gibs_source(name):
+    """Источник и подготовка тайла слоя GIBS по имени слоя вида."""
+    if name == "clouds":
+        return (basemap.Source("NASA GIBS", clouds.url_template(
+            time.time()), clouds.MAX_LEVEL, clouds.ATTRIBUTION,
+            builtin=True), prepare_clouds)
+    layer = temperature.SEA if name == "sea" else temperature.LAND
+    return (basemap.Source("NASA GIBS", temperature.url_template(layer),
+                           temperature.MAX_LEVEL, temperature.ATTRIBUTION,
+                           builtin=True), prepare_temperature)
 
 
 def xyz_sources():
@@ -234,6 +254,9 @@ class GlobeWindow(QWidget):
         self.attribution = QLabel(self.view)
         self.attribution.setOpenExternalLinks(True)
         self.attribution.setStyleSheet(ATTRIBUTION_STYLE)
+        # Шкала температуры, видна вместе со строкой «Температура».
+        self.legend = TemperatureLegend(self.view)
+        self.legend.hide()
         self.view.installEventFilter(self)
         splitter = QSplitter(self)
         self.splitter = splitter
@@ -257,7 +280,7 @@ class GlobeWindow(QWidget):
         self.ofm_layer = None
         self.rail_layer = None
         self.place_loader = None
-        self.cloud_loader = None  # облака NASA GIBS, см. set_clouds
+        self.gibs_loaders = {}  # слой GIBS вида -> загрузчик, см. _set_gibs
         self.sky_loader = None  # картинка неба, см. _load_sky
         # Настройки вида делятся на выбранные и действующие. Выбранные
         # показывают свойства вида и список слоёв. Действующие видны
@@ -521,7 +544,12 @@ class GlobeWindow(QWidget):
             if on:
                 self._load_sky()
         elif key == "clouds":
-            self.set_clouds(on)
+            self._set_gibs("clouds", on)
+        elif key == "temperature":
+            self._set_gibs("sea", on)
+            self._set_gibs("land", on)
+            self.legend.setVisible(on)
+            self._place_attribution()
 
     def _update_grid(self):
         """Сетка на глобусе. Строится заново, только когда меняется
@@ -597,22 +625,23 @@ class GlobeWindow(QWidget):
             lambda key, rgba, extra: self.view.set_sky_image(rgba))
         self.sky_loader.want((0, 0, 0), 1.0)
 
-    def set_clouds(self, on):
-        """Облака NASA GIBS: новый загрузчик на дату снимка или никакого."""
-        if self.cloud_loader is not None:
-            self.cloud_loader.abort()
-            self.cloud_loader.deleteLater()
-            self.cloud_loader = None
+    def _set_gibs(self, name, on):
+        """Слой NASA GIBS вида - облака, море или суша: новый загрузчик
+        или никакого. Ответы GIBS запрещают кэш, поэтому мимо него."""
+        old = self.gibs_loaders.pop(name, None)
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        loader = None
         if on:
-            source = basemap.Source(
-                "NASA GIBS", clouds.url_template(time.time()),
-                clouds.MAX_LEVEL, clouds.ATTRIBUTION, builtin=True)
-            self.cloud_loader = TileLoader(source, parent=self,
-                                           prepare=prepare_clouds,
-                                           size=TILE_SIZE, cache=False)
-            self.cloud_loader.loaded.connect(
-                lambda key, rgba, levels: self.view.add_clouds(key, levels))
-        self.view.set_clouds(on, self.cloud_loader)
+            source, prepare = gibs_source(name)
+            loader = TileLoader(source, parent=self, prepare=prepare,
+                                size=TILE_SIZE, cache=False)
+            loader.loaded.connect(
+                lambda key, rgba, levels, name=name:
+                self.view.add_gibs(name, key, levels))
+            self.gibs_loaders[name] = loader
+        self.view.set_gibs(name, on, loader)
         self._show_attribution()
 
     def set_relief(self, on):
@@ -766,8 +795,10 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
         if self.view.store.scale:
             parts.append(TERRAIN_ATTRIBUTION)
-        if self.cloud_loader is not None:
+        if "clouds" in self.gibs_loaders:
             parts.append(link_html(*clouds.ATTRIBUTION))
+        if "sea" in self.gibs_loaders:
+            parts.append(link_html(*temperature.ATTRIBUTION))
         self.attribution.setText(" · ".join(parts))
         self._place_attribution()
 
@@ -777,6 +808,11 @@ class GlobeWindow(QWidget):
             max(MARGIN, self.view.width() - self.attribution.width()
                 - MARGIN),
             self.view.height() - self.attribution.height() - MARGIN)
+        # Шкала - в левом нижнем углу. Узкий вид: над подписью.
+        bottom = self.view.height() - MARGIN
+        if self.attribution.x() < MARGIN + self.legend.width():
+            bottom = self.attribution.y() - MARGIN // 2
+        self.legend.move(MARGIN, bottom - self.legend.height())
 
     def eventFilter(self, watched, event):
         if watched is self.view and event.type() == enum(
@@ -1755,7 +1791,7 @@ class GlobeWindow(QWidget):
         self.terrain_loader.abort()
         if self.place_loader is not None:
             self.place_loader.abort()
-        for loader in (self.cloud_loader, self.sky_loader):
+        for loader in list(self.gibs_loaders.values()) + [self.sky_loader]:
             if loader is not None:
                 loader.abort()
         if self.overlay is not None:

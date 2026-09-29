@@ -114,8 +114,10 @@ EN = {
     "Облака: NASA GIBS, снимки VIIRS.": "Clouds: NASA GIBS, VIIRS imagery.",
     "Звёзды: каталог ярких звёзд Йельского университета.":
         "Stars: the Yale Bright Star Catalogue.",
-    "Координатная сетка, звёзды и облака за последние полные сутки.":
-        "A coordinate grid, stars and clouds of the last complete day.",
+    "Координатная сетка, звёзды, облака и температура суши и моря.":
+        "A coordinate grid, stars, clouds and land and sea temperature.",
+    "Температура: NASA GIBS, MODIS и GHRSST MUR.":
+        "Temperature: NASA GIBS, MODIS and GHRSST MUR.",
     "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
     "OpenStreetMap.":
         "Vector base: OpenFreeMap, © OpenMapTiles, © OpenStreetMap "
@@ -177,6 +179,17 @@ EN = {
         "Clouds from NASA GIBS VIIRS imagery of the last complete day. "
         "They lie as a translucent veil over the imagery. Snow and ice "
         "are white too and stay visible.",
+    "Температура": "Temperature",
+    "Температура поверхности по данным NASA GIBS: суша "
+    "днём за 8 дней по MODIS, море за сутки по GHRSST "
+    "MUR. Под облаками на суше бывают пропуски. Шкала "
+    "в градусах стоит в левом нижнем углу вида.":
+        "Surface temperature from NASA GIBS: land by day over 8 days from "
+        "MODIS, sea over a day from GHRSST MUR. Land may have gaps under "
+        "clouds. The scale in degrees is in the bottom left corner of the "
+        "view.",
+    "Суша, °C": "Land, °C",
+    "Море, °C": "Sea, °C",
     "{angle} с. ш.": "{angle}N",
     "{angle} ю. ш.": "{angle}S",
     "{angle} в. д.": "{angle}E",

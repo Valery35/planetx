@@ -283,54 +283,39 @@ def hold_gil(context):
     return done
 
 
-def draw_batch(items, mvps, u_mvp, overlays=None, u_overlay_uv=-1,
-               clouds=None, u_clouds_uv=-1):
+def draw_batch(items, mvps, u_mvp, layers=()):
     """Нарисовать набор сеток, у каждой своя текстура и матрица.
 
     items - пары (GpuMesh, текстура), mvps - массив (N, 4, 4) float32
-    по строкам, как его даёт Camera.tiles_mvp. overlays - пары
-    (текстура наложения, окно (сдвиг u, сдвиг v, масштаб)) по одной
-    на сетку. Текстура наложения идёт на блок 1, подложка на блок 0.
-    Без overlays блок 1 не трогается. clouds - такие же пары для
-    облаков, блок 2.
+    по строкам, как его даёт Camera.tiles_mvp. Подложка идёт на блок 0.
+    layers - слои поверх неё: (текстурный блок, место окна в шейдере,
+    пары (текстура, окно (сдвиг u, сдвиг v, масштаб)) по одной на сетку).
+    Это наложение слоёв проекта, облака и температура. Блоки слоёв,
+    которых в списке нет, не трогаются.
 
     Горячий путь кадра идёт через функции OpenGL.raw без проверки ошибок
     после каждого вызова. Замер 26 сентября 2026 года: glUniformMatrix4fv
     с проверкой 36 мкс, без неё 6 мкс. Ошибки ловит frame_errors раз
-    в кадр. Привязка и окно наложения меняются, только когда отличаются
+    в кадр. Привязка и окно слоя меняются, только когда отличаются
     от прошлой сетки.
     """
     base = mvps.ctypes.data
     stride = mvps.strides[0]
     last_texture = None
-    last_overlay = None
-    last_window = None
-    last_cloud = None
-    last_cloud_window = None
+    last = [[None, None] for _ in layers]
     null = ctypes.c_void_p(0)
     for i, (mesh, texture) in enumerate(items):
-        if clouds is not None:
-            cloud, cloud_window = clouds[i]
-            if cloud != last_cloud:
-                _active_texture(GL.GL_TEXTURE2)
-                _bind_texture(GL.GL_TEXTURE_2D, cloud)
+        for n, (unit, u_uv, pairs) in enumerate(layers):
+            image, window = pairs[i]
+            seen = last[n]
+            if image != seen[0]:
+                _active_texture(unit)
+                _bind_texture(GL.GL_TEXTURE_2D, image)
                 _active_texture(GL.GL_TEXTURE0)
-                last_cloud = cloud
-            if cloud_window != last_cloud_window:
-                _uniform4f(u_clouds_uv, cloud_window[0], cloud_window[1],
-                           cloud_window[2], 0.0)
-                last_cloud_window = cloud_window
-        if overlays is not None:
-            overlay, window = overlays[i]
-            if overlay != last_overlay:
-                _active_texture(GL.GL_TEXTURE1)
-                _bind_texture(GL.GL_TEXTURE_2D, overlay)
-                _active_texture(GL.GL_TEXTURE0)
-                last_overlay = overlay
-            if window != last_window:
-                _uniform4f(u_overlay_uv, window[0], window[1], window[2],
-                           0.0)
-                last_window = window
+                seen[0] = image
+            if window != seen[1]:
+                _uniform4f(u_uv, window[0], window[1], window[2], 0.0)
+                seen[1] = window
         if texture != last_texture:
             _bind_texture(GL.GL_TEXTURE_2D, texture)
             last_texture = texture
