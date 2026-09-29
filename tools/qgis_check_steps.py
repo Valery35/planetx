@@ -2738,18 +2738,29 @@ def icons_time():
     state["icons_folder"] = folder
     view.navigator.stop()
     view.navigator.set_pose(Pose(58.02, 56.25, 6000.0, 0.0, 30.0))
+    # Шкала закрыта, пока её не откроют: кнопка доступна, метки все.
+    button = window.toolbar.time
     out = {"bar_shown": window.timebar.isVisible(),
+           "button": [button.isEnabled(), button.isChecked()],
            "extent": [round(v) for v in window.timebar.extent()],
            "shapes_all": len([s for s in view.features.shapes
                               if s.kind == "point"])}
-    # Промежуток после 5 сентября: флаг скрыт, музей и метка без
-    # времени видны.
+    # Кнопка открывает шкалу. Промежуток после 5 сентября: флаг скрыт,
+    # музей и метка без времени видны.
+    button.setChecked(True)
+    out["bar_by_button"] = window.timebar.isVisible()
     import calendar
     lo = calendar.timegm((2026, 9, 5, 0, 0, 0))
     window.timebar.set_range(lo, window.timebar.extent()[1])
     out["names_after_5th"] = sorted(s.name for s in view.features.shapes
                                     if s.kind == "point")
+    # Закрытая шкала метки не скрывает.
+    button.setChecked(False)
+    out["names_closed"] = sorted(s.name for s in view.features.shapes
+                                 if s.kind == "point")
+    # Перелёт к виду с датой сам открывает шкалу.
     window.fly_to_place(store.find(keys[1]))
+    out["bar_after_fly"] = [window.timebar.isVisible(), button.isChecked()]
     out["range_after_fly"] = [round(v) for v in window.timebar.range()]
     tree = store.export_tree(folder)
     back = {p.name: p for p in read_kml(write_kml(tree).encode()).places()}
@@ -2774,7 +2785,8 @@ def icons_time_check():
     result["icons_time"]["labels"] = view.labels.count
     result["icons_time"]["gl_errors"] = dict(view.gl_errors)
     window.myplaces.remove(state["icons_folder"])
-    result["icons_time"]["bar_after_remove"] = window.timebar.isVisible()
+    result["icons_time"]["bar_after_remove"] = [
+        window.timebar.isVisible(), window.toolbar.time.isEnabled()]
 
 
 @check(300)

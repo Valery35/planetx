@@ -36,6 +36,7 @@ class ViewToolbar(QFrame):
     sync_toggled = pyqtSignal(bool)
     save_view_requested = pyqtSignal()
     record_toggled = pyqtSignal(bool)
+    time_toggled = pyqtSignal(bool)
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal()
@@ -87,6 +88,14 @@ class ViewToolbar(QFrame):
                "мышью, клавишами или перелётами, повторный щелчок "
                "останавливает запись. Тур ложится в «Мои метки»."),
             self.record_toggled, checkable=True)
+        # Шкала времени меток. Кнопка доступна, когда у видимых меток
+        # есть время, окно зовёт set_time_available.
+        self.time = self._button(
+            QgsApplication.getThemeIcon("/propertyicons/temporal.svg"),
+            tr("Шкала времени меток. Пока шкала открыта, метки вне её "
+               "промежутка скрыты. Закрытая шкала показывает все метки."),
+            self.time_toggled, checkable=True)
+        self.time.setEnabled(False)
         self._button(
             QgsApplication.getThemeIcon("/mActionSaveMapAsImage.svg"),
             tr("Снимок вида в файл PNG или JPEG, в том числе больше окна."),
@@ -124,7 +133,7 @@ class ViewToolbar(QFrame):
         self.properties = self._button(
             QgsApplication.getThemeIcon("/mActionOptions.svg"),
             tr("Свойства вида: подложка, масштаб рельефа, язык подписей, "
-               "связь с картой, обновление, инструменты управления."),
+               "связь с картой, обновление, формат координат."),
             self.properties_clicked)
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)
@@ -143,6 +152,19 @@ class ViewToolbar(QFrame):
             button.clicked.connect(signal)
         self.layout().addWidget(button)
         return button
+
+    def set_time_available(self, available):
+        """Кнопка шкалы доступна, когда у видимых меток есть время.
+        Без таких меток шкала закрывается."""
+        self.time.setEnabled(available)
+        if not available:
+            self.time.setChecked(False)
+
+    def set_time_shown(self, shown):
+        """Отметка кнопки по шкале, открытой окном, без сигнала."""
+        self.time.blockSignals(True)
+        self.time.setChecked(shown)
+        self.time.blockSignals(False)
 
     def set_sidebar(self, shown):
         """Подсказка значка боковой панели по её состоянию."""

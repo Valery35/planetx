@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.17.2
+version=0.17.3
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -73,7 +73,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.17.2 The description, manual and changelog describe
+changelog=0.17.3 The placemark time slider opens with a button on
+      the icon bar or by itself on a flight to a dated view, a
+      closed slider shows all placemarks.
+      0.17.2 The description, manual and changelog describe
       the plugin in its own words.
       0.17.1 The navigation controls in the corner of the
       view are always shown, as a faint outline away from the

@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.17.2
+Version 0.17.3
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -57,10 +57,12 @@ dragged with the mouse.
 | Ruler | Opens the Ruler window |
 | New placemark | Opens the New placemark window |
 | Save view | Puts a placemark at the look-at point with height, heading and tilt |
+| Record tour | Records the camera movement as a tour into My Places |
+| Time slider | Opens and closes the placemark time slider. It is available when visible placemarks have a time |
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
-| View properties | Base map, terrain, labels, link with the map, update, navigation controls |
+| View properties | Base map, terrain, labels, link with the map, update, coordinate format |
 | About | Controls, data sources, links |
 
 ### Status line
@@ -471,8 +473,10 @@ section.
 
 <img src="figures/en/demo.jpg" width="600" alt="Perm demo with the time slider">
 
-When visible placemarks have a time, a time slider appears under the
-icon bar. It spans the placemark times from the earliest to the latest.
+The time slider opens with the Time slider button on the icon bar.
+The button is available when visible placemarks have a time. The
+slider spans the placemark times from the earliest to the latest. A
+closed slider hides no placemarks, all of them show.
 
 | Part | What it does |
 |---|---|
@@ -482,15 +486,16 @@ icon bar. It spans the placemark times from the earliest to the latest.
 | ×1 | Playback speed, at ×1 the slider is crossed in 20 seconds |
 
 A flight to a placemark and a tour set the slider to the time of the
-placemark view, without it to the time of the placemark itself. The
+placemark view, without it to the time of the placemark itself. A
+closed slider opens then. The
 slider is its own and does not depend on the QGIS Temporal Controller
 that drives tracks.
 
 ### KML and KMZ
 
 Open KML or KMZ… puts a KML or KMZ file, including one from Google
-Earth, into My Places as a new folder named after the file. Folders, styles, icons, times and placemark
-views are kept, `gx:Tour` becomes a recorded tour. The
+Earth, into My Places as a new folder named after the file.
+Folders, styles, icons, times and placemark views are kept, `gx:Tour` becomes a recorded tour. The
 camera flies to the contents of the file.
 
 Save as KML… saves a folder or the whole My Places to KMZ or KML. The

@@ -41,9 +41,14 @@ EN = {
     "Свернуть или развернуть векторную основу и рельеф.":
         "Collapse or expand the vector base and terrain.",
     "Свойства вида: подложка, масштаб рельефа, язык подписей, "
-    "связь с картой, обновление, инструменты управления.":
+    "связь с картой, обновление, формат координат.":
         "View properties: base map, terrain exaggeration, label language, "
-        "link with the map, update, navigation controls.",
+        "link with the map, update, coordinate format.",
+    "Шкала времени меток. Пока шкала открыта, метки вне её "
+    "промежутка скрыты. Закрытая шкала показывает все метки.":
+        "Placemark time slider. While the slider is open, placemarks "
+        "outside its interval are hidden. A closed slider shows all "
+        "placemarks.",
     "Подложка": "Base map",
     "{name} · {kind}": "{name} · {kind}",
     "Отметка показывает слой на глобусе, видимость на карте QGIS "

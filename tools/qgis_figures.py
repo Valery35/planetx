@@ -239,6 +239,7 @@ def demo_wait():
         return
     result["demo_missing"] = view.load_missing
     lo = calendar.timegm((2026, 9, 30, 6, 30, 0))
+    window.toolbar.time.setChecked(True)  # шкала открывается кнопкой
     window.timebar.set_range(lo, lo + 5400.0)
     QgsApplication.processEvents()
     view.repaint()

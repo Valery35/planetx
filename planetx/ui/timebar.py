@@ -3,8 +3,11 @@
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Шкала времени меток вверху вида, как шкала времени Google Earth.
 
-Шкала появляется, когда у видимых «Моих меток» есть время (core/when.py),
-и охватывает его от самого раннего до самого позднего. Два бегунка
+Шкала охватывает время видимых «Моих меток» (core/when.py) от самого
+раннего до самого позднего. Она не висит на виде всё время. Её
+открывает кнопка на панели значков, а сама шкала открывается при
+перелёте к метке или виду с датой. Закрытая шкала метки не скрывает,
+решение автора от 30 сентября 2026 года. Два бегунка
 задают промежуток, метки вне него скрыты, метки без времени видны
 всегда. Бегунки тянутся по одному или вместе за середину промежутка,
 щелчок по полосе переносит промежуток туда. Кнопка проигрывания
@@ -188,8 +191,12 @@ class TimeBar(QFrame):
         # Место панели: функция без аргументов, отдаёт левый верхний
         # угол. Ставит окно - под панелью значков.
         self.anchor = None
+        self.known = False  # охват задан, у видимых меток есть время
         parent.installEventFilter(self)
         self.hide()
+
+    def shown(self):
+        return not self.isHidden()
 
     def extent(self):
         return self.track.extent
@@ -201,18 +208,32 @@ class TimeBar(QFrame):
         """Охват шкалы по временам меток или None - шкалы нет.
         Промежуток, которого не было, - вся шкала."""
         if extent is None:
-            self.stop()
-            self.hide()
+            self.known = False
+            self.close_bar()
             return
-        fresh = self.isHidden()
+        fresh = not self.known
+        self.known = True
         old = self.track.extent
         self.track.set_extent(*extent)
         if fresh or old != self.track.extent:
             self.track.set_range(*self.track.extent)
         self._label()
+        if self.shown():
+            self.adjustSize()
+            self._place()
+
+    def open_bar(self):
+        """Показать шкалу. Без охвата показывать нечего."""
+        if not self.known:
+            return
         self.show()
+        self.raise_()
         self.adjustSize()
         self._place()
+
+    def close_bar(self):
+        self.stop()
+        self.hide()
 
     def set_range(self, lo, hi):
         """Промежуток снаружи: вид метки с датой, остановка тура.

@@ -466,6 +466,8 @@ class GlobeWindow(QWidget):
         self._record_timer.setInterval(RECORD_PERIOD)
         self._record_timer.timeout.connect(self._record_sample)
         self.toolbar.record_toggled.connect(self._record_toggled)
+        self.toolbar.time_toggled.connect(self._time_toggled)
+        self._update_timebar()
         self.tour.stop_reached.connect(
             lambda stop: self._show_time(stop.time))
         # Растущие треки точечных слоёв по времени контроллера QGIS.
@@ -1298,7 +1300,22 @@ class GlobeWindow(QWidget):
         extent = when.extent(p.time for p in self.myplaces.places
                              if p.visible)
         self.timebar.set_extent(extent)
-        self._time_range = self.timebar.range() if extent else None
+        # Панель значков заводится позже первого чтения меток.
+        toolbar = getattr(self, "toolbar", None)
+        if toolbar is not None:
+            toolbar.set_time_available(extent is not None)
+        self._time_range = self.timebar.range() \
+            if self.timebar.shown() else None
+
+    def _time_toggled(self, on):
+        """Кнопка шкалы. Закрытая шкала метки не скрывает."""
+        if on:
+            self.timebar.open_bar()
+        else:
+            self.timebar.close_bar()
+        self._time_range = self.timebar.range() \
+            if self.timebar.shown() else None
+        self._refresh_shapes()
 
     def _time_changed(self, lo, hi):
         self._time_range = (lo, hi)
@@ -1310,10 +1327,15 @@ class GlobeWindow(QWidget):
         return span is None or when.visible(place.time, *span)
 
     def _show_time(self, time):
-        """Шкала на время вида или метки, как у Google Earth."""
+        """Шкала на время вида или метки, как у Google Earth. Закрытая
+        шкала при этом открывается - у вида есть дата."""
         span = when.interval(time)
-        if span is not None and self._time_range is not None:
-            self.timebar.set_range(*span)
+        if span is None or not self.timebar.known:
+            return
+        if not self.timebar.shown():
+            self.timebar.open_bar()
+            self.toolbar.set_time_shown(True)
+        self.timebar.set_range(*span)
 
     def _refresh_shapes(self):
         """На глобусе видимые «Мои метки», треки и фигура открытой
