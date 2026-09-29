@@ -31,6 +31,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
 
+from ..core import lookat
 from ..core.placetree import is_folder
 from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
@@ -120,8 +121,10 @@ VIEW_ICON = "/mIconCamera.svg"  # метка «Сохранить вид» с р
 
 
 def place_icon(place):
-    """Значок метки: сохранённый вид, точка, линия или многоугольник."""
-    name = VIEW_ICON if place.view \
+    """Значок метки: сохранённый вид, точка, линия или многоугольник.
+    Вид, поставленный метке «Снимком вида», значок не меняет."""
+    name = VIEW_ICON if lookat.is_view_mark(
+        place.kind, place.shape.points, place.view) \
         else PLACE_ICONS.get(place.kind, PLACE_ICONS["point"])
     return QgsApplication.getThemeIcon(name)
 
@@ -777,7 +780,8 @@ class LayerPanel(QWidget):
             actions = [("fly", tr("Подлететь"))]
             if key.startswith("line:"):
                 actions.append(("tour", tr("Тур по пути")))
-            actions += [("properties", tr("Свойства…")),
+            actions += [("snapshot", tr("Снимок вида метки")),
+                        ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),
                         ("copy", tr("Копировать")),
                         ("paste", tr("Вставить")),

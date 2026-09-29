@@ -67,6 +67,15 @@ class TestTour(unittest.TestCase):
         self.assertEqual(empty.index_at(0.0), -1)
 
 
+class TestClock(unittest.TestCase):
+
+    def test_minutes_and_hours(self):
+        self.assertEqual(tr.clock(0.0), "0:00")
+        self.assertEqual(tr.clock(65.4), "1:05")
+        self.assertEqual(tr.clock(3725.0), "1:02:05")
+        self.assertEqual(tr.clock(-3.0), "0:00")
+
+
 class TestPath(unittest.TestCase):
 
     def setUp(self):

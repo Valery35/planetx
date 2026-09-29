@@ -2296,6 +2296,55 @@ def layer_labels_real_check():
         "labels": view.labels.count,
         "gl_errors": dict(view.gl_errors)}
 
+@check(1500)
+def place_view():
+    # Вид метки, как в Google Earth: «Снимок вида метки» в меню, перелёт
+    # и тур по виду, значок, KML, окно свойств, прежний вид из трёх
+    # чисел. Метки - в «Моих метках» отдельного профиля.
+    from planetx.core.features import Shape
+    from planetx.core.kml import write_kml
+    from planetx.core.navigation import Pose
+    from planetx.ui.panel import place_icon
+    from qgis.core import QgsApplication as App
+    window = state["window"]
+    places = window.myplaces
+    key = places.add(Shape("polygon", [(58.0, 56.2), (58.0, 56.3),
+                                       (58.1, 56.3)], name="Участок вида"))
+    old = places.add(Shape("point", [(57.5, 55.5)], name="Прежний вид"),
+                     view=(1500.0, 20.0, 30.0))
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.2, 56.5, 12000.0, 40.0, 55.0))
+    window._place_action("snapshot", key)
+    place = places.find(key)
+    stop = window.place_stop(place)
+    old_place = places.find(old)
+    tree = places.export_keys([key])
+    text = write_kml(tree)
+    from planetx.ui.placeprops import PlaceProperties
+    dialog = PlaceProperties(place, window, current_view=window.current_view)
+    dialog_view = dialog.view()
+    view.navigator.set_pose(Pose(50.0, 30.0, 8000.0, 0.0, 0.0))
+    dialog._snapshot()
+    snapped = dialog.view()
+    dialog._reset_view()
+    reset = dialog.view()
+    dialog.close()
+    result["place_view"] = {
+        "view": [round(v, 4) for v in place.view],
+        "stop": [round(v, 4) for v in (stop.lat, stop.lon, stop.distance,
+                                       stop.heading, stop.tilt)],
+        "icon_is_polygon": place_icon(place).cacheKey()
+        == App.getThemeIcon("/mIconPolygonLayer.svg").cacheKey(),
+        "old_view": [round(v, 4) for v in old_place.view],
+        "old_icon_camera": place_icon(old_place).cacheKey()
+        == App.getThemeIcon("/mIconCamera.svg").cacheKey(),
+        "kml_lookat": "<latitude>58.20000000</latitude>" in text,
+        "dialog_view": [round(v, 4) for v in dialog_view],
+        "dialog_snapshot": [round(v, 4) for v in snapped],
+        "dialog_reset": [round(v, 4) for v in reset]}
+    places.remove_many([key, old])
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

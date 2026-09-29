@@ -65,8 +65,19 @@ class TestRead(unittest.TestCase):
         perm = self.tree.children[0]
         self.assertEqual(perm.kind, "point")
         self.assertEqual(perm.points, [(58.0105, 56.2294)])
-        self.assertEqual(perm.view, (2500.0, 30.0, 45.0))
+        # Точка взгляда LookAt не совпадает с меткой, как в Google Earth.
+        self.assertEqual(perm.view, (58.01, 56.23, 2500.0, 30.0, 45.0))
         self.assertEqual(perm.description, "город & порт")
+
+    def test_view_of_polygon_and_without_look_point(self):
+        data = b"""<kml><Document><Placemark><name>A</name>
+            <LookAt><heading>10</heading><tilt>20</tilt><range>900</range>
+            </LookAt><Polygon><outerBoundaryIs><LinearRing><coordinates>
+            56,58 56.2,58 56.2,58.1 56,58</coordinates></LinearRing>
+            </outerBoundaryIs></Polygon></Placemark></Document></kml>"""
+        field = kml.read_kml(data).children[0]
+        # Без точки взгляда ею становится первая вершина метки.
+        self.assertEqual(field.view, (58.0, 56.0, 900.0, 10.0, 20.0))
 
     def test_style_through_stylemap(self):
         path = self.tree.children[1].children[0]
@@ -115,7 +126,7 @@ class TestWrite(unittest.TestCase):
             again = kml.read_file(data, "Поездка")
             self.assertEqual(len(again.places()), 5)
             perm = again.children[0]
-            self.assertEqual(perm.view, (2500.0, 30.0, 45.0))
+            self.assertEqual(perm.view, (58.01, 56.23, 2500.0, 30.0, 45.0))
             self.assertAlmostEqual(perm.points[0][0], 58.0105)
             self.assertEqual(perm.description, "город & порт")
             path = again.children[1].children[0]

@@ -5,19 +5,21 @@
 
 Тур строится в core/tour.py и проигрывается навигатором как перелёт.
 Пауза останавливает навигатор и запоминает время тура. Продолжение
-на остановке сдвигает начало отсчёта, в полёте - строит путь заново
-от позы камеры, если её сдвинули мышью. Кнопки «назад» и «дальше»
-строят тур заново от позы камеры, поэтому камера всегда летит,
-а не прыгает.
+сдвигает начало отсчёта, если камера стоит в позе тура, иначе строит
+путь заново от позы камеры - её сдвинули мышью. Кнопки «назад»
+и «дальше» строят тур заново от позы камеры, поэтому камера всегда
+летит, а не прыгает. Ползунок слева на панели показывает время тура
+и перематывает его: пока его тянут, камера стоит в позе тура на этом
+времени. Решение автора от 29 сентября 2026 года.
 """
 import time
 
 from qgis.core import QgsSettings
-from qgis.PyQt.QtCore import QEvent, QObject, pyqtSignal
+from qgis.PyQt.QtCore import QEvent, QObject, Qt, pyqtSignal
 from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QFrame, QHBoxLayout,
-                                 QLabel, QToolButton)
+                                 QLabel, QSlider, QToolButton)
 
-from ..core.tour import PAUSE, Tour
+from ..core.tour import PAUSE, Tour, clock
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -27,6 +29,8 @@ STYLE = ("QFrame#planetxTour { background: rgba(250, 250, 250, 230); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
 # Поза камеры сдвинута мышью, если ушла дальше этой доли расстояния.
 MOVED = 1e-3
+SLIDER_STEPS = 1000  # делений ползунка на весь тур
+SLIDER_WIDTH = 220  # логических пикселей
 
 
 class TourBar(QFrame):
@@ -37,6 +41,10 @@ class TourBar(QFrame):
     forward = pyqtSignal()
     close_clicked = pyqtSignal()
     record = pyqtSignal()
+    # Ползунок: нажат, сдвинут на долю тура от 0 до 1, отпущен.
+    seek_started = pyqtSignal()
+    seek = pyqtSignal(float)
+    seek_finished = pyqtSignal()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -45,6 +53,21 @@ class TourBar(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 3, 6, 3)
         layout.setSpacing(3)
+        self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
+        self.slider.setRange(0, SLIDER_STEPS)
+        self.slider.setFixedWidth(SLIDER_WIDTH)
+        self.slider.setToolTip(tr(
+            "Сколько тура прошло. Ползунок перематывает тур. Камера сразу "
+            "встаёт в эту точку, тур идёт дальше с неё."))
+        self.slider.sliderPressed.connect(self.seek_started)
+        self.slider.sliderMoved.connect(
+            lambda value: self.seek.emit(value / SLIDER_STEPS))
+        self.slider.sliderReleased.connect(self.seek_finished)
+        # Щелчок по полосе, а не по бегунку, тоже переставляет время.
+        self.slider.actionTriggered.connect(self._stepped)
+        layout.addWidget(self.slider)
+        self.clock = QLabel(self)
+        layout.addWidget(self.clock)
         buttons = []
         for text, tip, signal in (
                 ("⏮", tr("Предыдущая остановка"), self.back),
@@ -88,6 +111,23 @@ class TourBar(QFrame):
         parent.installEventFilter(self)
         self.hide()
 
+    def _stepped(self, action):
+        """Шаг ползунка щелчком по полосе или клавишами."""
+        if not self.slider.isSliderDown():
+            self.seek_started.emit()
+            self.seek.emit(self.slider.sliderPosition() / SLIDER_STEPS)
+            self.seek_finished.emit()
+
+    def set_time(self, t, duration):
+        """Ползунок и часы: время тура t из duration секунд. Пока
+        ползунок тянут, его положение не трогается."""
+        if not self.slider.isSliderDown():
+            self.slider.blockSignals(True)
+            self.slider.setValue(int(round(
+                SLIDER_STEPS * t / duration)) if duration > 0 else 0)
+            self.slider.blockSignals(False)
+        self.clock.setText("%s / %s" % (clock(t), clock(duration)))
+
     def set_state(self, playing, index, count, name):
         self.play.setText("⏸" if playing else "▶")
         self.play.setToolTip(tr("Пауза") if playing else tr("Продолжить"))
@@ -130,6 +170,10 @@ class TourPlayer(QObject):
         self.bar.forward.connect(lambda: self.play_from(self.index + 1))
         self.bar.toggle.connect(self.toggle)
         self.bar.close_clicked.connect(self.stop)
+        self.bar.seek_started.connect(self._seek_started)
+        self.bar.seek.connect(self.seek)
+        self.bar.seek_finished.connect(self._seek_finished)
+        self._resume = False  # тур шёл, когда взяли ползунок
         self.stops = []
         self.tour = None
         self.offset = 0  # номер первой остановки нынешнего тура
@@ -181,14 +225,42 @@ class TourPlayer(QObject):
         if self.t >= self.tour.duration:
             self.play_from(0)  # тур кончился - заново
             return
-        if self.tour.arrived(self.t) and not self._moved():
-            # На остановке камера на месте: время тура идёт дальше.
-            self.nav.start_flight(self.tour, time.monotonic() - self.t)
-            self.playing = True
-            self._show()
-            self.view.update()
+        if not self._moved():
+            # Камера в позе тура: время тура идёт дальше.
+            self._resume_at(self.t)
         else:
             self.play_from(self.index)
+
+    def _resume_at(self, t):
+        self.nav.start_flight(self.tour, time.monotonic() - t)
+        self.playing = True
+        self._show()
+        self.view.update()
+
+    def _seek_started(self):
+        if self.tour is None:
+            return
+        self._resume = self.playing
+        if self.playing:
+            self.nav.stop()
+            self.playing = False
+
+    def seek(self, share):
+        """Перемотать тур на долю share от 0 до 1: камера встаёт в позу
+        тура на этом времени."""
+        if self.tour is None:
+            return
+        self.t = min(max(share, 0.0), 1.0) * self.tour.duration
+        self.nav.show(self.tour.pose_at(self.t))
+        self._show()
+        self.view.update()
+
+    def _seek_finished(self):
+        if self.tour is None:
+            return
+        if self._resume and self.t < self.tour.duration:
+            self._resume_at(self.t)
+        self._resume = False
 
     def _moved(self):
         pose = self.nav.pose
@@ -235,3 +307,6 @@ class TourPlayer(QObject):
         stop = self.stops[self.index] if self.stops else None
         self.bar.set_state(self.playing, self.index, len(self.stops),
                            stop.name if stop else "")
+        if self.tour is not None:
+            self.bar.set_time(min(self.t, self.tour.duration),
+                              self.tour.duration)

@@ -23,7 +23,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
-from ..core import basemap, clouds, stars, temperature
+from ..core import basemap, clouds, lookat, stars, temperature
 from ..core.ellipsoid import ecef_to_geodetic
 from ..core import graticule
 from ..core.features import Shape
@@ -1415,6 +1415,11 @@ class GlobeWindow(QWidget):
             self.tour.start([self.place_stop(item, along=True)])
         elif action == "properties":
             self._open_place_properties(item)
+        elif action == "snapshot":
+            # «Снимок вида» Google Earth: вид глобуса сейчас становится
+            # видом метки, по нему идут перелёт к метке и тур.
+            self.myplaces.update(key, {"view": lookat.text(
+                self.current_view())})
         elif action == "rename":
             name, ok = QInputDialog.getText(
                 self, tr("Переименовать"), tr("Название"), text=item.name)
@@ -1465,7 +1470,8 @@ class GlobeWindow(QWidget):
         key = place.key
         dialog = self.prop_dialogs.get(key)
         if dialog is None:
-            dialog = PlaceProperties(place, self)
+            dialog = PlaceProperties(place, self,
+                                     current_view=self.current_view)
             dialog.setAttribute(enum(Qt, "WidgetAttribute",
                                      "WA_DeleteOnClose"))
             self.prop_dialogs[key] = dialog
@@ -1587,19 +1593,21 @@ class GlobeWindow(QWidget):
         return True
 
     def place_stop(self, place, along=False):
-        """Остановка над меткой: точка, охват линии и многоугольника.
+        """Остановка над меткой: вид метки, иначе точка, охват линии
+        и многоугольника.
 
-        Сохранённый вид возвращает расстояние, азимут и наклон. along -
-        путь проезжается вдоль, как в туре Google Earth.
+        Вид метки (core/lookat.py) задаёт точку взгляда, расстояние,
+        азимут и наклон, как вид метки Google Earth. along - путь
+        проезжается вдоль, как в туре Google Earth.
         """
         points = place.shape.points
         name = place.shape.name
         if along and place.kind == "line" and len(points) > 1:
             return PathStop(name, points)
+        if place.view is not None:
+            return Stop(name, *place.view)
         if len(points) == 1:
             lat, lon = points[0]
-            if place.view is not None:
-                return Stop(name, lat, lon, *place.view)
             return Stop(name, lat, lon, SEARCH_MIN_DISTANCE)
         lats = [p[0] for p in points]
         lons = [p[1] for p in points]
@@ -1623,8 +1631,7 @@ class GlobeWindow(QWidget):
     def save_view(self):
         """Вид глобуса меткой в «Моих метках», как в Google Earth.
 
-        Метка стоит в точке взгляда, ракурс - расстояние, азимут
-        и наклон - пишется в поле view.
+        Метка стоит в точке взгляда, вид - в поле view.
         """
         default = self.new_name(tr("Вид"))
         name, ok = QInputDialog.getText(self, tr("Сохранить вид"),
@@ -1634,9 +1641,14 @@ class GlobeWindow(QWidget):
         pose = self.view.navigator.pose
         shape = Shape("point", [(pose.lat, pose.lon)],
                       name=name.strip() or default)
-        self.myplaces.add(shape, view=(pose.distance, pose.heading,
-                                       pose.tilt),
+        self.myplaces.add(shape, view=self.current_view(),
                           folder=self.panel.current_folder())
+
+    def current_view(self):
+        """Вид глобуса сейчас для метки, core.lookat."""
+        pose = self.view.navigator.pose
+        return lookat.make(pose.lat, pose.lon, pose.distance,
+                           pose.heading, pose.tilt)
 
     def _fly_extent(self, extent, crs):
         """Перелёт к охвату в системе координат crs, взгляд отвесный."""

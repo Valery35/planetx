@@ -30,7 +30,7 @@ from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsProject, QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from ..core import placetree
+from ..core import lookat, placetree
 from ..core.features import Shape
 from ..core.kml import KFolder, KPlace
 from ..i18n import tr
@@ -92,15 +92,6 @@ def _points(kind, geometry):
     if len(ring) > 1 and ring[0] == ring[-1]:
         ring = ring[:-1]
     return [(p.y(), p.x()) for p in ring]
-
-
-def _view(text):
-    """Ракурс из поля view: (расстояние, азимут, наклон) или None."""
-    try:
-        view = tuple(float(v) for v in str(text or "").split(","))
-    except ValueError:
-        return None
-    return view if len(view) == 3 else None
 
 
 def _int(value):
@@ -297,7 +288,8 @@ class MyPlaces(QObject):
                     kind, feature.id(), shape,
                     bool(1 if visible is None else visible),
                     str(feature["measure"] or ""),
-                    _view(_value(feature, layer, "view")),
+                    lookat.parse(_value(feature, layer, "view"),
+                                 points[0] if points else None),
                     _int(_value(feature, layer, "position")),
                     _folder_key(_int(_value(feature, layer, "folder"))),
                     str(feature["description"] or "")))
@@ -363,8 +355,7 @@ class MyPlaces(QObject):
     def add(self, shape, measure="", view=None, folder=None):
         """Записать новую метку в конец папки folder, None - корень.
 
-        Возвращает её ключ или None. view - ракурс сохранённого вида:
-        расстояние, азимут, наклон.
+        Возвращает её ключ или None. view - вид метки core.lookat.
         """
         layer = self.layers.get(shape.kind)
         if layer is None or not shape.points:
@@ -379,8 +370,7 @@ class MyPlaces(QObject):
                   "fill": _color_text(shape.fill), "visible": 1,
                   "measure": measure,
                   "created": time.strftime("%Y-%m-%d %H:%M:%S"),
-                  "view": ",".join(repr(float(v)) for v in view)
-                  if view else "",
+                  "view": lookat.text(view),
                   "position": placetree.next_position(self.nodes(), folder),
                   "folder": _folder_fid(folder),
                   "height": float(shape.height or 0.0),
@@ -576,8 +566,7 @@ class MyPlaces(QObject):
                     "fill": _color_text(place.fill),
                     "visible": int(place.visible), "measure": "",
                     "created": stamp,
-                    "view": ",".join(repr(float(v)) for v in place.view)
-                    if place.view else "",
+                    "view": lookat.text(place.view),
                     "position": position, "folder": _folder_fid(key),
                     "height": float(place.height or 0.0),
                     "extrude": int(bool(place.extrude))}

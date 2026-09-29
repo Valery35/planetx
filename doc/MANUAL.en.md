@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.14.0
+Version 0.15.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -342,7 +342,7 @@ together, and the Del key deletes it after a question.
 |---|---|
 | My Places | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Copy, Paste, Add the places layers to the project |
 | Folder | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Copy, Paste, Rename…, Delete |
-| Place | Fly to, Tour along the path, Properties…, New Folder, Copy, Paste, Rename…, Delete |
+| Place | Fly to, Tour along the path, Snapshot view, Properties…, New Folder, Copy, Paste, Rename…, Delete |
 | Several rows | Copy, Show selected, Hide selected, Delete selected |
 | Empty space | New Folder, Open KML or KMZ…, Paste |
 
@@ -397,9 +397,24 @@ brings the previous look back.
 | Fill | Fill color of the polygon and of the wall |
 | Height above ground | Lift of the object above the terrain in metres. The Ground - Space slider under the field sets it from the ground to 100 km |
 | Extend to ground | A wall from the object to the ground, a post for a placemark |
+| Place view | Look point, range, heading and tilt of the camera at the place |
 
 Extending works with a height above zero. A path becomes a wall, a
 polygon becomes a block.
+
+### Place view
+
+Any place can have a view of its own, like the View tab in Google Earth.
+A view is the point the camera looks at, the range to it, the heading
+and the tilt. The look point may differ from the place. Fly to, a double
+click on the place and a tour stop follow the view.
+
+Snapshot view in the place menu makes the current globe view the view of
+the place. The properties window has the same values in the Place view
+section. The Snapshot current view button takes the globe view, Reset
+brings back the view the place had when the window opened. Clearing the
+section check box removes the view, then the camera frames the whole
+place. The view goes into KML as a LookAt element and is read from it.
 
 ### Copy and paste
 
@@ -453,7 +468,8 @@ closes the other.
 A tour flies over the checked places of a folder in the list order,
 including nested folders.
 
-- A saved view brings back its distance, heading and tilt.
+- A place with a view of its own brings back its look point, range,
+  heading and tilt.
 - Along a path the camera travels the line.
 - Other places are framed whole.
 
@@ -465,6 +481,7 @@ The tour bar appears at the bottom of the view:
 
 | Button | What it does |
 |---|---|
+| Slider | Shows how much of the tour has passed and winds the tour. The camera moves to the chosen point at once, after release the tour goes on from it |
 | ⏮, ⏭ | Previous and next stop |
 | ⏸, ▶ | Pause and continue |
 | Pause | How many seconds the camera stays at a stop |
@@ -488,10 +505,31 @@ a repeated recording gives the same frames.
 
 A file `frames.json` lies next to the frames - frame rate, size, camera
 pose and data time of each frame, numbers of frames that did not fully
-load. Any video editor assembles a video from the frames.
+load.
 
 The bar shows the frame number. The cross on the bar stops the
 recording.
+
+### Making a video from the frames
+
+PlanetX writes frames, not a video file. Any program that opens an image
+sequence assembles a video from them.
+
+The free program ffmpeg (ffmpeg.org) makes an MP4 with one command in
+the folder with the frames:
+
+```
+ffmpeg -framerate 25 -i frame_%05d.png -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -c:v libx264 -pix_fmt yuv420p -crf 18 tour.mp4
+```
+
+The rate 25 matches the recording rate, so the video runs at the pace
+of the tour. The `pad` filter adds a pixel when a frame side is odd, the
+H.264 codec needs even sides. A smaller `-crf` value gives better
+quality and a larger file.
+
+The video editors Shotcut and DaVinci Resolve open numbered frames as
+one clip. Music, captions and several tours joined together can be
+added there.
 
 ---
 

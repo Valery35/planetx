@@ -585,6 +585,10 @@ EN = {
     "Пауза": "Pause",
     "Следующая остановка": "Next stop",
     "Закончить тур": "End tour",
+    "Сколько тура прошло. Ползунок перематывает тур. Камера сразу "
+    "встаёт в эту точку, тур идёт дальше с неё.":
+        "How much of the tour has passed. The slider winds the tour. The "
+        "camera moves to that point at once, and the tour goes on from it.",
     "Записать тур кадрами PNG, 25 кадров в секунду тура, в размере "
     "окна. Каждый кадр ждёт загрузки тайлов, поэтому запись идёт "
     "дольше тура. Кадры с теми же номерами в папке заменяются.":
@@ -641,6 +645,44 @@ EN = {
         "Zero lays the object on the ground.",
     "Высота над землёй": "Height above ground",
     "Выдавить до земли": "Extend to ground",
+    "Снимок вида метки": "Snapshot view",
+    "Вид метки": "Place view",
+    "Откуда смотрит камера, когда летит к метке или стоит на ней "
+    "в туре, как вид метки в Google Earth. Без своего вида камера "
+    "берёт метку в кадр целиком.":
+        "Where the camera looks from when it flies to the place or stands "
+        "at it in a tour, like the place view in Google Earth. Without a "
+        "view of its own the camera frames the whole place.",
+    "Широта": "Latitude",
+    "Широта точки, на которую смотрит камера. Она может "
+    "не совпадать с меткой.":
+        "Latitude of the point the camera looks at. It may differ from "
+        "the place.",
+    "Долгота": "Longitude",
+    "Долгота точки, на которую смотрит камера.":
+        "Longitude of the point the camera looks at.",
+    "Расстояние": "Range",
+    "Расстояние от камеры до точки взгляда, «диапазон» "
+    "Google Earth. Больше - вид шире.":
+        "Distance from the camera to the look point, the range of Google "
+        "Earth. Larger gives a wider view.",
+    "Азимут": "Heading",
+    "Куда смотрит камера, «курс» Google Earth. 0 - север "
+    "вверху кадра.":
+        "Where the camera faces, the heading of Google Earth. 0 puts north "
+        "at the top of the frame.",
+    "Наклон": "Tilt",
+    "Наклон камеры, «угол обзора» Google Earth. 0 - взгляд "
+    "отвесно вниз, больше - к горизонту.":
+        "Camera tilt, the tilt of Google Earth. 0 looks straight down, "
+        "larger values look towards the horizon.",
+    "Снимок текущего вида": "Snapshot current view",
+    "Взять вид глобуса сейчас: точку взгляда, расстояние, азимут "
+    "и наклон.":
+        "Take the current globe view: look point, range, heading and tilt.",
+    "Сброс": "Reset",
+    "Вернуть вид, который был у метки при открытии окна.":
+        "Return the view the place had when the window opened.",
     "Стена от поднятого объекта до земли, у точки - стойка. Работает при "
     "высоте больше нуля.":
         "A wall from the raised object down to the ground, a post for a "

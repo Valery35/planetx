@@ -9,9 +9,10 @@ LineString и внешнее кольцо Polygon переносятся, MultiG
 разбивается на отдельные метки с тем же названием. Высоты вершин
 отбрасываются, метки лежат на рельефе. Стиль берётся из styleUrl,
 у StyleMap - вариант normal, и из вложенного Style. LookAt метки
-становится сохранённым видом: расстояние range, азимут heading,
-наклон tilt. Camera, модели, наложения картинок и сетевые ссылки
-не переносятся.
+становится её видом, core/lookat.py: точка взгляда longitude
+и latitude, расстояние range, азимут heading, наклон tilt. Без точки
+взгляда ею считается сама метка. Camera, модели, наложения картинок
+и сетевые ссылки не переносятся.
 
 Высота над землёй переносится у altitudeMode relativeToGround
 и gx:relativeToSeaFloor: высота первой вершины становится подъёмом
@@ -33,6 +34,11 @@ import io
 import re
 import zipfile
 from xml.parsers import expat
+
+try:  # внутри плагина QGIS
+    from . import lookat
+except ImportError:  # headless-тесты
+    import lookat
 
 NS = "http://www.opengis.net/kml/2.2"
 # Цвета Google Earth по умолчанию: жёлтая линия, белая заливка.
@@ -132,7 +138,8 @@ class KPlace:
 
     kind - "point", "line", "polygon". points - (широта, долгота).
     color, fill - RGBA 0-255, fill только у многоугольника. view -
-    (расстояние, азимут, наклон) или None.
+    вид core.lookat: (широта, долгота, расстояние, азимут, наклон)
+    или None.
     """
 
     def __init__(self, name, kind, points, color=LINE_COLOR,
@@ -297,15 +304,18 @@ def _styles(root):
     return styles
 
 
-def _view(node):
+def _view(node, anchor):
+    """Вид из LookAt. Без точки взгляда ею считается anchor."""
     look = _child(node, "LookAt")
     if look is None:
         return None
-    distance = _float(look, "range", 0.0)
-    if distance <= 0.0:
-        return None
-    return (distance, _float(look, "heading", 0.0) % 360.0,
-            min(max(_float(look, "tilt", 0.0), 0.0), 85.0))
+    lat = _float(look, "latitude", anchor[0]) if anchor else \
+        _float(look, "latitude", 0.0)
+    lon = _float(look, "longitude", anchor[1]) if anchor else \
+        _float(look, "longitude", 0.0)
+    return lookat.make(lat, lon, _float(look, "range", 0.0),
+                       _float(look, "heading", 0.0),
+                       _float(look, "tilt", 0.0))
 
 
 def _visible(node):
@@ -318,9 +328,9 @@ def _placemark(node, styles):
     if inline is not None:
         style.update(_style_of(inline))
     name = _text(node, "name")
-    view = _view(node)
     out = []
     for kind, points, height, extrude in _geometries(node):
+        view = _view(node, points[0] if points else None)
         color = style.get("icon" if kind == "point" else "color") \
             or LINE_COLOR
         fill = None
@@ -330,7 +340,7 @@ def _placemark(node, styles):
         out.append(KPlace(name, kind, points, color=color,
                           width=style.get("width", LINE_WIDTH), fill=fill,
                           visible=_visible(node),
-                          view=view if kind == "point" else None,
+                          view=view,
                           description=_text(node, "description"),
                           height=height, extrude=extrude))
     return out
@@ -428,9 +438,8 @@ def _placemark_kml(place, indent):
             "</LinearRing></outerBoundaryIs></Polygon>".format(
                 mode, _coord_text(place.points, close=True, height=h))
     look = ""
-    if place.view is not None and place.kind == "point":
-        distance, heading, tilt = place.view
-        lat, lon = place.points[0]
+    if place.view is not None:
+        lat, lon, distance, heading, tilt = place.view
         look = "<LookAt><longitude>{:.8f}</longitude><latitude>{:.8f}" \
             "</latitude><altitude>0</altitude><heading>{:g}</heading>" \
             "<tilt>{:g}</tilt><range>{:g}</range></LookAt>".format(

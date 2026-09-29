@@ -128,6 +128,16 @@ class PathStop(Stop):
         return self.pose_at(self.glide)
 
 
+def clock(seconds):
+    """Время тура для панели: «м:сс», с часами - «ч:мм:сс»."""
+    total = int(max(0.0, seconds) + 0.5)
+    hours, rest = divmod(total, 3600)
+    minutes, secs = divmod(rest, 60)
+    if hours:
+        return "%d:%02d:%02d" % (hours, minutes, secs)
+    return "%d:%02d" % (minutes, secs)
+
+
 class Tour:
     """Перелёты от позы start по остановкам stops с паузой pause."""
 
