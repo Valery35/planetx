@@ -33,9 +33,10 @@ MAX_POINTS = 4000  # точек на линию или контур, не бол
 SHAPE_POINTS = 800
 
 Shape = namedtuple("Shape",
-                   "kind points color width fill name height extrude",
+                   "kind points color width fill name height extrude "
+                   "icon",
                    defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
-                             False))
+                             False, "dot"))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
@@ -43,7 +44,8 @@ kind - "point", "line" или "polygon". points - вершины (широта,
 цвет линии RGBA 0-255, width - толщина в логических пикселях, fill -
 цвет заливки многоугольника RGBA или None. name - подпись. height -
 подъём над рельефом в метрах, как «относительно земли» у Google Earth.
-extrude - стена от объекта до земли, у точки - стойка.
+extrude - стена от объекта до земли, у точки - стойка. icon - значок
+точки из core/icons.py, окрашенный цветом color.
 """
 
 

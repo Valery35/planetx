@@ -31,13 +31,14 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
 
-from ..core import lookat
+from ..core import icons, lookat
 from ..core.placetree import is_folder
 from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
                            WATER_NAMES)
 from ..qt_compat import enum, enum_int
+from .placeprops import icon_image
 
 # Роль данных строки: номер слоя QGIS, у строки «Глобус» - None.
 LAYER_ROLE = enum_int(enum(Qt, "ItemDataRole", "UserRole"))
@@ -53,6 +54,8 @@ BUILDINGS = "buildings"
 EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
+# Роль строки записанного тура: у неё своё меню.
+TOUR_ROLE = PLACE_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 DRAG = enum(Qt, "ItemFlag", "ItemIsDragEnabled")
 DROP = enum(Qt, "ItemFlag", "ItemIsDropEnabled")
@@ -124,6 +127,11 @@ VIEW_ICON = "/mIconCamera.svg"  # метка «Сохранить вид» с р
 def place_icon(place):
     """Значок метки: сохранённый вид, точка, линия или многоугольник.
     Вид, поставленный метке «Снимком вида», значок не меняет."""
+    if getattr(place, "tour", None):
+        return QgsApplication.getThemeIcon(
+            "/mTemporalNavigationMovie.svg")
+    if place.kind == "point" and place.shape.icon != icons.DEFAULT:
+        return icon_image(place.shape.icon, place.shape.color)
     name = VIEW_ICON if lookat.is_view_mark(
         place.kind, place.shape.points, place.view) \
         else PLACE_ICONS.get(place.kind, PLACE_ICONS["point"])
@@ -597,6 +605,8 @@ class LayerPanel(QWidget):
                 continue
             item = QTreeWidgetItem(parent, [node.name or tr("Без названия")])
             item.setData(0, PLACE_ROLE, node.key)
+            item.setData(0, TOUR_ROLE, bool(getattr(node, "tour",
+                                                    None)))
             item.setIcon(0, place_icon(node))
             if node.measure:
                 item.setToolTip(0, node.measure)
@@ -785,8 +795,11 @@ class LayerPanel(QWidget):
                        ("remove", tr("Удалить"))]
         elif key:
             actions = [("fly", tr("Подлететь"))]
-            if key.startswith("line:"):
+            if item.data(0, TOUR_ROLE):
+                actions.append(("tour", tr("Запустить тур")))
+            elif key.startswith("line:"):
                 actions.append(("tour", tr("Тур по пути")))
+                actions.append(("profile", tr("Профиль высот")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),

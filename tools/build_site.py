@@ -123,6 +123,26 @@ RU = {
                    "Пункт меню «Подлететь» ведёт камеру к охвату слоя.",
     "project.fig": "Пермь с высоты 40 км. Магистрали, железные дороги, "
                    "номера дорог и названия пунктов поверх космоснимка.",
+    "places.eyebrow": "Метки, время, измерения",
+    "places.h2": "Свои метки, их время и измерения",
+    "places.sub": "Метки, пути и многоугольники рисуются щелчками "
+                  "по глобусу и хранятся в «Моих метках», как в Google "
+                  "Earth. У метки бывают значок, своё время и свой вид. "
+                  "Файлы KML Google Earth открываются и сохраняются. "
+                  "Пункт «Демо «Пермь»» меню «Сцена» показывает всё сразу.",
+    "places.fig": "Демо «Пермь». Шкала времени на 11:30-13:00, видна "
+                  "Эспланада, маршрут прогулки и 3D-здания.",
+    "places.c1.h": "Значки и время",
+    "places.c1.p": "35 значков меток окрашиваются цветом метки. Момент "
+                   "или промежуток метки задаёт её место на шкале "
+                   "времени, метки вне промежутка скрыты.",
+    "places.c2.h": "Линейка и профиль высот",
+    "places.c2.p": "Длина на карте и по рельефу, курс, площадь. Профиль "
+                   "высот пути с набором высоты и уклонами. Координаты "
+                   "в градусах, UTM или MGRS.",
+    "places.c3.h": "Туры",
+    "places.c3.p": "Тур облетает метки или проигрывает запись движения "
+                   "камеры. Тур записывается кадрами PNG для ролика.",
     "controls.eyebrow": "Управление",
     "controls.h2": "Навигация мышью и клавиатурой",
     "controls.sub": "Навигация повторяет Google Earth. Значок "
@@ -255,6 +275,27 @@ EN = {
                    "menu item takes the camera to the layer extent.",
     "project.fig": "Perm from 40 km. Motorways, railways, road numbers "
                    "and place names over satellite imagery.",
+    "places.eyebrow": "Places, time, measurements",
+    "places.h2": "Your places, their time and measurements",
+    "places.sub": "Placemarks, paths and polygons are drawn with clicks "
+                  "on the globe and kept in My Places, as in Google "
+                  "Earth. A placemark can have an icon, a time and a view "
+                  "of its own. Google Earth KML files open and save. "
+                  "Perm demo in the Scene menu shows it all at once.",
+    "places.fig": "Perm demo. The time slider at 11:30-13:00 shows the "
+                  "Esplanade, the walk route and 3D buildings.",
+    "places.c1.h": "Icons and time",
+    "places.c1.p": "35 placemark icons take the placemark colour. A "
+                   "moment or interval puts the placemark on the time "
+                   "slider, placemarks outside the interval are hidden.",
+    "places.c2.h": "Ruler and elevation profile",
+    "places.c2.p": "Map and ground length, heading, area. The elevation "
+                   "profile of a path with ascent and slopes. Coordinates "
+                   "in degrees, UTM or MGRS.",
+    "places.c3.h": "Tours",
+    "places.c3.p": "A tour flies over placemarks or plays a recorded "
+                   "camera movement. A tour records to PNG frames for a "
+                   "video.",
     "controls.eyebrow": "Controls",
     "controls.h2": "Mouse and keyboard navigation",
     "controls.sub": "Navigation follows Google Earth. The View "
@@ -504,6 +545,24 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
   </div>
 </section>
 
+<section id="places">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="places.eyebrow"></div>
+    <h2 data-i18n="places.h2"></h2>
+    <p class="sub" data-i18n="places.sub"></p>
+    <figure><img alt="" src="@DEMO@">
+      <figcaption data-i18n="places.fig"></figcaption></figure>
+    <div class="trio">
+      <div class="card"><h3 data-i18n="places.c1.h"></h3>
+        <p data-i18n="places.c1.p"></p></div>
+      <div class="card"><h3 data-i18n="places.c2.h"></h3>
+        <p data-i18n="places.c2.p"></p></div>
+      <div class="card"><h3 data-i18n="places.c3.h"></h3>
+        <p data-i18n="places.c3.p"></p></div>
+    </div>
+  </div>
+</section>
+
 <section id="controls">
   <div class="wrap">
     <div class="eyebrow" data-i18n="controls.eyebrow"></div>
@@ -630,6 +689,7 @@ def main():
             ("@CAUCASUS@", image("caucasus.jpg")),
             ("@EARTH@", image("earth.jpg")),
             ("@PERM@", image("perm.jpg")),
+            ("@DEMO@", image("demo.jpg")),
             ("@CONTROLS@", CONTROLS),
             ("@VERSION@", version()),
             ("@TEXTS@", json.dumps({"ru": RU, "en": EN},

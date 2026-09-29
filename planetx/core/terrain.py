@@ -197,7 +197,7 @@ class HeightStore:
                 return float(sample(tile, u, v)) * self.scale
         return 0.0
 
-    def heights_at(self, lats, lons):
+    def heights_at(self, lats, lons, scaled=True):
         """Высоты рельефа в массиве точек, float64.
 
         То же, что height_at по каждой точке, но тайл подбирается
@@ -207,7 +207,7 @@ class HeightStore:
         lats = np.asarray(lats, dtype=np.float64)
         lons = np.asarray(lons, dtype=np.float64)
         out = np.zeros(lats.shape)
-        if not self.scale or not lats.size:
+        if (scaled and not self.scale) or not lats.size:
             return out
         lat = np.clip(lats, -85.05112878, 85.05112878)
         u = ((lons + 180.0) / 360.0) % 1.0
@@ -231,7 +231,9 @@ class HeightStore:
                 pick = idx[(tx == x) & (ty == y)]
                 out[pick] = sample(tile, u[pick], v[pick])
                 left[pick] = False
-        return out * self.scale
+        # scaled=False - настоящие высоты, для линейки и профиля. Они
+        # нужны и при выключенном рельефе.
+        return out * self.scale if scaled else out
 
     def range_for(self, key):
         """Наименьшая и наибольшая высота для тайла подложки key.

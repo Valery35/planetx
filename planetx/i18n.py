@@ -242,12 +242,18 @@ EN = {
     "и сохранёнными видами, чтение и запись KML и KMZ.":
         "My Places with folders, placemarks, paths, polygons and saved "
         "views, reading and writing KML and KMZ.",
-    "Линейка на эллипсоиде WGS84, подъём и выдавливание меток.":
-        "Ruler on the WGS84 ellipsoid, lifting and extruding places.",
-    "Туры по меткам и вдоль путей, запись тура кадрами PNG "
-    "для видео.":
-        "Tours over places and along paths, recording a tour as PNG frames "
-        "for a video.",
+    "Линейка на эллипсоиде WGS84 и по рельефу, профиль высот, "
+    "координаты в градусах, UTM и MGRS.":
+        "A ruler on the WGS84 ellipsoid and along the terrain, the "
+        "elevation profile, coordinates in degrees, UTM and MGRS.",
+    "Значки меток, время меток со шкалой времени, подъём "
+    "и выдавливание меток.":
+        "Placemark icons, placemark time with a time slider, lifting "
+        "and extruding places.",
+    "Туры по меткам и вдоль путей, запись тура с экрана "
+    "и кадрами PNG для видео, демо «Пермь».":
+        "Tours over places and along paths, recording a tour from the "
+        "screen and as PNG frames for a video, the Perm demo.",
     "Растущие треки по «Временному контроллеру» QGIS.":
         "Growing tracks along the QGIS Temporal Controller.",
     "Сцены в файл, снимок вида в файл и в макет QGIS.":
@@ -273,6 +279,23 @@ EN = {
         "the controls is chosen in the view properties.",
     "Инструменты управления всегда на экране":
         "Navigation controls always on screen",
+    "с. ш.": "N",
+    "ю. ш.": "S",
+    "в. д.": "E",
+    "з. д.": "W",
+    "Координаты": "Coordinates",
+    "Формат": "Format",
+    "Десятичные градусы": "Decimal degrees",
+    "Градусы, минуты, секунды": "Degrees, minutes, seconds",
+    "Как записаны координаты в строке состояния и в окне "
+    "«Объекты». Поле «Поиск» понимает все четыре формата "
+    "независимо от выбора. Выше 84° северной и ниже 80° "
+    "южной широты UTM и MGRS заменяются десятичными "
+    "градусами.":
+        "How coordinates are written in the status line and the Features "
+        "window. The Search field understands all four formats whatever "
+        "the choice. North of 84° and south of 80° UTM and MGRS are "
+        "replaced with decimal degrees.",
     "Кольцо компаса, джойстики и ползунок высоты в правом верхнем "
     "углу вида, как в Google Earth. Без флажка они появляются, "
     "когда курсор подходит к углу вида, с флажком видны всё "
@@ -419,6 +442,41 @@ EN = {
     "Щелчок по глобусу ставит метку. Новый щелчок переносит её.":
         "A click on the globe places the placemark. A new click moves it.",
     "Линейка": "Ruler",
+    "Длина на карте": "Map length",
+    "Длина по рельефу": "Ground length",
+    "Курс": "Heading",
+    "Азимут начала линии от севера по часовой стрелке "
+    "на эллипсоиде WGS84.":
+        "Azimuth of the start of the line clockwise from north on the "
+        "WGS84 ellipsoid.",
+    "Длина вдоль поверхности рельефа с подъёмами и спусками. "
+    "Высоты берутся из Mapzen Terrain Tiles, недостающие "
+    "загружаются. Пока они загружаются, перед числом стоит «≈».":
+        "Length along the terrain surface with its rises and falls. "
+        "Heights come from Mapzen Terrain Tiles, missing ones are loaded. "
+        "While they load, the number is preceded by «≈».",
+    "Профиль высот": "Elevation profile",
+    "График высоты вдоль линии или пути с наибольшей и наименьшей "
+    "высотой, набором и потерей высоты и уклонами.":
+        "A chart of height along the line or path with the highest and "
+        "lowest height, ascent, descent and slopes.",
+    "Точку можно перетащить мышью, Backspace убирает последнюю.":
+        "A point can be dragged with the mouse, Backspace removes the "
+        "last one.",
+    "Профиль высот: {name}": "Elevation profile: {name}",
+    "Нет данных": "No data",
+    "{distance}, высота {height}, уклон {slope}":
+        "{distance}, height {height}, slope {slope}",
+    "Отметьте на глобусе хотя бы две точки.":
+        "Mark at least two points on the globe.",
+    "Длина по карте {flat}, по рельефу {ground}. Наименьшая "
+    "высота {low}, наибольшая {high}. Набор высоты {gain}, "
+    "потеря {loss}. Средний уклон {mean}, наибольший {max}.":
+        "Map length {flat}, ground length {ground}. Lowest height {low}, "
+        "highest {high}. Ascent {gain}, descent {loss}. Mean slope "
+        "{mean}, maximum {max}.",
+    "Высоты ещё загружаются, числа уточнятся.":
+        "Heights are still loading, the numbers will be refined.",
     "Линейка. Длина, периметр и площадь на эллипсоиде, сохранение "
     "измерения в «Мои метки».":
         "Ruler. Length, perimeter and area on the ellipsoid, the "
@@ -657,6 +715,77 @@ EN = {
         "Zero lays the object on the ground.",
     "Высота над землёй": "Height above ground",
     "Выдавить до земли": "Extend to ground",
+    "Значок": "Icon",
+    "Кружок": "Circle", "Кнопка": "Pushpin", "Флаг": "Flag",
+    "Справка": "Information", "Фотоаппарат": "Camera", "Дом": "House",
+    "Вершина": "Peak", "Лес": "Forest", "Вода": "Water",
+    "Геодезический пункт": "Survey point", "Карьер": "Quarry",
+    "Пеший маршрут": "Hiking", "Лагерь": "Camp", "Автомобиль": "Car",
+    "Автобус": "Bus", "Железная дорога": "Railway", "Трамвай": "Tram",
+    "Аэропорт": "Airport", "Судно": "Ship", "Заправка": "Fuel",
+    "Стоянка": "Parking", "Больница": "Hospital", "Аптека": "Pharmacy",
+    "Школа": "School", "Храм": "Church", "Музей": "Museum",
+    "Гостиница": "Hotel", "Ресторан": "Restaurant", "Кафе": "Cafe",
+    "Магазин": "Shop", "Полиция": "Police", "Пожарная часть": "Fire station",
+    "Почта": "Post office", "Горные лыжи": "Skiing", "Купание": "Swimming",
+    "Нет": "None", "Момент": "Moment", "Промежуток": "Interval",
+    "Цвет значка метки, как цвет значка в Google Earth.":
+        "Color of the placemark icon, as the icon color in Google Earth.",
+    "Значок точки на глобусе и в списке. В KML он уходит "
+    "стандартным значком Google Earth той же темы.":
+        "Icon of the point on the globe and in the list. In KML it goes as "
+        "the standard Google Earth icon of the same theme.",
+    "Собственное время метки, как TimeStamp и TimeSpan "
+    "в Google Earth. Метка со временем видна, пока её время "
+    "попадает в промежуток шкалы времени внизу вида. Метка "
+    "без времени видна всегда.":
+        "The placemark's own time, as TimeStamp and TimeSpan in Google "
+        "Earth. A placemark with a time shows while its time falls into the "
+        "interval of the time slider at the bottom of the view. A placemark "
+        "without a time always shows.",
+    "Дата и время вида, как в Google Earth. Перелёт к метке "
+    "и тур ставят шкалу времени на это время.":
+        "Date and time of the view, as in Google Earth. A flight to the "
+        "placemark and a tour set the time slider to this time.",
+    "Дата/время": "Date/time",
+    "Записать тур, как в Google Earth. Двигайте камеру "
+    "мышью, клавишами или перелётами, повторный щелчок "
+    "останавливает запись. Тур ложится в «Мои метки».":
+        "Record a tour, as in Google Earth. Move the camera with the mouse, "
+        "keys or flights, a second click stops recording. The tour goes "
+        "into My Places.",
+    "Тур": "Tour",
+    "Демо «Пермь»": "Perm demo",
+    "Сцена с метками по Перми: значки, время прогулки на шкале, "
+    "виды, маршрут, выдавленный многоугольник, записанный облёт "
+    "и 3D-здания. Метки ложатся новой папкой в «Мои метки».":
+        "A scene with placemarks around Perm: icons, the time of a walk on "
+        "the time slider, views, a route, an extruded polygon, a recorded "
+        "flight and 3D buildings. The placemarks go into My Places as a new "
+        "folder.",
+    "Сохранить тур": "Save tour",
+    "Тур не записан, камера не двигалась.":
+        "The tour was not recorded, the camera did not move.",
+    "Запись тура {clock}. Повторный щелчок "
+    "по кнопке записи её заканчивает.":
+        "Recording a tour {clock}. A second click on the record button "
+        "ends it.",
+    "Проиграть: промежуток идёт вдоль шкалы, метки появляются "
+    "и скрываются по своему времени.":
+        "Play: the interval moves along the slider, placemarks appear and "
+        "hide by their time.",
+    "Промежуток времени меток. Бегунки тянутся по одному или "
+    "вместе за середину, щелчок по полосе переносит промежуток. "
+    "Метки вне промежутка скрыты, метки без времени видны "
+    "всегда.":
+        "The time interval of placemarks. The handles are dragged one at a "
+        "time or together by the middle, a click on the bar moves the "
+        "interval. Placemarks outside the interval are hidden, placemarks "
+        "without a time always show.",
+    "Скорость проигрывания. При ×1 промежуток проходит шкалу "
+    "за 20 секунд.":
+        "Playback speed. At ×1 the interval crosses the slider in 20 "
+        "seconds.",
     "Снимок вида метки": "Snapshot view",
     "Вид метки": "Place view",
     "Откуда смотрит камера, когда летит к метке или стоит на ней "

@@ -180,6 +180,72 @@ def buildings_wait():
     result["buildings_drawn"] = view.buildings.drawn
     save(view.grabFramebuffer(), "buildings.jpg", jpeg=True)
     window.set_extra("buildings", False)
+    QTimer.singleShot(500, profile_start)
+
+
+def profile_start():
+    # Линейка и профиль высот пути через Эльбрус.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(43.35, 42.445, 30000.0, 0.0, 40.0))
+    window._open_ruler()
+    window.ruler_dialog.tabs.setCurrentIndex(1)
+    for lat, lon in ((43.31, 42.40), (43.3499, 42.4453), (43.39, 42.49)):
+        window.ruler.add(lat, lon)
+    state["started"] = time.monotonic()
+    QTimer.singleShot(2000, profile_wait)
+
+
+def profile_wait():
+    window = state["window"]
+    ready = window.ruler.values(rubber=False)["ground_ready"]
+    if not ready and time.monotonic() - state["started"] < WAIT:
+        QTimer.singleShot(1000, profile_wait)
+        return
+    result["profile_ready"] = ready
+    save(window.ruler_dialog.grab().toImage(), "ruler.png")
+    window._ruler_profile()
+    dialog = window.profile_dialog
+    QgsApplication.processEvents()
+    save(dialog.grab().toImage(), "profile.png")
+    dialog.close()
+    window.ruler_dialog.close()
+    QTimer.singleShot(500, demo_start)
+
+
+def demo_start():
+    # Демо «Пермь» со шкалой времени на середину прогулки.
+    window = state["window"]
+    # Метки сценария картинок в кадре демо не нужны.
+    store = window.myplaces
+    store.set_visible_many({key: False for key in store.with_contents(
+        [state["places"]])})
+    state["demo"] = window.open_demo()
+    state["started"] = time.monotonic()
+    QTimer.singleShot(3000, demo_wait)
+
+
+def demo_wait():
+    import calendar
+    window = state["window"]
+    view = window.view
+    view._heartbeat()
+    spent = time.monotonic() - state["started"]
+    busy = view.navigator.flight is not None or view.load_missing
+    if busy and spent < BUILDINGS_WAIT:
+        QTimer.singleShot(1000, demo_wait)
+        return
+    result["demo_missing"] = view.load_missing
+    lo = calendar.timegm((2026, 9, 30, 6, 30, 0))
+    window.timebar.set_range(lo, lo + 5400.0)
+    QgsApplication.processEvents()
+    view.repaint()
+    save(window.grab().toImage(), "demo.jpg", jpeg=True)
+    if state.get("demo"):
+        window.myplaces.remove(state["demo"])
+    window.set_extra("buildings", False)
     QTimer.singleShot(500, finish)
 
 

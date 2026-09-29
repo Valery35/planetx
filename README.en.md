@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.16.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.17.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -100,8 +100,12 @@ and atmosphere, from space down to single streets.
 - **Selection.** Features selected on the QGIS map are highlighted on the
   globe, features found by a click on the globe are selected on the map.
 - **Ruler.** Line, path, polygon and circle by clicks on the globe.
-  Length, perimeter and area on the WGS84 ellipsoid. The measurement
-  is saved to My Places.
+  Length, perimeter and area on the WGS84 ellipsoid, ground length
+  and heading. Points are dragged with the mouse. The elevation
+  profile of a path shows ascent and slopes. The measurement is
+  saved to My Places.
+- **Coordinates.** Degrees, degrees-minutes-seconds, UTM or MGRS in
+  the status line, search understands all four.
 - **My Places.** Placemarks, paths and polygons are drawn by clicks
   on the globe. They, saved views and measurements sit in the My Places
   folder of the Places section, as in Google Earth. The places file is
@@ -111,14 +115,20 @@ and atmosphere, from space down to single streets.
   flies over the checked places in the list order, along a path the
   camera travels the line. Places and folders are rearranged by
   dragging. The bar at the bottom of the view pauses the tour, steps
-  between stops and records the tour as PNG frames for a video.
+  between stops and records the tour as PNG frames for a video. The
+  record button records a tour from the screen, as in Google Earth.
+- **Placemark time.** A placemark can have a moment or an interval,
+  the time slider under the icon bar hides placemarks outside it.
+- **Perm demo.** The Scene menu opens a scene with placemarks around
+  Perm with icons, time, tours and 3D buildings.
 - **Scenes.** The whole view - camera, time, layers, settings and a
   places folder with its tour - saves to a file and opens on another
   computer.
 - **Tracks.** A point layer with a time field shows as growing paths of
   its objects along the QGIS Temporal Controller. The camera can follow
   along the motion.
-- **Place properties.** Name, description, colors, height above ground
+- **Place properties.** Name, description, icon, colors, time,
+  height above ground
   and extending to the ground. A path becomes a wall, a polygon a block.
 - **KML and KMZ.** Google Earth files open into My Places with folders,
   styles and placemark views. A folder saves to KMZ or KML.

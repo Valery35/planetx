@@ -35,12 +35,14 @@ class ViewToolbar(QFrame):
     properties_clicked = pyqtSignal()
     sync_toggled = pyqtSignal(bool)
     save_view_requested = pyqtSignal()
+    record_toggled = pyqtSignal(bool)
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal()
     snapshot_clicked = pyqtSignal()
     scene_save_requested = pyqtSignal()
     scene_open_requested = pyqtSignal()
+    demo_requested = pyqtSignal()
     layout_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -79,6 +81,12 @@ class ViewToolbar(QFrame):
             tr("Сохранить вид. Точка взгляда становится меткой в «Моих "
                "метках», перелёт к ней возвращает высоту, азимут "
                "и наклон."), self.save_view_requested)
+        self.record = self._button(
+            QgsApplication.getThemeIcon("/mActionRecord.svg"),
+            tr("Записать тур, как в Google Earth. Двигайте камеру "
+               "мышью, клавишами или перелётами, повторный щелчок "
+               "останавливает запись. Тур ложится в «Мои метки»."),
+            self.record_toggled, checkable=True)
         self._button(
             QgsApplication.getThemeIcon("/mActionSaveMapAsImage.svg"),
             tr("Снимок вида в файл PNG или JPEG, в том числе больше окна."),
@@ -103,6 +111,13 @@ class ViewToolbar(QFrame):
             self.scene_save_requested)
         menu.addAction(tr("Открыть сцену…")).triggered.connect(
             self.scene_open_requested)
+        menu.addSeparator()
+        demo = menu.addAction(tr("Демо «Пермь»"))
+        demo.setToolTip(tr(
+            "Сцена с метками по Перми: значки, время прогулки на шкале, "
+            "виды, маршрут, выдавленный многоугольник, записанный облёт "
+            "и 3D-здания. Метки ложатся новой папкой в «Мои метки»."))
+        demo.triggered.connect(self.demo_requested)
         scene.setMenu(menu)
         self.layout().addWidget(scene)
         self.scene = scene

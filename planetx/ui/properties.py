@@ -13,6 +13,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QDoubleSpinBox,
                                  QFormLayout, QGroupBox, QVBoxLayout)
 
+from ..core.coords import FORMATS
 from ..core.places import AS_QGIS, LABEL_LANGUAGES, LOCAL
 from ..core.sync import BOTH, GLOBE_TO_MAP, MAP_TO_GLOBE
 from ..i18n import tr
@@ -49,7 +50,8 @@ class PropertiesDialog(QDialog):
 
     sources - подложки из core/basemap.py. state - словарь с ключами
     basemap, relief, scale, language, sync, follow, new_shown, auto,
-    nav - показ экранных органов навигации, auto или always.
+    nav - показ инструментов управления, auto или always, coords -
+    формат координат из core.coords.FORMATS.
     """
 
     auto_changed = pyqtSignal(bool)
@@ -60,6 +62,7 @@ class PropertiesDialog(QDialog):
     follow_changed = pyqtSignal(bool)
     new_shown_changed = pyqtSignal(bool)
     nav_chosen = pyqtSignal(str)
+    coords_chosen = pyqtSignal(str)
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -165,6 +168,22 @@ class PropertiesDialog(QDialog):
         navigation = QGroupBox(tr("Навигация"), self)
         QVBoxLayout(navigation).addWidget(self.nav)
 
+        self.coords = QComboBox(self)
+        names = {"decimal": tr("Десятичные градусы"),
+                 "dms": tr("Градусы, минуты, секунды"),
+                 "utm": "UTM", "mgrs": "MGRS"}
+        self.coords.addItems([names[fmt] for fmt in FORMATS])
+        self.coords.setToolTip(tr(
+            "Как записаны координаты в строке состояния и в окне "
+            "«Объекты». Поле «Поиск» понимает все четыре формата "
+            "независимо от выбора. Выше 84° северной и ниже 80° "
+            "южной широты UTM и MGRS заменяются десятичными "
+            "градусами."))
+        self.coords.currentIndexChanged.connect(
+            lambda index: self.coords_chosen.emit(FORMATS[index]))
+        coordinates = QGroupBox(tr("Координаты"), self)
+        QFormLayout(coordinates).addRow(tr("Формат"), self.coords)
+
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Close"), self)
         buttons.rejected.connect(self.close)
@@ -175,6 +194,7 @@ class PropertiesDialog(QDialog):
         layout.addWidget(canvas)
         layout.addWidget(layers)
         layout.addWidget(navigation)
+        layout.addWidget(coordinates)
         layout.addStretch(1)
         layout.addWidget(buttons)
         self.set_state(state)
@@ -182,7 +202,8 @@ class PropertiesDialog(QDialog):
     def set_state(self, state):
         """Показать состояние окна. Сигналы при этом не идут."""
         widgets = [self.basemap, self.scale, self.language, self.sync,
-                   self.follow, self.new_shown, self.auto, self.nav]
+                   self.follow, self.new_shown, self.auto, self.nav,
+                   self.coords]
         for widget in widgets:
             widget.blockSignals(True)
         self.basemap.setCurrentIndex(state["basemap"])
@@ -199,5 +220,8 @@ class PropertiesDialog(QDialog):
         self.follow.setChecked(state["follow"])
         self.new_shown.setChecked(state["new_shown"])
         self.nav.setChecked(state.get("nav") == "always")
+        fmt = state.get("coords", FORMATS[0])
+        self.coords.setCurrentIndex(FORMATS.index(fmt)
+                                    if fmt in FORMATS else 0)
         for widget in widgets:
             widget.blockSignals(False)

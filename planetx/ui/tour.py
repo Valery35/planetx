@@ -155,6 +155,8 @@ class TourPlayer(QObject):
     """
 
     message = pyqtSignal(str)
+    # Тур пришёл к новой остановке, core.tour.Stop.
+    stop_reached = pyqtSignal(object)
 
     def __init__(self, view, stops, parent=None):
         super().__init__(parent)
@@ -179,6 +181,7 @@ class TourPlayer(QObject):
         self.offset = 0  # номер первой остановки нынешнего тура
         self.t = 0.0  # время тура на последнем кадре
         self.playing = False
+        self._reached = None  # номер остановки, о которой сказано
         view.changed.connect(self.tick)
 
     @property
@@ -206,6 +209,7 @@ class TourPlayer(QObject):
             return
         k = min(max(k, 0), len(self.stops) - 1)
         self.offset = k
+        self._reached = None
         self.tour = Tour(self.nav.pose, self.stops[k:],
                          self.bar.pause.value(), self.view.camera.fov_y)
         self.t = 0.0
@@ -305,6 +309,9 @@ class TourPlayer(QObject):
 
     def _show(self):
         stop = self.stops[self.index] if self.stops else None
+        if stop is not None and self.index != self._reached:
+            self._reached = self.index
+            self.stop_reached.emit(stop)
         self.bar.set_state(self.playing, self.index, len(self.stops),
                            stop.name if stop else "")
         if self.tour is not None:

@@ -32,6 +32,7 @@
 """
 import ctypes
 import math
+import os
 import time
 from collections import deque
 
@@ -40,10 +41,12 @@ from OpenGL import GL
 from OpenGL.raw.GL.VERSION.GL_1_1 import glDrawArrays as raw_draw_arrays
 from OpenGL.raw.GL.VERSION.GL_1_5 import (glBeginQuery, glEndQuery,
                                           glGetQueryObjectuiv)
+from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QPointF, QRectF, Qt
 from qgis.PyQt.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QImage,
                              QPainter, QPainterPath, QPen, QPolygonF)
 
+from ..core import icons
 from ..core.ellipsoid import geodetic_to_ecef, surface_normal
 from ..core.layer_labels import dark
 from ..core.places import KIND, identity, select_labels
@@ -117,6 +120,8 @@ STYLES = {
     # Подпись слоя проекта по умолчанию. Цвет и кегль подписи слоя
     # приходят из QGIS, для них стиль заводит layer_style.
     "layer": (12, False, False, QColor(255, 255, 255, 245), 0.0, None),
+    # Длина отрезка линейки, жёлтая, как её линия.
+    "ruler": (12, True, False, QColor(255, 214, 0, 250), 0.0, None),
     # Экватор, тропики и полярные круги, жёлтые, как в Google Earth.
     "circle": (11, False, False, QColor(255, 230, 0, 240), 0.0, None),
 }
@@ -139,6 +144,48 @@ ROUND_JOIN = enum(Qt, "PenJoinStyle", "RoundJoin")
 
 HALO_LIGHT = QColor(255, 255, 255, 200)  # обводка тёмной подписи слоя
 GAP_DOT = 3.0  # отступ подписи точки слоя от самой точки, пикселей
+ICON_DOT = 8.0  # полуразмер значка метки, логических пикселей
+ROUND_DOT = 4.5  # полуразмер кружка метки
+
+
+def icon_style(icon, rgba):
+    """Класс надписи для значка icon (core/icons.py) цвета rgba. Стиль
+    заводится один раз на сочетание, место в очереди - как у «mark»."""
+    kind = "icon:%s:%s" % (icon, ",".join(str(int(c)) for c in rgba))
+    if kind not in STYLES:
+        dot = ROUND_DOT if icon == icons.DEFAULT else ICON_DOT
+        STYLES[kind] = (12, False, False, QColor(255, 255, 255, 245), dot,
+                        kind)
+        KIND[kind] = KIND["mark"]
+    return kind
+
+
+def svg_file(relative):
+    """Полный путь SVG из библиотеки QGIS или None."""
+    for folder in QgsApplication.svgPaths():
+        path = os.path.join(folder, relative)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _draw_icon(painter, marker, cx, cy, r, halo):
+    """Значок метки: SVG из библиотеки QGIS, окрашенный цветом метки,
+    кружок - без SVG. Нет файла - кружок."""
+    _, icon, rgba = marker.split(":", 2)
+    color = QColor(*(int(v) for v in rgba.split(",")))
+    path = svg_file(icons.svg(icon)) if icon != icons.DEFAULT else None
+    if path is not None:
+        size = 2.0 * r
+        image, _ = QgsApplication.svgCache().svgAsImage(
+            path, size, color, QColor(40, 30, 0, 230), 1.0, 1.0)
+        if not image.isNull():
+            painter.drawImage(QPointF(cx - image.width() / 2.0,
+                                      cy - image.height() / 2.0), image)
+            return
+    painter.setPen(QPen(QColor(60, 40, 0, 230), halo))
+    painter.setBrush(QBrush(color))
+    painter.drawEllipse(QRectF(cx - r, cy - r, 2.0 * r, 2.0 * r))
 
 
 def layer_style(size, rgba, point):
@@ -239,6 +286,10 @@ class _Style:
     def _marker(self, painter, anchor):
         if self.marker == "gap":
             return  # точку слоя рисует QGIS в картинке наложения
+        if self.marker.startswith("icon:"):
+            _draw_icon(painter, self.marker, anchor[0], anchor[1],
+                       self.dot, self.halo * 0.8)
+            return
         painter.setPen(QPen(HALO, self.halo * 0.8))
         painter.setBrush(QBrush(self.color))
         r = self.dot

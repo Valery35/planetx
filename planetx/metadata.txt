@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.16.0
+version=0.17.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -18,6 +18,12 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       a coordinate grid, stars with the Milky Way, clouds and land and
       sea temperature from NASA GIBS. 3D buildings from
       OpenStreetMap rise from the ground near the camera.
+      The ruler measures ground length and heading, the elevation
+      profile of a path shows ascent and slopes. Coordinates show
+      in degrees, degrees-minutes-seconds, UTM or MGRS. Places
+      have icons and a time of their own with a time slider, as
+      in Google Earth, and a tour can be recorded from the screen.
+      The Perm demo in the Scene menu shows it all.
       Labels stay upright, do not overlap and hide behind mountains and
       the horizon. The label language follows QGIS or is chosen from
       15 languages and local names.
@@ -67,7 +73,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.16.0 3D buildings in the Layers panel, as in Google
+changelog=0.17.0 Ruler with ground length, heading and dragging
+      of points. Elevation profile of lines and paths. Coordinates
+      in degrees, DMS, UTM or MGRS, search understands all four.
+      Placemark icons, placemark time with a time slider as in
+      Google Earth, recording a tour from the screen, all kept in
+      KML. The Perm demo in the Scene menu.
+      0.16.0 3D buildings in the Layers panel, as in Google
       Earth. OpenStreetMap buildings rise as blocks when the camera
       is closer than 6 km to the ground, with the height from
       OpenStreetMap or from the number of floors. They are off by

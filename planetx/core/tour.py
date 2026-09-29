@@ -51,6 +51,9 @@ class Stop:
     """Остановка тура: название и поза в конце перелёта."""
 
     glide = 0.0  # секунд движения после прилёта
+    # Время остановки для шкалы времени, пара строк core.when:
+    # время вида метки, иначе время самой метки.
+    time = None
 
     def __init__(self, name, lat, lon, distance, heading=0.0, tilt=0.0):
         self.name = name
@@ -126,6 +129,64 @@ class PathStop(Stop):
 
     def end_pose(self):
         return self.pose_at(self.glide)
+
+
+class RecordedStop(Stop):
+    """Записанное движение камеры, как запись тура Google Earth.
+
+    samples - позы (время, широта, долгота, расстояние, азимут, наклон)
+    с началом времени 0. Тур подлетает к первой позе, как к любой
+    остановке, и проигрывает запись вместо проезда. Между позами
+    широта и наклон идут линейно, долгота и азимут - без скачка через
+    180° и 360°, расстояние - по логарифму, так приближение ровное.
+    """
+
+    def __init__(self, name, samples):
+        data = np.asarray(samples, dtype=np.float64).reshape(-1, 6)
+        data = data[np.argsort(data[:, 0], kind="stable")]
+        data[:, 0] -= data[0, 0]
+        self.samples = data
+        self.t = data[:, 0]
+        # Поля lon и heading - поза первой остановки, у массивов имена свои.
+        self.lons = np.degrees(np.unwrap(np.radians(data[:, 2])))
+        self.headings = np.degrees(np.unwrap(np.radians(data[:, 4])))
+        self.log_distance = np.log(np.maximum(data[:, 3], 1.0))
+        self.glide = float(self.t[-1])
+        super().__init__(name, float(data[0, 1]), float(data[0, 2]),
+                         float(data[0, 3]), float(data[0, 4]),
+                         float(data[0, 5]))
+
+    def pose_at(self, t):
+        t = min(max(t, 0.0), self.glide)
+        i = int(np.searchsorted(self.t, t, side="right")) - 1
+        i = min(max(i, 0), len(self.t) - 1)
+        j = min(i + 1, len(self.t) - 1)
+        span = self.t[j] - self.t[i]
+        k = (t - self.t[i]) / span if span > 0 else 0.0
+
+        def mix(values):
+            return float(values[i] + k * (values[j] - values[i]))
+        lon = (mix(self.lons) + 180.0) % 360.0 - 180.0
+        return Pose(mix(self.samples[:, 1]), lon,
+                    math.exp(mix(self.log_distance)),
+                    mix(self.headings) % 360.0, mix(self.samples[:, 5]))
+
+    def end_pose(self):
+        return self.pose_at(self.glide)
+
+
+def thin(samples):
+    """Прореживание записи: на стоянке остаются первая и последняя поза,
+    время между ними сохраняется."""
+    out = []
+    for sample in samples:
+        pose = tuple(sample[1:])
+        if len(out) >= 2 and tuple(out[-1][1:]) == pose \
+                and tuple(out[-2][1:]) == pose:
+            out[-1] = tuple(sample)
+        else:
+            out.append(tuple(sample))
+    return out
 
 
 def clock(seconds):

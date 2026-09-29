@@ -14,6 +14,7 @@ import os
 import sys
 import time
 
+import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsProject, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, QMimeData, Qt, QTimer, pyqtSignal
@@ -23,11 +24,14 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
-from ..core import basemap, clouds, lookat, stars, temperature
-from ..core.ellipsoid import ecef_to_geodetic
+from ..core import basemap, clouds, lookat, stars, temperature, when
+from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
+from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
+                            number, segment_midpoints)
 from ..core import graticule
 from ..core.features import Shape
-from ..core.flight import Flight, fit_view, parse_latlon
+from ..core.coords import FORMATS as COORD_FORMATS, parse_point
+from ..core.flight import Flight, fit_view
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                             place_text, search_url)
 from ..core.mipmap import mip_chain
@@ -38,7 +42,7 @@ from ..core.kml import KmlError, read_file as read_kml_file, read_kml, \
     write_kml, write_kmz
 from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
-from ..core.tour import PathStop, Stop
+from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
@@ -60,7 +64,9 @@ from .layer_labels import LayerLabels
 from .legend import TemperatureLegend
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
-from .measure import Ruler, RulerDialog
+from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
+from .measure import _xy as ruler_xy
+from .elevation import HeightSource, ProfileDialog
 from .myplaces import MyPlaces
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
@@ -75,6 +81,7 @@ from .snapshot import SnapshotDialog
 from .tour import TourPlayer
 from .track import TrackDialog, TrackManager
 from .sync import MapSync
+from .timebar import TimeBar
 from .toolbar import ViewToolbar
 
 TERRAIN_ATTRIBUTION = (
@@ -101,6 +108,8 @@ GRID_WIDTH = 1.0
 CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
+COORDS_KEY = "PlanetX/coords"  # формат координат
+RECORD_PERIOD = 100  # мс между позами записи тура
 SYNC_KEY = "PlanetX/sync"  # направление синхронизации с картой
 # Тип KML в буфере обмена, как у Google Earth. Рядом кладётся текст.
 KML_MIME = "application/vnd.google-earth.kml+xml"
@@ -239,6 +248,37 @@ def distance_text(metres):
               .replace(",", " "))
 
 
+class _RulerVertices:
+    """Точки линейки, которые тянутся мышью (render/view.py,
+    vertex_tool). Точка хватается, если курсор ближе GRAB_PIXELS."""
+
+    def __init__(self, window):
+        self.window = window
+        self.index = None
+
+    def grab(self, px, py):
+        window = self.window
+        points = window.ruler.points
+        if not points:
+            return False
+        view = window.view
+        lats = np.array([p[0] for p in points])
+        lons = np.array([p[1] for p in points])
+        xyz = geodetic_to_ecef(lats, lons, view.store.heights_at(lats, lons))
+        pixels, front = view.camera.project(xyz)
+        self.index = nearest_vertex(pixels, front, px, py,
+                                    GRAB_PIXELS * view.devicePixelRatioF())
+        return self.index is not None
+
+    def move(self, px, py):
+        found = self.window._ground(px, py)
+        if found is not None and self.index is not None:
+            self.window.ruler.move(self.index, *found)
+
+    def drop(self):
+        self.index = None
+
+
 class GlobeWindow(QWidget):
     """Отдельное окно поверх главного окна QGIS."""
 
@@ -258,6 +298,11 @@ class GlobeWindow(QWidget):
             os.path.dirname(os.path.dirname(__file__)), "icon.svg")))
 
         self.view = GlobeView(self)
+        # Шкала времени меток, своя, как в Google Earth. Она нужна
+        # до первого чтения «Моих меток».
+        self.timebar = TimeBar(self.view)
+        self._time_range = None
+        self.timebar.range_changed.connect(self._time_changed)
         self.view.on_motion = set_moving
         self.view.load_changed.connect(self._show_state)
         self.panel = LayerPanel(self)
@@ -319,6 +364,11 @@ class GlobeWindow(QWidget):
         language = settings.value(LANGUAGE_KEY, AS_QGIS) or AS_QGIS
         self._language = language if language in LABEL_LANGUAGES \
             or language == LOCAL else AS_QGIS
+        # Формат координат, по умолчанию десятичные градусы. Решение
+        # помощника от 30 сентября 2026 года, утверждает автор.
+        coords = QgsSettings().value(COORDS_KEY, COORD_FORMATS[0])
+        self.coords = coords if coords in COORD_FORMATS \
+            else COORD_FORMATS[0]
         self._places_source = None
         # Масштаб ставится до первой загрузки, сетки сразу собираются
         # с ним.
@@ -386,6 +436,14 @@ class GlobeWindow(QWidget):
         self.panel.places_action.connect(self._places_action)
         self.ruler = Ruler(self)
         self.ruler.changed.connect(self._refresh_shapes)
+        self.ruler.changed.connect(self._ruler_changed)
+        self.ruler.heights = self._true_heights
+        self.ruler.has_heights = self._has_height_tile
+        self.ruler.ask_heights = self.view.want_tool_heights
+        self.profile_dialog = None
+        self._profile_mark = None
+        self.ruler_vertices = _RulerVertices(self)
+        self.view.undo_point.connect(self._undo_point)
         self.ruler_dialog = None
         self.toolbar.ruler_clicked.connect(self._open_ruler)
         # Новая метка: тот же механизм точек, своё окно.
@@ -402,12 +460,21 @@ class GlobeWindow(QWidget):
         self.myplaces.load()
         # Тур по отмеченным «Моим меткам».
         self.tour = TourPlayer(self.view, self._tour_stops, self)
+        # Запись тура с экрана, как в Google Earth.
+        self._recording = None
+        self._record_timer = QTimer(self)
+        self._record_timer.setInterval(RECORD_PERIOD)
+        self._record_timer.timeout.connect(self._record_sample)
+        self.toolbar.record_toggled.connect(self._record_toggled)
+        self.tour.stop_reached.connect(
+            lambda stop: self._show_time(stop.time))
         # Растущие треки точечных слоёв по времени контроллера QGIS.
         self.tracks = TrackManager(self.view, self)
         self.tracks.changed.connect(self._refresh_shapes)
         self.panel.track_requested.connect(self._open_track)
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
+        self.toolbar.demo_requested.connect(self.open_demo)
         self.tour.message.connect(
             lambda text: setattr(self, "message", (text, time.monotonic())))
         # Запись тура кадрами PNG по одной шкале с треками.
@@ -509,7 +576,8 @@ class GlobeWindow(QWidget):
                 "relief": self._relief, "scale": self._scale,
                 "language": self._language, "sync": self.sync.direction,
                 "follow": self.follow, "new_shown": self.new_shown,
-                "auto": self.auto_refresh, "nav": self.navpad.mode}
+                "auto": self.auto_refresh, "nav": self.navpad.mode,
+                "coords": self.coords}
 
     def set_sync_direction(self, way):
         """Кто за кем следует при синхронизации с картой."""
@@ -874,6 +942,9 @@ class GlobeWindow(QWidget):
         bar = self.toolbar.geometry()
         self.spinner.move(bar.right() + MARGIN,
                           bar.center().y() - self.spinner.height() // 2)
+        # Шкала времени - под панелью значков, как в Google Earth.
+        self.timebar.anchor = lambda: (bar.left(), bar.bottom() + MARGIN)
+        self.timebar._place()
         # Шкала - в левом нижнем углу. Узкий вид: над подписью.
         bottom = self.view.height() - MARGIN
         if self.attribution.x() < MARGIN + self.legend.width():
@@ -1044,6 +1115,16 @@ class GlobeWindow(QWidget):
         if on and self.dirty:
             self.refresh()
 
+    def set_coords(self, fmt):
+        """Формат координат строки состояния и окна «Объекты»."""
+        if fmt not in COORD_FORMATS:
+            return
+        self.coords = fmt
+        QgsSettings().setValue(COORDS_KEY, fmt)
+        self._cursor_text = ""
+        self._update_cursor()
+        self._sync_properties()
+
     def _sync_properties(self):
         if self.properties is not None:
             self.properties.set_state(self.state())
@@ -1060,6 +1141,7 @@ class GlobeWindow(QWidget):
             self.properties.follow_changed.connect(self.set_follow)
             self.properties.new_shown_changed.connect(self.set_new_shown)
             self.properties.nav_chosen.connect(self.navpad.set_mode)
+            self.properties.coords_chosen.connect(self.set_coords)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()
@@ -1069,6 +1151,7 @@ class GlobeWindow(QWidget):
     def _heights(self, key, rgba, tile):
         self.terrain_errors.pop(key, None)
         self.view.add_heights(tile)
+        self._heights_arrived()
 
     def _loaded(self, key, rgba, prepared):
         self.errors.pop(key, None)
@@ -1106,7 +1189,7 @@ class GlobeWindow(QWidget):
     def fly(self, text=None):
         """Поиск из поля ввода: координаты - перелёт, иначе Nominatim."""
         text = self.place.text() if text is None else text
-        target = parse_latlon(text)
+        target = parse_point(text)
         if target is not None:
             self.panel.set_found([])
             self._found = []
@@ -1209,14 +1292,38 @@ class GlobeWindow(QWidget):
 
     def _places_changed(self):
         self.panel.set_places(self.myplaces.tree())
+        self._update_timebar()
         self._refresh_shapes()
+
+    def _update_timebar(self):
+        """Охват шкалы времени по видимым меткам со временем."""
+        extent = when.extent(p.time for p in self.myplaces.places
+                             if p.visible)
+        self.timebar.set_extent(extent)
+        self._time_range = self.timebar.range() if extent else None
+
+    def _time_changed(self, lo, hi):
+        self._time_range = (lo, hi)
+        self._refresh_shapes()
+
+    def _time_ok(self, place):
+        """Попадает ли время метки в промежуток шкалы."""
+        span = self._time_range
+        return span is None or when.visible(place.time, *span)
+
+    def _show_time(self, time):
+        """Шкала на время вида или метки, как у Google Earth."""
+        span = when.interval(time)
+        if span is not None and self._time_range is not None:
+            self.timebar.set_range(*span)
 
     def _refresh_shapes(self):
         """На глобусе видимые «Мои метки», треки и фигура открытой
         линейки."""
         # Метка с открытым окном свойств показывается с правками окна.
         shapes = [self.previews.get(p.key, p.shape)
-                  for p in self.myplaces.places if p.visible]
+                  for p in self.myplaces.places
+                  if p.visible and self._time_ok(p) and not p.tour]
         if getattr(self, "tracks", None) is not None:
             shapes += self.tracks.shapes()
         shapes += getattr(self, "grid_shapes", [])
@@ -1274,6 +1381,12 @@ class GlobeWindow(QWidget):
                         time.monotonic())
         self._show_state()
         return True
+
+    def open_demo(self):
+        """Демо «Пермь» из папки модуля, tools/make_demo.py."""
+        return self.open_scene(os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "demo",
+            "perm" + EXTENSION))
 
     def open_scene(self, path=None):
         """Сцена из файла на глобус. Возвращает ключ папки её меток."""
@@ -1377,6 +1490,86 @@ class GlobeWindow(QWidget):
 
     # Линейка.
 
+    def _true_heights(self, lats, lons):
+        """Настоящие высоты рельефа, без вертикального масштаба."""
+        return self.view.store.heights_at(lats, lons, scaled=False)
+
+    def _has_height_tile(self, key):
+        return key in self.view.store.tiles
+
+    def _ruler_changed(self):
+        self._update_tool_marks()
+        dialog = self.profile_dialog
+        if dialog is not None and dialog.isVisible() \
+                and dialog.source is self.ruler:
+            dialog.refresh()
+
+    def _undo_point(self):
+        """Backspace над видом: последняя точка линейки."""
+        if self._ruler_open():
+            self.ruler.remove_last()
+
+    def _heights_arrived(self):
+        """Пришёл тайл высот: длина по рельефу и профиль уточняются."""
+        if self._ruler_open() and len(self.ruler.points) >= 2:
+            self.ruler_dialog.show_values()
+        dialog = self.profile_dialog
+        if dialog is not None and dialog.isVisible():
+            dialog.refresh()
+
+    def _update_tool_marks(self):
+        """Длины отрезков линейки у их середин и точка профиля под
+        курсором графика."""
+        marks = []
+        ruler = self.ruler
+        if self._ruler_open() and ruler.mode in ("line", "path",
+                                                 "polygon"):
+            points = ruler._points(True)
+            closed = ruler.mode == "polygon"
+            pairs = list(zip(points, points[1:]))
+            if closed and len(points) >= 3:
+                pairs.append((points[-1], points[0]))
+            unit = self.ruler_dialog.length_unit()
+            short = unit_short()[unit]
+            middles = segment_midpoints(points, closed)
+            for n, ((a, b), (lat, lon)) in enumerate(zip(pairs, middles)):
+                length = ruler.da.measureLine(ruler_xy([a, b]))
+                text = "{} {}".format(
+                    number(convert(length, unit, LENGTH_UNITS)), short)
+                marks.append(MarkPlace(-300000 - n, text, "ruler", 1, lat,
+                                       lon))
+        if self._profile_mark is not None:
+            marks.append(self._profile_mark)
+        self.view.tool_marks = marks
+        self.view.update()
+
+    def _open_profile(self, title, points, source):
+        """Окно «Профиль высот» для точек points() с высотами source."""
+        if self.profile_dialog is None:
+            self.profile_dialog = ProfileDialog(title, points, source, self)
+            self.profile_dialog.point_hovered.connect(self._profile_hover)
+            self.profile_dialog.finished.connect(
+                lambda *args: self._profile_hover(None))
+        else:
+            self.profile_dialog.set_points(title, points, source)
+        self.profile_dialog.show()
+        self.profile_dialog.raise_()
+
+    def _ruler_profile(self):
+        self._open_profile(tr("Линейка"), lambda: self.ruler._points(False),
+                           self.ruler)
+
+    def _profile_hover(self, point):
+        """Точка профиля под курсором графика - метка на глобусе."""
+        if point is None:
+            self._profile_mark = None
+        else:
+            lat, lon, height = point
+            self._profile_mark = MarkPlace(
+                -400000, tr("{value} м", value="{:.0f}".format(height)),
+                "mark", 1, lat, lon)
+        self._update_tool_marks()
+
     def _ruler_open(self):
         return self.ruler_dialog is not None and self.ruler_dialog.isVisible()
 
@@ -1386,13 +1579,17 @@ class GlobeWindow(QWidget):
         if self.ruler_dialog is None:
             self.ruler_dialog = RulerDialog(self.ruler, self)
             self.ruler_dialog.save_requested.connect(self._save_ruler)
+            self.ruler_dialog.profile_requested.connect(
+                self._ruler_profile)
             self.ruler_dialog.finished.connect(self._ruler_closed)
         self.ruler_dialog.show()
         self.ruler_dialog.raise_()
+        self.view.vertex_tool = self.ruler_vertices
         self._refresh_shapes()
         self._tool_cursor()
 
     def _ruler_closed(self, *args):
+        self.view.vertex_tool = None
         self.ruler.clear()
         self._refresh_shapes()
         self._tool_cursor()
@@ -1456,9 +1653,16 @@ class GlobeWindow(QWidget):
         if action == "fly":
             self.fly_to_place(item)
         elif action == "tour":
-            self.tour.start([self.place_stop(item, along=True)])
+            stop = self.place_stop(item, along=True)
+            stop.time = item.view_time or item.time
+            self.tour.start([stop])
         elif action == "properties":
             self._open_place_properties(item)
+        elif action == "profile":
+            points = list(item.shape.points)
+            self._open_profile(item.name, lambda: points, HeightSource(
+                self._true_heights, self._has_height_tile,
+                self.view.want_tool_heights))
         elif action == "snapshot":
             # «Снимок вида» Google Earth: вид глобуса сейчас становится
             # видом метки, по нему идут перелёт к метке и тур.
@@ -1646,6 +1850,11 @@ class GlobeWindow(QWidget):
         """
         points = place.shape.points
         name = place.shape.name
+        if place.tour:
+            # Записанный тур: проигрывание, перелёт - к его началу.
+            recorded = RecordedStop(name, place.tour)
+            return recorded if along else Stop(
+                name, *place.tour[0][1:])
         if along and place.kind == "line" and len(points) > 1:
             return PathStop(name, points)
         if place.view is not None:
@@ -1665,12 +1874,62 @@ class GlobeWindow(QWidget):
         stop = self.place_stop(place)
         self._fly_to(stop.lat, stop.lon, stop.distance, stop.heading,
                      stop.tilt)
+        self._show_time(place.view_time or place.time)
 
     def _tour_stops(self, folder=None):
         """Остановки тура: отмеченные метки папки folder и вложенных
         папок в порядке списка, None - все «Мои метки»."""
-        return [self.place_stop(p, along=True)
-                for p in self.myplaces.places_in(folder) if p.visible]
+        stops = []
+        for place in self.myplaces.places_in(folder):
+            if place.visible:
+                stop = self.place_stop(place, along=True)
+                stop.time = place.view_time or place.time
+                stops.append(stop)
+        return stops
+
+    def _record_toggled(self, on):
+        """Кнопка записи тура: начать или закончить и сохранить."""
+        if on:
+            self._recording = []
+            self._record_start = time.monotonic()
+            self._record_sample()
+            self._record_timer.start()
+            return
+        self._record_timer.stop()
+        samples = thin(self._recording or [])
+        self._recording = None
+        if len(samples) < 2 or samples[-1][0] <= 0.0:
+            self.message = (tr("Тур не записан, камера не двигалась."),
+                            time.monotonic())
+            self._show_state()
+            return
+        default = self.new_name(tr("Тур"))
+        name, ok = QInputDialog.getText(self, tr("Сохранить тур"),
+                                        tr("Название"), text=default)
+        if not ok:
+            return
+        self.save_recorded(samples, name.strip() or default)
+
+    def save_recorded(self, samples, name):
+        """Записанный тур в «Мои метки». Линия метки - точки
+        взгляда, на глобусе она не рисуется."""
+        points = [(s[1], s[2]) for s in samples]
+        return self.myplaces.add(
+            Shape("line", points, name=name), tour=list(samples),
+            folder=self.panel.current_folder())
+
+    def _record_sample(self):
+        """Поза камеры в запись, раз в RECORD_PERIOD."""
+        if self._recording is None:
+            return
+        pose = self.view.navigator.pose
+        t = time.monotonic() - self._record_start
+        self._recording.append((t, pose.lat, pose.lon, pose.distance,
+                                pose.heading, pose.tilt))
+        self.message = (tr("Запись тура {clock}. Повторный щелчок "
+                           "по кнопке записи её заканчивает.",
+                           clock=clock(t)), time.monotonic())
+        self._show_state()
 
     def save_view(self):
         """Вид глобуса меткой в «Моих метках», как в Google Earth.
@@ -1749,7 +2008,8 @@ class GlobeWindow(QWidget):
         self._mark("{:.5f}, {:.5f}".format(lat, lon), lat, lon)
         if self.identified is None:
             self.identified = IdentifyDialog(self)
-        self.identified.show_result(point_text(lat, lon, height), found)
+        self.identified.show_result(
+            point_text(lat, lon, height, fmt=self.coords), found)
 
     def _ground(self, px, py):
         """Широта и долгота точки рельефа под пикселем или None."""
@@ -1857,7 +2117,7 @@ class GlobeWindow(QWidget):
                     self.drawer.set_cursor((lat, lon))
                 scale = view.store.scale
                 text = point_text(lat, lon, h / scale if scale else None,
-                                  digits=5)
+                                  digits=5, fmt=self.coords)
         if text != self._cursor_text:
             self._cursor_text = text
             self._show_state()

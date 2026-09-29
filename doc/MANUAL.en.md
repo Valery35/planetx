@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.16.0
+Version 0.17.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -67,7 +67,8 @@ dragged with the mouse.
 
 The status line sits under the left panel. It usually shows the camera
 height, for example "Overview from 2 000 km". The second line shows the
-coordinates and elevation of the point under the cursor.
+coordinates and elevation of the point under the cursor. The coordinate
+format is chosen in the view properties.
 
 The line also reports loading:
 
@@ -150,8 +151,18 @@ keeps them all the time.
 ### Place search
 
 Type a place name into the Search field at the top of the panel, for
-example `Perm`, or coordinates in degrees, for example
-`58.0105, 56.2294`. Enter or the Search button starts the search.
+example `Perm`, or coordinates. Enter or the Search button starts the
+search.
+
+| Format | Example |
+|---|---|
+| Decimal degrees | `58.0105, 56.2294` |
+| Degrees, minutes, seconds | `58°00′37.8″ N, 56°13′45.8″ E` or `58 00 37.8 N 56 13 45.8 E` |
+| UTM | `40V 454464 6430139` |
+| MGRS | `40V DK 54464 30138` |
+
+Search also understands the coordinates copied from the status line
+of the globe together with the elevation.
 
 - Coordinates start a flight at once. The camera lands no higher than
   2 km from the point.
@@ -250,6 +261,7 @@ window. The window does not block work with the globe.
 | QGIS map | New layers straight to the globe | A new project layer is checked on the globe at once |
 | Update | Update automatically | The globe refreshes after every change without the Refresh button |
 | Navigation | Navigation controls always on screen | The ring, sticks and slider stay all the time, not only near the corner |
+| Coordinates | Format | Decimal degrees, degrees-minutes-seconds, UTM or MGRS in the status line and the Features window. North of 84° and south of 80° UTM and MGRS are replaced with decimal degrees |
 
 The default base map is Esri World Imagery, listed as an example. Esri
 sets its terms of use. OpenStreetMap comes next, then the XYZ Tiles
@@ -417,11 +429,13 @@ brings the previous look back.
 |---|---|
 | Name | Name in the list and label on the globe |
 | Description | Text of the placemark, it goes into KML too |
-| Color, Width | Color and width of the line and outline |
+| Icon | Point icon from the QGIS set, in KML the Google Earth icon of the same theme |
+| Color, Width | Color of the point icon, color and width of the line and outline |
 | Fill | Fill color of the polygon and of the wall |
 | Height above ground | Lift of the object above the terrain in metres. The Ground - Space slider under the field sets it from the ground to 100 km |
 | Extend to ground | A wall from the object to the ground, a post for a placemark |
-| Place view | Look point, range, heading and tilt of the camera at the place |
+| Time | Moment or interval of the placemark for the time slider |
+| Place view | Look point, range, heading, tilt of the camera at the place and the view date |
 
 Extending works with a height above zero. A path becomes a wall, a
 polygon becomes a block.
@@ -450,10 +464,36 @@ of that place, on empty space the root of My Places. Folders from the
 clipboard come in as folders. KML copied in Google Earth pastes the
 same way.
 
+### Placemark time and the time slider
+
+A placemark can have a time of its own, as in Google Earth. It is a
+moment or an interval, the Time field of the placemark properties. In
+KML the time is written as TimeStamp and TimeSpan. The view of a
+placemark has its own time, the Date/time field of the Place view
+section.
+
+<img src="figures/en/demo.jpg" width="600" alt="Perm demo with the time slider">
+
+When visible placemarks have a time, a time slider appears under the
+icon bar. It spans the placemark times from the earliest to the latest.
+
+| Part | What it does |
+|---|---|
+| Handles | Set the interval. Placemarks outside it are hidden, placemarks without a time always show |
+| Bar between the handles | Dragging moves the whole interval, a click on the bar centres it on the click |
+| ▶ | Playback, the interval moves along the slider |
+| ×1 | Playback speed, at ×1 the slider is crossed in 20 seconds |
+
+A flight to a placemark and a tour set the slider to the time of the
+placemark view, without it to the time of the placemark itself. The
+slider is its own and does not depend on the QGIS Temporal Controller
+that drives tracks.
+
 ### KML and KMZ
 
 Open KML or KMZ… puts a Google Earth file into My Places as a new folder
-named after the file. Folders, styles and placemark views are kept. The
+named after the file. Folders, styles, icons, times and placemark
+views are kept, `gx:Tour` becomes a recorded tour. The
 camera flies to the contents of the file.
 
 Save as KML… saves a folder or the whole My Places to KMZ or KML. The
@@ -467,16 +507,28 @@ The Ruler icon opens a window with the tabs Line, Path, Polygon and
 Circle. Points are put with clicks on the globe, a rubber band follows
 the cursor.
 
+<img src="figures/en/ruler.png" width="300" alt="Ruler">
+
 | Tab | Values |
 |---|---|
-| Line | Length. The third click starts a new line |
-| Path | Length |
+| Line | Map length, ground length, heading. The third click starts a new line |
+| Path | Map length, ground length |
 | Polygon | Perimeter, area |
 | Circle | Radius, perimeter, area. The first click is the center, the second sets the radius |
 
-The values are computed on the WGS84 ellipsoid. Each value has its own
-units - metres, kilometres, miles, nautical miles, and for the area
-square metres, hectares, square kilometres, square miles.
+Map length, perimeter and area are computed on the WGS84 ellipsoid.
+Ground length runs along the surface with its rises and falls. Heading
+is the azimuth of the start of the line clockwise from north. Each value
+has its own units - metres, kilometres, miles, nautical miles, and for
+the area square metres, hectares, square kilometres, square miles.
+
+Heights for the ground length come from Mapzen Terrain Tiles. Missing
+height tiles along the line are loaded, even when terrain is off. While
+they load, the ground length is preceded by «≈».
+
+A ruler point can be grabbed with the mouse and dragged, Backspace
+removes the last point. Each segment on the globe is labelled with its
+length.
 
 The Save button puts the shape into My Places together with the
 measurement. The name is offered with a number, for example Line 1. The
@@ -484,6 +536,25 @@ measurement shows in the row tooltip.
 
 The Ruler and New placemark windows are open one at a time. Opening one
 closes the other.
+
+### Elevation profile
+
+The Elevation profile button of the ruler opens a chart of height along
+the line, as in Google Earth. The Elevation profile item in the menu of
+a path in My Places does the same.
+
+<img src="figures/en/profile.png" width="600" alt="Elevation profile of a path over Elbrus">
+
+Under the chart are the map and ground length, the lowest and highest
+height, ascent and descent, the mean and maximum slope. The cursor over
+the chart shows the distance, height and slope at that place, and a
+mark with the height shows the point on the globe. The profile of the
+ruler follows its points.
+
+Heights are taken as for the ground length. The slope is measured over a
+stretch not shorter than three pixels of height data, so roughness of
+the data does not pass for a cliff. On steep mountains the maximum slope
+may exceed 100 %, that is 45°.
 
 ---
 
@@ -513,6 +584,19 @@ The tour bar appears at the bottom of the view:
 | ✕ | Ends the tour |
 
 Moving the camera with the mouse pauses the tour.
+
+### Recording a tour from the screen
+
+The record button ⏺ on the icon bar records the camera movement, as the
+tour recording of Google Earth. The camera can be moved with the mouse,
+keys, flights and the navigation controls. A second click ends the
+recording and asks for a name. The tour goes into My Places with a film
+icon and is not drawn on the globe.
+
+Play tour in the menu of such a tour plays the recording. The camera
+first flies to the start of the recording. The slider of the tour bar
+and recording to PNG frames work as for a tour over places. In KML a
+recorded tour is saved as `gx:Tour`, and Google Earth plays it.
 
 ### Recording a tour for a video
 
@@ -609,6 +693,16 @@ and added if missing. The other project layers are unchecked on the
 globe. The places of the scene come in as a new folder, and the camera
 flies to the scene pose. The status line lists the layers that were not
 found and did not open.
+
+
+### Perm demo
+
+Perm demo in the Scene menu opens a scene with placemarks around Perm.
+It has placemarks with icons and the time of a walk by the hour and
+placemark views with a date. There are also a route, an extruded polygon,
+a path along the Kama and a recorded flight over the centre. 3D buildings and stars
+are on. The walk time is an example. The placemarks go into My Places as
+a new folder, which can be deleted.
 
 ---
 

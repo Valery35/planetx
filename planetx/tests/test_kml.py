@@ -155,5 +155,97 @@ class TestWrite(unittest.TestCase):
         self.assertIsNone(kml.kml_color("zz", None))
 
 
+TIMED = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"
+     xmlns:gx="http://www.google.com/kml/ext/2.2">
+<Document>
+  <Style id="hike"><IconStyle><color>ff00ff00</color><Icon>
+    <href>http://maps.google.com/mapfiles/kml/shapes/hiker.png</href>
+  </Icon></IconStyle></Style>
+  <Placemark><name>Поход</name><styleUrl>#hike</styleUrl>
+    <TimeStamp><when>2026-09-30</when></TimeStamp>
+    <LookAt><gx:TimeSpan><begin>2026-09-01</begin><end>2026-09-30</end>
+      </gx:TimeSpan><longitude>56.2</longitude><latitude>58.0</latitude>
+      <range>900</range></LookAt>
+    <Point><coordinates>56.2,58.0</coordinates></Point></Placemark>
+  <Folder><name>Лето</name>
+    <TimeSpan><begin>2026-06</begin><end>2026-08</end></TimeSpan>
+    <Placemark><name>Кнопка</name><Style><IconStyle><Icon>
+      <href>http://maps.google.com/mapfiles/kml/pushpin/red-pushpin.png</href>
+      </Icon></IconStyle></Style>
+      <Point><coordinates>56.3,58.1</coordinates></Point></Placemark>
+    <Placemark><name>Своё</name>
+      <TimeStamp><when>2026-07-15T10:00:00Z</when></TimeStamp>
+      <Style><IconStyle><Icon><href>http://example.com/x.png</href>
+      </Icon></IconStyle></Style>
+      <Point><coordinates>56.4,58.2</coordinates></Point></Placemark>
+  </Folder>
+</Document>
+</kml>""".encode("utf-8")
+
+
+class TestIconsAndTime(unittest.TestCase):
+
+    def setUp(self):
+        self.tree = kml.read_kml(TIMED)
+        self.places = {p.name: p for p in self.tree.places()}
+
+    def test_icons(self):
+        self.assertEqual(self.places["Поход"].icon, "hiker")
+        self.assertEqual(self.places["Поход"].color, (0, 255, 0, 255))
+        self.assertEqual(self.places["Кнопка"].icon, "pushpin")
+        self.assertEqual(self.places["Своё"].icon, "dot")
+
+    def test_times(self):
+        hike = self.places["Поход"]
+        self.assertEqual(hike.time, ("2026-09-30", "2026-09-30"))
+        self.assertEqual(hike.view_time, ("2026-09-01", "2026-09-30"))
+        # Время папки достаётся метке без своего времени.
+        self.assertEqual(self.places["Кнопка"].time, ("2026-06", "2026-08"))
+        self.assertEqual(self.places["Своё"].time,
+                         ("2026-07-15T10:00:00Z", "2026-07-15T10:00:00Z"))
+
+    def test_round_trip(self):
+        again = kml.read_kml(kml.write_kml(self.tree).encode("utf-8"))
+        places = {p.name: p for p in again.places()}
+        for name, place in self.places.items():
+            self.assertEqual(places[name].icon, place.icon, name)
+            self.assertEqual(places[name].time, place.time, name)
+            self.assertEqual(places[name].view_time, place.view_time, name)
+
+class TestTour(unittest.TestCase):
+    """Записанный тур как gx:Tour туда и обратно, gx:Wait держит позу."""
+
+    def test_round_trip(self):
+        samples = [(0.0, 58.0, 56.0, 3000.0, 10.0, 30.0),
+                   (1.5, 58.01, 56.02, 2500.0, 20.0, 45.0),
+                   (4.0, 58.02, 56.03, 2000.0, 30.0, 60.0)]
+        root = kml.KFolder("Туры", children=[kml.KPlace(
+            "Облёт", "line", [(s[1], s[2]) for s in samples],
+            tour=samples)])
+        text = kml.write_kml(root)
+        self.assertIn("<gx:Tour>", text)
+        back = kml.read_kml(text.encode("utf-8")).places()[0]
+        self.assertEqual(back.name, "Облёт")
+        for got, want in zip(back.tour, samples):
+            for a, b in zip(got, want):
+                self.assertAlmostEqual(a, b, places=2)
+
+    def test_wait(self):
+        data = """<kml xmlns="http://www.opengis.net/kml/2.2"
+          xmlns:gx="http://www.google.com/kml/ext/2.2"><Document>
+          <gx:Tour><name>Ждать</name><gx:Playlist>
+            <gx:FlyTo><gx:duration>2</gx:duration><LookAt>
+              <longitude>56</longitude><latitude>58</latitude>
+              <range>1000</range></LookAt></gx:FlyTo>
+            <gx:Wait><gx:duration>3</gx:duration></gx:Wait>
+            <gx:FlyTo><gx:duration>1</gx:duration><Camera>
+              <longitude>57</longitude><latitude>59</latitude>
+              </Camera></gx:FlyTo>
+          </gx:Playlist></gx:Tour></Document></kml>""".encode("utf-8")
+        tour = kml.read_kml(data).places()[0].tour
+        self.assertEqual([s[0] for s in tour], [2.0, 5.0])
+        self.assertEqual(tour[0][1:], tour[1][1:])
+
 if __name__ == "__main__":
     unittest.main()

@@ -2608,6 +2608,355 @@ def buildings_scene():
         "loader": window.buildings_loader is not None}
     window.set_extra("buildings", False)
 
+
+@check(1500)
+def coords_search():
+    # Поиск понимает все форматы координат и строку глобуса с высотой.
+    from planetx.core.coords import FORMATS, format_point
+    from planetx.ui.identify import hemispheres
+    window = state["window"]
+    found = {}
+    for fmt in FORMATS:
+        text = format_point(58.0105, 56.2294, fmt, hemispheres())
+        window.fly(text)
+        mark = window.view.search_mark
+        found[fmt] = [text, round(mark.lat, 5), round(mark.lon, 5)] \
+            if mark is not None else [text, None]
+        window.set_coords(fmt)
+        found[fmt].append(window.coords)
+    window.fly("59.593416, 56.806003, высота 207 м")
+    mark = window.view.search_mark
+    found["with_height"] = [round(mark.lat, 6), round(mark.lon, 6)]
+    window.set_coords("decimal")
+    result["coords_search"] = found
+
+
+# Путь линейки через вершину Эльбруса, 5642 м.
+ELBRUS = (43.3499, 42.4453)
+
+
+@check(1500)
+def ruler_path():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(ELBRUS[0], ELBRUS[1], 25000.0, 0.0, 0.0))
+    window._open_ruler()
+    window.ruler_dialog.tabs.setCurrentIndex(1)  # путь
+    ruler = window.ruler
+    ruler.add(43.31, 42.40)
+    ruler.add(*ELBRUS)
+    ruler.add(43.39, 42.49)
+    view.update()
+
+
+@check(1000)
+def ruler_wait():
+    """Ждать высоты вдоль пути, не дольше 90 с."""
+    import time
+    window = state["window"]
+    started = state.setdefault("ruler_started", time.monotonic())
+    values = window.ruler.values(rubber=False)
+    elapsed = time.monotonic() - started
+    if not values["ground_ready"] and elapsed < 90.0:
+        return 1000
+    state["ruler_ready_s"] = round(elapsed, 1)
+    return None
+
+
+@check(500)
+def ruler_path_check():
+    window = state["window"]
+    view = window.view
+    ruler = window.ruler
+    values = ruler.values(rubber=False)
+    window._ruler_profile()
+    dialog = window.profile_dialog
+    p = dialog.chart.profile
+    out = {"length_m": round(values["length"], 1),
+           "ground_m": round(values["ground"], 1),
+           "ground_ready": values["ground_ready"],
+           "ready_after_s": state.get("ruler_ready_s"),
+           "tool_heights_left": len(view.tool_heights),
+           "profile_high": round(p.high, 1) if p else None,
+           "profile_gain": round(p.gain, 1) if p else None,
+           "profile_title": dialog.windowTitle(),
+           "stats": dialog.stats.text(),
+           "segment_labels": len([m for m in view.tool_marks
+                                  if m.kind == "ruler"]),
+           "summary": window.ruler_dialog.summary()}
+    # Перетаскивание последней точки через vertex_tool вида.
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    lat, lon = ruler.points[2]
+    xyz = geodetic_to_ecef(lat, lon, view.store.heights_at(
+        np.array([lat]), np.array([lon]))[0])
+    (px, py), front = view.camera.project(xyz[None])[0][0], True
+    tool = view.vertex_tool
+    grabbed = tool.grab(px, py)
+    tool.move(px + 60.0, py)
+    tool.drop()
+    out["grabbed"] = bool(grabbed)
+    out["moved"] = ruler.points[2] != (lat, lon)
+    view.undo_point.emit()
+    out["after_backspace"] = len(ruler.points)
+    # Профиль пути из «Моих меток».
+    from planetx.core.features import Shape
+    key = window.myplaces.add(Shape("line", [(43.31, 42.40), ELBRUS],
+                                    name="Путь на Эльбрус"))
+    window._place_action("profile", key)
+    out["place_profile_title"] = dialog.windowTitle()
+    window.myplaces.remove(key)
+    out["gl_errors"] = dict(view.gl_errors)
+    result["ruler_path"] = out
+    dialog.close()
+    window.ruler_dialog.close()
+
+
+@check(1500)
+def icons_time():
+    # Значки меток и шкала времени: охват, скрытие меток вне промежутка,
+    # перелёт к метке с датой вида, KML туда и обратно, окно свойств.
+    from planetx.core.features import Shape
+    from planetx.core.kml import read_kml, write_kml
+    from planetx.core.navigation import Pose
+    from planetx.ui.placeprops import PlaceProperties
+    window = state["window"]
+    view = window.view
+    store = window.myplaces
+    folder = store.add_folder("Значки и время")
+    keys = [
+        store.add(Shape("point", [(58.0105, 56.2294)], (255, 80, 0, 255),
+                        name="Флаг", icon="flag"), folder=folder,
+                  period=("2026-09-01", "2026-09-01")),
+        store.add(Shape("point", [(58.02, 56.25)], (0, 160, 255, 255),
+                        name="Музей", icon="museum"), folder=folder,
+                  period=("2026-09-10", "2026-09-20"),
+                  view=(58.02, 56.25, 1500.0, 0.0, 45.0),
+                  view_period=("2026-09-15", "2026-09-15")),
+        store.add(Shape("point", [(58.03, 56.27)], name="Без времени",
+                        icon="camera"), folder=folder)]
+    state["icons_keys"] = keys
+    state["icons_folder"] = folder
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.02, 56.25, 6000.0, 0.0, 30.0))
+    out = {"bar_shown": window.timebar.isVisible(),
+           "extent": [round(v) for v in window.timebar.extent()],
+           "shapes_all": len([s for s in view.features.shapes
+                              if s.kind == "point"])}
+    # Промежуток после 5 сентября: флаг скрыт, музей и метка без
+    # времени видны.
+    import calendar
+    lo = calendar.timegm((2026, 9, 5, 0, 0, 0))
+    window.timebar.set_range(lo, window.timebar.extent()[1])
+    out["names_after_5th"] = sorted(s.name for s in view.features.shapes
+                                    if s.kind == "point")
+    window.fly_to_place(store.find(keys[1]))
+    out["range_after_fly"] = [round(v) for v in window.timebar.range()]
+    tree = store.export_tree(folder)
+    back = {p.name: p for p in read_kml(write_kml(tree).encode()).places()}
+    out["kml"] = {name: [p.icon, list(p.time) if p.time else None,
+                         list(p.view_time) if p.view_time else None]
+                  for name, p in back.items()}
+    dialog = PlaceProperties(store.find(keys[1]), window,
+                             current_view=window.current_view)
+    values = dialog.values()
+    out["dialog"] = {k: values[k] for k in ("icon", "time", "view_time")}
+    dialog.close()
+    out["marks"] = sorted(m.kind for m in view._own_marks())
+    result["icons_time"] = out
+    view.update()
+
+
+@check(3000)
+def icons_time_check():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_icons.png"))
+    result["icons_time"]["labels"] = view.labels.count
+    result["icons_time"]["gl_errors"] = dict(view.gl_errors)
+    window.myplaces.remove(state["icons_folder"])
+    result["icons_time"]["bar_after_remove"] = window.timebar.isVisible()
+
+
+@check(300)
+def record_screen():
+    # Запись тура с экрана: кнопка записи, камера проходит десять поз.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.0, 56.2, 8000.0, 0.0, 20.0))
+    window.toolbar.record.setChecked(True)
+    state["record_k"] = 0
+
+
+@check(300)
+def record_screen_move():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    k = state["record_k"]
+    if k < 10:
+        window.view.navigator.set_pose(Pose(
+            58.0 + 0.005 * k, 56.2 + 0.01 * k, 8000.0 - 400.0 * k,
+            10.0 * k, 20.0 + 3.0 * k))
+        state["record_k"] = k + 1
+        return 300
+    return None
+
+
+@check(500)
+def record_screen_stop():
+    import planetx.ui.window as wmod
+    window = state["window"]
+    wmod.QInputDialog.getText = staticmethod(
+        lambda *args, **kwargs: ("Тур теста", True))
+    window.toolbar.record.setChecked(False)
+    place = next(p for p in window.myplaces.places if p.tour
+                 and p.name == "Тур теста")
+    state["record_key"] = place.key
+    from planetx.core.kml import read_kml, write_kml
+    back = read_kml(write_kml(window.myplaces.export_keys(
+        [place.key])).encode()).places()[0]
+    result["record_screen"] = {
+        "samples": len(place.tour),
+        "duration": round(place.tour[-1][0], 2),
+        "last": [round(v, 4) for v in place.tour[-1][1:]],
+        "kml_samples": len(back.tour),
+        "drawn": any(s.name == "Тур теста" for s in
+                     window.view.features.shapes)}
+    window._place_action("tour", place.key)
+
+
+@check(12000)
+def record_screen_play():
+    window = state["window"]
+    pose = window.view.navigator.pose
+    out = result["record_screen"]
+    tour = window.tour.tour
+    out["tour_duration"] = round(tour.duration, 2) if tour else None
+    if tour is not None:
+        # Поза тура в конце - без зависимости от кадров окна.
+        end = tour.pose_at(tour.duration)
+        out["tour_end"] = [round(end.lat, 4), round(end.lon, 4),
+                           round(end.distance, 1), round(end.heading, 2),
+                           round(end.tilt, 2)]
+        out["stop_kind"] = type(tour.stops[0]).__name__
+    out["end_pose"] = [round(pose.lat, 4), round(pose.lon, 4),
+                       round(pose.distance, 1), round(pose.heading, 2),
+                       round(pose.tilt, 2)]
+    window.tour.stop()
+    window.myplaces.remove(state["record_key"])
+
+
+@check(1500)
+def demo_open():
+    # Демо «Пермь» из меню «Сцена»: метки со значками и временем, тур,
+    # шкала времени, 3D-здания.
+    window = state["window"]
+    nav = window.view.navigator
+    starts = []
+    original = nav.start_flight
+
+    def counted(flight, now):
+        import traceback as tb
+        starts.append(" < ".join(
+            "%s:%d %s" % (os.path.basename(f.filename), f.lineno, f.name)
+            for f in tb.extract_stack()[-5:-1]))
+        return original(flight, now)
+    nav.start_flight = counted
+    state["demo_starts"] = starts
+    # Исключения кадра: кадр с ошибкой не заказывает следующий.
+    failures = []
+    view = window.view
+    render = view._render
+
+    def guarded_render(*args, **kwargs):
+        try:
+            return render(*args, **kwargs)
+        except (AttributeError, IndexError, KeyError, RuntimeError,
+                TypeError, ValueError):
+            failures.append(traceback.format_exc().splitlines()[-6:])
+            raise
+    view._render = guarded_render
+    state["demo_failures"] = failures
+    # Счёт кадров по секундам и состояние вида.
+    from qgis.PyQt.QtCore import QTimer as _Timer
+    samples = []
+    ticker = _Timer()
+    ticker.setInterval(1000)
+    ticker.timeout.connect(lambda: samples.append(
+        [view.frame, view.isVisible(), view.updatesEnabled(),
+         view.navigator.flight is not None, view.shot is not None,
+         window.isMinimized(), round(view.navigator.pose.distance)]))
+    ticker.start()
+    state["demo_ticker"] = ticker
+    state["demo_samples"] = samples
+    part = os.environ.get("PLANETX_DEMO_PART", "")
+    if part:
+        # Разбор по частям: какое действие демо держит главный поток.
+        from planetx.core.kml import read_kml
+        from planetx.core.scene import read_scene
+        with open(os.path.join(ROOT, "planetx", "demo", "perm.planetx"),
+                  "rb") as fh:
+            scene, kml = read_scene(fh.read())
+        key = None
+        if part == "places":
+            key = window.myplaces.import_tree(read_kml(kml, scene.places))
+        elif part == "extras":
+            for name, on in scene.view["extras"].items():
+                window.set_extra(name, on)
+        elif part == "groups":
+            window.set_line_groups(set(scene.view["groups"]))
+        elif part == "fly":
+            window._fly_to(*scene.camera)
+        state["demo_key"] = key
+        result["demo"] = {"part": part}
+        return
+    key = window.open_demo()
+    state["demo_key"] = key
+    places = window.myplaces.places_in(key) if key else []
+    result["demo"] = {
+        "folder": key is not None,
+        "places": len(places),
+        "icons": sorted({p.shape.icon for p in places
+                         if p.kind == "point"}),
+        "timed": len([p for p in places if p.time]),
+        "tours": len([p for p in places if p.tour]),
+        "extruded": len([p for p in places if p.shape.extrude]),
+        "bar": window.timebar.isVisible(),
+        "buildings": window.extras.get("buildings")}
+    window.view.update()
+
+
+@check(45000)
+def demo_check():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_demo.png"))
+    out = result["demo"]
+    out["labels"] = view.labels.count
+    out["buildings_drawn"] = view.buildings.drawn
+    out["gl_errors"] = dict(view.gl_errors)
+    pose = view.navigator.pose
+    out["pose"] = [round(pose.lat, 4), round(pose.lon, 4),
+                   round(pose.distance), round(pose.heading, 1),
+                   round(pose.tilt, 1)]
+    out["flight"] = view.navigator.flight is not None
+    out["frames"] = view.frame
+    starts = state.get("demo_starts", [])
+    out["flight_starts"] = len(starts)
+    out["flight_callers"] = sorted(set(starts))[:6]
+    failures = state.get("demo_failures", [])
+    out["render_failures"] = len(failures)
+    state["demo_ticker"].stop()
+    out["per_second"] = state.get("demo_samples", [])
+    out["first_failure"] = failures[0] if failures else None
+    if state.get("demo_key"):
+        window.myplaces.remove(state["demo_key"])
+    window.set_extra("buildings", False)
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

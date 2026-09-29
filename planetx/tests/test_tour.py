@@ -117,5 +117,40 @@ class TestPath(unittest.TestCase):
         self.assertAlmostEqual(leg.lon, 56.34, 4)
 
 
+class TestRecorded(unittest.TestCase):
+    """Записанный тур: позы между моментами, переходы через 180°,
+    прореживание, место в туре."""
+
+    SAMPLES = [(0.0, 58.0, 179.0, 1000.0, 350.0, 30.0),
+               (1.0, 58.0, -179.0, 4000.0, 10.0, 50.0),
+               (3.0, 58.2, -179.0, 4000.0, 10.0, 50.0)]
+
+    def test_interpolation(self):
+        stop = tr.RecordedStop("Запись", self.SAMPLES)
+        self.assertEqual(stop.glide, 3.0)
+        mid = stop.pose_at(0.5)
+        # Через линию перемены дат, а не назад через весь шар.
+        self.assertAlmostEqual(abs(mid.lon), 180.0, places=6)
+        # Через север, а не через юг.
+        self.assertAlmostEqual(mid.heading % 360.0, 0.0, places=6)
+        self.assertAlmostEqual(mid.distance, 2000.0, places=6)
+        self.assertAlmostEqual(mid.tilt, 40.0, places=6)
+        end = stop.end_pose()
+        self.assertAlmostEqual(end.lat, 58.2, places=9)
+
+    def test_in_tour(self):
+        stop = tr.RecordedStop("Запись", self.SAMPLES)
+        tour = tr.Tour(Pose(55.0, 37.0, 2.0e6), [stop], pause=1.0)
+        arrive = tour.glides[0]
+        self.assertAlmostEqual(tour.duration, arrive + 3.0 + 1.0)
+        self.assertAlmostEqual(tour.pose_at(arrive + 3.0).lat, 58.2)
+
+    def test_thin(self):
+        still = (58.0, 56.0, 1000.0, 0.0, 0.0)
+        samples = [(float(t),) + still for t in range(5)]
+        samples.append((5.0, 58.1, 56.0, 1000.0, 0.0, 0.0))
+        out = tr.thin(samples)
+        self.assertEqual([s[0] for s in out], [0.0, 4.0, 5.0])
+
 if __name__ == "__main__":
     unittest.main()

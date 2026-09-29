@@ -21,6 +21,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (QDialog, QLabel, QPushButton, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout)
 
+from ..core.coords import format_point
 from ..core.ellipsoid import A
 from ..i18n import tr
 from ..qt_compat import enum
@@ -117,9 +118,17 @@ def identify(layers, lat, lon, metres):
     return out
 
 
-def point_text(lat, lon, height=None, digits=6):
-    """Координаты точки и высота рельефа для окна и строки состояния."""
-    text = "{0:.{2}f}, {1:.{2}f}".format(lat, lon, digits)
+def hemispheres():
+    """Подписи полушарий для градусов-минут-секунд."""
+    return (tr("с. ш."), tr("ю. ш."), tr("в. д."), tr("з. д."))
+
+
+def point_text(lat, lon, height=None, digits=6, fmt="decimal"):
+    """Координаты точки и высота рельефа для окна и строки состояния.
+
+    fmt - формат из core.coords.FORMATS.
+    """
+    text = format_point(lat, lon, fmt, hemispheres(), digits)
     if height is None:
         return text
     # Высоты рельефа не ниже нуля, дно моря прижато к нулю. Без max

@@ -153,9 +153,11 @@ class Features:
         self.dirty = True
 
     def marks(self):
-        """Точечные объекты: (номер, имя, широта, долгота, подъём)."""
+        """Точечные объекты: (номер, имя, широта, долгота, подъём,
+        значок, цвет)."""
         return [(i, shape.name, shape.points[0][0], shape.points[0][1],
-                 float(shape.height or 0.0))
+                 float(shape.height or 0.0), shape.icon,
+                 tuple(shape.color))
                 for i, shape in enumerate(self.shapes)
                 if shape.kind == "point" and shape.points]
 

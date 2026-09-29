@@ -22,6 +22,7 @@
 position и folder и таблица папок добавлены 28 сентября 2026 года,
 в прежний файл - при открытии.
 """
+import json
 import os
 import time
 
@@ -30,7 +31,7 @@ from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsProject, QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from ..core import lookat, placetree
+from ..core import icons, lookat, placetree, when
 from ..core.features import Shape
 from ..core.kml import KFolder, KPlace
 from ..i18n import tr
@@ -45,7 +46,11 @@ FIELDS = (("name", "string"), ("description", "string"),
           ("visible", "integer"), ("measure", "string"),
           ("created", "string"), ("view", "string"),
           ("position", "integer"), ("folder", "integer"),
-          ("height", "double"), ("extrude", "integer"))
+          ("height", "double"), ("extrude", "integer"),
+          ("icon", "string"), ("time", "string"),
+          ("view_time", "string"),
+          # Записанный тур длиннее 255 знаков, поле без предела длины.
+          ("tour", "string(0)"))
 FOLDER_TABLE = "folders"
 FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("position", "integer"), ("visible", "integer"),
@@ -146,6 +151,28 @@ def _add_missing(layer, fields=None):
         layer.updateFields()
 
 
+def tour_text(samples):
+    """Записанный тур для поля файла: JSON, 7 знаков в градусах."""
+    if not samples:
+        return ""
+    return json.dumps([[round(t, 3), round(lat, 7), round(lon, 7),
+                        round(d, 2), round(h, 3), round(k, 3)]
+                       for t, lat, lon, d, h, k in samples])
+
+
+def tour_from_text(text):
+    """Записанный тур из поля файла или None."""
+    if not text:
+        return None
+    try:
+        data = json.loads(str(text))
+    except ValueError:
+        return None
+    samples = [tuple(float(v) for v in row) for row in data
+               if isinstance(row, list) and len(row) == 6]
+    return samples if len(samples) >= 2 else None
+
+
 def _value(feature, layer, name):
     """Значение поля или None, если поля в слое нет."""
     return feature[name] if layer.fields().indexOf(name) >= 0 else None
@@ -158,15 +185,23 @@ def _kplace(place):
                   color=shape.color, width=shape.width, fill=shape.fill,
                   visible=place.visible, view=place.view,
                   description=place.description or place.measure,
-                  height=shape.height, extrude=shape.extrude)
+                  height=shape.height, extrude=shape.extrude,
+                  icon=shape.icon, time=place.time,
+                  view_time=place.view_time, tour=place.tour)
 
 
 class Place:
     """Метка из файла: ключ (вид, номер объекта), объект и видимость."""
 
     def __init__(self, kind, fid, shape, visible, measure="", view=None,
-                 position=None, folder=None, description=""):
+                 position=None, folder=None, description="",
+                 time=None, view_time=None, tour=None):
         self.kind = kind
+        # Записанный тур: позы core.tour.RecordedStop или None.
+        self.tour = tour
+        # Время метки и её вида, пары строк core.when или None.
+        self.time = time
+        self.view_time = view_time
         self.description = description
         self.position = position
         self.fid = fid
@@ -282,7 +317,9 @@ class MyPlaces(QObject):
                     name=str(feature["name"] or ""),
                     height=max(_float(_value(feature, layer, "height")),
                                0.0),
-                    extrude=bool(_int(_value(feature, layer, "extrude"))))
+                    extrude=bool(_int(_value(feature, layer, "extrude"))),
+                    icon=icons.normal(str(_value(feature, layer, "icon")
+                                          or icons.DEFAULT)))
                 visible = _int(feature["visible"])
                 self.places.append(Place(
                     kind, feature.id(), shape,
@@ -292,7 +329,10 @@ class MyPlaces(QObject):
                                  points[0] if points else None),
                     _int(_value(feature, layer, "position")),
                     _folder_key(_int(_value(feature, layer, "folder"))),
-                    str(feature["description"] or "")))
+                    str(feature["description"] or ""),
+                    when.unpack(_value(feature, layer, "time")),
+                    when.unpack(_value(feature, layer, "view_time")),
+                    tour_from_text(_value(feature, layer, "tour"))))
         self.folders = []
         if self.folder_layer is not None:
             for feature in self.folder_layer.getFeatures():
@@ -352,7 +392,8 @@ class MyPlaces(QObject):
             if folder else None
         return [p for p in self.places if inside is None or p.key in inside]
 
-    def add(self, shape, measure="", view=None, folder=None):
+    def add(self, shape, measure="", view=None, folder=None, period=None,
+            view_period=None, tour=None):
         """Записать новую метку в конец папки folder, None - корень.
 
         Возвращает её ключ или None. view - вид метки core.lookat.
@@ -374,7 +415,10 @@ class MyPlaces(QObject):
                   "position": placetree.next_position(self.nodes(), folder),
                   "folder": _folder_fid(folder),
                   "height": float(shape.height or 0.0),
-                  "extrude": int(bool(shape.extrude))}
+                  "extrude": int(bool(shape.extrude)),
+                  "icon": shape.icon, "time": when.pack(period),
+                  "view_time": when.pack(view_period),
+                  "tour": tour_text(tour)}
         for name, value in values.items():
             if layer.fields().indexOf(name) >= 0:
                 feature[name] = value
@@ -569,7 +613,10 @@ class MyPlaces(QObject):
                     "view": lookat.text(place.view),
                     "position": position, "folder": _folder_fid(key),
                     "height": float(place.height or 0.0),
-                    "extrude": int(bool(place.extrude))}
+                    "extrude": int(bool(place.extrude)),
+                    "icon": place.icon, "time": when.pack(place.time),
+                    "view_time": when.pack(place.view_time),
+                    "tour": tour_text(place.tour)}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

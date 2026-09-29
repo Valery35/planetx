@@ -14,6 +14,13 @@ LineString и внешнее кольцо Polygon переносятся, MultiG
 взгляда ею считается сама метка. Camera, модели, наложения картинок
 и сетевые ссылки не переносятся.
 
+Значок точки - Icon в IconStyle, адрес узнаётся по имени картинки
+(core/icons.py). Время метки - TimeStamp или TimeSpan, время вида -
+gx:TimeStamp или gx:TimeSpan внутри LookAt, как у Google Earth.
+Время папки достаётся её меткам без своего времени. Время хранится
+строками, как в файле (core/when.py). gx:Tour - записанный тур:
+позы LookAt у gx:FlyTo по времени, gx:Wait держит позу.
+
 Высота над землёй переносится у altitudeMode relativeToGround
 и gx:relativeToSeaFloor: высота первой вершины становится подъёмом
 метки, extrude - стеной до земли. absolute отсчитывается от уровня
@@ -36,11 +43,13 @@ import zipfile
 from xml.parsers import expat
 
 try:  # внутри плагина QGIS
-    from . import lookat
+    from . import icons, lookat
 except ImportError:  # headless-тесты
+    import icons
     import lookat
 
 NS = "http://www.opengis.net/kml/2.2"
+GX = "http://www.google.com/kml/ext/2.2"
 # Цвета Google Earth по умолчанию: жёлтая линия, белая заливка.
 LINE_COLOR = (255, 255, 0, 255)
 FILL_COLOR = (255, 255, 255, 64)
@@ -139,12 +148,21 @@ class KPlace:
     kind - "point", "line", "polygon". points - (широта, долгота).
     color, fill - RGBA 0-255, fill только у многоугольника. view -
     вид core.lookat: (широта, долгота, расстояние, азимут, наклон)
-    или None.
+    или None. icon - значок точки core.icons. time и view_time -
+    время метки и вида, пара строк core.when или None. tour -
+    записанный тур: позы (время, широта, долгота, расстояние,
+    азимут, наклон), тогда points - точки взгляда.
     """
 
     def __init__(self, name, kind, points, color=LINE_COLOR,
                  width=LINE_WIDTH, fill=None, visible=True, view=None,
-                 description="", height=0.0, extrude=False):
+                 description="", height=0.0, extrude=False,
+                 icon=icons.DEFAULT, time=None, view_time=None,
+                 tour=None):
+        self.tour = tour
+        self.icon = icon
+        self.time = time
+        self.view_time = view_time
         self.height = height
         self.extrude = extrude
         self.name = name
@@ -281,6 +299,7 @@ def _style_of(node):
     icon = _child(node, "IconStyle")
     if icon is not None:
         style["icon"] = kml_color(_text(icon, "color"), None)
+        style["href"] = _text(_child(icon, "Icon"), "href") or None
     return {k: v for k, v in style.items() if v is not None}
 
 
@@ -318,11 +337,31 @@ def _view(node, anchor):
                        _float(look, "tilt", 0.0))
 
 
+def _time_of(node):
+    """Время узла: TimeStamp - момент, TimeSpan - промежуток."""
+    stamp = _child(node, "TimeStamp")
+    if stamp is not None and _text(stamp, "when"):
+        when = _text(stamp, "when")
+        return (when, when)
+    span = _child(node, "TimeSpan")
+    if span is not None:
+        begin, end = _text(span, "begin"), _text(span, "end")
+        if begin or end:
+            return (begin, end)
+    return None
+
+
+def _view_time(node):
+    """Время вида: gx:TimeStamp или gx:TimeSpan внутри LookAt."""
+    look = _child(node, "LookAt")
+    return _time_of(look) if look is not None else None
+
+
 def _visible(node):
     return _text(node, "visibility", "1") != "0"
 
 
-def _placemark(node, styles):
+def _placemark(node, styles, inherited=None):
     style = dict(styles.get(_text(node, "styleUrl").lstrip("#"), {}))
     inline = _child(node, "Style")
     if inline is not None:
@@ -342,19 +381,58 @@ def _placemark(node, styles):
                           visible=_visible(node),
                           view=view,
                           description=_text(node, "description"),
-                          height=height, extrude=extrude))
+                          height=height, extrude=extrude,
+                          icon=icons.from_href(style.get("href"))
+                          if kind == "point" else icons.DEFAULT,
+                          time=_time_of(node) or inherited,
+                          view_time=_view_time(node)))
     return out
 
 
-def _walk(node, styles, folder):
+def _tour(node):
+    """Записанный тур из gx:Tour: позы LookAt у gx:FlyTo по времени,
+    gx:Wait держит позу. FlyTo с Camera и прочие шаги пропускаются."""
+    playlist = _child(node, "Playlist")
+    if playlist is None:
+        return None
+    samples = []
+    t = 0.0
+    for step in playlist:
+        name = _local(step.tag)
+        duration = max(_float(step, "duration", 0.0), 0.0)
+        if name == "FlyTo":
+            look = _child(step, "LookAt")
+            if look is None:
+                continue
+            t += duration
+            samples.append((t, _float(look, "latitude", 0.0),
+                            _float(look, "longitude", 0.0),
+                            _float(look, "range", 1000.0),
+                            _float(look, "heading", 0.0),
+                            _float(look, "tilt", 0.0)))
+        elif name == "Wait" and samples:
+            t += duration
+            samples.append((t,) + tuple(samples[-1][1:]))
+    if len(samples) < 2:
+        return None
+    points = [(s[1], s[2]) for s in samples]
+    return KPlace(_text(node, "name"), "line", points, visible=_visible(node),
+                  description=_text(node, "description"), tour=samples)
+
+
+def _walk(node, styles, folder, inherited=None):
     for child in node:
         name = _local(child.tag)
         if name in ("Folder", "Document"):
             sub = KFolder(_text(child, "name"), _visible(child))
-            _walk(child, styles, sub)
+            _walk(child, styles, sub, _time_of(child) or inherited)
             folder.children.append(sub)
         elif name == "Placemark":
-            folder.children.extend(_placemark(child, styles))
+            folder.children.extend(_placemark(child, styles, inherited))
+        elif name == "Tour":
+            tour = _tour(child)
+            if tour is not None:
+                folder.children.append(tour)
 
 
 def read_kml(data, name=""):
@@ -410,12 +488,26 @@ def _raise_kml(place):
         "</altitudeMode>".format(int(bool(place.extrude)))
 
 
+def _time_kml(time, prefix=""):
+    """TimeStamp или TimeSpan для записи. prefix «gx:» - время вида."""
+    if not time or not (time[0] or time[1]):
+        return ""
+    if time[0] == time[1]:
+        return "<{p}TimeStamp><when>{}</when></{p}TimeStamp>".format(
+            escape(time[0]), p=prefix)
+    parts = "".join(
+        "<{0}>{1}</{0}>".format(tag, escape(value))
+        for tag, value in (("begin", time[0]), ("end", time[1])) if value)
+    return "<{p}TimeSpan>{}</{p}TimeSpan>".format(parts, p=prefix)
+
+
 def _placemark_kml(place, indent):
     pad = "  " * indent
     style = ""
     if place.kind == "point":
-        style = "<IconStyle><color>{}</color></IconStyle>".format(
-            color_kml(place.color))
+        style = "<IconStyle><color>{}</color><Icon><href>{}</href>" \
+            "</Icon></IconStyle>".format(
+                color_kml(place.color), escape(icons.href(place.icon)))
     else:
         style = "<LineStyle><color>{}</color><width>{:g}</width>" \
             "</LineStyle>".format(color_kml(place.color), place.width)
@@ -440,18 +532,38 @@ def _placemark_kml(place, indent):
     look = ""
     if place.view is not None:
         lat, lon, distance, heading, tilt = place.view
-        look = "<LookAt><longitude>{:.8f}</longitude><latitude>{:.8f}" \
+        look = "<LookAt>{}<longitude>{:.8f}</longitude><latitude>{:.8f}" \
             "</latitude><altitude>0</altitude><heading>{:g}</heading>" \
             "<tilt>{:g}</tilt><range>{:g}</range></LookAt>".format(
-                lon, lat, heading, tilt, distance)
+                _time_kml(place.view_time, "gx:"), lon, lat, heading,
+                tilt, distance)
     parts = ["<Placemark>", "<name>{}</name>".format(escape(place.name))]
     if place.description:
         parts.append("<description>{}</description>".format(
             escape(place.description)))
     parts += ["<visibility>{}</visibility>".format(int(place.visible)),
-              look, "<Style>{}</Style>".format(style), geometry,
-              "</Placemark>"]
+              _time_kml(place.time), look,
+              "<Style>{}</Style>".format(style), geometry, "</Placemark>"]
     return pad + "".join(p for p in parts if p)
+
+
+def _tour_kml(place, indent):
+    """Записанный тур как gx:Tour: gx:FlyTo плавно к каждой позе."""
+    pad = "  " * indent
+    steps = []
+    last = None
+    for t, lat, lon, distance, heading, tilt in place.tour:
+        duration = 0.0 if last is None else t - last
+        last = t
+        steps.append(
+            "<gx:FlyTo><gx:duration>{:.3f}</gx:duration><gx:flyToMode>"
+            "smooth</gx:flyToMode><LookAt><longitude>{:.8f}</longitude>"
+            "<latitude>{:.8f}</latitude><altitude>0</altitude><heading>"
+            "{:.3f}</heading><tilt>{:.3f}</tilt><range>{:.2f}</range>"
+            "</LookAt></gx:FlyTo>".format(duration, lon, lat, heading, tilt,
+                                          distance))
+    return pad + "<gx:Tour><name>{}</name><gx:Playlist>{}</gx:Playlist>" \
+        "</gx:Tour>".format(escape(place.name), "".join(steps))
 
 
 def _folder_kml(folder, indent, tag="Folder"):
@@ -463,6 +575,8 @@ def _folder_kml(folder, indent, tag="Folder"):
     for child in folder.children:
         if isinstance(child, KFolder):
             lines.extend(_folder_kml(child, indent + 1))
+        elif child.tour:
+            lines.append(_tour_kml(child, indent + 1))
         else:
             lines.append(_placemark_kml(child, indent + 1))
     lines.append(pad + "</{}>".format(tag))
@@ -472,7 +586,7 @@ def _folder_kml(folder, indent, tag="Folder"):
 def write_kml(folder):
     """Текст KML папки: Document с вложенными Folder и Placemark."""
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
-             '<kml xmlns="{}">'.format(NS)]
+             '<kml xmlns="{}" xmlns:gx="{}">'.format(NS, GX)]
     lines.extend(_folder_kml(folder, 1, "Document"))
     lines.append("</kml>")
     return "\n".join(lines) + "\n"

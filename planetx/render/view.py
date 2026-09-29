@@ -36,7 +36,7 @@ from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
 from .buildings import SHOT_UPLOADS as BUILDING_SHOT_UPLOADS, Buildings
 from .features import Features
-from .labels import Labels
+from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
 from .sky import Sky
 from .stars import Stars
@@ -161,6 +161,9 @@ REBUILD_TIME = 0.002  # секунд на подмену пересобранн�
 # Приоритет замены тайла старой подложки, который виден в кадре. Выше
 # экранной ошибки любого нового тайла, мелкие уровни раньше.
 STALE_PRIORITY = 1.0e6
+# Приоритет высот для линейки и профиля. Ниже тайлов кадра, у них
+# приоритет - экранная ошибка в пикселях.
+TOOL_HEIGHT_PRIORITY = 0.5
 
 
 class _Built(QObject):
@@ -222,6 +225,8 @@ class GlobeView(QOpenGLWidget):
     shot_done = pyqtSignal(object, bool)
     # Сменилось состояние загрузки: сколько ждёт, стоит ли загрузка.
     load_changed = pyqtSignal()
+    # Backspace или Delete над видом: убрать последнюю точку инструмента.
+    undo_point = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -246,6 +251,10 @@ class GlobeView(QOpenGLWidget):
         # Включён инструмент: опрос, линейка или рисование. Тогда второй
         # щелчок двойного - обычный щелчок, точка инструмента.
         self.tool_active = False
+        # Точки инструмента, которые можно тянуть мышью: объект с методами
+        # grab(px, py) -> bool, move(px, py) и drop(). Ставит окно.
+        self.vertex_tool = None
+        self._vertex_drag = False
         self.setCursor(self.tool_cursor)
         self.loader = None
         # Рельеф: хранилище высот, загрузчик Terrarium, уровень высот,
@@ -263,6 +272,9 @@ class GlobeView(QOpenGLWidget):
         self.relief = 0
         self._terrain_wanted = frozenset()
         self._terrain_at = 0.0
+        # Тайлы высот для линейки и профиля. Загрузчик высот оставляет
+        # только набор вида, поэтому они входят в него.
+        self.tool_heights = {}
         self._nearest_probe = None
         # Ошибки и видимость узлов между кадрами неподвижной камеры.
         self.memo = lod.Memo()
@@ -331,6 +343,8 @@ class GlobeView(QOpenGLWidget):
         self.grid_marks = []
         # Подписи слоёв проекта, ui/layer_labels.py.
         self.layer_marks = []
+        # Длины отрезков линейки и точка профиля высот.
+        self.tool_marks = []
         self._places_wanted = frozenset()
         self._places_at = 0.0
         self.labels = Labels()
@@ -448,8 +462,10 @@ class GlobeView(QOpenGLWidget):
         shapes = self.features.shapes
         if self._feature_marks[1] is not shapes:
             self._feature_marks = ([
-                Place(-2 - i, name or "", "mark", 1, lat, lon, None, lift)
-                for i, name, lat, lon, lift in self.features.marks()],
+                Place(-2 - i, name or "", icon_style(icon, color), 1, lat,
+                      lon, None, lift)
+                for i, name, lat, lon, lift, icon, color
+                in self.features.marks()],
                 shapes)
         return self._feature_marks[0]
 
@@ -469,6 +485,14 @@ class GlobeView(QOpenGLWidget):
         """Пришли пункты тайла векторной основы."""
         self.places.add(key, places)
         self.last_arrival = time.monotonic()
+        self.update()
+
+    def want_tool_heights(self, keys):
+        """Тайлы высот для линейки и профиля. Прежний набор заменяется,
+        пришедшие тайлы из него уходят сами."""
+        self.tool_heights = {key: TOOL_HEIGHT_PRIORITY for key in keys
+                             if key not in self.store.tiles}
+        self._terrain_at = 0.0
         self.update()
 
     def add_heights(self, tile):
@@ -645,6 +669,11 @@ class GlobeView(QOpenGLWidget):
         elif button == RIGHT:
             self.navigator.stop()
             self.zoom_drag = (px, py, py)
+        elif button == LEFT and self.vertex_tool is not None \
+                and self.vertex_tool.grab(px, py):
+            # Точка линейки под курсором тянется, Земля стоит.
+            self.navigator.stop()
+            self._vertex_drag = True
         elif button == LEFT:
             self._press = (px, py)
             self.navigator.press(px, py, time.monotonic())
@@ -655,6 +684,10 @@ class GlobeView(QOpenGLWidget):
             return
         px, py = self._pixel(event)
         self.hovered.emit(px, py)
+        if self._vertex_drag:
+            self.vertex_tool.move(px, py)
+            self.update()
+            return
         if self._press is not None and math.hypot(
                 px - self._press[0], py - self._press[1]) \
                 > CLICK_PIXELS * self.devicePixelRatioF():
@@ -690,7 +723,11 @@ class GlobeView(QOpenGLWidget):
         if self.shot is not None:
             return
         press, self._press = self._press, None
-        if press is not None and event.button() == LEFT:
+        if self._vertex_drag:
+            self._vertex_drag = False
+            if self.vertex_tool is not None:
+                self.vertex_tool.drop()
+        elif press is not None and event.button() == LEFT:
             self.clicked.emit(*press)
         self.turning = None
         self.looking = None
@@ -769,6 +806,8 @@ class GlobeView(QOpenGLWidget):
             self.fly_pose(pose.lat, pose.lon, pose.distance, 0.0, 0.0)
         elif named("Key_Space"):
             nav.stop()
+        elif named("Key_Backspace", "Key_Delete"):
+            self.undo_point.emit()
         else:
             super().keyPressEvent(event)
             return
@@ -1091,13 +1130,20 @@ class GlobeView(QOpenGLWidget):
         Приоритет высот - экранная ошибка тайла, который их ждёт.
         Загрузчик зовётся при смене набора, не чаще LOADER_PERIOD.
         """
-        if self.terrain_loader is None or not self.store.scale:
+        if self.terrain_loader is None:
+            return
+        if not self.store.scale and not self.tool_heights:
             return
         # Чаще LOADER_PERIOD загрузчик не зовётся, набор между вызовами
         # не нужен. Сбор набора стоил около 0.5 мс на кадр.
         if now - self._terrain_at <= LOADER_PERIOD:
             return
-        wanted = self._height_needs(sel)
+        wanted = self._height_needs(sel) if self.store.scale else {}
+        self.tool_heights = {key: priority for key, priority
+                             in self.tool_heights.items()
+                             if key not in self.store.tiles}
+        for key, priority in self.tool_heights.items():
+            wanted.setdefault(key, priority)
         keys = frozenset(wanted)
         stale = keys and now - self._terrain_at > 1.0
         changed = keys != self._terrain_wanted \
@@ -1335,6 +1381,7 @@ class GlobeView(QOpenGLWidget):
                 else None, self.store.version, ratio,
                 still=shot or not motion)
         if (self.label_kinds or self.search_mark is not None
+                or self.tool_marks
                 or self.features.shapes) \
                 and not self.show_holes:
             self._draw_labels(sel, ratio)
@@ -1645,7 +1692,8 @@ class GlobeView(QOpenGLWidget):
         kinds = kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
-        own = self._own_marks() + self.layer_marks + self.grid_marks
+        own = self._own_marks() + self.layer_marks + self.grid_marks \
+            + self.tool_marks
         if mark is not None or own:
             head = ([mark] if mark is not None else []) + own
             if self._marked[0] is not places or self._marked[1] != head:
