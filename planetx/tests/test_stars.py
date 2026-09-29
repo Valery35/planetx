@@ -38,6 +38,26 @@ class TestTime(unittest.TestCase):
         self.assertAlmostEqual(math.asin(ecef[2]), 0.3, places=9)
 
 
+class TestSkyImage(unittest.TestCase):
+
+    def test_rotation_back_gives_ra_and_dec(self):
+        # Картинка неба берёт восхождение и склонение из направления
+        # в ECEF поворотом sky_rotation обратно, как шейдер render/sky.py.
+        when = 1.8e9
+        ra, dec = math.radians(266.4), math.radians(-28.9)
+        ecef = stars.to_ecef(stars.sky_directions([ra], [dec]), when)[0]
+        back = stars.sky_rotation(when).T @ ecef
+        u = (math.atan2(back[1], back[0]) / (2 * math.pi)) % 1.0
+        v = math.acos(back[2]) / math.pi
+        self.assertAlmostEqual(u * 360.0, 266.4, places=6)
+        self.assertAlmostEqual(90.0 - v * 180.0, -28.9, places=6)
+
+    def test_sky_address(self):
+        self.assertTrue(stars.SKY_URL.startswith(
+            "https://github.com/Valery35/planetx/releases/download/"))
+        self.assertTrue(0.0 < stars.SKY_FLOOR < 1.0)
+
+
 class TestLook(unittest.TestCase):
 
     def test_brighter_is_bigger(self):

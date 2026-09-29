@@ -30,7 +30,8 @@ OPENFREEMAP = "https://openfreemap.org/"
 GIBS = ("https://www.earthdata.nasa.gov/engage/open-data-services-software/"
         "earthdata-developer-portal/gibs-api")
 NOMINATIM_POLICY = "https://operations.osmfoundation.org/policies/nominatim/"
-ESRI_TERMS = "https://www.esri.com/en-us/legal/terms/full-master-agreement"
+SVS = "https://svs.gsfc.nasa.gov/4851"
+ESRI_TERMS ="https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
 PAGE = "https://www.informpp.ru/главная-страница/qgis-planetx"
@@ -114,6 +115,9 @@ def about_html():
         _link(GIBS, tr("Облака: NASA GIBS, снимки VIIRS.")),
         html.escape(tr("Звёзды: каталог ярких звёзд Йельского "
                        "университета.")),
+        _link(SVS, tr("Млечный путь: NASA/Goddard Space Flight Center "
+                      "Scientific Visualization Studio, Gaia DR2: "
+                      "ESA/Gaia/DPAC.")),
         _link(NOMINATIM_POLICY, tr("Поиск мест: Nominatim, © участники "
                                    "OpenStreetMap.")),
         html.escape(tr("Свои подложки берутся из подключений XYZ Tiles "

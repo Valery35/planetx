@@ -60,7 +60,13 @@ CACHE_CONTROL = enum(QNetworkRequest, "Attribute",
 PREFER_CACHE = enum(QNetworkRequest, "CacheLoadControl", "PreferCache")
 NO_ERROR = enum(QNetworkReply, "NetworkError", "NoError")
 HTTP_STATUS = enum(QNetworkRequest, "Attribute", "HttpStatusCodeAttribute")
-ALWAYS_NETWORK = enum(QNetworkRequest, "CacheLoadControl", "AlwaysNetwork")
+# Переадресация. Qt 6 по умолчанию идёт по ней, Qt 5 нет. Файлы
+# выпусков GitHub отдаются переадресацией 302, картинка неба в QGIS
+# 3.36 не приходила, 29 сентября 2026 года.
+REDIRECT = enum(QNetworkRequest, "Attribute", "RedirectPolicyAttribute")
+SAFE_REDIRECT = enum(QNetworkRequest, "RedirectPolicy",
+                     "NoLessSafeRedirectPolicy")
+ALWAYS_NETWORK =enum(QNetworkRequest, "CacheLoadControl", "AlwaysNetwork")
 CACHE_SAVE = enum(QNetworkRequest, "Attribute", "CacheSaveControlAttribute")
 # Ответ раскодирования для заглушки вместо снимка, см. core/placeholder.
 MISSING = "missing"
@@ -365,6 +371,7 @@ class TileLoader(QObject):
         source = self.source
         request = QNetworkRequest(QUrl(source.tile_url(z, x, y)))
         request.setAttribute(MARK, True)
+        request.setAttribute(REDIRECT, SAFE_REDIRECT)
         if self.cache:
             request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
         else:

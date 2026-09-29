@@ -23,7 +23,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
-from ..core import basemap, clouds
+from ..core import basemap, clouds, stars
 from ..core.ellipsoid import ecef_to_geodetic
 from ..core import graticule
 from ..core.features import Shape
@@ -258,6 +258,7 @@ class GlobeWindow(QWidget):
         self.rail_layer = None
         self.place_loader = None
         self.cloud_loader = None  # облака NASA GIBS, см. set_clouds
+        self.sky_loader = None  # картинка неба, см. _load_sky
         # Настройки вида делятся на выбранные и действующие. Выбранные
         # показывают свойства вида и список слоёв. Действующие видны
         # на глобусе. Кнопка «Обновить» или автообновление переносят
@@ -517,6 +518,8 @@ class GlobeWindow(QWidget):
             self._update_grid()
         elif key == "stars":
             self.view.set_stars(on)
+            if on:
+                self._load_sky()
         elif key == "clouds":
             self.set_clouds(on)
 
@@ -580,6 +583,19 @@ class GlobeWindow(QWidget):
             return graticule.angle_text(abs(value), step)
         return tr("{angle} в. д.", angle=angle) if value > 0 \
             else tr("{angle} з. д.", angle=angle)
+
+    def _load_sky(self):
+        """Картинка неба с Млечным путём, один раз за окно. Запрос идёт
+        тем же загрузчиком, что и тайлы, картинка раскодируется в его
+        потоке. Второй раз она берётся из кэша QGIS."""
+        if self.sky_loader is not None:
+            return
+        source = basemap.Source("NASA SVS", stars.SKY_URL, 0,
+                                builtin=True)
+        self.sky_loader = TileLoader(source, parent=self)
+        self.sky_loader.loaded.connect(
+            lambda key, rgba, extra: self.view.set_sky_image(rgba))
+        self.sky_loader.want((0, 0, 0), 1.0)
 
     def set_clouds(self, on):
         """Облака NASA GIBS: новый загрузчик на дату снимка или никакого."""
@@ -1739,8 +1755,9 @@ class GlobeWindow(QWidget):
         self.terrain_loader.abort()
         if self.place_loader is not None:
             self.place_loader.abort()
-        if self.cloud_loader is not None:
-            self.cloud_loader.abort()
+        for loader in (self.cloud_loader, self.sky_loader):
+            if loader is not None:
+                loader.abort()
         if self.overlay is not None:
             self.overlay.abort()
         self.refresh_timer.stop()

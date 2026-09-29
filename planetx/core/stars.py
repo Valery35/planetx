@@ -20,6 +20,18 @@ FADE_LOW = 30000.0  # ниже звёзд нет
 UNIX_J2000 = 946728000.0  # 1 января 2000 года, 12:00 UT, в секундах Unix
 SIZE_BRIGHT = 4.5  # размер самой яркой звезды в логических пикселях
 SIZE_FAINT = 1.6  # размер звезды величины MAX_MAG
+# Картинка неба с Млечным путём: NASA SVS Deep Star Maps 2020,
+# переведённая tools/build_sky.py. Прямое восхождение 0-360° слева
+# направо, склонение +90° в верхней строке. Лежит в выпуске GitHub,
+# модуль скачивает её при первом показе звёзд, дальше - кэш QGIS.
+# Решение автора от 29 сентября 2026 года.
+SKY_URL = ("https://github.com/Valery35/planetx/releases/download/"
+           "sky-2020/sky_2020_8k.jpg")
+# Яркость картинки неба на экране и доля её яркости, которая становится
+# чёрной - ниже неё зерно слабых звёзд. Подобраны на снимках над
+# центром Галактики 29 сентября 2026 года, их утверждает автор.
+SKY_GAIN = 0.5
+SKY_FLOOR = 0.2
 
 
 def gmst(unix_time):
@@ -38,13 +50,18 @@ def sky_directions(ra, dec):
                      np.sin(dec)], axis=1)
 
 
-def to_ecef(directions, unix_time):
-    """Направления звёзд в ECEF на момент unix_time. Земля повёрнута
-    на угол GMST, звёзды в её системе - на тот же угол назад."""
+def sky_rotation(unix_time):
+    """Поворот из экваториальной системы в ECEF на момент unix_time.
+    Земля повёрнута на угол GMST, звёзды в её системе - на тот же угол
+    назад."""
     angle = gmst(unix_time)
     c, s = math.cos(angle), math.sin(angle)
-    rotation = np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
-    return np.asarray(directions) @ rotation.T
+    return np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
+
+
+def to_ecef(directions, unix_time):
+    """Направления звёзд в ECEF на момент unix_time."""
+    return np.asarray(directions) @ sky_rotation(unix_time).T
 
 
 def sizes(mag):

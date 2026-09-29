@@ -37,6 +37,7 @@ from . import gpu
 from .features import Features
 from .labels import Labels
 from .clouds import Clouds
+from .sky import Sky
 from .stars import Stars
 from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SHELL, SKY_FRAGMENT,
                       TILE_FRAGMENT, TILE_VERTEX)
@@ -338,6 +339,7 @@ class GlobeView(QOpenGLWidget):
         # надписи класса «mark».
         self.features = Features()
         self.stars = Stars()
+        self.sky = Sky()  # Млечный путь, строка «Звёзды»
         self.show_stars = True
         self.clouds = Clouds()
         self.show_clouds = False
@@ -834,6 +836,7 @@ class GlobeView(QOpenGLWidget):
         self.labels.init_gl()
         self.features.init_gl()
         self.stars.init_gl()
+        self.sky.init_gl(self.empty_vao)
         self._context = ctx
         ctx.aboutToBeDestroyed.connect(self.release_gl)
 
@@ -846,6 +849,7 @@ class GlobeView(QOpenGLWidget):
         self.labels.release_gl()
         self.features.release_gl()
         self.stars.release_gl()
+        self.sky.release_gl()
         self.build_pool.clear()
         self.build_pool.waitForDone(2000)
         for mesh in (list(self.meshes.values()) + self.caps
@@ -1294,9 +1298,11 @@ class GlobeView(QOpenGLWidget):
         if air:
             self._draw_sky()
         if self.show_stars and not self.show_holes:
+            self.sky.draw(self.camera)
             self.stars.draw(self.camera, ratio)
         else:
             self.stars.drawn = 0
+            self.sky.drawn = False
         features_busy = False
         if self.features.shapes and not self.show_holes:
             features_busy = self.features.draw(
@@ -1557,6 +1563,11 @@ class GlobeView(QOpenGLWidget):
     def set_stars(self, on):
         """Показать или скрыть звёзды."""
         self.show_stars = bool(on)
+        self.update()
+
+    def set_sky_image(self, rgba):
+        """Пришла картинка неба с Млечным путём."""
+        self.sky.set_image(rgba)
         self.update()
 
     def _draw_sky(self):

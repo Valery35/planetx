@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.10.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.11.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -27,7 +27,7 @@ and atmosphere, from space down to single streets.
   the sky is visible at the horizon, and distant mountains fade into haze.
 - **Grid, stars, clouds.** A coordinate grid with labels, the equator,
   tropics and polar circles in yellow, as in Google Earth. The stars
-  stand at their places in the sky. Clouds come from NASA imagery of
+  and the Milky Way stand at their places in the sky. Clouds come from NASA imagery of
   the last complete day.
 - **Left panel.** The sections Places, Project layers and Layers
   collapse with a click on the header, as in Google Earth.
@@ -161,7 +161,9 @@ Terrain comes from [Mapzen Terrain Tiles](https://github.com/tilezen/joerd/blob/
 data from SRTM, GMTED, ETOPO1 and other sources.
 
 Clouds come from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api),
-VIIRS imagery. Stars come from the Yale Bright Star Catalogue.
+VIIRS imagery. Stars come from the Yale Bright Star Catalogue. The
+Milky Way comes from [NASA/Goddard Space Flight Center Scientific Visualization Studio](https://svs.gsfc.nasa.gov/4851),
+Gaia DR2: ESA/Gaia/DPAC.
 
 Data sources and their terms of use are described in [doc/SOURCES.md](doc/SOURCES.md), in Russian.
 

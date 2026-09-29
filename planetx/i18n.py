@@ -156,11 +156,19 @@ EN = {
         "Parallels and meridians with degree labels, as the Google Earth "
         "grid. The grid step changes with the camera height.",
     "Звёзды": "Stars",
-    "Звёзды каталога ярких звёзд Йельского университета. "
-    "Они видны из космоса и гаснут, когда камера "
-    "опускается в атмосферу.":
-        "Stars of the Yale Bright Star Catalogue. They show from space and "
-        "fade when the camera descends into the atmosphere.",
+    "Звёзды каталога ярких звёзд Йельского университета "
+    "и Млечный путь по карте неба NASA. Картинка неба "
+    "скачивается при первом показе. Звёзды видны "
+    "из космоса и гаснут, когда камера опускается "
+    "в атмосферу.":
+        "Stars of the Yale Bright Star Catalogue and the Milky Way from the "
+        "NASA sky map. The sky image is downloaded when first shown. The "
+        "stars show from space and fade when the camera descends into the "
+        "atmosphere.",
+    "Млечный путь: NASA/Goddard Space Flight Center Scientific "
+    "Visualization Studio, Gaia DR2: ESA/Gaia/DPAC.":
+        "Milky Way: NASA/Goddard Space Flight Center Scientific "
+        "Visualization Studio, Gaia DR2: ESA/Gaia/DPAC.",
     "Облака": "Clouds",
     "Облака по снимкам VIIRS из NASA GIBS за последние "
     "полные сутки. Они лежат полупрозрачной пеленой "

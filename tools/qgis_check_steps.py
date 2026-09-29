@@ -2031,7 +2031,7 @@ def _sky_points(view):
     return int((top.max(axis=2) > 50).sum())
 
 
-@check(4000)
+@check(15000)
 def stars_on():
     # Звёзды: из космоса вокруг Земли светлые точки, выключены - нет.
     from planetx.core.navigation import Pose
@@ -2049,7 +2049,9 @@ def stars_off():
     view = window.view
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_stars.png"))
     result["stars"] = {"drawn": view.stars.drawn,
-                       "sky_px_on": _sky_points(view)}
+                       "sky_px_on": _sky_points(view),
+                       "milky_way": view.sky.drawn,
+                       "sky_texture": view.sky.texture is not None}
     window.set_extra("stars", False)
     view.update()
 

@@ -63,11 +63,8 @@ def load(path=DATA):
 def sky_mvp(camera, unix_time):
     """Матрица кадра для направлений звёзд: проекция, поворот камеры
     и поворот неба на звёздное время, по строкам, float32."""
-    angle = stars.gmst(unix_time)
-    c, s = np.cos(angle), np.sin(angle)
-    earth = np.array([[c, s, 0.0], [-s, c, 0.0], [0.0, 0.0, 1.0]])
     view = np.eye(4)
-    view[:3, :3] = camera.rotation.T @ earth
+    view[:3, :3] = camera.rotation.T @ stars.sky_rotation(unix_time)
     return np.ascontiguousarray(camera.projection() @ view,
                                 dtype=np.float32)
 
