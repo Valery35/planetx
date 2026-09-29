@@ -2161,6 +2161,141 @@ def temperature_off():
     out["off_loaders"] = sorted(window.gibs_loaders)
     out["gl_errors"] = dict(view.gl_errors)
 
+@check(3000)
+def layer_labels_on():
+    # Подписи слоёв проекта: точки со своими подписями и многоугольник
+    # с подписью по правилу тёмным цветом. Слои временные, в памяти.
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPalLayerSettings,
+                           QgsPointXY, QgsRuleBasedLabeling,
+                           QgsTextFormat, QgsVectorLayer,
+                           QgsVectorLayerSimpleLabeling)
+    from qgis.PyQt.QtGui import QColor
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    points = QgsVectorLayer("Point?crs=EPSG:4326&field=name:string",
+                            "Подписи точек", "memory")
+    feats = []
+    for n, (lat, lon) in enumerate(((58.01, 56.23), (58.03, 56.30),
+                                    (57.99, 56.15))):
+        f = QgsFeature(points.fields())
+        f.setAttribute("name", "Скважина %d" % (n + 1))
+        f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
+        feats.append(f)
+    points.dataProvider().addFeatures(feats)
+    settings = QgsPalLayerSettings()
+    settings.fieldName = "name"
+    fmt = QgsTextFormat()
+    fmt.setColor(QColor(255, 220, 0))
+    fmt.setSize(10)
+    settings.setFormat(fmt)
+    points.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+    points.setLabelsEnabled(True)
+    area = QgsVectorLayer("Polygon?crs=EPSG:4326&field=title:string",
+                          "Подписи участков", "memory")
+    f = QgsFeature(area.fields())
+    f.setAttribute("title", "Участок")
+    f.setGeometry(QgsGeometry.fromWkt(
+        "POLYGON((56.18 57.96, 56.28 57.96, 56.28 58.00, 56.18 58.00, "
+        "56.18 57.96))"))
+    area.dataProvider().addFeatures([f])
+    rule_settings = QgsPalLayerSettings()
+    rule_settings.fieldName = "'Участок: ' || title"
+    rule_settings.isExpression = True
+    dark_fmt = QgsTextFormat()
+    dark_fmt.setColor(QColor(20, 20, 20))
+    rule_settings.setFormat(dark_fmt)
+    root = QgsRuleBasedLabeling.Rule(None)
+    root.appendChild(QgsRuleBasedLabeling.Rule(rule_settings, 0, 0,
+                                               "title IS NOT NULL"))
+    area.setLabeling(QgsRuleBasedLabeling(root))
+    area.setLabelsEnabled(True)
+    QgsProject.instance().addMapLayers([points, area])
+    state["label_layers"] = [points.id(), area.id()]
+    for layer_id in state["label_layers"]:
+        window.set_layer_shown(layer_id, True)
+    window.refresh()
+    window.view.navigator.set_pose(Pose(58.0, 56.23, 30000.0, 0.0, 30.0))
+    window.view.update()
+
+
+@check(4000)
+def layer_labels_check():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_layer_labels.png"))
+    marks = view.layer_marks
+    shown = view.labels.shown
+    result["layer_labels"] = {
+        "marks": sorted(m.name for m in marks),
+        "kinds": sorted({m.kind for m in marks}),
+        "shown": sorted(m.name for m in marks
+                        if (m.id, m.name) in shown),
+        "gl_errors": dict(view.gl_errors)}
+    for layer_id in state["label_layers"]:
+        window.set_layer_shown(layer_id, False)
+    window.refresh()
+
+
+@check(1500)
+def layer_labels_off():
+    view = state["window"].view
+    result["layer_labels"]["off"] = len(view.layer_marks)
+    QgsProject.instance().removeMapLayers(state["label_layers"])
+
+@check(8000)
+def layer_labels_real():
+    # Подписи настоящего слоя автора: путь к слою, поле подписи и proj
+    # его системы координат - в PLANETX_LABEL_LAYER через «;;», в пути
+    # GeoPackage уже есть «|». Слой открывается только на чтение.
+    from qgis.core import (QgsCoordinateReferenceSystem, QgsPalLayerSettings,
+                           QgsVectorLayer, QgsVectorLayerSimpleLabeling)
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    from planetx.core.navigation import Pose
+    spec = os.environ.get("PLANETX_LABEL_LAYER")
+    if not spec:
+        result["layer_labels_real"] = "PLANETX_LABEL_LAYER не задан"
+        return
+    source, field, proj = spec.split(";;", 2)
+    layer = QgsVectorLayer(source, "Слой автора", "ogr")
+    layer.setCrs(QgsCoordinateReferenceSystem.fromProj(proj))
+    settings = QgsPalLayerSettings()
+    settings.fieldName = field
+    layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+    layer.setLabelsEnabled(True)
+    QgsProject.instance().addMapLayer(layer)
+    state["real_layer"] = layer.id()
+    window = state["window"]
+    window.set_layer_shown(layer.id(), True)
+    window.refresh()
+    # Точка взгляда - середина охвата слоя.
+    from qgis.core import QgsCoordinateTransform
+    to_wgs = QgsCoordinateTransform(
+        layer.crs(), QgsCoordinateReferenceSystem("EPSG:4326"),
+        QgsProject.instance().transformContext())
+    c = to_wgs.transform(layer.extent().center())
+    window.view.navigator.set_pose(Pose(c.y(), c.x(), 15000.0, 0.0, 0.0))
+    window.view.update()
+    state["real_center"] = (round(c.y(), 4), round(c.x(), 4))
+
+
+@check(6000)
+def layer_labels_real_check():
+    if "real_layer" not in state:
+        return
+    view = state["window"].view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_layer_labels_real.png"))
+    marks = view.layer_marks
+    result["layer_labels_real"] = {
+        "center": state["real_center"],
+        "marks": len(marks),
+        "sample": [m.name for m in marks[:5]],
+        "shown": sum(1 for m in marks
+                     if (m.id, m.name) in view.labels.shown),
+        "labels": view.labels.count,
+        "gl_errors": dict(view.gl_errors)}
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

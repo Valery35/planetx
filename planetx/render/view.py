@@ -328,6 +328,8 @@ class GlobeView(QOpenGLWidget):
         self.label_kinds = set()
         # Подписи координатной сетки, core.places.Place класса «grid».
         self.grid_marks = []
+        # Подписи слоёв проекта, ui/layer_labels.py.
+        self.layer_marks = []
         self._places_wanted = frozenset()
         self._places_at = 0.0
         self.labels = Labels()
@@ -1615,7 +1617,7 @@ class GlobeView(QOpenGLWidget):
         kinds = kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
-        own = self._own_marks() + self.grid_marks
+        own = self._own_marks() + self.layer_marks + self.grid_marks
         if mark is not None or own:
             head = ([mark] if mark is not None else []) + own
             if self._marked[0] is not places or self._marked[1] != head:

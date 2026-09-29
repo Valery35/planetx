@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.12.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.13.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -43,7 +43,9 @@ and atmosphere, from space down to single streets.
   properties.
 - **Project layers.** Vector and raster layers of the project lie on the
   globe in the QGIS map order. A check mark in the window list shows
-  a layer on the globe and leaves the map unchanged.
+  a layer on the globe and leaves the map unchanged. Labels of vector
+  layers stay level like city names, with the text and colour of the
+  layer labels in QGIS.
 
 ![The Earth from space](doc/images/earth.jpg)
 

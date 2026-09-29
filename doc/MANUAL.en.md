@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.12.0
+Version 0.13.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -245,9 +245,17 @@ table. The check box of a layer shows it on the globe and does not
 change its visibility on the map. In a new project the boxes are clear.
 The checks are stored in the project.
 
-Layers lie on the globe as a picture drawn by QGIS, with the styles and
-labels of the map. The picture lies on the terrain, it cannot be raised
-or extruded.
+Layers lie on the globe as a picture drawn by QGIS, with the styles of
+the map. The picture lies on the terrain, it cannot be raised or
+extruded.
+
+Labels of vector layers come separately, like city names. They stay
+level at any turn and tilt, do not overlap and hide behind mountains
+and the horizon. The text, colour and size come from the layer labels
+in QGIS, rule-based labels too. A point label stands to the right of
+the point, a line label at its middle, a polygon label inside it.
+Features around the view point are labelled, at most 500 per layer.
+The scale visibility of QGIS labels is not used on the globe.
 
 A double click on a layer flies to its extent, looking straight down.
 The right-click menu:

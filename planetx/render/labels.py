@@ -45,6 +45,7 @@ from qgis.PyQt.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QImage,
                              QPainter, QPainterPath, QPen, QPolygonF)
 
 from ..core.ellipsoid import geodetic_to_ecef, surface_normal
+from ..core.layer_labels import dark
 from ..core.places import KIND, identity, select_labels
 from ..i18n import tr
 from ..qt_compat import enum
@@ -113,6 +114,9 @@ STYLES = {
     "village": (11, False, False, QColor(240, 240, 240, 210), 1.8, "dot"),
     # Подпись линии координатной сетки, без значка.
     "grid": (11, False, False, QColor(255, 255, 255, 235), 0.0, None),
+    # Подпись слоя проекта по умолчанию. Цвет и кегль подписи слоя
+    # приходят из QGIS, для них стиль заводит layer_style.
+    "layer": (12, False, False, QColor(255, 255, 255, 245), 0.0, None),
     # Экватор, тропики и полярные круги, жёлтые, как в Google Earth.
     "circle": (11, False, False, QColor(255, 230, 0, 240), 0.0, None),
 }
@@ -133,6 +137,24 @@ PREMULTIPLIED = enum(QImage, "Format", "Format_RGBA8888_Premultiplied")
 ROUND_JOIN = enum(Qt, "PenJoinStyle", "RoundJoin")
 
 
+HALO_LIGHT = QColor(255, 255, 255, 200)  # обводка тёмной подписи слоя
+GAP_DOT = 3.0  # отступ подписи точки слоя от самой точки, пикселей
+
+
+def layer_style(size, rgba, point):
+    """Вид надписи подписи слоя проекта: кегль в логических пикселях,
+    цвет (r, g, b, a). У точки текст стоит справа от неё, значок
+    QGIS не закрывается. Возвращает класс надписи, он заводится один
+    раз на сочетание вида. Место в очереди - как у класса «layer»."""
+    kind = "layer:%d:%s:%d" % (round(size), ",".join(map(str, rgba)),
+                               int(bool(point)))
+    if kind not in STYLES:
+        STYLES[kind] = (int(round(size)), False, False, QColor(*rgba),
+                        GAP_DOT if point else 0.0, "gap" if point else None)
+        KIND[kind] = KIND["layer"]
+    return kind
+
+
 class _Style:
     """Шрифт, значок и размеры надписи одного класса при данном
     масштабе."""
@@ -150,6 +172,9 @@ class _Style:
         self.font.setItalic(italic)
         self.metrics = QFontMetricsF(self.font)
         self.color = color
+        # Тёмная подпись слоя проекта - со светлой обводкой.
+        self.halo_color = HALO_LIGHT if dark(
+            (color.red(), color.green(), color.blue())) else HALO
         self.marker = marker
         self.dot = dot * ratio if marker not in (None, "shield") else 0.0
         self.halo = HALO_WIDTH * ratio
@@ -194,7 +219,7 @@ class _Style:
                          self.font, text)
             painter.fillPath(path, QBrush(self.color))
         else:
-            halo = QPen(HALO, 2.0 * self.halo)
+            halo = QPen(self.halo_color, 2.0 * self.halo)
             halo.setJoinStyle(ROUND_JOIN)
             x = self.halo + (2.0 * self.dot + self.gap if self.dot else 0.0)
             path = QPainterPath()
@@ -212,6 +237,8 @@ class _Style:
         return rows[:, :w * 4].reshape(h, w, 4).copy()
 
     def _marker(self, painter, anchor):
+        if self.marker == "gap":
+            return  # точку слоя рисует QGIS в картинке наложения
         painter.setPen(QPen(HALO, self.halo * 0.8))
         painter.setBrush(QBrush(self.color))
         r = self.dot

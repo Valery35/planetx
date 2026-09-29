@@ -55,6 +55,7 @@ from ..qt_compat import enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import IdentifyDialog, identify, point_text
+from .layer_labels import LayerLabels
 from .legend import TemperatureLegend
 from .draw import PlaceDialog
 from .measure import Ruler, RulerDialog
@@ -452,6 +453,9 @@ class GlobeWindow(QWidget):
         self.panel.extra_toggled.connect(self.set_extra)
         self.grid_shapes = []
         self._grid_key = None
+        self.layer_labels = LayerLabels(self)
+        self.layer_labels.changed.connect(self._show_layer_labels)
+        self.view.changed.connect(self._update_layer_labels)
         self.view.changed.connect(self._update_grid)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
@@ -550,6 +554,19 @@ class GlobeWindow(QWidget):
             self._set_gibs("land", on)
             self.legend.setVisible(on)
             self._place_attribution()
+
+    def _update_layer_labels(self, force=False):
+        """Подписи слоёв проекта, которые сейчас на глобусе. Слои
+        читаются заново, только когда вид сдвинулся на долю окна."""
+        pose = self.view.navigator.pose
+        width = 2.0 * pose.distance * math.tan(
+            math.radians(self.view.camera.fov_y) / 2.0)
+        self.layer_labels.update(self._applied_layers or [], pose.lat,
+                                 pose.lon, width, force)
+
+    def _show_layer_labels(self):
+        self.view.layer_marks = self.layer_labels.marks
+        self.view.update()
 
     def _update_grid(self):
         """Сетка на глобусе. Строится заново, только когда меняется
@@ -755,6 +772,8 @@ class GlobeWindow(QWidget):
             if self.ofm_layer is not None:
                 set_line_groups(self.ofm_layer, lines)
             self._update_overlay(keep=True)
+            # Подписи слоёв - заново: сменились слои или их данные.
+            self._update_layer_labels(force=True)
         self._show_attribution()
 
     def _switch_basemap(self, source):
@@ -1781,6 +1800,7 @@ class GlobeWindow(QWidget):
     def closeEvent(self, event):
         self.sync.close()
         self.tracks.close()
+        self.layer_labels.close()
         if self.identified is not None:
             self.identified.close()
         if self.ruler_dialog is not None:

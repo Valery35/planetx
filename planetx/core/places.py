@@ -34,10 +34,12 @@ LEVEL_OFFSET = 2
 # подписываются воды, заповедники, вершины, аэропорты и номера дорог.
 # Класс «search» - временная метка найденного места, она важнее всех.
 # Класс «mark» - точечный объект глобуса, свой или из «Моих меток».
-# Классы «circle» и «grid» - подписи экватора, тропиков, полярных
-# кругов и линий координатной сетки. Класса у каждого стиля
-# render/labels.py требует test_label_kinds.
-CLASSES = ("search", "mark", "circle", "grid", "country", "capital",
+# Класс «layer» - подпись слоя проекта. Классы «circle» и «grid» -
+# подписи экватора, тропиков, полярных кругов и линий координатной
+# сетки. Класса у каждого стиля render/labels.py требует
+# test_label_kinds.
+CLASSES = ("search", "mark", "layer", "circle", "grid", "country",
+           "capital",
            "city", "state",
            "water", "town", "park", "peak", "airport", "road_ref",
            "village")
