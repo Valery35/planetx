@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.15.0
+version=0.16.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -16,7 +16,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       water names, roads with their numbers, railways, airports, rivers,
       lakes, peaks and protected areas from OpenFreeMap vector tiles,
       a coordinate grid, stars with the Milky Way, clouds and land and
-      sea temperature from NASA GIBS.
+      sea temperature from NASA GIBS. 3D buildings from
+      OpenStreetMap rise from the ground near the camera.
       Labels stay upright, do not overlap and hide behind mountains and
       the horizon. The label language follows QGIS or is chosen from
       15 languages and local names.
@@ -66,7 +67,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.15.0 Any place can have a view of its own, as in Google
+changelog=0.16.0 3D buildings in the Layers panel, as in Google
+      Earth. OpenStreetMap buildings rise as blocks when the camera
+      is closer than 6 km to the ground, with the height from
+      OpenStreetMap or from the number of floors. They are off by
+      default. A scene remembers the rows of the Layers panel.
+      0.15.0 Any place can have a view of its own, as in Google
       Earth: look point, range, heading and tilt. Snapshot view in the
       place menu and the Place view section of the properties set it,
       fly-to and tours follow it, KML keeps it as LookAt. A slider on

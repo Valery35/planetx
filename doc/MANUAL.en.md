@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.15.0
+Version 0.16.0
 
 PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -187,6 +187,7 @@ take effect at once, without the Refresh button.
 | Stars | Stars brighter than magnitude 6 and the Milky Way at their places in the sky |
 | Clouds | Clouds from NASA GIBS VIIRS imagery of the last complete day |
 | Temperature | Surface temperature of land by day over 8 days (MODIS) and of the sea over a day (GHRSST MUR) with a scale in degrees |
+| 3D buildings | OpenStreetMap buildings as blocks from OpenFreeMap tiles, off by default |
 
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
@@ -208,6 +209,29 @@ near the surface over a day.
 
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
+
+### 3D buildings
+
+The 3D buildings row of the Layers section puts OpenStreetMap buildings
+on the globe as blocks. Outlines and heights come from the same
+OpenFreeMap vector tiles as the vector base. The row is off by default.
+
+<img src="figures/en/buildings.jpg" width="600" alt="3D buildings in the centre of Perm">
+
+Buildings show when the camera is closer than 6 km to the ground. The
+globe keeps up to 32 building tiles around the camera, the nearest
+first. Tiles behind the camera are not loaded.
+
+The height of a building is its height in OpenStreetMap, otherwise the
+number of floors times 3.66 m. A building without either gets a height
+of 5 m. In the centre of Perm two thirds of the buildings have a height
+of their own, in the centre of Moscow almost all. In the outskirts many
+houses have the same height. The colour of a building comes from
+OpenStreetMap, otherwise the building is light grey. Roofs are flat.
+
+The bottom of a building stands at the lowest point of the terrain
+under its outline. A view snapshot waits until all buildings of the
+frame are loaded. A scene remembers whether buildings are on.
 
 ### View properties
 
@@ -572,6 +596,8 @@ A scene holds:
 - the project layers checked on the globe, as a link to their source.
 - the base map, terrain, terrain exaggeration, groups of the Layers
   section and the label language.
+- the rows of the Layers section, the grid, stars, clouds,
+  temperature and 3D buildings.
 - the selected folder of My Places with its tour.
 
 A database password does not go into the file, a link to a QGIS
@@ -624,11 +650,13 @@ the insertion.
 - Above latitude 85° the poles are covered with the ocean color, the Web
   Mercator tile grid ends there.
 - Recording a tour takes longer than the tour itself.
+- Buildings are blocks with flat roofs, roof shapes and facades
+  are not shown.
 
 ## Data sources
 
 Imagery - Esri World Imagery, Esri sets the terms. Map data ©
-OpenStreetMap contributors. Vector tiles - OpenFreeMap. Terrain - Mapzen
+OpenStreetMap contributors. Vector tiles and 3D buildings - OpenFreeMap. Terrain - Mapzen
 Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Clouds - NASA GIBS,
 VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale Bright Star Catalogue. Milky Way -
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia

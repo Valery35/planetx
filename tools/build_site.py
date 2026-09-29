@@ -124,7 +124,7 @@ RU = {
     "project.fig": "Пермь с высоты 40 км. Магистрали, железные дороги, "
                    "номера дорог и названия пунктов поверх космоснимка.",
     "controls.eyebrow": "Управление",
-    "controls.h2": "Земля тянется мышью",
+    "controls.h2": "Навигация мышью и клавиатурой",
     "controls.sub": "Навигация повторяет Google Earth. Значок "
                     "«Свойства вида» открывает свойства вида, кнопка "
                     "«О модуле» напоминает управление и источники.",
@@ -150,7 +150,7 @@ RU = {
     "c6.p": "Двойной щелчок подлетает к точке, правая кнопка "
             "приближает и отдаляет, Ctrl поворачивает взгляд. Стрелки, "
             "PageUp, PageDown, N, U и R работают как в Google Earth.",
-    "c7.h": "Органы на экране",
+    "c7.h": "Инструменты управления на экране",
     "c7.p": "В правом верхнем углу вида кольцо компаса, джойстики "
             "взгляда и сдвига и ползунок высоты. Они появляются, когда "
             "курсор подходит к углу.",
@@ -256,7 +256,7 @@ EN = {
     "project.fig": "Perm from 40 km. Motorways, railways, road numbers "
                    "and place names over satellite imagery.",
     "controls.eyebrow": "Controls",
-    "controls.h2": "Drag the Earth with the mouse",
+    "controls.h2": "Mouse and keyboard navigation",
     "controls.sub": "Navigation follows Google Earth. The View "
                     "properties icon opens the view properties, the About "
                     "button lists the controls and the sources.",

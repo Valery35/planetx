@@ -109,7 +109,7 @@ class ViewToolbar(QFrame):
         self.properties = self._button(
             QgsApplication.getThemeIcon("/mActionOptions.svg"),
             tr("Свойства вида: подложка, масштаб рельефа, язык подписей, "
-               "связь с картой, обновление, органы навигации."),
+               "связь с картой, обновление, инструменты управления."),
             self.properties_clicked)
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)

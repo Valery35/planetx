@@ -49,7 +49,8 @@ RELIEF = "relief"  # строка рельефа в панели «Слои»
 # Строки раздела «Слои» под рельефом: сетка, звёзды, облака.
 GRID, STARS, CLOUDS = "grid", "stars", "clouds"
 TEMPERATURE = "temperature"
-EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE)
+BUILDINGS = "buildings"
+EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
@@ -459,7 +460,13 @@ class LayerPanel(QWidget):
                     "Температура поверхности по данным NASA GIBS: суша "
                     "днём за 8 дней по MODIS, море за сутки по GHRSST "
                     "MUR. Под облаками на суше бывают пропуски. Шкала "
-                    "в градусах стоит в левом нижнем углу вида."))):
+                    "в градусах стоит в левом нижнем углу вида.")),
+                (BUILDINGS, tr("3D-здания"), tr(
+                    "Объёмные здания из OpenStreetMap по векторным "
+                    "тайлам OpenFreeMap. Они видны, когда камера ближе "
+                    "6 км к земле. Высота взята из OSM, иначе из "
+                    "этажности. Здание без этих сведений получает "
+                    "высоту 5 м."))):
             item = QTreeWidgetItem(self.geo, [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)

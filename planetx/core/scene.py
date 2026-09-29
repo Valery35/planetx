@@ -42,7 +42,8 @@ class Scene:
     1 анимация, 2 промежуток), start, end - время ISO 8601, frame -
     номер кадра, step - длина кадра в секундах. layers - список
     словарей name, provider, source, kind ("vector" или "raster").
-    view - настройки вида: basemap, relief, scale, groups, language.
+    view - настройки вида: basemap, relief, scale, groups, language,
+    extras - включены ли строки раздела «Слои» по ключам.
     places - название папки меток сцены или "".
     """
 

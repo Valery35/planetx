@@ -40,6 +40,7 @@ from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, Stop
 from ..core.tiling import tile_mesh
+from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
 from ..core.places import Place as MarkPlace  # метка найденного места
@@ -90,9 +91,10 @@ DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # Сетка, звёзды, облака: ключ настройки и умолчание. Звёзды включены,
 # как в Google Earth, сетка и облака выключены. Решение помощника от
-# 29 сентября 2026 года, его утверждает автор.
+# 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
+# решение автора от 29 сентября 2026 года.
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
-                  "temperature": False}
+                  "temperature": False, "buildings": False}
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
@@ -212,6 +214,18 @@ def places_decoder(languages):
     return decode
 
 
+def buildings_decoder(key, data):
+    """Разбор тайла зданий в рабочем потоке: Footprint или NO_BUILDINGS.
+
+    Ошибка разбора даёт None, исключение в рабочем потоке не уходит.
+    """
+    try:
+        found = footprints(key, data)
+    except (DecodeError, ValueError, IndexError):
+        return None
+    return NO_BUILDINGS if found is None else found
+
+
 def heights_preparer(key, rgba):
     """Работа рабочего потока для тайла высот Terrarium."""
     return make_tile(*key, rgba)
@@ -289,6 +303,8 @@ class GlobeWindow(QWidget):
         self.place_loader = None
         self.gibs_loaders = {}  # слой GIBS вида -> загрузчик, см. _set_gibs
         self.sky_loader = None  # картинка неба, см. _load_sky
+        self.buildings_loader = None  # тайлы зданий, см. _set_buildings
+        self._ofm_source = None  # тайлы OpenFreeMap после TileJSON
         # Настройки вида делятся на выбранные и действующие. Выбранные
         # показывают свойства вида и список слоёв. Действующие видны
         # на глобусе. Кнопка «Обновить» или автообновление переносят
@@ -560,6 +576,27 @@ class GlobeWindow(QWidget):
             self._set_gibs("land", on)
             self.legend.setVisible(on)
             self._place_attribution()
+        elif key == "buildings":
+            self._set_buildings(on)
+
+    def _set_buildings(self, on):
+        """3D-здания: загрузчик тайлов OpenFreeMap или никакого. Адрес
+        тайлов даёт TileJSON, до его прихода здания ждут."""
+        old = self.buildings_loader
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        self.buildings_loader = None
+        if on and self._ofm_source is not None:
+            self.buildings_loader = TileLoader(self._ofm_source, parent=self,
+                                               decode=buildings_decoder)
+            self.buildings_loader.loaded.connect(
+                lambda key, found, extra: self.view.add_buildings(key, found))
+        elif on and self._tilejson is None:
+            self._tilejson = fetch_json(OPENFREEMAP_TILEJSON,
+                                        self._tilejson_done)
+        self.view.set_buildings(on, self.buildings_loader)
+        self._show_attribution()
 
     def _update_layer_labels(self, force=False):
         """Подписи слоёв проекта, которые сейчас на глобусе. Слои
@@ -816,7 +853,8 @@ class GlobeWindow(QWidget):
 
     def _show_attribution(self):
         parts = [attribution_html(self.source)]
-        if self._applied_groups and self.ofm_layer is not None:
+        if self._applied_groups and self.ofm_layer is not None \
+                or self.buildings_loader is not None:
             parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
         if self.view.store.scale:
             parts.append(TERRAIN_ATTRIBUTION)
@@ -863,8 +901,14 @@ class GlobeWindow(QWidget):
         # Названия пунктов - из тех же векторных тайлов, свой загрузчик.
         self._places_source = basemap.Source("OpenFreeMap", tiles[0],
                                              max_zoom)
+        self._ofm_source = basemap.Source("OpenFreeMap", tiles[0], max_zoom)
         self._start_place_loader()
-        self._update_overlay()
+        # TileJSON просят и здания без векторной основы. Тогда наложение
+        # не пересобирается, картинки слоёв проекта остаются.
+        if self._applied_groups:
+            self._update_overlay()
+        if self.extras.get("buildings") and self.buildings_loader is None:
+            self._set_buildings(True)
         self._show_attribution()
 
     def _start_place_loader(self):
@@ -1832,7 +1876,8 @@ class GlobeWindow(QWidget):
         self.terrain_loader.abort()
         if self.place_loader is not None:
             self.place_loader.abort()
-        for loader in list(self.gibs_loaders.values()) + [self.sky_loader]:
+        for loader in list(self.gibs_loaders.values()) + [
+                self.sky_loader, self.buildings_loader]:
             if loader is not None:
                 loader.abort()
         if self.overlay is not None:

@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.15.0.
+A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.16.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -30,6 +30,9 @@ and atmosphere, from space down to single streets.
   and the Milky Way stand at their places in the sky. Clouds come from NASA imagery of
   the last complete day. Land and sea temperature from NASA data
   colours the globe, the scale in degrees is in the corner of the view.
+- **3D buildings.** OpenStreetMap buildings from OpenFreeMap tiles
+  rise as blocks when the camera is closer than 6 km to the ground.
+  The height comes from OpenStreetMap or from the number of floors.
 - **Left panel.** The sections Places, Project layers and Layers
   collapse with a click on the header, as in Google Earth.
 - **Layers section.** As in Google Earth, it holds
@@ -158,7 +161,7 @@ of use.
 
 Map data © OpenStreetMap contributors,
 [terms of use](https://www.openstreetmap.org/copyright). Vector tiles
-come from [OpenFreeMap](https://openfreemap.org/).
+and 3D buildings come from [OpenFreeMap](https://openfreemap.org/).
 
 Terrain comes from [Mapzen Terrain Tiles](https://github.com/tilezen/joerd/blob/master/docs/attribution.md),
 data from SRTM, GMTED, ETOPO1 and other sources.

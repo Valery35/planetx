@@ -305,3 +305,39 @@ void main() {
     frag = u_color;
 }
 """
+
+# 3D-здания, render/buildings.py. Нормаль и цвет - в вершине, нормаль
+# в ECEF. Освещение как у отмывки рельефа (core.tiling.shade): свет
+# u_light, яркость делится на яркость плоской крыши u_flat, так крыша
+# остаётся цвета здания, стены светлее или темнее.
+BUILDING_VERTEX = """
+#version 330 core
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec4 a_normal;
+layout(location = 2) in vec4 a_color;
+uniform mat4 u_mvp;
+uniform vec3 u_light;
+uniform float u_ambient;
+uniform float u_flat;
+uniform vec2 u_limits;
+out vec3 v_color;
+void main() {
+    gl_Position = u_mvp * vec4(a_position, 1.0);
+    vec3 n = a_normal.xyz;
+    float len = length(n);
+    float lambert = len > 0.0 ? clamp(dot(n / len, u_light), 0.0, 1.0)
+                              : 1.0;
+    float shade = clamp((u_ambient + (1.0 - u_ambient) * lambert) / u_flat,
+                        u_limits.x, u_limits.y);
+    v_color = min(a_color.rgb * shade, vec3(1.0));
+}
+"""
+
+BUILDING_FRAGMENT = """
+#version 330 core
+in vec3 v_color;
+out vec4 frag;
+void main() {
+    frag = vec4(v_color, 1.0);
+}
+"""

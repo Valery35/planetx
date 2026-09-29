@@ -79,7 +79,10 @@ def capture(window, folder=None, name=""):
     view = {"basemap": window.sources[window._basemap].name,
             "relief": bool(window._relief), "scale": float(window._scale),
             "groups": sorted(window._groups),
-            "language": window._language}
+            "language": window._language,
+            # Строки раздела «Слои»: сетка, звёзды, облака, температура,
+            # 3D-здания.
+            "extras": {key: bool(on) for key, on in window.extras.items()}}
     kml = ""
     places = ""
     if folder:
@@ -138,6 +141,12 @@ def apply(window, scene, kml=b""):
     language = view.get("language")
     if language in LABEL_LANGUAGES or language in (LOCAL, AS_QGIS):
         window.set_label_language(language)
+    # В прежних сценах строк раздела «Слои» нет, они остаются как есть.
+    extras = view.get("extras")
+    if isinstance(extras, dict):
+        for key, on in extras.items():
+            if key in window.extras and bool(on) != window.extras[key]:
+                window.set_extra(key, bool(on))
     wanted, missing = set(), []
     for entry in scene.layers:
         layer = _find_layer(entry) or _add_layer(entry)

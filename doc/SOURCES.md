@@ -15,7 +15,7 @@ QGIS. Запросы идут через сетевые настройки и д
 |---|---|---|---|
 | Esri World Imagery | космоснимки, подложка по умолчанию | [Esri Master License Agreement](https://www.esri.com/en-us/legal/terms/full-master-agreement) | Esri, Vantor, Earthstar Geographics, and the GIS User Community |
 | OpenStreetMap | карта, подложка на выбор | [ODbL и правила использования тайлов](https://www.openstreetmap.org/copyright) | © OpenStreetMap contributors |
-| OpenFreeMap | границы, реки, дороги, названия пунктов | [бесплатно, в том числе коммерчески, с подписью](https://openfreemap.org/) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors |
+| OpenFreeMap | границы, реки, дороги, названия пунктов, 3D-здания | [бесплатно, в том числе коммерчески, с подписью](https://openfreemap.org/) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors |
 | Mapzen Terrain Tiles | высоты рельефа | [условия по источникам высот](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) | Terrain: Mapzen, SRTM, GMTED, ETOPO1 and others |
 | NASA GIBS, VIIRS SNPP Corrected Reflectance | облака, строка «Облака» | [данные NASA открыты, NASA просит указать источник](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | NASA GIBS, VIIRS |
 | NASA GIBS, MODIS Terra LST 8 дней и GHRSST MUR | температура суши и моря, строка «Температура» | [данные NASA открыты, NASA просит указать источник](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | NASA GIBS, MODIS, GHRSST MUR |

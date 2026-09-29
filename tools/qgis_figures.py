@@ -8,8 +8,9 @@
         tools\\qgis_figures.py
 
 Язык модуля задаёт PLANETX_LANG (ru или en). Картинки ложатся
-в doc/figures/<язык>: окно глобуса над Пермью, угол с органами
-навигации, окна «Свойства вида» и свойств метки. Глобус ждёт загрузки
+в doc/figures/<язык>: окно глобуса над Пермью, угол с инструментами
+управления, окна «Свойства вида» и свойств метки, 3D-здания в центре
+Перми. Глобус ждёт загрузки
 тайлов, но не дольше WAIT секунд. Свои метки сценарий ставит
 в отдельную папку и в конце удаляет. QGIS пользователя не трогается,
 в конце QGIS закрывается.
@@ -34,6 +35,7 @@ from qgis.PyQt.QtCore import QTimer  # noqa: E402
 from qgis.utils import iface  # noqa: E402
 
 WAIT = 60.0  # секунд на загрузку тайлов вида
+BUILDINGS_WAIT = 120.0  # секунд на загрузку зданий
 JPEG_WIDTH = 1400  # ширина снимка окна в руководстве
 result = {"lang": LANG, "files": [], "errors": []}
 state = {}
@@ -148,6 +150,36 @@ def shoot():
     except (AttributeError, IndexError, KeyError, RuntimeError,
             TypeError) as error:
         result["errors"].append(repr(error))
+        QTimer.singleShot(500, finish)
+        return
+    QTimer.singleShot(500, buildings_start)
+
+
+def buildings_start():
+    # 3D-здания в центре Перми с 1.5 км, наклон 60°.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.navpad.set_mode("auto")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(58.0105, 56.2294, 1500.0, 30.0, 60.0))
+    window.set_extra("buildings", True)
+    state["started"] = time.monotonic()
+    QTimer.singleShot(3000, buildings_wait)
+
+
+def buildings_wait():
+    window = state["window"]
+    view = window.view
+    view._heartbeat()
+    spent = time.monotonic() - state["started"]
+    if view.load_missing and spent < BUILDINGS_WAIT:
+        QTimer.singleShot(1000, buildings_wait)
+        return
+    result["buildings_missing"] = view.load_missing
+    result["buildings_drawn"] = view.buildings.drawn
+    save(view.grabFramebuffer(), "buildings.jpg", jpeg=True)
+    window.set_extra("buildings", False)
     QTimer.singleShot(500, finish)
 
 

@@ -25,6 +25,12 @@ TEMP = os.environ.get("TEMP", ".")
 CRASH = open(os.path.join(TEMP, "planetx_steps_crash.txt"), "w",
              encoding="utf-8")
 faulthandler.enable(CRASH, all_threads=True)
+# Зависание: стеки всех потоков в тот же файл каждые HANG_DUMP секунд.
+# Прогон шагов редко идёт дольше, при зависании видно, где стоит
+# главный поток. Переменная PLANETX_HANG_DUMP, 0 - выключено.
+HANG_DUMP = int(os.environ.get("PLANETX_HANG_DUMP", "0"))
+if HANG_DUMP:
+    faulthandler.dump_traceback_later(HANG_DUMP, repeat=True, file=CRASH)
 
 from qgis.core import QgsApplication, QgsProject  # noqa: E402
 from qgis.PyQt.QtCore import QTimer  # noqa: E402
@@ -76,8 +82,113 @@ def run(index=0):
     QTimer.singleShot(delay, lambda: run(index + 1))
 
 
+GL_TRACE = os.environ.get("PLANETX_GL_TRACE") == "1"
+TRACE_PATH = os.path.join(TEMP, "planetx_gl_trace.txt")
+
+
+def _trace(text):
+    """Строка журнала трассировки, сразу на диск: при падении видно
+    последнее действие перед ним."""
+    with open(TRACE_PATH, "a", encoding="utf-8") as f:
+        f.write("{:.3f} {}\n".format(time.monotonic(), text))
+
+
+def _install_gl_trace():
+    """Отладочный контекст OpenGL и журнал действий зданий.
+
+    Контекст с флагом отладки, QOpenGLDebugLogger в синхронном режиме:
+    сообщение драйвера приходит внутри вызова, который его вызвал,
+    к нему пишется стек Python. Только в проверочном профиле.
+    """
+    from qgis.PyQt.QtGui import QSurfaceFormat
+    import planetx.render.view as rv
+    import planetx.render.buildings as rb
+    if os.path.exists(TRACE_PATH):
+        os.remove(TRACE_PATH)
+    plain = rv.surface_format
+
+    def debug_format():
+        fmt = plain()
+        fmt.setOption(rv.enum(QSurfaceFormat, "FormatOption",
+                              "DebugContext"))
+        return fmt
+    rv.surface_format = debug_format
+
+    upload = rb.Buildings.upload
+
+    def traced_upload(self, count=rb.UPLOADS):
+        order = [k for k in self.wanted if k in self.results][:count]
+        for key in order:
+            mesh, level = self.results[key]
+            top = int(mesh.indices.max()) if len(mesh.indices) else -1
+            _trace("upload {} v={} i={} max={} level={}".format(
+                key, len(mesh.vertices), len(mesh.indices), top, level))
+        upload(self, count)
+        _trace("uploaded buffers={} vertices={}".format(
+            len(self.buffers), self.vertices))
+    rb.Buildings.upload = traced_upload
+
+    draw = rb.Buildings.draw
+
+    def traced_draw(self, camera):
+        _trace("draw start {}x{} buffers={}".format(
+            camera.width, camera.height, len(self.buffers)))
+        draw(self, camera)
+        _trace("draw end drawn={}".format(self.drawn))
+    rb.Buildings.draw = traced_draw
+
+    for name in ("_shot_frame", "_paint_preview", "paintGL"):
+        original = getattr(rv.GlobeView, name)
+
+        def wrapped(self, _original=original, _name=name):
+            _trace("enter " + _name)
+            out = _original(self)
+            _trace("leave " + _name)
+            return out
+        setattr(rv.GlobeView, name, wrapped)
+
+
+@check(500)
+def gl_trace_on():
+    """Журнал сообщений драйвера, когда контекст окна уже создан.
+    Шаг ставится в PLANETX_STEPS сразу после открытия окна."""
+    try:
+        from qgis.PyQt.QtOpenGL import QOpenGLDebugLogger
+    except ImportError:
+        from qgis.PyQt.QtGui import QOpenGLDebugLogger
+    view = state["window"].view
+    view.makeCurrent()
+    logger = QOpenGLDebugLogger(view)
+    ok = logger.initialize()
+
+    def logged(message):
+        severity = message.severity()
+        if getattr(severity, "value", severity) == 8:  # уведомление
+            return
+        _trace("GL {} {} {}: {}".format(
+            int(message.id()), str(message.type()), str(message.severity()),
+            message.message()))
+        _trace("  stack: " + " | ".join(
+            line.strip().replace("\n", " ")
+            for line in traceback.format_stack()[-8:-1]))
+    logger.messageLogged.connect(logged)
+    logger.startLogging(
+        QOpenGLDebugLogger.LoggingMode.SynchronousLogging
+        if hasattr(QOpenGLDebugLogger, "LoggingMode")
+        else QOpenGLDebugLogger.SynchronousLogging)
+    view.doneCurrent()
+    state["gl_logger"] = logger
+    from qgis.PyQt.QtGui import QSurfaceFormat
+    import planetx.render.view as rv
+    debug = view.context().format().testOption(
+        rv.enum(QSurfaceFormat, "FormatOption", "DebugContext"))
+    _trace("logger initialized={} debug={}".format(ok, debug))
+
+
 @check(4000)
 def open_globe():
+    if GL_TRACE:
+        _install_gl_trace()
     if os.environ.get("PLANETX_LABELS_FREE"):
         # Сравнение: надписи без ограничений разметки и растровки.
         from planetx.render import labels
@@ -90,6 +201,7 @@ def open_globe():
     state["plugin"] = plugin
     state["window"] = plugin.window
     plugin.window.showNormal()
+
 
 
 @check(200)
@@ -2344,6 +2456,157 @@ def place_view():
         "dialog_snapshot": [round(v, 4) for v in snapped],
         "dialog_reset": [round(v, 4) for v in reset]}
     places.remove_many([key, old])
+
+
+BUILDINGS_POSE = (58.0105, 56.2294, 1500.0, 30.0, 60.0)
+
+
+def _buildings_report(window):
+    view = window.view
+    b = view.buildings
+    loader = window.buildings_loader
+    return {"wanted": len(b.wanted), "footprints": len(b.footprints),
+            "buffers": len(b.buffers), "drawn": b.drawn,
+            "vertices": b.vertices, "missing": b.missing(),
+            "started": len(loader.started) if loader else None,
+            "active": len(loader.replies) if loader else None,
+            "queued": len(loader.queue) if loader else None,
+            "decoding": len(loader.decoding) if loader else None,
+            "failed": state.get("buildings_failed", []),
+            "building": len(b.building), "results": len(b.results),
+            "gl_errors": dict(view.gl_errors),
+            "outside_errors": dict(view.outside_errors)}
+
+
+@check(1500)
+def buildings_on():
+    # 3D-здания над центром Перми: тайлы приходят, сетки в видеокарте,
+    # кадр со зданиями отличается от кадра без них, подпись есть.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(*BUILDINGS_POSE))
+    window.set_extra("buildings", True)
+    state["buildings_failed"] = []
+    window.buildings_loader.failed.connect(
+        lambda key, text: state["buildings_failed"].append(
+            [list(key), str(text)]))
+    view.update()
+
+
+def _changed_pixels(a, b, step=4):
+    if a.size() != b.size():
+        return -1
+    count = 0
+    for y in range(0, a.height(), step):
+        for x in range(0, a.width(), step):
+            if a.pixel(x, y) != b.pixel(x, y):
+                count += 1
+    return count
+
+
+@check(15000)
+def buildings_wait():
+    window = state["window"]
+    view = window.view
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_buildings.png"))
+    # Тот же кадр без зданий сразу следом: разница - сами здания.
+    view.buildings.shown = False
+    bare = view.grabFramebuffer()
+    view.buildings.shown = True
+    again = view.grabFramebuffer()
+    result["buildings"] = _buildings_report(window)
+    result["buildings"]["changed_px_sampled"] = _changed_pixels(image, bare)
+    result["buildings"]["same_px_check"] = _changed_pixels(image, again)
+    result["buildings"]["attribution"] = \
+        "OpenFreeMap" in window.attribution.text()
+    result["buildings"]["frame_ms"] = round(
+        1000.0 * sorted(view.frame_times)[len(view.frame_times) // 2], 2)
+    window.set_extra("buildings", False)
+    view.update()
+
+
+@check(2000)
+def buildings_off():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    result["buildings"]["off"] = {
+        "loader": window.buildings_loader is None,
+        "drawn": view.buildings.drawn}
+    window.set_extra("buildings", True)
+    lat, lon = BUILDINGS_POSE[:2]
+    view.navigator.set_pose(Pose(lat, lon, 20000.0, 0.0, 0.0))
+    view.update()
+
+
+@check(3000)
+def buildings_range():
+    window = state["window"]
+    report = _buildings_report(window)
+    result["buildings"]["high"] = report
+    window.set_extra("buildings", False)
+    window.view.update()
+
+
+@check(500)
+def buildings_shot():
+    # Снимок вида ждёт здания: после него все тайлы зданий кадра
+    # в видеокарте.
+    from planetx.core.navigation import Pose
+    import planetx.ui.snapshot as smod
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(*BUILDINGS_POSE))
+    # PLANETX_SHOT_BARE=1 - тот же снимок без зданий, для сравнения.
+    window.set_extra("buildings",
+                     os.environ.get("PLANETX_SHOT_BARE") != "1")
+    path = os.path.join(TEMP, "planetx_buildings_shot.png")
+    if os.path.exists(path):
+        os.remove(path)
+    smod.QFileDialog.getSaveFileName = staticmethod(
+        lambda *args, **kwargs: (path, ""))
+
+    def setup(dialog):
+        dialog.keep.setChecked(False)
+        dialog.width_px.setValue(2000)
+        dialog.height_px.setValue(1500)
+    _shot_begin(False, setup)
+
+
+@check(1500)
+def buildings_shot_wait():
+    out = _shot_wait()
+    if isinstance(out, int):
+        return out
+    window = state["window"]
+    b = window.view.buildings
+    out["wanted"] = len(b.wanted)
+    out["buffers"] = len([k for k in b.wanted if k in b.buffers])
+    out["empty"] = len([k for k in b.wanted
+                        if b.footprints.get(k) == "empty"])
+    out["missing_after"] = b.missing()
+    out["rejected"] = b.rejected
+    result["buildings_shot"] = out
+    return None
+
+
+@check(500)
+def buildings_scene():
+    # Строка «3D-здания» уходит в сцену и возвращается из неё.
+    from planetx.ui.scene import apply, capture
+    window = state["window"]
+    scene, _ = capture(window)
+    saved = scene.view.get("extras", {}).get("buildings")
+    window.set_extra("buildings", False)
+    apply(window, scene)
+    result["buildings_scene"] = {
+        "saved": saved, "restored": window.extras.get("buildings"),
+        "loader": window.buildings_loader is not None}
+    window.set_extra("buildings", False)
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.

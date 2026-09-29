@@ -138,6 +138,19 @@ class HeightStore:
         self.version += 1
         self.added.append((tile.z, tile.x, tile.y))
 
+    def snapshot(self):
+        """Копия для рабочего потока: тот же набор тайлов и масштаб.
+
+        Главный поток добавляет тайлы в словарь, обход того же словаря
+        в рабочем потоке мог бы оборваться. Тайлы не меняются, копия
+        словаря стоит доли миллисекунды.
+        """
+        copy = HeightStore()
+        copy.tiles = dict(self.tiles)
+        copy.scale = self.scale
+        copy.version = self.version
+        return copy
+
     def take_added(self):
         """Ключи тайлов, добавленных с прошлого вызова."""
         added, self.added = self.added, []

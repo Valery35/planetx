@@ -34,6 +34,7 @@ from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
                            tile_mesh)
 from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
+from .buildings import SHOT_UPLOADS as BUILDING_SHOT_UPLOADS, Buildings
 from .features import Features
 from .labels import Labels
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
@@ -340,6 +341,8 @@ class GlobeView(QOpenGLWidget):
         # Свои объекты: линии и многоугольники рисует Features, точки -
         # надписи класса «mark».
         self.features = Features()
+        # 3D-здания из тайлов OpenFreeMap, строка «3D-здания».
+        self.buildings = Buildings()
         self.stars = Stars()
         self.sky = Sky()  # Млечный путь, строка «Звёзды»
         self.show_stars = True
@@ -378,7 +381,7 @@ class GlobeView(QOpenGLWidget):
 
     def _pump_loaders(self):
         for loader in (self.loader, self.terrain_loader, self.place_loader,
-                       self.overlay):
+                       self.overlay, self.buildings.loader):
             if loader is not None:
                 loader.pump_if_due()
 
@@ -391,6 +394,9 @@ class GlobeView(QOpenGLWidget):
         sel = self.selection
         if sel is not None and sel.want and self.loader is not None \
                 and not self.loader.busy() and self.shot is None:
+            self.update()
+        elif self.buildings.results and self.shot is None:
+            # Готовые сетки зданий уходят в видеокарту только в кадре.
             self.update()
         self._check_load(sel)
 
@@ -569,6 +575,7 @@ class GlobeView(QOpenGLWidget):
             return
         self.store.set_scale(scale)
         self.relief += 1
+        self.buildings.set_relief(self.relief)
         self.build_pool.clear()
         self.building.clear()
         self.built.clear()
@@ -840,6 +847,7 @@ class GlobeView(QOpenGLWidget):
         self.hole_query = int(np.ravel(GL.glGenQueries(1))[0])
         self.labels.init_gl()
         self.features.init_gl()
+        self.buildings.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
         self._context = ctx
@@ -853,6 +861,7 @@ class GlobeView(QOpenGLWidget):
         self._end_shot()
         self.labels.release_gl()
         self.features.release_gl()
+        self.buildings.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
         self.build_pool.clear()
@@ -1303,6 +1312,14 @@ class GlobeView(QOpenGLWidget):
             holes = self._count_holes()
             GL.glUseProgram(self.program)
             self.hole_counts.append((self.frame, gaps, holes))
+        buildings_busy = False
+        if self.buildings.shown and not self.show_holes:
+            # До неба: небо рисуется там, где глубина осталась 1.0.
+            buildings_busy = self.buildings.update(
+                self.camera, self.store, time.monotonic())
+            self.buildings.upload(BUILDING_SHOT_UPLOADS if shot
+                                  else 1 if motion else 2)
+            self.buildings.draw(self.camera)
         if air:
             self._draw_sky()
         if self.show_stars and not self.show_holes:
@@ -1349,7 +1366,7 @@ class GlobeView(QOpenGLWidget):
         if shot:
             pass  # кадры снимка идут по таймеру
         elif moving or refill or self.built or self._drop_overlays \
-                or features_busy \
+                or features_busy or buildings_busy \
                 or self.labels.pending or (
                 self.pending and any(k in sel.keep for k in self.pending)) \
                 or (self.overlay_pending and any(
@@ -1387,7 +1404,7 @@ class GlobeView(QOpenGLWidget):
         for layer in self.gibs.values():
             if layer.shown:
                 count += layer.missing + len(layer.pending)
-        return count
+        return count + self.buildings.missing()
 
     # Снимок вида
 
@@ -1569,6 +1586,17 @@ class GlobeView(QOpenGLWidget):
     def add_gibs(self, name, key, levels):
         """Пришла картинка тайла слоя GIBS."""
         self.gibs[name].add(key, levels)
+        self.last_arrival = time.monotonic()
+        self.update()
+
+    def set_buildings(self, on, loader=None):
+        """Показать 3D-здания с загрузчиком loader или скрыть их."""
+        self.buildings.set_shown(on, loader)
+        self.update()
+
+    def add_buildings(self, key, footprint):
+        """Пришёл разобранный тайл зданий."""
+        self.buildings.add(key, footprint)
         self.last_arrival = time.monotonic()
         self.update()
 

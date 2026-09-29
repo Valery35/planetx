@@ -153,7 +153,7 @@ class PropertiesDialog(QDialog):
         layers = QGroupBox(tr("Обновление"), self)
         QVBoxLayout(layers).addWidget(self.auto)
 
-        self.nav = QCheckBox(tr("Органы навигации всегда на экране"),
+        self.nav = QCheckBox(tr("Инструменты управления всегда на экране"),
                              self)
         self.nav.setToolTip(tr(
             "Кольцо компаса, джойстики и ползунок высоты в правом верхнем "

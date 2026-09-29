@@ -41,7 +41,7 @@ EN = {
     "Свернуть или развернуть векторную основу и рельеф.":
         "Collapse or expand the vector base and terrain.",
     "Свойства вида: подложка, масштаб рельефа, язык подписей, "
-    "связь с картой, обновление, органы навигации.":
+    "связь с картой, обновление, инструменты управления.":
         "View properties: base map, terrain exaggeration, label language, "
         "link with the map, update, navigation controls.",
     "Подложка": "Base map",
@@ -114,8 +114,10 @@ EN = {
     "Облака: NASA GIBS, снимки VIIRS.": "Clouds: NASA GIBS, VIIRS imagery.",
     "Звёзды: каталог ярких звёзд Йельского университета.":
         "Stars: the Yale Bright Star Catalogue.",
-    "Координатная сетка, звёзды, облака и температура суши и моря.":
-        "A coordinate grid, stars, clouds and land and sea temperature.",
+    "Координатная сетка, звёзды, облака, температура суши и моря, "
+    "3D-здания.":
+        "A coordinate grid, stars, clouds, land and sea temperature, "
+        "3D buildings.",
     "Температура: NASA GIBS, MODIS и GHRSST MUR.":
         "Temperature: NASA GIBS, MODIS and GHRSST MUR.",
     "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
@@ -123,8 +125,8 @@ EN = {
         "Vector base: OpenFreeMap, © OpenMapTiles, © OpenStreetMap "
         "contributors.",
     "О модуле PlanetX": "About PlanetX",
-    "Левая кнопка тянет Землю, после отпускания она вращается "
-    "по инерции.":
+    "С нажатой левой кнопкой Земля поворачивается вслед "
+    "за курсором, после отпускания вращается по инерции.":
         "The left button drags the Earth, after release it keeps "
         "rotating by inertia.",
     "Колесо приближает к точке под курсором.":
@@ -179,6 +181,16 @@ EN = {
         "Clouds from NASA GIBS VIIRS imagery of the last complete day. "
         "They lie as a translucent veil over the imagery. Snow and ice "
         "are white too and stay visible.",
+    "3D-здания": "3D buildings",
+    "Объёмные здания из OpenStreetMap по векторным "
+    "тайлам OpenFreeMap. Они видны, когда камера ближе "
+    "6 км к земле. Высота взята из OSM, иначе из "
+    "этажности. Здание без этих сведений получает "
+    "высоту 5 м.":
+        "3D buildings from OpenStreetMap in OpenFreeMap vector tiles. "
+        "They show when the camera is closer than 6 km to the ground. "
+        "The height comes from OSM or from the number of floors. A "
+        "building without either gets a height of 5 m.",
     "Температура": "Temperature",
     "Температура поверхности по данным NASA GIBS: суша "
     "днём за 8 дней по MODIS, море за сутки по GHRSST "
@@ -254,12 +266,12 @@ EN = {
     "Кольцо поворачивает вид, буква N ставит север вверху. "
     "Джойстик в кольце поворачивает взгляд, нижний сдвигает вид. "
     "Ползунок задаёт высоту, плюс и минус приближают и отдаляют. "
-    "Показ органов выбирается в свойствах вида.":
+    "Показ инструментов выбирается в свойствах вида.":
         "The ring turns the view, the letter N puts north up. The stick "
         "inside the ring looks around, the lower one moves the view. The "
         "slider sets the height, plus and minus zoom in and out. Showing "
         "the controls is chosen in the view properties.",
-    "Органы навигации всегда на экране":
+    "Инструменты управления всегда на экране":
         "Navigation controls always on screen",
     "Кольцо компаса, джойстики и ползунок высоты в правом верхнем "
     "углу вида, как в Google Earth. Без флажка они появляются, "
