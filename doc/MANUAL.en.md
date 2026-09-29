@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.17.1
+Version 0.17.2
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -488,8 +488,8 @@ that drives tracks.
 
 ### KML and KMZ
 
-Open KML or KMZ… puts a Google Earth file into My Places as a new folder
-named after the file. Folders, styles, icons, times and placemark
+Open KML or KMZ… puts a KML or KMZ file, including one from Google
+Earth, into My Places as a new folder named after the file. Folders, styles, icons, times and placemark
 views are kept, `gx:Tour` becomes a recorded tour. The
 camera flies to the contents of the file.
 

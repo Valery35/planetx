@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.17.1
+version=0.17.2
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -68,12 +68,14 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
 homepage=https://www.informpp.ru/главная-страница/qgis-planetx
-tags=3d,globe,earth,google earth,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,labels,vector tiles,opengl
+tags=3d,globe,earth,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,labels,vector tiles,opengl
 category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.17.1 The navigation controls in the corner of the
+changelog=0.17.2 The description, manual and changelog describe
+      the plugin in its own words.
+      0.17.1 The navigation controls in the corner of the
       view are always shown, as a faint outline away from the
       cursor and in full near it. Tooltips describe the plugin in
       its own words.
@@ -83,13 +85,13 @@ changelog=0.17.1 The navigation controls in the corner of the
       Placemark icons, placemark time with a time slider,
       recording a tour from the screen, all kept in
       KML. The Perm demo in the Scene menu.
-      0.16.0 3D buildings in the Layers panel, as in Google
-      Earth. OpenStreetMap buildings rise as blocks when the camera
+      0.16.0 3D buildings in the Layers panel.
+      OpenStreetMap buildings rise as blocks when the camera
       is closer than 6 km to the ground, with the height from
       OpenStreetMap or from the number of floors. They are off by
       default. A scene remembers the rows of the Layers panel.
-      0.15.0 Any place can have a view of its own, as in Google
-      Earth: look point, range, heading and tilt. Snapshot view in the
+      0.15.0 Any place can have a view of its own:
+      look point, range, heading and tilt. Snapshot view in the
       place menu and the Place view section of the properties set it,
       fly-to and tours follow it, KML keeps it as LookAt. A slider on
       the tour bar shows how much of the tour has passed and winds it.
@@ -104,28 +106,28 @@ changelog=0.17.1 The navigation controls in the corner of the
       in the bottom left corner of the view. The coordinate grid with
       labels no longer breaks drawing with an error, the fault came in
       0.10.0.
-      0.11.0 The Milky Way behind the Earth, as in Google Earth,
+      0.11.0 The Milky Way behind the Earth,
       from the NASA sky map. The sky image is downloaded once when the
       stars are first shown. Files of GitHub releases and other
       redirected tiles now load in QGIS 3.
-      0.10.0 A coordinate grid as in Google Earth: the step follows
+      0.10.0 A coordinate grid: the step follows
       the camera height, lines are labelled, the equator, tropics and
       polar circles are yellow. Stars around the Earth at their places in
       the sky. Clouds from NASA imagery of the last complete day, in the
       Layers panel. Translucent own lines and walls no longer turn dark.
-      0.9.0 Copy and paste in My Places, as in Google Earth: places
+      0.9.0 Copy and paste in My Places: places
       and folders go to the clipboard as KML text, which can be edited in
       a text editor and pasted back. The place properties window no longer
       blocks the globe, changes show at once and a Ground - Space slider
       sets the height. A PDF manual with pictures in Russian and English
       ships with the plugin and opens from About.
-      0.8.0 On-screen navigation controls as in Google Earth: the
+      0.8.0 On-screen navigation controls: the
       compass ring with N, the look and move sticks and the height slider
       with plus and minus appear in the top right corner of the view. A
       check box in the view properties keeps them on screen. The view
       properties open from the icon bar. The About window describes the
       features, controls and requirements.
-      0.7.0 Mouse and keys as in Google Earth: double click zooms to
+      0.7.0 Mouse and keys: double click zooms to
       a point, right drag zooms, Ctrl looks around, arrows, PageUp,
       PageDown, N, U, R and Space. The left panel has collapsible
       sections Places, Project layers and Layers. Several places are
@@ -151,12 +153,12 @@ changelog=0.17.1 The navigation controls in the corner of the
       0.5.1 The base map no longer stops loading and stays blurred,
       the fault came in 0.5.0. The globe turns as smoothly with large
       places, such as the regions of a country from KML, as without them.
-      Place properties as in Google Earth: name, description, colors,
+      Place properties: name, description, colors,
       height above ground and extending to the ground, a path becomes a
-      wall and a polygon a block. Google Earth files: Open KML or KMZ puts
+      wall and a polygon a block. KML files: Open KML or KMZ puts
       the file into My Places with folders, styles and views, Save as KML
       writes a folder back.
-      0.5.0 Tours as in Google Earth: Play tour flies over the
+      0.5.0 Tours: Play tour flies over the
       checked places of My Places or a folder, a saved view restores its
       height, heading and tilt, along a path the camera travels the line.
       Folders in My Places with dragging of places and folders. View
@@ -167,15 +169,15 @@ changelog=0.17.1 The navigation controls in the corner of the
       moving.
       0.4.3 The plugin passes the Qt 6 check of the QGIS plugin
       repository. Nothing changes in the globe itself.
-      0.4.2 My Places is a folder right under the Globe row, as in
-      Google Earth, shown even when empty. Its check box shows or hides
+      0.4.2 My Places is a folder right under the Globe row,
+      shown even when empty. Its check box shows or hides
       all places, a double click on a place flies there. Save view is a
       button of its own and puts a placemark that restores the height,
       heading and tilt. The QGIS bookmarks menu is removed.
       0.4.1 A large polygon no longer hangs QGIS while it is drawn.
       Arrow cursor over the globe, closed hand while dragging, cross for
       the ruler, new placemark and identify.
-      0.4.0 My Places as in Google Earth: placemarks, paths and
+      0.4.0 My Places: placemarks, paths and
       polygons drawn on the globe and saved in a shared file. Ruler with
       line, path, polygon and circle on the WGS84 ellipsoid, measurements
       saved to My Places. QGIS bookmarks and Save view with heading and
@@ -186,14 +188,14 @@ changelog=0.17.1 The navigation controls in the corner of the
       system. Identify features by a click on the globe. Coordinates and
       elevation under the cursor in the status line. Borders, place names
       and terrain are on by default, other layers off.
-      0.3.1 Place search by name as in Google Earth, with a red pin
+      0.3.1 Place search by name, with a red pin
       on the place found and a list of other matches. Search runs through
       Nominatim.
       0.3.0 Esri World Imagery by default. Project layers on the
-      globe in the QGIS map order. Layers panel as in Google Earth with
+      globe in the QGIS map order. Layers panel with
       borders, place and water names, roads and road numbers, railways,
-      airports, rivers, lakes, peaks and protected areas. Labels in the
-      style of Google Earth with a choice of language. Terrain can be
+      airports, rivers, lakes, peaks and protected areas. Labels
+      with a choice of language. Terrain can be
       switched off, vertical exaggeration. Refresh button and automatic
       refresh. Own PlanetX toolbar.
       0.2.0 Terrain relief with hill shading, the camera stays above

@@ -128,7 +128,7 @@ RU = {
     "places.sub": "Метки, пути и многоугольники рисуются щелчками "
                   "по глобусу и хранятся в «Моих метках». "
                   "У метки бывают значок, своё время и свой вид. "
-                  "Файлы KML Google Earth открываются и сохраняются. "
+                  "Файлы KML и KMZ открываются и сохраняются. "
                   "Пункт «Демо «Пермь»» меню «Сцена» показывает всё сразу.",
     "places.fig": "Демо «Пермь». Шкала времени на 11:30-13:00, видна "
                   "Эспланада, маршрут прогулки и 3D-здания.",
@@ -280,7 +280,7 @@ EN = {
     "places.sub": "Placemarks, paths and polygons are drawn with clicks "
                   "on the globe and kept in My Places. "
                   "A placemark can have an icon, a time and a view "
-                  "of its own. Google Earth KML files open and save. "
+                  "of its own. KML and KMZ files open and save. "
                   "Perm demo in the Scene menu shows it all at once.",
     "places.fig": "Perm demo. The time slider at 11:30-13:00 shows the "
                   "Esplanade, the walk route and 3D buildings.",

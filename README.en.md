@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.17.1.
+A 3D globe inside QGIS. PlanetX version 0.17.2.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -130,7 +130,8 @@ and atmosphere, from space down to single streets.
 - **Place properties.** Name, description, icon, colors, time,
   height above ground
   and extending to the ground. A path becomes a wall, a polygon a block.
-- **KML and KMZ.** Google Earth files open into My Places with folders,
+- **KML and KMZ.** KML and KMZ files, including Google Earth
+  ones, open into My Places with folders,
   styles and placemark views. A folder saves to KMZ or KML.
 - **Copy and paste.** Places and folders are copied to the clipboard
   as KML text and pasted back, also after editing in a text editor and
