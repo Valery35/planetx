@@ -83,7 +83,7 @@ class ViewToolbar(QFrame):
                "и наклон."), self.save_view_requested)
         self.record = self._button(
             QgsApplication.getThemeIcon("/mActionRecord.svg"),
-            tr("Записать тур, как в Google Earth. Двигайте камеру "
+            tr("Записать тур с экрана. Двигайте камеру "
                "мышью, клавишами или перелётами, повторный щелчок "
                "останавливает запись. Тур ложится в «Мои метки»."),
             self.record_toggled, checkable=True)

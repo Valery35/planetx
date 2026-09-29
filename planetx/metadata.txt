@@ -2,8 +2,8 @@
 name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
-description=3D globe for QGIS in the spirit of Google Earth: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.17.0
+description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
+version=0.17.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -12,7 +12,7 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       horizon. Esri World Imagery opens by default as an example base map.
       It can be switched to OpenStreetMap or any XYZ Tiles connection set
       up in QGIS.
-      The Layers panel, as in Google Earth, adds borders, place names,
+      The Layers panel adds borders, place names,
       water names, roads with their numbers, railways, airports, rivers,
       lakes, peaks and protected areas from OpenFreeMap vector tiles,
       a coordinate grid, stars with the Milky Way, clouds and land and
@@ -21,8 +21,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       The ruler measures ground length and heading, the elevation
       profile of a path shows ascent and slopes. Coordinates show
       in degrees, degrees-minutes-seconds, UTM or MGRS. Places
-      have icons and a time of their own with a time slider, as
-      in Google Earth, and a tour can be recorded from the screen.
+      have icons and a time of their own with a time slider,
+      and a tour can be recorded from the screen.
       The Perm demo in the Scene menu shows it all.
       Labels stay upright, do not overlap and hide behind mountains and
       the horizon. The label language follows QGIS or is chosen from
@@ -30,18 +30,18 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Layers of the current project, vector and raster, lie on the globe
       in the map order of QGIS, labels of vector layers stay level like
       city names.
-      Navigation follows Google Earth. Drag the Earth with the left mouse
+      Drag the Earth with the left mouse
       button, it keeps rotating by inertia after release. The wheel zooms
       to the point under the cursor, the middle button or Shift with the
       left button turns and tilts the view. A double click zooms to a
       point, the right button zooms, Ctrl looks around, arrows, PageUp,
-      PageDown, N, U and R work as in Google Earth. The compass ring,
-      look and move sticks and the height slider appear in the corner of
-      the view. The globe follows the QGIS map window or leads it, in any
+      PageDown, N, U and R move the view. The compass ring,
+      look and move sticks and the height slider stay in the corner of
+      the view as a faint outline. The globe follows the QGIS map window or leads it, in any
       map coordinate system. A click in the Identify mode lists the
       features of the project layers under the point and selects them on
       the map, selection on the map shows on the globe.
-      My Places, as in Google Earth, keep placemarks, paths, polygons and
+      My Places keep placemarks, paths, polygons and
       measurements in a shared file of the QGIS profile. They are drawn
       by clicks on the globe. The ruler measures lines, paths,
       polygons and circles on the WGS84 ellipsoid. Save view puts a
@@ -73,11 +73,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.17.0 Ruler with ground length, heading and dragging
+changelog=0.17.1 The navigation controls in the corner of the
+      view are always shown, as a faint outline away from the
+      cursor and in full near it. Tooltips describe the plugin in
+      its own words.
+      0.17.0 Ruler with ground length, heading and dragging
       of points. Elevation profile of lines and paths. Coordinates
       in degrees, DMS, UTM or MGRS, search understands all four.
-      Placemark icons, placemark time with a time slider as in
-      Google Earth, recording a tour from the screen, all kept in
+      Placemark icons, placemark time with a time slider,
+      recording a tour from the screen, all kept in
       KML. The Perm demo in the Scene menu.
       0.16.0 3D buildings in the Layers panel, as in Google
       Earth. OpenStreetMap buildings rise as blocks when the camera

@@ -55,7 +55,7 @@ RU = {
     "title": "PlanetX - трёхмерный глобус для QGIS · Информ++",
     "desc": "PlanetX показывает всю Землю в отдельном окне QGIS: "
             "космоснимки, рельеф, атмосферу, границы, дороги, подписи "
-            "и слои проекта. Навигация как в Google Earth.",
+            "и слои проекта.",
     "brand.sub": "для QGIS",
     "nav.idea": "Глобус",
     "nav.layers": "Слои",
@@ -63,7 +63,7 @@ RU = {
     "nav.controls": "Управление",
     "hero.eyebrow": "Плагин QGIS · 3D-глобус",
     "hero.h1": "Вся Земля в окне QGIS, от космоса до улицы",
-    "hero.lead": "PlanetX открывает глобус в духе Google Earth "
+    "hero.lead": "PlanetX открывает глобус "
                  "в QGIS. Космоснимки лежат на рельефе, вокруг планеты "
                  "светится атмосфера, границы, дороги и названия "
                  "включаются флажками. Слои текущего проекта ложатся "
@@ -79,8 +79,8 @@ RU = {
     "idea.h2": "Своё окно, свой движок, данные из открытых источников",
     "idea.sub": "Глобус рисуется на OpenGL 3.3 собственным движком, "
                 "а не штатным 3D-видом QGIS. Камера держит точку "
-                "взгляда, расстояние, азимут и наклон, как в Google "
-                "Earth. Тайлы подложки, высот и векторной основы идут "
+                "взгляда, расстояние, азимут и наклон. "
+                "Тайлы подложки, высот и векторной основы идут "
                 "через сетевые настройки и кэш QGIS.",
     "idea.c1.h": "Космоснимки и рельеф",
     "idea.c1.p": "По умолчанию подложка - Esri World Imagery как пример. "
@@ -95,7 +95,7 @@ RU = {
                  "не дрожит.",
     "layers.eyebrow": "Панель «Слои»",
     "layers.h2": "Границы, дороги и названия поверх снимков",
-    "layers.sub": "Внизу слева, как в Google Earth, лежат группы "
+    "layers.sub": "Внизу слева лежат группы "
                   "«Границы и названия», «Транспорт» и «Природа». "
                   "Данные берутся из векторных тайлов OpenFreeMap "
                   "и ложатся по рельефу. Там же координатная сетка "
@@ -103,7 +103,7 @@ RU = {
                   "за последние полные сутки. Флажки срабатывают сразу.",
     "layers.fig": "Евразия с высоты 9000 км. Названия стран и городов, "
                   "границы стран жёлтые, границы областей тонкие белые.",
-    "layers.c1.h": "Подписи как в Google Earth",
+    "layers.c1.h": "Ровные подписи",
     "layers.c1.p": "Надписи остаются ровными при любом повороте и наклоне "
                    "и не налезают друг на друга. Пункт за горой или "
                    "за горизонтом не подписан. При приближении "
@@ -126,8 +126,8 @@ RU = {
     "places.eyebrow": "Метки, время, измерения",
     "places.h2": "Свои метки, их время и измерения",
     "places.sub": "Метки, пути и многоугольники рисуются щелчками "
-                  "по глобусу и хранятся в «Моих метках», как в Google "
-                  "Earth. У метки бывают значок, своё время и свой вид. "
+                  "по глобусу и хранятся в «Моих метках». "
+                  "У метки бывают значок, своё время и свой вид. "
                   "Файлы KML Google Earth открываются и сохраняются. "
                   "Пункт «Демо «Пермь»» меню «Сцена» показывает всё сразу.",
     "places.fig": "Демо «Пермь». Шкала времени на 11:30-13:00, видна "
@@ -145,7 +145,7 @@ RU = {
                    "камеры. Тур записывается кадрами PNG для ролика.",
     "controls.eyebrow": "Управление",
     "controls.h2": "Навигация мышью и клавиатурой",
-    "controls.sub": "Навигация повторяет Google Earth. Значок "
+    "controls.sub": "Значок "
                     "«Свойства вида» открывает свойства вида, кнопка "
                     "«О модуле» напоминает управление и источники.",
     "g1": "Мышь и клавиатура",
@@ -166,14 +166,14 @@ RU = {
             "«Обновить». Можно включить автоматическое обновление.",
     "k1": "ЛКМ", "k2": "Колесо", "k3": "СКМ", "k4": "Enter",
     "k5": "Кнопка",
-    "c6.h": "Как в Google Earth",
+    "c6.h": "Щелчки и клавиши",
     "c6.p": "Двойной щелчок подлетает к точке, правая кнопка "
             "приближает и отдаляет, Ctrl поворачивает взгляд. Стрелки, "
-            "PageUp, PageDown, N, U и R работают как в Google Earth.",
+            "PageUp, PageDown, N, U и R управляют видом.",
     "c7.h": "Инструменты управления на экране",
     "c7.p": "В правом верхнем углу вида кольцо компаса, джойстики "
-            "взгляда и сдвига и ползунок высоты. Они появляются, когда "
-            "курсор подходит к углу.",
+            "взгляда и сдвига и ползунок высоты. Вдали от курсора они "
+            "стоят слабым контуром, у курсора видны целиком.",
     "k6": "2×", "k7": "Угол",
     "fact1": "кадров в секунду при вращении глобуса, не меньше, "
              "в любую секунду замера.",
@@ -204,7 +204,7 @@ EN = {
     "title": "PlanetX - a 3D globe for QGIS · Inform++",
     "desc": "PlanetX shows the whole Earth in its own QGIS window: "
             "satellite imagery, terrain, atmosphere, borders, roads, "
-            "labels and project layers. Navigation as in Google Earth.",
+            "labels and project layers.",
     "brand.sub": "for QGIS",
     "nav.idea": "Globe",
     "nav.layers": "Layers",
@@ -212,7 +212,7 @@ EN = {
     "nav.controls": "Controls",
     "hero.eyebrow": "QGIS plugin · 3D globe",
     "hero.h1": "The whole Earth in a QGIS window, from space to the street",
-    "hero.lead": "PlanetX opens a globe in the spirit of Google Earth "
+    "hero.lead": "PlanetX opens a globe "
                  "right inside QGIS. Satellite imagery lies on the "
                  "terrain, the atmosphere glows around the planet, and "
                  "borders, roads and names are switched on with check "
@@ -230,8 +230,8 @@ EN = {
     "idea.h2": "Its own window, its own engine, data from open sources",
     "idea.sub": "The globe is drawn with OpenGL 3.3 by its own engine "
                 "rather than the built-in QGIS 3D view. The camera holds "
-                "the look-at point, distance, heading and tilt, as in "
-                "Google Earth. Base map, terrain and vector tiles go "
+                "the look-at point, distance, heading and tilt. "
+                "Base map, terrain and vector tiles go "
                 "through the QGIS network settings and cache.",
     "idea.c1.h": "Satellite imagery and terrain",
     "idea.c1.p": "The default base map is Esri World Imagery as an "
@@ -246,7 +246,7 @@ EN = {
                  "pixel, and the picture does not jitter.",
     "layers.eyebrow": "The Layers panel",
     "layers.h2": "Borders, roads and names over the imagery",
-    "layers.sub": "At the bottom left, as in Google Earth, there are the "
+    "layers.sub": "At the bottom left there are the "
                   "groups Borders and names, Transport and Nature. The "
                   "data come from OpenFreeMap vector tiles and follow the "
                   "terrain. The same panel holds a coordinate grid with "
@@ -255,7 +255,7 @@ EN = {
     "layers.fig": "Eurasia from 9000 km. Names of countries and cities, "
                   "country borders in yellow, region borders thin and "
                   "white.",
-    "layers.c1.h": "Labels as in Google Earth",
+    "layers.c1.h": "Upright labels",
     "layers.c1.p": "Labels stay upright at any turn and tilt and do not "
                    "overlap. A place behind a mountain or beyond the "
                    "horizon is not labelled. Zooming in brings smaller "
@@ -278,8 +278,8 @@ EN = {
     "places.eyebrow": "Places, time, measurements",
     "places.h2": "Your places, their time and measurements",
     "places.sub": "Placemarks, paths and polygons are drawn with clicks "
-                  "on the globe and kept in My Places, as in Google "
-                  "Earth. A placemark can have an icon, a time and a view "
+                  "on the globe and kept in My Places. "
+                  "A placemark can have an icon, a time and a view "
                   "of its own. Google Earth KML files open and save. "
                   "Perm demo in the Scene menu shows it all at once.",
     "places.fig": "Perm demo. The time slider at 11:30-13:00 shows the "
@@ -298,7 +298,7 @@ EN = {
                    "video.",
     "controls.eyebrow": "Controls",
     "controls.h2": "Mouse and keyboard navigation",
-    "controls.sub": "Navigation follows Google Earth. The View "
+    "controls.sub": "The View "
                     "properties icon opens the view properties, the About "
                     "button lists the controls and the sources.",
     "g1": "Mouse and keyboard",
@@ -319,14 +319,14 @@ EN = {
             "button. Automatic refresh can be switched on.",
     "k1": "Left", "k2": "Wheel", "k3": "Middle", "k4": "Enter",
     "k5": "Button",
-    "c6.h": "As in Google Earth",
+    "c6.h": "Clicks and keys",
     "c6.p": "A double click flies to the point, the right button zooms "
             "in and out, Ctrl looks around. Arrows, PageUp, PageDown, N, "
-            "U and R work as in Google Earth.",
+            "U and R control the view.",
     "c7.h": "On-screen controls",
     "c7.p": "The top right corner of the view holds the compass ring, "
-            "the look and move sticks and the height slider. They appear "
-            "when the cursor comes near the corner.",
+            "the look and move sticks and the height slider. Away from the "
+            "cursor they stay as a faint outline, near it in full.",
     "k6": "2×", "k7": "Corner",
     "fact1": "frames per second at least while the globe rotates, in "
              "every second of the measurement.",

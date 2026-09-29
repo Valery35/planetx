@@ -80,6 +80,13 @@ class TestCatalogue(unittest.TestCase):
         for text in i18n.EN.values():
             self.assertIsNone(re.search(r"[А-Яа-яЁё]", text), text)
 
+    def test_no_foreign_product_in_interface(self):
+        # Решение автора от 30 сентября 2026 года - у модуля своё лицо,
+        # интерфейс не ссылается на Google Earth.
+        found = [text for pair in i18n.EN.items() for text in pair
+                 if "Google" in text]
+        self.assertEqual(found, [])
+
     def test_placeholders_match(self):
         for source, text in i18n.EN.items():
             self.assertEqual(sorted(re.findall(r"{\w+}", source)),

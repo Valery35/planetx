@@ -203,7 +203,7 @@ class PlaceProperties(QDialog):
             self.color.setAllowOpacity(True)
             self.color.setColor(QColor(*shape.color))
             self.color.setToolTip(tr(
-                "Цвет значка метки, как цвет значка в Google Earth."))
+                "Цвет значка метки на глобусе и в списке."))
             self.color.colorChanged.connect(self._color_changed)
             self.icon = QComboBox(self)
             names = icon_names()
@@ -214,7 +214,7 @@ class PlaceProperties(QDialog):
                 icons.normal(shape.icon)))
             self.icon.setToolTip(tr(
                 "Значок точки на глобусе и в списке. В KML он уходит "
-                "стандартным значком Google Earth той же темы."))
+                "адресом стандартного значка той же темы."))
             self.icon.currentIndexChanged.connect(self._changed)
             form.addRow(tr("Значок"), self.icon)
             form.addRow(tr("Цвет"), self.color)
@@ -249,7 +249,7 @@ class PlaceProperties(QDialog):
         self.height.setSuffix(tr(" м"))
         self.height.setValue(float(shape.height or 0.0))
         self.height.setToolTip(tr(
-            "Подъём над рельефом, как «относительно земли» в Google Earth. "
+            "Подъём над рельефом. "
             "Ноль - объект лежит на земле."))
         self.height.valueChanged.connect(self._height_typed)
         form.addRow(tr("Высота над землёй"), self.height)
@@ -258,7 +258,7 @@ class PlaceProperties(QDialog):
         self.slider.setValue(int(round(
             height_share(self.height.value()) * SLIDER_STEPS)))
         self.slider.setToolTip(tr(
-            "Высота ползунком, как в Google Earth. Шкала логарифмическая, "
+            "Высота ползунком. Шкала логарифмическая, "
             "у земли шаг - метры, выше - сотни метров и километры."))
         self.slider.valueChanged.connect(self._height_slid)
         slider_row = QWidget(self)
@@ -278,8 +278,8 @@ class PlaceProperties(QDialog):
         self.time = TimeField(place.time, self)
         self.time.setToolTip(tr(
             "Собственное время метки, как TimeStamp и TimeSpan "
-            "в Google Earth. Метка со временем видна, пока её время "
-            "попадает в промежуток шкалы времени внизу вида. Метка "
+            "в KML. Метка со временем видна, пока её время "
+            "попадает в промежуток шкалы времени вверху вида. Метка "
             "без времени видна всегда."))
         form.addRow(tr("Время"), self.time)
         self.look = self._view_group(place.view)
@@ -301,7 +301,7 @@ class PlaceProperties(QDialog):
         group.setChecked(view is not None)
         group.setToolTip(tr(
             "Откуда смотрит камера, когда летит к метке или стоит на ней "
-            "в туре, как вид метки в Google Earth. Без своего вида камера "
+            "в туре. Без своего вида камера "
             "берёт метку в кадр целиком."))
         form = QFormLayout(group)
         view = view or self._default_view()
@@ -313,13 +313,13 @@ class PlaceProperties(QDialog):
                 (tr("Долгота"), -180.0, 180.0, 6, "°", view[1], tr(
                     "Долгота точки, на которую смотрит камера.")),
                 (tr("Расстояние"), 1.0, 5.0e7, 0, tr(" м"), view[2], tr(
-                    "Расстояние от камеры до точки взгляда, «диапазон» "
-                    "Google Earth. Больше - вид шире.")),
+                    "Расстояние от камеры до точки взгляда. "
+                    "Больше - вид шире.")),
                 (tr("Азимут"), 0.0, 360.0, 1, "°", view[3], tr(
-                    "Куда смотрит камера, «курс» Google Earth. 0 - север "
+                    "Куда смотрит камера. 0 - север "
                     "вверху кадра.")),
                 (tr("Наклон"), 0.0, lookat.MAX_TILT, 1, "°", view[4], tr(
-                    "Наклон камеры, «угол обзора» Google Earth. 0 - взгляд "
+                    "Наклон камеры. 0 - взгляд "
                     "отвесно вниз, больше - к горизонту."))):
             field = QDoubleSpinBox(group)
             field.setRange(low, high)
@@ -331,7 +331,7 @@ class PlaceProperties(QDialog):
             self.look_fields.append(field)
         self.view_time = TimeField(self.place.view_time, group)
         self.view_time.setToolTip(tr(
-            "Дата и время вида, как в Google Earth. Перелёт к метке "
+            "Дата и время вида. Перелёт к метке "
             "и тур ставят шкалу времени на это время."))
         form.addRow(tr("Дата/время"), self.view_time)
         row = QWidget(group)

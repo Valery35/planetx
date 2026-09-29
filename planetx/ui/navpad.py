@@ -10,29 +10,27 @@
 скорость растёт с отклонением. Бегунок ползунка стоит по высоте
 камеры, перетаскивание задаёт новую.
 
-По умолчанию органы видны, когда курсор подходит к углу вида, как
-в Google Earth. Флажок в свойствах вида держит их на экране всё время.
-Расчёт лежит в core/navpad.py.
+Органы видны всегда. Пока курсор далеко, они стоят слабым контуром
+без заливки и не мешают виду. Когда курсор подходит к углу вида,
+органы рисуются целиком. Расчёт лежит в core/navpad.py.
 """
 import math
 import time
 
-from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QEvent, QPointF, QRect, QRectF, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QRegion
 from qgis.PyQt.QtWidgets import QWidget
 
 from ..core.navigation import clamp_distance, lifted
-from ..core.navpad import (MODES, angle_delta, look_step, move_step,
+from ..core.navpad import (FAINT, angle_delta, look_step, move_step,
                            north_angle, ring_angle, ring_turn,
                            slider_distance, slider_share, stick,
                            zoom_factor)
 from ..i18n import tr
 from ..qt_compat import enum
 
-MODE_KEY = "PlanetX/nav_controls"
 MARGIN = 8  # логических пикселей от края вида
-NEAR_ZONE = 48  # столько пикселей вокруг органов курсор их показывает
+NEAR_ZONE = 48  # столько пикселей вокруг органов курсор их проявляет
 TICK = 16  # мс между шагами, пока кнопка мыши нажата
 # Раскладка в логических пикселях.
 WIDTH, HEIGHT = 84, 288
@@ -65,16 +63,13 @@ class NavPad(QWidget):
         self.setToolTip(tr(
             "Кольцо поворачивает вид, буква N ставит север вверху. "
             "Джойстик в кольце поворачивает взгляд, нижний сдвигает вид. "
-            "Ползунок задаёт высоту, плюс и минус приближают и отдаляют. "
-            "Показ инструментов выбирается в свойствах вида."))
-        self.mode = QgsSettings().value(MODE_KEY, "auto") or "auto"
-        if self.mode not in MODES:
-            self.mode = "auto"
+            "Ползунок задаёт высоту, плюс и минус приближают и отдаляют."))
         self.part = None  # что нажато: ring, north, look, move, plus...
         self.stick = (0.0, 0.0)
         self.ring_last = 0.0
         self.moved = False
         self.hot = False  # курсор над органами
+        self.near = False  # курсор у угла вида, органы проявлены
         self.last = time.monotonic()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
@@ -83,17 +78,8 @@ class NavPad(QWidget):
         view.hovered.connect(self._view_hover)
         view.changed.connect(self._view_changed)
         self._place()
-        self.setVisible(self.mode == "always")
 
     # Показ.
-
-    def set_mode(self, mode):
-        """Режим показа: auto или always."""
-        if mode not in MODES:
-            return
-        self.mode = mode
-        QgsSettings().setValue(MODE_KEY, mode)
-        self.setVisible(mode == "always")
 
     def _shape(self):
         ellipse = enum(QRegion, "RegionType", "Ellipse")
@@ -120,16 +106,17 @@ class NavPad(QWidget):
 
     def _view_hover(self, px, py):
         """Курсор над видом в пикселях кадра, (-1, -1) - ушёл."""
-        if self.mode != "auto" or self.part is not None:
+        if self.part is not None:
             return
-        if px < 0:
-            self.setVisible(False)
-            return
-        ratio = self.view.devicePixelRatioF()
-        x, y = px / ratio, py / ratio
-        near = self.geometry().adjusted(-NEAR_ZONE, -NEAR_ZONE, NEAR_ZONE,
-                                        NEAR_ZONE)
-        self.setVisible(near.contains(int(x), int(y)))
+        near = False
+        if px >= 0:
+            ratio = self.view.devicePixelRatioF()
+            zone = self.geometry().adjusted(-NEAR_ZONE, -NEAR_ZONE,
+                                            NEAR_ZONE, NEAR_ZONE)
+            near = zone.contains(int(px / ratio), int(py / ratio))
+        if near != self.near:
+            self.near = near
+            self.update()
 
     def _view_changed(self):
         if self.isVisible():
@@ -263,11 +250,13 @@ class NavPad(QWidget):
     # Рисование.
 
     def paintEvent(self, event):
-        alpha = 1.0 if (self.hot or self.part) else 0.65
+        faint = not (self.hot or self.near or self.part)
+        alpha = FAINT if faint else 1.0 if (self.hot or self.part) else 0.65
         p = QPainter(self)
         try:
             p.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-            fill = QColor(24, 24, 24, int(150 * alpha))
+            # Вдали от курсора остаётся контур без заливки.
+            fill = QColor(24, 24, 24, 0 if faint else int(150 * alpha))
             line = QColor(255, 255, 255, int(210 * alpha))
             accent = QColor(120, 190, 255, int(230 * alpha))
             p.setPen(QPen(line, 1.2))

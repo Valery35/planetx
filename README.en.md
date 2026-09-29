@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS in the spirit of Google Earth. PlanetX version 0.17.0.
+A 3D globe inside QGIS. PlanetX version 0.17.1.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -26,7 +26,7 @@ and atmosphere, from space down to single streets.
 - **Atmosphere.** A blue glow surrounds the planet. From a low altitude
   the sky is visible at the horizon, and distant mountains fade into haze.
 - **Grid, stars, clouds.** A coordinate grid with labels, the equator,
-  tropics and polar circles in yellow, as in Google Earth. The stars
+  tropics and polar circles in yellow. The stars
   and the Milky Way stand at their places in the sky. Clouds come from NASA imagery of
   the last complete day. Land and sea temperature from NASA data
   colours the globe, the scale in degrees is in the corner of the view.
@@ -34,8 +34,8 @@ and atmosphere, from space down to single streets.
   rise as blocks when the camera is closer than 6 km to the ground.
   The height comes from OpenStreetMap or from the number of floors.
 - **Left panel.** The sections Places, Project layers and Layers
-  collapse with a click on the header, as in Google Earth.
-- **Layers section.** As in Google Earth, it holds
+  collapse with a click on the header.
+- **Layers section.** It holds
   the groups Borders and names, Transport and Nature. They hold borders,
   places, water names, roads and road numbers, railways, airports,
   rivers, lakes, peaks, nature reserves and national parks. Check boxes
@@ -60,15 +60,15 @@ and atmosphere, from space down to single streets.
   and the point stays in place.
 - **Turn and tilt.** The middle button or Shift with the left button turns
   and tilts the view.
-- **Mouse and keys as in Google Earth.** A left double click flies to the
+- **Mouse and keys.** A left double click flies to the
   point and zooms in, a right double click zooms out. Dragging with the
   right button up zooms in, down zooms out. Ctrl with the left button
   looks around, the eye stays in place. Arrows move the view, with
   Shift they turn and tilt, with Ctrl they look around. PageUp and
   PageDown zoom, N puts north up, U looks straight down, R does both,
   Space stops.
-- **On-screen controls.** The top right corner of the view holds, as in
-  Google Earth, the compass ring, the look and move sticks and the
+- **On-screen controls.** The top right corner of the view holds
+  the compass ring, the look and move sticks and the
   height slider with plus and minus buttons.
 - **Search.** Type a place name in the Search field at the top left,
   for example `Perm`, or coordinates in degrees, for example
@@ -108,7 +108,7 @@ and atmosphere, from space down to single streets.
   the status line, search understands all four.
 - **My Places.** Placemarks, paths and polygons are drawn by clicks
   on the globe. They, saved views and measurements sit in the My Places
-  folder of the Places section, as in Google Earth. The places file is
+  folder of the Places section. The places file is
   shared by the QGIS profile, so places are visible in any project.
   A double click on a place flies there.
 - **Tour.** Play tour in the menu of My Places or any of its folders
@@ -116,7 +116,7 @@ and atmosphere, from space down to single streets.
   camera travels the line. Places and folders are rearranged by
   dragging. The bar at the bottom of the view pauses the tour, steps
   between stops and records the tour as PNG frames for a video. The
-  record button records a tour from the screen, as in Google Earth.
+  record button records a tour from the screen.
 - **Placemark time.** A placemark can have a moment or an interval,
   the time slider under the icon bar hides placemarks outside it.
 - **Perm demo.** The Scene menu opens a scene with placemarks around

@@ -154,11 +154,12 @@ EN = {
     "Страница модуля": "Plugin page",
     "Возможности": "Features",
     "Координатная сетка": "Grid",
-    "Параллели и меридианы с подписями градусов, как "
-    "сетка Google Earth. Шаг сетки меняется с высотой "
+    "Параллели и меридианы с подписями градусов, экватор, "
+    "тропики и полярные круги. Шаг сетки меняется с высотой "
     "камеры.":
-        "Parallels and meridians with degree labels, as the Google Earth "
-        "grid. The grid step changes with the camera height.",
+        "Parallels and meridians with degree labels, the equator, the "
+        "tropics and the polar circles. The grid step changes with "
+        "the camera height.",
     "Звёзды": "Stars",
     "Звёзды каталога ярких звёзд Йельского университета "
     "и Млечный путь по карте неба NASA. Картинка неба "
@@ -218,9 +219,9 @@ EN = {
     "Вставка": "Pasted",
     "В буфере обмена нет меток KML.": "The clipboard holds no KML places.",
     "Вставлено меток {count}.": "Places pasted {count}.",
-    "Высота ползунком, как в Google Earth. Шкала логарифмическая, "
+    "Высота ползунком. Шкала логарифмическая, "
     "у земли шаг - метры, выше - сотни метров и километры.":
-        "Height by slider, as in Google Earth. The scale is logarithmic, "
+        "Height by slider. The scale is logarithmic, "
         "near the ground the step is metres, higher up hundreds of metres "
         "and kilometres.",
     "Поверхность земли": "Ground",
@@ -271,14 +272,10 @@ EN = {
         "The Python module PyOpenGL. QGIS builds for Windows include it.",
     "Кольцо поворачивает вид, буква N ставит север вверху. "
     "Джойстик в кольце поворачивает взгляд, нижний сдвигает вид. "
-    "Ползунок задаёт высоту, плюс и минус приближают и отдаляют. "
-    "Показ инструментов выбирается в свойствах вида.":
+    "Ползунок задаёт высоту, плюс и минус приближают и отдаляют.":
         "The ring turns the view, the letter N puts north up. The stick "
         "inside the ring looks around, the lower one moves the view. The "
-        "slider sets the height, plus and minus zoom in and out. Showing "
-        "the controls is chosen in the view properties.",
-    "Инструменты управления всегда на экране":
-        "Navigation controls always on screen",
+        "slider sets the height, plus and minus zoom in and out.",
     "с. ш.": "N",
     "ю. ш.": "S",
     "в. д.": "E",
@@ -296,21 +293,12 @@ EN = {
         "window. The Search field understands all four formats whatever "
         "the choice. North of 84° and south of 80° UTM and MGRS are "
         "replaced with decimal degrees.",
-    "Кольцо компаса, джойстики и ползунок высоты в правом верхнем "
-    "углу вида, как в Google Earth. Без флажка они появляются, "
-    "когда курсор подходит к углу вида, с флажком видны всё "
-    "время.":
-        "The compass ring, the sticks and the height slider in the top "
-        "right corner of the view, as in Google Earth. Without the check "
-        "they appear when the cursor comes near the corner of the view, "
-        "with it they stay all the time.",
-    "Навигация": "Navigation",
     "Руководство": "Manual",
     "Сообщить об ошибке": "Report a bug",
     "Страница в каталоге QGIS": "QGIS plugin page",
-    "Трёхмерный глобус внутри QGIS в духе Google Earth. Рельеф, "
+    "Трёхмерный глобус внутри QGIS. Рельеф, "
     "атмосфера, подложки из подключений QGIS.":
-        "A 3D globe inside QGIS in the spirit of Google Earth. Terrain, "
+        "A 3D globe inside QGIS. Terrain, "
         "atmosphere, base maps from QGIS connections.",
     "Управление": "Controls",
     "Источники данных": "Data sources",
@@ -709,9 +697,9 @@ EN = {
         "to KML.",
     "Описание": "Description",
     " м": " m",
-    "Подъём над рельефом, как «относительно земли» в Google Earth. Ноль - "
+    "Подъём над рельефом. Ноль - "
     "объект лежит на земле.":
-        "Height above the terrain, as relative to ground in Google Earth. "
+        "Height above the terrain. "
         "Zero lays the object on the ground.",
     "Высота над землёй": "Height above ground",
     "Выдавить до земли": "Extend to ground",
@@ -729,29 +717,29 @@ EN = {
     "Магазин": "Shop", "Полиция": "Police", "Пожарная часть": "Fire station",
     "Почта": "Post office", "Горные лыжи": "Skiing", "Купание": "Swimming",
     "Нет": "None", "Момент": "Moment", "Промежуток": "Interval",
-    "Цвет значка метки, как цвет значка в Google Earth.":
-        "Color of the placemark icon, as the icon color in Google Earth.",
+    "Цвет значка метки на глобусе и в списке.":
+        "Color of the placemark icon on the globe and in the list.",
     "Значок точки на глобусе и в списке. В KML он уходит "
-    "стандартным значком Google Earth той же темы.":
+    "адресом стандартного значка той же темы.":
         "Icon of the point on the globe and in the list. In KML it goes as "
-        "the standard Google Earth icon of the same theme.",
+        "the address of a standard icon of the same theme.",
     "Собственное время метки, как TimeStamp и TimeSpan "
-    "в Google Earth. Метка со временем видна, пока её время "
-    "попадает в промежуток шкалы времени внизу вида. Метка "
+    "в KML. Метка со временем видна, пока её время "
+    "попадает в промежуток шкалы времени вверху вида. Метка "
     "без времени видна всегда.":
-        "The placemark's own time, as TimeStamp and TimeSpan in Google "
-        "Earth. A placemark with a time shows while its time falls into the "
-        "interval of the time slider at the bottom of the view. A placemark "
+        "The placemark's own time, as TimeStamp and TimeSpan in KML. "
+        "A placemark with a time shows while its time falls into the "
+        "interval of the time slider at the top of the view. A placemark "
         "without a time always shows.",
-    "Дата и время вида, как в Google Earth. Перелёт к метке "
+    "Дата и время вида. Перелёт к метке "
     "и тур ставят шкалу времени на это время.":
-        "Date and time of the view, as in Google Earth. A flight to the "
+        "Date and time of the view. A flight to the "
         "placemark and a tour set the time slider to this time.",
     "Дата/время": "Date/time",
-    "Записать тур, как в Google Earth. Двигайте камеру "
+    "Записать тур с экрана. Двигайте камеру "
     "мышью, клавишами или перелётами, повторный щелчок "
     "останавливает запись. Тур ложится в «Мои метки».":
-        "Record a tour, as in Google Earth. Move the camera with the mouse, "
+        "Record a tour from the screen. Move the camera with the mouse, "
         "keys or flights, a second click stops recording. The tour goes "
         "into My Places.",
     "Тур": "Tour",
@@ -789,10 +777,10 @@ EN = {
     "Снимок вида метки": "Snapshot view",
     "Вид метки": "Place view",
     "Откуда смотрит камера, когда летит к метке или стоит на ней "
-    "в туре, как вид метки в Google Earth. Без своего вида камера "
+    "в туре. Без своего вида камера "
     "берёт метку в кадр целиком.":
         "Where the camera looks from when it flies to the place or stands "
-        "at it in a tour, like the place view in Google Earth. Without a "
+        "at it in a tour. Without a "
         "view of its own the camera frames the whole place.",
     "Широта": "Latitude",
     "Широта точки, на которую смотрит камера. Она может "
@@ -803,19 +791,19 @@ EN = {
     "Долгота точки, на которую смотрит камера.":
         "Longitude of the point the camera looks at.",
     "Расстояние": "Range",
-    "Расстояние от камеры до точки взгляда, «диапазон» "
-    "Google Earth. Больше - вид шире.":
-        "Distance from the camera to the look point, the range of Google "
-        "Earth. Larger gives a wider view.",
+    "Расстояние от камеры до точки взгляда. "
+    "Больше - вид шире.":
+        "Distance from the camera to the look point. Larger "
+        "gives a wider view.",
     "Азимут": "Heading",
-    "Куда смотрит камера, «курс» Google Earth. 0 - север "
+    "Куда смотрит камера. 0 - север "
     "вверху кадра.":
-        "Where the camera faces, the heading of Google Earth. 0 puts north "
+        "Where the camera faces. 0 puts north "
         "at the top of the frame.",
     "Наклон": "Tilt",
-    "Наклон камеры, «угол обзора» Google Earth. 0 - взгляд "
+    "Наклон камеры. 0 - взгляд "
     "отвесно вниз, больше - к горизонту.":
-        "Camera tilt, the tilt of Google Earth. 0 looks straight down, "
+        "Camera tilt. 0 looks straight down, "
         "larger values look towards the horizon.",
     "Снимок текущего вида": "Snapshot current view",
     "Взять вид глобуса сейчас: точку взгляда, расстояние, азимут "

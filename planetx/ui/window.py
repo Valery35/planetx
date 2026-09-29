@@ -576,8 +576,7 @@ class GlobeWindow(QWidget):
                 "relief": self._relief, "scale": self._scale,
                 "language": self._language, "sync": self.sync.direction,
                 "follow": self.follow, "new_shown": self.new_shown,
-                "auto": self.auto_refresh, "nav": self.navpad.mode,
-                "coords": self.coords}
+                "auto": self.auto_refresh, "coords": self.coords}
 
     def set_sync_direction(self, way):
         """Кто за кем следует при синхронизации с картой."""
@@ -1140,7 +1139,6 @@ class GlobeWindow(QWidget):
             self.properties.sync_chosen.connect(self.set_sync_direction)
             self.properties.follow_changed.connect(self.set_follow)
             self.properties.new_shown_changed.connect(self.set_new_shown)
-            self.properties.nav_chosen.connect(self.navpad.set_mode)
             self.properties.coords_chosen.connect(self.set_coords)
         self.properties.show()
         self.properties.raise_()

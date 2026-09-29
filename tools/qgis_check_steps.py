@@ -1894,7 +1894,6 @@ def _pad_release(x, y):
 def navpad_plus():
     from planetx.ui import navpad as ui
     window = state["window"]
-    window.navpad.set_mode("always")
     pad = window.navpad
     view = window.view
     result["navpad"] = {
@@ -1969,22 +1968,20 @@ def navpad_ring():
     _send_mouse(pad, "MouseButtonPress", ui.CX, mid, left, left)
     _pad_release(ui.CX, mid)
     out["slider_distance"] = round(nav.pose.distance)
-    # Автоматический показ: у угла виден, вдали скрыт.
-    pad.set_mode("auto")
+    # Показ: органы видны всегда, у угла проявлены, вдали - контур.
     ratio = view.devicePixelRatioF()
+    view.hovered.emit(100 * ratio, (view.height() - 100) * ratio)
+    QgsApplication.processEvents()
+    out["far"] = [pad.isVisible(), pad.near]
+    state["window"].grab().save(os.path.join(TEMP, "planetx_navpad_far.png"))
     view.hovered.emit((view.width() - 30) * ratio, 30 * ratio)
-    out["auto_near"] = pad.isVisible()
-    view.hovered.emit(100 * ratio, (view.height() - 100) * ratio)
-    out["auto_far"] = pad.isVisible()
-    pad.set_mode("always")
-    view.hovered.emit(100 * ratio, (view.height() - 100) * ratio)
-    out["always_far"] = pad.isVisible()
-    pad.set_mode("always")
+    QgsApplication.processEvents()
+    out["near"] = [pad.isVisible(), pad.near]
+    state["window"].grab().save(os.path.join(TEMP, "planetx_navpad_near.png"))
+    view.hovered.emit(-1, -1)
+    out["gone"] = [pad.isVisible(), pad.near]
     _pad_reset()
     view.update()
-    QgsApplication.processEvents()
-    state["window"].grab().save(os.path.join(TEMP, "planetx_navpad_view.png"))
-    pad.set_mode("auto")
 
 
 @check(300)

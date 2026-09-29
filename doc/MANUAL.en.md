@@ -2,9 +2,9 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.17.0
+Version 0.17.1
 
-PlanetX is a 3D globe inside QGIS in the spirit of Google Earth. The
+PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets. Layers of the current
 project, your own placemarks, paths and polygons lie on the globe. Tours
@@ -92,7 +92,7 @@ Messages of search, scenes, tours and recording stay for 5 seconds.
 
 ## Navigation
 
-Navigation follows Google Earth.
+Navigation uses the mouse, the keys and the navigation controls.
 
 ### Mouse
 
@@ -129,8 +129,7 @@ focus.
 
 ### On-screen controls
 
-The navigation controls stand in the top right corner of the view,
-as in Google Earth.
+The navigation controls stand in the top right corner of the view.
 
 <img src="figures/en/navpad.png" width="90" alt="Navigation controls">
 
@@ -144,9 +143,9 @@ as in Google Earth.
 | Slider | The thumb stands at the camera height, dragging sets a new one |
 
 The speed of the sticks grows with the distance from the middle. The
-controls appear when the cursor comes near the corner of the view. The
-check box Navigation controls always on screen in the view properties
-keeps them all the time.
+controls are always shown. While the cursor is far away, they stand
+as a faint outline and do not cover the view. When the cursor comes
+near the corner of the view, they are drawn in full.
 
 ### Place search
 
@@ -185,7 +184,7 @@ place. The globe remembers which sections are collapsed.
 
 ### Layers section
 
-The section follows the Layers panel of Google Earth. Its check boxes
+Its check boxes
 take effect at once, without the Refresh button.
 
 | Group | Rows |
@@ -260,7 +259,6 @@ window. The window does not block work with the globe.
 | QGIS map | Layers as on the QGIS map | The globe shows the layers switched on in the QGIS legend |
 | QGIS map | New layers straight to the globe | A new project layer is checked on the globe at once |
 | Update | Update automatically | The globe refreshes after every change without the Refresh button |
-| Navigation | Navigation controls always on screen | The ring, sticks and slider stay all the time, not only near the corner |
 | Coordinates | Format | Decimal degrees, degrees-minutes-seconds, UTM or MGRS in the status line and the Features window. North of 84° and south of 80° UTM and MGRS are replaced with decimal degrees |
 
 The default base map is Esri World Imagery, listed as an example. Esri
@@ -356,8 +354,7 @@ the Features window.
 My Places is the folder at the top of the Places section, marked with a
 star. It holds placemarks, paths, polygons, saved views and
 measurements. The places are kept in one file `PlanetX/myplaces.gpkg`
-in the QGIS profile folder and are visible in any project, like My
-Places in Google Earth.
+in the QGIS profile folder and are visible in any project.
 
 ### List rows
 
@@ -429,7 +426,7 @@ brings the previous look back.
 |---|---|
 | Name | Name in the list and label on the globe |
 | Description | Text of the placemark, it goes into KML too |
-| Icon | Point icon from the QGIS set, in KML the Google Earth icon of the same theme |
+| Icon | Point icon from the QGIS set, in KML a standard icon of the same theme |
 | Color, Width | Color of the point icon, color and width of the line and outline |
 | Fill | Fill color of the polygon and of the wall |
 | Height above ground | Lift of the object above the terrain in metres. The Ground - Space slider under the field sets it from the ground to 100 km |
@@ -442,7 +439,7 @@ polygon becomes a block.
 
 ### Place view
 
-Any place can have a view of its own, like the View tab in Google Earth.
+Any place can have a view of its own.
 A view is the point the camera looks at, the range to it, the heading
 and the tilt. The look point may differ from the place. Fly to, a double
 click on the place and a tour stop follow the view.
@@ -457,7 +454,7 @@ place. The view goes into KML as a LookAt element and is read from it.
 ### Copy and paste
 
 Copy or Ctrl+C puts the selected places and folders into the
-clipboard as KML text, as Google Earth does. The text can be pasted
+clipboard as KML text. The text can be pasted
 into a text editor, edited and copied back. Paste or Ctrl+V puts the
 places from the clipboard into a folder. On a place it is the folder
 of that place, on empty space the root of My Places. Folders from the
@@ -466,7 +463,7 @@ same way.
 
 ### Placemark time and the time slider
 
-A placemark can have a time of its own, as in Google Earth. It is a
+A placemark can have a time of its own. It is a
 moment or an interval, the Time field of the placemark properties. In
 KML the time is written as TimeStamp and TimeSpan. The view of a
 placemark has its own time, the Date/time field of the Place view
@@ -540,7 +537,7 @@ closes the other.
 ### Elevation profile
 
 The Elevation profile button of the ruler opens a chart of height along
-the line, as in Google Earth. The Elevation profile item in the menu of
+the line. The Elevation profile item in the menu of
 a path in My Places does the same.
 
 <img src="figures/en/profile.png" width="600" alt="Elevation profile of a path over Elbrus">
@@ -587,8 +584,8 @@ Moving the camera with the mouse pauses the tour.
 
 ### Recording a tour from the screen
 
-The record button ⏺ on the icon bar records the camera movement, as the
-tour recording of Google Earth. The camera can be moved with the mouse,
+The record button ⏺ on the icon bar records the camera movement.
+The camera can be moved with the mouse,
 keys, flights and the navigation controls. A second click ends the
 recording and asks for a name. The tour goes into My Places with a film
 icon and is not drawn on the globe.

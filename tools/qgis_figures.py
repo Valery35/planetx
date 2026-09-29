@@ -99,7 +99,7 @@ def start():
     nav = window.view.navigator
     nav.stop()
     nav.set_pose(Pose(58.0, 56.22, 22000.0, 20.0, 55.0))
-    window.navpad.set_mode("always")
+    window.navpad.near = True  # органы целиком, как у курсора
     state["started"] = time.monotonic()
     QTimer.singleShot(3000, wait_tiles)
 
@@ -132,7 +132,7 @@ def shoot():
                           int((pad.height() + 2 * margin) * ratio))
         save(crop, "navpad.png")
         # Свойства вида снимаются с умолчанием, органы у угла вида.
-        pad.set_mode("auto")
+        pad.near = False
         window._show_properties()
         dialog = window.properties
         QgsApplication.processEvents()
@@ -159,7 +159,7 @@ def buildings_start():
     # 3D-здания в центре Перми с 1.5 км, наклон 60°.
     from planetx.core.navigation import Pose
     window = state["window"]
-    window.navpad.set_mode("auto")
+    window.navpad.near = False
     nav = window.view.navigator
     nav.stop()
     nav.set_pose(Pose(58.0105, 56.2294, 1500.0, 30.0, 60.0))

@@ -138,7 +138,7 @@ def about_html():
     return "".join((
         "<h2>PlanetX {}</h2>".format(html.escape(plugin_version())),
         "<p>{}</p>".format(html.escape(tr(
-            "Трёхмерный глобус внутри QGIS в духе Google Earth. Рельеф, "
+            "Трёхмерный глобус внутри QGIS. Рельеф, "
             "атмосфера, подложки из подключений QGIS."))),
         "<h3>{}</h3>".format(html.escape(tr("Возможности"))), features,
         "<h3>{}</h3>".format(html.escape(tr("Управление"))), controls,

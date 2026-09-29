@@ -50,8 +50,7 @@ class PropertiesDialog(QDialog):
 
     sources - подложки из core/basemap.py. state - словарь с ключами
     basemap, relief, scale, language, sync, follow, new_shown, auto,
-    nav - показ инструментов управления, auto или always, coords -
-    формат координат из core.coords.FORMATS.
+    coords - формат координат из core.coords.FORMATS.
     """
 
     auto_changed = pyqtSignal(bool)
@@ -61,7 +60,6 @@ class PropertiesDialog(QDialog):
     sync_chosen = pyqtSignal(str)
     follow_changed = pyqtSignal(bool)
     new_shown_changed = pyqtSignal(bool)
-    nav_chosen = pyqtSignal(str)
     coords_chosen = pyqtSignal(str)
 
     def __init__(self, sources, state, parent=None):
@@ -156,18 +154,6 @@ class PropertiesDialog(QDialog):
         layers = QGroupBox(tr("Обновление"), self)
         QVBoxLayout(layers).addWidget(self.auto)
 
-        self.nav = QCheckBox(tr("Инструменты управления всегда на экране"),
-                             self)
-        self.nav.setToolTip(tr(
-            "Кольцо компаса, джойстики и ползунок высоты в правом верхнем "
-            "углу вида, как в Google Earth. Без флажка они появляются, "
-            "когда курсор подходит к углу вида, с флажком видны всё "
-            "время."))
-        self.nav.toggled.connect(
-            lambda on: self.nav_chosen.emit("always" if on else "auto"))
-        navigation = QGroupBox(tr("Навигация"), self)
-        QVBoxLayout(navigation).addWidget(self.nav)
-
         self.coords = QComboBox(self)
         names = {"decimal": tr("Десятичные градусы"),
                  "dms": tr("Градусы, минуты, секунды"),
@@ -193,7 +179,6 @@ class PropertiesDialog(QDialog):
         layout.addWidget(labels)
         layout.addWidget(canvas)
         layout.addWidget(layers)
-        layout.addWidget(navigation)
         layout.addWidget(coordinates)
         layout.addStretch(1)
         layout.addWidget(buttons)
@@ -202,8 +187,7 @@ class PropertiesDialog(QDialog):
     def set_state(self, state):
         """Показать состояние окна. Сигналы при этом не идут."""
         widgets = [self.basemap, self.scale, self.language, self.sync,
-                   self.follow, self.new_shown, self.auto, self.nav,
-                   self.coords]
+                   self.follow, self.new_shown, self.auto, self.coords]
         for widget in widgets:
             widget.blockSignals(True)
         self.basemap.setCurrentIndex(state["basemap"])
@@ -219,7 +203,6 @@ class PropertiesDialog(QDialog):
         self.auto.setChecked(state["auto"])
         self.follow.setChecked(state["follow"])
         self.new_shown.setChecked(state["new_shown"])
-        self.nav.setChecked(state.get("nav") == "always")
         fmt = state.get("coords", FORMATS[0])
         self.coords.setCurrentIndex(FORMATS.index(fmt)
                                     if fmt in FORMATS else 0)
