@@ -2736,6 +2736,109 @@ def sky_record_check():
     window.set_body("earth")
 
 
+SITE_SHOTS = os.path.join(ROOT, "doc", "images")
+
+
+@check(25000)
+def site_mars():
+    # Снимки для сайта: Марс над Фарсидой и долинами Маринер.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("mars")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(-2.0, -85.0, 8.5e6, 0.0, 0.0))
+    window.view.update()
+
+
+@check(25000)
+def site_moon():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.view.grabFramebuffer().save(
+        os.path.join(SITE_SHOTS, "mars.jpg"), "JPG", 92)
+    window.set_body("moon")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(8.0, 12.0, 4.6e6, 0.0, 0.0))
+    window.view.update()
+
+
+@check(15000)
+def site_sky():
+    window = state["window"]
+    window.view.grabFramebuffer().save(
+        os.path.join(SITE_SHOTS, "moon.jpg"), "JPG", 92)
+    window.set_extra("stars", True)
+    window.set_body("sky")
+    window.show_sky(88.0, 8.0, 75.0)
+
+
+@check(300)
+def site_sky_save():
+    from qgis.PyQt.QtGui import QPainter
+    window = state["window"]
+    view = window.view
+    view.repaint()
+    image = view.grabFramebuffer()
+    # Картинка с масштабом экрана 2 рисуется в логических пикселях,
+    # подписи уехали бы вдвое. Подписи считаются в пикселях кадра.
+    image.setDevicePixelRatio(1.0)
+    painter = QPainter(image)
+    try:
+        window.sky_labels.draw(painter, image.width(), image.height(),
+                               view.devicePixelRatioF())
+    finally:
+        painter.end()
+    image.save(os.path.join(SITE_SHOTS, "sky.jpg"), "JPG", 92)
+    window.set_body("earth")
+    result["site_shots"] = {name: os.path.getsize(
+        os.path.join(SITE_SHOTS, name)) for name in
+        ("mars.jpg", "moon.jpg", "sky.jpg")}
+
+
+@check(25000)
+def moon_holes():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("moon")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(8.0, 12.0, 4.6e6, 0.0, 0.0))
+    window.view.update()
+
+
+@check(300)
+def moon_holes_check():
+    # Сторож: смешивание, оставленное включённым до кадра, не белит
+    # перекрытые поверхности Луны. Белых пикселей - только шапки.
+    import numpy as np
+    from OpenGL import GL
+    from qgis.PyQt.QtGui import QImage
+    window = state["window"]
+    view = window.view
+
+    def white():
+        img = view.grabFramebuffer().convertToFormat(
+            QImage.Format.Format_RGB888)
+        ptr = img.constBits()
+        ptr.setsize(img.sizeInBytes())
+        a = np.frombuffer(ptr, np.uint8).reshape(
+            img.height(), img.bytesPerLine())[:, :img.width() * 3]
+        a = a.reshape(img.height(), img.width(), 3)
+        return int((a.min(axis=2) > 200).sum())
+    clean = white()
+    view.makeCurrent()
+    GL.glEnable(GL.GL_BLEND)
+    GL.glBlendFunc(GL.GL_ONE, GL.GL_ONE)
+    view.doneCurrent()
+    forced = white()
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_moon_a.png"))
+    result["moon_holes"] = {"white": clean, "white_after_blend": forced,
+                            "levels": sorted({k[0] for k in
+                                              view.selection.draw})}
+    window.set_body("earth")
+
 SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
 
 

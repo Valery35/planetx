@@ -1401,6 +1401,7 @@ class GlobeView(QOpenGLWidget):
         self.step_time = time.monotonic()
         moving = self.navigator.step(self.step_time)
         self._take_outside_errors()
+        gpu.reset_state()
         gpu.gl.glClearColor(*(HOLE if self.show_holes else SPACE), 1.0)
         gpu.gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.drawn = 0
@@ -1799,6 +1800,7 @@ class GlobeView(QOpenGLWidget):
         width = max(1, int(round(self.width() * ratio)))
         height = max(1, int(round(self.height() * ratio)))
         self._take_outside_errors()
+        gpu.reset_state()
         GL.glClearColor(*PREVIEW_COLOR, 1.0)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         if shot.fbo is None:

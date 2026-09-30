@@ -328,6 +328,31 @@ def draw_batch(items, mvps, u_mvp, layers=()):
                        null)
 
 
+def reset_state():
+    """Состояние OpenGL начала кадра: без смешивания, с проверкой
+    и записью глубины, все каналы цвета, без ножниц и трафарета,
+    текстурный блок 0.
+
+    Вид сам ставит это состояние перед очисткой буфера и не полагается
+    на то, что оставил прошлый кадр или чужой код в том же контексте.
+    1 октября 2026 года на Луне и Марсе при рисовании тайлов осталось
+    включено смешивание. Свет перекрытых поверхностей складывался,
+    край диска, швы тайлов и полярные шапки выходили белыми. На Земле
+    смешивание в конце кадра выключали надписи пунктов, и там этого
+    не было видно.
+    """
+    gl.glDisable(GL.GL_BLEND)
+    GL.glBlendFunc(GL.GL_ONE, GL.GL_ZERO)
+    gl.glEnable(GL.GL_DEPTH_TEST)
+    gl.glDepthFunc(GL.GL_LESS)
+    gl.glDepthMask(GL.GL_TRUE)
+    GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
+    gl.glDisable(GL.GL_CULL_FACE)
+    GL.glDisable(GL.GL_SCISSOR_TEST)
+    GL.glDisable(GL.GL_STENCIL_TEST)
+    gl.glActiveTexture(GL.GL_TEXTURE0)
+
+
 def frame_errors():
     """Коды ошибок OpenGL, накопленные с прошлого вызова."""
     codes = []
