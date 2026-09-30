@@ -43,7 +43,8 @@ class Scene:
     номер кадра, step - длина кадра в секундах. layers - список
     словарей name, provider, source, kind ("vector" или "raster").
     view - настройки вида: basemap, relief, scale, groups, language,
-    extras - включены ли строки раздела «Слои» по ключам.
+    extras - включены ли строки раздела «Слои» по ключам, sun - момент
+    солнца в секундах Unix или None, если свет постоянный.
     places - название папки меток сцены или "".
     """
 

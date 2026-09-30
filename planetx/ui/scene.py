@@ -82,7 +82,9 @@ def capture(window, folder=None, name=""):
             "language": window._language,
             # Строки раздела «Слои»: сетка, звёзды, облака, температура,
             # 3D-здания.
-            "extras": {key: bool(on) for key, on in window.extras.items()}}
+            "extras": {key: bool(on) for key, on in window.extras.items()},
+            # Солнце: момент в секундах Unix, None - постоянный свет.
+            "sun": window.sun_time if window.sun_on else None}
     kml = ""
     places = ""
     if folder:
@@ -147,6 +149,14 @@ def apply(window, scene, kml=b""):
         for key, on in extras.items():
             if key in window.extras and bool(on) != window.extras[key]:
                 window.set_extra(key, bool(on))
+    # В прежних сценах солнца нет, свет остаётся как есть.
+    if "sun" in view:
+        moment = view["sun"]
+        if isinstance(moment, (int, float)):
+            window.set_sun_time(float(moment))
+            window.set_sun(True)
+        elif moment is None:
+            window.set_sun(False)
     wanted, missing = set(), []
     for entry in scene.layers:
         layer = _find_layer(entry) or _add_layer(entry)

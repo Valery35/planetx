@@ -2966,6 +2966,182 @@ def demo_check():
         window.myplaces.remove(state["demo_key"])
     window.set_extra("buildings", False)
 
+# Выпуск «Объём и свет». Солнце: день, ночь и выключенное солнце над
+# Пермью. Яркость кадра - средняя по нижней половине, там земля.
+SUN_POSE = (58.0105, 56.2294, 30000.0, 0.0, 30.0)
+# 21 июня 2026 года. Истинный полдень в Перми около 08:15 UTC,
+# полночь - около 20:15 UTC.
+SUN_DAY = 1782029700.0
+SUN_NIGHT = SUN_DAY + 12 * 3600.0
+
+
+def _ground_brightness(view):
+    """Средняя яркость 0-255 нижней половины кадра, шаг 8 пикселей."""
+    image = view.grabFramebuffer()
+    total = 0
+    count = 0
+    for y in range(image.height() // 2, image.height(), 8):
+        for x in range(0, image.width(), 8):
+            rgb = image.pixel(x, y)
+            total += ((rgb >> 16) & 255) * 30 + ((rgb >> 8) & 255) * 59 \
+                + (rgb & 255) * 11
+            count += 100
+    return round(total / max(count, 1), 1)
+
+
+@check(12000)
+def sun_setup():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(*SUN_POSE))
+    window.set_sun(False)
+    view.update()
+
+
+@check(3000)
+def sun_off():
+    window = state["window"]
+    state["sun_plain"] = _ground_brightness(window.view)
+    window.set_sun(True)
+    window.set_sun_time(SUN_DAY)
+    window.view.update()
+
+
+@check(3000)
+def sun_day():
+    from planetx.core import sun
+    window = state["window"]
+    view = window.view
+    state["sun_day"] = _ground_brightness(view)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_sun_day.png"))
+    state["sun_day_elevation"] = round(sun.horizontal(
+        SUN_POSE[0], SUN_POSE[1], SUN_DAY)[0], 2)
+    window.set_sun_time(SUN_NIGHT)
+    view.update()
+
+
+@check(1000)
+def sun_night():
+    from planetx.core import sun
+    window = state["window"]
+    view = window.view
+    night = _ground_brightness(view)
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_sun_night.png"))
+    result["sun"] = {
+        "plain": state["sun_plain"], "day": state["sun_day"],
+        "night": night,
+        "night_to_day": round(night / max(state["sun_day"], 1.0), 3),
+        "day_elevation": state["sun_day_elevation"],
+        "night_elevation": round(sun.horizontal(
+            SUN_POSE[0], SUN_POSE[1], SUN_NIGHT)[0], 2),
+        "view_sun": view.sun_time,
+        "state": {k: window.state()[k] for k in ("sun", "sun_time")},
+        "gl_errors": dict(view.gl_errors),
+        "outside_errors": dict(view.outside_errors)}
+    window.set_sun(False)
+    result["sun"]["off_after"] = view.sun_time is None
+    view.update()
+
+
+# 3D-линейка над центром Перми со зданиями: точка на крыше, путь,
+# многоугольник, «Мои метки» и KML туда и обратно.
+@check(15000)
+def ruler3d_setup():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(*BUILDINGS_POSE))
+    window.set_extra("buildings", True)
+    view.update()
+
+
+@check(1500)
+def ruler3d_check():
+    import numpy as np
+    from planetx.core import kml
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    from planetx.core.navigation import ground_under
+    from planetx.ui.measure import MODES
+    window = state["window"]
+    view = window.view
+    camera = view.camera
+    out = {"buildings_drawn": view.buildings.drawn,
+           "buildings_buffers": len(view.buildings.buffers)}
+    # Точки сетки по кадру: где луч попадает в здание раньше рельефа.
+    hits = []
+    w, h = camera.width, camera.height
+    for fy in (0.45, 0.55, 0.65, 0.75):
+        for fx in (0.3, 0.4, 0.5, 0.6, 0.7):
+            px, py = w * fx, h * fy
+            origin, direction = camera.ray(px, py)
+            hit = view.buildings.ray_hit(origin, direction)
+            ground = ground_under(camera, px, py,
+                                  view.navigator.pose.terrain)
+            if hit is None or ground is None:
+                continue
+            if hit[0] < float(np.linalg.norm(ground - origin)):
+                hits.append((px, py))
+    out["pixels_on_buildings"] = len(hits)
+    window._open_ruler()
+    dialog = window.ruler_dialog
+    dialog.tabs.setCurrentIndex(MODES.index("path3d"))
+    ruler = window.ruler
+    out["mode"] = ruler.mode
+    picks = hits[:3] if len(hits) >= 3 else \
+        [(w * 0.4, h * 0.6), (w * 0.5, h * 0.6), (w * 0.6, h * 0.7)]
+    for px, py in picks:
+        window._clicked(px, py)
+    out["points"] = len(ruler.points)
+    out["alts"] = [round(a, 1) for a in ruler.alts]
+    ground = window._true_heights(
+        np.array([p[0] for p in ruler.points]),
+        np.array([p[1] for p in ruler.points]))
+    out["above_ground"] = [round(a - g, 1)
+                           for a, g in zip(ruler.alts, ground)]
+    values = ruler.values(rubber=False)
+    out["length_m"] = round(values["length"] or 0.0, 2)
+    out["segment_labels"] = len([m for m in view.tool_marks
+                                 if m.kind == "ruler"])
+    out["summary"] = dialog.summary()
+    # Точка на крыше: пиксель точки совпадает с пикселем щелчка.
+    shape = ruler.shape(rubber=False)
+    from planetx.core.features import geometry, vertices
+    xyz = vertices(geometry(shape), 0.0)
+    pixels, _ = camera.project(xyz)
+    out["pixel_error"] = round(float(np.max(np.hypot(
+        pixels[:, 0] - np.array([p[0] for p in picks]),
+        pixels[:, 1] - np.array([p[1] for p in picks])))), 2)
+    # Многоугольник по тем же точкам.
+    dialog.tabs.setCurrentIndex(MODES.index("polygon3d"))
+    for px, py in picks:
+        window._clicked(px, py)
+    values = ruler.values(rubber=False)
+    out["polygon_area_m2"] = round(values["area"] or 0.0, 2)
+    out["polygon_perimeter_m"] = round(values["perimeter"] or 0.0, 2)
+    polygon = ruler.shape(rubber=False, name="3D check")
+    key = window.myplaces.add(polygon, measure=dialog.summary())
+    place = window.myplaces.find(key)
+    out["saved_alts_equal"] = place is not None and place.shape.alts \
+        is not None and np.allclose(place.shape.alts, polygon.alts,
+                                    atol=0.01)
+    from planetx.ui.myplaces import _kplace
+    text = kml.write_kml(kml.KFolder("x", True, [_kplace(place)]))
+    again = kml.read_kml(text.encode("utf-8")).children[0]
+    out["kml_alts_equal"] = again.alts is not None and np.allclose(
+        again.alts, polygon.alts, atol=0.01)
+    window.myplaces.remove(key)
+    lat, lon, height = (float(v) for v in ecef_to_geodetic(xyz[0]))
+    out["first_point"] = [round(lat, 6), round(lon, 6), round(height, 1)]
+    out["gl_errors"] = dict(view.gl_errors)
+    result["ruler3d"] = out
+    dialog.close()
+    window.set_extra("buildings", False)
+
+
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")

@@ -262,6 +262,8 @@ window. The window does not block work with the globe.
 | QGIS map | New layers straight to the globe | A new project layer is checked on the globe at once |
 | Update | Update automatically | The globe refreshes after every change without the Refresh button |
 | Coordinates | Format | Decimal degrees, degrees-minutes-seconds, UTM or MGRS in the status line and the Features window. North of 84° and south of 80° UTM and MGRS are replaced with decimal degrees |
+| Sun | Sunlight | Terrain, buildings and air are lit by the sun, the night side darkens |
+| Sun | Date and time | The moment of the sun position by the computer clock, the Now button sets the current one |
 
 The default base map is Esri World Imagery, listed as an example. Esri
 sets its terms of use. OpenStreetMap comes next, then the XYZ Tiles
@@ -277,6 +279,14 @@ local one.
 A change of base map, terrain exaggeration or project layers shows after
 the Refresh button on the icon bar. The status line reminds about it.
 The label language changes at once.
+
+Without the Sunlight check box the light is constant, from the
+north-west at 45°. With it the sun stands at the chosen date and time.
+Slopes facing the sun are brighter, slopes facing away are darker, the
+night side of the Earth is dark and the air above it does not glow.
+Mountains and buildings cast no shadows. While the placemark time slider
+is open, the sun follows the right end of its range. A scene keeps the
+sun together with the other view settings.
 
 ### Project layers section
 
@@ -505,9 +515,9 @@ file extension chooses the format.
 
 ## Ruler
 
-The Ruler icon opens a window with the tabs Line, Path, Polygon and
-Circle. Points are put with clicks on the globe, a rubber band follows
-the cursor.
+The Ruler icon opens a window with the tabs Line, Path, Polygon,
+Circle, 3D path and 3D polygon. Points are put with clicks on the globe,
+a rubber band follows the cursor.
 
 <img src="figures/en/ruler.png" width="300" alt="Ruler">
 
@@ -517,6 +527,8 @@ the cursor.
 | Path | Map length, ground length |
 | Polygon | Perimeter, area |
 | Circle | Radius, perimeter, area. The first click is the center, the second sets the radius |
+| 3D path | Length along straight segments in space |
+| 3D polygon | Perimeter, area in the plane of the polygon |
 
 Map length, perimeter and area are computed on the WGS84 ellipsoid.
 Ground length runs along the surface with its rises and falls. Heading
@@ -531,6 +543,14 @@ they load, the ground length is preceded by «≈».
 A ruler point can be grabbed with the mouse and dragged, Backspace
 removes the last point. Each segment on the globe is labelled with its
 length.
+
+On the 3D path and 3D polygon tabs a point lands on the terrain, a roof
+or a wall of a building under the cursor. Each point has its own
+height. Segments run straight in space, the length includes the height
+differences. The area of a 3D polygon is measured in its plane, so a
+house wall or an inclined slope can be measured. To put points on
+buildings, switch on the 3D buildings row in the Layers section. In My
+Places and in KML the shape is saved with the height of every vertex.
 
 The Save button puts the shape into My Places together with the
 measurement. The name is offered with a number, for example Line 1. The
@@ -748,6 +768,9 @@ the insertion.
 - Recording a tour takes longer than the tour itself.
 - Buildings are blocks with flat roofs, roof shapes and facades
   are not shown.
+- The sun casts no shadows.
+- With a vertical exaggeration other than 1 the 3D path and 3D polygon
+  stay at true heights and part from the raised terrain.
 
 ## Data sources
 

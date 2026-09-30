@@ -25,7 +25,7 @@ def sample():
                  "kind": "vector"}],
         view={"basemap": "Esri World Imagery", "relief": True,
               "scale": 2.0, "groups": ["borders", "places"],
-              "language": "ru"},
+              "language": "ru", "sun": 1782029700.0},
         places="Маршрут", name="Пермь")
 
 
@@ -38,6 +38,7 @@ class TestScene(unittest.TestCase):
         self.assertEqual(scene.time["frame"], 4)
         self.assertEqual(scene.layers[0]["name"], "Скважины")
         self.assertEqual(scene.view["groups"], ["borders", "places"])
+        self.assertEqual(scene.view["sun"], 1782029700.0)
         self.assertEqual((scene.places, scene.name), ("Маршрут", "Пермь"))
         self.assertEqual(kml, b"<kml/>")
 
