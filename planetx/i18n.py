@@ -287,6 +287,25 @@ EN = {
     "з. д.": "W",
     "Координаты": "Coordinates",
     "Формат": "Format",
+    "Солнце": "Sun",
+    "Свет от солнца": "Sunlight",
+    "Рельеф, здания и воздух освещаются солнцем на заданные дату "
+    "и время, ночная сторона Земли темнеет. Тени от гор "
+    "и зданий не рисуются. Без флажка свет постоянный, "
+    "с северо-запада.":
+        "Terrain, buildings and air are lit by the sun at the chosen "
+        "date and time, the night side of the Earth darkens. Shadows of "
+        "mountains and buildings are not drawn. Without the check box "
+        "the light is constant, from the north-west.",
+    "Дата и время": "Date and time",
+    "Момент, на который стоит солнце, по часам компьютера. "
+    "Пока открыта шкала времени меток, солнце стоит на правом "
+    "краю её промежутка.":
+        "The moment of the sun position, by the computer clock. While "
+        "the placemark time slider is open, the sun follows the right "
+        "end of its range.",
+    "Сейчас": "Now",
+    "Ставит текущие дату и время.": "Sets the current date and time.",
     "Десятичные градусы": "Decimal degrees",
     "Градусы, минуты, секунды": "Degrees, minutes, seconds",
     "Как записаны координаты в строке состояния и в окне "

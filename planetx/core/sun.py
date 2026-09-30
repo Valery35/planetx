@@ -20,8 +20,18 @@ import numpy as np
 
 try:  # внутри плагина QGIS
     from .stars import UNIX_J2000, gmst
+    from .tiling import AMBIENT, LIGHT_ELEVATION, SHADE_LIMITS
 except ImportError:  # headless-тесты
     from stars import UNIX_J2000, gmst
+    from tiling import AMBIENT, LIGHT_ELEVATION, SHADE_LIMITS
+
+# Яркость ночной стороны в долях яркости ровной земли днём. Сумерки -
+# переход от ночи ко дню по синусу высоты солнца над плоскостью склона,
+# от DUSK до DAWN, примерно от -6° до +3°. Величины назначил помощник
+# 30 сентября 2026 года, их утверждает автор.
+NIGHT = 0.15
+DUSK = -0.10
+DAWN = 0.05
 
 
 def _centuries(unix_time):
@@ -82,3 +92,28 @@ def horizontal(lat, lon, unix_time):
     elevation = math.degrees(math.asin(max(-1.0, min(1.0, sun @ up))))
     azimuth = math.degrees(math.atan2(sun @ east, sun @ north)) % 360.0
     return elevation, azimuth
+
+
+def daylight(cos):
+    """Доля дня от 0 ночью до 1 днём по синусу высоты солнца cos над
+    плоскостью поверхности. Переход - smoothstep от DUSK до DAWN, как
+    в шейдере."""
+    t = np.clip((np.asarray(cos, dtype=np.float64) - DUSK) / (DAWN - DUSK),
+                0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def light(normals, sun):
+    """Множитель яркости поверхности под солнцем, как в шейдере тайла.
+
+    normals - единичные нормали (N, 3) в ECEF, sun - направление на
+    солнце. Днём - та же отмывка, что у постоянного света
+    core.tiling.shade: рассеянный свет AMBIENT и прямой по косинусу,
+    ровная земля под солнцем на высоте LIGHT_ELEVATION даёт 1. Ночью -
+    NIGHT, между ними сумерки.
+    """
+    cos = np.asarray(normals, dtype=np.float64) @ np.asarray(sun)
+    flat = math.sin(LIGHT_ELEVATION)
+    day = np.clip((AMBIENT + (1.0 - AMBIENT) * np.clip(cos, 0.0, 1.0))
+                  / (AMBIENT + (1.0 - AMBIENT) * flat), *SHADE_LIMITS)
+    return NIGHT + (day - NIGHT) * daylight(cos)

@@ -7,7 +7,15 @@
 u_mvp уже включает сдвиг «центр тайла - глаз», посчитанный в float64.
 """
 
+import math
+
+from ..core.sun import DAWN, DUSK, NIGHT
+from ..core.tiling import AMBIENT, LIGHT_ELEVATION, SHADE_LIMITS
+
 A_KM = 6378.137
+# Воздух светится и после захода солнца, пока освещена верхняя
+# атмосфера. Нижняя граница его сумерек ниже, чем у земли, около -11°.
+AIR_DUSK = -0.20
 SHELL_KM = 300.0  # толщина оболочки атмосферы
 SHELL = 1.0 + SHELL_KM / A_KM  # оболочка в долях полуосей эллипсоида
 
@@ -30,6 +38,8 @@ uniform vec3 u_eye;        // глаз в долях полуосей
 uniform vec3 u_axes;       // 1 / полуоси
 uniform float u_qc_shell;  // |eye|² - SHELL², посчитано в double
 uniform float u_air;       // 1 - атмосфера включена, 0 - выключена
+uniform vec3 u_sun;        // направление на солнце в ECEF
+uniform float u_sun_on;    // 1 - свет от солнца, 0 - постоянный свет
 const float RADIUS_KM = %(a_km)r;
 // Высота однородной атмосферы вшестеро больше настоящей, иначе гало
 // из космоса уже 5 пикселей. Рассеяние уменьшено в той же доле, отвесный столб
@@ -80,25 +90,49 @@ vec3 air(vec3 dir, float t_end, out vec3 pass) {
         return vec3(0.0);
     }
     float tc = clamp(-qb / qa, t0, t1);
+    // При солнце воздух светится там, где его освещает солнце. Доля
+    // берётся в самой плотной точке отрезка, ближайшей к центру Земли.
+    float lit = 1.0;
+    if (u_sun_on > 0.5) {
+        vec3 up = normalize(u_eye + tc * d);
+        lit = smoothstep(%(air_dusk)r, %(dawn)r, dot(up, u_sun));
+    }
     float km_per_t = length(dir) / 1000.0;
     float depth = half_depth(d, tc, t0, km_per_t)
         + half_depth(d, tc, t1, km_per_t);
     pass = exp(-BETA * depth);
-    return 1.0 - pass;
+    return (1.0 - pass) * lit;
 }
-""" % {"a_km": A_KM}
+""" % {"a_km": A_KM, "air_dusk": AIR_DUSK, "dawn": DAWN}
+
+# Яркость поверхности под солнцем - та же формула, что core.sun.light,
+# её сторожит test_sun.TestLight.
+SUN_LIGHT = """
+float sun_shade(vec3 n) {
+    float c = dot(n, u_sun);
+    float day = clamp((%(ambient)r + %(direct)r * clamp(c, 0.0, 1.0))
+                      / %(flat)r, %(low)r, %(high)r);
+    return mix(%(night)r, day, smoothstep(%(dusk)r, %(dawn)r, c));
+}
+""" % {"ambient": AMBIENT, "direct": 1.0 - AMBIENT,
+       "flat": AMBIENT + (1.0 - AMBIENT) * math.sin(LIGHT_ELEVATION),
+       "low": SHADE_LIMITS[0], "high": SHADE_LIMITS[1], "night": NIGHT,
+       "dusk": DUSK, "dawn": DAWN}
 
 TILE_VERTEX = """#version 330 core
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec2 a_uv;
 layout(location = 2) in float a_shade;
+layout(location = 3) in vec3 a_normal;
 uniform mat4 u_mvp;
 out vec2 v_uv;
 out float v_shade;
+out vec3 v_normal;
 out float v_depth;
 void main() {
     v_uv = a_uv;
     v_shade = a_shade;
+    v_normal = a_normal;
     gl_Position = u_mvp * vec4(a_position, 1.0);
     v_depth = gl_Position.w;
 }
@@ -208,6 +242,7 @@ void main() {
 TILE_FRAGMENT = """#version 330 core
 in vec2 v_uv;
 in float v_shade;
+in vec3 v_normal;
 in float v_depth;
 uniform sampler2D u_texture;
 // Наложение: картинка слоя QGIS с премноженной альфой. Координаты
@@ -225,7 +260,7 @@ uniform vec4 u_sea_uv;
 uniform sampler2D u_land;
 uniform vec4 u_land_uv;
 out vec4 frag_color;
-""" + ATMOSPHERE + """
+""" + ATMOSPHERE + SUN_LIGHT + """
 vec3 lay(vec3 under, sampler2D image, vec4 uv) {
     vec4 top = texture(image, uv.xy + uv.z * v_uv);
     return under * (1.0 - top.a) + top.rgb;
@@ -236,8 +271,10 @@ void main() {
     base = lay(base, u_land, u_land_uv);
     base = lay(base, u_overlay, u_overlay_uv);
     base = lay(base, u_clouds, u_clouds_uv);
-    // Отмывка рельефа: множитель яркости, на равнине 1.
-    vec3 ground = clamp(base * v_shade, 0.0, 1.0);
+    // Отмывка рельефа: множитель яркости, на равнине 1. При солнце -
+    // по нормали рельефа и направлению на солнце, с ночной стороной.
+    float shade = u_sun_on > 0.5 ? sun_shade(normalize(v_normal)) : v_shade;
+    vec3 ground = clamp(base * shade, 0.0, 1.0);
     // Дымка: воздух между глазом и поверхностью.
     vec3 pass;
     // Белая подложка под дымкой остаётся белой: pass + (1 - pass) = 1.
@@ -320,6 +357,10 @@ uniform vec3 u_light;
 uniform float u_ambient;
 uniform float u_flat;
 uniform vec2 u_limits;
+// Ночь: доля дня u_day у глаза, яркость ночи u_night. Без солнца
+// u_day = 1, картинка как у постоянного света.
+uniform float u_day;
+uniform float u_night;
 out vec3 v_color;
 void main() {
     gl_Position = u_mvp * vec4(a_position, 1.0);
@@ -329,6 +370,7 @@ void main() {
                               : 1.0;
     float shade = clamp((u_ambient + (1.0 - u_ambient) * lambert) / u_flat,
                         u_limits.x, u_limits.y);
+    shade = mix(u_night, shade, u_day);
     v_color = min(a_color.rgb * shade, vec3(1.0));
 }
 """

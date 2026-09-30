@@ -109,6 +109,7 @@ CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, поляр�
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
 COORDS_KEY = "PlanetX/coords"  # формат координат
+SUN_KEY = "PlanetX/sun"  # свет от солнца или постоянный
 RECORD_PERIOD = 100  # мс между позами записи тура
 SYNC_KEY = "PlanetX/sync"  # направление синхронизации с картой
 # Тип KML в буфере обмена, как у Google Earth. Рядом кладётся текст.
@@ -369,10 +370,16 @@ class GlobeWindow(QWidget):
         coords = QgsSettings().value(COORDS_KEY, COORD_FORMATS[0])
         self.coords = coords if coords in COORD_FORMATS \
             else COORD_FORMATS[0]
+        # Солнце по умолчанию выключено, решение автора от 30 сентября
+        # 2026 года. Момент солнца живёт до закрытия окна, None - время
+        # включения.
+        self.sun_on = QgsSettings().value(SUN_KEY, False, type=bool)
+        self.sun_time = None
         self._places_source = None
         # Масштаб ставится до первой загрузки, сетки сразу собираются
         # с ним.
         self.view.set_relief(self._relief_target())
+        self._apply_sun()
         self._applied_groups = None
         self._applied_layers = None
         # Слои проекта изменились с последнего обновления.
@@ -578,7 +585,8 @@ class GlobeWindow(QWidget):
                 "relief": self._relief, "scale": self._scale,
                 "language": self._language, "sync": self.sync.direction,
                 "follow": self.follow, "new_shown": self.new_shown,
-                "auto": self.auto_refresh, "coords": self.coords}
+                "auto": self.auto_refresh, "coords": self.coords,
+                "sun": self.sun_on, "sun_time": self.sun_time}
 
     def set_sync_direction(self, way):
         """Кто за кем следует при синхронизации с картой."""
@@ -1126,6 +1134,34 @@ class GlobeWindow(QWidget):
         self._update_cursor()
         self._sync_properties()
 
+    def set_sun(self, on):
+        """Свет от солнца или постоянный. Настройка QGIS."""
+        self.sun_on = bool(on)
+        QgsSettings().setValue(SUN_KEY, self.sun_on)
+        if self.sun_on and self.sun_time is None:
+            self.sun_time = float(int(time.time()))
+        self._apply_sun()
+        self._sync_properties()
+
+    def set_sun_time(self, unix_time):
+        """Момент солнца в секундах Unix."""
+        self.sun_time = float(unix_time)
+        self._apply_sun()
+        self._sync_properties()
+
+    def _apply_sun(self):
+        """Передать виду момент солнца. Открытая шкала времени меток
+        задаёт его правым краем промежутка."""
+        if not self.sun_on:
+            self.view.set_sun(None)
+            return
+        moment = self.sun_time
+        if self._time_range is not None:
+            moment = self._time_range[1]
+        if moment is None:
+            moment = float(int(time.time()))
+        self.view.set_sun(moment)
+
     def _sync_properties(self):
         if self.properties is not None:
             self.properties.set_state(self.state())
@@ -1142,6 +1178,8 @@ class GlobeWindow(QWidget):
             self.properties.follow_changed.connect(self.set_follow)
             self.properties.new_shown_changed.connect(self.set_new_shown)
             self.properties.coords_chosen.connect(self.set_coords)
+            self.properties.sun_toggled.connect(self.set_sun)
+            self.properties.sun_time_chosen.connect(self.set_sun_time)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()
@@ -1315,10 +1353,12 @@ class GlobeWindow(QWidget):
             self.timebar.close_bar()
         self._time_range = self.timebar.range() \
             if self.timebar.shown() else None
+        self._apply_sun()
         self._refresh_shapes()
 
     def _time_changed(self, lo, hi):
         self._time_range = (lo, hi)
+        self._apply_sun()
         self._refresh_shapes()
 
     def _time_ok(self, place):

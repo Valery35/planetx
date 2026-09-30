@@ -22,6 +22,7 @@ from OpenGL import GL
 from qgis.PyQt.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
 
 from ..core import buildings as core
+from ..core import sun as core_sun
 from ..core.ellipsoid import ecef_to_geodetic, surface_normal
 from ..core.tiling import AMBIENT, LIGHT_ELEVATION, SHADE_LIMITS
 from . import gpu
@@ -31,7 +32,8 @@ UPLOADS = 1  # сеток за кадр
 SHOT_UPLOADS = 8  # сеток за кадр снимка
 FOOTPRINTS_KEPT = 96  # разобранных тайлов в памяти, по давности
 LOADER_PERIOD = 0.1  # секунд между просьбами к загрузчику
-UNIFORMS = ("u_mvp", "u_light", "u_ambient", "u_flat", "u_limits")
+UNIFORMS = ("u_mvp", "u_light", "u_ambient", "u_flat", "u_limits",
+            "u_day", "u_night")
 
 
 class _Built(QObject):
@@ -286,8 +288,12 @@ class Buildings:
             GL.glDeleteProgram(self.program)
         self.program = None
 
-    def draw(self, camera):
-        """Нарисовать здания. Вызывается после тайлов, до неба."""
+    def draw(self, camera, sun=None):
+        """Нарисовать здания. Вызывается после тайлов, до неба.
+
+        sun - направление на солнце в ECEF или None - постоянный свет.
+        Доля дня берётся у глаза, здания видны не дальше RANGE от него.
+        """
         self.drawn = 0
         if not self.shown or self.program is None:
             return
@@ -301,7 +307,14 @@ class Buildings:
         gl = gpu.gl
         gl.glUseProgram(self.program)
         lat, lon = _latlon(np.asarray(camera.eye, dtype=np.float64))
-        gl.glUniform3f(loc["u_light"], *light_at(lat, lon).tolist())
+        if sun is None:
+            gl.glUniform3f(loc["u_light"], *light_at(lat, lon).tolist())
+            day = 1.0
+        else:
+            gl.glUniform3f(loc["u_light"], *(float(v) for v in sun))
+            day = float(core_sun.daylight(surface_normal(lat, lon) @ sun))
+        gl.glUniform1f(loc["u_day"], day)
+        gl.glUniform1f(loc["u_night"], core_sun.NIGHT)
         gl.glUniform1f(loc["u_ambient"], AMBIENT)
         gl.glUniform1f(loc["u_flat"], AMBIENT + (1.0 - AMBIENT)
                        * math.sin(LIGHT_ELEVATION))

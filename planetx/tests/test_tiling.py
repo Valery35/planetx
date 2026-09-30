@@ -2,6 +2,7 @@
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Сетка тайлов Web Mercator и сетка вершин тайла."""
+import math
 import os
 import sys
 import unittest
@@ -13,6 +14,7 @@ CORE = os.path.join(os.path.dirname(os.path.dirname(
 sys.path.insert(0, CORE)
 
 import ellipsoid as el  # noqa: E402
+import sun  # noqa: E402
 import tiling as tl  # noqa: E402
 
 # Эталон - QGIS 4.0.3, перевод в EPSG:3857 и деление на тайлы,
@@ -246,6 +248,38 @@ class TestTerrainMesh(unittest.TestCase):
                                                      + (v * 256 - 90))
                                           * 1500.0)))
         self.assertLess(float(np.median(steep.shade)), 0.8)
+
+    def test_normals_for_sunlight(self):
+        # Ровный тайл: нормаль - нормаль эллипсоида, у юбки своя
+        # из узла края.
+        plain = tl.tile_mesh(10, 641, 361)
+        side = plain.segments + 1
+        n = plain.normal[:, :3].astype(np.float64) / 127.0
+        n /= np.linalg.norm(n, axis=1, keepdims=True)
+        pos = plain.center + plain.positions.astype(np.float64)
+        lat, lon, _ = el.ecef_to_geodetic(pos[:side * side])
+        up = el.surface_normal(lat, lon)
+        self.assertGreater(float((n[:side * side] * up).sum(axis=1).min()),
+                           math.cos(math.radians(1.0)))
+        self.assertEqual(len(plain.normal), len(plain.positions))
+        # Склон к северо-западу: солнце с северо-запада под 45° даёт
+        # по нормалям ту же яркость, что постоянная отмывка.
+        lit = tl.tile_mesh(10, 641, 361, self.slope)
+        lat0, lon0, _ = el.ecef_to_geodetic(lit.center)
+        la, lo = math.radians(float(lat0)), math.radians(float(lon0))
+        up0 = np.array([math.cos(la) * math.cos(lo),
+                        math.cos(la) * math.sin(lo), math.sin(la)])
+        east = np.array([-math.sin(lo), math.cos(lo), 0.0])
+        north = np.cross(up0, east)
+        e = tl.LIGHT_ELEVATION
+        light = up0 * math.sin(e) + (north - east) * math.cos(e) \
+            / math.sqrt(2.0)
+        normals = lit.normal[:side * side, :3].astype(np.float64) / 127.0
+        normals /= np.linalg.norm(normals, axis=1, keepdims=True)
+        by_sun = sun.light(normals, light)
+        self.assertLess(abs(float(np.median(by_sun))
+                            - float(np.median(lit.shade[:side * side]))),
+                        0.01)
 
     def test_skirt_goes_below_the_height_spread(self):
         mesh = tl.tile_mesh(10, 641, 361, self.slope)

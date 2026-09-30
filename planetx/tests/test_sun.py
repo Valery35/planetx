@@ -88,5 +88,41 @@ class TestDirection(unittest.TestCase):
         self.assertLess(elevation, -20.0)
 
 
+
+class TestLight(unittest.TestCase):
+    """Свет солнца: день как постоянная отмывка, ночь, сумерки."""
+
+    UP = np.array([[0.0, 0.0, 1.0]])
+
+    def at(self, elevation):
+        e = math.radians(elevation)
+        return float(sun.light(self.UP, np.array([math.cos(e), 0.0,
+                                                  math.sin(e)]))[0])
+
+    def test_flat_ground_at_45_degrees_is_one(self):
+        self.assertAlmostEqual(self.at(45.0), 1.0, places=9)
+
+    def test_night(self):
+        self.assertAlmostEqual(self.at(-20.0), sun.NIGHT, places=9)
+        self.assertAlmostEqual(self.at(-90.0), sun.NIGHT, places=9)
+
+    def test_brighter_with_higher_sun(self):
+        values = [self.at(e) for e in (-8, -4, 0, 2, 5, 20, 45, 80)]
+        self.assertEqual(values, sorted(values))
+
+    def test_twilight_is_continuous(self):
+        steps = np.diff([self.at(e / 10.0) for e in range(-120, 60)])
+        self.assertLess(float(np.abs(steps).max()), 0.02)
+
+    def test_slope_facing_away_is_dark(self):
+        # Склон 60° от солнца на высоте 30°: солнце ниже его плоскости.
+        e = math.radians(30.0)
+        s = np.array([math.cos(e), 0.0, math.sin(e)])
+        a = math.radians(60.0)
+        away = np.array([[-math.sin(a), 0.0, math.cos(a)]])
+        self.assertAlmostEqual(float(sun.light(away, s)[0]), sun.NIGHT,
+                               places=9)
+
+
 if __name__ == "__main__":
     unittest.main()

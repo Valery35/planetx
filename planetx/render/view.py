@@ -18,7 +18,7 @@ from qgis.PyQt.QtCore import (QObject, QRunnable, QThreadPool, Qt, QTimer,
                               pyqtSignal)
 from qgis.PyQt.QtGui import QImage, QSurfaceFormat
 
-from ..core import lod
+from ..core import lod, sun
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
 from ..core.camera import Camera
@@ -122,7 +122,7 @@ def surface_format():
 
 
 AIR_UNIFORMS = ("u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes",
-                "u_qc_shell", "u_air")
+                "u_qc_shell", "u_air", "u_sun", "u_sun_on")
 def uniforms(program, names):
     return {name: GL.glGetUniformLocation(program, name) for name in names}
 
@@ -144,10 +144,16 @@ def ray_uniforms(u, camera, a=A, b=B):
     return eye
 
 
-def air_uniforms(u, camera, on):
+def air_uniforms(u, camera, on, light=None):
+    """Величины атмосферы. light - направление на солнце в ECEF или None,
+    тогда свет постоянный, как без солнца."""
     eye = ray_uniforms(u, camera)
     gpu.gl.glUniform1f(u["u_qc_shell"], float(eye @ eye) - SHELL * SHELL)
     gpu.gl.glUniform1f(u["u_air"], 1.0 if on else 0.0)
+    lit = (0.0, 0.0, 1.0) if light is None \
+        else tuple(float(v) for v in light)
+    gpu.gl.glUniform3f(u["u_sun"], *lit)
+    gpu.gl.glUniform1f(u["u_sun_on"], 0.0 if light is None else 1.0)
     return eye
 
 
@@ -360,6 +366,9 @@ class GlobeView(QOpenGLWidget):
         self.stars = Stars()
         self.sky = Sky()  # Млечный путь, строка «Звёзды»
         self.show_stars = True
+        # Солнце: момент в секундах Unix или None - постоянный свет
+        # с северо-запада, как до выпуска «Объём и свет».
+        self.sun_time = None
         # Слои NASA GIBS: облака, температура моря и суши.
         self.gibs = {name: GibsLayer(level)
                      for name, level, _, _, _ in GIBS_LAYERS}
@@ -1312,7 +1321,7 @@ class GlobeView(QOpenGLWidget):
         self._clear_overlay()
         self._clear_gibs()
         air = self.atmosphere and not self.show_holes
-        air_uniforms(self.tile_air, self.camera, air)
+        air_uniforms(self.tile_air, self.camera, air, self.sun_direction())
 
         items = list(zip(self.caps, self.cap_textures or [self.ocean] * 2))
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
@@ -1365,7 +1374,7 @@ class GlobeView(QOpenGLWidget):
                 self.camera, self.store, time.monotonic())
             self.buildings.upload(BUILDING_SHOT_UPLOADS if shot
                                   else 1 if motion else 2)
-            self.buildings.draw(self.camera)
+            self.buildings.draw(self.camera, self.sun_direction())
         if air:
             self._draw_sky()
         if self.show_stars and not self.show_holes:
@@ -1647,6 +1656,19 @@ class GlobeView(QOpenGLWidget):
         self.last_arrival = time.monotonic()
         self.update()
 
+    def set_sun(self, unix_time):
+        """Свет от солнца на момент unix_time, None - постоянный свет."""
+        value = None if unix_time is None else float(unix_time)
+        if value != self.sun_time:
+            self.sun_time = value
+            self.update()
+
+    def sun_direction(self):
+        """Направление на солнце в ECEF или None без солнца."""
+        if self.sun_time is None:
+            return None
+        return sun.direction(self.sun_time)
+
     def set_stars(self, on):
         """Показать или скрыть звёзды."""
         self.show_stars = bool(on)
@@ -1667,7 +1689,7 @@ class GlobeView(QOpenGLWidget):
         gl = gpu.gl
         gl.glUseProgram(self.sky_program)
         u = self.sky_air
-        eye = air_uniforms(u, self.camera, True)
+        eye = air_uniforms(u, self.camera, True, self.sun_direction())
         gl.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)

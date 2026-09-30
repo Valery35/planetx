@@ -24,7 +24,11 @@ from OpenGL.raw.GL.VERSION.GL_3_0 import glBindVertexArray as _bind_vao
 # Расширение анизотропной фильтрации. Константы не входят в ядро 3.3.
 TEXTURE_MAX_ANISOTROPY = 0x84FE
 MAX_TEXTURE_MAX_ANISOTROPY = 0x84FF
-STRIDE = 6 * 4  # x, y, z, u, v и множитель отмывки во float32
+# Вершина тайла: x, y, z, u, v и множитель отмывки во float32, нормаль
+# рельефа четырьмя байтами со знаком.
+VERTEX = np.dtype([("position", "<f4", 3), ("uv", "<f4", 2),
+                   ("shade", "<f4"), ("normal", "i1", 4)])
+STRIDE = VERTEX.itemsize
 
 
 class ShaderError(RuntimeError):
@@ -73,10 +77,11 @@ class GpuMesh:
     """Сетка тайла в видеокарте: массив вершин с буферами."""
 
     def __init__(self, mesh):
-        data = np.ascontiguousarray(
-            np.concatenate([mesh.positions, mesh.uv, mesh.shade[:, None]],
-                           axis=1),
-            dtype=np.float32)
+        data = np.zeros(len(mesh.positions), dtype=VERTEX)
+        data["position"] = mesh.positions
+        data["uv"] = mesh.uv
+        data["shade"] = mesh.shade
+        data["normal"] = mesh.normal
         indices = np.ascontiguousarray(mesh.indices)
         self.count = len(indices)
         self.center = mesh.center
@@ -89,10 +94,14 @@ class GpuMesh:
         gl.buffer_data(GL.GL_ARRAY_BUFFER, data)
         gl.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, self.ebo)
         gl.buffer_data(GL.GL_ELEMENT_ARRAY_BUFFER, indices)
-        for index, size, offset in ((0, 3, 0), (1, 2, 3), (2, 1, 5)):
+        for index, size, kind, norm, name in (
+                (0, 3, GL.GL_FLOAT, GL.GL_FALSE, "position"),
+                (1, 2, GL.GL_FLOAT, GL.GL_FALSE, "uv"),
+                (2, 1, GL.GL_FLOAT, GL.GL_FALSE, "shade"),
+                (3, 3, GL.GL_BYTE, GL.GL_TRUE, "normal")):
             gl.glEnableVertexAttribArray(index)
-            gl.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
-                                     STRIDE, ctypes.c_void_p(offset * 4))
+            gl.glVertexAttribPointer(index, size, kind, norm, STRIDE,
+                                     ctypes.c_void_p(VERTEX.fields[name][1]))
         gl.glBindVertexArray(0)
 
     def draw(self):

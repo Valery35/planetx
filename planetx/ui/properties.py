@@ -8,10 +8,13 @@
 автообновления - в проекте. Векторная основа и флажок рельефа живут
 в панели «Слои» окна глобуса, как в Google Earth.
 """
-from qgis.PyQt.QtCore import pyqtSignal
-from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
-                                 QDialogButtonBox, QDoubleSpinBox,
-                                 QFormLayout, QGroupBox, QVBoxLayout)
+import time
+
+from qgis.PyQt.QtCore import QDateTime, pyqtSignal
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
+                                 QDialog, QDialogButtonBox, QDoubleSpinBox,
+                                 QFormLayout, QGroupBox, QHBoxLayout,
+                                 QPushButton, QVBoxLayout)
 
 from ..core.coords import FORMATS
 from ..core.places import AS_QGIS, LABEL_LANGUAGES, LOCAL
@@ -61,6 +64,8 @@ class PropertiesDialog(QDialog):
     follow_changed = pyqtSignal(bool)
     new_shown_changed = pyqtSignal(bool)
     coords_chosen = pyqtSignal(str)
+    sun_toggled = pyqtSignal(bool)
+    sun_time_chosen = pyqtSignal(float)  # секунды Unix
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -170,6 +175,35 @@ class PropertiesDialog(QDialog):
         coordinates = QGroupBox(tr("Координаты"), self)
         QFormLayout(coordinates).addRow(tr("Формат"), self.coords)
 
+        self.sun = QCheckBox(tr("Свет от солнца"), self)
+        self.sun.setToolTip(tr(
+            "Рельеф, здания и воздух освещаются солнцем на заданные дату "
+            "и время, ночная сторона Земли темнеет. Тени от гор "
+            "и зданий не рисуются. Без флажка свет постоянный, "
+            "с северо-запада."))
+        self.sun.toggled.connect(self.sun_toggled)
+        self.sun_time = QDateTimeEdit(self)
+        self.sun_time.setCalendarPopup(True)
+        self.sun_time.setDisplayFormat("dd.MM.yyyy HH:mm")
+        self.sun_time.setToolTip(tr(
+            "Момент, на который стоит солнце, по часам компьютера. "
+            "Пока открыта шкала времени меток, солнце стоит на правом "
+            "краю её промежутка."))
+        self.sun_time.dateTimeChanged.connect(
+            lambda value: self.sun_time_chosen.emit(
+                float(value.toSecsSinceEpoch())))
+        now = QPushButton(tr("Сейчас"), self)
+        now.setToolTip(tr("Ставит текущие дату и время."))
+        now.clicked.connect(
+            lambda: self.sun_time_chosen.emit(float(int(time.time()))))
+        moment = QHBoxLayout()
+        moment.addWidget(self.sun_time, 1)
+        moment.addWidget(now)
+        light = QGroupBox(tr("Солнце"), self)
+        light_form = QFormLayout(light)
+        light_form.addRow(self.sun)
+        light_form.addRow(tr("Дата и время"), moment)
+
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Close"), self)
         buttons.rejected.connect(self.close)
@@ -180,6 +214,7 @@ class PropertiesDialog(QDialog):
         layout.addWidget(canvas)
         layout.addWidget(layers)
         layout.addWidget(coordinates)
+        layout.addWidget(light)
         layout.addStretch(1)
         layout.addWidget(buttons)
         self.set_state(state)
@@ -187,7 +222,8 @@ class PropertiesDialog(QDialog):
     def set_state(self, state):
         """Показать состояние окна. Сигналы при этом не идут."""
         widgets = [self.basemap, self.scale, self.language, self.sync,
-                   self.follow, self.new_shown, self.auto, self.coords]
+                   self.follow, self.new_shown, self.auto, self.coords,
+                   self.sun, self.sun_time]
         for widget in widgets:
             widget.blockSignals(True)
         self.basemap.setCurrentIndex(state["basemap"])
@@ -206,5 +242,10 @@ class PropertiesDialog(QDialog):
         fmt = state.get("coords", FORMATS[0])
         self.coords.setCurrentIndex(FORMATS.index(fmt)
                                     if fmt in FORMATS else 0)
+        self.sun.setChecked(state.get("sun", False))
+        moment = state.get("sun_time")
+        self.sun_time.setDateTime(QDateTime.fromSecsSinceEpoch(
+            int(time.time() if moment is None else moment)))
+        self.sun_time.setEnabled(self.sun.isChecked())
         for widget in widgets:
             widget.blockSignals(False)
