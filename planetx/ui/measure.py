@@ -176,8 +176,10 @@ class Ruler(QObject):
     def _alts(self, rubber):
         alts = list(self.alts)
         if self._rubber(rubber):
-            alts.append(0.0 if self.cursor_alt is None
-                        else float(self.cursor_alt))
+            # Курсор без высоты остался от вида без высот: резинка идёт
+            # на высоте последней точки, пока курсор не сдвинется.
+            alts.append(float(self.cursor_alt) if self.cursor_alt
+                        is not None else alts[-1])
         return alts
 
     def _solid_points(self, rubber):

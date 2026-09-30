@@ -601,6 +601,21 @@ def mesh_ok(mesh):
     return bool(np.isfinite(mesh.vertices["position"]).all())
 
 
+Prepared = namedtuple("Prepared", "center a e1 e2")
+Prepared.__doc__ = """Треугольники сетки для проверки луча: первая
+вершина и два ребра, float64, смещения от center."""
+
+
+def prepare(mesh):
+    """Треугольники сетки для ray_hit_prepared. Выборка вершин по номерам
+    - три четверти времени проверки, поэтому её держат готовой."""
+    tri = mesh.indices.reshape(-1, 3)
+    p = mesh.vertices["position"].astype(np.float64)
+    a = p[tri[:, 0]]
+    return Prepared(np.asarray(mesh.center, dtype=np.float64), a,
+                    p[tri[:, 1]] - a, p[tri[:, 2]] - a)
+
+
 def ray_hit(meshes, origin, direction):
     """Ближайшее попадание луча в здания: (расстояние, точка) или None.
 
@@ -610,29 +625,32 @@ def ray_hit(meshes, origin, direction):
     от центра тайла, методом Мёллера-Трумбора. Треугольник попадает
     с обеих сторон, стены видны и изнутри двора.
     """
+    return ray_hit_prepared([prepare(m) for m in meshes
+                             if len(m.indices)], origin, direction)
+
+
+def ray_hit_prepared(prepared, origin, direction):
+    """То же, что ray_hit, по готовым треугольникам prepare."""
     origin = np.asarray(origin, dtype=np.float64)
     d = np.asarray(direction, dtype=np.float64)
     d = d / np.linalg.norm(d)
     best = None
-    for m in meshes:
-        if not len(m.indices):
+    for item in prepared:
+        a, e1, e2 = item.a, item.e1, item.e2
+        if not len(a):
             continue
-        tri = m.indices.reshape(-1, 3)
-        p = m.vertices["position"].astype(np.float64)
-        a, b, c = p[tri[:, 0]], p[tri[:, 1]], p[tri[:, 2]]
-        o = origin - np.asarray(m.center, dtype=np.float64)
-        e1, e2 = b - a, c - a
+        o = origin - item.center
         h = np.cross(d, e2)
-        det = (e1 * h).sum(axis=1)
+        det = np.einsum("ij,ij->i", e1, h)
         # Ребро треугольника - метры, порог отбрасывает луч в плоскости
         # треугольника.
-        ok = np.abs(det) > 1e-9 * (e1 * e1).sum(axis=1)
+        ok = np.abs(det) > 1e-9 * np.einsum("ij,ij->i", e1, e1)
         inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
         s = o - a
-        u = (s * h).sum(axis=1) * inv
+        u = np.einsum("ij,ij->i", s, h) * inv
         q = np.cross(s, e1)
         v = (q @ d) * inv
-        t = (e2 * q).sum(axis=1) * inv
+        t = np.einsum("ij,ij->i", e2, q) * inv
         inside = ok & (u >= 0.0) & (v >= 0.0) & (u + v <= 1.0) & (t > 0.0)
         if not inside.any():
             continue

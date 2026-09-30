@@ -71,6 +71,13 @@ class _Buffers:
         # на крыше или стене (core.buildings.ray_hit). Живёт, пока тайл
         # в видеокарте, то есть в пределах бюджета MAX_VERTICES.
         self.mesh = mesh
+        # Треугольники для проверки луча считаются при первой просьбе
+        # 3D-линейки, core.prepare.
+        self.prepared = None
+        # Радиус описанной сферы: луч мимо неё тайл не проверяет.
+        self.radius = float(np.sqrt(
+            (mesh.vertices["position"].astype(np.float64) ** 2)
+            .sum(axis=1).max())) if len(mesh.vertices) else 0.0
         self.center = mesh.center
         self.level = level
         self.vertices = len(vertices)
@@ -279,9 +286,25 @@ class Buildings:
         масштабом рельефа."""
         if not self.shown:
             return None
-        meshes = [self.buffers[k].mesh for k in self.wanted
-                  if k in self.buffers]
-        return core.ray_hit(meshes, origin, direction) if meshes else None
+        origin = np.asarray(origin, dtype=np.float64)
+        d = np.asarray(direction, dtype=np.float64)
+        d = d / np.linalg.norm(d)
+        meshes = []
+        for key in self.wanted:
+            item = self.buffers.get(key)
+            if item is None:
+                continue
+            # Отсев по описанной сфере: луч проходит мимо или сфера
+            # целиком позади глаза.
+            to = np.asarray(item.center, dtype=np.float64) - origin
+            along = float(to @ d)
+            miss = float(to @ to) - along * along
+            if along < -item.radius or miss > item.radius * item.radius:
+                continue
+            if item.prepared is None:
+                item.prepared = core.prepare(item.mesh)
+            meshes.append(item.prepared)
+        return core.ray_hit_prepared(meshes, origin, d) if meshes else None
 
     # Ресурсы OpenGL.
 
