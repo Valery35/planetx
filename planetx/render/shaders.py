@@ -7,13 +7,19 @@
 u_mvp уже включает сдвиг «центр тайла - глаз», посчитанный в float64.
 """
 
+try:  # внутри плагина QGIS
+    from ..core import sun as _sun
+except ImportError:  # проверки без пакета
+    import sun as _sun
+
 A_KM = 6378.137
 SHELL_KM = 300.0  # толщина оболочки атмосферы
 SHELL = 1.0 + SHELL_KM / A_KM  # оболочка в долях полуосей эллипсоида
 
 # Воздух на луче из глаза. Плотность падает с высотой по экспоненте,
-# рассеяние по каналам как у рэлеевского на уровне моря. Солнца нет,
-# свет рассеивается одинаково во все стороны. Луч идёт в координатах
+# рассеяние по каналам как у рэлеевского на уровне моря. Свет
+# рассеивается одинаково во все стороны. При включённом солнце
+# воздух над ночной стороной гаснет до AIR_NIGHT. Луч идёт в координатах
 # в долях полуосей, эллипсоид там - единичная сфера. Члены |eye|² - r²
 # считаются на процессоре в double, как в счётчике дыр.
 #
@@ -30,7 +36,23 @@ uniform vec3 u_eye;        // глаз в долях полуосей
 uniform vec3 u_axes;       // 1 / полуоси
 uniform float u_qc_shell;  // |eye|² - SHELL², посчитано в double
 uniform float u_air;       // 1 - атмосфера включена, 0 - выключена
+uniform vec3 u_sun;        // направление на солнце в ECEF
+uniform float u_sun_on;    // 1 - свет солнца, 0 - отмывка без солнца
 const float RADIUS_KM = %(a_km)r;
+// Свет солнца, формула core.sun.brightness.
+const float SUN_AMBIENT = %(ambient)r;
+const float SUN_NIGHT = %(night)r;
+const float SUN_FLAT = %(flat)r;
+const float TWILIGHT = %(twilight)r;
+const float DAYLIGHT = %(daylight)r;
+// Ночью воздух светится на эту долю от дневного.
+const float AIR_NIGHT = 0.03;
+
+float sun_brightness(float cos_sun) {
+    float day = smoothstep(TWILIGHT, DAYLIGHT, cos_sun);
+    float ambient = mix(SUN_NIGHT, SUN_AMBIENT, day);
+    return (ambient + (1.0 - SUN_AMBIENT) * max(cos_sun, 0.0)) / SUN_FLAT;
+}
 // Высота однородной атмосферы вшестеро больше настоящей, иначе гало
 // из космоса уже 5 пикселей. Рассеяние уменьшено в той же доле, отвесный столб
 // воздуха такой же, как у настоящей атмосферы.
@@ -84,21 +106,33 @@ vec3 air(vec3 dir, float t_end, out vec3 pass) {
     float depth = half_depth(d, tc, t0, km_per_t)
         + half_depth(d, tc, t1, km_per_t);
     pass = exp(-BETA * depth);
-    return 1.0 - pass;
+    vec3 glow = 1.0 - pass;
+    if (u_sun_on > 0.5) {
+        // Воздух светится, пока над ближней к Земле точкой луча день.
+        vec3 up = normalize(u_eye + tc * d);
+        glow *= mix(AIR_NIGHT, 1.0,
+                    smoothstep(TWILIGHT, DAYLIGHT, dot(up, u_sun)));
+    }
+    return glow;
 }
-""" % {"a_km": A_KM}
+""" % {"a_km": A_KM, "ambient": _sun.AMBIENT, "night": _sun.NIGHT,
+       "flat": _sun.FLAT, "twilight": _sun.TWILIGHT,
+       "daylight": _sun.DAYLIGHT}
 
 TILE_VERTEX = """#version 330 core
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec2 a_uv;
 layout(location = 2) in float a_shade;
+layout(location = 3) in vec3 a_normal;
 uniform mat4 u_mvp;
 out vec2 v_uv;
 out float v_shade;
+out vec3 v_normal;
 out float v_depth;
 void main() {
     v_uv = a_uv;
     v_shade = a_shade;
+    v_normal = a_normal;
     gl_Position = u_mvp * vec4(a_position, 1.0);
     v_depth = gl_Position.w;
 }
@@ -208,6 +242,7 @@ void main() {
 TILE_FRAGMENT = """#version 330 core
 in vec2 v_uv;
 in float v_shade;
+in vec3 v_normal;
 in float v_depth;
 uniform sampler2D u_texture;
 // Наложение: картинка слоя QGIS с премноженной альфой. Координаты
@@ -236,8 +271,13 @@ void main() {
     base = lay(base, u_land, u_land_uv);
     base = lay(base, u_overlay, u_overlay_uv);
     base = lay(base, u_clouds, u_clouds_uv);
-    // Отмывка рельефа: множитель яркости, на равнине 1.
-    vec3 ground = clamp(base * v_shade, 0.0, 1.0);
+    // Отмывка рельефа: множитель яркости, на равнине 1. С солнцем -
+    // свет по нормали и направлению на солнце, с ночной стороной.
+    float shade = v_shade;
+    if (u_sun_on > 0.5) {
+        shade = sun_brightness(dot(normalize(v_normal), u_sun));
+    }
+    vec3 ground = clamp(base * shade, 0.0, 1.0);
     // Дымка: воздух между глазом и поверхностью.
     vec3 pass;
     // Белая подложка под дымкой остаётся белой: pass + (1 - pass) = 1.
@@ -320,18 +360,35 @@ uniform vec3 u_light;
 uniform float u_ambient;
 uniform float u_flat;
 uniform vec2 u_limits;
+// С солнцем u_light - направление на солнце, свет по формуле
+// core.sun.brightness, ночью дома тёмные.
+uniform float u_sun_on;
+const float SUN_AMBIENT = %(ambient)r;
+const float SUN_NIGHT = %(night)r;
+const float SUN_FLAT = %(flat)r;
+const float TWILIGHT = %(twilight)r;
+const float DAYLIGHT = %(daylight)r;
 out vec3 v_color;
 void main() {
     gl_Position = u_mvp * vec4(a_position, 1.0);
     vec3 n = a_normal.xyz;
     float len = length(n);
-    float lambert = len > 0.0 ? clamp(dot(n / len, u_light), 0.0, 1.0)
-                              : 1.0;
-    float shade = clamp((u_ambient + (1.0 - u_ambient) * lambert) / u_flat,
-                        u_limits.x, u_limits.y);
+    float shade;
+    if (u_sun_on > 0.5) {
+        float c = len > 0.0 ? dot(n / len, u_light) : 1.0;
+        float day = smoothstep(TWILIGHT, DAYLIGHT, c);
+        shade = (mix(SUN_NIGHT, SUN_AMBIENT, day)
+                 + (1.0 - SUN_AMBIENT) * max(c, 0.0)) / SUN_FLAT;
+    } else {
+        float lambert = len > 0.0 ? clamp(dot(n / len, u_light), 0.0, 1.0)
+                                  : 1.0;
+        shade = clamp((u_ambient + (1.0 - u_ambient) * lambert) / u_flat,
+                      u_limits.x, u_limits.y);
+    }
     v_color = min(a_color.rgb * shade, vec3(1.0));
 }
-"""
+""" % {"ambient": _sun.AMBIENT, "night": _sun.NIGHT, "flat": _sun.FLAT,
+       "twilight": _sun.TWILIGHT, "daylight": _sun.DAYLIGHT}
 
 BUILDING_FRAGMENT = """
 #version 330 core

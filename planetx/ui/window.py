@@ -24,12 +24,13 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
-from ..core import basemap, clouds, lookat, stars, temperature, when
+from ..core import (basemap, clouds, lookat, stars, sun, temperature,
+                    when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints)
 from ..core import graticule
-from ..core.features import Shape
+from ..core.features import Shape, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, fit_view
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
@@ -100,8 +101,10 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # как в Google Earth, сетка и облака выключены. Решение помощника от
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
 # решение автора от 29 сентября 2026 года.
+# Солнце выключено, умолчание плана работ после 0.16.0.
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
-                  "temperature": False, "buildings": False}
+                  "temperature": False, "buildings": False, "sun": False}
+SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
@@ -258,22 +261,31 @@ class _RulerVertices:
 
     def grab(self, px, py):
         window = self.window
-        points = window.ruler.points
+        ruler = window.ruler
+        points = ruler.points
         if not points:
             return False
         view = window.view
         lats = np.array([p[0] for p in points])
         lons = np.array([p[1] for p in points])
-        xyz = geodetic_to_ecef(lats, lons, view.store.heights_at(lats, lons))
+        if ruler.spatial():
+            xyz = window.drawn_points(ruler)
+        else:
+            xyz = geodetic_to_ecef(lats, lons,
+                                   view.store.heights_at(lats, lons))
         pixels, front = view.camera.project(xyz)
         self.index = nearest_vertex(pixels, front, px, py,
                                     GRAB_PIXELS * view.devicePixelRatioF())
         return self.index is not None
 
     def move(self, px, py):
-        found = self.window._ground(px, py)
+        window = self.window
+        if window.ruler.spatial():
+            found = window._surface(px, py)
+        else:
+            found = window._ground(px, py)
         if found is not None and self.index is not None:
-            self.window.ruler.move(self.index, *found)
+            window.ruler.move(self.index, *found)
 
     def drop(self):
         self.index = None
@@ -647,6 +659,34 @@ class GlobeWindow(QWidget):
             self._place_attribution()
         elif key == "buildings":
             self._set_buildings(on)
+        elif key == "sun":
+            self._update_sun()
+
+    def sun_time(self):
+        """Момент для солнца, секунды UTC: конец промежутка открытой
+        шкалы времени, иначе часы компьютера."""
+        if self.timebar.shown():
+            hi = self.timebar.range()[1]
+            if math.isfinite(hi):
+                return hi
+        return sun.now()
+
+    def _update_sun(self):
+        """Направление на солнце в вид. Пока строка «Солнце» включена
+        и шкала закрыта, солнце идёт по часам раз в SUN_PERIOD."""
+        # Шкала времени бывает раньше строк раздела «Слои».
+        on = getattr(self, "extras", {}).get("sun", False)
+        self.view.sun = sun.direction(self.sun_time()) if on else None
+        timer = getattr(self, "sun_timer", None)
+        if timer is None:
+            timer = self.sun_timer = QTimer(self)
+            timer.setInterval(SUN_PERIOD)
+            timer.timeout.connect(self._update_sun)
+        if on and not self.timebar.shown():
+            timer.start()
+        else:
+            timer.stop()
+        self.view.update()
 
     def _set_buildings(self, on):
         """3D-здания: загрузчик тайлов OpenFreeMap или никакого. Адрес
@@ -1316,10 +1356,12 @@ class GlobeWindow(QWidget):
         self._time_range = self.timebar.range() \
             if self.timebar.shown() else None
         self._refresh_shapes()
+        self._update_sun()
 
     def _time_changed(self, lo, hi):
         self._time_range = (lo, hi)
         self._refresh_shapes()
+        self._update_sun()
 
     def _time_ok(self, place):
         """Попадает ли время метки в промежуток шкалы."""
@@ -1355,7 +1397,20 @@ class GlobeWindow(QWidget):
             shape = self.place_dialog.shape()
             if shape is not None:
                 shapes.append(shape)
-        self.view.set_shapes(shapes)
+        self.view.set_shapes([self._drawn_shape(s) for s in shapes])
+
+    def _drawn_shape(self, shape):
+        """3D-объект так, как он стоит на поднятом рельефе: к настоящей
+        высоте точки добавлен подъём рельефа под ней."""
+        scale = self.view.store.scale
+        if not has_alts(shape) or not scale or scale == 1.0:
+            return shape
+        lat = np.array([p[0] for p in shape.points])
+        lon = np.array([p[1] for p in shape.points])
+        drawn = np.asarray(self.view.store.heights_at(lat, lon))
+        alts = np.asarray(shape.alts, dtype=np.float64) + drawn \
+            - drawn / scale
+        return shape._replace(alts=tuple(float(a) for a in alts))
 
     # Сцена.
 
@@ -1617,7 +1672,9 @@ class GlobeWindow(QWidget):
     def _save_ruler(self):
         """«Сохранить»: фигура линейки в «Мои метки» с измерением."""
         titles = {"line": tr("Линия"), "path": tr("Путь"),
-                  "polygon": tr("Многоугольник"), "circle": tr("Круг")}
+                  "polygon": tr("Многоугольник"), "circle": tr("Круг"),
+                  "path3d": tr("3D-путь"),
+                  "polygon3d": tr("3D-многоугольник")}
         name, ok = QInputDialog.getText(
             self, tr("Сохранить измерение"), tr("Название"),
             text=self.new_name(titles[self.ruler.mode]))
@@ -2003,6 +2060,11 @@ class GlobeWindow(QWidget):
         tool = self.ruler if self._ruler_open() \
             else self.drawer if self._place_open() else None
         if tool is not None:
+            if tool is self.ruler and tool.spatial():
+                found = self._surface(px, py)
+                if found is not None:
+                    tool.add(*found)
+                return
             found = self._ground(px, py)
             if found is not None:
                 tool.add(found[0], found[1])
@@ -2040,6 +2102,37 @@ class GlobeWindow(QWidget):
             return None
         lat, lon, _ = (float(v) for v in ecef_to_geodetic(point))
         return lat, lon
+
+    def _surface(self, px, py):
+        """Точка 3D-линейки под пикселем: широта, долгота и настоящая
+        высота над эллипсоидом, на крыше или стене здания, если луч
+        встречает его раньше рельефа. None - мимо Земли.
+
+        Рельеф на экране поднят в store.scale раз. Высота точки над
+        рельефом при этом настоящая, здания не растягиваются, поэтому
+        настоящая высота - нарисованная минус подъём рельефа."""
+        view = self.view
+        point = view.surface_hit(px, py)
+        if point is None:
+            return None
+        lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
+        scale = view.store.scale
+        if scale and scale != 1.0:
+            drawn = float(view.store.heights_at(np.array([lat]),
+                                                np.array([lon]))[0])
+            h -= drawn - drawn / scale
+        return lat, lon, h
+
+    def drawn_points(self, ruler, rubber=False):
+        """Точки 3D-линейки в ECEF так, как они нарисованы: при подъёме
+        рельефа высота рельефа под точкой поднята в store.scale раз."""
+        xyz = ruler.space_points(rubber)
+        scale = self.view.store.scale
+        if not len(xyz) or not scale or scale == 1.0:
+            return xyz
+        lat, lon, h = ecef_to_geodetic(xyz)
+        drawn = np.asarray(self.view.store.heights_at(lat, lon))
+        return geodetic_to_ecef(lat, lon, h + drawn - drawn / scale)
 
     def fly_view(self, lat, lon, distance):
         """Перелёт с прежними азимутом и наклоном, для синхронизации."""
@@ -2131,7 +2224,11 @@ class GlobeWindow(QWidget):
                                  view.navigator.pose.terrain)
             if point is not None:
                 lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
-                if self._ruler_open():
+                if self._ruler_open() and self.ruler.spatial():
+                    found = self._surface(*self._hover)
+                    if found is not None:
+                        self.ruler.set_cursor(found[:2], found[2])
+                elif self._ruler_open():
                     self.ruler.set_cursor((lat, lon))
                 elif self._place_open():
                     self.drawer.set_cursor((lat, lon))

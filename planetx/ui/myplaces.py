@@ -50,7 +50,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           ("icon", "string"), ("time", "string"),
           ("view_time", "string"),
           # Записанный тур длиннее 255 знаков, поле без предела длины.
-          ("tour", "string(0)"))
+          ("tour", "string(0)"),
+          # Высоты вершин 3D-пути и 3D-многоугольника, JSON.
+          ("alts", "string(0)"))
 FOLDER_TABLE = "folders"
 FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("position", "integer"), ("visible", "integer"),
@@ -173,6 +175,30 @@ def tour_from_text(text):
     return samples if len(samples) >= 2 else None
 
 
+def alts_text(alts):
+    """Высоты вершин 3D-объекта для поля файла: JSON, миллиметры."""
+    if not alts:
+        return ""
+    return json.dumps([round(float(a), 3) for a in alts])
+
+
+def alts_from_text(text, count):
+    """Высоты вершин из поля файла, если их столько же, сколько вершин,
+    иначе None."""
+    if not text:
+        return None
+    try:
+        data = json.loads(str(text))
+    except ValueError:
+        return None
+    if not isinstance(data, list) or len(data) != count:
+        return None
+    try:
+        return tuple(float(a) for a in data)
+    except (TypeError, ValueError):
+        return None
+
+
 def _value(feature, layer, name):
     """Значение поля или None, если поля в слое нет."""
     return feature[name] if layer.fields().indexOf(name) >= 0 else None
@@ -187,7 +213,8 @@ def _kplace(place):
                   description=place.description or place.measure,
                   height=shape.height, extrude=shape.extrude,
                   icon=shape.icon, time=place.time,
-                  view_time=place.view_time, tour=place.tour)
+                  view_time=place.view_time, tour=place.tour,
+                  alts=shape.alts)
 
 
 class Place:
@@ -319,7 +346,9 @@ class MyPlaces(QObject):
                                0.0),
                     extrude=bool(_int(_value(feature, layer, "extrude"))),
                     icon=icons.normal(str(_value(feature, layer, "icon")
-                                          or icons.DEFAULT)))
+                                          or icons.DEFAULT)),
+                    alts=alts_from_text(_value(feature, layer, "alts"),
+                                        len(points)))
                 visible = _int(feature["visible"])
                 self.places.append(Place(
                     kind, feature.id(), shape,
@@ -418,7 +447,7 @@ class MyPlaces(QObject):
                   "extrude": int(bool(shape.extrude)),
                   "icon": shape.icon, "time": when.pack(period),
                   "view_time": when.pack(view_period),
-                  "tour": tour_text(tour)}
+                  "tour": tour_text(tour), "alts": alts_text(shape.alts)}
         for name, value in values.items():
             if layer.fields().indexOf(name) >= 0:
                 feature[name] = value
@@ -616,7 +645,8 @@ class MyPlaces(QObject):
                     "extrude": int(bool(place.extrude)),
                     "icon": place.icon, "time": when.pack(place.time),
                     "view_time": when.pack(place.view_time),
-                    "tour": tour_text(place.tour)}
+                    "tour": tour_text(place.tour),
+                    "alts": alts_text(getattr(place, "alts", None))}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

@@ -22,6 +22,7 @@ from OpenGL import GL
 from qgis.PyQt.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
 
 from ..core import buildings as core
+from ..core import measure3d
 from ..core.ellipsoid import ecef_to_geodetic, surface_normal
 from ..core.tiling import AMBIENT, LIGHT_ELEVATION, SHADE_LIMITS
 from . import gpu
@@ -31,7 +32,8 @@ UPLOADS = 1  # сеток за кадр
 SHOT_UPLOADS = 8  # сеток за кадр снимка
 FOOTPRINTS_KEPT = 96  # разобранных тайлов в памяти, по давности
 LOADER_PERIOD = 0.1  # секунд между просьбами к загрузчику
-UNIFORMS = ("u_mvp", "u_light", "u_ambient", "u_flat", "u_limits")
+UNIFORMS = ("u_mvp", "u_light", "u_ambient", "u_flat", "u_limits",
+            "u_sun_on")
 
 
 class _Built(QObject):
@@ -69,6 +71,11 @@ class _Buffers:
         self.level = level
         self.vertices = len(vertices)
         self.count = len(indices)
+        # Копия для попадания луча в здание, 3D-линейка.
+        self.positions = np.array(vertices["position"], dtype=np.float32)
+        self.triangles = indices.reshape(-1, 3)
+        self.radius = float(np.linalg.norm(self.positions, axis=1).max()) \
+            if len(self.positions) else 0.0
         gl = gpu.gl
         self.vao = gl.gen_names("glGenVertexArrays", 1)[0]
         self.vbo, self.ebo = gl.gen_names("glGenBuffers", 2)
@@ -91,6 +98,24 @@ class _Buffers:
     def delete(self):
         gpu.gl.delete_names("glDeleteVertexArrays", [self.vao])
         gpu.gl.delete_names("glDeleteBuffers", [self.vbo, self.ebo])
+
+
+def pick(buffers, origin, direction):
+    """Ближнее попадание луча в здания тайлов buffers: параметр t точки
+    origin + t·direction или None. Тайлы отбираются по описанному шару."""
+    best = None
+    origin = np.asarray(origin, dtype=np.float64)
+    for item in buffers:
+        if not measure3d.ray_sphere(origin, direction, item.center,
+                                    item.radius):
+            continue
+        p = item.positions.astype(np.float64)
+        tri = item.triangles
+        t = measure3d.ray_triangles(origin - item.center, direction,
+                                    p[tri[:, 0]], p[tri[:, 1]], p[tri[:, 2]])
+        if t is not None and (best is None or t < best):
+            best = t
+    return best
 
 
 def light_at(lat, lon):
@@ -286,8 +311,9 @@ class Buildings:
             GL.glDeleteProgram(self.program)
         self.program = None
 
-    def draw(self, camera):
-        """Нарисовать здания. Вызывается после тайлов, до неба."""
+    def draw(self, camera, sun=None):
+        """Нарисовать здания. Вызывается после тайлов, до неба.
+        sun - направление на солнце в ECEF или None - свет отмывки."""
         self.drawn = 0
         if not self.shown or self.program is None:
             return
@@ -301,7 +327,9 @@ class Buildings:
         gl = gpu.gl
         gl.glUseProgram(self.program)
         lat, lon = _latlon(np.asarray(camera.eye, dtype=np.float64))
-        gl.glUniform3f(loc["u_light"], *light_at(lat, lon).tolist())
+        light = light_at(lat, lon).tolist() if sun is None else list(sun)
+        gl.glUniform3f(loc["u_light"], *light)
+        gl.glUniform1f(loc["u_sun_on"], 0.0 if sun is None else 1.0)
         gl.glUniform1f(loc["u_ambient"], AMBIENT)
         gl.glUniform1f(loc["u_flat"], AMBIENT + (1.0 - AMBIENT)
                        * math.sin(LIGHT_ELEVATION))

@@ -35,6 +35,7 @@ from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
 from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
 from .buildings import SHOT_UPLOADS as BUILDING_SHOT_UPLOADS, Buildings
+from .buildings import pick as pick_buildings
 from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
@@ -122,7 +123,9 @@ def surface_format():
 
 
 AIR_UNIFORMS = ("u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes",
-                "u_qc_shell", "u_air")
+                "u_qc_shell", "u_air", "u_sun", "u_sun_on")
+
+
 def uniforms(program, names):
     return {name: GL.glGetUniformLocation(program, name) for name in names}
 
@@ -144,10 +147,14 @@ def ray_uniforms(u, camera, a=A, b=B):
     return eye
 
 
-def air_uniforms(u, camera, on):
+def air_uniforms(u, camera, on, sun=None):
+    """Величины воздуха и солнца. sun - направление на солнце в ECEF
+    или None, тогда свет - отмывка без солнца."""
     eye = ray_uniforms(u, camera)
     gpu.gl.glUniform1f(u["u_qc_shell"], float(eye @ eye) - SHELL * SHELL)
     gpu.gl.glUniform1f(u["u_air"], 1.0 if on else 0.0)
+    gpu.gl.glUniform3f(u["u_sun"], *(sun or (0.0, 0.0, 1.0)))
+    gpu.gl.glUniform1f(u["u_sun_on"], 0.0 if sun is None else 1.0)
     return eye
 
 
@@ -332,6 +339,9 @@ class GlobeView(QOpenGLWidget):
         self.hole_check = False
         # Небо, гало и дымка. Выключается для сравнения в замерах.
         self.atmosphere = True
+        # Направление на солнце в ECEF или None - свет отмывки без
+        # солнца. Ставит окно по строке «Солнце» раздела «Слои».
+        self.sun = None
         self.hole_counts = []
         # Надписи пунктов: тайлы пунктов, их загрузчик и отрисовка.
         # Загрузчик ставит окно, когда известен адрес тайлов.
@@ -735,6 +745,28 @@ class GlobeView(QOpenGLWidget):
         self.navigator.release(time.monotonic())
         self.setCursor(self.tool_cursor)
         self.update()
+
+    def surface_hit(self, px, py):
+        """Точка ECEF под пикселем кадра на крыше или стене здания, если
+        луч встречает его раньше рельефа, иначе на рельефе. None - луч
+        уходит мимо Земли. Для 3D-линейки."""
+        self._fit_camera()
+        ground = ground_under(self.camera, px, py,
+                              self.navigator.pose.terrain)
+        buildings = self.buildings
+        if not buildings.shown:
+            return ground
+        origin, d = self.camera.ray(px, py)
+        items = [buildings.buffers[k] for k in buildings.wanted
+                 if k in buildings.buffers]
+        t = pick_buildings(items, origin, d)
+        if t is None:
+            return ground
+        hit = np.asarray(origin, dtype=np.float64) + np.asarray(d) * t
+        if ground is not None and float(np.linalg.norm(ground - origin)) \
+                < float(np.linalg.norm(hit - origin)):
+            return ground
+        return hit
 
     def mouseDoubleClickEvent(self, event):
         """Двойной щелчок левой - перелёт к точке с приближением, правой -
@@ -1312,7 +1344,7 @@ class GlobeView(QOpenGLWidget):
         self._clear_overlay()
         self._clear_gibs()
         air = self.atmosphere and not self.show_holes
-        air_uniforms(self.tile_air, self.camera, air)
+        air_uniforms(self.tile_air, self.camera, air, self.sun)
 
         items = list(zip(self.caps, self.cap_textures or [self.ocean] * 2))
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
@@ -1365,7 +1397,7 @@ class GlobeView(QOpenGLWidget):
                 self.camera, self.store, time.monotonic())
             self.buildings.upload(BUILDING_SHOT_UPLOADS if shot
                                   else 1 if motion else 2)
-            self.buildings.draw(self.camera)
+            self.buildings.draw(self.camera, self.sun)
         if air:
             self._draw_sky()
         if self.show_stars and not self.show_holes:
@@ -1667,7 +1699,7 @@ class GlobeView(QOpenGLWidget):
         gl = gpu.gl
         gl.glUseProgram(self.sky_program)
         u = self.sky_air
-        eye = air_uniforms(u, self.camera, True)
+        eye = air_uniforms(u, self.camera, True, self.sun)
         gl.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)

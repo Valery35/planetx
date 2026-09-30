@@ -51,7 +51,8 @@ RELIEF = "relief"  # строка рельефа в панели «Слои»
 GRID, STARS, CLOUDS = "grid", "stars", "clouds"
 TEMPERATURE = "temperature"
 BUILDINGS = "buildings"
-EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS)
+SUN = "sun"
+EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
@@ -474,7 +475,13 @@ class LayerPanel(QWidget):
                     "тайлам OpenFreeMap. Они видны, когда камера ближе "
                     "6 км к земле. Высота взята из OSM, иначе из "
                     "этажности. Здание без этих сведений получает "
-                    "высоту 5 м."))):
+                    "высоту 5 м.")),
+                (SUN, tr("Солнце"), tr(
+                    "Свет рельефа, зданий и воздуха по положению солнца. "
+                    "Ночная сторона Земли тёмная. Время солнца - конец "
+                    "промежутка открытой шкалы времени, без неё - часы "
+                    "компьютера. Без флажка свет падает с северо-запада, "
+                    "как на карте рельефа."))):
             item = QTreeWidgetItem(self.geo, [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)

@@ -247,5 +247,36 @@ class TestTour(unittest.TestCase):
         self.assertEqual([s[0] for s in tour], [2.0, 5.0])
         self.assertEqual(tour[0][1:], tour[1][1:])
 
+
+class TestSpace(unittest.TestCase):
+    """3D-путь и 3D-многоугольник - altitudeMode absolute с высотой
+    у каждой вершины, отрезки не садятся на рельеф."""
+
+    def test_round_trip(self):
+        path = kml.KPlace("Крыши", "line", [(58.0, 56.0), (58.001, 56.002)],
+                          alts=(152.5, 187.25))
+        roof = kml.KPlace("Скат", "polygon",
+                          [(58.0, 56.0), (58.0, 56.001), (58.001, 56.001)],
+                          alts=(140.0, 140.0, 151.5))
+        text = kml.write_kml(kml.KFolder("3D", children=[path, roof]))
+        self.assertIn("<altitudeMode>absolute</altitudeMode>", text)
+        self.assertNotIn("<tessellate>", text)
+        back = {p.name: p for p in kml.read_kml(text.encode()).places()}
+        self.assertEqual(back["Крыши"].alts, (152.5, 187.25))
+        self.assertEqual(back["Скат"].alts, (140.0, 140.0, 151.5))
+
+    def test_flat_objects_have_no_heights(self):
+        line = kml.KPlace("Путь", "line", [(58.0, 56.0), (58.1, 56.1)])
+        text = kml.write_kml(kml.KFolder("2D", children=[line]))
+        self.assertIn("<tessellate>1</tessellate>", text)
+        self.assertIsNone(kml.read_kml(text.encode()).places()[0].alts)
+        # Высота есть не у каждой вершины - не 3D-объект.
+        data = """<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark>
+          <LineString><altitudeMode>absolute</altitudeMode>
+          <coordinates>56,58,100 56.1,58.1</coordinates></LineString>
+          </Placemark></kml>""".encode("utf-8")
+        self.assertIsNone(kml.read_kml(data).places()[0].alts)
+
+
 if __name__ == "__main__":
     unittest.main()

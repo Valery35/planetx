@@ -34,9 +34,9 @@ SHAPE_POINTS = 800
 
 Shape = namedtuple("Shape",
                    "kind points color width fill name height extrude "
-                   "icon",
+                   "icon alts",
                    defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
-                             False, "dot"))
+                             False, "dot", None))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
@@ -45,7 +45,10 @@ kind - "point", "line" или "polygon". points - вершины (широта,
 цвет заливки многоугольника RGBA или None. name - подпись. height -
 подъём над рельефом в метрах, как «относительно земли» у Google Earth.
 extrude - стена от объекта до земли, у точки - стойка. icon - значок
-точки из core/icons.py, окрашенный цветом color.
+точки из core/icons.py, окрашенный цветом color. alts - высоты точек
+над эллипсоидом в метрах или None. С ними объект 3D-линейки стоит
+в пространстве, как «абсолютная высота» KML: отрезки прямые, на рельеф
+не садятся, height не действует.
 """
 
 
@@ -152,13 +155,22 @@ def share_height(share):
     return (MAX_HEIGHT + 1.0) ** share - 1.0
 
 
-Geometry = namedtuple("Geometry", "ring lines triangles wall stem")
+Geometry = namedtuple("Geometry", "ring lines triangles wall stem alts",
+                      defaults=(None,))
 Geometry.__doc__ = """Контур объекта для видеокарты, от высот не зависит.
 
 ring - вершины (широта, долгота) после сгущения. lines, triangles,
 wall - индексы отрезков, заливки и стены. У выдавленного объекта
 вершины идут дважды: поднятые, потом на земле. stem - стойка точки.
+alts - высоты вершин над эллипсоидом у 3D-объекта, иначе None.
 """
+
+
+def has_alts(shape):
+    """Стоит ли объект в пространстве по своим высотам."""
+    alts = getattr(shape, "alts", None)
+    return alts is not None and len(alts) == len(shape.points) \
+        and len(alts) > 0
 
 
 def geometry(shape):
@@ -176,6 +188,15 @@ def geometry(shape):
         return None
     closed = shape.kind == "polygon" and len(shape.points) >= 3
     triangles = empty
+    if has_alts(shape):
+        # Прямые отрезки в пространстве, без сгущения по дуге.
+        ring = np.asarray(shape.points, dtype=np.float64).reshape(-1, 2)
+        if closed and shape.fill is not None:
+            triangles = np.asarray(triangulate(plane(ring)),
+                                   dtype=np.uint32).ravel()
+        return Geometry(ring, segments(len(ring), closed=closed), triangles,
+                        empty, False,
+                        np.asarray(shape.alts, dtype=np.float64))
     if closed and shape.fill is not None:
         ring, triangles = fill(shape.points, max_points=SHAPE_POINTS)
     else:
@@ -187,6 +208,8 @@ def geometry(shape):
 
 def vertices(geo, height, heights_at=None):
     """Вершины контура в ECEF: поднятые, у стены и стойки ещё земля."""
+    if geo.alts is not None:
+        return geodetic_to_ecef(geo.ring[:, 0], geo.ring[:, 1], geo.alts)
     top = lift(geo.ring, offset=height, heights_at=heights_at)
     if len(geo.wall) or geo.stem:
         return np.vstack([top, lift(geo.ring, heights_at=heights_at)])

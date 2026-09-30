@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.17.3.
+A 3D globe inside QGIS. PlanetX version 0.18.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -33,6 +33,9 @@ and atmosphere, from space down to single streets.
 - **3D buildings.** OpenStreetMap buildings from OpenFreeMap tiles
   rise as blocks when the camera is closer than 6 km to the ground.
   The height comes from OpenStreetMap or from the number of floors.
+- **Sun.** Terrain and buildings are lit by the position of the sun
+  at the time slider time or by the clock, the night side of the
+  Earth is dark.
 - **Left panel.** The sections Places, Project layers and Layers
   collapse with a click on the header.
 - **Layers section.** It holds
@@ -101,7 +104,8 @@ and atmosphere, from space down to single streets.
   globe, features found by a click on the globe are selected on the map.
 - **Ruler.** Line, path, polygon and circle by clicks on the globe.
   Length, perimeter and area on the WGS84 ellipsoid, ground length
-  and heading. Points are dragged with the mouse. The elevation
+  and heading, a 3D path and a 3D polygon over roofs and walls of
+  buildings. Points are dragged with the mouse. The elevation
   profile of a path shows ascent and slopes. The measurement is
   saved to My Places.
 - **Coordinates.** Degrees, degrees-minutes-seconds, UTM or MGRS in

@@ -30,7 +30,8 @@ MAX_LEVEL = 19
 MIN_SKIRT = 2.0
 
 TileMesh = namedtuple(
-    "TileMesh", "z x y segments center radius positions uv indices shade")
+    "TileMesh",
+    "z x y segments center radius positions uv indices shade normals")
 TileMesh.__doc__ = """Сетка вершин одного тайла.
 
 center - центр в ECEF, float64. radius - радиус описанной сферы вокруг
@@ -38,6 +39,8 @@ center - центр в ECEF, float64. radius - радиус описанной �
 uv - текстурные координаты, float32, v = 0 на северном краю. indices -
 общий для всех тайлов с тем же segments буфер индексов, uint16.
 shade - множитель яркости вершин от отмывки рельефа, float32, форма (N,).
+normals - единичные нормали рельефа в ECEF, float32, форма (N, 3), для
+света солнца (core/sun.py). У юбки нормаль её края.
 """
 
 
@@ -190,18 +193,27 @@ LIGHT_ELEVATION = math.radians(45.0)
 SHADE_LIMITS = (0.4, 1.35)
 
 
-def shade(lat, lon, positions):
-    """Множитель яркости узлов по нормалям рельефа.
-
-    lat, lon, positions - узлы с полосой в один узел вокруг тайла. Нормаль
-    считается центральными разностями, поэтому соседние тайлы с одной
-    картой высот получают на общем краю одинаковое затенение. Ровная
-    местность даёт множитель 1.
-    """
+def terrain_normals(positions):
+    """Единичные нормали рельефа во внутренних узлах сетки с полосой
+    в один узел. Нормаль считается центральными разностями, поэтому
+    соседние тайлы с одной картой высот получают на общем краю одну
+    нормаль."""
     east_t = positions[1:-1, 2:] - positions[1:-1, :-2]
     north_t = positions[:-2, 1:-1] - positions[2:, 1:-1]
     normal = np.cross(east_t, north_t)
     normal /= np.linalg.norm(normal, axis=-1, keepdims=True)
+    return normal
+
+
+def shade(lat, lon, positions, normal=None):
+    """Множитель яркости узлов по нормалям рельефа.
+
+    lat, lon, positions - узлы с полосой в один узел вокруг тайла.
+    normal - готовые нормали из terrain_normals или None. Ровная
+    местность даёт множитель 1.
+    """
+    if normal is None:
+        normal = terrain_normals(positions)
     la = np.radians(lat[1:-1, 1:-1])
     lo = np.radians(lon[1:-1, 1:-1])
     east = np.stack([-np.sin(lo), np.cos(lo), np.zeros_like(lo)], axis=-1)
@@ -229,21 +241,24 @@ def tile_mesh(z, x, y, height_tile=None, exaggeration=1.0):
     seg = segments(z)
     lat_grid, lon_grid = grid_latlon(z, x, y)
     ring = _ring(seg)
+    up = surface_normal(lat_grid, lon_grid).reshape(-1, 3)
     if height_tile is None:
         heights = np.zeros_like(lat_grid)
         shading = np.ones((seg + 1) * (seg + 1))
+        lighting = up
         spread = 0.0
     else:
         u, v = grid_shares(z, x, y, seg, border=1)
         wide = sample(height_tile, u, v) * exaggeration
         heights = wide[1:-1, 1:-1]
         lat_w, lon_w = grid_latlon(z, x, y, border=1)
-        shading = shade(lat_w, lon_w,
-                        geodetic_to_ecef(lat_w, lon_w, wide)).ravel()
+        wide_ecef = geodetic_to_ecef(lat_w, lon_w, wide)
+        normal = terrain_normals(wide_ecef)
+        shading = shade(lat_w, lon_w, wide_ecef, normal).ravel()
+        lighting = normal.reshape(-1, 3)
         spread = float(heights.max() - heights.min())
     grid = geodetic_to_ecef(lat_grid, lon_grid, heights).reshape(-1, 3)
-    normals = surface_normal(lat_grid, lon_grid).reshape(-1, 3)[ring]
-    skirt = grid[ring] - normals * (skirt_depth(z) + spread)
+    skirt = grid[ring] - up[ring] * (skirt_depth(z) + spread)
     world = np.concatenate([grid, skirt])
 
     center = grid[(seg // 2) * (seg + 1) + seg // 2].copy()
@@ -254,10 +269,11 @@ def tile_mesh(z, x, y, height_tile=None, exaggeration=1.0):
     uv = np.stack([u.ravel(), v.ravel()], axis=1)
     uv = np.concatenate([uv, uv[ring]]).astype(np.float32)
     shading = np.concatenate([shading, shading[ring]]).astype(np.float32)
+    lighting = np.concatenate([lighting, lighting[ring]]).astype(np.float32)
 
     return TileMesh(z, x, y, seg, center, radius,
                     offsets.astype(np.float32), uv, index_buffer(seg),
-                    shading)
+                    shading, lighting)
 
 
 
@@ -292,5 +308,7 @@ def polar_cap_mesh(north, count=256):
     indices.setflags(write=False)
     uv = np.zeros((len(world), 2), dtype=np.float32)
     flat = np.ones(len(world), dtype=np.float32)
+    up = world / np.linalg.norm(world, axis=1, keepdims=True)
     return TileMesh(-1, 0, 0 if north else 1, count, center, radius,
-                    offsets.astype(np.float32), uv, indices, flat)
+                    offsets.astype(np.float32), uv, indices, flat,
+                    up.astype(np.float32))

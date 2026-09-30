@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.17.3
+version=0.18.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -23,7 +23,10 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       in degrees, degrees-minutes-seconds, UTM or MGRS. Places
       have icons and a time of their own with a time slider,
       and a tour can be recorded from the screen.
-      The Perm demo in the Scene menu shows it all.
+      The Perm demo in the Scene menu shows it all. The Sun row
+      lights terrain and buildings by the position of the sun with
+      a dark night side, the 3D path and 3D polygon of the ruler
+      measure over roofs and walls of buildings.
       Labels stay upright, do not overlap and hide behind mountains and
       the horizon. The label language follows QGIS or is chosen from
       15 languages and local names.
@@ -73,7 +76,11 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.17.3 The placemark time slider opens with a button on
+changelog=0.18.0 Sun light with the night side of the Earth by
+      the time slider or the clock. 3D path and 3D polygon of the
+      ruler over roofs and walls of 3D buildings, kept in My Places
+      and KML.
+      0.17.3 The placemark time slider opens with a button on
       the icon bar or by itself on a flight to a dated view, a
       closed slider shows all placemarks.
       0.17.2 The description, manual and changelog describe

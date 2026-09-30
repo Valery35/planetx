@@ -92,9 +92,11 @@ def cached_geometry(shape):
     провинций Афганистана 0.6 с на каждый флажок. Форма - вид, вершины,
     есть ли заливка и стена, от цвета и названия контур не зависит.
     """
+    alts = getattr(shape, "alts", None)
     key = (shape.kind, tuple(map(tuple, shape.points)),
            shape.fill is not None,
-           bool(shape.extrude) and float(shape.height or 0.0) > 0.0)
+           bool(shape.extrude) and float(shape.height or 0.0) > 0.0,
+           tuple(alts) if alts is not None else None)
     if key not in _geometries:
         if len(_geometries) >= GEOMETRY_CACHE:
             _geometries.clear()

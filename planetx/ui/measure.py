@@ -1,7 +1,13 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Линейка, как в Google Earth: линия, путь, многоугольник, круг.
+"""Линейка, как в Google Earth: линия, путь, многоугольник, круг,
+3D-путь и 3D-многоугольник.
+
+3D-виды ставят точку на крышу или стену здания, если луч из глаза
+встречает его раньше рельефа, и помнят высоту точки. Путь и контур
+меряются прямыми отрезками в пространстве (core/measure3d.py), площадь
+- в плоскости многоугольника, с наклоном этой плоскости.
 
 Точки ставятся щелчками по глобусу, перетаскивание по-прежнему двигает
 Землю. Точку линейки можно схватить и перетащить, Backspace убирает
@@ -13,6 +19,7 @@
 """
 import math
 
+import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsDistanceArea,
                        QgsGeometry, QgsPointXY, QgsProject)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
@@ -21,6 +28,8 @@ from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
                                  QPushButton, QTabBar, QVBoxLayout,
                                  QWidget)
 
+from ..core import measure3d
+from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import Shape
 from ..core.measure import (AREA_UNITS, CIRCLE_POINTS, LENGTH_UNITS,
                             SLOPE_PIXELS, convert, height_level, number,
@@ -28,7 +37,8 @@ from ..core.measure import (AREA_UNITS, CIRCLE_POINTS, LENGTH_UNITS,
 from ..i18n import tr
 from ..qt_compat import enum
 
-MODES = ("line", "path", "polygon", "circle")
+MODES = ("line", "path", "polygon", "circle", "path3d", "polygon3d")
+SPACE = ("path3d", "polygon3d")  # виды, у точек которых есть высота
 COLOR = (255, 214, 0, 255)  # жёлтая линия, как у линейки Google Earth
 FILL = (255, 214, 0, 50)
 WIDTH = 2.0
@@ -89,7 +99,10 @@ class Ruler(QObject):
         super().__init__(parent)
         self.mode = "line"
         self.points = []
+        # Высоты точек над эллипсоидом в 3D-видах, иначе None у каждой.
+        self.alts = []
         self.cursor = None
+        self.cursor_alt = None
         self.da = _distance_area()
         self.heights = None
         self.has_heights = None
@@ -103,51 +116,92 @@ class Ruler(QObject):
 
     def clear(self):
         self.points = []
+        self.alts = []
         self.changed.emit()
+
+    def spatial(self):
+        """3D-вид: точки с высотой, меры прямыми отрезками."""
+        return self.mode in SPACE
 
     def _limit(self):
         """Точек у вида: метка - одна, линия и круг - две."""
         return {"point": 1, "line": 2, "circle": 2}.get(self.mode)
 
-    def add(self, lat, lon):
-        """Щелчок по глобусу: новая точка по правилам вида линейки."""
+    def add(self, lat, lon, alt=None):
+        """Щелчок по глобусу: новая точка по правилам вида линейки.
+        alt - высота точки над эллипсоидом для 3D-видов."""
         limit = self._limit()
         if limit and len(self.points) >= limit:
-            self.points = []  # третий щелчок начинает заново
+            # Третий щелчок начинает заново.
+            self.points = []
+            self.alts = []
         self.points.append((lat, lon))
+        self.alts.append(alt)
         self.changed.emit()
 
-    def move(self, index, lat, lon):
-        """Точку index перетащили в (lat, lon)."""
+    def move(self, index, lat, lon, alt=None):
+        """Точку index перетащили в (lat, lon) на высоту alt."""
         if 0 <= index < len(self.points):
             self.points[index] = (lat, lon)
+            self.alts[index] = alt
             self.changed.emit()
 
     def remove_last(self):
         """Backspace: убрать последнюю точку."""
         if self.points:
             self.points.pop()
+            self.alts.pop()
             self.changed.emit()
 
-    def set_cursor(self, point):
+    def set_cursor(self, point, alt=None):
         """Точка под курсором или None. Резинка тянется к ней."""
-        if point != self.cursor:
+        if point != self.cursor or alt != self.cursor_alt:
             self.cursor = point
+            self.cursor_alt = alt
             if self.points:
                 self.changed.emit()
 
+    def _rubber(self, rubber):
+        limit = self._limit()
+        return rubber and self.cursor is not None and self.points \
+            and not (limit and len(self.points) >= limit) \
+            and (not self.spatial() or self.cursor_alt is not None)
+
     def _points(self, rubber):
         points = list(self.points)
-        limit = self._limit()
-        if rubber and self.cursor is not None and points \
-                and not (limit and len(points) >= limit):
+        if self._rubber(rubber):
             points.append(self.cursor)
         return points
+
+    def _alts(self, rubber):
+        alts = list(self.alts)
+        if self._rubber(rubber):
+            alts.append(self.cursor_alt)
+        return alts
+
+    def space_points(self, rubber=False):
+        """Точки 3D-вида в ECEF (n, 3). Точки без высоты пропускаются."""
+        pairs = [(p, a) for p, a in zip(self._points(rubber),
+                                        self._alts(rubber)) if a is not None]
+        if not pairs:
+            return np.zeros((0, 3))
+        lat = np.array([p[0] for p, _ in pairs])
+        lon = np.array([p[1] for p, _ in pairs])
+        return geodetic_to_ecef(lat, lon, np.array([a for _, a in pairs]))
 
     def shape(self, rubber=True, name="", color=COLOR, width=WIDTH,
               fill=FILL):
         """Фигура для глобуса или для «Моих меток», или None."""
         points = self._points(rubber)
+        if self.spatial():
+            alts = self._alts(rubber)
+            if len(points) < 2 or any(a is None for a in alts):
+                return None
+            kind = "polygon" if self.mode == "polygon3d" \
+                and len(points) >= 3 else "line"
+            return Shape(kind, points, color, width,
+                         fill if kind == "polygon" else None, name,
+                         alts=tuple(alts))
         if self.mode == "point":
             return Shape("point", points[:1], color, width, None, name) \
                 if points else None
@@ -176,8 +230,18 @@ class Ruler(QObject):
         points = self._points(rubber)
         out = {"length": None, "ground": None, "heading": None,
                "perimeter": None, "area": None, "radius": None,
-               "ground_ready": True}
+               "tilt": None, "ground_ready": True}
         if len(points) < 2:
+            return out
+        if self.spatial():
+            xyz = self.space_points(rubber)
+            if len(xyz) < 2:
+                return out
+            if self.mode == "path3d":
+                out["length"] = measure3d.path_length(xyz)
+            else:
+                out["perimeter"], out["area"], out["tilt"] = \
+                    measure3d.polygon(xyz)
             return out
         if self.mode in ("line", "path"):
             out["length"] = self.da.measureLine(_xy(points))
@@ -230,7 +294,9 @@ def line_profile(points, source):
     return profile(latlon, heights, window), not missing
 
 
-ROWS = ("length", "ground", "heading", "perimeter", "area", "radius")
+ROWS = ("length", "ground", "heading", "perimeter", "area", "radius",
+        "tilt")
+DEGREES = ("heading", "tilt")  # строки в градусах, без выбора единиц
 
 
 def row_titles(mode="line"):
@@ -238,18 +304,20 @@ def row_titles(mode="line"):
             else tr("Длина"),
             "ground": tr("Длина по рельефу"), "heading": tr("Курс"),
             "perimeter": tr("Периметр"), "area": tr("Площадь"),
-            "radius": tr("Радиус")}
+            "radius": tr("Радиус"), "tilt": tr("Наклон")}
 
 
 # Какие строки видны у вида линейки.
 SHOWN = {"line": ("length", "ground", "heading"),
          "path": ("length", "ground"),
          "polygon": ("perimeter", "area"),
-         "circle": ("radius", "perimeter", "area")}
+         "circle": ("radius", "perimeter", "area"),
+         "path3d": ("length",),
+         "polygon3d": ("perimeter", "area", "tilt")}
 
 
 def heading_text(value):
-    """Курс в градусах с одним знаком после точки."""
+    """Курс или наклон в градусах с одним знаком после точки."""
     return "{:.1f}°".format(value)
 
 
@@ -267,7 +335,7 @@ class RulerDialog(QDialog):
         self.setModal(False)
         self.tabs = QTabBar(self)
         for title in (tr("Линия"), tr("Путь"), tr("Многоугольник"),
-                      tr("Круг")):
+                      tr("Круг"), tr("3D-путь"), tr("3D-многоугольник")):
             self.tabs.addTab(title)
         self.tabs.currentChanged.connect(
             lambda i: self.ruler.set_mode(MODES[i]))
@@ -289,6 +357,10 @@ class RulerDialog(QDialog):
                 value.setToolTip(tr(
                     "Азимут начала линии от севера по часовой стрелке "
                     "на эллипсоиде WGS84."))
+            elif key == "tilt":
+                value.setToolTip(tr(
+                    "Угол плоскости многоугольника к горизонту. 0 - ровная "
+                    "крыша, 90 - стена."))
             else:
                 units = AREA_UNITS if key == "area" else LENGTH_UNITS
                 combo = QComboBox(self)
@@ -344,7 +416,13 @@ class RulerDialog(QDialog):
             "polygon": tr("Щелчками по глобусу отметьте вершины "
                           "многоугольника."),
             "circle": tr("Первый щелчок по глобусу - центр круга, "
-                         "второй задаёт радиус.")}
+                         "второй задаёт радиус."),
+            "path3d": tr("Щелчками отметьте точки пути на рельефе, крышах "
+                         "и стенах 3D-зданий. Длина меряется прямыми "
+                         "отрезками в пространстве."),
+            "polygon3d": tr("Щелчками отметьте вершины многоугольника "
+                            "на рельефе, крышах и стенах 3D-зданий. "
+                            "Площадь меряется в плоскости многоугольника.")}
         self.hint.setText(hints[mode] + " " + tr(
             "Точку можно перетащить мышью, Backspace убирает последнюю."))
         values = self.ruler.values()
@@ -359,7 +437,7 @@ class RulerDialog(QDialog):
                 continue
             label.setText(titles[key])
             value = values[key]
-            if key == "heading":
+            if key in DEGREES:
                 self.values[key].setText(
                     heading_text(value) if value is not None else "-")
                 continue
@@ -388,7 +466,7 @@ class RulerDialog(QDialog):
             title = titles[key]
             if parts:
                 title = title[:1].lower() + title[1:]
-            if key == "heading":
+            if key in DEGREES:
                 parts.append("{} {}".format(title,
                                             heading_text(values[key])))
                 continue

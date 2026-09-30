@@ -247,6 +247,31 @@ class TestTerrainMesh(unittest.TestCase):
                                           * 1500.0)))
         self.assertLess(float(np.median(steep.shade)), 0.8)
 
+    def test_normals_for_the_sun(self):
+        # Нормали единичные. У гладкого тайла - нормаль эллипсоида,
+        # у склона на юго-восток нормаль наклонена к северо-западу,
+        # у соседей на общем краю нормаль одна.
+        plain = tl.tile_mesh(10, 641, 361)
+        side = plain.segments + 1
+        lengths = np.linalg.norm(plain.normals, axis=1)
+        self.assertLess(np.abs(lengths - 1.0).max(), 1e-5)
+        lat, lon = tl.grid_latlon(10, 641, 361)
+        up = tl.surface_normal(lat, lon).reshape(-1, 3)
+        self.assertLess(np.abs(plain.normals[:side * side] - up).max(), 1e-6)
+        a = tl.tile_mesh(10, 641, 361, self.slope)
+        b = tl.tile_mesh(10, 642, 361, self.slope)
+        na = a.normals[:side * side].reshape(side, side, 3)[:, -1]
+        nb = b.normals[:side * side].reshape(side, side, 3)[:, 0]
+        self.assertLess(np.abs(na - nb).max(), 1e-5)
+        la, lo = np.radians(lat.ravel()), np.radians(lon.ravel())
+        north = np.stack([-np.sin(la) * np.cos(lo), -np.sin(la) * np.sin(lo),
+                          np.cos(la)], axis=1)
+        east = np.stack([-np.sin(lo), np.cos(lo), np.zeros_like(lo)], axis=1)
+        tilt = a.normals[:side * side]
+        self.assertGreater(float(np.median((tilt * north).sum(axis=1))), 0.0)
+        self.assertLess(float(np.median((tilt * east).sum(axis=1))), 0.0)
+        self.assertEqual(len(a.normals), len(a.positions))
+
     def test_skirt_goes_below_the_height_spread(self):
         mesh = tl.tile_mesh(10, 641, 361, self.slope)
         side = mesh.segments + 1

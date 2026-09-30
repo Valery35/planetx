@@ -120,9 +120,9 @@ EN = {
     "Звёзды: каталог ярких звёзд Йельского университета.":
         "Stars: the Yale Bright Star Catalogue.",
     "Координатная сетка, звёзды, облака, температура суши и моря, "
-    "3D-здания.":
+    "3D-здания, свет солнца.":
         "A coordinate grid, stars, clouds, land and sea temperature, "
-        "3D buildings.",
+        "3D buildings, sunlight.",
     "Температура: NASA GIBS, MODIS и GHRSST MUR.":
         "Temperature: NASA GIBS, MODIS and GHRSST MUR.",
     "Векторная основа: OpenFreeMap, © OpenMapTiles, © участники "
@@ -188,6 +188,17 @@ EN = {
         "They lie as a translucent veil over the imagery. Snow and ice "
         "are white too and stay visible.",
     "3D-здания": "3D buildings",
+    "Солнце": "Sun",
+    "Свет рельефа, зданий и воздуха по положению солнца. "
+    "Ночная сторона Земли тёмная. Время солнца - конец "
+    "промежутка открытой шкалы времени, без неё - часы "
+    "компьютера. Без флажка свет падает с северо-запада, "
+    "как на карте рельефа.":
+        "Light of the terrain, buildings and air by the position of the "
+        "sun. The night side of the Earth is dark. The sun time is the end "
+        "of the interval of the open time slider, without it the computer "
+        "clock. Without the check the light falls from the north-west, as "
+        "on a relief map.",
     "Объёмные здания из OpenStreetMap по векторным "
     "тайлам OpenFreeMap. Они видны, когда камера ближе "
     "6 км к земле. Высота взята из OSM, иначе из "
@@ -248,10 +259,12 @@ EN = {
     "и сохранёнными видами, чтение и запись KML и KMZ.":
         "My Places with folders, placemarks, paths, polygons and saved "
         "views, reading and writing KML and KMZ.",
-    "Линейка на эллипсоиде WGS84 и по рельефу, профиль высот, "
+    "Линейка на эллипсоиде WGS84 и по рельефу, 3D-путь "
+    "и 3D-многоугольник по зданиям, профиль высот, "
     "координаты в градусах, UTM и MGRS.":
-        "A ruler on the WGS84 ellipsoid and along the terrain, the "
-        "elevation profile, coordinates in degrees, UTM and MGRS.",
+        "A ruler on the WGS84 ellipsoid and along the terrain, a 3D "
+        "path and a 3D polygon over buildings, the elevation profile, "
+        "coordinates in degrees, UTM and MGRS.",
     "Значки меток, время меток со шкалой времени, подъём "
     "и выдавливание меток.":
         "Placemark icons, placemark time with a time slider, lifting "
@@ -478,6 +491,20 @@ EN = {
     "Путь": "Path",
     "Многоугольник": "Polygon",
     "Круг": "Circle",
+    "3D-путь": "3D path",
+    "3D-многоугольник": "3D polygon",
+    "Щелчками отметьте точки пути на рельефе, крышах и стенах "
+    "3D-зданий. Длина меряется прямыми отрезками в пространстве.":
+        "Click the points of the path on the terrain, roofs and walls of 3D "
+        "buildings. The length is measured by straight segments in space.",
+    "Щелчками отметьте вершины многоугольника на рельефе, крышах и "
+    "стенах 3D-зданий. Площадь меряется в плоскости многоугольника.":
+        "Click the vertices of the polygon on the terrain, roofs and walls of "
+        "3D buildings. The area is measured in the plane of the polygon.",
+    "Угол плоскости многоугольника к горизонту. 0 - ровная крыша, "
+    "90 - стена.":
+        "Angle of the polygon plane to the horizon. 0 is a flat roof, 90 a "
+        "wall.",
     "Длина": "Length",
     "Периметр": "Perimeter",
     "Площадь": "Area",

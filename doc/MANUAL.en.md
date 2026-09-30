@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.17.3
+Version 0.18.0
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -200,6 +200,7 @@ take effect at once, without the Refresh button.
 | Clouds | Clouds from NASA GIBS VIIRS imagery of the last complete day |
 | Temperature | Surface temperature of land by day over 8 days (MODIS) and of the sea over a day (GHRSST MUR) with a scale in degrees |
 | 3D buildings | OpenStreetMap buildings as blocks from OpenFreeMap tiles, off by default |
+| Sun | Light of the terrain, buildings and air by the position of the sun, the night side of the Earth is dark, off by default |
 
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
@@ -218,6 +219,15 @@ degrees Celsius are in the bottom left corner of the view. Land shows
 the temperature of the surface itself by day, not of the air, over 8
 days. Land may have gaps under clouds. Sea shows the water temperature
 near the surface over a day.
+
+The Sun row lights the terrain and buildings from the side of the
+sun. The night side of the Earth is dark, the air over it does not
+glow. The sun time is the end of the interval of the open time
+slider, so the light of the hour of a placemark shows. Without the
+slider the sun follows the computer clock. Without the Sun row the
+light falls from the north-west at 45°, as on a relief map. The
+position of the sun is computed to about 0.01°, there are no
+shadows.
 
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
@@ -505,8 +515,8 @@ file extension chooses the format.
 
 ## Ruler
 
-The Ruler icon opens a window with the tabs Line, Path, Polygon and
-Circle. Points are put with clicks on the globe, a rubber band follows
+The Ruler icon opens a window with the tabs Line, Path, Polygon,
+Circle, 3D path and 3D polygon. Points are put with clicks on the globe, a rubber band follows
 the cursor.
 
 <img src="figures/en/ruler.png" width="300" alt="Ruler">
@@ -517,6 +527,8 @@ the cursor.
 | Path | Map length, ground length |
 | Polygon | Perimeter, area |
 | Circle | Radius, perimeter, area. The first click is the center, the second sets the radius |
+| 3D path | Length by straight segments in space |
+| 3D polygon | Perimeter, area in the plane of the polygon, tilt of the plane |
 
 Map length, perimeter and area are computed on the WGS84 ellipsoid.
 Ground length runs along the surface with its rises and falls. Heading
@@ -535,6 +547,15 @@ length.
 The Save button puts the shape into My Places together with the
 measurement. The name is offered with a number, for example Line 1. The
 measurement shows in the row tooltip.
+
+The 3D path and 3D polygon tabs put a point on the roof or wall of
+a 3D building when the ray from the eye meets it before the
+terrain. They keep the height of the point. Segments run straight
+between the points and do not follow the terrain. The area of a
+3D polygon is measured in its plane, so for a roof slope or a wall
+it is the real one. Tilt is the angle of the plane to the horizon,
+0 is a flat roof, 90 a wall. A saved 3D shape goes to KML with
+altitudeMode absolute.
 
 The Ruler and New placemark windows are open one at a time. Opening one
 closes the other.
