@@ -13,6 +13,8 @@
 сцены передают другим людям. Ссылка authcfg на настройку подключения
 QGIS остаётся.
 """
+import math
+
 from qgis.core import (QgsDataSourceUri, QgsDateTimeRange, QgsInterval,
                        QgsProject, QgsRasterLayer, QgsVectorLayer)
 from qgis.PyQt.QtCore import QDateTime, Qt
@@ -83,6 +85,11 @@ def capture(window, folder=None, name=""):
             # Строки раздела «Слои»: сетка, звёзды, облака, температура,
             # 3D-здания.
             "extras": {key: bool(on) for key, on in window.extras.items()}}
+    sky = window.view.sky_view
+    if sky is not None:
+        # Вид неба: взгляд и угол обзора, градусы. Тело под небом
+        # остаётся в камере сцены.
+        view["sky"] = [math.degrees(sky.ra), math.degrees(sky.dec), sky.fov]
     kml = ""
     places = ""
     if folder:
@@ -180,4 +187,8 @@ def apply(window, scene, kml=b""):
     window.refresh()
     lat, lon, distance, heading, tilt = scene.camera
     window._fly_to(lat, lon, distance, heading, tilt)
+    sky = view.get("sky")
+    if isinstance(sky, list) and len(sky) == 3 \
+            and all(isinstance(v, (int, float)) for v in sky):
+        window.show_sky(*sky)
     return key, missing

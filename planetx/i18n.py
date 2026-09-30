@@ -17,6 +17,7 @@ EN = {
     "Подложка не загрузилась: {error}":
         "Base map failed to load: {error}",
     "Обзор с высоты {height}": "View from {height}",
+    "Звёздное небо, поле зрения {fov}°": "Starry sky, field of view {fov}°",
     "Для глобуса нужен модуль Python {name}. В этой сборке QGIS его нет.":
         "The globe needs the Python module {name}. This QGIS build "
         "does not have it.",
@@ -116,6 +117,10 @@ EN = {
         "exaggeration.",
     "Поиск мест: Nominatim, © участники OpenStreetMap.":
         "Place search: Nominatim, © OpenStreetMap contributors.",
+    "Созвездия и имена звёзд: d3-celestial, © Olaf Frohn. Планеты: "
+    "элементы орбит JPL.":
+        "Constellations and star names: d3-celestial, © Olaf Frohn. "
+        "Planets: JPL orbital elements.",
     "Марс: NASA, USGS, Viking MDIM2.1. Луна: USGS, LRO LOLA. Тайлы: "
     "OpenPlanetaryMap.":
         "Mars: NASA, USGS, Viking MDIM2.1. Moon: USGS, LRO LOLA. Tiles: "
@@ -196,11 +201,21 @@ EN = {
     "Земля": "Earth",
     "Марс": "Mars",
     "Луна": "Moon",
-    "Тело глобуса - Земля, Марс или Луна. У Марса и Луны свои "
-    "снимки, земные слои, поиск и здания на них выключены.":
-        "The body of the globe - Earth, Mars or the Moon. Mars and the Moon "
-        "have their own imagery, Earth layers, search and buildings are off "
-        "there.",
+    "Тело глобуса - Земля, Марс или Луна, или звёздное небо. "
+    "У Марса и Луны свои снимки, земные слои, поиск и здания "
+    "на них выключены. Небо показывает созвездия, звёзды "
+    "и планеты из центра небесной сферы.":
+        "The body of the globe - Earth, Mars or the Moon, or the starry "
+        "sky. Mars and the Moon have their own imagery, Earth layers, "
+        "search and buildings are off there. The sky shows constellations, "
+        "stars and planets from the centre of the celestial sphere.",
+    "Небо": "Sky",
+    "Меркурий": "Mercury",
+    "Венера": "Venus",
+    "Юпитер": "Jupiter",
+    "Сатурн": "Saturn",
+    "Уран": "Uranus",
+    "Нептун": "Neptune",
     "Поиск по названию есть только у Земли. Координаты вводятся числами.":
         "Search by name is available for the Earth only. Coordinates are "
         "entered as numbers.",

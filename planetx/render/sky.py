@@ -52,10 +52,12 @@ def fit(rgba, max_size):
     return np.ascontiguousarray(rgba)
 
 
-def sky_matrix(camera, unix_time):
-    """Оси камеры в экваториальной системе, по строкам, float32."""
-    return np.ascontiguousarray(
-        stars.sky_rotation(unix_time).T @ camera.rotation, dtype=np.float32)
+def sky_matrix(camera, unix_time, frame=None):
+    """Оси камеры в экваториальной системе, по строкам, float32.
+    frame - поворот неба вместо звёздного времени, см. render/stars."""
+    if frame is None:
+        frame = stars.sky_rotation(unix_time)
+    return np.ascontiguousarray(frame.T @ camera.rotation, dtype=np.float32)
 
 
 class Sky:
@@ -105,9 +107,10 @@ class Sky:
                             (GL.GL_TEXTURE_MAX_LEVEL, 0)):
             GL.glTexParameteri(GL.GL_TEXTURE_2D, name, value)
 
-    def draw(self, camera, unix_time=None):
+    def draw(self, camera, unix_time=None, frame=None, share=None):
         """Нарисовать небо после неба с гало и до точечных звёзд."""
-        share = stars.fade(camera.altitude())
+        if share is None:
+            share = stars.fade(camera.altitude())
         self.drawn = False
         if self.program is None or share <= 0.0:
             return
@@ -119,7 +122,8 @@ class Sky:
         gl = gpu.gl
         gl.glUseProgram(self.program)
         gl.matrix3(loc["u_sky"], GL.GL_TRUE, sky_matrix(
-            camera, time.time() if unix_time is None else unix_time))
+            camera, time.time() if unix_time is None else unix_time,
+            frame))
         t = np.tan(np.radians(camera.fov_y) / 2.0)
         gl.glUniform2f(loc["u_tan"], float(t * camera.aspect), float(t))
         gl.glUniform2f(loc["u_viewport"], float(camera.width),

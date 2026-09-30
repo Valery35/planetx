@@ -2390,6 +2390,92 @@ def body_tools_check():
     return None
 
 
+@check(15000)
+def sky_on():
+    # Вид неба: Орион. Картинка Млечного пути приходит из кэша QGIS.
+    window = state["window"]
+    window.set_extra("stars", True)
+    window.set_body("sky")
+    window.show_sky(85.0, 5.0, 70.0)
+
+
+def _sky_state(name):
+    window = state["window"]
+    view = window.view
+    view.repaint()
+    window.sky_labels.repaint()
+    window.grab().save(os.path.join(TEMP, "planetx_sky_%s.png" % name))
+    shown = window.sky_labels.shown
+    cam = view.camera
+    window._hover = (cam.width / 2.0, cam.height / 2.0)
+    window._update_cursor()
+    return {"sky": view.sky_view is not None,
+            "milky_way": view.sky.drawn, "stars": view.stars.drawn,
+            "lines": view.constellations.drawn, "bodies": view.bodies.drawn,
+            "labels": len(shown),
+            "names": [t for k, t, _, _ in shown][:12],
+            "navpad": window.navpad.isVisible(),
+            "ruler_enabled": window.toolbar.ruler_button.isEnabled(),
+            "cursor": window._cursor_text,
+            "status": window.status.text().split(chr(10))[0],
+            "spinner": window.spinner.isVisible(),
+            "attribution": window.attribution.text()[:60],
+            "gl_errors": dict(view.gl_errors)}
+
+
+@check(1500)
+def sky_check():
+    result["sky"] = {"orion": _sky_state("orion")}
+    # Юпитер и Марс осенью 2026 года - в Раке и Льве.
+    state["window"].show_sky(135.0, 18.0, 50.0)
+
+
+@check(300)
+def sky_planets():
+    window = state["window"]
+    result["sky"]["planets"] = _sky_state("planets")
+    view = window.view
+    view.sky_view.drag(100.0, 0.0, view.camera.height)
+    view.sky_view.zoom(0.5)
+    result["sky"]["after_drag"] = [round(math.degrees(view.sky_view.ra), 2),
+                                   round(view.sky_view.fov, 1)]
+    window.set_body("earth")
+    result["sky"]["earth"] = {
+        "sky": view.sky_view is not None,
+        "navpad": window.navpad.isVisible(),
+        "ruler_enabled": window.toolbar.ruler_button.isEnabled(),
+        "labels_visible": window.sky_labels.isVisible()}
+
+
+SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
+
+
+@check(2000)
+def sky_scene():
+    # Сцена с видом неба: сохранить, выйти на Землю, открыть.
+    window = state["window"]
+    window.set_body("sky")
+    window.show_sky(279.2, 38.8, 30.0)  # Вега
+    ok = window.save_scene(SKY_SCENE)
+    window.set_body("earth")
+    result["sky_scene"] = {"saved": ok,
+                           "left": window.view.sky_view is None}
+    window.open_scene(SKY_SCENE)
+
+
+@check(300)
+def sky_scene_check():
+    window = state["window"]
+    sky = window.view.sky_view
+    result["sky_scene"]["sky"] = None if sky is None else [
+        round(math.degrees(sky.ra), 2), round(math.degrees(sky.dec), 2),
+        round(sky.fov, 1)]
+    result["sky_scene"]["menu"] = [k for k, a in
+                                   window.toolbar.body_actions.items()
+                                   if a.isChecked()]
+    window.set_body("earth")
+
+
 BODY_SCENE = os.path.join(TEMP, "planetx_body_scene.planetx")
 
 

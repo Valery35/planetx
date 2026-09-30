@@ -38,6 +38,7 @@ from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
 from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
 from ..core.planets import EARTH_PLANET, planet_by_key
+from ..core.skyview import SkyView, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.kml import KmlError, read_file as read_kml_file, read_kml, \
@@ -75,6 +76,7 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
                       visible_on_map, write_flag, write_shown)
 from .navpad import NavPad
+from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
 from .record import TourRecorder
 from .placeprops import PlaceProperties
@@ -89,6 +91,14 @@ from .toolbar import ViewToolbar
 TERRAIN_ATTRIBUTION = (
     '<a href="https://github.com/tilezen/joerd/blob/master/docs/'
     'attribution.md">Terrain: Mapzen, SRTM, GMTED, ETOPO1 and others</a>')
+# Подпись вида неба: Млечный путь, звёзды, созвездия и светила.
+SKY_ATTRIBUTION = (
+    ("Milky Way: NASA/Goddard SVS, Gaia DR2: ESA/Gaia/DPAC",
+     "https://svs.gsfc.nasa.gov/4851"),
+    ("Stars: Yale BSC5", ""),
+    ("Constellations: d3-celestial © Olaf Frohn",
+     "https://github.com/ofrohn/d3-celestial"),
+    ("Planets: JPL approximate elements", ""))
 XYZ_PREFIX = "connections/xyz/items/"
 BASEMAP_KEY = "PlanetX/basemap"  # имя выбранной подложки в настройках
 SIDEBAR_KEY = "PlanetX/sidebar"  # видна ли левая панель окна
@@ -317,6 +327,10 @@ class GlobeWindow(QWidget):
         ellipsoid.set_body(EARTH_PLANET.body)
 
         self.view = GlobeView(self)
+        # Подписи неба - раньше панели значков, чтобы лечь под неё.
+        self.sky_labels = SkyLabels(self.view)
+        self.view.changed.connect(self.sky_labels.sync)
+        self._sky_state = None  # взгляд на небо до выхода из него
         # Шкала времени меток, своя, как в Google Earth. Она нужна
         # до первого чтения «Моих меток».
         self.timebar = TimeBar(self.view)
@@ -874,6 +888,11 @@ class GlobeWindow(QWidget):
         """Земля, Марс или Луна. Размеры тела, подложка, воздух,
         земные слои и вид - всё сразу. Камера встаёт над домашней
         точкой тела."""
+        if key == "sky":
+            self.show_sky()
+            return
+        if self.view.sky_view is not None:
+            self._leave_sky()
         planet = planet_by_key(key)
         self.toolbar.set_body(planet.key)
         if planet is self.planet:
@@ -918,6 +937,57 @@ class GlobeWindow(QWidget):
         navigator.set_pose(Pose(lat, lon, distance, 0.0, 0.0))
         self._show_attribution()
         self.view.update()
+
+    # Вид неба.
+
+    def _globe_buttons(self):
+        """Значки, которым нужна поверхность тела."""
+        bar = self.toolbar
+        return (bar.ruler_button, bar.place_button, bar.save_button,
+                bar.record, bar.sync, bar.identify)
+
+    def sky_moment(self):
+        """Момент светил неба: конец открытой шкалы времени, иначе
+        None - часы компьютера."""
+        return self.sun_time() if self.timebar.shown() else None
+
+    def show_sky(self, ra=None, dec=None, fov=None):
+        """Вид звёздного неба из центра небесной сферы. ra, dec, fov -
+        взгляд в градусах, None - прежний взгляд или начальный."""
+        view = self.view
+        if view.sky_view is None:
+            view.sky_view = self._sky_state or SkyView()
+            for dialog in (self.ruler_dialog, self.place_dialog):
+                if dialog is not None and dialog.isVisible():
+                    dialog.close()
+            view.navigator.stop()
+        if ra is not None:
+            view.sky_view.set(ra, dec, fov)
+        view.sky_time = self.sky_moment()
+        self.toolbar.set_body("sky")
+        self.navpad.hide()
+        self.legend.hide()
+        for button in self._globe_buttons():
+            button.setEnabled(False)
+        self._show_attribution()
+        self.sky_labels.sync()
+        view.update()
+
+    def _leave_sky(self):
+        view = self.view
+        self._sky_state = view.sky_view
+        view.sky_view = None
+        self.navpad.show()
+        for button in self._globe_buttons():
+            button.setEnabled(True)
+        self.toolbar.sync.setEnabled(self.planet.earth)
+        self.toolbar.identify.setEnabled(self.planet.earth)
+        self.legend.setVisible(bool(self.extras.get("temperature"))
+                               and self.planet.earth)
+        self.toolbar.set_body(self.planet.key)
+        self._show_attribution()
+        self.sky_labels.sync()
+        view.update()
 
     def _read_shown(self):
         """Отметки слоёв из проекта.
@@ -1037,6 +1107,11 @@ class GlobeWindow(QWidget):
         self._show_attribution()
 
     def _show_attribution(self):
+        if self.view.sky_view is not None:
+            self.attribution.setText(" · ".join(
+                link_html(*credit) for credit in SKY_ATTRIBUTION))
+            self._place_attribution()
+            return
         parts = [attribution_html(self.source)]
         if self._applied_groups and self.ofm_layer is not None \
                 or self.buildings_loader is not None:
@@ -1448,6 +1523,9 @@ class GlobeWindow(QWidget):
         self._time_range = (lo, hi)
         self._refresh_shapes()
         self._update_sun()
+        if self.view.sky_view is not None:
+            self.view.sky_time = self.sky_moment()
+            self.view.update()
 
     def _time_ok(self, place):
         """Попадает ли время метки в промежуток шкалы."""
@@ -2251,6 +2329,15 @@ class GlobeWindow(QWidget):
         if text and time.monotonic() - shown < MESSAGE_TIME:
             self.status.setText(text)
             return
+        sky = self.view.sky_view
+        if sky is not None:
+            # Небо тайлов не грузит, загрузка глобуса стоит без ошибки.
+            text = tr("Звёздное небо, поле зрения {fov}°",
+                      fov=int(round(sky.fov)))
+            if self._cursor_text:
+                text += "\n" + self._cursor_text
+            self.status.setText(text)
+            return
         if self.errors:
             text = tr("Подложка не загрузилась: {error}",
                       error=next(iter(self.errors.values())))
@@ -2311,8 +2398,12 @@ class GlobeWindow(QWidget):
     def _update_cursor(self):
         """Широта, долгота и высота рельефа под курсором."""
         text = ""
-        if self._hover is not None:
-            view = self.view
+        view = self.view
+        if self._hover is not None and view.sky_view is not None:
+            cam = view.camera
+            text = ra_dec_text(view.sky_view.direction_at(
+                *self._hover, cam.width, cam.height))
+        elif self._hover is not None:
             point = ground_under(view.camera, *self._hover,
                                  view.navigator.pose.terrain)
             if point is not None:

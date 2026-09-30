@@ -62,7 +62,7 @@ dragged with the mouse.
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
-| Body | The menu Earth, Mars, Moon, see [Mars and the Moon](#mars-and-the-moon) |
+| Body | The menu Earth, Mars, Moon and Sky, see [Mars and the Moon](#mars-and-the-moon) and [Starry sky](#starry-sky) |
 | View properties | Base map, terrain, labels, link with the map, update, coordinate format |
 | About | Controls, data sources, links |
 
@@ -787,6 +787,34 @@ to a place on another body switches the body first. A tour goes
 through the stops of the current body. A scene keeps its body and
 opens on it.
 
+## Starry sky
+
+The Sky item of the Body menu shows the sky from the centre of the
+celestial sphere. It holds the Milky Way, 5080 stars down to magnitude
+6, lines and names of 88 constellations and names of bright stars.
+The Sun, the Moon and the planets from Mercury to Neptune are there
+too. Celestial north
+is up and east is on the left, as on a star chart.
+
+| Action | What it does |
+|---|---|
+| Drag with the left button | The sky follows the cursor |
+| Wheel, PageUp, PageDown, plus, minus | Field of view from 2° to 110° |
+| Double click with the left button | The point moves to the centre, the field of view halves |
+| Double click with the right button | The field of view doubles |
+| Arrows | The view moves by a tenth of the window height |
+
+The status bar shows the field of view, the right ascension and the
+declination of the point under the cursor. Sky coordinates are epoch
+J2000. Bodies stand at the end of the open time slider range, otherwise
+at the computer clock time. Planets are placed within 0.1° in the
+years 1800-2050, the Moon within 0.3°.
+
+The ruler, new place, save view, tour recording, synchronization and
+feature identification are off in the sky. A view snapshot saves the
+sky without labels. A scene keeps the view direction and the field of
+view. To leave the sky, choose a body in the same menu.
+
 ---
 
 ## Limitations
@@ -801,6 +829,9 @@ opens on it.
   are not shown.
 - Mars and the Moon have no terrain. KML does not store the body of
   a place, places from a KML file go to the current body.
+- The sky is shown from the centre of the Earth, without the horizon
+  of an observing site. Precession since 2000 is ignored, it is about
+  0.4°.
 
 ## Data sources
 
@@ -811,7 +842,8 @@ VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale B
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
 DR2: ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
 Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
-OpenPlanetaryMap.
+OpenPlanetaryMap. Constellation lines, names and star names -
+d3-celestial, © Olaf Frohn. Planet positions - JPL orbital elements.
 
 The terms of all sources are described in [SOURCES.md](SOURCES.md).
 Tiles go through the QGIS network settings and cache, the plugin keeps

@@ -40,6 +40,9 @@ and atmosphere, from space down to single streets.
   in place of the Earth, with NASA and USGS imagery. Navigation, grid,
   ruler, places, tours, view snapshots and scenes work on any body.
   A place remembers its body.
+- **Starry sky.** The same icon opens the sky from the centre of the
+  celestial sphere. It shows the Milky Way, stars, constellation lines
+  and names, the Sun, the Moon and the planets at the chosen time.
 - **Left panel.** The sections Places, Project layers and Layers
   collapse with a click on the header.
 - **Layers section.** It holds
@@ -194,6 +197,8 @@ Gaia DR2: ESA/Gaia/DPAC.
 
 Mars comes from NASA, USGS, Viking MDIM2.1. The Moon comes from USGS,
 LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
+Constellations and star names come from [d3-celestial](https://github.com/ofrohn/d3-celestial),
+© Olaf Frohn. Planet positions come from JPL orbital elements.
 
 Data sources and their terms of use are described in [doc/SOURCES.md](doc/SOURCES.md), in Russian.
 
