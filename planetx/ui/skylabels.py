@@ -7,6 +7,7 @@
 Точки проецирует core.skyview после каждого кадра неба. Подписи
 ставятся по старшинству - светила, звёзды по блеску, созвездия по
 рангу, - и подпись, которая налезла бы на поставленную, пропускается.
+Те же подписи draw кладёт на картинку снимка вида (ui/snapshot.py).
 """
 import time
 
@@ -21,8 +22,11 @@ from ..i18n import is_russian, tr
 from ..qt_compat import enum
 
 GAP = 6.0  # логических пикселей от точки до подписи
+FONT_PIXELS = 12.0  # кегль подписи в логических пикселях
 STAR_COLOR = QColor(235, 235, 225, 210)
 CONSTELLATION_COLOR = QColor(120, 160, 220, 200)
+
+
 def body_name(key):
     """Название светила на языке интерфейса."""
     return {"sun": tr("Солнце"), "moon": tr("Луна"),
@@ -41,8 +45,7 @@ class SkyLabels(QWidget):
         self.setAttribute(enum(Qt, "WidgetAttribute",
                                "WA_TransparentForMouseEvents"))
         data = skydata.load()
-        russian = is_russian()
-        key = "ru" if russian else "en"
+        key = "ru" if is_russian() else "en"
         # (направление, текст, вид, старшинство - меньше раньше)
         self.fixed = []
         for star in data["stars"]:
@@ -52,11 +55,8 @@ class SkyLabels(QWidget):
             self.fixed.append((direction(entry["ra"], entry["dec"]),
                                entry[key], "constellation",
                                20.0 + entry["rank"]))
-        self.font = QFont()
-        self.font.setPointSizeF(9.0)
-        self.big = QFont(self.font)
-        self.big.setBold(True)
         self.shown = []  # подписи последнего рисования, для проверок
+        self.shot_shown = []  # подписи последнего снимка вида
         self.hide()
 
     def sync(self):
@@ -81,48 +81,61 @@ class SkyLabels(QWidget):
             return items + self.fixed
         return items + [item for item in self.fixed if item[2] == "star"]
 
-    def paintEvent(self, event):
+    def draw(self, painter, width, height, scale):
+        """Подписи на холст width × height пикселей кадра. scale -
+        пикселей кадра на логический пиксель, от него кегль и отступы.
+        Возвращает поставленные подписи: вид, текст, x, y."""
         sky = self.view.sky_view
-        self.shown = []
         if sky is None:
-            return
-        cam = self.view.camera
-        ratio = self.view.devicePixelRatioF()
+            return []
         items = sorted(self._items(), key=lambda item: item[3])
-        dirs = np.array([item[0] for item in items])
-        pixels, front = sky.project(dirs, cam.width, cam.height)
-        p = QPainter(self)
-        p.setRenderHint(enum(QPainter, "RenderHint", "TextAntialiasing"))
-        taken = []
-        width, height = self.width(), self.height()
-        for (v, text, kind, _), (x, y), ahead in zip(items, pixels, front):
-            if not ahead:
+        pixels, front = sky.project(np.array([item[0] for item in items]),
+                                    width, height)
+        font = QFont()
+        font.setPixelSize(max(6, int(round(FONT_PIXELS * scale))))
+        big = QFont(font)
+        big.setBold(True)
+        gap = GAP * scale
+        painter.setRenderHint(enum(QPainter, "RenderHint",
+                                   "TextAntialiasing"))
+        taken, shown = [], []
+        flags = enum(Qt, "AlignmentFlag", "AlignLeft") \
+            | enum(Qt, "AlignmentFlag", "AlignVCenter")
+        for (_, text, kind, _), (x, y), ahead in zip(items, pixels, front):
+            if not ahead or not (0.0 <= x <= width and 0.0 <= y <= height):
                 continue
-            x, y = x / ratio, y / ratio
-            if not (0.0 <= x <= width and 0.0 <= y <= height):
-                continue
-            font = self.big if kind.startswith("body") else self.font
-            metrics = QFontMetricsF(font)
+            body = kind.startswith("body")
+            metrics = QFontMetricsF(big if body else font)
             w = metrics.horizontalAdvance(text) if hasattr(
                 metrics, "horizontalAdvance") else metrics.width(text)
             h = metrics.height()
             if kind == "constellation":
                 rect = QRectF(x - w / 2.0, y - h / 2.0, w, h)
             else:
-                rect = QRectF(x + GAP, y - h - 1.0, w, h)
+                rect = QRectF(x + gap, y - h - scale, w, h)
             if any(rect.intersects(other) for other in taken):
                 continue
             taken.append(rect)
-            if kind.startswith("body"):
+            if body:
                 r, g, b = skydata.BODY_STYLE[kind[5:]][0]
                 color = QColor(int(r * 255), int(g * 255), int(b * 255))
             elif kind == "star":
                 color = STAR_COLOR
             else:
                 color = CONSTELLATION_COLOR
-            p.setFont(font)
-            p.setPen(color)
-            p.drawText(rect, enum(Qt, "AlignmentFlag", "AlignLeft")
-                       | enum(Qt, "AlignmentFlag", "AlignVCenter"), text)
-            self.shown.append((kind, text, round(x), round(y)))
-        p.end()
+            painter.setFont(big if body else font)
+            painter.setPen(color)
+            painter.drawText(rect, flags, text)
+            shown.append((kind, text, round(x), round(y)))
+        return shown
+
+    def paintEvent(self, event):
+        cam = self.view.camera
+        ratio = self.view.devicePixelRatioF()
+        p = QPainter(self)
+        try:
+            # Проекция - в пикселях кадра, холст виджета - в логических.
+            p.scale(1.0 / ratio, 1.0 / ratio)
+            self.shown = self.draw(p, cam.width, cam.height, ratio)
+        finally:
+            p.end()

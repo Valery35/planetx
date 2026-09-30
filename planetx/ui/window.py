@@ -102,6 +102,7 @@ SKY_ATTRIBUTION = (
 XYZ_PREFIX = "connections/xyz/items/"
 BASEMAP_KEY = "PlanetX/basemap"  # имя выбранной подложки в настройках
 SIDEBAR_KEY = "PlanetX/sidebar"  # видна ли левая панель окна
+CONSTELLATIONS_KEY = "PlanetX/constellations"  # линии созвездий на небе
 # Включена ли группа линий векторной основы, по группам.
 LINES_KEY = "PlanetX/lines/{}"
 # Группы панели «Слои», включённые при первом открытии. Решение автора
@@ -330,6 +331,8 @@ class GlobeWindow(QWidget):
         # Подписи неба - раньше панели значков, чтобы лечь под неё.
         self.sky_labels = SkyLabels(self.view)
         self.view.changed.connect(self.sky_labels.sync)
+        self.view.show_constellations = QgsSettings().value(
+            CONSTELLATIONS_KEY, True, type=bool)
         self._sky_state = None  # взгляд на небо до выхода из него
         # Шкала времени меток, своя, как в Google Earth. Она нужна
         # до первого чтения «Моих меток».
@@ -500,6 +503,10 @@ class GlobeWindow(QWidget):
         self._record_timer.timeout.connect(self._record_sample)
         self.toolbar.record_toggled.connect(self._record_toggled)
         self.toolbar.time_toggled.connect(self._time_toggled)
+        self.toolbar.constellations.setChecked(
+            self.view.show_constellations)
+        self.toolbar.constellations_toggled.connect(
+            self.set_constellations)
         self.toolbar.body_chosen.connect(self.set_body)
         self._update_timebar()
         self.tour.stop_reached.connect(
@@ -972,6 +979,13 @@ class GlobeWindow(QWidget):
         self._show_attribution()
         self.sky_labels.sync()
         view.update()
+
+    def set_constellations(self, on):
+        """Линии и названия созвездий на небе."""
+        self.view.show_constellations = bool(on)
+        QgsSettings().setValue(CONSTELLATIONS_KEY, bool(on))
+        self.toolbar.constellations.setChecked(bool(on))
+        self.view.update()
 
     def _leave_sky(self):
         view = self.view

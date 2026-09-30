@@ -210,6 +210,11 @@ EN = {
         "search and buildings are off there. The sky shows constellations, "
         "stars and planets from the centre of the celestial sphere.",
     "Небо": "Sky",
+    "Созвездия": "Constellations",
+    "Линии фигур и названия созвездий на небе. Без них остаются звёзды, "
+    "их имена и светила.":
+        "Constellation figures and names in the sky. Without them the "
+        "stars, their names and the bodies remain.",
     "Меркурий": "Mercury",
     "Венера": "Venus",
     "Юпитер": "Jupiter",

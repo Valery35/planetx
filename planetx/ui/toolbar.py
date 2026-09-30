@@ -38,6 +38,7 @@ class ViewToolbar(QFrame):
     record_toggled = pyqtSignal(bool)
     time_toggled = pyqtSignal(bool)
     body_chosen = pyqtSignal(str)
+    constellations_toggled = pyqtSignal(bool)
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal()
@@ -157,6 +158,15 @@ class ViewToolbar(QFrame):
                 lambda checked, k=key: self.body_chosen.emit(k))
             self.body_actions[key] = action
         self.body_actions["earth"].setChecked(True)
+        # Линии и названия созвездий неба, вне группы тел.
+        lines = menu.addAction(tr("Созвездия"))
+        lines.setCheckable(True)
+        lines.setChecked(True)
+        lines.setToolTip(tr("Линии фигур и названия созвездий на небе. "
+                            "Без них остаются звёзды, их имена "
+                            "и светила."))
+        lines.toggled.connect(self.constellations_toggled)
+        self.constellations = lines
         body.setMenu(menu)
         self.layout().addWidget(body)
         self.body = body

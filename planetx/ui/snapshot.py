@@ -341,6 +341,16 @@ class SnapshotDialog(QDialog):
                 "Видеокарта не создала буфер такого размера. Уменьшите "
                 "снимок."))
             return
+        if self.window.view.sky_view is not None:
+            # Подписи неба рисует слой поверх вида, в кадр они не
+            # попадают. На снимок они ложатся той же проекцией.
+            painter = QPainter(image)
+            try:
+                labels = self.window.sky_labels
+                labels.shot_shown = labels.draw(
+                    painter, image.width(), image.height(), self.ratio)
+            finally:
+                painter.end()
         draw_attribution(image, plain_text(self.window.attribution.text()),
                          self.ratio)
         note = "" if complete else tr(

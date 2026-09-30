@@ -2447,6 +2447,55 @@ def sky_planets():
         "labels_visible": window.sky_labels.isVisible()}
 
 
+@check(1500)
+def sky_toggle():
+    # Пункт «Созвездия»: без линий и названий, потом снимок с подписями.
+    import planetx.ui.snapshot as smod
+    window = state["window"]
+    window.set_body("sky")
+    window.show_sky(85.0, 5.0, 70.0)
+    window.set_constellations(False)
+    window.view.repaint()
+    window.sky_labels.repaint()
+    off = {"lines": window.view.constellations.drawn,
+           "names": sum(1 for k, _, _, _ in window.sky_labels.shown
+                        if k == "constellation"),
+           "stars": sum(1 for k, _, _, _ in window.sky_labels.shown
+                        if k == "star")}
+    window.set_constellations(True)
+    result["sky_toggle"] = {"off": off}
+    path = os.path.join(TEMP, "planetx_sky_shot.png")
+    if os.path.exists(path):
+        os.remove(path)
+    smod.QFileDialog.getSaveFileName = staticmethod(
+        lambda *args, **kwargs: (path, ""))
+
+    def setup(dialog):
+        dialog.keep.setChecked(False)
+        dialog.width_px.setValue(2400)
+        dialog.height_px.setValue(1600)
+    _shot_begin(False, setup)
+
+
+@check(500)
+def sky_toggle_check():
+    out = _shot_wait()
+    if isinstance(out, int):
+        return out
+    from qgis.PyQt.QtGui import QImage
+    window = state["window"]
+    image = QImage(os.path.join(TEMP, "planetx_sky_shot.png"))
+    shown = window.sky_labels.shot_shown
+    result["sky_toggle"].update({
+        "file": [image.width(), image.height()],
+        "shot_labels": len(shown),
+        "shot_names": [t for _, t, _, _ in shown][:8],
+        "lines_on": window.view.constellations.drawn,
+        "gl_errors": out.get("gl_errors")})
+    window.set_body("earth")
+    return None
+
+
 SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
 
 

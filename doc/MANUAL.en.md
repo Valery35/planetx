@@ -810,9 +810,12 @@ J2000. Bodies stand at the end of the open time slider range, otherwise
 at the computer clock time. Planets are placed within 0.1° in the
 years 1800-2050, the Moon within 0.3°.
 
+The Constellations item of the same menu hides and shows the
+constellation lines and names. Stars, their names and the bodies stay.
+
 The ruler, new place, save view, tour recording, synchronization and
 feature identification are off in the sky. A view snapshot saves the
-sky without labels. A scene keeps the view direction and the field of
+sky with its labels. A scene keeps the view direction and the field of
 view. To leave the sky, choose a body in the same menu.
 
 ---
