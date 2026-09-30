@@ -667,12 +667,22 @@ class LayerPanel(QWidget):
 
     def _tour_key(self, item):
         """Что облетит кнопка тура: "" - все «Мои метки», ключ папки -
-        её метки, ключ пути - путь, None - нечего."""
+        её метки, ключ пути - путь, None - нечего.
+
+        У выделенной метки тур идёт по её папке. Раньше кнопка у метки
+        была серой, и тур по трём меткам Луны не запускался, пока
+        не выделена папка, 1 октября 2026 года.
+        """
         if item is self.places_group:
             return ""
         key = item.data(0, PLACE_ROLE) if item is not None else None
         if key and (is_folder(key) or key.startswith("line:")):
             return key
+        if key:
+            parent = item.parent()
+            if parent is None or parent is self.places_group:
+                return ""
+            return self._tour_key(parent)
         return None
 
     def _tour_state(self, *args):

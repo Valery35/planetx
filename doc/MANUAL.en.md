@@ -594,7 +594,10 @@ including nested folders.
 
 A tour starts with Play tour in the menu of My Places or a folder. A path
 has Tour along the path in its menu. The ▶ button under the places list
-starts a tour too. When no places are checked, the status line says so.
+starts a tour too. It tours the selected folder or path, and with a
+place selected it tours the folder holding the place. A tour goes
+through the places of the body now on the globe. When no places are
+checked, the status line says so.
 
 The tour bar appears at the bottom of the view:
 

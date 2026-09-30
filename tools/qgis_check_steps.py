@@ -2522,6 +2522,55 @@ def moon_missing_check():
     window.set_body("earth")
 
 
+@check(2000)
+def moon_tour():
+    # Тур по трём меткам на Луне, как из меню «Мои метки».
+    from planetx.core.features import Shape
+    window = state["window"]
+    window.set_body("moon")
+    store = window.myplaces
+    folder = store.add_folder("Тур по Луне")
+    for i, (lat, lon) in enumerate(((0.67, 23.47), (-8.9, 15.5),
+                                    (26.1, 3.6))):
+        store.add(Shape("point", [(lat, lon)], name="Л%d" % i),
+                  folder=folder)
+    state["moon_folder"] = folder
+    stops = window._tour_stops(None)
+    # Выделена метка, а не папка: кнопка ▶ ведёт тур по её папке.
+    first = window.myplaces.places_in(folder)[0]
+    window.panel.select_place(first.key)
+    button = window.panel.tour_button
+    result["moon_tour_button"] = {
+        "enabled": button.isEnabled(), "tip": button.toolTip(),
+        "key_is_folder": window.panel._tour_key(
+            window.panel.list.currentItem()) == folder}
+    button.click()
+    tour = window.tour
+    result["moon_tour"] = {
+        "stops": len(stops),
+        "stop_points": [[round(s.lat, 2), round(s.lon, 2),
+                         round(s.distance)] for s in stops],
+        "player_stops": len(getattr(tour, "stops", []) or []),
+        "playing": bool(getattr(tour, "playing", None)
+                        or getattr(tour, "active", None))}
+
+
+@check(300)
+def moon_tour_check():
+    window = state["window"]
+    tour = window.tour
+    pose = window.view.navigator.pose
+    result["moon_tour"].update({
+        "after": {k: str(getattr(tour, k)) for k in dir(tour)
+                  if k in ("playing", "active", "index", "stops")},
+        "pose": [round(pose.lat, 2), round(pose.lon, 2),
+                 round(pose.distance)],
+        "status": window.status.text().split(chr(10))[0]})
+    tour.stop()
+    window.myplaces.remove(state["moon_folder"])
+    window.set_body("earth")
+
+
 SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
 
 
