@@ -24,6 +24,7 @@ from ..i18n import tr
 from ..qt_compat import enum
 
 PAUSE_KEY = "PlanetX/tour_pause"
+LOOP_KEY = "PlanetX/tour_loop"
 MARGIN = 12  # пикселей от нижнего края вида
 STYLE = ("QFrame#planetxTour { background: rgba(250, 250, 250, 230); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
@@ -81,6 +82,15 @@ class TourBar(QFrame):
             layout.addWidget(button)
             buttons.append(button)
         self.play = buttons[1]
+        # Тур по кругу, для показа на экране без присмотра.
+        self.loop = QToolButton(self)
+        self.loop.setText("⟳")
+        self.loop.setCheckable(True)
+        self.loop.setAutoRaise(True)
+        self.loop.setToolTip(tr(
+            "Тур по кругу. После последней остановки тур начинается "
+            "с первой. Остановить его - пауза или крестик."))
+        layout.addWidget(self.loop)
         self.info = QLabel(self)
         layout.addWidget(self.info)
         self.pause = QDoubleSpinBox(self)
@@ -168,6 +178,12 @@ class TourPlayer(QObject):
                                                     type=float))
         self.bar.pause.valueChanged.connect(
             lambda v: QgsSettings().setValue(PAUSE_KEY, float(v)))
+        self.bar.loop.setChecked(QgsSettings().value(LOOP_KEY, False,
+                                                     type=bool))
+        self.bar.loop.toggled.connect(
+            lambda on: QgsSettings().setValue(LOOP_KEY, bool(on)))
+        # Сколько раз тур начался заново по кругу, для проверок.
+        self.laps = 0
         self.bar.back.connect(lambda: self.play_from(self.index - 1))
         self.bar.forward.connect(lambda: self.play_from(self.index + 1))
         self.bar.toggle.connect(self.toggle)
@@ -292,6 +308,11 @@ class TourPlayer(QObject):
             self.playing = False
             if self.t >= self.tour.arrivals[-1]:
                 self.t = self.tour.duration
+                if self.bar.loop.isChecked() and self.nav.grab is None:
+                    # Тур дошёл до конца сам: по кругу с первой остановки.
+                    self.laps += 1
+                    self.play_from(0)
+                    return
         self._show()
 
     def pause_for_record(self):

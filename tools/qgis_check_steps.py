@@ -862,6 +862,65 @@ def tour_wait():
     return None
 
 
+@check(500)
+def tour_loop():
+    # Кнопка ⟳: тур после последней остановки идёт с первой.
+    from planetx.core.features import Shape
+    window = state["window"]
+    store = window.myplaces
+    for place in list(store.places):
+        if place.visible:
+            store.set_visible(place.key, False)
+    state["loop_keys"] = [
+        store.add(Shape("point", [(58.0, 56.25)], name="Круг 1")),
+        store.add(Shape("point", [(58.02, 56.27)], name="Круг 2"))]
+    player = window.tour
+    player.bar.pause.setValue(0.2)
+    player.bar.loop.setChecked(True)
+    player.laps = 0
+    window._place_action("tour", "")
+    state["loop_began"] = None
+    result["tour_loop"] = {"stops": len(player.stops),
+                           "loop_shown": player.bar.loop.isVisible()}
+
+
+@check(500)
+def tour_loop_wait():
+    import time
+    from qgis.core import QgsSettings
+    player = state["window"].tour
+    began = state["loop_began"] or time.monotonic()
+    state["loop_began"] = began
+    if player.laps < 2 and time.monotonic() - began < 90:
+        return 500
+    out = result["tour_loop"]
+    out["laps"] = player.laps
+    out["playing"] = player.playing
+    out["setting"] = QgsSettings().value("PlanetX/tour_loop", False,
+                                         type=bool)
+    # Без круга тур встаёт в конце.
+    player.bar.loop.setChecked(False)
+    state["loop_off"] = time.monotonic()
+    return None
+
+
+@check(500)
+def tour_loop_off():
+    import time
+    window = state["window"]
+    player = window.tour
+    laps = player.laps
+    if player.playing and time.monotonic() - state["loop_off"] < 60:
+        return 500
+    out = result["tour_loop"]
+    out["stopped_at_end"] = not player.playing
+    out["laps_after_off"] = laps
+    player.stop()
+    for key in state["loop_keys"]:
+        window.myplaces.remove(key)
+    return None
+
+
 
 @check(500)
 def tour_path():
@@ -2880,6 +2939,123 @@ def _demo_steps():
 
 
 _demo_steps()
+
+
+@check(1000)
+def close_without_heights():
+    # Закрытие окна на теле без загрузчика высот. Окно закрывается,
+    # шаг ставится последним. На прежнем коде AttributeError в журнале.
+    from planetx.core import planets
+    window = state["window"]
+    saved = planets.MOON_PLANET.terrain
+    planets.MOON_PLANET.terrain = None
+    from qgis.PyQt.QtGui import QCloseEvent
+    try:
+        window.set_body("moon")
+        out = result["close_without_heights"] = {
+            "loader": window.terrain_loader is not None, "error": ""}
+        # Ошибка в начале закрытия: сигнал closed всё равно уходит,
+        # иначе плагин держит ссылку на уничтоженное окно.
+        got = []
+        window.closed.connect(lambda: got.append(True))
+        sync, window.sync = window.sync, None
+        try:
+            window.closeEvent(QCloseEvent())
+        except AttributeError:
+            got.append(False)
+        window.sync = sync
+        out["closed_after_error"] = got
+        # closeEvent напрямую: исключение из обработчика события Qt
+        # уходит в окно QGIS мимо сборщика ошибок.
+        try:
+            window.closeEvent(QCloseEvent())
+        except AttributeError as exc:
+            out["error"] = str(exc)
+        if not out["error"]:
+            window.close()
+    finally:
+        planets.MOON_PLANET.terrain = saved
+
+
+def local_terrain():
+    """PLANETX_TERRAIN_DIR - папка с тайлами высот тел вместо хранилища
+    planetx-terrain, для проверки до публикации тайлов."""
+    folder = os.environ.get("PLANETX_TERRAIN_DIR")
+    if not folder:
+        return
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core import planets
+    for planet in (planets.MARS_PLANET, planets.MOON_PLANET):
+        name, _, level, credit = planet.terrain
+        url = QUrl.fromLocalFile(os.path.join(folder, planet.key)).toString()
+        planet.terrain = (name, url + "/{z}/{x}/{y}.png", level, credit)
+
+
+@check(20000)
+def mars_relief():
+    # Рельеф Марса по тайлам высот: Олимп с наклоном камеры.
+    from planetx.core.navigation import Pose
+    local_terrain()
+    window = state["window"]
+    window.set_relief(True)
+    window.set_body("mars")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(18.65, -133.8, 9.0e5, 20.0, 60.0))
+    window.view.update()
+
+
+@check(300)
+def mars_relief_check():
+    window = state["window"]
+    view = window.view
+    store = view.store
+    loader = window.terrain_loader
+    result["mars_relief"] = {
+        "source": loader.source.url[:60] if loader else None,
+        "scale": store.scale, "max_level": store.max_level,
+        "tiles": sorted({k[0] for k in store.tiles}),
+        "olympus_m": round(store.height_at(18.65, -133.8) / (store.scale
+                                                            or 1.0)),
+        "hellas_m": round(store.height_at(-42.4, 70.5) / (store.scale
+                                                         or 1.0)),
+        "errors": {str(k): str(v) for k, v in
+                   list(window.terrain_errors.items())[:3]},
+        "relief_enabled": not window.panel.geo_items["relief"].isDisabled(),
+        "attribution": window.attribution.text()[-80:],
+        "gl": dict(view.gl_errors)}
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_mars_relief.png"))
+    window.set_body("earth")
+
+
+@check(20000)
+def moon_relief():
+    # Рельеф Луны: кратер Коперник с низким наклоном камеры.
+    from planetx.core.navigation import Pose
+    local_terrain()
+    window = state["window"]
+    window.set_relief(True)
+    window.set_body("moon")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(9.62, -20.08, 2.5e5, 0.0, 65.0))
+    window.view.update()
+
+
+@check(300)
+def moon_relief_check():
+    window = state["window"]
+    view = window.view
+    store = view.store
+    result["moon_relief"] = {
+        "tiles": sorted({k[0] for k in store.tiles}),
+        "rim_m": round(store.height_at(9.62, -20.08 + 0.95)),
+        "floor_m": round(store.height_at(9.62, -20.08)),
+        "errors": {str(k): str(v) for k, v in
+                   list(window.terrain_errors.items())[:3]},
+        "gl": dict(view.gl_errors)}
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_moon_relief.png"))
+    window.set_body("earth")
 
 
 SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")

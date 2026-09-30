@@ -44,9 +44,24 @@ class TestDecode(unittest.TestCase):
         heights = tr.decode(encode(np.array([[-4000.0, -28.0, 10.0]])))
         self.assertEqual(heights.tolist(), [[0.0, 0.0, 10.0]])
 
+    def test_body_keeps_depressions(self):
+        # Марс и Луна: впадины ниже нуля остаются, равнина Эллада -8 км.
+        values = np.array([[-8206.0, -28.0, 21181.0]])
+        tile = tr.make_tile(0, 0, 0, encode(values), floor=None)
+        self.assertEqual(tile.heights.tolist(), values.tolist())
+        self.assertEqual(tile.low, -8206.0)
+
     def test_tile_range(self):
         tile = ramp_tile(3, 1, 2)
         self.assertEqual((tile.low, tile.high), (0.0, 2550.0))
+
+    def test_store_limits_wanted_level(self):
+        # У источника до уровня 5 глубже тайлы не просятся.
+        store = tr.HeightStore()
+        self.assertEqual(store.wanted((14, 9000, 5000))[0], 12)
+        store.max_level = 5
+        self.assertEqual(store.wanted((14, 9000, 5000)),
+                         (5, 9000 >> 9, 5000 >> 9))
 
 
 class TestSample(unittest.TestCase):

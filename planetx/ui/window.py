@@ -253,11 +253,6 @@ def buildings_decoder(key, data):
     return NO_BUILDINGS if found is None else found
 
 
-def heights_preparer(key, rgba):
-    """Работа рабочего потока для тайла высот Terrarium."""
-    return make_tile(*key, rgba)
-
-
 def distance_text(metres):
     """Расстояние для строки состояния, метры или километры."""
     if metres < 10000.0:
@@ -552,15 +547,11 @@ class GlobeWindow(QWidget):
         self.view.max_level = self.source.max_level
         # Высоты Terrarium идут своим загрузчиком, запросы к ним просит
         # вид по тайлам кадра.
-        self.terrain_loader = TileLoader(
-            basemap.Source("Terrarium", TERRARIUM_URL, TERRAIN_MAX),
-            parent=self, prepare=heights_preparer)
-        self.terrain_loader.loaded.connect(self._heights)
+        self.terrain_loader = None
         self.terrain_errors = {}
-        self.terrain_loader.failed.connect(self.terrain_errors.__setitem__)
-        self.view.terrain_loader = self.terrain_loader
-        if self._relief:
-            self.terrain_loader.want((0, 0, 0), 1.0)
+        # Высоты Марса и Луны: архив тайлов, скачивается один раз.
+        self._start_terrain(
+            basemap.Source("Terrarium", TERRARIUM_URL, TERRAIN_MAX), 0.0)
         self._shown_at = 0.0
         self.view.changed.connect(self._frame_done)
         # Мелкие уровни важнее: они первыми закрывают весь шар.
@@ -856,7 +847,7 @@ class GlobeWindow(QWidget):
         QgsSettings().setValue(RELIEF_KEY, self._relief)
         self.panel.set_geo(self._groups, self._relief)
         self.view.set_relief(self._relief_target())
-        if self._relief:
+        if self._relief and self.terrain_loader is not None:
             self.terrain_loader.want((0, 0, 0), 1.0)
         self._sync_properties()
         self._show_attribution()
@@ -885,10 +876,47 @@ class GlobeWindow(QWidget):
         self._changed()
 
     def _relief_target(self):
-        """Масштаб рельефа. У Марса и Луны высот тайлами нет."""
-        if not self.planet.earth:
+        """Масштаб рельефа. У тела без высот рельефа нет."""
+        if not self.planet.earth and self.planet.terrain is None:
             return 0.0
         return self._scale if self._relief else 0.0
+
+    def _start_terrain(self, source, floor):
+        """Загрузчик высот источника source или никакого (None).
+        floor - нижний предел высот, core.terrain.decode."""
+        old = self.terrain_loader
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        self.terrain_errors.clear()
+        self.terrain_loader = None
+        if source is not None:
+            self.terrain_loader = TileLoader(
+                source, parent=self,
+                prepare=lambda key, rgba: make_tile(*key, rgba, floor=floor))
+            self.terrain_loader.loaded.connect(self._heights)
+            self.terrain_loader.failed.connect(
+                self.terrain_errors.__setitem__)
+            if self._relief:
+                self.terrain_loader.want((0, 0, 0), 1.0)
+        self.view.terrain_loader = self.terrain_loader
+
+    def _body_terrain(self, planet):
+        """Высоты тела: Terrarium у Земли, архив у Марса и Луны.
+        Архив тела скачивается, когда рельеф включён."""
+        if planet.earth:
+            self.view.store.max_level = TERRAIN_MAX
+            self._start_terrain(basemap.Source(
+                "Terrarium", TERRARIUM_URL, TERRAIN_MAX), 0.0)
+            return
+        self._start_terrain(None, None)
+        if planet.terrain is None:
+            return
+        name, url, level, _ = planet.terrain
+        self.view.store.max_level = level
+        # Впадины тел ниже нуля остаются, пол не ставится.
+        self._start_terrain(basemap.Source(name, url, level,
+                                           builtin=True), None)
 
     # Тело глобуса.
 
@@ -922,6 +950,7 @@ class GlobeWindow(QWidget):
         self._start_loader()
         self.view.change_body(source.max_level, planet.air)
         self.loader.want_many((key, -key[0]) for key in start_keys())
+        self._body_terrain(planet)
         self.view.set_relief(self._relief_target())
         self.view.reset_places(self.source.max_level)
         self.view.label_kinds = label_kinds(self._groups) \
@@ -936,7 +965,8 @@ class GlobeWindow(QWidget):
             self.toolbar.identify.setChecked(False)
         self.toolbar.sync.setEnabled(planet.earth)
         self.toolbar.identify.setEnabled(planet.earth)
-        self.panel.set_earth(planet.earth)
+        self.panel.set_earth(planet.earth,
+                             relief=planet.terrain is not None)
         self._grid_key = None
         self._update_grid()
         self._refresh_shapes()
@@ -1144,7 +1174,10 @@ class GlobeWindow(QWidget):
                 or self.buildings_loader is not None):
             parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
         if self.view.store.scale:
-            parts.append(TERRAIN_ATTRIBUTION)
+            parts.append(TERRAIN_ATTRIBUTION if self.planet.earth
+                         else html.escape(self.planet.terrain[3])
+                         if self.planet.terrain
+                         and self.terrain_loader is not None else "")
         if "clouds" in self.gibs_loaders:
             parts.append(link_html(*clouds.ATTRIBUTION))
         if "sea" in self.gibs_loaders:
@@ -1778,9 +1811,14 @@ class GlobeWindow(QWidget):
         return self.view.store.heights_at(lats, lons, scaled=False)
 
     def _has_height_tile(self, key):
-        # Высот Марса и Луны нет, линейка и профиль не ждут их: высоты
-        # там нулевые. Иначе вид просил бы земные тайлы Terrarium.
-        return key in self.view.store.tiles or not self.planet.earth
+        # Тайлов глубже предельного уровня источника нет, у тела без
+        # высот их нет совсем: линейка и профиль их не ждут. Иначе вид
+        # просил бы на Марсе земные тайлы Terrarium.
+        if key in self.view.store.tiles:
+            return True
+        if self.terrain_loader is None:
+            return True
+        return key[0] > self.view.store.max_level
 
     def _ruler_changed(self):
         self._update_tool_marks()
@@ -2481,31 +2519,36 @@ class GlobeWindow(QWidget):
             self._show_state()
 
     def closeEvent(self, event):
-        self.sync.close()
-        self.tracks.close()
-        self.layer_labels.close()
-        if self.identified is not None:
-            self.identified.close()
-        if self.ruler_dialog is not None:
-            self.ruler_dialog.close()
-        if self.place_dialog is not None:
-            self.place_dialog.close()
-        self.loader.abort()
-        self.terrain_loader.abort()
-        if self.place_loader is not None:
-            self.place_loader.abort()
-        for loader in list(self.gibs_loaders.values()) + [
-                self.sky_loader, self.buildings_loader]:
-            if loader is not None:
-                loader.abort()
-        if self.overlay is not None:
-            self.overlay.abort()
-        self.refresh_timer.stop()
-        set_moving(False)
-        if self.properties is not None:
-            self.properties.close()
-        sys.setswitchinterval(self._switch_interval)
-        super().closeEvent(event)
-        # Окно с WA_DeleteOnClose Qt уничтожает позже. Плагин узнаёт
-        # о закрытии сразу, чтобы меню открыло новое окно, а не это.
-        self.closed.emit()
+        # Сообщение о закрытии уходит и после ошибки по дороге, иначе
+        # плагин держит ссылку на окно, которое Qt уже уничтожил.
+        try:
+            self.sync.close()
+            self.tracks.close()
+            self.layer_labels.close()
+            if self.identified is not None:
+                self.identified.close()
+            if self.ruler_dialog is not None:
+                self.ruler_dialog.close()
+            if self.place_dialog is not None:
+                self.place_dialog.close()
+            self.loader.abort()
+            if self.place_loader is not None:
+                self.place_loader.abort()
+            # У тела без высот загрузчика высот нет.
+            for loader in list(self.gibs_loaders.values()) + [
+                    self.terrain_loader, self.sky_loader,
+                    self.buildings_loader]:
+                if loader is not None:
+                    loader.abort()
+            if self.overlay is not None:
+                self.overlay.abort()
+            self.refresh_timer.stop()
+            set_moving(False)
+            if self.properties is not None:
+                self.properties.close()
+            sys.setswitchinterval(self._switch_interval)
+        finally:
+            super().closeEvent(event)
+            # Окно с WA_DeleteOnClose Qt уничтожает позже. Плагин
+            # узнаёт о закрытии сразу, чтобы меню открыло новое окно.
+            self.closed.emit()

@@ -576,15 +576,17 @@ class LayerPanel(QWidget):
                 self._extras[key] = bool(on)
         self.geo.blockSignals(False)
 
-    def set_earth(self, earth):
+    def set_earth(self, earth, relief=False):
         """Земля или другое тело. У Марса и Луны векторная основа,
-        рельеф, облака, температура, здания, солнце и слои проекта
-        недоступны, флажки остаются как были."""
-        for item in self.geo_items.values():
-            item.setDisabled(not earth)
+        облака, температура, здания, солнце и слои проекта недоступны,
+        флажки остаются как были. Рельеф доступен, если у тела есть
+        высоты, relief."""
+        for key, item in self.geo_items.items():
+            off = not earth and not (key == "relief" and relief)
+            item.setDisabled(off)
             parent = item.parent()
             if parent is not None:
-                parent.setDisabled(not earth)
+                parent.setDisabled(off)
         for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN):
             self.extra_items[key].setDisabled(not earth)
         self.layers.setEnabled(earth)

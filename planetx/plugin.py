@@ -52,7 +52,18 @@ class PlanetXPlugin:
         if self.window is window:
             self.window = None
 
+    def _drop_deleted(self):
+        # Окно, которое Qt уничтожил без сигнала closed, снимается.
+        # Так бывало, когда closeEvent падал до сигнала.
+        if self.window is None:
+            return
+        try:
+            self.window.isVisible()
+        except RuntimeError:
+            self.window = None
+
     def unload(self):
+        self._drop_deleted()
         if self.window is not None:
             self.window.close()
             self.window = None
@@ -89,6 +100,7 @@ class PlanetXPlugin:
                 tr("Для глобуса нужен модуль Python {name}. В этой сборке "
                    "QGIS его нет.", name=error.name or str(error)))
             return
+        self._drop_deleted()
         if self.window is None:
             window = GlobeWindow(self.iface.mainWindow())
             window.resize(1600, 930)

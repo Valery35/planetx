@@ -608,6 +608,7 @@ The tour bar appears at the bottom of the view:
 | ⏮, ⏭ | Previous and next stop |
 | ⏸, ▶ | Pause and continue |
 | Pause | How many seconds the camera stays at a stop |
+| ⟳ | Loops the tour. After the last stop the tour starts again from the first. The button state is kept between sessions |
 | ⏺ | Records the tour as PNG frames |
 | ✕ | Ends the tour |
 

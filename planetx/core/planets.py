@@ -12,8 +12,7 @@
 670 м на пиксель. Уровни проверены запросами 30 сентября 2026 года.
 Разметку Луны показала мозаика уровня 2 1 октября 2026 года: в порядке
 XYZ ряды не сходятся по краям, в порядке TMS Море Кризисов стоит
-на 17° с. ш., 59° в. д. Высот
-Марса и Луны тайлами нет, у них рельеф выключен.
+на 17° с. ш., 59° в. д.
 
 Воздух задаётся множителем рассеяния к земному по каналам RGB. У Марса
 пыльный воздух рассеивает красный сильнее синего, у Луны воздуха нет.
@@ -30,6 +29,13 @@ MARS_VIKING = ("https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/"
                "viking_mdim21_global/{z}/{x}/{-y}.png")
 MOON_ALBEDO = ("https://s3.amazonaws.com/opmbuilder/301_moon/tiles/w/"
                "hillshaded-albedo/{z}/{x}/{-y}.png")
+# Тайлы высот уровней 0-5 папками в хранилище planetx-terrain,
+# по одному тайлу, как земной Terrarium. Собирает их
+# tools/build_body_terrain.py из сеток PDS: MOLA MEGDR 32 точки
+# на градус для Марса, LOLA GDR 64 точки на градус для Луны.
+TERRAIN_TILES = ("https://raw.githubusercontent.com/Valery35/"
+                 "planetx-terrain/main/%s/{z}/{x}/{y}.png")
+TERRAIN_LEVEL = 5
 
 
 class Planet:
@@ -41,15 +47,21 @@ class Planet:
     воздуха нет. home - (широта, долгота, расстояние) начального вида.
     earth - есть ли земные функции: поиск, векторная основа, здания,
     облака, температура, солнце, треки, слои проекта, координаты UTM.
+    terrain - высоты тела: (название, адрес тайлов Terrarium с {z},
+    {x}, {y}, предельный уровень, подпись) или None. У Земли высоты
+    Terrarium задаёт окно, тайлы Марса и Луны собирает
+    tools/build_body_terrain.py.
     """
 
-    def __init__(self, body, imagery, air, home, earth=False):
+    def __init__(self, body, imagery, air, home, earth=False,
+                 terrain=None):
         self.body = body
         self.key = body.key
         self.imagery = imagery
         self.air = air
         self.home = home
         self.earth = earth
+        self.terrain = terrain
 
 
 EARTH_PLANET = Planet(EARTH, None, (1.0, 1.0, 1.0),
@@ -61,14 +73,18 @@ MARS_PLANET = Planet(
      "https://www.openplanetary.org/opm-basemaps/"
      "global-viking-mdim2-1-colorized-mosaic"),
     (1.2, 0.3, 0.07),
-    (18.65, -133.8, 1.2e7))  # Олимп
+    (18.65, -133.8, 1.2e7),  # Олимп
+    terrain=("MOLA MEGDR", TERRAIN_TILES % "mars",
+             TERRAIN_LEVEL, "Terrain: NASA MGS MOLA MEGDR"))
 MOON_PLANET = Planet(
     MOON,
     ("Moon LOLA hillshaded albedo", MOON_ALBEDO, 6,
      "USGS, LRO LOLA, OpenPlanetaryMap",
      "https://github.com/openplanetary/opm/wiki/OPM-Basemaps"),
     None,
-    (0.674, 23.473, 6.0e6))  # Море Спокойствия, место посадки Аполлона-11
+    (0.674, 23.473, 6.0e6),  # Море Спокойствия, посадка Аполлона-11
+    terrain=("LOLA GDR", TERRAIN_TILES % "moon",
+             TERRAIN_LEVEL, "Terrain: NASA LRO LOLA GDR"))
 PLANETS = (EARTH_PLANET, MARS_PLANET, MOON_PLANET)
 
 

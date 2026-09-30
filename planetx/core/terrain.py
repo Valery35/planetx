@@ -35,16 +35,21 @@ HeightTile.__doc__ = """Тайл высот: массив (256, 256) float32 в 
 наименьшая и наибольшая высота."""
 
 
-def decode(rgba):
-    """Картинка Terrarium (h, w, 3 или 4) uint8 в высоты float32, метры."""
+def decode(rgba, floor=0.0):
+    """Картинка Terrarium (h, w, 3 или 4) uint8 в высоты float32, метры.
+
+    floor - нижний предел высот. У Земли 0: подложка рисует воду
+    на уровне моря, дно под ней не нужно. У Марса и Луны None - впадины
+    вроде равнины Эллада глубже нуля на километры и остаются.
+    """
     rgb = np.asarray(rgba)[..., :3].astype(np.float32)
     heights = rgb[..., 0] * 256.0 + rgb[..., 1] + rgb[..., 2] / 256.0 \
         - 32768.0
-    return np.maximum(heights, 0.0)
+    return heights if floor is None else np.maximum(heights, floor)
 
 
-def make_tile(z, x, y, rgba):
-    heights = decode(rgba)
+def make_tile(z, x, y, rgba, floor=0.0):
+    heights = decode(rgba, floor)
     return HeightTile(z, x, y, heights, float(heights.min()),
                       float(heights.max()))
 
@@ -118,6 +123,9 @@ class HeightStore:
         self.tiles = {}
         self._ranges = {}
         self.scale = 1.0
+        # Самый подробный уровень тайлов высот источника: у Terrarium 15,
+        # у высот Марса и Луны 5. Глубже тайлы не просятся.
+        self.max_level = MAX_LEVEL
         # Растёт с каждым добавленным тайлом и со сменой масштаба. По ней
         # выбор тайлов понимает, что размахи высот могли измениться.
         self.version = 0
@@ -190,7 +198,7 @@ class HeightStore:
 
     def wanted(self, key):
         """Ключ тайла высот, нужного тайлу подложки key."""
-        return ancestor(key, height_level(key[0]))
+        return ancestor(key, min(height_level(key[0]), self.max_level))
 
     def height_at(self, lat, lon):
         """Высота рельефа в точке по самому точному готовому тайлу."""

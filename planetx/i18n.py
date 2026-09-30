@@ -733,6 +733,10 @@ EN = {
         "recording takes longer than the tour. Frames with the same "
         "numbers in the folder are replaced.",
     "Запись: кадр {n} из {count}": "Recording: frame {n} of {count}",
+    "Тур по кругу. После последней остановки тур начинается "
+    "с первой. Остановить его - пауза или крестик.":
+        "Loop the tour. After the last stop the tour starts again from "
+        "the first. Stop it with pause or the cross.",
     "Папка для кадров тура": "Folder for tour frames",
     "Запись тура прервана на кадре {n}.":
         "Tour recording stopped at frame {n}.",
