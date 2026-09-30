@@ -94,7 +94,8 @@ def cached_geometry(shape):
     """
     key = (shape.kind, tuple(map(tuple, shape.points)),
            shape.fill is not None,
-           bool(shape.extrude) and float(shape.height or 0.0) > 0.0)
+           bool(shape.extrude) and float(shape.height or 0.0) > 0.0,
+           None if shape.alts is None else tuple(shape.alts))
     if key not in _geometries:
         if len(_geometries) >= GEOMETRY_CACHE:
             _geometries.clear()

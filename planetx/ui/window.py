@@ -26,8 +26,8 @@ from qgis.utils import iface
 
 from ..core import basemap, clouds, lookat, stars, temperature, when
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
-from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
-                            number, segment_midpoints)
+from ..core.measure import (LENGTH_UNITS, chord_length, convert,
+                            nearest_vertex, number, segment_midpoints)
 from ..core import graticule
 from ..core.features import Shape
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
@@ -265,16 +265,22 @@ class _RulerVertices:
         view = window.view
         lats = np.array([p[0] for p in points])
         lons = np.array([p[1] for p in points])
-        xyz = geodetic_to_ecef(lats, lons, view.store.heights_at(lats, lons))
+        if window.ruler.solid():
+            heights = np.array(window.ruler.alts, dtype=np.float64)
+        else:
+            heights = view.store.heights_at(lats, lons)
+        xyz = geodetic_to_ecef(lats, lons, heights)
         pixels, front = view.camera.project(xyz)
         self.index = nearest_vertex(pixels, front, px, py,
                                     GRAB_PIXELS * view.devicePixelRatioF())
         return self.index is not None
 
     def move(self, px, py):
-        found = self.window._ground(px, py)
+        window = self.window
+        found = window._solid_ground(px, py) if window.ruler.solid() \
+            else window._ground(px, py)
         if found is not None and self.index is not None:
-            self.window.ruler.move(self.index, *found)
+            window.ruler.move(self.index, *found)
 
     def drop(self):
         self.index = None
@@ -1583,21 +1589,34 @@ class GlobeWindow(QWidget):
         marks = []
         ruler = self.ruler
         if self._ruler_open() and ruler.mode in ("line", "path",
-                                                 "polygon"):
+                                                 "polygon", "path3d",
+                                                 "polygon3d"):
             points = ruler._points(True)
-            closed = ruler.mode == "polygon"
+            closed = ruler.mode in ("polygon", "polygon3d")
             pairs = list(zip(points, points[1:]))
             if closed and len(points) >= 3:
                 pairs.append((points[-1], points[0]))
+            alts = ruler._alts(True)
+            ends = list(zip(alts, alts[1:] + alts[:1]))
             unit = self.ruler_dialog.length_unit()
             short = unit_short()[unit]
             middles = segment_midpoints(points, closed)
             for n, ((a, b), (lat, lon)) in enumerate(zip(pairs, middles)):
-                length = ruler.da.measureLine(ruler_xy([a, b]))
+                lift = 0.0
+                if ruler.solid():
+                    # Хорда в пространстве, подпись - у её середины.
+                    low, high = ends[n]
+                    length = chord_length([(a[0], a[1], low),
+                                           (b[0], b[1], high)])
+                    ground = float(self._true_heights(
+                        np.array([lat]), np.array([lon]))[0])
+                    lift = max(0.5 * (low + high) - ground, 0.0)
+                else:
+                    length = ruler.da.measureLine(ruler_xy([a, b]))
                 text = "{} {}".format(
                     number(convert(length, unit, LENGTH_UNITS)), short)
                 marks.append(MarkPlace(-300000 - n, text, "ruler", 1, lat,
-                                       lon))
+                                       lon, None, lift))
         if self._profile_mark is not None:
             marks.append(self._profile_mark)
         self.view.tool_marks = marks
@@ -1657,7 +1676,9 @@ class GlobeWindow(QWidget):
     def _save_ruler(self):
         """«Сохранить»: фигура линейки в «Мои метки» с измерением."""
         titles = {"line": tr("Линия"), "path": tr("Путь"),
-                  "polygon": tr("Многоугольник"), "circle": tr("Круг")}
+                  "polygon": tr("Многоугольник"), "circle": tr("Круг"),
+                  "path3d": tr("3D-путь"),
+                  "polygon3d": tr("3D-многоугольник")}
         name, ok = QInputDialog.getText(
             self, tr("Сохранить измерение"), tr("Название"),
             text=self.new_name(titles[self.ruler.mode]))
@@ -2043,9 +2064,12 @@ class GlobeWindow(QWidget):
         tool = self.ruler if self._ruler_open() \
             else self.drawer if self._place_open() else None
         if tool is not None:
-            found = self._ground(px, py)
+            if tool is self.ruler and self.ruler.solid():
+                found = self._solid_ground(px, py)
+            else:
+                found = self._ground(px, py)
             if found is not None:
-                tool.add(found[0], found[1])
+                tool.add(*found)
             return
         if not self.identifying:
             return
@@ -2080,6 +2104,34 @@ class GlobeWindow(QWidget):
             return None
         lat, lon, _ = (float(v) for v in ecef_to_geodetic(point))
         return lat, lon
+
+    def _solid_ground(self, px, py):
+        """Точка 3D-линейки под пикселем: (широта, долгота, высота над
+        эллипсоидом) или None.
+
+        Луч из глаза проверяется на рельеф и на показанные здания,
+        берётся ближнее попадание. На экране высоты подняты вертикальным
+        масштабом рельефа, высота переводится в настоящую: высота над
+        поднятой землёй плюс настоящая высота земли.
+        """
+        view = self.view
+        camera = view.camera
+        origin, direction = camera.ray(px, py)
+        best = None
+        ground = ground_under(camera, px, py, view.navigator.pose.terrain)
+        if ground is not None:
+            best = (float(np.linalg.norm(ground - origin)), ground)
+        hit = view.buildings.ray_hit(origin, direction)
+        if hit is not None and (best is None or hit[0] < best[0]):
+            best = hit
+        if best is None:
+            return None
+        lat, lon, h = (float(v) for v in ecef_to_geodetic(best[1]))
+        lats, lons = np.array([lat]), np.array([lon])
+        shown = float(view.store.heights_at(lats, lons)[0]) \
+            if view.store.scale else 0.0
+        true = float(self._true_heights(lats, lons)[0])
+        return lat, lon, h - shown + true
 
     def fly_view(self, lat, lon, distance):
         """Перелёт с прежними азимутом и наклоном, для синхронизации."""
@@ -2171,7 +2223,11 @@ class GlobeWindow(QWidget):
                                  view.navigator.pose.terrain)
             if point is not None:
                 lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
-                if self._ruler_open():
+                solid = self._solid_ground(*self._hover) \
+                    if self._ruler_open() and self.ruler.solid() else None
+                if solid is not None:
+                    self.ruler.set_cursor(solid[:2], solid[2])
+                elif self._ruler_open():
                     self.ruler.set_cursor((lat, lon))
                 elif self._place_open():
                     self.drawer.set_cursor((lat, lon))

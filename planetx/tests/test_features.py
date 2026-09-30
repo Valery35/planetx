@@ -149,5 +149,50 @@ class TestHeightSlider(unittest.TestCase):
         self.assertLess(ft.share_height(0.5), 320.0)
 
 
+
+class TestSolid(unittest.TestCase):
+    """Объект с абсолютными высотами: 3D-путь и 3D-многоугольник."""
+
+    def wall(self):
+        # Стена 50 × 20 м вдоль параллели у Перми, низ на 150 м.
+        dlon = 50.0 / (111320.0 * np.cos(np.radians(58.0)))
+        points = [(58.0, 56.2), (58.0, 56.2 + dlon), (58.0, 56.2 + dlon),
+                  (58.0, 56.2)]
+        return ft.Shape("polygon", points, fill=(255, 0, 0, 128),
+                        alts=(150.0, 150.0, 170.0, 170.0))
+
+    def test_vertices_keep_their_heights(self):
+        shape = ft.Shape("line", [(58.0, 56.2), (58.01, 56.25)],
+                         alts=(200.0, 350.0))
+        geo = ft.geometry(shape)
+        self.assertEqual(len(geo.ring), 2)  # без сгущения по дуге
+        _, _, h = el.ecef_to_geodetic(ft.vertices(geo, 0.0))
+        np.testing.assert_allclose(h, [200.0, 350.0], atol=1e-3)
+
+    def test_vertical_wall_is_filled(self):
+        geo = ft.geometry(self.wall())
+        tri = geo.triangles.reshape(-1, 3)
+        self.assertEqual(len(tri), 2)
+        xyz = ft.vertices(geo, 0.0)
+        a, b, c = xyz[tri[:, 0]], xyz[tri[:, 1]], xyz[tri[:, 2]]
+        area = 0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1).sum()
+        width = float(np.linalg.norm(xyz[1] - xyz[0]))
+        self.assertAlmostEqual(float(area), width * 20.0, delta=0.01)
+
+    def test_heights_ignore_terrain_and_raise(self):
+        shape = self.wall()._replace(height=500.0, extrude=True)
+        geo = ft.geometry(shape)
+        xyz = ft.vertices(geo, 500.0, heights_at=lambda la, lo: la * 0 + 99)
+        _, _, h = el.ecef_to_geodetic(xyz)
+        np.testing.assert_allclose(h, [150.0, 150.0, 170.0, 170.0],
+                                   atol=1e-3)
+        self.assertEqual(len(geo.wall), 0)
+
+    def test_heights_must_match_points(self):
+        shape = ft.Shape("line", [(58.0, 56.2), (58.01, 56.25)],
+                         alts=(200.0,))
+        self.assertIsNone(ft.geometry(shape))
+
+
 if __name__ == "__main__":
     unittest.main()

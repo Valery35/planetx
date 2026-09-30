@@ -287,6 +287,22 @@ EN = {
     "з. д.": "W",
     "Координаты": "Coordinates",
     "Формат": "Format",
+    "3D-путь": "3D path",
+    "3D-многоугольник": "3D polygon",
+    "Щелчками отметьте точки пути на рельефе, "
+    "крышах и стенах зданий. Отрезки идут по прямой "
+    "в пространстве, длина учитывает перепад "
+    "высот.":
+        "Click points of the path on the terrain, roofs and walls of "
+        "buildings. Segments are straight lines in space, the length "
+        "includes height differences.",
+    "Щелчками отметьте вершины на рельефе, "
+    "крышах и стенах зданий. Площадь считается "
+    "в плоскости многоугольника, например "
+    "у стены или склона.":
+        "Click vertices on the terrain, roofs and walls of buildings. "
+        "The area is measured in the plane of the polygon, for example "
+        "of a wall or a slope.",
     "Солнце": "Sun",
     "Свет от солнца": "Sunlight",
     "Рельеф, здания и воздух освещаются солнцем на заданные дату "

@@ -67,6 +67,10 @@ class _Buffers:
     def __init__(self, mesh, level):
         vertices = np.ascontiguousarray(mesh.vertices)
         indices = np.ascontiguousarray(mesh.indices, dtype=np.uint32)
+        # Сетка остаётся и на процессоре: по ней 3D-линейка ищет точку
+        # на крыше или стене (core.buildings.ray_hit). Живёт, пока тайл
+        # в видеокарте, то есть в пределах бюджета MAX_VERTICES.
+        self.mesh = mesh
         self.center = mesh.center
         self.level = level
         self.vertices = len(vertices)
@@ -268,6 +272,16 @@ class Buildings:
         for key in [k for k in self.results if k not in keep]:
             del self.results[key]
         self.vertices = sum(b.vertices for b in self.buffers.values())
+
+    def ray_hit(self, origin, direction):
+        """Ближайшее попадание луча в показанные здания: (расстояние,
+        точка ECEF) или None. Высоты - как на экране, с вертикальным
+        масштабом рельефа."""
+        if not self.shown:
+            return None
+        meshes = [self.buffers[k].mesh for k in self.wanted
+                  if k in self.buffers]
+        return core.ray_hit(meshes, origin, direction) if meshes else None
 
     # Ресурсы OpenGL.
 

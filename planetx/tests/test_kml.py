@@ -247,5 +247,49 @@ class TestTour(unittest.TestCase):
         self.assertEqual([s[0] for s in tour], [2.0, 5.0])
         self.assertEqual(tour[0][1:], tour[1][1:])
 
+
+ABSOLUTE = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<Placemark><name>Path</name><LineString>
+<altitudeMode>absolute</altitudeMode>
+<coordinates>56.1,58.1,150 56.2,58.1,180.5 56.2,58.2,210</coordinates>
+</LineString></Placemark>
+<Placemark><name>Wall</name><Polygon><altitudeMode>absolute</altitudeMode>
+<outerBoundaryIs><LinearRing><coordinates>56,58,100 56.001,58,100
+56.001,58,120 56,58,120 56,58,100</coordinates></LinearRing>
+</outerBoundaryIs></Polygon></Placemark>
+<Placemark><name>Flat</name><LineString>
+<altitudeMode>absolute</altitudeMode>
+<coordinates>56.1,58.1 56.2,58.1,180</coordinates>
+</LineString></Placemark>
+<Placemark><name>Ground</name><LineString>
+<coordinates>56.1,58.1,150 56.2,58.1,180</coordinates>
+</LineString></Placemark>
+</Document></kml>"""
+
+
+class TestAbsolute(unittest.TestCase):
+    """3D-путь и 3D-многоугольник: высота у каждой вершины."""
+
+    def test_read_heights_per_vertex(self):
+        path, wall, flat, ground = kml.read_kml(ABSOLUTE).children
+        self.assertEqual(path.alts, (150.0, 180.5, 210.0))
+        self.assertEqual(len(wall.points), 4)
+        self.assertEqual(wall.alts, (100.0, 100.0, 120.0, 120.0))
+        # Вершина без высоты - высот нет, объект на земле.
+        self.assertIsNone(flat.alts)
+        self.assertIsNone(ground.alts)
+
+    def test_round_trip(self):
+        path, wall, _, _ = kml.read_kml(ABSOLUTE).children
+        text = kml.write_kml(kml.KFolder("x", True, [path, wall]))
+        self.assertIn("<altitudeMode>absolute</altitudeMode>", text)
+        self.assertIn("<tessellate>0</tessellate>", text)
+        again = kml.read_kml(text.encode("utf-8")).children
+        self.assertEqual(again[0].alts, path.alts)
+        self.assertEqual(again[1].alts, wall.alts)
+        self.assertEqual(again[1].points, wall.points)
+
+
 if __name__ == "__main__":
     unittest.main()

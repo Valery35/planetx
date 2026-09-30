@@ -151,14 +151,16 @@ class KPlace:
     или None. icon - значок точки core.icons. time и view_time -
     время метки и вида, пара строк core.when или None. tour -
     записанный тур: позы (время, широта, долгота, расстояние,
-    азимут, наклон), тогда points - точки взгляда.
+    азимут, наклон), тогда points - точки взгляда. alts - высоты
+    вершин над уровнем моря у altitudeMode absolute, иначе None.
     """
 
     def __init__(self, name, kind, points, color=LINE_COLOR,
                  width=LINE_WIDTH, fill=None, visible=True, view=None,
                  description="", height=0.0, extrude=False,
                  icon=icons.DEFAULT, time=None, view_time=None,
-                 tour=None):
+                 tour=None, alts=None):
+        self.alts = alts
         self.tour = tour
         self.icon = icon
         self.time = time
@@ -258,20 +260,45 @@ def _raise(node, coords):
     return height, _text(node, "extrude", "0") == "1"
 
 
+def _absolute(node, coords, count):
+    """Высоты вершин у altitudeMode absolute, count штук, или None.
+
+    Так KML хранит 3D-путь и 3D-многоугольник. Высота отсчитывается
+    от уровня моря. Глобус ставит её над эллипсоидом, как и высоты
+    рельефа Terrarium, тоже отсчитанные от уровня моря, поэтому вершина
+    стоит над рельефом на верной высоте. Если у вершины нет высоты
+    или число вершин не совпало, высот нет, объект ложится на землю.
+    """
+    if coords is None or _text(node, "altitudeMode") != "absolute":
+        return None
+    alts = []
+    for item in _text(coords, "coordinates").split():
+        if _pair(item) is None:
+            continue
+        parts = item.split(",")
+        try:
+            alts.append(float(parts[2]))
+        except (ValueError, IndexError):
+            return None
+    return tuple(alts[:count]) if len(alts) >= count else None
+
+
 def _geometries(node):
-    """(вид, вершины, подъём, выдавливание) всех геометрий Placemark,
-    MultiGeometry по частям."""
+    """(вид, вершины, подъём, выдавливание, высоты вершин) всех
+    геометрий Placemark, MultiGeometry по частям."""
     out = []
     for child in node:
         name = _local(child.tag)
         if name == "Point":
             points = _coords(child)[:1]
             if points:
-                out.append(("point", points) + _raise(child, child))
+                out.append(("point", points) + _raise(child, child)
+                           + (None,))
         elif name in ("LineString", "LinearRing"):
             points = _coords(child)
             if len(points) >= 2:
-                out.append(("line", points) + _raise(child, child))
+                out.append(("line", points) + _raise(child, child)
+                           + (_absolute(child, child, len(points)),))
         elif name == "Polygon":
             outer = _child(child, "outerBoundaryIs")
             ring = _child(outer, "LinearRing") if outer is not None else None
@@ -279,7 +306,8 @@ def _geometries(node):
             if len(points) > 1 and points[0] == points[-1]:
                 points = points[:-1]
             if len(points) >= 3:
-                out.append(("polygon", points) + _raise(child, ring))
+                out.append(("polygon", points) + _raise(child, ring)
+                           + (_absolute(child, ring, len(points)),))
         elif name == "MultiGeometry":
             out.extend(_geometries(child))
     return out
@@ -368,7 +396,7 @@ def _placemark(node, styles, inherited=None):
         style.update(_style_of(inline))
     name = _text(node, "name")
     out = []
-    for kind, points, height, extrude in _geometries(node):
+    for kind, points, height, extrude, alts in _geometries(node):
         view = _view(node, points[0] if points else None)
         color = style.get("icon" if kind == "point" else "color") \
             or LINE_COLOR
@@ -385,7 +413,7 @@ def _placemark(node, styles, inherited=None):
                           icon=icons.from_href(style.get("href"))
                           if kind == "point" else icons.DEFAULT,
                           time=_time_of(node) or inherited,
-                          view_time=_view_time(node)))
+                          view_time=_view_time(node), alts=alts))
     return out
 
 
@@ -474,14 +502,20 @@ def read_file(data, name=""):
 
 # Запись.
 
-def _coord_text(points, close=False, height=0.0):
+def _coord_text(points, close=False, height=0.0, alts=None):
+    """Координаты «lon,lat,alt». alts - высота каждой вершины, иначе
+    у всех height."""
     pts = list(points) + (list(points[:1]) if close else [])
-    return " ".join("{:.8f},{:.8f},{:g}".format(lon, lat, height)
-                    for lat, lon in pts)
+    heights = [height] * len(points) if alts is None else list(alts)
+    heights += heights[:1] if close else []
+    return " ".join("{:.8f},{:.8f},{:g}".format(lon, lat, h)
+                    for (lat, lon), h in zip(pts, heights))
 
 
 def _raise_kml(place):
     """Режим высоты и выдавливание геометрии для записи."""
+    if getattr(place, "alts", None) is not None:
+        return "<altitudeMode>absolute</altitudeMode>"
     if not place.height:
         return ""
     return "<extrude>{}</extrude><altitudeMode>relativeToGround" \
@@ -517,18 +551,23 @@ def _placemark_kml(place, indent):
                                       1 if place.fill else 0)
     mode = _raise_kml(place)
     h = float(place.height or 0.0)
+    alts = getattr(place, "alts", None) if place.kind != "point" else None
+    # Прямые отрезки 3D-пути - без tessellate, иначе линия ложится
+    # на рельеф.
+    tess = 0 if alts is not None else 1
     if place.kind == "point":
         geometry = "<Point>{}<coordinates>{}</coordinates></Point>".format(
             mode, _coord_text(place.points, height=h))
     elif place.kind == "line":
-        geometry = "<LineString><tessellate>1</tessellate>{}<coordinates>" \
+        geometry = "<LineString><tessellate>{}</tessellate>{}<coordinates>" \
             "{}</coordinates></LineString>".format(
-                mode, _coord_text(place.points, height=h))
+                tess, mode, _coord_text(place.points, height=h, alts=alts))
     else:
-        geometry = "<Polygon><tessellate>1</tessellate>{}" \
+        geometry = "<Polygon><tessellate>{}</tessellate>{}" \
             "<outerBoundaryIs><LinearRing><coordinates>{}</coordinates>" \
             "</LinearRing></outerBoundaryIs></Polygon>".format(
-                mode, _coord_text(place.points, close=True, height=h))
+                tess, mode, _coord_text(place.points, close=True, height=h,
+                                        alts=alts))
     look = ""
     if place.view is not None:
         lat, lon, distance, heading, tilt = place.view

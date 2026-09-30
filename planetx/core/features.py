@@ -34,9 +34,9 @@ SHAPE_POINTS = 800
 
 Shape = namedtuple("Shape",
                    "kind points color width fill name height extrude "
-                   "icon",
+                   "icon alts",
                    defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
-                             False, "dot"))
+                             False, "dot", None))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
@@ -45,7 +45,11 @@ kind - "point", "line" или "polygon". points - вершины (широта,
 цвет заливки многоугольника RGBA или None. name - подпись. height -
 подъём над рельефом в метрах, как «относительно земли» у Google Earth.
 extrude - стена от объекта до земли, у точки - стойка. icon - значок
-точки из core/icons.py, окрашенный цветом color.
+точки из core/icons.py, окрашенный цветом color. alts - высоты вершин
+над эллипсоидом в метрах, как «абсолютно» у Google Earth, или None.
+У объекта с alts стороны - прямые отрезки в пространстве, без сгущения
+по дуге и без посадки на рельеф, height и extrude не действуют. Так
+рисуются 3D-путь и 3D-многоугольник линейки.
 """
 
 
@@ -152,12 +156,15 @@ def share_height(share):
     return (MAX_HEIGHT + 1.0) ** share - 1.0
 
 
-Geometry = namedtuple("Geometry", "ring lines triangles wall stem")
-Geometry.__doc__ = """Контур объекта для видеокарты, от высот не зависит.
+Geometry = namedtuple("Geometry", "ring lines triangles wall stem alts",
+                      defaults=(None,))
+Geometry.__doc__ = """Контур объекта для видеокарты, от высот рельефа
+не зависит.
 
 ring - вершины (широта, долгота) после сгущения. lines, triangles,
 wall - индексы отрезков, заливки и стены. У выдавленного объекта
 вершины идут дважды: поднятые, потом на земле. stem - стойка точки.
+alts - высоты вершин над эллипсоидом у объекта с абсолютными высотами.
 """
 
 
@@ -174,6 +181,8 @@ def geometry(shape):
                         empty, True)
     if len(shape.points) < 2:
         return None
+    if shape.alts is not None:
+        return _solid_geometry(shape)
     closed = shape.kind == "polygon" and len(shape.points) >= 3
     triangles = empty
     if closed and shape.fill is not None:
@@ -185,8 +194,51 @@ def geometry(shape):
                     wall, False)
 
 
+def _solid_geometry(shape):
+    """Контур объекта с абсолютными высотами: вершины как есть, заливка
+    режется в плоскости многоугольника."""
+    ring = np.asarray(shape.points, dtype=np.float64).reshape(-1, 2)
+    alts = np.asarray(shape.alts, dtype=np.float64).reshape(-1)
+    if len(alts) != len(ring):
+        return None
+    closed = shape.kind == "polygon" and len(ring) >= 3
+    triangles = np.zeros(0, dtype=np.uint32)
+    if closed and shape.fill is not None:
+        triangles = triangulate(solid_plane(ring, alts))
+    return Geometry(ring, segments(len(ring), closed=closed), triangles,
+                    np.zeros(0, dtype=np.uint32), False, alts)
+
+
+def solid_plane(latlon, alts):
+    """Вершины многоугольника в его собственной плоскости, метры (n, 2).
+
+    Плоскость проходит через среднюю точку перпендикулярно векторной
+    площади. Так режется и отвесная стена, у которой на карте площади
+    нет. Если векторная площадь почти нулевая, берётся касательная
+    плоскость, как у plane.
+    """
+    latlon = np.asarray(latlon, dtype=np.float64).reshape(-1, 2)
+    xyz = geodetic_to_ecef(latlon[:, 0], latlon[:, 1],
+                           np.asarray(alts, dtype=np.float64))
+    rel = xyz - xyz.mean(axis=0)
+    normal = np.cross(rel, np.roll(rel, -1, axis=0)).sum(axis=0)
+    size = float((rel * rel).sum(axis=1).max())
+    length = float(np.linalg.norm(normal))
+    if length <= 1e-9 * size:
+        return plane(latlon)
+    normal /= length
+    helper = np.eye(3)[int(np.argmin(np.abs(normal)))]
+    u = np.cross(normal, helper)
+    u /= np.linalg.norm(u)
+    v = np.cross(normal, u)
+    return np.stack([rel @ u, rel @ v], axis=1)
+
+
 def vertices(geo, height, heights_at=None):
-    """Вершины контура в ECEF: поднятые, у стены и стойки ещё земля."""
+    """Вершины контура в ECEF: поднятые, у стены и стойки ещё земля.
+    У объекта с абсолютными высотами - вершины на своих высотах."""
+    if geo.alts is not None:
+        return geodetic_to_ecef(geo.ring[:, 0], geo.ring[:, 1], geo.alts)
     top = lift(geo.ring, offset=height, heights_at=heights_at)
     if len(geo.wall) or geo.stem:
         return np.vstack([top, lift(geo.ring, heights_at=heights_at)])
