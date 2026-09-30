@@ -191,7 +191,7 @@ take effect at once, without the Refresh button.
 
 | Group | Rows |
 |---|---|
-| Borders and names | Borders, Places, Water names |
+| Borders and names | Borders, Places, Water-body names |
 | Transport | Roads, Road numbers, Railways, Airports |
 | Nature | Rivers, Lakes and reservoirs, Peaks, Reserves and national parks |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |

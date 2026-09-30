@@ -342,7 +342,7 @@ EN = {
         "Names of countries, regions, cities, towns and villages. Smaller "
         "places appear as you zoom in.",
     "Названия водоёмов":
-        "Water names",
+        "Water-body names",
     "Названия морей, озёр и водохранилищ, голубым курсивом.":
         "Names of seas, lakes and reservoirs, in light blue italics.",
     "Транспорт": "Transport",
