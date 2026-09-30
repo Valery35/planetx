@@ -22,7 +22,7 @@ from qgis.PyQt.QtWidgets import (QDialog, QLabel, QPushButton, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout)
 
 from ..core.coords import format_point
-from ..core.ellipsoid import A
+from ..core import ellipsoid
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -40,8 +40,8 @@ def _layer_point(layer, lat, lon, metres):
     to_layer = QgsCoordinateTransform(
         QgsCoordinateReferenceSystem("EPSG:4326"), layer.crs(),
         QgsProject.instance())
-    dlon = math.degrees(metres / (A * max(math.cos(math.radians(lat)),
-                                          1e-6)))
+    dlon = math.degrees(metres / (ellipsoid.A * max(
+        math.cos(math.radians(lat)), 1e-6)))
     try:
         p = to_layer.transform(QgsPointXY(lon, lat))
         q = to_layer.transform(QgsPointXY(min(lon + dlon, 180.0), lat))

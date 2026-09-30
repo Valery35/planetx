@@ -90,7 +90,8 @@ def capture(window, folder=None, name=""):
         places = tree.name
         kml = write_kml(tree)
     scene = Scene((pose.lat, pose.lon, pose.distance, pose.heading,
-                   pose.tilt), time, layers, view, places, name)
+                   pose.tilt), time, layers, view, places, name,
+                  body=window.planet.key)
     return scene, kml
 
 
@@ -128,6 +129,9 @@ def _navigation_mode(number):
 def apply(window, scene, kml=b""):
     """Поставить сцену на глобус. Возвращает (ключ папки меток или None,
     названия слоёв, которые не нашлись и не открылись)."""
+    # Тело - первым: метки сцены ложатся на текущее тело, земные
+    # настройки вида на другом теле остаются выключенными.
+    window.set_body(scene.body)
     view = scene.view
     names = [source.name for source in window.sources]
     if view.get("basemap") in names:

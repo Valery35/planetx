@@ -20,15 +20,14 @@ import math
 from collections import namedtuple
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A, B, E2
+    from . import ellipsoid
     from .tiling import MAX_LEVEL, skirt_depth
 except ImportError:  # headless-тесты
-    from ellipsoid import A, B, E2
+    import ellipsoid
     from tiling import MAX_LEVEL, skirt_depth
 
 THRESHOLD = 1.5  # пикселей
 TEXELS = 256
-CIRCUMFERENCE = 2.0 * math.pi * A
 # Запас к радиусу описанной сферы и к угловому радиусу тайла. Точки
 # между девятью опорными могут лежать чуть дальше них.
 MARGIN = 1.05
@@ -47,6 +46,11 @@ draw - тайлы для рисования, без перекрытий. want -
 _cache = {}
 
 
+def clear_cache():
+    """Забыть границы тайлов: они зависят от размеров тела."""
+    _cache.clear()
+
+
 def _ecef(lat, lon):
     """geodetic_to_ecef для одной точки на math, без NumPy.
 
@@ -56,9 +60,9 @@ def _ecef(lat, lon):
     """
     la, lo = math.radians(lat), math.radians(lon)
     sin_lat, cos_lat = math.sin(la), math.cos(la)
-    n = A / math.sqrt(1.0 - E2 * sin_lat * sin_lat)
+    n = ellipsoid.A / math.sqrt(1.0 - ellipsoid.E2 * sin_lat * sin_lat)
     return (n * cos_lat * math.cos(lo), n * cos_lat * math.sin(lo),
-            n * (1.0 - E2) * sin_lat)
+            n * (1.0 - ellipsoid.E2) * sin_lat)
 
 
 def tile_info(z, x, y):
@@ -90,7 +94,8 @@ def tile_info(z, x, y):
     alpha = min(math.pi, alpha * MARGIN)
     north, south = lats[0], lats[2]
     nearest = 0.0 if south <= 0.0 <= north else min(abs(north), abs(south))
-    texel = CIRCUMFERENCE * math.cos(math.radians(nearest)) / (TEXELS * n)
+    texel = (2.0 * math.pi * ellipsoid.A * math.cos(math.radians(nearest))
+             / (TEXELS * n))
     info = TileInfo(center, radius, direction, alpha, texel)
     if len(_cache) > CACHE_LIMIT:
         _cache.clear()
@@ -125,7 +130,9 @@ class _Frame:
         self.eye_dir = tuple(c / dist for c in self.eye)
         # Угол от точки под камерой до горизонта, на сфере радиуса B.
         # Меньший радиус даёт больший угол, отсечение остаётся осторожным.
-        self.horizon = math.acos(min(1.0, B / dist)) if dist > B else math.pi
+        b = ellipsoid.B
+        self.horizon = math.acos(min(1.0, b / dist)) if dist > b else math.pi
+        self.b = b
 
     def visible(self, z, info, low=0.0, high=0.0):
         """Может ли тайл попасть в кадр.
@@ -140,7 +147,8 @@ class _Frame:
         dx, dy, dz = info.direction
         cos = ex * dx + ey * dy + ez * dz
         angle = math.acos(-1.0 if cos < -1.0 else 1.0 if cos > 1.0 else cos)
-        beyond = math.acos(B / (B + high)) if high > 0.0 else 0.0
+        b = self.b
+        beyond = math.acos(b / (b + high)) if high > 0.0 else 0.0
         if angle > self.horizon + info.alpha + beyond:
             return False
         if z <= 2:
@@ -269,6 +277,7 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
     acos = math.acos
     sqrt = math.sqrt
     cache = _cache
+    polar = ellipsoid.B
 
     def probe(key, check):
         """Экранная ошибка тайла или None, если он точно не виден.
@@ -287,7 +296,7 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
         if check:
             cos = ex * dx + ey * dy + ez * dz
             angle = acos(-1.0 if cos < -1.0 else 1.0 if cos > 1.0 else cos)
-            beyond = acos(B / (B + high)) if high > 0.0 else 0.0
+            beyond = acos(polar / (polar + high)) if high > 0.0 else 0.0
             if angle > horizon + info.alpha + beyond:
                 return None
         cx, cy, cz = info.center

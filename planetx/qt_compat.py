@@ -9,9 +9,9 @@ QGIS 3.40 работает на Qt 5, QGIS 4 на Qt 6. Модуль собир�
 from qgis.PyQt import QtCore
 
 try:  # Qt 6
-    from qgis.PyQt.QtGui import QAction
+    from qgis.PyQt.QtGui import QAction, QActionGroup
 except ImportError:  # Qt 5
-    from qgis.PyQt.QtWidgets import QAction
+    from qgis.PyQt.QtWidgets import QAction, QActionGroup
 
 # В Qt 6 виджет OpenGL вынесен в отдельный модуль, и qgis.PyQt его
 # не отдаёт. Поэтому модуль берётся из PyQt6 напрямую.
@@ -36,4 +36,5 @@ def enum_int(value):
     return value.value if hasattr(value, "value") else int(value)
 
 
-__all__ = ["QAction", "QOpenGLWidget", "QT_MAJOR", "enum", "enum_int"]
+__all__ = ["QAction", "QActionGroup", "QOpenGLWidget", "QT_MAJOR", "enum",
+           "enum_int"]

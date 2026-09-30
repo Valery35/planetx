@@ -3,7 +3,7 @@
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Сцена - вид глобуса целиком, который сохраняется и передаётся.
 
-Расчёт без Qt. Сцена - камера, время временного контроллера, слои
+Расчёт без Qt. Сцена - тело, камера, время временного контроллера, слои
 проекта на глобусе ссылкой на источник, настройки вида и название
 папки меток сцены. Сами метки лежат рядом в KML (core/kml.py).
 
@@ -44,11 +44,13 @@ class Scene:
     словарей name, provider, source, kind ("vector" или "raster").
     view - настройки вида: basemap, relief, scale, groups, language,
     extras - включены ли строки раздела «Слои» по ключам.
-    places - название папки меток сцены или "".
+    places - название папки меток сцены или "". body - ключ тела
+    из core.ellipsoid, камера и метки сцены стоят на нём. В сценах
+    до планет тела нет, это Земля.
     """
 
     def __init__(self, camera, time=None, layers=(), view=None, places="",
-                 name=""):
+                 name="", body="earth"):
         # Азимут и наклон по умолчанию нули.
         self.camera = (tuple(float(v) for v in camera) + (0.0, 0.0))[:5]
         self.time = dict(time) if time else None
@@ -56,12 +58,14 @@ class Scene:
         self.view = dict(view or {})
         self.places = places
         self.name = name
+        self.body = body
 
     def to_dict(self):
         lat, lon, distance, heading, tilt = self.camera
         return {"format": FORMAT, "name": self.name,
                 "camera": {"lat": lat, "lon": lon, "distance": distance,
-                           "heading": heading, "tilt": tilt},
+                           "heading": heading, "tilt": tilt,
+                           "body": self.body},
                 "time": self.time, "layers": self.layers,
                 "view": self.view, "places": self.places}
 
@@ -93,7 +97,9 @@ class Scene:
         places = data.get("places") if isinstance(data.get("places"),
                                                   str) else ""
         name = data.get("name") if isinstance(data.get("name"), str) else ""
-        return cls(camera, time, layers, view, places, name)
+        body = cam.get("body") if isinstance(cam.get("body"), str) \
+            else "earth"
+        return cls(camera, time, layers, view, places, name, body)
 
 
 def write_scene(scene, kml_text=""):

@@ -46,7 +46,7 @@ class TestArc(unittest.TestCase):
     def test_over_the_pole(self):
         # Через полюс: два градуса дуги, а не половина параллели.
         self.assertAlmostEqual(sy.arc(89, 0, 89, 180),
-                               2 * math.radians(1) * sy.A, 0)
+                               2 * math.radians(1) * sy.ellipsoid.A, 0)
 
 
 class TestSameView(unittest.TestCase):

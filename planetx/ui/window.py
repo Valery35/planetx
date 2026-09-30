@@ -24,8 +24,8 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
-from ..core import (basemap, clouds, lookat, stars, sun, temperature,
-                    when)
+from ..core import (basemap, clouds, ellipsoid, lookat, stars, sun,
+                    temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints)
@@ -36,7 +36,8 @@ from ..core.flight import Flight, fit_view
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                             place_text, search_url)
 from ..core.mipmap import mip_chain
-from ..core.navigation import focal, ground_under
+from ..core.navigation import Pose, focal, ground_under
+from ..core.planets import EARTH_PLANET, planet_by_key
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.kml import KmlError, read_file as read_kml_file, read_kml, \
@@ -104,6 +105,8 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # Солнце выключено, умолчание плана работ после 0.16.0.
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False}
+# Строки раздела «Слои», которые есть только у Земли.
+EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun")
 SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 GRID_COLOR = (220, 220, 220, 255)
@@ -308,6 +311,10 @@ class GlobeWindow(QWidget):
         self.setWindowTitle("PlanetX")
         self.setWindowIcon(QIcon(os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "icon.svg")))
+        # Окно открывается на Земле, даже если прежнее закрылось на Марсе:
+        # размеры тела общие для модуля.
+        self.planet = EARTH_PLANET
+        ellipsoid.set_body(EARTH_PLANET.body)
 
         self.view = GlobeView(self)
         # Шкала времени меток, своя, как в Google Earth. Она нужна
@@ -479,6 +486,7 @@ class GlobeWindow(QWidget):
         self._record_timer.timeout.connect(self._record_sample)
         self.toolbar.record_toggled.connect(self._record_toggled)
         self.toolbar.time_toggled.connect(self._time_toggled)
+        self.toolbar.body_chosen.connect(self.set_body)
         self._update_timebar()
         self.tour.stop_reached.connect(
             lambda stop: self._show_time(stop.time))
@@ -643,6 +651,10 @@ class GlobeWindow(QWidget):
         self._apply_extra(key, bool(on))
 
     def _apply_extra(self, key, on):
+        if key in EARTH_EXTRAS and not self.planet.earth:
+            # Облака, температура, здания и солнце - земные. Флажок
+            # помнится и действует после возврата на Землю.
+            on = False
         if key == "grid":
             self._grid_key = None
             self._update_grid()
@@ -675,7 +687,8 @@ class GlobeWindow(QWidget):
         """Направление на солнце в вид. Пока строка «Солнце» включена
         и шкала закрыта, солнце идёт по часам раз в SUN_PERIOD."""
         # Шкала времени бывает раньше строк раздела «Слои».
-        on = getattr(self, "extras", {}).get("sun", False)
+        on = getattr(self, "extras", {}).get("sun", False) \
+            and self.planet.earth
         self.view.sun = sun.direction(self.sun_time()) if on else None
         timer = getattr(self, "sun_timer", None)
         if timer is None:
@@ -713,7 +726,9 @@ class GlobeWindow(QWidget):
         pose = self.view.navigator.pose
         width = 2.0 * pose.distance * math.tan(
             math.radians(self.view.camera.fov_y) / 2.0)
-        self.layer_labels.update(self._applied_layers or [], pose.lat,
+        # Слои проекта - земные, на другом теле подписей нет.
+        layers = (self._applied_layers or []) if self.planet.earth else []
+        self.layer_labels.update(layers, pose.lat,
                                  pose.lon, width, force)
 
     def _show_layer_labels(self):
@@ -848,7 +863,61 @@ class GlobeWindow(QWidget):
         self._changed()
 
     def _relief_target(self):
+        """Масштаб рельефа. У Марса и Луны высот тайлами нет."""
+        if not self.planet.earth:
+            return 0.0
         return self._scale if self._relief else 0.0
+
+    # Тело глобуса.
+
+    def set_body(self, key):
+        """Земля, Марс или Луна. Размеры тела, подложка, воздух,
+        земные слои и вид - всё сразу. Камера встаёт над домашней
+        точкой тела."""
+        planet = planet_by_key(key)
+        self.toolbar.set_body(planet.key)
+        if planet is self.planet:
+            return
+        self.planet = planet
+        ellipsoid.set_body(planet.body)
+        if planet.earth:
+            source = self.sources[self._basemap]
+        else:
+            name, url, top, text, link = planet.imagery
+            source = basemap.Source(name, url, top, (text, link),
+                                    builtin=True)
+        old = self.loader
+        old.abort()
+        old.deleteLater()
+        self.errors.clear()
+        self.source = source
+        self._start_loader()
+        self.view.change_body(source.max_level, planet.air)
+        self.loader.want_many((key, -key[0]) for key in start_keys())
+        self.view.set_relief(self._relief_target())
+        self.view.reset_places(self.source.max_level)
+        self.view.label_kinds = label_kinds(self._groups) \
+            if planet.earth else set()
+        self._update_overlay()
+        self._update_layer_labels(force=True)
+        for extra in EARTH_EXTRAS:
+            self._apply_extra(extra, self.extras.get(extra, False))
+        if not planet.earth:
+            # Отжатые кнопки сами выключают синхронизацию и опрос.
+            self.toolbar.sync.setChecked(False)
+            self.toolbar.identify.setChecked(False)
+        self.toolbar.sync.setEnabled(planet.earth)
+        self.toolbar.identify.setEnabled(planet.earth)
+        self.panel.set_earth(planet.earth)
+        self._grid_key = None
+        self._update_grid()
+        self._refresh_shapes()
+        lat, lon, distance = planet.home
+        navigator = self.view.navigator
+        navigator.stop()
+        navigator.set_pose(Pose(lat, lon, distance, 0.0, 0.0))
+        self._show_attribution()
+        self.view.update()
 
     def _read_shown(self):
         """Отметки слоёв из проекта.
@@ -879,16 +948,22 @@ class GlobeWindow(QWidget):
             self._mark_dirty(self._pending())
 
     def _pending(self):
-        """Есть ли выбранное, что ещё не видно на глобусе."""
-        return (self._basemap != self.sources.index(self.source)
+        """Есть ли выбранное, что ещё не видно на глобусе. У Марса
+        и Луны подложка своя, земные подложка и слои ждут Земли."""
+        if not self.planet.earth:
+            return False
+        return (self.source not in self.sources
+                or self._basemap != self.sources.index(self.source)
                 or self._relief_target() != self.view.store.scale
                 or self._overlay_layers() != self._applied_layers
                 or self._layers_stale)
 
     def refresh(self):
-        """Показать на глобусе выбранные подложку, рельеф и слои."""
+        """Показать на глобусе выбранные подложку, рельеф и слои. У Марса
+        и Луны подложка своя, она остаётся."""
         self.refresh_timer.stop()
-        self._switch_basemap(self.sources[self._basemap])
+        if self.planet.earth:
+            self._switch_basemap(self.sources[self._basemap])
         self.view.set_relief(self._relief_target())
         self._apply_vector(force=True)
         self._mark_dirty(False)
@@ -910,7 +985,8 @@ class GlobeWindow(QWidget):
                 and self._tilejson is None:
             self._tilejson = fetch_json(OPENFREEMAP_TILEJSON,
                                         self._tilejson_done)
-        self.view.label_kinds = label_kinds(self._groups)
+        self.view.label_kinds = label_kinds(self._groups) \
+            if self.planet.earth else set()
         self.view.update()
         # Наложение перерисовывается, только если сменились линии
         # или слои. Надписи пунктов рисует вид. Изменённые слои проекта
@@ -1049,6 +1125,9 @@ class GlobeWindow(QWidget):
                   for layer_id in self._applied_layers or ()]
         layers = [layer for layer in layers if layer is not None]
         groups = self._applied_groups or set()
+        if not self.planet.earth:
+            # Слои проекта и векторная основа - земные.
+            layers, groups = [], set()
         if groups & set(LINE_GROUPS) and self.ofm_layer is not None:
             layers.append(self.ofm_layer)
         min_levels = {}
@@ -1239,6 +1318,13 @@ class GlobeWindow(QWidget):
             self._fly_to(target[0], target[1], distance)
             return
         query = normalize(text)
+        if query and not self.planet.earth:
+            # Поиск по названию - Nominatim, он знает только Землю.
+            self.message = (tr("Поиск по названию есть только у Земли. "
+                               "Координаты вводятся числами."),
+                            time.monotonic())
+            self._show_state()
+            return
         if query:
             self._search(query)
 
@@ -1385,8 +1471,9 @@ class GlobeWindow(QWidget):
         # Метка с открытым окном свойств показывается с правками окна.
         shapes = [self.previews.get(p.key, p.shape)
                   for p in self.myplaces.places
-                  if p.visible and self._time_ok(p) and not p.tour]
-        if getattr(self, "tracks", None) is not None:
+                  if p.visible and self._time_ok(p) and not p.tour
+                  and p.body == self.planet.key]
+        if getattr(self, "tracks", None) is not None and self.planet.earth:
             shapes += self.tracks.shapes()
         shapes += getattr(self, "grid_shapes", [])
         if self._ruler_open():
@@ -1570,7 +1657,9 @@ class GlobeWindow(QWidget):
         return self.view.store.heights_at(lats, lons, scaled=False)
 
     def _has_height_tile(self, key):
-        return key in self.view.store.tiles
+        # Высот Марса и Луны нет, линейка и профиль не ждут их: высоты
+        # там нулевые. Иначе вид просил бы земные тайлы Terrarium.
+        return key in self.view.store.tiles or not self.planet.earth
 
     def _ruler_changed(self):
         self._update_tool_marks()
@@ -1947,7 +2036,10 @@ class GlobeWindow(QWidget):
         return Stop(name, lat, lon, distance)
 
     def fly_to_place(self, place):
-        """Перелёт к метке, как остановка тура."""
+        """Перелёт к метке, как остановка тура. Метка другого тела
+        сначала переключает тело."""
+        if place.body != self.planet.key:
+            self.set_body(place.body)
         stop = self.place_stop(place)
         self._fly_to(stop.lat, stop.lon, stop.distance, stop.heading,
                      stop.tilt)
@@ -1958,7 +2050,8 @@ class GlobeWindow(QWidget):
         папок в порядке списка, None - все «Мои метки»."""
         stops = []
         for place in self.myplaces.places_in(folder):
-            if place.visible:
+            # Тур идёт по меткам тела, которое сейчас на глобусе.
+            if place.visible and place.body == self.planet.key:
                 stop = self.place_stop(place, along=True)
                 stop.time = place.view_time or place.time
                 stops.append(stop)

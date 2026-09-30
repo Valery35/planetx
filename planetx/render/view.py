@@ -22,7 +22,7 @@ from ..core import lod
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
 from ..core.camera import Camera
-from ..core.ellipsoid import A, B
+from ..core import ellipsoid
 from ..core.ellipsoid import ecef_to_geodetic
 from ..core.flight import Flight
 from ..core.navigation import (Navigator, Pose, altitude, ground_under,
@@ -41,8 +41,8 @@ from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
 from .sky import Sky
 from .stars import Stars
-from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SHELL, SKY_FRAGMENT,
-                      TILE_FRAGMENT, TILE_VERTEX)
+from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SKY_FRAGMENT,
+                      TILE_FRAGMENT, TILE_VERTEX, shell)
 
 START_LEVELS = (0, 1, 2)
 START_VIEW = (58.0105, 56.2294, 2.0e7)  # над Пермью, 20 000 км
@@ -56,7 +56,6 @@ UNDERLAY_LEVEL = 2
 # буфера глубины у дальней плоскости. Худший случай - глаз на высоте
 # 9 км в 50 м от склона: ближняя плоскость 25 м, дальняя 680 км,
 # шаг 1.1 км.
-UNDERLAY_SCALE = 1.0 - UNDERLAY_DEPTH / A
 FRAMES_KEPT = 300
 UPLOADS_PER_FRAME = 3
 UPLOAD_TIME = 0.002  # секунд на загрузку текстур в кадре
@@ -123,19 +122,22 @@ def surface_format():
 
 
 AIR_UNIFORMS = ("u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes",
-                "u_qc_shell", "u_air", "u_sun", "u_sun_on")
+                "u_qc_shell", "u_air", "u_sun", "u_sun_on", "u_radius_km",
+                "u_air_tint")
 
 
 def uniforms(program, names):
     return {name: GL.glGetUniformLocation(program, name) for name in names}
 
 
-def ray_uniforms(u, camera, a=A, b=B):
+def ray_uniforms(u, camera, a=None, b=None):
     """Общие для полноэкранных проходов величины луча из глаза.
 
     Координаты в долях полуосей эллипсоида с полуосями a и b. Возвращает
     глаз в этих координатах, float64.
     """
+    a = ellipsoid.A if a is None else a
+    b = ellipsoid.B if b is None else b
     axes = np.array([1.0 / a, 1.0 / a, 1.0 / b])
     eye = camera.eye * axes
     t = math.tan(math.radians(camera.fov_y) / 2.0)
@@ -147,12 +149,16 @@ def ray_uniforms(u, camera, a=A, b=B):
     return eye
 
 
-def air_uniforms(u, camera, on, sun=None):
+def air_uniforms(u, camera, on, sun=None, tint=(1.0, 1.0, 1.0)):
     """Величины воздуха и солнца. sun - направление на солнце в ECEF
-    или None, тогда свет - отмывка без солнца."""
+    или None, тогда свет - отмывка без солнца. tint - рассеяние
+    воздуха тела к земному по R, G, B или None - воздуха нет."""
     eye = ray_uniforms(u, camera)
-    gpu.gl.glUniform1f(u["u_qc_shell"], float(eye @ eye) - SHELL * SHELL)
-    gpu.gl.glUniform1f(u["u_air"], 1.0 if on else 0.0)
+    top = shell(ellipsoid.A)
+    gpu.gl.glUniform1f(u["u_qc_shell"], float(eye @ eye) - top * top)
+    gpu.gl.glUniform1f(u["u_air"], 1.0 if on and tint is not None else 0.0)
+    gpu.gl.glUniform1f(u["u_radius_km"], ellipsoid.A / 1000.0)
+    gpu.gl.glUniform3f(u["u_air_tint"], *(tint or (1.0, 1.0, 1.0)))
     gpu.gl.glUniform3f(u["u_sun"], *(sun or (0.0, 0.0, 1.0)))
     gpu.gl.glUniform1f(u["u_sun_on"], 0.0 if sun is None else 1.0)
     return eye
@@ -342,6 +348,9 @@ class GlobeView(QOpenGLWidget):
         # Направление на солнце в ECEF или None - свет отмывки без
         # солнца. Ставит окно по строке «Солнце» раздела «Слои».
         self.sun = None
+        # Воздух тела: рассеяние к земному по R, G, B, None - воздуха
+        # нет. Ставит окно по телу (core/planets.py).
+        self.air_tint = (1.0, 1.0, 1.0)
         self.hole_counts = []
         # Надписи пунктов: тайлы пунктов, их загрузчик и отрисовка.
         # Загрузчик ставит окно, когда известен адрес тайлов.
@@ -525,6 +534,47 @@ class GlobeView(QOpenGLWidget):
         self.stale = set(self.textures)
         self._wanted = frozenset()
         self._wanted_at = 0.0
+        self.update()
+
+    def change_body(self, max_level, air_tint):
+        """Новое тело. core.ellipsoid.set_body окно уже сделало.
+
+        Сброс полный: тайлы, сетки, высоты, наложение и кэш выбора
+        тайлов прежнего тела на другом радиусе не годятся даже на время.
+        Полярные шапки и подстилка строятся заново. Кадр не рисуется,
+        пока не придут уровни 0-2 нового тела.
+        """
+        self.max_level = max_level
+        self.air_tint = air_tint
+        lod.clear_cache()
+        self.memo = lod.Memo()
+        self.store.clear()
+        self.relief += 1
+        self.build_pool.clear()
+        self.building.clear()
+        self.built.clear()
+        self.pending.clear()
+        self.overlay_pending.clear()
+        self.stale = set()
+        self._wanted = frozenset()
+        self._wanted_at = 0.0
+        if self._context is not None:
+            self.makeCurrent()
+            for key in list(self.textures):
+                self._forget(key)
+            for key in list(self.overlays):
+                self._forget_overlay(key)
+            for mesh in self.caps + list(self.underlay_meshes.values()):
+                mesh.delete()
+            for texture in self.cap_textures:
+                gpu.delete_texture(texture)
+            self.cap_textures = []
+            self.caps = [gpu.GpuMesh(polar_cap_mesh(north))
+                         for north in (True, False)]
+            self.underlay_meshes = {
+                key: gpu.GpuMesh(tile_mesh(*key)) for key in START_KEYS
+                if key[0] == UNDERLAY_LEVEL}
+            self.doneCurrent()
         self.update()
 
     def _forget(self, key):
@@ -1344,7 +1394,8 @@ class GlobeView(QOpenGLWidget):
         self._clear_overlay()
         self._clear_gibs()
         air = self.atmosphere and not self.show_holes
-        air_uniforms(self.tile_air, self.camera, air, self.sun)
+        air_uniforms(self.tile_air, self.camera, air, self.sun,
+                     self.air_tint)
 
         items = list(zip(self.caps, self.cap_textures or [self.ocean] * 2))
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
@@ -1352,7 +1403,7 @@ class GlobeView(QOpenGLWidget):
         scales = [1.0] * surface
         under = self._underlay_items(sel.keep)
         items += under
-        scales += [UNDERLAY_SCALE] * len(under)
+        scales += [1.0 - UNDERLAY_DEPTH / ellipsoid.A] * len(under)
         mvps = self.camera.tiles_mvp([mesh.center for mesh, _ in items],
                                      scales=scales)
         overlays = None
@@ -1635,7 +1686,8 @@ class GlobeView(QOpenGLWidget):
         """
         GL.glUseProgram(self.hole_program)
         u = self.hole_uniforms
-        eye = ray_uniforms(u, self.camera, A - HOLE_MARGIN, B - HOLE_MARGIN)
+        eye = ray_uniforms(u, self.camera, ellipsoid.A - HOLE_MARGIN,
+                           ellipsoid.B - HOLE_MARGIN)
         GL.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
         GL.glDepthFunc(GL.GL_LEQUAL)
         GL.glDepthMask(GL.GL_FALSE)
@@ -1699,7 +1751,7 @@ class GlobeView(QOpenGLWidget):
         gl = gpu.gl
         gl.glUseProgram(self.sky_program)
         u = self.sky_air
-        eye = air_uniforms(u, self.camera, True, self.sun)
+        eye = air_uniforms(u, self.camera, True, self.sun, self.air_tint)
         gl.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)

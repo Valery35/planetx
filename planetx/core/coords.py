@@ -14,10 +14,10 @@ import math
 import re
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A, F
+    from .ellipsoid import WGS84_A as A, WGS84_F as F
     from .flight import parse_latlon
 except ImportError:  # headless-тесты
-    from ellipsoid import A, F
+    from ellipsoid import WGS84_A as A, WGS84_F as F
     from flight import parse_latlon
 
 FORMATS = ("decimal", "dms", "utm", "mgrs")

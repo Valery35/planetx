@@ -116,6 +116,10 @@ EN = {
         "exaggeration.",
     "Поиск мест: Nominatim, © участники OpenStreetMap.":
         "Place search: Nominatim, © OpenStreetMap contributors.",
+    "Марс: NASA, USGS, Viking MDIM2.1. Луна: USGS, LRO LOLA. Тайлы: "
+    "OpenPlanetaryMap.":
+        "Mars: NASA, USGS, Viking MDIM2.1. Moon: USGS, LRO LOLA. Tiles: "
+        "OpenPlanetaryMap.",
     "Облака: NASA GIBS, снимки VIIRS.": "Clouds: NASA GIBS, VIIRS imagery.",
     "Звёзды: каталог ярких звёзд Йельского университета.":
         "Stars: the Yale Bright Star Catalogue.",
@@ -189,6 +193,17 @@ EN = {
         "are white too and stay visible.",
     "3D-здания": "3D buildings",
     "Солнце": "Sun",
+    "Земля": "Earth",
+    "Марс": "Mars",
+    "Луна": "Moon",
+    "Тело глобуса - Земля, Марс или Луна. У Марса и Луны свои "
+    "снимки, земные слои, поиск и здания на них выключены.":
+        "The body of the globe - Earth, Mars or the Moon. Mars and the Moon "
+        "have their own imagery, Earth layers, search and buildings are off "
+        "there.",
+    "Поиск по названию есть только у Земли. Координаты вводятся числами.":
+        "Search by name is available for the Earth only. Coordinates are "
+        "entered as numbers.",
     "Свет рельефа, зданий и воздуха по положению солнца. "
     "Ночная сторона Земли тёмная. Время солнца - конец "
     "промежутка открытой шкалы времени, без неё - часы "

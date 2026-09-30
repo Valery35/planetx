@@ -47,6 +47,15 @@ class TestScene(unittest.TestCase):
         self.assertIsNone(scene.time)
         self.assertEqual(kml, b"")
 
+    def test_body(self):
+        mars = sc.Scene((18.65, -133.8, 1.2e7), body="mars")
+        scene, _ = sc.read_scene(sc.write_scene(mars))
+        self.assertEqual(scene.body, "mars")
+        # Сцена до планет, без тела в камере, - земная.
+        old = sample().to_dict()
+        del old["camera"]["body"]
+        self.assertEqual(sc.Scene.from_dict(old).body, "earth")
+
     def test_bad_files(self):
         def pack(payload):
             buffer = io.BytesIO()

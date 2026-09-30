@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <!-- Тело глобуса: планета с кольцом. -->
+  <circle cx="12" cy="12" r="6.5" fill="#d9774b" stroke="#1d5fa8"
+          stroke-width="1.5"/>
+  <ellipse cx="12" cy="12" rx="10.5" ry="3.2" fill="none" stroke="#1d5fa8"
+           stroke-width="1.5" transform="rotate(-20 12 12)"/>
+</svg>

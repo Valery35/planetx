@@ -36,6 +36,10 @@ and atmosphere, from space down to single streets.
 - **Sun.** Terrain and buildings are lit by the position of the sun
   at the time slider time or by the clock, the night side of the
   Earth is dark.
+- **Mars and the Moon.** An icon on the icon bar puts Mars or the Moon
+  in place of the Earth, with NASA and USGS imagery. Navigation, grid,
+  ruler, places, tours, view snapshots and scenes work on any body.
+  A place remembers its body.
 - **Left panel.** The sections Places, Project layers and Layers
   collapse with a click on the header.
 - **Layers section.** It holds
@@ -187,6 +191,9 @@ VIIRS imagery. Temperature comes from NASA GIBS, MODIS and GHRSST MUR.
 Stars come from the Yale Bright Star Catalogue. The
 Milky Way comes from [NASA/Goddard Space Flight Center Scientific Visualization Studio](https://svs.gsfc.nasa.gov/4851),
 Gaia DR2: ESA/Gaia/DPAC.
+
+Mars comes from NASA, USGS, Viking MDIM2.1. The Moon comes from USGS,
+LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
 
 Data sources and their terms of use are described in [doc/SOURCES.md](doc/SOURCES.md), in Russian.
 

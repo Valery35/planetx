@@ -19,10 +19,12 @@ from functools import lru_cache
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A, geodetic_to_ecef, surface_normal
+    from . import ellipsoid
+    from .ellipsoid import geodetic_to_ecef, surface_normal
     from .terrain import grid_shares, sample
 except ImportError:  # headless-тесты
-    from ellipsoid import A, geodetic_to_ecef, surface_normal
+    import ellipsoid
+    from ellipsoid import geodetic_to_ecef, surface_normal
     from terrain import grid_shares, sample
 
 MAX_LAT = math.degrees(math.atan(math.sinh(math.pi)))
@@ -89,7 +91,7 @@ def segment_sag(z):
     Считается по экватору, где отрезок самый длинный.
     """
     angle = 2.0 * math.pi / ((1 << z) * segments(z))
-    return A * (1.0 - math.cos(angle / 2.0))
+    return ellipsoid.A * (1.0 - math.cos(angle / 2.0))
 
 
 def cell_sag(z):
@@ -100,7 +102,7 @@ def cell_sag(z):
     около 15.4 км, у уровня 3 около 3.9 км.
     """
     angle = math.sqrt(2.0) * 2.0 * math.pi / ((1 << z) * segments(z))
-    return A * (1.0 - math.cos(angle / 2.0))
+    return ellipsoid.A * (1.0 - math.cos(angle / 2.0))
 
 
 # Подстилка - плоские тайлы уровня 2 глубже поверхности на столько

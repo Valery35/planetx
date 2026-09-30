@@ -20,9 +20,11 @@ import math
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A, B, ecef_to_geodetic, geodetic_to_ecef
+    from . import ellipsoid
+    from .ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 except ImportError:  # headless-тесты
-    from ellipsoid import A, B, ecef_to_geodetic, geodetic_to_ecef
+    import ellipsoid
+    from ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 
 # Отношение дальней плоскости отсечения к ближней. При 24 битах глубины
 # это оставляет различимыми слои на ближней дистанции.
@@ -88,8 +90,8 @@ def clip_range(altitude, nearest=None):
     MAX_DEPTH_RATIO.
     """
     h = max(altitude, 1.0)
-    far = math.sqrt(h * (2.0 * A + h)) + math.sqrt(
-        MAX_TERRAIN * (2.0 * A + MAX_TERRAIN))
+    far = math.sqrt(h * (2.0 * ellipsoid.A + h)) + math.sqrt(
+        MAX_TERRAIN * (2.0 * ellipsoid.A + MAX_TERRAIN))
     close = 0.8 * h if nearest is None else NEAR_SHARE * nearest
     near = max(MIN_NEAR, min(close, 0.8 * h), far / MAX_DEPTH_RATIO)
     return near, far
@@ -218,7 +220,8 @@ class Camera:
         gx, gy = np.meshgrid(px * t * self.aspect, py * t)
         cam = np.stack([gx, gy, -np.ones_like(gx)], axis=-1)
         d = cam @ self.rotation.T
-        scale = np.array([1.0 / A, 1.0 / A, 1.0 / B])
+        a, b = ellipsoid.A, ellipsoid.B
+        scale = np.array([1.0 / a, 1.0 / a, 1.0 / b])
         o = self.eye * scale
         ds = d * scale
         qa = (ds * ds).sum(axis=-1)

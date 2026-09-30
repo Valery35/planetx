@@ -20,10 +20,10 @@ ln(-b + sqrt(b² + 1)) теряет точность при большом b, т
 import math
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A
+    from . import ellipsoid
     from .navigation import MAX_ALTITUDE, Pose
 except ImportError:  # headless-тесты
-    from ellipsoid import A
+    import ellipsoid
     from navigation import MAX_ALTITUDE, Pose
 
 RHO = math.sqrt(2.0)
@@ -109,7 +109,7 @@ class Flight:
         self.p1 = _unit(lat, lon)
         self.angle = _angle(self.p0, self.p1)
         self.scale = 2.0 * math.tan(math.radians(fov_y) / 2.0)
-        self.path = Path(A * self.angle, start.distance * self.scale,
+        self.path = Path(ellipsoid.A * self.angle, start.distance * self.scale,
                          distance * self.scale)
         self.duration = min(MAX_TIME, max(MIN_TIME,
                                           self.path.length / SPEED))

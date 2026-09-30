@@ -23,12 +23,12 @@ import math
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A
+    from . import ellipsoid
     from .features import densify
     from .flight import Flight
     from .navigation import Pose
 except ImportError:  # headless-тесты
-    from ellipsoid import A
+    import ellipsoid
     from features import densify
     from flight import Flight
     from navigation import Pose
@@ -90,7 +90,7 @@ class PathStop(Stop):
         u = np.stack([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo),
                       np.sin(la)], axis=1)
         steps = np.arccos(np.clip((u[:-1] * u[1:]).sum(axis=1),
-                                  -1.0, 1.0)) * A
+                                  -1.0, 1.0)) * ellipsoid.A
         self.points = pts
         self.s = np.concatenate([[0.0], np.cumsum(steps)])
         self.length = float(self.s[-1])

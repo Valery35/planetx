@@ -17,7 +17,7 @@ from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton
 
 from ..i18n import tr
-from ..qt_compat import enum
+from ..qt_compat import QActionGroup, enum
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 ICON_SIZE = QSize(20, 20)
@@ -37,6 +37,7 @@ class ViewToolbar(QFrame):
     save_view_requested = pyqtSignal()
     record_toggled = pyqtSignal(bool)
     time_toggled = pyqtSignal(bool)
+    body_chosen = pyqtSignal(str)
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal()
@@ -130,6 +131,31 @@ class ViewToolbar(QFrame):
         scene.setMenu(menu)
         self.layout().addWidget(scene)
         self.scene = scene
+        # Тело глобуса: Земля, Марс, Луна.
+        body = QToolButton(self)
+        body.setIcon(QIcon(os.path.join(ROOT, "planet.svg")))
+        body.setIconSize(ICON_SIZE)
+        body.setAutoRaise(True)
+        body.setToolTip(tr(
+            "Тело глобуса - Земля, Марс или Луна. У Марса и Луны свои "
+            "снимки, земные слои, поиск и здания на них выключены."))
+        body.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
+                               "InstantPopup"))
+        menu = QMenu(body)
+        group = QActionGroup(menu)
+        self.body_actions = {}
+        for key, title in (("earth", tr("Земля")), ("mars", tr("Марс")),
+                           ("moon", tr("Луна"))):
+            action = menu.addAction(title)
+            action.setCheckable(True)
+            action.setActionGroup(group)
+            action.triggered.connect(
+                lambda checked, k=key: self.body_chosen.emit(k))
+            self.body_actions[key] = action
+        self.body_actions["earth"].setChecked(True)
+        body.setMenu(menu)
+        self.layout().addWidget(body)
+        self.body = body
         self.properties = self._button(
             QgsApplication.getThemeIcon("/mActionOptions.svg"),
             tr("Свойства вида: подложка, масштаб рельефа, язык подписей, "
@@ -152,6 +178,12 @@ class ViewToolbar(QFrame):
             button.clicked.connect(signal)
         self.layout().addWidget(button)
         return button
+
+    def set_body(self, key):
+        """Отметка тела в меню без сигнала."""
+        action = self.body_actions.get(key)
+        if action is not None:
+            action.setChecked(True)
 
     def set_time_available(self, available):
         """Кнопка шкалы доступна, когда у видимых меток есть время.

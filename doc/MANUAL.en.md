@@ -62,6 +62,7 @@ dragged with the mouse.
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
+| Body | The menu Earth, Mars, Moon, see [Mars and the Moon](#mars-and-the-moon) |
 | View properties | Base map, terrain, labels, link with the map, update, coordinate format |
 | About | Controls, data sources, links |
 
@@ -759,6 +760,35 @@ the insertion.
 
 ---
 
+## Mars and the Moon
+
+The Body icon on the icon bar opens the menu Earth, Mars and Moon.
+The chosen body replaces the Earth as a whole. The size of the globe,
+the imagery and the air change, and the camera flies to the start
+point of the body. On Mars it is the Olympus Mons volcano, on the Moon
+it is the Sea of Tranquility, the Apollo 11 landing site.
+
+Mars imagery is the Viking MDIM2.1 colour mosaic, about 650 m per
+pixel. Moon imagery is the LOLA albedo with hillshading, about 670 m
+per pixel. Mars has a thin dusty air, the Moon has no air.
+
+On Mars and the Moon the navigation, grid, stars, ruler, My Places,
+tours, view snapshot and scenes work. Functions with Earth-only data
+are off:
+
+- terrain, vector base, clouds, temperature, 3D buildings and sunlight
+- project layers and their labels, tracks
+- synchronization with the QGIS map and feature identification
+- place search by name. Coordinates in the search field work
+
+Each place remembers its body. My Places lists the places of all
+bodies, the globe shows only the places of the current one. A flight
+to a place on another body switches the body first. A tour goes
+through the stops of the current body. A scene keeps its body and
+opens on it.
+
+---
+
 ## Limitations
 
 - Project layers lie on the terrain as a picture, a layer cannot be
@@ -769,6 +799,8 @@ the insertion.
 - Recording a tour takes longer than the tour itself.
 - Buildings are blocks with flat roofs, roof shapes and facades
   are not shown.
+- Mars and the Moon have no terrain. KML does not store the body of
+  a place, places from a KML file go to the current body.
 
 ## Data sources
 
@@ -777,7 +809,9 @@ OpenStreetMap contributors. Vector tiles and 3D buildings - OpenFreeMap. Terrain
 Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Clouds - NASA GIBS,
 VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale Bright Star Catalogue. Milky Way -
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
-DR2: ESA/Gaia/DPAC. Place search - Nominatim.
+DR2: ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
+Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
+OpenPlanetaryMap.
 
 The terms of all sources are described in [SOURCES.md](SOURCES.md).
 Tiles go through the QGIS network settings and cache, the plugin keeps

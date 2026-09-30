@@ -21,9 +21,11 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A, geodetic_to_ecef
+    from . import ellipsoid
+    from .ellipsoid import geodetic_to_ecef
 except ImportError:  # headless-тесты
-    from ellipsoid import A, geodetic_to_ecef
+    import ellipsoid
+    from ellipsoid import geodetic_to_ecef
 
 STEP = 100.0  # метров между точками сгущения
 MAX_POINTS = 4000  # точек на линию или контур, не больше
@@ -76,11 +78,11 @@ def densify(points, closed=False, step=STEP, max_points=MAX_POINTS):
     ring = np.vstack([pts, pts[:1]]) if closed else pts
     u = _unit(ring[:, 0], ring[:, 1])
     angles = np.arccos(np.clip((u[:-1] * u[1:]).sum(axis=1), -1.0, 1.0))
-    total = float(angles.sum()) * A
+    total = float(angles.sum()) * ellipsoid.A
     step = max(step, total / max(1, max_points - len(ring)))
     out = []
     for i, (p, q, angle) in enumerate(zip(u[:-1], u[1:], angles)):
-        n = max(1, int(math.ceil(angle * A / step)))
+        n = max(1, int(math.ceil(angle * ellipsoid.A / step)))
         t = np.arange(n)[:, None] / n
         if angle < 1e-12:
             part = np.repeat(p[None], n, axis=0)
@@ -262,8 +264,8 @@ def plane(latlon):
     lat0 = float(latlon[:, 0].mean())
     lon0 = float(latlon[:, 1].mean())
     dlon = (latlon[:, 1] - lon0 + 180.0) % 360.0 - 180.0
-    x = np.radians(dlon) * A * math.cos(math.radians(lat0))
-    y = np.radians(latlon[:, 0] - lat0) * A
+    x = np.radians(dlon) * ellipsoid.A * math.cos(math.radians(lat0))
+    y = np.radians(latlon[:, 0] - lat0) * ellipsoid.A
     return np.stack([x, y], axis=1)
 
 
