@@ -51,7 +51,11 @@ class Source:
     attribution - пара «текст, ссылка», ссылка может быть пустой.
     headers - дополнительные заголовки запроса. authcfg - код настройки
     проверки подлинности QGIS. login - пара «имя, пароль» из подключения
-    или None.
+    или None. missing - коды ответа HTTP, которые значат «тайла нет»:
+    вместо такого тайла встаёт увеличенный предок. Хранилище S3 без
+    права на список отвечает на отсутствующий файл 403, так отвечает
+    сервер снимков Луны на тайл 6/57/39, 1 октября 2026 года. У прочих
+    подложек 403 - запрет доступа, это ошибка.
 
     Имя и пароль идут одной парой без значения по умолчанию. Параметр
     password="" сканер каталога QGIS (Bandit, правило B107) принял
@@ -60,11 +64,11 @@ class Source:
 
     __slots__ = ("name", "url", "max_level", "attribution", "headers",
                  "authcfg", "username", "password", "parallel", "builtin",
-                 "example")
+                 "example", "missing")
 
     def __init__(self, name, url, max_level=MAX_LEVEL, attribution=None,
                  headers=None, authcfg="", login=None, builtin=False,
-                 example=False):
+                 example=False, missing=(404,)):
         self.name = name
         self.url = url
         self.max_level = max_level
@@ -75,6 +79,7 @@ class Source:
         self.builtin = builtin
         # Встроенный пример подложки, в свойствах вида он так и назван.
         self.example = example
+        self.missing = tuple(missing)
         self.parallel = OSM_PARALLEL if is_osm(url) else OTHER_PARALLEL
 
     def tile_url(self, z, x, y):

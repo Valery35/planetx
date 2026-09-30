@@ -229,8 +229,9 @@ class TileLoader(QObject):
     векторных тайлов. Тогда loaded несёт её результат вместо массива.
     None из decode - ошибка разбора.
 
-    fill=True - снимок вместо заглушки. Тайл-заглушка или ответ 404
-    заменяется вырезкой из ближайшего предка с настоящим снимком,
+    fill=True - снимок вместо заглушки. Тайл-заглушка или ответ с кодом
+    из source.missing, обычно 404, заменяется вырезкой из ближайшего
+    предка с настоящим снимком,
     см. core/placeholder.py. Байты последних RECENT_TILES тайлов
     хранятся для вырезки, недостающего предка загрузчик просит сам.
     """
@@ -396,7 +397,8 @@ class TileLoader(QObject):
         self.last_user_agent = bytes(
             reply.request().rawHeader(b"User-Agent")).decode()
         if reply.error() != NO_ERROR:
-            if self.fill and reply.attribute(HTTP_STATUS) == 404:
+            if self.fill and reply.attribute(HTTP_STATUS) \
+                    in self.source.missing:
                 # Тайла нет на сервере: как заглушка, снимок из предка.
                 self.queue.done(key, ok=True)
                 self._missing(key)

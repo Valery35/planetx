@@ -2496,6 +2496,32 @@ def sky_toggle_check():
     return None
 
 
+@check(10000)
+def moon_missing():
+    # Тайл Луны 6/57/39 в разметке TMS сервер отдаёт кодом 403, его
+    # ключ XYZ - (6, 57, 24). Он должен встать вырезкой из предка.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("moon")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(36.6, 143.4, 250000.0, 0.0, 0.0))
+    window.view.update()
+
+
+@check(300)
+def moon_missing_check():
+    window = state["window"]
+    loader = window.loader
+    result["moon_missing"] = {
+        "url": window.source.tile_url(6, 57, 24),
+        "missing": (6, 57, 24) in loader.missing,
+        "filled": loader.filled,
+        "errors": {str(k): str(v) for k, v in window.errors.items()},
+        "attribution": window.attribution.text()}
+    window.set_body("earth")
+
+
 SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
 
 

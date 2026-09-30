@@ -910,8 +910,9 @@ class GlobeWindow(QWidget):
             source = self.sources[self._basemap]
         else:
             name, url, top, text, link = planet.imagery
+            # Снимки тел лежат в S3: отсутствующий тайл - ответ 403.
             source = basemap.Source(name, url, top, (text, link),
-                                    builtin=True)
+                                    builtin=True, missing=(403, 404))
         old = self.loader
         old.abort()
         old.deleteLater()
@@ -1127,8 +1128,9 @@ class GlobeWindow(QWidget):
             self._place_attribution()
             return
         parts = [attribution_html(self.source)]
-        if self._applied_groups and self.ofm_layer is not None \
-                or self.buildings_loader is not None:
+        if self.planet.earth and (
+                self._applied_groups and self.ofm_layer is not None
+                or self.buildings_loader is not None):
             parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
         if self.view.store.scale:
             parts.append(TERRAIN_ATTRIBUTION)
