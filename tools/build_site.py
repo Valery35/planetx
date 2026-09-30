@@ -129,7 +129,8 @@ RU = {
                   "по глобусу и хранятся в «Моих метках». "
                   "У метки бывают значок, своё время и свой вид. "
                   "Файлы KML и KMZ открываются и сохраняются. "
-                  "Сцена «Пермь» значка «Демо» показывает всё сразу.",
+                  "Сцена «Пермь» из набора «Демо» показывает эти "
+                  "возможности вместе.",
     "places.fig": "Демо «Пермь». Шкала времени на 11:30-13:00, видна "
                   "Эспланада, маршрут прогулки и 3D-здания.",
     "places.c1.h": "Значки и время",
@@ -147,33 +148,35 @@ RU = {
     "worlds.eyebrow": "Другие тела и небо",
     "worlds.h2": "Марс, Луна и звёздное небо",
     "worlds.sub": "Значок «Тело» заменяет Землю Марсом или Луной. Снимки "
-                  "Марса - цветная мозаика Viking MDIM2.1, снимки Луны - "
-                  "альбедо LOLA с отмывкой рельефа, около 650 м "
-                  "на пиксель. Навигация, метки, туры, линейка и сцены "
+                  "Марса - цветная мозаика Viking MDIM2.1, около 650 м "
+                  "на пиксель, снимки Луны - карта альбедо LOLA "
+                  "с отмывкой рельефа, около 670 м. Навигация, метки, "
+                  "туры, линейка и сцены "
                   "работают на любом теле, метка хранит своё тело. Пункт "
                   "«Небо» показывает небесную сферу изнутри - 5080 "
                   "звёзд, 88 созвездий, Солнце, Луну и планеты "
                   "на выбранный момент.",
     "worlds.mars": "Марс. Вулканы Фарсиды и долины Маринер, мозаика "
                    "Viking.",
-    "worlds.moon": "Видимая сторона Луны, альбедо LOLA с отмывкой "
+    "worlds.moon": "Видимая сторона Луны, карта альбедо LOLA с отмывкой "
                    "рельефа.",
     "worlds.sky": "Небо 1 октября 2026 года. Орион, Телец и Близнецы, "
                   "Луна у Плеяд, Марс в Раке.",
     "worlds.c1.h": "Положения светил",
-    "worlds.c1.p": "Планеты рассчитываются по кеплеровым элементам "
-                   "орбит JPL, Луна - по формулам Астрономического "
-                   "альманаха. Отклонение от эфемерид JPL Horizons не "
-                   "превышает 0.1° у планет и 0.3° у Луны.",
+    "worlds.c1.p": "Положения планет рассчитываются по кеплеровым "
+                   "элементам орбит JPL, положение Луны - по формулам "
+                   "Астрономического альманаха. Отклонение от эфемерид "
+                   "JPL Horizons в 1800-2050 годах не превышает 0.2° "
+                   "у планет и 0.3° у Луны.",
     "worlds.c2.h": "Метки и туры на небе",
     "worlds.c2.p": "Метка неба хранит направление взгляда и поле "
                    "зрения. Тур по меткам неба расширяет поле зрения "
                    "между удалёнными точками и сужает его у цели.",
     "worlds.c3.h": "Демо",
-    "worlds.c3.p": "Значок с академической шапочкой открывает готовые "
-                   "сцены. На Земле это Пермь и Бока-Чика, на Марсе "
-                   "и Луне - места посадок аппаратов, на небе - "
-                   "созвездия осени и зимы.",
+    "worlds.c3.p": "Значок с академической шапочкой открывает "
+                   "подготовленные сцены. На Земле это Пермь "
+                   "и Бока-Чика, на Марсе и Луне - места посадок "
+                   "аппаратов, на небе - созвездия и яркие объекты.",
     "controls.eyebrow": "Управление",
     "controls.h2": "Навигация мышью и клавиатурой",
     "controls.sub": "Значок "
@@ -230,8 +233,8 @@ RU = {
                  "© участники OpenStreetMap, векторные тайлы OpenFreeMap. "
                  "Рельеф Mapzen Terrain Tiles. Марс - NASA, USGS, Viking "
                  "MDIM2.1, Луна - USGS, LRO LOLA, тайлы "
-                 "OpenPlanetaryMap. Созвездия - d3-celestial, "
-                 "© Olaf Frohn.",
+                 "OpenPlanetaryMap. Созвездия и имена звёзд - "
+                 "d3-celestial, © Olaf Frohn.",
 }
 
 EN = {
@@ -315,7 +318,8 @@ EN = {
                   "on the globe and kept in My Places. "
                   "A placemark can have an icon, a time and a view "
                   "of its own. KML and KMZ files open and save. "
-                  "The Perm scene of the Demo icon shows it all at once.",
+                  "The Perm scene in Demo shows these features "
+                  "together.",
     "places.fig": "Perm demo. The time slider at 11:30-13:00 shows the "
                   "Esplanade, the walk route and 3D buildings.",
     "places.c1.h": "Icons and time",
@@ -335,8 +339,9 @@ EN = {
     "worlds.h2": "Mars, the Moon and the starry sky",
     "worlds.sub": "The Body icon replaces the Earth with Mars or the "
                   "Moon. Mars imagery is the Viking MDIM2.1 colour "
-                  "mosaic, Moon imagery is the LOLA albedo with hill "
-                  "shading, about 650 m per pixel. Navigation, places, "
+                  "mosaic, about 650 m per pixel, Moon imagery is the "
+                  "LOLA albedo map with hill shading, about 670 m. "
+                  "Navigation, places, "
                   "tours, the ruler and scenes work on any body, and a "
                   "place keeps its body. The Sky item shows the "
                   "celestial sphere from inside - 5080 stars, 88 "
@@ -344,26 +349,28 @@ EN = {
                   "the chosen moment.",
     "worlds.mars": "Mars. The Tharsis volcanoes and Valles Marineris, "
                    "Viking mosaic.",
-    "worlds.moon": "The near side of the Moon, LOLA albedo with hill "
+    "worlds.moon": "The near side of the Moon, LOLA albedo map with hill "
                    "shading.",
     "worlds.sky": "The sky on 1 October 2026. Orion, Taurus and Gemini, "
                   "the Moon at the Pleiades, Mars in Cancer.",
     "worlds.c1.h": "Positions of the bodies",
-    "worlds.c1.p": "Planets are computed from the JPL Keplerian orbital "
-                   "elements, the Moon from the formulae of the "
-                   "Astronomical Almanac. The deviation from the JPL "
-                   "Horizons ephemerides is within 0.1° for planets and "
-                   "0.3° for the Moon.",
+    "worlds.c1.p": "Planet positions are computed from the JPL "
+                   "Keplerian orbital elements, the Moon position from "
+                   "the formulae of the Astronomical Almanac. In the "
+                   "years 1800-2050 the deviation from the JPL Horizons "
+                   "ephemerides is within 0.2° for planets and 0.3° for "
+                   "the Moon.",
     "worlds.c2.h": "Places and tours in the sky",
     "worlds.c2.p": "A sky place keeps the view direction and the field "
                    "of view. A tour over sky places widens the field of "
                    "view between distant points and narrows it at the "
                    "target.",
     "worlds.c3.h": "Demo",
-    "worlds.c3.p": "The icon with an academic cap opens ready scenes. "
-                   "On the Earth these are Perm and Boca Chica, on Mars "
-                   "and the Moon the landing sites of spacecraft, in the "
-                   "sky the autumn and winter constellations.",
+    "worlds.c3.p": "The icon with an academic cap opens prepared "
+                   "scenes. On the Earth these are Perm and Boca Chica, "
+                   "on Mars and the Moon the landing sites of "
+                   "spacecraft, in the sky constellations and bright "
+                   "objects.",
     "controls.eyebrow": "Controls",
     "controls.h2": "Mouse and keyboard navigation",
     "controls.sub": "The View "
@@ -417,7 +424,10 @@ EN = {
     "ftr.line3": "Imagery Esri, Vantor, Earthstar Geographics, and the "
                  "GIS User Community. Map data © OpenStreetMap "
                  "contributors, vector tiles OpenFreeMap. Terrain Mapzen "
-                 "Terrain Tiles.",
+                 "Terrain Tiles. Mars - NASA, USGS, Viking MDIM2.1, the "
+                 "Moon - USGS, LRO LOLA, tiles OpenPlanetaryMap. "
+                 "Constellations and star names - d3-celestial, "
+                 "© Olaf Frohn.",
 }
 
 CONTROLS = "".join(

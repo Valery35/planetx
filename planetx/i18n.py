@@ -210,17 +210,17 @@ EN = {
         "search and buildings are off there. The sky shows constellations, "
         "stars and planets from the centre of the celestial sphere.",
     "Небо": "Sky",
-    "Демо: готовые сцены с метками и турами на Земле, Марсе, Луне и небе. "
-    "Метки ложатся новой папкой в «Мои метки», кнопка ▶ под списком "
-    "проводит тур.":
-        "Demo: ready scenes with places and tours on the Earth, Mars, the "
+    "Демо: подготовленные сцены с метками и турами на Земле, Марсе, "
+    "Луне и небе. Метки ложатся новой папкой в «Мои метки», кнопка ▶ "
+    "под списком проводит тур.":
+        "Demo: prepared scenes with places and tours on the Earth, Mars, the "
         "Moon and in the sky. The places go to My Places as a new folder, "
         "the ▶ button under the list plays the tour.",
     "Пермь": "Perm",
     "Бока-Чика, Starbase": "Boca Chica, Starbase",
     "Места посадок марсоходов": "Rover landing sites",
     "«Аполлоны» и «Луноходы»": "Apollo and Lunokhod sites",
-    "Созвездия осени и зимы": "Autumn and winter constellations",
+    "Созвездия и яркие объекты": "Constellations and bright objects",
     "Созвездия": "Constellations",
     "Линии фигур и названия созвездий на небе. Без них остаются звёзды, "
     "их имена и светила.":

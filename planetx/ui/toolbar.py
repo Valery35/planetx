@@ -131,7 +131,7 @@ class ViewToolbar(QFrame):
         demo.setIconSize(ICON_SIZE)
         demo.setAutoRaise(True)
         demo.setToolTip(tr(
-            "Демо: готовые сцены с метками и турами на Земле, Марсе, "
+            "Демо: подготовленные сцены с метками и турами на Земле, Марсе, "
             "Луне и небе. Метки ложатся новой папкой в «Мои метки», "
             "кнопка ▶ под списком проводит тур."))
         demo.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
@@ -143,7 +143,7 @@ class ViewToolbar(QFrame):
                 (tr("Марс"), (("mars", tr("Места посадок марсоходов")),)),
                 (tr("Луна"), (("moon",
                                tr("«Аполлоны» и «Луноходы»")),)),
-                (tr("Небо"), (("sky", tr("Созвездия осени и зимы")),))):
+                (tr("Небо"), (("sky", tr("Созвездия и яркие объекты")),))):
             menu.addSection(section)
             for key, title in items:
                 menu.addAction(title).triggered.connect(

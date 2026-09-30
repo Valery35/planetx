@@ -24,7 +24,8 @@ QGIS. Запросы идут через сетевые настройки и д
 | OpenPlanetaryMap, Viking MDIM2.1 | снимки Марса | условия не указаны, см. раздел «Марс и Луна» | NASA, USGS, Viking MDIM2.1, OpenPlanetaryMap |
 | OpenPlanetaryMap, LOLA hillshaded albedo | снимки Луны | условия не указаны, см. раздел «Марс и Луна» | USGS, LRO LOLA, OpenPlanetaryMap |
 | d3-celestial, Olaf Frohn | линии и названия созвездий, имена ярких звёзд, вид неба | [BSD с тремя пунктами](https://github.com/ofrohn/d3-celestial/blob/master/LICENSE), текст лицензии лежит в `planetx/data` | Constellations: d3-celestial © Olaf Frohn |
-| JPL, Approximate Positions of the Planets | положения планет на небе | [страница JPL](https://ssd.jpl.nasa.gov/planets/approx_pos.html), формулы, данных не скачивается | Planets: JPL approximate elements |
+| JPL, Approximate Positions of the Planets | положения планет на небе | [страница JPL](https://ssd.jpl.nasa.gov/planets/approx_pos.html), формулы, данные не скачиваются | Planets: JPL approximate elements |
+| Астрономический альманах, формулы малой точности | положение Луны на небе | формулы, данные не скачиваются | нет |
 | Nominatim | поиск места по названию | [правила использования Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | © OpenStreetMap contributors, в окне «О модуле» |
 
 ## Nominatim - поиск места
@@ -68,15 +69,16 @@ Tiles из обозревателя QGIS.
 ## Марс и Луна
 
 Снимки Марса и Луны дают базовые карты OpenPlanetaryMap. Это
-сообщество, которое выкладывает тайлы планетных данных для веб-карт.
+сообщество, которое публикует тайлы планетных данных для веб-карт.
 Марс - цветная мозаика Viking MDIM2.1 NASA и USGS, Луна - альбедо
-с отмывкой по рельефу LOLA от USGS. Страница базовых карт
+с отмывкой рельефа LOLA от USGS. Страница базовых карт
 [OPM Basemaps](https://github.com/openplanetary/opm/wiki/OPM-Basemaps)
 просит подписи «NASA/Viking/USGS» и «LOLA/USGS». Условий
 использования она не называет. Сверено 1 октября 2026 года.
 
 Тайлы обоих тел лежат в разметке TMS, ряды считаются от юга. Для Луны
-страница называет разметку XYZ, мозаика тайлов показала TMS.
+страница называет разметку XYZ, проверка расположения тайлов показала
+разметку TMS.
 
 ## Другие открытые покрытия
 

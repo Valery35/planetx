@@ -23,17 +23,18 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       in degrees, degrees-minutes-seconds, UTM or MGRS. Places
       have icons and a time of their own with a time slider,
       and a tour can be recorded from the screen.
-      The Demo button opens ready scenes: Perm and Boca Chica on
-      the Earth, landing sites on Mars and the Moon, constellations in
-      the sky. The Sun row
+      The Sun row
       lights terrain and buildings by the position of the sun with
       a dark night side, the 3D path and 3D polygon of the ruler
       measure over roofs and walls of buildings.
-      The Body button puts Mars or the Moon in place of the Earth, with
+      The Body icon puts Mars or the Moon in place of the Earth, with
       NASA and USGS imagery, and opens the starry sky seen from the
       centre of the celestial sphere: the Milky Way, stars,
       constellation lines and names, the Sun, the Moon and the planets
-      at the chosen time.
+      at the chosen time. The Demo icon with an academic cap opens
+      prepared scenes: Perm and Boca Chica on the Earth, landing sites
+      on Mars and the Moon, constellations and bright objects in the
+      sky.
       Labels stay upright, do not overlap and hide behind mountains and
       the horizon. The label language follows QGIS or is chosen from
       15 languages and local names.
@@ -86,14 +87,16 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.19.0 Mars and the Moon on the Body button of the
-      icon bar, with their own imagery, a place remembers its body.
-      The starry sky from the centre of the celestial sphere: the Milky
-      Way, stars, constellation lines and names, the Sun, the Moon and
-      the planets at the time slider time or by the clock. Places,
-      tours and tour recording work in the sky. The Demo button with
-      an academic cap opens ready scenes: Perm and Boca Chica, landing
-      sites on Mars and the Moon, constellations in the sky.
+changelog=0.19.0 The Body icon of the icon bar puts Mars or the
+      Moon in place of the Earth, with their own imagery, and a place
+      keeps its body. The Sky item shows the starry sky from the centre
+      of the celestial sphere: the Milky Way, stars, constellation
+      lines and names, the Sun, the Moon and the planets at the time
+      set by the time slider or the computer clock. Places, tours and
+      tour recording work in the sky. The Demo icon with an academic
+      cap opens prepared scenes: Perm and Boca Chica, landing sites on
+      Mars and the Moon, constellations and bright objects in the
+      sky.
       0.18.0 Sun light with the night side of the Earth by
       the time slider or the clock. 3D path and 3D polygon of the
       ruler over roofs and walls of 3D buildings, kept in My Places

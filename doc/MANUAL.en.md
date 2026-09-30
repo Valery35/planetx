@@ -725,19 +725,19 @@ found and did not open.
 
 ### Demo
 
-The Demo icon with an academic cap on the icon bar opens ready scenes.
+The Demo icon with an academic cap on the icon bar opens prepared scenes.
 Each scene puts its places into My Places as a new folder, the ▶ button
 under the list plays a tour over them. The folder can be deleted.
 
 | Section | Scene | What it holds |
 |---|---|---|
-| Earth | Perm | Places with icons and the time of a walk by the hour, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
+| Earth | Perm | Places with icons and the moments of a walk, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
 | Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Moon | Apollo and Lunokhod sites | The landing sites of six Apollo missions, Lunokhod 1 and Lunokhod 2 |
-| Sky | Autumn and winter constellations | Orion, the Pleiades, the Andromeda Galaxy, Cassiopeia, Ursa Major, Vega and Lyra, the Southern Cross |
+| Sky | Constellations and bright sky objects | Orion, the Pleiades, the Andromeda Galaxy (M31), Cassiopeia, Ursa Major, Lyra with Vega, the Southern Cross |
 
-The Perm walk time is an example. Landing coordinates are rounded to
+The Perm walk time is fictional. Landing coordinates are rounded to
 hundredths of a degree.
 
 ---
@@ -775,14 +775,14 @@ the insertion.
 ## Mars and the Moon
 
 The Body icon on the icon bar opens the menu Earth, Mars and Moon.
-The chosen body replaces the Earth as a whole. The size of the globe,
-the imagery and the air change, and the camera flies to the start
-point of the body. On Mars it is the Olympus Mons volcano, on the Moon
-it is the Sea of Tranquility, the Apollo 11 landing site.
+The chosen body replaces the Earth. The size of the globe, the imagery
+and the atmosphere change, and the camera flies to the start point of
+the body. On Mars it is Olympus Mons, on the Moon it is the Sea of
+Tranquility, the Apollo 11 landing site.
 
 Mars imagery is the Viking MDIM2.1 colour mosaic, about 650 m per
-pixel. Moon imagery is the LOLA albedo with hillshading, about 670 m
-per pixel. Mars has a thin dusty air, the Moon has no air.
+pixel. Moon imagery is the LOLA albedo map with hill shading, about
+670 m per pixel. Mars has a thin, dusty atmosphere, the Moon has none.
 
 On Mars and the Moon the navigation, grid, stars, ruler, My Places,
 tours, view snapshot and scenes work. Functions with Earth-only data
@@ -802,40 +802,44 @@ opens on it.
 ## Starry sky
 
 The Sky item of the Body menu shows the sky from the centre of the
-celestial sphere. It holds the Milky Way, 5080 stars down to magnitude
-6, lines and names of 88 constellations and names of bright stars.
-The Sun, the Moon and the planets from Mercury to Neptune are there
-too. Celestial north
-is up and east is on the left, as on a star chart.
+celestial sphere. It holds the Milky Way, 5080 stars down to
+magnitude 6, lines and names of 88 constellations and names of bright
+stars. The Sun, the Moon and the planets from Mercury to Neptune are
+there too. The north celestial pole is up and east is on the left, as
+on a star chart.
 
 | Action | What it does |
 |---|---|
 | Drag with the left button | The sky follows the cursor |
-| Wheel, PageUp, PageDown, plus, minus | Field of view from 2° to 110° |
+| Wheel, PageUp, PageDown, plus, minus | Changes the field of view from 2° to 110° |
 | Double click with the left button | The point moves to the centre, the field of view halves |
 | Double click with the right button | The field of view doubles |
 | Arrows | The view moves by a tenth of the window height |
 
 The status bar shows the field of view, the right ascension and the
-declination of the point under the cursor. Sky coordinates are epoch
-J2000. Bodies stand at the end of the open time slider range, otherwise
-at the computer clock time. Planets are placed within 0.1° in the
-years 1800-2050, the Moon within 0.3°.
+declination of the point under the cursor. Equatorial coordinates
+refer to the epoch J2000.0. The Sun, the Moon and the planets are
+placed at the end of the open time slider range, otherwise at the
+computer clock time. Planet positions differ from the JPL Horizons
+ephemerides by at most 0.2° in the years 1800-2050, the Moon position
+by at most 0.3°.
 
 The Constellations item of the same menu hides and shows the
-constellation lines and names. Stars, their names and the bodies stay.
+constellation lines and names. Stars, their names, the Sun, the Moon
+and the planets stay.
 
 Places and tours work in the sky. Save view puts a place with the
 view direction and the field of view. New place puts a point with a
 click on the sky. Record tour records the motion over the sky. Sky
-places lie in My Places with the others and show in the sky as yellow
-circles with a label. A tour and the ▶ button in the sky go through the
+places are kept in My Places with the others and are shown in the sky
+as yellow circles with a label. A tour and the ▶ button in the sky go through the
 sky places, between distant points the field of view widens on the
 way. A flight to a sky place from the list opens the sky.
 
 The ruler, synchronization and feature identification are off in the
 sky. A view snapshot saves the sky with its labels. A scene keeps the
-view direction and the field of view. To leave the sky, choose a body in the same menu.
+view direction and the field of view. To return to a body, choose it
+in the same menu.
 
 ---
 
@@ -849,11 +853,12 @@ view direction and the field of view. To leave the sky, choose a body in the sam
 - Recording a tour takes longer than the tour itself.
 - Buildings are blocks with flat roofs, roof shapes and facades
   are not shown.
-- Mars and the Moon have no terrain. KML does not store the body of
-  a place, places from a KML file go to the current body.
+- Mars and the Moon are smooth spheres, the relief shows only as hill
+  shading in the imagery. KML does not store the body of a place,
+  places from a KML file go to the current body.
 - The sky is shown from the centre of the Earth, without the horizon
-  of an observing site. Precession since 2000 is ignored, it is about
-  0.4°.
+  of an observing site. Coordinates are not reduced to the date, by
+  2026 precession shifts them by about 0.36°.
 
 ## Data sources
 
@@ -865,7 +870,9 @@ NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
 DR2: ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
 Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
 OpenPlanetaryMap. Constellation lines, names and star names -
-d3-celestial, © Olaf Frohn. Planet positions - JPL orbital elements.
+d3-celestial, © Olaf Frohn. Planet positions are computed from JPL
+orbital elements, the Moon position from the formulae of the
+Astronomical Almanac.
 
 The terms of all sources are described in [SOURCES.md](SOURCES.md).
 Tiles go through the QGIS network settings and cache, the plugin keeps

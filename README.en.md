@@ -40,7 +40,7 @@ and atmosphere, from space down to single streets.
   in place of the Earth, with NASA and USGS imagery. Navigation, grid,
   ruler, places, tours, view snapshots and scenes work on any body.
   A place remembers its body.
-- **Starry sky.** The same icon opens the sky from the centre of the
+- **Starry sky.** The Body icon also opens the sky from the centre of the
   celestial sphere. It shows the Milky Way, stars, constellation lines
   and names, the Sun, the Moon and the planets at the chosen time.
 - **Left panel.** The sections Places, Project layers and Layers
@@ -131,9 +131,10 @@ and atmosphere, from space down to single streets.
 - **Placemark time.** A placemark can have a moment or an interval. The
   time slider opens with a button on the icon bar and hides placemarks
   outside the interval.
-- **Demo.** The icon with an academic cap opens ready scenes with
+- **Demo.** The icon with an academic cap opens prepared scenes with
   places and tours. They show Perm and Boca Chica on the Earth, landing
-  sites on Mars and the Moon, constellations in the sky.
+  sites on Mars and the Moon, constellations and bright objects in the
+  sky.
 - **Scenes.** The whole view - camera, time, layers, settings and a
   places folder with its tour - saves to a file and opens on another
   computer.
@@ -196,10 +197,11 @@ Stars come from the Yale Bright Star Catalogue. The
 Milky Way comes from [NASA/Goddard Space Flight Center Scientific Visualization Studio](https://svs.gsfc.nasa.gov/4851),
 Gaia DR2: ESA/Gaia/DPAC.
 
-Mars comes from NASA, USGS, Viking MDIM2.1. The Moon comes from USGS,
+Mars imagery: NASA, USGS, Viking MDIM2.1. Moon imagery: USGS,
 LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
 Constellations and star names come from [d3-celestial](https://github.com/ofrohn/d3-celestial),
-© Olaf Frohn. Planet positions come from JPL orbital elements.
+© Olaf Frohn. Planet positions are computed from JPL orbital
+elements.
 
 Data sources and their terms of use are described in [doc/SOURCES.md](doc/SOURCES.md), in Russian.
 
