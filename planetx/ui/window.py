@@ -38,7 +38,8 @@ from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
 from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
 from ..core.planets import EARTH_PLANET, planet_by_key
-from ..core.skyview import SkyView, ra_dec_text
+from ..core.skydata import direction as sky_direction
+from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
 from ..core.kml import KmlError, read_file as read_kml_file, read_kml, \
@@ -951,8 +952,11 @@ class GlobeWindow(QWidget):
     def _globe_buttons(self):
         """Значки, которым нужна поверхность тела."""
         bar = self.toolbar
-        return (bar.ruler_button, bar.place_button, bar.save_button,
-                bar.record, bar.sync, bar.identify)
+        return (bar.ruler_button, bar.sync, bar.identify)
+
+    def body_key(self):
+        """Ключ того, что на экране: тело глобуса или "sky"."""
+        return "sky" if self.view.sky_view is not None else self.planet.key
 
     def sky_moment(self):
         """Момент светил неба: конец открытой шкалы времени, иначе
@@ -964,6 +968,9 @@ class GlobeWindow(QWidget):
         взгляд в градусах, None - прежний взгляд или начальный."""
         view = self.view
         if view.sky_view is None:
+            # Поза глобуса вернётся при выходе: в небе навигатор
+            # ведёт взгляд на небо, core.skyview.pose_of.
+            self._globe_pose = view.navigator.pose
             view.sky_view = self._sky_state or SkyView()
             for dialog in (self.ruler_dialog, self.place_dialog):
                 if dialog is not None and dialog.isVisible():
@@ -971,6 +978,7 @@ class GlobeWindow(QWidget):
             view.navigator.stop()
         if ra is not None:
             view.sky_view.set(ra, dec, fov)
+        view.sync_sky_pose()
         view.sky_time = self.sky_moment()
         self.toolbar.set_body("sky")
         self.navpad.hide()
@@ -992,6 +1000,9 @@ class GlobeWindow(QWidget):
         view = self.view
         self._sky_state = view.sky_view
         view.sky_view = None
+        view.navigator.stop()
+        if getattr(self, "_globe_pose", None) is not None:
+            view.navigator.set_pose(self._globe_pose)
         self.navpad.show()
         for button in self._globe_buttons():
             button.setEnabled(True)
@@ -1567,6 +1578,20 @@ class GlobeWindow(QWidget):
                   for p in self.myplaces.places
                   if p.visible and self._time_ok(p) and not p.tour
                   and p.body == self.planet.key]
+        # Метки неба подписывает слой подписей неба.
+        # Точка метки неба - (склонение, прямое восхождение), как
+        # (широта, долгота) у меток глобуса.
+        sky = [(p.shape.points[0], p.shape.name)
+               for p in self.myplaces.places
+               if p.visible and self._time_ok(p) and p.body == "sky"
+               and p.shape.points and not p.tour]
+        if self.view.sky_view is not None and self._place_open():
+            shape = self.place_dialog.shape()
+            if shape is not None and shape.points:
+                sky.append((shape.points[0], shape.name))
+        self.view.sky_places = [
+            (sky_direction(point[1] % 360.0, point[0]), name)
+            for point, name in sky]
         if getattr(self, "tracks", None) is not None and self.planet.earth:
             shapes += self.tracks.shapes()
         shapes += getattr(self, "grid_shapes", [])
@@ -1705,7 +1730,8 @@ class GlobeWindow(QWidget):
         shape = self.place_dialog.shape(rubber=False)
         if shape is None:
             return
-        self.myplaces.add(shape, folder=self.panel.current_folder())
+        self.myplaces.add(shape, folder=self.panel.current_folder(),
+                          body=self.body_key())
         self.place_dialog.name.clear()
         self.place_dialog.reset_name()
         self.drawer.clear()
@@ -2132,7 +2158,7 @@ class GlobeWindow(QWidget):
     def fly_to_place(self, place):
         """Перелёт к метке, как остановка тура. Метка другого тела
         сначала переключает тело."""
-        if place.body != self.planet.key:
+        if place.body != self.body_key():
             self.set_body(place.body)
         stop = self.place_stop(place)
         self._fly_to(stop.lat, stop.lon, stop.distance, stop.heading,
@@ -2144,8 +2170,9 @@ class GlobeWindow(QWidget):
         папок в порядке списка, None - все «Мои метки»."""
         stops = []
         for place in self.myplaces.places_in(folder):
-            # Тур идёт по меткам тела, которое сейчас на глобусе.
-            if place.visible and place.body == self.planet.key:
+            # Тур идёт по меткам тела, которое сейчас на глобусе,
+            # в небе - по меткам неба.
+            if place.visible and place.body == self.body_key():
                 stop = self.place_stop(place, along=True)
                 stop.time = place.view_time or place.time
                 stops.append(stop)
@@ -2180,7 +2207,7 @@ class GlobeWindow(QWidget):
         points = [(s[1], s[2]) for s in samples]
         return self.myplaces.add(
             Shape("line", points, name=name), tour=list(samples),
-            folder=self.panel.current_folder())
+            folder=self.panel.current_folder(), body=self.body_key())
 
     def _record_sample(self):
         """Поза камеры в запись, раз в RECORD_PERIOD."""
@@ -2205,11 +2232,14 @@ class GlobeWindow(QWidget):
                                         tr("Название"), text=default)
         if not ok:
             return
+        # В небе поза навигатора - взгляд на небо: точка метки -
+        # склонение и прямое восхождение, расстояние - поле зрения.
         pose = self.view.navigator.pose
         shape = Shape("point", [(pose.lat, pose.lon)],
                       name=name.strip() or default)
         self.myplaces.add(shape, view=self.current_view(),
-                          folder=self.panel.current_folder())
+                          folder=self.panel.current_folder(),
+                          body=self.body_key())
 
     def current_view(self):
         """Вид глобуса сейчас для метки, core.lookat."""
@@ -2246,6 +2276,16 @@ class GlobeWindow(QWidget):
         """Щелчок по глобусу: точка линейки или опрос объектов под ней."""
         tool = self.ruler if self._ruler_open() \
             else self.drawer if self._place_open() else None
+        sky = self.view.sky_view
+        if sky is not None:
+            # На небе щелчок ставит точку новой метки: склонение
+            # и прямое восхождение под курсором.
+            if tool is self.drawer:
+                cam = self.view.camera
+                ra, dec = ra_dec_of(sky.direction_at(px, py, cam.width,
+                                                     cam.height))
+                tool.add(dec, ra - 360.0 if ra > 180.0 else ra)
+            return
         if tool is not None:
             if tool is self.ruler and tool.spatial():
                 found = self._surface(px, py)

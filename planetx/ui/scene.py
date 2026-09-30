@@ -59,6 +59,11 @@ def capture(window, folder=None, name=""):
     меток.
     """
     pose = window.view.navigator.pose
+    if window.view.sky_view is not None \
+            and getattr(window, "_globe_pose", None) is not None:
+        # В небе навигатор ведёт взгляд на небо, камера глобуса -
+        # поза до входа в небо.
+        pose = window._globe_pose
     project = QgsProject.instance()
     layers = []
     for layer_id in sorted(window.shown_layers()):

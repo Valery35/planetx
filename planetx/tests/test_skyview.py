@@ -58,6 +58,19 @@ class TestSkyView(unittest.TestCase):
         self.assertAlmostEqual(x, 650.0, delta=1.5)
         self.assertAlmostEqual(y, 370.0, delta=1.5)
 
+    def test_pose_round_trip(self):
+        # Взгляд - поза навигатора - взгляд, в том числе RA за 180°.
+        for ra, dec, fov in ((83.0, 5.0, 70.0), (279.2, 38.8, 30.0),
+                             (350.0, -60.0, 2.0)):
+            view = sv.SkyView(ra, dec, fov)
+            lat, lon, distance = sv.pose_of(view, 1737400.0)
+            self.assertTrue(-180.0 <= lon <= 180.0)
+            back = sv.SkyView()
+            sv.follow_pose(back, lat, lon, distance, 1737400.0)
+            self.assertAlmostEqual(math.degrees(back.ra), ra, places=6)
+            self.assertAlmostEqual(math.degrees(back.dec), dec, places=6)
+            self.assertAlmostEqual(back.fov, fov, places=6)
+
     def test_limits(self):
         view = sv.SkyView(0.0, 0.0, 60.0)
         view.zoom(1e-3)

@@ -816,10 +816,17 @@ years 1800-2050, the Moon within 0.3°.
 The Constellations item of the same menu hides and shows the
 constellation lines and names. Stars, their names and the bodies stay.
 
-The ruler, new place, save view, tour recording, synchronization and
-feature identification are off in the sky. A view snapshot saves the
-sky with its labels. A scene keeps the view direction and the field of
-view. To leave the sky, choose a body in the same menu.
+Places and tours work in the sky. Save view puts a place with the
+view direction and the field of view. New place puts a point with a
+click on the sky. Record tour records the motion over the sky. Sky
+places lie in My Places with the others and show in the sky as yellow
+circles with a label. A tour and the ▶ button in the sky go through the
+sky places, between distant points the field of view widens on the
+way. A flight to a sky place from the list opens the sky.
+
+The ruler, synchronization and feature identification are off in the
+sky. A view snapshot saves the sky with its labels. A scene keeps the
+view direction and the field of view. To leave the sky, choose a body in the same menu.
 
 ---
 

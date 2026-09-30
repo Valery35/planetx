@@ -86,6 +86,37 @@ class SkyView:
         return v / np.linalg.norm(v)
 
 
+# Взгляд на небо как поза навигатора глобуса: широта - склонение,
+# долгота - прямое восхождение, расстояние пропорционально полю
+# зрения. Так перелёт van Wijk-Nuij и туры (core/flight.py,
+# core/tour.py) ведут и небо: между далёкими точками поле зрения по пути
+# расширяется. SPAN - ширина видимой полосы на единицу расстояния
+# у камеры глобуса с углом обзора 45°.
+SPAN = 2.0 * math.tan(math.radians(45.0) / 2.0)
+
+
+def distance_for(fov, radius):
+    """Расстояние позы для поля зрения fov, radius - радиус тела."""
+    return radius * math.radians(fov) / SPAN
+
+
+def fov_for(distance, radius):
+    """Поле зрения по расстоянию позы, обратное distance_for."""
+    return math.degrees(distance * SPAN / radius)
+
+
+def pose_of(view, radius):
+    """Широта, долгота и расстояние позы для взгляда view."""
+    ra = math.degrees(view.ra)
+    lon = ra - 360.0 if ra > 180.0 else ra
+    return math.degrees(view.dec), lon, distance_for(view.fov, radius)
+
+
+def follow_pose(view, lat, lon, distance, radius):
+    """Взгляд view по позе навигатора."""
+    view.set(lon % 360.0, lat, fov_for(distance, radius))
+
+
 def ra_dec_of(vector):
     """Прямое восхождение от 0 до 360° и склонение направления."""
     x, y, z = vector

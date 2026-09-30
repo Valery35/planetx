@@ -25,6 +25,7 @@ GAP = 6.0  # логических пикселей от точки до подп
 FONT_PIXELS = 12.0  # кегль подписи в логических пикселях
 STAR_COLOR = QColor(235, 235, 225, 210)
 CONSTELLATION_COLOR = QColor(120, 160, 220, 200)
+PLACE_COLOR = QColor(255, 214, 64)  # метки неба, как метки глобуса
 
 
 def body_name(key):
@@ -77,6 +78,8 @@ class SkyLabels(QWidget):
         items = [(v, body_name(name), "body:" + name, float(i))
                  for i, (name, v, _, _) in enumerate(
                      skydata.bodies(moment))]
+        items += [(v, name, "place", 9.0)
+                  for v, name in self.view.sky_places]
         if self.view.show_constellations:
             return items + self.fixed
         return items + [item for item in self.fixed if item[2] == "star"]
@@ -104,7 +107,7 @@ class SkyLabels(QWidget):
         for (_, text, kind, _), (x, y), ahead in zip(items, pixels, front):
             if not ahead or not (0.0 <= x <= width and 0.0 <= y <= height):
                 continue
-            body = kind.startswith("body")
+            body = kind.startswith("body") or kind == "place"
             metrics = QFontMetricsF(big if body else font)
             w = metrics.horizontalAdvance(text) if hasattr(
                 metrics, "horizontalAdvance") else metrics.width(text)
@@ -116,7 +119,14 @@ class SkyLabels(QWidget):
             if any(rect.intersects(other) for other in taken):
                 continue
             taken.append(rect)
-            if body:
+            if kind == "place":
+                # Кружок на месте метки: у светил и звёзд точку рисует
+                # видеокарта, у метки неба - этот слой.
+                color = PLACE_COLOR
+                painter.setPen(color)
+                painter.drawEllipse(QRectF(x - 3.0 * scale, y - 3.0 * scale,
+                                           6.0 * scale, 6.0 * scale))
+            elif body:
                 r, g, b = skydata.BODY_STYLE[kind[5:]][0]
                 color = QColor(int(r * 255), int(g * 255), int(b * 255))
             elif kind == "star":

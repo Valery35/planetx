@@ -427,10 +427,12 @@ class MyPlaces(QObject):
         return [p for p in self.places if inside is None or p.key in inside]
 
     def add(self, shape, measure="", view=None, folder=None, period=None,
-            view_period=None, tour=None):
+            view_period=None, tour=None, body=None):
         """Записать новую метку в конец папки folder, None - корень.
 
         Возвращает её ключ или None. view - вид метки core.lookat.
+        body - тело метки, None - текущее тело глобуса. У метки неба
+        body "sky": точка - склонение и прямое восхождение.
         """
         layer = self.layers.get(shape.kind)
         if layer is None or not shape.points:
@@ -453,7 +455,7 @@ class MyPlaces(QObject):
                   "icon": shape.icon, "time": when.pack(period),
                   "view_time": when.pack(view_period),
                   "tour": tour_text(tour), "alts": alts_text(shape.alts),
-                  "body": ellipsoid.BODY.key}
+                  "body": body or ellipsoid.BODY.key}
         for name, value in values.items():
             if layer.fields().indexOf(name) >= 0:
                 feature[name] = value

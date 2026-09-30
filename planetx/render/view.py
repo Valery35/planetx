@@ -28,7 +28,8 @@ from ..core.flight import Flight
 from ..core.navigation import (Navigator, Pose, altitude, ground_under,
                                nearest_terrain)
 from ..core.places import Place, PlaceStore, kinds_at
-from ..core.skyview import ra_dec_of
+from ..core.skyview import (FOV_MAX, FOV_MIN, distance_for, follow_pose,
+                            pose_of, ra_dec_of)
 from ..core.snapshot import letterbox
 from ..core.terrain import FLAT_LEVEL, HeightStore
 from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
@@ -390,6 +391,8 @@ class GlobeView(QOpenGLWidget):
         self.constellations = Constellations()
         self.show_constellations = True
         self.bodies = Stars(source=lambda: skydata.body_points(time.time()))
+        # Метки неба: (направление J2000, название), ставит окно.
+        self.sky_places = []
         self._bodies_time = None
         self._sky_press = None
         # Слои NASA GIBS: облака, температура моря и суши.
@@ -738,8 +741,10 @@ class GlobeView(QOpenGLWidget):
         px, py = self._pixel(event)
         button = event.button()
         if self.sky_view is not None:
-            # Небо тянется левой кнопкой, других жестов у него нет.
+            # Небо тянется левой кнопкой. Щелчок без сдвига - точка
+            # новой метки, сигнал clicked.
             self._sky_press = (px, py) if button == LEFT else None
+            self._press = self._sky_press
             return
         shift = bool(event.modifiers() & SHIFT)
         ctrl = bool(event.modifiers() & CTRL)
@@ -773,6 +778,7 @@ class GlobeView(QOpenGLWidget):
                 x0, y0 = self._sky_press
                 self._sky_press = (px, py)
                 self.sky_view.drag(px - x0, py - y0, self.camera.height)
+                self.sync_sky_pose()
                 self.update()
             return
         if self._vertex_drag:
@@ -814,7 +820,13 @@ class GlobeView(QOpenGLWidget):
         if self.shot is not None:
             return
         if self.sky_view is not None:
+            press, self._press = self._press, None
             self._sky_press = None
+            if press is not None and event.button() == LEFT:
+                px, py = self._pixel(event)
+                if math.hypot(px - press[0], py - press[1]) \
+                        <= CLICK_PIXELS * self.devicePixelRatioF():
+                    self.clicked.emit(*press)
             return
         press, self._press = self._press, None
         if self._vertex_drag:
@@ -860,14 +872,16 @@ class GlobeView(QOpenGLWidget):
         if self.sky_view is not None:
             # Левая - точка в середину и ближе вдвое, правая - дальше.
             self._fit_camera()
+            sky = self.sky_view
             if event.button() == LEFT:
                 px, py = self._pixel(event)
-                v = self.sky_view.direction_at(px, py, self.camera.width,
-                                               self.camera.height)
+                v = sky.direction_at(px, py, self.camera.width,
+                                     self.camera.height)
                 ra, dec = ra_dec_of(v)
-                self.sky_view.set(ra, dec, self.sky_view.fov / 2.0)
+                self.fly_sky(ra, dec, sky.fov / 2.0)
             elif event.button() == RIGHT:
-                self.sky_view.zoom(2.0)
+                ra, dec = ra_dec_of(sky.forward())
+                self.fly_sky(ra, dec, sky.fov * 2.0)
             self.update()
             return
         if self.tool_active:
@@ -912,6 +926,7 @@ class GlobeView(QOpenGLWidget):
 
         if self.sky_view is not None:
             if self._sky_key(key, named):
+                self.sync_sky_pose()
                 self.update()
             else:
                 super().keyPressEvent(event)
@@ -977,6 +992,7 @@ class GlobeView(QOpenGLWidget):
         notches = event.angleDelta().y() / 120.0
         if notches and self.sky_view is not None:
             self.sky_view.zoom(WHEEL_STEP ** notches)
+            self.sync_sky_pose()
             self.update()
             return
         if notches:
@@ -1389,7 +1405,7 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.drawn = 0
         if self.sky_view is not None and self.program is not None:
-            return self._render_sky(ratio, started)
+            return self._render_sky(ratio, started, moving)
         if self.program is None or not self.ready():
             return None
         # До первого полного кадра уровни 0-2 грузятся в видеокарту все
@@ -1604,10 +1620,29 @@ class GlobeView(QOpenGLWidget):
         cam.rotation = self.sky_view.rotation()
         return cam
 
-    def _render_sky(self, ratio, started):
+    def sync_sky_pose(self):
+        """Поза навигатора по взгляду на небо. Её зовут после мыши
+        и клавиш: перелёт и тур начинаются с того, что на экране."""
+        lat, lon, distance = pose_of(self.sky_view, ellipsoid.A)
+        self.navigator.stop()
+        self.navigator.set_pose(Pose(lat, lon, distance, 0.0, 0.0))
+
+    def fly_sky(self, ra, dec, fov):
+        """Перелёт взгляда на небе к точке ra, dec с полем fov."""
+        fov = max(FOV_MIN, min(FOV_MAX, fov))
+        lon = ra - 360.0 if ra > 180.0 else ra
+        self.sync_sky_pose()
+        self.fly_pose(dec, lon, distance_for(fov, ellipsoid.A), 0.0, 0.0)
+
+    def _render_sky(self, ratio, started, moving=False):
         """Кадр вида неба: Млечный путь, линии созвездий, звёзды
         и светила. Тайлов, воздуха и своих объектов в нём нет, камера
-        стоит в центре небесной сферы."""
+        стоит в центре небесной сферы. Пока идёт перелёт или тур,
+        взгляд берётся из позы навигатора, core.skyview.pose_of."""
+        if moving:
+            pose = self.navigator.pose
+            follow_pose(self.sky_view, pose.lat, pose.lon, pose.distance,
+                        ellipsoid.A)
         cam = self.sky_frame_camera()
         frame = np.eye(3)
         gpu.gl.glEnable(GL.GL_DEPTH_TEST)
@@ -1630,6 +1665,8 @@ class GlobeView(QOpenGLWidget):
         self.labels.count = 0
         self.frame_times.append(time.perf_counter() - started)
         self.changed.emit()
+        if moving:
+            self.update()
         return 0
 
     def _missing(self, sel):

@@ -2571,6 +2571,171 @@ def moon_tour_check():
     window.set_body("earth")
 
 
+@check(1500)
+def sky_tour():
+    # Метки неба «Сохранить видом» и тур по ним кнопкой ▶.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(58.0, 56.2, 2.0e7, 0.0, 0.0))
+    window.set_body("sky")
+    store = window.myplaces
+    folder = store.add_folder("Небо")
+    state["sky_folder"] = folder
+    window.panel.select_place(folder)
+    import planetx.ui.window as wmod
+    for name, (ra, dec, fov) in (("Орион", (84.0, 0.0, 40.0)),
+                                 ("Плеяды", (56.9, 24.1, 8.0)),
+                                 ("Вега", (279.2, 38.8, 20.0))):
+        window.show_sky(ra, dec, fov)
+        wmod.QInputDialog.getText = staticmethod(
+            lambda *a, n=name, **k: (n, True))
+        window.panel.select_place(folder)
+        window.save_view()
+    places = store.places_in(folder)
+    result["sky_tour"] = {
+        "places": [(p.shape.name, p.body,
+                    [round(v, 2) for v in p.shape.points[0]])
+                   for p in places],
+        "stops": len(window._tour_stops(folder)),
+        "labels": sorted(t for k, t, _, _ in window.sky_labels.shown
+                         if k == "place")}
+    window.show_sky(0.0, 0.0, 90.0)
+    window.panel.select_place(places[0].key)
+    window.panel.tour_button.click()
+    state["sky_track"] = []
+    view = window.view
+
+    def sample():
+        sky = view.sky_view
+        if sky is not None:
+            state["sky_track"].append((round(math.degrees(sky.ra), 1),
+                                       round(math.degrees(sky.dec), 1),
+                                       round(sky.fov, 1)))
+    timer = QTimer(window)
+    timer.timeout.connect(sample)
+    timer.start(500)
+    state["sky_timer"] = timer
+
+
+@check(25000)
+def sky_tour_wait():
+    pass
+
+
+@check(300)
+def sky_tour_check():
+    window = state["window"]
+    state["sky_timer"].stop()
+    track = state["sky_track"]
+    window.view.repaint()
+    window.sky_labels.repaint()
+    result["sky_tour"].update({
+        "samples": len(track), "track": track[::6],
+        "max_fov": max((t[2] for t in track), default=None),
+        "playing": bool(window.tour.playing),
+        "labels": sorted(t for k, t, _, _ in window.sky_labels.shown
+                         if k == "place")})
+    window.grab().save(os.path.join(TEMP, "planetx_sky_tour.png"))
+    window.tour.stop()
+    # Перелёт к метке неба с Земли включает небо.
+    window.set_body("earth")
+    globe = window.view.navigator.pose
+    place = window.myplaces.places_in(state["sky_folder"])[2]
+    window.fly_to_place(place)
+    result["sky_tour"]["fly"] = {"sky": window.view.sky_view is not None}
+    window.set_body("earth")
+    back = window.view.navigator.pose
+    result["sky_tour"]["globe_back"] = [
+        round(globe.lat, 3) == round(back.lat, 3),
+        round(globe.distance) == round(back.distance)]
+    window.myplaces.remove(state["sky_folder"])
+
+
+@check(4000)
+def sky_record():
+    # Новая метка щелчком по небу и запись тура с экрана на небе.
+    import planetx.ui.window as wmod
+    window = state["window"]
+    window.set_body("sky")
+    window.show_sky(84.0, 0.0, 60.0)
+    view = window.view
+    window._open_place()
+    cam = view.camera
+    window._clicked(cam.width / 2.0, cam.height / 2.0)
+    window._refresh_shapes()
+    preview = [n for _, n in view.sky_places]
+    window._save_place()
+    window.place_dialog.close()
+    state["sky_new"] = [p for p in window.myplaces.places
+                        if p.body == "sky"][-1]
+    result["sky_record"] = {
+        "tools": {"place": window.toolbar.place_button.isEnabled(),
+                  "record": window.toolbar.record.isEnabled(),
+                  "save": window.toolbar.save_button.isEnabled()},
+        "preview": preview,
+        "new": [state["sky_new"].shape.name, state["sky_new"].body,
+                [round(v, 2) for v in state["sky_new"].shape.points[0]]]}
+    wmod.QInputDialog.getText = staticmethod(
+        lambda *a, **k: ("Тур по небу", True))
+    window.toolbar.record.setChecked(True)
+    steps = iter(range(12))
+
+    def move():
+        if next(steps, None) is None:
+            state["sky_move"].stop()
+            return
+        view.sky_view.drag(40.0, -10.0, cam.height)
+        view.sync_sky_pose()
+        view.update()
+    timer = QTimer(window)
+    timer.timeout.connect(move)
+    timer.start(250)
+    state["sky_move"] = timer
+
+
+@check(6000)
+def sky_record_stop():
+    window = state["window"]
+    window.toolbar.record.setChecked(False)
+    tours = [p for p in window.myplaces.places
+             if p.body == "sky" and p.tour]
+    result["sky_record"]["tour"] = [(p.shape.name, len(p.tour))
+                                    for p in tours]
+    state["sky_rec"] = tours[-1] if tours else None
+    window.show_sky(0.0, 60.0, 60.0)
+    if state["sky_rec"] is not None:
+        window._place_action("tour", state["sky_rec"].key)
+    state["sky_rec_track"] = []
+
+    def sample():
+        sky = window.view.sky_view
+        if sky is not None:
+            state["sky_rec_track"].append(round(math.degrees(sky.ra), 1))
+    timer = QTimer(window)
+    timer.timeout.connect(sample)
+    timer.start(300)
+    state["sky_rec_timer"] = timer
+
+
+@check(300)
+def sky_record_check():
+    window = state["window"]
+    state["sky_rec_timer"].stop()
+    track = state["sky_rec_track"]
+    result["sky_record"]["replay_ra"] = [track[0], track[-1]] \
+        if track else None
+    window.tour.stop()
+    window.show_sky(279.2, 38.8, 20.0)
+    window.view.repaint()
+    window.sky_labels.repaint()
+    for place in (state["sky_new"], state["sky_rec"]):
+        if place is not None:
+            window.myplaces.remove(place.key)
+    window.set_body("earth")
+
+
 SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
 
 
