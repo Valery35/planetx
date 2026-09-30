@@ -62,6 +62,7 @@ dragged with the mouse.
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
+| Demo | Ready scenes by body, see [Demo](#demo) |
 | Body | The menu Earth, Mars, Moon and Sky, see [Mars and the Moon](#mars-and-the-moon) and [Starry sky](#starry-sky) |
 | View properties | Base map, terrain, labels, link with the map, update, coordinate format |
 | About | Controls, data sources, links |
@@ -722,14 +723,22 @@ flies to the scene pose. The status line lists the layers that were not
 found and did not open.
 
 
-### Perm demo
+### Demo
 
-Perm demo in the Scene menu opens a scene with placemarks around Perm.
-It has placemarks with icons and the time of a walk by the hour and
-placemark views with a date. There are also a route, an extruded polygon,
-a path along the Kama and a recorded flight over the centre. 3D buildings and stars
-are on. The walk time is an example. The placemarks go into My Places as
-a new folder, which can be deleted.
+The Demo icon with an academic cap on the icon bar opens ready scenes.
+Each scene puts its places into My Places as a new folder, the ▶ button
+under the list plays a tour over them. The folder can be deleted.
+
+| Section | Scene | What it holds |
+|---|---|---|
+| Earth | Perm | Places with icons and the time of a walk by the hour, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
+| Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
+| Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
+| Moon | Apollo and Lunokhod sites | The landing sites of six Apollo missions, Lunokhod 1 and Lunokhod 2 |
+| Sky | Autumn and winter constellations | Orion, the Pleiades, the Andromeda Galaxy, Cassiopeia, Ursa Major, Vega and Lyra, the Southern Cross |
+
+The Perm walk time is an example. Landing coordinates are rounded to
+hundredths of a degree.
 
 ---
 

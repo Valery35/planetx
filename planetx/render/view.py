@@ -1624,7 +1624,7 @@ class GlobeView(QOpenGLWidget):
     def sync_sky_pose(self):
         """Поза навигатора по взгляду на небо. Её зовут после мыши
         и клавиш: перелёт и тур начинаются с того, что на экране."""
-        lat, lon, distance = pose_of(self.sky_view, ellipsoid.A)
+        lat, lon, distance = pose_of(self.sky_view)
         self.navigator.stop()
         self.navigator.set_pose(Pose(lat, lon, distance, 0.0, 0.0))
 
@@ -1633,7 +1633,7 @@ class GlobeView(QOpenGLWidget):
         fov = max(FOV_MIN, min(FOV_MAX, fov))
         lon = ra - 360.0 if ra > 180.0 else ra
         self.sync_sky_pose()
-        self.fly_pose(dec, lon, distance_for(fov, ellipsoid.A), 0.0, 0.0)
+        self.fly_pose(dec, lon, distance_for(fov), 0.0, 0.0)
 
     def _render_sky(self, ratio, started, moving=False):
         """Кадр вида неба: Млечный путь, линии созвездий, звёзды
@@ -1642,8 +1642,7 @@ class GlobeView(QOpenGLWidget):
         взгляд берётся из позы навигатора, core.skyview.pose_of."""
         if moving:
             pose = self.navigator.pose
-            follow_pose(self.sky_view, pose.lat, pose.lon, pose.distance,
-                        ellipsoid.A)
+            follow_pose(self.sky_view, pose.lat, pose.lon, pose.distance)
         cam = self.sky_frame_camera()
         frame = np.eye(3)
         gpu.gl.glEnable(GL.GL_DEPTH_TEST)

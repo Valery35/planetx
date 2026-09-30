@@ -45,7 +45,7 @@ class ViewToolbar(QFrame):
     snapshot_clicked = pyqtSignal()
     scene_save_requested = pyqtSignal()
     scene_open_requested = pyqtSignal()
-    demo_requested = pyqtSignal()
+    demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -122,16 +122,35 @@ class ViewToolbar(QFrame):
             self.scene_save_requested)
         menu.addAction(tr("Открыть сцену…")).triggered.connect(
             self.scene_open_requested)
-        menu.addSeparator()
-        demo = menu.addAction(tr("Демо «Пермь»"))
-        demo.setToolTip(tr(
-            "Сцена с метками по Перми: значки, время прогулки на шкале, "
-            "виды, маршрут, выдавленный многоугольник, записанный облёт "
-            "и 3D-здания. Метки ложатся новой папкой в «Мои метки»."))
-        demo.triggered.connect(self.demo_requested)
         scene.setMenu(menu)
         self.layout().addWidget(scene)
         self.scene = scene
+        # Демо: готовые сцены по телам, значок - академическая шапочка.
+        demo = QToolButton(self)
+        demo.setIcon(QIcon(os.path.join(ROOT, "demo.svg")))
+        demo.setIconSize(ICON_SIZE)
+        demo.setAutoRaise(True)
+        demo.setToolTip(tr(
+            "Демо: готовые сцены с метками и турами на Земле, Марсе, "
+            "Луне и небе. Метки ложатся новой папкой в «Мои метки», "
+            "кнопка ▶ под списком проводит тур."))
+        demo.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
+                               "InstantPopup"))
+        menu = QMenu(demo)
+        for section, items in (
+                (tr("Земля"), (("perm", tr("Пермь")),
+                               ("bocachica", tr("Бока-Чика, Starbase")))),
+                (tr("Марс"), (("mars", tr("Места посадок марсоходов")),)),
+                (tr("Луна"), (("moon",
+                               tr("«Аполлоны» и «Луноходы»")),)),
+                (tr("Небо"), (("sky", tr("Созвездия осени и зимы")),))):
+            menu.addSection(section)
+            for key, title in items:
+                menu.addAction(title).triggered.connect(
+                    lambda checked=False, k=key: self.demo_requested.emit(k))
+        demo.setMenu(menu)
+        self.layout().addWidget(demo)
+        self.demo = demo
         # Тело глобуса: Земля, Марс, Луна, и вид звёздного неба.
         body = QToolButton(self)
         body.setIcon(QIcon(os.path.join(ROOT, "planet.svg")))

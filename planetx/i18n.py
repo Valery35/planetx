@@ -210,6 +210,17 @@ EN = {
         "search and buildings are off there. The sky shows constellations, "
         "stars and planets from the centre of the celestial sphere.",
     "Небо": "Sky",
+    "Демо: готовые сцены с метками и турами на Земле, Марсе, Луне и небе. "
+    "Метки ложатся новой папкой в «Мои метки», кнопка ▶ под списком "
+    "проводит тур.":
+        "Demo: ready scenes with places and tours on the Earth, Mars, the "
+        "Moon and in the sky. The places go to My Places as a new folder, "
+        "the ▶ button under the list plays the tour.",
+    "Пермь": "Perm",
+    "Бока-Чика, Starbase": "Boca Chica, Starbase",
+    "Места посадок марсоходов": "Rover landing sites",
+    "«Аполлоны» и «Луноходы»": "Apollo and Lunokhod sites",
+    "Созвездия осени и зимы": "Autumn and winter constellations",
     "Созвездия": "Constellations",
     "Линии фигур и названия созвездий на небе. Без них остаются звёзды, "
     "их имена и светила.":
@@ -810,14 +821,6 @@ EN = {
         "keys or flights, a second click stops recording. The tour goes "
         "into My Places.",
     "Тур": "Tour",
-    "Демо «Пермь»": "Perm demo",
-    "Сцена с метками по Перми: значки, время прогулки на шкале, "
-    "виды, маршрут, выдавленный многоугольник, записанный облёт "
-    "и 3D-здания. Метки ложатся новой папкой в «Мои метки».":
-        "A scene with placemarks around Perm: icons, the time of a walk on "
-        "the time slider, views, a route, an extruded polygon, a recorded "
-        "flight and 3D buildings. The placemarks go into My Places as a new "
-        "folder.",
     "Сохранить тур": "Save tour",
     "Тур не записан, камера не двигалась.":
         "The tour was not recorded, the camera did not move.",

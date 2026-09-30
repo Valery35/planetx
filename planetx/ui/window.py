@@ -1663,11 +1663,12 @@ class GlobeWindow(QWidget):
         self._show_state()
         return True
 
-    def open_demo(self):
-        """Демо «Пермь» из папки модуля, tools/make_demo.py."""
+    def open_demo(self, name="perm"):
+        """Демо из папки модуля, tools/make_demo.py: perm, bocachica,
+        mars, moon, sky."""
         return self.open_scene(os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "demo",
-            "perm" + EXTENSION))
+            name + EXTENSION))
 
     def open_scene(self, path=None):
         """Сцена из файла на глобус. Возвращает ключ папки её меток."""

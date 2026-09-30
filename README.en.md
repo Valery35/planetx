@@ -131,8 +131,9 @@ and atmosphere, from space down to single streets.
 - **Placemark time.** A placemark can have a moment or an interval. The
   time slider opens with a button on the icon bar and hides placemarks
   outside the interval.
-- **Perm demo.** The Scene menu opens a scene with placemarks around
-  Perm with icons, time, tours and 3D buildings.
+- **Demo.** The icon with an academic cap opens ready scenes with
+  places and tours. They show Perm and Boca Chica on the Earth, landing
+  sites on Mars and the Moon, constellations in the sky.
 - **Scenes.** The whole view - camera, time, layers, settings and a
   places folder with its tour - saves to a file and opens on another
   computer.

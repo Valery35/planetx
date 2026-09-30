@@ -2839,6 +2839,49 @@ def moon_holes_check():
                                               view.selection.draw})}
     window.set_body("earth")
 
+DEMOS = ("perm", "bocachica", "mars", "moon", "sky")
+
+
+def _demo_open(name):
+    window = state["window"]
+    state.setdefault("demo_keys", []).append(window.open_demo(name))
+
+
+def _demo_check(name):
+    window = state["window"]
+    folder = window.myplaces.folders[-1].key \
+        if window.myplaces.folders else None
+    places = window.myplaces.places_in(folder) if folder else []
+    result.setdefault("demos", {})[name] = {
+        "body": window.body_key(),
+        "places": len(places),
+        "bodies": sorted({p.body for p in places}),
+        "stops": len(window._tour_stops(folder)),
+        "status": window.status.text().split(chr(10))[0]}
+    if folder:
+        window.myplaces.remove(folder)
+
+
+def _demo_steps():
+    for i, name in enumerate(DEMOS):
+        prev = DEMOS[i - 1] if i else None
+
+        def step(name=name, prev=prev):
+            if prev is not None:
+                _demo_check(prev)
+            _demo_open(name)
+        step.__name__ = "demo_" + name
+        check(8000)(step)
+
+    def demo_done():
+        _demo_check(DEMOS[-1])
+        state["window"].set_body("earth")
+    check(300)(demo_done)
+
+
+_demo_steps()
+
+
 SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
 
 

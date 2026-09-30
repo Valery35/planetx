@@ -587,7 +587,7 @@ class MyPlaces(QObject):
 
     # KML и KMZ.
 
-    def import_tree(self, tree, parent=None, wrap=True):
+    def import_tree(self, tree, parent=None, wrap=True, body=None):
         """Записать дерево core.kml в папку parent новой папкой.
 
         Папки создаются по одной, метки пишутся одной правкой на слой,
@@ -655,7 +655,7 @@ class MyPlaces(QObject):
                     "view_time": when.pack(place.view_time),
                     "tour": tour_text(place.tour),
                     "alts": alts_text(getattr(place, "alts", None)),
-                    "body": ellipsoid.BODY.key}
+                    "body": body or ellipsoid.BODY.key}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

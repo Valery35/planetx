@@ -91,28 +91,30 @@ class SkyView:
 # зрения. Так перелёт van Wijk-Nuij и туры (core/flight.py,
 # core/tour.py) ведут и небо: между далёкими точками поле зрения по пути
 # расширяется. SPAN - ширина видимой полосы на единицу расстояния
-# у камеры глобуса с углом обзора 45°.
+# у камеры глобуса с углом обзора 45°. Радиус пересчёта постоянный,
+# радиус Земли: метки и туры неба одинаковы с любого тела под ним.
 SPAN = 2.0 * math.tan(math.radians(45.0) / 2.0)
+SKY_RADIUS = 6378137.0
 
 
-def distance_for(fov, radius):
+def distance_for(fov, radius=SKY_RADIUS):
     """Расстояние позы для поля зрения fov, radius - радиус тела."""
     return radius * math.radians(fov) / SPAN
 
 
-def fov_for(distance, radius):
+def fov_for(distance, radius=SKY_RADIUS):
     """Поле зрения по расстоянию позы, обратное distance_for."""
     return math.degrees(distance * SPAN / radius)
 
 
-def pose_of(view, radius):
+def pose_of(view, radius=SKY_RADIUS):
     """Широта, долгота и расстояние позы для взгляда view."""
     ra = math.degrees(view.ra)
     lon = ra - 360.0 if ra > 180.0 else ra
     return math.degrees(view.dec), lon, distance_for(view.fov, radius)
 
 
-def follow_pose(view, lat, lon, distance, radius):
+def follow_pose(view, lat, lon, distance, radius=SKY_RADIUS):
     """Взгляд view по позе навигатора."""
     view.set(lon % 360.0, lat, fov_for(distance, radius))
 

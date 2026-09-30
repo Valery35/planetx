@@ -129,7 +129,7 @@ RU = {
                   "по глобусу и хранятся в «Моих метках». "
                   "У метки бывают значок, своё время и свой вид. "
                   "Файлы KML и KMZ открываются и сохраняются. "
-                  "Пункт «Демо «Пермь»» меню «Сцена» показывает всё сразу.",
+                  "Сцена «Пермь» значка «Демо» показывает всё сразу.",
     "places.fig": "Демо «Пермь». Шкала времени на 11:30-13:00, видна "
                   "Эспланада, маршрут прогулки и 3D-здания.",
     "places.c1.h": "Значки и время",
@@ -143,6 +143,37 @@ RU = {
     "places.c3.h": "Туры",
     "places.c3.p": "Тур облетает метки или проигрывает запись движения "
                    "камеры. Тур записывается кадрами PNG для ролика.",
+    "nav.worlds": "Марс, Луна, небо",
+    "worlds.eyebrow": "Другие тела и небо",
+    "worlds.h2": "Марс, Луна и звёздное небо",
+    "worlds.sub": "Значок «Тело» заменяет Землю Марсом или Луной. Снимки "
+                  "Марса - цветная мозаика Viking MDIM2.1, снимки Луны - "
+                  "альбедо LOLA с отмывкой рельефа, около 650 м "
+                  "на пиксель. Навигация, метки, туры, линейка и сцены "
+                  "работают на любом теле, метка хранит своё тело. Пункт "
+                  "«Небо» показывает небесную сферу изнутри - 5080 "
+                  "звёзд, 88 созвездий, Солнце, Луну и планеты "
+                  "на выбранный момент.",
+    "worlds.mars": "Марс. Вулканы Фарсиды и долины Маринер, мозаика "
+                   "Viking.",
+    "worlds.moon": "Видимая сторона Луны, альбедо LOLA с отмывкой "
+                   "рельефа.",
+    "worlds.sky": "Небо 1 октября 2026 года. Орион, Телец и Близнецы, "
+                  "Луна у Плеяд, Марс в Раке.",
+    "worlds.c1.h": "Положения светил",
+    "worlds.c1.p": "Планеты рассчитываются по кеплеровым элементам "
+                   "орбит JPL, Луна - по формулам Астрономического "
+                   "альманаха. Отклонение от эфемерид JPL Horizons не "
+                   "превышает 0.1° у планет и 0.3° у Луны.",
+    "worlds.c2.h": "Метки и туры на небе",
+    "worlds.c2.p": "Метка неба хранит направление взгляда и поле "
+                   "зрения. Тур по меткам неба расширяет поле зрения "
+                   "между удалёнными точками и сужает его у цели.",
+    "worlds.c3.h": "Демо",
+    "worlds.c3.p": "Значок с академической шапочкой открывает готовые "
+                   "сцены. На Земле это Пермь и Бока-Чика, на Марсе "
+                   "и Луне - места посадок аппаратов, на небе - "
+                   "созвездия осени и зимы.",
     "controls.eyebrow": "Управление",
     "controls.h2": "Навигация мышью и клавиатурой",
     "controls.sub": "Значок "
@@ -197,7 +228,10 @@ RU = {
     "ftr.line3": "Космоснимки Esri, Vantor, Earthstar Geographics, "
                  "and the GIS User Community. Картографические данные "
                  "© участники OpenStreetMap, векторные тайлы OpenFreeMap. "
-                 "Рельеф Mapzen Terrain Tiles.",
+                 "Рельеф Mapzen Terrain Tiles. Марс - NASA, USGS, Viking "
+                 "MDIM2.1, Луна - USGS, LRO LOLA, тайлы "
+                 "OpenPlanetaryMap. Созвездия - d3-celestial, "
+                 "© Olaf Frohn.",
 }
 
 EN = {
@@ -281,7 +315,7 @@ EN = {
                   "on the globe and kept in My Places. "
                   "A placemark can have an icon, a time and a view "
                   "of its own. KML and KMZ files open and save. "
-                  "Perm demo in the Scene menu shows it all at once.",
+                  "The Perm scene of the Demo icon shows it all at once.",
     "places.fig": "Perm demo. The time slider at 11:30-13:00 shows the "
                   "Esplanade, the walk route and 3D buildings.",
     "places.c1.h": "Icons and time",
@@ -296,6 +330,40 @@ EN = {
     "places.c3.p": "A tour flies over placemarks or plays a recorded "
                    "camera movement. A tour records to PNG frames for a "
                    "video.",
+    "nav.worlds": "Mars, Moon, sky",
+    "worlds.eyebrow": "Other bodies and the sky",
+    "worlds.h2": "Mars, the Moon and the starry sky",
+    "worlds.sub": "The Body icon replaces the Earth with Mars or the "
+                  "Moon. Mars imagery is the Viking MDIM2.1 colour "
+                  "mosaic, Moon imagery is the LOLA albedo with hill "
+                  "shading, about 650 m per pixel. Navigation, places, "
+                  "tours, the ruler and scenes work on any body, and a "
+                  "place keeps its body. The Sky item shows the "
+                  "celestial sphere from inside - 5080 stars, 88 "
+                  "constellations, the Sun, the Moon and the planets at "
+                  "the chosen moment.",
+    "worlds.mars": "Mars. The Tharsis volcanoes and Valles Marineris, "
+                   "Viking mosaic.",
+    "worlds.moon": "The near side of the Moon, LOLA albedo with hill "
+                   "shading.",
+    "worlds.sky": "The sky on 1 October 2026. Orion, Taurus and Gemini, "
+                  "the Moon at the Pleiades, Mars in Cancer.",
+    "worlds.c1.h": "Positions of the bodies",
+    "worlds.c1.p": "Planets are computed from the JPL Keplerian orbital "
+                   "elements, the Moon from the formulae of the "
+                   "Astronomical Almanac. The deviation from the JPL "
+                   "Horizons ephemerides is within 0.1° for planets and "
+                   "0.3° for the Moon.",
+    "worlds.c2.h": "Places and tours in the sky",
+    "worlds.c2.p": "A sky place keeps the view direction and the field "
+                   "of view. A tour over sky places widens the field of "
+                   "view between distant points and narrows it at the "
+                   "target.",
+    "worlds.c3.h": "Demo",
+    "worlds.c3.p": "The icon with an academic cap opens ready scenes. "
+                   "On the Earth these are Perm and Boca Chica, on Mars "
+                   "and the Moon the landing sites of spacecraft, in the "
+                   "sky the autumn and winter constellations.",
     "controls.eyebrow": "Controls",
     "controls.h2": "Mouse and keyboard navigation",
     "controls.sub": "The View "
@@ -473,6 +541,7 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
         <a href="#idea" data-i18n="nav.idea"></a>
         <a href="#layers" data-i18n="nav.layers"></a>
         <a href="#project" data-i18n="nav.project"></a>
+        <a href="#worlds" data-i18n="nav.worlds"></a>
         <a href="#controls" data-i18n="nav.controls"></a>
         <a href="#family" data-i18n="fam.eyebrow"></a>
       </nav>
@@ -559,6 +628,30 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
         <p data-i18n="places.c2.p"></p></div>
       <div class="card"><h3 data-i18n="places.c3.h"></h3>
         <p data-i18n="places.c3.p"></p></div>
+    </div>
+  </div>
+</section>
+
+<section id="worlds">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="worlds.eyebrow"></div>
+    <h2 data-i18n="worlds.h2"></h2>
+    <p class="sub" data-i18n="worlds.sub"></p>
+    <div class="trio">
+      <figure><img alt="" src="@MARS@">
+        <figcaption data-i18n="worlds.mars"></figcaption></figure>
+      <figure><img alt="" src="@MOON@">
+        <figcaption data-i18n="worlds.moon"></figcaption></figure>
+      <figure><img alt="" src="@SKY@">
+        <figcaption data-i18n="worlds.sky"></figcaption></figure>
+    </div>
+    <div class="trio">
+      <div class="card"><h3 data-i18n="worlds.c1.h"></h3>
+        <p data-i18n="worlds.c1.p"></p></div>
+      <div class="card"><h3 data-i18n="worlds.c2.h"></h3>
+        <p data-i18n="worlds.c2.p"></p></div>
+      <div class="card"><h3 data-i18n="worlds.c3.h"></h3>
+        <p data-i18n="worlds.c3.p"></p></div>
     </div>
   </div>
 </section>
@@ -690,6 +783,9 @@ def main():
             ("@EARTH@", image("earth.jpg")),
             ("@PERM@", image("perm.jpg")),
             ("@DEMO@", image("demo.jpg")),
+            ("@MARS@", image("mars.jpg")),
+            ("@MOON@", image("moon.jpg")),
+            ("@SKY@", image("sky.jpg")),
             ("@CONTROLS@", CONTROLS),
             ("@VERSION@", version()),
             ("@TEXTS@", json.dumps({"ru": RU, "en": EN},

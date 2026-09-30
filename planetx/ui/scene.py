@@ -174,7 +174,9 @@ def apply(window, scene, kml=b""):
         window.set_layer_shown(layer.id(), layer.id() in wanted)
     key = None
     if kml:
-        key = window.myplaces.import_tree(read_kml(kml, scene.places))
+        # Метки ложатся на тело сцены, в том числе на небо.
+        key = window.myplaces.import_tree(read_kml(kml, scene.places),
+                                          body=window.body_key())
     controller = window.tracks.controller
     if scene.time and controller is not None:
         start = _datetime(scene.time.get("start"))
