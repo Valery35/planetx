@@ -33,14 +33,16 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import (A, ecef_to_geodetic, geodetic_to_ecef,
+    from . import ellipsoid
+    from .ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                             surface_normal)
     from .features import centered
     from .places import (EXTENT, _fields, _packed, _unpack, _value,
                          _zigzag)
     from .tiling import lat_of_row, lonlat_to_tile, tile_bounds
 except ImportError:  # headless-тесты
-    from ellipsoid import (A, ecef_to_geodetic, geodetic_to_ecef,
+    import ellipsoid
+    from ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                            surface_normal)
     from features import centered
     from places import EXTENT, _fields, _packed, _unpack, _value, _zigzag
@@ -557,7 +559,7 @@ def near_tiles(eye, forward, ground=0.0, reach=RANGE, limit=MAX_TILES):
     if above >= reach:
         return []
     radius = math.sqrt(reach * reach - max(above, 0.0) ** 2)
-    dlat = math.degrees(radius / A)
+    dlat = math.degrees(radius / ellipsoid.A)
     dlon = dlat / max(math.cos(math.radians(lat)), 1e-6)
     n = 1 << LEVEL
     x0, y0 = lonlat_to_tile(min(lat + dlat, 85.0), lon - dlon, LEVEL)

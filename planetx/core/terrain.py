@@ -129,6 +129,14 @@ class HeightStore:
         self.scale = float(scale)
         self.version += 1
 
+    def clear(self):
+        """Забыть все высоты: другое тело, у него свой рельеф или нет
+        никакого."""
+        self.tiles.clear()
+        self._ranges.clear()
+        self.added = []
+        self.version += 1
+
     def add(self, tile):
         # Кэш размахов не сбрасывается. Размах помнит тайл высот, по
         # которому посчитан, и пересчитывается, когда лучший тайл другой.

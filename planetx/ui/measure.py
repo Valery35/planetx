@@ -12,7 +12,8 @@
 Точки ставятся щелчками по глобусу, перетаскивание по-прежнему двигает
 Землю. Точку линейки можно схватить и перетащить, Backspace убирает
 последнюю. За курсором тянется резинка к следующей точке. Длина,
-периметр и площадь считаются на эллипсоиде WGS84 через QgsDistanceArea.
+периметр и площадь считаются на эллипсоиде текущего тела через
+QgsDistanceArea, у Земли это WGS84.
 Длина по рельефу и профиль высот - по точкам вдоль линии
 (core/measure.py). «Сохранить» кладёт фигуру в «Мои метки» вместе
 с текстом измерения.
@@ -28,7 +29,7 @@ from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
                                  QPushButton, QTabBar, QVBoxLayout,
                                  QWidget)
 
-from ..core import measure3d
+from ..core import ellipsoid, measure3d
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import Shape
 from ..core.measure import (AREA_UNITS, CIRCLE_POINTS, LENGTH_UNITS,
@@ -62,7 +63,11 @@ def _distance_area():
     da = QgsDistanceArea()
     da.setSourceCrs(QgsCoordinateReferenceSystem("EPSG:4326"),
                     QgsProject.instance().transformContext())
-    da.setEllipsoid("WGS84")
+    if ellipsoid.BODY.key == "earth":
+        da.setEllipsoid("WGS84")
+    else:
+        # Марс и Луна - сферы, размеры из core.ellipsoid.
+        da.setEllipsoid(ellipsoid.A, ellipsoid.B)
     return da
 
 
@@ -71,7 +76,7 @@ def _xy(points):
 
 
 def ellipsoid_ring(da, lat, lon, radius, points=CIRCLE_POINTS):
-    """Окружность радиуса radius метров по геодезическим линиям WGS84.
+    """Окружность радиуса radius метров по геодезическим линиям тела.
 
     На сфере радиус расходился с мерой эллипсоида на 0.24 % на широте
     58°, 27 сентября 2026 года.
@@ -103,12 +108,21 @@ class Ruler(QObject):
         self.alts = []
         self.cursor = None
         self.cursor_alt = None
-        self.da = _distance_area()
+        self._da = None
+        self._da_body = None
         self.heights = None
         self.has_heights = None
         self.ask_heights = None
         # Точки, выборка, ключи высот, окно уклона.
         self._samples = (None, None, None, None)
+
+    @property
+    def da(self):
+        """Мера QGIS на текущем теле, заново после смены тела."""
+        if self._da is None or self._da_body is not ellipsoid.BODY:
+            self._da = _distance_area()
+            self._da_body = ellipsoid.BODY
+        return self._da
 
     def set_mode(self, mode):
         self.mode = mode

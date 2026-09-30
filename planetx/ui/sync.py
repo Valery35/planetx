@@ -24,7 +24,7 @@ from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsPointXY, QgsProject, QgsRectangle)
 from qgis.PyQt.QtCore import QObject, QTimer
 
-from ..core.ellipsoid import A
+from ..core import ellipsoid
 from ..core.sync import (BOTH, GLOBE_TO_MAP, MAP_TO_GLOBE, MAX_GROUND, arc,
                          distance_for, ground_size, same_view)
 
@@ -76,7 +76,7 @@ def extent_for(canvas, lat, lon, width):
     crs = canvas.mapSettings().destinationCrs()
     to_map = _transform(QgsCoordinateReferenceSystem(WGS84), crs)
     half = width / 2.0
-    dlon = math.degrees(half / (A * max(math.cos(math.radians(lat)),
+    dlon = math.degrees(half / (ellipsoid.A * max(math.cos(math.radians(lat)),
                                         1e-6)))
     try:
         c = to_map.transform(QgsPointXY(lon, lat))

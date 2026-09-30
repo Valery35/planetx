@@ -21,6 +21,10 @@ QGIS. Запросы идут через сетевые настройки и д
 | NASA GIBS, MODIS Terra LST 8 дней и GHRSST MUR | температура суши и моря, строка «Температура» | [данные NASA открыты, NASA просит указать источник](https://www.earthdata.nasa.gov/engage/open-data-services-software/earthdata-developer-portal/gibs-api) | NASA GIBS, MODIS, GHRSST MUR |
 | NASA SVS Deep Star Maps 2020 | Млечный путь, строка «Звёзды» | [страница SVS](https://svs.gsfc.nasa.gov/4851), SVS просит указать источник, запретов нет. Переведённая картинка лежит в выпуске `sky-2020` хранилища | NASA/Goddard SVS, Gaia DR2: ESA/Gaia/DPAC, в окне «О модуле» |
 | Yale Bright Star Catalogue, 5-е издание | звёзды, строка «Звёзды» | каталог CDS V/50, условия CDS не сверены, автор принял это 29 сентября 2026 года | нет |
+| OpenPlanetaryMap, Viking MDIM2.1 | снимки Марса | условия не указаны, см. раздел «Марс и Луна» | NASA, USGS, Viking MDIM2.1, OpenPlanetaryMap |
+| OpenPlanetaryMap, LOLA hillshaded albedo | снимки Луны | условия не указаны, см. раздел «Марс и Луна» | USGS, LRO LOLA, OpenPlanetaryMap |
+| d3-celestial, Olaf Frohn | линии и названия созвездий, имена ярких звёзд, вид неба | [BSD с тремя пунктами](https://github.com/ofrohn/d3-celestial/blob/master/LICENSE), текст лицензии лежит в `planetx/data` | Constellations: d3-celestial © Olaf Frohn |
+| JPL, Approximate Positions of the Planets | положения планет на небе | [страница JPL](https://ssd.jpl.nasa.gov/planets/approx_pos.html), формулы, данных не скачивается | Planets: JPL approximate elements |
 | Nominatim | поиск места по названию | [правила использования Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | © OpenStreetMap contributors, в окне «О модуле» |
 
 ## Nominatim - поиск места
@@ -60,6 +64,19 @@ Tiles из обозревателя QGIS.
 скачивания и без выгрузки для работы без сети. Кому нужна
 определённость, особенно в коммерческой работе, сверяет условия
 с Esri или выбирает в свойствах вида другую подложку.
+
+## Марс и Луна
+
+Снимки Марса и Луны дают базовые карты OpenPlanetaryMap. Это
+сообщество, которое выкладывает тайлы планетных данных для веб-карт.
+Марс - цветная мозаика Viking MDIM2.1 NASA и USGS, Луна - альбедо
+с отмывкой по рельефу LOLA от USGS. Страница базовых карт
+[OPM Basemaps](https://github.com/openplanetary/opm/wiki/OPM-Basemaps)
+просит подписи «NASA/Viking/USGS» и «LOLA/USGS». Условий
+использования она не называет. Сверено 1 октября 2026 года.
+
+Тайлы обоих тел лежат в разметке TMS, ряды считаются от юга. Для Луны
+страница называет разметку XYZ, мозаика тайлов показала TMS.
 
 ## Другие открытые покрытия
 

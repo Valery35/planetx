@@ -18,16 +18,17 @@ from qgis.PyQt.QtCore import (QObject, QRunnable, QThreadPool, Qt, QTimer,
                               pyqtSignal)
 from qgis.PyQt.QtGui import QImage, QSurfaceFormat
 
-from ..core import lod
+from ..core import lod, skydata
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
 from ..core.camera import Camera
-from ..core.ellipsoid import A, B
+from ..core import ellipsoid
 from ..core.ellipsoid import ecef_to_geodetic
 from ..core.flight import Flight
 from ..core.navigation import (Navigator, Pose, altitude, ground_under,
                                nearest_terrain)
 from ..core.places import Place, PlaceStore, kinds_at
+from ..core.skyview import ra_dec_of
 from ..core.snapshot import letterbox
 from ..core.terrain import FLAT_LEVEL, HeightStore
 from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
@@ -39,10 +40,11 @@ from .buildings import pick as pick_buildings
 from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
+from .constellations import Constellations
 from .sky import Sky
 from .stars import Stars
-from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SHELL, SKY_FRAGMENT,
-                      TILE_FRAGMENT, TILE_VERTEX)
+from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SKY_FRAGMENT,
+                      TILE_FRAGMENT, TILE_VERTEX, shell)
 
 START_LEVELS = (0, 1, 2)
 START_VIEW = (58.0105, 56.2294, 2.0e7)  # над Пермью, 20 000 км
@@ -56,7 +58,6 @@ UNDERLAY_LEVEL = 2
 # буфера глубины у дальней плоскости. Худший случай - глаз на высоте
 # 9 км в 50 м от склона: ближняя плоскость 25 м, дальняя 680 км,
 # шаг 1.1 км.
-UNDERLAY_SCALE = 1.0 - UNDERLAY_DEPTH / A
 FRAMES_KEPT = 300
 UPLOADS_PER_FRAME = 3
 UPLOAD_TIME = 0.002  # секунд на загрузку текстур в кадре
@@ -123,19 +124,22 @@ def surface_format():
 
 
 AIR_UNIFORMS = ("u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes",
-                "u_qc_shell", "u_air", "u_sun", "u_sun_on")
+                "u_qc_shell", "u_air", "u_sun", "u_sun_on", "u_radius_km",
+                "u_air_tint")
 
 
 def uniforms(program, names):
     return {name: GL.glGetUniformLocation(program, name) for name in names}
 
 
-def ray_uniforms(u, camera, a=A, b=B):
+def ray_uniforms(u, camera, a=None, b=None):
     """Общие для полноэкранных проходов величины луча из глаза.
 
     Координаты в долях полуосей эллипсоида с полуосями a и b. Возвращает
     глаз в этих координатах, float64.
     """
+    a = ellipsoid.A if a is None else a
+    b = ellipsoid.B if b is None else b
     axes = np.array([1.0 / a, 1.0 / a, 1.0 / b])
     eye = camera.eye * axes
     t = math.tan(math.radians(camera.fov_y) / 2.0)
@@ -147,12 +151,16 @@ def ray_uniforms(u, camera, a=A, b=B):
     return eye
 
 
-def air_uniforms(u, camera, on, sun=None):
+def air_uniforms(u, camera, on, sun=None, tint=(1.0, 1.0, 1.0)):
     """Величины воздуха и солнца. sun - направление на солнце в ECEF
-    или None, тогда свет - отмывка без солнца."""
+    или None, тогда свет - отмывка без солнца. tint - рассеяние
+    воздуха тела к земному по R, G, B или None - воздуха нет."""
     eye = ray_uniforms(u, camera)
-    gpu.gl.glUniform1f(u["u_qc_shell"], float(eye @ eye) - SHELL * SHELL)
-    gpu.gl.glUniform1f(u["u_air"], 1.0 if on else 0.0)
+    top = shell(ellipsoid.A)
+    gpu.gl.glUniform1f(u["u_qc_shell"], float(eye @ eye) - top * top)
+    gpu.gl.glUniform1f(u["u_air"], 1.0 if on and tint is not None else 0.0)
+    gpu.gl.glUniform1f(u["u_radius_km"], ellipsoid.A / 1000.0)
+    gpu.gl.glUniform3f(u["u_air_tint"], *(tint or (1.0, 1.0, 1.0)))
     gpu.gl.glUniform3f(u["u_sun"], *(sun or (0.0, 0.0, 1.0)))
     gpu.gl.glUniform1f(u["u_sun_on"], 0.0 if sun is None else 1.0)
     return eye
@@ -342,6 +350,9 @@ class GlobeView(QOpenGLWidget):
         # Направление на солнце в ECEF или None - свет отмывки без
         # солнца. Ставит окно по строке «Солнце» раздела «Слои».
         self.sun = None
+        # Воздух тела: рассеяние к земному по R, G, B, None - воздуха
+        # нет. Ставит окно по телу (core/planets.py).
+        self.air_tint = (1.0, 1.0, 1.0)
         self.hole_counts = []
         # Надписи пунктов: тайлы пунктов, их загрузчик и отрисовка.
         # Загрузчик ставит окно, когда известен адрес тайлов.
@@ -370,6 +381,17 @@ class GlobeView(QOpenGLWidget):
         self.stars = Stars()
         self.sky = Sky()  # Млечный путь, строка «Звёзды»
         self.show_stars = True
+        # Вид неба: core.skyview.SkyView или None - глобус. Камера неба
+        # стоит в экваториальной системе, светила - на момент sky_time,
+        # None - часы компьютера.
+        self.sky_view = None
+        self.sky_time = None
+        self.sky_camera = Camera((0.0, 0.0, 0.0), np.eye(3))
+        self.constellations = Constellations()
+        self.show_constellations = True
+        self.bodies = Stars(source=lambda: skydata.body_points(time.time()))
+        self._bodies_time = None
+        self._sky_press = None
         # Слои NASA GIBS: облака, температура моря и суши.
         self.gibs = {name: GibsLayer(level)
                      for name, level, _, _, _ in GIBS_LAYERS}
@@ -426,6 +448,13 @@ class GlobeView(QOpenGLWidget):
 
     def _check_load(self, sel):
         """Сколько ждёт кадр и стоит ли загрузка, для строки состояния."""
+        if self.sky_view is not None:
+            # Небо ничего не ждёт. Загрузка глобуса под ним стоит, но
+            # это не остановка.
+            if self.load_missing or self.load_stalled:
+                self.load_missing, self.load_stalled = 0, 0.0
+                self.load_changed.emit()
+            return
         if sel is None or self.shot is not None:
             return
         missing = self._missing(sel)
@@ -525,6 +554,47 @@ class GlobeView(QOpenGLWidget):
         self.stale = set(self.textures)
         self._wanted = frozenset()
         self._wanted_at = 0.0
+        self.update()
+
+    def change_body(self, max_level, air_tint):
+        """Новое тело. core.ellipsoid.set_body окно уже сделало.
+
+        Сброс полный: тайлы, сетки, высоты, наложение и кэш выбора
+        тайлов прежнего тела на другом радиусе не годятся даже на время.
+        Полярные шапки и подстилка строятся заново. Кадр не рисуется,
+        пока не придут уровни 0-2 нового тела.
+        """
+        self.max_level = max_level
+        self.air_tint = air_tint
+        lod.clear_cache()
+        self.memo = lod.Memo()
+        self.store.clear()
+        self.relief += 1
+        self.build_pool.clear()
+        self.building.clear()
+        self.built.clear()
+        self.pending.clear()
+        self.overlay_pending.clear()
+        self.stale = set()
+        self._wanted = frozenset()
+        self._wanted_at = 0.0
+        if self._context is not None:
+            self.makeCurrent()
+            for key in list(self.textures):
+                self._forget(key)
+            for key in list(self.overlays):
+                self._forget_overlay(key)
+            for mesh in self.caps + list(self.underlay_meshes.values()):
+                mesh.delete()
+            for texture in self.cap_textures:
+                gpu.delete_texture(texture)
+            self.cap_textures = []
+            self.caps = [gpu.GpuMesh(polar_cap_mesh(north))
+                         for north in (True, False)]
+            self.underlay_meshes = {
+                key: gpu.GpuMesh(tile_mesh(*key)) for key in START_KEYS
+                if key[0] == UNDERLAY_LEVEL}
+            self.doneCurrent()
         self.update()
 
     def _forget(self, key):
@@ -667,6 +737,10 @@ class GlobeView(QOpenGLWidget):
         self._fit_camera()
         px, py = self._pixel(event)
         button = event.button()
+        if self.sky_view is not None:
+            # Небо тянется левой кнопкой, других жестов у него нет.
+            self._sky_press = (px, py) if button == LEFT else None
+            return
         shift = bool(event.modifiers() & SHIFT)
         ctrl = bool(event.modifiers() & CTRL)
         if button == MIDDLE or (button == LEFT and shift):
@@ -694,6 +768,13 @@ class GlobeView(QOpenGLWidget):
             return
         px, py = self._pixel(event)
         self.hovered.emit(px, py)
+        if self.sky_view is not None:
+            if self._sky_press is not None:
+                x0, y0 = self._sky_press
+                self._sky_press = (px, py)
+                self.sky_view.drag(px - x0, py - y0, self.camera.height)
+                self.update()
+            return
         if self._vertex_drag:
             self.vertex_tool.move(px, py)
             self.update()
@@ -731,6 +812,9 @@ class GlobeView(QOpenGLWidget):
 
     def mouseReleaseEvent(self, event):
         if self.shot is not None:
+            return
+        if self.sky_view is not None:
+            self._sky_press = None
             return
         press, self._press = self._press, None
         if self._vertex_drag:
@@ -773,6 +857,19 @@ class GlobeView(QOpenGLWidget):
         отдаление, как в Google Earth."""
         if self.shot is not None:
             return
+        if self.sky_view is not None:
+            # Левая - точка в середину и ближе вдвое, правая - дальше.
+            self._fit_camera()
+            if event.button() == LEFT:
+                px, py = self._pixel(event)
+                v = self.sky_view.direction_at(px, py, self.camera.width,
+                                               self.camera.height)
+                ra, dec = ra_dec_of(v)
+                self.sky_view.set(ra, dec, self.sky_view.fov / 2.0)
+            elif event.button() == RIGHT:
+                self.sky_view.zoom(2.0)
+            self.update()
+            return
         if self.tool_active:
             self.mousePressEvent(event)
             return
@@ -813,6 +910,13 @@ class GlobeView(QOpenGLWidget):
         def named(*names):
             return any(key == enum(Qt, "Key", n) for n in names)
 
+        if self.sky_view is not None:
+            if self._sky_key(key, named):
+                self.update()
+            else:
+                super().keyPressEvent(event)
+            return
+
         for name, (dx, dy) in ARROWS.items():
             if key == enum(Qt, "Key", name):
                 if mods & CTRL:
@@ -845,6 +949,23 @@ class GlobeView(QOpenGLWidget):
             return
         self.update()
 
+    def _sky_key(self, key, named):
+        """Клавиши вида неба: стрелки сдвигают взгляд на долю высоты
+        кадра, PageUp, PageDown, плюс и минус меняют угол обзора."""
+        height = self.camera.height
+        for name, (dx, dy) in ARROWS.items():
+            if key == enum(Qt, "Key", name):
+                self.sky_view.drag(-dx * KEY_PAN * 2.0 * height,
+                                   dy * KEY_PAN * 2.0 * height, height)
+                return True
+        if named("Key_PageUp", "Key_Plus", "Key_Equal"):
+            self.sky_view.zoom(WHEEL_STEP)
+        elif named("Key_PageDown", "Key_Minus"):
+            self.sky_view.zoom(1.0 / WHEEL_STEP)
+        else:
+            return False
+        return True
+
     def leaveEvent(self, event):
         self.hovered.emit(-1.0, -1.0)
         super().leaveEvent(event)
@@ -854,6 +975,10 @@ class GlobeView(QOpenGLWidget):
             return
         self._fit_camera()
         notches = event.angleDelta().y() / 120.0
+        if notches and self.sky_view is not None:
+            self.sky_view.zoom(WHEEL_STEP ** notches)
+            self.update()
+            return
         if notches:
             px, py = self._pixel(event)
             self.navigator.wheel(px, py, WHEEL_STEP ** notches,
@@ -921,6 +1046,8 @@ class GlobeView(QOpenGLWidget):
         self.buildings.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
+        self.constellations.init_gl()
+        self.bodies.init_gl()
         self._context = ctx
         ctx.aboutToBeDestroyed.connect(self.release_gl)
 
@@ -935,6 +1062,8 @@ class GlobeView(QOpenGLWidget):
         self.buildings.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
+        self.constellations.release_gl()
+        self.bodies.release_gl()
         self.build_pool.clear()
         self.build_pool.waitForDone(2000)
         for mesh in (list(self.meshes.values()) + self.caps
@@ -1259,6 +1388,8 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glClearColor(*(HOLE if self.show_holes else SPACE), 1.0)
         gpu.gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         self.drawn = 0
+        if self.sky_view is not None and self.program is not None:
+            return self._render_sky(ratio, started)
         if self.program is None or not self.ready():
             return None
         # До первого полного кадра уровни 0-2 грузятся в видеокарту все
@@ -1344,7 +1475,8 @@ class GlobeView(QOpenGLWidget):
         self._clear_overlay()
         self._clear_gibs()
         air = self.atmosphere and not self.show_holes
-        air_uniforms(self.tile_air, self.camera, air, self.sun)
+        air_uniforms(self.tile_air, self.camera, air, self.sun,
+                     self.air_tint)
 
         items = list(zip(self.caps, self.cap_textures or [self.ocean] * 2))
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
@@ -1352,7 +1484,7 @@ class GlobeView(QOpenGLWidget):
         scales = [1.0] * surface
         under = self._underlay_items(sel.keep)
         items += under
-        scales += [UNDERLAY_SCALE] * len(under)
+        scales += [1.0 - UNDERLAY_DEPTH / ellipsoid.A] * len(under)
         mvps = self.camera.tiles_mvp([mesh.center for mesh, _ in items],
                                      scales=scales)
         overlays = None
@@ -1463,6 +1595,42 @@ class GlobeView(QOpenGLWidget):
         self.changed.emit()
         # Снимок ждёт и свои объекты: запись тура меняет треки к кадру.
         return self._missing(sel) + int(bool(features_busy)) if shot else 0
+
+    def sky_frame_camera(self):
+        """Камера неба под размер кадра и взгляд SkyView."""
+        cam = self.sky_camera
+        cam.width, cam.height = self.camera.width, self.camera.height
+        cam.fov_y = self.sky_view.fov
+        cam.rotation = self.sky_view.rotation()
+        return cam
+
+    def _render_sky(self, ratio, started):
+        """Кадр вида неба: Млечный путь, линии созвездий, звёзды
+        и светила. Тайлов, воздуха и своих объектов в нём нет, камера
+        стоит в центре небесной сферы."""
+        cam = self.sky_frame_camera()
+        frame = np.eye(3)
+        gpu.gl.glEnable(GL.GL_DEPTH_TEST)
+        self.sky.draw(cam, frame=frame, share=1.0)
+        if self.show_constellations:
+            self.constellations.draw(cam, frame)
+        else:
+            self.constellations.drawn = 0
+        self.stars.draw(cam, ratio, frame=frame, share=1.0)
+        moment = self.sky_time if self.sky_time is not None \
+            else time.time()
+        if self._bodies_time is None or abs(moment - self._bodies_time) > 30:
+            self.bodies.set_points(skydata.body_points(moment))
+            self._bodies_time = moment
+        self.bodies.draw(cam, ratio, frame=frame, share=1.0)
+        gpu.gl.glBindVertexArray(0)
+        gpu.gl.glUseProgram(0)
+        for code in gpu.frame_errors():
+            self.gl_errors[code] += 1
+        self.labels.count = 0
+        self.frame_times.append(time.perf_counter() - started)
+        self.changed.emit()
+        return 0
 
     def _missing(self, sel):
         """Сколько тайлов, картинок и надписей кадр ещё ждёт."""
@@ -1635,7 +1803,8 @@ class GlobeView(QOpenGLWidget):
         """
         GL.glUseProgram(self.hole_program)
         u = self.hole_uniforms
-        eye = ray_uniforms(u, self.camera, A - HOLE_MARGIN, B - HOLE_MARGIN)
+        eye = ray_uniforms(u, self.camera, ellipsoid.A - HOLE_MARGIN,
+                           ellipsoid.B - HOLE_MARGIN)
         GL.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
         GL.glDepthFunc(GL.GL_LEQUAL)
         GL.glDepthMask(GL.GL_FALSE)
@@ -1699,7 +1868,7 @@ class GlobeView(QOpenGLWidget):
         gl = gpu.gl
         gl.glUseProgram(self.sky_program)
         u = self.sky_air
-        eye = air_uniforms(u, self.camera, True, self.sun)
+        eye = air_uniforms(u, self.camera, True, self.sun, self.air_tint)
         gl.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)

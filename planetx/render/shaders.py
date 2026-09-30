@@ -12,9 +12,12 @@ try:  # внутри плагина QGIS
 except ImportError:  # проверки без пакета
     import sun as _sun
 
-A_KM = 6378.137
 SHELL_KM = 300.0  # толщина оболочки атмосферы
-SHELL = 1.0 + SHELL_KM / A_KM  # оболочка в долях полуосей эллипсоида
+
+
+def shell(a):
+    """Оболочка воздуха в долях полуосей тела с большой полуосью a, м."""
+    return 1.0 + SHELL_KM * 1000.0 / a
 
 # Воздух на луче из глаза. Плотность падает с высотой по экспоненте,
 # рассеяние по каналам как у рэлеевского на уровне моря. Свет
@@ -38,7 +41,8 @@ uniform float u_qc_shell;  // |eye|² - SHELL², посчитано в double
 uniform float u_air;       // 1 - атмосфера включена, 0 - выключена
 uniform vec3 u_sun;        // направление на солнце в ECEF
 uniform float u_sun_on;    // 1 - свет солнца, 0 - отмывка без солнца
-const float RADIUS_KM = %(a_km)r;
+uniform float u_radius_km; // большая полуось тела в километрах
+uniform vec3 u_air_tint;   // рассеяние воздуха тела к земному по R, G, B
 // Свет солнца, формула core.sun.brightness.
 const float SUN_AMBIENT = %(ambient)r;
 const float SUN_NIGHT = %(night)r;
@@ -75,7 +79,7 @@ float half_depth(vec3 d, float tc, float b, float km_per_t) {
     for (int i = 0; i < STEPS; ++i) {
         float u = (float(i) + 0.5) / float(STEPS);
         vec3 p = u_eye + (tc + span * u * u) * d;
-        float h = max(length(p) - 1.0, 0.0) * RADIUS_KM;
+        float h = max(length(p) - 1.0, 0.0) * u_radius_km;
         sum += exp(-h / SCALE_KM) * u;
     }
     return sum * 2.0 * abs(span) / float(STEPS) * km_per_t;
@@ -105,7 +109,7 @@ vec3 air(vec3 dir, float t_end, out vec3 pass) {
     float km_per_t = length(dir) / 1000.0;
     float depth = half_depth(d, tc, t0, km_per_t)
         + half_depth(d, tc, t1, km_per_t);
-    pass = exp(-BETA * depth);
+    pass = exp(-BETA * u_air_tint * depth);
     vec3 glow = 1.0 - pass;
     if (u_sun_on > 0.5) {
         // Воздух светится, пока над ближней к Земле точкой луча день.
@@ -115,7 +119,7 @@ vec3 air(vec3 dir, float t_end, out vec3 pass) {
     }
     return glow;
 }
-""" % {"a_km": A_KM, "ambient": _sun.AMBIENT, "night": _sun.NIGHT,
+""" % {"ambient": _sun.AMBIENT, "night": _sun.NIGHT,
        "flat": _sun.FLAT, "twilight": _sun.TWILIGHT,
        "daylight": _sun.DAYLIGHT}
 

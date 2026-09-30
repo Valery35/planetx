@@ -60,19 +60,29 @@ def load(path=DATA):
     return out
 
 
-def sky_mvp(camera, unix_time):
+def sky_mvp(camera, unix_time, frame=None):
     """Матрица кадра для направлений звёзд: проекция, поворот камеры
-    и поворот неба на звёздное время, по строкам, float32."""
+    и поворот неба на звёздное время, по строкам, float32. frame -
+    поворот неба вместо звёздного времени, у вида неба единичный:
+    камера там стоит в экваториальной системе."""
+    if frame is None:
+        frame = stars.sky_rotation(unix_time)
     view = np.eye(4)
-    view[:3, :3] = camera.rotation.T @ stars.sky_rotation(unix_time)
+    view[:3, :3] = camera.rotation.T @ frame
     return np.ascontiguousarray(camera.projection() @ view,
                                 dtype=np.float32)
 
 
 class Stars:
-    """Буфер звёзд и программа."""
+    """Буфер звёзд и программа.
 
-    def __init__(self):
+    source - вершины (N, 8) для буфера, по умолчанию каталог звёзд.
+    set_points заменяет вершины, так рисуются светила вида неба.
+    """
+
+    def __init__(self, source=load):
+        self.source = source
+        self.pending = None  # новые вершины до загрузки в видеокарту
         self.program = None
         self.vao = None
         self.vbo = None
@@ -81,7 +91,8 @@ class Stars:
         self.drawn = 0  # звёзд в последнем кадре, 0 - погашены
 
     def init_gl(self):
-        data = load()
+        data = self.source() if self.source is not None \
+            else np.zeros((0, 8), dtype=np.float32)
         self.count = len(data)
         self.program = gpu.build_program(STAR_VERTEX, STAR_FRAGMENT)
         self.locations = {name: GL.glGetUniformLocation(self.program, name)
@@ -99,6 +110,10 @@ class Stars:
         GL.glBindVertexArray(0)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
+    def set_points(self, data):
+        """Новые вершины (N, 8), в видеокарту - в кадре."""
+        self.pending = np.ascontiguousarray(data, dtype=np.float32)
+
     def release_gl(self):
         if self.vao is not None:
             GL.glDeleteVertexArrays(1, [self.vao])
@@ -107,15 +122,24 @@ class Stars:
             GL.glDeleteProgram(self.program)
         self.program = self.vao = self.vbo = None
 
-    def draw(self, camera, ratio, unix_time=None):
+    def draw(self, camera, ratio, unix_time=None, frame=None, share=None):
         """Нарисовать звёзды после неба. ratio - пикселей кадра
-        на логический пиксель."""
-        share = stars.fade(camera.altitude())
+        на логический пиксель. frame и share - поворот неба и яркость
+        вида неба, см. sky_mvp."""
+        if share is None:
+            share = stars.fade(camera.altitude())
         self.drawn = 0
         if self.program is None or share <= 0.0:
             return
+        if self.pending is not None:
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+            GL.glBufferData(GL.GL_ARRAY_BUFFER, self.pending.nbytes,
+                            self.pending, GL.GL_DYNAMIC_DRAW)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            self.count = len(self.pending)
+            self.pending = None
         mvp = sky_mvp(camera, time.time() if unix_time is None
-                      else unix_time)
+                      else unix_time, frame)
         gl = gpu.gl
         gl.glUseProgram(self.program)
         gpu._uniform_matrix(self.locations["u_mvp"], 1, GL.GL_TRUE,

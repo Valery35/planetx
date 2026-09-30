@@ -19,7 +19,9 @@ import time
 import sys
 import traceback
 
-ROOT = r"C:\Dev\planetx"
+# Корень модуля: рабочая копия или другая копия, например ветки,
+# через переменную PLANETX_ROOT.
+ROOT = os.environ.get("PLANETX_ROOT", r"C:\Dev\planetx")
 sys.path.insert(0, ROOT)
 TEMP = os.environ.get("TEMP", ".")
 CRASH = open(os.path.join(TEMP, "planetx_steps_crash.txt"), "w",
@@ -2276,6 +2278,257 @@ def tiles_deep_check():
                                        [:3]},
                             "gl_errors": dict(view.gl_errors)}
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_tiles.png"))
+
+
+def _body_state(name):
+    from planetx.core import ellipsoid
+    window = state["window"]
+    view = window.view
+    levels = [key[0] for key in view.textures]
+    pose = view.navigator.pose
+    view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_body_%s.png" % name))
+    return {"body": ellipsoid.BODY.key, "a": ellipsoid.A,
+            "planet": window.planet.key,
+            "textures": len(levels),
+            "max_level": max(levels) if levels else None,
+            "missing": view.load_missing,
+            "source": window.source.name,
+            "air": list(view.air_tint) if view.air_tint else None,
+            "relief": view.store.scale,
+            "pose": [round(pose.lat, 3), round(pose.lon, 3),
+                     round(pose.distance)],
+            "geo_enabled": not window.panel.geo_items["relief"].isDisabled(),
+            "errors": {str(k): str(v) for k, v in
+                       list(window.errors.items())[:3]},
+            "started": len(window.loader.started),
+            "gl_errors": dict(view.gl_errors)}
+
+
+# Пауза шага - время после него, поэтому смена тела стоит в шаге
+# с паузой 20 с, а замер - в следующем.
+
+@check(20000)
+def body_mars():
+    state["window"].set_body("mars")
+
+
+@check(20000)
+def body_mars_check():
+    result["bodies"] = {"mars": _body_state("mars")}
+    state["window"].set_body("moon")
+
+
+@check(20000)
+def body_moon_check():
+    result["bodies"]["moon"] = _body_state("moon")
+    state["window"].set_body("earth")
+
+
+@check(300)
+def body_earth_check():
+    result["bodies"]["earth"] = _body_state("earth")
+
+
+@check(4000)
+def body_tools():
+    # Инструменты на Марсе: сетка, линейка по экватору, снимок вида.
+    from planetx.core.navigation import Pose
+    import planetx.ui.snapshot as smod
+    window = state["window"]
+    window.set_body("mars")
+    window.set_extra("grid", True)
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(0.0, 0.5, 400000.0, 0.0, 0.0))
+    window._open_ruler()
+    window.ruler_dialog.tabs.setCurrentIndex(0)  # линия
+    window.ruler.add(0.0, 0.0)
+    window.ruler.add(0.0, 1.0)
+    state["terrain_before"] = len(window.view.terrain_loader.started) \
+        if window.view.terrain_loader is not None else 0
+    path = os.path.join(TEMP, "planetx_body_shot.png")
+    if os.path.exists(path):
+        os.remove(path)
+    smod.QFileDialog.getSaveFileName = staticmethod(
+        lambda *args, **kwargs: (path, ""))
+
+    def setup(dialog):
+        dialog.keep.setChecked(False)
+        dialog.width_px.setValue(1600)
+        dialog.height_px.setValue(1200)
+    _shot_begin(False, setup)
+
+
+@check(1500)
+def body_tools_check():
+    out = _shot_wait()
+    if isinstance(out, int):
+        return out
+    import math
+    from qgis.PyQt.QtGui import QImage
+    window = state["window"]
+    values = window.ruler.values(rubber=False)
+    image = QImage(os.path.join(TEMP, "planetx_body_shot.png"))
+    view = window.view
+    out.update({
+        "file": [image.width(), image.height()],
+        "grid_shapes": len(window.grid_shapes),
+        "length_m": round(values["length"], 1),
+        "expect_m": round(2 * math.pi * 3396190.0 / 360.0, 1),
+        "ground_m": round(values.get("ground") or 0.0, 1),
+        "ground_ready": values.get("ground_ready"),
+        "terrain_requests": (len(view.terrain_loader.started)
+                             if view.terrain_loader is not None else 0)
+        - state["terrain_before"],
+        "tool_heights": len(view.tool_heights)})
+    result["body_tools"] = out
+    window.ruler.clear()
+    window.ruler_dialog.close()
+    window.set_extra("grid", False)
+    window.set_body("earth")
+    return None
+
+
+@check(15000)
+def sky_on():
+    # Вид неба: Орион. Картинка Млечного пути приходит из кэша QGIS.
+    window = state["window"]
+    window.set_extra("stars", True)
+    window.set_body("sky")
+    window.show_sky(85.0, 5.0, 70.0)
+
+
+def _sky_state(name):
+    window = state["window"]
+    view = window.view
+    view.repaint()
+    window.sky_labels.repaint()
+    window.grab().save(os.path.join(TEMP, "planetx_sky_%s.png" % name))
+    shown = window.sky_labels.shown
+    cam = view.camera
+    window._hover = (cam.width / 2.0, cam.height / 2.0)
+    window._update_cursor()
+    return {"sky": view.sky_view is not None,
+            "milky_way": view.sky.drawn, "stars": view.stars.drawn,
+            "lines": view.constellations.drawn, "bodies": view.bodies.drawn,
+            "labels": len(shown),
+            "names": [t for k, t, _, _ in shown][:12],
+            "navpad": window.navpad.isVisible(),
+            "ruler_enabled": window.toolbar.ruler_button.isEnabled(),
+            "cursor": window._cursor_text,
+            "status": window.status.text().split(chr(10))[0],
+            "spinner": window.spinner.isVisible(),
+            "attribution": window.attribution.text()[:60],
+            "gl_errors": dict(view.gl_errors)}
+
+
+@check(1500)
+def sky_check():
+    result["sky"] = {"orion": _sky_state("orion")}
+    # Юпитер и Марс осенью 2026 года - в Раке и Льве.
+    state["window"].show_sky(135.0, 18.0, 50.0)
+
+
+@check(300)
+def sky_planets():
+    window = state["window"]
+    result["sky"]["planets"] = _sky_state("planets")
+    view = window.view
+    view.sky_view.drag(100.0, 0.0, view.camera.height)
+    view.sky_view.zoom(0.5)
+    result["sky"]["after_drag"] = [round(math.degrees(view.sky_view.ra), 2),
+                                   round(view.sky_view.fov, 1)]
+    window.set_body("earth")
+    result["sky"]["earth"] = {
+        "sky": view.sky_view is not None,
+        "navpad": window.navpad.isVisible(),
+        "ruler_enabled": window.toolbar.ruler_button.isEnabled(),
+        "labels_visible": window.sky_labels.isVisible()}
+
+
+SKY_SCENE = os.path.join(TEMP, "planetx_sky_scene.planetx")
+
+
+@check(2000)
+def sky_scene():
+    # Сцена с видом неба: сохранить, выйти на Землю, открыть.
+    window = state["window"]
+    window.set_body("sky")
+    window.show_sky(279.2, 38.8, 30.0)  # Вега
+    ok = window.save_scene(SKY_SCENE)
+    window.set_body("earth")
+    result["sky_scene"] = {"saved": ok,
+                           "left": window.view.sky_view is None}
+    window.open_scene(SKY_SCENE)
+
+
+@check(300)
+def sky_scene_check():
+    window = state["window"]
+    sky = window.view.sky_view
+    result["sky_scene"]["sky"] = None if sky is None else [
+        round(math.degrees(sky.ra), 2), round(math.degrees(sky.dec), 2),
+        round(sky.fov, 1)]
+    result["sky_scene"]["menu"] = [k for k, a in
+                                   window.toolbar.body_actions.items()
+                                   if a.isChecked()]
+    window.set_body("earth")
+
+
+BODY_SCENE = os.path.join(TEMP, "planetx_body_scene.planetx")
+
+
+@check(3000)
+def body_scene_mars():
+    state["window"].set_body("mars")
+
+
+@check(3000)
+def body_scene_save():
+    # Сцена на Марсе с меткой, потом Земля и открытие сцены.
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    store = window.myplaces
+    folder = store.add_folder("Сцена Марса")
+    store.add(Shape("point", [(18.65, -133.8)], name="Олимп"),
+              folder=folder)
+    window.panel.select_place(folder)
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(18.0, -134.0, 900000.0, 10.0, 30.0))
+    ok = window.save_scene(BODY_SCENE)
+    mars_shapes = len(window.view.features.shapes) \
+        if hasattr(window.view.features, "shapes") else None
+    store.remove(folder)
+    window.set_body("earth")
+    result["body_scene"] = {"saved": ok, "mars_shapes": mars_shapes}
+
+
+@check(5000)
+def body_scene_open():
+    window = state["window"]
+    state["body_scene_key"] = window.open_scene(BODY_SCENE)
+
+
+@check(300)
+def body_scene_check():
+    from planetx.core import ellipsoid
+    window = state["window"]
+    key = state["body_scene_key"]
+    places = window.myplaces.places_in(key) if key else []
+    pose = window.view.navigator.pose
+    result["body_scene"].update({
+        "planet": window.planet.key, "a": ellipsoid.A,
+        "places": [(p.name, p.body) for p in places],
+        "pose": [round(pose.lat, 2), round(pose.lon, 2),
+                 round(pose.distance)]})
+    window.set_body("earth")
+    result["body_scene"]["earth_hides_mars"] = all(
+        p.body != window.planet.key for p in places)
+    if key:
+        window.myplaces.remove(key)
 
 
 @check(300)

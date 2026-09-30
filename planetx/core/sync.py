@@ -15,9 +15,9 @@
 import math
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A
+    from . import ellipsoid
 except ImportError:  # headless-тесты
-    from ellipsoid import A
+    import ellipsoid
 
 OFF, MAP_TO_GLOBE, GLOBE_TO_MAP, BOTH = "off", "map", "globe", "both"
 DIRECTIONS = (MAP_TO_GLOBE, GLOBE_TO_MAP, BOTH)
@@ -35,7 +35,7 @@ def arc(lat1, lon1, lat2, lon2):
     dl = math.radians(lon2 - lon1)
     h = math.sin(dp / 2.0) ** 2 \
         + math.cos(p1) * math.cos(p2) * math.sin(dl / 2.0) ** 2
-    return 2.0 * A * math.asin(min(1.0, math.sqrt(h)))
+    return 2.0 * ellipsoid.A * math.asin(min(1.0, math.sqrt(h)))
 
 
 def ground_size(distance, fov_y, aspect):

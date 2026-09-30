@@ -62,6 +62,7 @@ dragged with the mouse.
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
+| Body | The menu Earth, Mars, Moon and Sky, see [Mars and the Moon](#mars-and-the-moon) and [Starry sky](#starry-sky) |
 | View properties | Base map, terrain, labels, link with the map, update, coordinate format |
 | About | Controls, data sources, links |
 
@@ -759,6 +760,63 @@ the insertion.
 
 ---
 
+## Mars and the Moon
+
+The Body icon on the icon bar opens the menu Earth, Mars and Moon.
+The chosen body replaces the Earth as a whole. The size of the globe,
+the imagery and the air change, and the camera flies to the start
+point of the body. On Mars it is the Olympus Mons volcano, on the Moon
+it is the Sea of Tranquility, the Apollo 11 landing site.
+
+Mars imagery is the Viking MDIM2.1 colour mosaic, about 650 m per
+pixel. Moon imagery is the LOLA albedo with hillshading, about 670 m
+per pixel. Mars has a thin dusty air, the Moon has no air.
+
+On Mars and the Moon the navigation, grid, stars, ruler, My Places,
+tours, view snapshot and scenes work. Functions with Earth-only data
+are off:
+
+- terrain, vector base, clouds, temperature, 3D buildings and sunlight
+- project layers and their labels, tracks
+- synchronization with the QGIS map and feature identification
+- place search by name. Coordinates in the search field work
+
+Each place remembers its body. My Places lists the places of all
+bodies, the globe shows only the places of the current one. A flight
+to a place on another body switches the body first. A tour goes
+through the stops of the current body. A scene keeps its body and
+opens on it.
+
+## Starry sky
+
+The Sky item of the Body menu shows the sky from the centre of the
+celestial sphere. It holds the Milky Way, 5080 stars down to magnitude
+6, lines and names of 88 constellations and names of bright stars.
+The Sun, the Moon and the planets from Mercury to Neptune are there
+too. Celestial north
+is up and east is on the left, as on a star chart.
+
+| Action | What it does |
+|---|---|
+| Drag with the left button | The sky follows the cursor |
+| Wheel, PageUp, PageDown, plus, minus | Field of view from 2° to 110° |
+| Double click with the left button | The point moves to the centre, the field of view halves |
+| Double click with the right button | The field of view doubles |
+| Arrows | The view moves by a tenth of the window height |
+
+The status bar shows the field of view, the right ascension and the
+declination of the point under the cursor. Sky coordinates are epoch
+J2000. Bodies stand at the end of the open time slider range, otherwise
+at the computer clock time. Planets are placed within 0.1° in the
+years 1800-2050, the Moon within 0.3°.
+
+The ruler, new place, save view, tour recording, synchronization and
+feature identification are off in the sky. A view snapshot saves the
+sky without labels. A scene keeps the view direction and the field of
+view. To leave the sky, choose a body in the same menu.
+
+---
+
 ## Limitations
 
 - Project layers lie on the terrain as a picture, a layer cannot be
@@ -769,6 +827,11 @@ the insertion.
 - Recording a tour takes longer than the tour itself.
 - Buildings are blocks with flat roofs, roof shapes and facades
   are not shown.
+- Mars and the Moon have no terrain. KML does not store the body of
+  a place, places from a KML file go to the current body.
+- The sky is shown from the centre of the Earth, without the horizon
+  of an observing site. Precession since 2000 is ignored, it is about
+  0.4°.
 
 ## Data sources
 
@@ -777,7 +840,10 @@ OpenStreetMap contributors. Vector tiles and 3D buildings - OpenFreeMap. Terrain
 Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Clouds - NASA GIBS,
 VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale Bright Star Catalogue. Milky Way -
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
-DR2: ESA/Gaia/DPAC. Place search - Nominatim.
+DR2: ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
+Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
+OpenPlanetaryMap. Constellation lines, names and star names -
+d3-celestial, © Olaf Frohn. Planet positions - JPL orbital elements.
 
 The terms of all sources are described in [SOURCES.md](SOURCES.md).
 Tiles go through the QGIS network settings and cache, the plugin keeps

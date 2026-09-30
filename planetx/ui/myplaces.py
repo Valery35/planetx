@@ -31,7 +31,7 @@ from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsProject, QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from ..core import icons, lookat, placetree, when
+from ..core import ellipsoid, icons, lookat, placetree, when
 from ..core.features import Shape
 from ..core.kml import KFolder, KPlace
 from ..i18n import tr
@@ -52,7 +52,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Записанный тур длиннее 255 знаков, поле без предела длины.
           ("tour", "string(0)"),
           # Высоты вершин 3D-пути и 3D-многоугольника, JSON.
-          ("alts", "string(0)"))
+          ("alts", "string(0)"),
+          # Тело метки: earth, mars или moon. Пустое - Земля.
+          ("body", "string"))
 FOLDER_TABLE = "folders"
 FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("position", "integer"), ("visible", "integer"),
@@ -222,8 +224,10 @@ class Place:
 
     def __init__(self, kind, fid, shape, visible, measure="", view=None,
                  position=None, folder=None, description="",
-                 time=None, view_time=None, tour=None):
+                 time=None, view_time=None, tour=None, body="earth"):
         self.kind = kind
+        # Тело, на котором стоит метка: earth, mars или moon.
+        self.body = body
         # Записанный тур: позы core.tour.RecordedStop или None.
         self.tour = tour
         # Время метки и её вида, пары строк core.when или None.
@@ -361,7 +365,8 @@ class MyPlaces(QObject):
                     str(feature["description"] or ""),
                     when.unpack(_value(feature, layer, "time")),
                     when.unpack(_value(feature, layer, "view_time")),
-                    tour_from_text(_value(feature, layer, "tour"))))
+                    tour_from_text(_value(feature, layer, "tour")),
+                    str(_value(feature, layer, "body") or "earth")))
         self.folders = []
         if self.folder_layer is not None:
             for feature in self.folder_layer.getFeatures():
@@ -447,7 +452,8 @@ class MyPlaces(QObject):
                   "extrude": int(bool(shape.extrude)),
                   "icon": shape.icon, "time": when.pack(period),
                   "view_time": when.pack(view_period),
-                  "tour": tour_text(tour), "alts": alts_text(shape.alts)}
+                  "tour": tour_text(tour), "alts": alts_text(shape.alts),
+                  "body": ellipsoid.BODY.key}
         for name, value in values.items():
             if layer.fields().indexOf(name) >= 0:
                 feature[name] = value
@@ -646,7 +652,8 @@ class MyPlaces(QObject):
                     "icon": place.icon, "time": when.pack(place.time),
                     "view_time": when.pack(place.view_time),
                     "tour": tour_text(place.tour),
-                    "alts": alts_text(getattr(place, "alts", None))}
+                    "alts": alts_text(getattr(place, "alts", None)),
+                    "body": ellipsoid.BODY.key}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

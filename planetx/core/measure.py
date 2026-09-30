@@ -19,12 +19,14 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from .ellipsoid import A, ecef_to_geodetic, geodetic_to_ecef
+    from . import ellipsoid
+    from .ellipsoid import ecef_to_geodetic, geodetic_to_ecef
     from .features import densify
     from .terrain import MAX_LEVEL as HEIGHT_LEVEL
     from .tiling import lonlat_to_tile
 except ImportError:  # headless-тесты
-    from ellipsoid import A, ecef_to_geodetic, geodetic_to_ecef
+    import ellipsoid
+    from ellipsoid import ecef_to_geodetic, geodetic_to_ecef
     from features import densify
     from terrain import MAX_LEVEL as HEIGHT_LEVEL
     from tiling import lonlat_to_tile
@@ -66,7 +68,7 @@ def destination(lat, lon, bearing, distance):
     phi = math.radians(lat)
     lam = math.radians(lon)
     theta = math.radians(bearing)
-    delta = distance / A
+    delta = distance / ellipsoid.A
     sin_phi = math.sin(phi) * math.cos(delta) \
         + math.cos(phi) * math.sin(delta) * math.cos(theta)
     phi2 = math.asin(max(-1.0, min(1.0, sin_phi)))
@@ -97,7 +99,7 @@ def number(value):
 
 def pixel_size(lat, level=HEIGHT_LEVEL):
     """Размер пикселя тайла высот уровня level на широте lat, м."""
-    return 2.0 * math.pi * A * math.cos(math.radians(lat)) \
+    return 2.0 * math.pi * ellipsoid.A * math.cos(math.radians(lat)) \
         / (TILE_PIXELS * (1 << level))
 
 
@@ -109,7 +111,7 @@ def sphere_length(points):
     lat, lon = pts[:, 0], pts[:, 1]
     cos_d = np.sin(lat[:-1]) * np.sin(lat[1:]) \
         + np.cos(lat[:-1]) * np.cos(lat[1:]) * np.cos(lon[1:] - lon[:-1])
-    return float(np.arccos(np.clip(cos_d, -1.0, 1.0)).sum() * A)
+    return float(np.arccos(np.clip(cos_d, -1.0, 1.0)).sum() * ellipsoid.A)
 
 
 def sample_line(points, limit=PROFILE_POINTS):
