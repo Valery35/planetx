@@ -84,7 +84,8 @@ class TourBar(QFrame):
         self.play = buttons[1]
         # Тур по кругу, для показа на экране без присмотра.
         self.loop = QToolButton(self)
-        self.loop.setText("⟳")
+        # Значок из того же набора эмодзи, что ⏮ ⏸ ⏭, синий в Windows.
+        self.loop.setText("🔁")
         self.loop.setCheckable(True)
         self.loop.setAutoRaise(True)
         self.loop.setToolTip(tr(

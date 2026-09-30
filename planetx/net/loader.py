@@ -266,6 +266,7 @@ class TileLoader(QObject):
         self.pump_timer = QTimer(self)
         self.pump_timer.setSingleShot(True)
         self.pump_timer.timeout.connect(self._pump)
+        self.stopped = False
         # Сведения для проверочных скриптов.
         self.max_seen = 0
         self.started = []
@@ -484,7 +485,11 @@ class TileLoader(QObject):
             self.idle.emit()
 
     def abort(self):
-        """Снять всё. Сигналы по снятым запросам не приходят."""
+        """Снять всё. Сигналы по снятым запросам не приходят. Повторный
+        вызов ничего не делает: связь sink.done уже снята."""
+        if self.stopped:
+            return
+        self.stopped = True
         self.pump_timer.stop()
         self.retain([])
         self.sink.done.disconnect()

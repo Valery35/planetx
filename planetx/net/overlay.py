@@ -326,6 +326,7 @@ class LayerOverlay(QObject):
         self.pump_timer = QTimer(self)
         self.pump_timer.setSingleShot(True)
         self.pump_timer.timeout.connect(self._pump)
+        self.stopped = False
         # Сведения для проверочных скриптов: время отрисовки по ключам.
         self.render_times = {}
         self.started_at = {}
@@ -455,7 +456,11 @@ class LayerOverlay(QObject):
             self.idle.emit()
 
     def abort(self):
-        """Снять всё. Сигналы по снятым заданиям не приходят."""
+        """Снять всё. Сигналы по снятым заданиям не приходят. Повторный
+        вызов ничего не делает: связь sink.done уже снята."""
+        if self.stopped:
+            return
+        self.stopped = True
         self.pump_timer.stop()
         for job in list(self.jobs.values()):
             job.finished.disconnect()

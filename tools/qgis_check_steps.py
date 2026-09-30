@@ -898,6 +898,7 @@ def tour_loop_wait():
     out["playing"] = player.playing
     out["setting"] = QgsSettings().value("PlanetX/tour_loop", False,
                                          type=bool)
+    player.bar.grab().save(os.path.join(TEMP, "planetx_tour_bar.png"))
     # Без круга тур встаёт в конце.
     player.bar.loop.setChecked(False)
     state["loop_off"] = time.monotonic()
@@ -2941,42 +2942,6 @@ def _demo_steps():
 _demo_steps()
 
 
-@check(1000)
-def close_without_heights():
-    # Закрытие окна на теле без загрузчика высот. Окно закрывается,
-    # шаг ставится последним. На прежнем коде AttributeError в журнале.
-    from planetx.core import planets
-    window = state["window"]
-    saved = planets.MOON_PLANET.terrain
-    planets.MOON_PLANET.terrain = None
-    from qgis.PyQt.QtGui import QCloseEvent
-    try:
-        window.set_body("moon")
-        out = result["close_without_heights"] = {
-            "loader": window.terrain_loader is not None, "error": ""}
-        # Ошибка в начале закрытия: сигнал closed всё равно уходит,
-        # иначе плагин держит ссылку на уничтоженное окно.
-        got = []
-        window.closed.connect(lambda: got.append(True))
-        sync, window.sync = window.sync, None
-        try:
-            window.closeEvent(QCloseEvent())
-        except AttributeError:
-            got.append(False)
-        window.sync = sync
-        out["closed_after_error"] = got
-        # closeEvent напрямую: исключение из обработчика события Qt
-        # уходит в окно QGIS мимо сборщика ошибок.
-        try:
-            window.closeEvent(QCloseEvent())
-        except AttributeError as exc:
-            out["error"] = str(exc)
-        if not out["error"]:
-            window.close()
-    finally:
-        planets.MOON_PLANET.terrain = saved
-
-
 def local_terrain():
     """PLANETX_TERRAIN_DIR - папка с тайлами высот тел вместо хранилища
     planetx-terrain, для проверки до публикации тайлов."""
@@ -3049,7 +3014,8 @@ def moon_relief_check():
     store = view.store
     result["moon_relief"] = {
         "tiles": sorted({k[0] for k in store.tiles}),
-        "rim_m": round(store.height_at(9.62, -20.08 + 0.95)),
+        # Коперник около 93 км, вал в 1.5° от центра по долготе.
+        "rim_m": round(store.height_at(9.62, -20.08 + 1.5)),
         "floor_m": round(store.height_at(9.62, -20.08)),
         "errors": {str(k): str(v) for k, v in
                    list(window.terrain_errors.items())[:3]},
@@ -4023,6 +3989,49 @@ def demo_check():
     if state.get("demo_key"):
         window.myplaces.remove(state["demo_key"])
     window.set_extra("buildings", False)
+
+
+@check(1000)
+def close_without_heights():
+    # Закрытие окна на теле без загрузчика высот. Окно закрывается,
+    # шаг ставится последним. На прежнем коде AttributeError в журнале.
+    from planetx.core import planets
+    window = state["window"]
+    saved = planets.MOON_PLANET.terrain
+    planets.MOON_PLANET.terrain = None
+    from qgis.PyQt.QtGui import QCloseEvent
+    try:
+        window.set_body("moon")
+        out = result["close_without_heights"] = {
+            "loader": window.terrain_loader is not None, "error": ""}
+        # Ошибка в начале закрытия: сигнал closed всё равно уходит,
+        # иначе плагин держит ссылку на уничтоженное окно.
+        got = []
+        window.closed.connect(lambda: got.append(True))
+        sync, window.sync = window.sync, None
+        try:
+            window.closeEvent(QCloseEvent())
+        except AttributeError:
+            got.append(False)
+        window.sync = sync
+        out["closed_after_error"] = got
+        # closeEvent напрямую: исключение из обработчика события Qt
+        # уходит в окно QGIS мимо сборщика ошибок.
+        try:
+            window.closeEvent(QCloseEvent())
+        except AttributeError as exc:
+            out["error"] = str(exc)
+        # Повторное закрытие: загрузчики уже сняты, abort не падает.
+        out["second_error"] = ""
+        try:
+            window.closeEvent(QCloseEvent())
+        except TypeError as exc:
+            out["second_error"] = str(exc)
+        if not out["error"] and not out["second_error"]:
+            window.close()
+    finally:
+        planets.MOON_PLANET.terrain = saved
+
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
 # всегда. Без переменной идут все шаги.

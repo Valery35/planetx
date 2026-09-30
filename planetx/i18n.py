@@ -442,12 +442,15 @@ EN = {
         "Nature reserves, national parks and refuges, a green outline and a "
         "name. Names are shown below 3000 km, the outline together with "
         "motorways.",
-    "Высоты Mapzen Terrain Tiles поднимают поверхность и дают отмывку "
-    "склонов. Без рельефа Земля гладкая, высоты не загружаются. "
+    "Высоты поднимают поверхность и дают отмывку склонов. "
+    "Высоты Земли - Mapzen Terrain Tiles, Марса - MOLA, Луны - "
+    "LOLA. Без рельефа шар гладкий, высоты не загружаются. "
     "Вертикальный масштаб - в свойствах вида.":
-        "Mapzen Terrain Tiles heights raise the surface and shade the "
-        "slopes. Without terrain the Earth is smooth and no heights are "
-        "loaded. Vertical exaggeration is in the view properties.",
+        "Heights raise the surface and shade the slopes. Earth heights "
+        "come from Mapzen Terrain Tiles, Mars heights from MOLA, Moon "
+        "heights from LOLA. Without terrain the globe is smooth and no "
+        "heights are loaded. Vertical exaggeration is in the view "
+        "properties.",
     "Без флажка глобус показывает новую подложку, масштаб рельефа и слои "
     "проекта после кнопки «Обновить». С флажком он обновляется сам после "
     "каждой смены настроек и каждой правки данных, стиля и порядка слоёв. "

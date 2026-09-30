@@ -22,18 +22,18 @@
 высота пикселя - в его центре, билинейно из сетки. Высота округляется
 до STEP метров и пишется как Terrarium: R·256 + G + B/256 - 32768,
 B = 0. Шаг выбран по замеру 1 октября 2026 года. У Марса на 40 тайлах
-уровня 5 шаг 1 м дал 52 КБ на тайл, шаг 10 м - 26 КБ, архив уровней
-0-5 с шагом 10 м - 48 МБ. У Луны с шагом 10 м архив 75 МБ, поверхность
-в кратерах сжимается хуже, шаг взят 20 м. Пиксель уровня 5 у экватора
-- 2.6 км у Марса и 1.3 км у Луны.
-Пишутся уровни 0..MAX_LEVEL в папка/{z}/{x}/{y}.png и архив
-папка.zip без сжатия, PNG уже сжаты.
+уровня 5 шаг 1 м дал 52 КБ на тайл, шаг 10 м - 26 КБ, все уровни
+0-5 с шагом 10 м - 45 МБ. У Луны с шагом 10 м 75 МБ, поверхность
+в кратерах сжимается хуже, шаг взят 20 м, 59 МБ. Пиксель уровня 5
+у экватора - 2.6 км у Марса и 1.3 км у Луны.
+Пишутся уровни 0..MAX_LEVEL в папка/{z}/{x}/{y}.png. Папки mars
+и moon кладутся в хранилище planetx-terrain, модуль читает тайлы
+оттуда по одному (core/planets.py).
 """
 import math
 import os
 import re
 import sys
-import zipfile
 
 import numpy as np
 from PIL import Image
@@ -141,15 +141,7 @@ def build(body, lbl_path, out, step=STEP):
                 Image.fromarray(rgb, "RGB").save(path, optimize=True)
                 count += 1
                 total += os.path.getsize(path)
-    archive = out.rstrip("\\/") + ".zip"
-    with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as zf:
-        for z in range(MAX_LEVEL + 1):
-            for x in range(1 << z):
-                for y in range(1 << z):
-                    name = "%d/%d/%d.png" % (z, x, y)
-                    zf.write(os.path.join(out, name), name)
-    print("тайлов %d, %.1f МБ, архив %s %.1f МБ" % (
-        count, total / 1e6, archive, os.path.getsize(archive) / 1e6))
+    print("тайлов %d, %.1f МБ" % (count, total / 1e6))
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.19.0
+version=0.20.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -28,7 +28,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       a dark night side, the 3D path and 3D polygon of the ruler
       measure over roofs and walls of buildings.
       The Body icon puts Mars or the Moon in place of the Earth, with
-      NASA and USGS imagery, and opens the starry sky seen from the
+      NASA and USGS imagery and terrain from MOLA and LOLA heights,
+      and opens the starry sky seen from the
       centre of the celestial sphere: the Milky Way, stars,
       constellation lines and names, the Sun, the Moon and the planets
       at the chosen time. The Demo icon with an academic cap opens
@@ -76,7 +77,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Star Catalogue. Milky Way: NASA/Goddard Space Flight Center
       Scientific Visualization Studio, Gaia DR2: ESA/Gaia/DPAC.
       Mars: NASA, USGS, Viking MDIM2.1. Moon: USGS, LRO LOLA. Tiles of
-      both: OpenPlanetaryMap. Constellations and star names:
+      both: OpenPlanetaryMap. Mars heights: NASA MGS MOLA MEGDR. Moon
+      heights: NASA LRO LOLA GDR. Constellations and star names:
       d3-celestial, © Olaf Frohn. Planets: JPL orbital elements.
       Developed with the support of Inform++ LLC (www.informpp.ru).
 tracker=https://github.com/Valery35/planetx/issues
@@ -87,7 +89,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.19.0 The Body icon of the icon bar puts Mars or the
+changelog=0.20.0 Mars and the Moon have terrain: mountains,
+      craters and plains from NASA MOLA and LOLA heights, with the same
+      vertical scale as on the Earth. The loop button on the tour bar
+      repeats the tour from the first stop. Closing the globe window
+      on Mars or the Moon no longer ends with an error.
+      0.19.0 The Body icon of the icon bar puts Mars or the
       Moon in place of the Earth, with their own imagery, and a place
       keeps its body. The Sky item shows the starry sky from the centre
       of the celestial sphere: the Milky Way, stars, constellation

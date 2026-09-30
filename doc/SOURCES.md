@@ -23,6 +23,8 @@ QGIS. Запросы идут через сетевые настройки и д
 | Yale Bright Star Catalogue, 5-е издание | звёзды, строка «Звёзды» | каталог CDS V/50, условия CDS не сверены, автор принял это 29 сентября 2026 года | нет |
 | OpenPlanetaryMap, Viking MDIM2.1 | снимки Марса | условия не указаны, см. раздел «Марс и Луна» | NASA, USGS, Viking MDIM2.1, OpenPlanetaryMap |
 | OpenPlanetaryMap, LOLA hillshaded albedo | снимки Луны | условия не указаны, см. раздел «Марс и Луна» | USGS, LRO LOLA, OpenPlanetaryMap |
+| NASA MGS MOLA MEGDR, 32 точки на градус | рельеф Марса | данные NASA PDS в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA MGS MOLA MEGDR |
+| NASA LRO LOLA GDR, 64 точки на градус | рельеф Луны | данные NASA PDS в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA LRO LOLA GDR |
 | d3-celestial, Olaf Frohn | линии и названия созвездий, имена ярких звёзд, вид неба | [BSD с тремя пунктами](https://github.com/ofrohn/d3-celestial/blob/master/LICENSE), текст лицензии лежит в `planetx/data` | Constellations: d3-celestial © Olaf Frohn |
 | JPL, Approximate Positions of the Planets | положения планет на небе | [страница JPL](https://ssd.jpl.nasa.gov/planets/approx_pos.html), формулы, данные не скачиваются | Planets: JPL approximate elements |
 | Астрономический альманах, формулы малой точности | положение Луны на небе | формулы, данные не скачиваются | нет |
@@ -79,6 +81,15 @@ Tiles из обозревателя QGIS.
 Тайлы обоих тел лежат в разметке TMS, ряды считаются от юга. Для Луны
 страница называет разметку XYZ, проверка расположения тайлов показала
 разметку TMS.
+
+Высоты Марса и Луны взяты из сеток PDS Geosciences Node. Марс -
+MOLA MEGDR `megt90n000fb`, 32 точки на градус, высоты над ареоидом.
+Луна - LOLA GDR `ldem_64`, 64 точки на градус, высоты над сферой
+радиусом 1737.4 км. Данные миссий NASA находятся в общественном
+достоянии, NASA просит указывать источник. Из сеток собраны тайлы
+Terrarium уровней 0-5, по 1365 тайлов на тело. Они лежат в отдельном
+хранилище [planetx-terrain](https://github.com/Valery35/planetx-terrain)
+и загружаются по одному тайлу через сеть и кэш QGIS.
 
 ## Другие открытые покрытия
 

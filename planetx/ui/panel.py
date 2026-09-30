@@ -441,9 +441,10 @@ class LayerPanel(QWidget):
         relief = QTreeWidgetItem(self.geo, [tr("Рельеф")])
         relief.setData(0, LAYER_ROLE, RELIEF)
         relief.setToolTip(0, tr(
-            "Высоты Mapzen Terrain Tiles поднимают поверхность и дают "
-            "отмывку склонов. Без рельефа Земля гладкая, высоты "
-            "не загружаются. Вертикальный масштаб - в свойствах вида."))
+            "Высоты поднимают поверхность и дают отмывку склонов. "
+            "Высоты Земли - Mapzen Terrain Tiles, Марса - MOLA, Луны - "
+            "LOLA. Без рельефа шар гладкий, высоты не загружаются. "
+            "Вертикальный масштаб - в свойствах вида."))
         relief.setFlags(relief.flags() | CHECKABLE)
         relief.setCheckState(0, UNCHECKED)
         self.geo_items[RELIEF] = relief

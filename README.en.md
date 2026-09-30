@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.19.0.
+A 3D globe inside QGIS. PlanetX version 0.20.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -37,9 +37,10 @@ and atmosphere, from space down to single streets.
   at the time slider time or by the clock, the night side of the
   Earth is dark.
 - **Mars and the Moon.** An icon on the icon bar puts Mars or the Moon
-  in place of the Earth, with NASA and USGS imagery. Navigation, grid,
-  ruler, places, tours, view snapshots and scenes work on any body.
-  A place remembers its body.
+  in place of the Earth, with NASA and USGS imagery. Mars terrain is
+  built from MOLA heights, Moon terrain from LOLA heights. Navigation,
+  terrain, grid, ruler, places, tours, view snapshots and scenes work
+  on any body. A place remembers its body.
 - **Starry sky.** The Body icon also opens the sky from the centre of the
   celestial sphere. It shows the Milky Way, stars, constellation lines
   and names, the Sun, the Moon and the planets at the chosen time.
@@ -126,8 +127,9 @@ and atmosphere, from space down to single streets.
   flies over the checked places in the list order, along a path the
   camera travels the line. Places and folders are rearranged by
   dragging. The bar at the bottom of the view pauses the tour, steps
-  between stops and records the tour as PNG frames for a video. The
-  record button records a tour from the screen.
+  between stops, repeats the tour in a loop and records it as PNG
+  frames for a video. The record button records a tour from the
+  screen.
 - **Placemark time.** A placemark can have a moment or an interval. The
   time slider opens with a button on the icon bar and hides placemarks
   outside the interval.
@@ -199,6 +201,8 @@ Gaia DR2: ESA/Gaia/DPAC.
 
 Mars imagery: NASA, USGS, Viking MDIM2.1. Moon imagery: USGS,
 LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
+Mars heights come from NASA MGS MOLA MEGDR, Moon heights from NASA
+LRO LOLA GDR.
 Constellations and star names come from [d3-celestial](https://github.com/ofrohn/d3-celestial),
 © Olaf Frohn. Planet positions are computed from JPL orbital
 elements.

@@ -608,7 +608,7 @@ The tour bar appears at the bottom of the view:
 | ⏮, ⏭ | Previous and next stop |
 | ⏸, ▶ | Pause and continue |
 | Pause | How many seconds the camera stays at a stop |
-| ⟳ | Loops the tour. After the last stop the tour starts again from the first. The button state is kept between sessions |
+| 🔁 | Loops the tour. After the last stop the tour starts again from the first. The button state is kept between sessions |
 | ⏺ | Records the tour as PNG frames |
 | ✕ | Ends the tour |
 
@@ -785,11 +785,20 @@ Mars imagery is the Viking MDIM2.1 colour mosaic, about 650 m per
 pixel. Moon imagery is the LOLA albedo map with hill shading, about
 670 m per pixel. Mars has a thin, dusty atmosphere, the Moon has none.
 
-On Mars and the Moon the navigation, grid, stars, ruler, My Places,
-tours, view snapshot and scenes work. Functions with Earth-only data
-are off:
+Mars terrain is built from the MOLA MEGDR heights, Moon terrain from
+the LOLA GDR heights. Heights are rounded to 10 m on Mars and to 20 m
+on the Moon. A height pixel at the equator is 2.6 km on Mars and
+1.3 km on the Moon. The terrain is switched on with the same Terrain
+row of the Layers section, the vertical scale is set in the view
+properties. Mars heights refer to the areoid, Moon heights refer to
+a sphere of radius 1737.4 km. Depressions below zero are kept, the
+floor of the Hellas plain lies 7-8 km below zero.
 
-- terrain, vector base, clouds, temperature, 3D buildings and sunlight
+On Mars and the Moon the navigation, terrain, grid, stars, ruler,
+My Places, tours, view snapshot and scenes work. Functions with
+Earth-only data are off:
+
+- vector base, clouds, temperature, 3D buildings and sunlight
 - project layers and their labels, tracks
 - synchronization with the QGIS map and feature identification
 - place search by name. Coordinates in the search field work
@@ -854,9 +863,11 @@ in the same menu.
 - Recording a tour takes longer than the tour itself.
 - Buildings are blocks with flat roofs, roof shapes and facades
   are not shown.
-- Mars and the Moon are smooth spheres, the relief shows only as hill
-  shading in the imagery. KML does not store the body of a place,
-  places from a KML file go to the current body.
+- Mars and Moon heights are coarser than Earth heights, a height pixel
+  at the equator is 2.6 km and 1.3 km. Craters smaller than 5-10 km
+  do not show in the heights.
+- KML does not store the body of a place, places from a KML file go
+  to the current body.
 - The sky is shown from the centre of the Earth, without the horizon
   of an observing site. Coordinates are not reduced to the date, by
   2026 precession shifts them by about 0.36°.
@@ -870,7 +881,8 @@ VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale B
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
 DR2: ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
 Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
-OpenPlanetaryMap. Constellation lines, names and star names -
+OpenPlanetaryMap. Mars heights - NASA MGS MOLA MEGDR, Moon heights -
+NASA LRO LOLA GDR. Constellation lines, names and star names -
 d3-celestial, © Olaf Frohn. Planet positions are computed from JPL
 orbital elements, the Moon position from the formulae of the
 Astronomical Almanac.
