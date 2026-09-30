@@ -13,7 +13,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
 import numpy as np  # noqa: E402
 
 import measure as ms  # noqa: E402
-from ellipsoid import A  # noqa: E402
+from ellipsoid import (A, ecef_to_geodetic,  # noqa: E402
+                       geodetic_to_ecef)
 
 
 class TestDestination(unittest.TestCase):
@@ -134,5 +135,63 @@ class TestProfile(unittest.TestCase):
         # Геодезическая, а не геоцентрическая широта.
         mid = ms.segment_midpoints([(45.0, 10.0), (45.0, 10.002)])[0]
         self.assertAlmostEqual(mid[0], 45.0, delta=1e-6)
+
+
+def local(points, lat0=58.0, lon0=56.2, h0=150.0):
+    """Точки в метрах на восток, север и вверх от (lat0, lon0, h0)
+    в широту, долготу и высоту над эллипсоидом."""
+    la, lo = math.radians(lat0), math.radians(lon0)
+    up = np.array([math.cos(la) * math.cos(lo), math.cos(la) * math.sin(lo),
+                   math.sin(la)])
+    east = np.array([-math.sin(lo), math.cos(lo), 0.0])
+    north = np.cross(up, east)
+    enu = np.asarray(points, dtype=np.float64)
+    xyz = geodetic_to_ecef(lat0, lon0, h0) + enu[:, :1] * east \
+        + enu[:, 1:2] * north + enu[:, 2:3] * up
+    lat, lon, h = ecef_to_geodetic(xyz)
+    return np.stack([lat, lon, h], axis=1)
+
+
+class TestSolid(unittest.TestCase):
+    """3D-путь и 3D-многоугольник: отрезки прямые, площадь в плоскости."""
+
+    def test_vertical_segment(self):
+        self.assertAlmostEqual(ms.chord_length(local([(0, 0, 0),
+                                                      (0, 0, 100)])),
+                               100.0, delta=1e-4)
+
+    def test_slanted_segment(self):
+        self.assertAlmostEqual(ms.chord_length(local([(0, 0, 0),
+                                                      (30, 0, 40)])),
+                               50.0, delta=1e-4)
+
+    def test_closed_perimeter(self):
+        square = local([(0, 0, 0), (100, 0, 0), (100, 100, 0), (0, 100, 0)])
+        self.assertAlmostEqual(ms.chord_length(square), 300.0, delta=1e-3)
+        self.assertAlmostEqual(ms.chord_length(square, closed=True), 400.0,
+                               delta=1e-3)
+
+    def test_inclined_square(self):
+        # Квадрат 100 × 100 м под наклоном 30°: площадь в плоскости
+        # 10 000 м², на карте было бы 8660 м².
+        c, s = math.cos(math.radians(30)), math.sin(math.radians(30))
+        square = local([(0, 0, 0), (100, 0, 0), (100, 100 * c, 100 * s),
+                        (0, 100 * c, 100 * s)])
+        self.assertAlmostEqual(ms.polygon_area_3d(square), 10000.0,
+                               delta=0.1)
+
+    def test_vertical_wall(self):
+        # Стена 50 × 20 м: на карте площади нет совсем.
+        wall = local([(0, 0, 0), (50, 0, 0), (50, 0, 20), (0, 0, 20)])
+        self.assertAlmostEqual(ms.polygon_area_3d(wall), 1000.0, delta=0.05)
+
+    def test_order_and_degenerate(self):
+        square = local([(0, 0, 0), (100, 0, 0), (100, 100, 0), (0, 100, 0)])
+        self.assertAlmostEqual(ms.polygon_area_3d(square[::-1]), 10000.0,
+                               delta=0.1)
+        self.assertEqual(ms.polygon_area_3d(square[:2]), 0.0)
+        self.assertEqual(ms.chord_length(square[:1]), 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

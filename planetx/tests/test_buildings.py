@@ -7,6 +7,7 @@
 29 сентября 2026 года, центр Перми и Берлин-Митте. © OpenMapTiles,
 © участники OpenStreetMap, ODbL.
 """
+import math
 import os
 import sys
 import time
@@ -19,7 +20,8 @@ CORE = os.path.join(os.path.dirname(os.path.dirname(
 sys.path.insert(0, CORE)
 
 import buildings as bd  # noqa: E402
-from ellipsoid import ecef_to_geodetic  # noqa: E402
+from ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,  # noqa: E402
+                       surface_normal)
 
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 PERM = (14, 10751, 4933)
@@ -338,6 +340,72 @@ def _tile(polygons, height=10):
              + _field(3, 2, b"render_height")
              + _field(4, 2, _field(5, 0, height)) + _field(5, 0, 4096))
     return _field(3, 2, layer)
+
+
+
+def box(lat, lon, size, height, base=0.0):
+    """Здание-коробка size × size метров с центром в lat, lon."""
+    dlat = size / 2.0 / 111320.0
+    dlon = dlat / math.cos(math.radians(lat))
+    latlon = np.array([[lat - dlat, lon - dlon], [lat - dlat, lon + dlon],
+                       [lat + dlat, lon + dlon], [lat + dlat, lon - dlon]])
+    return bd.Footprint(
+        PERM, latlon, np.array([1, 2, 3, 0]), np.ones(4, dtype=bool),
+        np.zeros(4, dtype=np.int64), np.array([height]), np.array([base]),
+        np.array([[200, 200, 200]], dtype=np.uint8),
+        np.array([0, 1, 2, 0, 2, 3], dtype=np.uint32))
+
+
+class TestRayHit(unittest.TestCase):
+    """Попадание луча в здание: крыша, стена, промах, ближнее из двух."""
+
+    LAT, LON = 58.0, 56.2
+
+    def setUp(self):
+        self.mesh = bd.mesh(box(self.LAT, self.LON, 20.0, 30.0))
+
+    def test_ray_from_above_hits_roof(self):
+        origin = geodetic_to_ecef(self.LAT, self.LON, 500.0)
+        down = -surface_normal(self.LAT, self.LON)
+        distance, point = bd.ray_hit([self.mesh], origin, down)
+        self.assertAlmostEqual(distance, 470.0, delta=0.01)
+        _, _, height = ecef_to_geodetic(point)
+        self.assertAlmostEqual(float(height), 30.0, delta=0.01)
+
+    def test_level_ray_hits_wall(self):
+        # Луч на высоте 10 м идёт с запада на восток из точки в 100 м
+        # от центра, стена стоит в 10 м от центра, около 90 м пути.
+        dlon = 100.0 / (111320.0 * math.cos(math.radians(self.LAT)))
+        origin = geodetic_to_ecef(self.LAT, self.LON - dlon, 10.0)
+        target = geodetic_to_ecef(self.LAT, self.LON, 10.0)
+        distance, point = bd.ray_hit([self.mesh], origin, target - origin)
+        wall = geodetic_to_ecef(self.LAT, self.LON - dlon / 10.0, 10.0)
+        self.assertAlmostEqual(distance, float(np.linalg.norm(wall - origin)),
+                               delta=0.01)
+        _, _, height = ecef_to_geodetic(point)
+        self.assertAlmostEqual(float(height), 10.0, delta=0.05)
+
+    def test_miss_and_ray_away(self):
+        origin = geodetic_to_ecef(self.LAT + 0.01, self.LON, 500.0)
+        down = -surface_normal(self.LAT + 0.01, self.LON)
+        self.assertIsNone(bd.ray_hit([self.mesh], origin, down))
+        origin = geodetic_to_ecef(self.LAT, self.LON, 500.0)
+        up = surface_normal(self.LAT, self.LON)
+        self.assertIsNone(bd.ray_hit([self.mesh], origin, up))
+
+    def test_ray_above_roof_misses(self):
+        dlon = 100.0 / (111320.0 * math.cos(math.radians(self.LAT)))
+        origin = geodetic_to_ecef(self.LAT, self.LON - dlon, 40.0)
+        target = geodetic_to_ecef(self.LAT, self.LON + dlon, 40.0)
+        self.assertIsNone(bd.ray_hit([self.mesh], origin, target - origin))
+
+    def test_nearest_of_two(self):
+        low = bd.mesh(box(self.LAT, self.LON, 40.0, 10.0))
+        origin = geodetic_to_ecef(self.LAT, self.LON, 500.0)
+        down = -surface_normal(self.LAT, self.LON)
+        distance, _ = bd.ray_hit([low, self.mesh], origin, down)
+        self.assertAlmostEqual(distance, 470.0, delta=0.01)
+        self.assertIsNone(bd.ray_hit([], origin, down))
 
 
 if __name__ == "__main__":

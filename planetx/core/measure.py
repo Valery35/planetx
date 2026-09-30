@@ -192,6 +192,45 @@ def ground_length(points, heights_at, limit=PROFILE_POINTS):
     return profile(latlon, heights_at(latlon[:, 0], latlon[:, 1])).ground
 
 
+def _ecef3(points):
+    """Точки (широта, долгота, высота над эллипсоидом) в ECEF, (N, 3)."""
+    pts = np.asarray(points, dtype=np.float64).reshape(-1, 3)
+    return geodetic_to_ecef(pts[:, 0], pts[:, 1], pts[:, 2])
+
+
+def chord_length(points, closed=False):
+    """Длина 3D-пути, м: сумма прямых отрезков в пространстве.
+
+    points - (широта, долгота, высота над эллипсоидом). Отрезки идут
+    по прямой между точками, а не по поверхности, как у 3D-пути,
+    поставленного на крыши и склоны. closed - замкнуть на первую точку.
+    """
+    xyz = _ecef3(points)
+    if len(xyz) < 2:
+        return 0.0
+    if closed:
+        xyz = np.vstack([xyz, xyz[:1]])
+    return float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).sum())
+
+
+def polygon_area_3d(points):
+    """Площадь 3D-многоугольника в его плоскости, м².
+
+    points - (широта, долгота, высота над эллипсоидом), без повтора
+    первой точки. Площадь - длина векторной площади, половины суммы
+    векторных произведений соседних вершин. У плоского многоугольника
+    это его площадь при любом наклоне, в том числе у отвесной стены.
+    У неплоского - площадь проекции на плоскость, где она наибольшая.
+    Точки берутся от их среднего, так числа в пределах размера фигуры.
+    """
+    xyz = _ecef3(points)
+    if len(xyz) < 3:
+        return 0.0
+    rel = xyz - xyz.mean(axis=0)
+    vector = np.cross(rel, np.roll(rel, -1, axis=0)).sum(axis=0)
+    return float(0.5 * np.linalg.norm(vector))
+
+
 def bearing(lat1, lon1, lat2, lon2):
     """Начальный азимут с севера по часовой, градусы 0-360, сфера.
 

@@ -599,3 +599,46 @@ def mesh_ok(mesh):
     if len(indices) and int(indices.max()) >= len(mesh.vertices):
         return False
     return bool(np.isfinite(mesh.vertices["position"]).all())
+
+
+def ray_hit(meshes, origin, direction):
+    """Ближайшее попадание луча в здания: (расстояние, точка) или None.
+
+    meshes - сетки Mesh, origin - начало луча в ECEF, direction -
+    направление, длина любая. Расстояние - в метрах вдоль луча. Проверка
+    идёт по тем же треугольникам, что рисует видеокарта, в float64
+    от центра тайла, методом Мёллера-Трумбора. Треугольник попадает
+    с обеих сторон, стены видны и изнутри двора.
+    """
+    origin = np.asarray(origin, dtype=np.float64)
+    d = np.asarray(direction, dtype=np.float64)
+    d = d / np.linalg.norm(d)
+    best = None
+    for m in meshes:
+        if not len(m.indices):
+            continue
+        tri = m.indices.reshape(-1, 3)
+        p = m.vertices["position"].astype(np.float64)
+        a, b, c = p[tri[:, 0]], p[tri[:, 1]], p[tri[:, 2]]
+        o = origin - np.asarray(m.center, dtype=np.float64)
+        e1, e2 = b - a, c - a
+        h = np.cross(d, e2)
+        det = (e1 * h).sum(axis=1)
+        # Ребро треугольника - метры, порог отбрасывает луч в плоскости
+        # треугольника.
+        ok = np.abs(det) > 1e-9 * (e1 * e1).sum(axis=1)
+        inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+        s = o - a
+        u = (s * h).sum(axis=1) * inv
+        q = np.cross(s, e1)
+        v = (q @ d) * inv
+        t = (e2 * q).sum(axis=1) * inv
+        inside = ok & (u >= 0.0) & (v >= 0.0) & (u + v <= 1.0) & (t > 0.0)
+        if not inside.any():
+            continue
+        near = float(t[inside].min())
+        if best is None or near < best:
+            best = near
+    if best is None:
+        return None
+    return best, origin + best * d
