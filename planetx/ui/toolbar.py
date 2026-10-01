@@ -32,9 +32,8 @@ def body_names():
             "callisto": tr("Каллисто"), "mimas": tr("Мимас"),
             "enceladus": tr("Энцелад"), "tethys": tr("Тефия"),
             "dione": tr("Диона"), "rhea": tr("Рея"), "titan": tr("Титан"),
-            "iapetus": tr("Япет"), "triton": tr("Тритон"),
-            "ceres": tr("Церера"), "vesta": tr("Веста"),
-            "pluto": tr("Плутон"), "charon": tr("Харон")}
+            "iapetus": tr("Япет"),
+            "ceres": tr("Церера"), "vesta": tr("Веста")}
 ICON_SIZE = QSize(20, 20)
 STYLE = ("QFrame#planetxToolbar { background: rgba(250, 250, 250, 225); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
@@ -182,29 +181,27 @@ class ViewToolbar(QFrame):
         menu = QMenu(body)
         group = QActionGroup(menu)
         self.body_actions = {}
-        names = body_names()
-        sections = {"jupiter": tr("Юпитер и его спутники"),
+        names = dict(body_names(), sky=tr("Небо"))
+        submenus = {"planets": tr("Планеты"),
+                    "jupiter": tr("Спутники Юпитера"),
                     "saturn": tr("Спутники Сатурна"),
-                    "neptune": tr("Спутник Нептуна"),
-                    "dwarf": tr("Карликовые планеты и астероиды")}
-        items = []
-        for section, keys in MENU:
-            items.append((None, sections.get(section, "")))
-            items += [(key, names[key]) for key in keys]
-        items += [(None, ""), ("sky", tr("Небо"))]
-        for key, title in items:
-            if key is None:
-                if title:
-                    menu.addSection(title)
-                elif menu.actions():
+                    "asteroids": tr("Астероиды")}
+        # Земля сверху, под разделителем Луна и Марс, прочие тела -
+        # короткими подменю, в конце небо.
+        for section, keys in MENU + (("", ("sky",)),):
+            if section:
+                target = menu.addMenu(submenus[section])
+            else:
+                if menu.actions():
                     menu.addSeparator()
-                continue
-            action = menu.addAction(title)
-            action.setCheckable(True)
-            action.setActionGroup(group)
-            action.triggered.connect(
-                lambda checked, k=key: self.body_chosen.emit(k))
-            self.body_actions[key] = action
+                target = menu
+            for key in keys:
+                action = target.addAction(names[key])
+                action.setCheckable(True)
+                action.setActionGroup(group)
+                action.triggered.connect(
+                    lambda checked, k=key: self.body_chosen.emit(k))
+                self.body_actions[key] = action
         self.body_actions["earth"].setChecked(True)
         # Линии и названия созвездий неба, вне группы тел.
         lines = menu.addAction(tr("Созвездия"))

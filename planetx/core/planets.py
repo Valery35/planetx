@@ -101,8 +101,6 @@ HOME_RADII = 3.5
 # широта и долгота начальной точки. Воздух у Венеры и Титана - плотная
 # дымка, цвет подобран помощником на снимке, его утверждает автор.
 # Множитель синего мал, как у Марса: земное рассеяние в синем сильнее.
-# Южная часть Харона и Тритона аппаратами не снята, начальная точка -
-# на снятой стороне.
 OTHER = (
     ("mercury", "MESSENGER MDIS MD3 color", 6,
      "NASA, JHU APL, Carnegie Institution, MESSENGER MDIS, USGS",
@@ -146,21 +144,12 @@ OTHER = (
     ("iapetus", "Cassini ISS and Voyager", 5,
      "NASA, JPL, Space Science Institute, Cassini ISS, USGS", USGS_MAPS,
      None, (0.0, 0.0)),
-    ("triton", "Voyager 2 color", 5,
-     "NASA, JPL, Voyager 2, P. Schenk (LPI), USGS", USGS_MAPS, None,
-     (-30.0, 0.0)),
     ("ceres", "Dawn FC", 5,
      "NASA, JPL-Caltech, UCLA, MPS, DLR, IDA, Dawn FC, USGS", USGS_MAPS,
      None, (0.0, 0.0)),
     ("vesta", "Dawn FC HAMO", 6,
      "NASA, JPL-Caltech, UCLA, MPS, DLR, IDA, Dawn FC, USGS", USGS_MAPS,
      None, (0.0, 0.0)),
-    ("pluto", "New Horizons LORRI and MVIC", 6,
-     "NASA, JHU APL, SwRI, New Horizons, USGS", USGS_MAPS, None,
-     (25.0, 175.0)),
-    ("charon", "New Horizons LORRI and MVIC", 5,
-     "NASA, JHU APL, SwRI, New Horizons, USGS", USGS_MAPS, None,
-     (30.0, 0.0)),
 )
 
 
@@ -172,13 +161,17 @@ def _other(key, name, level, credit, link, air, home):
 
 OTHER_PLANETS = tuple(_other(*row) for row in OTHER)
 PLANETS = (EARTH_PLANET, MARS_PLANET, MOON_PLANET) + OTHER_PLANETS
-# Меню «Тело»: разделы и ключи тел по порядку.
-MENU = (("", ("mercury", "venus", "earth", "moon", "mars")),
-        ("jupiter", ("jupiter", "io", "europa", "ganymede", "callisto")),
+# Меню «Тело»: Земля, Луна и Марс сверху, прочие тела - подменю.
+# Пустой заголовок - тела в самом меню после разделителя. Плутона,
+# Харона и Тритона нет: 24-33 % их шара аппараты не сняли. Решение
+# автора от 1 октября 2026 года - в меню только тела, снятые целиком.
+MENU = (("", ("earth",)),
+        ("", ("moon", "mars")),
+        ("planets", ("mercury", "venus", "jupiter")),
+        ("jupiter", ("io", "europa", "ganymede", "callisto")),
         ("saturn", ("mimas", "enceladus", "tethys", "dione", "rhea",
                     "titan", "iapetus")),
-        ("neptune", ("triton",)),
-        ("dwarf", ("ceres", "vesta", "pluto", "charon")))
+        ("asteroids", ("ceres", "vesta")))
 
 
 def planet_by_key(key):

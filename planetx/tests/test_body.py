@@ -111,6 +111,18 @@ class TestImagery(unittest.TestCase):
     С рядами XYZ Луна 30 сентября 2026 года вышла полосами по широте.
     """
 
+    def test_menu_bodies_exist(self):
+        # Каждый ключ меню - тело с размерами и снимками, Земля первая.
+        # 1 октября 2026 года правка меню срезала planet_by_key, окно
+        # глобуса не открывалось.
+        import planets
+        keys = [k for _, group in planets.MENU for k in group]
+        self.assertEqual(keys[0], "earth")
+        for key in keys:
+            planet = planets.planet_by_key(key)
+            self.assertEqual(planet.key, key)
+            self.assertIs(el.body_by_key(key), planet.body)
+
     def test_mars_and_moon_are_tms(self):
         import planets
         for planet in (planets.MARS_PLANET, planets.MOON_PLANET):

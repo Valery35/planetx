@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.20.0.
+A 3D globe inside QGIS. PlanetX version 0.21.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -38,8 +38,8 @@ and atmosphere, from space down to single streets.
   Earth is dark.
 - **Other bodies.** The Body icon on the icon bar puts Mercury, Venus,
   the Moon, Mars, Jupiter, its moons Io, Europa, Ganymede and
-  Callisto, the moons of Saturn from Mimas to Iapetus, Triton, Ceres,
-  Vesta, Pluto or Charon in place of the Earth. The imagery comes from
+  Callisto, the moons of Saturn from Mimas to Iapetus, Ceres or Vesta
+  in place of the Earth. The imagery comes from
   global NASA and USGS mosaics. Mars terrain is built from MOLA
   heights, Moon terrain from LOLA heights. Navigation, grid, ruler,
   places, tours, view snapshots and scenes work on any body. A place
@@ -208,7 +208,7 @@ Mars heights come from NASA MGS MOLA MEGDR, Moon heights from NASA
 LRO LOLA GDR. Imagery of other bodies comes from global mosaics of
 [USGS Astrogeology](https://astrogeology.usgs.gov/search) and NASA
 Photojournal, made from MESSENGER, Magellan, Galileo, Voyager,
-Cassini, Dawn and New Horizons data.
+Cassini and Dawn data.
 Constellations and star names come from [d3-celestial](https://github.com/ofrohn/d3-celestial),
 © Olaf Frohn. Planet positions are computed from JPL orbital
 elements.

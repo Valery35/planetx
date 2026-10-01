@@ -63,7 +63,7 @@ dragged with the mouse.
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
 | Demo | Ready scenes by body, see [Demo](#demo) |
-| Body | The menu of planets, moons, dwarf planets and Sky, see [Other bodies](#other-bodies) and [Starry sky](#starry-sky) |
+| Body | The menu of planets, moons, asteroids and Sky, see [Other bodies](#other-bodies) and [Starry sky](#starry-sky) |
 | View properties | Base map, terrain, labels, link with the map, update, coordinate format |
 | About | Controls, data sources, links |
 
@@ -775,25 +775,31 @@ the insertion.
 
 ## Other bodies
 
-The Body icon on the icon bar opens the menu of bodies. It has these
-sections:
+The Body icon on the icon bar opens the menu of bodies. The Earth is
+at the top, the Moon and Mars are below a separator, then come
+submenus:
 
-- Mercury, Venus, Earth, Moon, Mars
-- Jupiter and its moons Io, Europa, Ganymede, Callisto
-- moons of Saturn Mimas, Enceladus, Tethys, Dione, Rhea, Titan, Iapetus
-- the moon of Neptune Triton
-- dwarf planets and asteroids Ceres, Vesta, Pluto, Charon
+| Submenu | Bodies |
+|---|---|
+| Planets | Mercury, Venus, Jupiter |
+| Moons of Jupiter | Io, Europa, Ganymede, Callisto |
+| Moons of Saturn | Mimas, Enceladus, Tethys, Dione, Rhea, Titan, Iapetus |
+| Asteroids | Ceres, Vesta |
+
+The menu holds only bodies imaged by spacecraft in full. On Pluto,
+Charon and Triton 24 to 33 % of the globe is not imaged, they are not
+in the menu.
 
 The chosen body replaces the Earth. The size of the globe, the imagery
 and the atmosphere change, and the camera flies to the start point of
 the body. On Mars it is Olympus Mons, on the Moon it is the Sea of
-Tranquility, the Apollo 11 landing site. On Pluto it is Sputnik
-Planitia, on other bodies a point on the equator and the prime
-meridian.
+Tranquility, the Apollo 11 landing site, on Mercury the Caloris basin,
+on Venus Maxwell Montes. On other bodies it is a point on the equator
+and the prime meridian.
 
 Imagery of the bodies other than Mars and the Moon comes from global
 mosaics of USGS Astrogeology and NASA, made from MESSENGER, Magellan,
-Galileo, Voyager, Cassini, Dawn and New Horizons data. A tile pixel at
+Galileo, Voyager, Cassini and Dawn data. A tile pixel at
 the equator ranges from 100 m on Enceladus and Vesta to 120 km on
 Jupiter. Some imagery does not look as the eye would see it:
 
@@ -801,9 +807,7 @@ Jupiter. Some imagery does not look as the eye would see it:
 - Jupiter is a Cassini cloud map of December 2000, its clouds do not
   move
 - Titan is imaged in near infrared light through the haze
-- Mercury, Io, Ganymede and Triton are in colour, other bodies are grey
-- on Pluto, Charon and Triton the parts of the globe not imaged by
-  spacecraft are dark or filled with neighbouring pixels
+- Mercury, Io and Ganymede are in colour, other bodies are grey
 
 The globe of each body is a sphere, Jupiter is an oblate ellipsoid.
 Vesta, Ceres and small moons are not spherical in reality, their

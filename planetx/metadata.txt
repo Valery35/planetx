@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.20.0
+version=0.21.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -27,9 +27,10 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       lights terrain and buildings by the position of the sun with
       a dark night side, the 3D path and 3D polygon of the ruler
       measure over roofs and walls of buildings.
-      The Body icon puts Mars or the Moon in place of the Earth, with
-      NASA and USGS imagery and terrain from MOLA and LOLA heights,
-      and opens the starry sky seen from the
+      The Body icon puts the Moon, Mars, Mercury, Venus, Jupiter, the
+      Galilean moons, seven moons of Saturn, Ceres or Vesta in place of
+      the Earth, with global NASA and USGS imagery and terrain of Mars
+      and the Moon from MOLA and LOLA heights, and opens the starry sky seen from the
       centre of the celestial sphere: the Milky Way, stars,
       constellation lines and names, the Sun, the Moon and the planets
       at the chosen time. The Demo icon with an academic cap opens
@@ -78,18 +79,25 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Scientific Visualization Studio, Gaia DR2: ESA/Gaia/DPAC.
       Mars: NASA, USGS, Viking MDIM2.1. Moon: USGS, LRO LOLA. Tiles of
       both: OpenPlanetaryMap. Mars heights: NASA MGS MOLA MEGDR. Moon
-      heights: NASA LRO LOLA GDR. Constellations and star names:
+      heights: NASA LRO LOLA GDR. Other bodies: global mosaics of USGS
+      Astrogeology and NASA Photojournal from MESSENGER, Magellan,
+      Galileo, Voyager, Cassini and Dawn data. Constellations and star names:
       d3-celestial, © Olaf Frohn. Planets: JPL orbital elements.
       Developed with the support of Inform++ LLC (www.informpp.ru).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
 homepage=https://www.informpp.ru/главная-страница/qgis-planetx
-tags=3d,globe,earth,mars,moon,sky,stars,constellations,planets,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,labels,vector tiles,opengl
+tags=3d,globe,earth,mars,moon,mercury,venus,jupiter,europa,titan,sky,stars,constellations,planets,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,labels,vector tiles,opengl
 category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.20.0 Mars and the Moon have terrain: mountains,
+changelog=0.21.0 Sixteen more bodies in the Body menu: Mercury,
+      Venus, Jupiter, Io, Europa, Ganymede, Callisto, Mimas, Enceladus,
+      Tethys, Dione, Rhea, Titan, Iapetus, Ceres and Vesta, with global
+      NASA and USGS imagery. The Earth heads the menu, other bodies sit
+      in short submenus. Jupiter fits the view as a whole.
+      0.20.0 Mars and the Moon have terrain: mountains,
       craters and plains from NASA MOLA and LOLA heights, with the same
       vertical scale as on the Earth. The loop button on the tour bar
       repeats the tour from the first stop. Closing the globe window
