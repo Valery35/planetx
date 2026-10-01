@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.21.0.
+A 3D globe inside QGIS. PlanetX version 0.22.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -17,9 +17,11 @@ and atmosphere, from space down to single streets.
 ## Features
 
 - **Satellite imagery.** By default the globe shows Esri World Imagery
-  as an example base map. In the view properties the base map can be
-  switched to OpenStreetMap or to XYZ Tiles connections from the QGIS
-  browser.
+  as an example base map. The Base map group of the Layers section
+  switches it to OpenStreetMap or to XYZ Tiles connections from the
+  QGIS browser. A tile source of your own is added by its address in
+  any form, the window shows a test mosaic and finds the most detailed
+  level itself.
 - **Terrain.** Mountains and valleys are three-dimensional, slopes are
   shaded by light from the north-west. Vertical exaggeration is set in
   the view properties. The camera stays at least 50 m above the terrain.

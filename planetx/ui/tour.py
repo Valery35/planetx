@@ -112,9 +112,9 @@ class TourBar(QFrame):
         self.rec.setAutoRaise(True)
         self.rec.clicked.connect(self.record)
         layout.addWidget(self.rec)
-        # Крестик справа, как у Google Earth, закрывает тур.
+        # Справа ⏹ закрывает тур, синим значком, как прочие кнопки.
         close = QToolButton(self)
-        close.setText("✕")
+        close.setText("⏹")
         close.setToolTip(tr("Закончить тур"))
         close.setAutoRaise(True)
         close.clicked.connect(self.close_clicked)
@@ -140,7 +140,8 @@ class TourBar(QFrame):
         self.clock.setText("%s / %s" % (clock(t), clock(duration)))
 
     def set_state(self, playing, index, count, name):
-        self.play.setText("⏸" if playing else "▶")
+        # ▶ с селектором U+FE0F рисуется синим значком, как ⏮ ⏸ ⏭ 🔁.
+        self.play.setText("⏸" if playing else "▶️")
         self.play.setToolTip(tr("Пауза") if playing else tr("Продолжить"))
         self.info.setText(tr("Остановка {n} из {count}: {name}",
                              n=index + 1, count=count,

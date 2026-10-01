@@ -79,6 +79,7 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
+from .tilesource import TileSourceDialog
 from .record import TourRecorder
 from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
@@ -335,6 +336,7 @@ class GlobeWindow(QWidget):
         self.timebar = TimeBar(self.view)
         self._time_range = None
         self.timebar.range_changed.connect(self._time_changed)
+        self.timebar.closed.connect(self._time_bar_closed)
         self.view.on_motion = set_moving
         self.view.load_changed.connect(self._show_state)
         self.panel = LayerPanel(self)
@@ -569,6 +571,9 @@ class GlobeWindow(QWidget):
         self.watch.legend.connect(self._legend_changed)
         self._show_layers()
         self.panel.set_geo(self._groups, self._relief)
+        self._fill_basemaps()
+        self.panel.basemap_chosen.connect(self._panel_basemap)
+        self.panel.add_source_requested.connect(self.add_tile_source)
         settings = QgsSettings()
         self.extras = {key: settings.value(EXTRA_KEY + key, default,
                                            type=bool)
@@ -633,7 +638,43 @@ class GlobeWindow(QWidget):
     def choose_basemap(self, index):
         self._basemap = index
         QgsSettings().setValue(BASEMAP_KEY, self.sources[index].name)
+        self._fill_basemaps()
         self._changed()
+
+    def _fill_basemaps(self):
+        """Группа «Подложка» панели: источники Земли или снимки тела."""
+        if self.planet.earth:
+            names = [tr("{name} - пример", name=s.name) if s.example
+                     else s.name for s in self.sources]
+            self.panel.set_basemaps(names, self._basemap)
+        else:
+            self.panel.set_basemaps([], 0, own=self.planet.imagery[0])
+
+    def _panel_basemap(self, index):
+        """Подложка выбрана в панели - сразу на глобус, как флажки
+        раздела «Слои»."""
+        self.choose_basemap(index)
+        self._sync_properties()
+        self.refresh()
+
+    def add_tile_source(self):
+        """Окно «Новый источник тайлов». Источник ложится подключением
+        XYZ QGIS и сразу становится подложкой."""
+        pose = self.view.navigator.pose
+        dialog = TileSourceDialog(self, (pose.lat, pose.lon))
+        if not dialog.exec():
+            return
+        self.sources = basemap.builtins() + xyz_sources()
+        names = [s.name for s in self.sources]
+        index = names.index(dialog.saved_name) \
+            if dialog.saved_name in names else self._basemap
+        if self.properties is not None:
+            # Список подложек окна свойств строится при открытии.
+            self.properties.close()
+            self.properties = None
+        if iface is not None and hasattr(iface, "reloadConnections"):
+            iface.reloadConnections()
+        self._panel_basemap(index)
 
     def set_line_groups(self, groups):
         """Включить группы векторной основы, остальные выключить.
@@ -967,6 +1008,7 @@ class GlobeWindow(QWidget):
         self.toolbar.identify.setEnabled(planet.earth)
         self.panel.set_earth(planet.earth,
                              relief=planet.terrain is not None)
+        self._fill_basemaps()
         self._grid_key = None
         self._update_grid()
         self._refresh_shapes()
@@ -1567,6 +1609,11 @@ class GlobeWindow(QWidget):
             toolbar.set_time_available(extent is not None)
         self._time_range = self.timebar.range() \
             if self.timebar.shown() else None
+
+    def _time_bar_closed(self):
+        """Шкалу закрыли кнопкой ⏹ на ней самой."""
+        self.toolbar.set_time_shown(False)
+        self._time_toggled(False)
 
     def _time_toggled(self, on):
         """Кнопка шкалы. Закрытая шкала метки не скрывает."""

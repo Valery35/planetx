@@ -193,6 +193,7 @@ take effect at once, without the Refresh button.
 
 | Group | Rows |
 |---|---|
+| Base map | Sources of imagery and maps, one is checked, the last row is Add tile source… |
 | Borders and names | Borders, Places, Water names |
 | Transport | Roads, Road numbers, Railways, Airports |
 | Nature | Rivers, Lakes and reservoirs, Peaks, Reserves and national parks |
@@ -233,6 +234,35 @@ shadows.
 
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
+
+### Base map and a tile source of your own
+
+The Base map group lists Esri World Imagery, OpenStreetMap and the XYZ
+Tiles connections of the QGIS browser. Checking a row changes the base
+map on the globe at once. On other bodies the group shows the imagery
+of the body, the choice is not available.
+
+The row Add tile source… opens the new source window. The Address
+field takes an address in any of these forms:
+
+- a template with `{z}`, `{x}`, `{y}`, for example
+  `https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png`
+- the address of one tile copied from a browser, for example
+  `https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/5/10/17`
+- an address with the level, column and row in the query
+
+The window turns the address into a template and suggests a name from
+the server name. Below it builds a mosaic of the whole world from four
+level 1 tiles. If north is at the bottom of the mosaic, the server
+rows go from the bottom up, the box Rows from the bottom up (TMS)
+fixes this. The window finds the most detailed level itself by asking
+for tiles at the look point of the globe. No-data placeholders do not
+count. The source credit is in the corner of the view and on
+snapshots, for known servers it is filled in by itself.
+
+The source is saved as a QGIS XYZ Tiles connection and becomes the
+base map at once. It is also visible in the QGIS browser, where it can
+be edited or removed. The owner of the tiles sets their terms of use.
 
 ### 3D buildings
 
@@ -494,8 +524,11 @@ closed slider hides no placemarks, all of them show.
 |---|---|
 | Handles | Set the interval. Placemarks outside it are hidden, placemarks without a time always show |
 | Bar between the handles | Dragging moves the whole interval, a click on the bar centres it on the click |
-| ▶ | Playback, the interval moves along the slider |
+| ⏮, ⏭ | The interval of the same width moves to the start or the end of the slider |
+| ▶, ⏸ | Playback and pause, the interval moves along the slider |
+| 🔁 | Playback in a loop, after the end of the slider the interval starts from the beginning |
 | ×1 | Playback speed, at ×1 the slider is crossed in 20 seconds |
+| ⏹ | Closes the slider |
 
 A flight to a placemark and a tour set the slider to the time of the
 placemark view, without it to the time of the placemark itself. A
@@ -610,7 +643,7 @@ The tour bar appears at the bottom of the view:
 | Pause | How many seconds the camera stays at a stop |
 | 🔁 | Loops the tour. After the last stop the tour starts again from the first. The button state is kept between sessions |
 | ⏺ | Records the tour as PNG frames |
-| ✕ | Ends the tour |
+| ⏹ | Ends the tour |
 
 Moving the camera with the mouse pauses the tour.
 

@@ -858,6 +858,67 @@ EN = {
     "и скрываются по своему времени.":
         "Play: the interval moves along the slider, placemarks appear and "
         "hide by their time.",
+    "Снимки или карта на поверхности. Esri World Imagery - пример "
+    "подложки, условия её использования задаёт Esri. Свой источник "
+    "добавляет строка «Добавить источник тайлов…».":
+        "Imagery or a map on the surface. Esri World Imagery is an example "
+        "base map, Esri sets its terms of use. The row Add tile source… "
+        "adds a source of your own.",
+    "Свой источник тайлов по адресу. Окно разбирает адрес, "
+    "показывает пробную мозаику и находит самый подробный "
+    "уровень.":
+        "A tile source of your own by its address. The window parses the "
+        "address, shows a test mosaic and finds the most detailed level.",
+    "Добавить источник тайлов…": "Add tile source…",
+    "Новый источник тайлов": "New tile source",
+    "Адрес тайлов в любом виде - шаблон с {z}, {x}, {y}, адрес "
+    "одного тайла из браузера или адрес с z, x, y в параметрах "
+    "запроса. Окно само приводит его к шаблону.":
+        "A tile address in any form - a template with {z}, {x}, {y}, the "
+        "address of one tile from a browser or an address with z, x, y in "
+        "the query. The window turns it into a template itself.",
+    "Название источника в списке подложек и в обозревателе QGIS. "
+    "Предлагается по имени сервера.":
+        "The source name in the base map list and in the QGIS browser. It "
+        "is suggested from the server name.",
+    "Ряды снизу вверх (TMS)": "Rows from the bottom up (TMS)",
+    "У части серверов ряды тайлов считаются от южного края. Если "
+    "в мозаике ниже север внизу, отметьте флажок.":
+        "Some servers count tile rows from the southern edge. If north is "
+        "at the bottom of the mosaic below, check the box.",
+    "Самый подробный уровень тайлов сервера. Окно находит его само "
+    "по точке взгляда глобуса. Глубже этого уровня глобус "
+    "увеличивает последний тайл.":
+        "The most detailed tile level of the server. The window finds it "
+        "itself at the look point of the globe. Below this level the "
+        "globe enlarges the last tile.",
+    "Подпись источника в углу вида и на снимках. Условия "
+    "использования тайлов задаёт их владелец.":
+        "The source credit in the corner of the view and on snapshots. The "
+        "owner of the tiles sets their terms of use.",
+    "Адрес": "Address",
+    "Уровни до": "Levels up to",
+    "Подпись": "Credit",
+    "Шаблон - {url}": "Template - {url}",
+    "Загрузка мозаики…": "Loading the mosaic…",
+    "не картинка": "not an image",
+    "Тайлов мозаики пришло {n} из 4.": "{n} of 4 mosaic tiles arrived.",
+    "Ответы с ошибкой - {errors}.": "Error responses - {errors}.",
+    "В точке взгляда есть уровень {z}.":
+        "Level {z} exists at the look point.",
+    "Адрес не разобран. Нужен шаблон с {z}, {x}, {y} или адрес "
+    "одного тайла.":
+        "The address is not understood. A template with {z}, {x}, {y} or "
+        "the address of one tile is needed.",
+    "К началу шкалы": "To the start of the slider",
+    "К концу шкалы": "To the end of the slider",
+    "Проигрывание по кругу. Дойдя до конца шкалы, промежуток "
+    "начинает с начала.":
+        "Play in a loop. At the end of the slider the interval starts "
+        "again from the beginning.",
+    "Закрыть шкалу времени. Закрытая шкала метки "
+    "не скрывает.":
+        "Close the time slider. A closed slider does not hide placemarks.",
     "Промежуток времени меток. Бегунки тянутся по одному или "
     "вместе за середину, щелчок по полосе переносит промежуток. "
     "Метки вне промежутка скрыты, метки без времени видны "

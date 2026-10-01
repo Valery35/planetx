@@ -57,6 +57,9 @@ EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN)
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
 TOUR_ROLE = PLACE_ROLE + 1
+# Строки группы «Подложка»: номер источника или ADD_SOURCE.
+BASEMAP_ROLE = TOUR_ROLE + 1
+ADD_SOURCE = -1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 DRAG = enum(Qt, "ItemFlag", "ItemIsDragEnabled")
 DROP = enum(Qt, "ItemFlag", "ItemIsDropEnabled")
@@ -317,6 +320,9 @@ class LayerPanel(QWidget):
     track_requested = pyqtSignal(object)
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
+    # Подложка выбрана в группе «Подложка» - номер источника.
+    basemap_chosen = pyqtSignal(int)
+    add_source_requested = pyqtSignal()
     relief_toggled = pyqtSignal(bool)
     # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
     extra_toggled = pyqtSignal(str, bool)
@@ -366,7 +372,7 @@ class LayerPanel(QWidget):
         # Кнопка тура под списком, как в Google Earth: активна у пути
         # и у папки «Мои метки».
         self.tour_button = QToolButton(self)
-        self.tour_button.setText("▶")
+        self.tour_button.setText("▶\ufe0f")
         self.tour_button.setEnabled(False)
         self.tour_button.clicked.connect(self._tour_clicked)
         self.list.currentItemChanged.connect(self._tour_state)
@@ -427,6 +433,16 @@ class LayerPanel(QWidget):
         # Последнее сообщённое окну состояние панели «Слои».
         self._relief = False
         self._groups = set()
+        self._basemap = 0
+        # Подложка - первая группа раздела, одна отмеченная строка
+        # и «Добавить источник тайлов…». Просьба автора от 1 октября
+        # 2026 года.
+        self.base_group = QTreeWidgetItem(self.geo, [tr("Подложка")])
+        self.base_group.setToolTip(0, tr(
+            "Снимки или карта на поверхности. Esri World Imagery - пример "
+            "подложки, условия её использования задаёт Esri. Свой источник "
+            "добавляет строка «Добавить источник тайлов…»."))
+        self.geo.itemClicked.connect(self._geo_clicked)
         for title, tip, rows in geo_tree():
             group = QTreeWidgetItem(self.geo, [title])
             group.setToolTip(0, tip)
@@ -593,8 +609,69 @@ class LayerPanel(QWidget):
         self.layers.setEnabled(earth)
 
     def _geo_changed(self, item):
+        index = item.data(0, BASEMAP_ROLE)
+        if index is not None and index != ADD_SOURCE:
+            if item.checkState(0) == CHECKED:
+                self._pick_basemap(index)
+            else:
+                # Подложка без отметки не остаётся, отметка возвращается.
+                self._pick_basemap(self._basemap)
+            return
         if item.data(0, LAYER_ROLE):
             self._geo_timer.start(0)
+
+    def _geo_clicked(self, item, column):
+        index = item.data(0, BASEMAP_ROLE)
+        if index == ADD_SOURCE:
+            self.add_source_requested.emit()
+        elif index is not None and index != self._basemap:
+            self._pick_basemap(index)
+
+    def _pick_basemap(self, index):
+        changed = index != self._basemap
+        self._mark_basemap(index)
+        if changed:
+            self.basemap_chosen.emit(index)
+
+    def _mark_basemap(self, index):
+        self._basemap = index
+        self.geo.blockSignals(True)
+        for i in range(self.base_group.childCount()):
+            child = self.base_group.child(i)
+            value = child.data(0, BASEMAP_ROLE)
+            if value != ADD_SOURCE:
+                child.setCheckState(0, CHECKED if value == index
+                                    else UNCHECKED)
+        self.geo.blockSignals(False)
+
+    def set_basemaps(self, names, index, own=None):
+        """Строки группы «Подложка»: названия источников и выбранный.
+        own - название снимков другого тела, тогда группа показывает
+        только его и выбор недоступен."""
+        self.geo.blockSignals(True)
+        group = self.base_group
+        group.takeChildren()
+        self._basemap = index
+        if own is not None:
+            item = QTreeWidgetItem(group, [own])
+            item.setDisabled(True)
+        else:
+            for i, name in enumerate(names):
+                item = QTreeWidgetItem(group, [name])
+                item.setData(0, BASEMAP_ROLE, i)
+                item.setFlags(item.flags() | CHECKABLE)
+                item.setCheckState(0, CHECKED if i == index else UNCHECKED)
+            add = QTreeWidgetItem(group, [tr("Добавить источник тайлов…")])
+            add.setData(0, BASEMAP_ROLE, ADD_SOURCE)
+            add.setToolTip(0, tr(
+                "Свой источник тайлов по адресу. Окно разбирает адрес, "
+                "показывает пробную мозаику и находит самый подробный "
+                "уровень."))
+            font = add.font(0)
+            font.setItalic(True)
+            add.setFont(0, font)
+        group.setExpanded(True)
+        self.geo.blockSignals(False)
 
     def set_places(self, tree):
         """Строки «Моих меток» по дереву MyPlaces.tree(): метки Place

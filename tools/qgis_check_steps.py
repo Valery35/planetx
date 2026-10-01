@@ -899,6 +899,12 @@ def tour_loop_wait():
     out["setting"] = QgsSettings().value("PlanetX/tour_loop", False,
                                          type=bool)
     player.bar.grab().save(os.path.join(TEMP, "planetx_tour_bar.png"))
+    # Шкала времени в том же виде, что панель тура.
+    bar = state["window"].timebar
+    bar.set_extent((0.0, 86400.0 * 30))
+    bar.open_bar()
+    bar.grab().save(os.path.join(TEMP, "planetx_time_bar.png"))
+    bar.close_bar()
     # Без круга тур встаёт в конце.
     player.bar.loop.setChecked(False)
     state["loop_off"] = time.monotonic()
@@ -2940,6 +2946,102 @@ def _demo_steps():
 
 
 _demo_steps()
+
+
+@check(500)
+def tile_source():
+    # Подложка в разделе «Слои» и окно «Новый источник тайлов».
+    from planetx.ui.tilesource import TileSourceDialog
+    window = state["window"]
+    panel = window.panel
+    group = panel.base_group
+    rows = [group.child(i).text(0) for i in range(group.childCount())]
+    osm = next(i for i in range(group.childCount())
+               if group.child(i).text(0) == "OpenStreetMap")
+    panel._geo_clicked(group.child(osm), 0)
+    result["tile_source"] = {"rows": rows, "after_click": window.source.name}
+    panel._geo_clicked(group.child(0), 0)
+    pose = window.view.navigator.pose
+    dialog = TileSourceDialog(window, (pose.lat, pose.lon))
+    dialog.show()
+    # Адрес одного тайла ArcGIS: уровень, ряд, столбец.
+    dialog.address.setText(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/"
+        "World_Topo_Map/MapServer/tile/5/10/17")
+    dialog._check()
+    state["tile_dialog"] = dialog
+
+
+@check(500)
+def tile_source_wait():
+    import time
+    dialog = state["tile_dialog"]
+    began = state.setdefault("tile_began", time.monotonic())
+    if (dialog.got < 4 or dialog.replies) \
+            and time.monotonic() - began < 30:
+        return 500
+    out = result["tile_source"]
+    out.update({"template": dialog.template, "name": dialog.name.text(),
+                "got": dialog.got, "failed": dialog.failed,
+                "level": dialog.level.value(),
+                "status": dialog.status.text()})
+    dialog.preview.pixmap().save(os.path.join(TEMP,
+                                              "planetx_tile_preview.png"))
+    dialog.grab().save(os.path.join(TEMP, "planetx_tile_dialog.png"))
+    return None
+
+
+@check(3000)
+def tile_source_save():
+    import planetx.ui.window as wmod
+    from qgis.core import QgsSettings
+    window = state["window"]
+    dialog = state["tile_dialog"]
+    dialog.accept()
+
+    class Done:
+        saved_name = dialog.saved_name
+
+        def __init__(self, *args):
+            pass
+
+        def exec(self):
+            return True
+    real = wmod.TileSourceDialog
+    wmod.TileSourceDialog = Done
+    try:
+        window.add_tile_source()
+    finally:
+        wmod.TileSourceDialog = real
+    out = result["tile_source"]
+    out["saved"] = dialog.saved_name
+    out["source"] = window.source.name
+    out["source_url"] = window.source.url
+    group = window.panel.base_group
+    out["rows_after"] = [group.child(i).text(0)
+                         for i in range(group.childCount())]
+    settings = QgsSettings()
+    prefix = "connections/xyz/items/%s/" % dialog.saved_name
+    out["settings_url"] = settings.value(prefix + "url")
+
+
+@check(500)
+def tile_source_check():
+    from qgis.core import QgsSettings
+    window = state["window"]
+    out = result["tile_source"]
+    out["loaded_levels"] = sorted({k[0] for k in window.view.textures})
+    out["errors"] = len(window.errors)
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_tile_source.png"))
+    window.panel.geo.grab().save(os.path.join(TEMP, "planetx_geo.png"))
+    # Подложка по умолчанию обратно, подключение убирается.
+    window.panel._geo_clicked(window.panel.base_group.child(0), 0)
+    settings = QgsSettings()
+    prefix = "connections/xyz/items/%s/" % out["saved"]
+    for key in settings.allKeys():
+        if key.startswith(prefix):
+            settings.remove(key)
 
 
 def local_terrain():

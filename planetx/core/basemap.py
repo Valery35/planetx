@@ -176,7 +176,10 @@ def from_settings(items):
             headers["Referer"] = referer
         user = str(fields.get("username") or "")
         login = (user, str(fields.get("password") or "")) if user else None
+        # Подпись, введённая в окне «Новый источник тайлов».
+        credit = str(fields.get("planetx-attribution") or "").strip()
         out.append(Source(
-            name, url, top, attribution_for(name, url), headers,
-            str(fields.get("authcfg") or ""), login))
+            name, url, top,
+            (credit, "") if credit else attribution_for(name, url),
+            headers, str(fields.get("authcfg") or ""), login))
     return out

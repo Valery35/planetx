@@ -150,6 +150,7 @@ class TimeBar(QFrame):
     в секундах UTC."""
 
     range_changed = pyqtSignal(float, float)
+    closed = pyqtSignal()
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -158,14 +159,9 @@ class TimeBar(QFrame):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 3, 6, 3)
         layout.setSpacing(4)
-        self.play = QToolButton(self)
-        self.play.setText("▶")
-        self.play.setAutoRaise(True)
-        self.play.setToolTip(tr(
-            "Проиграть: промежуток идёт вдоль шкалы, метки появляются "
-            "и скрываются по своему времени."))
-        self.play.clicked.connect(self.toggle)
-        layout.addWidget(self.play)
+        # Кнопки в том же порядке и виде, что на панели тура: синие
+        # значки ⏮ ▶ ⏭ 🔁, ⏹ закрывает шкалу. Просьба автора
+        # от 1 октября 2026 года.
         self.track = RangeTrack(self)
         self.track.setToolTip(tr(
             "Промежуток времени меток. Бегунки тянутся по одному или "
@@ -176,6 +172,30 @@ class TimeBar(QFrame):
         layout.addWidget(self.track)
         self.label = QLabel(self)
         layout.addWidget(self.label)
+        buttons = []
+        for text, tip, slot in (
+                ("⏮", tr("К началу шкалы"), self.to_start),
+                ("▶\ufe0f", tr(
+                    "Проиграть: промежуток идёт вдоль шкалы, метки "
+                    "появляются и скрываются по своему времени."),
+                 self.toggle),
+                ("⏭", tr("К концу шкалы"), self.to_end)):
+            button = QToolButton(self)
+            button.setText(text)
+            button.setToolTip(tip)
+            button.setAutoRaise(True)
+            button.clicked.connect(slot)
+            layout.addWidget(button)
+            buttons.append(button)
+        self.play = buttons[1]
+        self.loop = QToolButton(self)
+        self.loop.setText("🔁")
+        self.loop.setCheckable(True)
+        self.loop.setAutoRaise(True)
+        self.loop.setToolTip(tr(
+            "Проигрывание по кругу. Дойдя до конца шкалы, промежуток "
+            "начинает с начала."))
+        layout.addWidget(self.loop)
         self.speed = QComboBox(self)
         for value in SPEEDS:
             self.speed.addItem("×{:g}".format(value), value)
@@ -184,6 +204,13 @@ class TimeBar(QFrame):
             "Скорость проигрывания. При ×1 промежуток проходит шкалу "
             "за 20 секунд."))
         layout.addWidget(self.speed)
+        close = QToolButton(self)
+        close.setText("⏹")
+        close.setToolTip(tr("Закрыть шкалу времени. Закрытая шкала метки "
+                            "не скрывает."))
+        close.setAutoRaise(True)
+        close.clicked.connect(self._close_clicked)
+        layout.addWidget(close)
         self.timer = QTimer(self)
         self.timer.setInterval(PLAY_PERIOD)
         self.timer.timeout.connect(self._step)
@@ -258,6 +285,25 @@ class TimeBar(QFrame):
             self.label.setText("{} - {}".format(time_text(lo, span),
                                                 time_text(hi, span)))
 
+    def _close_clicked(self):
+        self.close_bar()
+        self.closed.emit()
+
+    def to_start(self):
+        """Промежуток той же ширины - в начало шкалы."""
+        a, _ = self.track.extent
+        width = self.track.hi - self.track.lo
+        self.track.set_range(a, a + width)
+        self._moved(self.track.lo, self.track.hi)
+
+    def to_end(self):
+        """Промежуток той же ширины - в конец шкалы."""
+        self.stop()
+        _, b = self.track.extent
+        width = self.track.hi - self.track.lo
+        self.track.set_range(b - width, b)
+        self._moved(self.track.lo, self.track.hi)
+
     def toggle(self):
         if self.timer.isActive():
             self.stop()
@@ -273,7 +319,7 @@ class TimeBar(QFrame):
 
     def stop(self):
         self.timer.stop()
-        self.play.setText("▶")
+        self.play.setText("▶\ufe0f")
 
     def _step(self):
         now = time.monotonic()
@@ -283,8 +329,13 @@ class TimeBar(QFrame):
         shift = (b - a) * dt * self.speed.currentData() / PLAY_SECONDS
         lo, hi = self.track.lo + shift, self.track.hi + shift
         if hi >= b:
-            lo, hi = lo - (hi - b), b
-            self.stop()
+            if self.loop.isChecked():
+                # По кругу: промежуток той же ширины снова с начала.
+                width = hi - lo
+                lo, hi = a, a + width
+            else:
+                lo, hi = lo - (hi - b), b
+                self.stop()
         self.track.set_range(lo, hi)
         self._moved(self.track.lo, self.track.hi)
 
