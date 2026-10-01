@@ -201,14 +201,36 @@ EN = {
     "Земля": "Earth",
     "Марс": "Mars",
     "Луна": "Moon",
-    "Тело глобуса - Земля, Марс или Луна, или звёздное небо. "
-    "У Марса и Луны свои снимки, земные слои, поиск и здания "
-    "на них выключены. Небо показывает созвездия, звёзды "
-    "и планеты из центра небесной сферы.":
-        "The body of the globe - Earth, Mars or the Moon, or the starry "
-        "sky. Mars and the Moon have their own imagery, Earth layers, "
-        "search and buildings are off there. The sky shows constellations, "
-        "stars and planets from the centre of the celestial sphere.",
+    "Ио": "Io",
+    "Европа": "Europa",
+    "Ганимед": "Ganymede",
+    "Каллисто": "Callisto",
+    "Мимас": "Mimas",
+    "Энцелад": "Enceladus",
+    "Тефия": "Tethys",
+    "Диона": "Dione",
+    "Рея": "Rhea",
+    "Титан": "Titan",
+    "Япет": "Iapetus",
+    "Тритон": "Triton",
+    "Церера": "Ceres",
+    "Веста": "Vesta",
+    "Плутон": "Pluto",
+    "Харон": "Charon",
+    "Юпитер и его спутники": "Jupiter and its moons",
+    "Спутники Сатурна": "Moons of Saturn",
+    "Спутник Нептуна": "Moon of Neptune",
+    "Карликовые планеты и астероиды": "Dwarf planets and asteroids",
+    "Тело глобуса - планета, спутник, карликовая планета или "
+    "звёздное небо. У каждого тела свои снимки, у Марса и Луны ещё "
+    "и рельеф. Земные слои, поиск и здания на других телах "
+    "выключены. Небо показывает созвездия, звёзды и планеты из "
+    "центра небесной сферы.":
+        "The body of the globe - a planet, a moon, a dwarf planet or the "
+        "starry sky. Each body has its own imagery, Mars and the Moon "
+        "also have terrain. Earth layers, search and buildings are off "
+        "on other bodies. The sky shows constellations, stars and planets "
+        "from the centre of the celestial sphere.",
     "Небо": "Sky",
     "Демо: подготовленные сцены с метками и турами на Земле, Марсе, "
     "Луне и небе. Метки ложатся новой папкой в «Мои метки», кнопка ▶ "

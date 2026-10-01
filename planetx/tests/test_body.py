@@ -63,8 +63,24 @@ class TestBodies(BodyCase):
                                places=9)
 
     def test_unknown_key_is_earth(self):
-        self.assertIs(el.body_by_key("pluto"), el.EARTH)
+        self.assertIs(el.body_by_key("vulcan"), el.EARTH)
         self.assertIs(el.body_by_key("mars"), el.MARS)
+        self.assertIs(el.body_by_key("pluto"), el.PLUTO)
+
+    def test_limits_grow_with_large_bodies(self):
+        # Юпитер целиком в кадре: предел высоты и ползунок в радиусах.
+        import navigation
+        import navpad
+        try:
+            el.set_body(el.MARS)
+            self.assertEqual(navigation.max_altitude(),
+                             navigation.MAX_ALTITUDE)
+            self.assertEqual(navpad.slider_far(), navpad.FAR)
+            el.set_body(el.JUPITER)
+            self.assertGreater(navigation.max_altitude(), 5.0 * el.A)
+            self.assertGreater(navpad.slider_far(), 3.0 * el.A)
+        finally:
+            el.set_body(el.EARTH)
 
 
 def stale_imports(root):

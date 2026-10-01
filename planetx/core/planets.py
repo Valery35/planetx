@@ -21,9 +21,9 @@ XYZ ряды не сходятся по краям, в порядке TMS Мор
 белёсо-голубым. Цвет подобран на снимке, его утверждает автор.
 """
 try:  # внутри плагина QGIS
-    from .ellipsoid import EARTH, MARS, MOON
+    from .ellipsoid import EARTH, MARS, MOON, body_by_key
 except ImportError:  # headless-тесты
-    from ellipsoid import EARTH, MARS, MOON
+    from ellipsoid import EARTH, MARS, MOON, body_by_key
 
 MARS_VIKING = ("https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/"
                "viking_mdim21_global/{z}/{x}/{-y}.png")
@@ -85,7 +85,100 @@ MOON_PLANET = Planet(
     (0.674, 23.473, 6.0e6),  # Море Спокойствия, посадка Аполлона-11
     terrain=("LOLA GDR", TERRAIN_TILES % "moon",
              TERRAIN_LEVEL, "Terrain: NASA LRO LOLA GDR"))
-PLANETS = (EARTH_PLANET, MARS_PLANET, MOON_PLANET)
+
+# Снимки прочих тел - тайлы JPEG из глобальных мозаик USGS Astrogeology
+# и NASA Photojournal, общественное достояние. Нарезает их
+# tools/build_body_imagery.py, лежат они в хранилище planetx-terrain
+# рядом с высотами. Источники выбрал помощник 1 октября 2026 года
+# по просьбе автора «бери все планеты», условия - в doc/SOURCES.md.
+IMAGERY_TILES = ("https://raw.githubusercontent.com/Valery35/"
+                 "planetx-terrain/main/imagery/%s/{z}/{x}/{y}.jpg")
+USGS_MAPS = "https://astrogeology.usgs.gov/search"
+PHOTOJOURNAL = "https://science.nasa.gov/photojournal/"
+# Начальный вид - 3.5 радиуса от точки взгляда, как у Марса и Луны.
+HOME_RADII = 3.5
+# Ключ тела: название мозаики, уровень, подпись, ссылка, воздух,
+# широта и долгота начальной точки. Воздух у Венеры и Титана - плотная
+# дымка, цвет подобран помощником на снимке, его утверждает автор.
+# Множитель синего мал, как у Марса: земное рассеяние в синем сильнее.
+# Южная часть Харона и Тритона аппаратами не снята, начальная точка -
+# на снятой стороне.
+OTHER = (
+    ("mercury", "MESSENGER MDIS MD3 color", 6,
+     "NASA, JHU APL, Carnegie Institution, MESSENGER MDIS, USGS",
+     USGS_MAPS, None, (30.5, -170.2)),
+    ("venus", "Magellan C3-MDIR colorized topography", 5,
+     "NASA, JPL, Magellan, USGS", USGS_MAPS, (1.3, 0.55, 0.1),
+     (65.2, 3.3)),
+    ("jupiter", "Cassini PIA07782", 4,
+     "NASA, JPL, Space Science Institute, Cassini", PHOTOJOURNAL, None,
+     (0.0, 0.0)),
+    ("io", "Galileo SSI and Voyager color merge", 5,
+     "NASA, JPL, Galileo SSI, Voyager, USGS", USGS_MAPS, None,
+     (0.0, 0.0)),
+    ("europa", "Voyager and Galileo SSI", 6,
+     "NASA, JPL, Galileo SSI, Voyager, USGS", USGS_MAPS, None,
+     (0.0, 0.0)),
+    ("ganymede", "Voyager and Galileo SSI color", 5,
+     "NASA, JPL, Galileo SSI, Voyager, USGS", USGS_MAPS, None,
+     (0.0, 0.0)),
+    ("callisto", "Voyager and Galileo SSI", 6,
+     "NASA, JPL, Galileo SSI, Voyager, USGS", USGS_MAPS, None,
+     (0.0, 0.0)),
+    ("mimas", "Cassini PIA17214", 5,
+     "NASA, JPL-Caltech, Space Science Institute, Cassini",
+     PHOTOJOURNAL, None, (0.0, 0.0)),
+    ("enceladus", "Cassini ISS", 5,
+     "NASA, JPL, Space Science Institute, Cassini ISS, USGS", USGS_MAPS,
+     None, (0.0, 0.0)),
+    ("tethys", "Cassini ISS", 5,
+     "NASA, JPL, Space Science Institute, Cassini ISS, USGS", USGS_MAPS,
+     None, (0.0, 0.0)),
+    ("dione", "Cassini ISS and Voyager", 6,
+     "NASA, JPL, Space Science Institute, Cassini ISS, USGS", USGS_MAPS,
+     None, (0.0, 0.0)),
+    ("rhea", "Cassini ISS and Voyager", 5,
+     "NASA, JPL, Space Science Institute, DLR, Cassini ISS, USGS",
+     USGS_MAPS, None, (0.0, 0.0)),
+    ("titan", "Cassini ISS", 4,
+     "NASA, JPL-Caltech, Space Science Institute, Cassini ISS, USGS",
+     USGS_MAPS, (1.3, 0.4, 0.06), (0.0, 0.0)),
+    ("iapetus", "Cassini ISS and Voyager", 5,
+     "NASA, JPL, Space Science Institute, Cassini ISS, USGS", USGS_MAPS,
+     None, (0.0, 0.0)),
+    ("triton", "Voyager 2 color", 5,
+     "NASA, JPL, Voyager 2, P. Schenk (LPI), USGS", USGS_MAPS, None,
+     (-30.0, 0.0)),
+    ("ceres", "Dawn FC", 5,
+     "NASA, JPL-Caltech, UCLA, MPS, DLR, IDA, Dawn FC, USGS", USGS_MAPS,
+     None, (0.0, 0.0)),
+    ("vesta", "Dawn FC HAMO", 6,
+     "NASA, JPL-Caltech, UCLA, MPS, DLR, IDA, Dawn FC, USGS", USGS_MAPS,
+     None, (0.0, 0.0)),
+    ("pluto", "New Horizons LORRI and MVIC", 6,
+     "NASA, JHU APL, SwRI, New Horizons, USGS", USGS_MAPS, None,
+     (25.0, 175.0)),
+    ("charon", "New Horizons LORRI and MVIC", 5,
+     "NASA, JHU APL, SwRI, New Horizons, USGS", USGS_MAPS, None,
+     (30.0, 0.0)),
+)
+
+
+def _other(key, name, level, credit, link, air, home):
+    body = body_by_key(key)
+    return Planet(body, (name, IMAGERY_TILES % key, level, credit, link),
+                  air, (home[0], home[1], HOME_RADII * body.a))
+
+
+OTHER_PLANETS = tuple(_other(*row) for row in OTHER)
+PLANETS = (EARTH_PLANET, MARS_PLANET, MOON_PLANET) + OTHER_PLANETS
+# Меню «Тело»: разделы и ключи тел по порядку.
+MENU = (("", ("mercury", "venus", "earth", "moon", "mars")),
+        ("jupiter", ("jupiter", "io", "europa", "ganymede", "callisto")),
+        ("saturn", ("mimas", "enceladus", "tethys", "dione", "rhea",
+                    "titan", "iapetus")),
+        ("neptune", ("triton",)),
+        ("dwarf", ("ceres", "vesta", "pluto", "charon")))
 
 
 def planet_by_key(key):

@@ -63,7 +63,7 @@ dragged with the mouse.
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
 | Demo | Ready scenes by body, see [Demo](#demo) |
-| Body | The menu Earth, Mars, Moon and Sky, see [Mars and the Moon](#mars-and-the-moon) and [Starry sky](#starry-sky) |
+| Body | The menu of planets, moons, dwarf planets and Sky, see [Other bodies](#other-bodies) and [Starry sky](#starry-sky) |
 | View properties | Base map, terrain, labels, link with the map, update, coordinate format |
 | About | Controls, data sources, links |
 
@@ -773,13 +773,41 @@ the insertion.
 
 ---
 
-## Mars and the Moon
+## Other bodies
 
-The Body icon on the icon bar opens the menu Earth, Mars and Moon.
+The Body icon on the icon bar opens the menu of bodies. It has these
+sections:
+
+- Mercury, Venus, Earth, Moon, Mars
+- Jupiter and its moons Io, Europa, Ganymede, Callisto
+- moons of Saturn Mimas, Enceladus, Tethys, Dione, Rhea, Titan, Iapetus
+- the moon of Neptune Triton
+- dwarf planets and asteroids Ceres, Vesta, Pluto, Charon
+
 The chosen body replaces the Earth. The size of the globe, the imagery
 and the atmosphere change, and the camera flies to the start point of
 the body. On Mars it is Olympus Mons, on the Moon it is the Sea of
-Tranquility, the Apollo 11 landing site.
+Tranquility, the Apollo 11 landing site. On Pluto it is Sputnik
+Planitia, on other bodies a point on the equator and the prime
+meridian.
+
+Imagery of the bodies other than Mars and the Moon comes from global
+mosaics of USGS Astrogeology and NASA, made from MESSENGER, Magellan,
+Galileo, Voyager, Cassini, Dawn and New Horizons data. A tile pixel at
+the equator ranges from 100 m on Enceladus and Vesta to 120 km on
+Jupiter. Some imagery does not look as the eye would see it:
+
+- Venus is shown by the Magellan radar, the colour shows the height
+- Jupiter is a Cassini cloud map of December 2000, its clouds do not
+  move
+- Titan is imaged in near infrared light through the haze
+- Mercury, Io, Ganymede and Triton are in colour, other bodies are grey
+- on Pluto, Charon and Triton the parts of the globe not imaged by
+  spacecraft are dark or filled with neighbouring pixels
+
+The globe of each body is a sphere, Jupiter is an oblate ellipsoid.
+Vesta, Ceres and small moons are not spherical in reality, their
+imagery is slightly distorted on the sphere.
 
 Mars imagery is the Viking MDIM2.1 colour mosaic, about 650 m per
 pixel. Moon imagery is the LOLA albedo map with hill shading, about
@@ -794,9 +822,9 @@ properties. Mars heights refer to the areoid, Moon heights refer to
 a sphere of radius 1737.4 km. Depressions below zero are kept, the
 floor of the Hellas plain lies 7-8 km below zero.
 
-On Mars and the Moon the navigation, terrain, grid, stars, ruler,
-My Places, tours, view snapshot and scenes work. Functions with
-Earth-only data are off:
+On other bodies the navigation, grid, stars, ruler, My Places, tours,
+view snapshot and scenes work, on Mars and the Moon terrain works too.
+Functions with Earth-only data are off:
 
 - vector base, clouds, temperature, 3D buildings and sunlight
 - project layers and their labels, tracks
@@ -882,7 +910,10 @@ NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
 DR2: ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
 Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
 OpenPlanetaryMap. Mars heights - NASA MGS MOLA MEGDR, Moon heights -
-NASA LRO LOLA GDR. Constellation lines, names and star names -
+NASA LRO LOLA GDR. Imagery of other bodies - global mosaics of USGS
+Astrogeology and NASA Photojournal from data of NASA, JPL, DLR and
+mission institutes, the credit of each body is in the corner of the
+view. Constellation lines, names and star names -
 d3-celestial, © Olaf Frohn. Planet positions are computed from JPL
 orbital elements, the Moon position from the formulae of the
 Astronomical Almanac.

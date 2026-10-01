@@ -16,10 +16,25 @@ from qgis.PyQt.QtCore import QSize, pyqtSignal
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton
 
+from ..core.planets import MENU
 from ..i18n import tr
 from ..qt_compat import QActionGroup, enum
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
+
+
+def body_names():
+    """Названия тел меню «Тело» на языке интерфейса по ключам."""
+    return {"mercury": tr("Меркурий"), "venus": tr("Венера"),
+            "earth": tr("Земля"), "moon": tr("Луна"), "mars": tr("Марс"),
+            "jupiter": tr("Юпитер"), "io": tr("Ио"),
+            "europa": tr("Европа"), "ganymede": tr("Ганимед"),
+            "callisto": tr("Каллисто"), "mimas": tr("Мимас"),
+            "enceladus": tr("Энцелад"), "tethys": tr("Тефия"),
+            "dione": tr("Диона"), "rhea": tr("Рея"), "titan": tr("Титан"),
+            "iapetus": tr("Япет"), "triton": tr("Тритон"),
+            "ceres": tr("Церера"), "vesta": tr("Веста"),
+            "pluto": tr("Плутон"), "charon": tr("Харон")}
 ICON_SIZE = QSize(20, 20)
 STYLE = ("QFrame#planetxToolbar { background: rgba(250, 250, 250, 225); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
@@ -157,19 +172,33 @@ class ViewToolbar(QFrame):
         body.setIconSize(ICON_SIZE)
         body.setAutoRaise(True)
         body.setToolTip(tr(
-            "Тело глобуса - Земля, Марс или Луна, или звёздное небо. "
-            "У Марса и Луны свои снимки, земные слои, поиск и здания "
-            "на них выключены. Небо показывает созвездия, звёзды "
-            "и планеты из центра небесной сферы."))
+            "Тело глобуса - планета, спутник, карликовая планета или "
+            "звёздное небо. У каждого тела свои снимки, у Марса и Луны ещё "
+            "и рельеф. Земные слои, поиск и здания на других телах "
+            "выключены. Небо показывает созвездия, звёзды и планеты из "
+            "центра небесной сферы."))
         body.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
                                "InstantPopup"))
         menu = QMenu(body)
         group = QActionGroup(menu)
         self.body_actions = {}
-        for key, title in (("earth", tr("Земля")), ("mars", tr("Марс")),
-                           ("moon", tr("Луна")), ("sky", tr("Небо"))):
-            if key == "sky":
-                menu.addSeparator()
+        names = body_names()
+        sections = {"jupiter": tr("Юпитер и его спутники"),
+                    "saturn": tr("Спутники Сатурна"),
+                    "neptune": tr("Спутник Нептуна"),
+                    "dwarf": tr("Карликовые планеты и астероиды")}
+        items = []
+        for section, keys in MENU:
+            items.append((None, sections.get(section, "")))
+            items += [(key, names[key]) for key in keys]
+        items += [(None, ""), ("sky", tr("Небо"))]
+        for key, title in items:
+            if key is None:
+                if title:
+                    menu.addSection(title)
+                elif menu.actions():
+                    menu.addSeparator()
+                continue
             action = menu.addAction(title)
             action.setCheckable(True)
             action.setActionGroup(group)

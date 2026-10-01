@@ -36,11 +36,14 @@ and atmosphere, from space down to single streets.
 - **Sun.** Terrain and buildings are lit by the position of the sun
   at the time slider time or by the clock, the night side of the
   Earth is dark.
-- **Mars and the Moon.** An icon on the icon bar puts Mars or the Moon
-  in place of the Earth, with NASA and USGS imagery. Mars terrain is
-  built from MOLA heights, Moon terrain from LOLA heights. Navigation,
-  terrain, grid, ruler, places, tours, view snapshots and scenes work
-  on any body. A place remembers its body.
+- **Other bodies.** The Body icon on the icon bar puts Mercury, Venus,
+  the Moon, Mars, Jupiter, its moons Io, Europa, Ganymede and
+  Callisto, the moons of Saturn from Mimas to Iapetus, Triton, Ceres,
+  Vesta, Pluto or Charon in place of the Earth. The imagery comes from
+  global NASA and USGS mosaics. Mars terrain is built from MOLA
+  heights, Moon terrain from LOLA heights. Navigation, grid, ruler,
+  places, tours, view snapshots and scenes work on any body. A place
+  remembers its body.
 - **Starry sky.** The Body icon also opens the sky from the centre of the
   celestial sphere. It shows the Milky Way, stars, constellation lines
   and names, the Sun, the Moon and the planets at the chosen time.
@@ -202,7 +205,10 @@ Gaia DR2: ESA/Gaia/DPAC.
 Mars imagery: NASA, USGS, Viking MDIM2.1. Moon imagery: USGS,
 LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
 Mars heights come from NASA MGS MOLA MEGDR, Moon heights from NASA
-LRO LOLA GDR.
+LRO LOLA GDR. Imagery of other bodies comes from global mosaics of
+[USGS Astrogeology](https://astrogeology.usgs.gov/search) and NASA
+Photojournal, made from MESSENGER, Magellan, Galileo, Voyager,
+Cassini, Dawn and New Horizons data.
 Constellations and star names come from [d3-celestial](https://github.com/ofrohn/d3-celestial),
 © Olaf Frohn. Planet positions are computed from JPL orbital
 elements.

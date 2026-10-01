@@ -2954,6 +2954,38 @@ def local_terrain():
         name, _, level, credit = planet.terrain
         url = QUrl.fromLocalFile(os.path.join(folder, planet.key)).toString()
         planet.terrain = (name, url + "/{z}/{x}/{y}.png", level, credit)
+    for planet in planets.OTHER_PLANETS:
+        name, _, level, credit, link = planet.imagery
+        url = QUrl.fromLocalFile(os.path.join(folder, "imagery",
+                                              planet.key)).toString()
+        planet.imagery = (name, url + "/{z}/{x}/{y}.jpg", level, credit,
+                          link)
+
+
+@check(500)
+def bodies_cycle():
+    # Все тела меню по очереди: тайлы снимков, ошибки, снимок вида.
+    from planetx.core import planets
+    local_terrain()
+    window = state["window"]
+    view = window.view
+    keys = [p.key for p in planets.OTHER_PLANETS]
+    out = result.setdefault("bodies", {})
+    i = state.get("body_i", 0)
+    if i > 0:
+        key = keys[i - 1]
+        levels = sorted({k[0] for k in view.textures})
+        out[key] = {"levels": levels, "errors": len(window.errors),
+                    "gl": dict(view.gl_errors),
+                    "attribution": window.attribution.text()[-60:]}
+        view.grabFramebuffer().save(
+            os.path.join(TEMP, "planetx_body_%s.png" % key))
+    if i < len(keys):
+        state["body_i"] = i + 1
+        window.set_body(keys[i])
+        return 8000
+    window.set_body("earth")
+    return None
 
 
 @check(20000)

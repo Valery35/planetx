@@ -21,10 +21,10 @@ import math
 
 try:  # внутри плагина QGIS
     from . import ellipsoid
-    from .navigation import MAX_ALTITUDE, Pose
+    from .navigation import Pose, max_altitude
 except ImportError:  # headless-тесты
     import ellipsoid
-    from navigation import MAX_ALTITUDE, Pose
+    from navigation import Pose, max_altitude
 
 RHO = math.sqrt(2.0)
 SPEED = 2.0  # единиц длины пути S в секунду
@@ -131,7 +131,7 @@ class Flight:
         lat = math.degrees(math.atan2(z, math.hypot(x, y)))
         lon = math.degrees(math.atan2(y, x))
         blend = _smooth(t / self.duration)
-        pose = Pose(lat, lon, min(w / self.scale, MAX_ALTITUDE),
+        pose = Pose(lat, lon, min(w / self.scale, max_altitude()),
                     (self.start.heading + self.turn * blend) % 360.0,
                     self.start.tilt + (self.end.tilt - self.start.tilt)
                     * blend)

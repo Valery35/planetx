@@ -14,11 +14,17 @@
 """
 import math
 
+try:  # внутри плагина QGIS
+    from . import ellipsoid
+except ImportError:  # headless-тесты
+    import ellipsoid
+
 LOOK_RATE = 30.0  # градусов в секунду при полном отклонении джойстика
 MOVE_RATE = 0.5  # ширин видимой полосы в секунду при полном отклонении
 ZOOM_RATE = math.log(2.0)  # плюс и минус - вдвое за секунду
 NEAR = 100.0  # метров, расстояние у верхнего края ползунка
-FAR = 2.0e7  # метров, у нижнего края
+FAR = 2.0e7  # метров, у нижнего края, у Земли и тел меньше неё
+FAR_RADII = FAR / ellipsoid.EARTH.a  # у тел крупнее Земли - в радиусах
 # Органы видны всегда. Вдали от курсора - слабым контуром, у курсора -
 # целиком. Решение автора от 30 сентября 2026 года, выбора показа нет.
 FAINT = 0.3  # доля яркости контура вдали от курсора
@@ -72,14 +78,21 @@ def zoom_factor(direction, dt):
     return math.exp(-direction * ZOOM_RATE * dt)
 
 
-def slider_share(distance, near=NEAR, far=FAR):
+def slider_far():
+    """Расстояние у нижнего края ползунка для текущего тела."""
+    return max(FAR, FAR_RADII * ellipsoid.A)
+
+
+def slider_share(distance, near=NEAR, far=None):
     """Место бегунка от 0 (верх, близко) до 1 (низ, далеко), шкала
     логарифмическая, как высота в Google Earth."""
+    far = slider_far() if far is None else far
     distance = min(max(distance, near), far)
     return math.log(distance / near) / math.log(far / near)
 
 
-def slider_distance(share, near=NEAR, far=FAR):
+def slider_distance(share, near=NEAR, far=None):
     """Расстояние по месту бегунка."""
+    far = slider_far() if far is None else far
     share = min(max(share, 0.0), 1.0)
     return near * (far / near) ** share

@@ -25,6 +25,8 @@ QGIS. Запросы идут через сетевые настройки и д
 | OpenPlanetaryMap, LOLA hillshaded albedo | снимки Луны | условия не указаны, см. раздел «Марс и Луна» | USGS, LRO LOLA, OpenPlanetaryMap |
 | NASA MGS MOLA MEGDR, 32 точки на градус | рельеф Марса | данные NASA PDS в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA MGS MOLA MEGDR |
 | NASA LRO LOLA GDR, 64 точки на градус | рельеф Луны | данные NASA PDS в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA LRO LOLA GDR |
+| USGS Astrogeology, глобальные мозаики | снимки Меркурия, Венеры, спутников Юпитера, Сатурна и Нептуна, Цереры, Весты, Плутона и Харона | общественное достояние, у части мозаик USGS просит указать авторов, см. раздел «Другие тела» | своя у каждого тела, в углу вида |
+| NASA Photojournal, PIA07782 и PIA17214 | снимки Юпитера и Мимаса | изображения NASA, условия NASA для изображений, см. раздел «Другие тела» | NASA, JPL, Space Science Institute, Cassini |
 | d3-celestial, Olaf Frohn | линии и названия созвездий, имена ярких звёзд, вид неба | [BSD с тремя пунктами](https://github.com/ofrohn/d3-celestial/blob/master/LICENSE), текст лицензии лежит в `planetx/data` | Constellations: d3-celestial © Olaf Frohn |
 | JPL, Approximate Positions of the Planets | положения планет на небе | [страница JPL](https://ssd.jpl.nasa.gov/planets/approx_pos.html), формулы, данные не скачиваются | Planets: JPL approximate elements |
 | Астрономический альманах, формулы малой точности | положение Луны на небе | формулы, данные не скачиваются | нет |
@@ -90,6 +92,51 @@ MOLA MEGDR `megt90n000fb`, 32 точки на градус, высоты над 
 Terrarium уровней 0-5, по 1365 тайлов на тело. Они лежат в отдельном
 хранилище [planetx-terrain](https://github.com/Valery35/planetx-terrain)
 и загружаются по одному тайлу через сеть и кэш QGIS.
+
+## Другие тела
+
+Снимки остальных тел меню «Тело» нарезаны из глобальных мозаик
+в простой цилиндрической проекции. Мозаики выбраны 1 октября 2026
+года, адреса проверены в тот же день.
+
+| Тело | Мозаика | Пиксель мозаики |
+|---|---|---|
+| Меркурий | MESSENGER MDIS Basemap MD3 Color, USGS | 665 м |
+| Венера | Magellan C3-MDIR ClrTopo, USGS | 6.6 км |
+| Юпитер | Cassini, PIA07782, NASA Photojournal | около 120 км |
+| Ио | Galileo SSI и Voyager, цветная, USGS | 1 км |
+| Европа | Voyager и Galileo SSI, USGS | 500 м |
+| Ганимед | Voyager и Galileo SSI, цветная, USGS | 1.4 км |
+| Каллисто | Voyager и Galileo SSI, USGS | 1 км |
+| Мимас | Cassini, PIA17214, NASA Photojournal | 216 м |
+| Энцелад | Cassini ISS, USGS | 110 м |
+| Тефия | Cassini ISS, USGS | 293 м |
+| Диона | Cassini ISS и Voyager, USGS | 154 м |
+| Рея | Cassini ISS и Voyager, USGS | 417 м |
+| Титан | Cassini ISS, ближний ИК, USGS | 4 км |
+| Япет | Cassini ISS и Voyager, USGS | 803 м |
+| Тритон | Voyager 2, цветная, USGS | 600 м |
+| Церера | Dawn FC, USGS | 400 м |
+| Веста | Dawn FC HAMO, USGS | 60 м |
+| Плутон | New Horizons LORRI и MVIC, USGS | 300 м |
+| Харон | New Horizons LORRI и MVIC, USGS | 300 м |
+
+Мозаики USGS лежат на `planetarymaps.usgs.gov/mosaic/`, описания -
+на страницах Astropedia `astrogeology.usgs.gov/search`. По описаниям
+у одних мозаик ограничений использования нет, у других USGS просит
+указать авторов. Подпись каждого тела называет миссию, институты
+и USGS. Карты Юпитера и Мимаса - изображения NASA Photojournal,
+подпись взята из строки Credit страницы.
+
+Глобальной карты Сатурна в общественном достоянии не нашлось.
+Карта Björn Jónsson - работа частного лица без указанной лицензии,
+поэтому Сатурна в меню нет. Фобос сильно несферичен, его мозаика
+на сфере исказилась бы, его тоже нет.
+
+Из мозаик `tools/build_body_imagery.py` нарезает тайлы JPEG в сетке
+Web Mercator, они лежат в хранилище
+[planetx-terrain](https://github.com/Valery35/planetx-terrain)
+в папке `imagery` и загружаются по одному тайлу.
 
 ## Другие открытые покрытия
 

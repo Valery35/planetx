@@ -27,16 +27,20 @@ import math
 import numpy as np
 
 try:  # внутри плагина QGIS
+    from . import ellipsoid
     from .camera import MAX_TERRAIN, orientation
     from .ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                             ray_intersect, surface_normal)
 except ImportError:  # headless-тесты
+    import ellipsoid
     from camera import MAX_TERRAIN, orientation
     from ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                            ray_intersect, surface_normal)
 
 MIN_ALTITUDE = 50.0
-MAX_ALTITUDE = 5.0e7
+MAX_ALTITUDE = 5.0e7  # у Земли и тел меньше неё
+# У тела крупнее Земли предел растёт с радиусом: Юпитер целиком в кадре.
+MAX_ALTITUDE_RADII = MAX_ALTITUDE / ellipsoid.EARTH.a
 MAX_TILT = 85.0
 MAX_LAT = 89.99
 INERTIA_TAU = 0.35  # постоянная затухания, секунды
@@ -288,11 +292,16 @@ def solve_pin(camera, pose, point, px, py):
     return current
 
 
+def max_altitude():
+    """Наибольшая высота глаза над текущим телом, метров."""
+    return max(MAX_ALTITUDE, MAX_ALTITUDE_RADII * ellipsoid.A)
+
+
 def allowed(pose):
-    """Глаз не ниже MIN_ALTITUDE над рельефом и не выше MAX_ALTITUDE."""
+    """Глаз не ниже MIN_ALTITUDE над рельефом и не выше max_altitude."""
     eye = pose.eye_rotation()[0]
     return (clearance(eye, pose.terrain) >= MIN_ALTITUDE
-            and altitude(eye) <= MAX_ALTITUDE)
+            and altitude(eye) <= max_altitude())
 
 
 def clamp_distance(pose, distance):

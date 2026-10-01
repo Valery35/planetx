@@ -10,12 +10,14 @@ ECEF - прямоугольная система с началом в центр
 Широта и долгота - в градусах, высота - над эллипсоидом, в метрах.
 Функции принимают числа и массивы NumPy одинаковой формы.
 
-Тело одно на весь модуль: Земля (WGS84), Марс или Луна, `set_body`
-меняет его. Полуоси A, B и квадрат эксцентриситета E2 - величины
-модуля, другие модули читают их как `ellipsoid.A` в момент расчёта,
-а не копируют при импорте. Марс и Луна - сферы, как у тайлов снимков
-OpenPlanetaryMap в планетоцентрических широтах. Радиус Марса 3396.19 км
-и Луны 1737.4 км - по рекомендациям IAU 2015.
+Тело одно на весь модуль: Земля (WGS84), Марс, Луна или другое тело
+из BODIES, `set_body` меняет его. Полуоси A, B и квадрат
+эксцентриситета E2 - величины модуля, другие модули читают их как
+`ellipsoid.A` в момент расчёта, а не копируют при импорте. Марс и Луна -
+сферы, как у тайлов снимков OpenPlanetaryMap в планетоцентрических
+широтах. Радиус Марса 3396.19 км и Луны 1737.4 км - по рекомендациям
+IAU 2015. Радиусы прочих тел - сферы глобальных мозаик USGS, у Юпитера -
+сжатый эллипсоид IAU.
 """
 from collections import namedtuple
 
@@ -25,7 +27,30 @@ Body = namedtuple("Body", "key a f")
 EARTH = Body("earth", 6378137.0, 1.0 / 298.257223563)
 MARS = Body("mars", 3396190.0, 0.0)
 MOON = Body("moon", 1737400.0, 0.0)
-BODIES = (EARTH, MARS, MOON)
+# Остальные тела - сферы средних радиусов, как у мозаик USGS, кроме
+# сжатых Юпитера и Сатурна: экваториальный и полярный радиусы IAU 2015.
+MERCURY = Body("mercury", 2439400.0, 0.0)
+VENUS = Body("venus", 6051800.0, 0.0)
+JUPITER = Body("jupiter", 71492000.0, 1.0 - 66854000.0 / 71492000.0)
+IO = Body("io", 1821490.0, 0.0)
+EUROPA = Body("europa", 1560800.0, 0.0)
+GANYMEDE = Body("ganymede", 2631200.0, 0.0)
+CALLISTO = Body("callisto", 2410300.0, 0.0)
+MIMAS = Body("mimas", 198200.0, 0.0)
+ENCELADUS = Body("enceladus", 252000.0, 0.0)
+TETHYS = Body("tethys", 536300.0, 0.0)
+DIONE = Body("dione", 563000.0, 0.0)
+RHEA = Body("rhea", 764100.0, 0.0)
+TITAN = Body("titan", 2575000.0, 0.0)
+IAPETUS = Body("iapetus", 736000.0, 0.0)
+TRITON = Body("triton", 1350000.0, 0.0)
+CERES = Body("ceres", 470000.0, 0.0)
+VESTA = Body("vesta", 255000.0, 0.0)
+PLUTO = Body("pluto", 1188300.0, 0.0)
+CHARON = Body("charon", 606000.0, 0.0)
+BODIES = (EARTH, MARS, MOON, MERCURY, VENUS, JUPITER, IO, EUROPA,
+          GANYMEDE, CALLISTO, MIMAS, ENCELADUS, TETHYS, DIONE, RHEA,
+          TITAN, IAPETUS, TRITON, CERES, VESTA, PLUTO, CHARON)
 
 # WGS84 для расчётов, которые есть только у Земли: UTM и MGRS.
 WGS84_A = EARTH.a
