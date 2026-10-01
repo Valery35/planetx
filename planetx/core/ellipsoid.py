@@ -43,14 +43,11 @@ DIONE = Body("dione", 563000.0, 0.0)
 RHEA = Body("rhea", 764100.0, 0.0)
 TITAN = Body("titan", 2575000.0, 0.0)
 IAPETUS = Body("iapetus", 736000.0, 0.0)
-TRITON = Body("triton", 1350000.0, 0.0)
 CERES = Body("ceres", 470000.0, 0.0)
 VESTA = Body("vesta", 255000.0, 0.0)
-PLUTO = Body("pluto", 1188300.0, 0.0)
-CHARON = Body("charon", 606000.0, 0.0)
 BODIES = (EARTH, MARS, MOON, MERCURY, VENUS, JUPITER, IO, EUROPA,
           GANYMEDE, CALLISTO, MIMAS, ENCELADUS, TETHYS, DIONE, RHEA,
-          TITAN, IAPETUS, TRITON, CERES, VESTA, PLUTO, CHARON)
+          TITAN, IAPETUS, CERES, VESTA)
 
 # WGS84 для расчётов, которые есть только у Земли: UTM и MGRS.
 WGS84_A = EARTH.a

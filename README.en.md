@@ -66,6 +66,8 @@ and atmosphere, from space down to single streets.
 
 ![The Earth from space](doc/images/earth.jpg)
 
+![Other bodies of the Solar System](doc/images/bodies_en.jpg)
+
 ## Controls
 
 - **Grab the Earth.** Drag the Earth with the left mouse button. After

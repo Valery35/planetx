@@ -65,7 +65,7 @@ class TestBodies(BodyCase):
     def test_unknown_key_is_earth(self):
         self.assertIs(el.body_by_key("vulcan"), el.EARTH)
         self.assertIs(el.body_by_key("mars"), el.MARS)
-        self.assertIs(el.body_by_key("pluto"), el.PLUTO)
+        self.assertIs(el.body_by_key("vesta"), el.VESTA)
 
     def test_limits_grow_with_large_bodies(self):
         # Юпитер целиком в кадре: предел высоты и ползунок в радиусах.
