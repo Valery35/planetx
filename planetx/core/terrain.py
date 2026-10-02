@@ -131,6 +131,14 @@ class HeightStore:
         self.version = 0
         # Ключи тайлов, добавленных после последнего take_added.
         self.added = []
+        # Самая низкая высота загруженных тайлов, без масштаба, не выше
+        # нуля. У Земли пол высот 0, у Марса и Луны впадины ниже нуля.
+        self.low = 0.0
+
+    def depth(self):
+        """Насколько рельеф опускается ниже эллипсоида, метры, с масштабом.
+        На эту глубину опускается подстилка (render/view.py)."""
+        return -self.low * self.scale
 
     def set_scale(self, scale):
         """Новый вертикальный масштаб. Меняет все высоты сразу."""
@@ -143,6 +151,7 @@ class HeightStore:
         self.tiles.clear()
         self._ranges.clear()
         self.added = []
+        self.low = 0.0
         self.version += 1
 
     def add(self, tile):
@@ -151,6 +160,7 @@ class HeightStore:
         # Раньше каждый новый тайл высот сбрасывал весь кэш, и выбор
         # тайлов заново считал размахи всех тайлов кадра.
         self.tiles[(tile.z, tile.x, tile.y)] = tile
+        self.low = min(self.low, float(tile.low))
         self.version += 1
         self.added.append((tile.z, tile.x, tile.y))
 
@@ -164,6 +174,7 @@ class HeightStore:
         copy = HeightStore()
         copy.tiles = dict(self.tiles)
         copy.scale = self.scale
+        copy.low = self.low
         copy.version = self.version
         return copy
 

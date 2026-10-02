@@ -15,6 +15,11 @@
 - bocachica - Starbase у Бока-Чики, Техас: стартовая площадка,
   завод, пляж, соседние города и облёт площадки. Координаты - из
   Nominatim, 1 октября 2026 года.
+- jezero - кратер Езеро на Марсе: место посадки «Персеверанса»,
+  окрестности, профиль через кратер, точка для видимости, облёт,
+  уклон склонов. Экспозиция на равнинах Марса при пикселе высот 2.6 км
+  давала пёструю рябь, поэтому в демо включён уклон. Шаг 5 плана
+  фазы 3.
 - mars - места посадок марсоходов и крупные формы рельефа Марса.
 - moon - места посадок «Аполлонов» и «Луноходов».
 - sky - созвездия и яркие объекты неба.
@@ -269,9 +274,93 @@ def sky():
     save("sky", scene, root)
 
 
+def mars_orbit(lat, lon, distance, seconds=40.0, step=0.5):
+    """Записанный облёт точки на Марсе: круг азимута, наклон 50°."""
+    samples = []
+    count = int(seconds / step)
+    for k in range(count + 1):
+        t = k * step
+        share = t / seconds
+        samples.append((t, lat, lon, distance, (360.0 * share) % 360.0,
+                        50.0))
+    return samples
+
+
+def mars_circle(lat, lon, radius_km, count=72):
+    """Круг радиуса radius_km на сфере Марса, замкнутый путь."""
+    radius = 3389.5  # км, core/ellipsoid.py
+    points = []
+    for k in range(count + 1):
+        a = 2.0 * math.pi * k / count
+        d = radius_km / radius
+        la = math.asin(math.sin(math.radians(lat)) * math.cos(d)
+                       + math.cos(math.radians(lat)) * math.sin(d)
+                       * math.cos(a))
+        lo = math.radians(lon) + math.atan2(
+            math.sin(a) * math.sin(d) * math.cos(math.radians(lat)),
+            math.cos(d) - math.sin(math.radians(lat)) * math.sin(la))
+        points.append((math.degrees(la), math.degrees(lo)))
+    return points
+
+
+# Кратер Езеро: центр 18.38° с. ш., 77.58° в. д., диаметр около 45 км.
+# Место посадки «Персеверанса» - опубликованное NASA, остальные
+# точки - центры областей по номенклатуре МАС, округлены до десятых.
+JEZERO = (18.38, 77.58)
+JEZERO_SITES = (
+    ("«Персеверанс», место посадки «Октавия Батлер»", 18.4447, 77.4508,
+     "flag", RED, (60000.0, 0.0, 45.0),
+     "Марсоход NASA сел здесь 18 февраля 2021 года, у западного края "
+     "кратера Езеро. В кратере около 3.5 млрд лет назад было озеро."),
+    ("Кратер Езеро", 18.38, 77.58, "dot", YELLOW, (150000.0, 0.0, 40.0),
+     "Кратер диаметром около 45 км на западном краю равнины Исиды."),
+    ("Борозды Нили", 22.6, 76.8, "dot", ORANGE, (600000.0, 0.0, 30.0),
+     "Система борозд к северо-западу от Езеро."),
+    ("Равнина Исиды", 12.9, 87.0, "dot", ORANGE, (1500000.0, 0.0, 20.0),
+     "Ударный бассейн диаметром около 1500 км к востоку от Езеро."),
+    ("Плато Большой Сирт", 8.4, 69.5, "dot", ORANGE,
+     (1500000.0, 0.0, 20.0), "Вулканическое плато к юго-западу."),
+)
+
+
+def jezero():
+    title = "PlanetX: демо, кратер Езеро"
+    lat, lon = JEZERO
+    places = [KPlace(name, "point", [(la, lo)], color=color, icon=icon,
+                     view=(la, lo) + view, description=text)
+              for name, la, lo, icon, color, view, text in JEZERO_SITES]
+    places.append(KPlace(
+        "Край кратера, восточный", "point", [(lat, lon + 0.42)],
+        color=WHITE, icon="flag", view=(lat, lon + 0.42, 120000.0, 270.0,
+                                         45.0),
+        description="Точка у восточного края кратера, около. В меню метки "
+                    "- «Видимость отсюда…» с радиусом 30 км."))
+    places.append(KPlace(
+        "Круг 45 км вокруг центра Езеро", "line",
+        mars_circle(lat, lon, 22.5), color=YELLOW, width=2.0,
+        description="Круг диаметром 45 км, по нему виден размер кратера."))
+    places.append(KPlace(
+        "Профиль через кратер Езеро", "line",
+        [(lat, lon - 0.6), (lat, lon + 0.6)], color=WHITE, width=3.0,
+        description="Путь с запада на восток через центр кратера, около "
+                    "67 км. В меню - «Профиль высот». Высоты MOLA, пиксель "
+                    "около 2.6 км."))
+    samples = mars_orbit(lat, lon, 160000.0)
+    places.append(KPlace("Облёт кратера Езеро", "line",
+                         [(s[1], s[2]) for s in samples], tour=samples,
+                         description="Записанный тур вокруг кратера."))
+    root = KFolder(title, children=places)
+    view = {"relief": True, "scale": 3.0,
+            "extras": {"stars": True, "slope": True}}
+    scene = Scene((lat, lon, 200000.0, 0.0, 40.0), None, [], view, title,
+                  "Кратер Езеро", body="mars")
+    save("jezero", scene, root)
+
+
 def main():
     perm()
     bocachica()
+    jezero()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,

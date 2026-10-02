@@ -51,6 +51,23 @@ class TestDecode(unittest.TestCase):
         self.assertEqual(tile.heights.tolist(), values.tolist())
         self.assertEqual(tile.low, -8206.0)
 
+    def test_store_depth_follows_lowest_and_scale(self):
+        # Подстилка опускается на глубину самой низкой высоты: равнина
+        # Исиды -3.3 км при масштабе 3 закрывалась подстилкой на 3 км.
+        store = tr.HeightStore()
+        self.assertEqual(store.depth(), 0.0)
+        store.add(tr.make_tile(0, 0, 0, encode(np.array([[-3300.0, 50.0]])),
+                               floor=None))
+        store.set_scale(3.0)
+        self.assertEqual(store.depth(), 9900.0)
+        store.set_scale(0.0)
+        self.assertEqual(store.depth(), 0.0)
+        store.clear()
+        self.assertEqual(store.low, 0.0)
+        # Земля: пол высот 0, подстилка на прежних 3 км.
+        store.add(ramp_tile(3, 1, 2))
+        self.assertEqual(store.depth(), 0.0)
+
     def test_tile_range(self):
         tile = ramp_tile(3, 1, 2)
         self.assertEqual((tile.low, tile.high), (0.0, 2550.0))

@@ -1847,7 +1847,7 @@ class GlobeWindow(QWidget):
 
     def open_demo(self, name="perm"):
         """Демо из папки модуля, tools/make_demo.py: perm, bocachica,
-        mars, moon, sky."""
+        mars, jezero, moon, sky."""
         return self.open_scene(os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "demo",
             name + EXTENSION))

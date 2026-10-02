@@ -1501,7 +1501,11 @@ class GlobeView(QOpenGLWidget):
         scales = [1.0] * surface
         under = self._underlay_items(sel.keep)
         items += under
-        scales += [1.0 - UNDERLAY_DEPTH / ellipsoid.A] * len(under)
+        # Подстилка ниже самой низкой высоты тела: впадины Марса и Луны
+        # уходят ниже эллипсоида, и подстилка на 3 км закрывала их
+        # размытым снимком уровня 2.
+        depth = UNDERLAY_DEPTH + self.store.depth()
+        scales += [1.0 - depth / ellipsoid.A] * len(under)
         mvps = self.camera.tiles_mvp([mesh.center for mesh, _ in items],
                                      scales=scales)
         overlays = None

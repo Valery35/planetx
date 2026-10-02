@@ -997,6 +997,7 @@ EN = {
     "по менее подробным.":
         "Not all heights are loaded, the computation used less detailed "
         "ones.",
+    "Кратер Езеро": "Jezero crater",
     "Инсоляция": "Insolation",
     "Инсоляция…": "Insolation…",
     "Первые сутки промежутка. Итог - среднее количество часов "

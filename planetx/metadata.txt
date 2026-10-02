@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.24.0
+version=0.24.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -35,7 +35,7 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       constellation lines and names, the Sun, the Moon and the planets
       at the chosen time. The Demo icon with an academic cap opens
       prepared scenes: Perm and Boca Chica on the Earth, landing sites
-      on Mars and the Moon, constellations and bright objects in the
+      on Mars and the Moon, Jezero crater on Mars, constellations and bright objects in the
       sky.
       Labels stay upright, do not overlap and hide behind mountains and
       the horizon. The label language follows QGIS or is chosen from
@@ -92,7 +92,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.24.0 Terrain analysis. Slope and Aspect rows of the
+changelog=0.24.1 The Demo icon has a Jezero crater scene on Mars
+      with the Perseverance landing site, an elevation profile across
+      the crater, a point for the viewshed, a flight around and the
+      slope colouring. Depressions of Mars and the Moon deeper than
+      3 km, such as Isidis and Hellas, are no longer covered by a
+      blurred patch of imagery.
+      0.24.0 Terrain analysis. Slope and Aspect rows of the
       Layers panel colour the Earth, Mars and the Moon by terrain
       slope classes or by the compass direction slopes face. Viewshed
       from here in the menu of a point placemark colours the places

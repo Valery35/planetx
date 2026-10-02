@@ -2905,7 +2905,7 @@ def moon_holes_check():
                                               view.selection.draw})}
     window.set_body("earth")
 
-DEMOS = ("perm", "bocachica", "mars", "moon", "sky")
+DEMOS = ("perm", "bocachica", "mars", "jezero", "moon", "sky")
 
 
 def _demo_open(name):
@@ -2946,6 +2946,131 @@ def _demo_steps():
 
 
 _demo_steps()
+
+
+@check(40000)
+def jezero_open():
+    # Демо «Кратер Езеро» из меню значка «Демо», шаг 5 плана фазы 3.
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Кратер Езеро", "Jezero crater"))
+    folders = len(window.myplaces.folders)
+    action.trigger()
+    result["jezero"] = {"new_folder": len(window.myplaces.folders)
+                        - folders}
+
+
+@check(8000)
+def jezero_probe():
+    # Что под пикселями кадра: точка рельефа, высота, тайл кадра
+    # и его снимок. Потом масштаб рельефа 1 для сравнения.
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    from planetx.core.navigation import ground_under
+    from planetx.core.tiling import lonlat_to_tile
+    window = state["window"]
+    view = window.view
+    view._fit_camera()
+    cam = view.camera
+    probes = {}
+    for name, fx, fy in (("brown", 0.75, 0.85), ("green", 0.3, 0.3),
+                         ("crater", 0.5, 0.6)):
+        px, py = cam.width * fx, cam.height * fy
+        hit = ground_under(cam, px, py, view.navigator.pose.terrain)
+        if hit is None:
+            probes[name] = None
+            continue
+        lat, lon, h = (float(v) for v in ecef_to_geodetic(hit))
+        drawn = [k for k in view.selection.draw
+                 if lonlat_to_tile(lat, lon, k[0]) == (k[1], k[2])]
+        probes[name] = {"lat": round(lat, 3), "lon": round(lon, 3),
+                        "h": round(h), "drawn": drawn,
+                        "textured": [k in view.textures for k in drawn],
+                        "terrain": round(float(view.store.height_at(
+                            lat, lon) or 0.0))}
+    result.setdefault("jezero", {})["probe"] = probes
+    result["jezero"]["levels"] = sorted({k[0] for k in view.selection.draw})
+    result["jezero"]["eye_alt"] = round(float(cam.altitude()))
+    result["jezero"]["source_max"] = window.source.max_level
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_jezero_s3.png"))
+    # Подстилка в проверочном режиме зелёная. Над равниной Исиды при
+    # масштабе 3 она закрывала рельеф, на прежнем коде пикселей много.
+    import numpy as np
+    view.show_holes = True
+    image = view.grabFramebuffer()
+    view.show_holes = False
+    image = image.convertToFormat(image.Format.Format_RGBA8888) \
+        if hasattr(image, "Format") else image.convertToFormat(17)
+    ptr = image.constBits()
+    ptr.setsize(image.sizeInBytes()) if hasattr(ptr, "setsize") else None
+    rgba = np.frombuffer(ptr, dtype=np.uint8).reshape(
+        image.height(), image.bytesPerLine() // 4, 4)
+    green = (rgba[..., 0] == 0) & (rgba[..., 1] == 255) & (rgba[..., 2] == 0)
+    result["jezero"]["underlay_pixels"] = int(green.sum())
+    result["jezero"]["store_depth"] = round(view.store.depth())
+    state["jz_scale"] = window._scale
+    window.set_relief_scale(1.0)
+
+
+@check(500)
+def jezero_check():
+    window = state["window"]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_jezero_s1.png"))
+    window.set_relief_scale(state["jz_scale"])
+    window = state["window"]
+    view = window.view
+    out = result["jezero"]
+    folder = window.myplaces.folders[-1]
+    state["jz_folder"] = folder.key
+    places = window.myplaces.places_in(folder.key)
+    out["folder"] = folder.name
+    out["places"] = len(places)
+    out["body"] = window.body_key()
+    out["slope"] = window.extras.get("slope")
+    out["slope_textures"] = len(view.gibs["slope"].textures)
+    out["legend"] = window.slope_legend.isVisible()
+    out["stops"] = len(window._tour_stops(folder.key))
+    out["gl"] = dict(view.gl_errors)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_jezero.png"))
+    rim = next(p for p in places if p.name.startswith("Край кратера"))
+    line = next(p for p in places if p.name.startswith("Профиль"))
+    window._place_action("profile", line.key)
+    window._place_action("viewshed", rim.key)
+    dialog = window.viewshed_dialog
+    dialog.radius.setValue(30.0)
+    state["jz_started"] = time.monotonic()
+    dialog.build.emit(2.0, 0.0, 30000.0)
+
+
+@check(3000)
+def jezero_wait():
+    window = state["window"]
+    if window.viewshed_job is not None \
+            and time.monotonic() - state["jz_started"] < 45.0:
+        return 500
+
+
+@check(500)
+def jezero_done():
+    window = state["window"]
+    out = result["jezero"]
+    vs = window.viewshed_result
+    out["viewshed_share"] = round(vs.share, 3) if vs else None
+    out["viewshed_status"] = window.viewshed_dialog.status.text()
+    window.profile_dialog.refresh()
+    p = window.profile_dialog.chart.profile
+    if p is not None:
+        out["profile_km"] = round(p.flat / 1000.0, 1)
+        out["profile_low_high"] = [round(p.low), round(p.high)]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_jezero_viewshed.png"))
+    out["gl_after"] = dict(window.view.gl_errors)
+    window.viewshed_dialog.clear.emit()
+    window.viewshed_dialog.close()
+    window.profile_dialog.close()
+    window.myplaces.remove(state["jz_folder"])
+    window.set_extra("slope", False)
+    window.set_body("earth")
 
 
 @check(500)
