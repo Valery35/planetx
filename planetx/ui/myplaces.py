@@ -56,9 +56,14 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Тело метки: earth, mars или moon. Пустое - Земля.
           ("body", "string"))
 FOLDER_TABLE = "folders"
+# description, view, radio и expandable - окно свойств папки, как
+# у Google Earth, 2 октября 2026 года. Прежний файл получает их при
+# открытии, пустые значения - описания и вида нет, папка обычная.
 FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("position", "integer"), ("visible", "integer"),
-                 ("expanded", "integer"))
+                 ("expanded", "integer"), ("description", "string"),
+                 ("view", "string"), ("radio", "integer"),
+                 ("expandable", "integer"))
 # Цвета по умолчанию, как у Google Earth: жёлтая метка и линия, белый
 # контур многоугольника с полупрозрачной заливкой.
 DEFAULT_COLOR = {"point": (255, 214, 0, 255), "line": (255, 214, 0, 255),
@@ -251,16 +256,28 @@ class Place:
         return self.shape.name
 
 
+
+def _kfolder(folder):
+    """Папка «Моих меток» папкой core.kml, без детей."""
+    return KFolder(folder.name, folder.visible,
+                   description=folder.description, view=folder.view,
+                   radio=folder.radio, expandable=folder.expandable)
+
 class Folder:
     """Папка «Моих меток»."""
 
-    def __init__(self, fid, name, parent, position, visible, expanded):
+    def __init__(self, fid, name, parent, position, visible, expanded,
+                 description="", view=None, radio=False, expandable=True):
         self.fid = fid
         self.name = name
         self.parent = parent  # ключ папки-родителя или None - корень
         self.position = position
         self.visible = visible
         self.expanded = expanded
+        self.description = description
+        self.view = view  # вид core.lookat или None
+        self.radio = radio  # содержимое - группа переключателей
+        self.expandable = expandable  # папку можно раскрыть
 
     @property
     def key(self):
@@ -369,14 +386,20 @@ class MyPlaces(QObject):
                     str(_value(feature, layer, "body") or "earth")))
         self.folders = []
         if self.folder_layer is not None:
-            for feature in self.folder_layer.getFeatures():
+            layer = self.folder_layer
+            for feature in layer.getFeatures():
                 visible = _int(feature["visible"])
+                expandable = _int(_value(feature, layer, "expandable"))
                 self.folders.append(Folder(
                     feature.id(), str(feature["name"] or ""),
                     _folder_key(_int(feature["parent"])),
                     _int(feature["position"]),
                     bool(1 if visible is None else visible),
-                    bool(_int(feature["expanded"]) or 0)))
+                    bool(_int(feature["expanded"]) or 0),
+                    str(_value(feature, layer, "description") or ""),
+                    lookat.parse(_value(feature, layer, "view"), None),
+                    bool(_int(_value(feature, layer, "radio")) or 0),
+                    bool(1 if expandable is None else expandable)))
         # Метка или папка в папке, которой нет, стоит в корне.
         known = {f.key for f in self.folders}
         for place in self.places:
@@ -566,6 +589,11 @@ class MyPlaces(QObject):
     def rename(self, key, name):
         self._write({key: {"name": name}})
 
+    def sort_folder(self, folder=None):
+        """Сортировать содержимое папки от А до Я, как Google Earth."""
+        plan = placetree.sort_plan(self.nodes(), folder)
+        self._write({key: {"position": n} for key, n in plan.items()})
+
     def remove(self, key):
         """Удалить метку или папку со всем содержимым, как в Google Earth."""
         self.remove_many([key])
@@ -606,8 +634,14 @@ class MyPlaces(QObject):
             for field, value in (
                     ("name", node.name), ("parent", _folder_fid(parent_key)),
                     ("position", position), ("visible", int(node.visible)),
-                    ("expanded", 0)):
-                feature[field] = value
+                    ("expanded", 0),
+                    ("description", getattr(node, "description", "")),
+                    ("view", lookat.text(getattr(node, "view", None))),
+                    ("radio", int(bool(getattr(node, "radio", False)))),
+                    ("expandable",
+                     int(bool(getattr(node, "expandable", True))))):
+                if layer.fields().indexOf(field) >= 0:
+                    feature[field] = value
             ok, added = layer.dataProvider().addFeatures([feature])
             if not ok:
                 return None
@@ -672,14 +706,13 @@ class MyPlaces(QObject):
     def export_tree(self, folder=None):
         """Папка folder (None - все «Мои метки») деревом core.kml."""
         item = self.find(folder) if folder else None
-        root = KFolder(item.name if item else tr("Мои метки"),
-                       item.visible if item else True)
+        root = _kfolder(item) if item else KFolder(tr("Мои метки"))
 
         def fill(target, nodes):
             for node in nodes:
                 if isinstance(node, tuple):
                     sub, kids = node
-                    child = KFolder(sub.name, sub.visible)
+                    child = _kfolder(sub)
                     fill(child, kids)
                     target.children.append(child)
                 else:

@@ -3044,6 +3044,84 @@ def tile_source_check():
             settings.remove(key)
 
 
+@check(2000)
+def folder_props():
+    # Свойства папки как у Google Earth, 2 октября 2026 года.
+    from planetx.core import kml, placetree
+    from planetx.core.features import Shape
+    from planetx.ui.folderprops import FolderDialog
+    window = state["window"]
+    store = window.myplaces
+    out = result.setdefault("folder_props", {})
+    top = store.add_folder("Проверка папки")
+    state["fp_top"] = top
+    a = store.add(Shape("point", [(58.0, 56.0)], name="в"), folder=top)
+    b = store.add(Shape("point", [(58.1, 56.1)], name="а"), folder=top)
+    c = store.add(Shape("point", [(58.2, 56.2)], name="б"), folder=top)
+    # Окно свойств: имя, описание, группа переключателей, вид.
+    dialog = FolderDialog(store.find(top), window.current_view, window)
+    dialog.name.setText("Проверка папки 2")
+    dialog.description.setPlainText("описание папки")
+    dialog.radio.setChecked(True)
+    dialog._snapshot()
+    dialog.grab().save(os.path.join(TEMP, "planetx_folder_props.png"))
+    store.update(top, dialog.values())
+    folder = store.find(top)
+    out["saved"] = [folder.name, folder.description, folder.radio,
+                    folder.expandable, folder.view is not None]
+    # Переключатели: включение всех оставляет первую по списку.
+    window._places_toggled({a: True, b: True, c: True})
+    out["radio_visible"] = [store.find(k).visible for k in (a, b, c)]
+    # Щелчок по выбранному переключателю его не гасит.
+    window._places_toggled({a: False})
+    out["radio_keeps"] = store.find(a).visible
+    window.panel.select_place(a)
+    window.panel.list.grab().save(os.path.join(TEMP,
+                                               "planetx_radio_list.png"))
+    # Сортировка от А до Я.
+    window._place_action("sort", top)
+    out["sorted"] = [n.name for n in placetree.children(store.nodes(),
+                                                        top)]
+    # KML туда и обратно.
+    text = kml.write_kml(store.export_tree(top))
+    out["kml"] = ["radioFolder" in text, "описание папки" in text,
+                  "<LookAt>" in text]
+    back = kml.read_kml(text.encode("utf-8"))
+    out["kml_back"] = [back.radio, back.description, back.view is not None]
+    # Папка без раскрытия: строк детей в списке нет.
+    store.update(top, {"expandable": 0, "radio": 0})
+    item = None
+    group = window.panel.places_group
+    for i in range(group.childCount()):
+        if group.child(i).data(0, 256 + 1) == top:
+            item = group.child(i)
+    out["closed_rows"] = item.childCount() if item is not None else None
+    window._places_toggled({top: False})
+    out["closed_hidden"] = [store.find(k).visible for k in (a, b, c)]
+    # Вырезать и вставить.
+    window._place_action("cut", b)
+    out["after_cut"] = store.find(b) is None
+    window.paste_places(top)
+    out["after_paste"] = sorted(p.name for p in store.places_in(top))
+    # Перелёт к виду папки.
+    window._place_action("fly", top)
+    out["fly"] = window.view.navigator.flight is not None
+    # Без вида - перелёт к охвату меток папки.
+    window.view.navigator.stop()
+    store.update(top, {"view": ""})
+    window._place_action("fly", top)
+    flight = window.view.navigator.flight
+    out["fly_extent"] = flight is not None
+
+
+@check(500)
+def folder_props_check():
+    window = state["window"]
+    window.myplaces.remove(state["fp_top"])
+    result["folder_props"]["removed"] = \
+        window.myplaces.find(state["fp_top"]) is None
+
+
 def local_terrain():
     """PLANETX_TERRAIN_DIR - папка с тайлами высот тел вместо хранилища
     planetx-terrain, для проверки до публикации тайлов."""

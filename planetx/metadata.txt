@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.22.0
+version=0.23.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -92,7 +92,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.22.0 The Base map group of the Layers panel switches
+changelog=0.23.0 Folders of My Places have a properties window:
+      name, description, view, allow expanding and show contents as
+      option buttons, with radio buttons in the list. A double click
+      or Fly to goes to the folder view or frames its places. The
+      folder menu has Add, Cut, Snapshot folder view and Sort A-Z,
+      folder properties are kept in KML. The Base map group of the Layers panel switches
       imagery at once. Add tile source opens a window that takes a tile
       address in any form, shows a world mosaic, finds the most detailed
       level and saves the source as a QGIS XYZ Tiles connection. The

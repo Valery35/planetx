@@ -105,6 +105,39 @@ def move_many_plan(nodes, keys, parent, index):
     return plan
 
 
+
+def sort_plan(nodes, parent):
+    """Номера детей папки parent по названию от А до Я, как «Сортировать
+    от А до Я» Google Earth. Папки и метки сортируются вместе,
+    без учёта регистра. Возвращает {ключ: номер}."""
+    kids = sorted(children(nodes, parent),
+                  key=lambda n: ((n.name or "").casefold(), n.key))
+    return {n.key: i for i, n in enumerate(kids)}
+
+
+def radio_states(nodes, radio, states):
+    """Флажки с учётом папок-переключателей radio (ключи папок): в такой
+    папке включён не больше чем один ребёнок. Если включили одного -
+    соседи гаснут. Если включили сразу несколько, как флажком самой
+    папки, остаётся первый по списку. Выбранный ребёнок щелчком
+    по нему не гаснет, как переключатель, погасить всех можно только
+    флажком самой папки. states - {ключ: включён}, возвращается
+    дополненный словарь."""
+    out = dict(states)
+    for folder in radio:
+        kids = [n.key for n in children(nodes, folder)]
+        lit = [k for k in kids if states.get(k)]
+        if not lit:
+            if folder not in states:
+                for key in kids:
+                    if key in states:
+                        out[key] = True
+            continue
+        keep = lit[0]
+        for key in kids:
+            out[key] = key == keep
+    return out
+
 def next_position(nodes, parent):
     """Номер для нового узла в конце папки parent."""
     kids = children(nodes, parent)

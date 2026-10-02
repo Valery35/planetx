@@ -126,5 +126,42 @@ class TestNumberedName(unittest.TestCase):
                          "Моя метка 1")
 
 
+
+class TestFolderTools(unittest.TestCase):
+    """«Сортировать от А до Я» и папка-переключатель, 2 октября 2026."""
+
+    def test_sort_plan(self):
+        nodes = [pt.Node("point:1", None, 0, "в"),
+                 pt.Node("folder:1", None, 1, "А"),
+                 pt.Node("line:2", None, 2, "б")]
+        self.assertEqual(pt.sort_plan(nodes, None),
+                         {"folder:1": 0, "line:2": 1, "point:1": 2})
+
+    def test_radio_one_turned_on_switches_siblings_off(self):
+        nodes = tree()
+        out = pt.radio_states(nodes, {"folder:1"}, {"folder:2": True})
+        self.assertEqual(out, {"folder:2": True, "line:2": False})
+
+    def test_radio_folder_checked_keeps_first(self):
+        nodes = tree()
+        out = pt.radio_states(nodes, {"folder:1"},
+                              {"line:2": True, "folder:2": True,
+                               "point:3": True})
+        self.assertEqual(out["line:2"], True)
+        self.assertEqual(out["folder:2"], False)
+
+    def test_radio_choice_is_not_cleared_by_its_own_click(self):
+        out = pt.radio_states(tree(), {"folder:1"}, {"line:2": False})
+        self.assertEqual(out, {"line:2": True})
+        # Флажок самой папки гасит всё.
+        out = pt.radio_states(tree(), {"folder:1"},
+                              {"folder:1": False, "line:2": False,
+                               "folder:2": False})
+        self.assertFalse(any(out.values()))
+
+    def test_plain_folder_untouched(self):
+        states = {"line:2": True, "folder:2": True}
+        self.assertEqual(pt.radio_states(tree(), set(), states), states)
+
 if __name__ == "__main__":
     unittest.main()

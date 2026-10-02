@@ -26,7 +26,9 @@ from qgis.PyQt.QtGui import QFont, QKeySequence
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
-                                 QSizePolicy, QSlider, QSplitter,
+                                 QSizePolicy, QSlider, QSplitter, QStyle,
+                                 QStyledItemDelegate, QStyleOptionButton,
+                                 QStyleOptionViewItem,
                                  QToolButton, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
@@ -60,6 +62,11 @@ TOUR_ROLE = PLACE_ROLE + 1
 # Строки группы «Подложка»: номер источника или ADD_SOURCE.
 BASEMAP_ROLE = TOUR_ROLE + 1
 ADD_SOURCE = -1
+# Строка внутри папки-переключателя: рисуется переключателем, как
+# в Google Earth, а не флажком.
+RADIO_ROLE = BASEMAP_ROLE + 1
+# Строка самой папки-переключателя.
+RADIO_FOLDER_ROLE = RADIO_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 DRAG = enum(Qt, "ItemFlag", "ItemIsDragEnabled")
 DROP = enum(Qt, "ItemFlag", "ItemIsDropEnabled")
@@ -151,6 +158,47 @@ def layer_kind(layer):
         kinds = {0: tr("точки"), 1: tr("линии"), 2: tr("полигоны")}
         return kinds.get(enum_int(layer.geometryType()), tr("таблица"))
     return tr("слой")
+
+
+class RadioDelegate(QStyledItemDelegate):
+    """Строки папки-переключателя и сама такая папка - кружки
+    переключателей вместо флажков, как в Google Earth. Щелчок по кружку
+    работает как по флажку: окно оставляет включённой одну строку
+    папки. Кружок папки с точкой, когда в ней что-то показано."""
+
+    def paint(self, painter, option, index):
+        if not (index.data(RADIO_ROLE) or index.data(RADIO_FOLDER_ROLE)):
+            super().paint(painter, option, index)
+            return
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        widget = opt.widget
+        style = widget.style() if widget is not None else None
+        if style is None:
+            super().paint(painter, option, index)
+            return
+        rect = style.subElementRect(
+            enum(QStyle, "SubElement", "SE_ItemViewItemCheckIndicator"),
+            opt, widget)
+        on = opt.checkState != UNCHECKED
+        # Фон строки целиком, потом строка без флажка правее кружка:
+        # значок и текст остаются на своих местах.
+        style.drawPrimitive(enum(QStyle, "PrimitiveElement",
+                                 "PE_PanelItemViewItem"), opt, painter,
+                            widget)
+        opt.features &= ~enum(QStyleOptionViewItem, "ViewItemFeature",
+                              "HasCheckIndicator")
+        opt.rect.setLeft(rect.right() + 1)
+        style.drawControl(enum(QStyle, "ControlElement", "CE_ItemViewItem"),
+                          opt, painter, widget)
+        button = QStyleOptionButton()
+        button.rect = rect
+        button.state = enum(QStyle, "StateFlag", "State_Enabled") | (
+            enum(QStyle, "StateFlag", "State_On") if on
+            else enum(QStyle, "StateFlag", "State_Off"))
+        style.drawPrimitive(enum(QStyle, "PrimitiveElement",
+                                 "PE_IndicatorRadioButton"),
+                            button, painter, widget)
 
 
 class Section(QWidget):
@@ -369,6 +417,7 @@ class LayerPanel(QWidget):
             lambda item: self.place_chosen.emit(self.found.row(item)))
 
         self.list = PlaceTree(self)
+        self.list.setItemDelegate(RadioDelegate(self.list))
         # Кнопка тура под списком, как в Google Earth: активна у пути
         # и у папки «Мои метки».
         self.tour_button = QToolButton(self)
@@ -695,9 +744,18 @@ class LayerPanel(QWidget):
                 item = QTreeWidgetItem(parent, [folder.name
                                                 or tr("Без названия")])
                 item.setData(0, PLACE_ROLE, folder.key)
+                item.setData(0, RADIO_ROLE, self._radio_parent(parent))
+                item.setData(0, RADIO_FOLDER_ROLE, bool(folder.radio))
                 item.setIcon(0, folder_icon)
                 item.setFlags(item.flags() | CHECKABLE | TRISTATE)
-                self._fill(item, kids)
+                if folder.description:
+                    item.setToolTip(0, folder.description)
+                if folder.expandable:
+                    self._fill(item, kids)
+                else:
+                    # Папка без раскрытия: строки детей не показываются,
+                    # их видимость следует флажку самой папки.
+                    kids = []
                 if not kids:
                     item.setCheckState(0, CHECKED if folder.visible
                                        else UNCHECKED)
@@ -705,6 +763,7 @@ class LayerPanel(QWidget):
                 continue
             item = QTreeWidgetItem(parent, [node.name or tr("Без названия")])
             item.setData(0, PLACE_ROLE, node.key)
+            item.setData(0, RADIO_ROLE, self._radio_parent(parent))
             item.setData(0, TOUR_ROLE, bool(getattr(node, "tour",
                                                     None)))
             item.setIcon(0, place_icon(node))
@@ -712,6 +771,11 @@ class LayerPanel(QWidget):
                 item.setToolTip(0, node.measure)
             item.setFlags((item.flags() | CHECKABLE) & ~DROP)
             item.setCheckState(0, CHECKED if node.visible else UNCHECKED)
+
+    @staticmethod
+    def _radio_parent(parent):
+        """Лежит ли строка в папке-переключателе."""
+        return bool(parent.data(0, RADIO_FOLDER_ROLE))
 
     def select_place(self, key):
         """Сделать строку метки или папки текущей и показать её."""
@@ -836,8 +900,9 @@ class LayerPanel(QWidget):
                                     item.checkState(0) == CHECKED)
 
     def _double_clicked(self, item, column=0):
+        # У папки перелёт к её виду, если вид задан, как у Google Earth.
         key = item.data(0, PLACE_ROLE)
-        if key and not is_folder(key):
+        if key:
             self.place_action.emit("fly", key)
 
     def _opacity_action(self, menu, layer):
@@ -895,14 +960,27 @@ class LayerPanel(QWidget):
             menu.exec(self.list.viewport().mapToGlobal(point))
             return
         if is_folder(key):
-            actions = [("tour", tr("Запустить тур")),
-                       ("new_folder", tr("Новая папка")),
-                       ("import_kml", tr("Открыть KML или KMZ…")),
-                       ("export_kml", tr("Сохранить как KML…")),
+            # Порядок меню папки Google Earth, 2 октября 2026 года,
+            # сверху «Подлететь», как у метки.
+            menu.addAction(tr("Подлететь")).triggered.connect(
+                lambda: self.place_action.emit("fly", key))
+            self._add_menu(menu, key)
+            actions = [None,
+                       ("cut", tr("Вырезать")),
                        ("copy", tr("Копировать")),
                        ("paste", tr("Вставить")),
+                       ("remove", tr("Удалить")),
+                       None,
                        ("rename", tr("Переименовать…")),
-                       ("remove", tr("Удалить"))]
+                       None,
+                       ("import_kml", tr("Открыть KML или KMZ…")),
+                       ("export_kml", tr("Сохранить как KML…")),
+                       None,
+                       ("snapshot", tr("Снимок вида папки")),
+                       ("sort", tr("Сортировать от А до Я")),
+                       None,
+                       ("tour", tr("Запустить тур")),
+                       ("properties", tr("Свойства…"))]
         elif key:
             actions = [("fly", tr("Подлететь"))]
             if item.data(0, TOUR_ROLE):
@@ -913,19 +991,26 @@ class LayerPanel(QWidget):
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),
+                        ("cut", tr("Вырезать")),
                         ("copy", tr("Копировать")),
                         ("paste", tr("Вставить")),
                         ("rename", tr("Переименовать…")),
                         ("remove", tr("Удалить"))]
         if key:
-            for action, text in actions:
+            for entry in actions:
+                if entry is None:
+                    menu.addSeparator()
+                    continue
+                action, text = entry
                 menu.addAction(text).triggered.connect(
                     lambda _=False, a=action: self.place_action.emit(a, key))
         elif item is self.places_group:
+            self._add_menu(menu, "")
+            menu.addSeparator()
             menu.addAction(tr("Запустить тур")).triggered.connect(
                 lambda: self.place_action.emit("tour", ""))
-            menu.addAction(tr("Новая папка")).triggered.connect(
-                lambda: self.place_action.emit("new_folder", ""))
+            menu.addAction(tr("Сортировать от А до Я")).triggered.connect(
+                lambda: self.place_action.emit("sort", ""))
             menu.addAction(tr("Открыть KML или KMZ…")).triggered.connect(
                 lambda: self.place_action.emit("import_kml", ""))
             menu.addAction(tr("Сохранить как KML…")).triggered.connect(
@@ -937,6 +1022,18 @@ class LayerPanel(QWidget):
             menu.addAction(tr("Добавить слои меток в проект")).triggered \
                 .connect(lambda: self.place_action.emit("project", ""))
         menu.exec(self.list.viewport().mapToGlobal(point))
+
+    def _add_menu(self, menu, key):
+        """Подменю «Добавить» папки: папка, метка, путь, многоугольник
+        и тур, записанный с экрана. Новое ложится в папку key."""
+        sub = menu.addMenu(tr("Добавить"))
+        for action, text in (("new_folder", tr("Папку")),
+                             ("draw_point", tr("Метку")),
+                             ("draw_line", tr("Путь")),
+                             ("draw_polygon", tr("Многоугольник")),
+                             ("record_tour", tr("Записанный тур"))):
+            sub.addAction(text).triggered.connect(
+                lambda _=False, a=action: self.place_action.emit(a, key))
 
     def _copy_selected(self):
         """Ctrl+C: выделенные строки, без выделения - текущая, корень

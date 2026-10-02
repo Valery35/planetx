@@ -130,12 +130,23 @@ def escape(text):
 
 
 class KFolder:
-    """Папка KML: название, флажок, дети KFolder и KPlace."""
+    """Папка KML: название, флажок, дети KFolder и KPlace.
 
-    def __init__(self, name="", visible=True, children=None):
+    description - описание, view - вид core.lookat или None. Стиль
+    списка, как в окне свойств папки Google Earth: radio - содержимое
+    группой переключателей (listItemType radioFolder), expandable -
+    папку можно раскрыть (без него checkHideChildren).
+    """
+
+    def __init__(self, name="", visible=True, children=None,
+                 description="", view=None, radio=False, expandable=True):
         self.name = name
         self.visible = visible
         self.children = children if children is not None else []
+        self.description = description
+        self.view = view
+        self.radio = radio
+        self.expandable = expandable
 
     def places(self):
         """Все метки внутри, на любой глубине."""
@@ -329,6 +340,9 @@ def _style_of(node):
     if icon is not None:
         style["icon"] = kml_color(_text(icon, "color"), None)
         style["href"] = _text(_child(icon, "Icon"), "href") or None
+    listing = _child(node, "ListStyle")
+    if listing is not None:
+        style["list_type"] = _text(listing, "listItemType") or None
     return {k: v for k, v in style.items() if v is not None}
 
 
@@ -449,11 +463,25 @@ def _tour(node):
                   description=_text(node, "description"), tour=samples)
 
 
+def _list_type(node, styles):
+    """listItemType стиля папки: свой Style или Style по styleUrl."""
+    style = dict(styles.get(_text(node, "styleUrl").lstrip("#"), {}))
+    inline = _child(node, "Style")
+    if inline is not None:
+        style.update(_style_of(inline))
+    return style.get("list_type", "")
+
+
 def _walk(node, styles, folder, inherited=None):
     for child in node:
         name = _local(child.tag)
         if name in ("Folder", "Document"):
-            sub = KFolder(_text(child, "name"), _visible(child))
+            kind = _list_type(child, styles)
+            sub = KFolder(_text(child, "name"), _visible(child),
+                          description=_text(child, "description"),
+                          view=_view(child, None),
+                          radio=kind == "radioFolder",
+                          expandable=kind != "checkHideChildren")
             _walk(child, styles, sub, _time_of(child) or inherited)
             folder.children.append(sub)
         elif name == "Placemark":
@@ -476,7 +504,9 @@ def read_kml(data, name=""):
     # документа, как в Google Earth, без него - name, обычно имя файла.
     if len(top.children) == 1 and isinstance(top.children[0], KFolder):
         only = top.children[0]
-        top = KFolder(only.name or name, only.visible, only.children)
+        top = KFolder(only.name or name, only.visible, only.children,
+                      only.description, only.view, only.radio,
+                      only.expandable)
     return top
 
 
@@ -616,12 +646,32 @@ def _tour_kml(place, indent):
         "</gx:Tour>".format(escape(place.name), "".join(steps))
 
 
+def _look_kml(view):
+    """LookAt вида core.lookat."""
+    lat, lon, distance, heading, tilt = view
+    return "<LookAt><longitude>{:.8f}</longitude><latitude>{:.8f}" \
+        "</latitude><altitude>0</altitude><heading>{:g}</heading>" \
+        "<tilt>{:g}</tilt><range>{:g}</range></LookAt>".format(
+            lon, lat, heading, tilt, distance)
+
+
 def _folder_kml(folder, indent, tag="Folder"):
     pad = "  " * indent
     lines = [pad + "<{}>".format(tag),
              pad + "  <name>{}</name>".format(escape(folder.name)),
              pad + "  <visibility>{}</visibility>".format(
                  int(folder.visible))]
+    if getattr(folder, "description", ""):
+        lines.append(pad + "  <description>{}</description>".format(
+            escape(folder.description)))
+    if getattr(folder, "view", None) is not None:
+        lines.append(pad + "  " + _look_kml(folder.view))
+    kind = "radioFolder" if getattr(folder, "radio", False) else \
+        "checkHideChildren" if not getattr(folder, "expandable", True) \
+        else ""
+    if kind:
+        lines.append(pad + "  <Style><ListStyle><listItemType>{}"
+                     "</listItemType></ListStyle></Style>".format(kind))
     for child in folder.children:
         if isinstance(child, KFolder):
             lines.extend(_folder_kml(child, indent + 1))

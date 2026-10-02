@@ -29,7 +29,7 @@ from ..core import (basemap, clouds, ellipsoid, lookat, stars, sun,
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints)
-from ..core import graticule
+from ..core import graticule, placetree
 from ..core.features import Shape, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, fit_view
@@ -79,6 +79,7 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
+from .folderprops import FolderDialog
 from .tilesource import TileSourceDialog
 from .record import TourRecorder
 from .placeprops import PlaceProperties
@@ -458,7 +459,7 @@ class GlobeWindow(QWidget):
         self.previews = {}
         self.prop_dialogs = {}
         self.myplaces.changed.connect(self._places_changed)
-        self.panel.places_toggled.connect(self.myplaces.set_visible_many)
+        self.panel.places_toggled.connect(self._places_toggled)
         self.panel.folder_expanded.connect(self.myplaces.set_expanded)
         self.panel.place_action.connect(self._place_action)
         self.panel.place_moved.connect(
@@ -1982,11 +1983,48 @@ class GlobeWindow(QWidget):
                           folder=self.panel.current_folder())
         self.ruler.clear()
 
+    def _places_toggled(self, states):
+        """Флажки «Моих меток» из панели. Флажок папки без раскрытия
+        переходит на всё её содержимое, в папке-переключателе остаётся
+        одна видимая строка (core/placetree.radio_states)."""
+        states = dict(states)
+        nodes = self.myplaces.nodes()
+        for folder in self.myplaces.folders:
+            if not folder.expandable and folder.key in states:
+                for key in placetree.descendants(nodes, folder.key):
+                    states[key] = states[folder.key]
+        radio = {f.key for f in self.myplaces.folders if f.radio}
+        self.myplaces.set_visible_many(
+            placetree.radio_states(nodes, radio, states))
+
     def _place_action(self, action, key):
         """Действие меню «Моих меток»: тур, папка, перелёт, имя,
         удаление, слои в проект. key "" - корень «Мои метки»."""
         if action == "project":
             self.myplaces.add_to_project()
+            return
+        if action in ("draw_point", "draw_line", "draw_polygon"):
+            # «Добавить» в меню папки: окно «Новая метка» на нужной
+            # вкладке, новая метка ложится в эту папку.
+            if key:
+                self.panel.select_place(key)
+            self._open_place()
+            self.place_dialog.tabs.setCurrentIndex(
+                ("draw_point", "draw_line", "draw_polygon").index(action))
+            return
+        if action == "record_tour":
+            if key:
+                self.panel.select_place(key)
+            self.toolbar.record.setChecked(True)
+            return
+        if action == "sort":
+            self.myplaces.sort_folder(key or None)
+            return
+        if action == "cut":
+            # «Вырезать» Google Earth: копия в буфер обмена, строка
+            # уходит из списка, «Вставить» кладёт её на новое место.
+            self.copy_places([key])
+            self.myplaces.remove(key)
             return
         if action in ("new_folder", "new_folder_after"):
             # Папка сразу с названием, без окна, переименовывается потом.
@@ -2022,6 +2060,9 @@ class GlobeWindow(QWidget):
         item = self.myplaces.find(key)
         if item is None:
             return
+        if is_folder(key):
+            self._folder_action(action, item)
+            return
         if action == "fly":
             self.fly_to_place(item)
         elif action == "tour":
@@ -2056,6 +2097,31 @@ class GlobeWindow(QWidget):
                 question = tr("Удалить «{name}» из «Моих меток»?",
                               name=name)
             answer = QMessageBox.question(self, title, question)
+            if answer == enum(QMessageBox, "StandardButton", "Yes"):
+                self.myplaces.remove(key)
+
+    def _folder_action(self, action, folder):
+        """Перелёт к виду папки, снимок вида, свойства, имя, удаление."""
+        key = folder.key
+        if action == "fly":
+            self.fly_to_folder(folder)
+        elif action == "snapshot":
+            self.myplaces.update(key, {"view": lookat.text(
+                self.current_view())})
+        elif action == "properties":
+            dialog = FolderDialog(folder, self.current_view, self)
+            if dialog.exec():
+                self.myplaces.update(key, dialog.values())
+        elif action == "rename":
+            name, ok = QInputDialog.getText(
+                self, tr("Переименовать"), tr("Название"), text=folder.name)
+            if ok:
+                self.myplaces.rename(key, name.strip())
+        elif action == "remove":
+            answer = QMessageBox.question(
+                self, tr("Удалить папку"), tr(
+                    "Удалить папку «{name}» со всем содержимым?",
+                    name=folder.name or tr("Без названия")))
             if answer == enum(QMessageBox, "StandardButton", "Yes"):
                 self.myplaces.remove(key)
 
@@ -2240,6 +2306,33 @@ class GlobeWindow(QWidget):
         lat, lon, distance = fit_view(min(lons), min(lats), max(lons),
                                       max(lats), camera.fov_y, camera.aspect)
         return Stop(name, lat, lon, distance)
+
+    def fly_to_folder(self, folder):
+        """Перелёт к папке, как двойной щелчок в Google Earth: к виду
+        папки, без него - к охвату её меток. Берутся метки тела, которое
+        на глобусе, без них - тела первой метки папки."""
+        if folder.view is not None:
+            self._fly_to(*folder.view)
+            return
+        places = self.myplaces.places_in(folder.key)
+        if not places:
+            return
+        here = [p for p in places if p.body == self.body_key()]
+        if not here:
+            self.set_body(places[0].body)
+            here = [p for p in places if p.body == self.body_key()]
+        points = [pt for p in here for pt in p.shape.points]
+        if len(points) == 1 or len(here) == 1:
+            stop = self.place_stop(here[0])
+            self._fly_to(stop.lat, stop.lon, stop.distance, stop.heading,
+                         stop.tilt)
+            return
+        camera = self.view.camera
+        lats = [p[0] for p in points]
+        lons = [p[1] for p in points]
+        lat, lon, distance = fit_view(min(lons), min(lats), max(lons),
+                                      max(lats), camera.fov_y, camera.aspect)
+        self._fly_to(lat, lon, max(distance, SEARCH_MIN_DISTANCE), 0.0, 0.0)
 
     def fly_to_place(self, place):
         """Перелёт к метке, как остановка тура. Метка другого тела

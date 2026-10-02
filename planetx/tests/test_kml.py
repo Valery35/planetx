@@ -278,5 +278,36 @@ class TestSpace(unittest.TestCase):
         self.assertIsNone(kml.read_kml(data).places()[0].alts)
 
 
+class TestFolderProperties(unittest.TestCase):
+    """Свойства папки, как в окне папки Google Earth: описание, вид,
+    группа переключателей, запрет раскрытия."""
+
+    def test_round_trip(self):
+        inner = kml.KFolder("Б", radio=True,
+                            children=[kml.KPlace("т", "point", [(1.0, 2.0)])])
+        closed = kml.KFolder("В", expandable=False)
+        top = kml.KFolder("А", children=[inner, closed],
+                          description="о папке",
+                          view=(58.0, 56.2, 5000.0, 30.0, 45.0))
+        back = kml.read_kml(kml.write_kml(top).encode("utf-8"))
+        self.assertEqual(back.description, "о папке")
+        self.assertEqual(tuple(round(v, 6) for v in back.view),
+                         (58.0, 56.2, 5000.0, 30.0, 45.0))
+        b, c = back.children
+        self.assertEqual((b.radio, b.expandable), (True, True))
+        self.assertEqual((c.radio, c.expandable), (False, False))
+        self.assertEqual((back.radio, back.expandable), (False, True))
+
+    def test_list_style_by_url(self):
+        data = (b'<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+                b'<Style id="r"><ListStyle><listItemType>radioFolder'
+                b'</listItemType></ListStyle></Style>'
+                b'<Folder><name>x</name><styleUrl>#r</styleUrl></Folder>'
+                b'<Folder><name>y</name></Folder></Document></kml>')
+        x, y = kml.read_kml(data).children
+        self.assertTrue(x.radio)
+        self.assertFalse(y.radio)
+
+
 if __name__ == "__main__":
     unittest.main()

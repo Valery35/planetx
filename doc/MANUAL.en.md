@@ -417,13 +417,37 @@ together, and the Del key deletes it after a question.
 
 | Where | Items |
 |---|---|
-| My Places | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Copy, Paste, Add the places layers to the project |
-| Folder | Play tour, New Folder, Open KML or KMZ…, Save as KML…, Copy, Paste, Rename…, Delete |
-| Place | Fly to, Tour along the path, Snapshot view, Properties…, New Folder, Copy, Paste, Rename…, Delete |
+| My Places | Add, Play tour, Sort A-Z, Open KML or KMZ…, Save as KML…, Copy, Paste, Add the places layers to the project |
+| Folder | Fly to, Add, Cut, Copy, Paste, Delete, Rename…, Open KML or KMZ…, Save as KML…, Snapshot folder view, Sort A-Z, Play tour, Properties… |
+| Place | Fly to, Tour along the path, Snapshot view, Properties…, New Folder, Cut, Copy, Paste, Rename…, Delete |
 | Several rows | Copy, Show selected, Hide selected, Delete selected |
 | Empty space | New Folder, Open KML or KMZ…, Paste |
 
-Only paths have Tour along the path.
+Only paths have Tour along the path. The Add submenu creates a
+folder, placemark, path, polygon or recorded tour in the folder. The
+placemark, path and polygon are drawn in the New place window, the
+tour is recorded with the record button. Cut copies the row to the
+clipboard and removes it from the list, Paste puts it in a new place.
+Sort A-Z orders places and folders by name.
+
+### Folder properties
+
+The Folder properties window opens from the folder menu:
+
+| Field | What it sets |
+|---|---|
+| Name | The folder name in the list |
+| Allow the folder to be expanded | Without the box the folder does not expand in the list, the folder box shows and hides all its contents |
+| Show contents as option buttons | One row of the folder shows on the globe, checking one clears the others |
+| Description | Text about the folder, the tooltip of its row |
+| View | Look point, range, heading and tilt, buttons Snapshot current view and Reset |
+
+A double click on a folder and Fly to in its menu fly to the folder
+view. Without a view of its own the flight frames all places of the
+folder. The view is set by hand with numbers on the View tab or by a
+snapshot: Snapshot folder view sets the folder view to the view of
+the globe. The
+description, the view and the way contents show go to KML and back.
 
 A new folder appears at once with the name New Folder and is renamed
 later. On a folder it is created inside, on a place right below it. A

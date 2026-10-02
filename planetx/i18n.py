@@ -910,6 +910,39 @@ EN = {
     "одного тайла.":
         "The address is not understood. A template with {z}, {x}, {y} or "
         "the address of one tile is needed.",
+    "Свойства папки": "Folder properties",
+    "Разрешить раскрывать папку": "Allow the folder to be expanded",
+    "Без флажка папка в списке не раскрывается, её метки "
+    "показывает и скрывает флажок самой папки.":
+        "Without the box the folder does not expand in the list, the box "
+        "of the folder itself shows and hides its places.",
+    "Показать содержание как группу переключателей":
+        "Show contents as option buttons",
+    "На глобусе видна только одна метка или папка из этой папки. "
+    "Флажок одной строки снимает флажки остальных.":
+        "Only one place or folder of this folder shows on the globe. "
+        "Checking one row clears the others.",
+    "Описание папки. Оно хранится в «Моих метках» и в KML.":
+        "The folder description. It is kept in My Places and in KML.",
+    "Вид папки": "Folder view",
+    "Откуда смотрит камера, когда летит к папке. Вид задаётся "
+    "вручную числами или снимком текущего вида. Без своего вида "
+    "перелёт берёт в кадр все метки папки.":
+        "Where the camera looks from when it flies to the folder. The view "
+        "is set by hand with numbers or by a snapshot of the current view. "
+        "Without a view of its own the flight frames all places of the "
+        "folder.",
+    "Вернуть вид, который был у папки при открытии окна.":
+        "Restore the view the folder had when the window opened.",
+    "Широта точки, на которую смотрит камера.":
+        "Latitude of the point the camera looks at.",
+    "Добавить": "Add",
+    "Папку": "Folder",
+    "Метку": "Placemark",
+    "Записанный тур": "Recorded tour",
+    "Вырезать": "Cut",
+    "Снимок вида папки": "Snapshot folder view",
+    "Сортировать от А до Я": "Sort A-Z",
     "К началу шкалы": "To the start of the slider",
     "К концу шкалы": "To the end of the slider",
     "Проигрывание по кругу. Дойдя до конца шкалы, промежуток "

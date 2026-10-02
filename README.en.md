@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.22.0.
+A 3D globe inside QGIS. PlanetX version 0.23.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -129,7 +129,9 @@ and atmosphere, from space down to single streets.
   on the globe. They, saved views and measurements sit in the My Places
   folder of the Places section. The places file is
   shared by the QGIS profile, so places are visible in any project.
-  A double click on a place flies there.
+  A double click on a place or folder flies there. A folder has a
+  description, a view of its own and can show its contents as option
+  buttons, with one place of the folder on the globe.
 - **Tour.** Play tour in the menu of My Places or any of its folders
   flies over the checked places in the list order, along a path the
   camera travels the line. Places and folders are rearranged by
