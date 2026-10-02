@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.23.0.
+A 3D globe inside QGIS. PlanetX version 0.24.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -123,6 +123,11 @@ and atmosphere, from space down to single streets.
   buildings. Points are dragged with the mouse. The elevation
   profile of a path shows ascent and slopes. The measurement is
   saved to My Places.
+- **Terrain analysis.** The Slope and Aspect rows colour the surface
+  of the Earth, Mars and the Moon by slope steepness and by compass
+  direction. Viewshed from a point placemark shows the places seen
+  from it and those hidden by the terrain. Insolation shows the hours
+  of direct sunlight per day for chosen dates, with mountain shadows.
 - **Coordinates.** Degrees, degrees-minutes-seconds, UTM or MGRS in
   the status line, search understands all four.
 - **My Places.** Placemarks, paths and polygons are drawn by clicks

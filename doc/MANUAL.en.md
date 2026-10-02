@@ -204,6 +204,8 @@ take effect at once, without the Refresh button.
 | Temperature | Surface temperature of land by day over 8 days (MODIS) and of the sea over a day (GHRSST MUR) with a scale in degrees |
 | 3D buildings | OpenStreetMap buildings as blocks from OpenFreeMap tiles, off by default |
 | Sun | Light of the terrain, buildings and air by the position of the sun, the night side of the Earth is dark, off by default |
+| Slope | Surface slope from the heights in classes from flat to steeper than 35°, off by default |
+| Aspect | The direction a slope faces, in the colours of the compass directions, switched on instead of the slope |
 
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
@@ -234,6 +236,18 @@ shadows.
 
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
+
+The Slope and Aspect rows colour the surface by the terrain heights.
+Slope is the angle of the surface to the horizontal, in classes 0-2°,
+2-5°, 5-10°, 10-15°, 15-25°, 25-35° and steeper than 35°, from green
+to purple. Aspect is the compass direction a slope faces downhill,
+each of the eight directions has its colour, ground flatter than 0.5°
+is grey. The scale is in the bottom left corner of the view. The slope
+is computed from the true heights, without the vertical exaggeration
+of the view. The layer exists on the Earth, Mars and the Moon, other
+bodies have no heights. The accuracy is limited by the height pixel.
+It is about 5 m at the equator on the most detailed level on the Earth,
+2.6 km on Mars, 1.3 km on the Moon.
 
 ### Base map and a tile source of your own
 
@@ -445,7 +459,7 @@ The Folder properties window opens from the folder menu:
 A double click on a folder and Fly to in its menu fly to the folder
 view. Without a view of its own the flight frames all places of the
 folder. The view is set by hand with numbers on the View tab or by a
-snapshot: Snapshot folder view sets the folder view to the view of
+snapshot. Snapshot folder view sets the folder view to the view of
 the globe. The
 description, the view and the way contents show go to KML and back.
 
@@ -637,6 +651,46 @@ Heights are taken as for the ground length. The slope is measured over a
 stretch not shorter than three pixels of height data, so roughness of
 the data does not pass for a cliff. On steep mountains the maximum slope
 may exceed 100 %, that is 45°.
+
+### Viewshed from a point
+
+The Viewshed from here… item in the menu of a point placemark opens
+the Viewshed from a point window. The window sets the observer height
+above the terrain, the target height and the circle radius. The Build
+button loads the heights under the circle and colours it. Visible places
+are green, places hidden by the terrain are red. The Remove button
+removes the colouring.
+
+Rays leave the point with an equal azimuth step. The step along a ray
+is one five-hundredth of the radius, 20 m for a radius of 10 km. A place
+is visible if the ray from the eye to it does not touch the terrain on
+the way. The computation takes the curvature of the body into account,
+and on the Earth the refraction with the coefficient 0.13. Buildings
+and forest are not taken into account. The window shows the visible
+share of the circle area. If the heights are not loaded within 30 s,
+the computation uses less detailed ones, and the window says so. The
+viewshed is computed on the Earth, Mars and the Moon.
+
+### Insolation
+
+The Insolation… item in the menu of a point placemark opens the
+Insolation window. The window sets the first and the last day of the
+period and the circle radius. The Build button loads the heights and
+colours the circle by the mean number of hours of direct sunlight per
+day. Blue means little light, red means much light. The scale in the
+bottom left corner of the view runs from zero to the largest value in
+the circle. The Remove button removes the colouring.
+
+The position of the Sun is computed every 10 minutes of the UTC day. A
+place is lit if the Sun is above the mountain horizon at its azimuth
+and falls on the front side of the slope. The horizon is taken in 32
+directions at a distance of at least the radius and at least 5 km. A
+period longer than 15 days is computed over 15 evenly spaced days.
+Clouds, refraction, buildings and forest are not taken into account.
+The height grid has 800 nodes per side, the step is 25 m for a radius
+of 5 km. The computation runs in parts, and the globe responds to the
+mouse meanwhile. The line under the fields shows the share done.
+Insolation is computed only for the Earth.
 
 ---
 

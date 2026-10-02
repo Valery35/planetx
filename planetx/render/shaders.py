@@ -263,6 +263,15 @@ uniform sampler2D u_sea;
 uniform vec4 u_sea_uv;
 uniform sampler2D u_land;
 uniform vec4 u_land_uv;
+// Уклон или экспозиция по высотам, над температурой, см. core/slope.py.
+uniform sampler2D u_slope;
+uniform vec4 u_slope_uv;
+// Видимость из точки, над уклоном, см. core/viewshed.py.
+uniform sampler2D u_viewshed;
+uniform vec4 u_viewshed_uv;
+// Инсоляция, над видимостью, см. core/insolation.py.
+uniform sampler2D u_insolation;
+uniform vec4 u_insolation_uv;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
 vec3 lay(vec3 under, sampler2D image, vec4 uv) {
@@ -273,6 +282,9 @@ void main() {
     vec3 base = texture(u_texture, v_uv).rgb;
     base = lay(base, u_sea, u_sea_uv);
     base = lay(base, u_land, u_land_uv);
+    base = lay(base, u_slope, u_slope_uv);
+    base = lay(base, u_viewshed, u_viewshed_uv);
+    base = lay(base, u_insolation, u_insolation_uv);
     base = lay(base, u_overlay, u_overlay_uv);
     base = lay(base, u_clouds, u_clouds_uv);
     // Отмывка рельефа: множитель яркости, на равнине 1. С солнцем -

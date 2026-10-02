@@ -3122,6 +3122,442 @@ def folder_props_check():
         window.myplaces.find(state["fp_top"]) is None
 
 
+@check(12000)
+def slope_on():
+    # Уклон над Эльбрусом, шаг 1 плана фазы 3.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(43.35, 42.44, 40000.0, 0.0, 45.0))
+    window.set_extra("slope", True)
+
+
+def _slope_report(name):
+    window = state["window"]
+    view = window.view
+    layer = view.gibs["slope"]
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_%s.png" % name))
+    return {"textures": len(layer.textures), "shown": layer.shown,
+            "max_level": layer.max_level,
+            "loader": "slope" in window.gibs_loaders,
+            "legend": window.slope_legend.isVisible(),
+            "mode": window.slope_legend.mode,
+            "errors": len(window.gibs_loaders["slope"].errors)
+            if "slope" in window.gibs_loaders
+            and hasattr(window.gibs_loaders["slope"], "errors") else None,
+            "gl": dict(view.gl_errors)}
+
+
+@check(12000)
+def slope_check():
+    window = state["window"]
+    result["slope"] = {"elbrus": _slope_report("slope_elbrus")}
+    window.set_extra("aspect", True)
+    result["slope"]["aspect_turns_slope_off"] = \
+        not window.extras.get("slope")
+
+
+@check(500)
+def aspect_check():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    result["slope"]["aspect"] = _slope_report("aspect_elbrus")
+    window.set_extra("slope", True)
+    window.set_body("mars")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(18.65, -133.8, 1.2e6, 0.0, 30.0))
+
+
+@check(12000)
+def slope_mars():
+    pass
+
+
+@check(500)
+def slope_mars_check():
+    window = state["window"]
+    result["slope"]["mars"] = _slope_report("slope_mars")
+    window.set_body("mercury")
+    result["slope"]["mercury_loader"] = "slope" in window.gibs_loaders
+    window.set_body("earth")
+    window.set_extra("slope", False)
+    result["slope"]["off"] = "slope" not in window.gibs_loaders
+
+
+@check(500)
+def viewshed_on():
+    # Видимость с вершины Чегет, радиус 10 км, шаг 2 плана фазы 3.
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(43.2425, 42.5157, 45000.0, 0.0, 30.0))
+    key = window.myplaces.add(Shape("point", [(43.2425, 42.5157)],
+                                    name="Чегет"))
+    state["vs_key"] = key
+    window._place_action("viewshed", key)
+    dialog = window.viewshed_dialog
+    result["viewshed"] = {"dialog": dialog is not None
+                          and dialog.isVisible()}
+    state["vs_started"] = time.monotonic()
+    dialog.build.emit(2.0, 0.0, 10000.0)
+
+
+@check(10000)
+def viewshed_wait():
+    window = state["window"]
+    if window.viewshed_job is not None \
+            and time.monotonic() - state["vs_started"] < 45.0:
+        return 500
+    result["viewshed"]["seconds"] = round(
+        time.monotonic() - state["vs_started"], 1)
+
+
+@check(500)
+def viewshed_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["viewshed"]
+    vs = window.viewshed_result
+    layer = view.gibs["viewshed"]
+    out["computed"] = vs is not None
+    out["status"] = window.viewshed_dialog.status.text()
+    if vs is not None:
+        out["share"] = round(vs.share, 3)
+        out["step"] = round(vs.step, 1)
+        out["shape"] = list(vs.visible.shape)
+        seen, inside = vs.at(np.array([43.2425, 43.2425]),
+                             np.array([42.5160, 42.8]), 6378137.0)
+        out["near_seen"] = bool(seen[0])
+        out["far_inside"] = bool(inside[1])
+    out["shown"] = layer.shown
+    out["max_level"] = layer.max_level
+    out["textures"] = len(layer.textures)
+    out["gl"] = dict(view.gl_errors)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_viewshed.png"))
+    window.viewshed_dialog.clear.emit()
+    out["cleared"] = not layer.shown and window.viewshed_tiles is None
+    window.viewshed_dialog.close()
+    window.myplaces.remove(state["vs_key"])
+
+
+@check(8000)
+def profile_hover_on():
+    # Точка профиля под курсором графика: та же высота в другом месте
+    # пути не возвращает метку на прежнее место. Путь через Эльбрус.
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(43.35, 42.44, 30000.0, 0.0, 30.0))
+    key = window.myplaces.add(Shape("line", [(43.30, 42.38), (43.40, 42.50)],
+                                    name="Профиль"))
+    state["ph_key"] = key
+    window._place_action("profile", key)
+
+
+def _same_height_pair(p):
+    """Два номера точек профиля с одной подписью высоты, дальше 1 км
+    друг от друга, и третий номер с другой подписью."""
+    import numpy as np
+    text = np.rint(p.height).astype(int)
+    for i in range(len(text)):
+        far = np.nonzero((text == text[i])
+                         & (np.abs(p.distance - p.distance[i]) > 1000.0))[0]
+        if len(far):
+            other = int(np.nonzero(text != text[i])[0][0])
+            return i, int(far[0]), other
+    return None
+
+
+@check(500)
+def profile_hover_a():
+    window = state["window"]
+    window.profile_dialog.refresh()
+    p = window.profile_dialog.chart.profile
+    pair = _same_height_pair(p)
+    result["profile_hover"] = {"pair": list(pair) if pair else None}
+    state["ph_pair"] = pair
+    if pair:
+        window.profile_dialog.chart.hovered.emit(float(pair[0]))
+
+
+@check(500)
+def profile_hover_b():
+    window = state["window"]
+    if state["ph_pair"]:
+        window.profile_dialog.chart.hovered.emit(float(state["ph_pair"][2]))
+
+
+@check(500)
+def profile_hover_c():
+    window = state["window"]
+    if state["ph_pair"]:
+        window.profile_dialog.chart.hovered.emit(float(state["ph_pair"][1]))
+
+
+@check(500)
+def profile_hover_check():
+    from planetx.core.places import identity
+    window = state["window"]
+    out = result["profile_hover"]
+    mark = window._profile_mark
+    labels = window.view.labels
+    row = labels._row.get(identity(mark)) if mark is not None else None
+    if row is not None:
+        drawn = labels._places[row]
+        out["mark"] = [round(mark.lat, 6), round(mark.lon, 6)]
+        out["drawn"] = [round(drawn.lat, 6), round(drawn.lon, 6)]
+        out["same_place"] = out["mark"] == out["drawn"]
+    out["row"] = row
+    window.profile_dialog.close()
+    window.myplaces.remove(state["ph_key"])
+
+
+class _SyncPool:
+    """Подмена ThreadPoolExecutor: задание выполняется сразу."""
+
+    def __init__(self, max_workers=1):
+        pass
+
+    def submit(self, fn, *args):
+        from concurrent.futures import Future
+        future = Future()
+        future.set_result(fn(*args))
+        return future
+
+    def shutdown(self, wait=True):
+        pass
+
+
+def _gap_watch(name):
+    """Паузы цикла событий: таймер 5 мс пишет промежутки между
+    срабатываниями. Пауза больше 50 мс - мышь заметно не отвечает."""
+    from qgis.PyQt.QtCore import QTimer
+    timer = QTimer()
+    gaps = []
+    last = [time.perf_counter()]
+
+    def tick():
+        now = time.perf_counter()
+        gaps.append(now - last[0])
+        last[0] = now
+    timer.timeout.connect(tick)
+    timer.start(5)
+    state[name + "_gaps"] = (timer, gaps)
+
+
+def _time_calls(name, targets):
+    """Длительность вызовов методов: обёртка на экземпляре пишет
+    время каждого вызова. Снимается в _calls_report."""
+    found = {}
+    for obj, attr in targets:
+        original = getattr(obj, attr)
+        times = found.setdefault(attr, [])
+
+        def wrapped(*args, _f=original, _t=times, **kwargs):
+            started = time.perf_counter()
+            try:
+                return _f(*args, **kwargs)
+            finally:
+                _t.append(time.perf_counter() - started)
+        setattr(obj, attr, wrapped)
+    state[name + "_calls"] = (targets, found)
+
+
+def _calls_report(name):
+    targets, found = state.pop(name + "_calls")
+    for obj, attr in targets:
+        if attr in obj.__dict__:
+            delattr(obj, attr)
+    out = {}
+    for attr, times in found.items():
+        ms = sorted(t * 1000.0 for t in times)
+        out[attr] = {"calls": len(ms),
+                     "max_ms": round(ms[-1], 1) if ms else None,
+                     "over_50": sum(1 for t in ms if t > 50.0)}
+    return out
+
+
+def _gap_report(name):
+    timer, gaps = state.pop(name + "_gaps")
+    timer.stop()
+    ms = sorted(g * 1000.0 for g in gaps)
+    return {"ticks": len(ms), "max_ms": round(ms[-1], 1) if ms else None,
+            "over_50": sum(1 for g in ms if g > 50.0),
+            "over_100": sum(1 for g in ms if g > 100.0)}
+
+
+@check(500)
+def insolation_on():
+    # Инсоляция у Чегета 21 декабря 2026 года, радиус 5 км, шаг 3
+    # плана фазы 3.
+    from qgis.PyQt.QtCore import QDate
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(43.2425, 42.5157, 25000.0, 0.0, 30.0))
+    key = window.myplaces.add(Shape("point", [(43.2425, 42.5157)],
+                                    name="Чегет"))
+    state["ins_key"] = key
+    if os.environ.get("PLANETX_OLD_DIALOG"):
+        # Прежнее окно для сторожа: места под состояние не оставлено.
+        from planetx.ui import insolation as insui
+        insui.fit_status = lambda *args: None
+    window._place_action("insolation", key)
+    dialog = window.insolation_dialog
+    result["insolation"] = {"dialog": dialog is not None
+                            and dialog.isVisible()}
+    dialog.first.setDate(QDate(2026, 12, 21))
+    dialog.last.setDate(QDate(2026, 12, 21))
+    dialog.radius.setValue(5.0)
+    _gap_watch("ins")
+    _time_calls("ins", [(window, "_insolation_poll"),
+                        (window, "_show_insolation"),
+                        (window, "_true_heights"),
+                        # paintGL не оборачивается: виртуальный метод Qt
+                        # после снятия обёртки больше не вызывается.
+                        (window.view, "_render"),
+                        (window.view, "add_gibs")])
+    # Таймер связан с прежним методом, его вызовы идут мимо обёртки.
+    window.insolation_timer.timeout.disconnect()
+    window.insolation_timer.timeout.connect(
+        lambda: window._insolation_poll())
+    if os.environ.get("PLANETX_OLD_TILES"):
+        # Прежнее поведение для сторожа: картинки тайлов считаются
+        # в главном потоке, рабочий поток подменён синхронным.
+        from planetx.ui import viewshed as vsui
+        vsui.ThreadPoolExecutor = _SyncPool
+    state["ins_started"] = time.monotonic()
+    # Как кнопка «Построить»: даты и радиус из полей окна.
+    from planetx.ui.insolation import day_start
+    out = result["insolation"]
+    out["start"] = day_start(dialog.first.date())
+    dialog.build.emit(float(out["start"]),
+                      float(day_start(dialog.last.date())),
+                      dialog.radius.value() * 1000.0)
+
+
+@check(10000)
+def insolation_wait():
+    window = state["window"]
+    job = window.insolation_job
+    # Камера ходит, пока рабочий поток считает: так видно, мешает ли
+    # расчёт мыши.
+    if job is not None and "points" in job \
+            and "ins_calc_swing" not in state:
+        _swing_start("ins_calc")
+    if job is not None and time.monotonic() - state["ins_started"] < 60.0:
+        return 100
+    if "ins_calc_swing" in state:
+        result["insolation"]["swing_while_computing"] = \
+            _swing_report("ins_calc")
+    result["insolation"]["seconds"] = round(
+        time.monotonic() - state["ins_started"], 1)
+
+
+@check(3500)
+def insolation_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["insolation"]
+    ins = window.insolation_result
+    layer = view.gibs["insolation"]
+    out["computed"] = ins is not None
+    out["status"] = window.insolation_dialog.status.text()
+    if ins is not None:
+        out["days"] = ins.days
+        out["cell"] = round(ins.cell, 1)
+        out["hours_min"] = round(float(ins.hours.min()), 2)
+        out["hours_median"] = round(float(np.median(ins.hours)), 2)
+        out["hours_max"] = round(float(ins.hours.max()), 2)
+        out["top"] = ins.top
+    out["legend"] = window.insolation_legend.isVisible()
+    out["gaps"] = _gap_report("ins")
+    out["calls"] = _calls_report("ins")
+    out["shown"] = layer.shown
+    out["textures"] = len(layer.textures)
+    out["gl"] = dict(view.gl_errors)
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_insolation.png"))
+    # Поля окна не сжаты строкой состояния в две строки.
+    dialog = window.insolation_dialog
+    out["fields"] = {name: [w.height(), w.sizeHint().height()]
+                     for name, w in (("first", dialog.first),
+                                     ("last", dialog.last),
+                                     ("radius", dialog.radius))}
+    out["fields_clipped"] = any(h < hint for h, hint
+                                in out["fields"].values())
+    _swing_start("ins_on")
+
+
+def _swing_start(name):
+    """Камера ходит по долготе ±0.05° от позы, как при перетаскивании
+    мышью, 3 с. Паузы цикла событий и кадры пишутся."""
+    from qgis.PyQt.QtCore import QTimer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    base = nav.pose
+    started = time.perf_counter()
+    timer = QTimer()
+
+    def step():
+        t = time.perf_counter() - started
+        nav.set_pose(Pose(base.lat, base.lon + 0.05 * math.sin(t * 2.0),
+                          base.distance, base.heading, base.tilt))
+        window.view.update()
+    timer.timeout.connect(step)
+    timer.start(16)
+    state[name + "_swing"] = (timer, base, window.view.frame)
+    _gap_watch(name)
+
+
+def _swing_report(name):
+    window = state["window"]
+    timer, base, frame = state.pop(name + "_swing")
+    timer.stop()
+    window.view.navigator.set_pose(base)
+    out = _gap_report(name)
+    out["frames"] = window.view.frame - frame
+    return out
+
+
+@check(3500)
+def insolation_turn():
+    window = state["window"]
+    out = result["insolation"]
+    out["swing_with_layer"] = _swing_report("ins_on")
+    window.insolation_dialog.clear.emit()
+    layer = window.view.gibs["insolation"]
+    out["cleared"] = not layer.shown and window.insolation_tiles is None \
+        and not window.insolation_legend.isVisible()
+    _swing_start("ins_off")
+
+
+@check(500)
+def insolation_turn_check():
+    window = state["window"]
+    out = result["insolation"]
+    out["swing_without_layer"] = _swing_report("ins_off")
+    window.insolation_dialog.close()
+    window.myplaces.remove(state["ins_key"])
+
+
 def local_terrain():
     """PLANETX_TERRAIN_DIR - папка с тайлами высот тел вместо хранилища
     planetx-terrain, для проверки до публикации тайлов."""

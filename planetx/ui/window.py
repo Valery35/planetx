@@ -41,13 +41,15 @@ from ..core.planets import EARTH_PLANET, planet_by_key
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
-from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, make_tile
+from ..core.slope import aspect_rgba, slope_aspect, slope_rgba
+from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, decode, make_tile
 from ..core.kml import KmlError, read_file as read_kml_file, read_kml, \
     write_kml, write_kmz
 from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
+from ..core import insolation, viewshed
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
@@ -65,7 +67,7 @@ from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
-from .legend import TemperatureLegend
+from .legend import InsolationLegend, SlopeLegend, TemperatureLegend
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
@@ -81,6 +83,8 @@ from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
 from .folderprops import FolderDialog
 from .tilesource import TileSourceDialog
+from .viewshed import ResultTiles, ViewshedDialog, display_level
+from .insolation import InsolationDialog
 from .record import TourRecorder
 from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
@@ -90,6 +94,11 @@ from .track import TrackDialog, TrackManager
 from .sync import MapSync
 from .timebar import TimeBar
 from .toolbar import ViewToolbar
+
+VIEWSHED_POLL = 250  # мс между проверками высот видимости
+VIEWSHED_WAIT = 30.0  # с, дальше расчёт идёт по тем высотам, что есть
+HEIGHT_CHUNK = 20000  # узлов сетки инсоляции за проход цикла событий
+CALC_BUDGET = 0.004  # с расчёта инсоляции за проход цикла событий
 
 TERRAIN_ATTRIBUTION = (
     '<a href="https://github.com/tilezen/joerd/blob/master/docs/'
@@ -118,7 +127,10 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # решение автора от 29 сентября 2026 года.
 # Солнце выключено, умолчание плана работ после 0.16.0.
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
-                  "temperature": False, "buildings": False, "sun": False}
+                  "temperature": False, "buildings": False, "sun": False,
+                  "slope": False, "aspect": False}
+# Уклон и экспозиция - один слой вида, включена одна из двух строк.
+SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun")
 SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
@@ -182,6 +194,17 @@ def prepare_clouds(key, rgba):
     """Работа рабочего потока для тайла облаков: прозрачность
     по белизне и уровни мипмапов."""
     return mip_chain(clouds.cloud_rgba(rgba, key))
+
+
+def slope_prepare(mode, floor, radius):
+    """Работа рабочего потока для тайла уклона или экспозиции: высоты
+    Terrarium, расчёт core/slope.py, раскраска и уровни мипмапов."""
+    def prepare(key, rgba):
+        heights = decode(rgba, floor)
+        grade, aspect = slope_aspect(heights, key[0], key[2], radius)
+        return mip_chain(aspect_rgba(aspect) if mode == "aspect"
+                         else slope_rgba(grade))
+    return prepare
 
 
 def prepare_temperature(key, rgba):
@@ -358,6 +381,10 @@ class GlobeWindow(QWidget):
         # Шкала температуры, видна вместе со строкой «Температура».
         self.legend = TemperatureLegend(self.view)
         self.legend.hide()
+        self.slope_legend = SlopeLegend(self.view)
+        self.slope_legend.hide()
+        self.insolation_legend = InsolationLegend(self.view)
+        self.insolation_legend.hide()
         self.view.installEventFilter(self)
         splitter = QSplitter(self)
         self.splitter = splitter
@@ -477,6 +504,23 @@ class GlobeWindow(QWidget):
         self.ruler.ask_heights = self.view.want_tool_heights
         self.profile_dialog = None
         self._profile_mark = None
+        # Видимость из точки: окно, задание расчёта и тайлы слоя.
+        self.viewshed_dialog = None
+        self.viewshed_job = None
+        self.viewshed_tiles = None
+        self.viewshed_result = None
+        self.viewshed_timer = QTimer(self)
+        self.viewshed_timer.setInterval(VIEWSHED_POLL)
+        self.viewshed_timer.timeout.connect(self._viewshed_poll)
+        # Инсоляция: то же, расчёт в своём рабочем потоке.
+        self.insolation_dialog = None
+        self.insolation_job = None
+        self.insolation_tiles = None
+        self.insolation_result = None
+        self.insolation_pool = None
+        self.insolation_timer = QTimer(self)
+        self.insolation_timer.setInterval(VIEWSHED_POLL)
+        self.insolation_timer.timeout.connect(self._insolation_poll)
         self.ruler_vertices = _RulerVertices(self)
         self.view.undo_point.connect(self._undo_point)
         self.ruler_dialog = None
@@ -700,6 +744,12 @@ class GlobeWindow(QWidget):
 
     def set_extra(self, key, on):
         """Сетка, звёзды или облака флажком раздела «Слои», сразу."""
+        if key in SURFACE_EXTRAS and on:
+            # Уклон и экспозиция занимают один слой: вторая строка гаснет.
+            other = SURFACE_EXTRAS[1 - SURFACE_EXTRAS.index(key)]
+            self.extras[other] = False
+            QgsSettings().setValue(EXTRA_KEY + other, False)
+            self.panel.set_extras({other: False})
         self.extras[key] = bool(on)
         QgsSettings().setValue(EXTRA_KEY + key, bool(on))
         self.panel.set_extras({key: bool(on)})
@@ -728,6 +778,8 @@ class GlobeWindow(QWidget):
             self._set_buildings(on)
         elif key == "sun":
             self._update_sun()
+        elif key in SURFACE_EXTRAS:
+            self._set_surface()
 
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой
@@ -864,18 +916,49 @@ class GlobeWindow(QWidget):
             lambda key, rgba, extra: self.view.set_sky_image(rgba))
         self.sky_loader.want((0, 0, 0), 1.0)
 
-    def _set_gibs(self, name, on):
+    def _surface_source(self):
+        """Тайлы высот тела для уклона: (источник, пол высот) или None,
+        если высот у тела нет."""
+        if self.planet.earth:
+            return basemap.Source("Terrarium", TERRARIUM_URL,
+                                  TERRAIN_MAX, builtin=True), 0.0
+        if self.planet.terrain is None:
+            return None
+        name, url, level, _ = self.planet.terrain
+        return basemap.Source(name, url, level, builtin=True), None
+
+    def _set_surface(self):
+        """Слой уклона или экспозиции по строкам раздела «Слои» и телу.
+        Тайлы высот берутся через кэш QGIS, слой считается из них
+        в рабочем потоке (core/slope.py)."""
+        mode = next((k for k in SURFACE_EXTRAS if self.extras.get(k)),
+                    None)
+        found = self._surface_source()
+        if mode is None or found is None or self.view.sky_view is not None:
+            self._set_gibs("slope", False)
+            self.slope_legend.hide()
+            return
+        source, floor = found
+        self.view.gibs["slope"].max_level = source.max_level
+        self._set_gibs("slope", True, (source, slope_prepare(
+            mode, floor, ellipsoid.A)), cache=True)
+        self.slope_legend.set_mode(mode)
+        self.slope_legend.show()
+        self._place_attribution()
+
+    def _set_gibs(self, name, on, made=None, cache=False):
         """Слой NASA GIBS вида - облака, море или суша: новый загрузчик
-        или никакого. Ответы GIBS запрещают кэш, поэтому мимо него."""
+        или никакого. Ответы GIBS запрещают кэш, поэтому мимо него.
+        made - (источник, подготовка) своего слоя, как у уклона."""
         old = self.gibs_loaders.pop(name, None)
         if old is not None:
             old.abort()
             old.deleteLater()
         loader = None
         if on:
-            source, prepare = gibs_source(name)
+            source, prepare = made or gibs_source(name)
             loader = TileLoader(source, parent=self, prepare=prepare,
-                                size=TILE_SIZE, cache=False)
+                                size=TILE_SIZE, cache=cache)
             loader.loaded.connect(
                 lambda key, rgba, levels, name=name:
                 self.view.add_gibs(name, key, levels))
@@ -976,6 +1059,9 @@ class GlobeWindow(QWidget):
         if planet is self.planet:
             return
         self.planet = planet
+        # Видимость и инсоляция считались по высотам прежнего тела.
+        self._clear_viewshed()
+        self._clear_insolation()
         ellipsoid.set_body(planet.body)
         if planet.earth:
             source = self.sources[self._basemap]
@@ -1001,6 +1087,7 @@ class GlobeWindow(QWidget):
         self._update_layer_labels(force=True)
         for extra in EARTH_EXTRAS:
             self._apply_extra(extra, self.extras.get(extra, False))
+        self._set_surface()
         if not planet.earth:
             # Отжатые кнопки сами выключают синхронизацию и опрос.
             self.toolbar.sync.setChecked(False)
@@ -1056,6 +1143,8 @@ class GlobeWindow(QWidget):
         self.toolbar.set_body("sky")
         self.navpad.hide()
         self.legend.hide()
+        self.slope_legend.hide()
+        self.insolation_legend.hide()
         for button in self._globe_buttons():
             button.setEnabled(False)
         self._show_attribution()
@@ -1083,6 +1172,9 @@ class GlobeWindow(QWidget):
         self.toolbar.identify.setEnabled(self.planet.earth)
         self.legend.setVisible(bool(self.extras.get("temperature"))
                                and self.planet.earth)
+        self.insolation_legend.setVisible(
+            self.insolation_result is not None)
+        self._set_surface()
         self.toolbar.set_body(self.planet.key)
         self._show_attribution()
         self.sky_labels.sync()
@@ -1216,7 +1308,7 @@ class GlobeWindow(QWidget):
                 self._applied_groups and self.ofm_layer is not None
                 or self.buildings_loader is not None):
             parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
-        if self.view.store.scale:
+        if self.view.store.scale or "slope" in self.gibs_loaders:
             parts.append(TERRAIN_ATTRIBUTION if self.planet.earth
                          else html.escape(self.planet.terrain[3])
                          if self.planet.terrain
@@ -1245,6 +1337,15 @@ class GlobeWindow(QWidget):
         if self.attribution.x() < MARGIN + self.legend.width():
             bottom = self.attribution.y() - MARGIN // 2
         self.legend.move(MARGIN, bottom - self.legend.height())
+        # Шкала уклона - над шкалой температуры, если та видна.
+        if self.legend.isVisible():
+            bottom = self.legend.y() - MARGIN // 2
+        self.slope_legend.move(MARGIN, bottom - self.slope_legend.height())
+        # Шкала инсоляции - над ними.
+        if self.slope_legend.isVisible():
+            bottom = self.slope_legend.y() - MARGIN // 2
+        self.insolation_legend.move(
+            MARGIN, bottom - self.insolation_legend.height())
 
     def eventFilter(self, watched, event):
         if watched is self.view and event.type() == enum(
@@ -1868,6 +1969,241 @@ class GlobeWindow(QWidget):
             return True
         return key[0] > self.view.store.max_level
 
+    # Видимость из точки.
+
+    def _open_viewshed(self, item):
+        """Окно «Видимость из точки» для точечной метки item."""
+        dialog = self.viewshed_dialog
+        if dialog is None:
+            dialog = ViewshedDialog(self)
+            dialog.build.connect(self._build_viewshed)
+            dialog.clear.connect(self._clear_viewshed)
+            self.viewshed_dialog = dialog
+        lat, lon = item.shape.points[0]
+        dialog.point = (lat, lon)
+        dialog.place.setText("{}  {:.5f}, {:.5f}".format(
+            item.name or tr("Без названия"), lat, lon))
+        dialog.status.setText("")
+        dialog.show()
+        dialog.raise_()
+
+    def _build_viewshed(self, observer, target, radius_m):
+        """Расчёт видимости: сначала тайлы высот под кругом, потом
+        расчёт в _viewshed_poll."""
+        dialog = self.viewshed_dialog
+        if self._surface_source() is None or self.view.sky_view is not None:
+            dialog.status.setText(tr("Для этого тела высот нет."))
+            return
+        lat, lon = dialog.point
+        cell = radius_m / viewshed.STEPS
+        _, keys = viewshed.height_tiles(lat, lon, radius_m, cell,
+                                        ellipsoid.A,
+                                        self.view.store.max_level)
+        self.viewshed_job = {"lat": lat, "lon": lon, "radius": radius_m,
+                             "cell": cell, "observer": observer,
+                             "target": target, "keys": keys,
+                             "started": time.monotonic()}
+        self.viewshed_timer.start()
+        self._viewshed_poll()
+
+    def _viewshed_poll(self):
+        job = self.viewshed_job
+        if job is None:
+            self.viewshed_timer.stop()
+            return
+        missing = [k for k in job["keys"] if not self._has_height_tile(k)]
+        waited = time.monotonic() - job["started"]
+        if missing and waited < VIEWSHED_WAIT:
+            self.view.want_tool_heights(missing)
+            self.viewshed_dialog.status.setText(tr(
+                "Загрузка высот: {done} из {total}",
+                done=len(job["keys"]) - len(missing),
+                total=len(job["keys"])))
+            return
+        self.viewshed_timer.stop()
+        self.viewshed_job = None
+        result = viewshed.compute(job["lat"], job["lon"], job["radius"],
+                                  job["cell"], self._true_heights,
+                                  observer=job["observer"],
+                                  target=job["target"])
+        self._show_viewshed(result)
+        text = tr("Видно {share} площади круга. Шаг расчёта {step} м.",
+                  share="{:.0f}%".format(100.0 * result.share),
+                  step="{:.0f}".format(result.step))
+        if missing:
+            text += " " + tr("Загружены не все высоты, расчёт шёл "
+                             "по менее подробным.")
+        self.viewshed_dialog.status.setText(text)
+
+    def _show_viewshed(self, result):
+        """Слой видимости по результату result, None убирает слой."""
+        old = self.viewshed_tiles
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        self.viewshed_tiles = None
+        self.viewshed_result = result
+        if result is None:
+            self.view.set_gibs("viewshed", False)
+            return
+        tiles = ResultTiles(result, ellipsoid.A, parent=self)
+        tiles.loaded.connect(lambda key, rgba, levels:
+                             self.view.add_gibs("viewshed", key, levels))
+        self.viewshed_tiles = tiles
+        self.view.gibs["viewshed"].max_level = display_level(
+            result.step, result.lat, ellipsoid.A)
+        self.view.set_gibs("viewshed", True, tiles)
+
+    def _clear_viewshed(self):
+        self.viewshed_job = None
+        self.viewshed_timer.stop()
+        self._show_viewshed(None)
+        if self.viewshed_dialog is not None:
+            self.viewshed_dialog.status.setText("")
+
+    # Инсоляция.
+
+    def _open_insolation(self, item):
+        """Окно «Инсоляция» для точечной метки item."""
+        dialog = self.insolation_dialog
+        if dialog is None:
+            dialog = InsolationDialog(self)
+            dialog.build.connect(self._build_insolation)
+            dialog.clear.connect(self._clear_insolation)
+            self.insolation_dialog = dialog
+        lat, lon = item.shape.points[0]
+        dialog.point = (lat, lon)
+        dialog.place.setText("{}  {:.5f}, {:.5f}".format(
+            item.name or tr("Без названия"), lat, lon))
+        dialog.status.setText("")
+        dialog.show()
+        dialog.raise_()
+
+    def _build_insolation(self, start, end, radius_m):
+        """Расчёт инсоляции: тайлы высот под сеткой, потом высоты узлов
+        и расчёт частями по проходам цикла событий (_insolation_poll)."""
+        dialog = self.insolation_dialog
+        if not self.planet.earth or self.view.sky_view is not None:
+            dialog.status.setText(tr("Инсоляция считается только для "
+                                     "Земли."))
+            return
+        lat, lon = dialog.point
+        cell, margin, _ = insolation.layout(radius_m)
+        _, keys = viewshed.height_tiles(lat, lon, margin * cell + radius_m,
+                                        cell, ellipsoid.A,
+                                        self.view.store.max_level)
+        self.insolation_job = {"lat": lat, "lon": lon, "radius": radius_m,
+                               "start": start, "end": end, "keys": keys,
+                               "started": time.monotonic(),
+                               "work": None, "missing": False}
+        self.insolation_timer.setInterval(VIEWSHED_POLL)
+        self.insolation_timer.start()
+        self._insolation_poll()
+
+    def _insolation_poll(self):
+        job = self.insolation_job
+        dialog = self.insolation_dialog
+        if job is None:
+            self.insolation_timer.stop()
+            return
+        work = job["work"]
+        if work is None:
+            missing = [k for k in job["keys"]
+                       if not self._has_height_tile(k)]
+            waited = time.monotonic() - job["started"]
+            if missing and waited < VIEWSHED_WAIT:
+                self.view.want_tool_heights(missing)
+                dialog.status.setText(tr(
+                    "Загрузка высот: {done} из {total}",
+                    done=len(job["keys"]) - len(missing),
+                    total=len(job["keys"])))
+                return
+            # Высоты снимаются в главном потоке, хранилище высот вида
+            # меняется только в нём. Узлов 640 тысяч, они снимаются
+            # частями по HEIGHT_CHUNK за проход цикла событий, чтобы
+            # вид отвечал мыши.
+            if "points" not in job:
+                job["missing"] = bool(missing)
+                lats, lons = insolation.grid_points(job["lat"], job["lon"],
+                                                    job["radius"])
+                job["points"] = (lats.ravel(), lons.ravel())
+                job["heights"] = []
+                self.insolation_timer.setInterval(0)
+            lats, lons = job["points"]
+            done = sum(len(part) for part in job["heights"])
+            if done < len(lats):
+                end = done + HEIGHT_CHUNK
+                job["heights"].append(self._true_heights(lats[done:end],
+                                                         lons[done:end]))
+                dialog.status.setText(tr(
+                    "Высоты узлов сетки: {share}",
+                    share="{:.0f}%".format(100.0 * done / len(lats))))
+                return
+            heights = np.concatenate(job["heights"])
+            job["work"] = insolation.parts(
+                job["lat"], job["lon"], job["radius"], heights,
+                job["start"], job["end"], ellipsoid.A)
+            return
+        # Расчёт идёт частями в главном потоке, не дольше CALC_BUDGET
+        # за проход цикла событий. В рабочем потоке он отнимал у вида
+        # GIL: при движении камеры 34 кадра из 125 шли дольше 50 мс.
+        started = time.perf_counter()
+        result = None
+        try:
+            while time.perf_counter() - started < CALC_BUDGET:
+                share = next(work)
+        except StopIteration as stop:
+            result = stop.value
+        if result is None:
+            dialog.status.setText(tr("Расчёт инсоляции: {share}",
+                                     share="{:.0f}%".format(100.0 * share)))
+            return
+        self.insolation_timer.stop()
+        self.insolation_timer.setInterval(VIEWSHED_POLL)
+        self.insolation_job = None
+        self._show_insolation(result)
+        text = tr("За {days} сут. прямое солнце светит от {low} "
+                  "до {high} ч в сутки. Шаг сетки - {step} м.",
+                  days=result.days,
+                  low="{:.1f}".format(float(result.hours.min())),
+                  high="{:.1f}".format(float(result.hours.max())),
+                  step="{:.0f}".format(result.cell))
+        if job["missing"]:
+            text += " " + tr("Загружены не все высоты, расчёт шёл "
+                             "по менее подробным.")
+        dialog.status.setText(text)
+
+    def _show_insolation(self, result):
+        """Слой инсоляции по результату result, None убирает слой."""
+        old = self.insolation_tiles
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        self.insolation_tiles = None
+        self.insolation_result = result
+        if result is None:
+            self.view.set_gibs("insolation", False)
+            self.insolation_legend.hide()
+            return
+        tiles = ResultTiles(result, ellipsoid.A, insolation.tile_rgba,
+                            parent=self)
+        tiles.loaded.connect(lambda key, rgba, levels:
+                             self.view.add_gibs("insolation", key, levels))
+        self.insolation_tiles = tiles
+        self.view.gibs["insolation"].max_level = display_level(
+            result.cell, result.lat, ellipsoid.A)
+        self.view.set_gibs("insolation", True, tiles)
+        self.insolation_legend.set_top(result.top)
+        self.insolation_legend.show()
+        self._place_attribution()
+
+    def _clear_insolation(self):
+        self.insolation_job = None
+        self.insolation_timer.stop()
+        self._show_insolation(None)
+        if self.insolation_dialog is not None:
+            self.insolation_dialog.status.setText("")
+
     def _ruler_changed(self):
         self._update_tool_marks()
         dialog = self.profile_dialog
@@ -2076,6 +2412,10 @@ class GlobeWindow(QWidget):
             self._open_profile(item.name, lambda: points, HeightSource(
                 self._true_heights, self._has_height_tile,
                 self.view.want_tool_heights))
+        elif action == "viewshed":
+            self._open_viewshed(item)
+        elif action == "insolation":
+            self._open_insolation(item)
         elif action == "snapshot":
             # «Снимок вида» Google Earth: вид глобуса сейчас становится
             # видом метки, по нему идут перелёт к метке и тур.
@@ -2671,6 +3011,17 @@ class GlobeWindow(QWidget):
                 self.ruler_dialog.close()
             if self.place_dialog is not None:
                 self.place_dialog.close()
+            if self.viewshed_dialog is not None:
+                self.viewshed_dialog.close()
+            self.viewshed_timer.stop()
+            if self.viewshed_tiles is not None:
+                self.viewshed_tiles.abort()
+            if self.insolation_dialog is not None:
+                self.insolation_dialog.close()
+            self.insolation_timer.stop()
+            self.insolation_job = None
+            if self.insolation_tiles is not None:
+                self.insolation_tiles.abort()
             self.loader.abort()
             if self.place_loader is not None:
                 self.place_loader.abort()

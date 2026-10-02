@@ -500,6 +500,19 @@ class Labels:
         for place in places:
             key = identity(place)
             row = self._row.get(key)
+            if row is not None and (place.id or 0) < 0 \
+                    and self._places[row] is not place \
+                    and (self._places[row].lat, self._places[row].lon) \
+                    != (place.lat, place.lon):
+                # Своя метка - точка профиля, длина отрезка линейки,
+                # подпись сетки - сменила место при том же номере и
+                # тексте. Строка переносится на новое место, иначе
+                # надпись стояла бы там, где этот текст был раньше:
+                # точка профиля прыгала на прежнее место той же высоты.
+                self._places[row] = place
+                self._n[row] = surface_normal(place.lat, place.lon)
+                self._ver[row] = NO_HEIGHT
+                self.hidden.pop(key, None)
             if row is None:
                 if budget <= 0:
                     # Пункт размечается в следующих кадрах, пока его

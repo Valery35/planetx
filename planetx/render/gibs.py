@@ -12,7 +12,7 @@
 """
 import time
 
-from ..core import clouds, temperature
+from ..core import clouds, temperature, terrain
 from ..core.clouds import source_key
 from ..core.overlay import window
 from . import gpu
@@ -25,8 +25,17 @@ ASK_PERIOD = 0.3
 # Слои снизу вверх: имя, предельный уровень, текстурный блок, имена
 # переменных шейдера. Наложение слоёв проекта - блок 1, между морем
 # и облаками, см. shaders.TILE_FRAGMENT.
+# Уклон и экспозиция (core/slope.py) - блок 5, по тайлам высот, его
+# предельный уровень - уровень высот тела, окно ставит его при смене тела.
 LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           ("land", temperature.MAX_LEVEL, 4, "u_land", "u_land_uv"),
+          ("slope", terrain.MAX_LEVEL, 5, "u_slope", "u_slope_uv"),
+          # Видимость из точки (core/viewshed.py) - блок 6, уровень
+          # ставит окно по шагу расчёта.
+          ("viewshed", terrain.MAX_LEVEL, 6, "u_viewshed", "u_viewshed_uv"),
+          # Инсоляция (core/insolation.py) - блок 7, так же.
+          ("insolation", terrain.MAX_LEVEL, 7, "u_insolation",
+           "u_insolation_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
 
 

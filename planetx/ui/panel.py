@@ -54,7 +54,8 @@ GRID, STARS, CLOUDS = "grid", "stars", "clouds"
 TEMPERATURE = "temperature"
 BUILDINGS = "buildings"
 SUN = "sun"
-EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN)
+SLOPE, ASPECT = "slope", "aspect"
+EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
@@ -547,7 +548,14 @@ class LayerPanel(QWidget):
                     "Ночная сторона Земли тёмная. Время солнца - конец "
                     "промежутка открытой шкалы времени, без неё - часы "
                     "компьютера. Без флажка свет падает с северо-запада, "
-                    "как на карте рельефа."))):
+                    "как на карте рельефа.")),
+                (SLOPE, tr("Уклон"), tr(
+                    "Уклон поверхности по высотам рельефа, классами от "
+                    "ровного до круче 35°. Шкала стоит в левом нижнем "
+                    "углу вида. Есть у Земли, Марса и Луны.")),
+                (ASPECT, tr("Экспозиция"), tr(
+                    "Куда обращён склон - цвет стороны света, ровное "
+                    "место серое. Включается вместо уклона."))):
             item = QTreeWidgetItem(self.geo, [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)
@@ -655,6 +663,9 @@ class LayerPanel(QWidget):
                 parent.setDisabled(off)
         for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN):
             self.extra_items[key].setDisabled(not earth)
+        # Уклон и экспозиция - там, где есть высоты.
+        for key in (SLOPE, ASPECT):
+            self.extra_items[key].setDisabled(not (earth or relief))
         self.layers.setEnabled(earth)
 
     def _geo_changed(self, item):
@@ -988,6 +999,9 @@ class LayerPanel(QWidget):
             elif key.startswith("line:"):
                 actions.append(("tour", tr("Тур по пути")))
                 actions.append(("profile", tr("Профиль высот")))
+            elif key.startswith("point:"):
+                actions.append(("viewshed", tr("Видимость отсюда…")))
+                actions.append(("insolation", tr("Инсоляция…")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),

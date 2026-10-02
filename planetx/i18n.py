@@ -943,6 +943,89 @@ EN = {
     "Вырезать": "Cut",
     "Снимок вида папки": "Snapshot folder view",
     "Сортировать от А до Я": "Sort A-Z",
+    "Экспозиция, ровное - серое": "Aspect, flat is grey",
+    "Уклон, °": "Slope, °",
+    "С": "N",
+    "СВ": "NE",
+    "В": "E",
+    "ЮВ": "SE",
+    "Ю": "S",
+    "ЮЗ": "SW",
+    "З": "W",
+    "СЗ": "NW",
+    "Уклон": "Slope",
+    "Уклон поверхности по высотам рельефа, классами от "
+    "ровного до круче 35°. Шкала стоит в левом нижнем "
+    "углу вида. Есть у Земли, Марса и Луны.":
+        "Surface slope from the terrain heights, in classes from flat to "
+        "steeper than 35°. The scale is in the bottom left corner of the "
+        "view. Available on the Earth, Mars and the Moon.",
+    "Экспозиция": "Aspect",
+    "Куда обращён склон - цвет стороны света, ровное "
+    "место серое. Включается вместо уклона.":
+        "Which way a slope faces - the colour of the compass direction, "
+        "flat ground is grey. It replaces the slope when switched on.",
+    "Видимость отсюда…": "Viewshed from here…",
+    "Видимость из точки": "Viewshed from a point",
+    "Высота глаза или мачты над рельефом в точке. Выше - дальше "
+    "видно и меньше мест скрыто за рельефом.":
+        "Height of the eye or mast above the terrain at the point. A "
+        "higher value sees farther and fewer places stay hidden behind "
+        "the terrain.",
+    "Высота того, что надо увидеть, над рельефом, например "
+    "мачты или здания. При нуле проверяется сама земля.":
+        "Height above the terrain of what has to be seen, for example a "
+        "mast or a building. At zero the ground itself is checked.",
+    " км": " km",
+    "Радиус круга расчёта. Больше - шаг расчёта крупнее, он "
+    "около пятисотой доли радиуса.":
+        "Radius of the computed circle. A larger radius gives a coarser "
+        "step, the step is about one five-hundredth of the radius.",
+    "Точка": "Point",
+    "Высота наблюдателя": "Observer height",
+    "Высота цели": "Target height",
+    "Построить": "Build",
+    "Убрать": "Remove",
+    "Убрать слой видимости с глобуса.":
+        "Remove the viewshed layer from the globe.",
+    "Видно {share} площади круга. Шаг расчёта {step} м.":
+        "{share} of the circle area is visible. The computation step is "
+        "{step} m.",
+    "Для этого тела высот нет.": "This body has no heights.",
+    "Загрузка высот: {done} из {total}": "Loading heights: {done} of {total}",
+    "Загружены не все высоты, расчёт шёл "
+    "по менее подробным.":
+        "Not all heights are loaded, the computation used less detailed "
+        "ones.",
+    "Инсоляция": "Insolation",
+    "Инсоляция…": "Insolation…",
+    "Первые сутки промежутка. Итог - среднее количество часов "
+    "прямого солнца в сутки за промежуток.":
+        "The first day of the period. The result is the mean number of "
+        "hours of direct sunlight per day over the period.",
+    "Последние сутки промежутка, включительно. Длинный промежуток "
+    "считается по 15 суткам, взятым равномерно.":
+        "The last day of the period, inclusive. A long period is computed "
+        "over 15 evenly spaced days.",
+    "Радиус круга расчёта. Больше - шаг сетки крупнее. Тени "
+    "гор берутся с расстояния не меньше радиуса и не меньше "
+    "5 км.":
+        "Radius of the computed circle. A larger radius gives a coarser "
+        "grid. Mountain shadows are taken from a distance of at least the "
+        "radius and at least 5 km.",
+    "Первые сутки": "First day",
+    "Последние сутки": "Last day",
+    "Убрать слой инсоляции с глобуса.":
+        "Remove the insolation layer from the globe.",
+    "Прямое солнце, ч в сутки": "Direct sun, h per day",
+    "За {days} сут. прямое солнце светит от {low} "
+    "до {high} ч в сутки. Шаг сетки - {step} м.":
+        "Over {days} days direct sun shines from {low} to {high} h per "
+        "day. The grid step is {step} m.",
+    "Инсоляция считается только для Земли.":
+        "Insolation is computed only for the Earth.",
+    "Расчёт инсоляции: {share}": "Computing insolation: {share}",
+    "Высоты узлов сетки: {share}": "Heights of the grid nodes: {share}",
     "К началу шкалы": "To the start of the slider",
     "К концу шкалы": "To the end of the slider",
     "Проигрывание по кругу. Дойдя до конца шкалы, промежуток "
