@@ -61,6 +61,7 @@ class PropertiesDialog(QDialog):
     follow_changed = pyqtSignal(bool)
     new_shown_changed = pyqtSignal(bool)
     coords_chosen = pyqtSignal(str)
+    sea_changed = pyqtSignal(bool)
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -92,8 +93,18 @@ class PropertiesDialog(QDialog):
             "Камера остаётся над поднятой поверхностью. После смены "
             "глобус пересобирает поверхность за несколько секунд."))
         self.scale.valueChanged.connect(self.scale_changed)
+        self.sea = QCheckBox(tr("Глубины морей и океанов"), self)
+        self.sea.setToolTip(tr(
+            "С флажком дно морей и океанов лежит на своих глубинах, над "
+            "ним полупрозрачная вода, строка состояния показывает "
+            "глубину под курсором, профиль высот - глубины и уровень "
+            "моря. Без флажка высоты ниже уровня моря считаются нулём, "
+            "море ровное. Есть только у Земли."))
+        self.sea.toggled.connect(self.sea_changed)
         relief = QGroupBox(tr("Рельеф"), self)
-        QFormLayout(relief).addRow(tr("Вертикальный масштаб"), self.scale)
+        relief_form = QFormLayout(relief)
+        relief_form.addRow(tr("Вертикальный масштаб"), self.scale)
+        relief_form.addRow(self.sea)
 
         self.language = QComboBox(self)
         self.languages = language_choices()
@@ -187,7 +198,8 @@ class PropertiesDialog(QDialog):
     def set_state(self, state):
         """Показать состояние окна. Сигналы при этом не идут."""
         widgets = [self.basemap, self.scale, self.language, self.sync,
-                   self.follow, self.new_shown, self.auto, self.coords]
+                   self.follow, self.new_shown, self.auto, self.coords,
+                   self.sea]
         for widget in widgets:
             widget.blockSignals(True)
         self.basemap.setCurrentIndex(state["basemap"])
@@ -203,6 +215,7 @@ class PropertiesDialog(QDialog):
         self.auto.setChecked(state["auto"])
         self.follow.setChecked(state["follow"])
         self.new_shown.setChecked(state["new_shown"])
+        self.sea.setChecked(state.get("sea", True))
         fmt = state.get("coords", FORMATS[0])
         self.coords.setCurrentIndex(FORMATS.index(fmt)
                                     if fmt in FORMATS else 0)

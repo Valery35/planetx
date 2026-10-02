@@ -36,6 +36,9 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # Инсоляция (core/insolation.py) - блок 7, так же.
           ("insolation", terrain.MAX_LEVEL, 7, "u_insolation",
            "u_insolation_uv"),
+          # Маска выреза блока подземного режима (ui/subsurface.py) -
+          # блок 8. В шейдере не смешивается, а отбрасывает поверхность.
+          ("cut", 16, 8, "u_cut", "u_cut_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
 
 

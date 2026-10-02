@@ -512,7 +512,13 @@ class Labels:
                 self._places[row] = place
                 self._n[row] = surface_normal(place.lat, place.lon)
                 self._ver[row] = NO_HEIGHT
-                self.hidden.pop(key, None)
+                # Прежний ответ о видимости остаётся, но устаревшим: до
+                # новой проверки надпись показывается по нему. Сброс
+                # ответа гасил надпись до проверки, и точка профиля
+                # мигала на каждом шаге курсора.
+                old = self.hidden.get(key)
+                if old is not None:
+                    self.hidden[key] = (old[0], None)
             if row is None:
                 if budget <= 0:
                     # Пункт размечается в следующих кадрах, пока его
@@ -644,10 +650,15 @@ class Labels:
         # Иначе пункт за горой мелькал бы надписью до ответа. Пункт
         # с устаревшей проверкой показывается по ней до новой. Кадры
         # идут, пока все пункты окна не проверены при этой отметке.
+        # Своя метка (отрицательный номер) - точка профиля, длина отрезка
+        # линейки - показывается и до ответа. Её текст меняется с каждым
+        # шагом курсора, у нового текста своя строка, и без этого точка
+        # профиля мигала на каждом шаге. За горой её скроет ответ.
         entries = [self.hidden.get(key) for key in keys]
+        own = [(self._places[row].id or 0) < 0 for row in rows[index]]
         unknown = any(e is None or e[1] != stamp for e in entries)
         keep = [n for n, e in enumerate(entries)
-                if e is not None and not e[0]]
+                if (e is not None and not e[0]) or (e is None and own[n])]
         if not keep:
             self.shown = set()
             self.pending = unknown or self._more

@@ -236,3 +236,13 @@ def segment_midpoints(points, closed=False):
         lat, lon, _ = ecef_to_geodetic(middle)
         out.append((float(lat), float(lon)))
     return out
+
+
+def surface_level(height):
+    """Высота точки для строки состояния: ("depth", метры) ниже уровня
+    моря, как у дна океана, иначе ("height", метры). Глубина меньше
+    полуметра - высота 0, иначе ещё не загруженная высота печаталась бы
+    как «-0 м». Без строки «Дно океана» высоты Земли не ниже нуля."""
+    if height < -0.5:
+        return "depth", round(-height)
+    return "height", round(max(height, 0.0))

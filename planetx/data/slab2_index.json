@@ -1,0 +1,191 @@
+{
+ "alu": {
+  "bytes": 39878,
+  "east": -137.9,
+  "north": 64.7,
+  "south": 50.4,
+  "west": 165.5
+ },
+ "cal": {
+  "bytes": 7762,
+  "east": 19.8,
+  "north": 41.3,
+  "south": 35.8,
+  "west": 12.5
+ },
+ "cam": {
+  "bytes": 23625,
+  "east": -82.9,
+  "north": 21.7,
+  "south": 7.4,
+  "west": -106.8
+ },
+ "car": {
+  "bytes": 14593,
+  "east": -57.5,
+  "north": 20.0,
+  "south": 10.1,
+  "west": -70.9
+ },
+ "cas": {
+  "bytes": 16927,
+  "east": -118.9,
+  "north": 50.0,
+  "south": 38.6,
+  "west": -128.3
+ },
+ "cot": {
+  "bytes": 2426,
+  "east": 125.7,
+  "north": 7.9,
+  "south": 5.4,
+  "west": 123.3
+ },
+ "hal": {
+  "bytes": 14479,
+  "east": 129.4,
+  "north": 10.8,
+  "south": -0.8,
+  "west": 120.0
+ },
+ "hel": {
+  "bytes": 20273,
+  "east": 35.6,
+  "north": 40.0,
+  "south": 32.4,
+  "west": 18.6
+ },
+ "him": {
+  "bytes": 7457,
+  "east": 91.9,
+  "north": 34.1,
+  "south": 26.7,
+  "west": 74.8
+ },
+ "hin": {
+  "bytes": 7683,
+  "east": 72.16,
+  "north": 37.36,
+  "south": 35.36,
+  "west": 68.72
+ },
+ "izu": {
+  "bytes": 25342,
+  "east": 147.8,
+  "north": 34.9,
+  "south": 11.0,
+  "west": 134.4
+ },
+ "ker": {
+  "bytes": 44075,
+  "east": -172.4,
+  "north": -14.2,
+  "south": -43.3,
+  "west": 169.7
+ },
+ "kur": {
+  "bytes": 65191,
+  "east": 164.0,
+  "north": 56.9,
+  "south": 35.0,
+  "west": 129.5
+ },
+ "mak": {
+  "bytes": 11685,
+  "east": 67.5,
+  "north": 29.9,
+  "south": 24.1,
+  "west": 55.6
+ },
+ "man": {
+  "bytes": 24242,
+  "east": 122.56,
+  "north": 22.96,
+  "south": 13.2,
+  "west": 119.12
+ },
+ "mue": {
+  "bytes": 8835,
+  "east": -64.24,
+  "north": 18.4,
+  "south": 17.28,
+  "west": -70.84
+ },
+ "pam": {
+  "bytes": 13404,
+  "east": 75.96,
+  "north": 39.48,
+  "south": 36.64,
+  "west": 70.8
+ },
+ "phi": {
+  "bytes": 9256,
+  "east": 129.2,
+  "north": 17.1,
+  "south": 1.4,
+  "west": 121.8
+ },
+ "png": {
+  "bytes": 11618,
+  "east": 142.9,
+  "north": 0.2,
+  "south": -5.3,
+  "west": 132.6
+ },
+ "puy": {
+  "bytes": 15612,
+  "east": 168.08,
+  "north": -44.68,
+  "south": -50.04,
+  "west": 163.28
+ },
+ "ryu": {
+  "bytes": 27367,
+  "east": 139.9,
+  "north": 37.4,
+  "south": 23.4,
+  "west": 121.3
+ },
+ "sam": {
+  "bytes": 125114,
+  "east": -60.1,
+  "north": 11.2,
+  "south": -45.6,
+  "west": -82.0
+ },
+ "sco": {
+  "bytes": 7852,
+  "east": -23.9,
+  "north": -55.1,
+  "south": -60.3,
+  "west": -30.3
+ },
+ "sol": {
+  "bytes": 15019,
+  "east": 163.1,
+  "north": -3.1,
+  "south": -11.3,
+  "west": 141.9
+ },
+ "sul": {
+  "bytes": 4268,
+  "east": 124.5,
+  "north": 2.3,
+  "south": -0.6,
+  "west": 119.3
+ },
+ "sum": {
+  "bytes": 80154,
+  "east": 133.1,
+  "north": 26.7,
+  "south": -11.4,
+  "west": 91.6
+ },
+ "van": {
+  "bytes": 12607,
+  "east": 173.9,
+  "north": -9.7,
+  "south": -23.1,
+  "west": 164.9
+ }
+}

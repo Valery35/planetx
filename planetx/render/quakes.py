@@ -1,0 +1,174 @@
+# -*- coding: utf-8 -*-
+# PlanetX - трёхмерный глобус для QGIS.
+# Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
+"""Землетрясения в видеокарте: очаги точками, линии к эпицентрам.
+
+Расчёт - core/quakes.py. Очаги лежат под рельефом, поэтому рисуются
+без проверки глубины, поверх поверхности, а очаги за горизонтом
+отбрасываются на процессоре (core.quakes.facing). Каждый кадр вершины
+считаются от глаза в double и уходят в видеокарту в float32, так
+мировые координаты в видеокарту не попадают (AGENTS, «Координаты»).
+Событий сводки - сотни, пересчёт стоит доли миллисекунды.
+"""
+import ctypes
+
+import numpy as np
+from OpenGL import GL
+
+from ..core import quakes as core
+from . import gpu
+
+GL_PROGRAM_POINT_SIZE = 0x8642
+STEM_ALPHA = 0.55  # непрозрачность линии от эпицентра к очагу
+
+VERTEX = """#version 330 core
+layout(location = 0) in vec3 a_offset;
+layout(location = 1) in float a_size;
+layout(location = 2) in vec4 a_color;
+uniform mat4 u_mvp;
+uniform float u_ratio;
+out vec4 v_color;
+void main() {
+    gl_Position = u_mvp * vec4(a_offset, 1.0);
+    gl_PointSize = a_size * u_ratio;
+    v_color = a_color;
+}
+"""
+
+FRAGMENT = """#version 330 core
+in vec4 v_color;
+uniform float u_points;
+out vec4 frag;
+void main() {
+    float alpha = v_color.a;
+    if (u_points > 0.5) {
+        // Кружок с тёмным ободком: точка видна и на светлом снимке.
+        float d = 2.0 * length(gl_PointCoord - vec2(0.5));
+        if (d > 1.0) {
+            discard;
+        }
+        vec3 rgb = d > 0.75 ? v_color.rgb * 0.35 : v_color.rgb;
+        frag = vec4(rgb, alpha);
+    } else {
+        frag = vec4(v_color.rgb, alpha);
+    }
+}
+"""
+
+
+class Quakes:
+    """Очаги землетрясений окна глобуса."""
+
+    def __init__(self):
+        self.program = None
+        self.vao = None
+        self.vbo = None
+        self.locations = {}
+        self.events = []
+        self.focus = np.zeros((0, 3))
+        self.epicenter = np.zeros((0, 3))
+        self.colors = np.zeros((0, 4), dtype=np.float32)
+        self.sizes = np.zeros(0, dtype=np.float32)
+        self.lats = np.zeros(0)
+        self.lons = np.zeros(0)
+        self.times = np.zeros(0)
+        # Промежуток шкалы времени (от, до) или None - видно всё.
+        self.window = None
+        self.drawn = 0
+
+    def init_gl(self):
+        self.program = gpu.build_program(VERTEX, FRAGMENT)
+        self.locations = {name: GL.glGetUniformLocation(self.program, name)
+                          for name in ("u_mvp", "u_ratio", "u_points")}
+        self.vao = GL.glGenVertexArrays(1)
+        self.vbo = GL.glGenBuffers(1)
+        GL.glBindVertexArray(self.vao)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        stride = 8 * 4
+        for index, size, offset in ((0, 3, 0), (1, 1, 3), (2, 4, 4)):
+            GL.glEnableVertexAttribArray(index)
+            GL.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
+                                     stride, ctypes.c_void_p(offset * 4))
+        GL.glBindVertexArray(0)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+
+    def release_gl(self):
+        if self.program is None:
+            return
+        GL.glDeleteProgram(self.program)
+        GL.glDeleteVertexArrays(1, [self.vao])
+        GL.glDeleteBuffers(1, [self.vbo])
+        self.program = None
+
+    def set_events(self, events, scale, ground, depth_map=None):
+        """События core.quakes.Quake. scale - масштаб рельефа, ground -
+        настоящие отметки рельефа для эпицентров, depth_map - глубины
+        на экране при выделении коры разреза или None."""
+        self.events = list(events)
+        if not self.events:
+            self.focus = np.zeros((0, 3))
+            self.epicenter = np.zeros((0, 3))
+            return
+        self.focus, self.epicenter = core.points(self.events, scale, ground,
+                                                 depth_map)
+        rgb = core.depth_colors([q.depth for q in self.events])
+        self.colors = np.hstack([rgb / 255.0, np.ones((len(rgb), 1))]) \
+            .astype(np.float32)
+        self.sizes = core.sizes([q.mag for q in self.events]) \
+            .astype(np.float32)
+        self.lats = np.array([q.lat for q in self.events])
+        self.lons = np.array([q.lon for q in self.events])
+        self.times = core.times(self.events)
+
+    def draw(self, camera, ratio):
+        """Нарисовать видимые очаги и линии к ним. Вызывается в кадре
+        после поверхности и своих объектов, до надписей."""
+        self.drawn = 0
+        if self.program is None or not len(self.focus):
+            return
+        eye = np.asarray(camera.eye, dtype=np.float64)
+        seen = core.facing(eye, self.epicenter, self.lats, self.lons) \
+            & core.in_window(self.times, self.window)
+        if not np.any(seen):
+            return
+        focus = self.focus[seen] - eye
+        epi = self.epicenter[seen] - eye
+        colors = self.colors[seen]
+        n = len(focus)
+        stems = np.zeros((2 * n, 8), dtype=np.float32)
+        stems[0::2, 0:3] = epi
+        stems[1::2, 0:3] = focus
+        stems[:, 4:8] = np.repeat(colors, 2, axis=0)
+        stems[:, 7] = STEM_ALPHA
+        dots = np.zeros((n, 8), dtype=np.float32)
+        dots[:, 0:3] = focus
+        dots[:, 3] = self.sizes[seen]
+        dots[:, 4:8] = colors
+        data = np.ascontiguousarray(np.vstack([stems, dots]))
+        mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
+                                   dtype=np.float32)
+        loc = self.locations
+        GL.glUseProgram(self.program)
+        GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
+        GL.glUniform1f(loc["u_ratio"], float(ratio))
+        GL.glBindVertexArray(self.vao)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
+                        GL.GL_STREAM_DRAW)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL_PROGRAM_POINT_SIZE)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                               GL.GL_ZERO, GL.GL_ONE)
+        try:
+            GL.glUniform1f(loc["u_points"], 0.0)
+            GL.glDrawArrays(GL.GL_LINES, 0, 2 * n)
+            GL.glUniform1f(loc["u_points"], 1.0)
+            GL.glDrawArrays(GL.GL_POINTS, 2 * n, n)
+            self.drawn = n
+        finally:
+            GL.glBindVertexArray(0)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            GL.glDisable(GL.GL_BLEND)
+            GL.glDisable(GL_PROGRAM_POINT_SIZE)
+            GL.glEnable(GL.GL_DEPTH_TEST)

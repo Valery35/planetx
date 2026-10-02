@@ -55,7 +55,10 @@ TEMPERATURE = "temperature"
 BUILDINGS = "buildings"
 SUN = "sun"
 SLOPE, ASPECT = "slope", "aspect"
-EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT)
+QUAKES = "quakes"
+CUTAWAY = "cutaway"
+EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT,
+          QUAKES, CUTAWAY)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
@@ -549,6 +552,19 @@ class LayerPanel(QWidget):
                     "промежутка открытой шкалы времени, без неё - часы "
                     "компьютера. Без флажка свет падает с северо-запада, "
                     "как на карте рельефа.")),
+                (QUAKES, tr("Землетрясения"), tr(
+                    "Землетрясения магнитудой от 4.5 за последние 30 "
+                    "суток по сводке USGS. Кружок стоит в очаге на его "
+                    "глубине, линия ведёт к эпицентру на поверхности. "
+                    "Цвет показывает глубину очага, размер - магнитуду. "
+                    "Сводка загружается при включении строки.")),
+                (CUTAWAY, tr("Разрез Земли"), tr(
+                    "Вынимает из Земли сектор под точкой взгляда - "
+                    "четверть полушария шириной 90° по долготе. На его "
+                    "гранях видны кора, мантия и ядро по радиусам "
+                    "модели PREM. Где грань проходит через зону "
+                    "субдукции, на ней видна погружающаяся плита. "
+                    "Сектор ставится заново при каждом включении строки.")),
                 (SLOPE, tr("Уклон"), tr(
                     "Уклон поверхности по высотам рельефа, классами от "
                     "ровного до круче 35°. Шкала стоит в левом нижнем "
@@ -661,7 +677,7 @@ class LayerPanel(QWidget):
             parent = item.parent()
             if parent is not None:
                 parent.setDisabled(off)
-        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN):
+        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, CUTAWAY):
             self.extra_items[key].setDisabled(not earth)
         # Уклон и экспозиция - там, где есть высоты.
         for key in (SLOPE, ASPECT):

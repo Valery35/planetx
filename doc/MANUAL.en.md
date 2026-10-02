@@ -204,6 +204,8 @@ take effect at once, without the Refresh button.
 | Temperature | Surface temperature of land by day over 8 days (MODIS) and of the sea over a day (GHRSST MUR) with a scale in degrees |
 | 3D buildings | OpenStreetMap buildings as blocks from OpenFreeMap tiles, off by default |
 | Sun | Light of the terrain, buildings and air by the position of the sun, the night side of the Earth is dark, off by default |
+| Earthquakes | Earthquake foci of magnitude 4.5 and above over 30 days from the USGS feed, off by default |
+| Earth cutaway | A sector removed from the Earth with the shells on its faces, off by default |
 | Slope | Surface slope from the heights in classes from flat to steeper than 35°, off by default |
 | Aspect | The direction a slope faces, in the colours of the compass directions, switched on instead of the slope |
 
@@ -248,6 +250,62 @@ of the view. The layer exists on the Earth, Mars and the Moon, other
 bodies have no heights. The accuracy is limited by the height pixel.
 It is about 5 m at the equator on the most detailed level on the Earth,
 2.6 km on Mars, 1.3 km on the Moon.
+
+Sea and ocean depths are part of the terrain. The floor lies at its
+depths, and semi-transparent water lies above it at sea level. Water
+shallower than 200 m is more transparent, the floor shows near the
+shore. Below sea level the status bar shows the depth under the
+cursor. The depths come from the same Terrarium tiles as the land
+heights, in the ocean these are ETOPO1 data. Sea names stay at sea
+level. The elevation profile, the ruler and the slope use the floor,
+the viewshed and insolation use the water surface. A profile below
+sea level shows the water and a dashed sea level line. Dry
+depressions below zero, for example the Dead Sea, are not told apart
+from the sea by the heights and are filled on the profile too. The
+Sea and ocean depths box in the Terrain group of the view properties
+switches them off, then heights below sea level count as zero and the
+sea is flat. Depths exist only on the Earth.
+
+The Earthquakes row shows earthquakes of magnitude 4.5 and above
+over the last 30 days from the feed of the U.S. Geological Survey
+(USGS). The feed is loaded each time the row is switched on. A circle
+marks the focus at its depth, and a thin line leads from it to the
+epicentre on the surface. The colour of the circle shows the focus
+depth, from red near the surface to purple at 700 km, the scale is in
+the bottom left corner of the view. The circle grows with the
+magnitude. Foci show through the surface, foci on the far side of the
+Earth are hidden. The depth is stretched by the vertical exaggeration
+of the terrain, like the heights. Each event has a time. With the row
+on, the time slider becomes available, and it shows the events of the
+chosen interval. The row exists only on the Earth.
+
+The Earth cutaway row removes a sector of the Earth under the look-at
+point. The sector is a quarter of a hemisphere 90° wide in longitude,
+from the equator to the pole of the hemisphere of the look-at point.
+Its three faces are coloured by shells after the radii of the PREM
+model. These are the crust to 24.4 km, the upper mantle to 400 km,
+the transition zone to 670 km, the lower mantle to 2891 km, the outer
+core to 5149.5 km and the inner core. The shell scale is in the bottom
+left corner of the view. The edge of the faces lies on the ellipsoid,
+the depths are not stretched by the vertical exaggeration. The crust
+on the faces comes from the CRUST1.0 model in 1° cells. These are
+water, ice, upper, middle and lower sediments, upper, middle and lower
+crust, below the Moho the mantle begins. The crust is 6-7 km thick
+under the ocean and about 70 km under Tibet. Where a face crosses a subduction zone, the subducting
+slab from the Slab2 model of the U.S. Geological Survey shows on it as
+a band from the upper surface of the slab down by its thickness. Slabs
+exist in 27 zones. The file of a zone is requested when a face touches
+it, the loading icon shows this. The model is downloaded
+from the site of its authors when the row is first switched on, until
+then the crust is the 24.4 km PREM layer. The crust layers can be told
+apart up close, where the depths on the faces are true. As the camera
+moves away, depths to 400 km are stretched so that the crust stays
+visible. At the surface the stretch reaches 8 times, towards 400 km
+it fades out, below the scale is true. The shell scale shows the
+factor, earthquake foci are stretched the same way.
+Labels of
+places in the removed sector are not shown. The sector is placed anew
+each time the row is switched on. The row exists only on the Earth.
 
 ### Base map and a tile source of your own
 
@@ -312,11 +370,12 @@ window. The window does not block work with the globe.
 |---|---|---|
 | Base map | List | Source of imagery or map |
 | Terrain | Vertical exaggeration | Height multiplier from 0.5 to 10 |
+| Terrain | Sea and ocean depths | The floor at its depths with water above it, on by default |
 | Labels | Language | Language of labels and search |
 | QGIS map | Synchronization | Direction of the link with the map |
 | QGIS map | Layers as on the QGIS map | The globe shows the layers switched on in the QGIS legend |
 | QGIS map | New layers straight to the globe | A new project layer is checked on the globe at once |
-| Update | Update automatically | The globe refreshes after every change without the Refresh button |
+| Update | Update automatically | The globe refreshes after every change without the Refresh button, on by default |
 | Coordinates | Format | Decimal degrees, degrees-minutes-seconds, UTM or MGRS in the status line and the Features window. North of 84° and south of 80° UTM and MGRS are replaced with decimal degrees |
 
 The default base map is Esri World Imagery, listed as an example. Esri
@@ -694,6 +753,71 @@ Insolation is computed only for the Earth.
 
 ---
 
+## Subsurface mode
+
+The Subsurface mode icon on the icon bar opens a window of the same
+name. The mode shows drill holes, bed roofs, section walls and a block
+cut under the surface.
+
+### Data
+
+The data are tables in the same layout as in Isoliner.
+
+| Table | Fields | What it sets |
+|---|---|---|
+| collar | hole_id, z, eoh, point geometry | Hole collar, collar elevation, end-of-hole depth along the hole |
+| interval | hole_id, from, to, code | Intervals along the hole, positive downward, code is the bed or lithology |
+| survey | hole_id, depth, azimuth, dip or zenith | Survey. Without it the hole is vertical |
+| beds | code, ord, color, surface | Order of beds from top to bottom, colour "#rrggbb", roof raster file |
+| sections | line geometry | Section lines |
+| cut | polygon geometry | Block cut |
+
+Fields are also found by other common names, for example bhid, elev,
+td, from_m, to_m, litho. A dip angle with negative values is counted
+from the horizontal, -90 is straight down. A bed roof is a raster of
+elevations in metres in any coordinate system, GDAL reads it.
+
+The source is chosen in the window. GeoPackage file takes the tables
+with these names from one file. It finds the roof rasters by the
+surface field of the beds table, the path is relative to the folder of
+the file. Project layers takes the tables from layers of the current
+project and the roofs from the rasters checked in the list. The bed
+code of a roof is the layer name.
+
+### Display
+
+The Build button reads the data, loads the terrain heights under the
+model and builds it.
+
+- A drill hole follows the survey by the minimum curvature method.
+  Intervals take the colour of their bed, the hole number stands
+  above the collar.
+- A bed roof is a surface in the colour of the bed.
+- A section is a set of walls along the line from the terrain to the
+  model bottom, beds between the roofs have their own colours.
+- The model bottom is the end of the deepest hole, without holes it
+  is 20 m below the deepest roof.
+
+Depth is stretched by the terrain scale, like the surface. With the
+terrain off, elevations are counted from the surface.
+
+The Surface opacity slider makes the terrain inside the model frame
+transparent, the drill holes and roofs show through it. Outside the
+frame the surface stays opaque. The Block cut checkbox removes the
+surface and the roofs inside the cut polygon. Walls with beds stand
+along the cut edge, a plane at the model bottom lies at its floor. The
+Camera under ground checkbox lets the camera go below the terrain down
+to the model bottom. Inside the model frame the camera then moves along
+its bottom. The Remove button removes the subsurface objects from the
+globe. The window settings are kept in the project.
+
+The Permian deposits demo in the Demo icon opens a synthetic site
+near Berezniki, on the Verkhnekamsk deposit. It has 24 drill holes, 9 bed roofs of the Verkhnekamsk
+section, two sections and a cut of the north-east quarter. The data are
+made up for the example, they are not a survey.
+
+---
+
 ## Tours
 
 A tour flies over the checked places of a folder in the list order,
@@ -845,6 +969,7 @@ under the list plays a tour over them. The folder can be deleted.
 |---|---|---|
 | Earth | Perm | Places with icons and the moments of a walk, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
 | Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
+| Earth | Permian deposits | Synthetic drill holes, bed roofs, sections and a block cut, the Subsurface mode window |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |
 | Moon | Apollo and Lunokhod sites | The landing sites of six Apollo missions, Lunokhod 1 and Lunokhod 2 |

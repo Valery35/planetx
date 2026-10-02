@@ -49,7 +49,7 @@ from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
-from ..core import insolation, viewshed
+from ..core import crust, cutaway, insolation, quakes, slabs, viewshed
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
@@ -60,14 +60,16 @@ from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            PLACES,
                            RAIL_FROM, RAILWAYS, VECTOR_GROUPS, label_kinds,
                            railway_layer,
-                           OPENFREEMAP_TILEJSON, LayerOverlay, fetch_json,
+                           OPENFREEMAP_TILEJSON, LayerOverlay, fetch_bytes,
+                           fetch_json,
                            openfreemap_layer, set_line_groups)
 from ..qt_compat import enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
-from .legend import InsolationLegend, SlopeLegend, TemperatureLegend
+from .legend import (CutawayLegend, InsolationLegend, QuakeLegend,
+                     SlopeLegend, TemperatureLegend)
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
@@ -85,6 +87,7 @@ from .folderprops import FolderDialog
 from .tilesource import TileSourceDialog
 from .viewshed import ResultTiles, ViewshedDialog, display_level
 from .insolation import InsolationDialog
+from .subsurface import DEFAULTS as SUBSURFACE_DEFAULTS, SubsurfaceManager
 from .record import TourRecorder
 from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
@@ -128,11 +131,21 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # Солнце выключено, умолчание плана работ после 0.16.0.
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
-                  "slope": False, "aspect": False}
+                  "slope": False, "aspect": False,
+                  "quakes": False, "cutaway": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
-EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun")
+EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
+                "cutaway")
+# Глубины морей и океанов - часть данных рельефа, флажок в свойствах
+# вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
+SEA_KEY = "PlanetX/sea_depths"
+# Файлы модуля: указатель зон плит Slab2 (tools/build_slabs.py).
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+# Автообновление глобуса по умолчанию включено, решение автора от
+# 2 октября 2026 года. Флажок хранится в проекте.
+AUTO_DEFAULT = True
 SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 GRID_COLOR = (220, 220, 220, 255)
@@ -385,7 +398,30 @@ class GlobeWindow(QWidget):
         self.slope_legend.hide()
         self.insolation_legend = InsolationLegend(self.view)
         self.insolation_legend.hide()
+        self.quake_legend = QuakeLegend(self.view)
+        self.quake_legend.hide()
+        self.cutaway_legend = CutawayLegend(self.view)
+        self.cutaway_legend.hide()
+        # Землетрясения: события сводки и ответ на её запрос.
+        self.quake_events = []
+        self._quake_reply = None
+        # Плиты Slab2 на разрезах: указатель зон с рамками, пришедшие
+        # зоны, ждущие ответы. Зона просится, когда разрез её касается.
+        # slab_base - шаблон адреса зоны вместо slabs.URL, для проверки
+        # на локальной копии хранилища planetx-terrain.
+        self.slab_index = None
+        self.slab_zones = {}
+        self._slab_replies = {}
+        self.slab_errors = {}
+        self.slab_base = None
+        self._slab_codes = []
+        # Разрез Земли: модель коры CRUST1.0, её запрос и ошибка.
+        self.crust = None
+        self._crust_reply = None
+        self.crust_error = ""
+        self.quake_error = ""
         self.view.installEventFilter(self)
+        self.view.wedge_gain_changed.connect(self._wedge_gain_changed)
         splitter = QSplitter(self)
         self.splitter = splitter
         splitter.addWidget(self.panel)
@@ -439,7 +475,7 @@ class GlobeWindow(QWidget):
         self._applied_layers = None
         # Слои проекта изменились с последнего обновления.
         self._layers_stale = False
-        self.auto_refresh = read_flag(AUTO_REFRESH, False)
+        self.auto_refresh = read_flag(AUTO_REFRESH, AUTO_DEFAULT)
         self.new_shown = settings.value(NEW_SHOWN_KEY, False, type=bool)
         self.follow = False
         self._shown = set()
@@ -536,6 +572,9 @@ class GlobeWindow(QWidget):
             lambda: self._open_snapshot(False))
         self.toolbar.layout_clicked.connect(
             lambda: self._open_snapshot(True))
+        # Подземный режим: скважины, кровли, разрезы, вырез блока.
+        self.subsurface = SubsurfaceManager(self)
+        self.toolbar.subsurface_clicked.connect(self.subsurface.open_dialog)
         self.myplaces.load()
         # Тур по отмеченным «Моим меткам».
         self.tour = TourPlayer(self.view, self._tour_stops, self)
@@ -596,9 +635,12 @@ class GlobeWindow(QWidget):
         # вид по тайлам кадра.
         self.terrain_loader = None
         self.terrain_errors = {}
+        self.sea_depths = QgsSettings().value(SEA_KEY, True, type=bool)
+        self.view.sea_floor = self.sea_depths
         # Высоты Марса и Луны: архив тайлов, скачивается один раз.
         self._start_terrain(
-            basemap.Source("Terrarium", TERRARIUM_URL, TERRAIN_MAX), 0.0)
+            basemap.Source("Terrarium", TERRARIUM_URL, TERRAIN_MAX),
+            self._earth_floor())
         self._shown_at = 0.0
         self.view.changed.connect(self._frame_done)
         # Мелкие уровни важнее: они первыми закрывают весь шар.
@@ -661,7 +703,8 @@ class GlobeWindow(QWidget):
                 "relief": self._relief, "scale": self._scale,
                 "language": self._language, "sync": self.sync.direction,
                 "follow": self.follow, "new_shown": self.new_shown,
-                "auto": self.auto_refresh, "coords": self.coords}
+                "auto": self.auto_refresh, "coords": self.coords,
+                "sea": self.sea_depths}
 
     def set_sync_direction(self, way):
         """Кто за кем следует при синхронизации с картой."""
@@ -780,6 +823,10 @@ class GlobeWindow(QWidget):
             self._update_sun()
         elif key in SURFACE_EXTRAS:
             self._set_surface()
+        elif key == "quakes":
+            self._set_quakes(on)
+        elif key == "cutaway":
+            self._set_cutaway(on)
 
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой
@@ -921,7 +968,8 @@ class GlobeWindow(QWidget):
         если высот у тела нет."""
         if self.planet.earth:
             return basemap.Source("Terrarium", TERRARIUM_URL,
-                                  TERRAIN_MAX, builtin=True), 0.0
+                                  TERRAIN_MAX, builtin=True), \
+                self._earth_floor()
         if self.planet.terrain is None:
             return None
         name, url, level, _ = self.planet.terrain
@@ -972,6 +1020,8 @@ class GlobeWindow(QWidget):
         QgsSettings().setValue(RELIEF_KEY, self._relief)
         self.panel.set_geo(self._groups, self._relief)
         self.view.set_relief(self._relief_target())
+        self.subsurface.relief_changed()
+        self._place_quakes()
         if self._relief and self.terrain_loader is not None:
             self.terrain_loader.want((0, 0, 0), 1.0)
         self._sync_properties()
@@ -1026,13 +1076,191 @@ class GlobeWindow(QWidget):
                 self.terrain_loader.want((0, 0, 0), 1.0)
         self.view.terrain_loader = self.terrain_loader
 
+    def _earth_floor(self):
+        """Пол высот Земли: 0 - отрицательные высоты обнуляются, как
+        прежде, None - с дном океана они остаются."""
+        return None if self.sea_depths else 0.0
+
+    def set_sea_depths(self, on):
+        """Глубины морей и океанов флажком окна свойств вида."""
+        self.sea_depths = bool(on)
+        QgsSettings().setValue(SEA_KEY, self.sea_depths)
+        self._set_sea_floor(self.sea_depths and self.planet.earth)
+        self._sync_properties()
+
+    def _set_sea_floor(self, on):
+        """Глубины морей и океанов: высоты Земли заново, с впадинами
+        ниже нуля или без них, и вода над ними."""
+        self.view.sea_floor = on
+        if not self.planet.earth:
+            return
+        self._body_terrain(self.planet)
+        self.view.reset_heights()
+        # Уклон и экспозиция тоже считают дно.
+        self._set_surface()
+
+    def _set_cutaway(self, on):
+        """Разрез Земли строкой раздела «Слои»: сектор под точкой
+        взгляда в момент включения."""
+        self.cutaway_legend.setVisible(on)
+        self._place_attribution()
+        if not on:
+            self.view.set_wedge(None)
+            self._wedge_gain_changed()
+            self._show_slabs()
+            return
+        if self.view.wedge is None:
+            pose = self.view.navigator.pose
+            self.view.set_wedge(cutaway.wedge_at(pose.lat, pose.lon),
+                                self.crust)
+            self._wedge_gain_changed()
+            self._want_slabs()
+        if self.crust is None and self._crust_reply is None:
+            # Модель не распространяется с модулем, она скачивается
+            # с сайта UCSD и дальше берётся из кэша QGIS.
+            self._crust_reply = fetch_bytes(crust.URL, self._crust_done)
+        self._show_attribution()
+
+    def _wedge_gain_changed(self):
+        """Растяжение коры сменилось: очаги и шкала оболочек следом."""
+        self.cutaway_legend.set_gain(self.view.wedge_gain)
+        self._place_attribution()
+        if self.view.quakes.events:
+            self._place_quakes()
+
+    def _crust_done(self, data, error):
+        self._crust_reply = None
+        self.crust_error = error
+        if data is not None:
+            try:
+                self.crust = crust.from_archive(data)
+            except crust.CrustError as problem:
+                self.crust_error = str(problem)
+        self.cutaway_legend.set_crust(self.crust is not None)
+        self._place_attribution()
+        if self.crust is not None and self.view.wedge is not None:
+            self.view.set_wedge(self.view.wedge, self.crust)
+        self._show_attribution()
+
+    def _want_slabs(self):
+        """Зоны плит Slab2, которых касается разрез: пришедшие - на
+        грани, недостающие - в запрос. Указатель зон лежит в модуле."""
+        if self.slab_index is None:
+            with open(os.path.join(DATA_DIR, "slab2_index.json"),
+                      encoding="utf-8") as fh:
+                self.slab_index = slabs.read_index(fh.read())
+        wedge = self.view.wedge
+        if wedge is None:
+            return
+        codes = slabs.touched(self.slab_index, *cutaway.arc_points(wedge))
+        self._slab_codes = codes
+        for code in codes:
+            if code in self.slab_zones or code in self._slab_replies \
+                    or code in self.slab_errors:
+                continue
+            self._slab_replies[code] = fetch_bytes(
+                slabs.url_of(code, self.slab_base),
+                lambda data, error, code=code: self._slab_done(
+                    code, data, error))
+        self.view.data_pending = len(self._slab_replies)
+        self._show_slabs()
+
+    def _slab_done(self, code, data, error):
+        self._slab_replies.pop(code, None)
+        self.view.data_pending = len(self._slab_replies)
+        if data is None:
+            self.slab_errors[code] = error
+        else:
+            try:
+                self.slab_zones[code] = slabs.load(data, code)
+            except slabs.SlabError as problem:
+                self.slab_errors[code] = str(problem)
+        self._show_slabs()
+
+    def _show_slabs(self):
+        """Пришедшие зоны разреза - на грани, подпись источника и строка
+        шкалы оболочек следом."""
+        codes = self._slab_codes
+        zones = [self.slab_zones[c] for c in codes if c in self.slab_zones] \
+            if self.view.wedge is not None else []
+        self.view.set_wedge_slabs(zones)
+        self.cutaway_legend.set_slabs(bool(zones))
+        self._place_attribution()
+        self._show_attribution()
+
+    def _depth_map(self):
+        """Глубины на экране очагов: при разрезе Земли - с растяжением
+        коры, иначе None."""
+        gain = self.view.wedge_gain
+        if self.view.wedge is None or gain == 1.0:
+            return None
+        return lambda depth: cutaway.stretch(depth, gain)
+
+    def _quake_legend_state(self):
+        """Шкала глубины очагов - при очагах на Земле."""
+        on = self.extras.get("quakes", False) and self.planet.earth \
+            and self.view.sky_view is None
+        self.quake_legend.setVisible(on)
+        self._place_attribution()
+
+    def _set_quakes(self, on):
+        """Землетрясения строкой раздела «Слои». Сводка USGS
+        загружается при каждом включении, кэш QGIS отдаёт её только
+        по заголовкам сервера."""
+        if not on:
+            if self._quake_reply is not None:
+                self._quake_reply.abort()
+            self._quake_reply = None
+            self.view.quakes.set_events([], 0.0, None)
+            self._update_timebar()
+            self._quake_legend_state()
+            self._show_attribution()
+            self.view.update()
+            return
+        self._quake_legend_state()
+        if self._quake_reply is None:
+            self._quake_reply = fetch_json(quakes.FEED, self._quakes_done,
+                                           prefer_cache=False)
+
+    def _quakes_done(self, data, error):
+        self._quake_reply = None
+        self.quake_error = error
+        if data is not None:
+            self.quake_events = quakes.parse(data)
+        self._place_quakes()
+
+    def _place_quakes(self):
+        """События на глобус по нынешнему масштабу рельефа. Эпицентр
+        стоит на рельефе из хранилища высот, грубом вдали от вида."""
+        on = self.extras.get("quakes", False) and self.planet.earth
+        events = self.quake_events if on else []
+        # При разрезе Земли очаги растягиваются по глубине, как кора.
+        self.view.quakes.set_events(events, self.view.store.scale,
+                                    self._surface_ground, self._depth_map())
+        self._update_timebar()
+        self._time_quakes()
+        self._show_attribution()
+        self.view.update()
+
+    def _surface_ground(self, lats, lons):
+        """Высоты нарисованной поверхности: с дном океана - дно."""
+        return self._true_heights(lats, lons)
+
+    def _surface_heights(self, lats, lons):
+        """Высоты поверхности для видимости и инсоляции: с дном океана
+        над водой - уровень моря, а не дно."""
+        heights = self._true_heights(lats, lons)
+        if self.view.sea_floor:
+            heights = np.maximum(heights, 0.0)
+        return heights
+
     def _body_terrain(self, planet):
         """Высоты тела: Terrarium у Земли, архив у Марса и Луны.
         Архив тела скачивается, когда рельеф включён."""
         if planet.earth:
             self.view.store.max_level = TERRAIN_MAX
             self._start_terrain(basemap.Source(
-                "Terrarium", TERRARIUM_URL, TERRAIN_MAX), 0.0)
+                "Terrarium", TERRARIUM_URL, TERRAIN_MAX), self._earth_floor())
             return
         self._start_terrain(None, None)
         if planet.terrain is None:
@@ -1059,9 +1287,11 @@ class GlobeWindow(QWidget):
         if planet is self.planet:
             return
         self.planet = planet
-        # Видимость и инсоляция считались по высотам прежнего тела.
+        # Видимость, инсоляция и подземное считались по высотам
+        # прежнего тела.
         self._clear_viewshed()
         self._clear_insolation()
+        self.subsurface.clear()
         ellipsoid.set_body(planet.body)
         if planet.earth:
             source = self.sources[self._basemap]
@@ -1078,6 +1308,8 @@ class GlobeWindow(QWidget):
         self._start_loader()
         self.view.change_body(source.max_level, planet.air)
         self.loader.want_many((key, -key[0]) for key in start_keys())
+        # Вода над впадинами - только у Земли.
+        self.view.sea_floor = self.sea_depths and planet.earth
         self._body_terrain(planet)
         self.view.set_relief(self._relief_target())
         self.view.reset_places(self.source.max_level)
@@ -1145,6 +1377,8 @@ class GlobeWindow(QWidget):
         self.legend.hide()
         self.slope_legend.hide()
         self.insolation_legend.hide()
+        self.quake_legend.hide()
+        self.cutaway_legend.hide()
         for button in self._globe_buttons():
             button.setEnabled(False)
         self._show_attribution()
@@ -1174,6 +1408,9 @@ class GlobeWindow(QWidget):
                                and self.planet.earth)
         self.insolation_legend.setVisible(
             self.insolation_result is not None)
+        self._quake_legend_state()
+        self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
+                                       and self.planet.earth)
         self._set_surface()
         self.toolbar.set_body(self.planet.key)
         self._show_attribution()
@@ -1226,6 +1463,8 @@ class GlobeWindow(QWidget):
         if self.planet.earth:
             self._switch_basemap(self.sources[self._basemap])
         self.view.set_relief(self._relief_target())
+        self.subsurface.relief_changed()
+        self._place_quakes()
         self._apply_vector(force=True)
         self._mark_dirty(False)
         self._show_attribution()
@@ -1317,6 +1556,12 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*clouds.ATTRIBUTION))
         if "sea" in self.gibs_loaders:
             parts.append(link_html(*temperature.ATTRIBUTION))
+        if self.view.quakes.events:
+            parts.append(link_html(*quakes.ATTRIBUTION))
+        if self.view.wedge_slabs:
+            parts.append(link_html(*slabs.ATTRIBUTION))
+        if self.view.wedge is not None and self.crust is not None:
+            parts.append(link_html(*crust.CITATION))
         self.attribution.setText(" · ".join(parts))
         self._place_attribution()
 
@@ -1346,6 +1591,15 @@ class GlobeWindow(QWidget):
             bottom = self.slope_legend.y() - MARGIN // 2
         self.insolation_legend.move(
             MARGIN, bottom - self.insolation_legend.height())
+        # Шкала глубины очагов - выше всех.
+        if self.insolation_legend.isVisible():
+            bottom = self.insolation_legend.y() - MARGIN // 2
+        self.quake_legend.move(MARGIN, bottom - self.quake_legend.height())
+        # Оболочки разреза - над шкалой очагов.
+        if self.quake_legend.isVisible():
+            bottom = self.quake_legend.y() - MARGIN // 2
+        self.cutaway_legend.move(
+            MARGIN, bottom - self.cutaway_legend.height())
 
     def eventFilter(self, watched, event):
         if watched is self.view and event.type() == enum(
@@ -1499,9 +1753,10 @@ class GlobeWindow(QWidget):
 
     def _project_reloaded(self):
         """Открыт другой проект: его настройки глобуса."""
-        self.auto_refresh = read_flag(AUTO_REFRESH, False)
+        self.auto_refresh = read_flag(AUTO_REFRESH, AUTO_DEFAULT)
         self._read_shown()
         self.tracks.load()
+        self.subsurface.project_reloaded()
 
     def _mark_dirty(self, dirty):
         self.dirty = dirty
@@ -1540,6 +1795,7 @@ class GlobeWindow(QWidget):
             self.properties.follow_changed.connect(self.set_follow)
             self.properties.new_shown_changed.connect(self.set_new_shown)
             self.properties.coords_chosen.connect(self.set_coords)
+            self.properties.sea_changed.connect(self.set_sea_depths)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()
@@ -1702,8 +1958,13 @@ class GlobeWindow(QWidget):
 
     def _update_timebar(self):
         """Охват шкалы времени по видимым меткам со временем."""
-        extent = when.extent(p.time for p in self.myplaces.places
-                             if p.visible)
+        times = [p.time for p in self.myplaces.places if p.visible]
+        # Землетрясения на шкале - моменты первого и последнего события.
+        quake_span = quakes.span(self.view.quakes.events) \
+            if hasattr(self, "view") else None
+        if quake_span is not None:
+            times += [when.stamp(when.text(t)) for t in quake_span]
+        extent = when.extent(times)
         self.timebar.set_extent(extent)
         # Панель значков заводится позже первого чтения меток.
         toolbar = getattr(self, "toolbar", None)
@@ -1727,9 +1988,16 @@ class GlobeWindow(QWidget):
             if self.timebar.shown() else None
         self._refresh_shapes()
         self._update_sun()
+        self._time_quakes()
+
+    def _time_quakes(self):
+        """Землетрясения в промежутке шкалы времени."""
+        self.view.quakes.window = self._time_range
+        self.view.update()
 
     def _time_changed(self, lo, hi):
         self._time_range = (lo, hi)
+        self._time_quakes()
         self._refresh_shapes()
         self._update_sun()
         if self.view.sky_view is not None:
@@ -1847,10 +2115,19 @@ class GlobeWindow(QWidget):
 
     def open_demo(self, name="perm"):
         """Демо из папки модуля, tools/make_demo.py: perm, bocachica,
-        mars, jezero, moon, sky."""
-        return self.open_scene(os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "demo",
-            name + EXTENSION))
+        subsurface, mars, jezero, moon, sky. У subsurface после сцены
+        строится подземное из planetx/demo/subsurface."""
+        demo = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                            "demo")
+        key = self.open_scene(os.path.join(demo, name + EXTENSION))
+        if name == "subsurface":
+            self.subsurface.start(dict(
+                SUBSURFACE_DEFAULTS, source="gpkg",
+                path=os.path.join(demo, "subsurface",
+                                  "perm_subsurface.gpkg"),
+                opacity=0.6, cut=True))
+            self.subsurface.open_dialog()
+        return key
 
     def open_scene(self, path=None):
         """Сцена из файла на глобус. Возвращает ключ папки её меток."""
@@ -2023,7 +2300,7 @@ class GlobeWindow(QWidget):
         self.viewshed_timer.stop()
         self.viewshed_job = None
         result = viewshed.compute(job["lat"], job["lon"], job["radius"],
-                                  job["cell"], self._true_heights,
+                                  job["cell"], self._surface_heights,
                                   observer=job["observer"],
                                   target=job["target"])
         self._show_viewshed(result)
@@ -2133,8 +2410,8 @@ class GlobeWindow(QWidget):
             done = sum(len(part) for part in job["heights"])
             if done < len(lats):
                 end = done + HEIGHT_CHUNK
-                job["heights"].append(self._true_heights(lats[done:end],
-                                                         lons[done:end]))
+                job["heights"].append(self._surface_heights(
+                    lats[done:end], lons[done:end]))
                 dialog.status.setText(tr(
                     "Высоты узлов сетки: {share}",
                     share="{:.0f}%".format(100.0 * done / len(lats))))
@@ -3022,6 +3299,7 @@ class GlobeWindow(QWidget):
             self.insolation_job = None
             if self.insolation_tiles is not None:
                 self.insolation_tiles.abort()
+            self.subsurface.close()
             self.loader.abort()
             if self.place_loader is not None:
                 self.place_loader.abort()

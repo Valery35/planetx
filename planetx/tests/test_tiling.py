@@ -223,6 +223,22 @@ class TestTerrainMesh(unittest.TestCase):
         sb = b.shade[:side * side].reshape(side, side)[:, 0]
         self.assertLess(np.abs(sa - sb).max(), 1e-5)
 
+    def test_sea_lowers_mesh_to_sea_level(self):
+        # Проход воды опускает вершину на a_sea.w вдоль a_sea.xyz: узлы
+        # и юбка ложатся на эллипсоид, высота в sea - высота узла.
+        mesh = tl.tile_mesh(10, 641, 361, self.slope, exaggeration=2.0)
+        self.assertEqual(mesh.sea.shape, (len(mesh.positions), 4))
+        pos = mesh.center + mesh.positions.astype(np.float64)
+        flat = pos - mesh.sea[:, :3] * mesh.sea[:, 3:]
+        _, _, h = el.ecef_to_geodetic(flat)
+        self.assertLess(np.abs(h).max(), 0.05)
+        side = mesh.segments + 1
+        _, _, grid_h = el.ecef_to_geodetic(pos[:side * side])
+        self.assertLess(np.abs(grid_h - mesh.sea[:side * side, 3]).max(),
+                        0.05)
+        cap = tl.polar_cap_mesh(True)
+        self.assertTrue(np.all(cap.sea[:, 3] == 0.0))
+
     def test_flat_ground_is_not_shaded(self):
         flat = height_tile(*self.z8, lambda u, v: np.zeros_like(u))
         mesh = tl.tile_mesh(10, 641, 361, flat)

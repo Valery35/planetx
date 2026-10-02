@@ -232,15 +232,42 @@ def set_line_groups(layer, groups):
     layer.setRenderer(renderer)
 
 
-def fetch_json(url, done):
+def fetch_bytes(url, done, prefer_cache=True):
+    """Асинхронно получить ответ и вызвать done(байты или None, ошибка).
+
+    Запрос идёт через QgsNetworkAccessManager с меткой PlanetX, как
+    запросы тайлов, ответ ложится в кэш QGIS. Возвращает ответ, его
+    нужно держать до конца.
+    """
+    request = QNetworkRequest(QUrl(url))
+    request.setAttribute(MARK, True)
+    if prefer_cache:
+        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+    reply = QgsNetworkAccessManager.instance().get(request)
+
+    def finished():
+        if reply.error() != NO_ERROR:
+            done(None, reply.errorString())
+        else:
+            done(bytes(reply.readAll()), "")
+        reply.deleteLater()
+
+    reply.finished.connect(finished)
+    return reply
+
+
+def fetch_json(url, done, prefer_cache=True):
     """Асинхронно получить JSON и вызвать done(данные или None, ошибка).
 
     Запрос идёт через QgsNetworkAccessManager с меткой PlanetX, как
     запросы тайлов. Возвращает ответ, его нужно держать до конца.
+    prefer_cache=False - для данных, которые меняются каждую минуту:
+    кэш QGIS тогда отдаёт ответ только по заголовкам сервера.
     """
     request = QNetworkRequest(QUrl(url))
     request.setAttribute(MARK, True)
-    request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+    if prefer_cache:
+        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
     reply = QgsNetworkAccessManager.instance().get(request)
 
     def finished():

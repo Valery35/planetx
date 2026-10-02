@@ -18,7 +18,7 @@ from qgis.PyQt.QtCore import (QObject, QRunnable, QThreadPool, Qt, QTimer,
                               pyqtSignal)
 from qgis.PyQt.QtGui import QImage, QSurfaceFormat
 
-from ..core import lod, skydata
+from ..core import cutaway, lod, skydata
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
 from ..core.camera import Camera
@@ -41,6 +41,8 @@ from .buildings import pick as pick_buildings
 from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
+from .subsurface import Subsurface
+from .quakes import Quakes
 from .constellations import Constellations
 from .sky import Sky
 from .stars import Stars
@@ -55,6 +57,11 @@ HOLE = (1.0, 0.0, 1.0)  # пурпурный фон проверочного р�
 OCEAN = (0xAA, 0xD3, 0xDF, 0xFF)  # цвет воды на подложке OSM
 UNDERLAY_COLOR = (0x00, 0xFF, 0x00, 0xFF)  # подстилка в проверочном режиме
 UNDERLAY_LEVEL = 2
+# Вода над дном океана: цвет и непрозрачность, мельче SHALLOW метров
+# (с масштабом рельефа) вода прозрачнее. Выбор помощника, утверждает
+# автор.
+WATER_COLOR = (0.09, 0.30, 0.55, 0.5)
+SHALLOW = 200.0
 # Подстилка лежит на UNDERLAY_DEPTH ниже поверхности. Это больше шага
 # буфера глубины у дальней плоскости. Худший случай - глаз на высоте
 # 9 км в 50 м от склона: ближняя плоскость 25 м, дальняя 680 км,
@@ -241,6 +248,8 @@ class GlobeView(QOpenGLWidget):
     shot_done = pyqtSignal(object, bool)
     # Сменилось состояние загрузки: сколько ждёт, стоит ли загрузка.
     load_changed = pyqtSignal()
+    # Сменилось растяжение коры разреза Земли, cutaway.gain_for.
+    wedge_gain_changed = pyqtSignal()
     # Backspace или Delete над видом: убрать последнюю точку инструмента.
     undo_point = pyqtSignal()
 
@@ -294,7 +303,33 @@ class GlobeView(QOpenGLWidget):
         self._nearest_probe = None
         # Ошибки и видимость узлов между кадрами неподвижной камеры.
         self.memo = lod.Memo()
-        self.navigator.set_terrain(self.store.height_at)
+        # Подземный режим: сетки (render/subsurface.py), непрозрачность
+        # поверхности и пол навигации - функция высоты на экране или
+        # None. С полом камера опускается под рельеф до низа модели.
+        self.subsurface = Subsurface()
+        # Разрез Земли: вынутый сектор (core.cutaway.Wedge или None)
+        # и грани с оболочками - отдельный набор подземных сеток.
+        self.wedge = None
+        self.cutaway = Subsurface()
+        self.wedge_crust = None
+        self.wedge_gain = 1.0
+        # Плиты Slab2 на гранях: зоны, которых касается разрез, и их
+        # полосы - поверх граней со смещением глубины.
+        self.wedge_slabs = []
+        self.cutaway_slabs = Subsurface(offset=True)
+        # Запросов данных вне загрузчиков тайлов: файлы зон плит.
+        # Входят в счётчик загрузки, его показывает значок загрузки.
+        self.data_pending = 0
+        # Надписи без пунктов вынутого сектора: список, сектор, итог.
+        self._wedged = (None, None, [])
+        # Землетрясения: очаги точками поверх поверхности.
+        self.quakes = Quakes()
+        self.surface_alpha = 1.0
+        self.floor = None
+        # Дно океана: высоты Земли ниже нуля не обнуляются, над ними
+        # рисуется вода (_draw_water). Включает строка «Дно океана».
+        self.sea_floor = False
+        self.navigator.set_terrain(self.terrain_at)
         self.pending = {}
         # Подложка: наибольший уровень источника и тайлы прежней подложки,
         # которые ещё не заменены.
@@ -365,6 +400,8 @@ class GlobeView(QOpenGLWidget):
         self.grid_marks = []
         # Подписи слоёв проекта, ui/layer_labels.py.
         self.layer_marks = []
+        # Подписи устьев скважин подземного режима.
+        self.subsurface_marks = []
         # Длины отрезков линейки и точка профиля высот.
         self.tool_marks = []
         self._places_wanted = frozenset()
@@ -460,7 +497,7 @@ class GlobeView(QOpenGLWidget):
             return
         if sel is None or self.shot is not None:
             return
-        missing = self._missing(sel)
+        missing = self._missing(sel) + self.data_pending
         # Надписи ждут ответов проверок видимости, а не данных, вставшей
         # считается только загрузка данных.
         data = missing - (1 if self.labels.pending else 0)
@@ -528,6 +565,100 @@ class GlobeView(QOpenGLWidget):
         self.places.add(key, places)
         self.last_arrival = time.monotonic()
         self.update()
+
+    def _draw_water(self, items, mvps):
+        """Вода над дном океана: те же сетки тайлов, опущенные на уровень
+        моря (TileMesh.sea), только там, где рельеф ниже нуля. Глубину
+        не пишет, поэтому дно видно сквозь неё, а суша выше нуля
+        закрывает её проверкой глубины. Программа - тайла, с дымкой."""
+        if not items:
+            return
+        gl = gpu.gl
+        gl.glUniform1f(self.u_water, 1.0)
+        gl.glUniform4f(self.u_water_color, *WATER_COLOR)
+        gl.glUniform1f(self.u_shallow, SHALLOW * self.store.scale)
+        gl.glEnable(GL.GL_BLEND)
+        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                               GL.GL_ZERO, GL.GL_ONE)
+        GL.glDepthMask(GL.GL_FALSE)
+        try:
+            gpu.draw_batch(items, mvps, self.u_mvp)
+        finally:
+            GL.glDepthMask(GL.GL_TRUE)
+            gl.glDisable(GL.GL_BLEND)
+            gl.glUniform1f(self.u_water, 0.0)
+
+    def label_height(self, lat, lon):
+        """Высота надписи: с дном океана - не ниже уровня моря, иначе
+        названия морей лежали бы на дне."""
+        h = self.store.height_at(lat, lon)
+        return max(h, 0.0) if self.sea_floor else h
+
+    def terrain_at(self, lat, lon):
+        """Высота на экране, по которой ходит камера: рельеф или, если
+        задан пол подземного режима, наименьшее из рельефа и пола."""
+        h = self.store.height_at(lat, lon)
+        if self.floor is not None:
+            low = self.floor(lat, lon)
+            if low is not None and low < h:
+                return low
+        return h
+
+    def set_wedge(self, wedge, crust=None):
+        """Разрез Земли: вынуть сектор wedge (core.cutaway.Wedge) или
+        вернуть поверхность (None). crust - модель коры core.crust.Crust
+        для граней или None."""
+        self.wedge = wedge
+        self.wedge_crust = crust
+        self.camera.deep = wedge is not None
+        self.wedge_gain = self._wedge_gain()
+        self.cutaway.set_mesh("faces", None if wedge is None
+                              else cutaway.faces(wedge, crust=crust,
+                                                 gain=self.wedge_gain))
+        if wedge is None:
+            self.wedge_slabs = []
+        self._build_wedge_slabs()
+        self.update()
+
+    def _wedge_gain(self):
+        """Растяжение коры для нынешнего расстояния до точки взгляда,
+        без сектора - 1."""
+        if self.wedge is None:
+            return 1.0
+        return cutaway.gain_for(self.navigator.pose.distance)
+
+    def _follow_wedge_gain(self):
+        """Грани заново, если сменилась ступень растяжения коры. Зовётся
+        из кадра, сборка граней - около 6 мс."""
+        gain = self._wedge_gain()
+        if gain == self.wedge_gain:
+            return
+        self.wedge_gain = gain
+        self.cutaway.set_mesh("faces", cutaway.faces(
+            self.wedge, crust=self.wedge_crust, gain=gain))
+        self._build_wedge_slabs()
+        self.wedge_gain_changed.emit()
+
+    def set_wedge_slabs(self, zones):
+        """Зоны плит Slab2 на гранях разреза, core.slabs.Slab."""
+        self.wedge_slabs = list(zones)
+        self._build_wedge_slabs()
+        self.update()
+
+    def _build_wedge_slabs(self):
+        mesh = None
+        if self.wedge is not None and self.wedge_slabs:
+            mesh = cutaway.slab_bands(self.wedge, self.wedge_slabs,
+                                      self.wedge_gain)
+        self.cutaway_slabs.set_mesh("bands", mesh)
+
+    def eye_underground(self):
+        """Глаз ниже рельефа под ним - только с полом подземного режима."""
+        if self.floor is None:
+            return False
+        lat, lon, h = (float(v) for v in ecef_to_geodetic(
+            np.asarray(self.camera.eye, dtype=np.float64)))
+        return h < self.store.height_at(lat, lon)
 
     def want_tool_heights(self, keys):
         """Тайлы высот для линейки и профиля. Прежний набор заменяется,
@@ -691,6 +822,24 @@ class GlobeView(QOpenGLWidget):
         for key in self.mesh_levels:
             self.mesh_levels[key] = -1
             self._maybe_rebuild(key, -1)
+        self.update()
+
+    def reset_heights(self):
+        """Забыть высоты и пересобрать сетки по новым, например когда
+        включили дно океана: прежние высоты моря обнулены. До прихода
+        новых высот рисуются прежние сетки."""
+        self.store.clear()
+        self.relief += 1
+        self.buildings.set_relief(self.relief)
+        self.build_pool.clear()
+        self.building.clear()
+        self.built.clear()
+        self.pending = {key: (image, mesh, -1) for key, (image, mesh, _)
+                        in self.pending.items()}
+        for key in self.mesh_levels:
+            self.mesh_levels[key] = -1
+        self._terrain_wanted = frozenset()
+        self._terrain_at = 0.0
         self.update()
 
     def _maybe_rebuild(self, key, level):
@@ -1021,6 +1170,20 @@ class GlobeView(QOpenGLWidget):
         self.program = gpu.build_program(TILE_VERTEX, TILE_FRAGMENT)
         self.u_mvp = GL.glGetUniformLocation(self.program, "u_mvp")
         self.u_texture = GL.glGetUniformLocation(self.program, "u_texture")
+        # Непрозрачность поверхности. Значение по умолчанию в GLSL - 0,
+        # а альфа кадра видна окну Qt, поэтому 1 ставится сразу.
+        self.u_alpha = GL.glGetUniformLocation(self.program, "u_alpha")
+        self.u_water = GL.glGetUniformLocation(self.program, "u_water")
+        self.u_water_color = GL.glGetUniformLocation(self.program,
+                                                     "u_water_color")
+        self.u_shallow = GL.glGetUniformLocation(self.program, "u_shallow")
+        self.u_wedge_on = GL.glGetUniformLocation(self.program,
+                                                  "u_wedge_on")
+        self.u_wedge = GL.glGetUniformLocation(self.program, "u_wedge")
+        GL.glUseProgram(self.program)
+        GL.glUniform1f(self.u_alpha, 1.0)
+        GL.glUniform1f(self.u_water, 0.0)
+        GL.glUseProgram(0)
         self.tile_air = uniforms(self.program, AIR_UNIFORMS)
         self.sky_program = gpu.build_program(HOLE_VERTEX, SKY_FRAGMENT)
         self.sky_air = uniforms(self.sky_program, AIR_UNIFORMS + ("u_qc",))
@@ -1060,6 +1223,10 @@ class GlobeView(QOpenGLWidget):
         self.labels.init_gl()
         self.features.init_gl()
         self.buildings.init_gl()
+        self.subsurface.init_gl()
+        self.cutaway.init_gl()
+        self.cutaway_slabs.init_gl()
+        self.quakes.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
         self.constellations.init_gl()
@@ -1076,6 +1243,10 @@ class GlobeView(QOpenGLWidget):
         self.labels.release_gl()
         self.features.release_gl()
         self.buildings.release_gl()
+        self.subsurface.release_gl()
+        self.cutaway.release_gl()
+        self.cutaway_slabs.release_gl()
+        self.quakes.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
         self.constellations.release_gl()
@@ -1440,11 +1611,11 @@ class GlobeView(QOpenGLWidget):
             moving = True
         # Опрос высот вокруг глаза стоит до 1 мс. Он повторяется, только
         # если глаз сдвинулся или пришли новые высоты.
-        probe = (tuple(self.camera.eye), self.store.version)
+        probe = (tuple(self.camera.eye), self.store.version, id(self.floor))
         if probe != self._nearest_probe:
             self._nearest_probe = probe
             self.camera.nearest = nearest_terrain(self.camera.eye,
-                                                  self.store.height_at)
+                                                  self.terrain_at)
         marks.append(time.perf_counter())
         sel = lod.select(self.camera, self.textures.__contains__,
                          max_level=self.max_level,
@@ -1484,22 +1655,51 @@ class GlobeView(QOpenGLWidget):
         # стык с соседом другого уровня. Отсечение обратных граней
         # убрало бы её.
         gpu.gl.glDisable(GL.GL_CULL_FACE)
+        # Подземное - до поверхности: прозрачная поверхность ложится
+        # поверх смешиванием, непрозрачная закрывает проверкой глубины.
+        self.subsurface.prepare()
+        underground = self.subsurface.active and not self.show_holes
+        if underground:
+            self.subsurface.draw(self.camera)
+        wedge = self.wedge if not self.show_holes else None
+        if wedge is not None:
+            self._follow_wedge_gain()
+            self.cutaway.draw(self.camera)
+            self.cutaway_slabs.draw(self.camera)
+        else:
+            # Убранная сетка граней уходит из видеокарты.
+            self.cutaway.prepare()
+            self.cutaway_slabs.prepare()
+            self.cutaway.drawn = 0
+            self.cutaway_slabs.drawn = 0
         gpu.gl.glUseProgram(self.program)
+        gpu.gl.glUniform1f(self.u_wedge_on, 0.0 if wedge is None else 1.0)
+        if wedge is not None:
+            gpu.gl.glUniform4f(self.u_wedge, *cutaway.uniform(wedge))
         gpu.gl.glUniform1i(self.u_texture, 0)
         gpu.gl.glUniform1i(self.u_overlay, 1)
         for unit, sampler, _ in self.gibs_slots.values():
             gpu.gl.glUniform1i(sampler, unit - GL.GL_TEXTURE0)
         self._clear_overlay()
         self._clear_gibs()
-        air = self.atmosphere and not self.show_holes
+        # Под землёй воздуха нет: глаз ниже рельефа - атмосфера
+        # и небо не рисуются.
+        air = self.atmosphere and not self.show_holes \
+            and not self.eye_underground()
         air_uniforms(self.tile_air, self.camera, air, self.sun,
                      self.air_tint)
+        alpha = self.surface_alpha if underground else 1.0
+        gpu.gl.glUniform1f(self.u_alpha, alpha)
 
         items = list(zip(self.caps, self.cap_textures or [self.ocean] * 2))
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
         surface = len(items)
         scales = [1.0] * surface
-        under = self._underlay_items(sel.keep)
+        # Подстилка закрыла бы подземное сквозь прозрачную поверхность
+        # и вырез блока.
+        cut = self.gibs["cut"].shown
+        under = [] if (underground and (alpha < 1.0 or cut)) \
+            else self._underlay_items(sel.keep)
         items += under
         # Подстилка ниже самой низкой высоты тела: впадины Марса и Луны
         # уходят ниже эллипсоида, и подстилка на 3 км закрывала их
@@ -1529,7 +1729,27 @@ class GlobeView(QOpenGLWidget):
                     sel.draw, self.clear_texture, self.frame)))
             else:
                 layer.missing = 0
+        if alpha < 1.0:
+            # Прозрачная поверхность в два прохода. Первый пишет только
+            # глубину, второй смешивает цвет там, где глубина та же. Так
+            # на пиксель приходится один слой поверхности, а юбки тайлов
+            # под ней не просвечивают полосами.
+            GL.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE,
+                           GL.GL_FALSE)
+            gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp,
+                           layers)
+            GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
+            GL.glDepthFunc(GL.GL_LEQUAL)
+            GL.glDepthMask(GL.GL_FALSE)
+            gpu.gl.glEnable(GL.GL_BLEND)
+            GL.glBlendFuncSeparate(
+                GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA, GL.GL_ZERO,
+                GL.GL_ONE)
         gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp, layers)
+        if alpha < 1.0:
+            gpu.gl.glDisable(GL.GL_BLEND)
+            GL.glDepthMask(GL.GL_TRUE)
+            GL.glDepthFunc(GL.GL_LESS)
         if layers:
             # Подстилка идёт без наложения и слоёв GIBS.
             self._clear_overlay()
@@ -1539,6 +1759,11 @@ class GlobeView(QOpenGLWidget):
             gaps = self._count_holes()
             GL.glUseProgram(self.program)
         gpu.draw_batch(items[surface:], mvps[surface:], self.u_mvp)
+        if alpha < 1.0:
+            gpu.gl.glUniform1f(self.u_alpha, 1.0)
+        if self.sea_floor and self.store.scale and not self.show_holes:
+            self._draw_water(items[len(self.caps):surface],
+                             mvps[len(self.caps):surface])
         if self.hole_check:
             holes = self._count_holes()
             GL.glUseProgram(self.program)
@@ -1565,8 +1790,12 @@ class GlobeView(QOpenGLWidget):
                 self.camera, self.store.heights_at if self.store.scale
                 else None, self.store.version, ratio,
                 still=shot or not motion)
+        if self.quakes.events and not self.show_holes:
+            self.quakes.draw(self.camera, ratio)
+        else:
+            self.quakes.drawn = 0
         if (self.label_kinds or self.search_mark is not None
-                or self.tool_marks
+                or self.tool_marks or self.subsurface_marks
                 or self.features.shapes) \
                 and not self.show_holes:
             self._draw_labels(sel, ratio)
@@ -1936,13 +2165,25 @@ class GlobeView(QOpenGLWidget):
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
         own = self._own_marks() + self.layer_marks + self.grid_marks \
+            + self.subsurface_marks \
             + self.tool_marks
         if mark is not None or own:
             head = ([mark] if mark is not None else []) + own
             if self._marked[0] is not places or self._marked[1] != head:
                 self._marked = (places, head, head + places)
             places = self._marked[2]
-        height_at = self.store.height_at if self.store.scale else None
+        if self.wedge is not None and places:
+            # Пункты вынутого сектора висели бы над его гранями.
+            if self._wedged[0] is not places \
+                    or self._wedged[1] != self.wedge:
+                out = cutaway.inside(self.wedge,
+                                     [p.lat for p in places],
+                                     [p.lon for p in places])
+                self._wedged = (places, self.wedge,
+                                [p for p, gone in zip(places, out)
+                                 if not gone])
+            places = self._wedged[2]
+        height_at = self.label_height if self.store.scale else None
         self.labels.draw(self.camera, self.camera.projection(), places,
                          height_at, self.store.version, ratio)
 

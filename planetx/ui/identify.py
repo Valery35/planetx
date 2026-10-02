@@ -22,6 +22,7 @@ from qgis.PyQt.QtWidgets import (QDialog, QLabel, QPushButton, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout)
 
 from ..core.coords import format_point
+from ..core.measure import surface_level
 from ..core import ellipsoid
 from ..i18n import tr
 from ..qt_compat import enum
@@ -131,10 +132,11 @@ def point_text(lat, lon, height=None, digits=6, fmt="decimal"):
     text = format_point(lat, lon, fmt, hemispheres(), digits)
     if height is None:
         return text
-    # Высоты рельефа не ниже нуля, дно моря прижато к нулю. Без max
-    # ещё не загруженная высота печаталась как «-0 м».
-    return tr("{point}, высота {height} м", point=text,
-              height="{:.0f}".format(max(height, 0.0)))
+    # Ниже уровня моря - глубина, как у дна океана, core.measure.
+    kind, value = surface_level(height)
+    if kind == "depth":
+        return tr("{point}, глубина {depth} м", point=text, depth=value)
+    return tr("{point}, высота {height} м", point=text, height=value)
 
 
 def _value(value):

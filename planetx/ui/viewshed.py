@@ -51,8 +51,9 @@ class ResultTiles(QObject):
         self.result = result
         self.radius = radius
         self.paint = paint
-        self.box = viewshed.circle_box(result.lat, result.lon,
-                                       result.radius_m, radius)
+        # Рамка результата - своя (маска выреза) или рамка круга.
+        self.box = getattr(result, "box", None) or viewshed.circle_box(
+            result.lat, result.lon, result.radius_m, radius)
         self.queue = []
         self.running = {}  # ключ тайла - задание рабочего потока
         self.pool = None

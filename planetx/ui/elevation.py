@@ -23,6 +23,8 @@ from .measure import line_profile
 LINE = QColor(255, 214, 0)  # жёлтый, как линия линейки
 FILL = QColor(255, 214, 0, 70)
 GRID = QColor(128, 128, 128, 90)
+WATER = QColor(40, 120, 210, 90)  # вода ниже уровня моря
+WATER_LINE = QColor(30, 90, 170)
 MARGIN = (54, 12, 14, 30)  # слева, сверху, справа, снизу, пиксели
 CENTER = enum(Qt, "AlignmentFlag", "AlignCenter")
 VCENTER = enum(Qt, "AlignmentFlag", "AlignVCenter")
@@ -109,6 +111,10 @@ class ProfileChart(QWidget):
     def _ranges(self):
         p = self.profile
         low, high = p.low, p.high
+        if low < 0.0:
+            # Ниже уровня моря в шкалу входит ноль - видна поверхность
+            # воды над дном.
+            high = max(high, 0.0)
         pad = max((high - low) * 0.08, 1.0)
         return 0.0, max(p.flat, 1.0), low - pad, high + pad
 
@@ -159,6 +165,24 @@ class ProfileChart(QWidget):
         path.lineTo(to_screen(float(p.distance[-1]), y0))
         path.closeSubpath()
         painter.fillPath(path, FILL)
+        if p.low < 0.0:
+            # Ниже уровня моря - вода от кривой до нуля и линия уровня
+            # моря с подписью. Сухие впадины ниже нуля тоже заливаются,
+            # высоты не отличают их от моря.
+            water = QPainterPath(to_screen(float(p.distance[0]), 0.0))
+            for dist, height in zip(p.distance, p.height):
+                water.lineTo(to_screen(float(dist), min(float(height), 0.0)))
+            water.lineTo(to_screen(float(p.distance[-1]), 0.0))
+            water.closeSubpath()
+            painter.fillPath(water, WATER)
+            sea = to_screen(x0, 0.0)
+            pen = QPen(WATER_LINE, 1.2)
+            pen.setStyle(enum(Qt, "PenStyle", "DashLine"))
+            painter.setPen(pen)
+            painter.drawLine(QPointF(rect.left(), sea.y()),
+                             QPointF(rect.right(), sea.y()))
+            painter.drawText(QRectF(rect.right() - 160, sea.y() - 17, 156,
+                                    16), RIGHT, tr("уровень моря"))
         painter.setPen(QPen(LINE.darker(130), 1.6))
         for i in range(len(p.distance) - 1):
             painter.drawLine(to_screen(float(p.distance[i]),

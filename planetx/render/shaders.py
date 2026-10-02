@@ -128,16 +128,29 @@ layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec2 a_uv;
 layout(location = 2) in float a_shade;
 layout(location = 3) in vec3 a_normal;
+// Вверх по нормали эллипсоида и высота вершины на экране, см.
+// core.tiling.TileMesh.sea. В проходе воды (u_water) сетка опускается
+// на уровень моря.
+layout(location = 4) in vec4 a_sea;
 uniform mat4 u_mvp;
+uniform float u_water;
 out vec2 v_uv;
 out float v_shade;
 out vec3 v_normal;
 out float v_depth;
+out float v_height;
+out vec3 v_up;
 void main() {
     v_uv = a_uv;
+    v_up = a_sea.xyz;
     v_shade = a_shade;
     v_normal = a_normal;
-    gl_Position = u_mvp * vec4(a_position, 1.0);
+    v_height = a_sea.w;
+    vec3 p = a_position;
+    if (u_water > 0.5) {
+        p -= a_sea.xyz * a_sea.w;
+    }
+    gl_Position = u_mvp * vec4(p, 1.0);
     v_depth = gl_Position.w;
 }
 """
@@ -272,6 +285,25 @@ uniform vec4 u_viewshed_uv;
 // Инсоляция, над видимостью, см. core/insolation.py.
 uniform sampler2D u_insolation;
 uniform vec4 u_insolation_uv;
+// Маска подземного режима, см. ui/subsurface.py. Альфа маски - вырез
+// блока, там поверхности нет. Красный канал - рамка модели, там
+// непрозрачность поверхности u_alpha, вне её поверхность непрозрачна.
+uniform sampler2D u_cut;
+uniform vec4 u_cut_uv;
+uniform float u_alpha;
+// Проход воды (строка «Дно океана»): сетка на уровне моря, только над
+// рельефом ниже нуля, цвет u_water_color. У берега, мельче u_shallow
+// метров на экране, вода прозрачнее.
+in float v_height;
+// Разрез Земли (core/cutaway.py): поверхность в вынутом секторе
+// отбрасывается по нормали эллипсоида. u_wedge - направление средней
+// долготы (x, y), косинус половины ширины, полушарие.
+in vec3 v_up;
+uniform float u_wedge_on;
+uniform vec4 u_wedge;
+uniform float u_water;
+uniform vec4 u_water_color;
+uniform float u_shallow;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
 vec3 lay(vec3 under, sampler2D image, vec4 uv) {
@@ -279,17 +311,36 @@ vec3 lay(vec3 under, sampler2D image, vec4 uv) {
     return under * (1.0 - top.a) + top.rgb;
 }
 void main() {
-    vec3 base = texture(u_texture, v_uv).rgb;
-    base = lay(base, u_sea, u_sea_uv);
-    base = lay(base, u_land, u_land_uv);
-    base = lay(base, u_slope, u_slope_uv);
-    base = lay(base, u_viewshed, u_viewshed_uv);
-    base = lay(base, u_insolation, u_insolation_uv);
-    base = lay(base, u_overlay, u_overlay_uv);
-    base = lay(base, u_clouds, u_clouds_uv);
+    if (u_wedge_on > 0.5 && u_wedge.w * v_up.z > 0.0
+            && dot(v_up.xy, u_wedge.xy) >= u_wedge.z * length(v_up.xy)) {
+        discard;
+    }
+    vec4 mask = texture(u_cut, u_cut_uv.xy + u_cut_uv.z * v_uv);
+    if (mask.a > 0.5) {
+        discard;
+    }
+    float alpha = mask.r > 0.5 ? u_alpha : 1.0;
+    vec3 base;
+    float shade = v_shade;
+    if (u_water > 0.5) {
+        if (v_height >= 0.0) {
+            discard;
+        }
+        base = u_water_color.rgb;
+        alpha = u_water_color.a * clamp(-v_height / u_shallow, 0.25, 1.0);
+        shade = 1.0;
+    } else {
+        base = texture(u_texture, v_uv).rgb;
+        base = lay(base, u_sea, u_sea_uv);
+        base = lay(base, u_land, u_land_uv);
+        base = lay(base, u_slope, u_slope_uv);
+        base = lay(base, u_viewshed, u_viewshed_uv);
+        base = lay(base, u_insolation, u_insolation_uv);
+        base = lay(base, u_overlay, u_overlay_uv);
+        base = lay(base, u_clouds, u_clouds_uv);
+    }
     // Отмывка рельефа: множитель яркости, на равнине 1. С солнцем -
     // свет по нормали и направлению на солнце, с ночной стороной.
-    float shade = v_shade;
     if (u_sun_on > 0.5) {
         shade = sun_brightness(dot(normalize(v_normal), u_sun));
     }
@@ -298,7 +349,7 @@ void main() {
     vec3 pass;
     // Белая подложка под дымкой остаётся белой: pass + (1 - pass) = 1.
     vec3 light = air(view_dir(), v_depth, pass);
-    frag_color = vec4(min(ground * pass + light, vec3(1.0)), 1.0);
+    frag_color = vec4(min(ground * pass + light, vec3(1.0)), alpha);
 }
 """
 
@@ -412,5 +463,36 @@ in vec3 v_color;
 out vec4 frag;
 void main() {
     frag = vec4(v_color, 1.0);
+}
+"""
+
+# Подземный режим (render/subsurface.py): стволы, горизонты, стенки
+# разрезов. Свет как у зданий, но с двух сторон - стенку и горизонт
+# видно и снизу, из-под земли. Альфа - из цвета вершины.
+SUBSURFACE_VERTEX = """
+#version 330 core
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec4 a_normal;
+layout(location = 2) in vec4 a_color;
+uniform mat4 u_mvp;
+uniform vec3 u_light;
+uniform float u_ambient;
+out vec4 v_color;
+void main() {
+    gl_Position = u_mvp * vec4(a_position, 1.0);
+    vec3 n = a_normal.xyz;
+    float len = length(n);
+    float lambert = len > 0.0 ? abs(dot(n / len, u_light)) : 1.0;
+    float shade = u_ambient + (1.0 - u_ambient) * lambert;
+    v_color = vec4(a_color.rgb * shade, a_color.a);
+}
+"""
+
+SUBSURFACE_FRAGMENT = """
+#version 330 core
+in vec4 v_color;
+out vec4 frag;
+void main() {
+    frag = v_color;
 }
 """

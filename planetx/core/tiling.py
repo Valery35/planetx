@@ -33,7 +33,7 @@ MIN_SKIRT = 2.0
 
 TileMesh = namedtuple(
     "TileMesh",
-    "z x y segments center radius positions uv indices shade normals")
+    "z x y segments center radius positions uv indices shade normals sea")
 TileMesh.__doc__ = """Сетка вершин одного тайла.
 
 center - центр в ECEF, float64. radius - радиус описанной сферы вокруг
@@ -43,6 +43,9 @@ uv - текстурные координаты, float32, v = 0 на северн
 shade - множитель яркости вершин от отмывки рельефа, float32, форма (N,).
 normals - единичные нормали рельефа в ECEF, float32, форма (N, 3), для
 света солнца (core/sun.py). У юбки нормаль её края.
+sea - вверх по нормали эллипсоида и высота вершины на экране, float32,
+форма (N, 4). По ним проход воды опускает сетку на уровень моря, у юбки
+высота ниже края на глубину юбки, опущенная юбка вырождается в линию.
 """
 
 
@@ -272,10 +275,16 @@ def tile_mesh(z, x, y, height_tile=None, exaggeration=1.0):
     uv = np.concatenate([uv, uv[ring]]).astype(np.float32)
     shading = np.concatenate([shading, shading[ring]]).astype(np.float32)
     lighting = np.concatenate([lighting, lighting[ring]]).astype(np.float32)
+    level = heights.ravel()
+    drop = skirt_depth(z) + spread
+    sea = np.concatenate([
+        np.hstack([up, level[:, None]]),
+        np.hstack([up[ring], (level[ring] - drop)[:, None]])]
+    ).astype(np.float32)
 
     return TileMesh(z, x, y, seg, center, radius,
                     offsets.astype(np.float32), uv, index_buffer(seg),
-                    shading, lighting)
+                    shading, lighting, sea)
 
 
 
@@ -311,6 +320,7 @@ def polar_cap_mesh(north, count=256):
     uv = np.zeros((len(world), 2), dtype=np.float32)
     flat = np.ones(len(world), dtype=np.float32)
     up = world / np.linalg.norm(world, axis=1, keepdims=True)
+    sea = np.hstack([up, np.zeros((len(world), 1))]).astype(np.float32)
     return TileMesh(-1, 0, 0 if north else 1, count, center, radius,
                     offsets.astype(np.float32), uv, indices, flat,
-                    up.astype(np.float32))
+                    up.astype(np.float32), sea)

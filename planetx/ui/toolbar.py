@@ -61,6 +61,7 @@ class ViewToolbar(QFrame):
     scene_open_requested = pyqtSignal()
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
+    subsurface_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -120,6 +121,10 @@ class ViewToolbar(QFrame):
             QgsApplication.getThemeIcon("/mActionNewLayout.svg"),
             tr("Вид в макет QGIS неизменной картинкой, вставленной "
                "в проект."), self.layout_clicked)
+        self.subsurface = self._button(
+            QIcon(os.path.join(ROOT, "subsurface.svg")),
+            tr("Подземный режим - скважины, горизонты, разрезы и вырез "
+               "блока под поверхностью."), self.subsurface_clicked)
         # Сцена: вид целиком в файл и из файла.
         scene = QToolButton(self)
         scene.setIcon(QgsApplication.getThemeIcon("/mActionFileSave.svg"))
@@ -153,7 +158,8 @@ class ViewToolbar(QFrame):
         menu = QMenu(demo)
         for section, items in (
                 (tr("Земля"), (("perm", tr("Пермь")),
-                               ("bocachica", tr("Бока-Чика, Starbase")))),
+                               ("bocachica", tr("Бока-Чика, Starbase")),
+                               ("subsurface", tr("Пермские отложения")))),
                 (tr("Марс"), (("mars", tr("Места посадок марсоходов")),
                               ("jezero", tr("Кратер Езеро")))),
                 (tr("Луна"), (("moon",

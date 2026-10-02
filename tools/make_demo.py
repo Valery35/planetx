@@ -357,10 +357,28 @@ def jezero():
     save("jezero", scene, root)
 
 
+def subsurface():
+    """Пермские отложения: только вид, данные - planetx/demo/subsurface,
+    их собирает tools/make_subsurface_demo.py, открывает окно глобуса
+    (GlobeWindow.open_demo). Масштаб рельефа 2 - выбор помощника."""
+    title = "PlanetX: демо, пермские отложения"
+    root = KFolder(title, children=[KPlace(
+        "Пермские отложения", "point", [(59.45, 56.88)], color=ORANGE,
+        icon="flag", view=(59.445, 56.885, 9000.0, 30.0, 60.0),
+        description="Синтетические скважины, кровли пластов, разрезы "
+                    "и вырез блока. Окно - значок «Подземный режим».")])
+    view = dict(EARTH_VIEW, scale=2.0,
+                extras=dict(EARTH_VIEW["extras"], buildings=False))
+    scene = Scene((59.445, 56.885, 9000.0, 30.0, 60.0), None, [], view,
+                  title, "Пермские отложения")
+    save("subsurface", scene, root)
+
+
 def main():
     perm()
     bocachica()
     jezero()
+    subsurface()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,

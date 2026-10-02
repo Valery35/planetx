@@ -78,7 +78,7 @@ def perspective(fov_y, aspect, near, far):
         [0.0, 0.0, -1.0, 0.0]])
 
 
-def clip_range(altitude, nearest=None):
+def clip_range(altitude, nearest=None, reach=None):
     """Ближняя и дальняя плоскости отсечения.
 
     altitude - высота глаза над эллипсоидом. Дальняя плоскость стоит
@@ -87,11 +87,14 @@ def clip_range(altitude, nearest=None):
     и ближняя плоскость берётся на 0.8 высоты. С рельефом nearest -
     расстояние до ближайшего рельефа, ближняя плоскость берётся
     на NEAR_SHARE от него. Отношение дальней к ближней не больше
-    MAX_DEPTH_RATIO.
+    MAX_DEPTH_RATIO. reach - дальность, до которой видно внутрь Земли,
+    при разрезе (core/cutaway.py) - расстояние до дальнего края шара.
     """
     h = max(altitude, 1.0)
     far = math.sqrt(h * (2.0 * ellipsoid.A + h)) + math.sqrt(
         MAX_TERRAIN * (2.0 * ellipsoid.A + MAX_TERRAIN))
+    if reach is not None:
+        far = max(far, reach)
     close = 0.8 * h if nearest is None else NEAR_SHARE * nearest
     near = max(MIN_NEAR, min(close, 0.8 * h), far / MAX_DEPTH_RATIO)
     return near, far
@@ -109,6 +112,9 @@ class Camera:
         # Расстояние до ближайшего рельефа, от него считается ближняя
         # плоскость. None - рельефа нет.
         self.nearest = None
+        # Разрез Земли: внутренность шара видна, дальняя плоскость
+        # отодвигается за центр.
+        self.deep = False
 
     @classmethod
     def look_at(cls, lat, lon, distance, heading=0.0, tilt=0.0, h=0.0,
@@ -138,7 +144,9 @@ class Camera:
         return float(ecef_to_geodetic(self.eye)[2])
 
     def projection(self):
-        near, far = clip_range(self.altitude(), self.nearest)
+        reach = float(np.linalg.norm(self.eye)) + ellipsoid.A \
+            if self.deep else None
+        near, far = clip_range(self.altitude(), self.nearest, reach)
         return perspective(self.fov_y, self.aspect, near, far)
 
     def tile_model_view(self, center, scale=1.0):

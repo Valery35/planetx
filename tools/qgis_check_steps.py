@@ -42,12 +42,17 @@ OUT = os.path.join(TEMP, "planetx_steps.json")
 result = {"errors": []}
 state = {}
 CHECKS = []
+MANUAL = set()  # отладочные шаги, только по имени
 
 
-def check(delay):
-    """Шаг проверки: функция и пауза перед следующим шагом, мс."""
+def check(delay, manual=False):
+    """Шаг проверки: функция и пауза перед следующим шагом, мс.
+    manual - отладочный шаг, он идёт только по имени в PLANETX_STEPS,
+    в полный прогон не входит."""
     def wrap(function):
         CHECKS.append((function, delay))
+        if manual:
+            MANUAL.add(function.__name__)
         return function
     return wrap
 
@@ -74,7 +79,7 @@ def run(index=0):
     try:
         again = function()
     except (AttributeError, KeyError, RuntimeError, TypeError,
-            ValueError, OSError):
+            ValueError, OSError, ImportError, IndexError):
         result["errors"].append("%s: %s" % (
             function.__name__, traceback.format_exc().splitlines()[-1]))
     if again:
@@ -150,7 +155,11 @@ def _install_gl_trace():
         setattr(rv.GlobeView, name, wrapped)
 
 
-@check(500)
+# Отладочный вывод драйвера повесил QGIS (AGENTS, «Сбой снимка со
+# зданиями»), в QGIS 4 класс лежит не там, где его ищет шаг. В полный
+# прогон шаг не входит, 2 октября 2026 года он остановил его окном
+# ошибки.
+@check(500, manual=True)
 def gl_trace_on():
     """Журнал сообщений драйвера, когда контекст окна уже создан.
     Шаг ставится в PLANETX_STEPS сразу после открытия окна."""
@@ -2948,6 +2957,381 @@ def _demo_steps():
 _demo_steps()
 
 
+def _cursor_at_center(window):
+    """Строка под курсором в середине вида: широта, долгота, высота
+    или глубина."""
+    view = window.view
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    from planetx.core.navigation import ground_under
+    window._hover = (view.width() / 2.0, view.height() / 2.0)
+    window._update_cursor()
+    point = ground_under(view.camera, *window._hover,
+                         view.navigator.pose.terrain)
+    lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
+    terrain = view.navigator.pose.terrain
+    return {"text": window._cursor_text,
+            "store_m": round(view.store.height_at(lat, lon)
+                             / (view.store.scale or 1.0)),
+            "terrain": terrain is not None}
+
+
+@check(25000)
+def seafloor_on():
+    # Дно океана: Марианский жёлоб с 600 км, строка «Дно океана».
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    # show, а не set_pose: поза с рельефом, по нему ищется точка
+    # под курсором.
+    nav.show(Pose(11.35, 142.4, 600000.0, 0.0, 30.0))
+    window.set_sea_depths(True)
+    key = window.myplaces.add(Shape("line", [(10.6, 142.5), (12.2, 142.5)],
+                                    name="Через жёлоб"))
+    state["sf_key"] = key
+    window._place_action("profile", key)
+    result["seafloor"] = {"flag": window.view.sea_floor}
+
+
+@check(15000)
+def seafloor_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["seafloor"]
+    store = view.store
+    trench = store.heights_at(np.array([11.35]), np.array([142.2]),
+                              scaled=False)
+    out["trench_m"] = round(float(trench[0]))
+    out["store_low"] = round(store.low)
+    window.profile_dialog.refresh()
+    p = window.profile_dialog.chart.profile
+    out["profile_low"] = round(float(p.low)) if p is not None else None
+    out["profile_high"] = round(float(p.high)) if p is not None else None
+    out["gl"] = dict(view.gl_errors)
+    out["cursor"] = _cursor_at_center(window)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_seafloor.png"))
+    window.profile_dialog.grab().save(os.path.join(
+        TEMP, "planetx_seafloor_profile.png"))
+    # Чёрное море: середина западной котловины.
+    from planetx.core.navigation import Pose
+    view.navigator.stop()
+    view.navigator.show(Pose(43.2, 31.5, 400000.0, 0.0, 20.0))
+
+
+@check(15000)
+def seafloor_black_sea():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["seafloor"]
+    h = view.store.heights_at(np.array([43.2]), np.array([31.5]),
+                              scaled=False)
+    out["black_sea_m"] = round(float(h[0]))
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_seafloor_black.png"))
+    window.set_sea_depths(False)
+
+
+@check(10000)
+def seafloor_off():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["seafloor"]
+    h = view.store.heights_at(np.array([43.2]), np.array([31.5]),
+                              scaled=False)
+    out["off_black_sea_m"] = round(float(h[0]))
+    out["off_flag"] = view.sea_floor
+    out["off_cursor"] = _cursor_at_center(window)
+    out["gl_after"] = dict(view.gl_errors)
+    view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_seafloor_black_off.png"))
+    # Флажок окна свойств вида и автообновление - умолчания.
+    window._show_properties()
+    out["properties_sea"] = window.properties.sea.isChecked()
+    window.properties.sea.setChecked(True)
+    out["after_checkbox"] = view.sea_floor
+    out["auto_refresh"] = window.auto_refresh
+    out["panel_row"] = "seafloor" in window.panel.extra_items
+    window.properties.close()
+    window.profile_dialog.close()
+    window.myplaces.remove(state["sf_key"])
+
+
+@check(15000)
+def quakes_on():
+    # Землетрясения: сводка USGS, вид на Японию и Курилы с наклоном.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(38.0, 142.0, 3000000.0, 0.0, 45.0))
+    window.set_extra("quakes", True)
+    result["quakes"] = {"legend": window.quake_legend.isVisible()}
+
+
+@check(3000)
+def quakes_check():
+    window = state["window"]
+    view = window.view
+    out = result["quakes"]
+    out["events"] = len(window.quake_events)
+    out["error"] = window.quake_error
+    out["depths"] = sorted(round(q.depth) for q in window.quake_events)[-3:]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_quakes.png"))
+    out["drawn"] = view.quakes.drawn
+    out["usgs_credit"] = "USGS" in window.attribution.text()
+    out["gl"] = dict(view.gl_errors)
+    # Шкала времени: последние 7 суток сводки.
+    out["time_known"] = window.timebar.known
+    window.toolbar.set_time_shown(True)
+    window._time_toggled(True)
+    lo, hi = window.timebar.extent()
+    out["extent_days"] = round((hi - lo) / 86400.0, 1)
+    window.timebar.set_range(hi - 7 * 86400.0, hi)
+    out["window_days"] = round((view.quakes.window[1]
+                                - view.quakes.window[0]) / 86400.0, 1)
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_quakes_week.png"))
+    out["drawn_week"] = view.quakes.drawn
+    window.toolbar.set_time_shown(False)
+    window._time_toggled(False)
+    view.grabFramebuffer()
+    out["drawn_closed"] = view.quakes.drawn
+    window.set_extra("quakes", False)
+
+
+@check(10000)
+def cutaway_on():
+    # Разрез Земли: сектор над Европой, вид сбоку с 15 000 км.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    # Сектор 143.5° в. д. - 126.5° з. д.: западная грань идёт через
+    # Японский жёлоб. Землетрясения - очаги у жёлоба, в вынутом секторе.
+    nav.set_pose(Pose(45.0, -171.5, 15000000.0, 0.0, 0.0))
+    # Зоны плит Slab2 - из локальной копии planetx-terrain, если есть.
+    folder = os.environ.get("PLANETX_TERRAIN_DIR")
+    if folder:
+        from qgis.PyQt.QtCore import QUrl
+        window.slab_base = QUrl.fromLocalFile(
+            os.path.join(folder, "slab2")).toString() + "/{code}.npz"
+    window.set_extra("cutaway", True)
+    window.set_extra("quakes", True)
+    nav.set_pose(Pose(25.0, 175.0, 18000000.0, 300.0, 20.0))
+    result["cutaway"] = {"wedge": list(window.view.wedge),
+                         "started": time.monotonic()}
+
+
+@check(1000)
+def cutaway_wait():
+    # Модель коры CRUST1.0 скачивается с сайта UCSD.
+    window = state["window"]
+    out = result["cutaway"]
+    out.setdefault("pending_seen", 0)
+    out["pending_seen"] = max(out["pending_seen"],
+                              window.view.data_pending)
+    if (window.crust is None and not window.crust_error
+            or window._slab_replies) \
+            and time.monotonic() - out["started"] < 60.0:
+        return 1000
+    out["crust_s"] = round(time.monotonic() - out["started"], 1)
+    out["crust_error"] = window.crust_error
+    out["crust"] = window.crust is not None
+    out["legend_crust"] = window.cutaway_legend.crust
+    out["credit"] = "CRUST1.0" in window.attribution.text()
+    out["slab_codes"] = list(window._slab_codes)
+    out["slab_loaded"] = sorted(window.slab_zones)
+    out["slab_errors"] = dict(window.slab_errors)
+    out["slab_credit"] = "Slab2" in window.attribution.text()
+    out["legend_slabs"] = window.cutaway_legend.slabs
+    out["pending_after"] = window.view.data_pending
+
+
+@check(3000)
+def cutaway_check():
+    window = state["window"]
+    view = window.view
+    out = result["cutaway"]
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_cutaway.png"))
+    out["legend"] = window.cutaway_legend.isVisible()
+    window.grab().save(os.path.join(TEMP, "planetx_cutaway_window.png"))
+    out["faces_drawn"] = view.cutaway.drawn
+    out["vertices"] = view.cutaway.vertex_count()
+    out["gain"] = view.wedge_gain
+    out["slab_vertices"] = view.cutaway_slabs.vertex_count()
+    out["slab_drawn"] = view.cutaway_slabs.drawn
+    out["legend_gain"] = window.cutaway_legend.gain
+    out["gl"] = dict(view.gl_errors)
+    # Ближе: западная грань у Японского жёлоба, взгляд на запад
+    # из вынутого сектора, 400 км.
+    from planetx.core.navigation import Pose
+    view.navigator.set_pose(Pose(38.0, 145.0, 400000.0, 270.0, 80.0))
+
+
+@check(3000)
+def cutaway_close():
+    window = state["window"]
+    view = window.view
+    out = result["cutaway"]
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_cutaway_close.png"))
+    out["close_faces_drawn"] = view.cutaway.drawn
+    out["close_gain"] = view.wedge_gain
+    window.grab().save(os.path.join(TEMP, "planetx_cutaway_close_win.png"))
+    window.set_extra("cutaway", False)
+    window.set_extra("quakes", False)
+
+
+@check(1000)
+def cutaway_off():
+    window = state["window"]
+    view = window.view
+    out = result["cutaway"]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_cutaway_off.png"))
+    out["off_wedge"] = view.wedge
+    out["off_deep"] = view.camera.deep
+    out["off_faces_drawn"] = view.cutaway.drawn
+    out["gl_after"] = dict(view.gl_errors)
+
+
+@check(1000)
+def quakes_off():
+    window = state["window"]
+    view = window.view
+    out = result["quakes"]
+    view.grabFramebuffer()
+    out["off_drawn"] = view.quakes.drawn
+    out["off_legend"] = window.quake_legend.isVisible()
+    out["off_credit"] = "USGS" in window.attribution.text()
+    out["gl_after"] = dict(view.gl_errors)
+
+
+@check(15000)
+def subsurface_open():
+    # Подземный режим, шаг 4 плана фазы 3: демо из меню значка «Демо».
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Пермские отложения",
+                                  "Permian deposits"))
+    action.trigger()
+    result["subsurface"] = {"started": window.subsurface.job is not None
+                            or window.subsurface.model is not None}
+
+
+@check(3000)
+def subsurface_wait():
+    window = state["window"]
+    if window.subsurface.job is not None:
+        return 500
+
+
+@check(3500)
+def subsurface_check():
+    window = state["window"]
+    view = window.view
+    out = result["subsurface"]
+    model = window.subsurface.model
+    out["holes"] = len(model.holes) if model else None
+    out["horizons"] = len(model.horizons) if model else None
+    out["sections"] = len(model.sections) if model else None
+    out["rings"] = len(model.rings) if model else None
+    out["missing"] = model.missing if model else None
+    out["skipped"] = model.skipped if model else None
+    out["status"] = window.subsurface.dialog.status.text() \
+        if window.subsurface.dialog else None
+    out["meshes"] = sorted(view.subsurface.buffers)
+    out["vertices"] = view.subsurface.vertex_count()
+    out["drawn"] = view.subsurface.drawn
+    out["cut_shown"] = view.gibs["cut"].shown
+    out["cut_textures"] = len(view.gibs["cut"].textures)
+    out["alpha"] = view.surface_alpha
+    out["marks"] = len(view.subsurface_marks)
+    out["scale"] = view.store.scale
+    out["gl"] = dict(view.gl_errors)
+    if model:
+        import numpy as np
+        lines = list(model.sections) + [np.vstack([r, r[:1]])
+                                        for r in model.rings]
+        out["nan_samples"] = [
+            int(sum(np.isnan(h.at(line[:, 0], line[:, 1])).sum()
+                    for h in model.horizons)) for line in lines]
+        out["line_points"] = [len(line) for line in lines]
+    # Исключение из paintGL не доходит до журнала QGIS: кадр
+    # рисуется здесь, ошибка - в отчёт.
+    import traceback
+    view.makeCurrent()
+    try:
+        view._fit_camera()
+        view._render(view.devicePixelRatioF())
+        out["render_error"] = ""
+    except (RuntimeError, ValueError, TypeError, AttributeError,
+            KeyError, IndexError) as exc:
+        out["render_error"] = traceback.format_exc()[-1500:] or str(exc)
+    view.doneCurrent()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_subsurface.png"))
+    # Замер кадров по вариантам: PLANETX_SS_VARIANT=opaque - поверхность
+    # непрозрачна, none - подземного нет, та же камера.
+    variant = os.environ.get("PLANETX_SS_VARIANT", "")
+    if variant == "opaque":
+        window.subsurface.set_options(dict(window.subsurface.settings,
+                                           opacity=1.0))
+    elif variant == "none":
+        window.subsurface.clear()
+    out["variant"] = variant
+    _swing_start("ss_top")
+
+
+@check(500)
+def subsurface_under():
+    # Камера под землёй: точка взгляда на низу модели, глаз ниже рельефа.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result["subsurface"]
+    out["swing_over_model"] = _swing_report("ss_top")
+    settings = dict(window.subsurface.settings, under=True)
+    window.subsurface.set_options(settings)
+    nav = window.view.navigator
+    nav.stop()
+    # show сажает точку взгляда на пол, set_pose - нет.
+    nav.show(Pose(59.445, 56.89, 1500.0, 20.0, 75.0))
+    out["floor"] = window.view.floor is not None
+
+
+@check(3000)
+def subsurface_under_check():
+    window = state["window"]
+    view = window.view
+    out = result["subsurface"]
+    out["eye_underground"] = view.eye_underground()
+    out["gl_under"] = dict(view.gl_errors)
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_subsurface_under.png"))
+    if os.environ.get("PLANETX_SS_PARTS"):
+        # Отладка: каждая сетка отдельно с того же места.
+        keep = dict(view.subsurface.buffers)
+        for name in keep:
+            view.subsurface.buffers = {name: keep[name]}
+            view.grabFramebuffer().save(os.path.join(
+                TEMP, "planetx_ss_%s.png" % name))
+        view.subsurface.buffers = keep
+    window.subsurface.set_options(dict(window.subsurface.settings,
+                                       under=False))
+    window.subsurface.clear()
+    view.repaint()
+    out["cleared"] = not view.subsurface.active and view.floor is None \
+        and not view.gibs["cut"].shown and view.surface_alpha == 1.0
+    window.myplaces.remove(window.myplaces.folders[-1].key)
+    window.set_relief_scale(1.0)
+
+
 @check(40000)
 def jezero_open():
     # Демо «Кратер Езеро» из меню значка «Демо», шаг 5 плана фазы 3.
@@ -3443,6 +3827,27 @@ def profile_hover_check():
         out["mark"] = [round(mark.lat, 6), round(mark.lon, 6)]
         out["drawn"] = [round(drawn.lat, 6), round(drawn.lon, 6)]
         out["same_place"] = out["mark"] == out["drawn"]
+        # Сразу после переезда, в первом кадре, надпись видна: прежний
+        # ответ о видимости держится до новой проверки.
+        # Точка встаёт на высоту, которой ещё не было: у неё новая
+        # строка таблицы надписей и нет ответа о видимости.
+        import numpy as np
+        p = window.profile_dialog.chart.profile
+        seen = {int(round(float(p.height[i]))) for i in state["ph_pair"]}
+        fresh = next(i for i in np.argsort(-p.height)
+                     if int(round(float(p.height[i]))) not in seen)
+        window.profile_dialog.chart.hovered.emit(float(fresh))
+        frame = window.view.frame
+        # repaint у QOpenGLWidget кадр не рисует, grabFramebuffer рисует.
+        window.view.grabFramebuffer()
+        key = identity(window._profile_mark)
+        out["shown_right_after_move"] = key in labels.shown
+        out["debug"] = {"frames": window.view.frame - frame,
+                        "shown": len(labels.shown),
+                        "hidden": str(labels.hidden.get(key)),
+                        "in_tool_marks": window._profile_mark
+                        in window.view.tool_marks,
+                        "count": labels.count}
     out["row"] = row
     window.profile_dialog.close()
     window.myplaces.remove(state["ph_key"])
@@ -4812,4 +5217,6 @@ ONLY = os.environ.get("PLANETX_STEPS")
 if ONLY:
     CHECKS[:] = [c for c in CHECKS if c[0].__name__ == "open_globe"
                  or c[0].__name__ in ONLY.split(",")]
+else:
+    CHECKS[:] = [c for c in CHECKS if c[0].__name__ not in MANUAL]
 QTimer.singleShot(3000, run)

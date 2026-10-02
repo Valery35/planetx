@@ -134,5 +134,13 @@ class TestProfile(unittest.TestCase):
         # Геодезическая, а не геоцентрическая широта.
         mid = ms.segment_midpoints([(45.0, 10.0), (45.0, 10.002)])[0]
         self.assertAlmostEqual(mid[0], 45.0, delta=1e-6)
+class TestSurfaceLevel(unittest.TestCase):
+
+    def test_below_sea_is_depth(self):
+        self.assertEqual(ms.surface_level(-10565.4), ("depth", 10565))
+        self.assertEqual(ms.surface_level(-0.3), ("height", 0))
+        self.assertEqual(ms.surface_level(207.6), ("height", 208))
+
+
 if __name__ == "__main__":
     unittest.main()

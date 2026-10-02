@@ -673,6 +673,7 @@ EN = {
     "Удалить «{name}» из «Моих меток»?": "Delete \"{name}\" from My Places?",
     "значения в точке": "values at the point",
     "{point}, высота {height} м": "{point}, elevation {height} m",
+    "{point}, глубина {depth} м": "{point}, depth {depth} m",
     "Объекты": "Features",
     "Объект": "Feature",
     "Значение": "Value",
@@ -998,6 +999,141 @@ EN = {
         "Not all heights are loaded, the computation used less detailed "
         "ones.",
     "Кратер Езеро": "Jezero crater",
+    "уровень моря": "sea level",
+    "Глубины морей и океанов": "Sea and ocean depths",
+    "С флажком дно морей и океанов лежит на своих глубинах, над "
+    "ним полупрозрачная вода, строка состояния показывает "
+    "глубину под курсором, профиль высот - глубины и уровень "
+    "моря. Без флажка высоты ниже уровня моря считаются нулём, "
+    "море ровное. Есть только у Земли.":
+        "With the box checked the sea and ocean floor lies at its depths "
+        "under semi-transparent water, the status bar shows the depth "
+        "under the cursor, and the elevation profile shows depths and sea "
+        "level. Without it heights below sea level count as zero and the "
+        "sea is flat. Exists only on the Earth.",
+    "Землетрясения": "Earthquakes",
+    "Землетрясения магнитудой от 4.5 за последние 30 "
+    "суток по сводке USGS. Кружок стоит в очаге на его "
+    "глубине, линия ведёт к эпицентру на поверхности. "
+    "Цвет показывает глубину очага, размер - магнитуду. "
+    "Сводка загружается при включении строки.":
+        "Earthquakes of magnitude 4.5 and above over the last 30 days from "
+        "the USGS feed. A circle marks the focus at its depth, and a line "
+        "leads to the epicentre on the surface. The colour shows the focus "
+        "depth, the size shows the magnitude. The feed is loaded when the "
+        "row is switched on.",
+    "Глубина очага, км": "Focus depth, km",
+    "Плита Slab2": "Slab2 slab",
+    "Разрез Земли": "Earth cutaway",
+    "Внутреннее ядро": "Inner core",
+    "Внешнее ядро": "Outer core",
+    "Нижняя мантия": "Lower mantle",
+    "Переходная зона": "Transition zone",
+    "Верхняя мантия": "Upper mantle",
+    "Кора": "Crust",
+    "Оболочки PREM, глубина, км": "PREM shells, depth, km",
+    "Кора CRUST1.0, оболочки PREM, глубина, км":
+        "CRUST1.0 crust, PREM shells, depth, km",
+    "{}, Мохо-{:g}": "{}, Moho-{:g}",
+    "Глубины до {:g} км растянуты, у поверхности "
+    "×{:g}": "Depths to {:g} km stretched, ×{:g} at the surface",
+    "Лёд": "Ice",
+    "Верхние осадки": "Upper sediments",
+    "Средние осадки": "Middle sediments",
+    "Нижние осадки": "Lower sediments",
+    "Верхняя кора": "Upper crust",
+    "Средняя кора": "Middle crust",
+    "Нижняя кора": "Lower crust",
+    "Вынимает из Земли сектор под точкой взгляда - "
+    "четверть полушария шириной 90° по долготе. На его "
+    "гранях видны кора, мантия и ядро по радиусам "
+    "модели PREM. Где грань проходит через зону "
+    "субдукции, на ней видна погружающаяся плита. "
+    "Сектор ставится заново при каждом включении строки.":
+        "Removes a sector of the Earth under the look-at point, a quarter "
+        "of a hemisphere 90° wide in longitude. Its faces show the crust, "
+        "the mantle and the core by the radii of the PREM model. Where a "
+        "face crosses a subduction zone, the subducting slab shows on it. "
+        "The sector is placed anew each time the row is switched on.",
+    "Пермские отложения": "Permian deposits",
+    "Подземный режим": "Subsurface mode",
+    "Подземный режим - скважины, горизонты, разрезы и вырез "
+    "блока под поверхностью.":
+        "Subsurface mode - drill holes, horizons, sections and a block "
+        "cut under the surface.",
+    "Файл GeoPackage": "GeoPackage file",
+    "Таблицы collar, interval, survey, beds, sections и cut "
+    "в одном файле, как у Isoliner. Кровли пластов - растры, "
+    "их файлы названы в поле surface таблицы beds.":
+        "Tables collar, interval, survey, beds, sections and cut in one "
+        "file, as in Isoliner. Bed roofs are rasters, their files are "
+        "named in the surface field of the beds table.",
+    "Таблицы и растры кровель - слои текущего проекта.":
+        "The tables and the roof rasters are layers of the current "
+        "project.",
+    "Обзор…": "Browse…",
+    "Устья": "Collars",
+    "Точки устьев с полями hole_id, z - отметка устья, eoh - "
+    "глубина забоя по стволу.":
+        "Collar points with the fields hole_id, z - collar elevation, "
+        "eoh - end-of-hole depth along the hole.",
+    "Интервалы": "Intervals",
+    "Таблица hole_id, from, to, code. Глубины по стволу, "
+    "code - пласт или литология, от него цвет.":
+        "Table hole_id, from, to, code. Depths along the hole, code is "
+        "the bed or lithology and sets the colour.",
+    "Инклинометрия": "Survey",
+    "Таблица hole_id, depth, azimuth, dip или zenith. "
+    "Без неё скважины вертикальные.":
+        "Table hole_id, depth, azimuth, dip or zenith. Without it the "
+        "holes are vertical.",
+    "Пласты": "Beds",
+    "Таблица code, ord, color - порядок пластов сверху "
+    "вниз и их цвета. Без неё цвет - по коду.":
+        "Table code, ord, color - the order of beds from top to bottom and "
+        "their colours. Without it the colour follows the code.",
+    "Разрезы": "Sections",
+    "Линии, вдоль которых строятся стенки разреза "
+    "между кровлями пластов.":
+        "Lines along which section walls are built between the bed "
+        "roofs.",
+    "Вырез": "Cut",
+    "Многоугольник выреза блока. Внутри него поверхность "
+    "и кровли убираются, по краю встают стенки.":
+        "Polygon of the block cut. The surface and the roofs are removed "
+        "inside it, walls stand along its edge.",
+    "Растры отметок кровель пластов. Код пласта - имя слоя.":
+        "Elevation rasters of bed roofs. The bed code is the layer name.",
+    "Кровли": "Roofs",
+    "Непрозрачность поверхности. Меньше - сквозь рельеф видны "
+    "скважины и кровли пластов.":
+        "Opacity of the surface. A lower value shows the drill holes and "
+        "the bed roofs through the terrain.",
+    "Непрозрачность поверхности": "Surface opacity",
+    "Вырез блока": "Block cut",
+    "Убрать поверхность и кровли внутри многоугольника выреза. "
+    "По краю выреза видны пласты, на дне - низ модели.":
+        "Remove the surface and the roofs inside the cut polygon. The beds "
+        "show along the cut edge, the model bottom lies at its floor.",
+    "Камера под землёй": "Camera under ground",
+    "Камера опускается ниже рельефа до низа модели в её рамке. "
+    "Над моделью камера ходит по её низу, а не по рельефу.":
+        "The camera goes below the terrain down to the model bottom inside "
+        "the model frame. Over the model the camera moves along its "
+        "bottom, not along the terrain.",
+    "Убрать подземное с глобуса.":
+        "Remove the subsurface objects from the globe.",
+    "GeoPackage (*.gpkg)": "GeoPackage (*.gpkg)",
+    "Файл не найден.": "The file is not found.",
+    "Данных нет: нужны устья скважин или "
+    "кровли пластов.":
+        "No data: drill hole collars or bed roofs are needed.",
+    "Скважин {holes}, кровель {horizons}, разрезов "
+    "{sections}. Вершин {vertices}.":
+        "Drill holes {holes}, roofs {horizons}, sections {sections}. "
+        "Vertices {vertices}.",
+    "Не найдены {names}.": "Not found: {names}.",
+    "Пропущено строк - {count}.": "Rows skipped: {count}.",
     "Инсоляция": "Insolation",
     "Инсоляция…": "Insolation…",
     "Первые сутки промежутка. Итог - среднее количество часов "

@@ -30,6 +30,10 @@ QGIS. Запросы идут через сетевые настройки и д
 | d3-celestial, Olaf Frohn | линии и названия созвездий, имена ярких звёзд, вид неба | [BSD с тремя пунктами](https://github.com/ofrohn/d3-celestial/blob/master/LICENSE), текст лицензии лежит в `planetx/data` | Constellations: d3-celestial © Olaf Frohn |
 | JPL, Approximate Positions of the Planets | положения планет на небе | [страница JPL](https://ssd.jpl.nasa.gov/planets/approx_pos.html), формулы, данные не скачиваются | Planets: JPL approximate elements |
 | Астрономический альманах, формулы малой точности | положение Луны на небе | формулы, данные не скачиваются | нет |
+| USGS, сводка землетрясений M4.5+ за 30 суток | землетрясения, строка «Землетрясения» | [данные USGS в общественном достоянии США, USGS просит указать источник](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits), сверено 2 октября 2026 года | Earthquakes: USGS |
+| PREM, Dziewonski, Anderson, 1981 | радиусы оболочек, строка «Разрез Земли» | опубликованная модель, радиусы границ записаны в код, данные не скачиваются | PREM, в шкале оболочек |
+| CRUST1.0, Laske, Masters, Ma, Pasyanos, 2013 | слои коры на гранях, строка «Разрез Земли» | [страница модели](https://igppweb.ucsd.edu/~gabi/crust1.html), лицензии нет, авторы просят ссылку на сайт или статью EGU2013-2658. Модуль не распространяет модель, а скачивает архив с сайта UCSD при первом показе, сверено 2 октября 2026 года | CRUST1.0, Laske, Masters, Ma, Pasyanos |
+| USGS Slab2, Hayes, 2018, doi:10.5066/F7PV6JNV | плиты на гранях разреза Земли | [данные USGS в общественном достоянии США](https://www.usgs.gov/data/slab2-a-comprehensive-subduction-zone-geometry-model), USGS просит ссылку. Условие выпуска - вне контура зоны модель не применять, узлы вне контура удалены. Сетки глубины, толщины и падения прорежены до 0.1° и лежат файлами зон в хранилище planetx-terrain, папка `slab2`, сверено 2 октября 2026 года | Slabs: USGS Slab2 |
 | Nominatim | поиск места по названию | [правила использования Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | © OpenStreetMap contributors, в окне «О модуле» |
 
 ## Nominatim - поиск места
