@@ -6070,6 +6070,55 @@ def tile_source_check():
             settings.remove(key)
 
 
+@check(500)
+def basemap_checkbox():
+    # Щелчок мышью по флажку подложки. До 2 октября 2026 года флажок
+    # выбирал подложку, строки группы пересоздавались, и Qt присылал
+    # itemClicked без строки - AttributeError в _geo_clicked, нашёл
+    # автор на QGIS 3.40.15. Ошибки слотов идут в sys.excepthook.
+    from qgis.PyQt.QtCore import Qt
+    from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtWidgets import QStyle, QStyleOptionViewItem
+    from planetx.qt_compat import enum
+    window = state["window"]
+    panel = window.panel
+    base = next(s for s in panel.sections if s.name == "base")
+    was_open = base.is_open()
+    base.set_open(True)
+    tree = panel.geo
+    group = panel.base_group
+    osm = next(i for i in range(group.childCount())
+               if group.child(i).text(0) == "OpenStreetMap")
+    row = group.child(osm)
+    tree.scrollToItem(row)
+    QgsApplication.processEvents()
+    option = QStyleOptionViewItem()
+    option.rect = tree.visualItemRect(row)
+    option.features |= enum(QStyleOptionViewItem, "ViewItemFeature",
+                            "HasCheckIndicator")
+    box = tree.style().subElementRect(
+        enum(QStyle, "SubElement", "SE_ItemViewItemCheckIndicator"),
+        option, tree)
+    caught = []
+    hook = sys.excepthook
+    sys.excepthook = lambda kind, value, tb: caught.append(repr(value))
+    try:
+        QTest.mouseClick(tree.viewport(),
+                         enum(Qt, "MouseButton", "LeftButton"),
+                         enum(Qt, "KeyboardModifier", "NoModifier"),
+                         box.center())
+        QgsApplication.processEvents()
+    finally:
+        sys.excepthook = hook
+    result["basemap_checkbox"] = {
+        "visible": not option.rect.isEmpty(),
+        "source": window.source.name,
+        "same_row": group.child(osm) is row,
+        "errors": caught}
+    panel._geo_clicked(group.child(0), 0)
+    base.set_open(was_open)
+
+
 @check(2000)
 def folder_props():
     # Свойства папки как у Google Earth, 2 октября 2026 года.
