@@ -49,7 +49,8 @@ from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
-from ..core import crust, cutaway, insolation, quakes, slabs, viewshed
+from ..core import (crust, cutaway, insolation, quakes, section, slabs,
+                    viewshed)
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
@@ -540,6 +541,10 @@ class GlobeWindow(QWidget):
         self.ruler.ask_heights = self.view.want_tool_heights
         self.profile_dialog = None
         self._profile_mark = None
+        # Разрез вниз вдоль пути: окно, точки пути и точка под курсором.
+        self.section_dialog = None
+        self._section_points = []
+        self._section_mark = None
         # Видимость из точки: окно, задание расчёта и тайлы слоя.
         self.viewshed_dialog = None
         self.viewshed_job = None
@@ -1115,10 +1120,7 @@ class GlobeWindow(QWidget):
                                 self.crust)
             self._wedge_gain_changed()
             self._want_slabs()
-        if self.crust is None and self._crust_reply is None:
-            # Модель не распространяется с модулем, она скачивается
-            # с сайта UCSD и дальше берётся из кэша QGIS.
-            self._crust_reply = fetch_bytes(crust.URL, self._crust_done)
+        self._want_crust()
         self._show_attribution()
 
     def _wedge_gain_changed(self):
@@ -1141,19 +1143,37 @@ class GlobeWindow(QWidget):
         if self.crust is not None and self.view.wedge is not None:
             self.view.set_wedge(self.view.wedge, self.crust)
         self._show_attribution()
+        self._refresh_section()
 
-    def _want_slabs(self):
-        """Зоны плит Slab2, которых касается разрез: пришедшие - на
-        грани, недостающие - в запрос. Указатель зон лежит в модуле."""
+    def _want_crust(self):
+        """Модель коры CRUST1.0: не распространяется с модулем, она
+        скачивается с сайта UCSD и дальше берётся из кэша QGIS."""
+        if self.crust is None and self._crust_reply is None \
+                and not self.crust_error:
+            self._crust_reply = fetch_bytes(crust.URL, self._crust_done)
+
+    def _read_slab_index(self):
         if self.slab_index is None:
             with open(os.path.join(DATA_DIR, "slab2_index.json"),
                       encoding="utf-8") as fh:
                 self.slab_index = slabs.read_index(fh.read())
+        return self.slab_index
+
+    def _want_slabs(self):
+        """Зоны плит Slab2, которых касается разрез: пришедшие - на
+        грани, недостающие - в запрос. Указатель зон лежит в модуле."""
         wedge = self.view.wedge
         if wedge is None:
             return
-        codes = slabs.touched(self.slab_index, *cutaway.arc_points(wedge))
+        codes = slabs.touched(self._read_slab_index(),
+                              *cutaway.arc_points(wedge))
         self._slab_codes = codes
+        self._request_slabs(codes)
+        self._show_slabs()
+
+    def _request_slabs(self, codes):
+        """Файлы зон плит, которых ещё нет, - в запрос. Ждущие запросы
+        входят в счётчик загрузки вида, его показывает значок."""
         for code in codes:
             if code in self.slab_zones or code in self._slab_replies \
                     or code in self.slab_errors:
@@ -1163,7 +1183,7 @@ class GlobeWindow(QWidget):
                 lambda data, error, code=code: self._slab_done(
                     code, data, error))
         self.view.data_pending = len(self._slab_replies)
-        self._show_slabs()
+        self.view.update()
 
     def _slab_done(self, code, data, error):
         self._slab_replies.pop(code, None)
@@ -1176,6 +1196,7 @@ class GlobeWindow(QWidget):
             except slabs.SlabError as problem:
                 self.slab_errors[code] = str(problem)
         self._show_slabs()
+        self._refresh_section()
 
     def _show_slabs(self):
         """Пришедшие зоны разреза - на грани, подпись источника и строка
@@ -1218,6 +1239,10 @@ class GlobeWindow(QWidget):
             self.view.update()
             return
         self._quake_legend_state()
+        self._want_quakes()
+
+    def _want_quakes(self):
+        """Сводка землетрясений USGS, если её запроса ещё нет."""
         if self._quake_reply is None:
             self._quake_reply = fetch_json(quakes.FEED, self._quakes_done,
                                            prefer_cache=False)
@@ -1228,6 +1253,7 @@ class GlobeWindow(QWidget):
         if data is not None:
             self.quake_events = quakes.parse(data)
         self._place_quakes()
+        self._refresh_section()
 
     def _place_quakes(self):
         """События на глобус по нынешнему масштабу рельефа. Эпицентр
@@ -2524,6 +2550,8 @@ class GlobeWindow(QWidget):
                                        lon))
         if self._profile_mark is not None:
             marks.append(self._profile_mark)
+        if self._section_mark is not None:
+            marks.append(self._section_mark)
         self.view.tool_marks = marks
         self.view.update()
 
@@ -2538,6 +2566,61 @@ class GlobeWindow(QWidget):
             self.profile_dialog.set_points(title, points, source)
         self.profile_dialog.show()
         self.profile_dialog.raise_()
+
+    def _open_section(self, title, points):
+        """Окно «Разрез» вниз вдоль пути points [(широта, долгота)].
+        Кора, зоны плит и сводка землетрясений просятся, если их нет."""
+        self._section_points = list(points)
+        if self.section_dialog is None:
+            self.section_dialog = SectionDialog(title, self._section, self)
+            self.section_dialog.point_hovered.connect(self._section_hover)
+            self.section_dialog.finished.connect(
+                lambda *args: self._section_hover(None))
+        else:
+            self.section_dialog.set_source(title, self._section)
+        self.section_dialog.show()
+        self.section_dialog.raise_()
+
+    def _section(self, depth, width):
+        """Разрез по точкам пути и данным, что уже есть, и пояснение,
+        что ещё загружается."""
+        found = section.along(self._section_points)
+        if found is None:
+            return None, ""
+        _, lats, lons = found
+        self._want_crust()
+        if not self.quake_events:
+            self._want_quakes()
+        codes = slabs.touched(self._read_slab_index(), lats, lons)
+        self._request_slabs(codes)
+        zones = [self.slab_zones[c] for c in codes if c in self.slab_zones]
+        waiting = []
+        if self.crust is None and self._crust_reply is not None:
+            waiting.append(tr("кора CRUST1.0"))
+        if any(c in self._slab_replies for c in codes):
+            waiting.append(tr("плиты Slab2"))
+        if self._quake_reply is not None:
+            waiting.append(tr("землетрясения"))
+        notes = tr("Загружаются: {what}.", what=", ".join(waiting)) \
+            if waiting else ""
+        return section.build(self._section_points, self.crust, zones,
+                             self.quake_events, depth, width), notes
+
+    def _refresh_section(self):
+        if self.section_dialog is not None \
+                and self.section_dialog.isVisible():
+            self.section_dialog.refresh()
+
+    def _section_hover(self, point):
+        """Точка разреза под курсором графика - метка на глобусе."""
+        if point is None:
+            self._section_mark = None
+        else:
+            lat, lon, distance = point
+            self._section_mark = MarkPlace(
+                -410000, tr("{value} км", value="{:.0f}".format(distance)),
+                "mark", 1, lat, lon)
+        self._update_tool_marks()
 
     def _ruler_profile(self):
         self._open_profile(tr("Линейка"), lambda: self.ruler._points(False),
@@ -2689,6 +2772,8 @@ class GlobeWindow(QWidget):
             self._open_profile(item.name, lambda: points, HeightSource(
                 self._true_heights, self._has_height_tile,
                 self.view.want_tool_heights))
+        elif action == "section":
+            self._open_section(item.name, list(item.shape.points))
         elif action == "viewshed":
             self._open_viewshed(item)
         elif action == "insolation":
