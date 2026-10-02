@@ -63,7 +63,7 @@ EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT,
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
 TOUR_ROLE = PLACE_ROLE + 1
-# Строки группы «Подложка»: номер источника или ADD_SOURCE.
+# Строки группы «Основа»: номер источника или ADD_SOURCE.
 BASEMAP_ROLE = TOUR_ROLE + 1
 ADD_SOURCE = -1
 # Строка внутри папки-переключателя: рисуется переключателем, как
@@ -372,7 +372,7 @@ class LayerPanel(QWidget):
     track_requested = pyqtSignal(object)
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
-    # Подложка выбрана в группе «Подложка» - номер источника.
+    # Подложка выбрана в группе «Основа» - номер источника.
     basemap_chosen = pyqtSignal(int)
     add_source_requested = pyqtSignal()
     relief_toggled = pyqtSignal(bool)
@@ -490,7 +490,7 @@ class LayerPanel(QWidget):
         # Подложка - первая группа раздела, одна отмеченная строка
         # и «Добавить источник тайлов…». Просьба автора от 1 октября
         # 2026 года.
-        self.base_group = QTreeWidgetItem(self.geo, [tr("Подложка")])
+        self.base_group = QTreeWidgetItem(self.geo, [tr("Основа")])
         self.base_group.setToolTip(0, tr(
             "Снимки или карта на поверхности. Esri World Imagery - пример "
             "подложки, условия её использования задаёт Esri. Свой источник "
@@ -564,7 +564,8 @@ class LayerPanel(QWidget):
                     "гранях видны кора, мантия и ядро по радиусам "
                     "модели PREM. Где грань проходит через зону "
                     "субдукции, на ней видна погружающаяся плита. "
-                    "Сектор ставится заново при каждом включении строки.")),
+                    "Углы сектора тянутся мышью. Сектор ставится заново "
+                    "при каждом включении строки.")),
                 (SLOPE, tr("Уклон"), tr(
                     "Уклон поверхности по высотам рельефа, классами от "
                     "ровного до круче 35°. Шкала стоит в левом нижнем "
@@ -721,7 +722,7 @@ class LayerPanel(QWidget):
         self.geo.blockSignals(False)
 
     def set_basemaps(self, names, index, own=None):
-        """Строки группы «Подложка»: названия источников и выбранный.
+        """Строки группы «Основа»: названия источников и выбранный.
         own - название снимков другого тела, тогда группа показывает
         только его и выбор недоступен."""
         self.geo.blockSignals(True)
@@ -1015,6 +1016,7 @@ class LayerPanel(QWidget):
             elif key.startswith("line:"):
                 actions.append(("tour", tr("Тур по пути")))
                 actions.append(("profile", tr("Профиль высот")))
+                actions.append(("section", tr("Разрез вниз…")))
             elif key.startswith("point:"):
                 actions.append(("viewshed", tr("Видимость отсюда…")))
                 actions.append(("insolation", tr("Инсоляция…")))

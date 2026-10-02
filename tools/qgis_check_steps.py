@@ -3105,6 +3105,81 @@ def quakes_check():
     window.set_extra("quakes", False)
 
 
+@check(2000)
+def section_open():
+    # Разрез вниз поперёк Японского жёлоба: с востока на запад по 38.5°
+    # с. ш., плита уходит под Японию. Зоны плит - с локальной копии.
+    from planetx.core.features import Shape
+    window = state["window"]
+    folder = os.environ.get("PLANETX_TERRAIN_DIR")
+    if folder:
+        from qgis.PyQt.QtCore import QUrl
+        window.slab_base = QUrl.fromLocalFile(
+            os.path.join(folder, "slab2")).toString() + "/{code}.npz"
+    key = window.myplaces.add(Shape("line", [(38.5, 146.0), (38.5, 132.0)],
+                                    name="Через Японский жёлоб"))
+    state["section_key"] = key
+    window._place_action("section", key)
+    result["section"] = {"started": time.monotonic(),
+                         "dialog": window.section_dialog is not None}
+
+
+@check(1000)
+def section_wait():
+    window = state["window"]
+    out = result["section"]
+    waiting = (window.crust is None and not window.crust_error) \
+        or window._quake_reply is not None or window._slab_replies
+    if waiting and time.monotonic() - out["started"] < 60.0:
+        return 1000
+    out["wait_s"] = round(time.monotonic() - out["started"], 1)
+
+
+@check(1000)
+def section_check():
+    import numpy as np
+    window = state["window"]
+    dialog = window.section_dialog
+    out = result["section"]
+    s = dialog.chart.section
+    out["length_km"] = round(float(s.distance[-1]))
+    out["crust"] = s.bounds is not None
+    slab = np.isfinite(s.slab_top)
+    out["slab_points"] = int(slab.sum())
+    out["slab_depth_km"] = [round(float(np.nanmin(s.slab_top)), 1),
+                            round(float(np.nanmax(s.slab_top)), 1)] \
+        if slab.any() else None
+    out["moho_km"] = [round(float(v), 1) for v in
+                      (np.min(-s.bounds[:, -1]), np.max(-s.bounds[:, -1]))] \
+        if s.bounds is not None else None
+    out["quakes"] = len(s.quakes)
+    out["feed_events"] = len(window.quake_events)
+    out["feed_error"] = window.quake_error
+    out["near_line"] = sorted(
+        (round(q.lat, 1), round(q.lon, 1), round(q.depth))
+        for q in window.quake_events
+        if 36.0 < q.lat < 41.0 and 130.0 < q.lon < 147.0)[:8]
+    out["deep_quakes"] = sum(1 for q in s.quakes if q[1] > 70.0)
+    out["stats"] = dialog.stats.text()
+    # За 30 суток ближайшие очаги у этой линии - в 100-150 км от неё.
+    dialog.band.setValue(400.0)
+    out["quakes_400km"] = len(dialog.chart.section.quakes)
+    dialog.grab().save(os.path.join(TEMP, "planetx_section.png"))
+    # Курсор над графиком - метка на глобусе.
+    dialog.chart.hovered.emit(len(s.distance) // 2)
+    out["mark"] = window._section_mark is not None \
+        and window._section_mark in window.view.tool_marks
+    dialog.chart.hovered.emit(-1)
+    out["mark_after"] = window._section_mark is not None
+    # Глубина 2891 км - до границы ядра.
+    dialog.depth.setCurrentIndex(3)
+    out["depth_core"] = dialog.chart.section.depth
+    dialog.grab().save(os.path.join(TEMP, "planetx_section_core.png"))
+    dialog.close()
+    window.myplaces.remove(state["section_key"])
+    out["gl"] = dict(window.view.gl_errors)
+
+
 @check(10000)
 def cutaway_on():
     # Разрез Земли: сектор над Европой, вид сбоку с 15 000 км.
@@ -3167,6 +3242,31 @@ def cutaway_check():
     out["gain"] = view.wedge_gain
     out["slab_vertices"] = view.cutaway_slabs.vertex_count()
     out["slab_drawn"] = view.cutaway_slabs.drawn
+    # Угол тянется мышью: юго-западный угол - на 10° севернее и 15°
+    # западнее, через пиксели экрана.
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    corners = window.wedge_corners
+    out["corner_tool"] = view.vertex_tool is corners
+    out["corner_marks"] = sum(1 for m in view.tool_marks
+                              if -420004 < m.id <= -420000)
+    before = view.wedge
+    lat, lon = before.south, before.west
+    target = (lat + 10.0, lon - 15.0)
+    xyz = geodetic_to_ecef(np.array([lat, target[0]]),
+                           np.array([lon, target[1]]), np.zeros(2))
+    pixels, _ = view.camera.project(xyz)
+    out["grabbed"] = corners.grab(*pixels[0])
+    corners.move(*pixels[1])
+    corners.drop()
+    after = view.wedge
+    out["wedge_after"] = [round(v, 1) for v in after]
+    out["moved_by"] = [round(after.south - before.south, 1),
+                       round((after.west - before.west + 180.0) % 360.0
+                             - 180.0, 1)]
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_cutaway_moved.png"))
+    out["gl_drag"] = dict(view.gl_errors)
     out["legend_gain"] = window.cutaway_legend.gain
     out["gl"] = dict(view.gl_errors)
     # Ближе: западная грань у Японского жёлоба, взгляд на запад

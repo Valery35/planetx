@@ -297,10 +297,12 @@ uniform float u_alpha;
 in float v_height;
 // Разрез Земли (core/cutaway.py): поверхность в вынутом секторе
 // отбрасывается по нормали эллипсоида. u_wedge - направление средней
-// долготы (x, y), косинус половины ширины, полушарие.
+// долготы (x, y), косинус половины ширины; u_wedge_lat - синусы южной
+// и северной широты сектора.
 in vec3 v_up;
 uniform float u_wedge_on;
 uniform vec4 u_wedge;
+uniform vec2 u_wedge_lat;
 uniform float u_water;
 uniform vec4 u_water_color;
 uniform float u_shallow;
@@ -311,9 +313,14 @@ vec3 lay(vec3 under, sampler2D image, vec4 uv) {
     return under * (1.0 - top.a) + top.rgb;
 }
 void main() {
-    if (u_wedge_on > 0.5 && u_wedge.w * v_up.z > 0.0
-            && dot(v_up.xy, u_wedge.xy) >= u_wedge.z * length(v_up.xy)) {
-        discard;
+    if (u_wedge_on > 0.5) {
+        float up = length(v_up);
+        float sin_lat = up > 0.0 ? v_up.z / up : 0.0;
+        if (sin_lat > u_wedge_lat.x && sin_lat < u_wedge_lat.y
+                && dot(v_up.xy, u_wedge.xy)
+                >= u_wedge.z * length(v_up.xy)) {
+            discard;
+        }
     }
     vec4 mask = texture(u_cut, u_cut_uv.xy + u_cut_uv.z * v_uv);
     if (mask.a > 0.5) {

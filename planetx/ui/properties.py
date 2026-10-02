@@ -79,7 +79,7 @@ class PropertiesDialog(QDialog):
             "QGIS, кроме подключений рельефа. Новое подключение "
             "появляется здесь при следующем открытии окна."))
         self.basemap.currentIndexChanged.connect(self.basemap_chosen)
-        base = QGroupBox(tr("Подложка"), self)
+        base = QGroupBox(tr("Основа"), self)
         QVBoxLayout(base).addWidget(self.basemap)
 
         self.scale = QDoubleSpinBox(self)

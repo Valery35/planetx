@@ -73,9 +73,12 @@ from .legend import (CutawayLegend, InsolationLegend, QuakeLegend,
                      SlopeLegend, TemperatureLegend)
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
+from . import globemenu
+from .handles import DrawVertices, Handles
 from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
 from .measure import _xy as ruler_xy
 from .elevation import HeightSource, ProfileDialog
+from .section import SectionDialog
 from .myplaces import MyPlaces
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
@@ -340,6 +343,57 @@ class _RulerVertices:
         self.index = None
 
 
+class _WedgeCorners:
+    """Угловые точки разреза Земли, которые тянутся мышью (render/view.py,
+    vertex_tool), просьба автора от 2 октября 2026 года. Угол меняет
+    свою долготу и свою широту сектора (core.cutaway.move_corner)."""
+
+    def __init__(self, window):
+        self.window = window
+        self.index = None
+
+    def points(self):
+        """Углы сектора без повторов: у полюса два угла совпадают."""
+        wedge = self.window.view.wedge
+        if wedge is None:
+            return []
+        out = []
+        for n, (lat, lon) in enumerate(cutaway.corners(wedge)):
+            if abs(lat) >= 90.0 and n in (1, 3):
+                continue
+            out.append((n, lat, lon))
+        return out
+
+    def grab(self, px, py):
+        view = self.window.view
+        points = self.points()
+        if not points:
+            return False
+        xyz = geodetic_to_ecef(np.array([p[1] for p in points]),
+                               np.array([p[2] for p in points]),
+                               np.zeros(len(points)))
+        pixels, front = view.camera.project(xyz)
+        found = nearest_vertex(pixels, front, px, py,
+                               GRAB_PIXELS * view.devicePixelRatioF())
+        self.index = None if found is None else points[found][0]
+        return self.index is not None
+
+    def move(self, px, py):
+        window = self.window
+        found = window._ground(px, py)
+        wedge = window.view.wedge
+        if found is None or self.index is None or wedge is None:
+            return
+        window.view.set_wedge(cutaway.move_corner(wedge, self.index,
+                                                  *found), window.crust)
+        window._update_tool_marks()
+
+    def drop(self):
+        self.index = None
+        # Зоны плит - по новому сектору, когда угол отпущен.
+        self.window._want_slabs()
+
+
 class GlobeWindow(QWidget):
     """Отдельное окно поверх главного окна QGIS."""
 
@@ -366,6 +420,9 @@ class GlobeWindow(QWidget):
         # Подписи неба - раньше панели значков, чтобы лечь под неё.
         self.sky_labels = SkyLabels(self.view)
         self.view.changed.connect(self.sky_labels.sync)
+        # Кружки вершин рисуемого объекта - тоже под панелью значков.
+        self.handles = Handles(self.view)
+        self.view.changed.connect(self.handles.sync)
         self.view.show_constellations = QgsSettings().value(
             CONSTELLATIONS_KEY, True, type=bool)
         self._sky_state = None  # взгляд на небо до выхода из него
@@ -544,6 +601,8 @@ class GlobeWindow(QWidget):
         # Разрез вниз вдоль пути: окно, точки пути и точка под курсором.
         self.section_dialog = None
         self._section_points = []
+        # Углы разреза Земли, которые тянутся мышью.
+        self.wedge_corners = _WedgeCorners(self)
         self._section_mark = None
         # Видимость из точки: окно, задание расчёта и тайлы слоя.
         self.viewshed_dialog = None
@@ -569,6 +628,13 @@ class GlobeWindow(QWidget):
         # Новая метка: тот же механизм точек, своё окно.
         self.drawer = Ruler(self)
         self.drawer.changed.connect(self._refresh_shapes)
+        self.draw_vertices = DrawVertices(self)
+        self.handles.tool = self.draw_vertices
+        self.drawer.changed.connect(self.handles.sync)
+        self.view.hovered.connect(self.draw_vertices.hover)
+        self.view.menu_requested.connect(self._globe_menu)
+        # Ключ метки, форму которой правят в окне «Новая метка».
+        self.editing_key = None
         self.place_dialog = None
         self.toolbar.place_clicked.connect(self._open_place)
         # Снимок вида в файл и в макет, по окну на каждое.
@@ -735,7 +801,7 @@ class GlobeWindow(QWidget):
         self._changed()
 
     def _fill_basemaps(self):
-        """Группа «Подложка» панели: источники Земли или снимки тела."""
+        """Группа «Основа» панели: источники Земли или снимки тела."""
         if self.planet.earth:
             names = [tr("{name} - пример", name=s.name) if s.example
                      else s.name for s in self.sources]
@@ -1111,6 +1177,9 @@ class GlobeWindow(QWidget):
         self._place_attribution()
         if not on:
             self.view.set_wedge(None)
+            if self.view.vertex_tool is self.wedge_corners:
+                self.view.vertex_tool = None
+            self._update_tool_marks()
             self._wedge_gain_changed()
             self._show_slabs()
             return
@@ -1120,6 +1189,9 @@ class GlobeWindow(QWidget):
                                 self.crust)
             self._wedge_gain_changed()
             self._want_slabs()
+        if self.view.vertex_tool is None:
+            self.view.vertex_tool = self.wedge_corners
+        self._update_tool_marks()
         self._want_crust()
         self._show_attribution()
 
@@ -2053,7 +2125,8 @@ class GlobeWindow(QWidget):
         shapes = [self.previews.get(p.key, p.shape)
                   for p in self.myplaces.places
                   if p.visible and self._time_ok(p) and not p.tour
-                  and p.body == self.planet.key]
+                  and p.body == self.planet.key
+                  and p.key != self.editing_key]
         # Метки неба подписывает слой подписей неба.
         # Точка метки неба - (склонение, прямое восхождение), как
         # (широта, долгота) у меток глобуса.
@@ -2204,17 +2277,35 @@ class GlobeWindow(QWidget):
             self.place_dialog.finished.connect(self._place_closed)
         self.place_dialog.show()
         self.place_dialog.raise_()
+        self.view.vertex_tool = self.draw_vertices
         self._refresh_shapes()
         self._tool_cursor()
 
     def _place_closed(self, *args):
+        self.view.vertex_tool = self.wedge_corners \
+            if self.view.wedge is not None else None
+        if self.editing_key is not None:
+            self.editing_key = None
+            self.place_dialog.end_edit()
         self.drawer.clear()
         self._refresh_shapes()
         self._tool_cursor()
+        self.handles.sync()
 
     def _save_place(self):
         shape = self.place_dialog.shape(rubber=False)
         if shape is None:
+            return
+        if self.editing_key is not None:
+            # Правка формы: метка остаётся на своём месте в списке.
+            if not self.myplaces.set_shape(self.editing_key, shape):
+                self.message = (tr(
+                    "Форма не записана. Вид объекта после правки "
+                    "стал другим."), time.monotonic())
+                self._show_state()
+                return
+            self.editing_key = None
+            self.place_dialog.end_edit()
             return
         self.myplaces.add(shape, folder=self.panel.current_folder(),
                           body=self.body_key())
@@ -2231,6 +2322,30 @@ class GlobeWindow(QWidget):
         bases = {"point": tr("Моя метка"), "path": tr("Мой путь"),
                  "polygon": tr("Мой многоугольник")}
         return self.new_name(bases[mode])
+
+    def edit_place(self, key):
+        """Форма сохранённой метки в окне «Новая метка»: вершины
+        тянутся мышью, «Сохранить» записывает её на прежнее место."""
+        place = self.myplaces.find(key)
+        if place is None or is_folder(key) \
+                or not globemenu.editable(place):
+            return
+        self._open_place()
+        self.editing_key = key
+        self.place_dialog.begin_edit(place)
+        self._refresh_shapes()
+
+    def add_place_here(self, lat, lon):
+        """«Добавить метку здесь» меню глобуса: окно «Новая метка»
+        с точкой под курсором."""
+        self._open_place()
+        self.place_dialog.tabs.setCurrentIndex(0)
+        self.drawer.clear()
+        self.drawer.add(lat, lon)
+
+    def _globe_menu(self, px, py):
+        """Щелчок правой кнопкой по глобусу без сдвига."""
+        globemenu.show(self, px, py)
 
     def set_sidebar(self, shown):
         """Показать или скрыть левую панель, вид занимает её место."""
@@ -2518,6 +2633,8 @@ class GlobeWindow(QWidget):
         """Backspace над видом: последняя точка линейки."""
         if self._ruler_open():
             self.ruler.remove_last()
+        elif self._place_open() and self.editing_key is None:
+            self.drawer.remove_last()
 
     def _heights_arrived(self):
         """Пришёл тайл высот: длина по рельефу и профиль уточняются."""
@@ -2552,6 +2669,10 @@ class GlobeWindow(QWidget):
             marks.append(self._profile_mark)
         if self._section_mark is not None:
             marks.append(self._section_mark)
+        for n, lat, lon in self.wedge_corners.points():
+            # Подпись угла - его широта и долгота, видна, пока его тянут.
+            marks.append(MarkPlace(-420000 - n, "{:.0f}°, {:.0f}°".format(
+                lat, lon), "mark", 1, lat, lon))
         self.view.tool_marks = marks
         self.view.update()
 
@@ -2656,7 +2777,8 @@ class GlobeWindow(QWidget):
         self._tool_cursor()
 
     def _ruler_closed(self, *args):
-        self.view.vertex_tool = None
+        self.view.vertex_tool = self.wedge_corners \
+            if self.view.wedge is not None else None
         self.ruler.clear()
         self._refresh_shapes()
         self._tool_cursor()
@@ -3375,6 +3497,8 @@ class GlobeWindow(QWidget):
                 self.place_dialog.close()
             if self.viewshed_dialog is not None:
                 self.viewshed_dialog.close()
+            if self.section_dialog is not None:
+                self.section_dialog.close()
             self.viewshed_timer.stop()
             if self.viewshed_tiles is not None:
                 self.viewshed_tiles.abort()

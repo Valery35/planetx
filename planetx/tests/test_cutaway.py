@@ -36,21 +36,40 @@ class TestCutaway(unittest.TestCase):
                         [-160.0, 120.0, 170.0, 215.0 - 360.0])
         self.assertEqual(got.tolist(), [True, False, False, True])
         south = cw.wedge_at(-5.0, 0.0)
-        self.assertEqual(south.sign, -1.0)
+        self.assertEqual((south.south, south.north), (-90.0, 0.0))
         self.assertTrue(cw.inside(south, [-80.0], [40.0])[0])
+
+    def test_move_corner(self):
+        wedge = cw.wedge_at(30.0, 100.0)
+        # Юго-западный угол - на 20° с. ш., 70° в. д.
+        moved = cw.move_corner(wedge, 0, 20.0, 70.0)
+        self.assertEqual(moved, cw.Wedge(70.0, 145.0, 20.0, 90.0))
+        # Северо-восточный угол через линию перемены дат.
+        wide = cw.move_corner(moved, 3, 60.0, -170.0)
+        self.assertAlmostEqual(cw.span(wide), 120.0)
+        self.assertEqual((wide.south, wide.north), (20.0, 60.0))
+        self.assertTrue(cw.inside(wide, [40.0], [179.0])[0])
+        self.assertFalse(cw.inside(wide, [65.0], [179.0])[0])
+        # Восток за западом - сектор не выворачивается.
+        thin = cw.move_corner(wedge, 1, 30.0, 50.0)
+        self.assertAlmostEqual(cw.span(thin), cw.MIN_SPAN)
+        # Угол за полюс и широты наоборот - по порядку.
+        flipped = cw.move_corner(wedge, 2, -10.0, 55.0)
+        self.assertEqual((flipped.south, flipped.north), (-10.0, 0.0))
 
     def test_uniform_matches_inside(self):
         # Шейдер считает сектор по нормали: dot(xy, c) >= cos(half)·|xy|
-        # и знак z. Та же проверка, что и inside.
-        wedge = cw.wedge_at(40.0, 60.0)
-        cx, cy, cos_half, sign = cw.uniform(wedge)
+        # и синус широты между синусами границ. Та же проверка, что
+        # и inside.
+        wedge = cw.make_wedge(20.0, 130.0, -25.0, 50.0)
+        cx, cy, cos_half, sin_s, sin_n = cw.uniform(wedge)
         rng = np.random.default_rng(3)
         lats = rng.uniform(-89.0, 89.0, 500)
         lons = rng.uniform(-180.0, 180.0, 500)
         up = el.surface_normal(lats, lons)
         xy = np.hypot(up[:, 0], up[:, 1])
         shader = ((up[:, 0] * cx + up[:, 1] * cy >= cos_half * xy)
-                  & (sign * up[:, 2] > 0.0))
+                  & (up[:, 2] > sin_s) & (up[:, 2] < sin_n))
         self.assertEqual(shader.tolist(),
                          cw.inside(wedge, lats, lons).tolist())
 

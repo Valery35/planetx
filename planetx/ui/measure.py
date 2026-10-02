@@ -108,6 +108,8 @@ class Ruler(QObject):
         self.alts = []
         self.cursor = None
         self.cursor_alt = None
+        # Рисование завершено: щелчок точек не добавляет, резинки нет.
+        self.finished = False
         self._da = None
         self._da_body = None
         self.heights = None
@@ -131,6 +133,7 @@ class Ruler(QObject):
     def clear(self):
         self.points = []
         self.alts = []
+        self.finished = False
         self.changed.emit()
 
     def spatial(self):
@@ -144,6 +147,8 @@ class Ruler(QObject):
     def add(self, lat, lon, alt=None):
         """Щелчок по глобусу: новая точка по правилам вида линейки.
         alt - высота точки над эллипсоидом для 3D-видов."""
+        if self.finished:
+            return
         limit = self._limit()
         if limit and len(self.points) >= limit:
             # Третий щелчок начинает заново.
@@ -167,6 +172,41 @@ class Ruler(QObject):
             self.alts.pop()
             self.changed.emit()
 
+    def insert(self, index, lat, lon, alt=None):
+        """Новая вершина перед точкой index, середина отрезка."""
+        self.points.insert(index, (lat, lon))
+        self.alts.insert(index, alt)
+        self.changed.emit()
+
+    def remove(self, index):
+        """Убрать вершину index."""
+        if 0 <= index < len(self.points):
+            del self.points[index]
+            del self.alts[index]
+            if not self.points:
+                self.finished = False
+            self.changed.emit()
+
+    def finish(self):
+        """Рисование завершено, вершины остаются для правки."""
+        if not self.finished:
+            self.finished = True
+            self.changed.emit()
+
+    def resume(self):
+        """Продолжить рисование: щелчки снова добавляют точки."""
+        if self.finished:
+            self.finished = False
+            self.changed.emit()
+
+    def load(self, mode, points, alts=None):
+        """Готовый объект для правки: вид, точки и высоты."""
+        self.mode = mode
+        self.points = [tuple(p) for p in points]
+        self.alts = list(alts) if alts else [None] * len(self.points)
+        self.finished = mode != "point"
+        self.changed.emit()
+
     def set_cursor(self, point, alt=None):
         """Точка под курсором или None. Резинка тянется к ней."""
         if point != self.cursor or alt != self.cursor_alt:
@@ -177,7 +217,8 @@ class Ruler(QObject):
 
     def _rubber(self, rubber):
         limit = self._limit()
-        return rubber and self.cursor is not None and self.points \
+        return rubber and not self.finished \
+            and self.cursor is not None and self.points \
             and not (limit and len(self.points) >= limit) \
             and (not self.spatial() or self.cursor_alt is not None)
 

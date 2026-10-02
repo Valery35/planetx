@@ -107,6 +107,7 @@ Navigation uses the mouse, the keys and the navigation controls.
 | Left double click | Flies to the point under the cursor and zooms in 2.5 times |
 | Right double click | Zooms out 2.5 times |
 | Right button drag | Up - closer, down - farther, toward the press point |
+| Right click | The menu of the point under the cursor |
 | Middle button or left with Shift | Turn and tilt around the look-at point |
 | Left button with Ctrl | Looks around, the eye stays in place |
 
@@ -305,7 +306,27 @@ it fades out, below the scale is true. The shell scale shows the
 factor, earthquake foci are stretched the same way.
 Labels of
 places in the removed sector are not shown. The sector is placed anew
-each time the row is switched on. The row exists only on the Earth.
+each time the row is switched on. The corners of the sector are
+marked with points showing their latitude and longitude, and they can
+be dragged with the mouse. A corner changes its own longitude and its
+own latitude. If the latitude is neither 0° nor a pole, the lower or
+upper face becomes a cone towards the centre of the Earth. The row
+exists only on the Earth.
+
+The Section down… item in the menu of a path in My Places opens the
+Section window. It shows a section of the Earth down along the path.
+The distance from the start of the path runs across, the depth runs
+down.
+The section shows the CRUST1.0 crust layers, the PREM shells, the
+Slab2 slabs and earthquake foci from a band along the path. The
+colours are those of the Earth cutaway faces, the layer scale is to
+the right of the chart. The Depth list sets the depth of the section,
+from 100 km to the centre of the Earth. The Foci band field sets the
+width of the band. A focus is moved onto the section at the nearest
+point of the path. The cursor over the chart marks the point on the
+globe and shows the Moho and slab depths there. The crust, the slabs
+and the earthquake feed are loaded when the window opens, if they are
+not there yet, the line under the chart tells what is still loading.
 
 ### Base map and a tile source of your own
 
@@ -547,6 +568,30 @@ The Save button writes the object to the selected folder of My Places.
 The window stays open for the next object. The Clear button removes the
 points put so far.
 
+Vertices are shown as circles and are dragged with the mouse. The
+circle in the middle of a segment adds a new vertex there. A click on
+the first point closes the shape, and a path becomes a polygon. A click
+on the last point finishes the path. A hint stands at the cursor. After
+finishing, clicks add no points, and the vertices can still be edited.
+
+### Right-click menu on the globe
+
+A right click on the globe opens a menu.
+
+| Item | What it does |
+|---|---|
+| Delete vertex | Removes the vertex of the drawn object under the cursor |
+| Finish drawing, Continue drawing | Stops and resumes adding points with clicks |
+| Edit shape | Opens the saved placemark, path or polygon under the cursor in the New placemark window. Save writes the object back to its place in the list |
+| Properties… | Opens the properties of the placemark under the cursor |
+| Add placemark here | Opens the New placemark window with the point under the cursor |
+| Fly here | Flies to the point with the same altitude and tilt |
+| Copy coordinates | Latitude and longitude of the point to the clipboard |
+
+The shape of a 3D path, a 3D polygon and a tour is not edited this way.
+A placemark with a saved measurement loses the measurement text after
+its shape is edited.
+
 ### Saved view
 
 The Save view icon puts a placemark at the look-at point. The name is
@@ -753,71 +798,6 @@ Insolation is computed only for the Earth.
 
 ---
 
-## Subsurface mode
-
-The Subsurface mode icon on the icon bar opens a window of the same
-name. The mode shows drill holes, bed roofs, section walls and a block
-cut under the surface.
-
-### Data
-
-The data are tables in the same layout as in Isoliner.
-
-| Table | Fields | What it sets |
-|---|---|---|
-| collar | hole_id, z, eoh, point geometry | Hole collar, collar elevation, end-of-hole depth along the hole |
-| interval | hole_id, from, to, code | Intervals along the hole, positive downward, code is the bed or lithology |
-| survey | hole_id, depth, azimuth, dip or zenith | Survey. Without it the hole is vertical |
-| beds | code, ord, color, surface | Order of beds from top to bottom, colour "#rrggbb", roof raster file |
-| sections | line geometry | Section lines |
-| cut | polygon geometry | Block cut |
-
-Fields are also found by other common names, for example bhid, elev,
-td, from_m, to_m, litho. A dip angle with negative values is counted
-from the horizontal, -90 is straight down. A bed roof is a raster of
-elevations in metres in any coordinate system, GDAL reads it.
-
-The source is chosen in the window. GeoPackage file takes the tables
-with these names from one file. It finds the roof rasters by the
-surface field of the beds table, the path is relative to the folder of
-the file. Project layers takes the tables from layers of the current
-project and the roofs from the rasters checked in the list. The bed
-code of a roof is the layer name.
-
-### Display
-
-The Build button reads the data, loads the terrain heights under the
-model and builds it.
-
-- A drill hole follows the survey by the minimum curvature method.
-  Intervals take the colour of their bed, the hole number stands
-  above the collar.
-- A bed roof is a surface in the colour of the bed.
-- A section is a set of walls along the line from the terrain to the
-  model bottom, beds between the roofs have their own colours.
-- The model bottom is the end of the deepest hole, without holes it
-  is 20 m below the deepest roof.
-
-Depth is stretched by the terrain scale, like the surface. With the
-terrain off, elevations are counted from the surface.
-
-The Surface opacity slider makes the terrain inside the model frame
-transparent, the drill holes and roofs show through it. Outside the
-frame the surface stays opaque. The Block cut checkbox removes the
-surface and the roofs inside the cut polygon. Walls with beds stand
-along the cut edge, a plane at the model bottom lies at its floor. The
-Camera under ground checkbox lets the camera go below the terrain down
-to the model bottom. Inside the model frame the camera then moves along
-its bottom. The Remove button removes the subsurface objects from the
-globe. The window settings are kept in the project.
-
-The Permian deposits demo in the Demo icon opens a synthetic site
-near Berezniki, on the Verkhnekamsk deposit. It has 24 drill holes, 9 bed roofs of the Verkhnekamsk
-section, two sections and a cut of the north-east quarter. The data are
-made up for the example, they are not a survey.
-
----
-
 ## Tours
 
 A tour flies over the checked places of a folder in the list order,
@@ -969,7 +949,6 @@ under the list plays a tour over them. The folder can be deleted.
 |---|---|---|
 | Earth | Perm | Places with icons and the moments of a walk, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
 | Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
-| Earth | Permian deposits | Synthetic drill holes, bed roofs, sections and a block cut, the Subsurface mode window |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |
 | Moon | Apollo and Lunokhod sites | The landing sites of six Apollo missions, Lunokhod 1 and Lunokhod 2 |

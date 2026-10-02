@@ -560,6 +560,26 @@ class MyPlaces(QObject):
         """Свойства метки из окна свойств: {поле файла: значение}."""
         self._write({key: values})
 
+    def set_shape(self, key, shape):
+        """Новая форма метки key после правки вершин на глобусе:
+        геометрия, название, цвет и толщина. Вид объекта прежний,
+        иначе запись не идёт и возвращается False. Текст измерения
+        стирается, он относился к прежней форме."""
+        layer = self._layer_of(key)
+        item = self.find(key)
+        if layer is None or item is None or not shape.points \
+                or shape.kind != item.kind:
+            return False
+        if not layer.dataProvider().changeGeometryValues(
+                {item.fid: _geometry(shape.kind, shape.points)}):
+            return False
+        self._write({key: {"name": shape.name,
+                           "color": _color_text(shape.color),
+                           "width": float(shape.width),
+                           "fill": _color_text(shape.fill),
+                           "measure": ""}})
+        return True
+
     def set_visible_many(self, states):
         """Флажки меток и папок разом: {ключ: включена}."""
         self._write({key: {"visible": 1 if on else 0}

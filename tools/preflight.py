@@ -30,7 +30,8 @@ REQUIRED = ("name", "qgisMinimumVersion", "qgisMaximumVersion",
             "repository", "tracker", "icon")
 
 # Кроме стандартной библиотеки допустимы модули, которые есть в QGIS.
-ALLOWED = {"qgis", "PyQt5", "PyQt6", "numpy", "OpenGL"}
+# osgeo - привязки GDAL, они входят в состав QGIS.
+ALLOWED = {"qgis", "PyQt5", "PyQt6", "numpy", "OpenGL", "osgeo"}
 
 VERSION = re.compile(r"\b(\d+\.\d+\.\d+)\b")
 # Файлы, где номер версии плагина повторяется. Ищется номер рядом

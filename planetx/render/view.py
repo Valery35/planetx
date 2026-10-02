@@ -17,6 +17,7 @@ from OpenGL import GL
 from qgis.PyQt.QtCore import (QObject, QRunnable, QThreadPool, Qt, QTimer,
                               pyqtSignal)
 from qgis.PyQt.QtGui import QImage, QSurfaceFormat
+from qgis.PyQt.QtWidgets import QApplication
 
 from ..core import cutaway, lod, skydata
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
@@ -252,6 +253,8 @@ class GlobeView(QOpenGLWidget):
     wedge_gain_changed = pyqtSignal()
     # Backspace или Delete над видом: убрать последнюю точку инструмента.
     undo_point = pyqtSignal()
+    # Щелчок правой кнопкой без сдвига, пиксели кадра: меню глобуса.
+    menu_requested = pyqtSignal(float, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -280,6 +283,14 @@ class GlobeView(QOpenGLWidget):
         # grab(px, py) -> bool, move(px, py) и drop(). Ставит окно.
         self.vertex_tool = None
         self._vertex_drag = False
+        # Правая кнопка: щелчок без сдвига открывает меню. Меню ждёт
+        # срок двойного щелчка, двойной щелчок правой отдаляет.
+        self._right_press = None
+        self._right_double = False
+        self._menu_point = None
+        self._menu_timer = QTimer(self)
+        self._menu_timer.setSingleShot(True)
+        self._menu_timer.timeout.connect(self._emit_menu)
         self.setCursor(self.tool_cursor)
         self.loader = None
         # Рельеф: хранилище высот, загрузчик Terrarium, уровень высот,
@@ -907,6 +918,7 @@ class GlobeView(QOpenGLWidget):
         elif button == RIGHT:
             self.navigator.stop()
             self.zoom_drag = (px, py, py)
+            self._right_press = (px, py)
         elif button == LEFT and self.vertex_tool is not None \
                 and self.vertex_tool.grab(px, py):
             # Точка линейки под курсором тянется, Земля стоит.
@@ -949,6 +961,10 @@ class GlobeView(QOpenGLWidget):
         elif self.zoom_drag is not None:
             # Вверх - ближе, вниз - дальше, к точке нажатия.
             x0, y0, last = self.zoom_drag
+            if self._right_press is not None and math.hypot(
+                    px - x0, py - y0) \
+                    > CLICK_PIXELS * self.devicePixelRatioF():
+                self._right_press = None
             self.zoom_drag = (x0, y0, py)
             factor = math.exp((py - last) * RIGHT_ZOOM
                               / self.devicePixelRatioF())
@@ -984,12 +1000,23 @@ class GlobeView(QOpenGLWidget):
                 self.vertex_tool.drop()
         elif press is not None and event.button() == LEFT:
             self.clicked.emit(*press)
+        if event.button() == RIGHT:
+            right, self._right_press = self._right_press, None
+            double, self._right_double = self._right_double, False
+            if right is not None and not double:
+                self._menu_point = right
+                self._menu_timer.start(QApplication.doubleClickInterval())
         self.turning = None
         self.looking = None
         self.zoom_drag = None
         self.navigator.release(time.monotonic())
         self.setCursor(self.tool_cursor)
         self.update()
+
+    def _emit_menu(self):
+        point, self._menu_point = self._menu_point, None
+        if point is not None and self.shot is None:
+            self.menu_requested.emit(*point)
 
     def surface_hit(self, px, py):
         """Точка ECEF под пикселем кадра на крыше или стене здания, если
@@ -1033,6 +1060,9 @@ class GlobeView(QOpenGLWidget):
                 self.fly_sky(ra, dec, sky.fov * 2.0)
             self.update()
             return
+        if event.button() == RIGHT:
+            self._menu_timer.stop()
+            self._right_double = True
         if self.tool_active:
             self.mousePressEvent(event)
             return
@@ -1180,6 +1210,8 @@ class GlobeView(QOpenGLWidget):
         self.u_wedge_on = GL.glGetUniformLocation(self.program,
                                                   "u_wedge_on")
         self.u_wedge = GL.glGetUniformLocation(self.program, "u_wedge")
+        self.u_wedge_lat = GL.glGetUniformLocation(self.program,
+                                                   "u_wedge_lat")
         GL.glUseProgram(self.program)
         GL.glUniform1f(self.u_alpha, 1.0)
         GL.glUniform1f(self.u_water, 0.0)
@@ -1675,7 +1707,9 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glUseProgram(self.program)
         gpu.gl.glUniform1f(self.u_wedge_on, 0.0 if wedge is None else 1.0)
         if wedge is not None:
-            gpu.gl.glUniform4f(self.u_wedge, *cutaway.uniform(wedge))
+            cx, cy, cos_half, sin_s, sin_n = cutaway.uniform(wedge)
+            gpu.gl.glUniform4f(self.u_wedge, cx, cy, cos_half, 0.0)
+            GL.glUniform2f(self.u_wedge_lat, sin_s, sin_n)
         gpu.gl.glUniform1i(self.u_texture, 0)
         gpu.gl.glUniform1i(self.u_overlay, 1)
         for unit, sampler, _ in self.gibs_slots.values():

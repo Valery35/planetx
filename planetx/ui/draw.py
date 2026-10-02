@@ -37,6 +37,8 @@ class PlaceDialog(QDialog):
         # namer(вид) - название новой метки с номером, как «Моя метка 3».
         self.namer = namer
         self.auto_name = ""
+        # Заливка метки, форму которой правят, иначе None.
+        self.edit_fill = None
         self.setWindowTitle(tr("Новая метка"))
         self.setModal(False)
         self.tabs = QTabBar(self)
@@ -103,20 +105,67 @@ class PlaceDialog(QDialog):
         self.auto_name = self.namer(MODES[self.tabs.currentIndex()])
         self.name.setText(self.auto_name)
 
+    def to_polygon(self):
+        """Путь замкнули щелчком по первой точке: вкладка
+        «Многоугольник» с теми же точками."""
+        self._set_tab("polygon")
+        self.ruler.mode = "polygon"
+        self.reset_name()
+        self.ruler.changed.emit()
+
+    def _set_tab(self, mode):
+        """Сменить вкладку, не трогая поставленные точки."""
+        self.tabs.blockSignals(True)
+        self.tabs.setCurrentIndex(MODES.index(mode))
+        self.tabs.blockSignals(False)
+
+    def begin_edit(self, place):
+        """Форма сохранённой метки place в окне: её точки, название,
+        цвет и толщина. Вид объекта при правке не меняется."""
+        shape = place.shape
+        mode = {"point": "point", "line": "path",
+                "polygon": "polygon"}[shape.kind]
+        self._set_tab(mode)
+        self.tabs.setEnabled(False)
+        self.setWindowTitle(tr("Изменение метки"))
+        self.edit_fill = shape.fill
+        self.auto_name = ""
+        self.name.setText(shape.name)
+        self.color.setColor(QColor(*shape.color))
+        self.width.setValue(shape.width)
+        self.ruler.load(mode, shape.points)
+
+    def end_edit(self):
+        """Правка формы закончена, окно снова ставит новую метку."""
+        self.tabs.setEnabled(True)
+        self.setWindowTitle(tr("Новая метка"))
+        self.edit_fill = None
+        self.name.clear()
+        self._mode(self.tabs.currentIndex())
+
     def _update(self):
         hints = {
-            "point": tr("Щелчок по глобусу ставит метку. Новый щелчок "
-                        "переносит её."),
-            "path": tr("Щелчками по глобусу отметьте точки пути."),
+            "point": tr("Щелчок по глобусу ставит метку. Метка "
+                        "перетаскивается мышью."),
+            "path": tr("Щелчками по глобусу отметьте точки пути. "
+                       "Щелчок по последней точке завершает путь, "
+                       "по первой - замыкает фигуру."),
             "polygon": tr("Щелчками по глобусу отметьте вершины "
-                          "многоугольника.")}
-        self.hint.setText(hints[self.ruler.mode])
+                          "многоугольника. Щелчок по первой вершине "
+                          "завершает рисование.")}
+        text = hints[self.ruler.mode]
+        if self.ruler.finished:
+            text = tr("Вершины перетаскиваются мышью. Кружок в середине "
+                      "отрезка ставит новую вершину. Правая кнопка "
+                      "открывает меню.")
+        self.hint.setText(text)
         self.save.setEnabled(self.ruler.shape(rubber=False) is not None)
 
     def style(self):
         """Цвет, толщина и заливка для фигуры."""
         color = _rgba(self.color.color())
-        fill = (color[0], color[1], color[2], DEFAULT_FILL[3])
+        alpha = self.edit_fill[3] if self.edit_fill else DEFAULT_FILL[3]
+        fill = (color[0], color[1], color[2], alpha)
         return {"color": color, "width": self.width.value(), "fill": fill}
 
     def shape(self, rubber=True):

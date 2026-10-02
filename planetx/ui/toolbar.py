@@ -35,6 +35,9 @@ def body_names():
             "iapetus": tr("Япет"),
             "ceres": tr("Церера"), "vesta": tr("Веста")}
 ICON_SIZE = QSize(20, 20)
+# Значок «Подземный режим» и демо «Пермские отложения» скрыты до
+# своего выпуска, решение автора от 3 октября 2026 года.
+SUBSURFACE = False
 STYLE = ("QFrame#planetxToolbar { background: rgba(250, 250, 250, 225); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
 DIRTY_STYLE = "QToolButton { background: #ff9f1c; border-radius: 3px; }"
@@ -125,6 +128,7 @@ class ViewToolbar(QFrame):
             QIcon(os.path.join(ROOT, "subsurface.svg")),
             tr("Подземный режим - скважины, горизонты, разрезы и вырез "
                "блока под поверхностью."), self.subsurface_clicked)
+        self.subsurface.setVisible(SUBSURFACE)
         # Сцена: вид целиком в файл и из файла.
         scene = QToolButton(self)
         scene.setIcon(QgsApplication.getThemeIcon("/mActionFileSave.svg"))
@@ -167,6 +171,8 @@ class ViewToolbar(QFrame):
                 (tr("Небо"), (("sky", tr("Созвездия и яркие объекты")),))):
             menu.addSection(section)
             for key, title in items:
+                if key == "subsurface" and not SUBSURFACE:
+                    continue
                 menu.addAction(title).triggered.connect(
                     lambda checked=False, k=key: self.demo_requested.emit(k))
         demo.setMenu(menu)

@@ -80,31 +80,95 @@ GAIN_DISTANCE = 2.0e6
 # Плита Slab2 на гранях (core/slabs.py) - цвет, выбор помощника.
 SLAB_COLOR = (55, 85, 125)
 
-Wedge = namedtuple("Wedge", "lon sign half")
-Wedge.__doc__ = """Сектор: средняя долгота, полушарие (1 - северное,
--1 - южное), половина ширины по долготе в градусах."""
+# Сектор двигается за угловые точки, просьба автора от 2 октября 2026
+# года. Ширина по долготе и по широте - не меньше MIN_SPAN, по долготе
+# не больше MAX_SPAN.
+MIN_SPAN = 5.0
+MAX_SPAN = 180.0
+
+Wedge = namedtuple("Wedge", "west east south north")
+Wedge.__doc__ = """Сектор: западная и восточная долгота, южная и северная
+широта, градусы. Восток отсчитывается от запада к востоку, через линию
+перемены дат тоже. Широта 0 - плоскость экватора, широта ±90 - полюс,
+прочие широты - конус к центру Земли."""
+
+
+def make_wedge(west, east, south, north):
+    """Сектор с границами в допустимых пределах: долготы от -180 до 180,
+    ширина по долготе MIN_SPAN-MAX_SPAN, широты по порядку и не уже
+    MIN_SPAN."""
+    west = (float(west) + 180.0) % 360.0 - 180.0
+    span = min(max((float(east) - west) % 360.0, MIN_SPAN), MAX_SPAN)
+    east = (west + span + 180.0) % 360.0 - 180.0
+    south = min(max(float(south), -90.0), 90.0 - MIN_SPAN)
+    north = min(max(float(north), south + MIN_SPAN), 90.0)
+    return Wedge(west, east, south, north)
+
+
+def span(wedge):
+    """Ширина сектора по долготе, градусы."""
+    return (wedge.east - wedge.west) % 360.0 or 360.0
+
+
+def middle(wedge):
+    """Средняя долгота сектора."""
+    return (wedge.west + span(wedge) / 2.0 + 180.0) % 360.0 - 180.0
 
 
 def wedge_at(lat, lon, half=HALF):
-    """Сектор под точкой взгляда: её долгота посередине, её
-    полушарие."""
-    return Wedge(float(lon), 1.0 if lat >= 0.0 else -1.0, float(half))
+    """Сектор под точкой взгляда: её долгота посередине, от экватора до
+    полюса её полушария."""
+    if lat >= 0.0:
+        return make_wedge(lon - half, lon + half, 0.0, 90.0)
+    return make_wedge(lon - half, lon + half, -90.0, 0.0)
 
 
 def uniform(wedge):
-    """Четыре числа для шейдера тайла: направление средней долготы
-    (x, y), косинус половины ширины, полушарие."""
-    lon = math.radians(wedge.lon)
-    return (math.cos(lon), math.sin(lon), math.cos(math.radians(wedge.half)),
-            wedge.sign)
+    """Числа для шейдера тайла: направление средней долготы (x, y),
+    косинус половины ширины, синусы южной и северной широты."""
+    lon = math.radians(middle(wedge))
+    return (math.cos(lon), math.sin(lon),
+            math.cos(math.radians(span(wedge) / 2.0)),
+            math.sin(math.radians(wedge.south)),
+            math.sin(math.radians(wedge.north)))
 
 
 def inside(wedge, lats, lons):
     """Признак «точка в вынутом секторе» для широт и долгот."""
     lats = np.asarray(lats, dtype=np.float64)
     lons = np.asarray(lons, dtype=np.float64)
-    off = (lons - wedge.lon + 180.0) % 360.0 - 180.0
-    return (wedge.sign * lats > 0.0) & (np.abs(off) <= wedge.half)
+    off = (lons - wedge.west) % 360.0
+    return (lats > wedge.south) & (lats < wedge.north) & \
+        (off <= span(wedge))
+
+
+def corners(wedge):
+    """Угловые точки сектора на поверхности: (широта, долгота) в порядке
+    юго-запад, юго-восток, северо-запад, северо-восток. У полюса две
+    точки совпадают."""
+    return [(wedge.south, wedge.west), (wedge.south, wedge.east),
+            (wedge.north, wedge.west), (wedge.north, wedge.east)]
+
+
+def move_corner(wedge, index, lat, lon):
+    """Сектор, у которого угол index (как в corners) встал в точку."""
+    west, east, south, north = wedge
+    if index in (0, 2):
+        west = lon
+    else:
+        east = lon
+    if index in (0, 1):
+        south = lat
+    else:
+        north = lat
+    if (east - west) % 360.0 > MAX_SPAN:
+        # Угол перетащили за противоположную сторону - сектор
+        # не выворачивается, ширина остаётся наименьшей.
+        if index in (0, 2):
+            west = east - MIN_SPAN
+        else:
+            east = west + MIN_SPAN
+    return make_wedge(west, east, min(south, north), max(south, north))
 
 
 def boundary(directions):
@@ -211,16 +275,29 @@ def faces(wedge, shells=SHELLS, step=None, crust=None, gain=1.0):
 
 def arcs(wedge, step=CRUST_STEP):
     """Дуги граней: единичные направления (n, 3) и нормаль грани.
-    Экваториальная - по долготе на экваторе, меридиональные - от
-    экватора до полюса на крайних долготах."""
-    count = max(2, int(math.ceil(2.0 * wedge.half / step)) + 1)
-    lons = np.radians(np.linspace(wedge.lon - wedge.half,
-                                  wedge.lon + wedge.half, count))
-    out = [(np.stack([np.cos(lons), np.sin(lons), np.zeros(count)], -1),
-            np.array([0.0, 0.0, 1.0]))]
-    count = max(2, int(math.ceil(90.0 / step)) + 1)
-    lats = np.radians(np.linspace(0.0, 90.0 * wedge.sign, count))
-    for lon in (wedge.lon - wedge.half, wedge.lon + wedge.half):
+    Широтные - по долготе на южной и северной широте, если она не
+    полюс: на экваторе это плоскость, на прочих широтах конус к центру.
+    Меридиональные - от южной до северной широты на крайних долготах."""
+    width = span(wedge)
+    count = max(2, int(math.ceil(width / step)) + 1)
+    lons = np.radians(wedge.west + np.linspace(0.0, width, count))
+    out = []
+    for lat in (wedge.south, wedge.north):
+        if abs(lat) >= 90.0:
+            continue
+        phi = math.radians(lat)
+        directions = np.stack([math.cos(phi) * np.cos(lons),
+                               math.cos(phi) * np.sin(lons),
+                               np.full(count, math.sin(phi))], -1)
+        # Нормаль конуса - на север в середине дуги: свет одной грани
+        # один.
+        lam = math.radians(middle(wedge))
+        normal = np.array([-math.sin(phi) * math.cos(lam),
+                           -math.sin(phi) * math.sin(lam), math.cos(phi)])
+        out.append((directions, normal))
+    count = max(2, int(math.ceil((wedge.north - wedge.south) / step)) + 1)
+    lats = np.radians(np.linspace(wedge.south, wedge.north, count))
+    for lon in (wedge.west, wedge.east):
         lam = math.radians(lon)
         out.append((np.stack([np.cos(lats) * math.cos(lam),
                               np.cos(lats) * math.sin(lam), np.sin(lats)],
@@ -267,5 +344,7 @@ def label_points(wedge, shells=SHELLS):
     out = []
     for name, low, high, _ in shells:
         mid = (low + high) / 2.0 / PREM_RADIUS
-        out.append((name, 0.0, wedge.lon, (mid - 1.0) * ellipsoid.A))
+        out.append((name, max(wedge.south, 0.0) if wedge.north > 0.0
+                    else wedge.north, middle(wedge),
+                    (mid - 1.0) * ellipsoid.A))
     return out

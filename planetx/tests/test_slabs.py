@@ -76,13 +76,13 @@ class TestSlabs(unittest.TestCase):
     def test_bands_on_faces(self):
         slab = sl.load(sample_bytes(), "tst")
         # Западная грань - по 180°, через зону.
-        wedge = cw.Wedge(-135.0, 1.0, 45.0)
+        wedge = cw.make_wedge(-180.0, -90.0, 0.0, 90.0)
         mesh = cw.slab_bands(wedge, [slab])
         self.assertIsNotNone(mesh)
         color = np.array(cw.SLAB_COLOR, dtype=np.uint8)
         self.assertTrue(np.all(mesh.vertices["color"][:, :3] == color))
         # Без плиты на дугах сетки нет.
-        far = cw.Wedge(0.0, 1.0, 45.0)
+        far = cw.make_wedge(-45.0, 45.0, 0.0, 90.0)
         self.assertIsNone(cw.slab_bands(far, [slab]))
 
     def test_index_in_module(self):

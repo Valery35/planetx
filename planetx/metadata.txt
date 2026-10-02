@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.24.1
+version=0.25.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -92,7 +92,19 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.24.1 The Demo icon has a Jezero crater scene on Mars
+changelog=0.25.0 The Earthquakes row of the Layers panel shows
+      the earthquakes of the last 30 days from the USGS feed at their
+      depth, coloured by depth and sized by magnitude. The Earth
+      section row takes a sector out of the Earth and shows the crust,
+      mantle, core and subducting slabs on its faces. Section down in
+      the menu of a path draws a section of the Earth along the path.
+      Terrain shows sea and ocean depths under translucent water.
+      Vertices in the New placemark window are dragged with the mouse,
+      the circle in the middle of a segment adds a vertex, a click on
+      the first point closes the shape. A right click on the globe
+      opens a menu, Edit shape there edits a saved placemark, path or
+      polygon. The globe updates automatically by default.
+      0.24.1 The Demo icon has a Jezero crater scene on Mars
       with the Perseverance landing site, an elevation profile across
       the crater, a point for the viewshed, a flight around and the
       slope colouring. Depressions of Mars and the Moon deeper than

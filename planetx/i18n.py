@@ -50,7 +50,7 @@ EN = {
         "Placemark time slider. While the slider is open, placemarks "
         "outside its interval are hidden. A closed slider shows all "
         "placemarks.",
-    "Подложка": "Base map",
+    "Основа": "Base map",
     "{name} · {kind}": "{name} · {kind}",
     "Отметка показывает слой на глобусе, видимость на карте QGIS "
     "не меняется. Двойной щелчок переносит к слою, меню по правой "
@@ -513,8 +513,6 @@ EN = {
         "depend on the scale.",
     "Записать объект в «Мои метки».": "Write the object to My Places.",
     "Убрать поставленные точки.": "Remove the points placed.",
-    "Щелчок по глобусу ставит метку. Новый щелчок переносит её.":
-        "A click on the globe places the placemark. A new click moves it.",
     "Линейка": "Ruler",
     "Длина на карте": "Map length",
     "Длина по рельефу": "Ground length",
@@ -1024,6 +1022,35 @@ EN = {
         "row is switched on.",
     "Глубина очага, км": "Focus depth, km",
     "Плита Slab2": "Slab2 slab",
+    "Разрез вниз…": "Section down…",
+    "Разрез: {name}": "Section: {name}",
+    "Разрез": "Section",
+    "Глубина": "Depth",
+    "Полоса очагов": "Foci band",
+    "Нужен путь хотя бы из двух точек.":
+        "A path of at least two points is needed.",
+    "Мохо {depth}": "Moho {depth}",
+    "плита {top}-{bottom}": "slab {top}-{bottom}",
+    "кора CRUST1.0": "CRUST1.0 crust",
+    "плиты Slab2": "Slab2 slabs",
+    "землетрясения": "earthquakes",
+    "Загружаются: {what}.": "Loading: {what}.",
+    "Длина {length}, глубина {depth}. Очагов землетрясений "
+    "в полосе {count}.":
+        "Length {length}, depth {depth}. Earthquake foci in the band "
+        "{count}.",
+    "До какой глубины идёт разрез. 700 км - низ переходной зоны, "
+    "глубже землетрясений почти нет. 2891 км - граница ядра, "
+    "6371 км - центр Земли.":
+        "How deep the section goes. 700 km is the bottom of the "
+        "transition zone, there are almost no earthquakes deeper. "
+        "2891 km is the core boundary, 6371 km is the centre of the Earth.",
+    "Ширина полосы вдоль линии, из которой очаги землетрясений "
+    "переносятся на разрез. Шире полоса - больше очагов, но "
+    "дальние очаги лежат не там, где линия.":
+        "Width of the band along the line from which earthquake foci are "
+        "moved onto the section. A wider band gives more foci, but distant "
+        "foci do not lie where the line is.",
     "Разрез Земли": "Earth cutaway",
     "Внутреннее ядро": "Inner core",
     "Внешнее ядро": "Outer core",
@@ -1049,12 +1076,14 @@ EN = {
     "гранях видны кора, мантия и ядро по радиусам "
     "модели PREM. Где грань проходит через зону "
     "субдукции, на ней видна погружающаяся плита. "
-    "Сектор ставится заново при каждом включении строки.":
+    "Углы сектора тянутся мышью. Сектор ставится заново "
+    "при каждом включении строки.":
         "Removes a sector of the Earth under the look-at point, a quarter "
         "of a hemisphere 90° wide in longitude. Its faces show the crust, "
         "the mantle and the core by the radii of the PREM model. Where a "
         "face crosses a subduction zone, the subducting slab shows on it. "
-        "The sector is placed anew each time the row is switched on.",
+        "The corners of the sector can be dragged with the mouse. The "
+        "sector is placed anew each time the row is switched on.",
     "Пермские отложения": "Permian deposits",
     "Подземный режим": "Subsurface mode",
     "Подземный режим - скважины, горизонты, разрезы и вырез "
@@ -1364,6 +1393,35 @@ EN = {
     "Картинка вставлена в макет «{name}».":
         "The picture is inserted into layout “{name}”.",
     "Снимок сохранён: {path}": "Snapshot saved: {path}",
+    "Добавить вершину": "Add a vertex",
+    "Замкнуть фигуру": "Close the shape",
+    "Завершить путь": "Finish the path",
+    "Удалить вершину": "Delete vertex",
+    "Продолжить рисование": "Continue drawing",
+    "Завершить рисование": "Finish drawing",
+    "Изменить форму": "Edit shape",
+    "Добавить метку здесь": "Add placemark here",
+    "Переместиться сюда": "Fly here",
+    "Скопировать координаты": "Copy coordinates",
+    "Изменение метки": "Edit placemark",
+    "Щелчок по глобусу ставит метку. Метка перетаскивается мышью.":
+        "A click on the globe sets the placemark. The placemark can be "
+        "dragged with the mouse.",
+    "Щелчками по глобусу отметьте точки пути. Щелчок по последней точке "
+    "завершает путь, по первой - замыкает фигуру.":
+        "Click on the globe to mark the path points. A click on the last "
+        "point finishes the path, a click on the first one closes the "
+        "shape.",
+    "Щелчками по глобусу отметьте вершины многоугольника. Щелчок по "
+    "первой вершине завершает рисование.":
+        "Click on the globe to mark the polygon vertices. A click on the "
+        "first vertex finishes drawing.",
+    "Вершины перетаскиваются мышью. Кружок в середине отрезка ставит "
+    "новую вершину. Правая кнопка открывает меню.":
+        "Vertices are dragged with the mouse. The circle in the middle of "
+        "a segment adds a new vertex. The right button opens the menu.",
+    "Форма не записана. Вид объекта после правки стал другим.":
+        "The shape was not saved. The object kind changed after editing.",
 }
 
 _language = None
