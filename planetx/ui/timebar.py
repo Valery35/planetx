@@ -22,6 +22,7 @@ from qgis.PyQt.QtGui import QColor, QPainter, QPen
 from qgis.PyQt.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel,
                                  QToolButton, QWidget)
 
+from ..core import when
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -35,6 +36,8 @@ PLAY_PERIOD = 40  # мс между шагами проигрывания
 PLAY_SECONDS = 20.0
 SPEEDS = (0.25, 0.5, 1.0, 2.0, 4.0)
 SELECTION = QColor(255, 214, 0, 150)
+# Шкала длиннее - у дат до нашей эры подписан только год.
+LONG_SPAN = 3 * 366 * 86400
 
 
 def time_text(seconds, span):
@@ -42,8 +45,18 @@ def time_text(seconds, span):
     шкалы короче двух суток."""
     if not math.isfinite(seconds):
         return "…"
-    fmt = "%Y-%m-%d %H:%M" if span < 2 * 86400 else "%Y-%m-%d"
-    return time.strftime(fmt, time.localtime(seconds))
+    if seconds >= 0.0:
+        fmt = "%Y-%m-%d %H:%M" if span < 2 * 86400 else "%Y-%m-%d"
+        return time.strftime(fmt, time.localtime(seconds))
+    # До 1970 года - дата UTC своим счётом: time.localtime на Windows
+    # таких моментов не берёт. Годы до нашей эры - словами.
+    year, month, day = when.civil(seconds)[:3]
+    if year > 0:
+        return "%04d-%02d-%02d" % (year, month, day)
+    if span > LONG_SPAN:
+        return tr("{date} до н. э.", date=str(1 - year))
+    return tr("{date} до н. э.",
+              date="%d-%02d-%02d" % (1 - year, month, day))
 
 
 class RangeTrack(QWidget):

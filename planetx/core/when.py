@@ -11,18 +11,49 @@ XML Schema: «2026», «2026-09», «2026-09-30», «2026-09-30T12:00:00Z»,
 времени строка переводится в секунды от 1970 года UTC. Время без пояса
 считается UTC.
 
+Годы до нашей эры пишутся со знаком, как в XML Schema 1.0: «-0264» -
+264 год до н. э., нулевого года нет. Календарь - пролептический
+григорианский, счёт дней свой: calendar и time.gmtime таких дат
+не берут.
+
 Время своё у метки и у её вида. Шкала времени глобуса своя, на
 «Временный контроллер» QGIS она не опирается, решение автора от
 30 сентября 2026 года.
 """
-import calendar
 import math
 import re
-import time as _time
 
 _DATE = re.compile(
     r"^\s*(-?\d{4})(?:-(\d{2})(?:-(\d{2})(?:[T ](\d{2}):(\d{2})"
     r"(?::(\d{2})(?:\.(\d+))?)?\s*(Z|[+-]\d{2}:?\d{2})?)?)?)?\s*$")
+
+
+def _days(year, month, day):
+    """Дней от 1 января 1970 года до даты. Год астрономический:
+    0 - это 1 год до н. э."""
+    y = year - (month <= 2)
+    era = y // 400
+    yoe = y - era * 400
+    doy = (153 * (month + (-3 if month > 2 else 9)) + 2) // 5 + day - 1
+    doe = yoe * 365 + yoe // 4 - yoe // 100 + doy
+    return era * 146097 + doe - 719468
+
+
+def civil(seconds):
+    """Дата и время UTC: (год, месяц, день, час, минута, секунда).
+    Год астрономический: 0 - это 1 год до н. э., -263 - 264 год
+    до н. э."""
+    days, rest = divmod(int(math.floor(seconds)), 86400)
+    z = days + 719468
+    era = z // 146097
+    doe = z - era * 146097
+    yoe = (doe - doe // 1460 + doe // 36524 - doe // 146096) // 365
+    doy = doe - (365 * yoe + yoe // 4 - yoe // 100)
+    mp = (5 * doy + 2) // 153
+    day = doy - (153 * mp + 2) // 5 + 1
+    month = mp + (3 if mp < 10 else -9)
+    year = yoe + era * 400 + (month <= 2)
+    return (year, month, day, rest // 3600, rest % 3600 // 60, rest % 60)
 
 
 def parse(text):
@@ -34,15 +65,20 @@ def parse(text):
     if not found:
         return None
     year, month, day, hour, minute, second, fraction, zone = found.groups()
-    try:
-        month = int(month or 1)
-        day = int(day or 1)
-        if not (1 <= month <= 12 and 1 <= day <= 31):
-            return None
-        seconds = calendar.timegm((int(year), month, day, int(hour or 0),
-                                   int(minute or 0), int(second or 0)))
-    except (ValueError, OverflowError):
+    year = int(year)
+    if year < 0:
+        # «-0264» - 264 год до н. э., астрономический год -263.
+        year += 1
+    month = int(month or 1)
+    day = int(day or 1)
+    hour = int(hour or 0)
+    minute = int(minute or 0)
+    second = int(second or 0)
+    if not (1 <= month <= 12 and 1 <= day <= 31 and hour <= 24
+            and minute <= 59 and second <= 61):
         return None
+    seconds = _days(year, month, day) * 86400 + hour * 3600 \
+        + minute * 60 + second
     if fraction:
         seconds += float("0." + fraction)
     if zone and zone != "Z":
@@ -54,8 +90,10 @@ def parse(text):
 
 def text(seconds):
     """Строка KML «2026-09-30T12:00:00Z» из секунд."""
-    return _time.strftime("%Y-%m-%dT%H:%M:%SZ",
-                          _time.gmtime(math.floor(seconds)))
+    year, month, day, hour, minute, second = civil(seconds)
+    era = "%04d" % year if year > 0 else "-%04d" % (1 - year)
+    return "%s-%02d-%02dT%02d:%02d:%02dZ" % (era, month, day, hour,
+                                            minute, second)
 
 
 def stamp(when):
@@ -87,6 +125,17 @@ def visible(time, lo, hi):
     if span is None:
         return True
     return span[0] <= hi and span[1] >= lo
+
+
+def share(time, moment):
+    """Доля промежутка time, прошедшая к моменту moment, от 0 до 1.
+    Без конечного начала и конца - 1: расти нечему."""
+    span = interval(time)
+    if span is None or not (math.isfinite(span[0])
+                            and math.isfinite(span[1])) \
+            or span[1] <= span[0]:
+        return 1.0
+    return min(max((moment - span[0]) / (span[1] - span[0]), 0.0), 1.0)
 
 
 def extent(times):

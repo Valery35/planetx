@@ -3105,6 +3105,360 @@ def quakes_check():
     window.set_extra("quakes", False)
 
 
+def _land_share(view):
+    """Доля пикселей кадра цвета суши палеогеографии: красный заметно
+    больше синего. Океан и небо синие."""
+    import numpy as np
+    image = view.grabFramebuffer()
+    bits = image.constBits()
+    if hasattr(bits, "setsize"):
+        bits.setsize(image.sizeInBytes())
+    a = np.frombuffer(bits, dtype=np.uint8).reshape(
+        image.height(), image.width(), 4).astype(int)
+    # Формат ARGB32: в памяти синий, зелёный, красный, альфа.
+    land = a[..., 2] > a[..., 0] + 20
+    return round(float(land.mean()), 4)
+
+
+def _fake_model():
+    """Поддельный сервер модели на 127.0.0.1 в потоке: на вопрос
+    отвечает вызовом инструмента, на ответ инструмента - текстом.
+    Понимает Anthropic Messages (/v1/messages) и Responses (/responses).
+    Запросы складываются в список для проверки."""
+    import http.server
+    import threading
+    seen = []
+    kml = ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+           '<name>Проба помощника</name><Placemark><name>Токио</name>'
+           '<Point><coordinates>139.69,35.69,0</coordinates></Point>'
+           '</Placemark></Document></kml>')
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return None
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(
+                int(self.headers["Content-Length"])))
+            seen.append((self.path, body,
+                         self.headers.get("x-api-key")
+                         or self.headers.get("Authorization")))
+            if self.path.endswith("/messages"):
+                last = body["messages"][-1]["content"]
+                if isinstance(last, str):
+                    answer = {"content": [
+                        {"type": "text", "text": "Лечу к Японии."},
+                        {"type": "tool_use", "id": "t1", "name": "fly_to",
+                         "input": {"lat": 36.0, "lon": 138.0,
+                                   "distance_km": 1500}}]}
+                else:
+                    answer = {"content": [{"type": "text",
+                                           "text": "Готово."}]}
+            else:
+                last = body["input"][-1]
+                if last.get("role") == "user":
+                    answer = {"output": [{
+                        "type": "function_call", "call_id": "c1",
+                        "name": "add_kml",
+                        "arguments": json.dumps({"kml": kml})}]}
+                else:
+                    answer = {"output": [{"type": "message", "content": [
+                        {"type": "output_text", "text": "Предложил."}]}]}
+            data = json.dumps(answer).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, seen
+
+
+@check(4000)
+def assistant_on():
+    # Помощник через поддельный сервер: Anthropic - перелёт к Японии.
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    server, seen = _fake_model()
+    state["fake_model"] = (server, seen)
+    ui_ai.load_key = lambda provider: "test-key"
+    window.open_assistant()
+    dialog = window.assistant_dialog
+    dialog.provider.setCurrentIndex(dialog.provider.findData(ai.ANTHROPIC))
+    dialog.base.setText("http://127.0.0.1:%d" % server.server_port)
+    dialog.input.setText("Покажи Японию")
+    dialog.send()
+    result["assistant"] = {}
+
+
+@check(2000)
+def assistant_anthropic_check():
+    from planetx.core import assistant as ai
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_model"]
+    out = result["assistant"]
+    out["requests"] = [p for p, _, _ in seen]
+    out["key_header"] = seen[0][2] if seen else None
+    second = seen[1][1]["messages"][-1]["content"][0] if len(seen) > 1 \
+        else None
+    out["tool_result"] = second
+    out["history"] = dialog.history.toPlainText()
+    pose = window.view.navigator.pose
+    out["pose"] = [round(pose.lat, 1), round(pose.lon, 1)]
+    # Responses: предложение KML и запись в «Мои метки».
+    del seen[:]
+    dialog.provider.setCurrentIndex(dialog.provider.findData(ai.RESPONSES))
+    dialog.base.setText("http://127.0.0.1:%d" % server.server_port)
+    dialog.input.setText("Поставь метку в Токио")
+    dialog.send()
+    state["places_before"] = len(window.myplaces.places)
+
+
+@check(1000)
+def assistant_responses_check():
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_model"]
+    out = result["assistant"]
+    out["responses_requests"] = [p for p, _, _ in seen]
+    out["responses_key"] = seen[0][2] if seen else None
+    out["function_output"] = seen[1][1]["input"][-1] if len(seen) > 1 \
+        else None
+    out["proposal_shown"] = dialog.proposal.isVisible()
+    out["proposal_text"] = dialog.proposal_text.text()
+    dialog._accept_place()
+    out["places_added"] = len(window.myplaces.places) \
+        - state["places_before"]
+    tokyo = [p for p in window.myplaces.places if p.name == "Токио"]
+    out["tokyo"] = [list(p.shape.points[0]) for p in tokyo]
+    out["folder"] = getattr(window, "assistant_folder", None)
+    if out["folder"]:
+        window.myplaces.remove(out["folder"])
+    out["places_after_cleanup"] = len(window.myplaces.places) \
+        - state["places_before"]
+    dialog.grab().save(os.path.join(TEMP, "planetx_assistant.png"))
+    out["context"] = window.assistant_context()
+    dialog.close()
+    server.shutdown()
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(1000)
+def assistant_tools():
+    # Остальные инструменты помощника - напрямую через исполнитель окна.
+    from planetx.core.assistant import Call
+    window = state["window"]
+    # Глубины - умолчание модуля, прерванный прогон мог их выключить.
+    window.set_sea_depths(True)
+    window._want_crust()
+    window.set_extra("quakes", True)
+    state["tools_started"] = time.monotonic()
+
+
+@check(1000)
+def assistant_tools_check():
+    from planetx.core.assistant import Call
+    window = state["window"]
+    if ((window.crust is None or not window.quake_events)
+            and time.monotonic() - state["tools_started"] < 60.0):
+        return 1000
+    out = result.setdefault("assistant", {})
+
+    def run(name, **args):
+        return window.assistant_tool(Call("x", name, args))
+    out["point_info"] = run("point_info", lat=38.5, lon=142.0)
+    out["quakes_summary"] = run("quakes_summary", south=30, north=46,
+                                west=128, east=150)[:300]
+    out["set_layer"] = run("set_layer", key="grid", on=True)
+    out["set_layer_bad"] = run("set_layer", key="nope", on=True)
+    out["cutaway"] = run("earth_cutaway", west=100, east=150, south=0,
+                         north=60)
+    out["cutaway_off"] = run("earth_cutaway", off=True)
+    out["section"] = run("section_down", points=[[38.5, 146], [38.5, 132]],
+                         depth_km=700)
+    out["get_kml"] = run("get_kml")[:160]
+    out["bad_args"] = run("fly_to", lat="x")
+    out["unknown"] = run("teleport")
+    run("set_layer", key="grid", on=False)
+    window.set_extra("quakes", False)
+    if window.section_dialog is not None:
+        window.section_dialog.close()
+    out["tools_gl"] = dict(window.view.gl_errors)
+
+
+@check(2000)
+def identify_on():
+    # Окно «Объекты»: метка «Моих меток», очаги землетрясений, место.
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    # Глубины - умолчание модуля, прерванный прогон мог их выключить.
+    window.set_sea_depths(True)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(38.5, 142.0, 3000000.0, 0.0, 0.0))
+    state["identify_key"] = window.myplaces.add(
+        Shape("point", [(38.5, 142.0)], name="Проба определения"))
+    window.set_extra("quakes", True)
+    window._want_crust()
+    window.toolbar.identify.setChecked(True)
+    result["identify"] = {"started": time.monotonic(),
+                          "identifying": window.identifying}
+
+
+@check(1000)
+def identify_wait():
+    window = state["window"]
+    out = result["identify"]
+    if (not window.quake_events or window.crust is None) \
+            and time.monotonic() - out["started"] < 60.0:
+        return 1000
+    out["wait_s"] = round(time.monotonic() - out["started"], 1)
+
+
+def _identified_tree(window):
+    """Дерево окна «Объекты»: {группа: {объект: {поле: значение}}}."""
+    tree = window.identified.tree
+    out = {}
+    for i in range(tree.topLevelItemCount()):
+        top = tree.topLevelItem(i)
+        objects = {}
+        for j in range(top.childCount()):
+            item = top.child(j)
+            objects[item.text(0)] = {item.child(k).text(0):
+                                     item.child(k).text(1)
+                                     for k in range(item.childCount())}
+        out[top.text(0)] = objects
+    return out
+
+
+@check(1000)
+def identify_check():
+    import numpy as np
+    from planetx.core import quakes as qk
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    window = state["window"]
+    view = window.view
+    out = result["identify"]
+    view.grabFramebuffer()
+    xyz = geodetic_to_ecef(np.array([38.5]), np.array([142.0]),
+                           np.zeros(1))
+    pixels, _ = view.camera.project(xyz)
+    window._clicked(*pixels[0])
+    out["at_place"] = _identified_tree(window)
+    # Щелчок по видимому очагу.
+    layer = view.quakes
+    eye = np.asarray(view.camera.eye)
+    shown = qk.facing(eye, layer.epicenter, layer.lats, layer.lons)
+    pixels, front = view.camera.project(layer.focus)
+    inside = shown & front & (pixels[:, 0] > 0) & (pixels[:, 1] > 0) \
+        & (pixels[:, 0] < view.width()) & (pixels[:, 1] < view.height())
+    if np.any(inside):
+        n = int(np.nonzero(inside)[0][0])
+        window._clicked(*pixels[n])
+        tree = _identified_tree(window)
+        out["quake_groups"] = list(tree)
+        out["quake_sample"] = next(iter(tree.get("Землетрясения", {})
+                                        .items()), None)
+    window.identified.grab().save(os.path.join(TEMP,
+                                               "planetx_identify.png"))
+    window.toolbar.identify.setChecked(False)
+    window.identified.close()
+    window.set_extra("quakes", False)
+    window.myplaces.remove(state["identify_key"])
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(15000)
+def paleo_startup():
+    # Палеогеография включена до первого кадра нового окна, как при
+    # открытии окна с сохранённым флажком 2 октября 2026 года у автора.
+    from planetx.core.navigation import Pose
+    plugin = state["plugin"]
+    old = plugin.window
+    old.close()
+    plugin.run()
+    window = plugin.window
+    state["window"] = window
+    window.set_extra("paleo", True)
+    window.view.navigator.set_pose(Pose(5.0, 20.0, 20000000.0, 0.0, 0.0))
+    result["paleo_startup"] = {"new_window": window is not old}
+
+
+@check(1000)
+def paleo_startup_check():
+    window = state["window"]
+    out = result["paleo_startup"]
+    out["cached"] = list(window.paleo_cache)
+    out["texture"] = window.view.land_texture
+    out["land"] = _land_share(window.view)
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_paleo_startup.png"))
+    window.set_extra("paleo", False)
+
+
+@check(3000)
+def paleo_on():
+    # Палеогеография на возраст 0 над Африкой.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(5.0, 20.0, 20000000.0, 0.0, 0.0))
+    window.set_extra("paleo", True)
+    result["paleo"] = {"started": time.monotonic()}
+
+
+@check(1000)
+def paleo_wait():
+    window = state["window"]
+    out = result["paleo"]
+    if 0 not in window.paleo_cache \
+            and time.monotonic() - out["started"] < 60.0:
+        return 1000
+    out["wait_s"] = round(time.monotonic() - out["started"], 1)
+
+
+@check(10000)
+def paleo_check():
+    # Смена контекста OpenGL: ресурсы освобождаются и создаются заново,
+    # как при открытии окна. Маска суши обязана прийти снова. Тайлы
+    # после смены грузятся заново, снимок - в следующем шаге.
+    window = state["window"]
+    view = window.view
+    out = result["paleo"]
+    out["land_before"] = _land_share(view)
+    # Вид вынимается из окна и возвращается: QOpenGLWidget пересоздаёт
+    # контекст сам, ресурсы освобождает release_gl по aboutToBeDestroyed.
+    out["textures_before"] = [view.clear_texture, view.land_texture]
+    old = view.context()
+    splitter = window.splitter
+    index = splitter.indexOf(view)
+    view.setParent(None)
+    splitter.insertWidget(index, view)
+    view.show()
+    view.grabFramebuffer()
+    out["context_changed"] = view.context() is not old
+    view.update()
+
+
+@check(1000)
+def paleo_after():
+    window = state["window"]
+    view = window.view
+    out = result["paleo"]
+    out["land_after_context"] = _land_share(view)
+    out["textures_after"] = [view.clear_texture, view.land_texture]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_paleo.png"))
+    window.set_extra("paleo", False)
+    out["gl"] = dict(view.gl_errors)
+
+
 @check(2000)
 def section_open():
     # Разрез вниз поперёк Японского жёлоба: с востока на запад по 38.5°
@@ -3175,7 +3529,19 @@ def section_check():
     dialog.depth.setCurrentIndex(3)
     out["depth_core"] = dialog.chart.section.depth
     dialog.grab().save(os.path.join(TEMP, "planetx_section_core.png"))
+    # Стенка на глобусе: вид с юга с наклоном, разрез до 700 км.
+    from planetx.core.navigation import Pose
+    dialog.depth.setCurrentIndex(2)
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(Pose(30.0, 139.0, 3500000.0, 0.0, 55.0))
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_section_wall.png"))
+    out["wall_vertices"] = view.section_wall.vertex_count()
+    out["wall_drawn"] = view.section_wall.drawn
     dialog.close()
+    view.grabFramebuffer()
+    out["wall_after_close"] = view.section_wall.drawn
     window.myplaces.remove(state["section_key"])
     out["gl"] = dict(window.view.gl_errors)
 

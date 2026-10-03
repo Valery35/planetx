@@ -149,5 +149,34 @@ class TestHeightSlider(unittest.TestCase):
         self.assertLess(ft.share_height(0.5), 320.0)
 
 
+class TestGrown(unittest.TestCase):
+
+    LINE = ft.Shape("line", [(0.0, 0.0), (0.0, 10.0), (0.0, 30.0)])
+
+    def test_full_is_same_object(self):
+        # Тот же объект - буферы видеокарты не пересобираются.
+        self.assertIs(ft.grown(self.LINE, 1.0), self.LINE)
+
+    def test_cut_inside_second_segment(self):
+        points = ft.grown(self.LINE, 0.5).points
+        self.assertEqual(points[:2], [(0.0, 0.0), (0.0, 10.0)])
+        self.assertAlmostEqual(points[2][1], 15.0, 6)
+        self.assertAlmostEqual(points[2][0], 0.0, 6)
+
+    def test_cut_inside_first_segment(self):
+        points = ft.grown(self.LINE, 0.1).points
+        self.assertEqual(len(points), 2)
+        self.assertAlmostEqual(points[1][1], 3.0, 6)
+
+    def test_start_is_still_a_line(self):
+        points = ft.grown(self.LINE, 0.0).points
+        self.assertEqual(len(points), 2)
+        self.assertLess(points[1][1], 0.1)
+
+    def test_other_kinds_untouched(self):
+        polygon = ft.Shape("polygon", [(0, 0), (0, 1), (1, 1)])
+        self.assertIs(ft.grown(polygon, 0.3), polygon)
+
+
 if __name__ == "__main__":
     unittest.main()

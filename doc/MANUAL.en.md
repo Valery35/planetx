@@ -195,10 +195,10 @@ take effect at once, without the Refresh button.
 | Group | Rows |
 |---|---|
 | Base map | Sources of imagery and maps, one is checked, the last row is Add tile source… |
+| Terrain | Mapzen Terrain Tiles elevations and hill shading |
 | Borders and names | Borders, Places, Water names |
 | Transport | Roads, Road numbers, Railways, Airports |
 | Nature | Rivers, Lakes and reservoirs, Peaks, Reserves and national parks |
-| Terrain | Mapzen Terrain Tiles elevations and hill shading |
 | Grid | Parallels and meridians with labels, the equator, tropics and polar circles in yellow |
 | Stars | Stars brighter than magnitude 6 and the Milky Way at their places in the sky |
 | Clouds | Clouds from NASA GIBS VIIRS imagery of the last complete day |
@@ -267,6 +267,16 @@ Sea and ocean depths box in the Terrain group of the view properties
 switches them off, then heights below sea level count as zero and the
 sea is flat. Depths exist only on the Earth.
 
+The Paleogeography row shows the coastlines of the past, up to a
+billion years ago, after the plate motion model of Merdith et al.
+2021 from the GPlates web service. A slider in the bottom left
+corner of the view sets the age in millions of years, the geological
+period is named next to it. Land is filled with a plain colour over
+the ocean. Today's imagery, borders and labels are removed for that
+time. The coastlines for each age are requested from the service,
+the first showing of an age needs the internet. When the window
+opens, the row is off.
+
 The Earthquakes row shows earthquakes of magnitude 4.5 and above
 over the last 30 days from the feed of the U.S. Geological Survey
 (USGS). The feed is loaded each time the row is switched on. A circle
@@ -327,6 +337,9 @@ point of the path. The cursor over the chart marks the point on the
 globe and shows the Moho and slab depths there. The crust, the slabs
 and the earthquake feed are loaded when the window opens, if they are
 not there yet, the line under the chart tells what is still loading.
+While the window is open, a wall of the same section hangs along the
+path on the globe. It shows through the surface, its depths are true.
+When the window closes, the wall disappears.
 
 ### Base map and a tile source of your own
 
@@ -484,6 +497,16 @@ the Features window.
 - The Select on map button selects the found features in the QGIS
   layers. The selection shows on the map, in the attribute table and on
   the globe.
+- The My Places group lists the visible placemarks, paths and
+  polygons under the point. Each shows its type, coordinates or length,
+  measurement and description.
+- The Earthquakes group lists the foci near the click point on the
+  screen. Each shows its magnitude, depth, UTC time, place and the USGS
+  event page.
+- The Site group shows the elevation or sea depth, the Moho depth, the
+  crust and sediment thickness after CRUST1.0 and the Slab2 slab under
+  the point. The crust model and the slab zone file load on the first
+  click, the window updates when they arrive.
 
 ---
 
@@ -1056,6 +1079,40 @@ bodies, the globe shows only the places of the current one. A flight
 to a place on another body switches the body first. A tour goes
 through the stops of the current body. A scene keeps its body and
 opens on it.
+
+## Assistant
+
+The Assistant icon on the icon bar opens a conversation window with an
+AI model. The model controls the globe on a request in words, for
+example "show a section across the Japan Trench" or "where are the
+deepest earthquakes near Japan this month". An API key of your own for
+the chosen service is needed.
+
+- **Service.** Claude (Anthropic) - Claude models. OpenAI Responses
+  format - xAI Grok and other services of this format. Each service has
+  its own address and model, by default `claude-sonnet-5-5` and
+  `grok-4.7`.
+- **Key.** The key is entered in the Key field and saved with the Save
+  key button in the QGIS password manager. On the first save QGIS may
+  ask for the master password.
+- **What the assistant does.** Flight to a point and place search, body
+  change, rows of the Layers section and the time slider, the Earth
+  cutaway and a section down along points, point information and an
+  earthquake summary in a box.
+- **Placemarks in KML.** The assistant proposes placemarks, paths,
+  polygons, folders and tours as a KML document. Below the conversation
+  a proposal appears with the Write to My Places and Cancel buttons.
+  Nothing is written without the button. Placemarks selected in My
+  Places can be read by the assistant as KML and returned corrected.
+- **What goes to the model server.** The request text, the look-at
+  point, the body and the rows switched on in the Layers section. Names
+  of project layers and My Places do not go, except placemarks selected
+  by the user.
+
+The assistant's actions show in the conversation as Action lines. It
+makes no more than six rounds of actions in a row, then it stops.
+
+---
 
 ## Starry sky
 

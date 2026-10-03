@@ -57,8 +57,9 @@ SUN = "sun"
 SLOPE, ASPECT = "slope", "aspect"
 QUAKES = "quakes"
 CUTAWAY = "cutaway"
+PALEO = "paleo"
 EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT,
-          QUAKES, CUTAWAY)
+          QUAKES, CUTAWAY, PALEO)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
@@ -507,7 +508,10 @@ class LayerPanel(QWidget):
                 item.setFlags(item.flags() | CHECKABLE)
                 item.setCheckState(0, UNCHECKED)
                 self.geo_items[key] = item
-        relief = QTreeWidgetItem(self.geo, [tr("Рельеф")])
+        # Рельеф стоит сразу под группой «Основа», просьба автора
+        # от 3 октября 2026 года.
+        relief = QTreeWidgetItem(self.geo, self.base_group)
+        relief.setText(0, tr("Рельеф"))
         relief.setData(0, LAYER_ROLE, RELIEF)
         relief.setToolTip(0, tr(
             "Высоты поднимают поверхность и дают отмывку склонов. "
@@ -566,6 +570,12 @@ class LayerPanel(QWidget):
                     "субдукции, на ней видна погружающаяся плита. "
                     "Углы сектора тянутся мышью. Сектор ставится заново "
                     "при каждом включении строки.")),
+                (PALEO, tr("Палеогеография"), tr(
+                    "Берега материков в прошлом, до миллиарда лет "
+                    "назад, по модели движения плит из веб-службы "
+                    "GPlates. Возраст задаёт ползунок в левом нижнем "
+                    "углу вида. Снимок, границы и подписи на это "
+                    "время убраны.")),
                 (SLOPE, tr("Уклон"), tr(
                     "Уклон поверхности по высотам рельефа, классами от "
                     "ровного до круче 35°. Шкала стоит в левом нижнем "
@@ -678,7 +688,8 @@ class LayerPanel(QWidget):
             parent = item.parent()
             if parent is not None:
                 parent.setDisabled(off)
-        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, CUTAWAY):
+        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, CUTAWAY,
+                    PALEO):
             self.extra_items[key].setDisabled(not earth)
         # Уклон и экспозиция - там, где есть высоты.
         for key in (SLOPE, ASPECT):

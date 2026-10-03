@@ -256,6 +256,37 @@ def fetch_bytes(url, done, prefer_cache=True):
     return reply
 
 
+POST_TIMEOUT = 120000  # мс: ответ модели помощника бывает долгим
+
+
+def post_json(url, headers, body, done):
+    """Асинхронный POST с телом JSON и вызов done(ответ JSON или None,
+    ошибка). Тело ответа разбирается и при ошибке HTTP: сервисы моделей
+    кладут в него причину. Кэш не используется. Возвращает ответ, его
+    нужно держать до конца."""
+    request = QNetworkRequest(QUrl(url))
+    request.setAttribute(MARK, True)
+    for name, value in headers.items():
+        request.setRawHeader(name.encode("ascii"), value.encode("utf-8"))
+    if hasattr(request, "setTransferTimeout"):
+        request.setTransferTimeout(POST_TIMEOUT)
+    reply = QgsNetworkAccessManager.instance().post(
+        request, json.dumps(body, ensure_ascii=False).encode("utf-8"))
+
+    def finished():
+        raw = bytes(reply.readAll())
+        failed = reply.error() != NO_ERROR
+        try:
+            data = json.loads(raw) if raw else None
+        except ValueError:
+            data = None
+        done(data, reply.errorString() if failed else "")
+        reply.deleteLater()
+
+    reply.finished.connect(finished)
+    return reply
+
+
 def fetch_json(url, done, prefer_cache=True):
     """Асинхронно получить JSON и вызвать done(данные или None, ошибка).
 

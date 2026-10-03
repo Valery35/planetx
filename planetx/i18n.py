@@ -1051,6 +1051,147 @@ EN = {
         "Width of the band along the line from which earthquake foci are "
         "moved onto the section. A wider band gives more foci, but distant "
         "foci do not lie where the line is.",
+    "Измерение": "Measurement",
+    "Магнитуда": "Magnitude",
+    "Глубина очага": "Focus depth",
+    "Время, UTC": "Time, UTC",
+    "Страница USGS": "USGS page",
+    "Мохо": "Moho",
+    "Толщина коры": "Crust thickness",
+    "Осадки": "Sediments",
+    "загружается": "loading",
+    "{top}-{bottom} км": "{top}-{bottom} km",
+    "Место": "Site",
+    "Под точкой": "Under the point",
+    "Тип": "Type",
+    "KML не разобран: {error}. Исправь документ.":
+        "KML not parsed: {error}. Fix the document.",
+    "Адрес сервиса. Для Anthropic и xAI менять его не нужно.":
+        "Service address. For Anthropic and xAI it needs no change.",
+    "В «Мои метки» записано меток: {count}.":
+        "Placemarks written to My Places: {count}.",
+    "В документе KML нет меток.":
+        "The KML document has no placemarks.",
+    "Вы":
+        "You",
+    "Выделенных меток нет.":
+        "No placemarks are selected.",
+    "Даты не разобраны: {start} - {end}.":
+        "Dates not parsed: {start} - {end}.",
+    "Действие":
+        "Action",
+    "Для разреза нужны хотя бы две точки.":
+        "A section needs at least two points.",
+    "Документ показан пользователю, меток {count}. Запись - после его "
+    "подтверждения.":
+        "The document is shown to the user, placemarks {count}. It is "
+        "written after the user confirms.",
+    "Записать в «Мои метки»":
+        "Write to My Places",
+    "Запрос, точка взгляда и включённые строки раздела «Слои» уходят на "
+    "сервер выбранной модели. Названия слоёв проекта и «Моих меток» не "
+    "уходят.":
+        "The request, the look-at point and the rows switched on in the "
+        "Layers section go to the server of the chosen model. Names of "
+        "project layers and My Places do not.",
+    "Ключ":
+        "Key",
+    "Ключ API выбранного сервиса. Он хранится в менеджере паролей QGIS и "
+    "уходит только на адрес сервиса.":
+        "API key of the chosen service. It is kept in the QGIS password "
+        "manager and goes only to the service address.",
+    "Ключ не сохранён: менеджер паролей QGIS отказал.":
+        "The key is not saved: the QGIS password manager refused.",
+    "Ключ сохранён в менеджере паролей QGIS.":
+        "The key is saved in the QGIS password manager.",
+    "Модель":
+        "Model",
+    "Модель не ответила: {error}":
+        "The model did not answer: {error}",
+    "Модуль":
+        "Plugin",
+    "Название модели у выбранного сервиса, например claude-sonnet-5-5 или "
+    "grok-4.7.":
+        "Model name at the chosen service, for example claude-sonnet-5-5 "
+        "or grok-4.7.",
+    "Например: покажи разрез через Японский жёлоб":
+        "For example: show a section across the Japan Trench",
+    "Неизвестная строка: {key}.":
+        "Unknown row: {key}.",
+    "Неизвестное тело: {body}.":
+        "Unknown body: {body}.",
+    "Нет ключа API. Введите его в поле «Ключ» и нажмите «Сохранить ключ».":
+        "No API key. Enter it in the Key field and press Save key.",
+    "Нет такого инструмента: {name}.":
+        "No such tool: {name}.",
+    "Отменить":
+        "Cancel",
+    "Ошибка в аргументах {name}: {error}":
+        "Error in the arguments of {name}: {error}",
+    "Перелёт к {lat:.3f}, {lon:.3f}.":
+        "Flight to {lat:.3f}, {lon:.3f}.",
+    "Поиск запущен: {query}.":
+        "Search started: {query}.",
+    "Помощник":
+        "Assistant",
+    "Помощник остановлен: слишком много действий подряд.":
+        "The assistant stopped: too many actions in a row.",
+    "Помощник предлагает папку «{name}», меток {count}.":
+        "The assistant proposes the folder {name}, placemarks {count}.",
+    "Помощник: глобусом управляет ИИ-модель Claude или Grok по запросу "
+    "словами. Нужен свой ключ API.":
+        "Assistant: the Claude or Grok AI model controls the globe on a "
+        "request in words. An API key of your own is needed.",
+    "Разрез Земли есть только у Земли.":
+        "The Earth cutaway exists only on the Earth.",
+    "Разрез Земли убран.":
+        "The Earth cutaway is removed.",
+    "Разрез не построен.":
+        "The section is not built.",
+    "Разрез открыт: длина {length:.0f} км, глубина {depth:.0f} км, очагов "
+    "в полосе {count}.":
+        "Section open: length {length:.0f} km, depth {depth:.0f} km, foci "
+        "in the band {count}.",
+    "Разрез помощника":
+        "Assistant section",
+    "Сведений о точке нет.":
+        "No information about the point.",
+    "Сводка землетрясений загружается, повтори запрос через несколько секунд.":
+        "The earthquake feed is loading, repeat the request in a few seconds.",
+    "Сектор: {wedge}.":
+        "Sector: {wedge}.",
+    "Сервис":
+        "Service",
+    "Сохранить ключ":
+        "Save key",
+    "Спросить":
+        "Ask",
+    "Строка {key}: {state}.":
+        "Row {key}: {state}.",
+    "Тело: {body}.":
+        "Body: {body}.",
+    "Формат OpenAI Responses (Grok и др.)":
+        "OpenAI Responses format (Grok and others)",
+    "Через какой сервис работает помощник. Anthropic - модели Claude. "
+    "Формат OpenAI Responses - xAI Grok и другие сервисы этого формата. У "
+    "каждого подключения свой ключ.":
+        "Which service the assistant works through. Anthropic - Claude "
+        "models. OpenAI Responses format - xAI Grok and other services of "
+        "this format. Each connection has its own key.",
+    "Шкала времени закрыта.":
+        "The time slider is closed.",
+    "Шкала времени: {start} - {end}.":
+        "Time slider: {start} - {end}.",
+    "Шкалы времени нет: у видимых меток и событий нет времени.":
+        "There is no time slider: visible placemarks and events have no time.",
+    "введите ключ API":
+        "enter the API key",
+    "включена":
+        "on",
+    "выключена":
+        "off",
+    "ключ сохранён":
+        "key saved",
     "Разрез Земли": "Earth cutaway",
     "Внутреннее ядро": "Inner core",
     "Внешнее ядро": "Outer core",
@@ -1393,6 +1534,32 @@ EN = {
     "Картинка вставлена в макет «{name}».":
         "The picture is inserted into layout “{name}”.",
     "Снимок сохранён: {path}": "Snapshot saved: {path}",
+    "{date} до н. э.": "{date} BC",
+    "Палеогеография": "Paleogeography",
+    "Берега материков в прошлом, до миллиарда лет назад, по модели "
+    "движения плит из веб-службы GPlates. Возраст задаёт ползунок в "
+    "левом нижнем углу вида. Снимок, границы и подписи на это время "
+    "убраны.":
+        "Continental coastlines in the past, up to a billion years ago, "
+        "from the plate motion model of the GPlates Web Service. The "
+        "slider in the lower left corner of the view sets the age. The "
+        "imagery, borders and labels are removed meanwhile.",
+    "Палеогеография не загрузилась: {error}":
+        "Paleogeography failed to load: {error}",
+    "Возраст в миллионах лет назад. Берега материков на этот возраст "
+    "загружаются из веб-службы GPlates.":
+        "Age in millions of years ago. The coastlines for this age are "
+        "loaded from the GPlates Web Service.",
+    "Показ от выбранного возраста к настоящему, шаг 5 млн лет.":
+        "Plays from the chosen age to the present, 5 Myr per step.",
+    "{age} млн лет назад, {period}": "{age} Myr ago, {period}",
+    "Настоящее": "Present",
+    "Четвертичный период": "Quaternary", "Неоген": "Neogene",
+    "Палеоген": "Paleogene", "Мел": "Cretaceous", "Юра": "Jurassic",
+    "Триас": "Triassic", "Пермский период": "Permian",
+    "Карбон": "Carboniferous", "Девон": "Devonian", "Силур": "Silurian",
+    "Ордовик": "Ordovician", "Кембрий": "Cambrian",
+    "Докембрий": "Precambrian",
     "Добавить вершину": "Add a vertex",
     "Замкнуть фигуру": "Close the shape",
     "Завершить путь": "Finish the path",

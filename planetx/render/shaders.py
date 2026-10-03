@@ -306,6 +306,13 @@ uniform vec2 u_wedge_lat;
 uniform float u_water;
 uniform vec4 u_water_color;
 uniform float u_shallow;
+// Гладкая основа одного цвета вместо снимка и всех наложений, без
+// отмывки и воды: фон палеогеографии, u_plain.a - включена ли.
+uniform vec4 u_plain;
+// Маска суши палеогеографии: равнопромежуточная картинка всей Земли,
+// север вверху, суша - красный канал. Цвет суши - u_land_color.
+uniform sampler2D u_paleo;
+uniform vec3 u_land_color;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
 vec3 lay(vec3 under, sampler2D image, vec4 uv) {
@@ -330,11 +337,22 @@ void main() {
     vec3 base;
     float shade = v_shade;
     if (u_water > 0.5) {
-        if (v_height >= 0.0) {
+        if (v_height >= 0.0 || u_plain.a > 0.5) {
             discard;
         }
         base = u_water_color.rgb;
         alpha = u_water_color.a * clamp(-v_height / u_shallow, 0.25, 1.0);
+        shade = 1.0;
+    } else if (u_plain.a > 0.5) {
+        float len_up = length(v_up);
+        vec3 n = len_up > 0.0 ? v_up / len_up : vec3(0.0, 0.0, 1.0);
+        vec2 where = vec2(atan(n.y, n.x) / 6.28318530718 + 0.5,
+                          0.5 - asin(clamp(n.z, -1.0, 1.0))
+                          / 3.14159265359);
+        // Без мипмапов: на шве 180° долгота прыгает, и уровень
+        // выбирался бы самый грубый.
+        float land = textureLod(u_paleo, where, 0.0).r;
+        base = mix(u_plain.rgb, u_land_color, land);
         shade = 1.0;
     } else {
         base = texture(u_texture, v_uv).rgb;
@@ -348,7 +366,7 @@ void main() {
     }
     // Отмывка рельефа: множитель яркости, на равнине 1. С солнцем -
     // свет по нормали и направлению на солнце, с ночной стороной.
-    if (u_sun_on > 0.5) {
+    if (u_sun_on > 0.5 && u_plain.a < 0.5) {
         shade = sun_brightness(dot(normalize(v_normal), u_sun));
     }
     vec3 ground = clamp(base * shade, 0.0, 1.0);

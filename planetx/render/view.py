@@ -321,6 +321,17 @@ class GlobeView(QOpenGLWidget):
         # Разрез Земли: вынутый сектор (core.cutaway.Wedge или None)
         # и грани с оболочками - отдельный набор подземных сеток.
         self.wedge = None
+        # Гладкая основа: цвет (r, g, b) от 0 до 1 вместо снимка,
+        # наложений и подписей мест, или None. Фон палеогеографии.
+        self.plain_base = None
+        # Маска суши на гладкой основе: цвет суши, текстура и новая
+        # картинка (h, w, 4), которая ждёт кадра. False - убрать.
+        self.land_color = (0.6, 0.6, 0.6)
+        self.land_texture = None
+        self._land_new = None
+        # Сама маска: после смены контекста она грузится в видеокарту
+        # заново, текстура старого контекста пропадает.
+        self._land_mask = None
         self.cutaway = Subsurface()
         self.wedge_crust = None
         self.wedge_gain = 1.0
@@ -331,6 +342,9 @@ class GlobeView(QOpenGLWidget):
         # Запросов данных вне загрузчиков тайлов: файлы зон плит.
         # Входят в счётчик загрузки, его показывает значок загрузки.
         self.data_pending = 0
+        # Стенка разреза вдоль линии (окно «Разрез»): видна сквозь
+        # поверхность.
+        self.section_wall = Subsurface(xray=True)
         # Надписи без пунктов вынутого сектора: список, сектор, итог.
         self._wedged = (None, None, [])
         # Землетрясения: очаги точками поверх поверхности.
@@ -533,6 +547,13 @@ class GlobeView(QOpenGLWidget):
         """
         self.pending[key] = (rgba, mesh, level)
         self.last_arrival = time.monotonic()
+        self.update()
+
+    def set_land(self, mask):
+        """Маска суши для гладкой основы: массив (h, w, 4) uint8,
+        равнопромежуточная картинка всей Земли, или None."""
+        self._land_new = False if mask is None else mask
+        self._land_mask = mask
         self.update()
 
     def set_tool_cursor(self, cross):
@@ -1210,6 +1231,10 @@ class GlobeView(QOpenGLWidget):
         self.u_wedge_on = GL.glGetUniformLocation(self.program,
                                                   "u_wedge_on")
         self.u_wedge = GL.glGetUniformLocation(self.program, "u_wedge")
+        self.u_plain = GL.glGetUniformLocation(self.program, "u_plain")
+        self.u_paleo = GL.glGetUniformLocation(self.program, "u_paleo")
+        self.u_land_color = GL.glGetUniformLocation(self.program,
+                                                    "u_land_color")
         self.u_wedge_lat = GL.glGetUniformLocation(self.program,
                                                    "u_wedge_lat")
         GL.glUseProgram(self.program)
@@ -1258,6 +1283,7 @@ class GlobeView(QOpenGLWidget):
         self.subsurface.init_gl()
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
+        self.section_wall.init_gl()
         self.quakes.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
@@ -1278,6 +1304,7 @@ class GlobeView(QOpenGLWidget):
         self.subsurface.release_gl()
         self.cutaway.release_gl()
         self.cutaway_slabs.release_gl()
+        self.section_wall.release_gl()
         self.quakes.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
@@ -1297,6 +1324,14 @@ class GlobeView(QOpenGLWidget):
         self.pool.delete_all()
         if self.clear_texture is not None:
             gpu.delete_texture(self.clear_texture)
+            if self.land_texture is not None:
+                gpu.delete_texture(self.land_texture)
+                self.land_texture = None
+            # Новый контекст получит ту же маску суши. Без этого
+            # палеогеография, включённая при открытии окна, шла
+            # сплошным океаном: маска приходила до смены контекста.
+            if self._land_mask is not None:
+                self._land_new = self._land_mask
             self.clear_texture = None
         self.overlays = {}
         if self.ocean is not None:
@@ -1706,6 +1741,24 @@ class GlobeView(QOpenGLWidget):
             self.cutaway_slabs.drawn = 0
         gpu.gl.glUseProgram(self.program)
         gpu.gl.glUniform1f(self.u_wedge_on, 0.0 if wedge is None else 1.0)
+        plain = self.plain_base
+        gpu.gl.glUniform4f(self.u_plain, *((0.0, 0.0, 0.0, 0.0)
+                                           if plain is None
+                                           else tuple(plain) + (1.0,)))
+        if self._land_new is not None:
+            if self.land_texture is not None:
+                gpu.delete_texture(self.land_texture)
+            self.land_texture = None if self._land_new is False \
+                else gpu.create_texture(self._land_new)
+            self._land_new = None
+        if plain is not None:
+            gpu.gl.glActiveTexture(GL.GL_TEXTURE9)
+            GL.glBindTexture(GL.GL_TEXTURE_2D, self.clear_texture
+                             if self.land_texture is None
+                             else self.land_texture)
+            gpu.gl.glActiveTexture(GL.GL_TEXTURE0)
+            gpu.gl.glUniform1i(self.u_paleo, 9)
+            GL.glUniform3f(self.u_land_color, *self.land_color)
         if wedge is not None:
             cx, cy, cos_half, sin_s, sin_n = cutaway.uniform(wedge)
             gpu.gl.glUniform4f(self.u_wedge, cx, cy, cos_half, 0.0)
@@ -1824,6 +1877,11 @@ class GlobeView(QOpenGLWidget):
                 self.camera, self.store.heights_at if self.store.scale
                 else None, self.store.version, ratio,
                 still=shot or not motion)
+        self.section_wall.prepare()
+        if self.section_wall.active and not self.show_holes:
+            self.section_wall.draw(self.camera)
+        else:
+            self.section_wall.drawn = 0
         if self.quakes.events and not self.show_holes:
             self.quakes.draw(self.camera, ratio)
         else:
@@ -2195,7 +2253,9 @@ class GlobeView(QOpenGLWidget):
                 loader.retain(wanted)
                 self._places_wanted = keys
                 self._places_at = now
-        kinds = kinds_at(self.label_kinds, self.camera.altitude())
+        # На гладкой основе нынешних городов и стран нет.
+        kinds = set() if self.plain_base is not None \
+            else kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
         own = self._own_marks() + self.layer_marks + self.grid_marks \

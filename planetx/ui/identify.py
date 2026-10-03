@@ -143,6 +143,21 @@ def _value(value):
     return "" if value is None else str(value)
 
 
+class Group:
+    """Группа окна «Объекты», которая не слой проекта: «Мои метки»,
+    землетрясения, место. У её объектов нет номеров, выделять на карте
+    нечего."""
+
+    def __init__(self, name):
+        self._name = name
+
+    def name(self):
+        return self._name
+
+    def selectByIds(self, ids):
+        """Выделять в группе нечего, номеров у объектов нет."""
+
+
 class IdentifyDialog(QDialog):
     """Немодальное окно «Объекты»: точка и дерево слой - объект - поле."""
 

@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.25.0.
+A 3D globe inside QGIS. PlanetX version 0.25.1.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -49,6 +49,23 @@ and atmosphere, from space down to single streets.
 - **Starry sky.** The Body icon also opens the sky from the centre of the
   celestial sphere. It shows the Milky Way, stars, constellation lines
   and names, the Sun, the Moon and the planets at the chosen time.
+- **Inside the Earth.** The terrain shows sea and ocean depths under
+  semi-transparent water. The Earthquakes row shows the foci of the last
+  30 days from the USGS feed at their depth. The Earth cutaway row
+  removes a sector, its faces show the CRUST1.0 crust, the mantle and
+  core of the PREM model and the Slab2 subducting slabs. The corners of
+  the sector can be dragged with the mouse. The Section down… item in
+  the menu of a path shows a section of the Earth along the path in its
+  own window and as a wall on the globe.
+- **Paleogeography.** The Paleogeography row shows the coastlines of
+  the past, up to a billion years ago, after the plate motion model of
+  the GPlates web service. A slider in the corner of the view sets the
+  age.
+- **Assistant.** A conversation window with the Claude or Grok AI
+  model. The model controls the globe on a request in words - flights,
+  Layers rows, sections, point and earthquake information. It proposes
+  placemarks as a KML document, they are written after confirmation. An
+  API key of your own is needed.
 - **Left panel.** The sections Places, Project layers and Layers
   collapse with a click on the header.
 - **Layers section.** It holds
@@ -94,9 +111,10 @@ and atmosphere, from space down to single streets.
   found is marked with a red pin. If several places are found, the
   others are listed below the field. Clearing the field removes the pin
   and closes the list.
-- **Refresh.** A new base map, terrain exaggeration and project layers
-  appear after the Refresh button in the corner of the view. Automatic
-  refresh is switched on in the view properties.
+- **Refresh.** The globe refreshes by itself after a change of the
+  base map, terrain exaggeration and project layers. If automatic
+  refresh is switched off in the view properties, the changes appear
+  after the Refresh button in the corner of the view.
 - **Map synchronization.** The link button in the corner of the view ties
   the globe to the QGIS map window. The map leads the globe, the globe
   leads the map or both follow each other, as chosen in the view

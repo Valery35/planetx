@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.25.0
+version=0.25.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -92,12 +92,25 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.25.0 The Earthquakes row of the Layers panel shows
+changelog=0.25.1 The Assistant icon opens a conversation with the
+      Claude or Grok AI model. On a request in words the model flies,
+      switches Layers rows, sets the Earth cutaway and sections and
+      answers about points and earthquakes. It proposes placemarks
+      as KML, they are written after confirmation. An API key of
+      your own is needed, it is kept in the QGIS password manager.
+      The Features window also shows My Places placemarks,
+      earthquake foci, the Moho, crust and slab under the point.
+      The Paleogeography row shows the coastlines of the past up to
+      a billion years ago. The globe window always opens on today's
+      Earth.
+      0.25.0 The Earthquakes row of the Layers panel shows
       the earthquakes of the last 30 days from the USGS feed at their
       depth, coloured by depth and sized by magnitude. The Earth
       section row takes a sector out of the Earth and shows the crust,
-      mantle, core and subducting slabs on its faces. Section down in
-      the menu of a path draws a section of the Earth along the path.
+      mantle, core and subducting slabs on its faces, its corners are
+      dragged with the mouse. Section down in the menu of a path draws
+      a section of the Earth along the path in a window and as a wall
+      on the globe.
       Terrain shows sea and ocean depths under translucent water.
       Vertices in the New placemark window are dragged with the mouse,
       the circle in the middle of a segment adds a vertex, a click on

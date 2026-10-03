@@ -28,16 +28,17 @@ from ..core import (basemap, clouds, ellipsoid, lookat, stars, sun,
                     temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
-                            number, segment_midpoints)
-from ..core import graticule, placetree
-from ..core.features import Shape, has_alts
+                            number, segment_midpoints, surface_level)
+from ..core import graticule, paleo, placetree
+from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, fit_view
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                             place_text, search_url)
 from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
-from ..core.planets import EARTH_PLANET, planet_by_key
+from ..core.planets import EARTH_PLANET, PLANETS, planet_by_key
+from ..core import assistant as assistant_core
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
@@ -49,8 +50,8 @@ from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
-from ..core import (crust, cutaway, insolation, quakes, section, slabs,
-                    viewshed)
+from ..core import (crust, cutaway, insolation, pick, quakes, section,
+                    slabs, viewshed)
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
@@ -67,7 +68,7 @@ from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
 from ..qt_compat import enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
-from .identify import IdentifyDialog, identify, point_text
+from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
 from .legend import (CutawayLegend, InsolationLegend, QuakeLegend,
                      SlopeLegend, TemperatureLegend)
@@ -79,7 +80,9 @@ from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
 from .measure import _xy as ruler_xy
 from .elevation import HeightSource, ProfileDialog
 from .section import SectionDialog
+from .assistant import AssistantDialog
 from .myplaces import MyPlaces
+from .paleo import PaleoBar, land_mask
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
@@ -136,12 +139,12 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False,
-                  "quakes": False, "cutaway": False}
+                  "quakes": False, "cutaway": False, "paleo": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
-                "cutaway")
+                "cutaway", "paleo")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -460,6 +463,14 @@ class GlobeWindow(QWidget):
         self.quake_legend.hide()
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
+        # Палеогеография: ползунок возраста, контуры по возрастам,
+        # запрос берегов и линии на глобусе.
+        self.paleo_bar = PaleoBar(self.view)
+        self.paleo_bar.age_changed.connect(self._paleo_age)
+        self.paleo_age = 0
+        self.paleo_cache = {}
+        self._paleo_replies = {}
+        self.paleo_bar.ready = lambda: self.paleo_age in self.paleo_cache
         # Землетрясения: события сводки и ответ на её запрос.
         self.quake_events = []
         self._quake_reply = None
@@ -572,6 +583,7 @@ class GlobeWindow(QWidget):
             lambda: self.set_sidebar(self.panel.isHidden()))
         self.set_sidebar(QgsSettings().value(SIDEBAR_KEY, True, type=bool))
         self.toolbar.about_clicked.connect(lambda: show_about(self))
+        self.toolbar.assistant_clicked.connect(self.open_assistant)
         self.toolbar.properties_clicked.connect(self._show_properties)
         self.toolbar.save_view_requested.connect(self.save_view)
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
@@ -600,6 +612,8 @@ class GlobeWindow(QWidget):
         self._profile_mark = None
         # Разрез вниз вдоль пути: окно, точки пути и точка под курсором.
         self.section_dialog = None
+        # ИИ-помощник: окно разговора, ui/assistant.py.
+        self.assistant_dialog = None
         self._section_points = []
         # Углы разреза Земли, которые тянутся мышью.
         self.wedge_corners = _WedgeCorners(self)
@@ -736,6 +750,12 @@ class GlobeWindow(QWidget):
         self.extras = {key: settings.value(EXTRA_KEY + key, default,
                                            type=bool)
                        for key, default in EXTRA_DEFAULTS.items()}
+        # При открытии окна - нынешняя Земля. Палеогеография - отдельный
+        # режим, она включается строкой и не переживает закрытие окна,
+        # решение автора от 3 октября 2026 года.
+        if "paleo" in self.extras:
+            self.extras["paleo"] = False
+            settings.setValue(EXTRA_KEY + "paleo", False)
         self.panel.set_extras(self.extras)
         self.panel.extra_toggled.connect(self.set_extra)
         self.grid_shapes = []
@@ -898,6 +918,8 @@ class GlobeWindow(QWidget):
             self._set_quakes(on)
         elif key == "cutaway":
             self._set_cutaway(on)
+        elif key == "paleo":
+            self._set_paleo(on)
 
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой
@@ -1210,6 +1232,7 @@ class GlobeWindow(QWidget):
                 self.crust = crust.from_archive(data)
             except crust.CrustError as problem:
                 self.crust_error = str(problem)
+        self._refresh_identified()
         self.cutaway_legend.set_crust(self.crust is not None)
         self._place_attribution()
         if self.crust is not None and self.view.wedge is not None:
@@ -1269,6 +1292,12 @@ class GlobeWindow(QWidget):
                 self.slab_errors[code] = str(problem)
         self._show_slabs()
         self._refresh_section()
+        self._refresh_identified()
+
+    def _refresh_identified(self):
+        """Окно «Объекты» открыто - место в нём уточняется."""
+        if self.identified is not None and self.identified.isVisible():
+            self._show_identified()
 
     def _show_slabs(self):
         """Пришедшие зоны разреза - на грани, подпись источника и строка
@@ -1288,6 +1317,70 @@ class GlobeWindow(QWidget):
         if self.view.wedge is None or gain == 1.0:
             return None
         return lambda depth: cutaway.stretch(depth, gain)
+
+    def _paleo_on(self):
+        return bool(self.extras.get("paleo")) and self.planet.earth \
+            and self.view.sky_view is None
+
+    def _set_paleo(self, on):
+        """Палеогеография строкой раздела «Слои»: ползунок возраста,
+        гладкая основа и берега материков на этот возраст."""
+        shown = self._paleo_on()
+        self.paleo_bar.setVisible(shown)
+        self.view.plain_base = paleo.OCEAN if shown else None
+        self._place_attribution()
+        if not shown:
+            self.paleo_bar.stop()
+            replies, self._paleo_replies = self._paleo_replies, {}
+            for reply in replies.values():
+                reply.abort()
+            self._show_paleo([])
+            return
+        self._paleo_age(self.paleo_bar.age())
+
+    def _paleo_age(self, age):
+        """Берега на возраст age млн лет: из памяти или запросом."""
+        self.paleo_age = age
+        if not self._paleo_on():
+            return
+        rings = self.paleo_cache.get(age)
+        if rings is None:
+            self._paleo_fetch(age)
+        else:
+            self._show_paleo(rings)
+
+    def _paleo_fetch(self, age):
+        """Запрос берегов на возраст age, если его ещё нет."""
+        if age in self.paleo_cache or age in self._paleo_replies \
+                or not 0 <= age <= paleo.MAX_AGE:
+            return
+        self._paleo_replies[age] = fetch_json(
+            paleo.url(age),
+            lambda data, error, age=age: self._paleo_done(age, data,
+                                                          error))
+
+    def _paleo_done(self, age, data, error):
+        if self._paleo_replies.pop(age, None) is None:
+            # Строку выключили, ответ уже не нужен.
+            return
+        if data is None:
+            self.paleo_bar.stop()
+            self.message = (tr("Палеогеография не загрузилась: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+            return
+        self.paleo_cache[age] = paleo.parse(data)
+        if age == self.paleo_age and self._paleo_on():
+            self._show_paleo(self.paleo_cache[age])
+
+    def _show_paleo(self, rings):
+        """Суша на возраст ползунка: маска для вида, [] - убрать."""
+        self.view.land_color = paleo.LAND
+        self.view.set_land(land_mask(rings) if rings else None)
+        self._show_attribution()
+        if self.paleo_bar.timer.isActive():
+            # Показ: следующий возраст просится заранее.
+            self._paleo_fetch(self.paleo_age - paleo.STEP)
 
     def _quake_legend_state(self):
         """Шкала глубины очагов - при очагах на Земле."""
@@ -1390,6 +1483,9 @@ class GlobeWindow(QWidget):
         self._clear_viewshed()
         self._clear_insolation()
         self.subsurface.clear()
+        # Разрез вниз - земной: кора, плиты и очаги есть только у Земли.
+        if self.section_dialog is not None:
+            self.section_dialog.close()
         ellipsoid.set_body(planet.body)
         if planet.earth:
             source = self.sources[self._basemap]
@@ -1477,6 +1573,8 @@ class GlobeWindow(QWidget):
         self.insolation_legend.hide()
         self.quake_legend.hide()
         self.cutaway_legend.hide()
+        self.paleo_bar.hide()
+        self.view.plain_base = None
         for button in self._globe_buttons():
             button.setEnabled(False)
         self._show_attribution()
@@ -1509,6 +1607,8 @@ class GlobeWindow(QWidget):
         self._quake_legend_state()
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
                                        and self.planet.earth)
+        self.paleo_bar.setVisible(self._paleo_on())
+        self.view.plain_base = paleo.OCEAN if self._paleo_on() else None
         self._set_surface()
         self.toolbar.set_body(self.planet.key)
         self._show_attribution()
@@ -1656,6 +1756,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*temperature.ATTRIBUTION))
         if self.view.quakes.events:
             parts.append(link_html(*quakes.ATTRIBUTION))
+        if self.view.plain_base is not None:
+            parts.append(link_html(*paleo.ATTRIBUTION))
         if self.view.wedge_slabs:
             parts.append(link_html(*slabs.ATTRIBUTION))
         if self.view.wedge is not None and self.crust is not None:
@@ -1698,6 +1800,12 @@ class GlobeWindow(QWidget):
             bottom = self.quake_legend.y() - MARGIN // 2
         self.cutaway_legend.move(
             MARGIN, bottom - self.cutaway_legend.height())
+        # Ползунок палеогеографии - над всеми шкалами.
+        if self.cutaway_legend.isVisible():
+            bottom = self.cutaway_legend.y() - MARGIN // 2
+        if self.attribution.x() < MARGIN + self.paleo_bar.width():
+            bottom = min(bottom, self.attribution.y() - MARGIN // 2)
+        self.paleo_bar.move(MARGIN, bottom - self.paleo_bar.height())
 
     def eventFilter(self, watched, event):
         if watched is self.view and event.type() == enum(
@@ -2107,6 +2215,16 @@ class GlobeWindow(QWidget):
         span = self._time_range
         return span is None or when.visible(place.time, *span)
 
+    def _timed_shape(self, place):
+        """Объект метки в момент шкалы времени. Путь с промежутком
+        времени растёт от начала к концу, пока по нему идёт правый
+        бегунок шкалы."""
+        shape = self.previews.get(place.key, place.shape)
+        span = self._time_range
+        if span is None or shape.kind != "line":
+            return shape
+        return grown(shape, when.share(place.time, span[1]))
+
     def _show_time(self, time):
         """Шкала на время вида или метки, как у Google Earth. Закрытая
         шкала при этом открывается - у вида есть дата."""
@@ -2122,7 +2240,7 @@ class GlobeWindow(QWidget):
         """На глобусе видимые «Мои метки», треки и фигура открытой
         линейки."""
         # Метка с открытым окном свойств показывается с правками окна.
-        shapes = [self.previews.get(p.key, p.shape)
+        shapes = [self._timed_shape(p)
                   for p in self.myplaces.places
                   if p.visible and self._time_ok(p) and not p.tour
                   and p.body == self.planet.key
@@ -2695,8 +2813,7 @@ class GlobeWindow(QWidget):
         if self.section_dialog is None:
             self.section_dialog = SectionDialog(title, self._section, self)
             self.section_dialog.point_hovered.connect(self._section_hover)
-            self.section_dialog.finished.connect(
-                lambda *args: self._section_hover(None))
+            self.section_dialog.finished.connect(self._section_closed)
         else:
             self.section_dialog.set_source(title, self._section)
         self.section_dialog.show()
@@ -2724,8 +2841,19 @@ class GlobeWindow(QWidget):
             waiting.append(tr("землетрясения"))
         notes = tr("Загружаются: {what}.", what=", ".join(waiting)) \
             if waiting else ""
-        return section.build(self._section_points, self.crust, zones,
-                             self.quake_events, depth, width), notes
+        built = section.build(self._section_points, self.crust, zones,
+                              self.quake_events, depth, width)
+        # Стенка на глобусе - из того же разреза.
+        self.view.section_wall.set_mesh(
+            "wall", section.wall_mesh(built) if built is not None else None)
+        self.view.update()
+        return built, notes
+
+    def _section_closed(self, *args):
+        """Окно «Разрез» закрыто: метка и стенка уходят с глобуса."""
+        self._section_hover(None)
+        self.view.section_wall.clear()
+        self.view.update()
 
     def _refresh_section(self):
         if self.section_dialog is not None \
@@ -3318,10 +3446,304 @@ class GlobeWindow(QWidget):
         scale = view.store.scale
         height = h / scale if scale else None
         self._mark("{:.5f}, {:.5f}".format(lat, lon), lat, lon)
+        self._identify_at = (lat, lon, height, tolerance, px, py, found)
+        self._show_identified()
+
+    def _show_identified(self):
+        """Окно «Объекты» по последнему щелчку: слои проекта, «Мои
+        метки», очаги землетрясений, место. Зовётся и по приходу коры
+        и плит, тогда место уточняется."""
+        args = getattr(self, "_identify_at", None)
+        if args is None:
+            return
+        lat, lon, height, tolerance, px, py, found = args
+        groups = list(found)
+        groups += self._identify_places(lat, lon, tolerance)
+        groups += self._identify_quakes(px, py)
+        groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)
         self.identified.show_result(
-            point_text(lat, lon, height, fmt=self.coords), found)
+            point_text(lat, lon, height, fmt=self.coords), groups)
+
+    # ИИ-помощник: контекст вида и инструменты (core/assistant.py).
+
+    def open_assistant(self):
+        """Окно «Помощник», немодальное, одно на окно глобуса."""
+        if self.assistant_dialog is None:
+            self.assistant_dialog = AssistantDialog(
+                self.assistant_tool, self.assistant_context, self)
+        self.assistant_dialog.show()
+        self.assistant_dialog.raise_()
+
+    def _layer_keys(self):
+        """Ключи строк раздела «Слои», которые может включать помощник."""
+        return ["relief"] + list(EXTRA_DEFAULTS) + list(VECTOR_GROUPS)
+
+    def assistant_context(self):
+        """Что уходит в модель с запросом: точка взгляда, тело,
+        включённые строки, сектор разреза. Названия слоёв проекта
+        и меток не уходят, решение автора от 3 октября 2026 года."""
+        pose = self.view.navigator.pose
+        on = (["relief"] if self._relief else []) \
+            + [k for k, v in self.extras.items() if v] \
+            + sorted(self._groups)
+        wedge = self.view.wedge
+        return {
+            "view": {"lat": round(pose.lat, 4), "lon": round(pose.lon, 4),
+                     "distance_km": round(pose.distance / 1000.0, 1),
+                     "heading": round(pose.heading, 1),
+                     "tilt": round(pose.tilt, 1)},
+            "body": "sky" if self.view.sky_view is not None
+            else self.planet.key,
+            "body_keys": ["sky"] + [p.key for p in PLANETS],
+            "layers_on": on, "layer_keys": self._layer_keys(),
+            "cutaway": [round(v, 2) for v in wedge] if wedge else None,
+            "selected_places": len(self.panel.list.selected_keys()),
+            "utc": when.text(time.time())}
+
+    def assistant_tool(self, call):
+        """Исполнить вызов инструмента модели, ответ - текст для модели.
+        Ошибка в аргументах - тоже ответ, модель может исправиться."""
+        handler = getattr(self, "_tool_" + call.name, None)
+        if handler is None:
+            return tr("Нет такого инструмента: {name}.", name=call.name)
+        try:
+            return handler(**call.args)
+        except (TypeError, ValueError, KeyError, IndexError) as error:
+            return tr("Ошибка в аргументах {name}: {error}",
+                      name=call.name, error=str(error))
+
+    def _tool_fly_to(self, lat, lon, distance_km=500.0):
+        self._fly_to(float(lat), float(lon), float(distance_km) * 1000.0)
+        return tr("Перелёт к {lat:.3f}, {lon:.3f}.", lat=float(lat),
+                  lon=float(lon))
+
+    def _tool_search_place(self, query):
+        self.place.setText(str(query))
+        self.fly(str(query))
+        return tr("Поиск запущен: {query}.", query=query)
+
+    def _tool_set_body(self, body):
+        if body != "sky" and body not in [p.key for p in PLANETS]:
+            return tr("Неизвестное тело: {body}.", body=body)
+        self.set_body(body)
+        return tr("Тело: {body}.", body=body)
+
+    def _tool_set_layer(self, key, on):
+        on = bool(on)
+        if key == "relief":
+            self.set_relief(on)
+        elif key in EXTRA_DEFAULTS:
+            self.set_extra(key, on)
+        elif key in VECTOR_GROUPS:
+            self.set_line_group(key, on)
+        else:
+            return tr("Неизвестная строка: {key}.", key=key)
+        return tr("Строка {key}: {state}.", key=key,
+                  state=tr("включена") if on else tr("выключена"))
+
+    def _tool_set_time(self, start="", end=""):
+        if not start and not end:
+            self.toolbar.set_time_shown(False)
+            self._time_toggled(False)
+            return tr("Шкала времени закрыта.")
+        if not self.timebar.known:
+            return tr("Шкалы времени нет: у видимых меток и событий нет "
+                      "времени.")
+        lo = when.parse(start) if start else float("-inf")
+        hi = when.parse(end) if end else float("inf")
+        if lo is None or hi is None:
+            return tr("Даты не разобраны: {start} - {end}.", start=start,
+                      end=end)
+        self.toolbar.set_time_shown(True)
+        self._time_toggled(True)
+        self.timebar.set_range(lo, hi)
+        return tr("Шкала времени: {start} - {end}.", start=start, end=end)
+
+    def _tool_earth_cutaway(self, west=None, east=None, south=0.0,
+                            north=90.0, off=False):
+        if off:
+            self.set_extra("cutaway", False)
+            return tr("Разрез Земли убран.")
+        if not self.planet.earth:
+            return tr("Разрез Земли есть только у Земли.")
+        if not self.extras.get("cutaway"):
+            self.set_extra("cutaway", True)
+        if west is not None and east is not None:
+            self.view.set_wedge(cutaway.make_wedge(west, east, south, north),
+                                self.crust)
+            self._wedge_gain_changed()
+            self._want_slabs()
+            self._update_tool_marks()
+        wedge = self.view.wedge
+        return tr("Сектор: {wedge}.", wedge=", ".join(
+            "{:.1f}".format(v) for v in wedge))
+
+    def _tool_section_down(self, points, depth_km=700.0):
+        pts = [(float(p[0]), float(p[1])) for p in points]
+        if len(pts) < 2:
+            return tr("Для разреза нужны хотя бы две точки.")
+        self._open_section(tr("Разрез помощника"), pts)
+        dialog = self.section_dialog
+        best = min(range(dialog.depth.count()), key=lambda i: abs(
+            dialog.depth.itemData(i) - float(depth_km)))
+        dialog.depth.setCurrentIndex(best)
+        found = dialog.chart.section
+        if found is None:
+            return tr("Разрез не построен.")
+        return tr("Разрез открыт: длина {length:.0f} км, глубина "
+                  "{depth:.0f} км, очагов в полосе {count}.",
+                  length=float(found.distance[-1]), depth=found.depth,
+                  count=len(found.quakes))
+
+    def _tool_point_info(self, lat, lon):
+        lat, lon = float(lat), float(lon)
+        height = float(self._true_heights(np.array([lat]),
+                                          np.array([lon]))[0])
+        groups = self._identify_site(lat, lon, height)
+        if not groups:
+            return tr("Сведений о точке нет.")
+        values = groups[0][1][0][1]
+        return "; ".join("{}: {}".format(k, v) for k, v in values)
+
+    def _tool_quakes_summary(self, south, north, west, east):
+        if not self.quake_events:
+            self._want_quakes()
+            return tr("Сводка землетрясений загружается, повтори запрос "
+                      "через несколько секунд.")
+        return assistant_core.quakes_text(
+            self.quake_events, (float(south), float(north), float(west),
+                                float(east)))
+
+    def _tool_add_kml(self, kml):
+        try:
+            tree = read_kml(str(kml).encode("utf-8"), tr("Помощник"))
+        except KmlError as error:
+            return tr("KML не разобран: {error}. Исправь документ.",
+                      error=str(error))
+        count = len(tree.places())
+        if not count:
+            return tr("В документе KML нет меток.")
+
+        def write():
+            # Ключ новой папки - для перелёта и для проверки.
+            self.assistant_folder = self.myplaces.import_tree(tree)
+            return tr("В «Мои метки» записано меток: {count}.",
+                      count=count)
+        self.assistant_dialog.propose(
+            tr("Помощник предлагает папку «{name}», меток {count}.",
+               name=tree.name or tr("Помощник"), count=count), write)
+        return tr("Документ показан пользователю, меток {count}. Запись - "
+                  "после его подтверждения.", count=count)
+
+    def _tool_get_kml(self):
+        pose = self.view.navigator.pose
+        out = [assistant_core.look_at_kml(pose.lat, pose.lon, pose.distance,
+                                          pose.heading, pose.tilt)]
+        keys = self.panel.list.selected_keys()
+        if keys:
+            out.append(write_kml(self.myplaces.export_keys(keys)))
+        else:
+            out.append(tr("Выделенных меток нет."))
+        return "\n".join(out)
+
+    def _identify_places(self, lat, lon, tolerance):
+        """Видимые «Мои метки» под щелчком."""
+        places = [p for p in self.myplaces.places
+                  if p.visible and self._time_ok(p) and not p.tour
+                  and p.body == self.planet.key and p.shape.points]
+        hits = pick.picked([(p.shape.kind, p.shape.points) for p in places],
+                           lat, lon, tolerance)
+        kinds = {"point": tr("Метка"), "line": tr("Путь"),
+                 "polygon": tr("Многоугольник")}
+        features = []
+        for n in hits:
+            p = places[n]
+            shape = p.shape
+            values = [(tr("Тип"), kinds.get(shape.kind, shape.kind))]
+            if shape.kind == "point":
+                a, b = shape.points[0]
+                values.append((tr("Координаты"), "{:.5f}, {:.5f}".format(
+                    a, b)))
+            elif shape.kind == "line":
+                values.append((tr("Длина"), distance_text(
+                    pick.path_length(shape.points))))
+            else:
+                values.append((tr("Периметр"), distance_text(
+                    pick.path_length(shape.points, closed=True))))
+            if p.measure:
+                values.append((tr("Измерение"), p.measure))
+            if p.description:
+                values.append((tr("Описание"), p.description))
+            features.append((shape.name or tr("Без названия"), values, None))
+        return [(Group(tr("Мои метки")), features)] if features else []
+
+    def _identify_quakes(self, px, py):
+        """Очаги землетрясений на глобусе у точки щелчка на экране."""
+        layer = self.view.quakes
+        if not layer.events:
+            return []
+        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
+        shown = quakes.facing(eye, layer.epicenter, layer.lats, layer.lons) \
+            & quakes.in_window(layer.times, layer.window)
+        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
+        near = np.zeros(len(layer.events), dtype=bool)
+        for points in (layer.focus, layer.epicenter):
+            pixels, front = self.view.camera.project(points)
+            gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
+            near |= front & (gap <= radius)
+        features = []
+        for n in np.nonzero(near & shown)[0]:
+            q = layer.events[int(n)]
+            values = [(tr("Магнитуда"), "{:.1f}".format(q.mag)),
+                      (tr("Глубина очага"), tr("{value} км", value=(
+                          "{:.0f}".format(q.depth))))]
+            if q.time is not None:
+                values.append((tr("Время, UTC"), when.text(q.time)))
+            if q.url:
+                values.append((tr("Страница USGS"), q.url))
+            features.append((q.place or "M {:.1f}".format(q.mag), values,
+                             None))
+        return [(Group(tr("Землетрясения")), features)] if features else []
+
+    def _identify_site(self, lat, lon, height):
+        """Место под щелчком: высота или глубина, кора CRUST1.0, плита
+        Slab2. Кора и зона плиты просятся, если их нет, окно обновится
+        по их приходу."""
+        if not self.planet.earth:
+            return []
+        values = []
+        if height is not None:
+            kind, value = surface_level(height)
+            values.append((tr("Глубина") if kind == "depth"
+                           else tr("Высота"), tr("{value} м",
+                                                 value=str(value))))
+        self._want_crust()
+        if self.crust is not None:
+            bounds = self.crust.at([lat], [lon])[0].astype(float)
+            sediments = float(bounds[2] - bounds[5])
+            values.append((tr("Мохо"), tr("{value} км", value="{:.1f}".format(
+                -bounds[-1]))))
+            values.append((tr("Толщина коры"), tr("{value} км", value=(
+                "{:.1f}".format(bounds[1] - bounds[-1])))))
+            if sediments > 0.0:
+                values.append((tr("Осадки"), tr("{value} км", value=(
+                    "{:.1f}".format(sediments)))))
+        elif self._crust_reply is not None:
+            values.append((tr("Кора"), tr("загружается")))
+        codes = slabs.touched(self._read_slab_index(), [lat], [lon])
+        self._request_slabs(codes)
+        zones = [self.slab_zones[c] for c in codes if c in self.slab_zones]
+        top, bottom = slabs.band(zones, [lat], [lon])
+        if np.isfinite(top[0]):
+            values.append((tr("Плита Slab2"), tr(
+                "{top}-{bottom} км", top="{:.0f}".format(top[0]),
+                bottom="{:.0f}".format(bottom[0]))))
+        elif any(c in self._slab_replies for c in codes):
+            values.append((tr("Плита Slab2"), tr("загружается")))
+        return [(Group(tr("Место")), [(tr("Под точкой"), values, None)])] \
+            if values else []
 
     def _ground(self, px, py):
         """Широта и долгота точки рельефа под пикселем или None."""
@@ -3499,6 +3921,8 @@ class GlobeWindow(QWidget):
                 self.viewshed_dialog.close()
             if self.section_dialog is not None:
                 self.section_dialog.close()
+            if self.assistant_dialog is not None:
+                self.assistant_dialog.close()
             self.viewshed_timer.stop()
             if self.viewshed_tiles is not None:
                 self.viewshed_tiles.abort()

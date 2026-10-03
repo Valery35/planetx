@@ -29,10 +29,14 @@ class Subsurface:
     offset - сетки поверх других в той же плоскости: полосы плит Slab2
     на гранях разреза Земли (core.cutaway.slab_bands). Смещение
     глубины к глазу убирает мерцание совпадающих плоскостей.
+    xray - сетки видны сквозь поверхность, без проверки и записи
+    глубины, как стенка разреза вдоль линии (core.section.wall_mesh).
+    Рисуются после поверхности, порядок полос - порядок в сетке.
     """
 
-    def __init__(self, offset=False):
+    def __init__(self, offset=False, xray=False):
         self.offset = offset
+        self.xray = xray
         self.program = None
         self.locations = {}
         self.buffers = {}  # имя - _Buffers
@@ -112,6 +116,9 @@ class Subsurface:
         if self.offset:
             GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
             GL.glPolygonOffset(-1.0, -4.0)
+        if self.xray:
+            GL.glDisable(GL.GL_DEPTH_TEST)
+            GL.glDepthMask(GL.GL_FALSE)
         base = mvps.ctypes.data
         stride = mvps.strides[0]
         null = ctypes.c_void_p(0)
@@ -127,4 +134,7 @@ class Subsurface:
             gl.glDisable(GL.GL_BLEND)
             if self.offset:
                 GL.glDisable(GL.GL_POLYGON_OFFSET_FILL)
+            if self.xray:
+                GL.glDepthMask(GL.GL_TRUE)
+                GL.glEnable(GL.GL_DEPTH_TEST)
         self.drawn = len(items)

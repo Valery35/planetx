@@ -49,6 +49,7 @@ class ViewToolbar(QFrame):
     sidebar_clicked = pyqtSignal()
     refresh_clicked = pyqtSignal()
     about_clicked = pyqtSignal()
+    assistant_clicked = pyqtSignal()
     properties_clicked = pyqtSignal()
     sync_toggled = pyqtSignal(bool)
     save_view_requested = pyqtSignal()
@@ -233,6 +234,10 @@ class ViewToolbar(QFrame):
             tr("Свойства вида: подложка, масштаб рельефа, язык подписей, "
                "связь с картой, обновление, формат координат."),
             self.properties_clicked)
+        self._button(QIcon(os.path.join(ROOT, "assistant.svg")),
+                     tr("Помощник: глобусом управляет ИИ-модель Claude или "
+                        "Grok по запросу словами. Нужен свой ключ API."),
+                     self.assistant_clicked)
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)
         self.adjustSize()

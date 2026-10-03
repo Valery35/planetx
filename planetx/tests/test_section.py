@@ -58,5 +58,33 @@ class TestSection(unittest.TestCase):
         self.assertTrue(np.allclose(sc.moho(section), 24.4))
 
 
+class TestWall(unittest.TestCase):
+
+    def setUp(self):
+        el.set_body(el.EARTH)
+
+    def test_wall_reaches_section_depth(self):
+        section = sc.build([(0.0, 0.0), (0.0, 10.0)], depth=700.0, count=21)
+        mesh = sc.wall_mesh(section)
+        points = mesh.vertices["position"].astype(np.float64) + mesh.center
+        self.assertTrue(np.all(np.isfinite(points)))
+        _, _, h = el.ecef_to_geodetic(points)
+        self.assertAlmostEqual(float(h.min()), -700000.0, delta=50.0)
+        self.assertAlmostEqual(float(h.max()), 0.0, delta=50.0)
+        alpha = mesh.vertices["color"][:, 3]
+        self.assertTrue(np.all(alpha == sc.WALL_ALPHA))
+
+    def test_wall_skips_missing_slab(self):
+        section = sc.build([(0.0, 0.0), (0.0, 10.0)], depth=100.0, count=21)
+        with_slab = section._replace(
+            slab_top=np.where(np.arange(21) < 5, 30.0, np.nan),
+            slab_bottom=np.where(np.arange(21) < 5, 80.0, np.nan))
+        plain = sc.wall_mesh(section)
+        slab = sc.wall_mesh(with_slab)
+        self.assertGreater(len(slab.indices), len(plain.indices))
+        self.assertTrue(np.all(np.isfinite(
+            slab.vertices["position"].astype(np.float64))))
+
+
 if __name__ == "__main__":
     unittest.main()

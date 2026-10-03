@@ -168,6 +168,42 @@ alts - высоты вершин над эллипсоидом у 3D-объек�
 """
 
 
+MIN_GROWN = 1.0e-3  # доля длины, с которой растущий путь уже виден
+
+
+def grown(shape, share):
+    """Путь, выросший на долю share своей длины, от 0 до 1. Доля 1,
+    не линия и 3D-объект - сам shape. Отрезок режется по той же дуге,
+    по какой его рисует densify."""
+    if share >= 1.0 or shape.kind != "line" or len(shape.points) < 2 \
+            or shape.alts is not None:
+        return shape
+    units = _unit(np.array([p[0] for p in shape.points], dtype=np.float64),
+                  np.array([p[1] for p in shape.points], dtype=np.float64))
+    arcs = np.arccos(np.clip((units[:-1] * units[1:]).sum(axis=1),
+                             -1.0, 1.0))
+    total = float(arcs.sum())
+    if total <= 0.0:
+        return shape
+    target = max(share, MIN_GROWN) * total
+    ends = np.cumsum(arcs)
+    n = min(int(np.searchsorted(ends, target)), len(arcs) - 1)
+    done = float(ends[n - 1]) if n else 0.0
+    arc = float(arcs[n])
+    points = [tuple(p) for p in shape.points[:n + 1]]
+    if arc > 0.0:
+        t = min(max((target - done) / arc, 0.0), 1.0)
+        s = math.sin(arc)
+        u = (math.sin((1.0 - t) * arc) * units[n]
+             + math.sin(t * arc) * units[n + 1]) / s if s > 1.0e-12 \
+            else units[n]
+        lat, lon = _latlon(u)
+        points.append((float(lat), float(lon)))
+    if len(points) < 2:
+        points.append(points[0])
+    return shape._replace(points=points)
+
+
 def has_alts(shape):
     """Стоит ли объект в пространстве по своим высотам."""
     alts = getattr(shape, "alts", None)

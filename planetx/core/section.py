@@ -25,14 +25,19 @@ import numpy as np
 
 try:  # внутри плагина QGIS
     from . import ellipsoid
-    from .cutaway import PREM_RADIUS, SHELLS
+    from .cutaway import (CRUST_COLORS, PREM_RADIUS, SHELLS, SLAB_COLOR,
+                          crust_layers)
     from .slabs import band
+    from .subsurface import merge, wall
 except ImportError:  # headless-тесты
     import ellipsoid
-    from cutaway import PREM_RADIUS, SHELLS
+    from cutaway import (CRUST_COLORS, PREM_RADIUS, SHELLS, SLAB_COLOR,
+                         crust_layers)
     from slabs import band
+    from subsurface import merge, wall
 
 SAMPLES = 600  # точек вдоль линии
+WALL_ALPHA = 220  # непрозрачность стенки на глобусе, выбор помощника
 DEPTHS = (100.0, 300.0, 700.0, 2891.0, PREM_RADIUS)  # км, выбор окна
 DEPTH = 700.0  # км, глубина по умолчанию - низ переходной зоны
 WIDTH = 100.0  # км, полоса очагов по обе стороны линии вместе
@@ -160,3 +165,40 @@ def shells_below(section):
             continue
         out.append((key, top, min(bottom, section.depth), color))
     return out
+
+
+def wall_mesh(section, alpha=WALL_ALPHA):
+    """Стенка разреза на глобусе: вертикальные полосы слоёв вдоль линии
+    от поверхности до глубины разреза, core.subsurface.Mesh или None.
+    Глубины настоящие, в метрах ниже уровня моря. Слой без толщины
+    в точке пропускается."""
+    n = len(section.distance)
+    lats, lons = section.lats, section.lons
+    limit = section.depth
+
+    def part(top, bottom, color):
+        # Глубины км вниз -> высоты м, обрезка по глубине разреза. Пустое
+        # место - нулевая толщина, такую полосу wall пропускает.
+        top = np.minimum(np.asarray(top, dtype=np.float64), limit)
+        bottom = np.minimum(np.asarray(bottom, dtype=np.float64), limit)
+        empty = ~(np.isfinite(top) & np.isfinite(bottom))
+        top = np.where(empty, 0.0, top)
+        bottom = np.where(empty, 0.0, bottom)
+        return wall(lats, lons, -top * 1000.0, -bottom * 1000.0,
+                    tuple(color) + (alpha,))
+
+    parts = []
+    base = moho(section)
+    for key, top, bottom, color in shells_below(section):
+        upper = base if key == "upper_mantle" else np.full(n, top)
+        parts.append(part(upper, np.full(n, bottom), color))
+    if section.bounds is not None:
+        depths = -section.bounds
+        for k, key in enumerate(crust_layers()):
+            parts.append(part(depths[:, k], depths[:, k + 1],
+                              CRUST_COLORS[key]))
+    else:
+        crust = [c for c in SHELLS if c[0] == "crust"][0]
+        parts.append(part(np.zeros(n), base, crust[3]))
+    parts.append(part(section.slab_top, section.slab_bottom, SLAB_COLOR))
+    return merge(parts, key="section")
