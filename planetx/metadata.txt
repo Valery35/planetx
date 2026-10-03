@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.26.0
+version=0.27.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -34,7 +34,8 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       centre of the celestial sphere: the Milky Way, stars,
       constellation lines and names, the Sun, the Moon and the planets
       at the chosen time. The Demo icon with an academic cap opens
-      prepared scenes: Perm and Boca Chica on the Earth, landing sites
+      prepared scenes: Perm, Boca Chica and the Japan Trench with a
+      section across the subduction zone on the Earth, landing sites
       on Mars and the Moon, Jezero crater on Mars, constellations and bright objects in the
       sky.
       Labels stay upright, do not overlap and hide behind mountains and
@@ -92,7 +93,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.26.0 The Search field understands requests in words, for
+changelog=0.27.0 A button by the Search field makes places from a
+      description, for example "the voyage of Columbus". The model
+      answers with one KML document, the places appear in My Places
+      and on the globe at once and the camera flies to them. Events
+      carry their dates, the time slider opens on them. The Cancel
+      link below the field removes the places. The Demo icon opens
+      the Japan Trench with earthquakes and an Earth cutaway across
+      the subduction zone. A scene keeps the cutaway sector.
+      0.26.0 The Search field understands requests in words, for
       example "show a section across the Japan Trench". The request
       goes to the assistant, the answer appears below the field. Place
       names and coordinates are found as before. The assistant works

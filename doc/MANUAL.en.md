@@ -972,6 +972,7 @@ under the list plays a tour over them. The folder can be deleted.
 |---|---|---|
 | Earth | Perm | Places with icons and the moments of a walk, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
 | Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
+| Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |
 | Moon | Apollo and Lunokhod sites | The landing sites of six Apollo missions, Lunokhod 1 and Lunokhod 2 |
@@ -1132,6 +1133,18 @@ OpenRouter with a free model is chosen.
 
 The assistant's actions show in the conversation as Action lines. It
 makes no more than six rounds of actions in a row, then it stops.
+
+Places from a description are made by the button with the assistant
+icon to the right of the Search field and by the Make places button of
+the Assistant window. A topic is typed in the field, for example "the
+voyage of Columbus" or "battles of the Hundred Years' War", Ctrl+Enter
+in the field does the same. The model answers with one KML document
+with placemarks, paths and polygons. The places are written to My
+Places as a new folder at once, the camera flies to them. Events with
+a known date carry the date, the time slider opens on the interval
+from the first to the last date. The Cancel link below the field
+removes the made folder. The coordinates and dates come from the
+model, they need checking.
 
 A request can also be typed in the Search field of the left panel. The
 assistant receives a request with a question mark, a request of six

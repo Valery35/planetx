@@ -20,11 +20,12 @@
 Панель только показывает и сообщает сигналами, решает окно.
 """
 import html
+import os
 
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsSettings, QgsVectorLayer)
 from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QFont, QKeySequence
+from qgis.PyQt.QtGui import QFont, QIcon, QKeySequence
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
@@ -41,7 +42,7 @@ from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
                            WATER_NAMES)
-from ..qt_compat import enum, enum_int
+from ..qt_compat import QAction, enum, enum_int
 from .placeprops import icon_image
 
 # Роль данных строки: номер слоя QGIS, у строки «Глобус» - None.
@@ -368,6 +369,9 @@ class LayerPanel(QWidget):
     search_cleared = pyqtSignal()
     # Ссылка «Разговор» под ответом помощника.
     assistant_requested = pyqtSignal()
+    # Кнопка «создать метки по описанию» и ссылка «Отменить» под ответом.
+    make_requested = pyqtSignal(str)
+    undo_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
     # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
@@ -415,10 +419,33 @@ class LayerPanel(QWidget):
         self.place.textChanged.connect(self._search_text)
         go = QPushButton(tr("Поиск"), self)
         go.clicked.connect(lambda: self.fly_text.emit(self.place.text()))
+        # Метки по описанию из строки поиска одним запросом к модели.
+        make = QToolButton(self)
+        make.setIcon(QIcon(os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "assistant.svg")))
+        make.setToolTip(tr(
+            "Создать метки по описанию в строке, например «путешествие "
+            "Колумба» или «битвы Столетней войны». Помощник отвечает одним "
+            "документом KML с датами событий. Метки сразу записываются "
+            "новой папкой в «Мои метки», камера летит к ним. Ссылка "
+            "«Отменить» под строкой удаляет папку. То же делает Ctrl+Enter "
+            "в строке."))
+        make.clicked.connect(
+            lambda: self.make_requested.emit(self.place.text()))
+        self.make = make
+        shortcut = QAction(self.place)
+        shortcut.setShortcut(QKeySequence("Ctrl+Return"))
+        shortcut.setShortcutContext(
+            enum(Qt, "ShortcutContext", "WidgetShortcut"))
+        shortcut.triggered.connect(
+            lambda checked=False: self.make_requested.emit(
+                self.place.text()))
+        self.place.addAction(shortcut)
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.addWidget(self.place, 1)
         top.addWidget(go, 0)
+        top.addWidget(make, 0)
         # Найденные места. Список виден, пока в нём есть строки.
         self.found = QListWidget(self)
         self.found.setVisible(False)
@@ -434,8 +461,7 @@ class LayerPanel(QWidget):
         self.answer.setVisible(False)
         self.answer.setTextInteractionFlags(
             enum(Qt, "TextInteractionFlag", "TextBrowserInteraction"))
-        self.answer.linkActivated.connect(
-            lambda link: self.assistant_requested.emit())
+        self.answer.linkActivated.connect(self._answer_link)
 
         self.list = PlaceTree(self)
         self.list.setItemDelegate(RadioDelegate(self.list))
@@ -666,14 +692,24 @@ class LayerPanel(QWidget):
             self.set_answer("")
             self.search_cleared.emit()
 
-    def set_answer(self, text):
+    def _answer_link(self, link):
+        if link == "undo":
+            self.undo_requested.emit()
+        else:
+            self.assistant_requested.emit()
+
+    def set_answer(self, text, undo=False):
         """Ответ помощника под строкой поиска со ссылкой на разговор.
-        Пустой текст прячет его."""
+        Пустой текст прячет его. undo - ещё ссылка «Отменить» для
+        только что созданных меток."""
         if not text:
             self.answer.clear()
             self.answer.setVisible(False)
             return
         body = html.escape(text).replace("\n", "<br>")
+        if undo:
+            body += ' <a href="undo">{}</a>'.format(
+                html.escape(tr("Отменить")))
         self.answer.setText('{} <a href="assistant">{}</a>'.format(
             body, html.escape(tr("Разговор…"))))
         self.answer.setVisible(True)

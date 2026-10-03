@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.26.0.
+A 3D globe inside QGIS. PlanetX version 0.27.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -65,7 +65,9 @@ and atmosphere, from space down to single streets.
   DeepSeek, OpenRouter models or an own model through Ollama. The model
   controls the globe on a request in words - flights, Layers rows,
   sections, point and earthquake information. A request can also be
-  typed in the Search field. The model proposes placemarks as a KML
+  typed in the Search field. A button by the Search field makes
+  places from a description, for example "the voyage of Columbus", with
+  the dates of the events. The model proposes placemarks as a KML
   document, they are written after confirmation. OpenRouter with free
   models is chosen by default, its key is free. Ollama works without a
   key.
@@ -169,9 +171,9 @@ and atmosphere, from space down to single streets.
   time slider opens with a button on the icon bar and hides placemarks
   outside the interval.
 - **Demo.** The icon with an academic cap opens prepared scenes with
-  places and tours. They show Perm and Boca Chica on the Earth, landing
-  sites on Mars and the Moon, constellations and bright objects in the
-  sky.
+  places and tours. They show Perm, Boca Chica and the Japan Trench with
+  a section across the subduction zone on the Earth, landing sites on
+  Mars and the Moon, constellations and bright objects in the sky.
 - **Scenes.** The whole view - camera, time, layers, settings and a
   places folder with its tour - saves to a file and opens on another
   computer.

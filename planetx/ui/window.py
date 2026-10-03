@@ -154,6 +154,8 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
 # Автообновление глобуса по умолчанию включено, решение автора от
 # 2 октября 2026 года. Флажок хранится в проекте.
 AUTO_DEFAULT = True
+# Полоса очагов окна «Разрез» в демо «Японский жёлоб», км.
+DEMO_QUAKE_BAND = 300.0
 SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 GRID_COLOR = (220, 220, 220, 255)
@@ -562,6 +564,8 @@ class GlobeWindow(QWidget):
         self.panel.place_chosen.connect(self.fly_place)
         self.panel.search_cleared.connect(self.clear_search)
         self.panel.assistant_requested.connect(self.open_assistant)
+        self.panel.make_requested.connect(self.make_places)
+        self.panel.undo_requested.connect(self.undo_made_places)
         # Поиск по названию: ответы по ключу (запрос, язык), запрос
         # в работе, время последнего запроса, найденные места.
         self._searched = {}
@@ -1220,6 +1224,18 @@ class GlobeWindow(QWidget):
         self._update_tool_marks()
         self._want_crust()
         self._show_attribution()
+
+    def set_wedge_box(self, west, east, south, north):
+        """Сектор разреза Земли по границам в градусах, при включённой
+        строке «Разрез Земли». Так его ставят помощник и сцена."""
+        if not self.planet.earth or not self.extras.get("cutaway"):
+            return False
+        self.view.set_wedge(cutaway.make_wedge(west, east, south, north),
+                            self.crust)
+        self._wedge_gain_changed()
+        self._want_slabs()
+        self._update_tool_marks()
+        return True
 
     def _wedge_gain_changed(self):
         """Растяжение коры сменилось: очаги и шкала оболочек следом."""
@@ -2359,11 +2375,20 @@ class GlobeWindow(QWidget):
 
     def open_demo(self, name="perm"):
         """Демо из папки модуля, tools/make_demo.py: perm, bocachica,
-        subsurface, mars, jezero, moon, sky. У subsurface после сцены
-        строится подземное из planetx/demo/subsurface."""
+        japan, subsurface, mars, jezero, moon, sky. У subsurface после
+        сцены строится подземное из planetx/demo/subsurface. У japan
+        открывается окно «Разрез» по первому пути папки демо без тура."""
         demo = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                             "demo")
         key = self.open_scene(os.path.join(demo, name + EXTENSION))
+        if name == "japan" and key is not None:
+            lines = [p for p in self.myplaces.places_in(key)
+                     if p.shape.kind == "line" and not p.tour]
+            if lines:
+                self._open_section(lines[0].name, lines[0].shape.points)
+                # За 30 суток очаги у этой линии лежат в 100-155 км от неё,
+                # полоса демо шире умолчания. Выбор помощника.
+                self.section_dialog.band.setValue(DEMO_QUAKE_BAND)
         if name == "subsurface":
             self.subsurface.start(dict(
                 SUBSURFACE_DEFAULTS, source="gpkg",
@@ -3502,6 +3527,7 @@ class GlobeWindow(QWidget):
                                      self.assistant_context, self)
             dialog.said.connect(self._assistant_said)
             dialog.busy_changed.connect(self._assistant_busy)
+            dialog.generated.connect(self._places_made)
             self.assistant_dialog = dialog
         return self.assistant_dialog
 
@@ -3518,6 +3544,68 @@ class GlobeWindow(QWidget):
         if not search_enabled() or not ready(current_provider()):
             return False
         return self._assistant().ask(text)
+
+    def make_places(self, text):
+        """Метки по описанию одним запросом к модели, кнопка у строки
+        поиска. Документ KML сразу ложится папкой в «Мои метки»
+        (_places_made), нажатие кнопки - согласие на запись."""
+        if not text.strip():
+            self.message = (tr("Опишите в строке «Поиск», какие метки "
+                               "создать."), time.monotonic())
+            self._show_state()
+            return False
+        self.panel.set_answer("")
+        return self._assistant().generate(text)
+
+    def _places_made(self, kml):
+        """Документ модели - в «Мои метки» новой папкой, камера к ней."""
+        dialog = self.assistant_dialog
+        try:
+            tree = read_kml(str(kml).encode("utf-8"), tr("Помощник"))
+        except KmlError as error:
+            dialog.say_note(tr("KML модели не разобран: {error}",
+                           error=str(error)))
+            return
+        count = len(tree.places())
+        if not count:
+            dialog.say_note(tr("В документе KML нет меток."))
+            return
+        key = self.myplaces.import_tree(tree, body=self.body_key())
+        self.assistant_folder = key
+        self.made_folder = key
+        self.panel.select_place(key)
+        folder = self.myplaces.find(key)
+        if folder is not None:
+            self.fly_to_folder(folder)
+        self._show_made_time(key)
+        dialog.say_note(tr("В «Мои метки» записано меток: {count}.",
+                       count=count))
+        self.panel.set_answer(
+            tr("Создана папка «{name}», меток {count}.",
+               name=tree.name or tr("Помощник"), count=count), undo=True)
+
+    def _show_made_time(self, key):
+        """Шкала времени на даты созданных меток: открывается, если
+        у меток папки есть время, промежуток - от первой до последней
+        даты. Просьба автора от 4 октября 2026 года."""
+        extent = when.extent([p.time for p in self.myplaces.places_in(key)])
+        if extent is None or not self.timebar.known:
+            return
+        if not self.timebar.shown():
+            self.timebar.open_bar()
+            self.toolbar.set_time_shown(True)
+        self.timebar.set_range(*extent)
+
+    def undo_made_places(self):
+        """Ссылка «Отменить» под строкой поиска: созданная папка
+        удаляется из «Моих меток»."""
+        key = getattr(self, "made_folder", None)
+        self.made_folder = None
+        if key is None or self.myplaces.find(key) is None:
+            self.panel.set_answer("")
+            return
+        self.myplaces.remove(key)
+        self.panel.set_answer(tr("Созданные метки удалены."))
 
     def _assistant_said(self, who, text):
         """Реплики разговора под строкой поиска. Вопрос пользователя
@@ -3628,11 +3716,7 @@ class GlobeWindow(QWidget):
         if not self.extras.get("cutaway"):
             self.set_extra("cutaway", True)
         if west is not None and east is not None:
-            self.view.set_wedge(cutaway.make_wedge(west, east, south, north),
-                                self.crust)
-            self._wedge_gain_changed()
-            self._want_slabs()
-            self._update_tool_marks()
+            self.set_wedge_box(west, east, south, north)
         wedge = self.view.wedge
         return tr("Сектор: {wedge}.", wedge=", ".join(
             "{:.1f}".format(v) for v in wedge))
@@ -3686,6 +3770,7 @@ class GlobeWindow(QWidget):
         def write():
             # Ключ новой папки - для перелёта и для проверки.
             self.assistant_folder = self.myplaces.import_tree(tree)
+            self._show_made_time(self.assistant_folder)
             return tr("В «Мои метки» записано меток: {count}.",
                       count=count)
         self.assistant_dialog.propose(

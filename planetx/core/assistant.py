@@ -183,7 +183,10 @@ def system_text(context):
         "для ответа нужны данные - вызови point_info или "
         "quakes_summary, не выдумывай чисел. Метки, пути, "
         "многоугольники, папки и туры - только документом KML через "
-        "add_kml, пользователь подтверждает запись сам.\n"
+        "add_kml, пользователь подтверждает запись сам. У события "
+        "с известной датой в KML обязательна дата: <TimeStamp><when> или "
+        "<TimeSpan>, год четырьмя цифрами, год до нашей эры - "
+        "астрономический со знаком минус (264 год до н. э. это -0263).\n"
         "Контекст вида: " + json.dumps(context, ensure_ascii=False))
 
 
@@ -361,29 +364,99 @@ def needs_key(base):
     return host not in LOCAL_HOSTS
 
 
-def request(provider, base, model, key, system, dialog):
-    """Адрес, заголовки и тело запроса для подключения provider."""
+def request(provider, base, model, key, system, dialog, tools=True,
+            max_tokens=None):
+    """Адрес, заголовки и тело запроса для подключения provider.
+    tools=False - запрос без инструментов, ответ только текстом.
+    max_tokens - свой предел длины ответа."""
     base = base.rstrip("/")
     kind = FORMAT.get(provider, provider)
+    headers = {"content-type": "application/json"}
     if kind == ANTHROPIC:
         url = base + "/v1/messages"
-        headers = {"x-api-key": key,
-                   "anthropic-version": ANTHROPIC_VERSION,
-                   "content-type": "application/json"}
+        headers["x-api-key"] = key
+        headers["anthropic-version"] = ANTHROPIC_VERSION
         body = build_anthropic(model, system, dialog)
-        return url, headers, body
-    headers = {"content-type": "application/json"}
-    if key:
-        headers["Authorization"] = "Bearer " + key
-    if kind == CHAT:
-        body = build_chat(model, system, dialog)
-        if provider == OPENROUTER:
-            body["reasoning"] = dict(OPENROUTER_REASONING)
-            if model.endswith(":free"):
-                body["models"] = [model, OPENROUTER_FREE]
-        return base + "/chat/completions", headers, body
-    return base + "/responses", headers, build_responses(model, system,
-                                                         dialog)
+        limit = "max_tokens"
+    else:
+        if key:
+            headers["Authorization"] = "Bearer " + key
+        if kind == CHAT:
+            url = base + "/chat/completions"
+            body = build_chat(model, system, dialog)
+            limit = "max_tokens"
+            if provider == OPENROUTER:
+                body["reasoning"] = dict(OPENROUTER_REASONING)
+                if model.endswith(":free"):
+                    body["models"] = [model, OPENROUTER_FREE]
+        else:
+            url = base + "/responses"
+            body = build_responses(model, system, dialog)
+            limit = "max_output_tokens"
+    if not tools:
+        body.pop("tools", None)
+    if max_tokens:
+        body[limit] = int(max_tokens)
+    return url, headers, body
+
+
+# Создание меток одним запросом: модель без инструментов возвращает
+# документ KML текстом. Просьба автора от 4 октября 2026 года - «кнопку
+# нажал, а ИИ выдал генерацию геометрий». Один запрос вместо двух-трёх
+# кругов add_kml, годятся и модели без инструментов.
+KML_MAX_TOKENS = 8192
+KML_PLACES = 40  # меток в документе, не больше: длина и время ответа
+
+
+def kml_system_text(context):
+    """Системная подсказка создания меток: в ответе только KML."""
+    return (
+        "Ты создаёшь метки для трёхмерного глобуса. В ответе - только один "
+        "документ KML 2.2, без пояснений и без разметки Markdown. "
+        "Правила: корень <kml xmlns=\"http://www.opengis.net/kml/2.2\">, "
+        "в нём <Document> с <name> на языке пользователя. Точки - "
+        "<Placemark> с <Point>, пути и маршруты - <LineString>, области "
+        "- <Polygon> с <outerBoundaryIs><LinearRing>. Координаты - "
+        "«долгота,широта,0» через пробел, десятичные градусы, восточная "
+        "долгота и северная широта положительные. У каждой метки <name> "
+        "и короткое <description> в одно-два предложения. Цвета - <Style> "
+        "с <LineStyle>, <PolyStyle>, <IconStyle>, цвет в записи aabbggrr. "
+        "У каждого события с известной датой дата обязательна: момент - "
+        "<TimeStamp><when>ГГГГ-ММ-ДД</when></TimeStamp>, промежуток - "
+        "<TimeSpan><begin>…</begin><end>…</end></TimeSpan>, годится "
+        "и неполная дата ГГГГ или ГГГГ-ММ. Год четырьмя цифрами, год "
+        "до нашей эры - астрономический со знаком минус: 264 год до н. э. "
+        "это -0263. Ту же дату словами ставь в начало <description>. "
+        "Метки событий располагай по порядку дат. Разные части темы "
+        "раскладывай по <Folder>. Меток не больше {places}. Координаты "
+        "бери настоящие, длинный путь задавай десятком-другим точек. "
+        "Контекст вида: {context}"
+    ).format(places=KML_PLACES,
+             context=json.dumps(context, ensure_ascii=False))
+
+
+def extract_kml(text):
+    """Документ KML из ответа модели или None. Снимает текст вокруг
+    документа. Оборванный документ (ответ упёрся в предел длины)
+    обрезается по последней целой метке и закрывается."""
+    if not text:
+        return None
+    start = text.find("<kml")
+    if start < 0:
+        return None
+    body = text[start:]
+    end = body.rfind("</kml>")
+    if end >= 0:
+        return body[:end + len("</kml>")]
+    cut = body.rfind("</Placemark>")
+    if cut < 0:
+        return None
+    body = body[:cut + len("</Placemark>")]
+    for tag in ("Folder", "Document"):
+        opened = body.count("<" + tag + ">") + body.count("<" + tag + " ")
+        body += "</{}>".format(tag) * max(
+            0, opened - body.count("</" + tag + ">"))
+    return body + "</kml>"
 
 
 def parse(provider, data):

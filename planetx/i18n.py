@@ -40,6 +40,36 @@ EN = {
         "Answer requests from the Search field box is checked. The answer "
         "appears below the field.",
     "Разговор…": "Conversation…",
+    "Создать метки": "Make places",
+    "Метки, пути и многоугольники по описанию в поле, например "
+    "«путешествие Колумба». Модель отвечает одним документом KML, он "
+    "сразу записывается новой папкой в «Мои метки».":
+        "Placemarks, paths and polygons from the description in the field, "
+        "for example \"the voyage of Columbus\". The model answers with "
+        "one KML document, it is written to My Places as a new folder at "
+        "once.",
+    "Создать метки по описанию в строке, например «путешествие Колумба» "
+    "или «битвы Столетней войны». Помощник отвечает одним документом KML "
+    "с датами событий. Метки сразу записываются новой папкой в «Мои "
+    "метки», камера летит к ним. Ссылка «Отменить» под строкой удаляет "
+    "папку. То же делает Ctrl+Enter в строке.":
+        "Make places from the description in the field, for example \"the "
+        "voyage of Columbus\" or \"battles of the Hundred Years' War\". The "
+        "assistant answers with one KML document with the dates of the "
+        "events. The places are written to My Places as a new folder at "
+        "once, the camera flies to them. The Cancel link below the field "
+        "removes the folder. Ctrl+Enter in the field does the same.",
+    "Модель не вернула документ KML.":
+        "The model returned no KML document.",
+    "Метки созданы документом KML.":
+        "The places are made as a KML document.",
+    "Опишите в строке «Поиск», какие метки создать.":
+        "Describe in the Search field which places to make.",
+    "KML модели не разобран: {error}":
+        "The KML of the model is not read: {error}",
+    "Создана папка «{name}», меток {count}.":
+        "The folder {name} is made, placemarks {count}.",
+    "Созданные метки удалены.": "The made places are removed.",
     "Настройки помощника": "Assistant settings",
     "Настройки…": "Settings…",
     "Сервис, модель и ключ API помощника.":
@@ -293,6 +323,7 @@ EN = {
         "the ▶ button under the list plays the tour.",
     "Пермь": "Perm",
     "Бока-Чика, Starbase": "Boca Chica, Starbase",
+    "Японский жёлоб": "Japan Trench",
     "Места посадок марсоходов": "Rover landing sites",
     "«Аполлоны» и «Луноходы»": "Apollo and Lunokhod sites",
     "Созвездия и яркие объекты": "Constellations and bright objects",

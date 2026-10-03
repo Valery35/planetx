@@ -90,6 +90,10 @@ def capture(window, folder=None, name=""):
             # Строки раздела «Слои»: сетка, звёзды, облака, температура,
             # 3D-здания.
             "extras": {key: bool(on) for key, on in window.extras.items()}}
+    wedge = window.view.wedge
+    if wedge is not None:
+        # Сектор разреза Земли: запад, восток, юг, север, градусы.
+        view["wedge"] = [round(float(v), 4) for v in wedge]
     sky = window.view.sky_view
     if sky is not None:
         # Вид неба: взгляд и угол обзора, градусы. Тело под небом
@@ -163,6 +167,12 @@ def apply(window, scene, kml=b""):
         for key, on in extras.items():
             if key in window.extras and bool(on) != window.extras[key]:
                 window.set_extra(key, bool(on))
+    # Сектор разреза - после строк: включённая строка ставит сектор под
+    # прежнюю точку взгляда, сцена заменяет его своим.
+    wedge = view.get("wedge")
+    if isinstance(wedge, list) and len(wedge) == 4 \
+            and all(isinstance(v, (int, float)) for v in wedge):
+        window.set_wedge_box(*wedge)
     wanted, missing = set(), []
     for entry in scene.layers:
         layer = _find_layer(entry) or _add_layer(entry)

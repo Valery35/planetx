@@ -85,6 +85,24 @@ class TestSlabs(unittest.TestCase):
         far = cw.make_wedge(-45.0, 45.0, 0.0, 90.0)
         self.assertIsNone(cw.slab_bands(far, [slab]))
 
+    def test_band_does_not_wedge_to_surface(self):
+        # Плита в первых двух точках дуги, дальше её нет (доля 1.0 -
+        # поверхность). Ячейка от конца плиты к точке без плиты шла
+        # клином до поверхности, 4 октября 2026 года на демо «Японский
+        # жёлоб».
+        edge = np.array([[1.0, 0.0, 0.0], [0.99, 0.14, 0.0],
+                         [0.96, 0.28, 0.0], [0.92, 0.4, 0.0]])
+        low = np.array([0.90, 0.91, 1.0, 1.0])
+        high = np.array([0.95, 0.96, 1.0, 1.0])
+        part = cw._band(edge, np.zeros(3), low, high, cw.SLAB_COLOR,
+                        whole=True)
+        used = np.unique(part.indices)
+        # Задействованы только точки 0 и 1 и их пары верхнего края.
+        self.assertEqual(sorted(used.tolist()), [0, 1, 4, 5])
+        # Слои коры выклиниваются, у них краевая ячейка остаётся.
+        part = cw._band(edge, np.zeros(3), low, high, cw.SLAB_COLOR)
+        self.assertIn(2, part.indices)
+
     def test_index_in_module(self):
         with open(INDEX, encoding="utf-8") as fh:
             index = sl.read_index(fh.read())

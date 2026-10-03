@@ -164,6 +164,7 @@ class ViewToolbar(QFrame):
         for section, items in (
                 (tr("Земля"), (("perm", tr("Пермь")),
                                ("bocachica", tr("Бока-Чика, Starbase")),
+                               ("japan", tr("Японский жёлоб")),
                                ("subsurface", tr("Пермские отложения")))),
                 (tr("Марс"), (("mars", tr("Места посадок марсоходов")),
                               ("jezero", tr("Кратер Езеро")))),

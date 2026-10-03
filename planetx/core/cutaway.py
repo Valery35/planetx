@@ -79,6 +79,10 @@ GAIN_STEPS = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0)
 GAIN_DISTANCE = 2.0e6
 # Плита Slab2 на гранях (core/slabs.py) - цвет, выбор помощника.
 SLAB_COLOR = (55, 85, 125)
+# Шаг дуги полосы плиты - шаг сетки файлов зон Slab2 (tools/build_slabs.py).
+# Ячейка полосы нужна с плитой на обоих концах, крупный шаг съедал бы
+# край зоны и узкие зоны целиком.
+SLAB_STEP = 0.1
 
 # Сектор двигается за угловые точки, просьба автора от 2 октября 2026
 # года. Ширина по долготе и по широте - не меньше MIN_SPAN, по долготе
@@ -205,14 +209,18 @@ def _share(elevation, gain):
     return (PREM_RADIUS - stretch(-elevation, gain)) / PREM_RADIUS
 
 
-def _band(edge, normal, low, high, color):
+def _band(edge, normal, low, high, color, whole=False):
     """Полоса грани между долями радиуса low и high (по точке дуги или
-    одно число). Ячейка нулевой толщины на обоих концах пропускается."""
+    одно число). Ячейка нулевой толщины на обоих концах пропускается.
+    whole - ячейка нужна с толщиной на обоих концах. Так у плиты: точка
+    без плиты стоит на поверхности, и ячейка от конца плиты к ней шла
+    клином от глубины до поверхности."""
     n = len(edge)
     low = np.broadcast_to(np.asarray(low, dtype=np.float64), (n,))
     high = np.broadcast_to(np.asarray(high, dtype=np.float64), (n,))
     i = np.arange(n - 1)
-    keep = (high[i] > low[i]) | (high[i + 1] > low[i + 1])
+    keep = ((high[i] > low[i]) & (high[i + 1] > low[i + 1]) if whole
+            else (high[i] > low[i]) | (high[i + 1] > low[i + 1]))
     i = i[keep]
     if not len(i):
         return None
@@ -321,7 +329,7 @@ def arc_points(wedge, step=CRUST_STEP):
             np.concatenate([p[1] for p in pairs]))
 
 
-def slab_bands(wedge, zones, gain=1.0, step=CRUST_STEP):
+def slab_bands(wedge, zones, gain=1.0, step=SLAB_STEP):
     """Полосы плит Slab2 на гранях, core.subsurface.Mesh или None.
     zones - зоны core.slabs.Slab, которых касается разрез. Глубины - с тем
     же растяжением, что у коры."""
@@ -333,7 +341,7 @@ def slab_bands(wedge, zones, gain=1.0, step=CRUST_STEP):
         high = np.where(none, 1.0, _share(-np.nan_to_num(top), gain))
         low = np.where(none, 1.0, _share(-np.nan_to_num(bottom), gain))
         edge = boundary(directions)[:, None] * directions
-        parts.append(_band(edge, normal, low, high, SLAB_COLOR))
+        parts.append(_band(edge, normal, low, high, SLAB_COLOR, whole=True))
     return merge(parts, key="slabs")
 
 

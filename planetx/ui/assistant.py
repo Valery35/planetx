@@ -297,6 +297,8 @@ class AssistantDialog(QDialog):
     said = pyqtSignal(str, str)
     # Ответ модели ждётся или уже пришёл.
     busy_changed = pyqtSignal(bool)
+    # Документ KML, созданный одним запросом (generate).
+    generated = pyqtSignal(str)
 
     def __init__(self, executor, context, parent=None):
         super().__init__(parent)
@@ -348,9 +350,16 @@ class AssistantDialog(QDialog):
         self.input.returnPressed.connect(self.send)
         self.send_button = QPushButton(tr("Спросить"), self)
         self.send_button.clicked.connect(self.send)
+        self.make_button = QPushButton(tr("Создать метки"), self)
+        self.make_button.setToolTip(tr(
+            "Метки, пути и многоугольники по описанию в поле, например "
+            "«путешествие Колумба». Модель отвечает одним документом KML, "
+            "он сразу записывается новой папкой в «Мои метки»."))
+        self.make_button.clicked.connect(self._make)
         ask = QHBoxLayout()
         ask.addWidget(self.input, 1)
         ask.addWidget(self.send_button)
+        ask.addWidget(self.make_button)
         layout = QVBoxLayout(self)
         layout.addLayout(top)
         layout.addWidget(self.history, 1)
@@ -399,6 +408,10 @@ class AssistantDialog(QDialog):
         if self.ask(text):
             self.input.clear()
 
+    def _make(self):
+        if self.generate(self.input.text()):
+            self.input.clear()
+
     def busy(self):
         return self.reply is not None
 
@@ -421,6 +434,61 @@ class AssistantDialog(QDialog):
         self.rounds = 0
         self._ask()
         return True
+
+    def generate(self, text):
+        """Метки по описанию одним запросом: модель без инструментов
+        возвращает KML текстом, документ уходит сигналом generated.
+        Кругов инструментов нет, разговор в запрос не идёт."""
+        text = text.strip()
+        if not text or self.reply is not None:
+            return False
+        provider = self.provider_key()
+        if not ready(provider):
+            self._say("note", tr("Нет ключа API. Его вводят в окне "
+                                 "«Настройки помощника»."))
+            self.show()
+            self.open_settings()
+            return False
+        self._say("user", text)
+        url, headers, body = ai.request(
+            provider, provider_base(provider), provider_model(provider),
+            load_key(provider), ai.kml_system_text(self.context()),
+            [{"role": "user", "text": text}], tools=False,
+            max_tokens=ai.KML_MAX_TOKENS)
+        self.send_button.setEnabled(False)
+        self.asked = provider
+        self.reply = post_json(
+            url, headers, body,
+            lambda data, error: self._generated(text, data, error))
+        self.busy_changed.emit(True)
+        return True
+
+    def _generated(self, text, data, error):
+        self.reply = None
+        self.send_button.setEnabled(True)
+        self.busy_changed.emit(False)
+        provider = self.asked or self.provider_key()
+        answer = ai.parse(provider, data)
+        if answer.error or data is None:
+            reason = (error or answer.error) if data is None \
+                else answer.error
+            self._say("note", tr("Модель не ответила: {error}",
+                                 error=reason))
+            return
+        kml = ai.extract_kml(answer.text)
+        if kml is None:
+            self._say("note", tr("Модель не вернула документ KML."))
+            return
+        # В разговоре остаётся короткий след, сам документ в запросы
+        # разговора не идёт.
+        self.dialog.append({"role": "user", "text": text})
+        self.dialog.append({"role": "assistant",
+                            "text": tr("Метки созданы документом KML.")})
+        self.generated.emit(kml)
+
+    def say_note(self, text):
+        """Строка модуля в разговоре, от окна глобуса."""
+        self._say("note", text)
 
     def _ask(self):
         provider = self.provider_key()

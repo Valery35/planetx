@@ -181,6 +181,51 @@ class TestChat(unittest.TestCase):
             self.assertIn(provider, ai.DEFAULTS)
 
 
+class TestKmlGeneration(unittest.TestCase):
+
+    def test_request_without_tools_and_with_limit(self):
+        dialog = [{"role": "user", "text": "Путешествие Колумба"}]
+        for provider, field in ((ai.ANTHROPIC, "max_tokens"),
+                                (ai.OPENROUTER, "max_tokens"),
+                                (ai.RESPONSES, "max_output_tokens")):
+            body = ai.request(provider, ai.DEFAULTS[provider][0], "m", "k",
+                              ai.kml_system_text({}), dialog, tools=False,
+                              max_tokens=ai.KML_MAX_TOKENS)[2]
+            self.assertNotIn("tools", body, provider)
+            self.assertEqual(body[field], ai.KML_MAX_TOKENS, provider)
+        # Обычный запрос инструменты несёт.
+        self.assertIn("tools", ai.request(ai.ANTHROPIC, "b", "m", "k", "s",
+                                          dialog)[2])
+
+    def test_extract_kml_from_fenced_answer(self):
+        doc = '<kml xmlns="x"><Document><name>А</name></Document></kml>'
+        text = "Вот документ:\n```xml\n<?xml version=\"1.0\"?>\n" + doc \
+            + "\n```\nГотово."
+        self.assertEqual(ai.extract_kml(text), doc)
+        self.assertIsNone(ai.extract_kml("Не могу."))
+        self.assertIsNone(ai.extract_kml(""))
+
+    def test_extract_kml_closes_cut_document(self):
+        text = ('<kml xmlns="x"><Document><name>А</name><Folder>'
+                "<name>Ф</name><Placemark><name>1</name></Placemark>"
+                "<Placemark><name>2</name><Point><coord")
+        got = ai.extract_kml(text)
+        self.assertTrue(got.endswith(
+            "<Placemark><name>1</name></Placemark></Folder></Document>"
+            "</kml>"))
+        # Оборван до первой целой метки - документа нет.
+        self.assertIsNone(ai.extract_kml('<kml><Document><Placemark><na'))
+
+    def test_cut_document_reads_as_kml(self):
+        import kml
+        text = ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+                "<name>Колумб</name><Folder><name>Первое</name><Placemark>"
+                "<name>Палос</name><Point><coordinates>-6.89,37.23,0"
+                "</coordinates></Point></Placemark><Placemark><name>Сан")
+        tree = kml.read_kml(ai.extract_kml(text).encode("utf-8"))
+        self.assertEqual([p.name for p in tree.places()], ["Палос"])
+
+
 class TestIsRequest(unittest.TestCase):
 
     def test_places_and_coordinates_are_not_requests(self):

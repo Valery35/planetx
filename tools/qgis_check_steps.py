@@ -3156,7 +3156,16 @@ def _fake_model():
                                            "text": "Готово."}]}
             elif self.path.endswith("/chat/completions"):
                 last = body["messages"][-1]
-                if last["role"] == "user":
+                if "tools" not in body:
+                    # Создание меток: KML текстом, в ограде Markdown,
+                    # с датой события до нашей эры.
+                    made = kml.replace(
+                        "</Point>", "</Point><TimeStamp><when>-0263-06"
+                        "</when></TimeStamp>")
+                    answer = {"choices": [{"message": {
+                        "role": "assistant",
+                        "content": "Вот:\n```xml\n" + made + "\n```"}}]}
+                elif last["role"] == "user":
                     answer = {"choices": [{"message": {
                         "role": "assistant", "content": None,
                         "tool_calls": [{"id": "k1", "type": "function",
@@ -3453,6 +3462,150 @@ def assistant_down_check():
     dialog.close()
     state["fake_search"][0].shutdown()
     out["gl"] = dict(window.view.gl_errors)
+
+
+@check(3000)
+def assistant_make():
+    # Метки по описанию одним запросом: кнопка у строки «Поиск».
+    from qgis.core import QgsSettings
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    server, seen = _fake_model()
+    state["fake_make"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    dialog = window._assistant()
+    dialog.hide()
+    _use_service(dialog, ai.OPENROUTER,
+                 "http://127.0.0.1:%d" % server.server_port)
+    dialog.settings.close()
+    state["make_before"] = len(window.myplaces.places)
+    window.view.navigator.stop()
+    window.place.setText("Токио")
+    window.panel.make.click()
+    result["assistant_make"] = {"busy": dialog.busy()}
+
+
+@check(1000)
+def assistant_make_check():
+    from qgis.core import QgsSettings
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    from planetx.core.when import text as when_text
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_make"]
+    out = result["assistant_make"]
+    out["requests"] = [p for p, _, _ in seen]
+    out["tools_sent"] = "tools" in seen[0][1] if seen else None
+    out["max_tokens"] = seen[0][1].get("max_tokens") if seen else None
+    out["places_added"] = len(window.myplaces.places) - state["make_before"]
+    key = getattr(window, "made_folder", None)
+    made = window.myplaces.places_in(key) if key else []
+    out["names"] = [p.name for p in made]
+    out["times"] = [p.time for p in made]
+    out["timebar_shown"] = window.timebar.shown()
+    out["time_range"] = [when_text(v) for v in window.timebar.range()] \
+        if window.timebar.shown() else None
+    out["answer"] = window.panel.answer.text()
+    out["dialog_shown"] = dialog.isVisible()
+    pose = window.view.navigator.target if hasattr(
+        window.view.navigator, "target") else None
+    # Ссылка «Отменить» удаляет созданную папку.
+    window.panel._answer_link("undo")
+    out["places_after_undo"] = len(window.myplaces.places) \
+        - state["make_before"]
+    out["answer_after_undo"] = window.panel.answer.text()
+    if window.timebar.shown():
+        window._time_bar_closed()
+        window.timebar.close_bar()
+    # Пустая строка - запроса нет.
+    del seen[:]
+    window.place.setText("")
+    out["empty_asked"] = window.make_places("")
+    out["empty_requests"] = len(seen)
+    settings = QgsSettings()
+    for provider in ai.PROVIDERS:
+        settings.remove(ui_ai.SETTINGS + provider + "/base")
+    settings.remove(ui_ai.SETTINGS + "provider")
+    ui_ai.load_key = state["real_load_key"]
+    dialog.close()
+    server.shutdown()
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(2000)
+def japan_open():
+    # Демо «Японский жёлоб»: сектор из сцены, землетрясения, окно «Разрез».
+    window = state["window"]
+    window.set_body("earth")
+    window.set_sea_depths(True)
+    # Строка разреза включена заранее: сектор встанет под прежнюю точку,
+    # сцена обязана заменить его своим.
+    window.set_extra("cutaway", True)
+    window.view.navigator.stop()
+    state["japan_key"] = window.open_demo("japan")
+    result["japan"] = {"started": time.monotonic()}
+
+
+@check(1000)
+def japan_wait():
+    import numpy as np
+    window = state["window"]
+    out = result["japan"]
+    dialog = window.section_dialog
+    s = dialog.chart.section if dialog is not None else None
+    ready = (window.crust is not None and window.quake_events
+             and s is not None and np.isfinite(s.slab_top).any()
+             and not window.view.load_missing)
+    if not ready and time.monotonic() - out["started"] < 90.0:
+        return 1000
+    out["waited"] = round(time.monotonic() - out["started"], 1)
+
+
+@check(1000)
+def japan_check():
+    import numpy as np
+    from planetx.ui.scene import capture
+    window = state["window"]
+    out = result["japan"]
+    out["wedge"] = [round(float(v), 2) for v in window.view.wedge] \
+        if window.view.wedge is not None else None
+    out["extras"] = {k: window.extras.get(k) for k in ("quakes", "cutaway")}
+    out["slab_zones"] = sorted(window.slab_zones)
+    out["events"] = len(window.quake_events)
+    pose = window.view.navigator.pose
+    out["pose"] = [round(pose.lat, 1), round(pose.lon, 1),
+                   round(pose.distance / 1000.0)]
+    dialog = window.section_dialog
+    out["section_open"] = dialog is not None and dialog.isVisible()
+    s = dialog.chart.section if dialog is not None else None
+    if s is not None:
+        slab = np.isfinite(s.slab_top)
+        out["section_km"] = round(float(s.distance[-1]))
+        out["slab_points"] = int(slab.sum())
+        out["slab_depth_km"] = round(float(np.nanmax(s.slab_top)), 1) \
+            if slab.any() else None
+        out["crust"] = s.bounds is not None
+        out["band_km"] = dialog.band.value()
+        out["section_quakes"] = len(s.quakes)
+        dialog.grab().save(os.path.join(TEMP, "planetx_japan_section.png"))
+    out["places"] = len(window.myplaces.places_in(state["japan_key"])) \
+        if state.get("japan_key") else 0
+    # Сцена с глобуса хранит сектор.
+    scene, _ = capture(window)
+    out["scene_wedge"] = scene.view.get("wedge")
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_japan.png"))
+    out["gl"] = dict(window.view.gl_errors)
+    if dialog is not None:
+        dialog.close()
+    if state.get("japan_key"):
+        window.myplaces.remove(state["japan_key"])
+    window.set_extra("quakes", False)
+    window.set_extra("cutaway", False)
 
 
 @check(2000)
