@@ -37,9 +37,10 @@ LEVEL_OFFSET = 2
 # Класс «ruler» - длина отрезка линейки у его середины.
 # Класс «layer» - подпись слоя проекта. Классы «circle» и «grid» -
 # подписи экватора, тропиков, полярных кругов и линий координатной
-# сетки. Класса у каждого стиля render/labels.py требует
-# test_label_kinds.
-CLASSES = ("search", "mark", "ruler", "layer", "circle", "grid", "country",
+# сетки. Класс «plate» - название литосферной плиты, core/plates.py.
+# Класса у каждого стиля render/labels.py требует test_label_kinds.
+CLASSES = ("search", "mark", "ruler", "layer", "circle", "grid", "plate",
+           "country",
            "capital",
            "city", "state",
            "water", "town", "park", "peak", "airport", "road_ref",

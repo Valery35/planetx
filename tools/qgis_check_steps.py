@@ -3702,6 +3702,54 @@ def odd_text_wait():
 
 
 @check(1000)
+def plates_on():
+    # Строка «Границы плит»: слой в наложении, названия плит, окно
+    # «Объекты» у Японского жёлоба.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(30.0, 150.0, 9000000.0, 0.0, 0.0))
+    window.set_extra("plates", True)
+    state["plates_started"] = time.monotonic()
+    result["plates"] = {}
+
+
+@check(1000)
+def plates_wait():
+    window = state["window"]
+    if (window.view.load_missing
+            and time.monotonic() - state["plates_started"] < 40.0):
+        return 1000
+
+
+@check(1000)
+def plates_check():
+    window = state["window"]
+    out = result["plates"]
+    overlay = window.overlay
+    out["lines"] = len(window.plates_data.boundaries) \
+        if window.plates_data else None
+    out["layer_features"] = window.plate_layer.featureCount() \
+        if window.plate_layer is not None else None
+    out["in_overlay"] = overlay is not None \
+        and window.plate_layer in overlay.layers
+    out["marks"] = len(window.view.plate_marks)
+    out["attribution"] = "Bird" in window.attribution.text()
+    found = window._identify_plates(38.3, 143.9, 80000.0)
+    out["identify"] = [(g.name if hasattr(g, "name") else str(g),
+                        [(name, values) for name, values, _ in items])
+                       for g, items in found]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_plates.png"))
+    window.set_extra("plates", False)
+    out["off_in_overlay"] = window.overlay is not None \
+        and window.plate_layer in window.overlay.layers
+    out["off_marks"] = len(window.view.plate_marks)
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(1000)
 def compact_clear():
     # Помощник - кнопка у строки «Поиск» с меню, значка на панели нет.
     # «Очистить «Мои метки»» удаляет все метки и папки. Только

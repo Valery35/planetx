@@ -334,6 +334,32 @@ EN = {
     "Пермь": "Perm",
     "Бока-Чика, Starbase": "Boca Chica, Starbase",
     "Японский жёлоб": "Japan Trench",
+    "Границы плит": "Plate boundaries",
+    "Границы литосферных плит по модели PB2002. Красные - раздвиг плит "
+    "на хребтах и рифтах, зелёные - сдвиг по трансформным разломам, синие "
+    "- схождение в зонах субдукции и коллизии. Названия плит стоят "
+    "надписями. Тип границы и скорость плит показывает окно «Объекты».":
+        "Lithospheric plate boundaries after the PB2002 model. Red - plates "
+        "moving apart at ridges and rifts, green - plates sliding along "
+        "transform faults, blue - plates converging in subduction and "
+        "collision zones. Plate names show as labels. The Features window "
+        "shows the boundary type and the plate speed.",
+    "Граница плит": "Plate boundary",
+    "Раздвиг плит": "Plates moving apart",
+    "Сдвиг плит": "Plates sliding",
+    "Схождение плит": "Plates converging",
+    "Океанический спрединговый хребет": "Oceanic spreading ridge",
+    "Континентальный рифт": "Continental rift",
+    "Океанический трансформный разлом": "Oceanic transform fault",
+    "Континентальный трансформный разлом": "Continental transform fault",
+    "Зона субдукции": "Subduction zone",
+    "Океаническая граница схождения": "Oceanic convergent boundary",
+    "Континентальная коллизия": "Continental collision",
+    "Плиты": "Plates",
+    "Скорость": "Speed",
+    "{value} мм/год": "{value} mm/yr",
+    "Границы плит не прочитаны: {error}":
+        "The plate boundaries are not read: {error}",
     "Места посадок марсоходов": "Rover landing sites",
     "«Аполлоны» и «Луноходы»": "Apollo and Lunokhod sites",
     "Созвездия и яркие объекты": "Constellations and bright objects",

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.27.2
+version=0.28.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.27.2 The plugin works as in 0.27.1. Stress checks of
+changelog=0.28.0 The Plate boundaries row shows the lithospheric
+      plate boundaries after the PB2002 model: red where plates move
+      apart, green along transform faults, blue where they converge.
+      Plate names show as labels. The Features window shows the
+      boundary type, the plate pair and the speed in mm/yr.
+      0.27.2 The plugin works as in 0.27.1. Stress checks of
       the base map loading are added for the developers.
       0.27.1 The assistant is one button by the Search field.
       A click makes places from a description, the arrow opens the

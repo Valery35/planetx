@@ -277,6 +277,16 @@ time. The coastlines for each age are requested from the service,
 the first showing of an age needs the internet. When the window
 opens, the row is off.
 
+The Plate boundaries row shows the lithospheric plate boundaries after
+the PB2002 model (Bird, 2003). Red lines are plates moving apart at
+oceanic ridges and continental rifts, green - plates sliding along
+transform faults, blue - plates converging in subduction and collision
+zones. Plate names show as labels. A click near a boundary in the
+Identify mode shows the boundary type, the plate pair and the speed of
+their relative motion in mm/yr. In the plate pair a slash in Bird's
+notation shows which plate goes under which: "PA\OK" is the Pacific
+plate under the Okhotsk plate.
+
 The Earthquakes row shows earthquakes of magnitude 4.5 and above
 over the last 30 days from the feed of the U.S. Geological Survey
 (USGS). The feed is loaded each time the row is switched on. A circle

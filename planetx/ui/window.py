@@ -50,8 +50,8 @@ from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
-from ..core import (crust, cutaway, insolation, pick, quakes, section,
-                    slabs, viewshed)
+from ..core import (crust, cutaway, insolation, pick, plates, quakes,
+                    section, slabs, viewshed)
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
@@ -64,7 +64,8 @@ from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            railway_layer,
                            OPENFREEMAP_TILEJSON, LayerOverlay, fetch_bytes,
                            fetch_json,
-                           openfreemap_layer, set_line_groups)
+                           openfreemap_layer, plate_layer,
+                           set_line_groups)
 from ..qt_compat import enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
@@ -140,12 +141,13 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False,
-                  "quakes": False, "cutaway": False, "paleo": False}
+                  "quakes": False, "cutaway": False, "paleo": False,
+                  "plates": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
-                "cutaway", "paleo")
+                "cutaway", "paleo", "plates")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -483,6 +485,10 @@ class GlobeWindow(QWidget):
         # на локальной копии хранилища planetx-terrain.
         self.slab_index = None
         self.slab_zones = {}
+        # Границы плит PB2002 (core/plates.py) и их слой наложения,
+        # читаются при первом включении строки.
+        self.plates_data = None
+        self.plate_layer = None
         self._slab_replies = {}
         self.slab_errors = {}
         self.slab_base = None
@@ -929,6 +935,8 @@ class GlobeWindow(QWidget):
             self._set_cutaway(on)
         elif key == "paleo":
             self._set_paleo(on)
+        elif key == "plates":
+            self._set_plates(on)
 
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой
@@ -1777,6 +1785,9 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*temperature.ATTRIBUTION))
         if self.view.quakes.events:
             parts.append(link_html(*quakes.ATTRIBUTION))
+        if self.planet.earth and getattr(self, "extras", {}).get("plates") \
+                and self.plates_data is not None:
+            parts.append(link_html(*plates.ATTRIBUTION))
         if self.view.plain_base is not None:
             parts.append(link_html(*paleo.ATTRIBUTION))
         if self.view.wedge_slabs:
@@ -1888,6 +1899,11 @@ class GlobeWindow(QWidget):
         if not self.planet.earth:
             # Слои проекта и векторная основа - земные.
             layers, groups = [], set()
+        # Наложение собирается и при создании окна, до строк «Слоёв».
+        if self.planet.earth and getattr(self, "extras", {}).get("plates") \
+                and self.plate_layer is not None:
+            # Границы плит - над векторной основой.
+            layers.append(self.plate_layer)
         if groups & set(LINE_GROUPS) and self.ofm_layer is not None:
             layers.append(self.ofm_layer)
         min_levels = {}
@@ -3535,6 +3551,7 @@ class GlobeWindow(QWidget):
         groups = list(found)
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
+        groups += self._identify_plates(lat, lon, tolerance)
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)
@@ -3871,6 +3888,60 @@ class GlobeWindow(QWidget):
             features.append((q.place or "M {:.1f}".format(q.mag), values,
                              None))
         return [(Group(tr("Землетрясения")), features)] if features else []
+
+    def _plate_names(self):
+        """Подписи групп и классов границ плит на языке интерфейса."""
+        return ({"divergent": tr("Раздвиг плит"),
+                 "transform": tr("Сдвиг плит"),
+                 "convergent": tr("Схождение плит")},
+                {"OSR": tr("Океанический спрединговый хребет"),
+                 "CRB": tr("Континентальный рифт"),
+                 "OTF": tr("Океанический трансформный разлом"),
+                 "CTF": tr("Континентальный трансформный разлом"),
+                 "SUB": tr("Зона субдукции"),
+                 "OCB": tr("Океаническая граница схождения"),
+                 "CCB": tr("Континентальная коллизия")})
+
+    def _set_plates(self, on):
+        """Строка «Границы плит»: линии границ в наложении, названия
+        плит надписями глобуса. Файл data/plates.json читается при
+        первом включении."""
+        if on and self.plates_data is None:
+            try:
+                with open(os.path.join(DATA_DIR, "plates.json"),
+                          encoding="utf-8") as fh:
+                    self.plates_data = plates.Plates.from_text(fh.read())
+            except (OSError, ValueError) as error:
+                self.message = (tr("Границы плит не прочитаны: {error}",
+                                   error=str(error)), time.monotonic())
+                self._show_state()
+                return
+        if on and self.plate_layer is None:
+            self.plate_layer = plate_layer(self.plates_data,
+                                           self._plate_names()[0])
+        self.view.plate_marks = [
+            MarkPlace(-300000 - n, p.name, "plate", 1, p.lat, p.lon)
+            for n, p in enumerate(self.plates_data.plates)] \
+            if on and self.plates_data is not None else []
+        self._update_overlay(keep=True)
+        self._show_attribution()
+        self.view.update()
+
+    def _identify_plates(self, lat, lon, tolerance):
+        """Граница плит у точки щелчка, когда строка включена."""
+        if not (self.planet.earth and self.extras.get("plates")
+                and self.plates_data is not None):
+            return []
+        found = plates.nearest(self.plates_data, lat, lon, tolerance)
+        if found is None:
+            return []
+        groups, classes = self._plate_names()
+        values = [(tr("Тип"), classes.get(found.code, found.code)),
+                  (tr("Плиты"), found.pair),
+                  (tr("Скорость"), tr("{value} мм/год",
+                                      value="{:.0f}".format(found.speed)))]
+        return [(Group(tr("Граница плит")), [
+            (groups[plates.group(found.code)], values, None)])]
 
     def _identify_site(self, lat, lon, height):
         """Место под щелчком: высота или глубина, кора CRUST1.0, плита

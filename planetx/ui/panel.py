@@ -61,8 +61,9 @@ SLOPE, ASPECT = "slope", "aspect"
 QUAKES = "quakes"
 CUTAWAY = "cutaway"
 PALEO = "paleo"
+PLATES = "plates"
 EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT,
-          QUAKES, CUTAWAY, PALEO)
+          QUAKES, PLATES, CUTAWAY, PALEO)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
@@ -619,6 +620,13 @@ class LayerPanel(QWidget):
                     "глубине, линия ведёт к эпицентру на поверхности. "
                     "Цвет показывает глубину очага, размер - магнитуду. "
                     "Сводка загружается при включении строки.")),
+                (PLATES, tr("Границы плит"), tr(
+                    "Границы литосферных плит по модели PB2002. Красные - "
+                    "раздвиг плит на хребтах и рифтах, зелёные - сдвиг "
+                    "по трансформным разломам, синие - схождение "
+                    "в зонах субдукции и коллизии. Названия плит стоят "
+                    "надписями. Тип границы и скорость плит показывает "
+                    "окно «Объекты».")),
                 (CUTAWAY, tr("Разрез Земли"), tr(
                     "Вынимает из Земли сектор под точкой взгляда - "
                     "четверть полушария шириной 90° по долготе. На его "
@@ -769,8 +777,8 @@ class LayerPanel(QWidget):
             parent = item.parent()
             if parent is not None:
                 parent.setDisabled(off)
-        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, CUTAWAY,
-                    PALEO):
+        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, PLATES,
+                    CUTAWAY, PALEO):
             self.extra_items[key].setDisabled(not earth)
         # Уклон и экспозиция - там, где есть высоты.
         for key in (SLOPE, ASPECT):

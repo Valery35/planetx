@@ -197,6 +197,37 @@ def railway_layer(tiles_url, max_zoom=14):
     return layer
 
 
+def plate_layer(plates_data, names):
+    """Слой в памяти с границами плит core.plates.Plates, цвет по группе
+    границы. names - подписи групп для легенды слоя. Слой не входит
+    в проект, его рисует наложение глобуса, как векторную основу."""
+    from qgis.core import (QgsCategorizedSymbolRenderer, QgsFeature,
+                           QgsGeometry, QgsPointXY, QgsRendererCategory,
+                           QgsVectorLayer)
+    from ..core import plates as core_plates
+    layer = QgsVectorLayer(
+        "LineString?crs=EPSG:4326&field=code:string(4)&field=grp:string(12)"
+        "&field=pair:string(12)&field=speed:double", "PlanetX plates",
+        "memory")
+    features = []
+    for b in plates_data.boundaries:
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(QgsGeometry.fromPolylineXY(
+            [QgsPointXY(lo, la) for la, lo in zip(b.lats, b.lons)]))
+        feature.setAttributes([b.code, core_plates.group(b.code), b.pair,
+                               b.speed])
+        features.append(feature)
+    layer.dataProvider().addFeatures(features)
+    categories = []
+    for key, rgba in core_plates.COLORS.items():
+        symbol = QgsLineSymbol.createSimple(_line(
+            ",".join(str(c) for c in rgba), core_plates.WIDTH))
+        categories.append(QgsRendererCategory(key, symbol,
+                                              names.get(key, key)))
+    layer.setRenderer(QgsCategorizedSymbolRenderer("grp", categories))
+    return layer
+
+
 def openfreemap_layer(tiles_url, max_zoom=14, groups=LINE_GROUPS):
     """Слой векторных тайлов OpenFreeMap со стилем из линий."""
     uri = "type=xyz&url={}&zmin=0&zmax={}".format(tiles_url, max_zoom)
