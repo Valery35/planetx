@@ -3536,6 +3536,171 @@ def assistant_make_check():
     out["gl"] = dict(window.view.gl_errors)
 
 
+# Падение с повреждением кучи 4 октября 2026 года: стек автора -
+# QgsVectorTileLoader::downloadBlocking в потоке QgsMapRendererParallelJob,
+# проверочный QGIS - нарушение доступа на get() главного потока. Шаг
+# перелетает по новым местам с основой OpenFreeMap. PLANETX_STRESS_JOBS -
+# отрисовок наложения одновременно, по умолчанию как в модуле.
+STRESS_SECONDS = 60.0
+STRESS_PERIOD = 250  # плавное движение, как в падении шага odd_text_wait
+STRESS_JUMP = 3.0  # скачок в новое место, с
+
+
+@check(1000)
+def vt_stress():
+    import random
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_relief(True)
+    seed = int(time.time())
+    state["stress_rnd"] = random.Random(seed)
+    state["stress_started"] = time.monotonic()
+    jobs = os.environ.get("PLANETX_STRESS_JOBS")
+    state["stress_jobs"] = int(jobs) if jobs else None
+    result["vt_stress"] = {"seed": seed, "jobs_limit": state["stress_jobs"],
+                           "flights": 0, "max_jobs": 0, "groups":
+                           sorted(window._groups)}
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(50.0, 10.0, 80000.0, 0.0, 40.0))
+
+
+@check(STRESS_PERIOD)
+def vt_stress_run():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result["vt_stress"]
+    overlay = window.overlay
+    if overlay is not None:
+        if state["stress_jobs"]:
+            overlay.queue.max_active = state["stress_jobs"]
+        if os.environ.get("PLANETX_STRESS_NOCANCEL") \
+                and not getattr(overlay, "_stress_patched", False):
+            # Опыт: ушедший из кадра тайл не отменяется, задание
+            # дорисовывается, картинка выбрасывается.
+            def retain(keys, overlay=overlay):
+                for key in overlay.queue.retain(keys):
+                    job = overlay.jobs.pop(key, None)
+                    if job is not None:
+                        job.finished.disconnect()
+                        job.finished.connect(
+                            lambda job=job: overlay._retire(job))
+                        overlay.retired.add(job)
+                    overlay.queue.done(key, ok=True)
+                overlay._later()
+            overlay.retain = retain
+            overlay._stress_patched = True
+        out["max_retired"] = max(out.get("max_retired", 0),
+                                 len(overlay.retired))
+        out["max_jobs"] = max(out["max_jobs"], len(overlay.jobs))
+    now = time.monotonic()
+    if now - state["stress_started"] < STRESS_SECONDS:
+        rnd = state["stress_rnd"]
+        if now - state.get("stress_jump", 0.0) >= STRESS_JUMP:
+            # Суша умеренных широт: Европа, Азия, Америки.
+            state["stress_jump"] = now
+            lat = rnd.uniform(25.0, 60.0)
+            lon = rnd.choice((rnd.uniform(-10.0, 60.0),
+                              rnd.uniform(60.0, 135.0),
+                              rnd.uniform(-120.0, -75.0)))
+            window.view.navigator.show(Pose(
+                lat, lon, rnd.uniform(60000.0, 400000.0),
+                rnd.uniform(0.0, 360.0), 30.0))
+            out["flights"] += 1
+        else:
+            pose = window.view.navigator.pose
+            window.view.navigator.show(Pose(
+                pose.lat, pose.lon + 0.05, pose.distance * 0.97,
+                pose.heading, pose.tilt))
+        return STRESS_PERIOD
+    out["gl"] = dict(window.view.gl_errors)
+    out["seconds"] = round(time.monotonic() - state["stress_started"], 1)
+
+
+# Строки, какие бесплатная модель кладёт в названия 4 октября 2026
+# года: флаг Англии из символов-тегов, ⚔️ с селектором вида, иврит
+# внутри русского слова, плюс сочетания, опасные для отрисовки текста.
+ODD_NAMES = (
+    "🏴\U000e0067\U000e0062\U000e0065\U000e006e\U000e0067\U000e007f "
+    "Английские владения к 1429 г. (после Азиנקур)",
+    "⚔️ Ланкастерская фаза (1415–1453)",
+    "🏰 Ключевые города и столицы",
+    "Татары 🇷🇺🇹🇷 👨‍👩‍👧‍👦 мечеть ☪️",
+    "Казань́̈̃ ‮обратно‬ ‌ ‍",
+    "عربي 中文 日本語 한국어 ไทย",
+    "Длинное " * 40,
+)
+
+
+def _odd_kml():
+    import random
+    rnd = random.Random(4)
+    marks = []
+    for n in range(40):
+        name = ODD_NAMES[n % len(ODD_NAMES)] + " %d" % n
+        lat = 57.0 + rnd.uniform(0.0, 3.0)
+        lon = 54.0 + rnd.uniform(0.0, 5.0)
+        if n % 5 == 4:
+            geom = ("<LineString><coordinates>{:.4f},{:.4f},0 {:.4f},{:.4f},0"
+                    "</coordinates></LineString>").format(
+                        lon, lat, lon + 0.5, lat + 0.3)
+        else:
+            geom = ("<Point><coordinates>{:.4f},{:.4f},0</coordinates>"
+                    "</Point>").format(lon, lat)
+        marks.append(
+            "<Placemark><name>{}</name><description>{}</description>"
+            "<TimeStamp><when>{}</when></TimeStamp>{}</Placemark>".format(
+                name, ODD_NAMES[(n + 3) % len(ODD_NAMES)],
+                1550 + 10 * n, geom))
+    return ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+            "<name>{}</name><Folder><name>{}</name>{}</Folder></Document>"
+            "</kml>").format(ODD_NAMES[3], ODD_NAMES[0], "".join(marks))
+
+
+@check(1000)
+def odd_text():
+    # Названия из странных символов всеми путями: метки по кнопке,
+    # история разговора, ответ под строкой, надписи на глобусе.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    out = result.setdefault("odd_text", {"rounds": 0})
+    dialog = window._assistant()
+    for name in ODD_NAMES:
+        dialog._say("assistant", name)
+        dialog._say("tool", name)
+    window._places_made(_odd_kml())
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.5, 56.5, 400000.0, 0.0, 30.0))
+    window.panel.set_answer(" ".join(ODD_NAMES), undo=True)
+    state["odd_started"] = time.monotonic()
+
+
+@check(1000)
+def odd_text_wait():
+    window = state["window"]
+    out = result["odd_text"]
+    # Кадры с надписями меток в течение 15 с, камера понемногу едет.
+    from planetx.core.navigation import Pose
+    t = time.monotonic() - state["odd_started"]
+    if t < 15.0:
+        pose = window.view.navigator.pose
+        window.view.navigator.show(Pose(pose.lat, pose.lon + 0.05,
+                                        pose.distance * 0.97, pose.heading,
+                                        30.0))
+        out["frames"] = out.get("frames", 0) + 1
+        return 250
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_odd.png"))
+    out["places"] = len(window.myplaces.places_in(window.made_folder)) \
+        if window.made_folder else 0
+    out["labels"] = len(getattr(window.view.labels, "items", []) or []) \
+        if hasattr(window.view, "labels") else None
+    window.undo_made_places()
+    window.assistant_dialog.close()
+    out["gl"] = dict(window.view.gl_errors)
+
+
 @check(1000)
 def compact_clear():
     # Помощник - кнопка у строки «Поиск» с меню, значка на панели нет.
