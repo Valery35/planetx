@@ -3536,6 +3536,31 @@ def assistant_make_check():
     out["gl"] = dict(window.view.gl_errors)
 
 
+@check(1000)
+def compact_clear():
+    # Помощник - кнопка у строки «Поиск» с меню, значка на панели нет.
+    # «Очистить «Мои метки»» удаляет все метки и папки. Только
+    # в проверочном профиле.
+    from qgis.PyQt.QtWidgets import QToolButton
+    from planetx.core.features import Shape
+    window = state["window"]
+    out = result.setdefault("compact", {})
+    out["menu"] = [a.text() for a in window.panel.make.menu().actions()]
+    out["toolbar_assistant"] = [
+        b.toolTip()[:40] for b in window.toolbar.findChildren(QToolButton)
+        if "Помощник" in b.toolTip()]
+    folder = window.myplaces.add_folder("Проба очистки")
+    window.myplaces.add(Shape("point", [(55.0, 37.0)], name="Внутри"),
+                        folder=folder)
+    window.myplaces.add(Shape("point", [(56.0, 38.0)], name="В корне"))
+    out["before"] = len(window.myplaces.places)
+    out["cleared"] = window.clear_places(confirm=False)
+    out["after_places"] = len(window.myplaces.places)
+    out["after_folders"] = len(window.myplaces.folders)
+    out["again"] = window.clear_places(confirm=False)
+    out["gl"] = dict(window.view.gl_errors)
+
+
 @check(2000)
 def japan_open():
     # Демо «Японский жёлоб»: сектор из сцены, землетрясения, окно «Разрез».

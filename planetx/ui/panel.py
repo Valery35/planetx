@@ -372,6 +372,8 @@ class LayerPanel(QWidget):
     # Кнопка «создать метки по описанию» и ссылка «Отменить» под ответом.
     make_requested = pyqtSignal(str)
     undo_requested = pyqtSignal()
+    # Меню кнопки помощника: окно настроек.
+    assistant_settings_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
     # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
@@ -429,9 +431,22 @@ class LayerPanel(QWidget):
             "документом KML с датами событий. Метки сразу записываются "
             "новой папкой в «Мои метки», камера летит к ним. Ссылка "
             "«Отменить» под строкой удаляет папку. То же делает Ctrl+Enter "
-            "в строке."))
+            "в строке. Стрелка открывает разговор с помощником и его "
+            "настройки."))
         make.clicked.connect(
             lambda: self.make_requested.emit(self.place.text()))
+        # Помощник целиком - эта кнопка: нажатие создаёт метки, стрелка -
+        # разговор и настройки. Значка на панели значков нет, решение
+        # автора от 4 октября 2026 года - инструмент компактный.
+        assistant_menu = QMenu(make)
+        assistant_menu.addAction(tr("Разговор с помощником…")).triggered \
+            .connect(lambda checked=False: self.assistant_requested.emit())
+        assistant_menu.addAction(tr("Настройки помощника…")).triggered \
+            .connect(lambda checked=False:
+                     self.assistant_settings_requested.emit())
+        make.setMenu(assistant_menu)
+        make.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
+                               "MenuButtonPopup"))
         self.make = make
         shortcut = QAction(self.place)
         shortcut.setShortcut(QKeySequence("Ctrl+Return"))
@@ -1130,6 +1145,9 @@ class LayerPanel(QWidget):
                 lambda: self.place_action.emit("paste", ""))
             menu.addAction(tr("Добавить слои меток в проект")).triggered \
                 .connect(lambda: self.place_action.emit("project", ""))
+            menu.addSeparator()
+            menu.addAction(tr("Очистить «Мои метки»…")).triggered.connect(
+                lambda: self.place_action.emit("clear", ""))
         menu.exec(self.list.viewport().mapToGlobal(point))
 
     def _add_menu(self, menu, key):

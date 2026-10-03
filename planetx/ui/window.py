@@ -565,6 +565,8 @@ class GlobeWindow(QWidget):
         self.panel.search_cleared.connect(self.clear_search)
         self.panel.assistant_requested.connect(self.open_assistant)
         self.panel.make_requested.connect(self.make_places)
+        self.panel.assistant_settings_requested.connect(
+            lambda: self._assistant().open_settings())
         self.panel.undo_requested.connect(self.undo_made_places)
         # Поиск по названию: ответы по ключу (запрос, язык), запрос
         # в работе, время последнего запроса, найденные места.
@@ -589,7 +591,6 @@ class GlobeWindow(QWidget):
             lambda: self.set_sidebar(self.panel.isHidden()))
         self.set_sidebar(QgsSettings().value(SIDEBAR_KEY, True, type=bool))
         self.toolbar.about_clicked.connect(lambda: show_about(self))
-        self.toolbar.assistant_clicked.connect(self.open_assistant)
         self.toolbar.properties_clicked.connect(self._show_properties)
         self.toolbar.save_view_requested.connect(self.save_view)
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
@@ -3001,6 +3002,9 @@ class GlobeWindow(QWidget):
         if action == "project":
             self.myplaces.add_to_project()
             return
+        if action == "clear":
+            self.clear_places()
+            return
         if action in ("draw_point", "draw_line", "draw_polygon"):
             # «Добавить» в меню папки: окно «Новая метка» на нужной
             # вкладке, новая метка ложится в эту папку.
@@ -3103,6 +3107,25 @@ class GlobeWindow(QWidget):
             answer = QMessageBox.question(self, title, question)
             if answer == enum(QMessageBox, "StandardButton", "Yes"):
                 self.myplaces.remove(key)
+
+    def clear_places(self, confirm=True):
+        """«Очистить «Мои метки»» - удалить все метки и папки после
+        подтверждения. Просьба автора от 4 октября 2026 года."""
+        top = [n.key for n in self.myplaces.folders if n.parent is None] \
+            + [p.key for p in self.myplaces.places if p.folder is None]
+        if not top:
+            return False
+        if confirm:
+            answer = QMessageBox.question(
+                self, tr("Очистить «Мои метки»"), tr(
+                    "Удалить все метки и папки «Моих меток», всего меток "
+                    "{count}? Отменить удаление нельзя.",
+                    count=len(self.myplaces.places)))
+            if answer != enum(QMessageBox, "StandardButton", "Yes"):
+                return False
+        self.myplaces.remove_many(top)
+        self.made_folder = None
+        return True
 
     def _folder_action(self, action, folder):
         """Перелёт к виду папки, снимок вида, свойства, имя, удаление."""

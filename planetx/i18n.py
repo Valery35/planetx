@@ -40,6 +40,14 @@ EN = {
         "Answer requests from the Search field box is checked. The answer "
         "appears below the field.",
     "Разговор…": "Conversation…",
+    "Разговор с помощником…": "Conversation with the assistant…",
+    "Настройки помощника…": "Assistant settings…",
+    "Очистить «Мои метки»…": "Clear My Places…",
+    "Очистить «Мои метки»": "Clear My Places",
+    "Удалить все метки и папки «Моих меток», всего меток {count}? "
+    "Отменить удаление нельзя.":
+        "Remove all placemarks and folders of My Places, placemarks "
+        "{count} in all? The removal cannot be undone.",
     "Создать метки": "Make places",
     "Метки, пути и многоугольники по описанию в поле, например "
     "«путешествие Колумба». Модель отвечает одним документом KML, он "
@@ -52,13 +60,15 @@ EN = {
     "или «битвы Столетней войны». Помощник отвечает одним документом KML "
     "с датами событий. Метки сразу записываются новой папкой в «Мои "
     "метки», камера летит к ним. Ссылка «Отменить» под строкой удаляет "
-    "папку. То же делает Ctrl+Enter в строке.":
+    "папку. То же делает Ctrl+Enter в строке. Стрелка открывает разговор "
+    "с помощником и его настройки.":
         "Make places from the description in the field, for example \"the "
         "voyage of Columbus\" or \"battles of the Hundred Years' War\". The "
         "assistant answers with one KML document with the dates of the "
         "events. The places are written to My Places as a new folder at "
         "once, the camera flies to them. The Cancel link below the field "
-        "removes the folder. Ctrl+Enter in the field does the same.",
+        "removes the folder. Ctrl+Enter in the field does the same. The "
+        "arrow opens the conversation with the assistant and its settings.",
     "Модель не вернула документ KML.":
         "The model returned no KML document.",
     "Метки созданы документом KML.":
@@ -1227,10 +1237,6 @@ EN = {
         "The assistant stopped: too many actions in a row.",
     "Помощник предлагает папку «{name}», меток {count}.":
         "The assistant proposes the folder {name}, placemarks {count}.",
-    "Помощник: глобусом управляет ИИ-модель Claude или Grok по запросу "
-    "словами. Нужен свой ключ API.":
-        "Assistant: the Claude or Grok AI model controls the globe on a "
-        "request in words. An API key of your own is needed.",
     "Разрез Земли есть только у Земли.":
         "The Earth cutaway exists only on the Earth.",
     "Разрез Земли убран.":

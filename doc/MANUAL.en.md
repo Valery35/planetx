@@ -534,7 +534,7 @@ together, and the Del key deletes it after a question.
 
 | Where | Items |
 |---|---|
-| My Places | Add, Play tour, Sort A-Z, Open KML or KMZ…, Save as KML…, Copy, Paste, Add the places layers to the project |
+| My Places | Add, Play tour, Sort A-Z, Open KML or KMZ…, Save as KML…, Copy, Paste, Add the places layers to the project, Clear My Places… |
 | Folder | Fly to, Add, Cut, Copy, Paste, Delete, Rename…, Open KML or KMZ…, Save as KML…, Snapshot folder view, Sort A-Z, Play tour, Properties… |
 | Place | Fly to, Tour along the path, Snapshot view, Properties…, New Folder, Cut, Copy, Paste, Rename…, Delete |
 | Several rows | Copy, Show selected, Hide selected, Delete selected |
@@ -710,6 +710,10 @@ camera flies to the contents of the file.
 
 Save as KML… saves a folder or the whole My Places to KMZ or KML. The
 file extension chooses the format.
+
+Clear My Places… removes all placemarks and folders after a
+confirmation. The removal cannot be undone, so the places needed are
+better saved to KML first.
 
 ---
 
@@ -1083,8 +1087,10 @@ opens on it.
 
 ## Assistant
 
-The Assistant icon on the icon bar opens a conversation window with an
-AI model. The model controls the globe on a request in words, for
+The assistant is the button with an icon to the right of the Search
+field. A click makes places from a description, the arrow of the button
+opens the menu Conversation with the assistant… and Assistant
+settings…. The conversation window with an AI model is Assistant. The model controls the globe on a request in words, for
 example "show a section across the Japan Trench" or "where are the
 deepest earthquakes near Japan this month". An API key of your own for
 the chosen service is needed.
@@ -1134,9 +1140,9 @@ OpenRouter with a free model is chosen.
 The assistant's actions show in the conversation as Action lines. It
 makes no more than six rounds of actions in a row, then it stops.
 
-Places from a description are made by the button with the assistant
-icon to the right of the Search field and by the Make places button of
-the Assistant window. A topic is typed in the field, for example "the
+Places from a description are made by the assistant button to the
+right of the Search field and by the Make places button of the
+Assistant window. A topic is typed in the field, for example "the
 voyage of Columbus" or "battles of the Hundred Years' War", Ctrl+Enter
 in the field does the same. The model answers with one KML document
 with placemarks, paths and polygons. The places are written to My
