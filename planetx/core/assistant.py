@@ -31,18 +31,76 @@ build_* переводит его в тело запроса подключен�
 import json
 from collections import namedtuple
 
+# Форматы запросов. ANTHROPIC и RESPONSES - ещё и имена подключений
+# Claude и Grok, они хранятся в настройках с 0.25.1.
 ANTHROPIC = "anthropic"
 RESPONSES = "responses"
-PROVIDERS = (ANTHROPIC, RESPONSES)
+CHAT = "chat"  # OpenAI Chat Completions: OpenRouter, Ollama и другие
+# Подключения. Просьба автора от 3 октября 2026 года - DeepSeek
+# и бесплатный вариант.
+DEEPSEEK = "deepseek"
+OPENROUTER = "openrouter"
+LOCAL = "local"
+PROVIDERS = (ANTHROPIC, RESPONSES, DEEPSEEK, OPENROUTER, LOCAL)
+# Формат запросов подключения. DeepSeek принимает формат Anthropic
+# по адресу .../anthropic (документация DeepSeek, 3 октября 2026 года).
+FORMAT = {ANTHROPIC: ANTHROPIC, RESPONSES: RESPONSES, DEEPSEEK: ANTHROPIC,
+          OPENROUTER: CHAT, LOCAL: CHAT}
 # Подключения по умолчанию: адрес и модель. Выбор помощника, модели
-# утверждает автор. grok-4.7 - пример модели из документации xAI.
+# утверждает автор. grok-4.7 - пример модели из документации xAI,
+# deepseek-flash - модель из документации DeepSeek, openrouter/free -
+# маршрутизатор бесплатных моделей OpenRouter с инструментами (список
+# /api/v1/models на 4 октября 2026 года), qwen3 - модель Ollama на своём
+# компьютере. Одна бесплатная модель (qwen3.8-27b:free) 3-4 октября
+# отвечала «rate-limited upstream», маршрутизатор берёт свободную.
 DEFAULTS = {
     ANTHROPIC: ("https://api.anthropic.com", "claude-sonnet-5-5"),
     RESPONSES: ("https://api.x.ai/v1", "grok-4.7"),
+    DEEPSEEK: ("https://api.deepseek.com/anthropic", "deepseek-flash"),
+    OPENROUTER: ("https://openrouter.ai/api/v1", "openrouter/free"),
+    LOCAL: ("http://localhost:11434/v1", "qwen3"),
 }
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "[::1]")
 ANTHROPIC_VERSION = "2023-06-01"
 MAX_TOKENS = 2048
+# Формат Chat: модели OpenRouter и Ollama часто рассуждают перед ответом,
+# рассуждение входит в предел. 3 октября 2026 года qwen3.8-27b:free
+# истратила 2048 на рассуждение и вернула пустой ответ.
+CHAT_MAX_TOKENS = 8192
+# OpenRouter: короткое рассуждение (параметр reasoning.effort).
+OPENROUTER_REASONING = {"effort": "low"}
+# Запасной путь бесплатной модели OpenRouter: при отказе, в том числе
+# по частоте запросов, OpenRouter берёт следующую модель списка models.
+OPENROUTER_FREE = "openrouter/free"
 MAX_ROUNDS = 6  # вызовов инструментов подряд в одном ответе, не больше
+
+# Строка поиска окна: запрос с этими первыми словами или с вопросительным
+# знаком - просьба помощнику, а не название места. Просьба автора
+# от 3 октября 2026 года - помощник органично в строке поиска.
+REQUEST_WORDS = frozenset((
+    "покажи", "показать", "где", "что", "как", "какой", "какая", "какие",
+    "какое", "сколько", "почему", "зачем", "когда", "включи", "выключи",
+    "убери", "сделай", "построй", "поставь", "открой", "найди", "лети",
+    "перелети", "переключи", "отметь", "добавь", "расскажи", "объясни",
+    "дай", "нарисуй", "проложи", "сравни",
+    "show", "where", "what", "how", "which", "why", "when", "turn",
+    "switch", "make", "build", "put", "open", "find", "fly", "mark",
+    "add", "tell", "explain", "give", "draw", "compare", "list",
+))
+REQUEST_LENGTH = 6  # слов и больше - просьба, названия мест короче
+
+
+def is_request(text):
+    """Похож ли запрос строки поиска на просьбу помощнику."""
+    text = text.strip()
+    if not text:
+        return False
+    if text.endswith("?"):
+        return True
+    words = text.lower().split()
+    first = words[0].strip(",.:;!")
+    return first in REQUEST_WORDS or len(words) >= REQUEST_LENGTH
+
 
 Call = namedtuple("Call", "id name args")
 Call.__doc__ = """Вызов инструмента моделью: номер вызова, имя, словарь
@@ -218,26 +276,123 @@ def parse_responses(data):
     return Reply("\n".join(t for t in texts if t), calls, raw, "")
 
 
+def build_chat(model, system, dialog):
+    """Тело запроса формата OpenAI Chat Completions."""
+    messages = [{"role": "system", "content": system}]
+    for m in dialog:
+        if m["role"] == "user":
+            if m.get("results"):
+                messages += [{"role": "tool", "tool_call_id": r.id,
+                              "content": r.text} for r in m["results"]]
+            else:
+                messages.append({"role": "user", "content": m["text"]})
+            continue
+        message = {"role": "assistant", "content": m.get("text") or ""}
+        if m.get("calls"):
+            message["tool_calls"] = [
+                {"id": c.id, "type": "function",
+                 "function": {"name": c.name, "arguments": json.dumps(
+                     c.args, ensure_ascii=False)}} for c in m["calls"]]
+        messages.append(message)
+    return {"model": model, "max_tokens": CHAT_MAX_TOKENS,
+            "messages": messages,
+            "tools": [{"type": "function", "function": {
+                "name": n, "description": d, "parameters": s}}
+                for n, d, s in TOOLS]}
+
+
+def parse_chat(data):
+    """Ответ формата Chat Completions в Reply."""
+    if not isinstance(data, dict):
+        return Reply("", [], None, "no data")
+    if data.get("error"):
+        return Reply("", [], None, chat_error(data["error"]))
+    choices = data.get("choices") or []
+    if not choices:
+        return Reply("", [], None, "no choices")
+    message = choices[0].get("message") or {}
+    if (choices[0].get("finish_reason") == "length"
+            and not message.get("content") and not message.get("tool_calls")):
+        return Reply("", [], None, "finish_reason length: "
+                     "ответ модели обрезан пределом длины")
+    text = message.get("content") or ""
+    if isinstance(text, list):
+        text = "\n".join(p.get("text", "") for p in text
+                         if isinstance(p, dict))
+    calls = []
+    for n, call in enumerate(message.get("tool_calls") or []):
+        function = call.get("function") or {}
+        args = function.get("arguments") or {}
+        if isinstance(args, str):
+            try:
+                args = json.loads(args or "{}")
+            except ValueError:
+                args = {}
+        calls.append(Call(call.get("id") or "call%d" % n,
+                          function.get("name", ""), args))
+    return Reply(text.strip(), calls, None, "")
+
+
+def chat_error(error):
+    """Текст ошибки формата Chat. OpenRouter кладёт имя провайдера
+    модели и его ответ в metadata, «Provider returned error» без них
+    ничего не говорит."""
+    if not isinstance(error, dict):
+        return str(error)
+    text = str(error.get("message") or error)
+    meta = error.get("metadata") or {}
+    if isinstance(meta, dict):
+        if meta.get("provider_name"):
+            text += " ({})".format(meta["provider_name"])
+        raw = meta.get("raw")
+        if raw:
+            text += ": " + (raw if isinstance(raw, str)
+                            else json.dumps(raw, ensure_ascii=False))[:300]
+    return text
+
+
+def needs_key(base):
+    """Нужен ли ключ: сервису на своём компьютере ключ не нужен."""
+    host = base.split("://", 1)[-1].split("/", 1)[0].lower()
+    if host.startswith("["):
+        host = host.split("]", 1)[0] + "]"
+    else:
+        host = host.split(":", 1)[0]
+    return host not in LOCAL_HOSTS
+
+
 def request(provider, base, model, key, system, dialog):
     """Адрес, заголовки и тело запроса для подключения provider."""
     base = base.rstrip("/")
-    if provider == ANTHROPIC:
+    kind = FORMAT.get(provider, provider)
+    if kind == ANTHROPIC:
         url = base + "/v1/messages"
         headers = {"x-api-key": key,
                    "anthropic-version": ANTHROPIC_VERSION,
                    "content-type": "application/json"}
         body = build_anthropic(model, system, dialog)
-    else:
-        url = base + "/responses"
-        headers = {"Authorization": "Bearer " + key,
-                   "content-type": "application/json"}
-        body = build_responses(model, system, dialog)
-    return url, headers, body
+        return url, headers, body
+    headers = {"content-type": "application/json"}
+    if key:
+        headers["Authorization"] = "Bearer " + key
+    if kind == CHAT:
+        body = build_chat(model, system, dialog)
+        if provider == OPENROUTER:
+            body["reasoning"] = dict(OPENROUTER_REASONING)
+            if model.endswith(":free"):
+                body["models"] = [model, OPENROUTER_FREE]
+        return base + "/chat/completions", headers, body
+    return base + "/responses", headers, build_responses(model, system,
+                                                         dialog)
 
 
 def parse(provider, data):
-    return parse_anthropic(data) if provider == ANTHROPIC \
-        else parse_responses(data)
+    kind = FORMAT.get(provider, provider)
+    if kind == ANTHROPIC:
+        return parse_anthropic(data)
+    if kind == CHAT:
+        return parse_chat(data)
+    return parse_responses(data)
 
 
 def look_at_kml(lat, lon, distance, heading, tilt):

@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.25.1.
+A 3D globe inside QGIS. PlanetX version 0.26.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -61,11 +61,14 @@ and atmosphere, from space down to single streets.
   the past, up to a billion years ago, after the plate motion model of
   the GPlates web service. A slider in the corner of the view sets the
   age.
-- **Assistant.** A conversation window with the Claude or Grok AI
-  model. The model controls the globe on a request in words - flights,
-  Layers rows, sections, point and earthquake information. It proposes
-  placemarks as a KML document, they are written after confirmation. An
-  API key of your own is needed.
+- **Assistant.** A conversation window with an AI model - Claude, Grok,
+  DeepSeek, OpenRouter models or an own model through Ollama. The model
+  controls the globe on a request in words - flights, Layers rows,
+  sections, point and earthquake information. A request can also be
+  typed in the Search field. The model proposes placemarks as a KML
+  document, they are written after confirmation. OpenRouter with free
+  models is chosen by default, its key is free. Ollama works without a
+  key.
 - **Left panel.** The sections Places, Project layers and Layers
   collapse with a click on the header.
 - **Layers section.** It holds

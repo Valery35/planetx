@@ -80,7 +80,8 @@ from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
 from .measure import _xy as ruler_xy
 from .elevation import HeightSource, ProfileDialog
 from .section import SectionDialog
-from .assistant import AssistantDialog
+from .assistant import (AssistantDialog, current_provider, ready,
+                        search_enabled)
 from .myplaces import MyPlaces
 from .paleo import PaleoBar, land_mask
 from .panel import LayerPanel
@@ -560,6 +561,7 @@ class GlobeWindow(QWidget):
         self.panel.fly_text.connect(self.fly)
         self.panel.place_chosen.connect(self.fly_place)
         self.panel.search_cleared.connect(self.clear_search)
+        self.panel.assistant_requested.connect(self.open_assistant)
         # Поиск по названию: ответы по ключу (запрос, язык), запрос
         # в работе, время последнего запроса, найденные места.
         self._searched = {}
@@ -614,6 +616,8 @@ class GlobeWindow(QWidget):
         self.section_dialog = None
         # ИИ-помощник: окно разговора, ui/assistant.py.
         self.assistant_dialog = None
+        # Запросы поиска, которые запустил помощник (fly, assistant=False).
+        self._tool_queries = set()
         self._section_points = []
         # Углы разреза Земли, которые тянутся мышью.
         self.wedge_corners = _WedgeCorners(self)
@@ -2046,8 +2050,10 @@ class GlobeWindow(QWidget):
 
     # Перелёты.
 
-    def fly(self, text=None):
-        """Поиск из поля ввода: координаты - перелёт, иначе Nominatim."""
+    def fly(self, text=None, assistant=True):
+        """Поиск из поля ввода: координаты - перелёт, просьба словами -
+        помощнику, иначе Nominatim. assistant=False - поиск запустил
+        сам помощник, к нему запрос не возвращается."""
         text = self.place.text() if text is None else text
         target = parse_point(text)
         if target is not None:
@@ -2059,6 +2065,17 @@ class GlobeWindow(QWidget):
             self._fly_to(target[0], target[1], distance)
             return
         query = normalize(text)
+        if not assistant:
+            self._tool_queries.add(query)
+        else:
+            self._tool_queries.discard(query)
+            self.panel.set_answer("")
+        # Просьба словами уходит помощнику, название места - Nominatim.
+        # Вне Земли Nominatim не работает, туда идёт любой запрос.
+        if query and assistant and (assistant_core.is_request(query)
+                                    or not self.planet.earth) \
+                and self.ask_assistant(query):
+            return
         if query and not self.planet.earth:
             # Поиск по названию - Nominatim, он знает только Землю.
             self.message = (tr("Поиск по названию есть только у Земли. "
@@ -2117,8 +2134,18 @@ class GlobeWindow(QWidget):
         self.panel.set_found([place_text(p) for p in places]
                              if len(places) > 1 else [])
         if not places:
+            # Место не нашлось - запрос, видимо, просьба помощнику.
+            if key[0] not in self._tool_queries \
+                    and self.ask_assistant(key[0]):
+                return
             self.message = (tr("Ничего не найдено: {text}", text=key[0]),
                             time.monotonic())
+            if assistant_core.is_request(key[0]) and search_enabled() \
+                    and not ready(current_provider()):
+                self.message = (tr("Ключа API нет, просьба не отправлена. "
+                                   "Ключ вводится в окне «Настройки "
+                                   "помощника»."),
+                                time.monotonic())
             self._show_state()
             return
         self.message = ("", 0.0)
@@ -3468,13 +3495,41 @@ class GlobeWindow(QWidget):
 
     # ИИ-помощник: контекст вида и инструменты (core/assistant.py).
 
-    def open_assistant(self):
-        """Окно «Помощник», немодальное, одно на окно глобуса."""
+    def _assistant(self):
+        """Окно «Помощник», одно на окно глобуса, создаётся скрытым."""
         if self.assistant_dialog is None:
-            self.assistant_dialog = AssistantDialog(
-                self.assistant_tool, self.assistant_context, self)
-        self.assistant_dialog.show()
-        self.assistant_dialog.raise_()
+            dialog = AssistantDialog(self.assistant_tool,
+                                     self.assistant_context, self)
+            dialog.said.connect(self._assistant_said)
+            dialog.busy_changed.connect(self._assistant_busy)
+            self.assistant_dialog = dialog
+        return self.assistant_dialog
+
+    def open_assistant(self):
+        """Окно «Помощник», немодальное."""
+        dialog = self._assistant()
+        dialog.show()
+        dialog.raise_()
+
+    def ask_assistant(self, text):
+        """Просьба из строки поиска. Ложь, если пользователь это
+        выключил, ключа API нет или прежний ответ ещё ждётся - тогда
+        запрос идёт поиском места."""
+        if not search_enabled() or not ready(current_provider()):
+            return False
+        return self._assistant().ask(text)
+
+    def _assistant_said(self, who, text):
+        """Реплики разговора под строкой поиска. Вопрос пользователя
+        там не повторяется, он уже в строке."""
+        if who == "assistant" or who == "note":
+            self.panel.set_answer(text)
+        elif who == "tool":
+            self.panel.set_answer(tr("Помощник думает…") + "\n" + text)
+
+    def _assistant_busy(self, busy):
+        if busy and not self.panel.answer.isVisible():
+            self.panel.set_answer(tr("Помощник думает…"))
 
     def _layer_keys(self):
         """Ключи строк раздела «Слои», которые может включать помощник."""
@@ -3521,7 +3576,9 @@ class GlobeWindow(QWidget):
 
     def _tool_search_place(self, query):
         self.place.setText(str(query))
-        self.fly(str(query))
+        # Поиск помощника не возвращается к помощнику, иначе запрос
+        # без найденного места пошёл бы по кругу.
+        self.fly(str(query), assistant=False)
         return tr("Поиск запущен: {query}.", query=query)
 
     def _tool_set_body(self, body):

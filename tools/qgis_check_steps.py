@@ -3154,6 +3154,20 @@ def _fake_model():
                 else:
                     answer = {"content": [{"type": "text",
                                            "text": "Готово."}]}
+            elif self.path.endswith("/chat/completions"):
+                last = body["messages"][-1]
+                if last["role"] == "user":
+                    answer = {"choices": [{"message": {
+                        "role": "assistant", "content": None,
+                        "tool_calls": [{"id": "k1", "type": "function",
+                                        "function": {
+                                            "name": "fly_to",
+                                            "arguments": json.dumps(
+                                                {"lat": -33.9,
+                                                 "lon": 151.2})}}]}}]}
+                else:
+                    answer = {"choices": [{"message": {
+                        "role": "assistant", "content": "Сидней."}}]}
             else:
                 last = body["input"][-1]
                 if last.get("role") == "user":
@@ -3176,6 +3190,16 @@ def _fake_model():
     return server, seen
 
 
+def _use_service(dialog, provider, base):
+    """Сервис и адрес помощника через окно «Настройки помощника»."""
+    dialog.open_settings()
+    settings = dialog.settings
+    settings.provider.setCurrentIndex(settings.provider.findData(provider))
+    settings.base.setText(base)
+    settings._remember()
+    return settings
+
+
 @check(4000)
 def assistant_on():
     # Помощник через поддельный сервер: Anthropic - перелёт к Японии.
@@ -3185,11 +3209,12 @@ def assistant_on():
     window.set_body("earth")
     server, seen = _fake_model()
     state["fake_model"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
     ui_ai.load_key = lambda provider: "test-key"
     window.open_assistant()
     dialog = window.assistant_dialog
-    dialog.provider.setCurrentIndex(dialog.provider.findData(ai.ANTHROPIC))
-    dialog.base.setText("http://127.0.0.1:%d" % server.server_port)
+    _use_service(dialog, ai.ANTHROPIC,
+                 "http://127.0.0.1:%d" % server.server_port)
     dialog.input.setText("Покажи Японию")
     dialog.send()
     result["assistant"] = {}
@@ -3212,8 +3237,8 @@ def assistant_anthropic_check():
     out["pose"] = [round(pose.lat, 1), round(pose.lon, 1)]
     # Responses: предложение KML и запись в «Мои метки».
     del seen[:]
-    dialog.provider.setCurrentIndex(dialog.provider.findData(ai.RESPONSES))
-    dialog.base.setText("http://127.0.0.1:%d" % server.server_port)
+    _use_service(dialog, ai.RESPONSES,
+                 "http://127.0.0.1:%d" % server.server_port)
     dialog.input.setText("Поставь метку в Токио")
     dialog.send()
     state["places_before"] = len(window.myplaces.places)
@@ -3289,6 +3314,145 @@ def assistant_tools_check():
     if window.section_dialog is not None:
         window.section_dialog.close()
     out["tools_gl"] = dict(window.view.gl_errors)
+
+
+@check(3000)
+def assistant_search():
+    # Просьба словами в строке «Поиск» уходит помощнику в скрытом окне,
+    # ответ - под строкой. Сервер модели поддельный.
+    from qgis.core import QgsSettings
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    server, seen = _fake_model()
+    state["fake_search"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    QgsSettings().setValue(ui_ai.SEARCH_KEY, True)
+    dialog = window._assistant()
+    dialog.hide()
+    _use_service(dialog, ai.ANTHROPIC,
+                 "http://127.0.0.1:%d" % server.server_port)
+    window.view.navigator.stop()
+    window.place.setText("Покажи Японию")
+    window.fly()
+    result["assistant_search"] = {
+        "busy_text": window.panel.answer.text(),
+        "busy_shown": window.panel.answer.isVisible()}
+
+
+@check(1000)
+def assistant_search_check():
+    from qgis.core import QgsSettings
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_search"]
+    out = result["assistant_search"]
+    out["requests"] = [p for p, _, _ in seen]
+    out["question"] = seen[0][1]["messages"][-1]["content"] if seen \
+        else None
+    out["answer"] = window.panel.answer.text()
+    out["dialog_shown"] = dialog.isVisible()
+    pose = window.view.navigator.pose
+    out["pose"] = [round(pose.lat, 1), round(pose.lon, 1)]
+    # Флажок окна снят - строка поиска помощнику ничего не шлёт.
+    dialog.settings.search.setChecked(False)
+    out["setting_off"] = QgsSettings().value(ui_ai.SEARCH_KEY, True,
+                                             type=bool)
+    before = len(seen)
+    out["asked_when_off"] = window.ask_assistant("покажи Марс")
+    out["requests_when_off"] = len(seen) - before
+    dialog.settings.search.setChecked(True)
+    # Пустая строка прячет ответ.
+    window.place.setText("")
+    out["answer_after_clear"] = window.panel.answer.isVisible()
+    # Свой сервис формата OpenAI Chat на этом компьютере: без ключа.
+    from planetx.core import assistant as ai
+    ui_ai.load_key = lambda provider: ""
+    del seen[:]
+    _use_service(dialog, ai.LOCAL,
+                 "http://127.0.0.1:%d" % server.server_port)
+    out["chat_asked"] = dialog.ask("Покажи Сидней")
+
+
+@check(1000)
+def assistant_chat_check():
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_search"]
+    out = result["assistant_search"]
+    out["chat_requests"] = [p for p, _, _ in seen]
+    out["chat_auth"] = [k for _, _, k in seen]
+    out["chat_tool_answer"] = seen[1][1]["messages"][-1] \
+        if len(seen) > 1 else None
+    out["chat_answer"] = window.panel.answer.text()
+    pose = window.view.navigator.pose
+    out["chat_pose"] = [round(pose.lat, 1), round(pose.lon, 1)]
+    # Удалённому сервису без ключа вопрос не уходит.
+    from planetx.core import assistant as ai
+    del seen[:]
+    _use_service(dialog, ai.OPENROUTER, ai.DEFAULTS[ai.OPENROUTER][0])
+    out["remote_without_key"] = dialog.ask("Покажи Сидней")
+    out["remote_requests"] = len(seen)
+    # Ключ без мастер-пароля: открытым текстом в настройках профиля,
+    # менеджер паролей не трогается.
+    from qgis.core import QgsSettings
+    from planetx.ui import assistant as ui_ai
+    ui_ai.load_key = state["real_load_key"]
+    settings = QgsSettings()
+    dialog.settings.plain.setChecked(True)
+    out["plain_setting"] = settings.value(ui_ai.PLAIN_KEY, False, type=bool)
+    dialog.settings.key.setText("plain-test-key")
+    dialog.settings._save_key()
+    out["plain_note"] = dialog.settings.status.text()
+    out["plain_loaded"] = ui_ai.load_key(ai.OPENROUTER) == "plain-test-key"
+    out["plain_ready"] = ui_ai.ready(ai.OPENROUTER)
+    out["plain_authcfg"] = settings.value(
+        ui_ai.SETTINGS + ai.OPENROUTER + "/authcfg", "")
+    settings.remove(ui_ai.SETTINGS + ai.OPENROUTER + "/key")
+    dialog.settings.plain.setChecked(True)
+    out["plain_after_cleanup"] = ui_ai.load_key(ai.OPENROUTER)
+    # Окно помощника - сервис и модель видны строкой сверху.
+    out["service_line"] = dialog.service.text()
+    out["placeholder"] = bool(dialog.history.placeholderText())
+    # Свой сервис не запущен: порт закрыт, ответа нет вовсе.
+    import socket
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    closed = probe.getsockname()[1]
+    probe.close()
+    ui_ai.load_key = lambda provider: ""
+    _use_service(dialog, ai.LOCAL, "http://127.0.0.1:%d" % closed)
+    out["down_asked"] = dialog.ask("Покажи Сидней")
+    ui_ai.load_key = state["real_load_key"]
+    state["down_settings"] = settings
+    state["down_started"] = time.monotonic()
+
+
+@check(5000)
+def assistant_down_check():
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    dialog = window.assistant_dialog
+    out = result["assistant_search"]
+    waited = time.monotonic() - state["down_started"]
+    if dialog.busy() and waited < 30.0:
+        return 1000
+    out["down_wait"] = round(waited, 1)
+    out["down_busy"] = dialog.busy()
+    lines = dialog.history.toPlainText().splitlines()
+    out["down_notes"] = [x for x in lines[-4:] if x.startswith("Модуль")]
+    settings = state["down_settings"]
+    # Адреса поддельного сервера не остаются в настройках профиля.
+    for provider in ai.PROVIDERS:
+        settings.remove(ui_ai.SETTINGS + provider + "/base")
+    settings.remove(ui_ai.SETTINGS + "provider")
+    dialog.close()
+    state["fake_search"][0].shutdown()
+    out["gl"] = dict(window.view.gl_errors)
 
 
 @check(2000)

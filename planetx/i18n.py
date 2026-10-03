@@ -25,11 +25,67 @@ EN = {
     "Название места или координаты в градусах, например Пермь или "
     "58.0105, 56.2294. Enter запускает поиск или перелёт. Несколько "
     "найденных мест показываются списком ниже, перелёт начинается "
-    "щелчком по строке. Перелёт прерывается мышью.":
+    "щелчком по строке. Перелёт прерывается мышью. Просьба словами, "
+    "например «покажи разрез через Японский жёлоб», уходит помощнику, "
+    "если в окне «Настройки помощника» сохранён ключ API и отмечен флажок "
+    "«Отвечать на просьбы из строки «Поиск»». Ответ появляется под "
+    "строкой.":
         "A place name or coordinates in degrees, for example Perm or "
         "58.0105, 56.2294. Enter starts the search or the flight. Several "
         "places found are listed below, a click on a row starts the "
-        "flight. The mouse interrupts the flight.",
+        "flight. The mouse interrupts the flight. A request in words, for "
+        "example \"show a section across the Japan Trench\", goes to the "
+        "assistant if an API key is saved in the Assistant settings window "
+        "and the "
+        "Answer requests from the Search field box is checked. The answer "
+        "appears below the field.",
+    "Разговор…": "Conversation…",
+    "Настройки помощника": "Assistant settings",
+    "Настройки…": "Settings…",
+    "Сервис, модель и ключ API помощника.":
+        "Service, model and API key of the assistant.",
+    "Здесь идёт разговор: ваши вопросы, действия помощника на глобусе и "
+    "его ответы. Вопрос задаётся в поле ниже или в строке «Поиск» панели.":
+        "The conversation goes here: your questions, the assistant's "
+        "actions on the globe and its answers. A question is asked in the "
+        "field below or in the Search field of the panel.",
+    "Сервис: {service}, модель {model}.":
+        "Service: {service}, model {model}.",
+    "Ключа API нет.": "There is no API key.",
+    "Нет ключа API. Его вводят в окне «Настройки помощника».":
+        "No API key. It is entered in the Assistant settings window.",
+    "ключ не нужен": "no key needed",
+    "Сервис на этом компьютере не отвечает. Проверьте, что он запущен, "
+    "например Ollama, и что адрес в настройках помощника верный.":
+        "The service on this computer does not answer. Check that it is "
+        "running, for example Ollama, and that the address in the assistant "
+        "settings is right.",
+    "Хранить ключ без мастер-пароля":
+        "Keep the key without the master password",
+    "Ключ сохраняется открытым текстом в настройках профиля QGIS, "
+    "мастер-пароль менеджера паролей не спрашивается. Ключ прочитает "
+    "любой, у кого есть доступ к папке профиля. Флажок действует на "
+    "следующее сохранение ключа.":
+        "The key is saved as plain text in the QGIS profile settings, the "
+        "password manager does not ask for the master password. Anyone "
+        "with access to the profile folder can read the key. The check box "
+        "applies to the next key save.",
+    "Ключ сохранён в настройках профиля QGIS без мастер-пароля.":
+        "The key is saved in the QGIS profile settings without the master "
+        "password.",
+    "Отвечать на просьбы из строки «Поиск»":
+        "Answer requests from the Search field",
+    "Просьба словами в строке «Поиск» панели уходит помощнику, ответ "
+    "появляется под строкой. Без флажка строка ищет только места "
+    "и координаты.":
+        "A request in words in the Search field of the panel goes to the "
+        "assistant, the answer appears below the field. Without the check "
+        "box the field finds only places and coordinates.",
+    "Помощник думает…": "The assistant is thinking…",
+    "Ключа API нет, просьба не отправлена. Ключ вводится в окне "
+    "«Настройки помощника».":
+        "There is no API key, the request is not sent. The key is entered "
+        "in the Assistant settings window.",
     "Поиск: {text}": "Searching: {text}",
     "Поиск не удался: {error}": "Search failed: {error}",
     "Ничего не найдено: {text}": "Nothing found: {text}",
@@ -1066,8 +1122,12 @@ EN = {
     "Тип": "Type",
     "KML не разобран: {error}. Исправь документ.":
         "KML not parsed: {error}. Fix the document.",
-    "Адрес сервиса. Для Anthropic и xAI менять его не нужно.":
-        "Service address. For Anthropic and xAI it needs no change.",
+    "Адрес сервиса. У Anthropic, xAI, DeepSeek и OpenRouter менять его "
+    "не нужно. У своего сервиса - адрес его входа формата OpenAI, "
+    "например http://localhost:11434/v1 у Ollama.":
+        "Service address. Anthropic, xAI, DeepSeek and OpenRouter need no "
+        "change. An own service needs the address of its OpenAI format "
+        "entry, for example http://localhost:11434/v1 for Ollama.",
     "В «Мои метки» записано меток: {count}.":
         "Placemarks written to My Places: {count}.",
     "В документе KML нет меток.":
@@ -1110,18 +1170,16 @@ EN = {
         "The model did not answer: {error}",
     "Модуль":
         "Plugin",
-    "Название модели у выбранного сервиса, например claude-sonnet-5-5 или "
-    "grok-4.7.":
-        "Model name at the chosen service, for example claude-sonnet-5-5 "
-        "or grok-4.7.",
+    "Название модели у выбранного сервиса. Модель должна уметь вызывать "
+    "инструменты (tools), иначе помощник только отвечает текстом.":
+        "Model name at the chosen service. The model must be able to call "
+        "tools, otherwise the assistant only answers with text.",
     "Например: покажи разрез через Японский жёлоб":
         "For example: show a section across the Japan Trench",
     "Неизвестная строка: {key}.":
         "Unknown row: {key}.",
     "Неизвестное тело: {body}.":
         "Unknown body: {body}.",
-    "Нет ключа API. Введите его в поле «Ключ» и нажмите «Сохранить ключ».":
-        "No API key. Enter it in the Key field and press Save key.",
     "Нет такого инструмента: {name}.":
         "No such tool: {name}.",
     "Отменить":
@@ -1170,14 +1228,19 @@ EN = {
         "Row {key}: {state}.",
     "Тело: {body}.":
         "Body: {body}.",
-    "Формат OpenAI Responses (Grok и др.)":
-        "OpenAI Responses format (Grok and others)",
-    "Через какой сервис работает помощник. Anthropic - модели Claude. "
-    "Формат OpenAI Responses - xAI Grok и другие сервисы этого формата. У "
-    "каждого подключения свой ключ.":
-        "Which service the assistant works through. Anthropic - Claude "
-        "models. OpenAI Responses format - xAI Grok and other services of "
-        "this format. Each connection has its own key.",
+    "OpenRouter (есть бесплатные модели)":
+        "OpenRouter (free models available)",
+    "Свой сервис, например Ollama":
+        "Own service, for example Ollama",
+    "Через какой сервис работает помощник. У каждого сервиса свой ключ, "
+    "адрес и модель. У OpenRouter модели с «:free» в названии бесплатны "
+    "с ограничением запросов в сутки. Свой сервис работает в формате "
+    "OpenAI Chat, на этом компьютере ключ не нужен.":
+        "Which service the assistant works through. Each service has its "
+        "own key, address and model. OpenRouter models with \":free\" in "
+        "the name are free with a daily request limit. An own service "
+        "works in the OpenAI Chat format, on this computer it needs no "
+        "key.",
     "Шкала времени закрыта.":
         "The time slider is closed.",
     "Шкала времени: {start} - {end}.":

@@ -87,6 +87,116 @@ class TestResponses(unittest.TestCase):
         self.assertEqual(reply.error, "bad key")
 
 
+class TestChat(unittest.TestCase):
+
+    def test_request_and_round_trip(self):
+        dialog = [{"role": "user", "text": "Покажи Японию"}]
+        url, headers, body = ai.request(
+            ai.OPENROUTER, "https://openrouter.ai/api/v1/", "m:free", "k",
+            "sys", dialog)
+        self.assertEqual(url, "https://openrouter.ai/api/v1/chat/completions")
+        self.assertEqual(headers["Authorization"], "Bearer k")
+        self.assertEqual(body["messages"][0],
+                         {"role": "system", "content": "sys"})
+        self.assertEqual(body["tools"][0]["function"]["name"], "fly_to")
+        reply = ai.parse(ai.OPENROUTER, {"choices": [{"message": {
+            "role": "assistant", "content": None, "tool_calls": [
+                {"id": "c1", "type": "function", "function": {
+                    "name": "fly_to",
+                    "arguments": '{"lat": 36, "lon": 138}'}}]}}]})
+        self.assertEqual(reply.calls[0].args, {"lat": 36, "lon": 138})
+        dialog += [ai.assistant_message(reply),
+                   ai.results_message([ai.Result("c1", "Перелёт.")])]
+        body = ai.build_chat("m", "sys", dialog)
+        self.assertEqual(body["messages"][2]["tool_calls"][0]["id"], "c1")
+        self.assertEqual(body["messages"][3], {
+            "role": "tool", "tool_call_id": "c1", "content": "Перелёт."})
+
+    def test_text_error_and_arguments_as_object(self):
+        reply = ai.parse(ai.LOCAL, {"choices": [{"message": {
+            "content": "Готово.", "tool_calls": [{"function": {
+                "name": "get_kml", "arguments": {}}}]}}]})
+        self.assertEqual(reply.text, "Готово.")
+        self.assertEqual(reply.calls[0].id, "call0")
+        self.assertEqual(ai.parse(ai.LOCAL, {"error": {"message": "x"}})
+                         .error, "x")
+        self.assertEqual(ai.parse(ai.LOCAL, {"choices": []}).error,
+                         "no choices")
+
+    def test_local_service_needs_no_key(self):
+        url, headers, body = ai.request(ai.LOCAL, "http://localhost:11434/v1",
+                                        "qwen3", "", "sys", [])
+        self.assertNotIn("Authorization", headers)
+        self.assertFalse(ai.needs_key("http://localhost:11434/v1"))
+        self.assertFalse(ai.needs_key("http://127.0.0.1:1234/v1"))
+        self.assertFalse(ai.needs_key("http://[::1]:11434/v1"))
+        self.assertTrue(ai.needs_key("https://openrouter.ai/api/v1"))
+
+    def test_provider_error_details_and_cut_answer(self):
+        reply = ai.parse(ai.OPENROUTER, {"error": {
+            "message": "Provider returned error", "code": 429,
+            "metadata": {"provider_name": "ModelRun",
+                         "raw": "rate limited upstream"}}})
+        self.assertEqual(reply.error, "Provider returned error (ModelRun): "
+                         "rate limited upstream")
+        # Рассуждение съело предел, ответа нет - это ошибка, а не тишина.
+        reply = ai.parse(ai.OPENROUTER, {"choices": [{
+            "finish_reason": "length",
+            "message": {"content": None, "reasoning": "..."}}]})
+        self.assertIn("finish_reason length", reply.error)
+
+    def test_openrouter_asks_for_short_reasoning(self):
+        dialog = [{"role": "user", "text": "Привет"}]
+        body = ai.request(ai.OPENROUTER, "https://openrouter.ai/api/v1", "m",
+                          "k", "sys", dialog)[2]
+        self.assertEqual(body["reasoning"], {"effort": "low"})
+        self.assertEqual(body["max_tokens"], ai.CHAT_MAX_TOKENS)
+        self.assertNotIn("models", body)
+        body = ai.request(ai.LOCAL, "http://localhost:11434/v1", "m", "",
+                          "sys", dialog)[2]
+        self.assertNotIn("reasoning", body)
+
+    def test_free_model_falls_back_to_free_router(self):
+        body = ai.request(ai.OPENROUTER, "https://openrouter.ai/api/v1",
+                          "qwen/qwen3.8-27b:free", "k", "sys", [])[2]
+        self.assertEqual(body["models"], ["qwen/qwen3.8-27b:free",
+                                          "openrouter/free"])
+        self.assertEqual(ai.DEFAULTS[ai.OPENROUTER][1], "openrouter/free")
+        body = ai.request(ai.OPENROUTER, "https://openrouter.ai/api/v1",
+                          "openrouter/free", "k", "sys", [])[2]
+        self.assertNotIn("models", body)
+
+    def test_deepseek_speaks_anthropic(self):
+        url, headers, body = ai.request(
+            ai.DEEPSEEK, *ai.DEFAULTS[ai.DEEPSEEK], key="k", system="sys",
+            dialog=[{"role": "user", "text": "Привет"}])
+        self.assertEqual(url,
+                         "https://api.deepseek.com/anthropic/v1/messages")
+        self.assertEqual(headers["x-api-key"], "k")
+        self.assertEqual(body["system"], "sys")
+
+    def test_every_provider_has_format_and_defaults(self):
+        for provider in ai.PROVIDERS:
+            self.assertIn(provider, ai.FORMAT)
+            self.assertIn(provider, ai.DEFAULTS)
+
+
+class TestIsRequest(unittest.TestCase):
+
+    def test_places_and_coordinates_are_not_requests(self):
+        for text in ("Пермь", "Нью-Йорк", "Красная площадь", "Mount Everest",
+                     "58.0105, 56.2294", "ул. Ленина 1, Пермь", ""):
+            self.assertFalse(ai.is_request(text), text)
+
+    def test_requests(self):
+        for text in ("покажи разрез через Японский жёлоб",
+                     "Где самые глубокие землетрясения у Японии",
+                     "что под Березниками?", "Show Mars",
+                     "fly, please, to the deepest point of the ocean now",
+                     "Эльбрус?"):
+            self.assertTrue(ai.is_request(text), text)
+
+
 class TestHelpers(unittest.TestCase):
 
     def test_look_at_kml_reads_back(self):

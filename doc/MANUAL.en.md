@@ -1088,13 +1088,34 @@ example "show a section across the Japan Trench" or "where are the
 deepest earthquakes near Japan this month". An API key of your own for
 the chosen service is needed.
 
-- **Service.** Claude (Anthropic) - Claude models. OpenAI Responses
-  format - xAI Grok and other services of this format. Each service has
-  its own address and model, by default `claude-sonnet-5-5` and
-  `grok-4.7`.
-- **Key.** The key is entered in the Key field and saved with the Save
-  key button in the QGIS password manager. On the first save QGIS may
-  ask for the master password.
+The conversation goes in the Assistant window. The line at the top
+names the service and the model, the Settings button opens the
+Assistant settings window. There the service, address and model are
+chosen, the key is entered and the check boxes are set. By default
+OpenRouter with a free model is chosen.
+
+- **Service.** Each service has its own key, address and model.
+  - Claude (Anthropic) - Claude models, by default
+    `claude-sonnet-5-5`.
+  - Grok (xAI) - Grok models, by default `grok-4.7`.
+  - DeepSeek - DeepSeek models, by default `deepseek-flash`.
+  - OpenRouter (free models available) - models of many developers
+    with one key. Models with `:free` in the name are free, the number
+    of requests per day is limited. By default `openrouter/free`, it
+    picks a free model that is available itself. If the chosen `:free`
+    model is busy, the request goes to `openrouter/free`.
+  - Own service, for example Ollama - any service of the OpenAI Chat
+    format. A service on this computer needs no key. By default the
+    Ollama address `http://localhost:11434/v1` and the model `qwen3`.
+  The model must be able to call tools, otherwise the assistant only
+  answers with text.
+- **Key.** The key is entered in the Key field of the Assistant
+  settings window and saved with the Save key button. The Keep the key
+  without the master password box is checked by default. With it the
+  key is saved as plain text in the QGIS profile settings, the master
+  password is not asked. Anyone with access to the profile folder can
+  read such a key. Without the box the key goes to the QGIS password
+  manager, and QGIS may ask for the master password.
 - **What the assistant does.** Flight to a point and place search, body
   change, rows of the Layers section and the time slider, the Earth
   cutaway and a section down along points, point information and an
@@ -1111,6 +1132,18 @@ the chosen service is needed.
 
 The assistant's actions show in the conversation as Action lines. It
 makes no more than six rounds of actions in a row, then it stops.
+
+A request can also be typed in the Search field of the left panel. The
+assistant receives a request with a question mark, a request of six
+words or more and a request that starts with a request or question
+word, for example "show", "where", "how many". A place name that is not
+found also goes to the assistant. Outside the Earth any request except
+coordinates goes to the assistant. The answer appears below the field,
+the Conversation link opens the Assistant window with the history.
+Proposed placemarks are shown in the Assistant window. The Answer
+requests from the Search field box of the Assistant settings window
+switches this off, then the field finds only places and coordinates. Without a
+saved API key the field also finds only places.
 
 ---
 

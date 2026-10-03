@@ -19,6 +19,8 @@
 
 Панель только показывает и сообщает сигналами, решает окно.
 """
+import html
+
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsSettings, QgsVectorLayer)
 from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
@@ -364,6 +366,8 @@ class LayerPanel(QWidget):
     # Номер строки в списке найденных мест.
     place_chosen = pyqtSignal(int)
     search_cleared = pyqtSignal()
+    # Ссылка «Разговор» под ответом помощника.
+    assistant_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
     # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
@@ -402,7 +406,10 @@ class LayerPanel(QWidget):
             "или 58.0105, 56.2294. Enter запускает поиск или перелёт. "
             "Несколько найденных мест показываются списком ниже, "
             "перелёт начинается щелчком по строке. Перелёт прерывается "
-            "мышью."))
+            "мышью. Просьба словами, например «покажи разрез через "
+            "Японский жёлоб», уходит помощнику, если в окне «Настройки "
+            "помощника» сохранён ключ API и отмечен флажок «Отвечать на "
+            "просьбы из строки «Поиск»». Ответ появляется под строкой."))
         self.place.returnPressed.connect(
             lambda: self.fly_text.emit(self.place.text()))
         self.place.textChanged.connect(self._search_text)
@@ -420,6 +427,15 @@ class LayerPanel(QWidget):
             lambda item: self.place_chosen.emit(self.found.row(item)))
         self.found.itemActivated.connect(
             lambda item: self.place_chosen.emit(self.found.row(item)))
+        # Ответ помощника на просьбу из строки поиска. Виден, пока
+        # в нём есть текст.
+        self.answer = QLabel(self)
+        self.answer.setWordWrap(True)
+        self.answer.setVisible(False)
+        self.answer.setTextInteractionFlags(
+            enum(Qt, "TextInteractionFlag", "TextBrowserInteraction"))
+        self.answer.linkActivated.connect(
+            lambda link: self.assistant_requested.emit())
 
         self.list = PlaceTree(self)
         self.list.setItemDelegate(RadioDelegate(self.list))
@@ -637,6 +653,7 @@ class LayerPanel(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.addLayout(top)
         layout.addWidget(self.found)
+        layout.addWidget(self.answer)
         layout.addWidget(split, 1)
         layout.addWidget(self.status, 0)
         self.set_layers([], set())
@@ -646,7 +663,20 @@ class LayerPanel(QWidget):
         """Пустое поле поиска закрывает список и снимает метку."""
         if not text.strip():
             self.set_found([])
+            self.set_answer("")
             self.search_cleared.emit()
+
+    def set_answer(self, text):
+        """Ответ помощника под строкой поиска со ссылкой на разговор.
+        Пустой текст прячет его."""
+        if not text:
+            self.answer.clear()
+            self.answer.setVisible(False)
+            return
+        body = html.escape(text).replace("\n", "<br>")
+        self.answer.setText('{} <a href="assistant">{}</a>'.format(
+            body, html.escape(tr("Разговор…"))))
+        self.answer.setVisible(True)
 
     def set_found(self, texts):
         """Строки найденных мест. Пустой список прячет его."""
