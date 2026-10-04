@@ -47,7 +47,7 @@ def _geometry_kind(geometry_type):
     return "point"
 
 
-def _settings(layer):
+def label_settings(layer):
     """Подписи слоя: пары (настройки QgsPalLayerSettings, фильтр
     правила или None). Пусто, если подписи слоя выключены."""
     if not layer.labelsEnabled() or layer.labeling() is None:
@@ -209,7 +209,7 @@ class LayerLabels(QObject):
             layer = project.mapLayer(layer_id)
             if not isinstance(layer, QgsVectorLayer) or not layer.isValid():
                 continue
-            pairs = _settings(layer)
+            pairs = label_settings(layer)
             if not pairs:
                 continue
             context = project.transformContext()

@@ -17,7 +17,7 @@ import time
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QEvent, QObject, Qt, pyqtSignal
 from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QFrame, QHBoxLayout,
-                                 QLabel, QSlider, QToolButton)
+                                 QLabel, QSlider, QToolButton, QVBoxLayout)
 
 from ..core.tour import PAUSE, Tour, clock
 from ..i18n import tr
@@ -32,6 +32,7 @@ STYLE = ("QFrame#planetxTour { background: rgba(250, 250, 250, 230); "
 MOVED = 1e-3
 SLIDER_STEPS = 1000  # делений ползунка на весь тур
 SLIDER_WIDTH = 220  # логических пикселей
+CAPTION_WIDTH = 480  # строка описания остановки, не уже, пикселей
 
 
 class TourBar(QFrame):
@@ -51,9 +52,17 @@ class TourBar(QFrame):
         super().__init__(parent)
         self.setObjectName("planetxTour")
         self.setStyleSheet(STYLE)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(4, 3, 6, 3)
+        column = QVBoxLayout(self)
+        column.setContentsMargins(4, 3, 6, 3)
+        column.setSpacing(2)
+        layout = QHBoxLayout()
         layout.setSpacing(3)
+        column.addLayout(layout)
+        # Описание остановки под кнопками: тур объясняет, что на виде.
+        self.caption = QLabel(self)
+        self.caption.setWordWrap(True)
+        self.caption.hide()
+        column.addWidget(self.caption)
         self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
         self.slider.setRange(0, SLIDER_STEPS)
         self.slider.setFixedWidth(SLIDER_WIDTH)
@@ -139,13 +148,20 @@ class TourBar(QFrame):
             self.slider.blockSignals(False)
         self.clock.setText("%s / %s" % (clock(t), clock(duration)))
 
-    def set_state(self, playing, index, count, name):
+    def set_state(self, playing, index, count, name, description=""):
         # ▶ с селектором U+FE0F рисуется синим значком, как ⏮ ⏸ ⏭ 🔁.
         self.play.setText("⏸" if playing else "▶️")
         self.play.setToolTip(tr("Пауза") if playing else tr("Продолжить"))
         self.info.setText(tr("Остановка {n} из {count}: {name}",
                              n=index + 1, count=count,
                              name=name or tr("Без названия")))
+        self.caption.setText(description)
+        self.caption.setVisible(bool(description))
+        if description:
+            # Строка описания не шире кнопок с ползунком, но не уже
+            # CAPTION_WIDTH.
+            self.caption.setFixedWidth(max(CAPTION_WIDTH, self.layout()
+                                           .itemAt(0).sizeHint().width()))
         self.adjustSize()
         self._place()
 
@@ -336,7 +352,8 @@ class TourPlayer(QObject):
             self._reached = self.index
             self.stop_reached.emit(stop)
         self.bar.set_state(self.playing, self.index, len(self.stops),
-                           stop.name if stop else "")
+                           stop.name if stop else "",
+                           getattr(stop, "description", "") if stop else "")
         if self.tour is not None:
             self.bar.set_time(min(self.t, self.tour.duration),
                               self.tour.duration)

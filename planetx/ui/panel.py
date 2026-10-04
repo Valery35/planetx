@@ -1285,6 +1285,10 @@ class LayerPanel(QWidget):
                 actions.append(("tour", tr("Тур по пути")))
                 actions.append(("profile", tr("Профиль высот")))
                 actions.append(("section", tr("Разрез вниз…")))
+                actions.append(("model_section", tr("Разрез модели…")))
+                actions.append(("model_wall", tr("Стенка разреза модели")))
+            elif key.startswith("polygon:"):
+                actions.append(("model_cut", tr("Вырез модели")))
             elif key.startswith("point:"):
                 actions.append(("viewshed", tr("Видимость отсюда…")))
                 actions.append(("insolation", tr("Инсоляция…")))

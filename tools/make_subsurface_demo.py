@@ -183,6 +183,55 @@ def sample(surface, gx0, gy_top, x, y):
     return top * (1 - ay) + bot * ay
 
 
+IMAGE_SIZE = (1600, 800)  # пикселей картинки разреза 3-3
+FONT = r"C:\Windows\Fonts\arial.ttf"
+
+
+def section_image(surfaces, gx0, gy_top, xa, xb, y, path):
+    """Картинка разреза вдоль линии y от xa до xb, как рисуют разрезы
+    геологи: полосы пластов своих цветов, кровли линиями, подписи кодов
+    и шкала отметок. Над рельефом прозрачно. Возвращает отметки верха
+    и низа картинки."""
+    from PIL import Image, ImageDraw, ImageFont
+    width, height = IMAGE_SIZE
+    xs = np.linspace(xa, xb, width)
+    stack = np.array([[sample(s, gx0, gy_top, x, y) for x in xs]
+                      for s in surfaces])
+    top = float(np.ceil(stack[0].max() / 10.0) * 10.0 + 10.0)
+    bottom = float(np.floor(stack[-1].min() / 10.0) * 10.0 - 10.0)
+    rows = top - (np.arange(height) + 0.5) / height * (top - bottom)
+    rgba = np.zeros((height, width, 4), dtype=np.uint8)
+    for k, (code, color, _, _) in enumerate(BEDS):
+        inside = (rows[:, None] <= stack[k][None, :]) \
+            & (rows[:, None] > stack[k + 1][None, :])
+        rgb = [int(color[i:i + 2], 16) for i in (1, 3, 5)]
+        rgba[inside] = rgb + [255]
+    image = Image.fromarray(rgba, "RGBA")
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.truetype(FONT, 22)
+    to_row = (lambda z: (top - z) / (top - bottom) * height)
+    for surface in stack[:-1]:
+        draw.line([(i, to_row(z)) for i, z in enumerate(surface)],
+                  fill=(20, 20, 20, 255), width=2)
+    for k, (code, _, _, _) in enumerate(BEDS):
+        middle = (stack[k][width // 8] + stack[k + 1][width // 8]) / 2.0
+        draw.text((width // 8, to_row(middle)), code, fill=(0, 0, 0, 255),
+                  font=font, anchor="lm")
+    for z in np.arange(np.ceil(bottom / 50.0) * 50.0, top, 50.0):
+        r = to_row(z)
+        # Отметки - на пластах, не у края картинки.
+        if to_row(stack[0][0]) + 12 < r < to_row(stack[-1][0]) - 12:
+            draw.line([(0, r), (24, r)], fill=(0, 0, 0, 255), width=2)
+            draw.text((30, r), "%.0f" % z, fill=(0, 0, 0, 255), font=font,
+                      anchor="lm")
+    # Название - в нижнем пласте, посередине.
+    middle = (stack[-2][width // 2] + stack[-1][width // 2]) / 2.0
+    draw.text((width // 2, to_row(middle)), "Разрез 3-3, синтетика",
+              fill=(255, 255, 255, 255), font=font, anchor="mm")
+    image.save(path)
+    return top, bottom
+
+
 def holes(surfaces, gx0, gy_top):
     """Скважины: устья, станции инклинометрии и интервалы по пересечению
     ствола с кровлями."""
@@ -314,6 +363,22 @@ def main():
             cx, cy, gx0 + WIDTH - 200, cy, gx0 + WIDTH - 200, gy_top - 200,
             cx, gy_top - 200, cx, cy)))
     cut.CreateFeature(f)
+    # Разрез с картинкой - параллельно разрезу 1-1, через вырез.
+    ya = gy_top - HEIGHT / 4
+    xa, xb = gx0 + 200, gx0 + WIDTH - 200
+    top, bottom = section_image(surfaces, gx0, gy_top, xa, xb, ya,
+                                os.path.join(OUT, "section_3.png"))
+    images = layer("images", ogr.wkbLineString,
+                   [("name", ogr.OFTString), ("image", ogr.OFTString),
+                    ("top", ogr.OFTReal), ("bottom", ogr.OFTReal)])
+    f = ogr.Feature(images.GetLayerDefn())
+    f.SetField("name", "Разрез 3-3")
+    f.SetField("image", "section_3.png")
+    f.SetField("top", top)
+    f.SetField("bottom", bottom)
+    f.SetGeometry(ogr.CreateGeometryFromWkt(
+        "LINESTRING (%f %f, %f %f)" % (xa, ya, xb, ya)))
+    images.CreateFeature(f)
     ds = None
     size = sum(os.path.getsize(os.path.join(OUT, n))
                for n in os.listdir(OUT))

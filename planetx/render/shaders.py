@@ -513,6 +513,32 @@ void main() {
 }
 """
 
+IMAGE_WALL_VERTEX = """
+#version 330 core
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec2 a_uv;
+uniform mat4 u_mvp;
+out vec2 v_uv;
+void main() {
+    gl_Position = u_mvp * vec4(a_position, 1.0);
+    v_uv = a_uv;
+}
+"""
+
+IMAGE_WALL_FRAGMENT = """
+#version 330 core
+in vec2 v_uv;
+uniform sampler2D u_image;
+out vec4 frag;
+void main() {
+    vec4 c = texture(u_image, v_uv);
+    if (c.a < 0.01) {
+        discard;
+    }
+    frag = c;
+}
+"""
+
 SUBSURFACE_FRAGMENT = """
 #version 330 core
 in vec4 v_color;

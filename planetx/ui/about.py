@@ -11,7 +11,7 @@ import html
 import os
 
 from qgis.PyQt.QtCore import Qt, QUrl
-from qgis.PyQt.QtGui import QIcon, QPixmap
+from qgis.PyQt.QtGui import QDesktopServices, QIcon, QPixmap
 from qgis.PyQt.QtWidgets import (QDialog, QDialogButtonBox, QHBoxLayout,
                                  QLabel, QTextBrowser, QVBoxLayout)
 
@@ -172,7 +172,11 @@ class AboutDialog(QDialog):
         logo.setAlignment(enum(Qt, "AlignmentFlag", "AlignTop"))
         text = QTextBrowser(self)
         text.setHtml(about_html())
-        text.setOpenExternalLinks(True)
+        # Ссылки открывает система: QTextBrowser сам открывает внутри
+        # себя ссылки file://, и руководство PDF выходило в окне текстом.
+        # Нашёл автор 4 октября 2026 года.
+        text.setOpenLinks(False)
+        text.anchorClicked.connect(QDesktopServices.openUrl)
         text.setFrameShape(enum(QTextBrowser, "Shape", "NoFrame"))
         text.setMinimumSize(560, 520)
         buttons = QDialogButtonBox(

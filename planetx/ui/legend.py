@@ -327,3 +327,57 @@ class CutawayLegend(QWidget):
             painter.setPen(TEXT)
             painter.drawText(PAD + box + 6, y + metrics.ascent(), text)
         painter.end()
+
+
+class BedsLegend(QWidget):
+    """Шкала подземного режима: пласты модели сверху вниз квадратами
+    своих цветов с кодами, ниже тоннели. items - [(цвет (r, g, b),
+    подпись)]."""
+
+    SWATCH = 12
+    COLUMN = 110  # логических пикселей на столбец
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(enum(Qt, "WidgetAttribute",
+                               "WA_TransparentForMouseEvents"))
+        self.items = []
+        self.hide()
+
+    def _layout(self):
+        """Строк в столбце и столбцов: не выше 12 строк."""
+        rows = min(len(self.items), 12) or 1
+        columns = (len(self.items) + rows - 1) // rows or 1
+        return rows, columns
+
+    def set_items(self, items):
+        self.items = list(items)
+        line = QFontMetrics(self.font()).height()
+        rows, columns = self._layout()
+        self.setFixedSize(columns * self.COLUMN + 2 * PAD,
+                          line * (rows + 1) + PAD)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+        painter.setBrush(BACKGROUND)
+        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        top = PAD // 2
+        painter.setPen(TEXT)
+        painter.drawText(PAD, top + metrics.ascent(), tr("Пласты"))
+        rows, _ = self._layout()
+        for n, (rgb, label) in enumerate(self.items):
+            x = PAD + (n // rows) * self.COLUMN
+            y = top + line * (n % rows + 1)
+            painter.setPen(QColor(60, 60, 60))
+            painter.setBrush(QColor(*rgb))
+            painter.drawRect(QRectF(x, y + (line - self.SWATCH) / 2.0,
+                                    self.SWATCH, self.SWATCH))
+            painter.setPen(TEXT)
+            painter.drawText(int(x + self.SWATCH + 6),
+                             int(y + metrics.ascent()), label)
+        painter.end()

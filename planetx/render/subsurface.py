@@ -15,10 +15,12 @@ import ctypes
 import numpy as np
 from OpenGL import GL
 
+from ..core.subsurface import IMAGE_VERTEX
 from ..core.tiling import AMBIENT
 from . import gpu
 from .buildings import _Buffers, _latlon, light_at
-from .shaders import SUBSURFACE_FRAGMENT, SUBSURFACE_VERTEX
+from .shaders import (IMAGE_WALL_FRAGMENT, IMAGE_WALL_VERTEX,
+                      SUBSURFACE_FRAGMENT, SUBSURFACE_VERTEX)
 
 UNIFORMS = ("u_mvp", "u_light", "u_ambient")
 
@@ -138,3 +140,117 @@ class Subsurface:
                 GL.glDepthMask(GL.GL_TRUE)
                 GL.glEnable(GL.GL_DEPTH_TEST)
         self.drawn = len(items)
+
+
+class _Wall:
+    """Стенка с картинкой в видеокарте: буферы и текстура."""
+
+    def __init__(self, center, vertices, indices, rgba):
+        vertices = np.ascontiguousarray(vertices)
+        indices = np.ascontiguousarray(indices, dtype=np.uint32)
+        self.center = center
+        self.count = len(indices)
+        gl = gpu.gl
+        self.vao = gl.gen_names("glGenVertexArrays", 1)[0]
+        self.vbo, self.ebo = gl.gen_names("glGenBuffers", 2)
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.buffer_data(GL.GL_ARRAY_BUFFER, vertices)
+        gl.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, self.ebo)
+        gl.buffer_data(GL.GL_ELEMENT_ARRAY_BUFFER, indices)
+        stride = IMAGE_VERTEX.itemsize
+        for index, size, field in ((0, 3, "position"), (1, 2, "uv")):
+            gl.glEnableVertexAttribArray(index)
+            gl.glVertexAttribPointer(
+                index, size, GL.GL_FLOAT, GL.GL_FALSE, stride,
+                ctypes.c_void_p(IMAGE_VERTEX.fields[field][1]))
+        gl.glBindVertexArray(0)
+        self.texture = gpu.create_texture(rgba)
+
+    def delete(self):
+        gpu.gl.delete_names("glDeleteVertexArrays", [self.vao])
+        gpu.gl.delete_names("glDeleteBuffers", [self.vbo, self.ebo])
+        gpu.delete_texture(self.texture)
+
+
+class ImageWalls:
+    """Разрезы с картинками: вертикальные стенки вдоль линий, на них
+    натянута картинка разреза (core.subsurface.image_wall). Рисуются
+    вместе с прочим подземным, до тайлов, с проверкой глубины, видны
+    с обеих сторон."""
+
+    def __init__(self):
+        self.program = None
+        self.locations = {}
+        self.walls = []
+        self.source = []  # стенки окна: (центр, вершины, индексы, rgba)
+        self.pending = None  # стенки, ждущие загрузки в видеокарту
+        self.drawn = 0
+
+    @property
+    def active(self):
+        return bool(self.walls) or bool(self.pending)
+
+    def init_gl(self):
+        self.program = gpu.build_program(IMAGE_WALL_VERTEX,
+                                         IMAGE_WALL_FRAGMENT)
+        self.locations = {name: GL.glGetUniformLocation(self.program, name)
+                          for name in ("u_mvp", "u_image")}
+
+    def release_gl(self):
+        for wall in self.walls:
+            wall.delete()
+        self.walls = []
+        # Стенки возвращаются в очередь: после смены контекста они
+        # загружаются снова.
+        self.pending = list(self.source) if self.source else None
+        if self.program is not None:
+            GL.glDeleteProgram(self.program)
+        self.program = None
+
+    def set_walls(self, walls):
+        """Новые стенки, [] - убрать. В видеокарту - в кадре."""
+        self.source = list(walls)
+        self.pending = list(walls)
+
+    def _upload(self):
+        for wall in self.walls:
+            wall.delete()
+        self.walls = [_Wall(*item) for item in self.pending]
+        self.pending = None
+
+    def draw(self, camera):
+        self.drawn = 0
+        if self.program is None:
+            return
+        if self.pending is not None:
+            self._upload()
+        if not self.walls:
+            return
+        mvps = np.ascontiguousarray(
+            camera.tiles_mvp([wall.center for wall in self.walls]),
+            dtype=np.float32)
+        loc = self.locations
+        gl = gpu.gl
+        gl.glUseProgram(self.program)
+        gl.glUniform1i(loc["u_image"], 0)
+        gl.glActiveTexture(GL.GL_TEXTURE0)
+        gl.glEnable(GL.GL_BLEND)
+        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                               GL.GL_ZERO, GL.GL_ONE)
+        base = mvps.ctypes.data
+        stride = mvps.strides[0]
+        null = ctypes.c_void_p(0)
+        try:
+            for i, wall in enumerate(self.walls):
+                GL.glBindTexture(GL.GL_TEXTURE_2D, wall.texture)
+                gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
+                                    ctypes.c_void_p(base + stride * i))
+                gpu._bind_vao(wall.vao)
+                gpu._draw_elements(GL.GL_TRIANGLES, wall.count,
+                                   GL.GL_UNSIGNED_INT, null)
+        finally:
+            gpu._bind_vao(0)
+            GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+            gl.glDisable(GL.GL_BLEND)
+        self.drawn = len(self.walls)

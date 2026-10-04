@@ -4806,6 +4806,137 @@ def quakes_off():
 
 
 @check(15000)
+def vegas_open():
+    # Демо «Тоннели Vegas Loop» из меню значка «Демо».
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Тоннели Vegas Loop", "Vegas Loop tunnels"))
+    action.trigger()
+    result["vegas"] = {"icon": window.toolbar.subsurface.isVisible(),
+                       "started": window.subsurface.job is not None
+                       or window.subsurface.model is not None}
+
+
+@check(3000)
+def vegas_wait():
+    window = state["window"]
+    if window.subsurface.job is not None:
+        return 500
+
+
+@check(3000)
+def vegas_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["vegas"]
+    model = window.subsurface.model
+    out["tunnels"] = len(model.tunnels) if model else None
+    out["missing"] = model.missing if model else None
+    out["status"] = window.subsurface.dialog.status.text() \
+        if window.subsurface.dialog else None
+    out["vertices"] = view.subsurface.vertex_count()
+    out["drawn"] = view.subsurface.drawn
+    out["alpha"] = view.surface_alpha
+    out["places"] = len([p for p in window.myplaces.places
+                         if "Station" in p.name])
+    if model and model.tunnels:
+        _, pts, depth, diameter, _ = model.tunnels[0]
+        g = window.subsurface._ground(pts[:, 0], pts[:, 1])
+        out["first"] = {"depth": depth, "diameter": diameter,
+                        "ground": [round(float(np.min(g)), 1),
+                                   round(float(np.max(g)), 1)]}
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_vegas.png"))
+    # Окно «Объекты»: щелчок по пикселю оси первого тоннеля.
+    pick = next(p for p in window.subsurface.picks if p.kind == "tunnel")
+    pixels, front = view.camera.project(pick.xyz)
+    k = len(pixels) // 2
+    found = window.subsurface.identify(float(pixels[k][0]),
+                                       float(pixels[k][1]), 6.0)
+    out["identify"] = [(name, dict(values)) for name, values, _ in found[:1]]
+    out["identify_far"] = len(window.subsurface.identify(-500.0, -500.0,
+                                                         6.0))
+    # Разрез модели вдоль самого длинного тоннеля.
+    longest = max(model.tunnels, key=lambda t: len(t[1]))
+    pts = longest[1]
+    window._open_model_section("Тоннель", [tuple(pts[0]), tuple(pts[-1])])
+    found = window.model_section_dialog.chart.section
+    out["model_section"] = {
+        "tunnels": len(found.tunnels) if found else None,
+        "depth": [round(float(found.ground[0] - found.tunnels[0][2][0]), 1)]
+        if found and found.tunnels else None}
+    window.model_section_dialog.grab().save(
+        os.path.join(TEMP, "planetx_vegas_section.png"))
+    window.model_section_dialog.close()
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(8000)
+def template_make():
+    # Кнопка «Создать шаблон…» без окна выбора файла: шаблон у точки
+    # взгляда над Пермью и его постройка.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(58.01, 56.25, 3000.0, 0.0, 55.0))
+    window.subsurface.open_dialog()
+    path = os.path.join(TEMP, "planetx_template.gpkg")
+    window.subsurface.make_template(path)
+    from qgis.core import QgsProject
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        "Шаблон подземного")
+    result["template"] = {"exists": os.path.exists(path),
+                          "group_layers": len(group.findLayers())
+                          if group else None}
+
+
+@check(1000)
+def template_wait():
+    window = state["window"]
+    if window.subsurface.job is not None:
+        return 500
+    model = window.subsurface.model
+    out = result["template"]
+    out["model"] = None if model is None else {
+        "holes": len(model.holes), "tunnels": len(model.tunnels),
+        "sections": len(model.sections), "rings": len(model.rings),
+        "images": len(model.images), "beds": model.beds,
+        "missing": model.missing}
+    out["status"] = window.subsurface.dialog.status.text()
+    out["gl"] = dict(window.view.gl_errors)
+    window.grab().save(os.path.join(TEMP, "planetx_template.png"))
+    window.subsurface.clear()
+
+
+@check(15000)
+def subsurface_tour():
+    # Тур демо «Пермские отложения»: описание остановки под кнопками.
+    window = state["window"]
+    key = window.open_demo("subsurface")
+    stops = window._tour_stops(key)
+    window.tour.start(stops)
+    bar = window.tour.bar
+    result["subsurface_tour"] = {
+        "stops": [s.name for s in stops],
+        "caption": bar.caption.text(), "caption_shown": bar.caption
+        .isVisible()}
+
+
+@check(1000)
+def subsurface_tour_check():
+    window = state["window"]
+    window.tour.play_from(2)
+    bar = window.tour.bar
+    out = result["subsurface_tour"]
+    out["caption_3"] = bar.caption.text()
+    window.grab().save(os.path.join(TEMP, "planetx_subsurface_tour.png"))
+    window.tour.stop()
+    window.subsurface.clear()
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(15000)
 def subsurface_open():
     # Подземный режим, шаг 4 плана фазы 3: демо из меню значка «Демо».
     window = state["window"]
@@ -4869,6 +5000,23 @@ def subsurface_check():
     view.doneCurrent()
     view.grabFramebuffer().save(os.path.join(TEMP,
                                              "planetx_subsurface.png"))
+    out["images"] = len(model.images) if model else None
+    out["legend"] = [window.beds_legend.isVisible(),
+                     len(window.beds_legend.items)]
+    out["beds"] = list(model.beds) if model else None
+    out["source"] = window.subsurface.settings.get("source")
+    window.grab().save(os.path.join(TEMP, "planetx_subsurface_window.png"))
+    out["image_walls"] = view.image_walls.drawn
+    # Окно «Объекты»: щелчок по середине ствола первой скважины.
+    pick = next((p for p in window.subsurface.picks if p.kind == "hole"),
+                None)
+    if pick is not None:
+        pixels, front = view.camera.project(pick.xyz)
+        k = len(pixels) // 2
+        found = window.subsurface.identify(float(pixels[k][0]),
+                                           float(pixels[k][1]), 6.0)
+        out["identify"] = [(name, dict(values))
+                           for name, values, _ in found[:1]]
     # Замер кадров по вариантам: PLANETX_SS_VARIANT=opaque - поверхность
     # непрозрачна, none - подземного нет, та же камера.
     variant = os.environ.get("PLANETX_SS_VARIANT", "")
@@ -4881,13 +5029,245 @@ def subsurface_check():
     _swing_start("ss_top")
 
 
+@check(8000)
+def image_view():
+    # Разрез 3-3 с картинкой вблизи: камера к югу от его середины
+    # смотрит на север, в вырез.
+    import numpy as np
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    if "ss_top_swing" in state:
+        # Качание камеры для замера кадров идёт, если шаг его отчёта
+        # не запускался.
+        _swing_report("ss_top")
+    model = window.subsurface.model
+    _, pts, _, _, _ = model.images[0]
+    lat, lon = (float(v) for v in np.mean(pts, axis=0))
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat - 0.003, lon + 0.012, 1800.0,
+                                        0.0, 70.0))
+    window.view.update()
+
+
+@check(1000)
+def image_view_check():
+    window = state["window"]
+    view = window.view
+    result.setdefault("subsurface", {})["image_close"] = {
+        "drawn": view.image_walls.drawn, "gl": dict(view.gl_errors)}
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_image_wall.png"))
+
+
+
+@check(3000)
+def subsurface_toggle():
+    # Геология - обычные слои глобуса: флажок устьев снят - скважин
+    # в 3D нет, наложение геологические слои не рисует.
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result.setdefault("subsurface", {})
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        "Пермские отложения")
+    collar = [node.layer() for node in group.findLayers()
+              if node.layer().name() == "collar"]
+    used = set(window.subsurface.sync_project(window._shown_in_order()))
+    out["overlay_has_geology"] = bool(used & set(window._applied_layers
+                                                 or ()))
+    state["collar_id"] = collar[0].id() if collar else None
+    window.set_layer_shown(state["collar_id"], False)
+    window.refresh()
+
+
+@check(3000)
+def subsurface_toggle_check():
+    window = state["window"]
+    out = result["subsurface"]
+    if window.subsurface.job is not None:
+        return 500
+    model = window.subsurface.model
+    out["holes_after_uncheck"] = len(model.holes) if model else None
+    out["horizons_after_uncheck"] = len(model.horizons) if model else None
+    window.set_layer_shown(state["collar_id"], True)
+    window.refresh()
+
+
+@check(3000)
+def subsurface_style():
+    # Стиль из QGIS: раскраска псевдоцветом у кровли roof_05, слой
+    # устьев полупрозрачный. Перерисовка слоёв пересобирает модель.
+    from qgis.core import (QgsColorRampShader, QgsProject,
+                           QgsRasterShader,
+                           QgsSingleBandPseudoColorRenderer)
+    from qgis.PyQt.QtGui import QColor
+    window = state["window"]
+    layers = {layer.name(): layer for layer in
+              QgsProject.instance().mapLayers().values()}
+    roof = layers["roof_05"]
+    stats = roof.dataProvider().bandStatistics(1)
+    ramp = QgsColorRampShader(stats.minimumValue, stats.maximumValue)
+    ramp.setColorRampItemList([
+        QgsColorRampShader.ColorRampItem(stats.minimumValue,
+                                         QColor(255, 0, 0)),
+        QgsColorRampShader.ColorRampItem(stats.maximumValue,
+                                         QColor(255, 255, 0))])
+    shader = QgsRasterShader()
+    shader.setRasterShaderFunction(ramp)
+    roof.setRenderer(QgsSingleBandPseudoColorRenderer(
+        roof.dataProvider(), 1, shader))
+    roof.triggerRepaint()
+    layers["collar"].setOpacity(0.5)
+    layers["collar"].triggerRepaint()
+
+
+@check(3000)
+def subsurface_style_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    if window.subsurface.job is not None:
+        return 500
+    out = result.setdefault("subsurface", {})
+    out["stale_auto"] = [window._layers_stale, window.auto_refresh,
+                         window.refresh_timer.isActive()]
+    model = window.subsurface.model
+    styled = [h.code for h in model.horizons if h.colors is not None]
+    out["styled_roofs"] = styled
+    out["collar_alpha"] = model.alpha.get("collar")
+    view = window.view
+    out["after_restyle"] = {
+        "surface_alpha": view.surface_alpha,
+        "opacity": window.subsurface.settings.get("opacity"),
+        "cut": window.subsurface.settings.get("cut"),
+        "cut_shown": view.gibs["cut"].shown,
+        "drawn": view.subsurface.drawn}
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_subsurface_style.png"))
+    layers = {layer.name(): layer for layer in
+              QgsProject.instance().mapLayers().values()}
+    layers["collar"].setOpacity(1.0)
+
+
+@check(3000)
+def subsurface_places():
+    # Вырез и стенка разреза по меткам, нарисованным на глобусе.
+    from planetx.core.features import Shape
+    window = state["window"]
+    if "ss_top_swing" in state:
+        _swing_report("ss_top")
+    manager = window.subsurface
+    south, north, west, east = manager.model.box()
+    mid_lat, mid_lon = (south + north) / 2, (west + east) / 2
+    ring = [(south + 0.001, west + 0.002), (south + 0.001, mid_lon),
+            (mid_lat, mid_lon), (mid_lat, west + 0.002)]
+    cut_key = window.myplaces.add(Shape("polygon", ring, name="Вырез пробы"))
+    line_key = window.myplaces.add(Shape(
+        "line", [(mid_lat - 0.004, west + 0.003),
+                 (mid_lat - 0.004, mid_lon - 0.003)], name="Стенка пробы"))
+    state["place_keys"] = (cut_key, line_key)
+    out = result.setdefault("subsurface", {})
+    before = manager.view.subsurface.vertex_count()
+    state["places_before"] = before
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_places_0.png"))
+    window._place_action("model_cut", cut_key)
+    window._place_action("model_wall", line_key)
+    out["places"] = {
+        "parts": dict(manager.place_parts),
+        "mask_rings": len(manager._mask_key[1]) if manager._mask_key
+        else None,
+        "vertices_grew": manager.view.subsurface.vertex_count() > before,
+        "message": window.message[0]}
+
+
+@check(3000)
+def subsurface_places_check():
+    from planetx.core.features import Shape
+    window = state["window"]
+    manager = window.subsurface
+    out = result["subsurface"]["places"]
+    if not state.get("places_waited"):
+        # Маска выреза строится тайлами, кадр - когда они пришли.
+        state["places_waited"] = True
+        return 4000
+    out["vertices_grew"] = window.view.subsurface.vertex_count() \
+        > state["places_before"]
+    view = window.view
+    import traceback
+    stuck = list(manager.tiles.running.values()) if manager.tiles else []
+    out["stuck_errors"] = [
+        "".join(traceback.format_exception(f.exception()))[-600:]
+        for f in stuck if f.done() and f.exception() is not None]
+    out["view_state"] = {
+        "model": manager.model is not None,
+        "cut_shown": view.gibs["cut"].shown,
+        "cut_textures": len(view.gibs["cut"].textures),
+        "surface_alpha": view.surface_alpha, "drawn": view.subsurface.drawn,
+        "tiles": None if manager.tiles is None else [
+            len(manager.tiles.queue), len(manager.tiles.running),
+            view.gibs["cut"].loader is manager.tiles,
+            manager.tiles.pool is not None],
+        "pose": [round(view.navigator.pose.lat, 4),
+                 round(view.navigator.pose.lon, 4),
+                 round(view.navigator.pose.distance)]}
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_subsurface_places.png"))
+    cut_key, line_key = state["place_keys"]
+    # Правка формы метки выреза пересобирает модель.
+    old_key = manager._places_key
+    place = window.myplaces.find(cut_key)
+    pts = list(place.shape.points)
+    pts[2] = (pts[2][0] + 0.002, pts[2][1] + 0.003)
+    window.myplaces.set_shape(cut_key, place.shape._replace(points=pts))
+    out["rebuilt_on_edit"] = manager._places_key != old_key
+    window._place_action("model_cut", cut_key)
+    window._place_action("model_wall", line_key)
+    out["parts_after_off"] = dict(manager.place_parts)
+    state["places_off_at"] = time.monotonic()
+    out["mask_rings_after_off"] = len(manager._mask_key[1]) \
+        if manager._mask_key else None
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(4000)
+def subsurface_places_off():
+    window = state["window"]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_places_2.png"))
+    cut_key, line_key = state["place_keys"]
+    window.myplaces.remove(cut_key)
+    window.myplaces.remove(line_key)
+
+
+@check(1000)
+def model_section_open():
+    # Окно «Разрез модели» по пути через середину модели с запада на
+    # восток: пласты, скважины и картинка не нужна - только модель.
+    window = state["window"]
+    model = window.subsurface.model
+    south, north, west, east = model.box()
+    # Через первый ряд скважин: ряды стоят через 700 м.
+    lat = model.holes[0][1]
+    window._open_model_section("Проба", [(lat, west), (lat, east)])
+    dialog = window.model_section_dialog
+    found = dialog.chart.section
+    out = result.setdefault("subsurface", {})
+    out["model_section"] = {
+        "shown": dialog.isVisible(),
+        "beds": len(found.beds) if found else None,
+        "holes": len(found.holes) if found else None,
+        "length": round(float(found.distance[-1])) if found else None,
+        "stats": dialog.stats.text()}
+    dialog.grab().save(os.path.join(TEMP, "planetx_model_section.png"))
+    dialog.close()
+
 @check(500)
 def subsurface_under():
     # Камера под землёй: точка взгляда на низу модели, глаз ниже рельефа.
     from planetx.core.navigation import Pose
     window = state["window"]
     out = result["subsurface"]
-    out["swing_over_model"] = _swing_report("ss_top")
+    if "ss_top_swing" in state:
+        out["swing_over_model"] = _swing_report("ss_top")
     settings = dict(window.subsurface.settings, under=True)
     window.subsurface.set_options(settings)
     nav = window.view.navigator

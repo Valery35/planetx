@@ -128,6 +128,74 @@ class TestHelpers(unittest.TestCase):
         self.assertEqual(len(floor.indices), 2)
 
 
+class TestTunnel(unittest.TestCase):
+    """Тоннель под рельефом: глубина по доле длины линии."""
+
+    def test_along_is_share_of_length(self):
+        share = ss.along([0.0, 0.0, 0.0], [0.0, 0.001, 0.003])
+        self.assertTrue(np.allclose(share, [0.0, 1.0 / 3.0, 1.0]))
+        self.assertTrue(np.allclose(ss.along([1.0], [2.0]), [0.0]))
+
+    def test_ramp_goes_from_portal_to_depth(self):
+        ground = np.array([600.0, 610.0, 620.0])
+        z = ss.tunnel_z(ground, 0.0, 12.0, [0.0, 0.5, 1.0])
+        self.assertTrue(np.allclose(z, [600.0, 604.0, 608.0]))
+        flat = ss.tunnel_z(ground, 12.0, 12.0, [0.0, 0.5, 1.0])
+        self.assertTrue(np.allclose(flat, ground - 12.0))
+
+
+class TestImageWall(unittest.TestCase):
+    """Стенка разреза с картинкой вдоль линии."""
+
+    def test_wall_spans_line_and_height(self):
+        lats = [58.0, 58.0, 58.0]
+        lons = [56.0, 56.005, 56.02]
+        center, vertices, indices = ss.image_wall(lats, lons, 100.0, -300.0)
+        self.assertEqual(len(vertices), 6)
+        self.assertEqual(len(indices), 12)
+        # Картинка по длине: u в точках - доля длины, v - верх 0, низ 1.
+        self.assertTrue(np.allclose(vertices["uv"][:3, 0], [0, 0.25, 1]))
+        self.assertTrue(np.allclose(vertices["uv"][:3, 1], 0.0))
+        self.assertTrue(np.allclose(vertices["uv"][3:, 1], 1.0))
+        top = vertices["position"][0] + center
+        bottom = vertices["position"][3] + center
+        self.assertAlmostEqual(float(np.linalg.norm(top - bottom)), 400.0,
+                               places=1)
+
+
+class TestToLine(unittest.TestCase):
+    """Точки модели на разрезе вдоль линии."""
+
+    def test_along_and_offset(self):
+        lons = np.linspace(56.0, 56.1, 101)
+        lats = np.full(101, 58.0)
+        distance = np.linspace(0.0, 5000.0, 101)
+        # Точка над серединой линии, в 0.001° к северу (около 111 м).
+        along, gap = ss.to_line(lats, lons, distance, [58.001], [56.05])
+        self.assertAlmostEqual(float(along[0]), 2500.0)
+        self.assertAlmostEqual(float(gap[0]), 111.2, delta=0.5)
+
+
+class TestNearest(unittest.TestCase):
+    """Ось ствола или тоннеля под курсором для окна «Объекты»."""
+
+    def test_nearest_segment_and_share(self):
+        pixels = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]
+        found = ss.nearest_on_screen(pixels, [True] * 3, 10.0, 7.0)
+        self.assertEqual(found[1], 1)
+        self.assertAlmostEqual(found[0], 0.0)
+        self.assertAlmostEqual(found[2], 0.7)
+        found = ss.nearest_on_screen(pixels, [True] * 3, 4.0, 3.0)
+        self.assertEqual((found[1], round(found[2], 2)), (0, 0.4))
+        self.assertAlmostEqual(found[0], 3.0)
+
+    def test_segment_behind_camera_is_skipped(self):
+        pixels = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0)]
+        found = ss.nearest_on_screen(pixels, [True, True, False], 10.0, 7.0)
+        self.assertEqual(found[1], 0)
+        self.assertIsNone(ss.nearest_on_screen(pixels, [False] * 3, 0, 0))
+
+
 class TestInside(unittest.TestCase):
 
     def test_square(self):

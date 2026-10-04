@@ -1,0 +1,42 @@
+[
+ {
+  "name": "Central Underground Station",
+  "lat": 36.1313431,
+  "lon": -115.152974
+ },
+ {
+  "name": "Encore Station",
+  "lat": 36.1292178,
+  "lon": -115.1632076
+ },
+ {
+  "name": "LVCC Central Plaza Station",
+  "lat": 36.1308311,
+  "lon": -115.1533335
+ },
+ {
+  "name": "LVCC South Station",
+  "lat": 36.1283899,
+  "lon": -115.1465589
+ },
+ {
+  "name": "Resorts World Station",
+  "lat": 36.1335636,
+  "lon": -115.1658246
+ },
+ {
+  "name": "Rivera Station",
+  "lat": 36.1358849,
+  "lon": -115.1596479
+ },
+ {
+  "name": "West Station",
+  "lat": 36.1332064,
+  "lon": -115.1599936
+ },
+ {
+  "name": "Westgate Resort Station",
+  "lat": 36.1358577,
+  "lon": -115.1526863
+ }
+]

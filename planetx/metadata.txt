@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.31.0
+version=0.32.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.31.0 A topic in the Search line for which no places are
+changelog=0.32.0 The Subsurface mode icon shows drill holes along
+      their survey, bed roofs, section walls with images, tunnels and
+      a cut block under the surface, with a transparent surface and
+      a camera underground. The data are ordinary project layers,
+      checked layers go under the globe in 3D and take their style
+      and labels from QGIS. A polygon of My Places cuts the model,
+      a path puts a section wall, the Model section window shows the
+      beds along a path. The Demo icon opens Permian deposits with
+      a tour and Vegas Loop tunnels. The Manual link of the About
+      window opens the PDF in the system viewer.
+      0.31.0 A topic in the Search line for which no places are
       found, for example Voyages of Columbus, turns into placemarks at
       once. Placemarks that the assistant proposes in a conversation
       show below the Search line with the Write to My Places link.

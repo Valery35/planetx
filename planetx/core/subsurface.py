@@ -23,9 +23,11 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
+    from . import ellipsoid
     from .buildings import VERTEX
     from .ellipsoid import geodetic_to_ecef, surface_normal
 except ImportError:  # headless-тесты
+    import ellipsoid
     from buildings import VERTEX
     from ellipsoid import geodetic_to_ecef, surface_normal
 
@@ -274,6 +276,98 @@ def densify(points, step):
         share = np.arange(1, count + 1)[:, None] / count
         out.append(a + (b - a) * share)
     return np.vstack(out)
+
+
+def along(lats, lons):
+    """Доля длины ломаной от начала до каждой точки, от 0 до 1. Длина -
+    по шару радиуса эллипсоида, хватает для линий в километры."""
+    lats = np.radians(np.asarray(lats, dtype=np.float64))
+    lons = np.radians(np.asarray(lons, dtype=np.float64))
+    if len(lats) < 2:
+        return np.zeros(len(lats))
+    dy = np.diff(lats)
+    dx = np.diff(lons) * np.cos((lats[1:] + lats[:-1]) / 2.0)
+    run = np.concatenate([[0.0], np.cumsum(np.hypot(dx, dy))])
+    return run / run[-1] if run[-1] > 0.0 else np.zeros(len(lats))
+
+
+# Вершина стенки с картинкой: смещение от центра и место в картинке.
+IMAGE_VERTEX = np.dtype([("position", np.float32, 3),
+                         ("uv", np.float32, 2)])
+
+
+def image_wall(lats, lons, tops, bottoms):
+    """Вертикальная стенка вдоль линии для картинки разреза: (центр
+    в ECEF, вершины IMAGE_VERTEX, индексы). tops, bottoms - высоты верха
+    и низа на экране в точках линии. Картинка ложится по длине линии
+    слева направо, верх картинки - вверху стенки."""
+    lats = np.asarray(lats, dtype=np.float64)
+    lons = np.asarray(lons, dtype=np.float64)
+    top = ecef(lats, lons, np.broadcast_to(tops, lats.shape))
+    bottom = ecef(lats, lons, np.broadcast_to(bottoms, lats.shape))
+    points = np.vstack([top, bottom])
+    center = points.mean(axis=0)
+    n = len(lats)
+    share = along(lats, lons)
+    vertices = np.zeros(2 * n, dtype=IMAGE_VERTEX)
+    vertices["position"] = (points - center).astype(np.float32)
+    vertices["uv"][:n, 0] = share
+    vertices["uv"][n:, 0] = share
+    vertices["uv"][n:, 1] = 1.0
+    i = np.arange(n - 1, dtype=np.uint32)
+    indices = np.column_stack([i, i + n, i + 1, i + 1, i + n, i + n + 1])
+    return center, vertices, indices.ravel()
+
+
+def to_line(line_lats, line_lons, distance, lats, lons):
+    """Точки (lats, lons) на разрезе вдоль линии с точками (line_lats,
+    line_lons) и расстояниями distance от начала: (расстояние вдоль
+    линии до ближайшей точки линии, удаление от неё) в единицах
+    distance и метрах. Шаг точек линии меньше полосы разреза."""
+    def unit(la, lo):
+        la = np.radians(np.asarray(la, dtype=np.float64))
+        lo = np.radians(np.asarray(lo, dtype=np.float64))
+        return np.stack([np.cos(la) * np.cos(lo), np.cos(la) * np.sin(lo),
+                         np.sin(la)], axis=-1)
+    line = unit(line_lats, line_lons)
+    points = unit(lats, lons).reshape(-1, 3)
+    dots = points @ line.T
+    nearest = np.argmax(dots, axis=1)
+    gap = np.arccos(np.clip(dots[np.arange(len(points)), nearest], -1.0,
+                            1.0))
+    radius = (2.0 * ellipsoid.A + ellipsoid.B) / 3.0
+    return np.asarray(distance, dtype=np.float64)[nearest], gap * radius
+
+
+def nearest_on_screen(pixels, front, px, py):
+    """Ближайшая к пикселю (px, py) точка ломаной на экране: (расстояние
+    в пикселях, номер отрезка, доля t вдоль него) или None. Отрезок
+    с концом за камерой не берётся."""
+    p = np.asarray(pixels, dtype=np.float64).reshape(-1, 2)
+    ok = np.asarray(front, dtype=bool)
+    if len(p) == 1:
+        return (float(np.hypot(p[0, 0] - px, p[0, 1] - py)), 0, 0.0) \
+            if ok[0] else None
+    a, b = p[:-1], p[1:]
+    seg = ok[:-1] & ok[1:]
+    if not np.any(seg):
+        return None
+    d = b - a
+    length2 = np.maximum((d ** 2).sum(axis=1), 1e-12)
+    t = np.clip(((px - a[:, 0]) * d[:, 0] + (py - a[:, 1]) * d[:, 1])
+                / length2, 0.0, 1.0)
+    gap = np.hypot(a[:, 0] + t * d[:, 0] - px, a[:, 1] + t * d[:, 1] - py)
+    gap = np.where(seg, gap, np.inf)
+    i = int(np.argmin(gap))
+    return float(gap[i]), i, float(t[i])
+
+
+def tunnel_z(ground, start, end, share):
+    """Отметки оси тоннеля: под рельефом ground на глубину, которая
+    меняется от start в начале линии до end в конце по доле длины
+    share. Спуск к порталу - линия от 0 до глубины тоннеля."""
+    depth = start + (end - start) * np.asarray(share, dtype=np.float64)
+    return np.asarray(ground, dtype=np.float64) - depth
 
 
 def floor_part(ring, alt, color):

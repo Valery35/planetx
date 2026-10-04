@@ -22,6 +22,8 @@
   уклон склонов. Экспозиция на равнинах Марса при пикселе высот 2.6 км
   давала пёструю рябь, поэтому в демо включён уклон. Шаг 5 плана
   фазы 3.
+- vegas - тоннели Vegas Loop компании The Boring Company в Лас-Вегасе
+  со станциями, данные - OpenStreetMap, tools/make_tunnel_demo.py.
 - mars - места посадок марсоходов и крупные формы рельефа Марса.
 - moon - места посадок «Аполлонов» и «Луноходов».
 - sky - созвездия и яркие объекты неба.
@@ -408,16 +410,73 @@ def subsurface():
     их собирает tools/make_subsurface_demo.py, открывает окно глобуса
     (GlobeWindow.open_demo). Масштаб рельефа 2 - выбор помощника."""
     title = "PlanetX: демо, пермские отложения"
-    root = KFolder(title, children=[KPlace(
-        "Пермские отложения", "point", [(59.45, 56.88)], color=ORANGE,
-        icon="flag", view=(59.445, 56.885, 9000.0, 30.0, 60.0),
-        description="Синтетические скважины, кровли пластов, разрезы "
-                    "и вырез блока. Окно - значок «Подземный режим».")])
+    # Остановки тура объясняют режим по шагам, описание видно под
+    # панелью тура. Координаты - из perm_subsurface.gpkg: вырез, разрез
+    # 3-3, скважина C-04 и первый ряд скважин. Виды - выбор помощника.
+    stops = (
+        ("1. Модель под поверхностью", "point", [(59.455, 56.88)],
+         (59.445, 56.885, 9000.0, 30.0, 60.0),
+         "Синтетический участок 4 на 3 км у Березников. Поверхность в "
+         "рамке модели полупрозрачная, под ней скважины, кровли пластов "
+         "и разрезы. Настройки - значок «Подземный режим»."),
+        ("2. Вырез блока", "point", [(59.4557, 56.8959)],
+         (59.452, 56.893, 3500.0, 30.0, 62.0),
+         "В северо-восточной четверти поверхность и кровли убраны. По "
+         "краю выреза видны пласты своих цветов, шкала «Пласты» внизу "
+         "слева называет их."),
+        ("3. Разрез с картинкой", "point", [(59.4566, 56.896)],
+         (59.4535, 56.896, 1800.0, 0.0, 70.0),
+         "Картинка разреза 3-3 натянута на стенку вдоль линии под "
+         "поверхностью. Так на модель ставится готовый геологический "
+         "разрез из файла PNG или JPG."),
+        ("4. Наклонная скважина C-04", "point", [(59.45995, 56.88476)],
+         (59.4585, 56.8848, 1200.0, 0.0, 68.0),
+         "Ствол идёт по инклинометрии, интервалы окрашены цветами "
+         "пластов. В режиме «Объекты» щелчок по стволу показывает пласт "
+         "и глубину в этой точке."),
+        ("5. Путь для разреза модели", "line",
+         [(59.4594, 56.845), (59.4594, 56.915)], None,
+         "В меню этого пути в «Моих метках» пункт «Разрез модели…» "
+         "открывает разрез вдоль него с пластами и скважинами в метрах."))
+    places = []
+    for name, kind, points, view, text in stops:
+        places.append(KPlace(name, kind, points,
+                             color=ORANGE if kind == "point" else YELLOW,
+                             width=3.0, icon="flag", view=view,
+                             description=text))
+    root = KFolder(title, children=places)
     view = dict(EARTH_VIEW, scale=2.0,
                 extras=dict(EARTH_VIEW["extras"], buildings=False))
     scene = Scene((59.445, 56.885, 9000.0, 30.0, 60.0), None, [], view,
                   title, "Пермские отложения")
     save("subsurface", scene, root)
+
+
+def vegas():
+    """Тоннели Vegas Loop: станции из planetx/demo/vegas/stations.json,
+    тоннели - таблица tunnels того же каталога, их собирает
+    tools/make_tunnel_demo.py из OpenStreetMap, строит подземный режим
+    (GlobeWindow.open_demo). Вид и прозрачность - выбор помощника."""
+    import json
+    title = "PlanetX: демо, тоннели Vegas Loop"
+    with open(os.path.join(DEMO, "vegas", "stations.json"),
+              encoding="utf-8") as fh:
+        stations = json.load(fh)
+    places = []
+    for s in stations:
+        # «Rivera» - написание в OpenStreetMap, станция у отеля Riviera.
+        name = s["name"].replace("Rivera", "Riviera")
+        places.append(KPlace(
+            name, "point", [(s["lat"], s["lon"])], color=BLUE, icon="rail",
+            view=(s["lat"], s["lon"], 600.0, 0.0, 60.0),
+            description="Станция Vegas Loop, The Boring Company. Данные - "
+                        "OpenStreetMap."))
+    root = KFolder(title, children=places)
+    view = dict(EARTH_VIEW, extras=dict(EARTH_VIEW["extras"],
+                                        buildings=False))
+    scene = Scene((36.1315, -115.1555, 1100.0, 20.0, 62.0), None, [], view,
+                  title, "Тоннели Vegas Loop")
+    save("vegas", scene, root)
 
 
 def main():
@@ -426,6 +485,7 @@ def main():
     jezero()
     japan()
     subsurface()
+    vegas()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,

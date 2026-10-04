@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.31.0.
+A 3D globe inside QGIS. PlanetX version 0.32.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -57,6 +57,12 @@ and atmosphere, from space down to single streets.
   the sector can be dragged with the mouse. The Section down… item in
   the menu of a path shows a section of the Earth along the path in its
   own window and as a wall on the globe.
+- **Subsurface mode.** Drill holes along their survey, bed roofs,
+  sections with images and tunnels from project layers go under the
+  globe surface with the QGIS style and labels. The surface becomes
+  transparent, a polygon of My Places cuts a block, the camera goes
+  underground. The Permian deposits and Vegas Loop tunnels demos show
+  the mode.
 - **Paleogeography.** The Paleogeography row shows the coastlines of
   the past, up to a billion years ago, after the plate motion model of
   the GPlates web service. A slider in the corner of the view sets the

@@ -42,7 +42,7 @@ from .buildings import pick as pick_buildings
 from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
-from .subsurface import Subsurface
+from .subsurface import ImageWalls, Subsurface
 from .quakes import Quakes
 from .constellations import Constellations
 from .sky import Sky
@@ -318,6 +318,8 @@ class GlobeView(QOpenGLWidget):
         # поверхности и пол навигации - функция высоты на экране или
         # None. С полом камера опускается под рельеф до низа модели.
         self.subsurface = Subsurface()
+        # Разрезы с картинками подземного режима.
+        self.image_walls = ImageWalls()
         # Разрез Земли: вынутый сектор (core.cutaway.Wedge или None)
         # и грани с оболочками - отдельный набор подземных сеток.
         self.wedge = None
@@ -1285,6 +1287,7 @@ class GlobeView(QOpenGLWidget):
         self.features.init_gl()
         self.buildings.init_gl()
         self.subsurface.init_gl()
+        self.image_walls.init_gl()
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
         self.section_wall.init_gl()
@@ -1306,6 +1309,7 @@ class GlobeView(QOpenGLWidget):
         self.features.release_gl()
         self.buildings.release_gl()
         self.subsurface.release_gl()
+        self.image_walls.release_gl()
         self.cutaway.release_gl()
         self.cutaway_slabs.release_gl()
         self.section_wall.release_gl()
@@ -1729,9 +1733,11 @@ class GlobeView(QOpenGLWidget):
         # Подземное - до поверхности: прозрачная поверхность ложится
         # поверх смешиванием, непрозрачная закрывает проверкой глубины.
         self.subsurface.prepare()
-        underground = self.subsurface.active and not self.show_holes
+        underground = (self.subsurface.active
+                       or self.image_walls.active) and not self.show_holes
         if underground:
             self.subsurface.draw(self.camera)
+            self.image_walls.draw(self.camera)
         wedge = self.wedge if not self.show_holes else None
         if wedge is not None:
             self._follow_wedge_gain()
@@ -2195,13 +2201,19 @@ class GlobeView(QOpenGLWidget):
         GL.glGetQueryObjectuiv(self.hole_query, GL.GL_QUERY_RESULT, result)
         return int(result[0])
 
-    def set_gibs(self, name, on, loader=None):
+    def set_gibs(self, name, on, loader=None, keep=False):
         """Показать слой GIBS с загрузчиком loader или скрыть его.
-        Прежние картинки освобождаются в следующем кадре."""
+        Прежние картинки освобождаются в следующем кадре. keep - они
+        рисуются, пока новый загрузчик не пришлёт замену: маска выреза
+        после пересборки модели не мигает непрозрачной поверхностью."""
         layer = self.gibs[name]
         layer.shown = bool(on)
         layer.loader = loader
-        layer.dropping = True
+        if keep and on:
+            layer.stale = set(layer.textures)
+            layer.wanted = frozenset()
+        else:
+            layer.dropping = True
         self.update()
 
     def add_gibs(self, name, key, levels):

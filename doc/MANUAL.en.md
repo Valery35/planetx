@@ -62,6 +62,7 @@ dragged with the mouse.
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
+| Subsurface mode | Drill holes, bed roofs, sections, tunnels and a block cut under the surface, see [Subsurface mode](#subsurface-mode) |
 | Demo | Ready scenes by body, see [Demo](#demo) |
 | Body | The menu of planets, moons, asteroids and Sky, see [Other bodies](#other-bodies) and [Starry sky](#starry-sky) |
 | View properties | Base map, terrain, labels, link with the map, update, coordinate format |
@@ -869,10 +870,150 @@ Insolation is computed only for the Earth.
 
 ---
 
+## Subsurface mode
+
+The Subsurface mode icon on the icon bar opens a window of the same
+name. The mode shows drill holes, bed roofs, section walls and a block
+cut under the surface.
+
+### Data
+
+The data are tables in the same layout as in Isoliner.
+
+| Table | Fields | What it sets |
+|---|---|---|
+| collar | hole_id, z, eoh, point geometry | Hole collar, collar elevation, end-of-hole depth along the hole |
+| interval | hole_id, from, to, code | Intervals along the hole, positive downward, code is the bed or lithology |
+| survey | hole_id, depth, azimuth, dip or zenith | Survey. Without it the hole is vertical |
+| beds | code, ord, color, surface | Order of beds from top to bottom, colour "#rrggbb", roof raster file |
+| sections | line geometry | Section lines |
+| cut | polygon geometry | Block cut |
+| images | name, image, top, bottom, line geometry | Image section: a PNG or JPG file relative to the folder of the GeoPackage file, elevations of the top and bottom of the image in metres |
+| tunnels | name, depth, depth_end, diameter, color, line geometry | Tunnel: depth of the axis below the surface at the start and the end of the line, diameter in metres, colour "#rrggbb" |
+
+Fields are also found by other common names, for example bhid, elev,
+td, from_m, to_m, litho. A dip angle with negative values is counted
+from the horizontal, -90 is straight down. A bed roof is a raster of
+elevations in metres in any coordinate system, GDAL reads it.
+
+Geological project layers show in 3D as ordinary globe layers. A
+layer is recognised by a table name from the list above or by its
+fields, for example a point layer with the fields hole_id and eoh is
+collars. A layer checked in Project layers goes under the surface, an
+unchecked box removes it. Such layers are not drawn as a flat image on
+the surface. A roof is a raster whose file is named in the surface
+field of the beds table. The interval, survey and beds tables are
+taken from the project by themselves, first from the same layer group.
+
+The path to a section image is relative to the folder of the file of
+its layer. When the project has several layers of one role, the top one
+in the layer tree is taken.
+
+The style comes from QGIS, as with ordinary layers:
+- a roof whose raster is coloured with a pseudocolour ramp, a palette
+  or RGB takes this colouring. A grey raster without settings takes
+  the bed colour from the beds table.
+- a hole without intervals and a tunnel take the colour of the feature
+  symbol when the layer style is categorized, graduated or rule-based.
+  With a single symbol the colour comes from the color field, without
+  it the mode uses its own colour.
+- the opacity of a QGIS layer is the opacity of its objects under the
+  surface.
+- the labels above the collars are the labels of the QGIS collar layer,
+  from a field or an expression. With the layer labels off there are
+  no labels.
+
+After the style or data of a layer is edited, the globe rebuilds the
+model as with ordinary layers. The Create template… button of the
+Subsurface mode window writes a GeoPackage file with all tables of the
+mode and an example at the view point - a drill hole with two intervals,
+a section, a tunnel and a cut - and adds it to the project as the
+Subsurface template group. The template tables are filled with your own
+data.
+
+### Display
+
+The model is built when at least one geological layer is checked. The
+globe loads the terrain heights under the model and puts it under the
+surface.
+
+- A drill hole follows the survey by the minimum curvature method.
+  Intervals take the colour of their bed, the layer label stands
+  above the collar.
+- A bed roof is a surface in the colour of the bed.
+- A tunnel is a tube of its diameter along the line below the
+  terrain. The depth changes from depth at the start of the line
+  to depth_end at its end, this sets a ramp to a portal. Without
+  depth_end the depth is constant, without diameter it is 3.7 m.
+- A section is a set of walls along the line from the terrain to the
+  model bottom, beds between the roofs have their own colours.
+- An image section is a vertical wall along the line from the top
+  elevation to the bottom elevation with the image stretched on it.
+  The left edge of the image is the start of the line, its top is the
+  top elevation. An image larger than 4096 pixels on the longer side
+  is scaled down.
+- The model bottom is the end of the deepest hole, without holes it
+  is 20 m below the deepest roof.
+
+Depth is stretched by the terrain scale, like the surface. With the
+terrain off, elevations are counted from the surface.
+
+The Surface opacity slider makes the terrain inside the model frame
+transparent, the drill holes and roofs show through it. Outside the
+frame the surface stays opaque. The Block cut checkbox removes the
+surface and the roofs inside the cut polygon. Walls with beds stand
+along the cut edge, a plane at the model bottom lies at its floor. The
+Camera under ground checkbox lets the camera go below the terrain down
+to the model bottom. Inside the model frame the camera then moves along
+its bottom. The window settings are kept in the project.
+
+A polygon of My Places cuts the model with the Model cut item of
+its menu, a path puts a wall with beds with the Model section wall
+item. Choosing the item again removes the cut or the wall. Editing
+the shape of the place changes the model at once. So a cut and a
+section are drawn right on the globe with the New placemark tool.
+
+The Beds legend in the bottom left corner of the view shows the beds
+of the model from top to bottom in their colours and the tunnels.
+
+In the Identify mode a click on a drill hole shows its number, the
+bed, the depth along the hole and below the collar, the elevation
+and the end of hole at the point under the cursor. A click on a
+tunnel shows its name, the depth and elevation of the axis and the
+diameter.
+
+The Model section… item of the path menu in My Places opens the window
+of the same name. The horizontal axis is the distance along the path,
+the vertical axis is the elevation in metres. The section shows the
+terrain, the beds between the roofs, the drill holes in the colours of
+their intervals and the tunnels at their diameter from a band along the
+path. The Band of holes and tunnels field sets the band width. The
+cursor over the chart marks the point on the globe.
+
+The subsurface demos put their data into the QGIS project as a group of
+ordinary layers and check them on the globe. The Permian deposits demo
+in the Demo icon opens a synthetic site
+near Berezniki, on the Verkhnekamsk deposit. It has 24 drill holes,
+9 bed roofs of the Verkhnekamsk
+section, two sections, a cut of the north-east quarter and the image
+section 3-3. The data are
+made up for the example, they are not a survey.
+
+The Vegas Loop tunnels demo opens the tunnels of The Boring Company
+under Las Vegas with their stations, about 8 km of lines. The
+routes and stations come from OpenStreetMap. OpenStreetMap has no
+depth, the tunnel axis is 12 m below the surface, about 40 feet
+after public information on the Las Vegas Convention Center
+tunnels, and ramps to the stations go from the surface down to
+this depth.
+
+---
+
 ## Tours
 
 A tour flies over the checked places of a folder in the list order,
-including nested folders.
+including nested folders. The description of the stop place shows
+below the buttons of the tour bar.
 
 - A place with a view of its own brings back its look point, range,
   heading and tilt.
@@ -1020,6 +1161,8 @@ under the list plays a tour over them. The folder can be deleted.
 |---|---|---|
 | Earth | Perm | Places with icons and the moments of a walk, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
 | Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
+| Earth | Permian deposits | A synthetic site near Berezniki with drill holes, roofs, sections and a cut. A tour of five stops explains the subsurface mode, see [Subsurface mode](#subsurface-mode) |
+| Earth | Vegas Loop tunnels | The Boring Company tunnels under Las Vegas with their stations, see [Subsurface mode](#subsurface-mode) |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |

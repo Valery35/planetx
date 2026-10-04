@@ -1377,55 +1377,13 @@ EN = {
         "The corners of the sector can be dragged with the mouse. The "
         "sector is placed anew each time the row is switched on.",
     "Пермские отложения": "Permian deposits",
+    "Тоннели Vegas Loop": "Vegas Loop tunnels",
     "Подземный режим": "Subsurface mode",
     "Подземный режим - скважины, горизонты, разрезы и вырез "
     "блока под поверхностью.":
         "Subsurface mode - drill holes, horizons, sections and a block "
         "cut under the surface.",
-    "Файл GeoPackage": "GeoPackage file",
-    "Таблицы collar, interval, survey, beds, sections и cut "
-    "в одном файле, как у Isoliner. Кровли пластов - растры, "
-    "их файлы названы в поле surface таблицы beds.":
-        "Tables collar, interval, survey, beds, sections and cut in one "
-        "file, as in Isoliner. Bed roofs are rasters, their files are "
-        "named in the surface field of the beds table.",
-    "Таблицы и растры кровель - слои текущего проекта.":
-        "The tables and the roof rasters are layers of the current "
-        "project.",
-    "Обзор…": "Browse…",
-    "Устья": "Collars",
-    "Точки устьев с полями hole_id, z - отметка устья, eoh - "
-    "глубина забоя по стволу.":
-        "Collar points with the fields hole_id, z - collar elevation, "
-        "eoh - end-of-hole depth along the hole.",
-    "Интервалы": "Intervals",
-    "Таблица hole_id, from, to, code. Глубины по стволу, "
-    "code - пласт или литология, от него цвет.":
-        "Table hole_id, from, to, code. Depths along the hole, code is "
-        "the bed or lithology and sets the colour.",
-    "Инклинометрия": "Survey",
-    "Таблица hole_id, depth, azimuth, dip или zenith. "
-    "Без неё скважины вертикальные.":
-        "Table hole_id, depth, azimuth, dip or zenith. Without it the "
-        "holes are vertical.",
     "Пласты": "Beds",
-    "Таблица code, ord, color - порядок пластов сверху "
-    "вниз и их цвета. Без неё цвет - по коду.":
-        "Table code, ord, color - the order of beds from top to bottom and "
-        "their colours. Without it the colour follows the code.",
-    "Разрезы": "Sections",
-    "Линии, вдоль которых строятся стенки разреза "
-    "между кровлями пластов.":
-        "Lines along which section walls are built between the bed "
-        "roofs.",
-    "Вырез": "Cut",
-    "Многоугольник выреза блока. Внутри него поверхность "
-    "и кровли убираются, по краю встают стенки.":
-        "Polygon of the block cut. The surface and the roofs are removed "
-        "inside it, walls stand along its edge.",
-    "Растры отметок кровель пластов. Код пласта - имя слоя.":
-        "Elevation rasters of bed roofs. The bed code is the layer name.",
-    "Кровли": "Roofs",
     "Непрозрачность поверхности. Меньше - сквозь рельеф видны "
     "скважины и кровли пластов.":
         "Opacity of the surface. A lower value shows the drill holes and "
@@ -1442,13 +1400,68 @@ EN = {
         "The camera goes below the terrain down to the model bottom inside "
         "the model frame. Over the model the camera moves along its "
         "bottom, not along the terrain.",
-    "Убрать подземное с глобуса.":
-        "Remove the subsurface objects from the globe.",
     "GeoPackage (*.gpkg)": "GeoPackage (*.gpkg)",
-    "Файл не найден.": "The file is not found.",
-    "Данных нет: нужны устья скважин или "
-    "кровли пластов.":
-        "No data: drill hole collars or bed roofs are needed.",
+    "Данных нет: нужны устья скважин, кровли пластов или тоннели.":
+        "No data: drill hole collars, bed roofs or tunnels are needed.",
+    "Тоннелей {count}.": "Tunnels: {count}.",
+    "Скважины, кровли пластов, разрезы, тоннели и картинки разрезов - "
+    "обычные слои проекта. Отмеченные в разделе «Слои проекта» встают под "
+    "поверхность глобуса. Чтобы посмотреть, как это выглядит, откройте "
+    "демо «Пермские отложения» и проведите тур кнопкой ▶ под «Моими "
+    "метками». Чтобы начать со своими данными, создайте шаблон у точки "
+    "взгляда.":
+        "Drill holes, bed roofs, sections, tunnels and section images are "
+        "ordinary project layers. Those checked in Project layers go under "
+        "the globe surface. To see how it looks, open the Permian deposits "
+        "demo and play its tour with the ▶ button under My Places. To start "
+        "with your own data, create a template at the view point.",
+    "Записать файл GeoPackage со всеми таблицами режима и примером у "
+    "точки взгляда - скважина, разрез, тоннель и вырез - и добавить его в "
+    "проект группой слоёв. Таблицы заполняются своими данными, глобус "
+    "показывает их после правки.":
+        "Write a GeoPackage file with all tables of the mode and an example "
+        "at the view point - a drill hole, a section, a tunnel and a cut - "
+        "and add it to the project as a group of layers. The tables are "
+        "filled with your own data, the globe shows them after editing.",
+    "Шаблон подземного": "Subsurface template",
+    "Разрезов с картинками {count}.": "Image sections: {count}.",
+    "Глубина оси": "Axis depth",
+    "Отметка оси": "Axis elevation",
+    "Диаметр": "Diameter",
+    "Тоннель": "Tunnel",
+    "Глубина по стволу": "Depth along hole",
+    "Глубина под устьем": "Depth below collar",
+    "Отметка": "Elevation",
+    "Глубина забоя": "End of hole",
+    "Пласт": "Bed",
+    "Скважина {name}": "Drill hole {name}",
+    "Подземное": "Subsurface",
+    "Разрез модели…": "Model section…",
+    "Стенка разреза модели": "Model section wall",
+    "Вырез модели": "Model cut",
+    "Вырез модели по «{name}».": "Model cut along \"{name}\".",
+    "Вырез модели по «{name}» убран.":
+        "Model cut along \"{name}\" removed.",
+    "Стенка разреза по «{name}».": "Section wall along \"{name}\".",
+    "Стенка разреза по «{name}» убрана.":
+        "Section wall along \"{name}\" removed.",
+    "Создать шаблон…": "Create template…",
+    "Создать шаблон": "Create template",
+    "Шаблон не записан: {error}": "Template not written: {error}",
+    "Разрез модели: {name}": "Model section: {name}",
+    "Разрез модели": "Model section",
+    "Полоса скважин и тоннелей": "Band of holes and tunnels",
+    "Ширина полосы вдоль линии, из которой скважины и тоннели "
+    "переносятся на разрез. Шире полоса - больше скважин, но "
+    "дальние лежат не там, где линия.":
+        "Width of the band along the line from which drill holes and "
+        "tunnels are moved onto the section. A wider band gives more holes, "
+        "but the far ones do not lie where the line is.",
+    "Нужны подземная модель и путь хотя бы из двух точек.":
+        "A subsurface model and a path of at least two points are needed.",
+    "Длина {length}. Скважин в полосе {holes}, тоннелей {tunnels}.":
+        "Length {length}. Holes in the band: {holes}, tunnels: {tunnels}.",
+    "рельеф {value}": "terrain {value}",
     "Скважин {holes}, кровель {horizons}, разрезов "
     "{sections}. Вершин {vertices}.":
         "Drill holes {holes}, roofs {horizons}, sections {sections}. "

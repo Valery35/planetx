@@ -72,8 +72,8 @@ from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
-from .legend import (CutawayLegend, InsolationLegend, QuakeLegend,
-                     SlopeLegend, TemperatureLegend)
+from .legend import (BedsLegend, CutawayLegend, InsolationLegend,
+                     QuakeLegend, SlopeLegend, TemperatureLegend)
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
@@ -97,7 +97,8 @@ from .folderprops import FolderDialog
 from .tilesource import TileSourceDialog
 from .viewshed import ResultTiles, ViewshedDialog, display_level
 from .insolation import InsolationDialog
-from .subsurface import DEFAULTS as SUBSURFACE_DEFAULTS, SubsurfaceManager
+from .subsurface import SubsurfaceManager, add_to_project, subsurface_ids
+from .subsection import ModelSectionDialog, build as model_section
 from .record import TourRecorder
 from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
@@ -465,6 +466,8 @@ class GlobeWindow(QWidget):
         self.legend.hide()
         self.slope_legend = SlopeLegend(self.view)
         self.slope_legend.hide()
+        # Пласты подземной модели.
+        self.beds_legend = BedsLegend(self.view)
         self.insolation_legend = InsolationLegend(self.view)
         self.insolation_legend.hide()
         self.quake_legend = QuakeLegend(self.view)
@@ -693,6 +696,7 @@ class GlobeWindow(QWidget):
             lambda: self._open_snapshot(True))
         # Подземный режим: скважины, кровли, разрезы, вырез блока.
         self.subsurface = SubsurfaceManager(self)
+        self.model_section_dialog = None
         self.toolbar.subsurface_clicked.connect(self.subsurface.open_dialog)
         self.myplaces.load()
         # Тур по отмеченным «Моим меткам».
@@ -1760,6 +1764,10 @@ class GlobeWindow(QWidget):
         force=False - как при флажке в панели «Слои»: слои проекта
         остаются прежними до кнопки «Обновить».
         """
+        if force and self.planet.earth and hasattr(self, "subsurface"):
+            # Геологические слои - в 3D, как обычные слои глобуса.
+            self.subsurface.sync_project(self._shown_in_order(),
+                                         restyle=self._layers_stale)
         layers = self._overlay_layers() if force else self._applied_layers
         if layers is None:
             layers = self._overlay_layers()
@@ -1807,7 +1815,13 @@ class GlobeWindow(QWidget):
     # Наложение.
 
     def _overlay_layers(self):
-        """Номера отмеченных слоёв проекта в порядке карты."""
+        """Номера отмеченных слоёв проекта в порядке карты, кроме
+        геологических - те идут в подземное (_apply_vector)."""
+        shown = self._shown_in_order()
+        under = subsurface_ids(shown)
+        return [i for i in shown if i not in under]
+
+    def _shown_in_order(self):
         return [layer.id() for layer in map_layers()
                 if layer.id() in self._shown]
 
@@ -1890,9 +1904,13 @@ class GlobeWindow(QWidget):
             bottom = self.quake_legend.y() - MARGIN // 2
         self.cutaway_legend.move(
             MARGIN, bottom - self.cutaway_legend.height())
-        # Ползунок палеогеографии - над всеми шкалами.
+        # Пласты подземной модели - над оболочками разреза.
         if self.cutaway_legend.isVisible():
             bottom = self.cutaway_legend.y() - MARGIN // 2
+        self.beds_legend.move(MARGIN, bottom - self.beds_legend.height())
+        # Ползунок палеогеографии - над всеми шкалами.
+        if self.beds_legend.isVisible():
+            bottom = self.beds_legend.y() - MARGIN // 2
         if self.attribution.x() < MARGIN + self.paleo_bar.width():
             bottom = min(bottom, self.attribution.y() - MARGIN // 2)
         self.paleo_bar.move(MARGIN, bottom - self.paleo_bar.height())
@@ -2014,8 +2032,9 @@ class GlobeWindow(QWidget):
         if added and self.new_shown and not self.follow:
             self._shown |= set(added)
             write_shown(self._shown)
-        # Перерисовка слоя меняет глобус, только если слой на нём.
-        if self._applied_layers:
+        # Перерисовка слоя меняет глобус, только если слой на нём:
+        # в наложении или в подземной модели из слоёв проекта.
+        if self._applied_layers or self.subsurface.from_project():
             self._layers_stale = True
         self._changed()
 
@@ -2428,6 +2447,9 @@ class GlobeWindow(QWidget):
 
     def _places_changed(self):
         self.panel.set_places(self.myplaces.tree())
+        # Метки, по которым режется подземная модель, могли измениться.
+        if hasattr(self, "subsurface"):
+            self.subsurface.places_changed()
         self._update_timebar()
         self._refresh_shapes()
 
@@ -2614,14 +2636,42 @@ class GlobeWindow(QWidget):
                 # За 30 суток очаги у этой линии лежат в 100-155 км от неё,
                 # полоса демо шире умолчания. Выбор помощника.
                 self.section_dialog.band.setValue(DEMO_QUAKE_BAND)
+        # Подземные демо кладут данные в проект QGIS группой обычных
+        # слоёв, глобус показывает их в 3D по флажкам «Слоёв проекта».
+        # Решение автора от 4 октября 2026 года.
         if name == "subsurface":
-            self.subsurface.start(dict(
-                SUBSURFACE_DEFAULTS, source="gpkg",
-                path=os.path.join(demo, "subsurface",
-                                  "perm_subsurface.gpkg"),
-                opacity=0.6, cut=True))
-            self.subsurface.open_dialog()
+            folder = os.path.join(demo, "subsurface")
+            self.subsurface_layers(
+                tr("Пермские отложения"),
+                os.path.join(folder, "perm_subsurface.gpkg"),
+                ("collar", "interval", "survey", "beds", "sections", "cut",
+                 "images"),
+                sorted(os.path.join(folder, f) for f in os.listdir(folder)
+                       if f.startswith("roof_") and f.endswith(".tif")),
+                opacity=0.6, cut=True)
+        if name == "vegas":
+            # Тоннели на 12 м под улицами видны сквозь полупрозрачную
+            # поверхность. Непрозрачность 0.5 - выбор помощника.
+            self.subsurface_layers(
+                tr("Тоннели Vegas Loop"),
+                os.path.join(demo, "vegas", "vegas_loop.gpkg"),
+                ("tunnels",), (), opacity=0.5, cut=False)
         return key
+
+    def subsurface_layers(self, title, path, tables, rasters, opacity, cut):
+        """Данные подземного - демо или шаблон - группа title в проекте
+        QGIS, слои отмечены на глобусе. Прежняя группа с тем же
+        названием заменяется."""
+        ids = add_to_project(title, path, tables, rasters)
+        for layer_id in ids:
+            self._shown.add(layer_id)
+            if self.follow:
+                set_visible_on_map(layer_id, True)
+        write_shown(self._shown)
+        self.subsurface.settings = dict(self.subsurface.settings,
+                                        opacity=opacity, cut=cut)
+        self._show_layers()
+        self.refresh()
 
     def open_scene(self, path=None):
         """Сцена из файла на глобус. Возвращает ключ папки её меток."""
@@ -3101,6 +3151,40 @@ class GlobeWindow(QWidget):
         self.view.update()
         return built, notes
 
+    def _open_model_section(self, title, points):
+        """Окно «Разрез модели» вдоль пути points: пласты, скважины
+        и тоннели подземной модели в метрах."""
+        points = list(points)
+        manager = self.subsurface
+
+        def provider(band):
+            if manager.model is None:
+                return None
+            return model_section(manager.model, manager._ground, points,
+                                 band)
+        if self.model_section_dialog is None:
+            self.model_section_dialog = ModelSectionDialog(title, provider,
+                                                           self)
+            self.model_section_dialog.point_hovered.connect(
+                self._model_section_hover)
+            self.model_section_dialog.finished.connect(
+                lambda *args: self._model_section_hover(None))
+        else:
+            self.model_section_dialog.set_source(title, provider)
+        self.model_section_dialog.show()
+        self.model_section_dialog.raise_()
+
+    def _model_section_hover(self, point):
+        """Точка разреза модели под курсором графика - метка на глобусе."""
+        if point is None:
+            self._section_mark = None
+        else:
+            lat, lon, distance = point
+            self._section_mark = MarkPlace(
+                -410000, tr("{value} м", value="{:.0f}".format(distance)),
+                "mark", 1, lat, lon)
+        self._update_tool_marks()
+
     def _section_closed(self, *args):
         """Окно «Разрез» закрыто: метка и стенка уходят с глобуса."""
         self._section_hover(None)
@@ -3269,6 +3353,7 @@ class GlobeWindow(QWidget):
         elif action == "tour":
             stop = self.place_stop(item, along=True)
             stop.time = item.view_time or item.time
+            stop.description = item.description or ""
             self.tour.start([stop])
         elif action == "properties":
             self._open_place_properties(item)
@@ -3279,6 +3364,23 @@ class GlobeWindow(QWidget):
                 self.view.want_tool_heights))
         elif action == "section":
             self._open_section(item.name, list(item.shape.points))
+        elif action == "model_section":
+            self._open_model_section(item.name, list(item.shape.points))
+        elif action in ("model_wall", "model_cut"):
+            # Метка режет подземную модель или ставит стенку разреза,
+            # повторный выбор убирает. Решение автора от 4 октября 2026
+            # года - вырез и разрез рисуются на глобусе.
+            on = self.subsurface.toggle_place(
+                key, "cut" if action == "model_cut" else "section")
+            names = {("model_cut", True): tr("Вырез модели по «{name}»."),
+                     ("model_cut", False): tr("Вырез модели по «{name}» "
+                                              "убран."),
+                     ("model_wall", True): tr("Стенка разреза по «{name}»."),
+                     ("model_wall", False): tr("Стенка разреза по «{name}» "
+                                               "убрана.")}
+            self.message = (names[(action, on)].format(
+                name=item.name or tr("Без названия")), time.monotonic())
+            self._show_state()
         elif action == "viewshed":
             self._open_viewshed(item)
         elif action == "insolation":
@@ -3597,6 +3699,7 @@ class GlobeWindow(QWidget):
             if place.visible and place.body == self.body_key():
                 stop = self.place_stop(place, along=True)
                 stop.time = place.view_time or place.time
+                stop.description = place.description or ""
                 stops.append(stop)
         return stops
 
@@ -3751,6 +3854,10 @@ class GlobeWindow(QWidget):
         groups = list(found)
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
+        under = self.subsurface.identify(
+            px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
+        if under:
+            groups.append((Group(tr("Подземное")), under))
         groups += self._identify_plates(lat, lon, tolerance)
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:

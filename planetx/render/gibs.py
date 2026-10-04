@@ -51,6 +51,9 @@ class GibsLayer:
         self.dropping = False  # освободить картинки в следующем кадре
         self.loader = None
         self.textures = {}
+        # Картинки прежнего загрузчика: рисуются, пока новый не прислал
+        # замену, но просятся у него заново (GlobeView.set_gibs, keep).
+        self.stale = set()
         self.used = {}
         self.pending = {}
         self.wanted = frozenset()
@@ -68,6 +71,7 @@ class GibsLayer:
         """Картинки в видеокарту, не больше count за кадр."""
         for key in sorted(self.pending, key=lambda k: k[0])[:count]:
             levels = self.pending.pop(key)
+            self.stale.discard(key)
             if key in self.textures:
                 pool.release(self.textures.pop(key))
             self.textures[key] = pool.acquire(levels)
@@ -87,7 +91,7 @@ class GibsLayer:
             else:
                 out.append((self.textures[found[0]], found[1]))
                 self.used[found[0]] = frame
-            if found is None or found[0] != own:
+            if found is None or found[0] != own or own in self.stale:
                 wanted[own] = -own[0]
         self.missing = len(wanted)
         keys = frozenset(wanted)
@@ -116,6 +120,7 @@ class GibsLayer:
         for texture in self.textures.values():
             pool.release(texture)
         self.textures.clear()
+        self.stale.clear()
         self.used.clear()
         self.pending.clear()
         self.wanted = frozenset()

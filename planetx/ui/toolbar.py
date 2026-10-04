@@ -35,9 +35,10 @@ def body_names():
             "iapetus": tr("Япет"),
             "ceres": tr("Церера"), "vesta": tr("Веста")}
 ICON_SIZE = QSize(20, 20)
-# Значок «Подземный режим» и демо «Пермские отложения» скрыты до
-# своего выпуска, решение автора от 3 октября 2026 года.
-SUBSURFACE = False
+# Значок «Подземный режим» и его демо. Были скрыты решением автора
+# от 3 октября 2026 года, открыты его решением от 4 октября 2026 года
+# вместе с демо «Тоннели Vegas Loop».
+SUBSURFACE = True
 STYLE = ("QFrame#planetxToolbar { background: rgba(250, 250, 250, 225); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
 DIRTY_STYLE = "QToolButton { background: #ff9f1c; border-radius: 3px; }"
@@ -164,7 +165,8 @@ class ViewToolbar(QFrame):
                 (tr("Земля"), (("perm", tr("Пермь")),
                                ("bocachica", tr("Бока-Чика, Starbase")),
                                ("japan", tr("Японский жёлоб")),
-                               ("subsurface", tr("Пермские отложения")))),
+                               ("subsurface", tr("Пермские отложения")),
+                               ("vegas", tr("Тоннели Vegas Loop")))),
                 (tr("Марс"), (("mars", tr("Места посадок марсоходов")),
                               ("jezero", tr("Кратер Езеро")))),
                 (tr("Луна"), (("moon",
@@ -172,7 +174,7 @@ class ViewToolbar(QFrame):
                 (tr("Небо"), (("sky", tr("Созвездия и яркие объекты")),))):
             menu.addSection(section)
             for key, title in items:
-                if key == "subsurface" and not SUBSURFACE:
+                if key in ("subsurface", "vegas") and not SUBSURFACE:
                     continue
                 menu.addAction(title).triggered.connect(
                     lambda checked=False, k=key: self.demo_requested.emit(k))

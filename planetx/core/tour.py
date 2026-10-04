@@ -54,6 +54,8 @@ class Stop:
     # Время остановки для шкалы времени, пара строк core.when:
     # время вида метки, иначе время самой метки.
     time = None
+    # Описание метки, его показывает панель тура под кнопками.
+    description = ""
 
     def __init__(self, name, lat, lon, distance, heading=0.0, tilt=0.0):
         self.name = name
