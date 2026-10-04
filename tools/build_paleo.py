@@ -1,211 +1,141 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Маски суши палеогеографии для хранилища planetx-terrain.
+"""Карты палеогеографии для хранилища planetx-terrain.
 
-    $PY tools/build_paleo.py fetch СЫРЬЁ
-    $PY tools/build_paleo.py build СЫРЬЁ ХРАНИЛИЩЕ [ВОЗРАСТ ...]
+    $PY tools/build_paleo.py СЕТКИ ХРАНИЛИЩЕ [ВОЗРАСТ ...]
 
-fetch скачивает берега модели MERDITH2021 у веб-службы GPlates на все
-возрасты 0-1000 млн лет с шагом 5 - по одному запросу, с паузой,
-ответы сжатыми в папку СЫРЬЁ. Уже скачанный возраст не запрашивается.
-Решение автора от 4 октября 2026 года - один раз скачать и положить
-в planetx-terrain, служба отвечает 6-25 с на возраст и кэшировать
-не разрешает.
+СЕТКИ - папка распакованного архива
+Scotese_Wright_2018_Maps_1-88_6minX6min_PaleoDEMS_nc.zip (PALEOMAP
+PaleoDEM, Scotese & Wright 2018, CC BY 4.0, zenodo.org/records/5460860):
+файлы netCDF *_<возраст>Ma.nc, сетка 3601 × 1801 через 0.1°, высоты
+и глубины в метрах. Читаются через GDAL из Python QGIS.
 
-build рисует из полных контуров маску суши - PNG в одном бите на
-пиксель, MASK_WIDTH × MASK_WIDTH / 2, долгота -180 слева, север
-вверху, суша белая - в ХРАНИЛИЩЕ/paleo/merdith2021/<возраст>.png,
-и указатель index.json. Контуры не прореживаются и не отбрасываются,
-как прежде у модуля (500 контуров из 2919, треть точек), отсюда дыры
-в материках. Контур через линию перемены дат и вокруг полюса
-раскладывает core.paleo.unwrapped, как у прежней маски.
-
-Данные - модель Merdith et al. 2021 (Earth-Science Reviews 214,
-103477), CC BY 4.0, zenodo.org/records/4485738, через GPlates Web
-Service (EarthByte, AuScope).
+На каждый возраст сетка красится по высотам с отмывкой
+(core.paleo.picture), потом билинейно переводится в тайлы JPEG
+Web Mercator 256 × 256 уровней 0..core.paleo.MAX_LEVEL:
+ХРАНИЛИЩЕ/paleo/paleomap/<возраст>/{z}/{x}/{y}.jpg и указатель
+ХРАНИЛИЩЕ/paleo/paleomap/index.json. Без списка возрастов нарезаются
+все. Прежние маски суши Merdith 2021 модуль больше не читает, решение
+автора от 5 октября 2026 года.
 """
-import gzip
+import glob
 import json
+import math
 import os
+import re
 import sys
 import time
-import urllib.error
-import urllib.request
 
 import numpy as np
-from PIL import Image, ImageDraw
-from scipy import ndimage
+from PIL import Image
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "planetx", "core"))
-
 import paleo  # noqa: E402
 
-AGENT = "PlanetX (+https://github.com/Valery35/planetx)"
-PAUSE = 1.0  # с между запросами к службе
-TRIES = 3
-TIMEOUT = 300  # с на ответ службы
-MASK_WIDTH = paleo.MASK_FILE_WIDTH
-FOLDER = os.path.join("paleo", "merdith2021")
-# Щели в материках, fill_slivers. Пороги предложил помощник по маскам
-# возрастов 0 и 5, автор утвердил их 4 октября 2026 года.
-EARTH_KM = 40075.0  # длина экватора
-SMALL = 20000.0  # км², замкнутая вода меньше - суша
-NARROW = 60.0  # км, средняя ширина
-LONG = 8.0  # площадь / (π · ширина²)
+SIZE = 256
+QUALITY = 82
+STEP = 0.1  # градусов, шаг сетки
 
 
-def ages():
-    return list(range(0, paleo.MAX_AGE + 1, paleo.STEP))
+def grids(folder):
+    """Файлы сеток по возрасту, млн лет."""
+    out = {}
+    for path in glob.glob(os.path.join(folder, "*.nc")):
+        found = re.search(r"_(\d+(?:\.\d+)?)Ma\.nc$", path)
+        if found:
+            out[int(round(float(found.group(1))))] = path
+    return out
 
 
-def raw_path(raw, age):
-    return os.path.join(raw, "{}.json.gz".format(age))
+def read(path):
+    """Сетка высот (строки с севера, столбцы с долготы -180), float32."""
+    from osgeo import gdal
+    gdal.UseExceptions()
+    ds = gdal.Open(path)
+    band = ds.GetRasterBand(1)
+    z = band.ReadAsArray().astype(np.float32)
+    nodata = band.GetNoDataValue()
+    if nodata is not None:
+        z[np.abs(z) >= abs(nodata) * 0.5] = 0.0
+    origin_lat = ds.GetGeoTransform()[3]
+    if origin_lat < 0.0:
+        z = z[::-1]
+    return z
 
 
-def fetch(raw):
-    """Скачать недостающие возрасты по одному."""
-    os.makedirs(raw, exist_ok=True)
-    todo = [a for a in ages() if not os.path.exists(raw_path(raw, a))]
-    print("скачать", len(todo), "из", len(ages()), flush=True)
-    for n, age in enumerate(todo):
+def sample(image, lat, lon):
+    """Цвет точек (lat, lon) из картинки сетки, билинейно. Узел (i, j)
+    сетки стоит на широте 90 - i·STEP и долготе -180 + j·STEP."""
+    rows, cols = image.shape[:2]
+    fy = (90.0 - lat) / STEP
+    fx = (lon + 180.0) / STEP
+    y0 = np.clip(np.floor(fy).astype(int), 0, rows - 2)
+    x0 = np.floor(fx).astype(int)
+    wy = np.clip(fy - y0, 0.0, 1.0)[..., None]
+    wx = (fx - x0)[..., None]
+    # Узел 3600 повторяет узел 0, долгота замкнута.
+    width = cols - 1
+    x0 %= width
+    x1 = (x0 + 1) % width
+    top = image[y0, x0] * (1.0 - wx) + image[y0, x1] * wx
+    low = image[y0 + 1, x0] * (1.0 - wx) + image[y0 + 1, x1] * wx
+    return top * (1.0 - wy) + low * wy
+
+
+def tile(image, z, x, y):
+    """Тайл z/x/y: цвет в центрах пикселей."""
+    n = 2 ** z
+    px = (np.arange(SIZE) + 0.5) / SIZE
+    lon = (x + px) / n * 360.0 - 180.0
+    merc = math.pi * (1.0 - 2.0 * (y + px) / n)
+    lat = np.degrees(np.arctan(np.sinh(merc)))
+    lon_grid, lat_grid = np.meshgrid(lon, lat)
+    rgb = sample(image, lat_grid, lon_grid)
+    return np.clip(np.rint(rgb), 0, 255).astype(np.uint8)
+
+
+def build(path, folder):
+    """Тайлы одного возраста в папку folder."""
+    picture = paleo.picture(read(path), STEP).astype(np.float32)
+    count = 0
+    for z in range(paleo.MAX_LEVEL + 1):
+        for x in range(2 ** z):
+            out = os.path.join(folder, str(z), str(x))
+            os.makedirs(out, exist_ok=True)
+            for y in range(2 ** z):
+                Image.fromarray(tile(picture, z, x, y)).save(
+                    os.path.join(out, "{}.jpg".format(y)),
+                    quality=QUALITY, optimize=True)
+                count += 1
+    return count
+
+
+def main(argv):
+    if len(argv) < 2:
+        print(__doc__)
+        return 2
+    source, store = argv[0], argv[1]
+    found = grids(source)
+    ages = [int(a) for a in argv[2:]] or sorted(found)
+    base = os.path.join(store, "paleo", "paleomap")
+    for age in ages:
         started = time.monotonic()
-        body = None
-        for attempt in range(TRIES):
-            request = urllib.request.Request(paleo.url(age),
-                                             headers={"User-Agent": AGENT})
-            try:
-                with urllib.request.urlopen(request,
-                                            timeout=TIMEOUT) as reply:
-                    body = reply.read()
-                json.loads(body)
-                break
-            except (urllib.error.URLError, OSError, ValueError) as error:
-                print("возраст", age, "попытка", attempt + 1, error,
-                      flush=True)
-                body = None
-                time.sleep(10.0 * (attempt + 1))
-        if body is None:
-            print("возраст", age, "не скачан", flush=True)
-            continue
-        part = raw_path(raw, age) + ".part"
-        with gzip.open(part, "wb") as fh:
-            fh.write(body)
-        os.replace(part, raw_path(raw, age))
-        print("{}/{} возраст {} {:.1f} с {} КБ".format(
-            n + 1, len(todo), age, time.monotonic() - started,
-            len(body) // 1024), flush=True)
-        time.sleep(PAUSE)
-
-
-def rings_of(data):
-    """Все внешние контуры ответа службы целиком: без прореживания и без
-    отбрасывания мелких."""
-    return paleo.parse(data, limit=10 ** 9, min_span=0.0, count=10 ** 9)
-
-
-def draw_mask(rings, width=MASK_WIDTH):
-    """Маска суши в один бит: Image «1», суша - 1."""
-    height = width // 2
-    image = Image.new("1", (width, height), 0)
-    draw = ImageDraw.Draw(image)
-    for ring in rings:
-        points = paleo.unwrapped(ring)
-        for shift in (-360.0, 0.0, 360.0):
-            xy = [((lon + shift + 180.0) / 360.0 * width,
-                   (90.0 - lat) / 180.0 * height) for lat, lon in points]
-            if len(xy) >= 3:
-                draw.polygon(xy, fill=1)
-    return Image.fromarray(fill_slivers(np.array(image, dtype=bool)))
-
-
-def fill_slivers(land):
-    """Щели между кусками суши - сушей.
-
-    Модель режет берега по плитам, при сборке на прошлый возраст куски
-    расходятся, и в материке остаются полосы воды, например в Гималаях
-    665 тыс. км² при средней ширине 105 км на возрасте 5. Сушей
-    становится замкнутая вода - не связанная с самым большим водоёмом,
-    океаном, - если она меньше SMALL, уже NARROW или вытянута больше
-    LONG (площадь / (π · ширина²), ширина - 2 · площадь / периметр).
-    У Чёрного моря, Каспия, Великих озёр вытянутость 1.9-3.2, у щели
-    в Гималаях 19, в Альпах 5.4 при ширине 43 км. Проливы, соединённые
-    с океаном, не трогаются. Края по долготе сшиваются."""
-    height, width = land.shape
-    water = ~land
-    labels, count = ndimage.label(water)
-    parent = np.arange(count + 1)
-
-    def root(i):
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
-
-    for a, b in zip(labels[:, 0], labels[:, -1]):
-        if a and b:
-            parent[root(a)] = root(b)
-    roots = np.array([root(i) for i in range(count + 1)])
-    labels = roots[labels]
-    lat = 90.0 - (np.arange(height) + 0.5) / height * 180.0
-    scale = np.repeat(np.cos(np.radians(lat))[:, None], width, axis=1)
-    pixel = EARTH_KM / width
-    area = np.bincount(labels.ravel(), weights=(scale * pixel ** 2).ravel(),
-                       minlength=count + 1)
-    edge = water & ~ndimage.binary_erosion(water, border_value=1)
-    perimeter = np.bincount(labels[edge], weights=scale[edge] * pixel,
-                            minlength=count + 1)
-    area[0] = 0.0
-    ocean = int(np.argmax(area))
-    wide = 2.0 * area / np.maximum(perimeter, 1e-9)
-    long = area / (np.pi * np.maximum(wide, 1e-9) ** 2)
-    fill = (area > 0) & ((area < SMALL) | (wide < NARROW) | (long > LONG))
-    fill[ocean] = False
-    fill[0] = False
-    return land | fill[labels]
-
-
-def build(raw, store, only=()):
-    out = os.path.join(store, FOLDER)
-    os.makedirs(out, exist_ok=True)
-    done = []
-    for age in ages():
-        if only and age not in only:
-            continue
-        path = raw_path(raw, age)
-        if not os.path.exists(path):
-            continue
-        with gzip.open(path, "rb") as fh:
-            data = json.loads(fh.read())
-        rings = rings_of(data)
-        image = draw_mask(rings)
-        target = os.path.join(out, "{}.png".format(age))
-        image.save(target, optimize=True)
-        pixels = image.convert("L").histogram()
-        land = pixels[255] / float(image.width * image.height)
-        done.append(age)
-        print("возраст {} контуров {} точек {} суша {:.1%} {} КБ".format(
-            age, len(rings), sum(len(r) for r in rings), land,
-            os.path.getsize(target) // 1024), flush=True)
-    present = sorted(int(name[:-4]) for name in os.listdir(out)
-                     if name.endswith(".png") and name[:-4].isdigit())
-    index = {"model": paleo.MODEL, "step": paleo.STEP,
-             "max_age": paleo.MAX_AGE, "width": MASK_WIDTH,
-             "ages": present,
-             "source": "Merdith et al. 2021, CC BY 4.0, "
-                       "zenodo.org/records/4485738, GPlates Web Service"}
-    with open(os.path.join(out, "index.json"), "w", encoding="utf-8",
-              newline="\n") as fh:
-        json.dump(index, fh, ensure_ascii=False, indent=1)
-    print("собрано", len(done), "в указателе", len(present))
+        count = build(found[age], os.path.join(base, str(age)))
+        print("{} млн лет: тайлов {}, {:.1f} с".format(
+            age, count, time.monotonic() - started), flush=True)
+    index = {"source": "PALEOMAP PaleoDEM, Scotese & Wright 2018",
+             "license": "CC BY 4.0",
+             "doi": "10.5281/zenodo.5460860",
+             "ages": sorted(int(a) for a in os.listdir(base)
+                            if a.isdigit()),
+             "max_level": paleo.MAX_LEVEL}
+    with open(os.path.join(base, "index.json"), "w", encoding="utf-8",
+              newline="\n") as stream:
+        json.dump(index, stream, ensure_ascii=False, indent=1)
+    return 0
 
 
 if __name__ == "__main__":
-    if len(sys.argv) >= 3 and sys.argv[1] == "fetch":
-        fetch(sys.argv[2])
-    elif len(sys.argv) >= 4 and sys.argv[1] == "build":
-        build(sys.argv[2], sys.argv[3],
-              tuple(int(a) for a in sys.argv[4:]))
-    else:
-        print(__doc__)
+    sys.exit(main(sys.argv[1:]))

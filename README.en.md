@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.32.0.
+A 3D globe inside QGIS. PlanetX version 0.33.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -63,10 +63,13 @@ and atmosphere, from space down to single streets.
   transparent, a polygon of My Places cuts a block, the camera goes
   underground. The Permian deposits and Vegas Loop tunnels demos show
   the mode.
-- **Paleogeography.** The Paleogeography row shows the coastlines of
-  the past, up to a billion years ago, after the plate motion model of
-  the GPlates web service. A slider in the corner of the view sets the
-  age.
+- **NASA themes.** The Planet of Fire, Planet of Water, Gases and Land
+  and Life groups of the Layers section show 21 NASA GIBS rasters by
+  date - smoke, carbon monoxide, precipitation, snow, ice, gases,
+  vegetation, night lights. The day of a theme is set by its slider.
+- **Paleogeography.** The Paleogeography row shows land relief and sea
+  depths of the past, up to 540 million years ago, after the PALEOMAP
+  PaleoDEM maps. A slider in the corner of the view sets the age.
 - **Assistant.** A conversation window with an AI model - Claude, Grok,
   DeepSeek, OpenRouter models or an own model through Ollama. The model
   controls the globe on a request in words - flights, Layers rows,

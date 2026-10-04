@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Ползунок возраста палеогеографии: млн лет назад, период, показ."""
-import numpy as np
-from qgis.PyQt.QtCore import QPointF, Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QColor, QImage, QPainter, QPolygonF
+"""Ползунок возраста палеогеографии: возрасты карт набора, период,
+показ."""
+from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QLabel, QSlider, \
     QToolButton
 
@@ -16,53 +15,6 @@ STYLE = ("QFrame#planetxPaleo { background: rgba(250, 250, 250, 230); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
 PLAY_PERIOD = 900  # мс на шаг возраста при показе
 SLIDER_WIDTH = 260
-
-
-def land_mask(rings, width=paleo.MASK_WIDTH):
-    """Маска суши для вида: массив (h, w, 4) uint8, картинка всей
-    Земли, север вверху, долгота -180 слева. Суша белая."""
-    height = width // 2
-    image = QImage(width, height,
-                   enum(QImage, "Format", "Format_RGBA8888"))
-    image.fill(QColor(0, 0, 0, 255))
-    painter = QPainter(image)
-    try:
-        painter.setRenderHint(enum(QPainter, "RenderHint",
-                                   "Antialiasing"))
-        white = QColor(255, 255, 255)
-        painter.setPen(white)
-        painter.setBrush(white)
-        for ring in rings:
-            points = paleo.unwrapped(ring)
-            # Копии со сдвигом на 360° закрывают оба края картинки.
-            for shift in (-360.0, 0.0, 360.0):
-                painter.drawPolygon(QPolygonF([
-                    QPointF((lon + shift + 180.0) / 360.0 * width,
-                            (90.0 - lat) / 180.0 * height)
-                    for lat, lon in points]))
-    finally:
-        painter.end()
-    bits = image.constBits()
-    bits.setsize(width * height * 4)
-    return np.frombuffer(bits, dtype=np.uint8).reshape(
-        height, width, 4).copy()
-
-
-def mask_from_png(data):
-    """Маска суши для вида из готового PNG planetx-terrain: массив
-    (h, w) uint8, суша 255, или None, если картинка не читается. Одна
-    яркость вместо RGBA - маска 8192 × 4096 занимает 32 МБ, а не 128."""
-    image = QImage.fromData(data, "PNG")
-    if image.isNull():
-        return None
-    image = image.convertToFormat(enum(QImage, "Format",
-                                       "Format_Grayscale8"))
-    width, height, line = image.width(), image.height(), \
-        image.bytesPerLine()
-    bits = image.constBits()
-    bits.setsize(line * height)
-    return np.frombuffer(bits, dtype=np.uint8).reshape(
-        height, line)[:, :width].copy()
 
 
 def period_names():
@@ -88,20 +40,21 @@ class PaleoBar(QFrame):
         layout.setContentsMargins(6, 3, 6, 3)
         layout.setSpacing(6)
         self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
-        self.slider.setRange(0, paleo.MAX_AGE // paleo.STEP)
+        self.slider.setRange(0, len(paleo.AGES) - 1)
         # Прошлое слева, настоящее справа, как на шкале времени.
         self.slider.setInvertedAppearance(True)
         self.slider.setFixedWidth(SLIDER_WIDTH)
         self.slider.setToolTip(tr(
-            "Возраст в миллионах лет назад. Суша на этот возраст "
-            "собрана по модели Merdith 2021 из веб-службы GPlates."))
+            "Возраст в миллионах лет назад. Карта рельефа и глубин на "
+            "этот возраст - PaleoDEM PALEOMAP, Scotese и Wright 2018."))
         self.slider.valueChanged.connect(self._moved)
         layout.addWidget(self.slider)
         self.play = QToolButton(self)
         self.play.setText("▶\ufe0f")
         self.play.setAutoRaise(True)
         self.play.setToolTip(tr(
-            "Показ от выбранного возраста к настоящему, шаг 5 млн лет."))
+            "Показ от выбранного возраста к настоящему по всем картам "
+            "набора."))
         self.play.clicked.connect(self.toggle)
         layout.addWidget(self.play)
         self.label = QLabel(self)
@@ -121,10 +74,10 @@ class PaleoBar(QFrame):
         self.hide()
 
     def age(self):
-        return self.slider.value() * paleo.STEP
+        return paleo.AGES[self.slider.value()]
 
     def set_age(self, age):
-        self.slider.setValue(int(age) // paleo.STEP)
+        self.slider.setValue(paleo.AGES.index(paleo.nearest(age)))
 
     def _show(self):
         age = self.age()

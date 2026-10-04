@@ -36,7 +36,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
 
-from ..core import icons, lookat
+from ..core import icons, lookat, themes
 from ..core.placetree import is_folder
 from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
@@ -45,6 +45,7 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
 from ..qt_compat import QAction, enum, enum_int
 from .placeprops import icon_image
 from .spinner import BusySpinner
+from .themes import group_names, theme_names
 
 # Роль данных строки: номер слоя QGIS, у строки «Глобус» - None.
 LAYER_ROLE = enum_int(enum(Qt, "ItemDataRole", "UserRole"))
@@ -77,6 +78,8 @@ ADD_SOURCE = -1
 RADIO_ROLE = BASEMAP_ROLE + 1
 # Строка самой папки-переключателя.
 RADIO_FOLDER_ROLE = RADIO_ROLE + 1
+THEME_ROLE = RADIO_FOLDER_ROLE + 1  # ключ темы NASA GIBS
+THEME_GROUP_ROLE = THEME_ROLE + 1  # ключ группы тем NASA GIBS
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 # Клавиши строки поиска и списка подсказок под ней.
 KEY_PRESS = enum(QEvent, "Type", "KeyPress")
@@ -221,7 +224,9 @@ class RadioDelegate(QStyledItemDelegate):
                           opt, painter, widget)
         button = QStyleOptionButton()
         button.rect = rect
-        button.state = enum(QStyle, "StateFlag", "State_Enabled") | (
+        # Недоступная строка, например тема на Марсе, - серый кружок.
+        enabled = enum(QStyle, "StateFlag", "State_Enabled")
+        button.state = (opt.state & enabled) | (
             enum(QStyle, "StateFlag", "State_On") if on
             else enum(QStyle, "StateFlag", "State_Off"))
         style.drawPrimitive(enum(QStyle, "PrimitiveElement",
@@ -416,6 +421,8 @@ class LayerPanel(QWidget):
     relief_toggled = pyqtSignal(bool)
     # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
     extra_toggled = pyqtSignal(str, bool)
+    # Тема NASA GIBS: ключ core.themes, "" - тема выключена.
+    theme_chosen = pyqtSignal(str)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -585,6 +592,9 @@ class LayerPanel(QWidget):
         self._place_timer.timeout.connect(self._emit_places)
         self.geo = QTreeWidget(self)
         self.geo.setHeaderHidden(True)
+        # Темы NASA - одна из всех, строки рисуются кружками
+        # переключателей. Просьба автора от 5 октября 2026 года.
+        self.geo.setItemDelegate(RadioDelegate(self.geo))
         # Щелчок по группе меняет все её строки, каждая шлёт itemChanged.
         # Изменения собираются за один проход цикла событий. Сигнал
         # подключается после того, как строки построены.
@@ -686,11 +696,10 @@ class LayerPanel(QWidget):
                     "Углы сектора тянутся мышью. Сектор ставится заново "
                     "при каждом включении строки.")),
                 (PALEO, tr("Палеогеография"), tr(
-                    "Берега материков в прошлом, до миллиарда лет "
-                    "назад, по модели движения плит из веб-службы "
-                    "GPlates. Возраст задаёт ползунок в левом нижнем "
-                    "углу вида. Снимок, границы и подписи на это "
-                    "время убраны.")),
+                    "Рельеф суши и глубины моря в прошлом, до 540 млн "
+                    "лет назад, по картам PaleoDEM PALEOMAP. Возраст "
+                    "задаёт ползунок в левом нижнем углу вида. Снимок, "
+                    "границы и подписи на это время убраны.")),
                 (SLOPE, tr("Уклон"), tr(
                     "Уклон поверхности по высотам рельефа, классами от "
                     "ровного до круче 35°. Шкала стоит в левом нижнем "
@@ -704,6 +713,35 @@ class LayerPanel(QWidget):
             item.setFlags(item.flags() | CHECKABLE)
             item.setCheckState(0, UNCHECKED)
             self.extra_items[key] = item
+        # Темы NASA GIBS - группы строк, отмечена одна тема из всех.
+        # Просьба автора от 5 октября 2026 года.
+        # Флажок группы отмечен, когда включена её тема. Снятый флажок
+        # выключает тему, поставленный - включает прежнюю тему группы.
+        # Замечание автора того же дня - «как отключить все слои из воды
+        # или огня».
+        self.theme_items = {}
+        self.theme_groups = []
+        self._theme = ""
+        self._group_last = {}
+        names = theme_names()
+        for group_key, title, tip in group_names():
+            group = QTreeWidgetItem(self.geo, [title])
+            group.setToolTip(0, tip)
+            group.setData(0, THEME_GROUP_ROLE, group_key)
+            group.setFlags(group.flags() | CHECKABLE)
+            group.setCheckState(0, UNCHECKED)
+            self.theme_groups.append(group)
+            for theme in themes.THEMES:
+                if theme.group != group_key:
+                    continue
+                text, row_tip = names[theme.key]
+                item = QTreeWidgetItem(group, [text])
+                item.setData(0, THEME_ROLE, theme.key)
+                item.setData(0, RADIO_ROLE, True)
+                item.setToolTip(0, row_tip)
+                item.setFlags(item.flags() | CHECKABLE)
+                item.setCheckState(0, UNCHECKED)
+                self.theme_items[theme.key] = item
         self.geo.itemChanged.connect(self._geo_changed)
         # Слои проекта - свой список, отдельно от меток.
         self.layers = QTreeWidget(self)
@@ -949,12 +987,64 @@ class LayerPanel(QWidget):
         for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, PLATES,
                     CUTAWAY, PALEO):
             self.extra_items[key].setDisabled(not earth)
+        for group in self.theme_groups:
+            group.setDisabled(not earth)
         # Уклон и экспозиция - там, где есть высоты.
         for key in (SLOPE, ASPECT):
             self.extra_items[key].setDisabled(not (earth or relief))
         self.layers.setEnabled(earth)
 
+    def set_theme(self, key):
+        """Отметить тему key, "" - ни одной. Сигналы не идут."""
+        self._theme = key or ""
+        current = themes.BY_KEY.get(self._theme)
+        if current is not None:
+            self._group_last[current.group] = current.key
+        self.geo.blockSignals(True)
+        for name, item in self.theme_items.items():
+            item.setCheckState(0, CHECKED if name == self._theme
+                               else UNCHECKED)
+        for group in self.theme_groups:
+            on = current is not None \
+                and group.data(0, THEME_GROUP_ROLE) == current.group
+            group.setCheckState(0, CHECKED if on else UNCHECKED)
+        self.geo.blockSignals(False)
+
+    def _theme_changed(self, item):
+        key = item.data(0, THEME_ROLE)
+        if item.checkState(0) == CHECKED:
+            chosen = key
+        elif key == self._theme:
+            chosen = ""
+        else:
+            return
+        # Отмечена одна тема: прежняя отметка снимается.
+        self.set_theme(chosen)
+        self.theme_chosen.emit(chosen)
+
+    def _theme_group_changed(self, item):
+        """Флажок группы тем: снят - тема группы выключена, поставлен -
+        включена прежняя тема группы, без неё - первая."""
+        group = item.data(0, THEME_GROUP_ROLE)
+        if item.checkState(0) == CHECKED:
+            chosen = self._group_last.get(group) or next(
+                t.key for t in themes.THEMES if t.group == group)
+        else:
+            current = themes.BY_KEY.get(self._theme)
+            if current is None or current.group != group:
+                self.set_theme(self._theme)
+                return
+            chosen = ""
+        self.set_theme(chosen)
+        self.theme_chosen.emit(chosen)
+
     def _geo_changed(self, item):
+        if item.data(0, THEME_ROLE):
+            self._theme_changed(item)
+            return
+        if item.data(0, THEME_GROUP_ROLE):
+            self._theme_group_changed(item)
+            return
         index = item.data(0, BASEMAP_ROLE)
         if index is not None and index != ADD_SOURCE:
             if item.checkState(0) == CHECKED:

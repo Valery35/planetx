@@ -426,6 +426,12 @@ class TileLoader(QObject):
         self._check_idle()
 
     def _decoded(self, key, rgba, extra):
+        if self.stopped:
+            # Ответ рабочего потока, поставленный в очередь до abort:
+            # снятие связи его не отменяет. Без этого тайл прежней
+            # подложки приходил новой - карта возраста 0 вставала
+            # на место возраста 100, 5 октября 2026 года.
+            return
         self.decoding.pop(key, None)
         if isinstance(rgba, str) and rgba == MISSING:
             self._missing(key)

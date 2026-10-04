@@ -52,7 +52,7 @@ from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
 from ..core import (crust, cutaway, insolation, pick, plates, quakes,
-                    section, slabs, viewshed)
+                    section, slabs, themes, viewshed)
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
@@ -73,7 +73,9 @@ from .about import show_about
 from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
 from .legend import (BedsLegend, CutawayLegend, InsolationLegend,
-                     QuakeLegend, SlopeLegend, TemperatureLegend)
+                     QuakeLegend, SlopeLegend, TemperatureLegend,
+                     ThemeLegend)
+from .themes import ThemeBar, theme_names
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
@@ -85,7 +87,7 @@ from .section import SectionDialog
 from .assistant import (AssistantDialog, current_provider, ready,
                         search_enabled)
 from .myplaces import MyPlaces
-from .paleo import PaleoBar, land_mask, mask_from_png
+from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
@@ -164,6 +166,7 @@ AUTO_DEFAULT = True
 DEMO_QUAKE_BAND = 300.0
 SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
+THEME_KEY = "PlanetX/theme"  # тема NASA GIBS, "" - выключена
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
 CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
@@ -240,6 +243,12 @@ def prepare_temperature(key, rgba):
     """Работа рабочего потока для тайла температуры: раскраска GIBS
     с непрозрачностью и уровни мипмапов."""
     return mip_chain(temperature.overlay_rgba(rgba))
+
+
+def prepare_theme(key, rgba):
+    """Работа рабочего потока для тайла темы NASA GIBS: прозрачность
+    и уровни мипмапов."""
+    return mip_chain(themes.overlay_rgba(rgba))
 
 
 def gibs_source(name):
@@ -474,15 +483,29 @@ class GlobeWindow(QWidget):
         self.quake_legend.hide()
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
-        # Палеогеография: ползунок возраста, контуры по возрастам,
-        # запрос берегов и линии на глобусе.
+        # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
+        # и шкалы слоёв по ключу темы, ждущие ответы.
+        self.theme_key = ""
+        self.theme_day = None
+        self._theme_shown = None
+        self._theme_domains = {}
+        self._theme_scales = {}
+        self._theme_replies = {}
+        self.theme_legend = ThemeLegend(self.view)
+        # День темы - свой ползунок: покрытию нужен момент, промежуток
+        # шкалы времени остаётся меткам и землетрясениям.
+        self.theme_bar = ThemeBar(self.view)
+        self.theme_bar.day_changed.connect(self._theme_day_chosen)
+        self.theme_bar.ready = self._theme_ready
+        # Палеогеография: ползунок возраста, карта возраста - подложка
+        # из тайлов planetx-terrain. Шаги подменяют адрес на локальную
+        # копию хранилища.
         self.paleo_bar = PaleoBar(self.view)
         self.paleo_bar.age_changed.connect(self._paleo_age)
         self.paleo_age = 0
-        self.paleo_cache = {}
-        self._paleo_replies = {}
-        self.paleo_mask_url = paleo.MASK_URL
-        self.paleo_bar.ready = lambda: self.paleo_age in self.paleo_cache
+        self.paleo_url = paleo.TILE_URL
+        self._paleo_sources = {}
+        self.paleo_bar.ready = self._paleo_ready
         # Землетрясения: события сводки и ответ на её запрос.
         self.quake_events = []
         self._quake_reply = None
@@ -804,6 +827,8 @@ class GlobeWindow(QWidget):
         self.view.changed.connect(self._update_grid)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
+        self.panel.theme_chosen.connect(self.set_theme)
+        self.set_theme(settings.value(THEME_KEY, "") or "")
         self.refresh()
 
     # Выбранное состояние. Его же меняют проверочные скрипты, на глобус
@@ -961,6 +986,115 @@ class GlobeWindow(QWidget):
         elif key == "plates":
             self._set_plates(on)
 
+    # Темы NASA GIBS.
+
+    def set_theme(self, key):
+        """Тема NASA GIBS из групп раздела «Слои», "" - выключить.
+        Включена одна тема, выбор помнят настройки QGIS. День темы
+        остаётся прежним, если он есть в ряду новой темы."""
+        key = key if key in themes.BY_KEY else ""
+        self.theme_key = key
+        QgsSettings().setValue(THEME_KEY, key)
+        self.panel.set_theme(key)
+        self._show_theme()
+
+    def _theme_on(self):
+        return bool(self.theme_key) and self.planet.earth \
+            and self.view.sky_view is None
+
+    def _show_theme(self):
+        """Тема на глобус или с глобуса. Ряд дат и шкала слоя
+        просятся при первом показе темы, ответы помнятся."""
+        if not self._theme_on():
+            self._theme_shown = None
+            self._set_gibs("theme", False)
+            self.theme_legend.hide()
+            self.theme_bar.stop()
+            self.theme_bar.hide()
+            self._place_attribution()
+            return
+        theme = themes.BY_KEY[self.theme_key]
+        if theme.key not in self._theme_domains:
+            self._theme_fetch(theme.key, "domains", theme.domains_url())
+        if theme.colormap and theme.key not in self._theme_scales:
+            self._theme_fetch(theme.key, "scale", theme.colormap_url())
+        self._apply_theme()
+
+    def _theme_fetch(self, key, kind, url):
+        if (key, kind) in self._theme_replies:
+            return
+        self._theme_replies[(key, kind)] = fetch_bytes(
+            url, lambda data, error, key=key, kind=kind:
+            self._theme_done(key, kind, data, error))
+
+    def _theme_done(self, key, kind, data, error):
+        self._theme_replies.pop((key, kind), None)
+        if kind == "domains":
+            if data is None:
+                self.message = (tr("Ряд дат темы не загрузился: {error}",
+                                   error=error), time.monotonic())
+                self._show_state()
+                return
+            self._theme_domains[key] = themes.parse_domains(data)
+        else:
+            self._theme_scales[key] = themes.parse_colormap(data) \
+                if data else None
+        if key == self.theme_key:
+            self._apply_theme()
+
+    def _theme_day_chosen(self, day):
+        """День с ползунка темы."""
+        self.theme_day = day
+        self._apply_theme()
+
+    def _theme_ready(self):
+        """Показан ли день темы: все картинки кадра пришли. Показ дней
+        подряд ждёт этого."""
+        layer = self.view.gibs["theme"]
+        return not layer.missing and not layer.pending
+
+    def _apply_theme(self):
+        """День темы, ползунок, слой вида и шкала в углу. День - с
+        ползунка, без него - последний день ряда. Смена дня той же темы
+        держит прежние картинки до замены."""
+        if not self._theme_on():
+            return
+        theme = themes.BY_KEY[self.theme_key]
+        intervals = self._theme_domains.get(theme.key)
+        if intervals is None:
+            return
+        days = themes.days(intervals)
+        if not days:
+            self.message = (tr("У темы нет дат в ряду."), time.monotonic())
+            self._show_state()
+            return
+        day = self.theme_day
+        if day not in days:
+            day = themes.pick_day(intervals, themes.moment(day)) \
+                if day else days[-1]
+        self.theme_day = day
+        if self.theme_bar.days != days or self.theme_bar.day() != day:
+            self.theme_bar.set_days(days, day)
+        self.theme_bar.show()
+        name = theme_names()[theme.key][0]
+        scale = self._theme_scales.get(theme.key)
+        units = scale["units"] if scale else ""
+        title = tr("{name}, {units} · {day}", name=name, units=units,
+                   day=day) if units else tr("{name} · {day}", name=name,
+                                             day=day)
+        self.theme_legend.set_theme(title, scale)
+        self.theme_legend.show()
+        self._place_attribution()
+        if (theme.key, day) == self._theme_shown:
+            return
+        keep = self._theme_shown is not None \
+            and self._theme_shown[0] == theme.key
+        self._theme_shown = (theme.key, day)
+        source = basemap.Source("NASA GIBS", theme.url(day), theme.level,
+                                themes.ATTRIBUTION, builtin=True,
+                                missing=(404,))
+        self.view.gibs["theme"].max_level = theme.level
+        self._set_gibs("theme", True, (source, prepare_theme), keep=keep)
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой
         шкалы времени, иначе часы компьютера."""
@@ -1127,7 +1261,7 @@ class GlobeWindow(QWidget):
         self.slope_legend.show()
         self._place_attribution()
 
-    def _set_gibs(self, name, on, made=None, cache=False):
+    def _set_gibs(self, name, on, made=None, cache=False, keep=False):
         """Слой NASA GIBS вида - облака, море или суша: новый загрузчик
         или никакого. Ответы GIBS запрещают кэш, поэтому мимо него.
         made - (источник, подготовка) своего слоя, как у уклона."""
@@ -1144,7 +1278,7 @@ class GlobeWindow(QWidget):
                 lambda key, rgba, levels, name=name:
                 self.view.add_gibs(name, key, levels))
             self.gibs_loaders[name] = loader
-        self.view.set_gibs(name, on, loader)
+        self.view.set_gibs(name, on, loader, keep=keep)
         self._show_attribution()
 
     def set_relief(self, on):
@@ -1383,95 +1517,61 @@ class GlobeWindow(QWidget):
         гладкая основа и берега материков на этот возраст."""
         shown = self._paleo_on()
         self.paleo_bar.setVisible(shown)
-        self.view.plain_base = paleo.OCEAN if shown else None
+        self.view.plain_base = shown
         if self._relief_target() != self.view.store.scale:
             self.view.set_relief(self._relief_target())
             self._place_quakes()
         self._place_attribution()
         if not shown:
             self.paleo_bar.stop()
-            replies, self._paleo_replies = self._paleo_replies, {}
-            for reply in replies.values():
-                reply.abort()
-            self._count_pending()
-            self._show_paleo([])
+            if self.planet.earth:
+                self._switch_basemap(self._earth_source())
+            self._show_attribution()
             return
         self._paleo_age(self.paleo_bar.age())
 
     def _paleo_age(self, age):
-        """Берега на возраст age млн лет: из памяти или запросом."""
+        """Карта возраста age млн лет - подложка. Уровни 0-2 прежнего
+        возраста стоят на экране, пока не придут новые, глубокие тайлы
+        снимаются сразу (change_source, coarse): кадр не смешивает два
+        возраста, новый встаёт грубым и уточняется."""
         self.paleo_age = age
-        if not self._paleo_on():
-            return
-        rings = self.paleo_cache.get(age)
-        if rings is None:
-            self._paleo_fetch(age)
-        else:
-            self._show_paleo(rings)
+        if self._paleo_on():
+            self._switch_basemap(self._earth_source(), coarse=True)
+
+    def _paleo_source(self, age):
+        """Источник тайлов карты возраста age, один на возраст: смена
+        источника сравнивается по тождеству."""
+        url = self.paleo_url.format(age=age, z="{z}", x="{x}", y="{y}")
+        found = self._paleo_sources.get(url)
+        if found is None:
+            found = basemap.Source(tr("{age} млн лет назад", age=age), url,
+                                   paleo.MAX_LEVEL, paleo.ATTRIBUTION,
+                                   builtin=True, missing=(404,))
+            self._paleo_sources[url] = found
+        return found
+
+    def _earth_source(self):
+        """Подложка Земли: карта возраста в палеогеографии, иначе
+        выбранная в группе «Основа»."""
+        if self._paleo_on():
+            return self._paleo_source(self.paleo_age)
+        return self.sources[self._basemap]
+
+    def _paleo_ready(self):
+        """Показан ли нынешний возраст: уровни 0-2 его карты на экране
+        и ни одного тайла прежней карты в кадре. Показ ждёт этого, иначе
+        шаги обгоняют загрузку."""
+        view = self.view
+        keep = view.selection.keep if view.selection else ()
+        return all(key in view.textures and key not in view.stale
+                   for key in start_keys()) \
+            and not any(key in view.stale for key in keep)
 
     def _count_pending(self):
-        """Ждущие ответы зон плит и масок палеогеографии - в счётчик
-        загрузки вида, его показывает значок загрузки."""
-        self.view.data_pending = len(self._slab_replies) \
-            + len(self._paleo_replies)
-
-    def _paleo_fetch(self, age):
-        """Запрос маски суши на возраст age из planetx-terrain, если её
-        ещё нет. Без готовой маски берега просятся у службы GPlates."""
-        if age in self.paleo_cache or age in self._paleo_replies \
-                or not 0 <= age <= paleo.MAX_AGE:
-            return
-        self._paleo_replies[age] = fetch_bytes(
-            self.paleo_mask_url.format(age=age),
-            lambda data, error, age=age: self._paleo_mask_done(
-                age, data, error))
-        self._count_pending()
-
-    def _paleo_mask_done(self, age, data, error):
-        if self._paleo_replies.pop(age, None) is None:
-            # Строку выключили, ответ уже не нужен.
-            return
-        if not data or not data.startswith(b"\x89PNG"):
-            # Маски нет, например хранилище ещё без неё, - берега
-            # просятся у службы GPlates.
-            self._paleo_replies[age] = fetch_json(
-                paleo.url(age),
-                lambda data, error, age=age: self._paleo_done(age, data,
-                                                              error))
-            return
-        self.paleo_cache[age] = ("png", data)
-        self._count_pending()
-        if age == self.paleo_age and self._paleo_on():
-            self._show_paleo(self.paleo_cache[age])
-
-    def _paleo_done(self, age, data, error):
-        if self._paleo_replies.pop(age, None) is None:
-            return
-        self._count_pending()
-        if data is None:
-            self.paleo_bar.stop()
-            self.message = (tr("Палеогеография не загрузилась: {error}",
-                               error=error), time.monotonic())
-            self._show_state()
-            return
-        self.paleo_cache[age] = ("rings", paleo.parse(data))
-        if age == self.paleo_age and self._paleo_on():
-            self._show_paleo(self.paleo_cache[age])
-
-    def _show_paleo(self, entry):
-        """Суша на возраст ползунка: маска для вида, [] - убрать. entry -
-        ("png", байты готовой маски) или ("rings", контуры службы)."""
-        self.view.land_color = paleo.LAND
-        mask = None
-        if entry and entry[0] == "png":
-            mask = mask_from_png(entry[1])
-        elif entry and entry[1]:
-            mask = land_mask(entry[1])
-        self.view.set_land(mask)
-        self._show_attribution()
-        if self.paleo_bar.timer.isActive():
-            # Показ: следующий возраст просится заранее.
-            self._paleo_fetch(self.paleo_age - paleo.STEP)
+        """Ждущие ответы зон плит - в счётчик загрузки вида, его
+        показывает значок загрузки."""
+        self.view.data_pending = len(self._slab_replies)
 
     def _quake_legend_state(self):
         """Шкала глубины очагов - при очагах на Земле."""
@@ -1579,7 +1679,7 @@ class GlobeWindow(QWidget):
             self.section_dialog.close()
         ellipsoid.set_body(planet.body)
         if planet.earth:
-            source = self.sources[self._basemap]
+            source = self._earth_source()
         else:
             name, url, top, text, link = planet.imagery
             # Снимки тел лежат в S3: отсутствующий тайл - ответ 403.
@@ -1604,6 +1704,7 @@ class GlobeWindow(QWidget):
         self._update_layer_labels(force=True)
         for extra in EARTH_EXTRAS:
             self._apply_extra(extra, self.extras.get(extra, False))
+        self._show_theme()
         self._set_surface()
         if not planet.earth:
             # Отжатые кнопки сами выключают синхронизацию и опрос.
@@ -1664,8 +1765,10 @@ class GlobeWindow(QWidget):
         self.insolation_legend.hide()
         self.quake_legend.hide()
         self.cutaway_legend.hide()
+        self.theme_legend.hide()
+        self.theme_bar.hide()
         self.paleo_bar.hide()
-        self.view.plain_base = None
+        self.view.plain_base = False
         for button in self._globe_buttons():
             button.setEnabled(False)
         self._show_attribution()
@@ -1699,7 +1802,8 @@ class GlobeWindow(QWidget):
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
                                        and self.planet.earth)
         self.paleo_bar.setVisible(self._paleo_on())
-        self.view.plain_base = paleo.OCEAN if self._paleo_on() else None
+        self.view.plain_base = self._paleo_on()
+        self._show_theme()
         self._set_surface()
         self.toolbar.set_body(self.planet.key)
         self._show_attribution()
@@ -1739,8 +1843,7 @@ class GlobeWindow(QWidget):
         и Луны подложка своя, земные подложка и слои ждут Земли."""
         if not self.planet.earth:
             return False
-        return (self.source not in self.sources
-                or self._basemap != self.sources.index(self.source)
+        return (self.source is not self._earth_source()
                 or self._relief_target() != self.view.store.scale
                 or self._overlay_layers() != self._applied_layers
                 or self._layers_stale)
@@ -1750,7 +1853,7 @@ class GlobeWindow(QWidget):
         и Луны подложка своя, она остаётся."""
         self.refresh_timer.stop()
         if self.planet.earth:
-            self._switch_basemap(self.sources[self._basemap])
+            self._switch_basemap(self._earth_source())
         self.view.set_relief(self._relief_target())
         self.subsurface.relief_changed()
         self._place_quakes()
@@ -1797,7 +1900,7 @@ class GlobeWindow(QWidget):
             self._update_layer_labels(force=True)
         self._show_attribution()
 
-    def _switch_basemap(self, source):
+    def _switch_basemap(self, source, coarse=False):
         if source is self.source:
             return
         old = self.loader
@@ -1806,7 +1909,7 @@ class GlobeWindow(QWidget):
         self.errors.clear()
         self.source = source
         self._start_loader()
-        self.view.change_source(source.max_level)
+        self.view.change_source(source.max_level, coarse=coarse)
         # Уровни 0-2 просятся сразу. Вид не рисует кадр, пока их нет,
         # и сам их не попросит. Без этого смена подложки до прихода
         # уровней 0-2 оставляла окно пустым, нашлось 26 сентября 2026.
@@ -1853,6 +1956,8 @@ class GlobeWindow(QWidget):
                          and self.terrain_loader is not None else "")
         if "clouds" in self.gibs_loaders:
             parts.append(link_html(*clouds.ATTRIBUTION))
+        if "theme" in self.gibs_loaders:
+            parts.append(link_html(*themes.ATTRIBUTION))
         if "sea" in self.gibs_loaders:
             parts.append(link_html(*temperature.ATTRIBUTION))
         if self.view.quakes.events:
@@ -1860,8 +1965,6 @@ class GlobeWindow(QWidget):
         if self.planet.earth and getattr(self, "extras", {}).get("plates") \
                 and self.plates_data is not None:
             parts.append(link_html(*plates.ATTRIBUTION))
-        if self.view.plain_base is not None:
-            parts.append(link_html(*paleo.ATTRIBUTION))
         if self.view.wedge_slabs:
             parts.append(link_html(*slabs.ATTRIBUTION))
         if self.view.wedge is not None and self.crust is not None:
@@ -1914,6 +2017,13 @@ class GlobeWindow(QWidget):
         if self.attribution.x() < MARGIN + self.paleo_bar.width():
             bottom = min(bottom, self.attribution.y() - MARGIN // 2)
         self.paleo_bar.move(MARGIN, bottom - self.paleo_bar.height())
+        # Шкала темы NASA и её ползунок дня - над всеми.
+        if self.paleo_bar.isVisible():
+            bottom = self.paleo_bar.y() - MARGIN // 2
+        self.theme_legend.move(MARGIN, bottom - self.theme_legend.height())
+        if self.theme_legend.isVisible():
+            bottom = self.theme_legend.y() - MARGIN // 2
+        self.theme_bar.move(MARGIN, bottom - self.theme_bar.height())
 
     def eventFilter(self, watched, event):
         if watched is self.view and event.type() == enum(

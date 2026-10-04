@@ -381,3 +381,95 @@ class BedsLegend(QWidget):
             painter.drawText(int(x + self.SWATCH + 6),
                              int(y + metrics.ascent()), label)
         painter.end()
+
+
+class ThemeLegend(QWidget):
+    """Шкала темы NASA GIBS: название с датой, ниже полоса цветов
+    с подписями (непрерывная шкала) или квадраты классов. scale -
+    словарь core.themes.parse_colormap или None, тогда только строка
+    названия."""
+
+    SWATCH = 10
+    COLUMN = 170  # логических пикселей на столбец классов
+    ROWS = 9  # строк классов в столбце
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(enum(Qt, "WidgetAttribute",
+                               "WA_TransparentForMouseEvents"))
+        self.title = ""
+        self.scale = None
+        self.hide()
+
+    def set_theme(self, title, scale):
+        self.title = title
+        self.scale = scale
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        width = max(BAR_WIDTH + 2 * PAD + 8,
+                    metrics.horizontalAdvance(title) + 2 * PAD)
+        height = line + PAD
+        if scale and scale["kind"] != "classification":
+            height += line + BAR_HEIGHT + 2
+        elif scale:
+            rows = min(len(scale["names"]), self.ROWS)
+            columns = (len(scale["names"]) + self.ROWS - 1) // self.ROWS
+            width = max(width, columns * self.COLUMN + 2 * PAD)
+            height += rows * line
+        self.setFixedSize(width, height)
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+        painter.setBrush(BACKGROUND)
+        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        top = PAD // 2
+        painter.setPen(TEXT)
+        painter.drawText(PAD, top + metrics.ascent(), self.title)
+        scale = self.scale
+        if scale and scale["kind"] != "classification":
+            bar = QRectF(PAD + 4, top + line + 1, BAR_WIDTH, BAR_HEIGHT)
+            colors = scale["colors"]
+            gradient = QLinearGradient(bar.left(), 0, bar.right(), 0)
+            for n, rgb in enumerate(colors):
+                gradient.setColorAt(n / max(len(colors) - 1, 1),
+                                    QColor(*rgb[:3]))
+            painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+            painter.setBrush(gradient)
+            painter.drawRect(bar)
+            painter.setPen(TEXT)
+            # Подпись, которая налезла бы на прежнюю, пропускается.
+            right = -1.0
+            for share, text in scale["labels"]:
+                x = bar.left() + share * BAR_WIDTH
+                width = metrics.horizontalAdvance(text)
+                left = min(max(x - width / 2, 1), self.width() - width - 1)
+                if left < right + 4:
+                    continue
+                right = left + width
+                painter.drawLine(int(x), int(bar.bottom()), int(x),
+                                 int(bar.bottom()) + 2)
+                painter.drawText(int(left),
+                                 int(bar.bottom()) + 2 + metrics.ascent(),
+                                 text)
+        elif scale:
+            for n, (rgb, name) in enumerate(zip(scale["colors"],
+                                                scale["names"])):
+                x = PAD + (n // self.ROWS) * self.COLUMN
+                y = top + line * (n % self.ROWS + 1)
+                painter.setPen(QColor(60, 60, 60))
+                painter.setBrush(QColor(*rgb[:3]))
+                painter.drawRect(QRectF(x, y + (line - self.SWATCH) / 2.0,
+                                        self.SWATCH, self.SWATCH))
+                painter.setPen(TEXT)
+                painter.drawText(int(x + self.SWATCH + 5),
+                                 int(y + metrics.ascent()),
+                                 metrics.elidedText(
+                                     name, enum(Qt, "TextElideMode",
+                                                "ElideRight"),
+                                     self.COLUMN - self.SWATCH - 10))
+        painter.end()

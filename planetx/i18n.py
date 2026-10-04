@@ -172,6 +172,15 @@ EN = {
         "outside its interval are hidden. A closed slider shows all "
         "placemarks.",
     "Основа": "Base map",
+    "На шаг ряда назад.": "One step of the series back.",
+    "На шаг ряда вперёд.": "One step of the series forward.",
+    "День темы. Ползунок идёт по дням ряда, пропущенных дней в нём нет.":
+        "The day of the theme. The slider goes over the days of the "
+        "series, missing days are not on it.",
+    "Показ дней подряд к концу ряда. Следующий день ждёт, пока "
+    "загрузится нынешний.":
+        "Plays the days one after another towards the end of the series. "
+        "The next day waits until the current one has loaded.",
     "{name} · {kind}": "{name} · {kind}",
     "Отметка показывает слой на глобусе, видимость на карте QGIS "
     "не меняется. Двойной щелчок переносит к слою, меню по правой "
@@ -1700,23 +1709,154 @@ EN = {
     "Снимок сохранён: {path}": "Snapshot saved: {path}",
     "{date} до н. э.": "{date} BC",
     "Палеогеография": "Paleogeography",
-    "Берега материков в прошлом, до миллиарда лет назад, по модели "
-    "движения плит из веб-службы GPlates. Возраст задаёт ползунок в "
-    "левом нижнем углу вида. Снимок, границы и подписи на это время "
-    "убраны.":
-        "Continental coastlines in the past, up to a billion years ago, "
-        "from the plate motion model of the GPlates Web Service. The "
-        "slider in the lower left corner of the view sets the age. The "
-        "imagery, borders and labels are removed meanwhile.",
-    "Палеогеография не загрузилась: {error}":
-        "Paleogeography failed to load: {error}",
-    "Возраст в миллионах лет назад. Суша на этот возраст собрана по "
-    "модели Merdith 2021 из веб-службы GPlates.":
-        "Age in millions of years ago. The land for this age is built "
-        "after the Merdith 2021 model from the GPlates Web Service.",
-    "Показ от выбранного возраста к настоящему, шаг 5 млн лет.":
-        "Plays from the chosen age to the present, 5 Myr per step.",
+    "Рельеф суши и глубины моря в прошлом, до 540 млн лет назад, по "
+    "картам PaleoDEM PALEOMAP. Возраст задаёт ползунок в левом нижнем "
+    "углу вида. Снимок, границы и подписи на это время убраны.":
+        "Land relief and sea depths in the past, up to 540 million years "
+        "ago, after the PALEOMAP PaleoDEM maps. The slider in the lower "
+        "left corner of the view sets the age. The imagery, borders and "
+        "labels are removed meanwhile.",
+    "Планета огня": "Planet of Fire",
+    "Дым, аэрозоль и угарный газ пожаров и промышленности по данным "
+    "NASA. Включена одна тема из всех групп. Флажок группы выключает её"
+    " тему и включает снова. День темы задаёт её ползунок в левом "
+    "нижнем углу вида.":
+        "Smoke, aerosol and carbon monoxide of fires and industry from NASA"
+        " data. One theme of all groups is on. The group check box turns "
+        "its theme off and on again. The day of the theme is set by its "
+        "slider in the bottom left corner of the view.",
+    "Планета воды": "Planet of Water",
+    "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
+    "наводнения по данным NASA. Включена одна тема из всех групп. "
+    "Флажок группы выключает её тему и включает снова.":
+        "Precipitation, soil moisture, snow, ice, vapour, chlorophyll, "
+        "salinity and floods from NASA data. One theme of all groups is on."
+        " The group check box turns its theme off and on again.",
+    "Газы": "Gases",
+    "Диоксид азота, диоксид серы, метан, углекислый газ и озон по "
+    "данным NASA. Включена одна тема из всех групп. Флажок группы "
+    "выключает её тему и включает снова.":
+        "Nitrogen dioxide, sulphur dioxide, methane, carbon dioxide and "
+        "ozone from NASA data. One theme of all groups is on. The group "
+        "check box turns its theme off and on again.",
+    "Земля и жизнь": "Land and Life",
+    "Растительность, пыль, ночные огни и типы покрова по данным NASA. "
+    "Включена одна тема из всех групп. Флажок группы выключает её тему "
+    "и включает снова.":
+        "Vegetation, dust, night lights and land cover from NASA data. One "
+        "theme of all groups is on. The group check box turns its theme off"
+        " and on again.",
+    "Дым, аэрозольный индекс": "Smoke, aerosol index",
+    "Поглощающий аэрозоль - дым пожаров и пыль - по OMPS за сутки, "
+    "с 2012 года.":
+        "Absorbing aerosol - smoke of fires and dust - from OMPS per day, "
+        "since 2012.",
+    "Оптическая толщина аэрозоля": "Aerosol optical depth",
+    "Насколько воздух ослабляет свет из-за дыма, пыли и смога, MODIS "
+    "за сутки, с 2017 года.":
+        "How much the air dims light because of smoke, dust and smog, "
+        "MODIS per day, since 2017.",
+    "Угарный газ": "Carbon monoxide",
+    "Доля угарного газа на высоте около 5 км по AIRS за сутки, "
+    "с 2002 года. Шлейфы пожаров видны на тысячи километров.":
+        "Carbon monoxide mixing ratio at about 5 km from AIRS per day, "
+        "since 2002. Fire plumes are seen over thousands of kilometres.",
+    "Выбросы угарного газа": "Carbon monoxide emission",
+    "Выбросы угарного газа у поверхности по реанализу MERRA-2 за месяц, "
+    "с 1980 года. Ряд отстаёт на несколько месяцев.":
+        "Surface carbon monoxide emission from the MERRA-2 reanalysis per "
+        "month, since 1980. The series lags by several months.",
+    "Интенсивность осадков IMERG за сутки, с 2000 года.":
+        "IMERG precipitation rate per day, since 2000.",
+    "Влажность почвы": "Soil moisture",
+    "Влажность верхних сантиметров почвы по SMAP за сутки, "
+    "с 2015 года. В ряду бывают пропущенные дни.":
+        "Moisture of the top centimetres of soil from SMAP per day, since "
+        "2015. The series has missing days.",
+    "Снежный покров": "Snow cover",
+    "Снег по снимкам MODIS Terra за сутки, с 2000 года. Под облаками "
+    "пропуски.":
+        "Snow from MODIS Terra imagery per day, since 2000. There are "
+        "gaps under clouds.",
+    "Морской лёд": "Sea ice",
+    "Сплочённость морского льда по GHRSST MUR за сутки, с 2002 года.":
+        "Sea ice concentration from GHRSST MUR per day, since 2002.",
+    "Водяной пар": "Water vapour",
+    "Водяной пар в толще атмосферы по MODIS Terra за сутки, "
+    "с 2000 года.":
+        "Water vapour in the atmospheric column from MODIS Terra per day, "
+        "since 2000.",
+    "Хлорофилл": "Chlorophyll",
+    "Хлорофилл водорослей в поверхностном слое моря по PACE за сутки, "
+    "с 2024 года.":
+        "Algae chlorophyll in the surface layer of the sea from PACE per "
+        "day, since 2024.",
+    "Солёность моря": "Sea salinity",
+    "Солёность поверхности моря по SMAP, скользящее среднее за 8 суток, "
+    "с 2015 года.":
+        "Sea surface salinity from SMAP, an 8-day running mean, since "
+        "2015.",
+    "Наводнения": "Floods",
+    "Вода, вышедшая за обычные берега, по MODIS за 3 суток, "
+    "с 2021 года.":
+        "Water beyond its usual banks from MODIS over 3 days, since 2021.",
+    "Диоксид азота": "Nitrogen dioxide",
+    "Диоксид азота в тропосфере по TROPOMI за сутки, с 2018 года. "
+    "Видны города, дороги и электростанции.":
+        "Tropospheric nitrogen dioxide from TROPOMI per day, since 2018. "
+        "Cities, roads and power plants are seen.",
+    "Диоксид серы": "Sulphur dioxide",
+    "Диоксид серы у поверхности по OMPS за сутки, с 2012 года. Видны "
+    "вулканы и заводы.":
+        "Near-surface sulphur dioxide from OMPS per day, since 2012. "
+        "Volcanoes and plants are seen.",
+    "Метан": "Methane",
+    "Доля метана на высоте около 7 км по AIRS за месяц, с 2002 года.":
+        "Methane mixing ratio at about 7 km from AIRS per month, since "
+        "2002.",
+    "Углекислый газ": "Carbon dioxide",
+    "Среднее содержание углекислого газа в столбе атмосферы по OCO-2, "
+    "полосы витков за сутки, с 2014 года. Ряд отстаёт на несколько "
+    "месяцев.":
+        "Column-average carbon dioxide from OCO-2, orbit swaths per day, "
+        "since 2014. The series lags by several months.",
+    "Озон": "Ozone",
+    "Общее содержание озона по OMI за сутки, с 2004 года. Видна "
+    "озоновая дыра над Антарктидой.":
+        "Total column ozone from OMI per day, since 2004. The ozone hole "
+        "over Antarctica is seen.",
+    "Растительность": "Vegetation",
+    "Индекс растительности NDVI по MODIS Terra за 16 суток, "
+    "с 2000 года. Ряд отстаёт на месяц.":
+        "NDVI vegetation index from MODIS Terra over 16 days, since 2000. "
+        "The series lags by a month.",
+    "Пыль": "Dust",
+    "Пыль в атмосфере по AIRS за сутки, с 2002 года.":
+        "Dust in the atmosphere from AIRS per day, since 2002.",
+    "Ночные огни": "Night lights",
+    "Ночной снимок VIIRS за сутки, с 2021 года. Видны огни городов, "
+    "пожары, факелы и полярные сияния.":
+        "VIIRS night image per day, since 2021. City lights, fires, gas "
+        "flares and auroras are seen.",
+    "Типы покрова": "Land cover",
+    "Типы земного покрова IGBP по MODIS за год, с 2001 года. Классы - "
+    "в шкале в углу вида.":
+        "IGBP land cover types from MODIS per year, since 2001. The "
+        "classes are in the legend in the corner of the view.",
+    "{name}, {units} · {day}": "{name}, {units} · {day}",
+    "{name} · {day}": "{name} · {day}",
+    "У темы нет дат в ряду.": "The theme has no dates in its series.",
+    "Ряд дат темы не загрузился: {error}":
+        "The date series of the theme failed to load: {error}",
+    "Возраст в миллионах лет назад. Карта рельефа и глубин на этот "
+    "возраст - PaleoDEM PALEOMAP, Scotese и Wright 2018.":
+        "Age in millions of years ago. The map of relief and depths for "
+        "this age is the PALEOMAP PaleoDEM, Scotese and Wright 2018.",
+    "Показ от выбранного возраста к настоящему по всем картам набора.":
+        "Plays from the chosen age to the present through all maps of "
+        "the set.",
     "{age} млн лет назад, {period}": "{age} Myr ago, {period}",
+    "{age} млн лет назад": "{age} Myr ago",
     "Настоящее": "Present",
     "Четвертичный период": "Quaternary", "Неоген": "Neogene",
     "Палеоген": "Paleogene", "Мел": "Cretaceous", "Юра": "Jurassic",

@@ -3115,8 +3115,9 @@ def _land_share(view):
         bits.setsize(image.sizeInBytes())
     a = np.frombuffer(bits, dtype=np.uint8).reshape(
         image.height(), image.width(), 4).astype(int)
-    # Формат ARGB32: в памяти синий, зелёный, красный, альфа.
-    land = a[..., 2] > a[..., 0] + 20
+    # Формат ARGB32: в памяти синий, зелёный, красный, альфа. Суша
+    # карт возраста зелёная и бурая, море синее.
+    land = (a[..., 2] + a[..., 1]) // 2 > a[..., 0] + 15
     return round(float(land.mean()), 4)
 
 
@@ -4422,6 +4423,7 @@ def paleo_startup():
     plugin.run()
     window = plugin.window
     state["window"] = window
+    _paleo_local(window)
     window.set_extra("paleo", True)
     window.view.navigator.set_pose(Pose(5.0, 20.0, 20000000.0, 0.0, 0.0))
     result["paleo_startup"] = {"new_window": window is not old}
@@ -4431,12 +4433,24 @@ def paleo_startup():
 def paleo_startup_check():
     window = state["window"]
     out = result["paleo_startup"]
-    out["cached"] = list(window.paleo_cache)
-    out["texture"] = window.view.land_texture
+    out["source"] = window.source.url
+    out["ready"] = window._paleo_ready()
     out["land"] = _land_share(window.view)
     window.view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_paleo_startup.png"))
     window.set_extra("paleo", False)
+    out["source_off"] = window.source.url
+
+
+def _paleo_local(window):
+    """Карты возрастов - с локальной копии planetx-terrain, если её
+    указывает PLANETX_TERRAIN_DIR, иначе из хранилища."""
+    folder = os.environ.get("PLANETX_TERRAIN_DIR")
+    if folder:
+        from qgis.PyQt.QtCore import QUrl
+        window.paleo_url = QUrl.fromLocalFile(os.path.join(
+            folder, "paleo", "paleomap")).toString() \
+            + "/{age}/{z}/{x}/{y}.jpg"
 
 
 @check(3000)
@@ -4445,6 +4459,7 @@ def paleo_on():
     from planetx.core.navigation import Pose
     window = state["window"]
     window.set_body("earth")
+    _paleo_local(window)
     window.view.navigator.stop()
     window.view.navigator.set_pose(Pose(5.0, 20.0, 20000000.0, 0.0, 0.0))
     window.set_extra("paleo", True)
@@ -4455,7 +4470,7 @@ def paleo_on():
 def paleo_wait():
     window = state["window"]
     out = result["paleo"]
-    if 0 not in window.paleo_cache \
+    if not window._paleo_ready() \
             and time.monotonic() - out["started"] < 60.0:
         return 1000
     out["wait_s"] = round(time.monotonic() - out["started"], 1)
@@ -4463,16 +4478,12 @@ def paleo_wait():
 
 @check(10000)
 def paleo_check():
-    # Смена контекста OpenGL: ресурсы освобождаются и создаются заново,
-    # как при открытии окна. Маска суши обязана прийти снова. Тайлы
-    # после смены грузятся заново, снимок - в следующем шаге.
+    # Смена контекста OpenGL: тайлы карты возраста грузятся заново, как
+    # при открытии окна. Снимок - в следующем шаге.
     window = state["window"]
     view = window.view
     out = result["paleo"]
     out["land_before"] = _land_share(view)
-    # Вид вынимается из окна и возвращается: QOpenGLWidget пересоздаёт
-    # контекст сам, ресурсы освобождает release_gl по aboutToBeDestroyed.
-    out["textures_before"] = [view.clear_texture, view.land_texture]
     old = view.context()
     splitter = window.splitter
     index = splitter.indexOf(view)
@@ -4490,18 +4501,15 @@ def paleo_after():
     view = window.view
     out = result["paleo"]
     out["land_after_context"] = _land_share(view)
-    out["textures_after"] = [view.clear_texture, view.land_texture]
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_paleo.png"))
     window.set_extra("paleo", False)
     out["gl"] = dict(view.gl_errors)
 
 
-# Палеогеография глазами пользователя: возрасты подряд, время ожидания
-# ответа службы и кадры издалека и вблизи берега. Жалоба автора от
-# 4 октября 2026 года - «палеогеография очень плохо работает».
-# Маски суши - с локальной копии planetx-terrain, если её указывает
-# PLANETX_TERRAIN_DIR, иначе из хранилища.
-PALEO_AGES = (0, 5, 100, 250)
+# Палеогеография глазами пользователя: показ возрастов кнопкой, пока
+# камера ходит, паузы цикла событий и время прихода каждого возраста.
+# Жалоба автора от 5 октября 2026 года - «тормозит, дёргается».
+PALEO_FROM = 100  # млн лет, начало показа
 
 
 @check(1000)
@@ -4509,61 +4517,87 @@ def paleo_tour():
     from planetx.core.navigation import Pose
     window = state["window"]
     window.set_body("earth")
+    _paleo_local(window)
     window.view.navigator.stop()
     window.view.navigator.set_pose(Pose(20.0, 20.0, 20000000.0, 0.0, 0.0))
-    folder = os.environ.get("PLANETX_TERRAIN_DIR")
-    if folder:
-        from qgis.PyQt.QtCore import QUrl
-        window.paleo_mask_url = QUrl.fromLocalFile(os.path.join(
-            folder, "paleo", "merdith2021")).toString() + "/{age}.png"
-    window.paleo_cache.clear()
     relief_before = window.view.store.scale
     window.set_extra("paleo", True)
-    result["paleo_tour"] = {"ages": {}, "index": 0,
-                            "started": time.monotonic(),
+    window.paleo_bar.set_age(PALEO_FROM)
+    window._paleo_age(PALEO_FROM)
+    result["paleo_tour"] = {"started": time.monotonic(),
                             "relief_before": relief_before,
                             "relief_on": window.view.store.scale,
-                            "pending_on": window.view.data_pending}
+                            "seen": []}
 
 
 @check(500)
 def paleo_tour_run():
-    from planetx.core.navigation import Pose
+    # Ждёт возраст начала, потом показ кнопкой с качанием камеры.
     window = state["window"]
-    view = window.view
     out = result["paleo_tour"]
-    index = out["index"]
-    if index >= len(PALEO_AGES):
-        return None
-    age = PALEO_AGES[index]
     waited = time.monotonic() - out["started"]
-    if window.paleo_age != age:
-        window.paleo_bar.set_age(age)
-        window._paleo_age(age)
-        out["started"] = time.monotonic()
-        return 500
-    if age not in window.paleo_cache and waited < 90.0:
-        return 500
-    if view.load_missing and waited < 90.0:
-        return 500
-    entry = window.paleo_cache.get(age)
-    view.grabFramebuffer().save(
-        os.path.join(TEMP, "planetx_paleo_%d.png" % age))
-    out["ages"][str(age)] = {
-        "wait_s": round(waited, 1),
-        "kind": entry[0] if entry else None,
-        "pending": view.data_pending,
-        "land_share": _land_share(view),
-        "label": window.paleo_bar.label.text()}
-    out["index"] = index + 1
-    out["started"] = time.monotonic()
-    return 500
+    if "playing" not in out:
+        if not window._paleo_ready() and waited < 60.0:
+            return 500
+        out["first_s"] = round(waited, 1)
+        image = window.view.grabFramebuffer()
+        image.save(os.path.join(TEMP, "planetx_paleo_%d.png" % PALEO_FROM))
+        state["paleo_first"] = _frame_array(image)
+        out["playing"] = time.monotonic()
+        _swing_start("paleo")
+        window.paleo_bar.toggle()
+        return 300
+    seen = out["seen"]
+    if not seen or seen[-1][0] != window.paleo_age:
+        seen.append((window.paleo_age,
+                     round(time.monotonic() - out["playing"], 2)))
+    if window.paleo_bar.timer.isActive() \
+            and time.monotonic() - out["playing"] < 90.0:
+        return 300
+    out["swing"] = _swing_report("paleo")
+    out["play_s"] = round(time.monotonic() - out["playing"], 1)
+    out["ages_seen"] = len(seen)
+    out["label"] = window.paleo_bar.label.text()
+    out["source"] = window.source.url
+    image = window.view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_paleo_0.png"))
+    # Кадр возраста PALEO_FROM отличается от кадра настоящего. На коде
+    # до правки TileLoader._decoded в кадре стояла карта возраста 0.
+    first = state.pop("paleo_first")
+    out["frame_diff"] = round(float(abs(
+        first.astype(int) - _frame_array(image).astype(int)).mean()), 1)
+    return None
+
+
+def _frame_array(image):
+    import numpy as np
+    bits = image.constBits()
+    if hasattr(bits, "setsize"):
+        bits.setsize(image.sizeInBytes())
+    return np.frombuffer(bits, dtype=np.uint8).reshape(
+        image.height(), image.width(), 4)[..., :3].copy()
+
+
+@check(500)
+def loader_stopped():
+    # Ответ рабочего потока после abort не доходит до окна: снятие
+    # связи не отменяет вызова, уже поставленного в очередь.
+    import numpy as np
+    from planetx.net.loader import TileLoader
+    from planetx.core import basemap
+    loader = TileLoader(basemap.osm())
+    seen = []
+    loader.loaded.connect(lambda *args: seen.append(args[0]))
+    loader.abort()
+    loader._decoded((3, 1, 1), np.zeros((256, 256, 4), np.uint8), None)
+    result["loader_stopped"] = {"delivered_after_abort": len(seen)}
+    loader.deleteLater()
 
 
 @check(4000)
 def paleo_close_view():
-    # Берег вблизи на возрасте 0: Гибралтар с 600 км - видно, насколько
-    # груба маска суши.
+    # Берег вблизи на возрасте 0: Гибралтар с 600 км - подробность
+    # карты 0.1°.
     from planetx.core.navigation import Pose
     window = state["window"]
     window.paleo_bar.set_age(0)
@@ -4578,10 +4612,145 @@ def paleo_close_check():
     out = result["paleo_tour"]
     window.view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_paleo_close.png"))
-    out["cache"] = sorted(window.paleo_cache)
     out["message"] = window.message[0]
     window.set_extra("paleo", False)
     out["relief_off"] = window.view.store.scale
+    out["source_off"] = window.source.url
+    out["gl"] = dict(window.view.gl_errors)
+
+
+# Темы NASA GIBS: каждая тема даёт картинки тайлов, день по шкале
+# времени, шкала в углу. Просьба автора от 5 октября 2026 года.
+@check(1000)
+def themes_open():
+    from planetx.core import themes
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("paleo", False)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(20.0, 30.0, 15000000.0, 0.0, 0.0))
+    result["themes"] = {"keys": [t.key for t in themes.THEMES],
+                        "index": 0, "each": {}, "started": None}
+
+
+@check(500)
+def themes_bar():
+    # Ползунок темы: появляется с темой, стоит на последнем дне ряда.
+    # Шкала времени при этом не открывается, её промежуток - меткам
+    # и землетрясениям. Замечание автора от 5 октября 2026 года.
+    window = state["window"]
+    out = result["themes"]
+    if window.theme_key != "ozone":
+        window.timebar.close_bar()
+        window._time_toggled(False)
+        window.set_theme("")
+        window.theme_day = None
+        window.set_theme("ozone")
+        out["bar_started"] = time.monotonic()
+    if "ozone" not in window._theme_domains \
+            and time.monotonic() - out["bar_started"] < 30.0:
+        return 500
+    bar = window.theme_bar
+    out["bar_shown"] = bar.isVisible()
+    out["bar_day"] = window.theme_day
+    out["bar_last"] = bar.days[-1] if bar.days else None
+    out["bar_days"] = len(bar.days)
+    out["timebar_after"] = window.timebar.shown()
+    return None
+
+@check(500)
+def themes_cycle():
+    # Темы по очереди: ряд дат, день, картинки в видеокарте, шкала.
+    window = state["window"]
+    out = result["themes"]
+    keys = out["keys"]
+    if out["index"] >= len(keys):
+        return None
+    key = keys[out["index"]]
+    if window.theme_key != key:
+        window.set_theme(key)
+        out["started"] = time.monotonic()
+        return 500
+    waited = time.monotonic() - out["started"]
+    layer = window.view.gibs["theme"]
+    if (not layer.textures or layer.missing) and waited < 25.0:
+        return 500
+    out["each"][key] = {
+        "day": window.theme_day, "textures": len(layer.textures),
+        "missing": layer.missing, "wait_s": round(waited, 1),
+        "legend": window.theme_legend.isVisible(),
+        "scale": (window._theme_scales.get(key) or {}).get("kind")}
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_theme_%s.png" % key))
+    out["index"] += 1
+    return 500
+
+
+@check(500)
+def themes_time():
+    # День с ползунка темы: осадки на 15 июля 2020 года.
+    window = state["window"]
+    out = result["themes"]
+    if window.theme_key != "rain":
+        window.set_theme("rain")
+        out["time_started"] = time.monotonic()
+    if "rain" not in window._theme_domains \
+            and time.monotonic() - out["time_started"] < 30.0:
+        return 500
+    bar = window.theme_bar
+    bar.slider.setValue(bar.days.index("2020-07-15"))
+    return None
+
+
+@check(8000)
+def themes_time_check():
+    window = state["window"]
+    out = result["themes"]
+    out["day_by_slider"] = window.theme_day
+    out["label"] = window.theme_bar.label.text()
+    layer = window.view.gibs["theme"]
+    out["textures_by_slider"] = len(layer.textures)
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_theme_rain_2020.png"))
+    # Новая тема берёт тот же день, если он есть в её ряду.
+    window.set_theme("snow")
+    out["day_after_switch"] = window.theme_day
+    # Темы в панели - кружки переключателей, снимок списка «Слои».
+    geo = window.panel.geo
+    for group in window.panel.theme_groups:
+        group.setExpanded(True)
+    geo.scrollToItem(window.panel.theme_items["rain"])
+    geo.grab().save(os.path.join(TEMP, "planetx_theme_panel.png"))
+    window.grab().save(os.path.join(TEMP, "planetx_theme_window.png"))
+
+@check(3000)
+def themes_off():
+    window = state["window"]
+    out = result["themes"]
+    out["day_after_close"] = window.theme_day
+    window.set_body("mars")
+    out["on_mars"] = {"legend": window.theme_legend.isVisible(),
+                      "shown": window.view.gibs["theme"].shown}
+    window.set_body("earth")
+    out["back_on_earth"] = window.view.gibs["theme"].shown
+    # Галка группы: снята - тема выключена, поставлена - прежняя тема
+    # группы снова. Замечание автора от 5 октября 2026 года.
+    from planetx.ui.panel import CHECKED, THEME_GROUP_ROLE, UNCHECKED
+    panel = window.panel
+    water = next(g for g in panel.theme_groups
+                 if g.data(0, THEME_GROUP_ROLE) == "water")
+    out["group_checked"] = water.checkState(0) == CHECKED
+    water.setCheckState(0, UNCHECKED)
+    out["group_off"] = (window.theme_key, window.view.gibs["theme"].shown)
+    water.setCheckState(0, CHECKED)
+    out["group_on"] = window.theme_key
+    window.set_theme("")
+    out["bar_after_off"] = window.theme_bar.isVisible()
+    out["group_after_off"] = water.checkState(0) == CHECKED
+    out["off"] = {"legend": window.theme_legend.isVisible(),
+                  "shown": window.view.gibs["theme"].shown,
+                  "loader": "theme" in window.gibs_loaders}
     out["gl"] = dict(window.view.gl_errors)
 
 

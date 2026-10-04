@@ -296,19 +296,44 @@ Sea and ocean depths box in the Terrain group of the view properties
 switches them off, then heights below sea level count as zero and the
 sea is flat. Depths exist only on the Earth.
 
-The Paleogeography row shows the coastlines of the past, up to a
-billion years ago, after the plate motion model of Merdith et al.
-2021 from the GPlates web service. A slider in the bottom left
-corner of the view sets the age in millions of years, the geological
-period is named next to it. Land is filled with a plain colour over
-the ocean. Today's imagery, borders, labels and relief are removed
-for that time, the relief setting itself does not change. The land
-for each age in steps of 5 million years is prepared in advance as
-a map 8192 pixels wide, about 5 km at the equator, and loads from the
-planetx-terrain repository, the first showing of an age needs the
-internet. Narrow enclosed strips of water between the pieces of land
-that the model cuts continents into along plates are filled as land
-on these maps. When the window opens, the row is off.
+The Paleogeography row shows the Earth in the past, up to 540 million
+years ago, after the PALEOMAP PaleoDEM maps (Scotese and Wright, 2018).
+The map of an age holds land heights and sea depths on a 0.1° grid,
+about 11 km, coloured by height with hill shading. A slider in the
+bottom left corner of the view sets the age in millions of years in
+steps of 5 million years, the geological period is named next to it.
+The ▶ button shows the ages one after another towards the present.
+Today's imagery, borders, labels and relief are removed for that time,
+the relief setting itself does not change. The maps lie as tiles in
+the planetx-terrain repository, the first showing of an age needs the
+internet. A new age appears at once in a coarse form and sharpens as
+it loads. When the window opens, the row is off.
+
+The Planet of Fire, Planet of Water, Gases and Land and Life groups at
+the bottom of the Layers section hold NASA themes. A theme is a raster
+by days, months or years from the NASA GIBS service. The groups hold:
+- Planet of Fire - smoke, aerosol optical depth, carbon monoxide and
+  its emission.
+- Planet of Water - precipitation, soil moisture, snow, sea ice, water
+  vapour, chlorophyll, sea salinity and floods.
+- Gases - nitrogen dioxide, sulphur dioxide, methane, carbon dioxide
+  and ozone.
+- Land and Life - vegetation, dust, night lights and land cover.
+
+Themes are radio buttons, one theme of all groups is on. Checking
+another theme clears the previous one. The group check box is checked
+while its theme is on. Clearing it turns the theme off, checking it
+turns the previous theme of the group on. The theme lies as semi-transparent colouring over the
+imagery, where there is no data the imagery shows. A legend with the
+name, units and date stands in the bottom left corner of the view. The
+day of the theme is set by its slider above the legend. It goes over
+the days of the series of the theme, missing days are not on it. The
+⏮ and ⏭ buttons move the day by a step of the series, ▶ shows the days
+one after another towards the end of the series. A theme opens on the
+last day of its series. A new theme takes the day of the previous one
+if its series has that day, otherwise the nearest earlier day. Some
+series lag behind today by months, the
+tooltip of the theme says so. Themes exist only on the Earth.
 
 The Plate boundaries row shows the lithospheric plate boundaries after
 the PB2002 model (Bird, 2003). Red lines are plates moving apart at
@@ -971,7 +996,7 @@ A polygon of My Places cuts the model with the Model cut item of
 its menu, a path puts a wall with beds with the Model section wall
 item. Choosing the item again removes the cut or the wall. Editing
 the shape of the place changes the model at once. So a cut and a
-section are drawn right on the globe with the New placemark tool.
+section are drawn on the globe with the New placemark tool.
 
 The Beds legend in the bottom left corner of the view shows the beds
 of the model from top to bottom in their colours and the tunnels.

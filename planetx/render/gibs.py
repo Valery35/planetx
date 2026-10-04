@@ -39,6 +39,9 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # Маска выреза блока подземного режима (ui/subsurface.py) -
           # блок 8. В шейдере не смешивается, а отбрасывает поверхность.
           ("cut", 16, 8, "u_cut", "u_cut_uv"),
+          # Тема NASA GIBS (core/themes.py) - блок 9, одна тема за раз,
+          # уровень ставит окно по слою темы.
+          ("theme", 9, 9, "u_theme", "u_theme_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
 
 

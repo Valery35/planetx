@@ -1,47 +1,29 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Палеогеография: берега материков в прошлом по веб-службе GPlates.
+"""Палеогеография: карты Земли в прошлом по PaleoDEM PALEOMAP.
 
-Служба отдаёт GeoJSON с многоугольниками берегов на заданный возраст
-в миллионах лет (URL). Модель движения плит MODEL охватывает последний
-миллиард лет. Источник выбран автором 3 октября 2026 года. Расчёт без Qt:
-адрес запроса, разбор ответа, прореживание контуров, название периода.
-
-Суша рисуется заливкой на гладкой основе цвета OCEAN: нынешний снимок,
-границы и подписи на это время убраны. Контуры ложатся в маску суши,
-картинку всей Земли, её красит шейдер тайла. Линиями контуры
-не рисуются: модель режет берега по плитам, швы шли бы по материкам.
+Источник - Scotese & Wright 2018, PALEOMAP Paleodigital Elevation
+Models, сетки высот и глубин 0.1° на возрасты AGES, CC BY 4.0. Выбран
+автором 5 октября 2026 года вместо масок суши службы GPlates: маска
+всей Земли раскодировалась и грузилась в видеокарту целиком, и вид
+вставал на каждом возрасте. Карта возраста - тайлы JPEG Web Mercator
+с раскраской высот и отмывкой, их нарезает tools/build_paleo.py в
+хранилище planetx-terrain. Окно ставит карту возраста подложкой.
+Расчёт без Qt: возрасты, адрес тайлов, название периода.
 """
-try:  # внутри плагина QGIS
-    from .features import Shape
-except ImportError:  # headless-тесты
-    from features import Shape
+import math
 
-SERVICE = "https://gws.gplates.org/reconstruct/coastlines/"
-MODEL = "MERDITH2021"
-MAX_AGE = 1000  # млн лет, охват модели
-STEP = 5  # млн лет, шаг ползунка
-ATTRIBUTION = ("Paleogeography: GPlates Web Service, Merdith et al. 2021",
-               "https://gwsdoc.gplates.org/")
-COLOR = (255, 236, 150, 255)
-OCEAN = (0.10, 0.22, 0.40)  # цвет гладкой основы, океан
-LAND = (0.66, 0.60, 0.42)  # цвет суши на ней
-MASK_WIDTH = 2048  # пикселей в маске суши по долготе
-# Готовые маски суши в planetx-terrain, tools/build_paleo.py: PNG в один
-# бит, MASK_FILE_WIDTH × MASK_FILE_WIDTH / 2. Пиксель на экваторе около
-# 4.9 км против 19.6 км у маски 2048. Решение автора от 4 октября 2026
-# года - служба отвечает 6-25 с на возраст, маски берутся готовыми.
-MASK_FILE_WIDTH = 8192
-MASK_URL = ("https://raw.githubusercontent.com/Valery35/planetx-terrain/"
-            "main/paleo/merdith2021/{age}.png")
-WIDTH = 1.5
-RING_POINTS = 120  # вершин на контур, не больше
-MIN_SPAN = 1.5  # градусов, контур мельче не рисуется
-# Контуров на возраст, не больше, остаются самые крупные. Модель режет
-# берега по плитам на 1379 кусков, все вместе они давали 1.07 млн
-# вершин линий, 3 октября 2026 года.
-MAX_RINGS = 500
+import numpy as np
+
+MAX_AGE = 540  # млн лет, охват набора
+# Возрасты карт набора 6 минут, млн лет: 109 сеток через 5 млн лет.
+AGES = tuple(range(0, MAX_AGE + 1, 5))
+MAX_LEVEL = 4  # уровень тайлов, пиксель около 0.09° у экватора
+TILE_URL = ("https://raw.githubusercontent.com/Valery35/planetx-terrain/"
+            "main/paleo/paleomap/{age}/{z}/{x}/{y}.jpg")
+ATTRIBUTION = ("Paleogeography: PALEOMAP PaleoDEM, Scotese & Wright 2018, "
+               "CC BY 4.0", "https://doi.org/10.5281/zenodo.5460860")
 # Нижние границы периодов, млн лет, шкала ICS.
 PERIODS = ((2.58, "quaternary"), (23.03, "neogene"), (66.0, "paleogene"),
            (145.0, "cretaceous"), (201.4, "jurassic"), (251.9, "triassic"),
@@ -49,11 +31,66 @@ PERIODS = ((2.58, "quaternary"), (23.03, "neogene"), (66.0, "paleogene"),
            (419.2, "devonian"), (443.8, "silurian"), (485.4, "ordovician"),
            (538.8, "cambrian"))
 PRECAMBRIAN = "precambrian"
+# Раскраска высот: отметка в метрах и цвет. Ниже нуля - море, от светлого
+# шельфа к тёмной глубине, выше - суша от низменности к снегу вершин.
+# Цвета подобрал помощник, утверждает автор.
+COLOR_STOPS = ((-9000.0, (8, 28, 66)), (-6000.0, (16, 48, 102)),
+               (-4000.0, (28, 72, 136)), (-2000.0, (48, 108, 168)),
+               (-200.0, (92, 160, 200)), (-0.5, (138, 196, 222)),
+               (0.0, (96, 140, 82)), (300.0, (132, 162, 96)),
+               (1000.0, (186, 176, 118)), (2000.0, (166, 132, 94)),
+               (3500.0, (146, 118, 108)), (5000.0, (236, 236, 236)))
+SUN_AZIMUTH = 315.0  # градусов, свет с северо-запада
+SUN_ALTITUDE = 45.0  # градусов над горизонтом
+# Подъём отмывки: на сетке 11 км уклоны малы, без подъёма горы плоские.
+# У моря подъём меньше, дно не спорит с сушей.
+LAND_RELIEF = 30.0
+SEA_RELIEF = 8.0
 
 
-def url(age, model=MODEL):
-    """Адрес берегов на возраст age млн лет."""
-    return "{}?time={:g}&model={}".format(SERVICE, float(age), model)
+def colors(heights):
+    """Цвет высот: массив (..., 3) uint8 по COLOR_STOPS."""
+    z = np.asarray(heights, dtype=np.float64)
+    marks = np.array([stop[0] for stop in COLOR_STOPS])
+    table = np.array([stop[1] for stop in COLOR_STOPS], dtype=np.float64)
+    out = np.empty(z.shape + (3,))
+    for channel in range(3):
+        out[..., channel] = np.interp(z, marks, table[:, channel])
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8)
+
+
+def hillshade(heights, step, radius=6371008.8):
+    """Отмывка сетки высот через step градусов, север в строке 0:
+    множитель яркости, на равнине около 1."""
+    z = np.asarray(heights, dtype=np.float64)
+    rows = z.shape[0]
+    lat = 90.0 - (np.arange(rows) + 0.5) * 180.0 / rows
+    dy = math.radians(step) * radius
+    dx = np.maximum(np.cos(np.radians(lat)), 0.01)[:, None] * dy
+    relief = np.where(z < 0.0, SEA_RELIEF, LAND_RELIEF)
+    # Долгота замкнута, края сетки по широте повторяют соседа.
+    east = (np.roll(z, -1, axis=1) - np.roll(z, 1, axis=1)) / (2.0 * dx)
+    north = np.empty_like(z)
+    north[1:-1] = (z[:-2] - z[2:]) / (2.0 * dy)
+    north[0] = north[1]
+    north[-1] = north[-2]
+    east *= relief
+    north *= relief
+    azimuth = math.radians(SUN_AZIMUTH)
+    altitude = math.radians(SUN_ALTITUDE)
+    sun = np.array([math.sin(azimuth) * math.cos(altitude),
+                    math.cos(azimuth) * math.cos(altitude),
+                    math.sin(altitude)])
+    length = np.sqrt(east * east + north * north + 1.0)
+    light = (-east * sun[0] - north * sun[1] + sun[2]) / length
+    return np.clip(light / sun[2], 0.35, 1.4)
+
+
+def picture(heights, step):
+    """Карта возраста: цвет высот с отмывкой, массив (..., 3) uint8."""
+    shade = hillshade(heights, step)[..., None]
+    return np.clip(np.rint(colors(heights) * shade), 0, 255).astype(
+        np.uint8)
 
 
 def period(age):
@@ -64,67 +101,7 @@ def period(age):
     return PRECAMBRIAN
 
 
-def thin(ring, limit=RING_POINTS):
-    """Контур не больше чем из limit вершин, вершины через равный шаг."""
-    if len(ring) <= limit:
-        return list(ring)
-    step = len(ring) / float(limit)
-    return [ring[int(i * step)] for i in range(limit)]
-
-
-def _rings(geometry):
-    kind = geometry.get("type")
-    coordinates = geometry.get("coordinates") or []
-    if kind == "Polygon":
-        return coordinates[:1]
-    if kind == "MultiPolygon":
-        return [part[0] for part in coordinates if part]
-    return []
-
-
-def parse(data, limit=RING_POINTS, min_span=MIN_SPAN, count=MAX_RINGS):
-    """Внешние контуры берегов из ответа службы: списки (широта,
-    долгота) без повтора первой точки, от крупных к мелким. Мелкие
-    контуры пропускаются."""
-    out = []
-    for feature in (data or {}).get("features") or []:
-        for ring in _rings(feature.get("geometry") or {}):
-            points = []
-            for pair in ring:
-                if len(pair) >= 2:
-                    points.append((float(pair[1]), float(pair[0])))
-            if len(points) > 1 and points[0] == points[-1]:
-                points.pop()
-            if len(points) < 3:
-                continue
-            lats = [p[0] for p in points]
-            lons = [p[1] for p in points]
-            span = max(max(lats) - min(lats), max(lons) - min(lons))
-            if span < min_span:
-                continue
-            out.append((span, thin(points, limit)))
-    out.sort(key=lambda item: -item[0])
-    return [ring for _, ring in out[:count]]
-
-
-def unwrapped(ring):
-    """Контур для маски суши: долгота идёт без скачка на 180°, может
-    выходить за ±180. Контур вокруг полюса дополнен до него, иначе
-    заливка не закрывает полярную шапку."""
-    out = [tuple(ring[0])]
-    lon = raw = ring[0][1]
-    for lat, value in list(ring[1:]) + [ring[0]]:
-        lon += (value - raw + 180.0) % 360.0 - 180.0
-        raw = value
-        out.append((lat, lon))
-    turn = lon - ring[0][1]
-    if abs(turn) < 180.0:
-        return out[:-1]
-    pole = 90.0 if sum(p[0] for p in ring) > 0.0 else -90.0
-    return out + [(pole, lon), (pole, ring[0][1])]
-
-
-def shapes(rings):
-    """Контуры линиями для глобуса."""
-    return [Shape("line", list(ring) + [ring[0]], COLOR, WIDTH)
-            for ring in rings]
+def nearest(age, ages=None):
+    """Ближайший к age возраст из набора."""
+    ages = ages or AGES
+    return min(ages, key=lambda value: (abs(value - age), value))

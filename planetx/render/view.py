@@ -323,17 +323,10 @@ class GlobeView(QOpenGLWidget):
         # Разрез Земли: вынутый сектор (core.cutaway.Wedge или None)
         # и грани с оболочками - отдельный набор подземных сеток.
         self.wedge = None
-        # Гладкая основа: цвет (r, g, b) от 0 до 1 вместо снимка,
-        # наложений и подписей мест, или None. Фон палеогеографии.
-        self.plain_base = None
-        # Маска суши на гладкой основе: цвет суши, текстура и новая
-        # картинка (h, w, 4), которая ждёт кадра. False - убрать.
-        self.land_color = (0.6, 0.6, 0.6)
-        self.land_texture = None
-        self._land_new = None
-        # Сама маска: после смены контекста она грузится в видеокарту
-        # заново, текстура старого контекста пропадает.
-        self._land_mask = None
+        # Палеогеография: снимок подложки - карта прошлого со своей
+        # отмывкой. Без отмывки вида, воды, наложений, солнца и подписей
+        # нынешних мест.
+        self.plain_base = False
         self.cutaway = Subsurface()
         self.wedge_crust = None
         self.wedge_gain = 1.0
@@ -555,13 +548,6 @@ class GlobeView(QOpenGLWidget):
         self.last_arrival = time.monotonic()
         self.update()
 
-    def set_land(self, mask):
-        """Маска суши для гладкой основы: массив (h, w, 4) uint8,
-        равнопромежуточная картинка всей Земли, или None."""
-        self._land_new = False if mask is None else mask
-        self._land_mask = mask
-        self.update()
-
     def set_tool_cursor(self, cross):
         """Перекрестие у инструментов, иначе стрелка."""
         self.tool_cursor = enum(Qt, "CursorShape",
@@ -714,15 +700,24 @@ class GlobeView(QOpenGLWidget):
             self._maybe_rebuild(key, level)
         self.update()
 
-    def change_source(self, max_level):
+    def change_source(self, max_level, coarse=False):
         """Новая подложка.
 
         Тайлы прежней подложки, нужные кадру, и уровни 0-2 остаются
         на экране, пока их не заменят новые. Остальные освобождаются
         в кадре, где контекст OpenGL текущий, см. _drop_stale.
+
+        coarse=True - на экране остаются только уровни 0-2, прочие тайлы
+        освобождаются сразу. Так у карт возрастов палеогеографии кадр
+        не смешивает две карты: новая встаёт грубой и уточняется.
         """
         self.max_level = max_level
         self.pending.clear()
+        if coarse and self._context is not None:
+            self.makeCurrent()
+            for key in [k for k in self.textures if k not in START_KEYS]:
+                self._forget(key)
+            self.doneCurrent()
         self.stale = set(self.textures)
         self._wanted = frozenset()
         self._wanted_at = 0.0
@@ -1238,9 +1233,6 @@ class GlobeView(QOpenGLWidget):
                                                   "u_wedge_on")
         self.u_wedge = GL.glGetUniformLocation(self.program, "u_wedge")
         self.u_plain = GL.glGetUniformLocation(self.program, "u_plain")
-        self.u_paleo = GL.glGetUniformLocation(self.program, "u_paleo")
-        self.u_land_color = GL.glGetUniformLocation(self.program,
-                                                    "u_land_color")
         self.u_wedge_lat = GL.glGetUniformLocation(self.program,
                                                    "u_wedge_lat")
         GL.glUseProgram(self.program)
@@ -1332,14 +1324,6 @@ class GlobeView(QOpenGLWidget):
         self.pool.delete_all()
         if self.clear_texture is not None:
             gpu.delete_texture(self.clear_texture)
-            if self.land_texture is not None:
-                gpu.delete_texture(self.land_texture)
-                self.land_texture = None
-            # Новый контекст получит ту же маску суши. Без этого
-            # палеогеография, включённая при открытии окна, шла
-            # сплошным океаном: маска приходила до смены контекста.
-            if self._land_mask is not None:
-                self._land_new = self._land_mask
             self.clear_texture = None
         self.overlays = {}
         if self.ocean is not None:
@@ -1751,24 +1735,7 @@ class GlobeView(QOpenGLWidget):
             self.cutaway_slabs.drawn = 0
         gpu.gl.glUseProgram(self.program)
         gpu.gl.glUniform1f(self.u_wedge_on, 0.0 if wedge is None else 1.0)
-        plain = self.plain_base
-        gpu.gl.glUniform4f(self.u_plain, *((0.0, 0.0, 0.0, 0.0)
-                                           if plain is None
-                                           else tuple(plain) + (1.0,)))
-        if self._land_new is not None:
-            if self.land_texture is not None:
-                gpu.delete_texture(self.land_texture)
-            self.land_texture = None if self._land_new is False \
-                else gpu.create_texture(self._land_new)
-            self._land_new = None
-        if plain is not None:
-            gpu.gl.glActiveTexture(GL.GL_TEXTURE9)
-            GL.glBindTexture(GL.GL_TEXTURE_2D, self.clear_texture
-                             if self.land_texture is None
-                             else self.land_texture)
-            gpu.gl.glActiveTexture(GL.GL_TEXTURE0)
-            gpu.gl.glUniform1i(self.u_paleo, 9)
-            GL.glUniform3f(self.u_land_color, *self.land_color)
+        gpu.gl.glUniform1f(self.u_plain, 1.0 if self.plain_base else 0.0)
         if wedge is not None:
             cx, cy, cos_half, sin_s, sin_n = cutaway.uniform(wedge)
             gpu.gl.glUniform4f(self.u_wedge, cx, cy, cos_half, 0.0)
@@ -2276,7 +2243,7 @@ class GlobeView(QOpenGLWidget):
                 self._places_wanted = keys
                 self._places_at = now
         # На гладкой основе нынешних городов и стран нет.
-        kinds = set() if self.plain_base is not None \
+        kinds = set() if self.plain_base \
             else kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark

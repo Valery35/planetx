@@ -1,26 +1,33 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Палеогеография: адрес запроса, разбор ответа, периоды."""
+"""Палеогеография: возрасты, периоды, раскраска и отмывка карт."""
 import os
 import sys
 import unittest
+
+import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "core"))
 
 import paleo  # noqa: E402
 
-SQUARE = [[10.0, 0.0], [20.0, 0.0], [20.0, 5.0], [10.0, 5.0], [10.0, 0.0]]
-
 
 class TestPaleo(unittest.TestCase):
 
-    def test_url(self):
-        self.assertEqual(
-            paleo.url(250),
-            "https://gws.gplates.org/reconstruct/coastlines/"
-            "?time=250&model=MERDITH2021")
+    def test_ages(self):
+        self.assertEqual(len(paleo.AGES), 109)
+        self.assertEqual((paleo.AGES[0], paleo.AGES[-1]), (0, 540))
+
+    def test_nearest(self):
+        self.assertEqual(paleo.nearest(252), 250)
+        self.assertEqual(paleo.nearest(1000), 540)
+        self.assertEqual(paleo.nearest(-3), 0)
+
+    def test_tile_url_has_age_and_tile(self):
+        url = paleo.TILE_URL.format(age=250, z=2, x=1, y=3)
+        self.assertTrue(url.endswith("/paleomap/250/2/1/3.jpg"))
 
     def test_period(self):
         self.assertEqual(paleo.period(0), "quaternary")
@@ -28,60 +35,27 @@ class TestPaleo(unittest.TestCase):
         self.assertEqual(paleo.period(280), "permian")
         self.assertEqual(paleo.period(600), "precambrian")
 
-    def test_parse_polygon(self):
-        data = {"features": [{"geometry": {"type": "Polygon",
-                                           "coordinates": [SQUARE]}}]}
-        rings = paleo.parse(data)
-        # Широта первой, замыкающая точка убрана.
-        self.assertEqual(rings, [[(0.0, 10.0), (0.0, 20.0), (5.0, 20.0),
-                                  (5.0, 10.0)]])
+    def test_sea_is_blue_and_land_is_not(self):
+        sea, land = paleo.colors([-3000.0, 500.0])
+        self.assertGreater(sea[2], sea[0])
+        self.assertGreater(land[1], land[2])
 
-    def test_parse_multipolygon_and_small(self):
-        small = [[0.0, 0.0], [0.1, 0.0], [0.1, 0.1], [0.0, 0.0]]
-        data = {"features": [{"geometry": {
-            "type": "MultiPolygon",
-            "coordinates": [[SQUARE], [small]]}}]}
-        self.assertEqual(len(paleo.parse(data)), 1)
+    def test_flat_ground_is_not_shaded(self):
+        shade = paleo.hillshade(np.full((20, 40), 100.0), 0.1)
+        self.assertTrue(np.allclose(shade, 1.0))
 
-    def test_largest_rings_kept(self):
-        big = [[0.0, 0.0], [40.0, 0.0], [40.0, 30.0], [0.0, 0.0]]
-        data = {"features": [
-            {"geometry": {"type": "Polygon", "coordinates": [SQUARE]}},
-            {"geometry": {"type": "Polygon", "coordinates": [big]}}]}
-        rings = paleo.parse(data, count=1)
-        self.assertEqual(len(rings), 1)
-        self.assertEqual(rings[0][1], (0.0, 40.0))
+    def test_slope_to_sun_is_lighter(self):
+        # Высота растёт к юго-востоку: склон смотрит на северо-запад,
+        # к солнцу, и светлее равнины. Обратный склон темнее.
+        rows, cols = np.mgrid[0:20, 0:40]
+        towards = paleo.hillshade((rows + cols) * 50.0, 0.1)
+        away = paleo.hillshade(-(rows + cols) * 50.0, 0.1)
+        self.assertGreater(towards[10, 20], 1.0)
+        self.assertLess(away[10, 20], 1.0)
 
-    def test_parse_empty(self):
-        self.assertEqual(paleo.parse(None), [])
-        self.assertEqual(paleo.parse({"features": [{"geometry": None}]}), [])
-
-    def test_thin(self):
-        ring = [(float(i), 0.0) for i in range(1000)]
-        thinned = paleo.thin(ring, 100)
-        self.assertEqual(len(thinned), 100)
-        self.assertEqual(thinned[0], ring[0])
-
-    def test_unwrapped_plain_ring(self):
-        ring = [(0.0, 10.0), (0.0, 20.0), (5.0, 20.0)]
-        self.assertEqual(paleo.unwrapped(ring), ring)
-
-    def test_unwrapped_across_180(self):
-        ring = [(0.0, 170.0), (0.0, -170.0), (5.0, -170.0), (5.0, 170.0)]
-        lons = [p[1] for p in paleo.unwrapped(ring)]
-        self.assertEqual(lons, [170.0, 190.0, 190.0, 170.0])
-
-    def test_unwrapped_around_pole(self):
-        ring = [(-80.0, float(lon)) for lon in range(-180, 180, 30)]
-        points = paleo.unwrapped(ring)
-        # Контур обошёл полюс: дополнен до южного полюса.
-        self.assertEqual(points[-2:], [(-90.0, 180.0), (-90.0, -180.0)])
-        self.assertEqual(points[-3], (-80.0, 180.0))
-
-    def test_shapes_are_closed_lines(self):
-        shape = paleo.shapes([[(0.0, 0.0), (0.0, 1.0), (1.0, 1.0)]])[0]
-        self.assertEqual(shape.kind, "line")
-        self.assertEqual(shape.points[0], shape.points[-1])
+    def test_picture_shape(self):
+        image = paleo.picture(np.zeros((10, 20)), 0.1)
+        self.assertEqual((image.shape, image.dtype), ((10, 20, 3), np.uint8))
 
 
 if __name__ == "__main__":
