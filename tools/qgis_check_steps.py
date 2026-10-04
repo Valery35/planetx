@@ -4970,6 +4970,123 @@ def overlays_kmz():
 
 
 @check(1500)
+def overlays_project():
+    # Картинки на поверхности - слоями проекта QGIS в GeoTIFF. Вопрос
+    # автора от 5 октября 2026 года - «растры положить в кугис обратно».
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["overlays"]
+    key = state["overlay_keys"][0]
+    item = window.myplaces.find(key)
+    path = os.path.join(TEMP, "planetx_ov_ground.tif")
+    layers = window.ground_to_project(key, target=path)
+    out["project_layers"] = len(layers)
+    if layers:
+        layer = layers[0]
+        box = layer.extent()
+        lats = [c[0] for c in item.overlay.corners]
+        lons = [c[1] for c in item.overlay.corners]
+        out["project_crs"] = layer.crs().authid()
+        out["project_extent"] = [round(box.xMinimum() - min(lons), 4),
+                                 round(box.xMaximum() - max(lons), 4),
+                                 round(box.yMinimum() - min(lats), 4),
+                                 round(box.yMaximum() - max(lats), 4)]
+        out["project_opacity"] = round(layer.renderer().opacity(), 2)
+        out["project_group"] = QgsProject.instance().layerTreeRoot() \
+            .findLayer(layer.id()).parent().name()
+    folder = os.path.join(TEMP, "planetx_ov_project")
+    os.makedirs(folder, exist_ok=True)
+    more = window.ground_to_project(None, target=folder)
+    # В профиле могут остаться картинки демо по ссылкам, тогда выгрузка
+    # ждёт их загрузки.
+    out["project_folder"] = len(more) or (
+        "waits" if window._ground_export is not None else 0)
+    window._ground_export = None
+    for layer in layers + more:
+        QgsProject.instance().removeMapLayer(layer.id())
+
+
+@check(2000)
+def aral_open():
+    # Демо «Аральское море» - наложения по ссылкам, просьба автора
+    # от 5 октября 2026 года «демки к растрам, можно по ссылкам».
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Аральское море", "Aral Sea"))
+    action.trigger()
+    key = window.panel.current_folder() if hasattr(
+        window.panel, "current_folder") else None
+    result["aral"] = {"folder": key}
+
+
+@check(3000)
+def aral_wait():
+    window = state["window"]
+    started = state.setdefault("aral_started", time.monotonic())
+    if window._href_replies and time.monotonic() - started < 60.0:
+        return 500
+
+
+@check(2000)
+def aral_check():
+    window = state["window"]
+    view = window.view
+    out = result["aral"]
+    items = [o for o in window.myplaces.overlays
+             if o.href.startswith("https://")]
+    out["overlays"] = sorted(o.kind for o in items)
+    out["visible"] = sorted(o.kind for o in items if o.visible)
+    out["loaded"] = len(window._link_images)
+    out["ground_layers"] = len(window._ground)
+    out["ground_errors"] = window.ground_layers.errors
+    out["photos_drawn"] = view.photos.drawn
+    out["screen"] = [(l.x(), l.y(), l.width(), l.height(), l.isVisible())
+                     for l in window.screen_overlays.labels]
+    out["view_size"] = [view.width(), view.height()]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_aral.png"))
+    window.grab().save(os.path.join(TEMP, "planetx_aral_window.png"))
+    # Папка трёх снимков - в проект QGIS. Скрытые снимки ещё не
+    # загружены, выгрузка ждёт их.
+    frames = next(f for f in window.myplaces.folders
+                  if f.name.startswith("Снимки MODIS"))
+    target = os.path.join(TEMP, "planetx_aral_project")
+    os.makedirs(target, exist_ok=True)
+    state["aral_layers"] = window.ground_to_project(frames.key,
+                                                    target=target)
+    out["export_now"] = len(state["aral_layers"])
+    out["export_waits"] = window._ground_export is not None
+
+
+@check(3000)
+def aral_project_wait():
+    window = state["window"]
+    started = state.setdefault("aral_export", time.monotonic())
+    if window._ground_export is not None \
+            and time.monotonic() - started < 60.0:
+        return 500
+
+
+@check(1000)
+def aral_project_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["aral"]
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        "PlanetX - картинки")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["project_layers"] = [(l.name(), l.isValid(), l.crs().authid())
+                             for l in layers]
+    if layers:
+        box = layers[0].extent()
+        out["project_extent"] = [round(box.xMinimum(), 3),
+                                 round(box.yMinimum(), 3),
+                                 round(box.xMaximum(), 3),
+                                 round(box.yMaximum(), 3)]
+    for layer in layers:
+        QgsProject.instance().removeMapLayer(layer.id())
+
+
+@check(1500)
 def overlays_clean():
     window = state["window"]
     out = result["overlays"]
@@ -5002,6 +5119,34 @@ def section_open():
     window._place_action("section", key)
     result["section"] = {"started": time.monotonic(),
                          "dialog": window.section_dialog is not None}
+
+
+@check(3000)
+def ground_refs():
+    # Сторож сбоя QGIS 3.36 на выходе, 5 октября 2026 года. Закрытое окно
+    # Qt удаляет позже, а очистка проекта при выходе будила его, и оно
+    # собирало новое наложение с растрами картинок вне проекта. Python
+    # удалял их после выхода QGIS. Шаг закрывает окно, очищает проект,
+    # как finish, и считает живые растры и наложение без сборки мусора.
+    import gc
+    from qgis.core import QgsRasterLayer
+    window = state["window"]
+    from qgis.PyQt import sip
+
+    def rasters():
+        return len([l for l in gc.get_objects()
+                    if isinstance(l, QgsRasterLayer)
+                    and not sip.isdeleted(l)])
+
+    before = rasters()
+    window.close()
+    QgsProject.instance().clear()
+    alive = rasters()
+    overlay = window.overlay
+    result["ground_refs"] = {
+        "before": before, "after": alive,
+        "overlay_after_close": overlay is not None
+        and not getattr(overlay, "stopped", True)}
 
 
 @check(1000)

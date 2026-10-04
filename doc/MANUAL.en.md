@@ -834,6 +834,13 @@ images from the places file and the ones linked to files. To KML the
 images from the places file go into a folder next to it, links stay
 links.
 
+Image to the QGIS project… in the menu of a ground overlay writes it to
+a GeoTIFF file in WGS84 by the corners of the image. The file is added
+to the project as a raster layer in the PlanetX - images group, with
+the opacity of the overlay. Ground overlays to the QGIS project… in the
+folder menu does the same for all ground overlays of the folder, into a
+chosen directory.
+
 Clear My Places… removes all placemarks and folders after a
 confirmation. The removal cannot be undone, so the places needed are
 better saved to KML first.
@@ -1241,6 +1248,7 @@ under the list plays a tour over them. The folder can be deleted.
 | Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
 | Earth | Permian deposits | A synthetic site near Berezniki with drill holes, roofs, sections and a cut. A tour of five stops explains the subsurface mode, see [Subsurface mode](#subsurface-mode) |
 | Earth | Vegas Loop tunnels | The Boring Company tunnels under Las Vegas with their stations, see [Subsurface mode](#subsurface-mode) |
+| Earth | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |

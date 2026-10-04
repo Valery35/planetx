@@ -1331,6 +1331,8 @@ class LayerPanel(QWidget):
                        None,
                        ("import_kml", tr("Открыть KML или KMZ…")),
                        ("export_kml", tr("Сохранить как KML…")),
+                       ("ground_project",
+                        tr("Картинки на поверхности в проект QGIS…")),
                        None,
                        ("snapshot", tr("Снимок вида папки")),
                        ("sort", tr("Сортировать от А до Я")),
@@ -1352,6 +1354,9 @@ class LayerPanel(QWidget):
             elif key.startswith("point:"):
                 actions.append(("viewshed", tr("Видимость отсюда…")))
                 actions.append(("insolation", tr("Инсоляция…")))
+            elif key.startswith("ground:"):
+                actions.append(("ground_project",
+                                tr("Картинку в проект QGIS…")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),

@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.34.0.
+A 3D globe inside QGIS. PlanetX version 0.35.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -197,7 +197,8 @@ and atmosphere, from space down to single streets.
   styles and placemark views. A folder saves to KMZ or KML.
 - **Image overlays.** A ground overlay by a box or four corners, a photo
   with a camera and a screen overlay, as in Google Earth. The image is
-  kept in the places file or as a link to a file or address.
+  kept in the places file or as a link to a file or address. A
+  ground overlay goes into the QGIS project as a GeoTIFF layer.
 - **Copy and paste.** Places and folders are copied to the clipboard
   as KML text and pasted back, also after editing in a text editor and
   from Google Earth.

@@ -600,3 +600,8 @@ class LayerOverlay(QObject):
         self.sink.done.disconnect()
         self.pool.clear()
         self.pool.waitForDone(1000)
+        # Слои вне проекта (растры картинок, векторная основа) живут, пока
+        # на них есть ссылка. Список снимается здесь, иначе они
+        # удаляются при разборе Python после выхода QGIS, и QGIS 3.36
+        # падает с нарушением доступа.
+        self.layers = []

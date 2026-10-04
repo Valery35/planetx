@@ -17,7 +17,8 @@ import time
 
 import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsCsException, QgsProject, QgsSettings)
+                       QgsCsException, QgsProject, QgsRasterLayer,
+                       QgsSettings)
 from qgis.PyQt.QtCore import QEvent, QMimeData, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon, QImage
 from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
@@ -79,7 +80,7 @@ from .legend import (BedsLegend, CutawayLegend, InsolationLegend,
 from .themes import theme_names
 from .overlays import (OUTLINE, BoxVertices, CornerVertices,
                        GroundLayers, OverlayDialog, ScreenOverlays,
-                       image_rgba)
+                       ground_geotiff, image_rgba)
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
@@ -531,6 +532,8 @@ class GlobeWindow(QWidget):
         self.overlay_dialogs = {}
         self._href_replies = {}
         self._link_images = {}
+        # Выгрузка в проект, ждущая картинок по ссылкам: (ключи, место).
+        self._ground_export = None
         self._overlay_edits = {}
         self._ground_pending = {}
         self._ground_timer = QTimer(self)
@@ -2809,7 +2812,8 @@ class GlobeWindow(QWidget):
 
     def open_demo(self, name="perm"):
         """Демо из папки модуля, tools/make_demo.py: perm, bocachica,
-        japan, subsurface, mars, jezero, moon, sky. У subsurface после
+        japan, subsurface, vegas, aral, mars, jezero, moon, sky. У
+        subsurface после
         сцены строится подземное из planetx/demo/subsurface. У japan
         открывается окно «Разрез» по первому пути папки демо без тура."""
         demo = os.path.join(os.path.dirname(os.path.dirname(__file__)),
@@ -3492,6 +3496,9 @@ class GlobeWindow(QWidget):
         if action in ("add_ground", "add_photo", "add_screen"):
             self.add_overlay(action[4:], key or None)
             return
+        if action == "ground_project":
+            self.ground_to_project(key or None)
+            return
         if action == "sort":
             self.myplaces.sort_folder(key or None)
             return
@@ -3722,10 +3729,11 @@ class GlobeWindow(QWidget):
         if data and not QImage.fromData(data).isNull():
             self._link_images[link] = bytes(data)
             self._refresh_overlays()
-            return
-        self.message = (tr("Картинка по ссылке не загрузилась: {link}",
-                           link=link), time.monotonic())
-        self._show_state()
+        else:
+            self.message = (tr("Картинка по ссылке не загрузилась: {link}",
+                               link=link), time.monotonic())
+            self._show_state()
+        self._ground_export_ready()
 
     def _overlay_bytes(self, item):
         """Байты картинки наложения: из файла меток или по ссылке."""
@@ -3832,6 +3840,94 @@ class GlobeWindow(QWidget):
             self.panel.select_place(key)
             self._open_overlay_properties(self.myplaces.find(key))
         return key
+
+    def ground_to_project(self, key=None, target=None):
+        """Картинки на поверхности - слоями проекта QGIS: файлы GeoTIFF
+        в WGS84 по углам картинки и растровые слои в группе «PlanetX -
+        картинки». key - картинка или папка, у папки - все её картинки
+        на поверхности. target - файл для одной картинки или папка для
+        нескольких, без него - окно выбора. Возвращает новые слои."""
+        keys = self.myplaces.with_contents([key]) if key \
+            else [o.key for o in self.myplaces.overlays]
+        items = [o for o in self.myplaces.overlays
+                 if o.key in keys and o.kind == "ground"]
+        if not items:
+            self.message = (tr("В папке нет картинок на поверхности."),
+                            time.monotonic())
+            self._show_state()
+            return []
+        start = QgsProject.instance().homePath() or os.path.expanduser("~")
+        if target is None and len(items) == 1:
+            target, _ = QFileDialog.getSaveFileName(
+                self, tr("Картинка в проект QGIS"),
+                os.path.join(start, (items[0].name or "overlay") + ".tif"),
+                tr("GeoTIFF (*.tif)"))
+        elif target is None:
+            target = QFileDialog.getExistingDirectory(
+                self, tr("Папка для картинок"), start)
+        if not target:
+            return []
+        # Скрытая картинка по ссылке ещё не загружена. Выгрузка ждёт
+        # ответов и идёт из _link_done, когда пришёл последний.
+        for item in items:
+            self._overlay_bytes(item)
+        if any(item.image is None and item.href in self._href_replies
+               for item in items):
+            self._ground_export = ([item.key for item in items], target)
+            self.message = (tr("Картинки по ссылкам загружаются, слои "
+                               "добавятся после загрузки."),
+                            time.monotonic())
+            self._show_state()
+            return []
+        return self._write_ground(items, target)
+
+    def _ground_export_ready(self):
+        """Ждущая выгрузка в проект, если пришли все её ссылки."""
+        if self._ground_export is None:
+            return
+        keys, target = self._ground_export
+        items = [o for o in self.myplaces.overlays if o.key in keys]
+        if any(item.image is None and item.href in self._href_replies
+               for item in items):
+            return
+        self._ground_export = None
+        self._write_ground(items, target)
+
+    def _write_ground(self, items, target):
+        """Файлы GeoTIFF картинок items и слои в группе «PlanetX -
+        картинки». target - файл одной картинки или папка."""
+        project = QgsProject.instance()
+        group = project.layerTreeRoot().findGroup(tr("PlanetX - картинки"))
+        if group is None:
+            group = project.layerTreeRoot().insertGroup(
+                0, tr("PlanetX - картинки"))
+        added = []
+        for n, item in enumerate(items):
+            if len(items) == 1 and not os.path.isdir(target):
+                path = target
+            else:
+                name = "".join(c if c.isalnum() or c in "-_ " else "_"
+                               for c in (item.name or "overlay")).strip()
+                path = os.path.join(target, "{}_{}.tif".format(
+                    name or "overlay", n + 1))
+            ok = ground_geotiff(item.fid, item.overlay,
+                                self._overlay_bytes(item), path)
+            layer = QgsRasterLayer(path, item.name or os.path.basename(path),
+                                   "gdal") if ok else None
+            if layer is None or not layer.isValid():
+                self.message = (tr("Картинка «{name}» не записана.",
+                                   name=item.name), time.monotonic())
+                self._show_state()
+                continue
+            layer.renderer().setOpacity(item.overlay.color[3] / 255.0)
+            project.addMapLayer(layer, False)
+            group.addLayer(layer)
+            added.append(layer)
+        if added:
+            self.message = (tr("В проект добавлено картинок {count}.",
+                               count=len(added)), time.monotonic())
+            self._show_state()
+        return added
 
     def _open_overlay_properties(self, item):
         """Немодальное окно свойств наложения. Правки видны сразу,
@@ -4969,6 +5065,11 @@ class GlobeWindow(QWidget):
         # Сообщение о закрытии уходит и после ошибки по дороге, иначе
         # плагин держит ссылку на окно, которое Qt уже уничтожил.
         try:
+            # Закрытое окно Qt удаляет позже. До того правки проекта, в том
+            # числе его очистка при выходе QGIS, будили бы окно, и оно
+            # собирало бы новое наложение со слоями вне проекта. Их
+            # удаление после выхода роняло QGIS 3.36.
+            self.watch.blockSignals(True)
             self.sync.close()
             self.tracks.close()
             self.layer_labels.close()
@@ -5005,6 +5106,12 @@ class GlobeWindow(QWidget):
                     loader.abort()
             if self.overlay is not None:
                 self.overlay.abort()
+            # Растры картинок на поверхности не входят в проект, их держит
+            # окно. Они отпускаются здесь, пока QGIS жив, а не при разборе
+            # Python после выхода.
+            self._ground = []
+            self._ground_ids = []
+            self.ground_layers.clear()
             self.refresh_timer.stop()
             set_moving(False)
             if self.properties is not None:

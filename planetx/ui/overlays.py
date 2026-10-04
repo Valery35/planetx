@@ -97,13 +97,13 @@ def ground_file(fid, overlay, data):
     """Файл растра VRT с привязкой картинки на поверхности по углам, или
     None, если GDAL картинку не прочёл. Имя - по картинке и углам, так
     одинаковый растр не пересоздаётся."""
-    from osgeo import gdal
     stamp = hashlib.sha256(data + repr(overlay.corners).encode(
         "ascii")).hexdigest()[:16]
     base = os.path.join(folder(), "{}_{}".format(fid, stamp))
     vrt = base + ".vrt"
     if os.path.exists(vrt):
         return vrt
+    from osgeo import gdal
     source = base + "." + _ext(data)
     with open(source, "wb") as stream:
         stream.write(data)
@@ -143,6 +143,21 @@ def ground_file(fid, overlay, data):
     return vrt
 
 
+def ground_geotiff(fid, overlay, data, path):
+    """Картинка на поверхности файлом GeoTIFF в WGS84 по её растру VRT,
+    для слоя проекта QGIS. Возвращает, записан ли файл."""
+    from osgeo import gdal
+    vrt = ground_file(fid, overlay, data) if data else None
+    if vrt is None:
+        return False
+    out = gdal.Translate(path, vrt, format="GTiff",
+                         creationOptions=["COMPRESS=DEFLATE", "TILED=YES"])
+    if out is None:
+        return False
+    out = None
+    return os.path.exists(path)
+
+
 class GroundLayers:
     """Растры QGIS картинок на поверхности, по одному на наложение."""
 
@@ -173,6 +188,10 @@ class GroundLayers:
             wanted[key] = layer
         self._layers = wanted
         return list(wanted.values())
+
+    def clear(self):
+        """Отпустить все растры."""
+        self._layers = {}
 
 
 class ScreenOverlays:

@@ -140,6 +140,21 @@ EN = {
         "outside its interval are hidden. A closed slider shows all "
         "placemarks.",
     "Основа": "Base map",
+    "Картинки на поверхности в проект QGIS…":
+        "Ground overlays to the QGIS project…",
+    "Картинку в проект QGIS…": "Image to the QGIS project…",
+    "PlanetX - картинки": "PlanetX - images",
+    "В папке нет картинок на поверхности.":
+        "The folder has no ground overlays.",
+    "Картинка в проект QGIS": "Image to the QGIS project",
+    "GeoTIFF (*.tif)": "GeoTIFF (*.tif)",
+    "В проект добавлено картинок {count}.":
+        "Images added to the project: {count}.",
+    "Папка для картинок": "Folder for the images",
+    "Картинки по ссылкам загружаются, слои добавятся после загрузки.":
+        "Linked images are loading, the layers will be added after "
+        "loading.",
+    "Картинка «{name}» не записана.": "The image “{name}” was not written.",
     "Растянуть от угла, с Shift - от середины":
         "Stretch from the corner, with Shift from the centre",
     "Растянуть сторону": "Stretch the side",
@@ -1477,6 +1492,7 @@ EN = {
         "sector is placed anew each time the row is switched on.",
     "Пермские отложения": "Permian deposits",
     "Тоннели Vegas Loop": "Vegas Loop tunnels",
+    "Аральское море": "Aral Sea",
     "Подземный режим": "Subsurface mode",
     "Подземный режим - скважины, горизонты, разрезы и вырез "
     "блока под поверхностью.":

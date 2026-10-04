@@ -24,6 +24,9 @@
   фазы 3.
 - vegas - тоннели Vegas Loop компании The Boring Company в Лас-Вегасе
   со станциями, данные - OpenStreetMap, tools/make_tunnel_demo.py.
+- aral - Аральское море: снимки MODIS 2000, 2014 и 2023 годов на
+  поверхности, фото у Муйнака и карта бассейна на экране, все картинки
+  по ссылкам.
 - mars - места посадок марсоходов и крупные формы рельефа Марса.
 - moon - места посадок «Аполлонов» и «Луноходов».
 - sky - созвездия и яркие объекты неба.
@@ -479,6 +482,69 @@ def vegas():
     save("vegas", scene, root)
 
 
+# Аральское море: наложения картинок по ссылкам, картинки в файл сцены
+# не входят. Снимки MODIS Terra в истинных цветах - запрос GetMap WMS
+# NASA GIBS, рамка запроса - рамка картинки. Дни без облаков выбраны
+# по снимкам 5 октября 2026 года. Фото и карта - Wikimedia Commons,
+# авторы и лицензии в описаниях. Камера фото у Муйнака примерная.
+# Выбор помощника.
+ARAL_BOX = (47.0, 43.0, 62.5, 57.5, 0.0)  # север, юг, восток, запад
+ARAL_WMS = ("https://gibs.earthdata.nasa.gov/wms/epsg4326/best/wms.cgi?"
+            "SERVICE=WMS&REQUEST=GetMap&VERSION=1.1.1"
+            "&LAYERS=MODIS_Terra_CorrectedReflectance_TrueColor&STYLES="
+            "&SRS=EPSG:4326&BBOX=57.5,43.0,62.5,47.0&WIDTH=1250&HEIGHT=1000"
+            "&FORMAT=image/jpeg&TIME={}")
+ARAL_DAYS = ("2000-08-24", "2014-08-25", "2023-09-04")
+ARAL_SHIPS = ("https://upload.wikimedia.org/wikipedia/commons/c/c1/"
+              "Moynaq%2C_Aral_Lake%2C_Ship_Wrecks%2C_Uzbekistan.jpg")
+ARAL_MAP = "https://upload.wikimedia.org/wikipedia/commons/8/85/Aral_map.png"
+MOYNAQ = (43.785, 59.025)
+
+
+def aral():
+    """Аральское море: три снимка на поверхности группой переключателей,
+    фото у Муйнака и карта бассейна на экране."""
+    from kml import KOverlay
+    from overlays import Overlay
+    title = "PlanetX: демо, Аральское море"
+    frames = []
+    for k, day in enumerate(ARAL_DAYS):
+        frames.append(KOverlay(
+            "Снимок {}".format(day), Overlay("ground", box=ARAL_BOX),
+            href=ARAL_WMS.format(day), visible=k == 0,
+            description="MODIS Terra в истинных цветах, {}. Источник - NASA "
+                        "GIBS, картинка по ссылке. Меню - «Картинку в "
+                        "проект QGIS…».".format(day),
+            view=(45.0, 60.0, 600000.0, 0.0, 0.0)))
+    folder = KFolder(
+        "Снимки MODIS 2000, 2014, 2023", children=frames, radio=True,
+        description="Группа переключателей - виден один снимок. Картинки "
+                    "на поверхности задаются рамкой по ссылке на запрос "
+                    "WMS NASA GIBS.")
+    lat, lon = MOYNAQ
+    ships = KOverlay(
+        "Корабли у Муйнака", Overlay(
+            "photo", camera=(lat, lon, 120.0, 0.0, 82.0, 0.0),
+            fov=(-30.0, 30.0, -20.0, 20.0), near=150.0),
+        href=ARAL_SHIPS,
+        description="Фото на бывшем дне моря у Муйнака, 2014 год. Автор - "
+                    "THORSTEN, Wikimedia Commons, CC BY-SA 4.0. Место камеры "
+                    "примерное. «Подлететь» ставит глаз в точку камеры.")
+    basin = KOverlay(
+        "Бассейн Аральского моря", Overlay(
+            "screen", overlay_xy=(1.0, 0.0, "fraction", "fraction"),
+            screen_xy=(1.0, 40.0, "fraction", "pixels")),
+        href=ARAL_MAP,
+        description="Карта бассейна на экране. Автор - Kmusser, Wikimedia "
+                    "Commons, CC BY-SA 2.5.")
+    root = KFolder(title, children=[folder, ships, basin])
+    view = dict(EARTH_VIEW, extras=dict(EARTH_VIEW["extras"],
+                                        buildings=False))
+    scene = Scene((45.0, 60.0, 700000.0, 0.0, 0.0), None, [], view, title,
+                  "Аральское море")
+    save("aral", scene, root)
+
+
 def main():
     perm()
     bocachica()
@@ -486,6 +552,7 @@ def main():
     japan()
     subsurface()
     vegas()
+    aral()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,
