@@ -39,6 +39,7 @@ from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
 from ..core.planets import EARTH_PLANET, PLANETS, planet_by_key
 from ..core import assistant as assistant_core
+from ..core import searchbar, skydata
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
@@ -127,6 +128,8 @@ XYZ_PREFIX = "connections/xyz/items/"
 BASEMAP_KEY = "PlanetX/basemap"  # имя выбранной подложки в настройках
 SIDEBAR_KEY = "PlanetX/sidebar"  # видна ли левая панель окна
 CONSTELLATIONS_KEY = "PlanetX/constellations"  # линии созвездий на небе
+# Прежние запросы строки «Поиск», список строк от новых к старым.
+HISTORY_KEY = "PlanetX/search_history"
 # Включена ли группа линий векторной основы, по группам.
 LINES_KEY = "PlanetX/lines/{}"
 # Группы панели «Слои», включённые при первом открытии. Решение автора
@@ -574,6 +577,7 @@ class GlobeWindow(QWidget):
         self.panel.assistant_settings_requested.connect(
             lambda: self._assistant().open_settings())
         self.panel.undo_requested.connect(self.undo_made_places)
+        self.panel.stop_requested.connect(self.stop_making)
         # Поиск по названию: ответы по ключу (запрос, язык), запрос
         # в работе, время последнего запроса, найденные места.
         self._searched = {}
@@ -584,6 +588,18 @@ class GlobeWindow(QWidget):
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._send_search)
+        # Подсказки строки «Поиск»: метки, прежние запросы, на небе
+        # звёзды и созвездия (core/searchbar.py). Панель спрашивает их
+        # при вводе. Объекты неба читаются из файла один раз.
+        self._sky_objects = None
+        # Чего ждёт строка «Поиск»: «assistant» - ответа модели, «search» -
+        # ответа службы поиска мест. Пока множество не пусто, у строки
+        # вращается значок ожидания.
+        self._busy = set()
+        self.panel.suggest_source = self.search_suggestions
+        self.panel.suggestion_chosen.connect(self.choose_suggestion)
+        self.panel.history_clear_requested.connect(
+            self.clear_search_history)
         self.panel.layer_toggled.connect(self.set_layer_shown)
         self.panel.geo_changed.connect(self.set_line_groups)
         self.panel.relief_toggled.connect(self.set_relief)
@@ -2084,10 +2100,14 @@ class GlobeWindow(QWidget):
     # Перелёты.
 
     def fly(self, text=None, assistant=True):
-        """Поиск из поля ввода: координаты - перелёт, просьба словами -
-        помощнику, иначе Nominatim. assistant=False - поиск запустил
-        сам помощник, к нему запрос не возвращается."""
+        """Поиск из поля ввода: координаты - перелёт, точное название
+        своей метки, на небе звезды или созвездия - перелёт к ним без
+        запроса в сеть, просьба словами - помощнику, иначе Nominatim.
+        assistant=False - поиск запустил сам помощник, к нему запрос
+        не возвращается и в историю запросов не идёт."""
         text = self.place.text() if text is None else text
+        if assistant:
+            self._remember_search(text)
         target = parse_point(text)
         if target is not None:
             self.panel.set_found([])
@@ -2103,6 +2123,13 @@ class GlobeWindow(QWidget):
         else:
             self._tool_queries.discard(query)
             self.panel.set_answer("")
+        # Свои метки ищутся только по Enter пользователя. Поиск помощника
+        # к ним не ведёт: точка взгляда уходит в модель, а места меток
+        # в неё не идут, решение автора от 3 октября 2026 года.
+        own = self._exact_match(text) if assistant else None
+        if own is not None:
+            self._fly_suggestion(own)
+            return
         # Просьба словами уходит помощнику, название места - Nominatim.
         # Вне Земли Nominatim не работает, туда идёт любой запрос.
         if query and assistant and (assistant_core.is_request(query)
@@ -2135,6 +2162,7 @@ class GlobeWindow(QWidget):
         self._search_key = key
         self.message = (tr("Поиск: {text}", text=query), time.monotonic())
         self._show_state()
+        self._set_busy("search", True)
         wait = SEARCH_INTERVAL - (time.monotonic() - self._search_at)
         self._search_timer.start(max(0, int(wait * 1000)))
 
@@ -2149,8 +2177,21 @@ class GlobeWindow(QWidget):
             search_url(*key),
             lambda data, error: self._search_done(key, data, error))
 
+    def _set_busy(self, reason, on):
+        """Значок ожидания у строки «Поиск». reason - чего ждём,
+        значок гаснет, когда не ждём ничего."""
+        if on:
+            self._busy.add(reason)
+        else:
+            self._busy.discard(reason)
+        tip = tr("Помощник ждёт ответ модели.") \
+            if "assistant" in self._busy else tr("Идёт поиск места.")
+        self.panel.set_busy(bool(self._busy), tip if self._busy else "")
+
     def _search_done(self, key, data, error):
         self._search_reply = None
+        # Следующий запрос может ждать своей очереди по таймеру.
+        self._set_busy("search", self._search_timer.isActive())
         if data is None:
             self.message = (tr("Поиск не удался: {error}", error=error),
                             time.monotonic())
@@ -2184,6 +2225,13 @@ class GlobeWindow(QWidget):
         self.message = ("", 0.0)
         self._show_state()
         self._fly_place(places[0])
+        # Тема вроде «Первая мировая война» находит места с этими словами
+        # в названии. Рядом - ссылка на метки помощника по теме, просьба
+        # автора от 4 октября 2026 года.
+        if key[0] not in self._tool_queries and search_enabled() \
+                and ready(current_provider()):
+            self.panel.set_answer(tr("Найдены места с этим названием."),
+                                  make=key[0])
 
     def fly_place(self, index):
         """Перелёт к месту из списка найденных."""
@@ -2194,7 +2242,116 @@ class GlobeWindow(QWidget):
         """Поле поиска очищено: списка и метки больше нет."""
         self._found = []
         self._search_key = None
+        # Ждущий запрос Nominatim снимается: с пустым ключом
+        # _send_search упал бы на search_url(*None).
+        self._search_timer.stop()
+        self._set_busy("search", False)
         self.view.set_search_mark(None)
+
+    # Строка «Поиск»: подсказки при вводе, история запросов, точное
+    # название своей метки или объекта неба (core/searchbar.py). Nominatim
+    # при вводе не спрашивается, его правила запрещают автодополнение.
+
+    def search_history(self):
+        """Прежние запросы строки «Поиск» из профиля QGIS, от новых
+        к старым."""
+        saved = QgsSettings().value(HISTORY_KEY, []) or []
+        # Список из одной строки настройки возвращают строкой.
+        if isinstance(saved, str):
+            saved = [saved]
+        elif not isinstance(saved, (list, tuple)):
+            saved = []
+        return [str(text) for text in saved
+                if str(text).strip()][:searchbar.HISTORY]
+
+    def _remember_search(self, text):
+        """Запрос по Enter встаёт в начало истории."""
+        history = self.search_history()
+        updated = searchbar.remember(history, text)
+        if updated != history:
+            QgsSettings().setValue(HISTORY_KEY, updated)
+
+    def clear_search_history(self):
+        """Пункт «Очистить историю поиска» меню кнопки помощника:
+        прежние запросы стираются из профиля."""
+        QgsSettings().remove(HISTORY_KEY)
+        self.panel.hide_hints()
+        self.message = (tr("История поиска очищена."), time.monotonic())
+        self._show_state()
+
+    def _search_places(self):
+        """Метки для строки «Поиск»: ключ, название, широта и долгота
+        меток тела на экране, на небе - меток неба. Метки без названия
+        или геометрии и записанные туры не идут."""
+        body = self.body_key()
+        out = []
+        for place in self.myplaces.places:
+            points = place.shape.points
+            if place.body == body and not place.tour and points \
+                    and (place.name or "").strip():
+                out.append((place.key, place.name, points[0][0],
+                            points[0][1]))
+        return out
+
+    def _search_sky(self):
+        """Звёзды и созвездия для строки «Поиск», вне неба их нет.
+        Файл неба читается один раз."""
+        if self.view.sky_view is None:
+            return []
+        if self._sky_objects is None:
+            language = "ru" if ui_language() == "ru" else "en"
+            self._sky_objects = searchbar.sky_objects(skydata.load(),
+                                                      language)
+        return self._sky_objects
+
+    def search_suggestions(self, text):
+        """Подсказки строки «Поиск» к тексту, их спрашивает панель при
+        вводе. Пустой текст - прежние запросы."""
+        found = searchbar.suggestions(
+            text, self._search_places(), self.search_history(),
+            self._search_sky(), searchbar.LIMIT + searchbar.HISTORY)
+        return searchbar.drop_repeats(found)[:searchbar.LIMIT]
+
+    def _exact_match(self, text):
+        """Своя метка, а на небе звезда или созвездие, чьё название
+        совпадает с text целиком. Из нескольких берётся первая, метки
+        идут раньше объектов неба. Без совпадения - None."""
+        places = self._search_places()
+        sky = self._search_sky()
+        found = searchbar.exact(text, searchbar.suggestions(
+            text, places, sky=sky, limit=len(places) + len(sky) + 1))
+        return found[0] if found else None
+
+    def choose_suggestion(self, item):
+        """Выбрана подсказка строки «Поиск». Прежний запрос идёт в строку
+        и ищется заново, к метке и объекту неба начинается перелёт."""
+        self.place.setText(item.text)
+        if item.kind == "history":
+            self.fly(item.text)
+        else:
+            self._fly_suggestion(item)
+
+    def _fly_suggestion(self, item):
+        """Перелёт к своей метке или объекту неба. Прежний поиск по
+        названию снимается: списка найденных мест, метки поиска
+        и ждущего запроса больше нет."""
+        self._search_timer.stop()
+        self.panel.set_found([])
+        self.clear_search()
+        if item.kind == "place":
+            place = self.myplaces.find(item.key)
+            if place is not None:
+                self.fly_to_place(place)
+                self.panel.select_place(item.key)
+            return
+        # Долгота подсказки неба - прямое восхождение от -180° до 180°.
+        ra = item.lon % 360.0
+        if self.view.sky_view is None:
+            self.show_sky(ra, item.lat, item.fov)
+        else:
+            # Плавный перелёт взгляда, как двойной щелчок по небу.
+            self.view.fly_sky(ra, item.lat, item.fov)
+        self.view.setFocus()
 
     def _mark(self, name, lat, lon):
         """Временная метка на месте, как у Google Earth. Одна на окно."""
@@ -3568,6 +3725,7 @@ class GlobeWindow(QWidget):
             dialog.said.connect(self._assistant_said)
             dialog.busy_changed.connect(self._assistant_busy)
             dialog.generated.connect(self._places_made)
+            dialog.progress.connect(self._assistant_progress)
             self.assistant_dialog = dialog
         return self.assistant_dialog
 
@@ -3620,9 +3778,14 @@ class GlobeWindow(QWidget):
         self._show_made_time(key)
         dialog.say_note(tr("В «Мои метки» записано меток: {count}.",
                        count=count))
-        self.panel.set_answer(
-            tr("Создана папка «{name}», меток {count}.",
-               name=tree.name or tr("Помощник"), count=count), undo=True)
+        timed = sum(1 for p in tree.places() if p.time)
+        answer = tr("Создана папка «{name}», меток {count}, со временем "
+                    "{timed}.", name=tree.name or tr("Помощник"),
+                    count=count, timed=timed)
+        if dialog.partial:
+            # Документ неполон: остановка, обрыв или предел длины.
+            answer += " " + dialog.partial
+        self.panel.set_answer(answer, undo=True)
 
     def _show_made_time(self, key):
         """Шкала времени на даты созданных меток: открывается, если
@@ -3656,8 +3819,22 @@ class GlobeWindow(QWidget):
             self.panel.set_answer(tr("Помощник думает…") + "\n" + text)
 
     def _assistant_busy(self, busy):
+        self._set_busy("assistant", busy)
         if busy and not self.panel.answer.isVisible():
-            self.panel.set_answer(tr("Помощник думает…"))
+            self.panel.set_answer(tr("Помощник думает…"),
+                                  stop=self._assistant().stream is not None)
+
+    def _assistant_progress(self, count):
+        """Метки идут потоком: счёт пришедших и ссылка «Остановить»."""
+        self.panel.set_answer(
+            tr("Помощник создаёт метки, получено {count}.", count=count),
+            stop=True)
+
+    def stop_making(self):
+        """Ссылка «Остановить»: поток ответа обрывается, пришедшие
+        целиком метки записываются."""
+        if self.assistant_dialog is not None:
+            self.assistant_dialog.stop_generation()
 
     def _layer_keys(self):
         """Ключи строк раздела «Слои», которые может включать помощник."""
@@ -3798,8 +3975,11 @@ class GlobeWindow(QWidget):
                                 float(east)))
 
     def _tool_add_kml(self, kml):
+        # Модель оборачивает документ текстом, оградой Markdown, прологом
+        # с чужой кодировкой - снимается так же, как у ответа текстом.
+        kml = assistant_core.extract_kml(str(kml)) or str(kml)
         try:
-            tree = read_kml(str(kml).encode("utf-8"), tr("Помощник"))
+            tree = read_kml(kml.encode("utf-8"), tr("Помощник"))
         except KmlError as error:
             return tr("KML не разобран: {error}. Исправь документ.",
                       error=str(error))

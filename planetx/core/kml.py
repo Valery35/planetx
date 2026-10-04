@@ -41,6 +41,7 @@ KMZ - архив ZIP, из него читается первый файл .kml,
 не раздует память вложенными сущностями. xml.etree и xml.sax сканер
 Bandit каталога QGIS считает опасными для чужих файлов.
 """
+import html
 import io
 import re
 import zipfile
@@ -121,6 +122,39 @@ def _parse(data):
     if not root:
         raise KmlError("empty XML")
     return root[0]
+
+
+_TEXT_TAGS = re.compile(r"(<(name|description)\b[^>]*>)(.*?)(</\2\s*>)",
+                        re.S)
+_XML_ENTITY = re.compile(r"&(?!(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);)")
+
+
+def _plain(text):
+    """Текст name или description без разметки HTML, для XML."""
+    if text.lstrip().startswith("<![CDATA["):
+        return text
+    text = re.sub(r"<\s*(br|/p|p)\b[^>]*>", "\n", text, flags=re.I)
+    text = re.sub(r"<[^>]*>", "", text)
+    return escape(html.unescape(text))
+
+
+def _mend(data):
+    """Байты KML, которые expat не разобрал, после правки частых ошибок
+    моделей помощника: разметка HTML и голые &, < в name и description,
+    сущности HTML вроде &nbsp; и &mdash;. Одна такая ошибка теряла весь
+    документ. Файл с объявлениями сущностей не правится."""
+    text = data.decode("utf-8", "replace") if isinstance(data, bytes) \
+        else str(data)
+    if "<!ENTITY" in text:
+        return None
+    text = _TEXT_TAGS.sub(lambda m: m.group(1) + _plain(m.group(3))
+                          + m.group(4), text)
+    text = re.sub(r"&([a-zA-Z][a-zA-Z0-9]*);", lambda m: m.group(0)
+                  if m.group(1) in ("amp", "lt", "gt", "quot", "apos")
+                  else escape(html.unescape(m.group(0))), text)
+    text = _XML_ENTITY.sub("&amp;", text)
+    text = re.sub(r"^\s*<\?xml[^>]*\?>", "", text)
+    return text.encode("utf-8")
 
 
 def escape(text):
@@ -239,21 +273,31 @@ def color_kml(rgba):
 
 def _pair(item):
     """(широта, долгота) из «lon,lat[,alt]» или None, если не число
-    или вне пределов."""
-    parts = item.split(",")
+    или вне пределов. Долгота 180-360 - запись 0-360, она переводится
+    в ±180."""
+    parts = item.replace("−", "-").split(",")
     try:
         lon, lat = float(parts[0]), float(parts[1])
     except (ValueError, IndexError):
         return None
+    if 180.0 < abs(lon) <= 360.0:
+        lon = (lon + 180.0) % 360.0 - 180.0
     if -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0:
         return lat, lon
     return None
 
 
+def _items(node):
+    """Записи «lon,lat[,alt]» из coordinates узла. Пробелы вокруг
+    запятых снимаются: модели помощника пишут «lon, lat, alt», 4 октября
+    2026 года так пропали все метки документа о Колумбе."""
+    text = _text(node, "coordinates") if node is not None else ""
+    return re.sub(r"\s*,\s*", ",", text).split()
+
+
 def _coords(node):
     """Вершины (широта, долгота) из coordinates: «lon,lat[,alt] ...»."""
-    text = _text(node, "coordinates")
-    pairs = (_pair(item) for item in text.split())
+    pairs = (_pair(item) for item in _items(node))
     return [pair for pair in pairs if pair is not None]
 
 
@@ -265,8 +309,7 @@ def _raise(node, coords):
     mode = _text(node, "altitudeMode")
     if mode not in RELATIVE:
         return 0.0, False
-    first = _text(coords, "coordinates").split()[:1] if coords is not None \
-        else []
+    first = _items(coords)[:1]
     parts = first[0].split(",") if first else []
     try:
         height = max(float(parts[2]), 0.0) if len(parts) > 2 else 0.0
@@ -281,7 +324,7 @@ def _alts(node, coords, count):
     if coords is None or _text(node, "altitudeMode") != "absolute":
         return None
     alts = []
-    for item in _text(coords, "coordinates").split():
+    for item in _items(coords):
         parts = item.split(",")
         if _pair(item) is None:
             continue
@@ -292,6 +335,23 @@ def _alts(node, coords, count):
     if len(alts) == count + 1:  # замкнутое кольцо повторяет первую
         alts = alts[:-1]
     return tuple(alts) if len(alts) == count else None
+
+
+def _outer_rings(polygon):
+    """Узлы внешних колец Polygon с coordinates. По стандарту это
+    outerBoundaryIs/LinearRing, модели пишут и LinearRing без
+    outerBoundaryIs, и coordinates прямо в Polygon. Дыры innerBoundaryIs
+    не берутся."""
+    found = []
+    for outer in _children(polygon, "outerBoundaryIs"):
+        ring = _child(outer, "LinearRing")
+        found.append(ring if ring is not None else outer)
+    if found:
+        return found
+    found = _children(polygon, "LinearRing")
+    if found:
+        return found
+    return [polygon] if _child(polygon, "coordinates") is not None else []
 
 
 def _geometries(node):
@@ -312,17 +372,50 @@ def _geometries(node):
                 out.append(("line", points) + _raise(child, child)
                            + (_alts(child, child, len(points)),))
         elif name == "Polygon":
-            outer = _child(child, "outerBoundaryIs")
-            ring = _child(outer, "LinearRing") if outer is not None else None
-            points = _coords(ring) if ring is not None else []
-            if len(points) > 1 and points[0] == points[-1]:
-                points = points[:-1]
-            if len(points) >= 3:
-                out.append(("polygon", points) + _raise(child, ring)
-                           + (_alts(child, ring, len(points)),))
-        elif name == "MultiGeometry":
+            for ring in _outer_rings(child):
+                points = _coords(ring)
+                if len(points) > 1 and points[0] == points[-1]:
+                    points = points[:-1]
+                if len(points) >= 3:
+                    out.append(("polygon", points) + _raise(child, ring)
+                               + (_alts(child, ring, len(points)),))
+        elif name in ("MultiGeometry", "MultiTrack"):
             out.extend(_geometries(child))
+        elif name == "Track":
+            # gx:Track - путь точками с моментами времени. На глобусе
+            # это линия, время - от первого момента до последнего
+            # (_track_time): линия с промежутком растёт по шкале времени.
+            points = _track_points(child)
+            if len(points) >= 2:
+                out.append(("line", points, 0.0, False, None))
     return out
+
+
+def _track_points(node):
+    """Вершины gx:Track: gx:coord «долгота широта высота» через пробел."""
+    points = []
+    for child in _children(node, "coord"):
+        pair = _pair(",".join((child.text or "").split()))
+        if pair is not None:
+            points.append(pair)
+    return points
+
+
+def _track_time(node):
+    """Промежуток времени треков узла: первый и последний when
+    gx:Track, в том числе внутри gx:MultiTrack и MultiGeometry."""
+    whens = []
+    for child in node:
+        name = _local(child.tag)
+        if name == "Track":
+            whens += [(w.text or "").strip()
+                      for w in _children(child, "when")]
+        elif name in ("MultiTrack", "MultiGeometry"):
+            span = _track_time(child)
+            if span is not None:
+                whens += list(span)
+    whens = [w for w in whens if w]
+    return (whens[0], whens[-1]) if whens else None
 
 
 def _style_of(node):
@@ -394,6 +487,17 @@ def _time_of(node):
     return None
 
 
+def _geometry_time(node):
+    """Время, записанное внутри геометрии Placemark: модели кладут
+    TimeSpan этапа пути в его LineString."""
+    for child in node:
+        if _local(child.tag) in GEOMETRY and _local(child.tag) != "Track":
+            found = _time_of(child) or _geometry_time(child)
+            if found:
+                return found
+    return None
+
+
 def _view_time(node):
     """Время вида: gx:TimeStamp или gx:TimeSpan внутри LookAt."""
     look = _child(node, "LookAt")
@@ -411,7 +515,17 @@ def _placemark(node, styles, inherited=None):
         style.update(_style_of(inline))
     name = _text(node, "name")
     out = []
-    for kind, points, height, extrude, alts in _geometries(node):
+    found = _geometries(node)
+    look = _child(node, "LookAt")
+    if not found and look is not None:
+        # Метка одним видом, без геометрии: точкой взгляда.
+        spot = _pair("{},{}".format(_text(look, "longitude"),
+                                    _text(look, "latitude")))
+        if spot is not None:
+            found = [("point", [spot], 0.0, False, None)]
+    time = _time_of(node) or _geometry_time(node) or _track_time(node) \
+        or inherited
+    for kind, points, height, extrude, alts in found:
         view = _view(node, points[0] if points else None)
         color = style.get("icon" if kind == "point" else "color") \
             or LINE_COLOR
@@ -427,9 +541,41 @@ def _placemark(node, styles, inherited=None):
                           height=height, extrude=extrude,
                           icon=icons.from_href(style.get("href"))
                           if kind == "point" else icons.DEFAULT,
-                          time=_time_of(node) or inherited,
+                          time=time,
                           view_time=_view_time(node), alts=alts))
     return out
+
+
+# Геометрии KML. По стандарту они лежат внутри Placemark.
+GEOMETRY = ("Point", "LineString", "LinearRing", "Polygon", "MultiGeometry",
+            "Track", "MultiTrack")
+
+
+def _bare(geometry, parent, styles, inherited):
+    """Метки из геометрии, которая лежит в папке без Placemark.
+
+    Стандарт так не разрешает, но модели помощника кладут линию
+    маршрута прямо в <Folder>, стиль - атрибутом styleUrl. 4 октября
+    2026 года так пропали четыре маршрута плаваний Колумба, в «Мои
+    метки» попали только точки. Метка получает название, описание,
+    стиль и время самой геометрии, без них - название и время папки.
+    """
+    holder = _Node("Placemark", {})
+    for tag in ("name", "description", "styleUrl", "Style", "TimeStamp",
+                "TimeSpan"):
+        own = _child(geometry, tag)
+        if own is not None:
+            holder.children.append(own)
+    if _child(holder, "name") is None:
+        name = _Node("name", {})
+        name.text = _text(parent, "name")
+        holder.children.append(name)
+    if _child(holder, "styleUrl") is None and geometry.get("styleUrl"):
+        url = _Node("styleUrl", {})
+        url.text = geometry.get("styleUrl")
+        holder.children.append(url)
+    holder.children.append(geometry)
+    return _placemark(holder, styles, inherited)
 
 
 def _tour(node):
@@ -486,6 +632,8 @@ def _walk(node, styles, folder, inherited=None):
             folder.children.append(sub)
         elif name == "Placemark":
             folder.children.extend(_placemark(child, styles, inherited))
+        elif name in GEOMETRY:
+            folder.children.extend(_bare(child, node, styles, inherited))
         elif name == "Tour":
             tour = _tour(child)
             if tour is not None:
@@ -494,7 +642,13 @@ def _walk(node, styles, folder, inherited=None):
 
 def read_kml(data, name=""):
     """Дерево KFolder из байтов KML. name - название корня."""
-    root = _parse(data)
+    try:
+        root = _parse(data)
+    except KmlError:
+        mended = _mend(data)
+        if mended is None:
+            raise
+        root = _parse(mended)
     if _local(root.tag) != "kml":
         raise KmlError("not KML")
     styles = _styles(root)

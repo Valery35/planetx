@@ -30,7 +30,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
 
 from ..core import assistant as ai
 from ..i18n import tr
-from ..net.overlay import post_json
+from ..net.overlay import post_json, post_stream
 from ..qt_compat import enum
 
 SETTINGS = "PlanetX/assistant/"
@@ -299,6 +299,8 @@ class AssistantDialog(QDialog):
     busy_changed = pyqtSignal(bool)
     # Документ KML, созданный одним запросом (generate).
     generated = pyqtSignal(str)
+    # Метки идут потоком: сколько меток уже пришло целиком.
+    progress = pyqtSignal(int)
 
     def __init__(self, executor, context, parent=None):
         super().__init__(parent)
@@ -310,6 +312,14 @@ class AssistantDialog(QDialog):
         self.rounds = 0
         self.reply = None
         self.asked = None  # подключение запроса, который ждёт ответа
+        # Поток ответа создания меток (core.assistant.StreamText), число
+        # пришедших меток, предел длины запроса и признак остановки.
+        self.stream = None
+        self.stream_places = 0
+        self.stream_tokens = 0
+        self.stopped = False
+        # Почему документ создания меток неполон, пусто - документ целый.
+        self.partial = ""
         self.pending = None  # предложенная метка: функция записи
         self.settings = None
         self.service = QLabel(self)
@@ -438,47 +448,102 @@ class AssistantDialog(QDialog):
     def generate(self, text):
         """Метки по описанию одним запросом: модель без инструментов
         возвращает KML текстом, документ уходит сигналом generated.
-        Кругов инструментов нет, разговор в запрос не идёт."""
+        Кругов инструментов нет, разговор в запрос не идёт. Ответ идёт
+        потоком: число пришедших меток сообщает сигнал progress."""
         text = text.strip()
         if not text or self.reply is not None:
             return False
-        provider = self.provider_key()
-        if not ready(provider):
+        if not ready(self.provider_key()):
             self._say("note", tr("Нет ключа API. Его вводят в окне "
                                  "«Настройки помощника»."))
             self.show()
             self.open_settings()
             return False
         self._say("user", text)
+        self._start_stream(text, ai.KML_MAX_TOKENS)
+        return True
+
+    def _start_stream(self, text, max_tokens):
+        provider = self.provider_key()
         url, headers, body = ai.request(
             provider, provider_base(provider), provider_model(provider),
             load_key(provider), ai.kml_system_text(self.context()),
             [{"role": "user", "text": text}], tools=False,
-            max_tokens=ai.KML_MAX_TOKENS)
+            max_tokens=max_tokens, stream=True)
         self.send_button.setEnabled(False)
+        self.make_button.setEnabled(False)
         self.asked = provider
-        self.reply = post_json(
-            url, headers, body,
-            lambda data, error: self._generated(text, data, error))
+        self.stream = ai.StreamText(provider)
+        self.stream_places = 0
+        self.stream_tokens = max_tokens
+        self.stopped = False
+        self.partial = ""
+        self.reply = post_stream(
+            url, headers, body, self._stream_chunk,
+            lambda error: self._generated(text, error))
         self.busy_changed.emit(True)
-        return True
 
-    def _generated(self, text, data, error):
+    def _stream_chunk(self, data):
+        stream = self.stream
+        if stream is None or not stream.feed(data):
+            return
+        count = ai.kml_progress(stream.text)
+        if count != self.stream_places:
+            self.stream_places = count
+            self.progress.emit(count)
+
+    def stop_generation(self):
+        """Остановить создание меток. Метки, пришедшие целиком,
+        остаются: документ закрывается по последней целой метке."""
+        if self.reply is not None and self.stream is not None:
+            self.stopped = True
+            self.reply.abort()
+
+    def _generated(self, text, error):
+        stream, self.stream = self.stream, None
+        if stream is None:
+            return  # окно закрыто, поток снят
         self.reply = None
+        stream.finish()
+        stopped, self.stopped = self.stopped, False
+        reason = stream.error or ("" if stopped else error)
+        if (reason and not stream.text
+                and self.stream_tokens > ai.KML_SAFE_TOKENS
+                and ai.length_refused(reason)):
+            # Сервис не принял предел длины ответа - повтор с меньшим.
+            self._say("note", tr("Сервис не принял длинный ответ, запрос "
+                                 "повторён с меньшим пределом длины."))
+            self._start_stream(text, ai.KML_SAFE_TOKENS)
+            return
         self.send_button.setEnabled(True)
+        self.make_button.setEnabled(True)
         self.busy_changed.emit(False)
-        provider = self.asked or self.provider_key()
-        answer = ai.parse(provider, data)
-        if answer.error or data is None:
-            reason = (error or answer.error) if data is None \
-                else answer.error
+        kml = ai.extract_kml(stream.text)
+        if kml is None:
+            if not reason:
+                self._say("note", tr("Модель не вернула документ KML."))
+                return
             self._say("note", tr("Модель не ответила: {error}",
                                  error=reason))
+            if not ai.needs_key(provider_base(self.asked
+                                              or self.provider_key())):
+                self._say("note", tr(
+                    "Сервис на этом компьютере не отвечает. Проверьте, "
+                    "что он запущен, например Ollama, и что адрес "
+                    "в настройках помощника верный."))
             return
-        kml = ai.extract_kml(answer.text)
-        if kml is None:
-            self._say("note", tr("Модель не вернула документ KML."))
-            return
+        whole = "</kml>" in stream.text
+        if reason:
+            self.partial = tr("Ответ модели оборвался: {error}. Взяты "
+                              "метки, пришедшие целиком.", error=reason)
+        elif stopped:
+            self.partial = tr("Создание меток остановлено. Взяты метки, "
+                              "пришедшие целиком.")
+        elif not whole:
+            self.partial = tr("Ответ модели упёрся в предел длины. Взяты "
+                              "метки, пришедшие целиком.")
+        if self.partial:
+            self._say("note", self.partial)
         # В разговоре остаётся короткий след, сам документ в запросы
         # разговора не идёт.
         self.dialog.append({"role": "user", "text": text})
@@ -574,6 +639,8 @@ class AssistantDialog(QDialog):
 
     def closeEvent(self, event):
         if self.reply is not None:
+            # Поток создания меток снимается без записи пришедшего.
+            self.stream = None
             self.reply.abort()
             self.reply = None
             self.busy_changed.emit(False)

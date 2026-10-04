@@ -177,6 +177,34 @@ of the globe together with the elevation.
 - The found place carries a red pin. Clearing the field removes the pin
   and closes the list.
 
+Suggestions of three kinds appear below the field while typing:
+
+- Placemarks of My Places on the body on the screen with a matching
+  name.
+- Earlier queries.
+- Stars and constellations when the sky view is open.
+
+A click on a suggestion or Enter on it starts a flight to the placemark
+or the sky object, an earlier query is searched again. The Down key
+moves into the list of suggestions, in an empty field it shows the
+earlier queries. Escape closes the list. Place names from the network
+are not suggested while typing. The Nominatim service takes a query
+only on Enter.
+
+Enter in the field handles the query in this order:
+
+1. Coordinates start a flight.
+2. The exact name of an own placemark starts a flight to it with no
+   network request. In the sky view the name of a star or
+   a constellation works the same way.
+3. A request in words goes to the assistant, the Assistant section
+   describes it.
+4. Anything else is searched as a place name.
+
+Queries entered with Enter are kept in the QGIS profile, 30 at most.
+The Clear search history item in the menu of the assistant button
+erases them.
+
 Over a long distance the camera rises and lands smoothly. The mouse interrupts a flight.
 
 ---
@@ -1150,17 +1178,46 @@ OpenRouter with a free model is chosen.
 The assistant's actions show in the conversation as Action lines. It
 makes no more than six rounds of actions in a row, then it stops.
 
-Places from a description are made by the assistant button to the
-right of the Search field and by the Make places button of the
-Assistant window. A topic is typed in the field, for example "the
-voyage of Columbus" or "battles of the Hundred Years' War", Ctrl+Enter
-in the field does the same. The model answers with one KML document
-with placemarks, paths and polygons. The places are written to My
-Places as a new folder at once, the camera flies to them. Events with
-a known date carry the date, the time slider opens on the interval
-from the first to the last date. The Cancel link below the field
-removes the made folder. The coordinates and dates come from the
-model, they need checking.
+### Places from a description
+
+The assistant button to the right of the Search field makes places on
+the topic from the field, for example "the voyage of Columbus" or
+"battles of the Hundred Years' War". Ctrl+Enter in the field and the
+Make places button of the Assistant window do the same. The model
+answers with one KML document, it is written to My Places as a new
+folder at once, the camera flies to the places.
+
+The model receives the rules of the document. They list everything the
+globe shows in space and in time:
+
+- Places and events come as points, routes, fronts and borders - as
+  lines along the real path, territories - as polygons.
+- Time stands on every placemark with at least a known date or year.
+  An event gets a moment, a campaign, a siege or a reign - an interval.
+- A route is split into legs. Each leg is a line with its own time
+  interval, on the time slider it grows from start to end.
+- A change of a territory or a front line comes as several shapes with
+  intervals in a row, on the time slider they replace one another.
+- The document holds 100 placemarks at most.
+
+The answer comes as a stream. While it comes, the line below the field
+shows the count of placemarks received and the Stop link. Stopping
+keeps the placemarks received whole. The plugin does the same when the
+answer breaks off or hits the length limit. The answer time grows with
+the size of the document.
+
+The finished answer below the field names the folder, the number of
+placemarks and the number of placemarks with time. The time slider
+opens on the interval from the first to the last date. The Cancel link
+removes the made folder.
+
+A topic like "World War I" searched with Enter finds places with these
+words in the name. Then the link Make places on the topic stands below
+the field, it does the same as the button.
+
+The coordinates and dates come from the model, they need checking.
+
+### Requests from the Search field
 
 A request can also be typed in the Search field of the left panel. The
 assistant receives a request with a question mark, a request of six

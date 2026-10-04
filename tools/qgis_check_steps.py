@@ -3162,6 +3162,9 @@ def _fake_model():
                     made = kml.replace(
                         "</Point>", "</Point><TimeStamp><when>-0263-06"
                         "</when></TimeStamp>")
+                    if body.get("stream"):
+                        self.stream(made, "медленно" in last["content"])
+                        return
                     answer = {"choices": [{"message": {
                         "role": "assistant",
                         "content": "Вот:\n```xml\n" + made + "\n```"}}]}
@@ -3193,6 +3196,38 @@ def _fake_model():
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+
+        def stream(self, made, slow):
+            """Ответ потоком событий SSE формата Chat. Быстрый - документ
+            made шестью кусками. Медленный - 12 меток, по одной в 0.3 с,
+            его останавливает шаг assistant_stop_check."""
+            if slow:
+                mark = made[made.index("<Placemark>"):
+                            made.index("</Placemark>") + len("</Placemark>")]
+                head = made[:made.index("<Placemark>")]
+                parts = [head] + [mark.replace("Токио", "Токио %d" % n)
+                                  for n in range(12)] + ["</Document></kml>"]
+                pause = 0.3
+            else:
+                text = "Вот:\n```xml\n" + made + "\n```"
+                size = max(1, len(text) // 6)
+                parts = [text[i:i + size] for i in range(0, len(text), size)]
+                pause = 0.05
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            try:
+                self.wfile.write(b": PROCESSING\n\n")
+                for part in parts:
+                    event = {"choices": [{"delta": {"content": part}}]}
+                    self.wfile.write(("data: " + json.dumps(
+                        event, ensure_ascii=False) + "\n\n").encode("utf-8"))
+                    self.wfile.flush()
+                    time.sleep(pause)
+                self.wfile.write(b"data: [DONE]\n\n")
+            except OSError:
+                # Клиент оборвал поток - шаг остановки.
+                seen.append(("stream aborted", {}, None))
 
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -3482,6 +3517,8 @@ def assistant_make():
                  "http://127.0.0.1:%d" % server.server_port)
     dialog.settings.close()
     state["make_before"] = len(window.myplaces.places)
+    state["make_progress"] = []
+    dialog.progress.connect(state["make_progress"].append)
     window.view.navigator.stop()
     window.place.setText("Токио")
     window.panel.make.click()
@@ -3501,11 +3538,15 @@ def assistant_make_check():
     out["requests"] = [p for p, _, _ in seen]
     out["tools_sent"] = "tools" in seen[0][1] if seen else None
     out["max_tokens"] = seen[0][1].get("max_tokens") if seen else None
+    out["stream_asked"] = seen[0][1].get("stream") if seen else None
+    out["progress"] = list(state["make_progress"])
+    out["busy_after"] = dialog.busy()
     out["places_added"] = len(window.myplaces.places) - state["make_before"]
     key = getattr(window, "made_folder", None)
     made = window.myplaces.places_in(key) if key else []
     out["names"] = [p.name for p in made]
     out["times"] = [p.time for p in made]
+    out["timed_in_answer"] = "со временем 1" in window.panel.answer.text()
     out["timebar_shown"] = window.timebar.shown()
     out["time_range"] = [when_text(v) for v in window.timebar.range()] \
         if window.timebar.shown() else None
@@ -3530,6 +3571,74 @@ def assistant_make_check():
     for provider in ai.PROVIDERS:
         settings.remove(ui_ai.SETTINGS + provider + "/base")
     settings.remove(ui_ai.SETTINGS + "provider")
+    ui_ai.load_key = state["real_load_key"]
+    dialog.close()
+    server.shutdown()
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(1500)
+def assistant_stop():
+    # Медленный поток из 12 меток останавливается ссылкой «Остановить»:
+    # метки, пришедшие целиком, записываются.
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    server, seen = _fake_model()
+    state["fake_stop"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    dialog = window._assistant()
+    dialog.hide()
+    _use_service(dialog, ai.OPENROUTER,
+                 "http://127.0.0.1:%d" % server.server_port)
+    dialog.settings.close()
+    state["stop_before"] = len(window.myplaces.places)
+    window.place.setText("Токио медленно")
+    result["assistant_stop"] = {"asked": window.make_places(
+        "Токио медленно")}
+
+
+@check(1000)
+def assistant_stop_check():
+    window = state["window"]
+    out = result["assistant_stop"]
+    out["busy_before"] = window.assistant_dialog.busy()
+    out["answer_before"] = window.panel.answer.text()
+    out["stop_link"] = 'href="stop"' in out["answer_before"]
+    # Значок ожидания у строки поиска крутится, пока идёт ответ.
+    out["spinner_busy"] = [window.panel.busy.busy(),
+                           window.panel.busy.isVisible(),
+                           window.panel.busy.toolTip()]
+    window.panel._answer_link("stop")
+
+
+@check(1000)
+def assistant_stop_done():
+    from qgis.core import QgsSettings
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_stop"]
+    out = result["assistant_stop"]
+    out["busy_after"] = dialog.busy()
+    out["spinner_after"] = [window.panel.busy.busy(),
+                            window.panel.busy.isVisible()]
+    out["places_added"] = len(window.myplaces.places) - state["stop_before"]
+    out["answer"] = window.panel.answer.text()
+    out["aborted_on_server"] = any(p == "stream aborted" for p, _, _ in seen)
+    window.undo_made_places()
+    if window.timebar.shown():
+        window._time_bar_closed()
+        window.timebar.close_bar()
+    window.place.setText("")
+    settings = QgsSettings()
+    for provider in ai.PROVIDERS:
+        settings.remove(ui_ai.SETTINGS + provider + "/base")
+    settings.remove(ui_ai.SETTINGS + "provider")
+    settings.remove("PlanetX/search_history")
     ui_ai.load_key = state["real_load_key"]
     dialog.close()
     server.shutdown()
@@ -3701,6 +3810,58 @@ def odd_text_wait():
     out["gl"] = dict(window.view.gl_errors)
 
 
+@check(3000)
+def topic_link():
+    # Поиск по названию нашёл места - под строкой ссылка на метки
+    # помощника по теме. Щелчок по ней - один запрос, метки в папку.
+    from planetx.core import assistant as ai
+    from planetx.core.geocode import Place
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    server, seen = _fake_model()
+    state["fake_topic"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    dialog = window._assistant()
+    _use_service(dialog, ai.OPENROUTER,
+                 "http://127.0.0.1:%d" % server.server_port)
+    dialog.settings.close()
+    topic = "Первая мировая война"
+    window.place.setText(topic)
+    window._show_found((topic, None), [Place(
+        "Немецкий ДОТ (Первая мировая война)", "", 55.2, 26.9, None)])
+    out = result["topic_link"] = {"answer": window.panel.answer.text()}
+    state["topic_before"] = len(window.myplaces.places)
+    window.panel._answer_link("make")
+    out["requests_sent"] = len(seen)
+
+
+@check(1000)
+def topic_link_check():
+    from qgis.core import QgsSettings
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    server, seen = state["fake_topic"]
+    out = result["topic_link"]
+    out["requests"] = [p for p, _, _ in seen]
+    out["no_tools"] = all("tools" not in b for _, b, _ in seen)
+    out["places_added"] = len(window.myplaces.places) - state["topic_before"]
+    out["answer_after"] = window.panel.answer.text()
+    window.undo_made_places()
+    if window.timebar.shown():
+        window._time_bar_closed()
+    settings = QgsSettings()
+    for provider in ai.PROVIDERS:
+        settings.remove(ui_ai.SETTINGS + provider + "/base")
+    settings.remove(ui_ai.SETTINGS + "provider")
+    ui_ai.load_key = state["real_load_key"]
+    window.assistant_dialog.close()
+    server.shutdown()
+    out["gl"] = dict(window.view.gl_errors)
+
+
 @check(1000)
 def plates_on():
     # Строка «Границы плит»: слой в наложении, названия плит, окно
@@ -3771,6 +3932,180 @@ def compact_clear():
     out["after_places"] = len(window.myplaces.places)
     out["after_folders"] = len(window.myplaces.folders)
     out["again"] = window.clear_places(confirm=False)
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(1000)
+def search_bar():
+    # Строка «Поиск»: подсказки из «Моих меток» и прежних запросов,
+    # клавиши списка подсказок, выбор подсказки, точное название своей
+    # метки по Enter без запроса к Nominatim, история в профиле, звезда
+    # в виде неба. Шаг без сети.
+    from qgis.PyQt.QtCore import QEvent, Qt
+    from qgis.PyQt.QtGui import QKeyEvent
+    from qgis.PyQt.QtWidgets import QApplication
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    from planetx.i18n import ui_language
+    from planetx.qt_compat import enum, enum_int
+    window = state["window"]
+    panel = window.panel
+    nav = window.view.navigator
+    window.set_body("earth")
+    state["search_sidebar"] = not panel.isHidden()
+    window.set_sidebar(True)
+    window.place.setText("")
+    window.clear_search_history()
+    nav.show(Pose(20.0, 0.0, 9000000.0, 0.0, 0.0))
+    names = (("Проба поиска Вокзал", 58.02, 56.25),
+             ("Проба поиска Университет", 58.0, 56.18),
+             ("Вокзал пробы поиска", 55.75, 37.62))
+    keys = [window.myplaces.add(Shape("point", [(lat, lon)], name=name))
+            for name, lat, lon in names]
+    state["search_keys"] = keys
+    out = result["search_bar"] = {"keys": keys}
+    # Запрос к Nominatim подменён списком до конца search_bar_check:
+    # шаг в сеть не ходит и при ошибке разбора строки.
+    out["nominatim"] = []
+    window._search = out["nominatim"].append
+
+    def press(widget, name):
+        # Клавиша через фильтр событий панели, как с клавиатуры.
+        QApplication.sendEvent(widget, QKeyEvent(
+            enum(QEvent, "Type", "KeyPress"),
+            enum_int(enum(Qt, "Key", name)),
+            enum(Qt, "KeyboardModifier", "NoModifier")))
+
+    def rows():
+        return [panel.hints.item(i).text()
+                for i in range(panel.hints.count())]
+
+    def edit(text):
+        # Правка пользователем: текст строки и сигнал textEdited.
+        window.place.setText(text)
+        window.place.textEdited.emit(text)
+
+    def target():
+        # Цель перелёта навигатора: широта и долгота.
+        if nav.flight is None:
+            return None
+        end = nav.flight[1].end
+        return [round(end.lat, 2), round(end.lon, 2)]
+
+    # Поставщик: начало названия выше начала слова.
+    out["source"] = [(s.kind, s.text)
+                     for s in window.search_suggestions("вокзал")]
+    # Текст, поставленный программой, подсказок не показывает.
+    window.place.setText("вокзал")
+    out["rows_set_text"] = rows()
+    edit("вокзал")
+    out["rows"] = rows()
+    out["shown"] = not panel.hints.isHidden()
+    # «Вниз» - в список, «вверх» с первой строки - в строку, Escape
+    # прячет список.
+    press(window.place, "Key_Down")
+    out["down"] = [panel.hints.currentRow(),
+                   panel.focusWidget() is panel.hints]
+    press(panel.hints, "Key_Up")
+    out["up"] = [panel.hints.currentRow(),
+                 panel.focusWidget() is window.place]
+    press(window.place, "Key_Escape")
+    out["escape_rows"] = rows()
+    # Выбор подсказки клавишами: перелёт к метке, она выделена в списке.
+    edit("универ")
+    press(window.place, "Key_Down")
+    press(panel.hints, "Key_Return")
+    out["chosen"] = {"target": target(), "text": window.place.text(),
+                     "rows": rows(),
+                     "selected": panel.list.selected_keys() == [keys[1]]}
+    # Enter с точным названием своей метки в другом регистре: перелёт
+    # к ней, запроса к Nominatim нет, запрос в истории.
+    nav.stop()
+    window.place.setText("")
+    reply = window._search_reply
+    name = names[0][0].upper()
+    edit(name)
+    window.place.returnPressed.emit()
+    out["exact"] = {"target": target(), "rows": rows(),
+                    "search_key": window._search_key,
+                    "timer": window._search_timer.isActive(),
+                    "same_reply": window._search_reply is reply,
+                    "history": window.search_history()}
+    # Прежний запрос с названием метки второй строкой не идёт.
+    out["repeat"] = [(s.kind, s.text)
+                     for s in window.search_suggestions("проба")]
+    # Поиск помощника в историю не идёт.
+    window.fly("10.0, 20.0", assistant=False)
+    out["tool_history"] = window.search_history()
+    # «Вниз» в пустой строке - прежние запросы, Enter по строке списка -
+    # запрос заново.
+    nav.stop()
+    window.place.setText("")
+    press(window.place, "Key_Down")
+    out["empty_down"] = rows()
+    press(panel.hints, "Key_Return")
+    out["history_chosen"] = {"target": target(),
+                             "text": window.place.text(),
+                             "timer": window._search_timer.isActive()}
+    # Последний пункт меню кнопки помощника стирает историю.
+    out["menu"] = [a.text() for a in panel.make.menu().actions()]
+    panel.make.menu().actions()[-1].trigger()
+    out["cleared"] = window.search_history()
+    # Небо: подсказка звезды, выбор ведёт взгляд к ней.
+    nav.stop()
+    window.show_sky(85.0, 5.0, 70.0)
+    star = "Сириус" if ui_language() == "ru" else "Sirius"
+    edit(star[:4].lower())
+    out["sky_rows"] = rows()
+    found = [s for s in panel._hints
+             if s.kind == "star" and s.text == star]
+    out["sky_star"] = list(found[0][3:]) if found else None
+    if found:
+        panel._choose_hint(panel._hints.index(found[0]))
+    out["sky_target"] = target()
+    state["search_started"] = time.monotonic()
+
+
+@check(500)
+def search_bar_check():
+    from planetx.i18n import ui_language
+    window = state["window"]
+    nav = window.view.navigator
+    out = result.setdefault("search_bar", {})
+    started = state.get("search_started")
+    if nav.flight is not None and started is not None \
+            and time.monotonic() - started < 20.0:
+        return 500
+    # Взгляд после перелёта: прямое восхождение, склонение, поле зрения.
+    sky = window.view.sky_view
+    out["sky_view"] = [round(math.degrees(sky.ra), 1),
+                       round(math.degrees(sky.dec), 1),
+                       round(sky.fov, 1)] if sky is not None else None
+    # Enter с точным названием созвездия: перелёт взгляда без Nominatim.
+    if sky is not None:
+        window.place.setText("Орион" if ui_language() == "ru" else "Orion")
+        window.place.returnPressed.emit()
+        end = nav.flight[1].end if nav.flight is not None else None
+        out["sky_exact"] = {
+            "target": [round(end.lat, 2), round(end.lon, 2)]
+            if end is not None else None,
+            "search_key": window._search_key,
+            "timer": window._search_timer.isActive()}
+    # Уборка и после сбоя первого шага: подмена поиска, метки шага,
+    # небо, строка, история, панель.
+    if "_search" in window.__dict__:
+        del window._search
+    nav.stop()
+    for key in state.get("search_keys", ()):
+        if key:
+            window.myplaces.remove(key)
+    window.set_body("earth")
+    window.place.setText("")
+    window.clear_search_history()
+    window.set_sidebar(state.get("search_sidebar", True))
+    out["places_left"] = [p.name for p in window.myplaces.places
+                          if "поиска" in p.name.lower()]
+    out["history_left"] = window.search_history()
     out["gl"] = dict(window.view.gl_errors)
 
 
@@ -4012,6 +4347,82 @@ def paleo_after():
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_paleo.png"))
     window.set_extra("paleo", False)
     out["gl"] = dict(view.gl_errors)
+
+
+# Палеогеография глазами пользователя: возрасты подряд, время ожидания
+# ответа службы и кадры издалека и вблизи берега. Жалоба автора от
+# 4 октября 2026 года - «палеогеография очень плохо работает».
+PALEO_AGES = (0, 100, 250, 600)
+
+
+@check(1000)
+def paleo_tour():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(20.0, 20.0, 20000000.0, 0.0, 0.0))
+    window.set_extra("paleo", True)
+    result["paleo_tour"] = {"ages": {}, "index": 0,
+                            "started": time.monotonic()}
+
+
+@check(500)
+def paleo_tour_run():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    out = result["paleo_tour"]
+    index = out["index"]
+    if index >= len(PALEO_AGES):
+        return None
+    age = PALEO_AGES[index]
+    waited = time.monotonic() - out["started"]
+    if window.paleo_age != age:
+        window.paleo_bar.set_age(age)
+        window._paleo_age(age)
+        out["started"] = time.monotonic()
+        return 500
+    if age not in window.paleo_cache and waited < 90.0:
+        return 500
+    if view.load_missing and waited < 90.0:
+        return 500
+    rings = window.paleo_cache.get(age)
+    view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_paleo_%d.png" % age))
+    out["ages"][str(age)] = {
+        "wait_s": round(waited, 1),
+        "rings": len(rings) if rings is not None else None,
+        "points": sum(len(r) for r in rings) if rings else 0,
+        "land_share": _land_share(view),
+        "label": window.paleo_bar.label.text()}
+    out["index"] = index + 1
+    out["started"] = time.monotonic()
+    return 500
+
+
+@check(4000)
+def paleo_close_view():
+    # Берег вблизи на возрасте 0: Гибралтар с 600 км - видно, насколько
+    # груба маска суши.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.paleo_bar.set_age(0)
+    window._paleo_age(0)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(36.0, -5.5, 600000.0, 0.0, 0.0))
+
+
+@check(1000)
+def paleo_close_check():
+    window = state["window"]
+    out = result["paleo_tour"]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_paleo_close.png"))
+    out["cache"] = sorted(window.paleo_cache)
+    out["message"] = window.message[0]
+    window.set_extra("paleo", False)
+    out["gl"] = dict(window.view.gl_errors)
 
 
 @check(2000)

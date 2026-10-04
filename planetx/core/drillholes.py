@@ -192,7 +192,11 @@ def code_color(code, palette=None):
     if palette and code in palette:
         text = palette[code].lstrip("#")
         return tuple(int(text[i:i + 2], 16) for i in (0, 2, 4))
-    digest = hashlib.md5(str(code).encode("utf-8")).digest()
+    # MD5 здесь - только устойчивый цвет кода, не защита. Без
+    # usedforsecurity=False сканер Bandit каталога QGIS считает это
+    # слабым хешем (B324).
+    digest = hashlib.md5(str(code).encode("utf-8"),
+                         usedforsecurity=False).digest()
     hue = digest[0] / 255.0
     r, g, b = _hsv(hue, 0.55 + digest[1] / 255.0 * 0.35,
                    0.70 + digest[2] / 255.0 * 0.25)

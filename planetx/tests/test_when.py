@@ -106,6 +106,14 @@ class TestBeforeEra(unittest.TestCase):
                                       when.parse("-0146")))
 
 
+class TestDeepTime(unittest.TestCase):
+    """Годы длиннее четырёх цифр - палеогеография и глубокое время."""
+
+    def test_long_years(self):
+        self.assertEqual(when.civil(when.parse("-28000"))[0], -27999)
+        self.assertEqual(when.civil(when.parse("12026"))[0], 12026)
+
+
 class TestShare(unittest.TestCase):
 
     def test_inside_span(self):

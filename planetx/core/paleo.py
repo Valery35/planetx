@@ -28,6 +28,13 @@ COLOR = (255, 236, 150, 255)
 OCEAN = (0.10, 0.22, 0.40)  # цвет гладкой основы, океан
 LAND = (0.66, 0.60, 0.42)  # цвет суши на ней
 MASK_WIDTH = 2048  # пикселей в маске суши по долготе
+# Готовые маски суши в planetx-terrain, tools/build_paleo.py: PNG в один
+# бит, MASK_FILE_WIDTH × MASK_FILE_WIDTH / 2. Пиксель на экваторе около
+# 4.9 км против 19.6 км у маски 2048. Решение автора от 4 октября 2026
+# года - служба отвечает 6-25 с на возраст, маски берутся готовыми.
+MASK_FILE_WIDTH = 8192
+MASK_URL = ("https://raw.githubusercontent.com/Valery35/planetx-terrain/"
+            "main/paleo/merdith2021/{age}.png")
 WIDTH = 1.5
 RING_POINTS = 120  # вершин на контур, не больше
 MIN_SPAN = 1.5  # градусов, контур мельче не рисуется

@@ -318,6 +318,44 @@ def post_json(url, headers, body, done):
     return reply
 
 
+# мс без единого байта, после которых поток ответа модели обрывается.
+STREAM_TIMEOUT = 300000
+
+
+def post_stream(url, headers, body, chunk, done):
+    """Асинхронный POST с ответом потоком событий: chunk(байты) зовётся
+    по мере прихода данных, done(ошибка сети или пустая строка) -
+    в конце. Так принимается длинный ответ модели: пока идут байты,
+    соединение не считается простаивающим. Ответ целиком ждать нельзя -
+    QgsNetworkAccessManager обрывает запрос без движения данных по
+    своему сроку из настроек сети QGIS. Возвращает ответ, его нужно
+    держать до конца, abort() обрывает поток и тоже приводит к done."""
+    request = QNetworkRequest(QUrl(url))
+    request.setAttribute(MARK, True)
+    for name, value in headers.items():
+        request.setRawHeader(name.encode("ascii"), value.encode("utf-8"))
+    request.setRawHeader(b"Accept", b"text/event-stream")
+    if hasattr(request, "setTransferTimeout"):
+        request.setTransferTimeout(STREAM_TIMEOUT)
+    reply = QgsNetworkAccessManager.instance().post(
+        request, json.dumps(body, ensure_ascii=False).encode("utf-8"))
+
+    def ready():
+        data = bytes(reply.readAll())
+        if data:
+            chunk(data)
+
+    def finished():
+        ready()
+        failed = reply.error() != NO_ERROR
+        done(reply.errorString() if failed else "")
+        reply.deleteLater()
+
+    reply.readyRead.connect(ready)
+    reply.finished.connect(finished)
+    return reply
+
+
 def fetch_json(url, done, prefer_cache=True):
     """Асинхронно получить JSON и вызвать done(данные или None, ошибка).
 

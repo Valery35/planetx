@@ -450,6 +450,8 @@ class GlobeView(QOpenGLWidget):
         # стоит в экваториальной системе, светила - на момент sky_time,
         # None - часы компьютера.
         self.sky_view = None
+        # Шёл ли перелёт взгляда в прошлом кадре неба, см. _render_sky.
+        self._sky_moved = False
         self.sky_time = None
         self.sky_camera = Camera((0.0, 0.0, 0.0), np.eye(3))
         self.constellations = Constellations()
@@ -1967,9 +1969,15 @@ class GlobeView(QOpenGLWidget):
         и светила. Тайлов, воздуха и своих объектов в нём нет, камера
         стоит в центре небесной сферы. Пока идёт перелёт или тур,
         взгляд берётся из позы навигатора, core.skyview.pose_of."""
-        if moving:
+        # На последнем шаге перелёта навигатор ставит конечную позу
+        # и сообщает, что движения больше нет. Взгляд переносится
+        # и в этом кадре, иначе он вставал чуть не доходя до цели:
+        # 4 октября 2026 года у Сириуса на 0.09° и с полем 12.8° вместо
+        # 12°.
+        if moving or self._sky_moved:
             pose = self.navigator.pose
             follow_pose(self.sky_view, pose.lat, pose.lon, pose.distance)
+        self._sky_moved = moving
         cam = self.sky_frame_camera()
         frame = np.eye(3)
         gpu.gl.glEnable(GL.GL_DEPTH_TEST)

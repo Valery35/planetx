@@ -29,6 +29,7 @@ build_* переводит его в тело запроса подключен�
 ответ в Reply.
 """
 import json
+import re
 from collections import namedtuple
 
 # Форматы запросов. ANTHROPIC и RESPONSES - ещё и имена подключений
@@ -183,11 +184,9 @@ def system_text(context):
         "для ответа нужны данные - вызови point_info или "
         "quakes_summary, не выдумывай чисел. Метки, пути, "
         "многоугольники, папки и туры - только документом KML через "
-        "add_kml, пользователь подтверждает запись сам. У события "
-        "с известной датой в KML обязательна дата: <TimeStamp><when> или "
-        "<TimeSpan>, год четырьмя цифрами, год до нашей эры - "
-        "астрономический со знаком минус (264 год до н. э. это -0263).\n"
-        "Контекст вида: " + json.dumps(context, ensure_ascii=False))
+        "add_kml, пользователь подтверждает запись сам. Правила "
+        "документа KML: " + KML_RULES.format(places=KML_PLACES)
+        + "\nКонтекст вида: " + json.dumps(context, ensure_ascii=False))
 
 
 def build_anthropic(model, system, dialog):
@@ -365,10 +364,11 @@ def needs_key(base):
 
 
 def request(provider, base, model, key, system, dialog, tools=True,
-            max_tokens=None):
+            max_tokens=None, stream=False):
     """Адрес, заголовки и тело запроса для подключения provider.
     tools=False - запрос без инструментов, ответ только текстом.
-    max_tokens - свой предел длины ответа."""
+    max_tokens - свой предел длины ответа. stream - ответ потоком
+    событий SSE, его разбирает StreamText."""
     base = base.rstrip("/")
     kind = FORMAT.get(provider, provider)
     headers = {"content-type": "application/json"}
@@ -397,6 +397,8 @@ def request(provider, base, model, key, system, dialog, tools=True,
         body.pop("tools", None)
     if max_tokens:
         body[limit] = int(max_tokens)
+    if stream:
+        body["stream"] = True
     return url, headers, body
 
 
@@ -404,35 +406,189 @@ def request(provider, base, model, key, system, dialog, tools=True,
 # документ KML текстом. Просьба автора от 4 октября 2026 года - «кнопку
 # нажал, а ИИ выдал генерацию геометрий». Один запрос вместо двух-трёх
 # кругов add_kml, годятся и модели без инструментов.
-KML_MAX_TOKENS = 8192
-KML_PLACES = 40  # меток в документе, не больше: длина и время ответа
+#
+# Задача автора того же дня - KML по запросу с максимумом данных
+# о пространстве и времени. Правила KML_RULES просят всё, что модуль
+# умеет показать: точки, линии по настоящему пути, многоугольники,
+# время у каждой метки, этапы пути отдельными линиями с промежутком
+# (такая линия растёт по шкале времени, core.features.grown), смену
+# территории многоугольниками с промежутками подряд. Ответ идёт потоком
+# (StreamText): длинный документ не упирается в простой соединения,
+# метки считаются по мере прихода.
+KML_MAX_TOKENS = 16000
+# Запасной предел: сервис отказал из-за длины ответа - повтор с ним.
+KML_SAFE_TOKENS = 8192
+KML_PLACES = 100  # меток в документе, не больше
+
+KML_RULES = (
+    "корень <kml xmlns=\"http://www.opengis.net/kml/2.2\">, в нём "
+    "<Document> с <name> на языке пользователя.\n"
+    "Пространство - всё, что у темы есть на местности:\n"
+    "- место или событие - <Placemark> с <Point>;\n"
+    "- маршрут, поход, плавание, линия фронта, граница, река, дорога - "
+    "<LineString>. Линия идёт по настоящему пути с промежуточными "
+    "точками вдоль берегов, рек и дорог, а не прямой между концами;\n"
+    "- государство, территория, район боёв, зона, ареал, водоём - "
+    "<Polygon> с <outerBoundaryIs><LinearRing>, контур по настоящим "
+    "очертаниям, от 12 до 60 вершин.\n"
+    "Каждая геометрия лежит внутри своего <Placemark> с <name>. Класть "
+    "<LineString> или <Polygon> прямо в <Folder> нельзя.\n"
+    "Координаты - пары «долгота,широта» через пробел, десятичные "
+    "градусы с 3-4 знаками, восточная долгота и северная широта "
+    "положительные. Внутри пары только запятая, без пробела, вот так - "
+    "<coordinates>-6.93,37.18 -13.85,28.68 -74.67,24.08</coordinates>. "
+    "Координаты настоящие, не выдуманные.\n"
+    "Время - у каждой метки, для которой известна хотя бы дата или год. "
+    "Без времени метка остаётся, только если его у неё нет вовсе:\n"
+    "- событие в один день - <TimeStamp><when>ГГГГ-ММ-ДД</when>"
+    "</TimeStamp>;\n"
+    "- всё, что длилось - осада, поход, война, правление, жизнь города "
+    "или государства - <TimeSpan><begin>…</begin><end>…</end>"
+    "</TimeSpan>;\n"
+    "- годится неполная дата ГГГГ или ГГГГ-ММ. Год не короче четырёх "
+    "цифр, год до нашей эры - со знаком минус, как в XML Schema: 264 год "
+    "до н. э. это -0264, 30 000 лет назад - -28000. Описание и название "
+    "без HTML, знак & пиши как &amp;;\n"
+    "- путь разбивай на этапы. Каждый этап - своя <LineString> со своим "
+    "<TimeSpan> от выхода до прихода: на шкале времени такая линия "
+    "растёт от начала к концу. Остановки пути - точки с датами;\n"
+    "- изменение территории или линии фронта во времени - несколько "
+    "<Polygon> или <LineString> одного объекта с промежутками "
+    "<TimeSpan> подряд: на шкале времени они сменяют друг друга;\n"
+    "- общее время этапа можно поставить <TimeSpan> у <Folder>, метки "
+    "без своего времени берут его.\n"
+    "Оформление: общие стили объявляй один раз в <Document> - <Style "
+    "id=\"…\"> с <LineStyle>, <PolyStyle>, <IconStyle>, цвет в записи "
+    "aabbggrr - и ссылайся на них <styleUrl>#id</styleUrl>. Заливка "
+    "многоугольника полупрозрачная, альфа от 40 до 80. Разные стороны, "
+    "этапы и виды объектов - разные цвета.\n"
+    "У каждой метки <name> и <description> в одно-два предложения, "
+    "в начале описания дата словами. Части темы раскладывай по "
+    "<Folder>, внутри - по порядку дат.\n"
+    "Объём: столько меток, сколько нужно, чтобы показать тему полно, "
+    "не больше {places}. Покрой всю тему - все этапы, весь промежуток "
+    "времени и всю территорию, а не только начало. Если места не "
+    "хватает, сокращай описания, а не геометрию и даты.")
 
 
 def kml_system_text(context):
     """Системная подсказка создания меток: в ответе только KML."""
     return (
-        "Ты создаёшь метки для трёхмерного глобуса. В ответе - только один "
-        "документ KML 2.2, без пояснений и без разметки Markdown. "
-        "Правила: корень <kml xmlns=\"http://www.opengis.net/kml/2.2\">, "
-        "в нём <Document> с <name> на языке пользователя. Точки - "
-        "<Placemark> с <Point>, пути и маршруты - <LineString>, области "
-        "- <Polygon> с <outerBoundaryIs><LinearRing>. Координаты - "
-        "«долгота,широта,0» через пробел, десятичные градусы, восточная "
-        "долгота и северная широта положительные. У каждой метки <name> "
-        "и короткое <description> в одно-два предложения. Цвета - <Style> "
-        "с <LineStyle>, <PolyStyle>, <IconStyle>, цвет в записи aabbggrr. "
-        "У каждого события с известной датой дата обязательна: момент - "
-        "<TimeStamp><when>ГГГГ-ММ-ДД</when></TimeStamp>, промежуток - "
-        "<TimeSpan><begin>…</begin><end>…</end></TimeSpan>, годится "
-        "и неполная дата ГГГГ или ГГГГ-ММ. Год четырьмя цифрами, год "
-        "до нашей эры - астрономический со знаком минус: 264 год до н. э. "
-        "это -0263. Ту же дату словами ставь в начало <description>. "
-        "Метки событий располагай по порядку дат. Разные части темы "
-        "раскладывай по <Folder>. Меток не больше {places}. Координаты "
-        "бери настоящие, длинный путь задавай десятком-другим точек. "
-        "Контекст вида: {context}"
-    ).format(places=KML_PLACES,
-             context=json.dumps(context, ensure_ascii=False))
+        "Ты создаёшь метки для трёхмерного глобуса со шкалой времени. "
+        "В ответе - только один документ KML 2.2, без пояснений и без "
+        "разметки Markdown. Правила документа: "
+        + KML_RULES.format(places=KML_PLACES)
+        + "\nКонтекст вида: " + json.dumps(context, ensure_ascii=False))
+
+
+def kml_progress(text):
+    """Сколько меток уже пришло целиком в потоке ответа."""
+    return text.count("</Placemark>")
+
+
+class StreamText:
+    """Текст ответа модели из потока событий SSE.
+
+    feed(байты) принимает куски ответа в любом порезе, в том числе
+    посреди строки и посреди символа UTF-8. Понимает события трёх
+    форматов по их виду: Anthropic Messages (content_block_delta),
+    OpenAI Chat (choices[0].delta.content) и OpenAI Responses
+    (response.output_text.delta). Рассуждения модели пропускаются.
+    finish() закрывает поток. Ответ не потоком (ошибка HTTP телом JSON
+    или сервис без потока) разбирается целиком через parse.
+    """
+
+    def __init__(self, provider):
+        self.provider = provider
+        self.text = ""
+        self.error = ""
+        self.cut = False  # ответ упёрся в предел длины
+        self.done = False
+        self._tail = b""
+        self._all = []
+        self._events = 0
+
+    def feed(self, data):
+        """Принять кусок ответа. Возвращает, вырос ли текст."""
+        if not data:
+            return False
+        self._all.append(bytes(data))
+        lines = (self._tail + bytes(data)).split(b"\n")
+        self._tail = lines.pop()
+        before = len(self.text)
+        for line in lines:
+            self._line(line.decode("utf-8", "replace").strip())
+        return len(self.text) > before
+
+    def finish(self):
+        """Поток кончился: остаток строки и ответ не потоком."""
+        if self._tail:
+            self._line(self._tail.decode("utf-8", "replace").strip())
+            self._tail = b""
+        if not self._events and not self.error:
+            whole = b"".join(self._all).decode("utf-8", "replace").strip()
+            if whole:
+                try:
+                    data = json.loads(whole)
+                except ValueError:
+                    data = None
+                if data is not None:
+                    reply = parse(self.provider, data)
+                    self.text = reply.text
+                    self.error = reply.error
+        self.done = True
+
+    def _line(self, line):
+        if not line.startswith("data:"):
+            return  # event:, комментарий «: …», пустая строка
+        payload = line[5:].strip()
+        if not payload or payload == "[DONE]":
+            return
+        try:
+            event = json.loads(payload)
+        except ValueError:
+            return
+        if not isinstance(event, dict):
+            return
+        self._events += 1
+        self._event(event)
+
+    def _event(self, event):
+        kind = event.get("type")
+        if event.get("error") and kind != "response.failed":
+            self.error = chat_error(event["error"])
+        elif kind == "content_block_delta":
+            delta = event.get("delta") or {}
+            if delta.get("type") == "text_delta":
+                self.text += delta.get("text") or ""
+        elif kind == "message_delta":
+            if (event.get("delta") or {}).get("stop_reason") == "max_tokens":
+                self.cut = True
+        elif kind == "response.output_text.delta":
+            delta = event.get("delta")
+            if isinstance(delta, str):
+                self.text += delta
+        elif kind == "response.incomplete":
+            self.cut = True
+        elif kind in ("response.failed", "error"):
+            failed = (event.get("response") or {}).get("error") \
+                or event.get("error") or event.get("message") or kind
+            self.error = chat_error(failed)
+        elif event.get("choices"):
+            choice = event["choices"][0] or {}
+            content = (choice.get("delta") or {}).get("content")
+            if isinstance(content, str):
+                self.text += content
+            if choice.get("finish_reason") == "length":
+                self.cut = True
+
+
+def length_refused(error):
+    """Похожа ли ошибка сервиса на отказ из-за предела длины ответа:
+    тогда запрос повторяется с KML_SAFE_TOKENS."""
+    text = (error or "").lower()
+    return "token" in text and ("max" in text or "limit" in text
+                                or "exceed" in text)
 
 
 def extract_kml(text):
@@ -441,22 +597,36 @@ def extract_kml(text):
     обрезается по последней целой метке и закрывается."""
     if not text:
         return None
-    start = text.find("<kml")
-    if start < 0:
-        return None
-    body = text[start:]
-    end = body.rfind("</kml>")
-    if end >= 0:
+    root = re.search(r"<kml[\s>]", text)
+    if root is None:
+        # Документ без корня <kml>: сразу <Document> или метки.
+        bare = re.search(r"<(Document|Folder|Placemark)[\s>]", text)
+        if bare is None:
+            return None
+        text = '<kml xmlns="http://www.opengis.net/kml/2.2">' \
+            + text[bare.start():]
+        root = re.search(r"<kml[\s>]", text)
+    body = text[root.start():]
+    end = body.find("</kml>")
+    if end >= 0:  # первый документ, если их в ответе два
         return body[:end + len("</kml>")]
-    cut = body.rfind("</Placemark>")
+    # Оборванный документ: до последнего целого элемента, открытые
+    # Folder и Document закрываются по стеку.
+    cut = max(body.rfind("</" + tag + ">") + len(tag) + 3
+              if body.rfind("</" + tag + ">") >= 0 else -1
+              for tag in ("Placemark", "Folder", "Document"))
     if cut < 0:
         return None
-    body = body[:cut + len("</Placemark>")]
-    for tag in ("Folder", "Document"):
-        opened = body.count("<" + tag + ">") + body.count("<" + tag + " ")
-        body += "</{}>".format(tag) * max(
-            0, opened - body.count("</" + tag + ">"))
-    return body + "</kml>"
+    body = body[:cut]
+    stack = []
+    for found in re.finditer(r"<(/?)(Folder|Document)[\s>]", body):
+        if found.group(1):
+            if stack and stack[-1] == found.group(2):
+                stack.pop()
+        else:
+            stack.append(found.group(2))
+    return body + "".join("</{}>".format(t) for t in reversed(stack)) \
+        + "</kml>"
 
 
 def parse(provider, data):

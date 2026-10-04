@@ -24,7 +24,7 @@ import os
 
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsSettings, QgsVectorLayer)
-from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
+from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QFont, QIcon, QKeySequence
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QLineEdit,
@@ -44,6 +44,7 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            WATER_NAMES)
 from ..qt_compat import QAction, enum, enum_int
 from .placeprops import icon_image
+from .spinner import BusySpinner
 
 # Роль данных строки: номер слоя QGIS, у строки «Глобус» - None.
 LAYER_ROLE = enum_int(enum(Qt, "ItemDataRole", "UserRole"))
@@ -77,6 +78,12 @@ RADIO_ROLE = BASEMAP_ROLE + 1
 # Строка самой папки-переключателя.
 RADIO_FOLDER_ROLE = RADIO_ROLE + 1
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
+# Клавиши строки поиска и списка подсказок под ней.
+KEY_PRESS = enum(QEvent, "Type", "KeyPress")
+KEY_DOWN = enum(Qt, "Key", "Key_Down")
+KEY_UP = enum(Qt, "Key", "Key_Up")
+KEY_ESCAPE = enum(Qt, "Key", "Key_Escape")
+KEY_CHOOSE = (enum(Qt, "Key", "Key_Return"), enum(Qt, "Key", "Key_Enter"))
 DRAG = enum(Qt, "ItemFlag", "ItemIsDragEnabled")
 DROP = enum(Qt, "ItemFlag", "ItemIsDropEnabled")
 OPEN_KEY = "PlanetX/panel_open/"  # + имя раздела: раскрыт ли он
@@ -167,6 +174,18 @@ def layer_kind(layer):
         kinds = {0: tr("точки"), 1: tr("линии"), 2: tr("полигоны")}
         return kinds.get(enum_int(layer.geometryType()), tr("таблица"))
     return tr("слой")
+
+
+def hint_text(item):
+    """Строка подсказки поиска (core.searchbar.Suggestion): название
+    и приписка вида - метка, звезда, созвездие или прежний запрос."""
+    if item.kind == "place":
+        return tr("{name} - метка", name=item.text)
+    if item.kind == "star":
+        return tr("{name} - звезда", name=item.text)
+    if item.kind == "constellation":
+        return tr("{name} - созвездие", name=item.text)
+    return tr("{name} - прежний запрос", name=item.text)
 
 
 class RadioDelegate(QStyledItemDelegate):
@@ -368,11 +387,17 @@ class LayerPanel(QWidget):
     # Номер строки в списке найденных мест.
     place_chosen = pyqtSignal(int)
     search_cleared = pyqtSignal()
+    # Выбрана подсказка строки поиска, core.searchbar.Suggestion.
+    suggestion_chosen = pyqtSignal(object)
+    # Меню кнопки помощника: стереть прежние запросы строки поиска.
+    history_clear_requested = pyqtSignal()
     # Ссылка «Разговор» под ответом помощника.
     assistant_requested = pyqtSignal()
     # Кнопка «создать метки по описанию» и ссылка «Отменить» под ответом.
     make_requested = pyqtSignal(str)
     undo_requested = pyqtSignal()
+    # Ссылка «Остановить» под счётом меток, идущих потоком.
+    stop_requested = pyqtSignal()
     # Меню кнопки помощника: окно настроек.
     assistant_settings_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
@@ -410,18 +435,19 @@ class LayerPanel(QWidget):
         self.place.setClearButtonEnabled(True)
         self.place.setToolTip(tr(
             "Название места или координаты в градусах, например Пермь "
-            "или 58.0105, 56.2294. Enter запускает поиск или перелёт. "
-            "Несколько найденных мест показываются списком ниже, "
-            "перелёт начинается щелчком по строке. Перелёт прерывается "
-            "мышью. Просьба словами, например «покажи разрез через "
-            "Японский жёлоб», уходит помощнику, если в окне «Настройки "
-            "помощника» сохранён ключ API и отмечен флажок «Отвечать на "
-            "просьбы из строки «Поиск»». Ответ появляется под строкой."))
-        self.place.returnPressed.connect(
-            lambda: self.fly_text.emit(self.place.text()))
+            "или 58.0105, 56.2294. Enter запускает поиск или перелёт, "
+            "несколько найденных мест показываются списком ниже. Просьба "
+            "словами, например «покажи разрез через Японский жёлоб», "
+            "уходит помощнику, если в его настройках сохранён ключ API. "
+            "При вводе под строкой появляются подсказки - свои метки, "
+            "прежние запросы, на небе звёзды и созвездия. Клавиша «вниз» "
+            "выбирает подсказку, в пустой строке она показывает прежние "
+            "запросы."))
+        self.place.returnPressed.connect(self._enter)
         self.place.textChanged.connect(self._search_text)
+        self.place.textEdited.connect(self._text_edited)
         go = QPushButton(tr("Поиск"), self)
-        go.clicked.connect(lambda: self.fly_text.emit(self.place.text()))
+        go.clicked.connect(self._enter)
         # Метки по описанию из строки поиска одним запросом к модели.
         make = QToolButton(self)
         make.setIcon(QIcon(os.path.join(
@@ -434,8 +460,7 @@ class LayerPanel(QWidget):
             "«Отменить» под строкой удаляет папку. То же делает Ctrl+Enter "
             "в строке. Стрелка открывает разговор с помощником и его "
             "настройки."))
-        make.clicked.connect(
-            lambda: self.make_requested.emit(self.place.text()))
+        make.clicked.connect(self._make)
         # Помощник целиком - эта кнопка: нажатие создаёт метки, стрелка -
         # разговор и настройки. Значка на панели значков нет, решение
         # автора от 4 октября 2026 года - инструмент компактный.
@@ -445,6 +470,12 @@ class LayerPanel(QWidget):
         assistant_menu.addAction(tr("Настройки помощника…")).triggered \
             .connect(lambda checked=False:
                      self.assistant_settings_requested.emit())
+        # Прежние запросы строки поиска хранит профиль QGIS, пункт их
+        # стирает.
+        assistant_menu.addSeparator()
+        assistant_menu.addAction(tr("Очистить историю поиска")).triggered \
+            .connect(lambda checked=False:
+                     self.history_clear_requested.emit())
         make.setMenu(assistant_menu)
         make.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
                                "MenuButtonPopup"))
@@ -453,15 +484,33 @@ class LayerPanel(QWidget):
         shortcut.setShortcut(QKeySequence("Ctrl+Return"))
         shortcut.setShortcutContext(
             enum(Qt, "ShortcutContext", "WidgetShortcut"))
-        shortcut.triggered.connect(
-            lambda checked=False: self.make_requested.emit(
-                self.place.text()))
+        shortcut.triggered.connect(self._make)
         self.place.addAction(shortcut)
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.addWidget(self.place, 1)
         top.addWidget(go, 0)
         top.addWidget(make, 0)
+        # Значок ожидания: ответ модели помощника или службы поиска мест
+        # ещё не пришёл. Виден только во время ожидания.
+        self.busy = BusySpinner(self)
+        top.addWidget(self.busy, 0)
+        # Подсказки при вводе: метки, небо, прежние запросы. Их даёт
+        # окно функцией suggest_source(текст) -> список Suggestion
+        # (core/searchbar.py). Список встроен в панель и виден, пока
+        # в нём есть строки. QCompleter не годится: Enter при открытом
+        # списке срабатывал бы дважды.
+        self.suggest_source = None
+        self._hints = []
+        self.hints = QListWidget(self)
+        self.hints.setVisible(False)
+        self.hints.setMaximumHeight(FOUND_HEIGHT)
+        self.hints.itemClicked.connect(
+            lambda item: self._choose_hint(self.hints.row(item)))
+        # «Вниз» из строки - в список, «вверх» с первой строки - обратно,
+        # Enter выбирает подсказку, Escape прячет список.
+        self.place.installEventFilter(self)
+        self.hints.installEventFilter(self)
         # Найденные места. Список виден, пока в нём есть строки.
         self.found = QListWidget(self)
         self.found.setVisible(False)
@@ -701,6 +750,7 @@ class LayerPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.addLayout(top)
+        layout.addWidget(self.hints)
         layout.addWidget(self.found)
         layout.addWidget(self.answer)
         layout.addWidget(split, 1)
@@ -709,30 +759,140 @@ class LayerPanel(QWidget):
         self._tour_state()
 
     def _search_text(self, text):
-        """Пустое поле поиска закрывает список и снимает метку."""
+        """Пустое поле поиска закрывает списки и снимает метку."""
         if not text.strip():
+            self.hide_hints()
             self.set_found([])
             self.set_answer("")
             self.search_cleared.emit()
 
+    def _enter(self, checked=False):
+        """Enter в строке поиска и кнопка «Поиск»: подсказки прячутся,
+        запрос уходит окну."""
+        self.hide_hints()
+        self.fly_text.emit(self.place.text())
+
+    def _make(self, checked=False):
+        """Кнопка помощника, Ctrl+Enter и ссылка под ответом: метки
+        по описанию в строке."""
+        self.hide_hints()
+        self.make_requested.emit(self.place.text())
+
+    # Подсказки строки поиска.
+
+    def _text_edited(self, text):
+        """Правка строки пользователем обновляет подсказки. Текст,
+        поставленный программой, сюда не приходит."""
+        if text.strip():
+            self.show_hints(text)
+        else:
+            self.hide_hints()
+
+    def show_hints(self, text):
+        """Подсказки к тексту от поставщика suggest_source. Пустой
+        текст - прежние запросы."""
+        source = self.suggest_source
+        self.set_hints(source(text) if source is not None else [])
+
+    def set_hints(self, items):
+        """Строки подсказок, список Suggestion. Пустой список прячет
+        их. Высота - по строкам, не больше FOUND_HEIGHT."""
+        self._hints = list(items)
+        self.hints.clear()
+        self.hints.addItems([hint_text(item) for item in self._hints])
+        if self._hints:
+            row = self.hints.sizeHintForRow(0)
+            height = row * len(self._hints) + 2 * self.hints.frameWidth()
+            self.hints.setFixedHeight(
+                min(height, FOUND_HEIGHT) if row > 0 else FOUND_HEIGHT)
+        self.hints.setVisible(bool(self._hints))
+
+    def hide_hints(self):
+        """Список подсказок пуст и спрятан."""
+        self.set_hints([])
+
+    def set_busy(self, on, tip=""):
+        """Значок ожидания у строки поиска, tip - что именно ждётся."""
+        self.busy.set_busy(on, tip)
+
+    def _choose_hint(self, row):
+        """Подсказка выбрана щелчком или Enter: список прячется, выбор
+        уходит окну."""
+        if not 0 <= row < len(self._hints):
+            return
+        item = self._hints[row]
+        if self.hints.hasFocus():
+            self.place.setFocus()
+        self.hide_hints()
+        self.suggestion_chosen.emit(item)
+
+    def eventFilter(self, watched, event):
+        """Клавиши строки поиска и списка подсказок."""
+        if event.type() == KEY_PRESS and (
+                watched is self.place or watched is self.hints) \
+                and self._hint_key(watched, event.key()):
+            return True
+        return super().eventFilter(watched, event)
+
+    def _hint_key(self, watched, key):
+        """Клавиша строки поиска или списка подсказок. Истина - клавиша
+        обработана здесь и дальше не идёт."""
+        if key == KEY_ESCAPE:
+            if not self._hints:
+                return False
+            self.hide_hints()
+            self.place.setFocus()
+            return True
+        if watched is self.place:
+            if key != KEY_DOWN:
+                return False
+            # В пустой строке «вниз» показывает прежние запросы.
+            if not self._hints:
+                self.show_hints(self.place.text())
+            if self._hints:
+                self.hints.setFocus()
+                self.hints.setCurrentRow(0)
+            return True
+        row = self.hints.currentRow()
+        if key == KEY_UP and row <= 0:
+            self.hints.setCurrentRow(-1)
+            self.place.setFocus()
+            return True
+        if key in KEY_CHOOSE:
+            self._choose_hint(row)
+            return True
+        return False
+
     def _answer_link(self, link):
         if link == "undo":
             self.undo_requested.emit()
+        elif link == "stop":
+            self.stop_requested.emit()
+        elif link == "make":
+            self._make()
         else:
             self.assistant_requested.emit()
 
-    def set_answer(self, text, undo=False):
+    def set_answer(self, text, undo=False, make="", stop=False):
         """Ответ помощника под строкой поиска со ссылкой на разговор.
         Пустой текст прячет его. undo - ещё ссылка «Отменить» для
-        только что созданных меток."""
+        только что созданных меток. make - тема строки: ссылка «Создать
+        метки по теме» после поиска по названию."""
         if not text:
             self.answer.clear()
             self.answer.setVisible(False)
             return
         body = html.escape(text).replace("\n", "<br>")
+        if make:
+            body += ' <a href="make">{}</a>'.format(html.escape(tr(
+                "Создать метки по теме «{topic}»", topic=make)))
         if undo:
             body += ' <a href="undo">{}</a>'.format(
                 html.escape(tr("Отменить")))
+        if stop:
+            # Метки идут потоком: остановка оставляет пришедшие целиком.
+            body += ' <a href="stop">{}</a>'.format(
+                html.escape(tr("Остановить")))
         self.answer.setText('{} <a href="assistant">{}</a>'.format(
             body, html.escape(tr("Разговор…"))))
         self.answer.setVisible(True)

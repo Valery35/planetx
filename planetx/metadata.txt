@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.28.0
+version=0.29.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,21 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.28.0 The Plate boundaries row shows the lithospheric
+changelog=0.29.0 The Search line suggests your places and earlier
+      queries while you type, and stars and constellations in the sky.
+      Enter on the exact name of your place flies to it without a
+      network request. Assistant places are richer: up to 100 places,
+      routes along the real path, territories as polygons and times
+      wherever they are known. Route stages grow on the time slider.
+      The answer arrives as a stream with a count of places and a Stop
+      link that keeps the places already complete. After a search by
+      name, the Make places on "topic" link turns a topic into
+      places. KML tracks gx:Track open as lines with a time span.
+      Assistant places are read when the model writes spaces after
+      commas, time inside a line, a polygon without an outer boundary
+      or HTML in a description. Years before the common era are written
+      correctly, and years longer than four digits are read.
+      0.28.0 The Plate boundaries row shows the lithospheric
       plate boundaries after the PB2002 model: red where plates move
       apart, green along transform faults, blue where they converge.
       Plate names show as labels. The Features window shows the

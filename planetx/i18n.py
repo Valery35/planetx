@@ -23,23 +23,47 @@ EN = {
         "does not have it.",
     "Поиск": "Search",
     "Название места или координаты в градусах, например Пермь или "
-    "58.0105, 56.2294. Enter запускает поиск или перелёт. Несколько "
-    "найденных мест показываются списком ниже, перелёт начинается "
-    "щелчком по строке. Перелёт прерывается мышью. Просьба словами, "
-    "например «покажи разрез через Японский жёлоб», уходит помощнику, "
-    "если в окне «Настройки помощника» сохранён ключ API и отмечен флажок "
-    "«Отвечать на просьбы из строки «Поиск»». Ответ появляется под "
-    "строкой.":
+    "58.0105, 56.2294. Enter запускает поиск или перелёт, несколько "
+    "найденных мест показываются списком ниже. Просьба словами, например "
+    "«покажи разрез через Японский жёлоб», уходит помощнику, если в его "
+    "настройках сохранён ключ API. При вводе под строкой появляются "
+    "подсказки - свои метки, прежние запросы, на небе звёзды и созвездия. "
+    "Клавиша «вниз» выбирает подсказку, в пустой строке она показывает "
+    "прежние запросы.":
         "A place name or coordinates in degrees, for example Perm or "
-        "58.0105, 56.2294. Enter starts the search or the flight. Several "
-        "places found are listed below, a click on a row starts the "
-        "flight. The mouse interrupts the flight. A request in words, for "
-        "example \"show a section across the Japan Trench\", goes to the "
-        "assistant if an API key is saved in the Assistant settings window "
-        "and the "
-        "Answer requests from the Search field box is checked. The answer "
-        "appears below the field.",
+        "58.0105, 56.2294. Enter starts the search or the flight, several "
+        "places found are listed below. A request in words, for example "
+        "\"show a section across the Japan Trench\", goes to the "
+        "assistant if an API key is saved in its settings. Suggestions "
+        "appear below the field while typing - own placemarks, earlier "
+        "queries and, in the sky, stars and constellations. The Down key "
+        "selects a suggestion, in an empty field it shows the earlier "
+        "queries.",
+    "{name} - метка": "{name} - placemark",
+    "{name} - звезда": "{name} - star",
+    "{name} - созвездие": "{name} - constellation",
+    "{name} - прежний запрос": "{name} - earlier query",
+    "Очистить историю поиска": "Clear search history",
+    "История поиска очищена.": "The search history is cleared.",
     "Разговор…": "Conversation…",
+    "Остановить": "Stop",
+    "Помощник ждёт ответ модели.":
+        "The assistant is waiting for the model answer.",
+    "Идёт поиск места.": "The place search is running.",
+    "Помощник создаёт метки, получено {count}.":
+        "The assistant is making places, {count} received.",
+    "Сервис не принял длинный ответ, запрос повторён с меньшим пределом "
+    "длины.":
+        "The service refused a long answer, the request is repeated with "
+        "a smaller length limit.",
+    "Ответ модели оборвался: {error}. Взяты метки, пришедшие целиком.":
+        "The model answer broke off: {error}. The places received whole "
+        "are taken.",
+    "Создание меток остановлено. Взяты метки, пришедшие целиком.":
+        "Making places is stopped. The places received whole are taken.",
+    "Ответ модели упёрся в предел длины. Взяты метки, пришедшие целиком.":
+        "The model answer hit the length limit. The places received whole "
+        "are taken.",
     "Разговор с помощником…": "Conversation with the assistant…",
     "Настройки помощника…": "Assistant settings…",
     "Очистить «Мои метки»…": "Clear My Places…",
@@ -77,8 +101,9 @@ EN = {
         "Describe in the Search field which places to make.",
     "KML модели не разобран: {error}":
         "The KML of the model is not read: {error}",
-    "Создана папка «{name}», меток {count}.":
-        "The folder {name} is made, placemarks {count}.",
+    "Создана папка «{name}», меток {count}, со временем {timed}.":
+        "The folder {name} is made, placemarks {count}, with time "
+        "{timed}.",
     "Созданные метки удалены.": "The made places are removed.",
     "Настройки помощника": "Assistant settings",
     "Настройки…": "Settings…",
@@ -334,6 +359,8 @@ EN = {
     "Пермь": "Perm",
     "Бока-Чика, Starbase": "Boca Chica, Starbase",
     "Японский жёлоб": "Japan Trench",
+    "Создать метки по теме «{topic}»": "Make places on \"{topic}\"",
+    "Найдены места с этим названием.": "Places with this name are found.",
     "Границы плит": "Plate boundaries",
     "Границы литосферных плит по модели PB2002. Красные - раздвиг плит "
     "на хребтах и рифтах, зелёные - сдвиг по трансформным разломам, синие "

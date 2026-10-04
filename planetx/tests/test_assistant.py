@@ -216,6 +216,58 @@ class TestKmlGeneration(unittest.TestCase):
         # Оборван до первой целой метки - документа нет.
         self.assertIsNone(ai.extract_kml('<kml><Document><Placemark><na'))
 
+    def test_extract_kml_odd_answers(self):
+        one = '<kml xmlns="x"><Document><name>А</name></Document></kml>'
+        self.assertEqual(ai.extract_kml(one + "\nи ещё\n" + one), one)
+        got = ai.extract_kml("Вот:\n<Document><name>Б</name></Document>")
+        self.assertTrue(got.startswith("<kml "))
+        self.assertTrue(got.endswith("</Document></kml>"))
+        cut = ('<kml><Document><Folder><name>Ф</name></Folder>'
+               "<Folder><name>Г</name><LineString><coordinates>1,2")
+        self.assertEqual(ai.extract_kml(cut),
+                         '<kml><Document><Folder><name>Ф</name></Folder>'
+                         "</Document></kml>")
+
+    def test_prompt_asks_time_and_space_everywhere(self):
+        text = ai.kml_system_text({})
+        for word in ("TimeStamp", "TimeSpan", "-0264", "этап", "растёт",
+                     "LineString", "Polygon", "сменяют", "styleUrl",
+                     str(ai.KML_PLACES)):
+            self.assertIn(word, text)
+        # Разговор с инструментами получает те же правила документа.
+        self.assertIn("сменяют", ai.system_text({}))
+
+    def test_stream_flag(self):
+        dialog = [{"role": "user", "text": "Тема"}]
+        for provider in (ai.ANTHROPIC, ai.OPENROUTER, ai.RESPONSES):
+            body = ai.request(provider, "b", "m", "k", "s", dialog,
+                              tools=False, stream=True)[2]
+            self.assertIs(body["stream"], True, provider)
+        self.assertNotIn("stream", ai.request(ai.ANTHROPIC, "b", "m", "k",
+                                              "s", dialog)[2])
+
+    def test_length_refused(self):
+        self.assertTrue(ai.length_refused(
+            "max_tokens: 16000 > 8192, which is the maximum allowed"))
+        self.assertTrue(ai.length_refused("Token limit exceeded"))
+        self.assertFalse(ai.length_refused("Provider returned error"))
+        self.assertFalse(ai.length_refused(""))
+
+    def test_time_span_and_bc_dates_read(self):
+        import kml
+        text = ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+                "<name>Пунические войны</name><Placemark><name>Первая "
+                "война</name><TimeSpan><begin>-0263</begin><end>-0240"
+                "</end></TimeSpan><Point><coordinates>10.3,36.8,0"
+                "</coordinates></Point></Placemark><Placemark><name>Канны"
+                "</name><TimeStamp><when>-0215-08-02</when></TimeStamp>"
+                "<Point><coordinates>16.13,41.3,0</coordinates></Point>"
+                "</Placemark></Document></kml>")
+        tree = kml.read_kml(ai.extract_kml(text).encode("utf-8"))
+        times = [p.time for p in tree.places()]
+        self.assertEqual(times[0], ("-0263", "-0240"))
+        self.assertEqual(times[1], ("-0215-08-02", "-0215-08-02"))
+
     def test_cut_document_reads_as_kml(self):
         import kml
         text = ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
@@ -224,6 +276,120 @@ class TestKmlGeneration(unittest.TestCase):
                 "</coordinates></Point></Placemark><Placemark><name>Сан")
         tree = kml.read_kml(ai.extract_kml(text).encode("utf-8"))
         self.assertEqual([p.name for p in tree.places()], ["Палос"])
+
+
+def sse(*events):
+    """Поток SSE из событий: словарь - строка data с JSON, строка -
+    как есть."""
+    lines = []
+    for event in events:
+        lines.append(event if isinstance(event, str)
+                     else "data: " + json.dumps(event, ensure_ascii=False))
+        lines.append("")
+    return ("\n".join(lines) + "\n").encode("utf-8")
+
+
+class TestStreamText(unittest.TestCase):
+
+    def feed_in_pieces(self, provider, data, size):
+        stream = ai.StreamText(provider)
+        grew = 0
+        for i in range(0, len(data), size):
+            grew += bool(stream.feed(data[i:i + size]))
+        stream.finish()
+        return stream, grew
+
+    def test_chat_deltas_in_any_cut(self):
+        data = sse(": OPENROUTER PROCESSING",
+                   {"choices": [{"delta": {"reasoning": "думаю"}}]},
+                   {"choices": [{"delta": {"content": "<kml><Docu"}}]},
+                   {"choices": [{"delta": {"content": "ment>Колумб"}}]},
+                   {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+                   "data: [DONE]")
+        # Порез по 1, 3 и 7 байт рвёт строки и символы UTF-8.
+        for size in (1, 3, 7, 4096):
+            stream, grew = self.feed_in_pieces(ai.OPENROUTER, data, size)
+            self.assertEqual(stream.text, "<kml><Document>Колумб", size)
+            self.assertEqual(stream.error, "")
+            self.assertFalse(stream.cut)
+            self.assertTrue(stream.done)
+            self.assertGreaterEqual(grew, 1)
+
+    def test_chat_cut_and_error(self):
+        stream, _ = self.feed_in_pieces(ai.LOCAL, sse(
+            {"choices": [{"delta": {"content": "<kml>"},
+                          "finish_reason": "length"}]}), 5)
+        self.assertTrue(stream.cut)
+        stream, _ = self.feed_in_pieces(ai.OPENROUTER, sse(
+            {"choices": [{"delta": {"content": "<kml>"}}]},
+            {"error": {"message": "Provider returned error", "metadata": {
+                "provider_name": "ModelRun", "raw": "overloaded"}}}), 9)
+        self.assertEqual(stream.error,
+                         "Provider returned error (ModelRun): overloaded")
+        # Пришедший до ошибки текст остаётся.
+        self.assertEqual(stream.text, "<kml>")
+
+    def test_anthropic_events(self):
+        data = sse("event: message_start",
+                   {"type": "message_start", "message": {"id": "m"}},
+                   "event: ping", {"type": "ping"},
+                   {"type": "content_block_delta", "index": 0, "delta": {
+                       "type": "thinking_delta", "thinking": "думаю"}},
+                   {"type": "content_block_delta", "index": 1, "delta": {
+                       "type": "text_delta", "text": "<kml>"}},
+                   {"type": "content_block_delta", "index": 1, "delta": {
+                       "type": "text_delta", "text": "</kml>"}},
+                   {"type": "message_delta",
+                    "delta": {"stop_reason": "max_tokens"}},
+                   {"type": "message_stop"})
+        stream, _ = self.feed_in_pieces(ai.ANTHROPIC, data, 11)
+        self.assertEqual(stream.text, "<kml></kml>")
+        self.assertTrue(stream.cut)
+        stream, _ = self.feed_in_pieces(ai.DEEPSEEK, sse({
+            "type": "error", "error": {"type": "overloaded_error",
+                                       "message": "Overloaded"}}), 6)
+        self.assertEqual(stream.error, "Overloaded")
+
+    def test_responses_events(self):
+        data = sse({"type": "response.created", "response": {}},
+                   {"type": "response.output_text.delta", "delta": "<kml>"},
+                   {"type": "response.output_text.delta", "delta": "</kml>"},
+                   {"type": "response.completed", "response": {}})
+        stream, _ = self.feed_in_pieces(ai.RESPONSES, data, 13)
+        self.assertEqual(stream.text, "<kml></kml>")
+        self.assertFalse(stream.cut)
+        stream, _ = self.feed_in_pieces(ai.RESPONSES, sse(
+            {"type": "response.output_text.delta", "delta": "<kml>"},
+            {"type": "response.incomplete", "response": {}}), 13)
+        self.assertTrue(stream.cut)
+        stream, _ = self.feed_in_pieces(ai.RESPONSES, sse({
+            "type": "response.failed",
+            "response": {"error": {"message": "bad key"}}}), 13)
+        self.assertEqual(stream.error, "bad key")
+
+    def test_plain_json_answer_instead_of_stream(self):
+        # Ошибка HTTP приходит телом JSON, не потоком.
+        refused = json.dumps({"error": {
+            "message": "max_tokens: 16000 > 8192"}}).encode("utf-8")
+        stream, _ = self.feed_in_pieces(ai.OPENROUTER, refused, 10)
+        self.assertEqual(stream.error, "max_tokens: 16000 > 8192")
+        self.assertTrue(ai.length_refused(stream.error))
+        # Сервис без потока отвечает обычным телом - текст берётся.
+        whole = json.dumps({"choices": [{"message": {
+            "content": "<kml></kml>"}}]}).encode("utf-8")
+        stream, _ = self.feed_in_pieces(ai.LOCAL, whole, 10)
+        self.assertEqual(stream.text, "<kml></kml>")
+        self.assertEqual(stream.error, "")
+        whole = json.dumps({"type": "error", "error": {
+            "message": "invalid x-api-key"}}).encode("utf-8")
+        stream, _ = self.feed_in_pieces(ai.ANTHROPIC, whole, 10)
+        self.assertEqual(stream.error, "invalid x-api-key")
+
+    def test_progress_counts_whole_placemarks(self):
+        text = ("<kml><Document><Placemark><name>1</name></Placemark>"
+                "<Placemark><name>2</name></Placemark><Placemark><na")
+        self.assertEqual(ai.kml_progress(text), 2)
+        self.assertEqual(ai.kml_progress(""), 0)
 
 
 class TestIsRequest(unittest.TestCase):

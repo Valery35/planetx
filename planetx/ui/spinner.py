@@ -28,6 +28,54 @@ LOADING = QColor(40, 110, 200)
 STALLED = QColor(230, 130, 20)
 
 
+BUSY_SIZE = 20  # сторона значка ожидания у строки поиска
+
+
+class BusySpinner(QWidget):
+    """Значок ожидания у строки «Поиск»: вращающаяся дуга, пока ждётся
+    ответ модели помощника или службы поиска мест. Просьба автора от
+    4 октября 2026 года. Вне ожидания значок спрятан и места в строке
+    не занимает."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(BUSY_SIZE, BUSY_SIZE)
+        self.angle = 0.0
+        self.timer = QTimer(self)
+        self.timer.setInterval(TICK)
+        self.timer.timeout.connect(self._turn)
+        self.hide()
+
+    def set_busy(self, on, tip=""):
+        """Показать или спрятать значок, tip - что именно ждётся."""
+        self.setToolTip(tip)
+        if on:
+            if not self.timer.isActive():
+                self.timer.start()
+            self.show()
+        else:
+            self.timer.stop()
+            self.hide()
+
+    def busy(self):
+        return self.timer.isActive()
+
+    def _turn(self):
+        self.angle = (self.angle + TURN * TICK / 1000.0) % 360.0
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        pen = QPen(LOADING, 2.5)
+        pen.setCapStyle(enum(Qt, "PenCapStyle", "RoundCap"))
+        painter.setPen(pen)
+        painter.setBrush(enum(Qt, "BrushStyle", "NoBrush"))
+        painter.drawArc(QRectF(3.0, 3.0, BUSY_SIZE - 6.0, BUSY_SIZE - 6.0),
+                        int(-self.angle * 16), ARC * 16)
+        painter.end()
+
+
 class LoadSpinner(QWidget):
     """Вращающаяся дуга, пока идёт загрузка."""
 

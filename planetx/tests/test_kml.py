@@ -213,6 +213,167 @@ class TestIconsAndTime(unittest.TestCase):
             self.assertEqual(places[name].time, place.time, name)
             self.assertEqual(places[name].view_time, place.view_time, name)
 
+
+TRACKS = """<kml xmlns="http://www.opengis.net/kml/2.2"
+ xmlns:gx="http://www.google.com/kml/ext/2.2"><Document>
+<Placemark><name>Плавание</name><gx:Track>
+<when>1492-08-03</when><when>1492-09-06</when><when>1492-10-12</when>
+<gx:coord>-6.89 37.23 0</gx:coord><gx:coord>-17.1 28.1 0</gx:coord>
+<gx:coord>-74.5 24.0 0</gx:coord></gx:Track></Placemark>
+<Placemark><name>Со своим временем</name>
+<TimeSpan><begin>1493</begin><end>1496</end></TimeSpan>
+<gx:MultiTrack><gx:Track><when>1493-09-25</when><when>1493-11-03</when>
+<gx:coord>-6.3 36.5 0</gx:coord><gx:coord>-61.4 15.4 0</gx:coord>
+</gx:Track></gx:MultiTrack></Placemark>
+<Placemark><name>Без моментов</name><Track>
+<coord>10 20</coord><coord>11 21</coord><coord>плохо</coord></Track>
+</Placemark></Document></kml>""".encode("utf-8")
+
+
+class TestTrack(unittest.TestCase):
+    """gx:Track - линия с промежутком времени от первого момента до
+    последнего. Модель помощника иногда отдаёт пути треками."""
+
+    def setUp(self):
+        self.places = {p.name: p for p in kml.read_kml(TRACKS).places()}
+
+    def test_track_is_line_with_span(self):
+        voyage = self.places["Плавание"]
+        self.assertEqual(voyage.kind, "line")
+        self.assertEqual(voyage.points, [(37.23, -6.89), (28.1, -17.1),
+                                         (24.0, -74.5)])
+        self.assertEqual(voyage.time, ("1492-08-03", "1492-10-12"))
+
+    def test_own_time_wins_and_multitrack(self):
+        second = self.places["Со своим временем"]
+        self.assertEqual(second.kind, "line")
+        self.assertEqual(second.time, ("1493", "1496"))
+
+    def test_track_without_when_and_prefix(self):
+        bare = self.places["Без моментов"]
+        self.assertEqual(bare.points, [(20.0, 10.0), (21.0, 11.0)])
+        self.assertIsNone(bare.time)
+
+
+BARE = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+<name>Путешествия Колумба</name>
+<Style id="voyage1"><LineStyle><color>ff0000ff</color><width>3</width>
+</LineStyle></Style>
+<Folder><name>Общее описание</name>
+<Placemark><name>Колумб</name><description>Мореплаватель.</description>
+</Placemark></Folder>
+<Folder><name>1-е путешествие (1492-1493)</name>
+<TimeSpan><begin>1492-08-03</begin><end>1493-03-15</end></TimeSpan>
+<LineString styleUrl="#voyage1"><coordinates>
+-6.30,36.98 -13.85,28.68 -74.67,24.08</coordinates></LineString>
+<Placemark><name>Палос</name><Point><coordinates>-6.89,37.23,0
+</coordinates></Point></Placemark>
+<Polygon><name>Эспаньола</name><outerBoundaryIs><LinearRing><coordinates>
+-74,18 -68,18 -68,20 -74,20 -74,18</coordinates></LinearRing>
+</outerBoundaryIs><TimeStamp><when>1492-12-05</when></TimeStamp></Polygon>
+</Folder></Document></kml>""".encode("utf-8")
+
+
+class TestBareGeometry(unittest.TestCase):
+    """Геометрия в папке без Placemark, как её пишут модели помощника.
+    Документ с плаваниями Колумба 4 октября 2026 года читался одними
+    точками."""
+
+    def setUp(self):
+        self.places = kml.read_kml(BARE).places()
+
+    def test_bare_line_takes_folder_name_time_and_style(self):
+        lines = [p for p in self.places if p.kind == "line"]
+        self.assertEqual(len(lines), 1)
+        line = lines[0]
+        self.assertEqual(line.name, "1-е путешествие (1492-1493)")
+        self.assertEqual(line.points, [(36.98, -6.3), (28.68, -13.85),
+                                       (24.08, -74.67)])
+        self.assertEqual(line.time, ("1492-08-03", "1493-03-15"))
+        self.assertEqual(line.color, (255, 0, 0, 255))
+        self.assertEqual(line.width, 3.0)
+
+    def test_bare_polygon_keeps_own_name_and_time(self):
+        areas = [p for p in self.places if p.kind == "polygon"]
+        self.assertEqual(len(areas), 1)
+        self.assertEqual(areas[0].name, "Эспаньола")
+        self.assertEqual(areas[0].time, ("1492-12-05", "1492-12-05"))
+        self.assertEqual(len(areas[0].points), 4)
+
+    def test_point_in_placemark_stays(self):
+        kinds = sorted(p.kind for p in self.places)
+        self.assertEqual(kinds, ["line", "point", "polygon"])
+
+
+def _doc(body):
+    return ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+            + body + "</Document></kml>").encode("utf-8")
+
+
+class TestModelSlips(unittest.TestCase):
+    """Вольности, которые пишут модели помощника. Проверка 4 октября
+    2026 года - ответ слабой модели о Колумбе с «lon, lat» читался
+    пустым, документ с &nbsp; или <br> не читался совсем."""
+
+    def test_spaces_after_commas(self):
+        places = kml.read_kml(_doc(
+            "<Placemark><name>П</name><Point><coordinates>-6.932, 37.181, 0"
+            "</coordinates></Point></Placemark><Placemark><name>Л</name>"
+            "<LineString><coordinates>-15.5, 28.0, 0 -30.0, 25.0, 0"
+            "</coordinates></LineString></Placemark>")).places()
+        self.assertEqual([p.points for p in places],
+                         [[(37.181, -6.932)], [(28.0, -15.5), (25.0, -30.0)]])
+
+    def test_polygon_without_outer_boundary(self):
+        places = kml.read_kml(_doc(
+            "<Placemark><Polygon><LinearRing><coordinates>0,0 1,0 1,1 0,0"
+            "</coordinates></LinearRing></Polygon></Placemark>"
+            "<Placemark><Polygon><coordinates>0,0 2,0 2,2 0,0"
+            "</coordinates></Polygon></Placemark>")).places()
+        self.assertEqual([p.kind for p in places], ["polygon", "polygon"])
+        self.assertEqual(len(places[1].points), 3)
+
+    def test_time_inside_geometry(self):
+        place = kml.read_kml(_doc(
+            "<Folder><TimeSpan><begin>1492</begin></TimeSpan><Placemark>"
+            "<LineString><TimeSpan><begin>1492-08-03</begin><end>"
+            "1492-10-12</end></TimeSpan><coordinates>-6,37 -16,28"
+            "</coordinates></LineString></Placemark></Folder>")).places()[0]
+        self.assertEqual(place.time, ("1492-08-03", "1492-10-12"))
+
+    def test_lon_over_180_and_unicode_minus(self):
+        places = kml.read_kml(_doc(
+            "<Placemark><Point><coordinates>200,10</coordinates></Point>"
+            "</Placemark><Placemark><Point><coordinates>−74,18"
+            "</coordinates></Point></Placemark>")).places()
+        self.assertEqual([p.points[0] for p in places],
+                         [(10.0, -160.0), (18.0, -74.0)])
+
+    def test_lookat_only_placemark_is_point(self):
+        place = kml.read_kml(_doc(
+            "<Placemark><name>Вид</name><LookAt><longitude>56.2"
+            "</longitude><latitude>58.0</latitude><range>1000</range>"
+            "</LookAt></Placemark>")).places()[0]
+        self.assertEqual((place.kind, place.points), ("point", [(58.0, 56.2)]))
+
+    def test_html_in_text_does_not_lose_document(self):
+        tree = kml.read_kml(_doc(
+            "<name>Битвы &amp; осады</name><Placemark><name>Ватерлоо"
+            "&nbsp;1815</name><description>Итог<br>войн & мира"
+            "</description><Point><coordinates>4.4,50.7</coordinates>"
+            "</Point></Placemark>"))
+        place = tree.places()[0]
+        self.assertEqual(place.name, "Ватерлоо\xa01815")
+        self.assertEqual(place.description, "Итог\nвойн & мира")
+        self.assertEqual(tree.name, "Битвы & осады")
+
+    def test_dtd_entities_still_refused(self):
+        bomb = (b'<?xml version="1.0"?><!DOCTYPE k [<!ENTITY a "aaaa">]>'
+                b"<kml><Document><name>&a;</name></Document></kml>")
+        with self.assertRaises(kml.KmlError):
+            kml.read_kml(bomb)
+
+
 class TestTour(unittest.TestCase):
     """Записанный тур как gx:Tour туда и обратно, gx:Wait держит позу."""
 
