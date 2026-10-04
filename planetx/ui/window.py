@@ -77,7 +77,7 @@ from .legend import (CutawayLegend, InsolationLegend, QuakeLegend,
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
-from .handles import DrawVertices, Handles
+from .handles import DrawVertices, Handles, PropVertices, ShapeEdit
 from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
 from .measure import _xy as ruler_xy
 from .elevation import HeightSource, ProfileDialog
@@ -579,6 +579,7 @@ class GlobeWindow(QWidget):
             lambda: self._assistant().open_settings())
         self.panel.undo_requested.connect(self.undo_made_places)
         self.panel.stop_requested.connect(self.stop_making)
+        self.panel.accept_requested.connect(self.accept_proposed)
         # Поиск по названию: ответы по ключу (запрос, язык), запрос
         # в работе, время последнего запроса, найденные места.
         self._searched = {}
@@ -677,10 +678,11 @@ class GlobeWindow(QWidget):
         self.draw_vertices = DrawVertices(self)
         self.handles.tool = self.draw_vertices
         self.drawer.changed.connect(self.handles.sync)
-        self.view.hovered.connect(self.draw_vertices.hover)
+        # Подсказка у курсора - тому, чьи вершины сейчас на глобусе: окно
+        # «Новая метка» или окно свойств метки.
+        self.view.hovered.connect(
+            lambda px, py: self.handles.tool.hover(px, py))
         self.view.menu_requested.connect(self._globe_menu)
-        # Ключ метки, форму которой правят в окне «Новая метка».
-        self.editing_key = None
         self.place_dialog = None
         self.toolbar.place_clicked.connect(self._open_place)
         # Снимок вида в файл и в макет, по окну на каждое.
@@ -2248,10 +2250,20 @@ class GlobeWindow(QWidget):
         self.panel.set_found([place_text(p) for p in places]
                              if len(places) > 1 else [])
         if not places:
-            # Место не нашлось - запрос, видимо, просьба помощнику.
-            if key[0] not in self._tool_queries \
-                    and self.ask_assistant(key[0]):
-                return
+            # Место не нашлось. Тема вроде «Путешествия Колумба» -
+            # метки одним запросом, как кнопка помощника, вопрос -
+            # разговор. В разговоре метки появляются, только если модель
+            # вызовет add_kml. 4 октября 2026 года бесплатная модель
+            # на «Путешествия Колумба» описала документ текстом, и меток
+            # не было.
+            if key[0] not in self._tool_queries:
+                if not assistant_core.is_request(key[0]) \
+                        and search_enabled() \
+                        and ready(current_provider()) \
+                        and self.make_places(key[0]):
+                    return
+                if self.ask_assistant(key[0]):
+                    return
             self.message = (tr("Ничего не найдено: {text}", text=key[0]),
                             time.monotonic())
             if assistant_core.is_request(key[0]) and search_enabled() \
@@ -2500,8 +2512,7 @@ class GlobeWindow(QWidget):
         shapes = [self._timed_shape(p)
                   for p in self.myplaces.places
                   if p.visible and self._time_ok(p) and not p.tour
-                  and p.body == self.planet.key
-                  and p.key != self.editing_key]
+                  and p.body == self.planet.key]
         # Метки неба подписывает слой подписей неба.
         # Точка метки неба - (склонение, прямое восхождение), как
         # (широта, долгота) у меток глобуса.
@@ -2662,15 +2673,13 @@ class GlobeWindow(QWidget):
         self.place_dialog.show()
         self.place_dialog.raise_()
         self.view.vertex_tool = self.draw_vertices
+        self.handles.tool = self.draw_vertices
         self._refresh_shapes()
         self._tool_cursor()
 
     def _place_closed(self, *args):
         self.view.vertex_tool = self.wedge_corners \
             if self.view.wedge is not None else None
-        if self.editing_key is not None:
-            self.editing_key = None
-            self.place_dialog.end_edit()
         self.drawer.clear()
         self._refresh_shapes()
         self._tool_cursor()
@@ -2679,17 +2688,6 @@ class GlobeWindow(QWidget):
     def _save_place(self):
         shape = self.place_dialog.shape(rubber=False)
         if shape is None:
-            return
-        if self.editing_key is not None:
-            # Правка формы: метка остаётся на своём месте в списке.
-            if not self.myplaces.set_shape(self.editing_key, shape):
-                self.message = (tr(
-                    "Форма не записана. Вид объекта после правки "
-                    "стал другим."), time.monotonic())
-                self._show_state()
-                return
-            self.editing_key = None
-            self.place_dialog.end_edit()
             return
         self.myplaces.add(shape, folder=self.panel.current_folder(),
                           body=self.body_key())
@@ -2706,18 +2704,6 @@ class GlobeWindow(QWidget):
         bases = {"point": tr("Моя метка"), "path": tr("Мой путь"),
                  "polygon": tr("Мой многоугольник")}
         return self.new_name(bases[mode])
-
-    def edit_place(self, key):
-        """Форма сохранённой метки в окне «Новая метка»: вершины
-        тянутся мышью, «Сохранить» записывает её на прежнее место."""
-        place = self.myplaces.find(key)
-        if place is None or is_folder(key) \
-                or not globemenu.editable(place):
-            return
-        self._open_place()
-        self.editing_key = key
-        self.place_dialog.begin_edit(place)
-        self._refresh_shapes()
 
     def add_place_here(self, lat, lon):
         """«Добавить метку здесь» меню глобуса: окно «Новая метка»
@@ -3017,7 +3003,7 @@ class GlobeWindow(QWidget):
         """Backspace над видом: последняя точка линейки."""
         if self._ruler_open():
             self.ruler.remove_last()
-        elif self._place_open() and self.editing_key is None:
+        elif self._place_open():
             self.drawer.remove_last()
 
     def _heights_arrived(self):
@@ -3302,11 +3288,6 @@ class GlobeWindow(QWidget):
             # видом метки, по нему идут перелёт к метке и тур.
             self.myplaces.update(key, {"view": lookat.text(
                 self.current_view())})
-        elif action == "rename":
-            name, ok = QInputDialog.getText(
-                self, tr("Переименовать"), tr("Название"), text=item.name)
-            if ok:
-                self.myplaces.rename(key, name.strip())
         elif action == "remove":
             name = item.name or tr("Без названия")
             if is_folder(key):
@@ -3352,11 +3333,6 @@ class GlobeWindow(QWidget):
             dialog = FolderDialog(folder, self.current_view, self)
             if dialog.exec():
                 self.myplaces.update(key, dialog.values())
-        elif action == "rename":
-            name, ok = QInputDialog.getText(
-                self, tr("Переименовать"), tr("Название"), text=folder.name)
-            if ok:
-                self.myplaces.rename(key, name.strip())
         elif action == "remove":
             answer = QMessageBox.question(
                 self, tr("Удалить папку"), tr(
@@ -3405,11 +3381,15 @@ class GlobeWindow(QWidget):
             def preview(shape, key=key):
                 self.previews[key] = shape
                 self._refresh_shapes()
+                self.handles.sync()
 
             def done(result, key=key, dialog=dialog):
                 self.prop_dialogs.pop(key, None)
                 self.previews.pop(key, None)
+                self._end_prop_vertices(dialog)
                 if result:
+                    if dialog.shape_changed():
+                        self.myplaces.set_shape(key, dialog.preview())
                     self.myplaces.update(key, dialog.values())
                 else:
                     self._refresh_shapes()
@@ -3418,6 +3398,29 @@ class GlobeWindow(QWidget):
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
+        self._begin_prop_vertices(place, dialog)
+
+    def _begin_prop_vertices(self, place, dialog):
+        """Вершины метки тянутся мышью, пока открыто её окно свойств.
+        Окно «Новая метка» и линейка главнее - при них вершины свойств
+        не берутся."""
+        if not globemenu.editable(place) or self._place_open() \
+                or self._ruler_open():
+            return
+        tool = PropVertices(self, dialog, ShapeEdit(
+            place.kind, dialog.points, dialog.set_points))
+        self.view.vertex_tool = tool
+        self.handles.tool = tool
+        self.handles.sync()
+
+    def _end_prop_vertices(self, dialog):
+        tool = self.handles.tool
+        if isinstance(tool, PropVertices) and tool.dialog is dialog:
+            self.handles.tool = self.draw_vertices
+            if self.view.vertex_tool is tool:
+                self.view.vertex_tool = self.wedge_corners \
+                    if self.view.wedge is not None else None
+            self.handles.sync()
 
     def copy_places(self, keys):
         """Метки и папки keys в буфер обмена текстом KML, как Google
@@ -3853,10 +3856,25 @@ class GlobeWindow(QWidget):
     def _assistant_said(self, who, text):
         """Реплики разговора под строкой поиска. Вопрос пользователя
         там не повторяется, он уже в строке."""
+        # Документ, который предложила модель, ждёт подтверждения. Он
+        # виден под строкой со ссылкой «Записать». 4 октября 2026 года
+        # предложение стояло в скрытом окне «Помощник», под строкой был
+        # только рассказ модели о документе, меток на глобусе не было.
+        dialog = self.assistant_dialog
+        waiting = dialog is not None and dialog.pending is not None
+        if waiting:
+            text = dialog.proposal_text.text() + "\n" + text
         if who == "assistant" or who == "note":
-            self.panel.set_answer(text)
+            self.panel.set_answer(text, accept=waiting)
         elif who == "tool":
-            self.panel.set_answer(tr("Помощник думает…") + "\n" + text)
+            self.panel.set_answer(tr("Помощник думает…") + "\n" + text,
+                                  accept=waiting)
+
+    def accept_proposed(self):
+        """Ссылка «Записать в «Мои метки»» под строкой поиска."""
+        if self.assistant_dialog is not None \
+                and self.assistant_dialog.pending is not None:
+            self.assistant_dialog._accept_place()
 
     def _assistant_busy(self, busy):
         self._set_busy("assistant", busy)

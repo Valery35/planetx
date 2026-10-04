@@ -812,10 +812,8 @@ EN = {
     "Мои метки - линии": "My Places - lines",
     "Мои метки - многоугольники": "My Places - polygons",
     "Без названия": "Untitled",
-    "Переименовать…": "Rename…",
     "Удалить": "Delete",
     "Добавить слои меток в проект": "Add the places layers to the project",
-    "Переименовать": "Rename",
     "Название": "Name",
     "Удалить метку": "Delete placemark",
     "Удалить «{name}» из «Моих меток»?": "Delete \"{name}\" from My Places?",
@@ -1719,11 +1717,9 @@ EN = {
     "Удалить вершину": "Delete vertex",
     "Продолжить рисование": "Continue drawing",
     "Завершить рисование": "Finish drawing",
-    "Изменить форму": "Edit shape",
     "Добавить метку здесь": "Add placemark here",
     "Переместиться сюда": "Fly here",
     "Скопировать координаты": "Copy coordinates",
-    "Изменение метки": "Edit placemark",
     "Щелчок по глобусу ставит метку. Метка перетаскивается мышью.":
         "A click on the globe sets the placemark. The placemark can be "
         "dragged with the mouse.",
@@ -1740,8 +1736,6 @@ EN = {
     "новую вершину. Правая кнопка открывает меню.":
         "Vertices are dragged with the mouse. The circle in the middle of "
         "a segment adds a new vertex. The right button opens the menu.",
-    "Форма не записана. Вид объекта после правки стал другим.":
-        "The shape was not saved. The object kind changed after editing.",
 }
 
 _language = None

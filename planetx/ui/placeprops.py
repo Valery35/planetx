@@ -182,6 +182,9 @@ class PlaceProperties(QDialog):
         # Вид глобуса сейчас, для кнопки «Снимок текущего вида».
         self.current_view = current_view
         shape = place.shape
+        # Вершины формы. Пока окно открыто, их тянут мышью на глобусе
+        # (ui/handles.py, PropVertices), set_points ставит новые.
+        self.points = list(shape.points)
         self.setModal(False)
         self.setWindowTitle(tr("Свойства: {name}",
                                name=place.name or tr("Без названия")))
@@ -409,9 +412,20 @@ class PlaceProperties(QDialog):
     def _changed(self, *args):
         self.changed.emit(self.preview())
 
+    def set_points(self, points):
+        """Новые вершины формы с глобуса."""
+        self.points = list(points)
+        self._changed()
+
+    def shape_changed(self):
+        """Изменена ли форма в окне."""
+        return [tuple(p) for p in self.points] \
+            != [tuple(p) for p in self.place.shape.points]
+
     def preview(self):
         """Объект метки с правками окна, для глобуса."""
-        values = {"name": self.name.text().strip(),
+        values = {"points": list(self.points),
+                  "name": self.name.text().strip(),
                   "height": float(self.height.value()),
                   "extrude": self.extrude.isChecked()}
         if self.color is not None:

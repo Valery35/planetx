@@ -577,8 +577,8 @@ together, and the Del key deletes it after a question.
 | Where | Items |
 |---|---|
 | My Places | Add, Play tour, Sort A-Z, Open KML or KMZ…, Save as KML…, Copy, Paste, Add the places layers to the project, Clear My Places… |
-| Folder | Fly to, Add, Cut, Copy, Paste, Delete, Rename…, Open KML or KMZ…, Save as KML…, Snapshot folder view, Sort A-Z, Play tour, Properties… |
-| Place | Fly to, Tour along the path, Snapshot view, Properties…, New Folder, Cut, Copy, Paste, Rename…, Delete |
+| Folder | Fly to, Add, Cut, Copy, Paste, Delete, Open KML or KMZ…, Save as KML…, Snapshot folder view, Sort A-Z, Play tour, Properties… |
+| Place | Fly to, Tour along the path, Snapshot view, Properties…, New Folder, Cut, Copy, Paste, Delete |
 | Several rows | Copy, Show selected, Hide selected, Delete selected |
 | Empty space | New Folder, Open KML or KMZ…, Paste |
 
@@ -608,8 +608,8 @@ snapshot. Snapshot folder view sets the folder view to the view of
 the globe. The
 description, the view and the way contents show go to KML and back.
 
-A new folder appears at once with the name New Folder and is renamed
-later. On a folder it is created inside, on a place right below it. A
+A new folder appears at once with the name New Folder, the name is
+changed in the Properties… window. On a folder it is created inside, on a place right below it. A
 folder is deleted with its contents after a question.
 
 Add the places layers to the project adds the three layers of the places
@@ -647,7 +647,6 @@ A right click on the globe opens a menu.
 |---|---|
 | Delete vertex | Removes the vertex of the drawn object under the cursor |
 | Finish drawing, Continue drawing | Stops and resumes adding points with clicks |
-| Edit shape | Opens the saved placemark, path or polygon under the cursor in the New placemark window. Save writes the object back to its place in the list |
 | Properties… | Opens the properties of the placemark under the cursor |
 | Add placemark here | Opens the New placemark window with the point under the cursor |
 | Fly here | Flies to the point with the same altitude and tilt |
@@ -670,8 +669,11 @@ whole view back.
 
 The Properties… item opens the properties window. The window does not
 block the globe, the view can be turned and zoomed. Each change shows
-on the globe at once. OK writes the changes to the place, Cancel
-brings the previous look back.
+on the globe at once. While the window is open, the vertices of the
+placemark, path or polygon show on the globe as circles and can be
+dragged, a circle in the middle of a segment adds a vertex. OK writes
+the changes to the place together with the shape, Cancel brings the
+previous look and shape back.
 
 | Field | What it sets |
 |---|---|
@@ -1226,11 +1228,15 @@ The coordinates and dates come from the model, they need checking.
 A request can also be typed in the Search field of the left panel. The
 assistant receives a request with a question mark, a request of six
 words or more and a request that starts with a request or question
-word, for example "show", "where", "how many". A place name that is not
-found also goes to the assistant. Outside the Earth any request except
-coordinates goes to the assistant. The answer appears below the field,
-the Conversation link opens the Assistant window with the history.
-Proposed placemarks are shown in the Assistant window. The Answer
+word, for example "show", "where", "how many". A topic for which
+Nominatim finds no places, for example "Voyages of Columbus", turns
+into placemarks at once, as with the button next to the field. A
+question for which no places are found goes to the conversation.
+Outside the Earth any request except coordinates goes to the
+assistant. The answer appears below the field, the Conversation link
+opens the Assistant window with the history. Placemarks that the
+assistant proposes in the conversation are shown below the field with
+the Write to My Places link. The Answer
 requests from the Search field box of the Assistant settings window
 switches this off, then the field finds only places and coordinates. Without a
 saved API key the field also finds only places.

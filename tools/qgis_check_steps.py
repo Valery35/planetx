@@ -379,7 +379,7 @@ def places_after_folder():
     result["folder_shown"] = len(window.view.features.shapes)
     store.set_visible(keys[1], False)
     result["after_hide"] = len(window.view.features.shapes)
-    store.rename(keys[0], "Центр Перми")
+    store.update(keys[0], {"name": "Центр Перми"})
     store.remove(keys[2])
     again = MyPlaces(store.path)
     again.load()
@@ -3859,6 +3859,153 @@ def topic_link_check():
     ui_ai.load_key = state["real_load_key"]
     window.assistant_dialog.close()
     server.shutdown()
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(3000)
+def topic_empty():
+    # Nominatim ничего не нашёл. Тема - сразу метки одним запросом без
+    # инструментов, а не разговор: 4 октября 2026 года «Путешествия
+    # Колумба» ушли в разговор, бесплатная модель описала документ
+    # текстом, меток не было.
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    server, seen = _fake_model()
+    state["fake_empty"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    dialog = window._assistant()
+    _use_service(dialog, ai.OPENROUTER,
+                 "http://127.0.0.1:%d" % server.server_port)
+    dialog.settings.close()
+    topic = "Путешествия Колумба"
+    window.place.setText(topic)
+    state["empty_before"] = len(window.myplaces.places)
+    window._show_found((topic, None), [])
+    result["topic_empty"] = {"answer_start": window.panel.answer.text()}
+
+
+@check(1000)
+def topic_empty_check():
+    from planetx.core import assistant as ai
+    window = state["window"]
+    server, seen = state["fake_empty"]
+    out = result["topic_empty"]
+    out["requests"] = len(seen)
+    out["no_tools"] = all("tools" not in b for _, b, _ in seen)
+    out["places_added"] = len(window.myplaces.places) - state["empty_before"]
+    window.undo_made_places()
+    if window.timebar.shown():
+        window._time_bar_closed()
+    # Вопрос без найденных мест - разговор с инструментами. Поддельный
+    # сервер формата Responses отвечает вызовом add_kml.
+    state["fake_question"] = len(seen)
+    _use_service(window.assistant_dialog, ai.RESPONSES,
+                 "http://127.0.0.1:%d" % server.server_port)
+    window.assistant_dialog.settings.close()
+    window._show_found(("где похоронен Колумб?", None), [])
+
+
+@check(1000)
+def topic_empty_done():
+    from qgis.core import QgsSettings
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_empty"]
+    out = result["topic_empty"]
+    asked = seen[state["fake_question"]:]
+    out["question_requests"] = len(asked)
+    out["question_tools"] = any("tools" in b for _, b, _ in asked)
+    out["answer"] = window.panel.answer.text()
+    out["accept_link"] = 'href="accept"' in out["answer"]
+    out["dialog_popped"] = dialog.isVisible()
+    before = len(window.myplaces.places)
+    window.panel._answer_link("accept")
+    out["accepted_places"] = len(window.myplaces.places) - before
+    out["answer_after"] = window.panel.answer.text()
+    window.undo_made_places()
+    if window.timebar.shown():
+        window._time_bar_closed()
+    settings = QgsSettings()
+    for provider in ai.PROVIDERS:
+        settings.remove(ui_ai.SETTINGS + provider + "/base")
+    settings.remove(ui_ai.SETTINGS + "provider")
+    ui_ai.load_key = state["real_load_key"]
+    window.assistant_dialog.close()
+    server.shutdown()
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(3000)
+def props_vertices():
+    # Окно «Свойства…» многоугольника: вершины тянутся мышью на глобусе,
+    # «OK» записывает форму, «Отмена» - нет. Просьба автора от 4 октября
+    # 2026 года.
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(58.1, 56.2, 60000.0, 0.0, 0.0))
+    key = window.myplaces.add(Shape(
+        "polygon", [(58.0, 56.0), (58.0, 56.4), (58.2, 56.2)],
+        name="Проба вершин"))
+    state["props_key"] = key
+    result["props_vertices"] = {}
+
+
+@check(1000)
+def props_vertices_drag():
+    window = state["window"]
+    view = window.view
+    key = state["props_key"]
+    out = result["props_vertices"]
+    window._open_place_properties(window.myplaces.find(key))
+    tool = window.handles.tool
+    out["tool"] = type(tool).__name__
+    out["active"] = tool.active()
+    vertices, front, middles, _ = tool.screen()
+    out["handles"] = [len(vertices), len(middles)]
+    x0, y0 = vertices[0]
+    out["grabbed"] = view.vertex_tool.grab(float(x0), float(y0))
+    view.vertex_tool.move(float(x0) + 80.0, float(y0) + 60.0)
+    view.vertex_tool.drop()
+    # Кружок середины первого отрезка - новая вершина. Середина
+    # сдвинулась вместе с вершиной, место берётся заново.
+    mx, my = tool.screen()[2][0]
+    out["middle_grabbed"] = view.vertex_tool.grab(float(mx), float(my))
+    view.vertex_tool.move(float(mx), float(my) + 50.0)
+    view.vertex_tool.drop()
+    dialog = window.prop_dialogs[key]
+    out["dialog_points"] = len(dialog.points)
+    out["preview_points"] = len(window.previews[key].points)
+    state["props_moved"] = dialog.points[0]
+    dialog.accept()
+
+
+@check(1000)
+def props_vertices_check():
+    window = state["window"]
+    key = state["props_key"]
+    out = result["props_vertices"]
+    place = window.myplaces.find(key)
+    out["saved_points"] = len(place.shape.points)
+    out["saved_moved"] = [round(v, 4) for v in place.shape.points[0]]
+    out["moved"] = [round(v, 4) for v in state["props_moved"]]
+    out["tool_after"] = type(window.handles.tool).__name__
+    out["vertex_tool_after"] = type(window.view.vertex_tool).__name__
+    # «Отмена» форму не меняет.
+    window._open_place_properties(place)
+    dialog = window.prop_dialogs[key]
+    dialog.set_points([(57.0, 55.0), (57.0, 55.5), (57.3, 55.2)])
+    dialog.reject()
+    out["after_cancel"] = [round(v, 4) for v in
+                           window.myplaces.find(key).shape.points[0]]
+    window.myplaces.remove(key)
     out["gl"] = dict(window.view.gl_errors)
 
 

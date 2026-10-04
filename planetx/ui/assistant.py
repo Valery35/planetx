@@ -622,16 +622,19 @@ class AssistantDialog(QDialog):
         self.pending = write
         self.proposal_text.setText(text)
         self.proposal.show()
-        # Вопрос из строки поиска идёт в скрытом окне. Кнопки записи
-        # должны быть видны, поэтому окно показывается.
-        if not self.isVisible():
-            self.show()
-        self.raise_()
+        # Вопрос из строки поиска идёт в скрытом окне. Предложение
+        # видно под строкой поиска со ссылкой «Записать»
+        # (GlobeWindow._assistant_said), окно само не всплывает.
+        if self.isVisible():
+            self.raise_()
 
     def _accept_place(self):
-        if self.pending is not None:
-            self._say("note", self.pending())
+        # Предложение снимается до сообщения о записи, иначе строка
+        # поиска показала бы его снова со ссылкой «Записать».
+        write = self.pending
         self._reject_place()
+        if write is not None:
+            self._say("note", write())
 
     def _reject_place(self):
         self.pending = None

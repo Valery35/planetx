@@ -38,7 +38,6 @@ class PlaceDialog(QDialog):
         self.namer = namer
         self.auto_name = ""
         # Заливка метки, форму которой правят, иначе None.
-        self.edit_fill = None
         self.setWindowTitle(tr("Новая метка"))
         self.setModal(False)
         self.tabs = QTabBar(self)
@@ -119,30 +118,6 @@ class PlaceDialog(QDialog):
         self.tabs.setCurrentIndex(MODES.index(mode))
         self.tabs.blockSignals(False)
 
-    def begin_edit(self, place):
-        """Форма сохранённой метки place в окне: её точки, название,
-        цвет и толщина. Вид объекта при правке не меняется."""
-        shape = place.shape
-        mode = {"point": "point", "line": "path",
-                "polygon": "polygon"}[shape.kind]
-        self._set_tab(mode)
-        self.tabs.setEnabled(False)
-        self.setWindowTitle(tr("Изменение метки"))
-        self.edit_fill = shape.fill
-        self.auto_name = ""
-        self.name.setText(shape.name)
-        self.color.setColor(QColor(*shape.color))
-        self.width.setValue(shape.width)
-        self.ruler.load(mode, shape.points)
-
-    def end_edit(self):
-        """Правка формы закончена, окно снова ставит новую метку."""
-        self.tabs.setEnabled(True)
-        self.setWindowTitle(tr("Новая метка"))
-        self.edit_fill = None
-        self.name.clear()
-        self._mode(self.tabs.currentIndex())
-
     def _update(self):
         hints = {
             "point": tr("Щелчок по глобусу ставит метку. Метка "
@@ -164,8 +139,7 @@ class PlaceDialog(QDialog):
     def style(self):
         """Цвет, толщина и заливка для фигуры."""
         color = _rgba(self.color.color())
-        alpha = self.edit_fill[3] if self.edit_fill else DEFAULT_FILL[3]
-        fill = (color[0], color[1], color[2], alpha)
+        fill = (color[0], color[1], color[2], DEFAULT_FILL[3])
         return {"color": color, "width": self.width.value(), "fill": fill}
 
     def shape(self, rubber=True):

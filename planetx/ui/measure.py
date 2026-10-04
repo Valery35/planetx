@@ -199,14 +199,6 @@ class Ruler(QObject):
             self.finished = False
             self.changed.emit()
 
-    def load(self, mode, points, alts=None):
-        """Готовый объект для правки: вид, точки и высоты."""
-        self.mode = mode
-        self.points = [tuple(p) for p in points]
-        self.alts = list(alts) if alts else [None] * len(self.points)
-        self.finished = mode != "point"
-        self.changed.emit()
-
     def set_cursor(self, point, alt=None):
         """Точка под курсором или None. Резинка тянется к ней."""
         if point != self.cursor or alt != self.cursor_alt:

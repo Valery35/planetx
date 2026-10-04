@@ -398,6 +398,7 @@ class LayerPanel(QWidget):
     undo_requested = pyqtSignal()
     # Ссылка «Остановить» под счётом меток, идущих потоком.
     stop_requested = pyqtSignal()
+    accept_requested = pyqtSignal()
     # Меню кнопки помощника: окно настроек.
     assistant_settings_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
@@ -870,19 +871,27 @@ class LayerPanel(QWidget):
             self.stop_requested.emit()
         elif link == "make":
             self._make()
+        elif link == "accept":
+            self.accept_requested.emit()
         else:
             self.assistant_requested.emit()
 
-    def set_answer(self, text, undo=False, make="", stop=False):
+    def set_answer(self, text, undo=False, make="", stop=False,
+                   accept=False):
         """Ответ помощника под строкой поиска со ссылкой на разговор.
         Пустой текст прячет его. undo - ещё ссылка «Отменить» для
         только что созданных меток. make - тема строки: ссылка «Создать
-        метки по теме» после поиска по названию."""
+        метки по теме» после поиска по названию. accept - ссылка
+        «Записать в «Мои метки»» для документа, который предложила
+        модель."""
         if not text:
             self.answer.clear()
             self.answer.setVisible(False)
             return
         body = html.escape(text).replace("\n", "<br>")
+        if accept:
+            body += ' <a href="accept">{}</a>'.format(
+                html.escape(tr("Записать в «Мои метки»")))
         if make:
             body += ' <a href="make">{}</a>'.format(html.escape(tr(
                 "Создать метки по теме «{topic}»", topic=make)))
@@ -1259,7 +1268,6 @@ class LayerPanel(QWidget):
                        ("paste", tr("Вставить")),
                        ("remove", tr("Удалить")),
                        None,
-                       ("rename", tr("Переименовать…")),
                        None,
                        ("import_kml", tr("Открыть KML или KMZ…")),
                        ("export_kml", tr("Сохранить как KML…")),
@@ -1286,7 +1294,6 @@ class LayerPanel(QWidget):
                         ("cut", tr("Вырезать")),
                         ("copy", tr("Копировать")),
                         ("paste", tr("Вставить")),
-                        ("rename", tr("Переименовать…")),
                         ("remove", tr("Удалить"))]
         if key:
             for entry in actions:

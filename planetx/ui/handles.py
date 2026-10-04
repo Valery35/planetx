@@ -128,8 +128,7 @@ class DrawVertices:
         tool = self.tool
         result = editing.click_result(tool.mode, len(tool.points), index,
                                       tool.finished)
-        if result == editing.CLOSE and tool.mode == "path" \
-                and self.window.editing_key is None:
+        if result == editing.CLOSE and tool.mode == "path":
             self.window.place_dialog.to_polygon()
         if result is not None:
             tool.finish()
@@ -160,6 +159,54 @@ class DrawVertices:
         if result == editing.FINISH:
             return tr("Завершить путь")
         return ""
+
+
+class ShapeEdit:
+    """Форма метки в окне «Свойства…» в протоколе Ruler, который ждёт
+    DrawVertices: точки, вид, перенос и вставка вершины. Фигура
+    завершена, щелчок по вершине её не замыкает и не завершает.
+    changed(points) получает новые точки."""
+
+    MODES = {"point": "point", "line": "path", "polygon": "polygon"}
+
+    def __init__(self, kind, points, changed):
+        self.mode = self.MODES.get(kind, "path")
+        self.points = [tuple(p) for p in points]
+        self.finished = True
+        self.changed = changed
+
+    def move(self, index, lat, lon):
+        self.points[index] = (lat, lon)
+        self.changed(list(self.points))
+
+    def insert(self, index, lat, lon):
+        self.points.insert(index, (lat, lon))
+        self.changed(list(self.points))
+
+    def finish(self):
+        return None
+
+
+class PropVertices(DrawVertices):
+    """Вершины метки, пока открыто её окно «Свойства…», как у Google
+    Earth: вершины тянутся мышью, «OK» записывает форму, «Отмена»
+    возвращает прежнюю. Просьба автора от 4 октября 2026 года."""
+
+    def __init__(self, window, dialog, edit):
+        super().__init__(window)
+        self.dialog = dialog
+        self.edit = edit
+
+    @property
+    def tool(self):
+        return self.edit
+
+    def active(self):
+        return self.dialog.isVisible() \
+            and self.window.view.sky_view is None and bool(self.edit.points)
+
+    def drop(self):
+        self.index = None
 
 
 class Handles(QWidget):

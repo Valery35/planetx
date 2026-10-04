@@ -606,9 +606,6 @@ class MyPlaces(QObject):
         folder.expanded = bool(on)
         self._write({key: {"expanded": 1 if on else 0}}, read=False)
 
-    def rename(self, key, name):
-        self._write({key: {"name": name}})
-
     def sort_folder(self, folder=None):
         """Сортировать содержимое папки от А до Я, как Google Earth."""
         plan = placetree.sort_plan(self.nodes(), folder)

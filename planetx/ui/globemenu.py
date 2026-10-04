@@ -41,7 +41,6 @@ def place_under(window, px, py):
         shape = place.shape
         if not place.visible or place.tour or not window._time_ok(place) \
                 or place.body != window.planet.key \
-                or place.key == window.editing_key \
                 or not shape.points or len(shape.points) > MAX_POINTS:
             continue
         lats = np.array([p[0] for p in shape.points])
@@ -93,9 +92,6 @@ def show(window, px, py):
         if place is not None:
             title = menu.addAction(place.name or tr("Без названия"))
             title.setEnabled(False)
-            if editable(place):
-                menu.addAction(tr("Изменить форму")).triggered.connect(
-                    lambda *a, k=place.key: window.edit_place(k))
             menu.addAction(tr("Свойства…")).triggered.connect(
                 lambda *a, p=place: window._open_place_properties(p))
     ground = window._ground(px, py)

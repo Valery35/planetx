@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.30.0
+version=0.31.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.30.0 Paleogeography shows continents without holes or
+changelog=0.31.0 A topic in the Search line for which no places are
+      found, for example Voyages of Columbus, turns into placemarks at
+      once. Placemarks that the assistant proposes in a conversation
+      show below the Search line with the Write to My Places link.
+      While the Properties window of a placemark, path or polygon is
+      open, its vertices can be dragged on the globe, OK writes the
+      shape too. The Edit shape and Rename items left the menus, the
+      name and the shape are changed in the Properties window.
+      0.30.0 Paleogeography shows continents without holes or
       water strips inside, with coasts four times finer, about 5 km at
       the equator. An age opens in a fraction of a second instead of
       6-25 s. Relief is off in this mode, and the loading icon shows
