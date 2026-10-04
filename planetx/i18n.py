@@ -22,23 +22,6 @@ EN = {
         "The globe needs the Python module {name}. This QGIS build "
         "does not have it.",
     "Поиск": "Search",
-    "Название места или координаты в градусах, например Пермь или "
-    "58.0105, 56.2294. Enter запускает поиск или перелёт, несколько "
-    "найденных мест показываются списком ниже. Просьба словами, например "
-    "«покажи разрез через Японский жёлоб», уходит помощнику, если в его "
-    "настройках сохранён ключ API. При вводе под строкой появляются "
-    "подсказки - свои метки, прежние запросы, на небе звёзды и созвездия. "
-    "Клавиша «вниз» выбирает подсказку, в пустой строке она показывает "
-    "прежние запросы.":
-        "A place name or coordinates in degrees, for example Perm or "
-        "58.0105, 56.2294. Enter starts the search or the flight, several "
-        "places found are listed below. A request in words, for example "
-        "\"show a section across the Japan Trench\", goes to the "
-        "assistant if an API key is saved in its settings. Suggestions "
-        "appear below the field while typing - own placemarks, earlier "
-        "queries and, in the sky, stars and constellations. The Down key "
-        "selects a suggestion, in an empty field it shows the earlier "
-        "queries.",
     "{name} - метка": "{name} - placemark",
     "{name} - звезда": "{name} - star",
     "{name} - созвездие": "{name} - constellation",
@@ -64,8 +47,6 @@ EN = {
     "Ответ модели упёрся в предел длины. Взяты метки, пришедшие целиком.":
         "The model answer hit the length limit. The places received whole "
         "are taken.",
-    "Разговор с помощником…": "Conversation with the assistant…",
-    "Настройки помощника…": "Assistant settings…",
     "Очистить «Мои метки»…": "Clear My Places…",
     "Очистить «Мои метки»": "Clear My Places",
     "Удалить все метки и папки «Моих меток», всего меток {count}? "
@@ -80,19 +61,6 @@ EN = {
         "for example \"the voyage of Columbus\". The model answers with "
         "one KML document, it is written to My Places as a new folder at "
         "once.",
-    "Создать метки по описанию в строке, например «путешествие Колумба» "
-    "или «битвы Столетней войны». Помощник отвечает одним документом KML "
-    "с датами событий. Метки сразу записываются новой папкой в «Мои "
-    "метки», камера летит к ним. Ссылка «Отменить» под строкой удаляет "
-    "папку. То же делает Ctrl+Enter в строке. Стрелка открывает разговор "
-    "с помощником и его настройки.":
-        "Make places from the description in the field, for example \"the "
-        "voyage of Columbus\" or \"battles of the Hundred Years' War\". The "
-        "assistant answers with one KML document with the dates of the "
-        "events. The places are written to My Places as a new folder at "
-        "once, the camera flies to them. The Cancel link below the field "
-        "removes the folder. Ctrl+Enter in the field does the same. The "
-        "arrow opens the conversation with the assistant and its settings.",
     "Модель не вернула документ KML.":
         "The model returned no KML document.",
     "Метки созданы документом KML.":
@@ -172,15 +140,103 @@ EN = {
         "outside its interval are hidden. A closed slider shows all "
         "placemarks.",
     "Основа": "Base map",
-    "На шаг ряда назад.": "One step of the series back.",
-    "На шаг ряда вперёд.": "One step of the series forward.",
-    "День темы. Ползунок идёт по дням ряда, пропущенных дней в нём нет.":
-        "The day of the theme. The slider goes over the days of the "
-        "series, missing days are not on it.",
-    "Показ дней подряд к концу ряда. Следующий день ждёт, пока "
-    "загрузится нынешний.":
-        "Plays the days one after another towards the end of the series. "
-        "The next day waits until the current one has loaded.",
+    "Растянуть от угла, с Shift - от середины":
+        "Stretch from the corner, with Shift from the centre",
+    "Растянуть сторону": "Stretch the side",
+    "Сдвинуть картинку": "Move the image",
+    "Повернуть картинку": "Rotate the image",
+    "В файле меток": "In the places file",
+    "Ссылка на файл или адрес": "Link to a file or address",
+    "Где лежит картинка. В файле меток - копия внутри «Моих меток», она "
+    "видна и без исходного файла. Ссылка - путь к файлу или адрес в сети, "
+    "картинка читается при показе, правка файла видна на глобусе.":
+        "Where the image lies. In the places file - a copy inside My "
+        "Places, it is shown without the source file. Link - a file path "
+        "or a web address, the image is read when shown, an edit of the "
+        "file shows on the globe.",
+    "Хранение": "Storage",
+    "Путь к файлу или адрес http(s)": "File path or http(s) address",
+    "Путь к файлу картинки или её адрес в сети. Картинка читается заново "
+    "при каждом показе.":
+        "The path to the image file or its web address. The image is read "
+        "again at each showing.",
+    "Обзор…": "Browse…",
+    "Выбрать файл картинки. В файле меток картинка заменяется копией, у "
+    "ссылки меняется путь. Углы и положение остаются.":
+        "Choose an image file. In the places file the image is replaced "
+        "with a copy, a link gets the new path. The corners and position "
+        "stay.",
+    "Перевести в четыре угла": "Convert to four corners",
+    "Каждый угол картинки тянется мышью отдельно, картинка может стать "
+    "неправильным четырёхугольником, как gx:LatLonQuad в KML. Обратно в "
+    "рамку она не переводится.":
+        "Each corner of the image is dragged with the mouse on its own, "
+        "the image can become an irregular quadrilateral, as gx:LatLonQuad "
+        "in KML. It does not convert back to a box.",
+    "Север": "North",
+    "Юг": "South",
+    "Восток": "East",
+    "Запад": "West",
+    "Поворот": "Rotation",
+    "Крест в середине сдвигает картинку, ромб поворачивает, углы и "
+    "середины сторон растягивают, с Shift - от середины.":
+        "The cross in the middle moves the image, the diamond rotates it, "
+        "the corners and the middles of the sides stretch it, with Shift "
+        "from the centre.",
+    "Поворот картинки вокруг середины против часовой стрелки.":
+        "Rotation of the image about its centre counterclockwise.",
+    "Край рамки картинки в градусах. Рамка задана сторонами света и "
+    "поворотом, как LatLonBox в KML.":
+        "An edge of the image box in degrees. The box is set by the "
+        "cardinal sides and the rotation, as LatLonBox in KML.",
+    "по ссылке {link}": "by link {link}",
+    "ссылки нет": "no link",
+    "Картинка по ссылке не загрузилась: {link}":
+        "The linked image failed to load: {link}",
+    "Путешествия Колумба": "Voyages of Columbus",
+    "Место, координаты или тема. Название места или координаты, например "
+    "Пермь или 58.0105, 56.2294, дают перелёт. Тема, например «путешествия "
+    "Колумба», становится метками с датами в «Моих метках». Вопрос словами "
+    "уходит помощнику. Ctrl+Enter сразу создаёт метки по теме.":
+        "A place, coordinates or a topic. A place name or coordinates, for "
+        "example Perm or 58.0105, 56.2294, fly there. A topic, for example "
+        "“voyages of Columbus”, becomes placemarks with dates in My Places. "
+        "A question in words goes to the assistant. Ctrl+Enter makes "
+        "placemarks for the topic at once.",
+    "Найти то, что введено в строке. Место - перелёт к нему, несколько "
+    "найденных мест - список ниже. Тема без места на карте - метки по ней "
+    "от помощника, если в окне «Свойства вида» настроен помощник.":
+        "Find what is typed in the field. A place - a flight to it, several "
+        "places found - a list below. A topic without a place on the map - "
+        "placemarks for it from the assistant, if the assistant is set up "
+        "in the View properties window.",
+    "Окно разговора с помощником. В нём вопросы словами, перелёты и метки "
+    "KML по просьбе.":
+        "The conversation window with the assistant. It takes questions in "
+        "words, flights and KML placemarks on request.",
+    "Сервис, модель и ключ API помощника. Без ключа тема в строке «Поиск» "
+    "меток не создаёт.":
+        "Service, model and API key of the assistant. Without a key a topic "
+        "in the Search field makes no placemarks.",
+    "Стереть прежние запросы строки «Поиск» из профиля QGIS.":
+        "Erase the previous queries of the Search field from the QGIS "
+        "profile.",
+    "Промежуток времени меток и землетрясений. Бегунки тянутся по одному "
+    "или вместе за середину, щелчок по полосе переносит промежуток. Тема "
+    "NASA показана на день правого бегунка. Метки вне промежутка скрыты, "
+    "метки без времени видны всегда.":
+        "Time range of placemarks and earthquakes. The handles are dragged "
+        "one by one or together by the middle, a click on the bar moves the "
+        "range. A NASA theme is shown for the day of the right handle. "
+        "Placemarks outside the range are hidden, placemarks without time "
+        "are always shown.",
+    "Момент времени темы NASA. Щелчок по полосе или протяжка бегунка "
+    "ставят день, кнопки ◂ и ▸ сдвигают его на шаг ряда темы.":
+        "The moment of the NASA theme. A click on the bar or dragging the "
+        "handle sets the day, the ◂ and ▸ buttons move it by a step of the "
+        "theme series.",
+    "На шаг ряда темы назад.": "One step of the theme series back.",
+    "На шаг ряда темы вперёд.": "One step of the theme series forward.",
     "{name} · {kind}": "{name} · {kind}",
     "Отметка показывает слой на глобусе, видимость на карте QGIS "
     "не меняется. Двойной щелчок переносит к слою, меню по правой "
@@ -946,8 +1002,42 @@ EN = {
     "KMZ (*.kmz);;KML (*.kml)": "KMZ (*.kmz);;KML (*.kml)",
     "Файл не прочитан: {error}": "The file was not read: {error}",
     "Файл не записан: {error}": "The file was not written: {error}",
-    "В файле нет точек, линий и многоугольников.":
-        "The file has no points, lines or polygons.",
+    "В файле нет точек, линий, многоугольников и наложений.":
+        "The file has no points, lines, polygons or overlays.",
+    "Картинка на поверхности": "Ground overlay",
+    "Картинка на экране": "Screen overlay",
+    "Фото": "Photo",
+    "Название наложения в «Моих метках».":
+        "The name of the overlay in My Places.",
+    "Описание наложения. Оно уходит в KML вместе с картинкой.":
+        "The description of the overlay. It goes into KML with the image.",
+    "Картинка": "Image",
+    "Непрозрачность картинки. У нуля сквозь неё виден снимок.":
+        "Opacity of the image. At zero the imagery shows through it.",
+    "Непрозрачность": "Opacity",
+    "Картинка наложения": "Overlay image",
+    "Картинки (*.png *.jpg *.jpeg *.gif)":
+        "Images (*.png *.jpg *.jpeg *.gif)",
+    "Углы картинки тянутся мышью на глобусе, пока окно открыто.":
+        "The corners of the image are dragged with the mouse on the globe "
+        "while the window is open.",
+    "Левый верхний": "Top left",
+    "Правый верхний": "Top right",
+    "Левый нижний": "Bottom left",
+    "Правый нижний": "Bottom right",
+    "Середина": "Centre",
+    "Угол вида, к которому прижата картинка.":
+        "The corner of the view the image is pinned to.",
+    "свой размер": "own size",
+    "Ширина картинки в долях ширины вида. Ноль - картинка своего размера "
+    "в пикселях.":
+        "Width of the image as a share of the view width. Zero - the image "
+        "at its own size in pixels.",
+    "{w} × {h} пикселей": "{w} × {h} pixels",
+    "картинки нет": "no image",
+    "Картинку на поверхности": "Ground overlay",
+    "Картинку на экране": "Screen overlay",
+    "Картинка не читается: {name}": "The image cannot be read: {name}",
 
     # Свойства метки.
     "Свойства…": "Properties…",
@@ -1515,14 +1605,6 @@ EN = {
     "Закрыть шкалу времени. Закрытая шкала метки "
     "не скрывает.":
         "Close the time slider. A closed slider does not hide placemarks.",
-    "Промежуток времени меток. Бегунки тянутся по одному или "
-    "вместе за середину, щелчок по полосе переносит промежуток. "
-    "Метки вне промежутка скрыты, метки без времени видны "
-    "всегда.":
-        "The time interval of placemarks. The handles are dragged one at a "
-        "time or together by the middle, a click on the bar moves the "
-        "interval. Placemarks outside the interval are hidden, placemarks "
-        "without a time always show.",
     "Скорость проигрывания. При ×1 промежуток проходит шкалу "
     "за 20 секунд.":
         "Playback speed. At ×1 the interval crosses the slider in 20 "
@@ -1719,12 +1801,12 @@ EN = {
     "Планета огня": "Planet of Fire",
     "Дым, аэрозоль и угарный газ пожаров и промышленности по данным "
     "NASA. Включена одна тема из всех групп. Флажок группы выключает её"
-    " тему и включает снова. День темы задаёт её ползунок в левом "
-    "нижнем углу вида.":
+    " тему и включает снова. День темы задаёт правый бегунок шкалы "
+    "времени.":
         "Smoke, aerosol and carbon monoxide of fires and industry from NASA"
         " data. One theme of all groups is on. The group check box turns "
-        "its theme off and on again. The day of the theme is set by its "
-        "slider in the bottom left corner of the view.",
+        "its theme off and on again. The day of the theme is set by the "
+        "right handle of the time slider.",
     "Планета воды": "Planet of Water",
     "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
     "наводнения по данным NASA. Включена одна тема из всех групп. "

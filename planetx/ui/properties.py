@@ -11,7 +11,8 @@
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QDoubleSpinBox,
-                                 QFormLayout, QGroupBox, QVBoxLayout)
+                                 QFormLayout, QGroupBox, QHBoxLayout,
+                                 QPushButton, QVBoxLayout)
 
 from ..core.coords import FORMATS
 from ..core.places import AS_QGIS, LABEL_LANGUAGES, LOCAL
@@ -62,6 +63,10 @@ class PropertiesDialog(QDialog):
     new_shown_changed = pyqtSignal(bool)
     coords_chosen = pyqtSignal(str)
     sea_changed = pyqtSignal(bool)
+    # Помощник: разговор, настройки подключения, история строки «Поиск».
+    assistant_requested = pyqtSignal()
+    assistant_settings_requested = pyqtSignal()
+    history_clear_requested = pyqtSignal()
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -181,6 +186,25 @@ class PropertiesDialog(QDialog):
         coordinates = QGroupBox(tr("Координаты"), self)
         QFormLayout(coordinates).addRow(tr("Формат"), self.coords)
 
+        assistant = QGroupBox(tr("Помощник"), self)
+        row = QHBoxLayout(assistant)
+        for text, tip, signal in (
+                (tr("Разговор…"), tr(
+                    "Окно разговора с помощником. В нём вопросы словами, "
+                    "перелёты и метки KML по просьбе."),
+                 self.assistant_requested),
+                (tr("Настройки…"), tr(
+                    "Сервис, модель и ключ API помощника. Без ключа тема "
+                    "в строке «Поиск» меток не создаёт."),
+                 self.assistant_settings_requested),
+                (tr("Очистить историю поиска"), tr(
+                    "Стереть прежние запросы строки «Поиск» из профиля "
+                    "QGIS."), self.history_clear_requested)):
+            button = QPushButton(text, assistant)
+            button.setToolTip(tip)
+            button.clicked.connect(lambda _=False, s=signal: s.emit())
+            row.addWidget(button)
+
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Close"), self)
         buttons.rejected.connect(self.close)
@@ -191,6 +215,7 @@ class PropertiesDialog(QDialog):
         layout.addWidget(canvas)
         layout.addWidget(layers)
         layout.addWidget(coordinates)
+        layout.addWidget(assistant)
         layout.addStretch(1)
         layout.addWidget(buttons)
         self.set_state(state)

@@ -320,6 +320,9 @@ class GlobeView(QOpenGLWidget):
         self.subsurface = Subsurface()
         # Разрезы с картинками подземного режима.
         self.image_walls = ImageWalls()
+        # Фото с камерой (core/overlays.py): плоскости с картинкой в 3D.
+        self.photos = ImageWalls()
+        self._terrain_nearest = None
         # Разрез Земли: вынутый сектор (core.cutaway.Wedge или None)
         # и грани с оболочками - отдельный набор подземных сеток.
         self.wedge = None
@@ -1280,6 +1283,7 @@ class GlobeView(QOpenGLWidget):
         self.buildings.init_gl()
         self.subsurface.init_gl()
         self.image_walls.init_gl()
+        self.photos.init_gl()
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
         self.section_wall.init_gl()
@@ -1302,6 +1306,7 @@ class GlobeView(QOpenGLWidget):
         self.buildings.release_gl()
         self.subsurface.release_gl()
         self.image_walls.release_gl()
+        self.photos.release_gl()
         self.cutaway.release_gl()
         self.cutaway_slabs.release_gl()
         self.section_wall.release_gl()
@@ -1673,8 +1678,15 @@ class GlobeView(QOpenGLWidget):
         probe = (tuple(self.camera.eye), self.store.version, id(self.floor))
         if probe != self._nearest_probe:
             self._nearest_probe = probe
-            self.camera.nearest = nearest_terrain(self.camera.eye,
-                                                  self.terrain_at)
+            self._terrain_nearest = nearest_terrain(self.camera.eye,
+                                                    self.terrain_at)
+        self.camera.nearest = self._terrain_nearest
+        # Плоскость фото ближе рельефа: ближняя плоскость отсечения
+        # не срезает её, когда глаз стоит в камере фото.
+        photo = self.photos.nearest(self.camera.eye)
+        if photo is not None:
+            self.camera.nearest = photo if self.camera.nearest is None \
+                else min(self.camera.nearest, photo)
         marks.append(time.perf_counter())
         sel = lod.select(self.camera, self.textures.__contains__,
                          max_level=self.max_level,
@@ -1722,6 +1734,8 @@ class GlobeView(QOpenGLWidget):
         if underground:
             self.subsurface.draw(self.camera)
             self.image_walls.draw(self.camera)
+        if self.photos.active and not self.show_holes:
+            self.photos.draw(self.camera)
         wedge = self.wedge if not self.show_holes else None
         if wedge is not None:
             self._follow_wedge_gain()

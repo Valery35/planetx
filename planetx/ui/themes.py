@@ -1,24 +1,12 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Названия и подсказки тем NASA GIBS для раздела «Слои», ползунок
-даты темы.
+"""Названия и подсказки тем NASA GIBS для раздела «Слои».
 
 Слои, адреса и даты - core/themes.py. Здесь только то, что видит
 человек, через tr().
 """
-from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QLabel, QSlider, \
-    QToolButton
-
 from ..i18n import tr
-from ..qt_compat import enum
-
-STYLE = ("QFrame#planetxThemeBar { background: rgba(250, 250, 250, 230); "
-         "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
-SLIDER_WIDTH = 260
-SETTLE = 300  # мс после остановки ползунка до смены дня
-PLAY_PERIOD = 900  # мс на шаг показа
 
 
 def group_names():
@@ -27,8 +15,8 @@ def group_names():
         ("fire", tr("Планета огня"), tr(
             "Дым, аэрозоль и угарный газ пожаров и промышленности по "
             "данным NASA. Включена одна тема из всех групп. Флажок группы "
-            "выключает её тему и включает снова. День темы задаёт её "
-            "ползунок в левом нижнем углу вида.")),
+            "выключает её тему и включает снова. День темы задаёт правый "
+            "бегунок шкалы времени.")),
         ("water", tr("Планета воды"), tr(
             "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность "
             "и наводнения по данным NASA. Включена одна тема из всех "
@@ -110,111 +98,3 @@ def theme_names():
             "Классы - в шкале в углу вида.")),
     }
 
-
-class ThemeBar(QFrame):
-    """Ползунок даты темы NASA: дни ряда темы, шаг назад и вперёд,
-    показ подряд. Сигнал day_changed - день YYYY-MM-DD. Просьба автора
-    от 5 октября 2026 года - у покрытий момент, а не промежуток."""
-
-    day_changed = pyqtSignal(str)
-
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.setObjectName("planetxThemeBar")
-        self.setStyleSheet(STYLE)
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(6, 3, 6, 3)
-        layout.setSpacing(4)
-        self.days = []
-        self.back = self._button("⏮", tr("На шаг ряда назад."),
-                                 lambda: self.step(-1))
-        layout.addWidget(self.back)
-        self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
-        self.slider.setFixedWidth(SLIDER_WIDTH)
-        self.slider.setToolTip(tr(
-            "День темы. Ползунок идёт по дням ряда, пропущенных дней в нём "
-            "нет."))
-        self.slider.valueChanged.connect(self._moved)
-        layout.addWidget(self.slider)
-        self.forward = self._button("⏭", tr("На шаг ряда вперёд."),
-                                    lambda: self.step(1))
-        layout.addWidget(self.forward)
-        self.play = self._button("▶\ufe0f", tr(
-            "Показ дней подряд к концу ряда. Следующий день ждёт, пока "
-            "загрузится нынешний."), self.toggle)
-        layout.addWidget(self.play)
-        self.label = QLabel(self)
-        layout.addWidget(self.label)
-        # День уходит сигналом, когда ползунок остановился.
-        self.settle = QTimer(self)
-        self.settle.setSingleShot(True)
-        self.settle.setInterval(SETTLE)
-        self.settle.timeout.connect(self._emit)
-        self.timer = QTimer(self)
-        self.timer.setInterval(PLAY_PERIOD)
-        self.timer.timeout.connect(self._step)
-        # ready() - показан ли нынешний день. Ставит окно.
-        self.ready = None
-        self.hide()
-
-    def _button(self, text, tip, slot):
-        button = QToolButton(self)
-        button.setText(text)
-        button.setToolTip(tip)
-        button.setAutoRaise(True)
-        button.clicked.connect(slot)
-        return button
-
-    def day(self):
-        if not self.days:
-            return None
-        return self.days[self.slider.value()]
-
-    def set_days(self, days, day):
-        """Дни ряда и выбранный день. Сигнал не идёт."""
-        self.stop()
-        self.days = list(days)
-        self.slider.blockSignals(True)
-        self.slider.setRange(0, max(len(self.days) - 1, 0))
-        if day in self.days:
-            self.slider.setValue(self.days.index(day))
-        else:
-            self.slider.setValue(len(self.days) - 1)
-        self.slider.blockSignals(False)
-        self._show()
-
-    def step(self, delta):
-        self.slider.setValue(self.slider.value() + delta)
-        self.settle.stop()
-        self._emit()
-
-    def _show(self):
-        self.label.setText(self.day() or "")
-        self.adjustSize()
-
-    def _moved(self, *args):
-        self._show()
-        self.settle.start()
-
-    def _emit(self):
-        if self.days:
-            self.day_changed.emit(self.day())
-
-    def toggle(self):
-        if self.timer.isActive():
-            self.stop()
-        elif self.slider.value() < self.slider.maximum():
-            self.timer.start()
-            self.play.setText("⏸")
-
-    def stop(self):
-        self.timer.stop()
-        self.play.setText("▶\ufe0f")
-
-    def _step(self):
-        if self.ready is not None and not self.ready():
-            return
-        if self.slider.value() >= self.slider.maximum():
-            self.stop()
-            return
-        self.step(1)

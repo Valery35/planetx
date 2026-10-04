@@ -13,6 +13,12 @@
 щелчок по полосе переносит промежуток туда. Кнопка проигрывания
 двигает промежуток вдоль шкалы. Шкала своя, на «Временный контроллер»
 QGIS не опирается, решение автора от 30 сентября 2026 года.
+
+Шкала - одно время вида, решение автора от 5 октября 2026 года.
+Покрытия - темы NASA - берут момент, правый бегунок, события - метки
+и землетрясения - промежуток. Без событий шкала - один бегунок
+(point). Шаги ◂ ▸ двигают момент по дням ряда покрытия (stepper),
+показ при покрытии идёт по этим дням и ждёт загрузки дня (ready).
 """
 import math
 import time
@@ -32,6 +38,7 @@ STYLE = ("QFrame#planetxTime { background: rgba(250, 250, 250, 230); "
 TRACK_WIDTH = 320  # логических пикселей
 HANDLE = 6.0  # полуширина бегунка
 PLAY_PERIOD = 40  # мс между шагами проигрывания
+STEP_PERIOD = 900  # мс на шаг показа по дням ряда покрытия
 # Проигрывание проходит шкалу за столько секунд при скорости 1.
 PLAY_SECONDS = 20.0
 SPEEDS = (0.25, 0.5, 1.0, 2.0, 4.0)
@@ -61,7 +68,8 @@ def time_text(seconds, span):
 
 class RangeTrack(QWidget):
     """Полоса шкалы с двумя бегунками. Сигнал moved - новый промежуток
-    (от, до) в секундах."""
+    (от, до) в секундах. point - один бегунок: промежуток нулевой
+    ширины, щелчок и протяжка ставят момент."""
 
     moved = pyqtSignal(float, float)
 
@@ -69,7 +77,8 @@ class RangeTrack(QWidget):
         super().__init__(parent)
         self.extent = (0.0, 1.0)
         self.lo, self.hi = 0.0, 1.0
-        self.drag = None  # "lo", "hi" или ("body", сдвиг)
+        self.drag = None  # "lo", "hi", "point" или ("body", сдвиг)
+        self.point = False
         self.setFixedSize(TRACK_WIDTH, 22)
         self.setMouseTracking(True)
 
@@ -100,17 +109,23 @@ class RangeTrack(QWidget):
         painter.drawLine(int(HANDLE), int(mid),
                          int(self.width() - HANDLE), int(mid))
         x0, x1 = self._x(self.lo), self._x(self.hi)
-        painter.fillRect(QRectF(x0, mid - 4.0, max(x1 - x0, 1.0), 8.0),
-                         SELECTION)
+        if not self.point:
+            painter.fillRect(QRectF(x0, mid - 4.0, max(x1 - x0, 1.0), 8.0),
+                             SELECTION)
         painter.setPen(QPen(QColor(60, 60, 60), 1.0))
-        painter.setBrush(QColor(255, 255, 255))
-        for x in (x0, x1):
+        painter.setBrush(SELECTION if self.point else QColor(255, 255, 255))
+        for x in ((x1,) if self.point else (x0, x1)):
             painter.drawRoundedRect(QRectF(x - HANDLE / 2.0, mid - 8.0,
                                            HANDLE, 16.0), 2.0, 2.0)
 
     def mousePressEvent(self, event):
         x = event.position().x() if hasattr(event, "position") \
             else event.pos().x()
+        if self.point:
+            t = self._t(x)
+            self._set(t, t)
+            self.drag = "point"
+            return
         x0, x1 = self._x(self.lo), self._x(self.hi)
         if abs(x - x1) <= HANDLE and (abs(x - x1) <= abs(x - x0)
                                       or x > x1):
@@ -133,7 +148,9 @@ class RangeTrack(QWidget):
         x = event.position().x() if hasattr(event, "position") \
             else event.pos().x()
         t = self._t(x)
-        if self.drag == "lo":
+        if self.drag == "point":
+            self._set(t, t)
+        elif self.drag == "lo":
             self._set(min(t, self.hi), self.hi)
         elif self.drag == "hi":
             self._set(self.lo, max(t, self.lo))
@@ -176,15 +193,37 @@ class TimeBar(QFrame):
         # значки ⏮ ▶ ⏭ 🔁, ⏹ закрывает шкалу. Просьба автора
         # от 1 октября 2026 года.
         self.track = RangeTrack(self)
-        self.track.setToolTip(tr(
-            "Промежуток времени меток. Бегунки тянутся по одному или "
-            "вместе за середину, щелчок по полосе переносит промежуток. "
+        self._range_tip = tr(
+            "Промежуток времени меток и землетрясений. Бегунки тянутся "
+            "по одному или вместе за середину, щелчок по полосе переносит "
+            "промежуток. Тема NASA показана на день правого бегунка. "
             "Метки вне промежутка скрыты, метки без времени видны "
-            "всегда."))
+            "всегда.")
+        self._point_tip = tr(
+            "Момент времени темы NASA. Щелчок по полосе или протяжка "
+            "бегунка ставят день, кнопки ◂ и ▸ сдвигают его на шаг ряда "
+            "темы.")
+        self.track.setToolTip(self._range_tip)
         self.track.moved.connect(self._moved)
         layout.addWidget(self.track)
         self.label = QLabel(self)
         layout.addWidget(self.label)
+        # Шаги по дням ряда покрытия: stepper(момент, ±1) - момент
+        # соседнего дня или None. Ставит окно, без него кнопок нет.
+        self.stepper = None
+        self.ready = None
+        self.steps = []
+        for text, tip, delta in (
+                ("◂", tr("На шаг ряда темы назад."), -1),
+                ("▸", tr("На шаг ряда темы вперёд."), 1)):
+            button = QToolButton(self)
+            button.setText(text)
+            button.setToolTip(tip)
+            button.setAutoRaise(True)
+            button.clicked.connect(lambda _=False, d=delta: self.step(d))
+            button.hide()
+            layout.addWidget(button)
+            self.steps.append(button)
         buttons = []
         for text, tip, slot in (
                 ("⏮", tr("К началу шкалы"), self.to_start),
@@ -255,7 +294,10 @@ class TimeBar(QFrame):
         self.known = True
         old = self.track.extent
         self.track.set_extent(*extent)
-        if fresh or old != self.track.extent:
+        if self.track.point:
+            # Момент остаётся на месте, в пределах нового охвата.
+            self.track.set_range(self.track.hi, self.track.hi)
+        elif fresh or old != self.track.extent:
             self.track.set_range(*self.track.extent)
         self._label()
         if self.shown():
@@ -275,12 +317,49 @@ class TimeBar(QFrame):
         self.stop()
         self.hide()
 
+    def set_point(self, on, at=None):
+        """Один бегунок в момент at или на месте правого. Выход из
+        режима - промежуток во всю шкалу с правым бегунком на месте."""
+        on = bool(on)
+        if on == self.track.point and at is None:
+            return
+        self.track.point = on
+        self.track.setToolTip(self._point_tip if on else self._range_tip)
+        moment = self.track.hi if at is None else at
+        if on:
+            self.track.set_range(moment, moment)
+        else:
+            self.track.set_range(self.track.extent[0], moment)
+        self._moved(self.track.lo, self.track.hi)
+
+    def set_stepper(self, stepper):
+        """Шаги по дням ряда покрытия, None - кнопок нет."""
+        self.stepper = stepper
+        for button in self.steps:
+            button.setVisible(stepper is not None)
+        self.adjustSize()
+
+    def step(self, delta):
+        """Правый бегунок - на соседний день ряда покрытия, ширина
+        промежутка та же. Возвращает, сдвинулся ли."""
+        if self.stepper is None:
+            return False
+        moment = self.stepper(self.track.hi, delta)
+        if moment is None:
+            return False
+        width = self.track.hi - self.track.lo
+        self.track.set_range(moment - width, moment)
+        self._moved(self.track.lo, self.track.hi)
+        return True
+
     def set_range(self, lo, hi):
         """Промежуток снаружи: вид метки с датой, остановка тура.
         Бесконечный край - край шкалы."""
         a, b = self.track.extent
         lo = a if not math.isfinite(lo) else lo
         hi = b if not math.isfinite(hi) else hi
+        if self.track.point:
+            lo = hi
         self.track.set_range(lo, hi)
         self._moved(self.track.lo, self.track.hi)
 
@@ -327,6 +406,9 @@ class TimeBar(QFrame):
             width = self.track.hi - self.track.lo
             self.track.set_range(a, a + width)
         self._last = time.monotonic()
+        # При покрытии показ идёт по дням его ряда, с ожиданием дня.
+        self.timer.setInterval(STEP_PERIOD if self.stepper is not None
+                               else PLAY_PERIOD)
         self.timer.start()
         self.play.setText("⏸")
 
@@ -335,6 +417,15 @@ class TimeBar(QFrame):
         self.play.setText("▶\ufe0f")
 
     def _step(self):
+        if self.stepper is not None:
+            if self.ready is not None and not self.ready():
+                return
+            if not self.step(1):
+                if self.loop.isChecked():
+                    self.to_start()
+                else:
+                    self.stop()
+            return
         now = time.monotonic()
         dt = now - (self._last or now)
         self._last = now

@@ -156,8 +156,10 @@ near the corner of the view, they are drawn in full.
 ### Place search
 
 Type a place name into the Search field at the top of the panel, for
-example `Perm`, or coordinates. Enter or the Search button starts the
-search.
+example `Perm`, coordinates or a topic, for example "Voyages of
+Columbus" - this example stands grey in the empty field. Enter or the
+Search button starts the search. A topic without a place on the map
+becomes placemarks, see Places from a description.
 
 | Format | Example |
 |---|---|
@@ -203,8 +205,8 @@ Enter in the field handles the query in this order:
 4. Anything else is searched as a place name.
 
 Queries entered with Enter are kept in the QGIS profile, 30 at most.
-The Clear search history item in the menu of the assistant button
-erases them.
+The Clear search history button of the Assistant group in the View
+properties window erases them.
 
 Over a long distance the camera rises and lands smoothly. The mouse interrupts a flight.
 
@@ -326,14 +328,12 @@ while its theme is on. Clearing it turns the theme off, checking it
 turns the previous theme of the group on. The theme lies as semi-transparent colouring over the
 imagery, where there is no data the imagery shows. A legend with the
 name, units and date stands in the bottom left corner of the view. The
-day of the theme is set by its slider above the legend. It goes over
-the days of the series of the theme, missing days are not on it. The
-⏮ and ⏭ buttons move the day by a step of the series, ▶ shows the days
-one after another towards the end of the series. A theme opens on the
-last day of its series. A new theme takes the day of the previous one
-if its series has that day, otherwise the nearest earlier day. Some
-series lag behind today by months, the
-tooltip of the theme says so. Themes exist only on the Earth.
+day of the theme is set by the right handle of the time slider, see
+Placemark time and the time slider. A chosen theme opens the slider on
+the last day of its series. The handle gives the nearest day of the
+series that is not later, missing days of the series are skipped. A new
+theme takes the same moment while the slider is open. Some series lag
+behind today by months, the tooltip of the theme says so. Themes exist only on the Earth.
 
 The Plate boundaries row shows the lithospheric plate boundaries after
 the PB2002 model (Bird, 2003). Red lines are plates moving apart at
@@ -742,6 +742,16 @@ same way.
 
 ### Placemark time and the time slider
 
+The time slider is one time of the whole view. Coverages - NASA themes -
+take the moment, the right handle. Events - placemarks with time and
+earthquakes - take the range between the handles. When a theme is on
+and there are no events, the slider has one handle. The ◂ and ▸ buttons
+move the moment by a step of the theme series, ▶ shows the days of the
+series one after another and waits until each day has loaded. The
+legends of the layers - theme, foci, cutaway, beds, insolation, slope
+and temperature - stand as one panel in the bottom left corner of the
+view.
+
 A placemark can have a time of its own. It is a
 moment or an interval, the Time field of the placemark properties. In
 KML the time is written as TimeStamp and TimeSpan. The view of a
@@ -780,6 +790,49 @@ camera flies to the contents of the file.
 
 Save as KML… saves a folder or the whole My Places to KMZ or KML. The
 file extension chooses the format.
+
+### Image overlays
+
+The Add submenu of a folder adds an image from a PNG, JPEG or GIF file
+in three ways:
+- Ground overlay - the image lies on the terrain by four corners, in
+  the middle of the view at half of its width. It lies under the
+  borders and project layers.
+- Photo - the image stands as a plane in 3D in front of the current
+  camera. Fly to puts the eye at the camera point of the photo, and
+  the photo covers the view.
+- Screen overlay - the image stands in a corner of the view and does
+  not move with the globe, for example a logo or a legend.
+
+The overlay opens in a properties window. It changes the name,
+description, image and opacity, for a screen overlay also the corner
+of the view and the width. OK saves the changes, Cancel brings back the
+previous state.
+
+A ground overlay is placed in one of two ways, as in KML:
+- Box - north, south, east, west and rotation, fields of the
+  properties window. While the window is open, handles stand on the
+  globe. The centre moves the image, the handle above the north side
+  rotates it, the corners and the middles of the sides stretch it from
+  the opposite corner or side, with Shift from the centre. A new image
+  is placed as a box.
+- Four corners - the Convert to four corners button. Each corner is
+  dragged with the mouse on its own, the image can become an irregular
+  quadrilateral. It does not convert back to a box.
+
+The image is kept in one of two ways, the Storage field:
+- In the places file - a copy inside My Places, shown without the
+  source file.
+- Link to a file or address - a file path or an http(s) address. The
+  image is read when shown, an edit of the file shows on the globe.
+
+KML and KMZ with Google Earth overlays - GroundOverlay, ScreenOverlay
+and PhotoOverlay - open the same way. The image of a KMZ goes into the
+places file, the image of a plain KML stays a link to a file next to it
+or to a web address. Save as KML… to KMZ puts into the archive the
+images from the places file and the ones linked to files. To KML the
+images from the places file go into a folder next to it, links stay
+links.
 
 Clear My Places… removes all placemarks and folders after a
 confirmation. The removal cannot be undone, so the places needed are
@@ -1299,10 +1352,10 @@ opens on it.
 
 ## Assistant
 
-The assistant is the button with an icon to the right of the Search
-field. A click makes places from a description, the arrow of the button
-opens the menu Conversation with the assistant… and Assistant
-settings…. The conversation window with an AI model is Assistant. The model controls the globe on a request in words, for
+The assistant answers topics and requests from the Search field. Its
+buttons stand in the Assistant group of the View properties window.
+Conversation… opens the Assistant window, Settings… the Assistant
+settings window. The conversation window with an AI model is Assistant. The model controls the globe on a request in words, for
 example "show a section across the Japan Trench" or "where are the
 deepest earthquakes near Japan this month". An API key of your own for
 the chosen service is needed.
@@ -1354,10 +1407,11 @@ makes no more than six rounds of actions in a row, then it stops.
 
 ### Places from a description
 
-The assistant button to the right of the Search field makes places on
-the topic from the field, for example "the voyage of Columbus" or
-"battles of the Hundred Years' War". Ctrl+Enter in the field and the
-Make places button of the Assistant window do the same. The model
+A topic in the Search field, for example "voyages of Columbus" or
+"battles of the Hundred Years' War", becomes placemarks if no place
+with that name is found. Ctrl+Enter in the field and the Make places
+button of the Assistant window make placemarks at once, without a
+place search. The model
 answers with one KML document, it is written to My Places as a new
 folder at once, the camera flies to the places.
 

@@ -208,6 +208,18 @@ class ImageWalls:
             GL.glDeleteProgram(self.program)
         self.program = None
 
+    def nearest(self, eye):
+        """Расстояние от глаза до ближайшей стенки за вычетом её
+        полуразмера, не меньше 1 м, или None без стенок."""
+        found = None
+        for center, vertices, _, _ in self.source:
+            radius = float(np.max(np.linalg.norm(
+                vertices["position"].astype(np.float64), axis=1)))
+            gap = float(np.linalg.norm(np.asarray(center) - eye)) - radius
+            gap = max(gap, 1.0)
+            found = gap if found is None else min(found, gap)
+        return found
+
     def set_walls(self, walls):
         """Новые стенки, [] - убрать. В видеокарту - в кадре."""
         self.source = list(walls)

@@ -8,6 +8,7 @@
 панель значков (ui/toolbar.py), в правом нижнем подпись источников.
 Окно связывает части и решает, панели только показывают.
 """
+import hashlib
 import html
 import math
 import os
@@ -18,7 +19,7 @@ import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsProject, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, QMimeData, Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QIcon
+from qgis.PyQt.QtGui import QIcon, QImage
 from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QLabel, QMessageBox, QSplitter,
                                  QVBoxLayout, QWidget)
@@ -45,14 +46,14 @@ from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.slope import aspect_rgba, slope_aspect, slope_rgba
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, decode, make_tile
-from ..core.kml import KmlError, read_file as read_kml_file, read_kml, \
-    write_kml, write_kmz
+from ..core.kml import KOverlay, KmlError, image_ext as kml_image_ext, \
+    read_file as read_kml_file, read_kml, write_kml, write_kmz
 from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
 from ..core import (crust, cutaway, insolation, pick, plates, quakes,
-                    section, slabs, themes, viewshed)
+                    overlays, section, slabs, themes, viewshed)
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
@@ -73,9 +74,12 @@ from .about import show_about
 from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
 from .legend import (BedsLegend, CutawayLegend, InsolationLegend,
-                     QuakeLegend, SlopeLegend, TemperatureLegend,
-                     ThemeLegend)
-from .themes import ThemeBar, theme_names
+                     LegendPanel, QuakeLegend, SlopeLegend,
+                     TemperatureLegend, ThemeLegend)
+from .themes import theme_names
+from .overlays import (OUTLINE, BoxVertices, CornerVertices,
+                       GroundLayers, OverlayDialog, ScreenOverlays,
+                       image_rgba)
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
@@ -86,7 +90,7 @@ from .elevation import HeightSource, ProfileDialog
 from .section import SectionDialog
 from .assistant import (AssistantDialog, current_provider, ready,
                         search_enabled)
-from .myplaces import MyPlaces
+from .myplaces import MyPlaces, OverlayItem
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
@@ -167,6 +171,12 @@ DEMO_QUAKE_BAND = 300.0
 SUN_PERIOD = 60000  # мс между пересчётами солнца по часам компьютера
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 THEME_KEY = "PlanetX/theme"  # тема NASA GIBS, "" - выключена
+THEME_DELAY = 300  # мс после движения шкалы времени до смены дня темы
+# Пауза после движения угла картинки на поверхности до пересборки её
+# растра, мс.
+GROUND_DELAY = 400
+# Новая картинка на экране - под панелью значков, пикселей от верха.
+SCREEN_TOP = 60.0
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
 CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
@@ -492,11 +502,41 @@ class GlobeWindow(QWidget):
         self._theme_scales = {}
         self._theme_replies = {}
         self.theme_legend = ThemeLegend(self.view)
-        # День темы - свой ползунок: покрытию нужен момент, промежуток
-        # шкалы времени остаётся меткам и землетрясениям.
-        self.theme_bar = ThemeBar(self.view)
-        self.theme_bar.day_changed.connect(self._theme_day_chosen)
-        self.theme_bar.ready = self._theme_ready
+        # Шкалы - одной панелью, сверху вниз: тема, пласты, оболочки
+        # разреза, очаги, инсоляция, уклон, температура.
+        self.legend_panel = LegendPanel(self.view)
+        for legend in (self.theme_legend, self.beds_legend,
+                       self.cutaway_legend, self.quake_legend,
+                       self.insolation_legend, self.slope_legend,
+                       self.legend):
+            self.legend_panel.add(legend)
+        self.legend_panel.changed = self._place_attribution
+        # День темы - правый бегунок шкалы времени, смена дня - после
+        # паузы в движении бегунка.
+        self._theme_open_time = False
+        self._theme_timer = QTimer(self)
+        self._theme_timer.setSingleShot(True)
+        self._theme_timer.setInterval(THEME_DELAY)
+        self._theme_timer.timeout.connect(self._apply_theme)
+        # Наложения картинок: растры картинок на поверхности в наложении,
+        # ключи показанных фото и картинок на экране, текстуры фото,
+        # окна свойств и их правки.
+        self.ground_layers = GroundLayers()
+        self._ground = []
+        self._ground_ids = []
+        self._photo_key = None
+        self._screen_key = None
+        self._photo_images = {}
+        self.screen_overlays = ScreenOverlays(self.view)
+        self.overlay_dialogs = {}
+        self._href_replies = {}
+        self._link_images = {}
+        self._overlay_edits = {}
+        self._ground_pending = {}
+        self._ground_timer = QTimer(self)
+        self._ground_timer.setSingleShot(True)
+        self._ground_timer.setInterval(GROUND_DELAY)
+        self._ground_timer.timeout.connect(self._ground_settled)
         # Палеогеография: ползунок возраста, карта возраста - подложка
         # из тайлов planetx-terrain. Шаги подменяют адрес на локальную
         # копию хранилища.
@@ -601,8 +641,6 @@ class GlobeWindow(QWidget):
         self.panel.search_cleared.connect(self.clear_search)
         self.panel.assistant_requested.connect(self.open_assistant)
         self.panel.make_requested.connect(self.make_places)
-        self.panel.assistant_settings_requested.connect(
-            lambda: self._assistant().open_settings())
         self.panel.undo_requested.connect(self.undo_made_places)
         self.panel.stop_requested.connect(self.stop_making)
         self.panel.accept_requested.connect(self.accept_proposed)
@@ -626,8 +664,6 @@ class GlobeWindow(QWidget):
         self._busy = set()
         self.panel.suggest_source = self.search_suggestions
         self.panel.suggestion_chosen.connect(self.choose_suggestion)
-        self.panel.history_clear_requested.connect(
-            self.clear_search_history)
         self.panel.layer_toggled.connect(self.set_layer_shown)
         self.panel.geo_changed.connect(self.set_line_groups)
         self.panel.relief_toggled.connect(self.set_relief)
@@ -990,9 +1026,12 @@ class GlobeWindow(QWidget):
 
     def set_theme(self, key):
         """Тема NASA GIBS из групп раздела «Слои», "" - выключить.
-        Включена одна тема, выбор помнят настройки QGIS. День темы
-        остаётся прежним, если он есть в ряду новой темы."""
+        Включена одна тема, выбор помнят настройки QGIS. Выбранная тема
+        открывает шкалу времени на последний день ряда, когда он придёт.
+        Новая тема при открытой шкале берёт её момент."""
         key = key if key in themes.BY_KEY else ""
+        self._theme_open_time = bool(key) and key != self.theme_key \
+            and not self.timebar.shown()
         self.theme_key = key
         QgsSettings().setValue(THEME_KEY, key)
         self.panel.set_theme(key)
@@ -1005,12 +1044,12 @@ class GlobeWindow(QWidget):
     def _show_theme(self):
         """Тема на глобус или с глобуса. Ряд дат и шкала слоя
         просятся при первом показе темы, ответы помнятся."""
+        self._time_mode()
         if not self._theme_on():
             self._theme_shown = None
+            self.theme_day = None
             self._set_gibs("theme", False)
             self.theme_legend.hide()
-            self.theme_bar.stop()
-            self.theme_bar.hide()
             self._place_attribution()
             return
         theme = themes.BY_KEY[self.theme_key]
@@ -1018,6 +1057,7 @@ class GlobeWindow(QWidget):
             self._theme_fetch(theme.key, "domains", theme.domains_url())
         if theme.colormap and theme.key not in self._theme_scales:
             self._theme_fetch(theme.key, "scale", theme.colormap_url())
+        self._update_timebar()
         self._apply_theme()
 
     def _theme_fetch(self, key, kind, url):
@@ -1036,16 +1076,39 @@ class GlobeWindow(QWidget):
                 self._show_state()
                 return
             self._theme_domains[key] = themes.parse_domains(data)
+            self._update_timebar()
         else:
             self._theme_scales[key] = themes.parse_colormap(data) \
                 if data else None
         if key == self.theme_key:
             self._apply_theme()
 
-    def _theme_day_chosen(self, day):
-        """День с ползунка темы."""
-        self.theme_day = day
-        self._apply_theme()
+    def _time_mode(self):
+        """Одно время вида: покрытию нужен момент, событиям - промежуток.
+        Без событий шкала - один бегунок, при теме у шкалы шаги по ряду
+        темы. Решение автора от 5 октября 2026 года."""
+        theme = getattr(self, "theme_key", "") and self._theme_on()
+        events = any(p.visible and p.time for p in self.myplaces.places) \
+            or bool(self.extras.get("quakes")
+                    and self.view.quakes.events)
+        if self.timebar.track.point != (bool(theme) and not events):
+            self.timebar.set_point(bool(theme) and not events)
+        self.timebar.set_stepper(self._theme_step if theme else None)
+        self.timebar.ready = self._theme_ready if theme else None
+
+    def _theme_step(self, moment, delta):
+        """Момент соседнего дня ряда темы для шага шкалы или None."""
+        intervals = self._theme_domains.get(self.theme_key)
+        if not intervals:
+            return None
+        days = themes.days(intervals)
+        day = themes.pick_day(intervals, moment)
+        if day not in days:
+            return None
+        index = days.index(day) + delta
+        if not 0 <= index < len(days):
+            return None
+        return themes.moment(days[index])
 
     def _theme_ready(self):
         """Показан ли день темы: все картинки кадра пришли. Показ дней
@@ -1053,29 +1116,43 @@ class GlobeWindow(QWidget):
         layer = self.view.gibs["theme"]
         return not layer.missing and not layer.pending
 
+    def theme_moment(self):
+        """Момент дня темы: правый бегунок открытой шкалы времени, без
+        неё - None, последний день ряда."""
+        if self.timebar.shown():
+            hi = self.timebar.range()[1]
+            if math.isfinite(hi):
+                return hi
+        return None
+
     def _apply_theme(self):
-        """День темы, ползунок, слой вида и шкала в углу. День - с
-        ползунка, без него - последний день ряда. Смена дня той же темы
-        держит прежние картинки до замены."""
+        """День темы по шкале времени, слой вида и шкала в углу. Смена
+        дня той же темы держит прежние картинки до замены."""
         if not self._theme_on():
             return
         theme = themes.BY_KEY[self.theme_key]
         intervals = self._theme_domains.get(theme.key)
         if intervals is None:
             return
-        days = themes.days(intervals)
-        if not days:
+        found = themes.span(intervals)
+        if getattr(self, "_theme_open_time", False) and found:
+            # Выбранная тема: шкала открывается на последнем дне ряда.
+            self._theme_open_time = False
+            if self.timebar.known:
+                if not self.timebar.shown():
+                    self.timebar.open_bar()
+                    self.toolbar.set_time_shown(True)
+                lo, hi = self.timebar.range()
+                self.timebar.set_range(lo if lo < found[1] else found[1],
+                                       found[1])
+                self._time_range = self.timebar.range()
+                self._refresh_shapes()
+        day = themes.pick_day(intervals, self.theme_moment())
+        if day is None:
             self.message = (tr("У темы нет дат в ряду."), time.monotonic())
             self._show_state()
             return
-        day = self.theme_day
-        if day not in days:
-            day = themes.pick_day(intervals, themes.moment(day)) \
-                if day else days[-1]
         self.theme_day = day
-        if self.theme_bar.days != days or self.theme_bar.day() != day:
-            self.theme_bar.set_days(days, day)
-        self.theme_bar.show()
         name = theme_names()[theme.key][0]
         scale = self._theme_scales.get(theme.key)
         units = scale["units"] if scale else ""
@@ -1766,7 +1843,6 @@ class GlobeWindow(QWidget):
         self.quake_legend.hide()
         self.cutaway_legend.hide()
         self.theme_legend.hide()
-        self.theme_bar.hide()
         self.paleo_bar.hide()
         self.view.plain_base = False
         for button in self._globe_buttons():
@@ -1984,51 +2060,26 @@ class GlobeWindow(QWidget):
         # Шкала времени - под панелью значков, как в Google Earth.
         self.timebar.anchor = lambda: (bar.left(), bar.bottom() + MARGIN)
         self.timebar._place()
-        # Шкала - в левом нижнем углу. Узкий вид: над подписью.
+        # Шкалы слоёв - одной панелью в левом нижнем углу. Узкий вид:
+        # над подписью. Ползунок палеогеографии - над панелью.
+        panel = getattr(self, "legend_panel", None)
+        if panel is None:
+            return
         bottom = self.view.height() - MARGIN
-        if self.attribution.x() < MARGIN + self.legend.width():
+        if self.attribution.x() < MARGIN + max(panel.width(),
+                                               self.paleo_bar.width()):
             bottom = self.attribution.y() - MARGIN // 2
-        self.legend.move(MARGIN, bottom - self.legend.height())
-        # Шкала уклона - над шкалой температуры, если та видна.
-        if self.legend.isVisible():
-            bottom = self.legend.y() - MARGIN // 2
-        self.slope_legend.move(MARGIN, bottom - self.slope_legend.height())
-        # Шкала инсоляции - над ними.
-        if self.slope_legend.isVisible():
-            bottom = self.slope_legend.y() - MARGIN // 2
-        self.insolation_legend.move(
-            MARGIN, bottom - self.insolation_legend.height())
-        # Шкала глубины очагов - выше всех.
-        if self.insolation_legend.isVisible():
-            bottom = self.insolation_legend.y() - MARGIN // 2
-        self.quake_legend.move(MARGIN, bottom - self.quake_legend.height())
-        # Оболочки разреза - над шкалой очагов.
-        if self.quake_legend.isVisible():
-            bottom = self.quake_legend.y() - MARGIN // 2
-        self.cutaway_legend.move(
-            MARGIN, bottom - self.cutaway_legend.height())
-        # Пласты подземной модели - над оболочками разреза.
-        if self.cutaway_legend.isVisible():
-            bottom = self.cutaway_legend.y() - MARGIN // 2
-        self.beds_legend.move(MARGIN, bottom - self.beds_legend.height())
-        # Ползунок палеогеографии - над всеми шкалами.
-        if self.beds_legend.isVisible():
-            bottom = self.beds_legend.y() - MARGIN // 2
-        if self.attribution.x() < MARGIN + self.paleo_bar.width():
-            bottom = min(bottom, self.attribution.y() - MARGIN // 2)
+        panel.move(MARGIN, bottom - panel.height())
+        if panel.isVisible():
+            bottom = panel.y() - MARGIN // 2
         self.paleo_bar.move(MARGIN, bottom - self.paleo_bar.height())
-        # Шкала темы NASA и её ползунок дня - над всеми.
-        if self.paleo_bar.isVisible():
-            bottom = self.paleo_bar.y() - MARGIN // 2
-        self.theme_legend.move(MARGIN, bottom - self.theme_legend.height())
-        if self.theme_legend.isVisible():
-            bottom = self.theme_legend.y() - MARGIN // 2
-        self.theme_bar.move(MARGIN, bottom - self.theme_bar.height())
 
     def eventFilter(self, watched, event):
         if watched is self.view and event.type() == enum(
                 QEvent, "Type", "Resize"):
             self._place_attribution()
+            if hasattr(self, "screen_overlays"):
+                self.screen_overlays.place()
         return super().eventFilter(watched, event)
 
     def _tilejson_done(self, data, error):
@@ -2096,6 +2147,8 @@ class GlobeWindow(QWidget):
         if RAILWAYS in groups and self.rail_layer is not None:
             layers.append(self.rail_layer)
             min_levels[self.rail_layer.id()] = RAIL_FROM
+        # Картинки на поверхности - под всеми, сразу над снимком.
+        layers += getattr(self, "_ground", [])
         if self.overlay is not None:
             self.overlay.abort()
             self.overlay.deleteLater()
@@ -2226,6 +2279,11 @@ class GlobeWindow(QWidget):
             self.properties.new_shown_changed.connect(self.set_new_shown)
             self.properties.coords_chosen.connect(self.set_coords)
             self.properties.sea_changed.connect(self.set_sea_depths)
+            self.properties.assistant_requested.connect(self.open_assistant)
+            self.properties.assistant_settings_requested.connect(
+                lambda: self._assistant().open_settings())
+            self.properties.history_clear_requested.connect(
+                self.clear_search_history)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()
@@ -2571,7 +2629,18 @@ class GlobeWindow(QWidget):
             if hasattr(self, "view") else None
         if quake_span is not None:
             times += [when.stamp(when.text(t)) for t in quake_span]
+        # Тема NASA на шкале - первый и последний день её ряда.
+        theme_span = themes.span(self._theme_domains.get(self.theme_key)) \
+            if getattr(self, "theme_key", "") and self._theme_on() else None
+        if theme_span is not None:
+            times += [when.stamp(when.text(t)) for t in theme_span]
         extent = when.extent(times)
+        if extent is None and getattr(self, "theme_key", "") \
+                and self._theme_on() \
+                and self.theme_key not in self._theme_domains:
+            # Ряд новой темы ещё грузится: шкала остаётся как есть,
+            # иначе она закрывалась бы на время загрузки.
+            return
         self.timebar.set_extent(extent)
         # Панель значков заводится позже первого чтения меток.
         toolbar = getattr(self, "toolbar", None)
@@ -2579,6 +2648,8 @@ class GlobeWindow(QWidget):
             toolbar.set_time_available(extent is not None)
         self._time_range = self.timebar.range() \
             if self.timebar.shown() else None
+        if hasattr(self, "extras") and hasattr(self, "_theme_timer"):
+            self._time_mode()
 
     def _time_bar_closed(self):
         """Шкалу закрыли кнопкой ⏹ на ней самой."""
@@ -2596,6 +2667,7 @@ class GlobeWindow(QWidget):
         self._refresh_shapes()
         self._update_sun()
         self._time_quakes()
+        self._theme_timer.start()
 
     def _time_quakes(self):
         """Землетрясения в промежутке шкалы времени."""
@@ -2607,6 +2679,7 @@ class GlobeWindow(QWidget):
         self._time_quakes()
         self._refresh_shapes()
         self._update_sun()
+        self._theme_timer.start()
         if self.view.sky_view is not None:
             self.view.sky_time = self.sky_moment()
             self.view.update()
@@ -2670,7 +2743,11 @@ class GlobeWindow(QWidget):
             shape = self.place_dialog.shape()
             if shape is not None:
                 shapes.append(shape)
+        shapes += [self.previews[key] for key in
+                   getattr(self, "overlay_dialogs", {})
+                   if key in self.previews]
         self.view.set_shapes([self._drawn_shape(s) for s in shapes])
+        self._refresh_overlays()
 
     def _drawn_shape(self, shape):
         """3D-объект так, как он стоит на поднятом рельефе: к настоящей
@@ -3412,6 +3489,9 @@ class GlobeWindow(QWidget):
                 self.panel.select_place(key)
             self.toolbar.record.setChecked(True)
             return
+        if action in ("add_ground", "add_photo", "add_screen"):
+            self.add_overlay(action[4:], key or None)
+            return
         if action == "sort":
             self.myplaces.sort_folder(key or None)
             return
@@ -3458,6 +3538,12 @@ class GlobeWindow(QWidget):
         if is_folder(key):
             self._folder_action(action, item)
             return
+        if isinstance(item, OverlayItem):
+            if action == "properties":
+                self._open_overlay_properties(item)
+                return
+            if action == "fly" and item.kind == "screen":
+                return
         if action == "fly":
             self.fly_to_place(item)
         elif action == "tour":
@@ -3518,7 +3604,8 @@ class GlobeWindow(QWidget):
         """«Очистить «Мои метки»» - удалить все метки и папки после
         подтверждения. Просьба автора от 4 октября 2026 года."""
         top = [n.key for n in self.myplaces.folders if n.parent is None] \
-            + [p.key for p in self.myplaces.places if p.folder is None]
+            + [p.key for p in self.myplaces.places + self.myplaces.overlays
+               if p.folder is None]
         if not top:
             return False
         if confirm:
@@ -3577,6 +3664,257 @@ class GlobeWindow(QWidget):
                     count=len(keys)))
             if answer == enum(QMessageBox, "StandardButton", "Yes"):
                 self.myplaces.remove_many(keys)
+
+    # Наложения картинок (core/overlays.py, ui/overlays.py).
+
+    def _overlay_edit(self, item):
+        """Наложение item с правками открытого окна свойств: (метка
+        картинки, Overlay, байты()). Углы картинки на поверхности
+        приходят из окна после паузы в движении, см. _overlay_preview.
+        Картинка - из файла меток, новая из окна или по ссылке."""
+        overlay, data, link = self._overlay_edits.get(
+            item.key, (item.overlay, None, None))
+        if data is not None:
+            token = "new:" + hashlib.sha256(data).hexdigest()
+            return token, overlay, lambda data=data: data
+        if link is None and item.image is not None:
+            return item.image, overlay, \
+                lambda item=item: self.myplaces.image(item.image)
+        link = link if link is not None else item.href
+        return self._link_token(link), overlay, \
+            lambda link=link: self._link_data(link)
+
+    def _link_token(self, link):
+        """Метка картинки по ссылке: путь и время правки файла или адрес
+        и пришёл ли ответ. Правка файла пересобирает растр."""
+        if not link:
+            return "link:"
+        if link.startswith(("http://", "https://")):
+            return "link:{}:{}".format(link, link in self._link_images)
+        try:
+            stamp = os.path.getmtime(link)
+        except OSError:
+            stamp = None
+        return "link:{}:{}".format(link, stamp)
+
+    def _link_data(self, link):
+        """Байты картинки по ссылке или None. Файл читается сразу, адрес
+        в сети просится через кэш QGIS, ответ хранится в памяти, в файл
+        меток не пишется - так ведёт себя поле Link Google Earth."""
+        if not link:
+            return None
+        if link.startswith(("http://", "https://")):
+            if link in self._link_images:
+                return self._link_images[link]
+            if link not in self._href_replies:
+                self._href_replies[link] = fetch_bytes(
+                    link, lambda data, error, link=link:
+                    self._link_done(link, data, error))
+            return None
+        try:
+            with open(link, "rb") as stream:
+                return stream.read()
+        except OSError:
+            return None
+
+    def _link_done(self, link, data, error):
+        self._href_replies.pop(link, None)
+        if data and not QImage.fromData(data).isNull():
+            self._link_images[link] = bytes(data)
+            self._refresh_overlays()
+            return
+        self.message = (tr("Картинка по ссылке не загрузилась: {link}",
+                           link=link), time.monotonic())
+        self._show_state()
+
+    def _overlay_bytes(self, item):
+        """Байты картинки наложения: из файла меток или по ссылке."""
+        if item.image is not None:
+            return self.myplaces.image(item.image)
+        return self._link_data(item.href)
+
+    def _refresh_overlays(self):
+        """Картинки на поверхности - растры в наложении, фото - плоскости
+        в 3D, картинки на экране - поверх вида. Видны отмеченные
+        наложения тела на глобусе в промежутке шкалы времени."""
+        if not hasattr(self, "ground_layers"):
+            return
+        items = [o for o in self.myplaces.overlays
+                 if o.visible and self._time_ok(o)
+                 and o.body == self.planet.key
+                 and self.view.sky_view is None]
+        entries = []
+        photos = []
+        screens = []
+        for item in items:
+            token, overlay, data = self._overlay_edit(item)
+            if item.kind == "ground":
+                entries.append((token, item.fid, item.name, overlay, data))
+            elif item.kind == "photo":
+                photos.append((token, overlay, data))
+            else:
+                screens.append((token, overlay, data))
+        layers = self.ground_layers.layers(entries)
+        ids = [layer.id() for layer in layers]
+        if ids != self._ground_ids:
+            self._ground = layers
+            self._ground_ids = ids
+            self._update_overlay(keep=True)
+        key = [(token, overlay.params()) for token, overlay, _ in photos]
+        if key != self._photo_key:
+            self._photo_key = key
+            walls = []
+            for token, overlay, data in photos:
+                rgba = self._photo_images.get(token)
+                if rgba is None:
+                    rgba = image_rgba(data())
+                    if rgba is None:
+                        continue
+                    self._photo_images[token] = rgba
+                if overlay.color[3] < 255:
+                    rgba = rgba.copy()
+                    rgba[..., 3] = (rgba[..., 3].astype(np.uint16)
+                                    * overlay.color[3] // 255)
+                walls.append(overlays.photo_mesh(overlay.camera, overlay.fov,
+                                                 overlay.near) + (rgba,))
+            self.view.photos.set_walls(walls)
+            self.view.update()
+        key = [(token, overlay.params()) for token, overlay, _ in screens]
+        if key != self._screen_key:
+            self._screen_key = key
+            self.screen_overlays.set_items(
+                [(overlay, data()) for _, overlay, data in screens])
+
+    def add_overlay(self, kind, folder=None, path=None):
+        """«Добавить → Картинку на поверхности, Фото, Картинку на
+        экране»: картинка из файла встаёт по нынешнему виду, потом
+        открывается окно свойств. Возвращает ключ или None."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("Картинка наложения"), "",
+                tr("Картинки (*.png *.jpg *.jpeg *.gif)"))
+        if not path:
+            return None
+        with open(path, "rb") as stream:
+            data = stream.read()
+        image = QImage()
+        if not image.loadFromData(data):
+            self.message = (tr("Картинка не читается: {name}",
+                               name=os.path.basename(path)),
+                            time.monotonic())
+            self._show_state()
+            return None
+        aspect = image.width() / float(max(image.height(), 1))
+        pose = self.view.navigator.pose
+        camera = self.view.camera
+        if kind == "ground":
+            visible = 2.0 * pose.distance * math.tan(
+                math.radians(camera.fov_y) / 2.0) * camera.aspect
+            overlay = overlays.Overlay("ground", box=overlays.fit_box(
+                pose.lat, pose.lon, overlays.NEW_SHARE * visible, aspect))
+        elif kind == "photo":
+            lat, lon, alt = (float(v) for v in ecef_to_geodetic(camera.eye))
+            shot, fov, near = overlays.view_camera(
+                lat, lon, alt, pose.heading, pose.tilt, camera.fov_y,
+                aspect, pose.distance)
+            overlay = overlays.Overlay("photo", camera=shot, fov=fov,
+                                       near=near)
+        else:
+            overlay = overlays.Overlay(
+                "screen", overlay_xy=(0.0, 1.0, "fraction", "fraction"),
+                screen_xy=(10.0, SCREEN_TOP, "pixels", "insetPixels"))
+        name = os.path.splitext(os.path.basename(path))[0]
+        key = self.myplaces.add_overlay(KOverlay(
+            name, overlay, image=data,
+            view=self.current_view() if kind != "screen" else None),
+            folder)
+        if key is not None:
+            self.panel.select_place(key)
+            self._open_overlay_properties(self.myplaces.find(key))
+        return key
+
+    def _open_overlay_properties(self, item):
+        """Немодальное окно свойств наложения. Правки видны сразу,
+        «OK» пишет их в файл, «Отмена» возвращает прежнее."""
+        key = item.key
+        dialog = self.overlay_dialogs.get(key)
+        if dialog is None:
+            dialog = OverlayDialog(item, self._overlay_bytes(item), self)
+            dialog.setAttribute(enum(Qt, "WidgetAttribute",
+                                     "WA_DeleteOnClose"))
+            self.overlay_dialogs[key] = dialog
+            dialog.changed.connect(
+                lambda key=key: self._overlay_preview(key))
+            dialog.mode_changed.connect(
+                lambda dialog=dialog: self._overlay_tool(dialog))
+
+            def done(result, key=key, dialog=dialog):
+                self.overlay_dialogs.pop(key, None)
+                self._overlay_edits.pop(key, None)
+                self.previews.pop(key, None)
+                self._end_prop_vertices(dialog)
+                if result:
+                    self.myplaces.set_overlay(
+                        key, dialog.overlay,
+                        image=dialog.image if dialog.link is None else None,
+                        link=dialog.link, **dialog.values())
+                else:
+                    self._refresh_shapes()
+            dialog.finished.connect(done)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        self._overlay_tool(dialog)
+        self._overlay_preview(key)
+
+    def _overlay_tool(self, dialog):
+        """Ручки картинки на поверхности по способу привязки: рамка -
+        сдвиг, поворот и растяжение, четыре угла - каждый угол сам."""
+        if dialog.item.kind != "ground" or self._place_open() \
+                or self._ruler_open():
+            return
+        self._end_prop_vertices(dialog)
+        if dialog.overlay.box is not None:
+            tool = BoxVertices(self, dialog)
+        else:
+            tool = CornerVertices(self, dialog, ShapeEdit(
+                "polygon", dialog.points, dialog.set_points))
+        self.view.vertex_tool = tool
+        self.handles.tool = tool
+        self.handles.sync()
+
+    def _overlay_preview(self, key):
+        """Правка окна свойств наложения на глобусе. Контур углов
+        картинки на поверхности - сразу, сама картинка - после паузы
+        в движении: растр пересобирается целиком."""
+        dialog = self.overlay_dialogs.get(key)
+        if dialog is None:
+            return
+        overlay = dialog.overlay
+        if overlay.kind == "ground":
+            self.previews[key] = Shape("polygon", list(overlay.corners),
+                                       color=OUTLINE, width=2.0)
+            self._ground_pending[key] = dialog
+            self._ground_timer.start()
+        else:
+            self._overlay_edits[key] = (
+                overlays.from_params(overlay.kind, overlay.params()),
+                dialog.image if dialog.link is None else None, dialog.link)
+        self._refresh_shapes()
+        self.handles.sync()
+
+    def _ground_settled(self):
+        """Пауза в движении углов: картинки на поверхности по окнам."""
+        pending, self._ground_pending = self._ground_pending, {}
+        for key, dialog in pending.items():
+            if key in self.overlay_dialogs:
+                overlay = dialog.overlay
+                self._overlay_edits[key] = (
+                    overlays.from_params("ground", overlay.params(),
+                                         list(overlay.corners)),
+                    dialog.image if dialog.link is None else None,
+                    dialog.link)
+        self._refresh_overlays()
 
     def _open_place_properties(self, place):
         """Немодальное окно свойств метки. Правки видны на глобусе
@@ -3696,13 +4034,22 @@ class GlobeWindow(QWidget):
                 "Файл не прочитан: {error}", error=str(error)))
             return None
         places = tree.places()
-        if not places:
+        found = tree.overlays()
+        # Картинка наложения простого KML - ссылка на файл рядом с ним,
+        # как у Google Earth. Из KMZ картинка ложится в файл меток.
+        for item in found:
+            if item.image is None and item.href and "://" not in item.href \
+                    and not os.path.isabs(item.href):
+                item.href = os.path.normpath(os.path.join(
+                    os.path.dirname(path), item.href.replace("/", os.sep)))
+        if not places and not found:
             QMessageBox.information(self, tr("Открыть KML или KMZ"), tr(
-                "В файле нет точек, линий и многоугольников."))
+                "В файле нет точек, линий, многоугольников и наложений."))
         key = self.myplaces.import_tree(tree, parent)
         if key is not None:
             self.panel.select_place(key)
-        points = [p for place in places for p in place.points]
+        points = [p for place in places for p in place.points] + [
+            p for item in found for p in item.overlay.corners]
         if points:
             lats = [p[0] for p in points]
             lons = [p[1] for p in points]
@@ -3722,9 +4069,28 @@ class GlobeWindow(QWidget):
                 + ".kmz", tr("KMZ (*.kmz);;KML (*.kml)"))
         if not path:
             return False
-        data = write_kmz(tree) if path.lower().endswith(".kmz") \
-            else write_kml(tree).encode("utf-8")
+        kmz = path.lower().endswith(".kmz")
+        hrefs = {}
         try:
+            for n, item in enumerate(tree.overlays()):
+                if item.image is None and item.href \
+                        and os.path.isfile(item.href) and kmz:
+                    # Картинка по ссылке на файл ложится в архив.
+                    with open(item.href, "rb") as fh:
+                        item.image = fh.read()
+                if item.image and not kmz:
+                    # Рядом с KML - папка картинок, ссылки на неё.
+                    stem = os.path.splitext(os.path.basename(path))[0]
+                    folder = os.path.join(os.path.dirname(path),
+                                          stem + "_files")
+                    os.makedirs(folder, exist_ok=True)
+                    name = "overlay{}.{}".format(n + 1,
+                                                 kml_image_ext(item.image))
+                    with open(os.path.join(folder, name), "wb") as fh:
+                        fh.write(item.image)
+                    hrefs[id(item)] = stem + "_files/" + name
+            data = write_kmz(tree) if kmz \
+                else write_kml(tree, hrefs).encode("utf-8")
             with open(path, "wb") as fh:
                 fh.write(data)
         except OSError as error:
@@ -3750,6 +4116,10 @@ class GlobeWindow(QWidget):
                 name, *place.tour[0][1:])
         if along and place.kind == "line" and len(points) > 1:
             return PathStop(name, points)
+        if place.kind == "photo" and getattr(place, "overlay", None):
+            # Фото: глаз в точке его камеры, как перелёт Google Earth.
+            return Stop(name, *overlays.photo_pose(place.overlay.camera,
+                                                   place.overlay.near))
         if place.view is not None:
             return Stop(name, *place.view)
         if len(points) == 1:

@@ -20,12 +20,11 @@
 Панель только показывает и сообщает сигналами, решает окно.
 """
 import html
-import os
 
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsSettings, QgsVectorLayer)
 from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QFont, QIcon, QKeySequence
+from qgis.PyQt.QtGui import QFont, QKeySequence
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
@@ -150,7 +149,11 @@ def geo_tree():
 
 # Значки строк «Моих меток» по виду объекта, из темы QGIS.
 PLACE_ICONS = {"point": "/mIconPointLayer.svg", "line": "/mIconLineLayer.svg",
-               "polygon": "/mIconPolygonLayer.svg"}
+               "polygon": "/mIconPolygonLayer.svg",
+               # Наложения: на поверхности, фото, на экране.
+               "ground": "/mIconRaster.svg",
+               "photo": "/mLayoutItemPicture.svg",
+               "screen": "/mActionAddImage.svg"}
 VIEW_ICON = "/mIconCamera.svg"  # метка «Сохранить вид» с ракурсом
 
 
@@ -394,8 +397,6 @@ class LayerPanel(QWidget):
     search_cleared = pyqtSignal()
     # Выбрана подсказка строки поиска, core.searchbar.Suggestion.
     suggestion_chosen = pyqtSignal(object)
-    # Меню кнопки помощника: стереть прежние запросы строки поиска.
-    history_clear_requested = pyqtSignal()
     # Ссылка «Разговор» под ответом помощника.
     assistant_requested = pyqtSignal()
     # Кнопка «создать метки по описанию» и ссылка «Отменить» под ответом.
@@ -404,8 +405,6 @@ class LayerPanel(QWidget):
     # Ссылка «Остановить» под счётом меток, идущих потоком.
     stop_requested = pyqtSignal()
     accept_requested = pyqtSignal()
-    # Меню кнопки помощника: окно настроек.
-    assistant_settings_requested = pyqtSignal()
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
     # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
@@ -439,55 +438,27 @@ class LayerPanel(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.place = QLineEdit(self)
-        self.place.setPlaceholderText(tr("Поиск"))
+        # Пример в пустой строке: место или тема. Решение автора от
+        # 5 октября 2026 года - кнопки помощника у строки нет, параметры
+        # помощника - в окне «Свойства вида».
+        self.place.setPlaceholderText(tr("Путешествия Колумба"))
         self.place.setClearButtonEnabled(True)
         self.place.setToolTip(tr(
-            "Название места или координаты в градусах, например Пермь "
-            "или 58.0105, 56.2294. Enter запускает поиск или перелёт, "
-            "несколько найденных мест показываются списком ниже. Просьба "
-            "словами, например «покажи разрез через Японский жёлоб», "
-            "уходит помощнику, если в его настройках сохранён ключ API. "
-            "При вводе под строкой появляются подсказки - свои метки, "
-            "прежние запросы, на небе звёзды и созвездия. Клавиша «вниз» "
-            "выбирает подсказку, в пустой строке она показывает прежние "
-            "запросы."))
+            "Место, координаты или тема. Название места или координаты, "
+            "например Пермь или 58.0105, 56.2294, дают перелёт. Тема, "
+            "например «путешествия Колумба», становится метками с датами "
+            "в «Моих метках». Вопрос словами уходит помощнику. Ctrl+Enter "
+            "сразу создаёт метки по теме."))
         self.place.returnPressed.connect(self._enter)
         self.place.textChanged.connect(self._search_text)
         self.place.textEdited.connect(self._text_edited)
         go = QPushButton(tr("Поиск"), self)
+        go.setToolTip(tr(
+            "Найти то, что введено в строке. Место - перелёт к нему, "
+            "несколько найденных мест - список ниже. Тема без места на "
+            "карте - метки по ней от помощника, если в окне «Свойства "
+            "вида» настроен помощник."))
         go.clicked.connect(self._enter)
-        # Метки по описанию из строки поиска одним запросом к модели.
-        make = QToolButton(self)
-        make.setIcon(QIcon(os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "assistant.svg")))
-        make.setToolTip(tr(
-            "Создать метки по описанию в строке, например «путешествие "
-            "Колумба» или «битвы Столетней войны». Помощник отвечает одним "
-            "документом KML с датами событий. Метки сразу записываются "
-            "новой папкой в «Мои метки», камера летит к ним. Ссылка "
-            "«Отменить» под строкой удаляет папку. То же делает Ctrl+Enter "
-            "в строке. Стрелка открывает разговор с помощником и его "
-            "настройки."))
-        make.clicked.connect(self._make)
-        # Помощник целиком - эта кнопка: нажатие создаёт метки, стрелка -
-        # разговор и настройки. Значка на панели значков нет, решение
-        # автора от 4 октября 2026 года - инструмент компактный.
-        assistant_menu = QMenu(make)
-        assistant_menu.addAction(tr("Разговор с помощником…")).triggered \
-            .connect(lambda checked=False: self.assistant_requested.emit())
-        assistant_menu.addAction(tr("Настройки помощника…")).triggered \
-            .connect(lambda checked=False:
-                     self.assistant_settings_requested.emit())
-        # Прежние запросы строки поиска хранит профиль QGIS, пункт их
-        # стирает.
-        assistant_menu.addSeparator()
-        assistant_menu.addAction(tr("Очистить историю поиска")).triggered \
-            .connect(lambda checked=False:
-                     self.history_clear_requested.emit())
-        make.setMenu(assistant_menu)
-        make.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
-                               "MenuButtonPopup"))
-        self.make = make
         shortcut = QAction(self.place)
         shortcut.setShortcut(QKeySequence("Ctrl+Return"))
         shortcut.setShortcutContext(
@@ -498,7 +469,6 @@ class LayerPanel(QWidget):
         top.setContentsMargins(0, 0, 0, 0)
         top.addWidget(self.place, 1)
         top.addWidget(go, 0)
-        top.addWidget(make, 0)
         # Значок ожидания: ответ модели помощника или службы поиска мест
         # ещё не пришёл. Виден только во время ожидания.
         self.busy = BusySpinner(self)
@@ -1420,14 +1390,18 @@ class LayerPanel(QWidget):
         menu.exec(self.list.viewport().mapToGlobal(point))
 
     def _add_menu(self, menu, key):
-        """Подменю «Добавить» папки: папка, метка, путь, многоугольник
-        и тур, записанный с экрана. Новое ложится в папку key."""
+        """Подменю «Добавить» папки: папка, метка, путь, многоугольник,
+        тур, записанный с экрана, и наложения картинок. Новое ложится
+        в папку key."""
         sub = menu.addMenu(tr("Добавить"))
         for action, text in (("new_folder", tr("Папку")),
                              ("draw_point", tr("Метку")),
                              ("draw_line", tr("Путь")),
                              ("draw_polygon", tr("Многоугольник")),
-                             ("record_tour", tr("Записанный тур"))):
+                             ("record_tour", tr("Записанный тур")),
+                             ("add_ground", tr("Картинку на поверхности")),
+                             ("add_photo", tr("Фото")),
+                             ("add_screen", tr("Картинку на экране"))):
             sub.addAction(text).triggered.connect(
                 lambda _=False, a=action: self.place_action.emit(a, key))
 

@@ -4,14 +4,15 @@
 """Шкалы в углу вида: температура суши и моря в градусах Цельсия,
 уклон и экспозиция поверхности (core/slope.py), часы прямого солнца
 (core/insolation.py), глубина очагов землетрясений (core/quakes.py),
-оболочки разреза Земли (core/cutaway.py).
+оболочки разреза Земли (core/cutaway.py), пласты подземной модели,
+темы NASA. Все шкалы стоят одной панелью LegendPanel.
 
 Цвета и подписи берутся из core/temperature.py. Виджет рисует себя
 сам, фон полупрозрачный, как у подписи источников.
 """
-from qgis.PyQt.QtCore import QRectF, Qt
+from qgis.PyQt.QtCore import QEvent, QRectF, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QFontMetrics, QLinearGradient, QPainter
-from qgis.PyQt.QtWidgets import QWidget
+from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
 from ..core import cutaway, insolation, quakes, slope, temperature
 from ..i18n import tr
@@ -43,9 +44,7 @@ class TemperatureLegend(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(BACKGROUND)
-        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        _background(self, painter)
         metrics = QFontMetrics(self.font())
         line = metrics.height()
         for n, (title, stops, ticks) in enumerate(self.rows):
@@ -92,9 +91,7 @@ class InsolationLegend(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(BACKGROUND)
-        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        _background(self, painter)
         metrics = QFontMetrics(self.font())
         line = metrics.height()
         top = PAD // 2
@@ -149,9 +146,7 @@ class SlopeLegend(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(BACKGROUND)
-        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        _background(self, painter)
         metrics = QFontMetrics(self.font())
         line = metrics.height()
         top = PAD // 2
@@ -191,9 +186,7 @@ class QuakeLegend(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(BACKGROUND)
-        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        _background(self, painter)
         metrics = QFontMetrics(self.font())
         line = metrics.height()
         top = PAD // 2
@@ -306,9 +299,7 @@ class CutawayLegend(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(BACKGROUND)
-        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        _background(self, painter)
         metrics = QFontMetrics(self.font())
         top = PAD // 2
         painter.setPen(TEXT)
@@ -361,9 +352,7 @@ class BedsLegend(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(BACKGROUND)
-        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        _background(self, painter)
         metrics = QFontMetrics(self.font())
         line = metrics.height()
         top = PAD // 2
@@ -422,9 +411,7 @@ class ThemeLegend(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(BACKGROUND)
-        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
+        _background(self, painter)
         metrics = QFontMetrics(self.font())
         line = metrics.height()
         top = PAD // 2
@@ -472,4 +459,63 @@ class ThemeLegend(QWidget):
                                      name, enum(Qt, "TextElideMode",
                                                 "ElideRight"),
                                      self.COLUMN - self.SWATCH - 10))
+        painter.end()
+
+
+def _background(widget, painter):
+    """Фон шкалы. Шкала в панели LegendPanel фона не рисует, фон
+    общий у панели."""
+    if isinstance(widget.parentWidget(), LegendPanel):
+        return
+    painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+    painter.setBrush(BACKGROUND)
+    painter.drawRoundedRect(QRectF(widget.rect()), 3, 3)
+
+
+class LegendPanel(QWidget):
+    """Шкалы слоёв одной панелью в углу вида: общий фон, шкалы -
+    разделами сверху вниз в порядке добавления, скрытые не занимают
+    места. Решение автора от 5 октября 2026 года. changed() зовётся,
+    когда размер панели сменился, - окно ставит её на место."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(enum(Qt, "WidgetAttribute",
+                               "WA_TransparentForMouseEvents"))
+        self.layout_ = QVBoxLayout(self)
+        self.layout_.setContentsMargins(0, PAD // 2, 0, PAD // 2)
+        self.layout_.setSpacing(2)
+        self.legends = []
+        self.changed = None
+        self.hide()
+
+    def add(self, legend):
+        legend.setParent(self)
+        self.layout_.addWidget(legend)
+        self.legends.append(legend)
+        legend.installEventFilter(self)
+        self.refit()
+
+    def eventFilter(self, watched, event):
+        if event.type() in (enum(QEvent, "Type", "Show"),
+                            enum(QEvent, "Type", "Hide"),
+                            enum(QEvent, "Type", "Resize")):
+            QTimer.singleShot(0, self.refit)
+        return False
+
+    def refit(self):
+        shown = [legend for legend in self.legends if not legend.isHidden()]
+        self.setVisible(bool(shown))
+        if shown:
+            self.layout_.activate()
+            self.adjustSize()
+        if self.changed is not None:
+            self.changed()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+        painter.setBrush(BACKGROUND)
+        painter.drawRoundedRect(QRectF(self.rect()), 3, 3)
         painter.end()

@@ -22,6 +22,7 @@
 position и folder и таблица папок добавлены 28 сентября 2026 года,
 в прежний файл - при открытии.
 """
+import base64
 import json
 import os
 import time
@@ -31,9 +32,9 @@ from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsProject, QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from ..core import ellipsoid, icons, lookat, placetree, when
+from ..core import ellipsoid, icons, lookat, overlays, placetree, when
 from ..core.features import Shape
-from ..core.kml import KFolder, KPlace
+from ..core.kml import KFolder, KOverlay, KPlace
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -56,6 +57,21 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Тело метки: earth, mars или moon. Пустое - Земля.
           ("body", "string"))
 FOLDER_TABLE = "folders"
+# Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
+# на поверхности, у картинки на экране и фото пусто. params - свойства
+# core.overlays, image - номер картинки в таблице images, href - адрес
+# картинки из KML, пока её нет. Картинки - текст base64 в том же файле,
+# решение автора того же дня.
+OVERLAY_TABLE = "overlays"
+OVERLAY_FIELDS = (("name", "string"), ("description", "string"),
+                  ("kind", "string"), ("visible", "integer"),
+                  ("position", "integer"), ("folder", "integer"),
+                  ("created", "string"), ("view", "string"),
+                  ("time", "string"), ("body", "string"),
+                  ("image", "integer"), ("href", "string(0)"),
+                  ("params", "string(0)"))
+IMAGE_TABLE = "images"
+IMAGE_FIELDS = (("name", "string"), ("data", "string(0)"))
 # description, view, radio и expandable - окно свойств папки, как
 # у Google Earth, 2 октября 2026 года. Прежний файл получает их при
 # открытии, пустые значения - описания и вида нет, папка обычная.
@@ -284,6 +300,50 @@ class Folder:
         return _folder_key(self.fid)
 
 
+class OverlayItem:
+    """Наложение из файла: картинка на поверхности, на экране или фото.
+
+    overlay - core.overlays.Overlay, image - номер картинки в таблице
+    images. shape - углы картинки на поверхности многоугольником для
+    правки вершин окном свойств, у прочих - точка."""
+
+    tour = None
+    measure = ""
+    view_time = None
+
+    def __init__(self, fid, overlay, name, visible, position=None,
+                 folder=None, description="", view=None, time=None,
+                 image=None, href="", body="earth"):
+        self.fid = fid
+        self.overlay = overlay
+        self.visible = visible
+        self.position = position
+        self.folder = folder
+        self.description = description
+        self.view = view
+        self.time = time
+        self.image = image
+        self.href = href
+        self.body = body
+        points = overlay.corners or ([overlay.camera[:2]]
+                                     if overlay.camera else [(0.0, 0.0)])
+        self.shape = Shape("polygon" if overlay.kind == "ground" else "point",
+                           [tuple(p) for p in points],
+                           color=(255, 255, 255, 255), width=1.0,
+                           name=name)
+
+    @property
+    def kind(self):
+        return self.overlay.kind
+
+    @property
+    def key(self):
+        return "{}:{}".format(self.kind, self.fid)
+
+    @property
+    def name(self):
+        return self.shape.name
+
 class MyPlaces(QObject):
     """Файл «Моих меток», метки и папки в памяти."""
 
@@ -294,8 +354,12 @@ class MyPlaces(QObject):
         self.path = path or store_path()
         self.places = []
         self.folders = []
+        self.overlays = []
         self.layers = {}
         self.folder_layer = None
+        self.overlay_layer = None
+        self.image_layer = None
+        self._images = {}  # номер картинки - байты, прочитанные
 
     # Файл.
 
@@ -347,7 +411,21 @@ class MyPlaces(QObject):
         if folders.isValid():
             _add_missing(folders, FOLDER_FIELDS)
             self.folder_layer = folders
+        self.overlay_layer = self._table(
+            OVERLAY_TABLE, "Polygon?crs=EPSG:4326&", OVERLAY_FIELDS)
+        self.image_layer = self._table(IMAGE_TABLE, "None?", IMAGE_FIELDS)
         self._read()
+
+    def _table(self, table, geometry, fields):
+        """Таблица файла, при нужде созданная, с недостающими полями."""
+        layer = self._open(table)
+        if not layer.isValid():
+            self._write_table(table, geometry + self._spec(fields), False)
+            layer = self._open(table)
+        if not layer.isValid():
+            return None
+        _add_missing(layer, fields)
+        return layer
 
     def _read(self):
         self.places = []
@@ -384,6 +462,32 @@ class MyPlaces(QObject):
                     when.unpack(_value(feature, layer, "view_time")),
                     tour_from_text(_value(feature, layer, "tour")),
                     str(_value(feature, layer, "body") or "earth")))
+        self.overlays = []
+        layer = self.overlay_layer
+        if layer is not None:
+            for feature in layer.getFeatures():
+                kind = str(feature["kind"] or "")
+                if kind not in overlays.KINDS:
+                    continue
+                corners = _points("polygon", feature.geometry()) \
+                    if kind == "ground" else None
+                overlay = overlays.from_params(kind, feature["params"],
+                                               corners)
+                if kind == "ground" and len(overlay.corners) != 4:
+                    continue
+                if kind == "photo" and not overlay.camera:
+                    continue
+                visible = _int(feature["visible"])
+                self.overlays.append(OverlayItem(
+                    feature.id(), overlay, str(feature["name"] or ""),
+                    bool(1 if visible is None else visible),
+                    _int(feature["position"]),
+                    _folder_key(_int(feature["folder"])),
+                    str(feature["description"] or ""),
+                    lookat.parse(feature["view"], None),
+                    when.unpack(feature["time"]), _int(feature["image"]),
+                    str(feature["href"] or ""),
+                    str(feature["body"] or "earth")))
         self.folders = []
         if self.folder_layer is not None:
             layer = self.folder_layer
@@ -402,7 +506,7 @@ class MyPlaces(QObject):
                     bool(1 if expandable is None else expandable)))
         # Метка или папка в папке, которой нет, стоит в корне.
         known = {f.key for f in self.folders}
-        for place in self.places:
+        for place in self.places + self.overlays:
             if place.folder not in known:
                 place.folder = None
         for folder in self.folders:
@@ -415,13 +519,13 @@ class MyPlaces(QObject):
     def nodes(self):
         """Узлы дерева для core/placetree.py."""
         return ([placetree.Node(p.key, p.folder, p.position, p.name)
-                 for p in self.places]
+                 for p in self.places + self.overlays]
                 + [placetree.Node(f.key, f.parent, f.position, f.name)
                    for f in self.folders])
 
     def tree(self, parent=None):
         """Дети папки parent по порядку: (Folder, дети) или Place."""
-        by_key = {p.key: p for p in self.places}
+        by_key = {p.key: p for p in self.places + self.overlays}
         by_key.update({f.key: f for f in self.folders})
         out = []
         for node in placetree.children(self.nodes(), parent):
@@ -441,7 +545,8 @@ class MyPlaces(QObject):
     def find(self, key):
         if placetree.is_folder(key):
             return next((f for f in self.folders if f.key == key), None)
-        return next((p for p in self.places if p.key == key), None)
+        return next((p for p in self.places + self.overlays
+                     if p.key == key), None)
 
     def places_in(self, folder=None):
         """Метки папки folder и её вложенных папок по порядку списка."""
@@ -519,7 +624,10 @@ class MyPlaces(QObject):
     def _layer_of(self, key):
         if placetree.is_folder(key):
             return self.folder_layer
-        return self.layers.get(key.split(":")[0])
+        kind = key.split(":")[0]
+        if kind in overlays.KINDS:
+            return self.overlay_layer
+        return self.layers.get(kind)
 
     def _write(self, changes, read=True):
         """Записать {ключ: {поле: значение}} одной правкой на слой."""
@@ -567,6 +675,13 @@ class MyPlaces(QObject):
         стирается, он относился к прежней форме."""
         layer = self._layer_of(key)
         item = self.find(key)
+        if isinstance(item, OverlayItem):
+            # Углы картинки на поверхности после правки в окне свойств.
+            if item.kind != "ground" or len(shape.points) != 4:
+                return False
+            overlay = overlays.from_params("ground", item.overlay.params(),
+                                           list(shape.points))
+            return self.set_overlay(key, overlay, name=shape.name)
         if layer is None or item is None or not shape.points \
                 or shape.kind != item.kind:
             return False
@@ -626,9 +741,123 @@ class MyPlaces(QObject):
             if layer is not None and item is not None:
                 per_layer.setdefault(id(layer), (layer, []))[1].append(
                     item.fid)
+        # Картинки удалённых наложений уходят из файла вместе с ними.
+        images = [item.image for item in self.overlays
+                  if item.key in keys and item.image is not None]
         for layer, fids in per_layer.values():
             layer.dataProvider().deleteFeatures(fids)
+        if images and self.image_layer is not None:
+            self.image_layer.dataProvider().deleteFeatures(images)
+            for fid in images:
+                self._images.pop(fid, None)
         self._read()
+
+    # Наложения.
+
+    def image(self, fid):
+        """Байты картинки номер fid или None."""
+        if fid is None or self.image_layer is None:
+            return None
+        if fid not in self._images:
+            feature = self.image_layer.getFeature(fid)
+            text = feature["data"] if feature.isValid() else None
+            try:
+                self._images[fid] = base64.b64decode(str(text)) \
+                    if text else None
+            except ValueError:
+                self._images[fid] = None
+        return self._images[fid]
+
+    def _add_image(self, data, name=""):
+        """Записать картинку, вернуть её номер или None."""
+        layer = self.image_layer
+        if layer is None or not data:
+            return None
+        feature = QgsFeature(layer.fields())
+        feature["name"] = name
+        feature["data"] = base64.b64encode(data).decode("ascii")
+        ok, added = layer.dataProvider().addFeatures([feature])
+        if not ok:
+            return None
+        self._images[added[0].id()] = bytes(data)
+        return added[0].id()
+
+    def _overlay_feature(self, item, folder, position, stamp, body):
+        """Объект таблицы наложений из KOverlay."""
+        layer = self.overlay_layer
+        overlay = item.overlay
+        feature = QgsFeature(layer.fields())
+        if overlay.kind == "ground":
+            feature.setGeometry(_geometry("polygon", overlay.corners))
+        values = {"name": item.name, "description": item.description,
+                  "kind": overlay.kind, "visible": int(item.visible),
+                  "position": position, "folder": _folder_fid(folder),
+                  "created": stamp, "view": lookat.text(item.view),
+                  "time": when.pack(item.time),
+                  "body": body or ellipsoid.BODY.key,
+                  "image": self._add_image(item.image, item.name),
+                  "href": "" if item.image else item.href,
+                  "params": overlay.params()}
+        for name, value in values.items():
+            feature[name] = value
+        return feature
+
+    def add_overlay(self, item, folder=None):
+        """Записать наложение KOverlay в конец папки folder. Возвращает
+        ключ или None."""
+        if self.overlay_layer is None:
+            return None
+        if folder is not None and self.find(folder) is None:
+            folder = None
+        feature = self._overlay_feature(
+            item, folder, placetree.next_position(self.nodes(), folder),
+            time.strftime("%Y-%m-%d %H:%M:%S"), None)
+        ok, added = self.overlay_layer.dataProvider().addFeatures([feature])
+        self._read()
+        return "{}:{}".format(item.overlay.kind, added[0].id()) \
+            if ok else None
+
+    def set_overlay(self, key, overlay=None, image=None, link=None,
+                    **values):
+        """Новые свойства наложения key: overlay - core.overlays.Overlay,
+        image - байты новой картинки в файл, link - ссылка на файл или
+        адрес вместо картинки в файле, values - поля name, description,
+        view, time."""
+        item = self.find(key)
+        layer = self.overlay_layer
+        if not isinstance(item, OverlayItem) or layer is None:
+            return False
+        changes = dict(values)
+        if "view" in changes:
+            changes["view"] = lookat.text(changes["view"])
+        if "time" in changes:
+            changes["time"] = when.pack(changes["time"])
+        if overlay is not None:
+            changes["params"] = overlay.params()
+            if overlay.kind == "ground" and not layer.dataProvider() \
+                    .changeGeometryValues({item.fid: _geometry(
+                        "polygon", overlay.corners)}):
+                return False
+        old = item.image
+        if image is not None:
+            changes["image"] = self._add_image(image, item.name)
+            changes["href"] = ""
+        elif link is not None:
+            # Картинка - по ссылке, копия из файла меток уходит.
+            changes["image"] = None
+            changes["href"] = link
+        if old is not None and "image" in changes \
+                and self.image_layer is not None:
+            self.image_layer.dataProvider().deleteFeatures([old])
+            self._images.pop(old, None)
+        self._write({key: changes})
+        return True
+
+    def koverlay(self, item):
+        """Наложение файла как KOverlay core.kml, с картинкой."""
+        return KOverlay(item.name, item.overlay, self.image(item.image),
+                        item.href, item.visible, item.description, item.view,
+                        item.time)
 
     # KML и KMZ.
 
@@ -644,6 +873,7 @@ class MyPlaces(QObject):
         if self.folder_layer is None:
             return None
         per_kind = {}
+        found = []  # наложения: (KOverlay, папка, место)
 
         def folder(node, parent_key, position):
             layer = self.folder_layer
@@ -666,6 +896,8 @@ class MyPlaces(QObject):
             for n, child in enumerate(node.children):
                 if isinstance(child, KFolder):
                     folder(child, key, n)
+                elif isinstance(child, KOverlay):
+                    found.append((child, key, n))
                 else:
                     per_kind.setdefault(child.kind, []).append(
                         (child, key, n))
@@ -679,6 +911,8 @@ class MyPlaces(QObject):
             for n, child in enumerate(tree.children):
                 if isinstance(child, KFolder):
                     folder(child, parent, start + n)
+                elif isinstance(child, KOverlay):
+                    found.append((child, parent, start + n))
                 else:
                     per_kind.setdefault(child.kind, []).append(
                         (child, parent, start + n))
@@ -712,6 +946,10 @@ class MyPlaces(QObject):
                         feature[name] = value
                 features.append(feature)
             layer.dataProvider().addFeatures(features)
+        if found and self.overlay_layer is not None:
+            self.overlay_layer.dataProvider().addFeatures(
+                [self._overlay_feature(item, key, position, stamp, body)
+                 for item, key, position in found])
         # Новая папка раскрыта, вложенные - свёрнуты.
         if top is not None:
             self.folder_layer.dataProvider().changeAttributeValues(
@@ -732,6 +970,8 @@ class MyPlaces(QObject):
                     child = _kfolder(sub)
                     fill(child, kids)
                     target.children.append(child)
+                elif isinstance(node, OverlayItem):
+                    target.children.append(self.koverlay(node))
                 else:
                     target.children.append(_kplace(node))
         fill(root, self.tree(folder))
@@ -746,7 +986,9 @@ class MyPlaces(QObject):
                 root.children.append(self.export_tree(key))
             else:
                 place = self.find(key)
-                if place is not None:
+                if isinstance(place, OverlayItem):
+                    root.children.append(self.koverlay(place))
+                elif place is not None:
                     root.children.append(_kplace(place))
         return root
 

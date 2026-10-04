@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.33.0.
+A 3D globe inside QGIS. PlanetX version 0.34.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -66,7 +66,7 @@ and atmosphere, from space down to single streets.
 - **NASA themes.** The Planet of Fire, Planet of Water, Gases and Land
   and Life groups of the Layers section show 21 NASA GIBS rasters by
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,
-  vegetation, night lights. The day of a theme is set by its slider.
+  vegetation, night lights. The time slider sets the day of a theme.
 - **Paleogeography.** The Paleogeography row shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.
@@ -195,6 +195,9 @@ and atmosphere, from space down to single streets.
 - **KML and KMZ.** KML and KMZ files, including Google Earth
   ones, open into My Places with folders,
   styles and placemark views. A folder saves to KMZ or KML.
+- **Image overlays.** A ground overlay by a box or four corners, a photo
+  with a camera and a screen overlay, as in Google Earth. The image is
+  kept in the places file or as a link to a file or address.
 - **Copy and paste.** Places and folders are copied to the clipboard
   as KML text and pasted back, also after editing in a text editor and
   from Google Earth.

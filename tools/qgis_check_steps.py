@@ -3522,7 +3522,8 @@ def assistant_make():
     dialog.progress.connect(state["make_progress"].append)
     window.view.navigator.stop()
     window.place.setText("Токио")
-    window.panel.make.click()
+    # Кнопки помощника у строки нет с 5 октября 2026 года, Ctrl+Enter.
+    window.panel._make()
     result["assistant_make"] = {"busy": dialog.busy()}
 
 
@@ -4063,11 +4064,18 @@ def compact_clear():
     # Помощник - кнопка у строки «Поиск» с меню, значка на панели нет.
     # «Очистить «Мои метки»» удаляет все метки и папки. Только
     # в проверочном профиле.
-    from qgis.PyQt.QtWidgets import QToolButton
+    from qgis.PyQt.QtWidgets import QPushButton, QToolButton
     from planetx.core.features import Shape
     window = state["window"]
     out = result.setdefault("compact", {})
-    out["menu"] = [a.text() for a in window.panel.make.menu().actions()]
+    # Кнопки помощника у строки поиска нет, решение автора от 5 октября
+    # 2026 года. Помощник - группа окна «Свойства вида».
+    out["make_button"] = hasattr(window.panel, "make")
+    out["placeholder"] = window.place.placeholderText()
+    window._show_properties()
+    out["properties_assistant"] = [
+        b.text() for b in window.properties.findChildren(QPushButton)]
+    window.properties.close()
     out["toolbar_assistant"] = [
         b.toolTip()[:40] for b in window.toolbar.findChildren(QToolButton)
         if "Помощник" in b.toolTip()]
@@ -4195,9 +4203,10 @@ def search_bar():
     out["history_chosen"] = {"target": target(),
                              "text": window.place.text(),
                              "timer": window._search_timer.isActive()}
-    # Последний пункт меню кнопки помощника стирает историю.
-    out["menu"] = [a.text() for a in panel.make.menu().actions()]
-    panel.make.menu().actions()[-1].trigger()
+    # Историю стирает кнопка группы «Помощник» окна «Свойства вида».
+    window._show_properties()
+    window.properties.history_clear_requested.emit()
+    window.properties.close()
     out["cleared"] = window.search_history()
     # Небо: подсказка звезды, выбор ведёт взгляд к ней.
     nav.stop()
@@ -4636,27 +4645,39 @@ def themes_open():
 
 @check(500)
 def themes_bar():
-    # Ползунок темы: появляется с темой, стоит на последнем дне ряда.
-    # Шкала времени при этом не открывается, её промежуток - меткам
-    # и землетрясениям. Замечание автора от 5 октября 2026 года.
+    # Одно время вида: тема без событий - шкала одним бегунком на
+    # последнем дне ряда. Вопрос автора от 5 октября 2026 года - «слоёв
+    # и легенд две, движок времени один».
     window = state["window"]
     out = result["themes"]
     if window.theme_key != "ozone":
+        # Метки со временем - события, на время шага они скрыты.
+        timed = {p.key: p.visible for p in window.myplaces.places
+                 if p.time and p.visible}
+        state["timed_places"] = timed
+        window.myplaces.set_visible_many({k: False for k in timed})
+        window.set_extra("quakes", False)
         window.timebar.close_bar()
         window._time_toggled(False)
         window.set_theme("")
-        window.theme_day = None
         window.set_theme("ozone")
         out["bar_started"] = time.monotonic()
-    if "ozone" not in window._theme_domains \
+    if ("ozone" not in window._theme_domains or window.theme_day is None) \
             and time.monotonic() - out["bar_started"] < 30.0:
         return 500
-    bar = window.theme_bar
-    out["bar_shown"] = bar.isVisible()
+    from planetx.core import themes
+    bar = window.timebar
+    lo, hi = bar.range()
+    out["bar_shown"] = bar.shown()
+    out["bar_point"] = bar.track.point and lo == hi
     out["bar_day"] = window.theme_day
-    out["bar_last"] = bar.days[-1] if bar.days else None
-    out["bar_days"] = len(bar.days)
-    out["timebar_after"] = window.timebar.shown()
+    out["bar_last"] = themes.pick_day(window._theme_domains["ozone"])
+    out["steps_shown"] = [b.isVisible() for b in bar.steps]
+    # Шаг назад по ряду - на предыдущий день.
+    bar.step(-1)
+    window._apply_theme()
+    out["day_after_step"] = window.theme_day
+    out["legend_panel"] = window.legend_panel.isVisible()
     return None
 
 @check(500)
@@ -4689,7 +4710,9 @@ def themes_cycle():
 
 @check(500)
 def themes_time():
-    # День с ползунка темы: осадки на 15 июля 2020 года.
+    # День по шкале времени: осадки на 15 июля 2020 года.
+    import calendar
+    import datetime
     window = state["window"]
     out = result["themes"]
     if window.theme_key != "rain":
@@ -4698,31 +4721,46 @@ def themes_time():
     if "rain" not in window._theme_domains \
             and time.monotonic() - out["time_started"] < 30.0:
         return 500
-    bar = window.theme_bar
-    bar.slider.setValue(bar.days.index("2020-07-15"))
+    day = float(calendar.timegm(datetime.date(2020, 7, 15).timetuple()))
+    window.timebar.set_range(day + 3600.0, day + 3600.0)
     return None
 
 
-@check(8000)
+@check(1500)
 def themes_time_check():
+    # Растительность и землетрясения вместе: шкала - промежуток для
+    # очагов, тема берёт правый бегунок. Шкалы - одной панелью.
     window = state["window"]
     out = result["themes"]
-    out["day_by_slider"] = window.theme_day
-    out["label"] = window.theme_bar.label.text()
-    layer = window.view.gibs["theme"]
-    out["textures_by_slider"] = len(layer.textures)
-    window.view.grabFramebuffer().save(
-        os.path.join(TEMP, "planetx_theme_rain_2020.png"))
-    # Новая тема берёт тот же день, если он есть в её ряду.
-    window.set_theme("snow")
+    out["day_by_timebar"] = window.theme_day
+    window.set_theme("ndvi")
     out["day_after_switch"] = window.theme_day
-    # Темы в панели - кружки переключателей, снимок списка «Слои».
+    window.set_extra("quakes", True)
+    out["quakes_started"] = time.monotonic()
     geo = window.panel.geo
     for group in window.panel.theme_groups:
         group.setExpanded(True)
     geo.scrollToItem(window.panel.theme_items["rain"])
     geo.grab().save(os.path.join(TEMP, "planetx_theme_panel.png"))
+
+
+@check(1000)
+def themes_events():
+    window = state["window"]
+    out = result["themes"]
+    if not window.view.quakes.events \
+            and time.monotonic() - out["quakes_started"] < 30.0:
+        return 1000
+    bar = window.timebar
+    lo, hi = bar.range()
+    out["with_quakes_point"] = bar.track.point
+    out["with_quakes_range"] = lo < hi
+    out["panel_legends"] = [type(l).__name__ for l in
+                            window.legend_panel.legends if not l.isHidden()]
     window.grab().save(os.path.join(TEMP, "planetx_theme_window.png"))
+    window.set_extra("quakes", False)
+    out["point_after_quakes"] = bar.track.point
+    return None
 
 @check(3000)
 def themes_off():
@@ -4736,23 +4774,216 @@ def themes_off():
     out["back_on_earth"] = window.view.gibs["theme"].shown
     # Галка группы: снята - тема выключена, поставлена - прежняя тема
     # группы снова. Замечание автора от 5 октября 2026 года.
+    from planetx.core import themes
     from planetx.ui.panel import CHECKED, THEME_GROUP_ROLE, UNCHECKED
     panel = window.panel
+    current = themes.BY_KEY[window.theme_key].group
     water = next(g for g in panel.theme_groups
-                 if g.data(0, THEME_GROUP_ROLE) == "water")
+                 if g.data(0, THEME_GROUP_ROLE) == current)
     out["group_checked"] = water.checkState(0) == CHECKED
     water.setCheckState(0, UNCHECKED)
     out["group_off"] = (window.theme_key, window.view.gibs["theme"].shown)
     water.setCheckState(0, CHECKED)
     out["group_on"] = window.theme_key
     window.set_theme("")
-    out["bar_after_off"] = window.theme_bar.isVisible()
+    out["bar_after_off"] = window.timebar.track.point
+    window.myplaces.set_visible_many(state.pop("timed_places", {}))
     out["group_after_off"] = water.checkState(0) == CHECKED
     out["off"] = {"legend": window.theme_legend.isVisible(),
                   "shown": window.view.gibs["theme"].shown,
                   "loader": "theme" in window.gibs_loaders}
     out["gl"] = dict(window.view.gl_errors)
 
+
+# Наложения картинок: на поверхности, фото, на экране. Просьба автора
+# от 5 октября 2026 года, «растры в KML, как в GE».
+def _overlay_png(name, color, size=(400, 200)):
+    from qgis.PyQt.QtGui import QColor, QImage
+    image = QImage(size[0], size[1], QImage.Format.Format_ARGB32
+                   if hasattr(QImage, "Format") else QImage.Format_ARGB32)
+    image.fill(QColor(*color))
+    path = os.path.join(TEMP, name)
+    image.save(path, "PNG")
+    return path
+
+
+def _centre_pixel(view):
+    image = view.grabFramebuffer()
+    c = image.pixelColor(image.width() // 2, image.height() // 2)
+    return [c.red(), c.green(), c.blue()]
+
+
+@check(1000)
+def overlays_open():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("paleo", False)
+    window.set_theme("")
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(20.0, 30.0, 400000.0, 0.0, 0.0))
+    result["overlays"] = {"before": len(window.myplaces.overlays)}
+
+
+@check(3000)
+def overlays_add():
+    window = state["window"]
+    out = result["overlays"]
+    out["centre_before"] = _centre_pixel(window.view)
+    red = _overlay_png("planetx_ov_red.png", (230, 20, 20, 255))
+    blue = _overlay_png("planetx_ov_blue.png", (20, 20, 230, 255),
+                        (300, 200))
+    green = _overlay_png("planetx_ov_green.png", (20, 200, 20, 255),
+                         (120, 60))
+    keys = [window.add_overlay("ground", path=red),
+            window.add_overlay("photo", path=blue),
+            window.add_overlay("screen", path=green)]
+    state["overlay_keys"] = keys
+    out["keys"] = keys
+    out["dialogs"] = len(window.overlay_dialogs)
+    for dialog in list(window.overlay_dialogs.values()):
+        dialog.reject()
+
+
+@check(1500)
+def overlays_check():
+    window = state["window"]
+    out = result["overlays"]
+    view = window.view
+    out["count"] = len(window.myplaces.overlays) - out["before"]
+    out["ground_layers"] = len(window._ground)
+    out["ground_errors"] = window.ground_layers.errors
+    out["in_overlay"] = bool(window.overlay) and any(
+        layer in window.overlay.layers for layer in window._ground) \
+        if hasattr(window.overlay, "layers") else None
+    out["centre_after"] = _centre_pixel(view)
+    out["photos_drawn"] = view.photos.drawn
+    labels = window.screen_overlays.labels
+    out["screen"] = [(l.x(), l.y(), l.width(), l.height(), l.isVisible())
+                     for l in labels]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_ov_ground.png"))
+    window.grab().save(os.path.join(TEMP, "planetx_ov_window.png"))
+    # Перелёт к фото: глаз в точке камеры фото.
+    photo = window.myplaces.find(state["overlay_keys"][1])
+    window._place_action("fly", photo.key)
+    out["photo_camera"] = list(photo.overlay.camera[:3])
+
+
+@check(6000)
+def overlays_photo_check():
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    window = state["window"]
+    out = result["overlays"]
+    view = window.view
+    eye = [float(v) for v in ecef_to_geodetic(view.camera.eye)]
+    out["eye_after_fly"] = [round(v, 4) for v in eye]
+    out["photos_drawn_close"] = view.photos.drawn
+    out["centre_photo"] = _centre_pixel(view)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_ov_photo.png"))
+
+
+@check(1500)
+def overlays_edit():
+    # Рамка картинки на поверхности: поворот полем, растяжение ручкой
+    # угла. Два способа привязки, как у Google Earth.
+    from planetx.core import overlays
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result["overlays"]
+    key = state["overlay_keys"][0]
+    item = window.myplaces.find(key)
+    out["new_box"] = item.overlay.box is not None
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(20.0, 30.0, 400000.0, 0.0, 0.0))
+    window._open_overlay_properties(item)
+    dialog = window.overlay_dialogs[key]
+    out["box_tool"] = type(window.handles.tool).__name__
+    dialog.edges["rotation"].setValue(30.0)
+    north, south, east, west, _ = dialog.overlay.box
+    dialog.set_box(overlays.box_drag(dialog.overlay.box, "corner", 2,
+                                     north + 0.3, east + 0.3))
+    out["box_after"] = [round(v, 4) for v in dialog.overlay.box]
+    # Ручки на глобусе: углы, середина и ромб, середины сторон.
+    window.handles.sync()
+    window.handles.grab()
+    out["handles_shown"] = list(window.handles.shown[:2])
+    out["ids_before"] = list(window._ground_ids)
+
+
+@check(1500)
+def overlays_edit_check():
+    # Четыре угла, непрозрачность и картинка ссылкой на файл, «OK».
+    window = state["window"]
+    out = result["overlays"]
+    key = state["overlay_keys"][0]
+    out["ids_after_drag"] = list(window._ground_ids)
+    dialog = window.overlay_dialogs[key]
+    dialog._to_corners()
+    out["quad_tool"] = type(window.handles.tool).__name__
+    points = dialog.points
+    lat, lon = points[2]
+    points[2] = (lat + 0.2, lon + 0.2)
+    dialog.set_points(points)
+    dialog.opacity.setValue(50)
+    dialog.store.setCurrentIndex(1)
+    dialog.path.setText(os.path.join(TEMP, "planetx_ov_red.png"))
+    dialog._path_edited()
+    dialog.accept()
+    item = window.myplaces.find(key)
+    out["saved_box"] = item.overlay.box
+    out["saved_corner"] = [round(v, 6) for v in item.overlay.corners[2]]
+    out["saved_alpha"] = item.overlay.color[3]
+    out["saved_link"] = (item.image, os.path.basename(item.href))
+    out["tool_after"] = type(window.handles.tool).__name__
+
+
+@check(1500)
+def overlays_kmz():
+    # KMZ - картинки внутрь архива, KML - папка картинок рядом, ссылка
+    # на файл остаётся ссылкой. Чтение обратно.
+    window = state["window"]
+    out = result["overlays"]
+    from planetx.core.kml import read_file
+    out["ground_linked_layers"] = len(window._ground)
+    path = os.path.join(TEMP, "planetx_overlays.kmz")
+    window.export_kml(None, path=path)
+    with open(path, "rb") as stream:
+        back = read_file(stream.read())
+    out["kmz_kinds"] = sorted(i.kind for i in back.overlays())
+    out["kmz_images"] = all(i.image for i in back.overlays())
+    plain = os.path.join(TEMP, "planetx_overlays.kml")
+    window.export_kml(None, path=plain)
+    files = os.path.join(TEMP, "planetx_overlays_files")
+    out["kml_files"] = sorted(os.listdir(files)) \
+        if os.path.isdir(files) else None
+    with open(plain, encoding="utf-8") as stream:
+        text = stream.read()
+    out["kml_hrefs"] = text.count("planetx_overlays_files/")
+    before = len(window.myplaces.overlays)
+    key = window.import_kml(None, path=plain)
+    out["imported"] = len(window.myplaces.overlays) - before
+    linked = [o for o in window.myplaces.overlays[before:]
+              if o.image is None]
+    out["imported_links"] = sorted(os.path.basename(o.href)
+                                   for o in linked)
+    state["overlay_import"] = key
+
+
+@check(1500)
+def overlays_clean():
+    window = state["window"]
+    out = result["overlays"]
+    images_before = window.myplaces.image_layer.featureCount()
+    keys = [k for k in state["overlay_keys"] if k]
+    if state.get("overlay_import"):
+        keys.append(state["overlay_import"])
+    window.myplaces.remove_many(keys)
+    out["left"] = len(window.myplaces.overlays) - out["before"]
+    out["images_removed"] = images_before \
+        - window.myplaces.image_layer.featureCount()
+    out["ground_after"] = len(window._ground)
+    out["screen_after"] = len(window.screen_overlays.labels)
+    out["gl"] = dict(window.view.gl_errors)
 
 @check(2000)
 def section_open():

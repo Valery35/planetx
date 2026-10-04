@@ -11,8 +11,10 @@ LineString и внешнее кольцо Polygon переносятся, MultiG
 у StyleMap - вариант normal, и из вложенного Style. LookAt метки
 становится её видом, core/lookat.py: точка взгляда longitude
 и latitude, расстояние range, азимут heading, наклон tilt. Без точки
-взгляда ею считается сама метка. Camera, модели, наложения картинок
-и сетевые ссылки не переносятся.
+взгляда ею считается сама метка. GroundOverlay, ScreenOverlay
+и PhotoOverlay становятся наложениями KOverlay (core/overlays.py),
+картинка из KMZ берётся по href внутри архива. Модели и сетевые
+ссылки не переносятся.
 
 Значок точки - Icon в IconStyle, адрес узнаётся по имени картинки
 (core/icons.py). Время метки - TimeStamp или TimeSpan, время вида -
@@ -45,13 +47,15 @@ import html
 import io
 import re
 import zipfile
+from urllib.parse import unquote
 from xml.parsers import expat
 
 try:  # внутри плагина QGIS
-    from . import icons, lookat
+    from . import icons, lookat, overlays
 except ImportError:  # headless-тесты
     import icons
     import lookat
+    import overlays
 
 NS = "http://www.opengis.net/kml/2.2"
 GX = "http://www.google.com/kml/ext/2.2"
@@ -187,7 +191,15 @@ class KFolder:
         out = []
         for child in self.children:
             out.extend(child.places() if isinstance(child, KFolder)
-                       else [child])
+                       else [child] if isinstance(child, KPlace) else [])
+        return out
+
+    def overlays(self):
+        """Все наложения внутри, на любой глубине."""
+        out = []
+        for child in self.children:
+            out.extend(child.overlays() if isinstance(child, KFolder)
+                       else [child] if isinstance(child, KOverlay) else [])
         return out
 
 
@@ -226,6 +238,27 @@ class KPlace:
         self.view = view
         self.description = description
 
+
+class KOverlay:
+    """Наложение KML: GroundOverlay, ScreenOverlay или PhotoOverlay.
+
+    overlay - свойства core.overlays.Overlay. image - байты картинки или
+    None, href - адрес картинки из файла. view, time - как у метки."""
+
+    def __init__(self, name, overlay, image=None, href="", visible=True,
+                 description="", view=None, time=None):
+        self.name = name
+        self.overlay = overlay
+        self.image = image
+        self.href = href
+        self.visible = visible
+        self.description = description
+        self.view = view
+        self.time = time
+
+    @property
+    def kind(self):
+        return self.overlay.kind
 
 def _local(tag):
     return tag
@@ -618,6 +651,80 @@ def _list_type(node, styles):
     return style.get("list_type", "")
 
 
+def _xy(node, name, default):
+    """overlayXY, screenXY или size: (x, y, единицы x, единицы y)."""
+    item = _child(node, name)
+    if item is None:
+        return default
+    try:
+        return (float(item.get("x", default[0])),
+                float(item.get("y", default[1])),
+                item.get("xunits", "fraction"),
+                item.get("yunits", "fraction"))
+    except ValueError:
+        return default
+
+
+def _overlay(node, styles, inherited):
+    """KOverlay из GroundOverlay, ScreenOverlay или PhotoOverlay, или
+    None, если места наложения в нём нет."""
+    tag = _local(node.tag)
+    icon = _child(node, "Icon")
+    href = _text(icon, "href").strip() if icon is not None else ""
+    color = kml_color(_text(node, "color"), overlays.WHITE)
+    order = int(_float(node, "drawOrder", 0.0))
+    if tag == "GroundOverlay":
+        quad = _child(node, "LatLonQuad")
+        box = _child(node, "LatLonBox")
+        if quad is not None:
+            corners = _coords(quad)[:4]
+            if len(corners) != 4:
+                return None
+            overlay = overlays.Overlay("ground", corners, color, order)
+        elif box is not None:
+            overlay = overlays.Overlay("ground", color=color, order=order,
+                                       box=(_float(box, "north", 0.0),
+                                            _float(box, "south", 0.0),
+                                            _float(box, "east", 0.0),
+                                            _float(box, "west", 0.0),
+                                            _float(box, "rotation", 0.0)))
+        else:
+            return None
+    elif tag == "ScreenOverlay":
+        base = overlays.Overlay("screen")
+        overlay = overlays.Overlay(
+            "screen", color=color, order=order,
+            overlay_xy=_xy(node, "overlayXY", base.overlay_xy),
+            screen_xy=_xy(node, "screenXY", base.screen_xy),
+            size=_xy(node, "size", base.size),
+            rotation=_float(node, "rotation", 0.0))
+    else:
+        camera = _child(node, "Camera")
+        if camera is None:
+            return None
+        volume = _child(node, "ViewVolume")
+        base = overlays.Overlay("photo")
+        fov = base.fov if volume is None else tuple(
+            _float(volume, name, value) for name, value in zip(
+                ("leftFov", "rightFov", "bottomFov", "topFov"), base.fov))
+        overlay = overlays.Overlay(
+            "photo", color=color, order=order,
+            camera=(_float(camera, "latitude", 0.0),
+                    _float(camera, "longitude", 0.0),
+                    _float(camera, "altitude", 0.0),
+                    _float(camera, "heading", 0.0),
+                    _float(camera, "tilt", 0.0),
+                    _float(camera, "roll", 0.0)),
+            fov=fov, near=_float(volume, "near", base.near)
+            if volume is not None else base.near)
+    anchor = overlay.corners[0] if overlay.corners else (
+        (overlay.camera[0], overlay.camera[1]) if overlay.camera else None)
+    return KOverlay(_text(node, "name"), overlay, href=href,
+                    visible=_visible(node),
+                    description=_text(node, "description"),
+                    view=_view(node, anchor),
+                    time=_time_of(node) or inherited)
+
 def _walk(node, styles, folder, inherited=None):
     for child in node:
         name = _local(child.tag)
@@ -638,6 +745,10 @@ def _walk(node, styles, folder, inherited=None):
             tour = _tour(child)
             if tour is not None:
                 folder.children.append(tour)
+        elif name in ("GroundOverlay", "ScreenOverlay", "PhotoOverlay"):
+            item = _overlay(child, styles, inherited)
+            if item is not None:
+                folder.children.append(item)
 
 
 def read_kml(data, name=""):
@@ -673,7 +784,22 @@ def read_kmz(data, name=""):
             if not names:
                 raise KmlError("no KML in KMZ")
             names.sort(key=lambda n: (n.lower() != "doc.kml", n))
-            return read_kml(archive.read(names[0]), name)
+            tree = read_kml(archive.read(names[0]), name)
+            # Картинки наложений - файлы архива по href, путь от
+            # папки файла KML.
+            files = {n.replace("\\", "/").lower(): n
+                     for n in archive.namelist()}
+            base = names[0].rsplit("/", 1)[0] + "/" \
+                if "/" in names[0] else ""
+            for item in tree.overlays():
+                ref = unquote(item.href.replace("\\", "/"))
+                while ref.startswith("./"):
+                    ref = ref[2:]
+                found = files.get((base + ref).lower()) \
+                    or files.get(ref.lower())
+                if found is not None:
+                    item.image = archive.read(found)
+            return tree
     except zipfile.BadZipFile as error:
         raise KmlError(str(error)) from error
 
@@ -809,7 +935,76 @@ def _look_kml(view):
             lon, lat, heading, tilt, distance)
 
 
-def _folder_kml(folder, indent, tag="Folder"):
+def image_ext(data):
+    """Расширение картинки по первым байтам."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:3] == b"GIF":
+        return "gif"
+    return "jpg"
+
+
+def _xy_kml(tag, value):
+    x, y, xu, yu = value
+    return '<{} x="{:g}" y="{:g}" xunits="{}" yunits="{}"/>'.format(
+        tag, x, y, escape(xu), escape(yu))
+
+
+def _overlay_kml(item, indent, href):
+    """Наложение KML, href - адрес картинки в файле."""
+    pad = "  " * indent
+    overlay = item.overlay
+    tag = {"ground": "GroundOverlay", "screen": "ScreenOverlay",
+           "photo": "PhotoOverlay"}[overlay.kind]
+    parts = ["<{}>".format(tag), "<name>{}</name>".format(escape(item.name))]
+    if item.description:
+        parts.append("<description>{}</description>".format(
+            escape(item.description)))
+    parts += ["<visibility>{}</visibility>".format(int(item.visible)),
+              _time_kml(item.time)]
+    if item.view is not None:
+        parts.append(_look_kml(item.view))
+    parts += ["<color>{}</color>".format(color_kml(overlay.color)),
+              "<drawOrder>{}</drawOrder>".format(overlay.order)]
+    if href:
+        parts.append("<Icon><href>{}</href></Icon>".format(escape(href)))
+    if overlay.kind == "ground":
+        box = overlay.box
+        if box is None:
+            plain = overlays.corners_box(overlay.corners)
+            box = plain + (0.0,) if plain else None
+        if box is not None:
+            parts.append("<LatLonBox><north>{:.8f}</north><south>{:.8f}"
+                         "</south><east>{:.8f}</east><west>{:.8f}</west>"
+                         "<rotation>{:g}</rotation></LatLonBox>".format(
+                             *box))
+        else:
+            parts.append("<gx:LatLonQuad><coordinates>{}</coordinates>"
+                         "</gx:LatLonQuad>".format(
+                             _coord_text(overlay.corners)))
+    elif overlay.kind == "screen":
+        parts += [_xy_kml("overlayXY", overlay.overlay_xy),
+                  _xy_kml("screenXY", overlay.screen_xy),
+                  _xy_kml("size", overlay.size),
+                  "<rotation>{:g}</rotation>".format(overlay.rotation)]
+    else:
+        lat, lon, alt, heading, tilt, roll = overlay.camera
+        left, right, bottom, top = overlay.fov
+        parts += ["<Camera><longitude>{:.8f}</longitude><latitude>{:.8f}"
+                  "</latitude><altitude>{:.3f}</altitude><heading>{:g}"
+                  "</heading><tilt>{:g}</tilt><roll>{:g}</roll>"
+                  "<altitudeMode>absolute</altitudeMode></Camera>".format(
+                      lon, lat, alt, heading, tilt, roll),
+                  "<ViewVolume><leftFov>{:g}</leftFov><rightFov>{:g}"
+                  "</rightFov><bottomFov>{:g}</bottomFov><topFov>{:g}"
+                  "</topFov><near>{:g}</near></ViewVolume>".format(
+                      left, right, bottom, top, overlay.near),
+                  "<Point><coordinates>{:.8f},{:.8f},{:.3f}</coordinates>"
+                  "</Point>".format(lon, lat, alt)]
+    parts.append("</{}>".format(tag))
+    return pad + "".join(p for p in parts if p)
+
+def _folder_kml(folder, indent, tag="Folder", hrefs=None):
     pad = "  " * indent
     lines = [pad + "<{}>".format(tag),
              pad + "  <name>{}</name>".format(escape(folder.name)),
@@ -828,7 +1023,10 @@ def _folder_kml(folder, indent, tag="Folder"):
                      "</listItemType></ListStyle></Style>".format(kind))
     for child in folder.children:
         if isinstance(child, KFolder):
-            lines.extend(_folder_kml(child, indent + 1))
+            lines.extend(_folder_kml(child, indent + 1, hrefs=hrefs))
+        elif isinstance(child, KOverlay):
+            href = (hrefs or {}).get(id(child), child.href)
+            lines.append(_overlay_kml(child, indent + 1, href))
         elif child.tour:
             lines.append(_tour_kml(child, indent + 1))
         else:
@@ -837,18 +1035,29 @@ def _folder_kml(folder, indent, tag="Folder"):
     return lines
 
 
-def write_kml(folder):
-    """Текст KML папки: Document с вложенными Folder и Placemark."""
+def write_kml(folder, hrefs=None):
+    """Текст KML папки: Document с вложенными Folder и Placemark.
+    hrefs - адреса картинок наложений {id(KOverlay): href}, без них -
+    href из исходного файла."""
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<kml xmlns="{}" xmlns:gx="{}">'.format(NS, GX)]
-    lines.extend(_folder_kml(folder, 1, "Document"))
+    lines.extend(_folder_kml(folder, 1, "Document", hrefs))
     lines.append("</kml>")
     return "\n".join(lines) + "\n"
 
 
 def write_kmz(folder):
-    """Байты KMZ: архив с doc.kml."""
+    """Байты KMZ: архив с doc.kml и картинками наложений в files/."""
+    hrefs = {}
+    files = []
+    for n, item in enumerate(folder.overlays()):
+        if item.image:
+            name = "files/overlay{}.{}".format(n + 1, image_ext(item.image))
+            hrefs[id(item)] = name
+            files.append((name, item.image))
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr("doc.kml", write_kml(folder).encode("utf-8"))
+        archive.writestr("doc.kml", write_kml(folder, hrefs).encode("utf-8"))
+        for name, data in files:
+            archive.writestr(name, data)
     return buffer.getvalue()

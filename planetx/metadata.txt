@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.33.0
+version=0.34.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,19 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.33.0 Paleogeography shows land relief and sea depths of
+changelog=0.34.0 The Add submenu of a My Places folder adds a ground
+      overlay, a photo and a screen overlay. A ground overlay is placed
+      by a box with rotation or by four corners, with handles to move,
+      rotate and stretch it, as in Google Earth. The image is kept in
+      the places file or as a link to a file or web address. Google
+      Earth overlays open from KML and KMZ and save back with images.
+      The time slider is one time of the view: a NASA theme takes the
+      day of the right handle, placemarks and earthquakes the range.
+      Without events the slider has one handle and steps over the theme
+      series. The legends stand as one panel. The assistant button left
+      the Search field, a topic typed there becomes placemarks, the
+      assistant settings are in the View properties window.
+      0.33.0 Paleogeography shows land relief and sea depths of
       the past after the PALEOMAP PaleoDEM maps, up to 540 million years
       ago. Changing the age and playing ages no longer stall the view.
       The Planet of Fire, Planet of Water, Gases and Land and Life groups
