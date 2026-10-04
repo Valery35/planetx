@@ -1699,10 +1699,10 @@ EN = {
         "imagery, borders and labels are removed meanwhile.",
     "Палеогеография не загрузилась: {error}":
         "Paleogeography failed to load: {error}",
-    "Возраст в миллионах лет назад. Берега материков на этот возраст "
-    "загружаются из веб-службы GPlates.":
-        "Age in millions of years ago. The coastlines for this age are "
-        "loaded from the GPlates Web Service.",
+    "Возраст в миллионах лет назад. Суша на этот возраст собрана по "
+    "модели Merdith 2021 из веб-службы GPlates.":
+        "Age in millions of years ago. The land for this age is built "
+        "after the Merdith 2021 model from the GPlates Web Service.",
     "Показ от выбранного возраста к настоящему, шаг 5 млн лет.":
         "Plays from the chosen age to the present, 5 Myr per step.",
     "{age} млн лет назад, {period}": "{age} Myr ago, {period}",

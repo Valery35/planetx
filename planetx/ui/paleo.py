@@ -48,6 +48,23 @@ def land_mask(rings, width=paleo.MASK_WIDTH):
         height, width, 4).copy()
 
 
+def mask_from_png(data):
+    """Маска суши для вида из готового PNG planetx-terrain: массив
+    (h, w) uint8, суша 255, или None, если картинка не читается. Одна
+    яркость вместо RGBA - маска 8192 × 4096 занимает 32 МБ, а не 128."""
+    image = QImage.fromData(data, "PNG")
+    if image.isNull():
+        return None
+    image = image.convertToFormat(enum(QImage, "Format",
+                                       "Format_Grayscale8"))
+    width, height, line = image.width(), image.height(), \
+        image.bytesPerLine()
+    bits = image.constBits()
+    bits.setsize(line * height)
+    return np.frombuffer(bits, dtype=np.uint8).reshape(
+        height, line)[:, :width].copy()
+
+
 def period_names():
     return {"quaternary": tr("Четвертичный период"), "neogene": tr("Неоген"),
             "paleogene": tr("Палеоген"), "cretaceous": tr("Мел"),
@@ -76,8 +93,8 @@ class PaleoBar(QFrame):
         self.slider.setInvertedAppearance(True)
         self.slider.setFixedWidth(SLIDER_WIDTH)
         self.slider.setToolTip(tr(
-            "Возраст в миллионах лет назад. Берега материков на этот "
-            "возраст загружаются из веб-службы GPlates."))
+            "Возраст в миллионах лет назад. Суша на этот возраст "
+            "собрана по модели Merdith 2021 из веб-службы GPlates."))
         self.slider.valueChanged.connect(self._moved)
         layout.addWidget(self.slider)
         self.play = QToolButton(self)

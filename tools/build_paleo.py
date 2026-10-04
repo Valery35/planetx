@@ -33,7 +33,9 @@ import time
 import urllib.error
 import urllib.request
 
+import numpy as np
 from PIL import Image, ImageDraw
+from scipy import ndimage
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "planetx", "core"))
@@ -46,6 +48,12 @@ TRIES = 3
 TIMEOUT = 300  # с на ответ службы
 MASK_WIDTH = paleo.MASK_FILE_WIDTH
 FOLDER = os.path.join("paleo", "merdith2021")
+# Щели в материках, fill_slivers. Пороги предложил помощник по маскам
+# возрастов 0 и 5, автор утвердил их 4 октября 2026 года.
+EARTH_KM = 40075.0  # длина экватора
+SMALL = 20000.0  # км², замкнутая вода меньше - суша
+NARROW = 60.0  # км, средняя ширина
+LONG = 8.0  # площадь / (π · ширина²)
 
 
 def ages():
@@ -109,7 +117,53 @@ def draw_mask(rings, width=MASK_WIDTH):
                    (90.0 - lat) / 180.0 * height) for lat, lon in points]
             if len(xy) >= 3:
                 draw.polygon(xy, fill=1)
-    return image
+    return Image.fromarray(fill_slivers(np.array(image, dtype=bool)))
+
+
+def fill_slivers(land):
+    """Щели между кусками суши - сушей.
+
+    Модель режет берега по плитам, при сборке на прошлый возраст куски
+    расходятся, и в материке остаются полосы воды, например в Гималаях
+    665 тыс. км² при средней ширине 105 км на возрасте 5. Сушей
+    становится замкнутая вода - не связанная с самым большим водоёмом,
+    океаном, - если она меньше SMALL, уже NARROW или вытянута больше
+    LONG (площадь / (π · ширина²), ширина - 2 · площадь / периметр).
+    У Чёрного моря, Каспия, Великих озёр вытянутость 1.9-3.2, у щели
+    в Гималаях 19, в Альпах 5.4 при ширине 43 км. Проливы, соединённые
+    с океаном, не трогаются. Края по долготе сшиваются."""
+    height, width = land.shape
+    water = ~land
+    labels, count = ndimage.label(water)
+    parent = np.arange(count + 1)
+
+    def root(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for a, b in zip(labels[:, 0], labels[:, -1]):
+        if a and b:
+            parent[root(a)] = root(b)
+    roots = np.array([root(i) for i in range(count + 1)])
+    labels = roots[labels]
+    lat = 90.0 - (np.arange(height) + 0.5) / height * 180.0
+    scale = np.repeat(np.cos(np.radians(lat))[:, None], width, axis=1)
+    pixel = EARTH_KM / width
+    area = np.bincount(labels.ravel(), weights=(scale * pixel ** 2).ravel(),
+                       minlength=count + 1)
+    edge = water & ~ndimage.binary_erosion(water, border_value=1)
+    perimeter = np.bincount(labels[edge], weights=scale[edge] * pixel,
+                            minlength=count + 1)
+    area[0] = 0.0
+    ocean = int(np.argmax(area))
+    wide = 2.0 * area / np.maximum(perimeter, 1e-9)
+    long = area / (np.pi * np.maximum(wide, 1e-9) ** 2)
+    fill = (area > 0) & ((area < SMALL) | (wide < NARROW) | (long > LONG))
+    fill[ocean] = False
+    fill[0] = False
+    return land | fill[labels]
 
 
 def build(raw, store, only=()):

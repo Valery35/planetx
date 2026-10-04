@@ -300,10 +300,14 @@ billion years ago, after the plate motion model of Merdith et al.
 2021 from the GPlates web service. A slider in the bottom left
 corner of the view sets the age in millions of years, the geological
 period is named next to it. Land is filled with a plain colour over
-the ocean. Today's imagery, borders and labels are removed for that
-time. The coastlines for each age are requested from the service,
-the first showing of an age needs the internet. When the window
-opens, the row is off.
+the ocean. Today's imagery, borders, labels and relief are removed
+for that time, the relief setting itself does not change. The land
+for each age in steps of 5 million years is prepared in advance as
+a map 8192 pixels wide, about 5 km at the equator, and loads from the
+planetx-terrain repository, the first showing of an age needs the
+internet. Narrow enclosed strips of water between the pieces of land
+that the model cuts continents into along plates are filled as land
+on these maps. When the window opens, the row is off.
 
 The Plate boundaries row shows the lithospheric plate boundaries after
 the PB2002 model (Bird, 2003). Red lines are plates moving apart at

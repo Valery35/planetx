@@ -4352,7 +4352,9 @@ def paleo_after():
 # Палеогеография глазами пользователя: возрасты подряд, время ожидания
 # ответа службы и кадры издалека и вблизи берега. Жалоба автора от
 # 4 октября 2026 года - «палеогеография очень плохо работает».
-PALEO_AGES = (0, 100, 250, 600)
+# Маски суши - с локальной копии planetx-terrain, если её указывает
+# PLANETX_TERRAIN_DIR, иначе из хранилища.
+PALEO_AGES = (0, 5, 100, 250)
 
 
 @check(1000)
@@ -4362,9 +4364,19 @@ def paleo_tour():
     window.set_body("earth")
     window.view.navigator.stop()
     window.view.navigator.set_pose(Pose(20.0, 20.0, 20000000.0, 0.0, 0.0))
+    folder = os.environ.get("PLANETX_TERRAIN_DIR")
+    if folder:
+        from qgis.PyQt.QtCore import QUrl
+        window.paleo_mask_url = QUrl.fromLocalFile(os.path.join(
+            folder, "paleo", "merdith2021")).toString() + "/{age}.png"
+    window.paleo_cache.clear()
+    relief_before = window.view.store.scale
     window.set_extra("paleo", True)
     result["paleo_tour"] = {"ages": {}, "index": 0,
-                            "started": time.monotonic()}
+                            "started": time.monotonic(),
+                            "relief_before": relief_before,
+                            "relief_on": window.view.store.scale,
+                            "pending_on": window.view.data_pending}
 
 
 @check(500)
@@ -4387,13 +4399,13 @@ def paleo_tour_run():
         return 500
     if view.load_missing and waited < 90.0:
         return 500
-    rings = window.paleo_cache.get(age)
+    entry = window.paleo_cache.get(age)
     view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_paleo_%d.png" % age))
     out["ages"][str(age)] = {
         "wait_s": round(waited, 1),
-        "rings": len(rings) if rings is not None else None,
-        "points": sum(len(r) for r in rings) if rings else 0,
+        "kind": entry[0] if entry else None,
+        "pending": view.data_pending,
         "land_share": _land_share(view),
         "label": window.paleo_bar.label.text()}
     out["index"] = index + 1
@@ -4422,6 +4434,7 @@ def paleo_close_check():
     out["cache"] = sorted(window.paleo_cache)
     out["message"] = window.message[0]
     window.set_extra("paleo", False)
+    out["relief_off"] = window.view.store.scale
     out["gl"] = dict(window.view.gl_errors)
 
 

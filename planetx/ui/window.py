@@ -85,7 +85,7 @@ from .section import SectionDialog
 from .assistant import (AssistantDialog, current_provider, ready,
                         search_enabled)
 from .myplaces import MyPlaces
-from .paleo import PaleoBar, land_mask
+from .paleo import PaleoBar, land_mask, mask_from_png
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_shown, set_visible_on_map,
@@ -478,6 +478,7 @@ class GlobeWindow(QWidget):
         self.paleo_age = 0
         self.paleo_cache = {}
         self._paleo_replies = {}
+        self.paleo_mask_url = paleo.MASK_URL
         self.paleo_bar.ready = lambda: self.paleo_age in self.paleo_cache
         # Землетрясения: события сводки и ответ на её запрос.
         self.quake_events = []
@@ -1177,8 +1178,12 @@ class GlobeWindow(QWidget):
         self._changed()
 
     def _relief_target(self):
-        """Масштаб рельефа. У тела без высот рельефа нет."""
+        """Масштаб рельефа. У тела без высот рельефа нет. В палеогеографии
+        рельеф выключен: нынешние горы на берегах прошлого лишние, решение
+        автора от 4 октября 2026 года. Настройка рельефа не меняется."""
         if not self.planet.earth and self.planet.terrain is None:
+            return 0.0
+        if getattr(self, "extras", {}).get("paleo") and self._paleo_on():
             return 0.0
         return self._scale if self._relief else 0.0
 
@@ -1322,12 +1327,12 @@ class GlobeWindow(QWidget):
                 slabs.url_of(code, self.slab_base),
                 lambda data, error, code=code: self._slab_done(
                     code, data, error))
-        self.view.data_pending = len(self._slab_replies)
+        self._count_pending()
         self.view.update()
 
     def _slab_done(self, code, data, error):
         self._slab_replies.pop(code, None)
-        self.view.data_pending = len(self._slab_replies)
+        self._count_pending()
         if data is None:
             self.slab_errors[code] = error
         else:
@@ -1373,12 +1378,16 @@ class GlobeWindow(QWidget):
         shown = self._paleo_on()
         self.paleo_bar.setVisible(shown)
         self.view.plain_base = paleo.OCEAN if shown else None
+        if self._relief_target() != self.view.store.scale:
+            self.view.set_relief(self._relief_target())
+            self._place_quakes()
         self._place_attribution()
         if not shown:
             self.paleo_bar.stop()
             replies, self._paleo_replies = self._paleo_replies, {}
             for reply in replies.values():
                 reply.abort()
+            self._count_pending()
             self._show_paleo([])
             return
         self._paleo_age(self.paleo_bar.age())
@@ -1394,34 +1403,65 @@ class GlobeWindow(QWidget):
         else:
             self._show_paleo(rings)
 
+    def _count_pending(self):
+        """Ждущие ответы зон плит и масок палеогеографии - в счётчик
+        загрузки вида, его показывает значок загрузки."""
+        self.view.data_pending = len(self._slab_replies) \
+            + len(self._paleo_replies)
+
     def _paleo_fetch(self, age):
-        """Запрос берегов на возраст age, если его ещё нет."""
+        """Запрос маски суши на возраст age из planetx-terrain, если её
+        ещё нет. Без готовой маски берега просятся у службы GPlates."""
         if age in self.paleo_cache or age in self._paleo_replies \
                 or not 0 <= age <= paleo.MAX_AGE:
             return
-        self._paleo_replies[age] = fetch_json(
-            paleo.url(age),
-            lambda data, error, age=age: self._paleo_done(age, data,
-                                                          error))
+        self._paleo_replies[age] = fetch_bytes(
+            self.paleo_mask_url.format(age=age),
+            lambda data, error, age=age: self._paleo_mask_done(
+                age, data, error))
+        self._count_pending()
 
-    def _paleo_done(self, age, data, error):
+    def _paleo_mask_done(self, age, data, error):
         if self._paleo_replies.pop(age, None) is None:
             # Строку выключили, ответ уже не нужен.
             return
+        if not data or not data.startswith(b"\x89PNG"):
+            # Маски нет, например хранилище ещё без неё, - берега
+            # просятся у службы GPlates.
+            self._paleo_replies[age] = fetch_json(
+                paleo.url(age),
+                lambda data, error, age=age: self._paleo_done(age, data,
+                                                              error))
+            return
+        self.paleo_cache[age] = ("png", data)
+        self._count_pending()
+        if age == self.paleo_age and self._paleo_on():
+            self._show_paleo(self.paleo_cache[age])
+
+    def _paleo_done(self, age, data, error):
+        if self._paleo_replies.pop(age, None) is None:
+            return
+        self._count_pending()
         if data is None:
             self.paleo_bar.stop()
             self.message = (tr("Палеогеография не загрузилась: {error}",
                                error=error), time.monotonic())
             self._show_state()
             return
-        self.paleo_cache[age] = paleo.parse(data)
+        self.paleo_cache[age] = ("rings", paleo.parse(data))
         if age == self.paleo_age and self._paleo_on():
             self._show_paleo(self.paleo_cache[age])
 
-    def _show_paleo(self, rings):
-        """Суша на возраст ползунка: маска для вида, [] - убрать."""
+    def _show_paleo(self, entry):
+        """Суша на возраст ползунка: маска для вида, [] - убрать. entry -
+        ("png", байты готовой маски) или ("rings", контуры службы)."""
         self.view.land_color = paleo.LAND
-        self.view.set_land(land_mask(rings) if rings else None)
+        mask = None
+        if entry and entry[0] == "png":
+            mask = mask_from_png(entry[1])
+        elif entry and entry[1]:
+            mask = land_mask(entry[1])
+        self.view.set_land(mask)
         self._show_attribution()
         if self.paleo_bar.timer.isActive():
             # Показ: следующий возраст просится заранее.

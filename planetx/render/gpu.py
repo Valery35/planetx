@@ -385,12 +385,20 @@ def create_texture(image, anisotropy=1.0):
     levels = image if isinstance(image, list) else [image]
     texture = GL.glGenTextures(1)
     GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
-    GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
     for level, rgba in enumerate(levels):
         rgba = np.ascontiguousarray(rgba, dtype=np.uint8)
         h, w = rgba.shape[:2]
-        GL.glTexImage2D(GL.GL_TEXTURE_2D, level, GL.GL_RGBA8, w, h, 0,
-                        GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, rgba)
+        if rgba.ndim == 2:
+            # Одна яркость, например маска суши палеогеографии. Шейдер
+            # читает красный канал.
+            GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, level, GL.GL_R8, w, h, 0,
+                            GL.GL_RED, GL.GL_UNSIGNED_BYTE, rgba)
+        else:
+            GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, level, GL.GL_RGBA8, w, h, 0,
+                            GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, rgba)
+    GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
     if len(levels) > 1:
         count = len(levels)
     else:
