@@ -16,6 +16,10 @@ import numpy as np
 from OpenGL import GL
 
 from ..core import quakes as core
+from ..core.ellipsoid import geodetic_to_ecef
+from ..core.fires import colors as fire_colors
+from ..core.fires import sizes as fire_sizes
+from ..core.subsurface import display
 from . import gpu
 
 GL_PROGRAM_POINT_SIZE = 0x8642
@@ -75,6 +79,8 @@ class Quakes:
         # Промежуток шкалы времени (от, до) или None - видно всё.
         self.window = None
         self.drawn = 0
+        # Линии от эпицентра к очагу. У пожаров (FirePoints) их нет.
+        self.stems = True
 
     def init_gl(self):
         self.program = gpu.build_program(VERTEX, FRAGMENT)
@@ -132,19 +138,23 @@ class Quakes:
         if not np.any(seen):
             return
         focus = self.focus[seen] - eye
-        epi = self.epicenter[seen] - eye
         colors = self.colors[seen]
         n = len(focus)
-        stems = np.zeros((2 * n, 8), dtype=np.float32)
-        stems[0::2, 0:3] = epi
-        stems[1::2, 0:3] = focus
-        stems[:, 4:8] = np.repeat(colors, 2, axis=0)
-        stems[:, 7] = STEM_ALPHA
         dots = np.zeros((n, 8), dtype=np.float32)
         dots[:, 0:3] = focus
         dots[:, 3] = self.sizes[seen]
         dots[:, 4:8] = colors
-        data = np.ascontiguousarray(np.vstack([stems, dots]))
+        lines = 0
+        if self.stems:
+            epi = self.epicenter[seen] - eye
+            stems = np.zeros((2 * n, 8), dtype=np.float32)
+            stems[0::2, 0:3] = epi
+            stems[1::2, 0:3] = focus
+            stems[:, 4:8] = np.repeat(colors, 2, axis=0)
+            stems[:, 7] = STEM_ALPHA
+            lines = 2 * n
+            dots = np.vstack([stems, dots])
+        data = np.ascontiguousarray(dots)
         mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
                                    dtype=np.float32)
         loc = self.locations
@@ -161,10 +171,11 @@ class Quakes:
         GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         try:
-            GL.glUniform1f(loc["u_points"], 0.0)
-            GL.glDrawArrays(GL.GL_LINES, 0, 2 * n)
+            if lines:
+                GL.glUniform1f(loc["u_points"], 0.0)
+                GL.glDrawArrays(GL.GL_LINES, 0, lines)
             GL.glUniform1f(loc["u_points"], 1.0)
-            GL.glDrawArrays(GL.GL_POINTS, 2 * n, n)
+            GL.glDrawArrays(GL.GL_POINTS, lines, n)
             self.drawn = n
         finally:
             GL.glBindVertexArray(0)
@@ -172,3 +183,34 @@ class Quakes:
             GL.glDisable(GL.GL_BLEND)
             GL.glDisable(GL_PROGRAM_POINT_SIZE)
             GL.glEnable(GL.GL_DEPTH_TEST)
+
+
+class FirePoints(Quakes):
+    """Очаги пожаров окна глобуса: точки на рельефе без линий, цвет
+    и размер по мощности излучения (core/fires.py). Очагов десятки
+    тысяч, отбор и сдвиг от глаза - одним проходом NumPy."""
+
+    def __init__(self):
+        super().__init__()
+        self.stems = False
+        self.fires = None
+
+    def set_fires(self, fires, scale, ground):
+        """Очаги core.fires.Fires или None. scale - масштаб рельефа,
+        ground(lats, lons) - настоящие отметки рельефа."""
+        self.fires = fires if fires is not None and len(fires) else None
+        if self.fires is None:
+            self.focus = np.zeros((0, 3))
+            self.epicenter = self.focus
+            return
+        lat, lon = fires.lat, fires.lon
+        g = np.asarray(ground(lat, lon), dtype=np.float64)
+        self.focus = geodetic_to_ecef(lat, lon, display(g, scale, g))
+        self.epicenter = self.focus
+        rgb = fire_colors(fires.frp)
+        self.colors = np.hstack([rgb / 255.0, np.full((len(rgb), 1), 0.9)]) \
+            .astype(np.float32)
+        self.sizes = fire_sizes(fires.frp).astype(np.float32)
+        self.lats = lat
+        self.lons = lon
+        self.times = fires.time

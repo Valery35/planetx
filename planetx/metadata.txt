@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.37.0
+version=0.38.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.37.0 With the Sun row city lights shine on the night side
+changelog=0.38.0 The Fires row of the Planet of Fire group shows fire
+      spots over the last 24 hours from the NASA FIRMS feed. Fires are
+      chosen in the same list as the NASA themes, either the fires or one
+      theme is on. The colour and size of a dot show the radiative power,
+      the spots stand on the time slider, a click in the Identify mode
+      shows the power and the image time. A layer legend shows also when
+      it is the first one on the legend panel.
+      0.37.0 With the Sun row city lights shine on the night side
       of the Earth from the NASA Black Marble image. In the twilight they
       fade together with the night, under clouds they are weaker.
       0.36.0 A height raster of the QGIS project becomes the globe

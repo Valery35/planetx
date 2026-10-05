@@ -1494,6 +1494,25 @@ EN = {
     "Тоннели Vegas Loop": "Vegas Loop tunnels",
     "Аральское море": "Aral Sea",
     "Рельеф глобуса": "Globe terrain",
+    "Пожары": "Fires",
+    "Очаги пожаров за последние 24 часа по снимкам VIIRS спутника "
+    "NOAA-20, сводка NASA FIRMS. Точка стоит на месте очага, цвет и "
+    "размер показывают мощность излучения. Сводка загружается при "
+    "включении строки, около 6 МБ.":
+        "Fire spots over the last 24 hours from VIIRS images of the "
+        "NOAA-20 satellite, NASA FIRMS feed. A dot stands at the fire, "
+        "its colour and size show the radiative power. The feed is "
+        "loaded when the row is switched on, about 6 MB.",
+    "Мощность пожара, МВт": "Fire power, MW",
+    "Сводка пожаров не загрузилась: {error}":
+        "The fire feed did not load: {error}",
+    "Мощность излучения": "Radiative power",
+    "{value} МВт": "{value} MW",
+    "Время снимка, UTC": "Image time, UTC",
+    "Достоверность": "Confidence",
+    "Снимок": "Image",
+    "ночной": "night",
+    "дневной": "day",
     "Карьер, свой рельеф": "Quarry, own terrain",
     "Карьер, съёмка 1 м": "Quarry, 1 m survey",
     "Высоты растра заменяют рельеф глобуса в его охвате. На полосе вдоль "
@@ -1827,14 +1846,15 @@ EN = {
         "left corner of the view sets the age. The imagery, borders and "
         "labels are removed meanwhile.",
     "Планета огня": "Planet of Fire",
-    "Дым, аэрозоль и угарный газ пожаров и промышленности по данным "
-    "NASA. Включена одна тема из всех групп. Флажок группы выключает её"
-    " тему и включает снова. День темы задаёт правый бегунок шкалы "
-    "времени.":
-        "Smoke, aerosol and carbon monoxide of fires and industry from NASA"
-        " data. One theme of all groups is on. The group check box turns "
-        "its theme off and on again. The day of the theme is set by the "
-        "right handle of the time slider.",
+    "Очаги пожаров, дым, аэрозоль и угарный газ пожаров и "
+    "промышленности по данным NASA. Включены пожары или одна тема из "
+    "всех групп. Флажок группы выключает её выбор и включает снова. День "
+    "темы задаёт правый бегунок шкалы времени.":
+        "Fire spots, smoke, aerosol and carbon monoxide of fires and "
+        "industry from NASA data. Either the fires or one theme of all "
+        "groups is on. The group check box turns its choice off and on "
+        "again. The day of the theme is set by the right handle of the "
+        "time slider.",
     "Планета воды": "Planet of Water",
     "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
     "наводнения по данным NASA. Включена одна тема из всех групп. "

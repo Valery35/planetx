@@ -43,7 +43,7 @@ from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
 from .subsurface import ImageWalls, Subsurface
-from .quakes import Quakes
+from .quakes import FirePoints, Quakes
 from .constellations import Constellations
 from .sky import Sky
 from .stars import Stars
@@ -347,6 +347,8 @@ class GlobeView(QOpenGLWidget):
         self._wedged = (None, None, [])
         # Землетрясения: очаги точками поверх поверхности.
         self.quakes = Quakes()
+        # Пожары NASA FIRMS: очаги точками на рельефе.
+        self.fires = FirePoints()
         self.surface_alpha = 1.0
         self.floor = None
         # Дно океана: высоты Земли ниже нуля не обнуляются, над ними
@@ -1288,6 +1290,7 @@ class GlobeView(QOpenGLWidget):
         self.cutaway_slabs.init_gl()
         self.section_wall.init_gl()
         self.quakes.init_gl()
+        self.fires.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
         self.constellations.init_gl()
@@ -1311,6 +1314,7 @@ class GlobeView(QOpenGLWidget):
         self.cutaway_slabs.release_gl()
         self.section_wall.release_gl()
         self.quakes.release_gl()
+        self.fires.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
         self.constellations.release_gl()
@@ -1873,6 +1877,10 @@ class GlobeView(QOpenGLWidget):
             self.section_wall.draw(self.camera)
         else:
             self.section_wall.drawn = 0
+        if self.fires.fires is not None and not self.show_holes:
+            self.fires.draw(self.camera, ratio)
+        else:
+            self.fires.drawn = 0
         if self.quakes.events and not self.show_holes:
             self.quakes.draw(self.camera, ratio)
         else:

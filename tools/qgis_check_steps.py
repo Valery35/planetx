@@ -5342,6 +5342,93 @@ def lights_check():
     out["off_loader"] = "lights" in window.gibs_loaders
 
 
+@check(300)
+def fires_on():
+    # Пожары NASA FIRMS, решение автора от 5 октября 2026 года. Южная
+    # Америка с 4000 км - в октябре там сезон пожаров.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    for key in ("cutaway", "quakes", "sun", "clouds", "temperature"):
+        window.set_extra(key, False)
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(-12.0, -55.0, 4.0e6, 0.0, 0.0))
+    started = time.monotonic()
+    window.set_extra("fires", True)
+    state["fires_started"] = started
+    result["fires"] = {"reply": window._fire_reply is not None}
+
+
+@check(2000)
+def fires_wait():
+    window = state["window"]
+    if window._fire_reply is not None \
+            and time.monotonic() - state["fires_started"] < 90.0:
+        return 500
+    result["fires"]["load_s"] = round(time.monotonic()
+                                      - state["fires_started"], 1)
+
+
+@check(1500)
+def fires_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["fires"]
+    data = window.fire_data
+    out["count"] = len(data) if data is not None else None
+    out["message"] = window.message[0]
+    out["drawn"] = view.fires.drawn
+    out["legend"] = [not window.fire_legend.isHidden(),
+                     window.legend_panel.isVisible()]
+    out["attribution"] = "FIRMS" in window.attribution.text()
+    out["timebar_extent"] = window.timebar.extent is not None \
+        if hasattr(window.timebar, "extent") else None
+    out["time_available"] = window.toolbar.time.isEnabled() \
+        if hasattr(window.toolbar, "time") else None
+    started = time.perf_counter()
+    for _ in range(5):
+        image = view.grabFramebuffer()
+    out["frame_ms"] = round((time.perf_counter() - started) / 5 * 1000, 1)
+    image.save(os.path.join(TEMP, "planetx_fires.png"))
+    window.grab().save(os.path.join(TEMP, "planetx_fires_window.png"))
+    # Опрос: щелчок по самому мощному видимому очагу.
+    layer = view.fires
+    pixels, front = view.camera.project(layer.focus)
+    w, h = view.camera.width, view.camera.height
+    inside = front & (pixels[:, 0] > 0) & (pixels[:, 0] < w) \
+        & (pixels[:, 1] > 0) & (pixels[:, 1] < h)
+    if np.any(inside):
+        n = int(np.nonzero(inside)[0][np.argmax(data.frp[inside])])
+        found = window._identify_fires(float(pixels[n, 0]),
+                                       float(pixels[n, 1]))
+        out["identify"] = [(name, dict(values))
+                           for name, values, _ in found[0][1][:1]] \
+            if found else []
+    # Строка «Пожары» - первая в группе «Планета огня», переключатель
+    # общего выбора тем: тема снимает пожары, пожары снимают тему.
+    panel = window.panel
+    row = panel.extra_items["fires"]
+    group = row.parent()
+    out["row_parent"] = group.text(0) if group is not None else None
+    from qgis.PyQt.QtCore import Qt
+    checked = _qt(Qt, "CheckState", "Checked")
+    smoke = panel.theme_items["smoke"]
+    smoke.setCheckState(0, checked)
+    QgsApplication.processEvents()
+    after_theme = [window.theme_key, bool(window.extras.get("fires")),
+                   row.checkState(0) == checked]
+    row.setCheckState(0, checked)
+    QgsApplication.processEvents()
+    after_fires = [window.theme_key, bool(window.extras.get("fires")),
+                   smoke.checkState(0) == checked,
+                   group.checkState(0) == checked]
+    out["radio"] = [after_theme, after_fires]
+    out["gl"] = dict(view.gl_errors)
+    window.set_extra("fires", False)
+    out["off"] = [view.fires.fires is None, window.fire_legend.isVisible()]
+
+
 @check(1500)
 def overlays_clean():
     window = state["window"]

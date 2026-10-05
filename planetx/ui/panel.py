@@ -60,11 +60,12 @@ BUILDINGS = "buildings"
 SUN = "sun"
 SLOPE, ASPECT = "slope", "aspect"
 QUAKES = "quakes"
+FIRES = "fires"
 CUTAWAY = "cutaway"
 PALEO = "paleo"
 PLATES = "plates"
 EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT,
-          QUAKES, PLATES, CUTAWAY, PALEO)
+          QUAKES, FIRES, PLATES, CUTAWAY, PALEO)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
@@ -192,6 +193,14 @@ def hint_text(item):
     if item.kind == "constellation":
         return tr("{name} - созвездие", name=item.text)
     return tr("{name} - прежний запрос", name=item.text)
+
+
+def theme_group(key):
+    """Группа темы key или пожаров, "" - без группы."""
+    if key == FIRES:
+        return "fire"
+    theme = themes.BY_KEY.get(key)
+    return theme.group if theme is not None else ""
 
 
 class RadioDelegate(QStyledItemDelegate):
@@ -652,6 +661,12 @@ class LayerPanel(QWidget):
                     "глубине, линия ведёт к эпицентру на поверхности. "
                     "Цвет показывает глубину очага, размер - магнитуду. "
                     "Сводка загружается при включении строки.")),
+                (FIRES, tr("Пожары"), tr(
+                    "Очаги пожаров за последние 24 часа по снимкам VIIRS "
+                    "спутника NOAA-20, сводка NASA FIRMS. Точка стоит на "
+                    "месте очага, цвет и размер показывают мощность "
+                    "излучения. Сводка загружается при включении строки, "
+                    "около 6 МБ.")),
                 (PLATES, tr("Границы плит"), tr(
                     "Границы литосферных плит по модели PB2002. Красные - "
                     "раздвиг плит на хребтах и рифтах, зелёные - сдвиг "
@@ -714,6 +729,17 @@ class LayerPanel(QWidget):
                 item.setFlags(item.flags() | CHECKABLE)
                 item.setCheckState(0, UNCHECKED)
                 self.theme_items[theme.key] = item
+            if group_key == "fire":
+                # Пожары - первой строкой «Планеты огня», переключателем
+                # в общем выборе тем: пожары или одна тема. Просьбы
+                # автора от 5 октября 2026 года.
+                fires = self.extra_items[FIRES]
+                self.geo.takeTopLevelItem(
+                    self.geo.indexOfTopLevelItem(fires))
+                group.insertChild(0, fires)
+                fires.setData(0, THEME_ROLE, FIRES)
+                fires.setData(0, RADIO_ROLE, True)
+                self.theme_items[FIRES] = fires
         self.geo.itemChanged.connect(self._geo_changed)
         # Слои проекта - свой список, отдельно от меток.
         # Растры проекта - рельеф глобуса, отметки меню слоя.
@@ -958,8 +984,8 @@ class LayerPanel(QWidget):
             parent = item.parent()
             if parent is not None:
                 parent.setDisabled(off)
-        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, PLATES,
-                    CUTAWAY, PALEO):
+        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, FIRES,
+                    PLATES, CUTAWAY, PALEO):
             self.extra_items[key].setDisabled(not earth)
         for group in self.theme_groups:
             group.setDisabled(not earth)
@@ -969,18 +995,20 @@ class LayerPanel(QWidget):
         self.layers.setEnabled(earth)
 
     def set_theme(self, key):
-        """Отметить тему key, "" - ни одной. Сигналы не идут."""
+        """Отметить тему key, "" - ни одной, FIRES - пожары. Сигналы
+        не идут."""
         self._theme = key or ""
-        current = themes.BY_KEY.get(self._theme)
-        if current is not None:
-            self._group_last[current.group] = current.key
+        current = theme_group(self._theme)
+        if current:
+            self._group_last[current] = self._theme
         self.geo.blockSignals(True)
         for name, item in self.theme_items.items():
             item.setCheckState(0, CHECKED if name == self._theme
                                else UNCHECKED)
+        self._extras[FIRES] = self._theme == FIRES
         for group in self.theme_groups:
-            on = current is not None \
-                and group.data(0, THEME_GROUP_ROLE) == current.group
+            on = bool(current) \
+                and group.data(0, THEME_GROUP_ROLE) == current
             group.setCheckState(0, CHECKED if on else UNCHECKED)
         self.geo.blockSignals(False)
 
@@ -1004,8 +1032,7 @@ class LayerPanel(QWidget):
             chosen = self._group_last.get(group) or next(
                 t.key for t in themes.THEMES if t.group == group)
         else:
-            current = themes.BY_KEY.get(self._theme)
-            if current is None or current.group != group:
+            if theme_group(self._theme) != group:
                 self.set_theme(self._theme)
                 return
             chosen = ""

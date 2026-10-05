@@ -10,11 +10,14 @@
 Цвета и подписи берутся из core/temperature.py. Виджет рисует себя
 сам, фон полупрозрачный, как у подписи источников.
 """
+import math
+
 from qgis.PyQt.QtCore import QEvent, QRectF, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QFontMetrics, QLinearGradient, QPainter
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
-from ..core import cutaway, insolation, quakes, slope, temperature
+from ..core import (cutaway, fires, insolation, quakes, slope,
+                    temperature)
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -205,6 +208,50 @@ class QuakeLegend(QWidget):
         for depth in quakes.DEPTH_TICKS:
             x = bar.left() + depth / deepest * BAR_WIDTH
             text = "{:g}".format(depth)
+            width = metrics.horizontalAdvance(text)
+            left = min(max(x - width / 2, 0.0), self.width() - width)
+            painter.drawText(int(left),
+                             int(bar.bottom()) + 2 + metrics.ascent(), text)
+        painter.end()
+
+
+class FireLegend(QWidget):
+    """Шкала мощности излучения очагов пожаров, МВт, логарифмическая,
+    цвета core.fires."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(enum(Qt, "WidgetAttribute",
+                               "WA_TransparentForMouseEvents"))
+        line = QFontMetrics(self.font()).height()
+        self.setFixedSize(BAR_WIDTH + 2 * PAD + 8,
+                          line * 2 + BAR_HEIGHT + 2 + PAD)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        _background(self, painter)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        top = PAD // 2
+        painter.setPen(TEXT)
+        painter.drawText(PAD, top + metrics.ascent(),
+                         tr("Мощность пожара, МВт"))
+        bar = QRectF(PAD + 4, top + line + 1, BAR_WIDTH, BAR_HEIGHT)
+        low = math.log10(fires.FRP_STOPS[0][0])
+        high = math.log10(fires.FRP_STOPS[-1][0])
+        gradient = QLinearGradient(bar.left(), 0, bar.right(), 0)
+        for frp, rgb in fires.FRP_STOPS:
+            gradient.setColorAt((math.log10(frp) - low) / (high - low),
+                                QColor(*rgb))
+        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+        painter.setBrush(gradient)
+        painter.drawRect(bar)
+        painter.setPen(TEXT)
+        for frp in fires.FRP_TICKS:
+            x = bar.left() + (math.log10(frp) - low) / (high - low) \
+                * BAR_WIDTH
+            text = "{:g}".format(frp)
             width = metrics.horizontalAdvance(text)
             left = min(max(x - width / 2, 0.0), self.width() - width)
             painter.drawText(int(left),
@@ -497,8 +544,12 @@ class LegendPanel(QWidget):
         self.refit()
 
     def eventFilter(self, watched, event):
+        # ShowToParent и HideToParent приходят и при скрытой панели,
+        # Show и Hide шкале скрытой панели Qt не шлёт.
         if event.type() in (enum(QEvent, "Type", "Show"),
                             enum(QEvent, "Type", "Hide"),
+                            enum(QEvent, "Type", "ShowToParent"),
+                            enum(QEvent, "Type", "HideToParent"),
                             enum(QEvent, "Type", "Resize")):
             QTimer.singleShot(0, self.refit)
         return False

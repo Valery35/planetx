@@ -53,6 +53,7 @@ from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
+from ..core import fires as fires_core
 from ..core import (crust, cutaway, insolation, pick, plates, quakes,
                     overlays, section, slabs, themes, viewshed)
 from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
@@ -74,8 +75,9 @@ from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels
-from .legend import (BedsLegend, CutawayLegend, InsolationLegend,
-                     LegendPanel, QuakeLegend, SlopeLegend,
+from .legend import (BedsLegend, CutawayLegend, FireLegend,
+                     InsolationLegend, LegendPanel, QuakeLegend,
+                     SlopeLegend,
                      TemperatureLegend, ThemeLegend)
 from .themes import theme_names
 from .overlays import (OUTLINE, BoxVertices, CornerVertices,
@@ -157,12 +159,12 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False,
                   "quakes": False, "cutaway": False, "paleo": False,
-                  "plates": False}
+                  "plates": False, "fires": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
-                "cutaway", "paleo", "plates")
+                "cutaway", "paleo", "plates", "fires")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -509,6 +511,8 @@ class GlobeWindow(QWidget):
         self.insolation_legend.hide()
         self.quake_legend = QuakeLegend(self.view)
         self.quake_legend.hide()
+        self.fire_legend = FireLegend(self.view)
+        self.fire_legend.hide()
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -521,12 +525,12 @@ class GlobeWindow(QWidget):
         self._theme_replies = {}
         self.theme_legend = ThemeLegend(self.view)
         # Шкалы - одной панелью, сверху вниз: тема, пласты, оболочки
-        # разреза, очаги, инсоляция, уклон, температура.
+        # разреза, очаги, пожары, инсоляция, уклон, температура.
         self.legend_panel = LegendPanel(self.view)
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
-                       self.insolation_legend, self.slope_legend,
-                       self.legend):
+                       self.fire_legend, self.insolation_legend,
+                       self.slope_legend, self.legend):
             self.legend_panel.add(legend)
         self.legend_panel.changed = self._place_attribution
         # День темы - правый бегунок шкалы времени, смена дня - после
@@ -569,6 +573,9 @@ class GlobeWindow(QWidget):
         # Землетрясения: события сводки и ответ на её запрос.
         self.quake_events = []
         self._quake_reply = None
+        # Пожары NASA FIRMS: очаги сводки и ждущий ответ.
+        self.fire_data = None
+        self._fire_reply = None
         # Плиты Slab2 на разрезах: указатель зон с рамками, пришедшие
         # зоны, ждущие ответы. Зона просится, когда разрез её касается.
         # slab_base - шаблон адреса зоны вместо slabs.URL, для проверки
@@ -887,7 +894,10 @@ class GlobeWindow(QWidget):
         for key, on in self.extras.items():
             self._apply_extra(key, on)
         self.panel.theme_chosen.connect(self.set_theme)
-        self.set_theme(settings.value(THEME_KEY, "") or "")
+        # Включённые пожары - тоже выбор темы, иначе пустая тема
+        # выключила бы их.
+        self.set_theme("fires" if self.extras.get("fires")
+                       else settings.value(THEME_KEY, "") or "")
         self.refresh()
 
     # Выбранное состояние. Его же меняют проверочные скрипты, на глобус
@@ -1038,6 +1048,8 @@ class GlobeWindow(QWidget):
             self._set_surface()
         elif key == "quakes":
             self._set_quakes(on)
+        elif key == "fires":
+            self._set_fires(on)
         elif key == "cutaway":
             self._set_cutaway(on)
         elif key == "paleo":
@@ -1052,12 +1064,17 @@ class GlobeWindow(QWidget):
         Включена одна тема, выбор помнят настройки QGIS. Выбранная тема
         открывает шкалу времени на последний день ряда, когда он придёт.
         Новая тема при открытой шкале берёт её момент."""
+        # Пожары - в том же выборе: пожары или одна тема. Просьба
+        # автора от 5 октября 2026 года.
+        fires = key == "fires"
+        if bool(self.extras.get("fires")) != fires:
+            self.set_extra("fires", fires)
         key = key if key in themes.BY_KEY else ""
         self._theme_open_time = bool(key) and key != self.theme_key \
             and not self.timebar.shown()
         self.theme_key = key
         QgsSettings().setValue(THEME_KEY, key)
-        self.panel.set_theme(key)
+        self.panel.set_theme("fires" if fires else key)
         self._show_theme()
 
     def _theme_on(self):
@@ -1113,7 +1130,9 @@ class GlobeWindow(QWidget):
         theme = getattr(self, "theme_key", "") and self._theme_on()
         events = any(p.visible and p.time for p in self.myplaces.places) \
             or bool(self.extras.get("quakes")
-                    and self.view.quakes.events)
+                    and self.view.quakes.events) \
+            or bool(self.extras.get("fires")
+                    and self.view.fires.fires is not None)
         if self.timebar.track.point != (bool(theme) and not events):
             self.timebar.set_point(bool(theme) and not events)
         self.timebar.set_stepper(self._theme_step if theme else None)
@@ -1393,6 +1412,7 @@ class GlobeWindow(QWidget):
         self.view.set_relief(self._relief_target())
         self.subsurface.relief_changed()
         self._place_quakes()
+        self._place_fires()
         if self._relief and self.terrain_loader is not None:
             self.terrain_loader.want((0, 0, 0), 1.0)
         self._sync_properties()
@@ -1629,6 +1649,7 @@ class GlobeWindow(QWidget):
         if self._relief_target() != self.view.store.scale:
             self.view.set_relief(self._relief_target())
             self._place_quakes()
+            self._place_fires()
         self._place_attribution()
         if not shown:
             self.paleo_bar.stop()
@@ -1687,6 +1708,51 @@ class GlobeWindow(QWidget):
             and self.view.sky_view is None
         self.quake_legend.setVisible(on)
         self._place_attribution()
+
+    def _set_fires(self, on):
+        """Пожары - строка группы «Планета огня» в общем выборе тем.
+        Сводка NASA FIRMS за 24 часа загружается при каждом включении.
+        Включённые пожары снимают тему."""
+        if on and self.theme_key:
+            self.set_theme("fires")
+        self.panel.set_theme("fires" if on else self.theme_key)
+        self.fire_legend.setVisible(on and self.planet.earth
+                                    and self.view.sky_view is None)
+        self._place_attribution()
+        if not on:
+            if self._fire_reply is not None:
+                self._fire_reply.abort()
+            self._fire_reply = None
+            self._place_fires()
+            return
+        if self._fire_reply is None:
+            self._fire_reply = fetch_bytes(fires_core.FEED, self._fires_done,
+                                           prefer_cache=False)
+            self.view.data_pending += 1
+
+    def _fires_done(self, data, error):
+        if self._fire_reply is not None:
+            self.view.data_pending = max(0, self.view.data_pending - 1)
+        self._fire_reply = None
+        if data is not None:
+            self.fire_data = fires_core.parse(data.decode("utf-8",
+                                                          "replace"))
+        else:
+            self.message = (tr("Сводка пожаров не загрузилась: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+        self._place_fires()
+
+    def _place_fires(self):
+        """Очаги на глобус по нынешнему масштабу рельефа."""
+        on = self.extras.get("fires", False) and self.planet.earth
+        self.view.fires.set_fires(self.fire_data if on else None,
+                                  self.view.store.scale,
+                                  self._surface_ground)
+        self._update_timebar()
+        self._time_quakes()
+        self._show_attribution()
+        self.view.update()
 
     def _set_quakes(self, on):
         """Землетрясения строкой раздела «Слои». Сводка USGS
@@ -1873,6 +1939,7 @@ class GlobeWindow(QWidget):
         self.slope_legend.hide()
         self.insolation_legend.hide()
         self.quake_legend.hide()
+        self.fire_legend.hide()
         self.cutaway_legend.hide()
         self.theme_legend.hide()
         self.paleo_bar.hide()
@@ -1907,6 +1974,8 @@ class GlobeWindow(QWidget):
         self.insolation_legend.setVisible(
             self.insolation_result is not None)
         self._quake_legend_state()
+        self.fire_legend.setVisible(self.extras.get("fires", False)
+                                    and self.planet.earth)
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
                                        and self.planet.earth)
         self.paleo_bar.setVisible(self._paleo_on())
@@ -1965,6 +2034,7 @@ class GlobeWindow(QWidget):
         self.view.set_relief(self._relief_target())
         self.subsurface.relief_changed()
         self._place_quakes()
+        self._place_fires()
         self._apply_vector(force=True)
         self._mark_dirty(False)
         self._show_attribution()
@@ -2072,6 +2142,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*temperature.ATTRIBUTION))
         if self.view.quakes.events:
             parts.append(link_html(*quakes.ATTRIBUTION))
+        if self.view.fires.fires is not None:
+            parts.append(link_html(*fires_core.ATTRIBUTION))
         if self.planet.earth and getattr(self, "extras", {}).get("plates") \
                 and self.plates_data is not None:
             parts.append(link_html(*plates.ATTRIBUTION))
@@ -2665,6 +2737,11 @@ class GlobeWindow(QWidget):
             if hasattr(self, "view") else None
         if quake_span is not None:
             times += [when.stamp(when.text(t)) for t in quake_span]
+        # Пожары - так же, первый и последний снимок сводки.
+        fire = self.view.fires.fires if hasattr(self, "view") else None
+        fire_span = fires_core.span(fire) if fire is not None else None
+        if fire_span is not None:
+            times += [when.stamp(when.text(t)) for t in fire_span]
         # Тема NASA на шкале - первый и последний день её ряда.
         theme_span = themes.span(self._theme_domains.get(self.theme_key)) \
             if getattr(self, "theme_key", "") and self._theme_on() else None
@@ -2706,8 +2783,9 @@ class GlobeWindow(QWidget):
         self._theme_timer.start()
 
     def _time_quakes(self):
-        """Землетрясения в промежутке шкалы времени."""
+        """Землетрясения и пожары в промежутке шкалы времени."""
         self.view.quakes.window = self._time_range
+        self.view.fires.window = self._time_range
         self.view.update()
 
     def _time_changed(self, lo, hi):
@@ -4535,6 +4613,7 @@ class GlobeWindow(QWidget):
         groups = list(found)
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
+        groups += self._identify_fires(px, py)
         under = self.subsurface.identify(
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
         if under:
@@ -4914,6 +4993,37 @@ class GlobeWindow(QWidget):
             features.append((q.place or "M {:.1f}".format(q.mag), values,
                              None))
         return [(Group(tr("Землетрясения")), features)] if features else []
+
+    def _identify_fires(self, px, py):
+        """Очаги пожаров у точки щелчка на экране, не больше 20."""
+        layer = self.view.fires
+        data = layer.fires
+        if data is None:
+            return []
+        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
+        shown = quakes.facing(eye, layer.focus, layer.lats, layer.lons) \
+            & quakes.in_window(layer.times, layer.window)
+        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
+        pixels, front = self.view.camera.project(layer.focus)
+        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
+        near = np.nonzero(front & shown & (gap <= radius))[0]
+        near = near[np.argsort(gap[near])][:20]
+        features = []
+        for n in near:
+            n = int(n)
+            values = [(tr("Мощность излучения"), tr(
+                "{value} МВт", value="{:.1f}".format(data.frp[n])))]
+            if not np.isnan(data.time[n]):
+                values.append((tr("Время снимка, UTC"),
+                               when.text(float(data.time[n]))))
+            if data.confidence[n]:
+                values.append((tr("Достоверность"), data.confidence[n]))
+            values.append((tr("Снимок"), tr("ночной") if data.night[n]
+                           else tr("дневной")))
+            features.append(("{:.4f}, {:.4f}".format(data.lat[n],
+                                                     data.lon[n]),
+                             values, None))
+        return [(Group(tr("Пожары")), features)] if features else []
 
     def _plate_names(self):
         """Подписи групп и классов границ плит на языке интерфейса."""

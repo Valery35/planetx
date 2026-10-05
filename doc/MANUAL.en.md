@@ -316,8 +316,8 @@ it loads. When the window opens, the row is off.
 The Planet of Fire, Planet of Water, Gases and Land and Life groups at
 the bottom of the Layers section hold NASA themes. A theme is a raster
 by days, months or years from the NASA GIBS service. The groups hold:
-- Planet of Fire - smoke, aerosol optical depth, carbon monoxide and
-  its emission.
+- Planet of Fire - fire spots, smoke, aerosol optical depth, carbon
+  monoxide and its emission.
 - Planet of Water - precipitation, soil moisture, snow, sea ice, water
   vapour, chlorophyll, sea salinity and floods.
 - Gases - nitrogen dioxide, sulphur dioxide, methane, carbon dioxide
@@ -336,6 +336,17 @@ the last day of its series. The handle gives the nearest day of the
 series that is not later, missing days of the series are skipped. A new
 theme takes the same moment while the slider is open. Some series lag
 behind today by months, the tooltip of the theme says so. Themes exist only on the Earth.
+
+The first row of the Planet of Fire is Fires, a radio button in the same
+choice as the themes: either the fires or one theme is on. The row shows
+fire spots over the last 24 hours from VIIRS
+images of the NOAA-20 satellite from the NASA FIRMS feed, about 78
+thousand spots. A dot stands at the fire, its colour and size show the
+radiative power from 1 to 1000 MW, the legend stands in the bottom left
+corner of the view. The feed, about 6 MB, is loaded each time the row is
+switched on. The spots stand on the time slider by the image time. A
+click on a spot in the Identify mode shows its power, image time and
+confidence.
 
 The Plate boundaries row shows the lithospheric plate boundaries after
 the PB2002 model (Bird, 2003). Red lines are plates moving apart at
