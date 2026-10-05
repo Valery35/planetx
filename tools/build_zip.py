@@ -19,7 +19,8 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLUGIN = "planetx"
 SKIP_DIRS = {"tests", "__pycache__"}
-SKIP_SUFFIXES = (".pyc", ".pyo")
+# .aux.xml - статистика растров, её пишут GDAL и QGIS при открытии.
+SKIP_SUFFIXES = (".pyc", ".pyo", ".aux.xml")
 
 
 def version():
