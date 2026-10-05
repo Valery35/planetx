@@ -9,7 +9,10 @@
 пропускает чистый код.
 """
 import ast
+import collections
+import math
 import os
+import re
 import sys
 import unittest
 
@@ -178,6 +181,36 @@ def secret_literals(source):
                     or getattr(target, "attr", None)
                 if _secret_name(name):
                     found.append(node.lineno)
+    return found
+
+
+# Строка в кавычках из символов base64 и её предел энтропии - как
+# у правила Base64HighEntropyString сканера detect-secrets.
+BASE64_QUOTED = re.compile(r"([\'\"])([A-Za-z0-9+/\-_=]+)(\1)")
+BASE64_LIMIT = 4.5
+
+
+def _entropy(text):
+    """Энтропия Шеннона строки, бит на символ."""
+    size = len(text)
+    return -sum(n / size * math.log2(n / size)
+                for n in collections.Counter(text).values())
+
+
+def entropy_literals(source):
+    """Строка, похожая на ключ, по правилу detect-secrets.
+
+    Каталог QGIS отметил выпуски 0.33.0-0.35.0 находкой «Potential
+    Base64 High Entropy String» на имени слоя NASA GIBS в
+    core/themes.py. Строка проверяется по одной строке файла, поэтому
+    длинное имя, разбитое на две части, находкой не считается.
+    """
+    found = []
+    for number, line in enumerate(source.splitlines(), 1):
+        for match in BASE64_QUOTED.finditer(line):
+            if _entropy(match.group(2)) > BASE64_LIMIT:
+                found.append(number)
+                break
     return found
 
 
@@ -409,6 +442,11 @@ class TestCodeRules(unittest.TestCase):
                   and os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(secret_literals, plugin), [])
 
+    def test_no_high_entropy_literals(self):
+        plugin = [p for p in self.paths if p.startswith(PLUGIN)
+                  and os.sep + "tests" + os.sep not in p]
+        self.assertEqual(scan(entropy_literals, plugin), [])
+
     def test_no_bom(self):
         texts = [os.path.join(ROOT, n) for n in os.listdir(ROOT)
                  if n.endswith(".md")]
@@ -514,6 +552,13 @@ class TestGuardsCatch(unittest.TestCase):
                     'self.password = ""\n',
                     'secret = "abc"\n'):
             self.assertCatches(secret_literals, bad, good)
+
+    def test_entropy_literal_guard(self):
+        # Прежняя запись core/themes.py и она же в две части.
+        bad = 'x = ("TROPOMI_L2_Nitrogen_Dioxide_Tropospheric_Column")\n'
+        good = ('x = ("TROPOMI_L2_Nitrogen_Dioxide_"\n'
+                '     "Tropospheric_Column")\n')
+        self.assertCatches(entropy_literals, bad, good)
 
     def test_symbol_guard(self):
         self.assertCatches(
