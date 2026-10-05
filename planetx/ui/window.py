@@ -46,7 +46,7 @@ from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.slope import aspect_rgba, slope_aspect, slope_rgba
-from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, decode, make_tile
+from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, decode
 from ..core.kml import KOverlay, KmlError, image_ext as kml_image_ext, \
     read_file as read_kml_file, read_kml, write_kml, write_kmz
 from ..core.placetree import is_folder, numbered_name
@@ -95,8 +95,12 @@ from .myplaces import MyPlaces, OverlayItem
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
-                      read_flag, read_shown, set_visible_on_map,
-                      visible_on_map, write_flag, write_shown)
+                      read_flag, read_insets, read_shown,
+                      set_visible_on_map, visible_on_map, write_flag,
+                      write_insets, write_shown)
+from .inset import DeepSource, terrain_prepare
+from .inset import apply as apply_insets
+from .inset import prepare as prepare_inset
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
@@ -239,11 +243,14 @@ def prepare_clouds(key, rgba):
     return mip_chain(clouds.cloud_rgba(rgba, key))
 
 
-def slope_prepare(mode, floor, radius):
+def slope_prepare(mode, floor, radius, insets=()):
     """Работа рабочего потока для тайла уклона или экспозиции: высоты
-    Terrarium, расчёт core/slope.py, раскраска и уровни мипмапов."""
+    Terrarium с врезками своего рельефа insets, расчёт core/slope.py,
+    раскраска и уровни мипмапов."""
     def prepare(key, rgba):
         heights = decode(rgba, floor)
+        if insets:
+            heights = apply_insets(insets, key, heights)
         grade, aspect = slope_aspect(heights, key[0], key[2], radius)
         return mip_chain(aspect_rgba(aspect) if mode == "aspect"
                          else slope_rgba(grade))
@@ -523,7 +530,7 @@ class GlobeWindow(QWidget):
         # ключи показанных фото и картинок на экране, текстуры фото,
         # окна свойств и их правки.
         self.ground_layers = GroundLayers()
-        self._ground = []
+        self._ground_rasters = []
         self._ground_ids = []
         self._photo_key = None
         self._screen_key = None
@@ -782,6 +789,7 @@ class GlobeWindow(QWidget):
         self.tracks = TrackManager(self.view, self)
         self.tracks.changed.connect(self._refresh_shapes)
         self.panel.track_requested.connect(self._open_track)
+        self.panel.inset_toggled.connect(self.set_inset)
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
         self.toolbar.demo_requested.connect(self.open_demo)
@@ -822,9 +830,11 @@ class GlobeWindow(QWidget):
         self.terrain_errors = {}
         self.sea_depths = QgsSettings().value(SEA_KEY, True, type=bool)
         self.view.sea_floor = self.sea_depths
-        # Высоты Марса и Луны: архив тайлов, скачивается один раз.
+        # Врезки своего рельефа - растры проекта, кортеж ui.inset.Entry.
+        self.insets = ()
+        self._load_insets()
         self._start_terrain(
-            basemap.Source("Terrarium", TERRARIUM_URL, TERRAIN_MAX),
+            DeepSource("Terrarium", TERRARIUM_URL, TERRAIN_MAX),
             self._earth_floor())
         self._shown_at = 0.0
         self.view.changed.connect(self._frame_done)
@@ -1316,11 +1326,11 @@ class GlobeWindow(QWidget):
         if self.planet.earth:
             return basemap.Source("Terrarium", TERRARIUM_URL,
                                   TERRAIN_MAX, builtin=True), \
-                self._earth_floor()
+                self._earth_floor(), self.insets
         if self.planet.terrain is None:
             return None
         name, url, level, _ = self.planet.terrain
-        return basemap.Source(name, url, level, builtin=True), None
+        return basemap.Source(name, url, level, builtin=True), None, ()
 
     def _set_surface(self):
         """Слой уклона или экспозиции по строкам раздела «Слои» и телу.
@@ -1333,10 +1343,10 @@ class GlobeWindow(QWidget):
             self._set_gibs("slope", False)
             self.slope_legend.hide()
             return
-        source, floor = found
+        source, floor, insets = found
         self.view.gibs["slope"].max_level = source.max_level
         self._set_gibs("slope", True, (source, slope_prepare(
-            mode, floor, ellipsoid.A)), cache=True)
+            mode, floor, ellipsoid.A, insets)), cache=True)
         self.slope_legend.set_mode(mode)
         self.slope_legend.show()
         self._place_attribution()
@@ -1417,9 +1427,13 @@ class GlobeWindow(QWidget):
         self.terrain_errors.clear()
         self.terrain_loader = None
         if source is not None:
+            # Высоты Земли - с врезками своего рельефа и тайлами глубже
+            # уровня 15 внутри их рамок (ui/inset.py).
+            insets = self.insets if isinstance(source, DeepSource) else ()
+            self.view.store.deep = [entry.box() for entry in insets]
             self.terrain_loader = TileLoader(
                 source, parent=self,
-                prepare=lambda key, rgba: make_tile(*key, rgba, floor=floor))
+                prepare=terrain_prepare(insets, floor))
             self.terrain_loader.loaded.connect(self._heights)
             self.terrain_loader.failed.connect(
                 self.terrain_errors.__setitem__)
@@ -1721,9 +1735,10 @@ class GlobeWindow(QWidget):
         Архив тела скачивается, когда рельеф включён."""
         if planet.earth:
             self.view.store.max_level = TERRAIN_MAX
-            self._start_terrain(basemap.Source(
+            self._start_terrain(DeepSource(
                 "Terrarium", TERRARIUM_URL, TERRAIN_MAX), self._earth_floor())
             return
+        self.view.store.deep = []
         self._start_terrain(None, None)
         if planet.terrain is None:
             return
@@ -2151,7 +2166,7 @@ class GlobeWindow(QWidget):
             layers.append(self.rail_layer)
             min_levels[self.rail_layer.id()] = RAIL_FROM
         # Картинки на поверхности - под всеми, сразу над снимком.
-        layers += getattr(self, "_ground", [])
+        layers += getattr(self, "_ground_rasters", [])
         if self.overlay is not None:
             self.overlay.abort()
             self.overlay.deleteLater()
@@ -2243,6 +2258,8 @@ class GlobeWindow(QWidget):
         self._read_shown()
         self.tracks.load()
         self.subsurface.project_reloaded()
+        self._load_insets()
+        self._refresh_relief()
 
     def _mark_dirty(self, dirty):
         self.dirty = dirty
@@ -2847,7 +2864,32 @@ class GlobeWindow(QWidget):
                 tr("Тоннели Vegas Loop"),
                 os.path.join(demo, "vegas", "vegas_loop.gpkg"),
                 ("tunnels",), (), opacity=0.5, cut=False)
+        if name == "quarry":
+            # Съёмка карьера - растр проекта, рельеф глобуса через меню
+            # слоя. Растр на глобусе картинкой не показывается.
+            layer_id = self._demo_raster(
+                tr("Карьер, свой рельеф"), tr("Карьер, съёмка 1 м"),
+                os.path.join(demo, "quarry", "quarry_dem.tif"))
+            if layer_id is not None:
+                self.set_insets(read_insets() + [layer_id])
         return key
+
+    def _demo_raster(self, title, name, path):
+        """Растр демо path в группе title вверху проекта. Прежняя группа
+        с тем же названием заменяется. Возвращает номер слоя или None."""
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        old = root.findGroup(title)
+        if old is not None:
+            for node in old.findLayers():
+                project.removeMapLayer(node.layerId())
+            root.removeChildNode(old)
+        layer = QgsRasterLayer(path, name, "gdal")
+        if not layer.isValid():
+            return None
+        project.addMapLayer(layer, False)
+        root.insertGroup(0, title).addLayer(layer)
+        return layer.id()
 
     def subsurface_layers(self, title, path, tables, rasters, opacity, cut):
         """Данные подземного - демо или шаблон - группа title в проекте
@@ -2996,7 +3038,54 @@ class GlobeWindow(QWidget):
             return True
         if self.terrain_loader is None:
             return True
-        return key[0] > self.view.store.max_level
+        return key[0] > self.view.store.cap(key)
+
+    # Свой рельеф.
+
+    def _load_insets(self):
+        """Врезки своего рельефа из записи проекта. Нижний в проекте
+        растр врезается первым, верхний - последним."""
+        ids = read_insets()
+        order = {layer.id(): n for n, layer in enumerate(map_layers())}
+        entries = []
+        for layer_id in sorted(ids, key=lambda i: -order.get(i, -1)):
+            layer = QgsProject.instance().mapLayer(layer_id)
+            if layer is None:
+                continue
+            QApplication.setOverrideCursor(enum(Qt, "CursorShape",
+                                                "WaitCursor"))
+            try:
+                entry = prepare_inset(layer)
+            finally:
+                QApplication.restoreOverrideCursor()
+            if isinstance(entry, str):
+                self.message = (tr("Растр «{name}» не стал рельефом "
+                                   "глобуса: {why}.", name=layer.name(),
+                                   why=entry), time.monotonic())
+                continue
+            entries.append(entry)
+        self.insets = tuple(entries)
+        self.panel.inset_ids = set(ids)
+
+    def set_inset(self, layer_id, on):
+        """Растр проекта layer_id - рельеф глобуса или нет."""
+        ids = [i for i in read_insets() if i != layer_id]
+        if on:
+            ids.append(layer_id)
+        self.set_insets(ids)
+
+    def set_insets(self, ids):
+        """Растры проекта ids - рельеф глобуса, прочие - нет."""
+        write_insets(ids)
+        self._load_insets()
+        self._refresh_relief()
+        self._show_state()
+
+    def _refresh_relief(self):
+        """Высоты заново: врезки сменились."""
+        self._body_terrain(self.planet)
+        self.view.reset_heights()
+        self._set_surface()
 
     # Видимость из точки.
 
@@ -3765,7 +3854,7 @@ class GlobeWindow(QWidget):
         layers = self.ground_layers.layers(entries)
         ids = [layer.id() for layer in layers]
         if ids != self._ground_ids:
-            self._ground = layers
+            self._ground_rasters = layers
             self._ground_ids = ids
             self._update_overlay(keep=True)
         key = [(token, overlay.params()) for token, overlay, _ in photos]
@@ -5109,7 +5198,7 @@ class GlobeWindow(QWidget):
             # Растры картинок на поверхности не входят в проект, их держит
             # окно. Они отпускаются здесь, пока QGIS жив, а не при разборе
             # Python после выхода.
-            self._ground = []
+            self._ground_rasters = []
             self._ground_ids = []
             self.ground_layers.clear()
             self.refresh_timer.stop()

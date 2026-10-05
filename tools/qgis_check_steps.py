@@ -82,6 +82,9 @@ def run(index=0):
             ValueError, OSError, ImportError, IndexError):
         result["errors"].append("%s: %s" % (
             function.__name__, traceback.format_exc().splitlines()[-1]))
+        # Полная трассировка - для разбора, в отчёте отдельно.
+        result.setdefault("traces", {})[function.__name__] = \
+            traceback.format_exc()
     if again:
         # Шаг ждёт: повторяется через again мс.
         QTimer.singleShot(again, lambda: run(index))
@@ -4851,10 +4854,10 @@ def overlays_check():
     out = result["overlays"]
     view = window.view
     out["count"] = len(window.myplaces.overlays) - out["before"]
-    out["ground_layers"] = len(window._ground)
+    out["ground_layers"] = len(window._ground_rasters)
     out["ground_errors"] = window.ground_layers.errors
     out["in_overlay"] = bool(window.overlay) and any(
-        layer in window.overlay.layers for layer in window._ground) \
+        layer in window.overlay.layers for layer in window._ground_rasters) \
         if hasattr(window.overlay, "layers") else None
     out["centre_after"] = _centre_pixel(view)
     out["photos_drawn"] = view.photos.drawn
@@ -4944,7 +4947,7 @@ def overlays_kmz():
     window = state["window"]
     out = result["overlays"]
     from planetx.core.kml import read_file
-    out["ground_linked_layers"] = len(window._ground)
+    out["ground_linked_layers"] = len(window._ground_rasters)
     path = os.path.join(TEMP, "planetx_overlays.kmz")
     window.export_kml(None, path=path)
     with open(path, "rb") as stream:
@@ -5037,7 +5040,7 @@ def aral_check():
     out["overlays"] = sorted(o.kind for o in items)
     out["visible"] = sorted(o.kind for o in items if o.visible)
     out["loaded"] = len(window._link_images)
-    out["ground_layers"] = len(window._ground)
+    out["ground_layers"] = len(window._ground_rasters)
     out["ground_errors"] = window.ground_layers.errors
     out["photos_drawn"] = view.photos.drawn
     out["screen"] = [(l.x(), l.y(), l.width(), l.height(), l.isVisible())
@@ -5086,6 +5089,150 @@ def aral_project_check():
         QgsProject.instance().removeMapLayer(layer.id())
 
 
+@check(2000)
+def quarry_open():
+    # Врезка своего рельефа, демо «Карьер», решение автора от 5 октября
+    # 2026 года. Растр 1 м в UTM 40N, карьер 150 м глубиной.
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Карьер, свой рельеф",
+                                  "Quarry, own terrain"))
+    started = time.monotonic()
+    action.trigger()
+    result["quarry"] = {
+        "prepare_s": round(time.monotonic() - started, 2),
+        "insets": [(e.name, e.level, [round(v) for v in e.bounds])
+                   for e in window.insets],
+        "deep": [[round(v, 6) for v in box] for box in window.view.store.deep]}
+
+
+def _quarry_wait(limit):
+    window = state["window"]
+    started = state.setdefault("quarry_wait", time.monotonic())
+    busy = window.terrain_loader is not None and window.terrain_loader.busy()
+    if (busy or window.view.load_missing) \
+            and time.monotonic() - started < limit:
+        return 500
+    state.pop("quarry_wait", None)
+
+
+@check(3000)
+def quarry_wait():
+    return _quarry_wait(40.0)
+
+
+def _dem_at(lat, lon):
+    from osgeo import gdal, osr
+    path = os.path.join(ROOT, "planetx", "demo", "quarry", "quarry_dem.tif")
+    ds = gdal.Open(path)
+    ref = osr.SpatialReference()
+    ref.ImportFromWkt(ds.GetProjection())
+    wgs = osr.SpatialReference()
+    wgs.ImportFromEPSG(4326)
+    for r in (ref, wgs):
+        r.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    x, y, _ = osr.CoordinateTransformation(wgs, ref).TransformPoint(lon,
+                                                                    lat)
+    x0, dx, _, y0, _, dy = ds.GetGeoTransform()
+    col, row = int((x - x0) / dx), int((y - y0) / dy)
+    value = ds.GetRasterBand(1).ReadAsArray(col, row, 1, 1)[0, 0]
+    return float(value)
+
+
+@check(2000)
+def quarry_check():
+    import numpy as np
+    window = state["window"]
+    out = result["quarry"]
+    store = window.view.store
+    lat, lon = 59.490, 56.970
+    out["centre"] = [round(store.heights_at([lat], [lon],
+                                            scaled=False)[0], 2),
+                     round(_dem_at(lat, lon), 2)]
+    # Профиль с запада на восток через дно, шаг около 2 м.
+    k = 1.0 / (111320.0 * math.cos(math.radians(lat)))
+    lons = lon + np.arange(-1000.0, 1000.0, 2.0) * k
+    line = store.heights_at(np.full(lons.shape, lat), lons, scaled=False)
+    steps = np.abs(np.diff(line))
+    out["profile"] = [round(float(line.min()), 1), round(float(line.max()),
+                                                         1)]
+    # Уступ - подряд идущие точки с перепадом больше 3 м на 2 м пути.
+    steep = steps > 3.0
+    out["faces"] = int(np.sum(steep[1:] & ~steep[:-1]) + steep[0])
+    # Край охвата на востоке: 1.2 км от центра, полоса 120 м.
+    lons = lon + np.arange(1000.0, 1400.0, 2.0) * k
+    edge = store.heights_at(np.full(lons.shape, lat), lons, scaled=False)
+    out["edge_jump"] = round(float(np.abs(np.diff(edge)).max()), 2)
+    out["levels"] = sorted({key[0] for key in store.tiles
+                            if key[0] >= 14})
+    from planetx.ui.scene import capture as capture_scene
+    scene, _ = capture_scene(window, None, "quarry")
+    out["scene_relief"] = [e["name"] for e in scene.layers
+                           if e.get("relief")]
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_quarry.png"))
+    # Ближе к уступам: высоты уровней глубже 15.
+    from planetx.core.navigation import Pose
+    window.view.navigator.show(Pose(lat, lon - 450.0 * k, 350.0, 90.0,
+                                    55.0))
+    window.view.update()
+
+
+@check(3000)
+def quarry_close_wait():
+    return _quarry_wait(40.0)
+
+
+@check(2000)
+def quarry_close_check():
+    window = state["window"]
+    out = result["quarry"]
+    store = window.view.store
+    out["levels_close"] = sorted({key[0] for key in store.tiles
+                                  if key[0] >= 15})
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_quarry_close.png"))
+    window.grab().save(os.path.join(TEMP, "planetx_quarry_window.png"))
+    # Выключение врезки возвращает Terrarium.
+    ids = list(window.panel.inset_ids)
+    window.set_insets([])
+    state["quarry_ids"] = ids
+
+
+@check(3000)
+def quarry_off_wait():
+    return _quarry_wait(30.0)
+
+
+@check(1500)
+def quarry_off_check():
+    window = state["window"]
+    out = result["quarry"]
+    store = window.view.store
+    out["centre_off"] = round(store.heights_at([59.490], [56.970],
+                                               scaled=False)[0], 2)
+    out["deep_off"] = len(store.deep)
+    window.set_insets(state["quarry_ids"])
+
+
+@check(1500)
+def globe_menu():
+    # Меню правой кнопки на глобусе в середине вида. С 0.34.0 до
+    # 5 октября 2026 года список self._ground закрывал метод окна
+    # _ground, и меню падало с «'list' object is not callable».
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.ui import globemenu
+    window = state["window"]
+    view = window.view
+    before = set(window.findChildren(QMenu))
+    globemenu.show(window, view.width() * view.devicePixelRatioF() / 2.0,
+                   view.height() * view.devicePixelRatioF() / 2.0)
+    menus = [m for m in window.findChildren(QMenu) if m not in before]
+    result["globe_menu"] = [a.text() for m in menus for a in m.actions()]
+    for menu in menus:
+        menu.close()
+
+
 @check(1500)
 def overlays_clean():
     window = state["window"]
@@ -5098,7 +5245,7 @@ def overlays_clean():
     out["left"] = len(window.myplaces.overlays) - out["before"]
     out["images_removed"] = images_before \
         - window.myplaces.image_layer.featureCount()
-    out["ground_after"] = len(window._ground)
+    out["ground_after"] = len(window._ground_rasters)
     out["screen_after"] = len(window.screen_overlays.labels)
     out["gl"] = dict(window.view.gl_errors)
 

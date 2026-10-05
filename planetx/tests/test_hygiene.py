@@ -215,6 +215,41 @@ def flat_property(source):
     return found
 
 
+def shadowed_methods(source):
+    """Присваивания self.имя, где имя - метод того же класса.
+
+    Атрибут экземпляра закрывает метод, и вызов падает с «object is not
+    callable». В 0.34.0 список растров картинок self._ground закрыл
+    метод окна _ground(px, py) - точку поверхности под пикселем. Меню
+    правой кнопки на глобусе, перетаскивание точек линейки, вершин
+    и углов разреза падали, 5 октября 2026 года. Свойства не в счёт.
+    """
+    found = []
+    for cls in ast.walk(ast.parse(source)):
+        if not isinstance(cls, ast.ClassDef):
+            continue
+        methods = set()
+        for item in cls.body:
+            if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                    and not any(isinstance(d, (ast.Name, ast.Attribute))
+                                for d in item.decorator_list):
+                methods.add(item.name)
+        for node in ast.walk(cls):
+            targets = []
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+                targets = [node.target]
+            for target in targets:
+                for part in ast.walk(target):
+                    if isinstance(part, ast.Attribute) \
+                            and isinstance(part.value, ast.Name) \
+                            and part.value.id == "self" \
+                            and part.attr in methods:
+                        found.append(part.lineno)
+    return found
+
+
 UNSAFE_XML = ("xml.etree", "xml.sax", "xml.dom", "lxml")
 
 
@@ -403,6 +438,9 @@ class TestCodeRules(unittest.TestCase):
                   if os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(unused_imports, plugin), [])
 
+    def test_no_attribute_shadows_a_method(self):
+        self.assertEqual(scan(shadowed_methods, self.paths), [])
+
     def test_no_secret_like_literals(self):
         # В архив идут модули плагина без тестов, их и проверяет каталог.
         plugin = [p for p in self.paths if p.startswith(PLUGIN)
@@ -519,6 +557,15 @@ class TestGuardsCatch(unittest.TestCase):
         self.assertCatches(
             symbol_from_layers, "s = QgsLineSymbol([line])\n",
             "s = QgsLineSymbol.createSimple(props)\n")
+
+    def test_shadowed_method_guard(self):
+        self.assertCatches(
+            shadowed_methods,
+            "class W:\n    def __init__(self):\n        self._ground = []\n"
+            "    def _ground(self, px, py):\n        return px\n",
+            "class W:\n    def __init__(self):\n"
+            "        self._ground_rasters = []\n"
+            "    def _ground(self, px, py):\n        return px\n")
 
     def test_flat_property_guard(self):
         self.assertCatches(

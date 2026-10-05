@@ -1493,6 +1493,18 @@ EN = {
     "Пермские отложения": "Permian deposits",
     "Тоннели Vegas Loop": "Vegas Loop tunnels",
     "Аральское море": "Aral Sea",
+    "Рельеф глобуса": "Globe terrain",
+    "Карьер, свой рельеф": "Quarry, own terrain",
+    "Карьер, съёмка 1 м": "Quarry, 1 m survey",
+    "Высоты растра заменяют рельеф глобуса в его охвате. На полосе вдоль "
+    "края высоты плавно переходят к общему рельефу. Внутри охвата рельеф "
+    "подробнее, до пикселя растра.":
+        "The raster heights replace the globe terrain within its extent. "
+        "Along a band at the edge the heights change smoothly to the "
+        "common terrain. Within the extent the terrain is more detailed, "
+        "down to the raster pixel.",
+    "Растр «{name}» не стал рельефом глобуса: {why}.":
+        "The raster “{name}” did not become globe terrain: {why}.",
     "Подземный режим": "Subsurface mode",
     "Подземный режим - скважины, горизонты, разрезы и вырез "
     "блока под поверхностью.":

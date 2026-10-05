@@ -412,6 +412,8 @@ class LayerPanel(QWidget):
     layer_properties = pyqtSignal(object)
     # Трек точечного слоя: открыть окно настроек трека.
     track_requested = pyqtSignal(object)
+    # Растр проекта включён или выключен рельефом глобуса.
+    inset_toggled = pyqtSignal(str, bool)
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
     # Подложка выбрана в группе «Основа» - номер источника.
@@ -714,6 +716,8 @@ class LayerPanel(QWidget):
                 self.theme_items[theme.key] = item
         self.geo.itemChanged.connect(self._geo_changed)
         # Слои проекта - свой список, отдельно от меток.
+        # Растры проекта - рельеф глобуса, отметки меню слоя.
+        self.inset_ids = set()
         self.layers = QTreeWidget(self)
         self.layers.setHeaderHidden(True)
         self.layers.setRootIsDecorated(False)
@@ -1429,7 +1433,8 @@ class LayerPanel(QWidget):
             self.fly_to_layer.emit(layer)
 
     def _layer_menu(self, point):
-        """Меню слоя проекта: перелёт, прозрачность, трек, свойства."""
+        """Меню слоя проекта: перелёт, прозрачность, трек, рельеф
+        глобуса у растра, свойства."""
         item = self.layers.itemAt(point)
         layer_id = item.data(0, LAYER_ROLE) if item is not None else None
         layer = QgsProject.instance().mapLayer(layer_id) if layer_id \
@@ -1437,6 +1442,7 @@ class LayerPanel(QWidget):
         if layer is None:
             return
         menu = QMenu(self)
+        menu.setToolTipsVisible(True)
         menu.addAction(tr("Подлететь")).triggered.connect(
             lambda: self.fly_to_layer.emit(layer))
         menu.addAction(self._opacity_action(menu, layer))
@@ -1444,6 +1450,18 @@ class LayerPanel(QWidget):
                 and enum_int(layer.geometryType()) == 0:
             menu.addAction(tr("Трек…")).triggered.connect(
                 lambda: self.track_requested.emit(layer))
+        if isinstance(layer, QgsRasterLayer) \
+                and layer.providerType() == "gdal":
+            relief = menu.addAction(tr("Рельеф глобуса"))
+            relief.setCheckable(True)
+            relief.setChecked(layer.id() in self.inset_ids)
+            relief.setToolTip(tr(
+                "Высоты растра заменяют рельеф глобуса в его охвате. "
+                "На полосе вдоль края высоты плавно переходят к общему "
+                "рельефу. Внутри охвата рельеф подробнее, до пикселя "
+                "растра."))
+            relief.toggled.connect(
+                lambda on: self.inset_toggled.emit(layer.id(), on))
         menu.addAction(tr("Свойства слоя…")).triggered.connect(
             lambda: self.layer_properties.emit(layer))
         menu.exec(self.layers.viewport().mapToGlobal(point))

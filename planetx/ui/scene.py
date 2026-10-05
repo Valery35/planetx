@@ -22,6 +22,7 @@ from qgis.PyQt.QtCore import QDateTime, Qt
 from ..core.kml import read_kml, write_kml
 from ..core.places import LABEL_LANGUAGES, LOCAL, AS_QGIS
 from ..core.scene import Scene
+from .project import read_insets
 from ..qt_compat import enum, enum_int
 
 # Поставщики, в источнике которых бывает пароль.
@@ -66,7 +67,10 @@ def capture(window, folder=None, name=""):
         pose = window._globe_pose
     project = QgsProject.instance()
     layers = []
-    for layer_id in sorted(window.shown_layers()):
+    shown = set(window.shown_layers())
+    # Растры - рельеф глобуса входят в сцену и без показа на глобусе.
+    reliefs = set(read_insets())
+    for layer_id in sorted(shown | reliefs):
         layer = project.mapLayer(layer_id)
         if layer is None:
             continue
@@ -74,7 +78,9 @@ def capture(window, folder=None, name=""):
                        "provider": layer.providerType(),
                        "source": clean_source(layer),
                        "kind": "raster" if isinstance(layer, QgsRasterLayer)
-                       else "vector"})
+                       else "vector",
+                       "shown": layer_id in shown,
+                       "relief": layer_id in reliefs})
     time = None
     controller = window.tracks.controller
     if controller is not None:
@@ -89,7 +95,10 @@ def capture(window, folder=None, name=""):
             "language": window._language,
             # Строки раздела «Слои»: сетка, звёзды, облака, температура,
             # 3D-здания.
-            "extras": {key: bool(on) for key, on in window.extras.items()}}
+            "extras": {key: bool(on) for key, on in window.extras.items()},
+            # Сцена знает о врезках своего рельефа. В прежних сценах
+            # поля нет, врезки проекта при открытии остаются.
+            "insets": len(reliefs)}
     wedge = window.view.wedge
     if wedge is not None:
         # Сектор разреза Земли: запад, восток, юг, север, градусы.
@@ -173,15 +182,20 @@ def apply(window, scene, kml=b""):
     if isinstance(wedge, list) and len(wedge) == 4 \
             and all(isinstance(v, (int, float)) for v in wedge):
         window.set_wedge_box(*wedge)
-    wanted, missing = set(), []
+    wanted, reliefs, missing = set(), [], []
     for entry in scene.layers:
         layer = _find_layer(entry) or _add_layer(entry)
         if layer is None:
             missing.append(entry.get("name") or entry.get("source"))
-        else:
+            continue
+        if entry.get("shown", True):
             wanted.add(layer.id())
+        if entry.get("relief"):
+            reliefs.append(layer.id())
     for layer in QgsProject.instance().mapLayers().values():
         window.set_layer_shown(layer.id(), layer.id() in wanted)
+    if "insets" in view:
+        window.set_insets(reliefs)
     key = None
     if kml:
         # Метки ложатся на тело сцены, в том числе на небо.

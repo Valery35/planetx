@@ -27,6 +27,8 @@
 - aral - Аральское море: снимки MODIS 2000, 2014 и 2023 годов на
   поверхности, фото у Муйнака и карта бассейна на экране, все картинки
   по ссылкам.
+- quarry - карьер у Березников: синтетическая съёмка 1 м рельефом
+  глобуса, профиль через уступы, отвал.
 - mars - места посадок марсоходов и крупные формы рельефа Марса.
 - moon - места посадок «Аполлонов» и «Луноходов».
 - sky - созвездия и яркие объекты неба.
@@ -545,6 +547,47 @@ def aral():
     save("aral", scene, root)
 
 
+# Карьер: синтетическая съёмка 1 м, planetx/demo/quarry/quarry_dem.tif,
+# её собирает tools/make_quarry_demo.py. Окно кладёт растр в проект
+# и включает его рельефом глобуса (GlobeWindow.open_demo). Координаты
+# меток - от центра карьера по размерам из того же скрипта, вид -
+# выбор помощника.
+QUARRY = (59.490, 56.970)
+QUARRY_LON_M = 1.0 / (111320.0 * math.cos(math.radians(QUARRY[0])))
+QUARRY_LAT_M = 1.0 / 111320.0
+
+
+def quarry():
+    title = "PlanetX: демо, карьер"
+    lat, lon = QUARRY
+    west = lon - 1000.0 * QUARRY_LON_M
+    east = lon + 1000.0 * QUARRY_LON_M
+    places = [
+        KPlace("Профиль через карьер", "line", [(lat, west), (lat, east)],
+               color=YELLOW, width=3.0,
+               description="Путь с запада на восток через дно карьера, "
+                           "2 км. В меню - «Профиль высот»: уступы по 15 м "
+                           "и дно на 150 м ниже бровки."),
+        KPlace("Дно карьера", "point", [(lat, lon)], color=ORANGE,
+               icon="flag", view=(lat, lon, 1800.0, 0.0, 55.0),
+               description="Синтетическая съёмка 1 м. Растр в проекте QGIS, "
+                           "в меню слоя раздела «Слои проекта» отмечен "
+                           "пункт «Рельеф глобуса»."),
+        KPlace("Отвал", "point",
+               [(lat + 640.0 * QUARRY_LAT_M, lon + 760.0 * QUARRY_LON_M)],
+               color=WHITE, icon="peak",
+               view=(lat + 640.0 * QUARRY_LAT_M, lon + 760.0 * QUARRY_LON_M,
+                     1200.0, 220.0, 60.0),
+               description="Отвал высотой 40 м в два яруса."),
+    ]
+    root = KFolder(title, children=places)
+    view = dict(EARTH_VIEW, scale=1.0,
+                extras=dict(EARTH_VIEW["extras"], buildings=False))
+    scene = Scene((lat - 0.004, lon, 2600.0, 10.0, 62.0), None, [], view,
+                  title, "Карьер")
+    save("quarry", scene, root)
+
+
 def main():
     perm()
     bocachica()
@@ -553,6 +596,7 @@ def main():
     subsurface()
     vegas()
     aral()
+    quarry()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,

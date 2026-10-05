@@ -19,16 +19,19 @@ from collections import namedtuple
 import numpy as np
 
 MAX_LEVEL = 15
-# Уровень высот сетки, собранной без рельефа при выключенном рельефе.
-# Он глубже любого тайла высот, поэтому новые высоты такую сетку
-# не пересобирают.
-FLAT_LEVEL = MAX_LEVEL + 1
 SIZE = 256
 # Уровень высот для тайла подложки уровня z. 256 пикселей высот на 16
 # отрезков сетки дают 4 пикселя на отрезок уже при z - 2, поэтому
 # высоты берутся на два уровня грубее. Загрузок высот так в 16 раз
 # меньше, чем тайлов подложки.
 LEVEL_OFFSET = 2
+# Самый подробный уровень высот внутри врезки своего рельефа: подложка
+# доходит до уровня 19, высоты берутся на LEVEL_OFFSET грубее.
+DEEP_LEVEL = 19 - LEVEL_OFFSET
+# Уровень высот сетки, собранной без рельефа при выключенном рельефе.
+# Он глубже любого тайла высот, поэтому новые высоты такую сетку
+# не пересобирают.
+FLAT_LEVEL = DEEP_LEVEL + 1
 
 HeightTile = namedtuple("HeightTile", "z x y heights low high")
 HeightTile.__doc__ = """Тайл высот: массив (256, 256) float32 в метрах,
@@ -54,9 +57,9 @@ def make_tile(z, x, y, rgba, floor=0.0):
                       float(heights.max()))
 
 
-def height_level(z):
-    """Уровень высот для тайла подложки уровня z."""
-    return max(0, min(z - LEVEL_OFFSET, MAX_LEVEL))
+def height_level(z, top=MAX_LEVEL):
+    """Уровень высот для тайла подложки уровня z, не глубже top."""
+    return max(0, min(z - LEVEL_OFFSET, top))
 
 
 def ancestor(key, level):
@@ -86,6 +89,21 @@ def sample(tile, u, v):
     top = h[y0, x0] * (1.0 - fx) + h[y0, x0 + 1] * fx
     bottom = h[y0 + 1, x0] * (1.0 - fx) + h[y0 + 1, x0 + 1] * fx
     return top * (1.0 - fy) + bottom * fy
+
+
+def pixel_shares(z, x, y):
+    """Доли мира u, v центров пикселей тайла высот (z, x, y), массивы
+    (256, 256)."""
+    total = float((1 << z) * SIZE)
+    idx = np.arange(SIZE, dtype=np.float64) + 0.5
+    return np.meshgrid((x * SIZE + idx) / total, (y * SIZE + idx) / total)
+
+
+def resample(tile, key):
+    """Высоты тайла key, более подробного, чем tile, по высотам tile -
+    его предка. Выборка билинейная, массив (256, 256) float32."""
+    u, v = pixel_shares(*key)
+    return sample(tile, u, v).astype(np.float32)
 
 
 def grid_shares(z, x, y, segments, border=0):
@@ -126,6 +144,9 @@ class HeightStore:
         # Самый подробный уровень тайлов высот источника: у Terrarium 15,
         # у высот Марса и Луны 5. Глубже тайлы не просятся.
         self.max_level = MAX_LEVEL
+        # Рамки врезок своего рельефа: (u0, v0, u1, v1, уровень) в долях
+        # мира. Внутри рамки высоты идут глубже max_level, до уровня.
+        self.deep = []
         # Растёт с каждым добавленным тайлом и со сменой масштаба. По ней
         # выбор тайлов понимает, что размахи высот могли измениться.
         self.version = 0
@@ -173,6 +194,8 @@ class HeightStore:
         """
         copy = HeightStore()
         copy.tiles = dict(self.tiles)
+        copy.deep = list(self.deep)
+        copy.max_level = self.max_level
         copy.scale = self.scale
         copy.low = self.low
         copy.version = self.version
@@ -183,13 +206,34 @@ class HeightStore:
         added, self.added = self.added, []
         return added
 
+    def cap(self, key):
+        """Предельный уровень высот для тайла key: max_level, внутри
+        рамки врезки - уровень врезки."""
+        top = self.max_level
+        if self.deep:
+            z, x, y = key
+            n = float(1 << z)
+            u0, v0, u1, v1 = x / n, y / n, (x + 1) / n, (y + 1) / n
+            for a, b, c, d, level in self.deep:
+                if u0 < c and a < u1 and v0 < d and b < v1:
+                    top = max(top, level)
+        return top
+
+    def cap_at(self, u, v):
+        """Предельный уровень высот в точке с долями мира u, v."""
+        top = self.max_level
+        for a, b, c, d, level in self.deep:
+            if a <= u <= c and b <= v <= d:
+                top = max(top, level)
+        return top
+
     def best(self, key):
         """Самый точный готовый тайл высот для тайла подложки key.
 
         Идёт от уровня height_level(z) вверх к уровню 0. None, если
         не готов даже тайл уровня 0.
         """
-        level = height_level(key[0])
+        level = height_level(key[0], self.cap(key))
         for zh in range(level, -1, -1):
             tile = self.tiles.get(ancestor(key, zh))
             if tile is not None:
@@ -209,14 +253,14 @@ class HeightStore:
 
     def wanted(self, key):
         """Ключ тайла высот, нужного тайлу подложки key."""
-        return ancestor(key, min(height_level(key[0]), self.max_level))
+        return ancestor(key, height_level(key[0], self.cap(key)))
 
     def height_at(self, lat, lon):
         """Высота рельефа в точке по самому точному готовому тайлу."""
         if not self.scale:
             return 0.0
         u, v = mercator_share(lat, lon)
-        for zh in range(MAX_LEVEL, -1, -1):
+        for zh in range(DEEP_LEVEL, -1, -1):
             n = 1 << zh
             key = (zh, min(int(u * n), n - 1), min(int(v * n), n - 1))
             tile = self.tiles.get(key)
@@ -242,7 +286,7 @@ class HeightStore:
                     / 2.0, 0.0, 1.0)
         left = np.ones(lats.shape, dtype=bool)
         levels = {key[0] for key in self.tiles}
-        for zh in range(MAX_LEVEL, -1, -1):
+        for zh in range(DEEP_LEVEL, -1, -1):
             if zh not in levels:
                 continue
             n = 1 << zh

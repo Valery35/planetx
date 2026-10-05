@@ -18,6 +18,7 @@ ENTRY = "PlanetX"  # запись проекта с настройками гл�
 AUTO_REFRESH = "auto_refresh"  # обновлять глобус без кнопки
 SHOWN = "layers"  # номера слоёв, отмеченных в списке глобуса
 FOLLOW = "follow_legend"  # видимость на глобусе как в легенде QGIS
+INSETS = "insets"  # растры проекта - рельеф глобуса
 
 
 def map_layers(project=None):
@@ -63,6 +64,18 @@ def read_shown(project=None):
 def write_shown(ids, project=None):
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, SHOWN, sorted(ids))
+
+
+def read_insets(project=None):
+    """Номера растров проекта - врезок своего рельефа."""
+    project = project or QgsProject.instance()
+    value, ok = project.readListEntry(ENTRY, INSETS, [])
+    return list(value) if ok else []
+
+
+def write_insets(ids, project=None):
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, INSETS, list(ids))
 
 
 class ProjectWatch(QObject):

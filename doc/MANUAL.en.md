@@ -522,7 +522,34 @@ The right-click menu:
 - Transparency slider - the transparency of the QGIS layer itself, it
   changes on the map too.
 - Track… - for point layers, see [Tracks](#tracks).
+- Globe terrain - for rasters, see [Own terrain](#own-terrain).
 - Layer Properties… - the standard QGIS layer properties window.
+
+### Own terrain
+
+A height raster of the QGIS project becomes the globe terrain within
+its extent. An example is a quarry with a mine survey. The Globe
+terrain item of the raster menu in the Project layers section turns the
+inset on and off. The raster can be in any coordinate system, it needs
+a file that GDAL reads. The checkbox that shows the layer on the globe
+is not needed for the inset.
+
+Where the raster has data, its heights replace the common terrain.
+Along a band at the edge of the data the heights change smoothly to the
+common terrain, the band is 5 % of the smaller side of the extent.
+Within the extent the terrain is more detailed than the common one,
+down to the raster pixel, but not finer than the pixel of level 17
+(about 0.6 m at latitude 60°). The raster heights are taken as they
+are. If the survey has its own height system, the band at the edge
+smooths the difference with the common terrain.
+
+The inset is seen by the surface mesh, the height under the cursor, the
+ruler, the elevation profile, the viewshed, the insolation, the slope
+and the aspect. With several insets the one higher in the project lies
+on top. The choice is kept in the project and in the scene.
+
+On the first switch-on the raster is converted into a file of the QGIS
+profile. For a survey of 2400 × 2400 pixels this takes about 2 s.
 
 ### Places section
 
@@ -1249,6 +1276,7 @@ under the list plays a tour over them. The folder can be deleted.
 | Earth | Permian deposits | A synthetic site near Berezniki with drill holes, roofs, sections and a cut. A tour of five stops explains the subsurface mode, see [Subsurface mode](#subsurface-mode) |
 | Earth | Vegas Loop tunnels | The Boring Company tunnels under Las Vegas with their stations, see [Subsurface mode](#subsurface-mode) |
 | Earth | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
+| Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |
