@@ -38,21 +38,27 @@ HeightTile.__doc__ = """Тайл высот: массив (256, 256) float32 в 
 наименьшая и наибольшая высота."""
 
 
-def decode(rgba, floor=0.0):
-    """Картинка Terrarium (h, w, 3 или 4) uint8 в высоты float32, метры.
+def decode(rgba, floor=0.0, encoding="terrarium"):
+    """Картинка высот (h, w, 3 или 4) uint8 в высоты float32, метры.
 
+    encoding - запись высоты в цвете: "terrarium" (Mapzen) или
+    "mapbox" (Mapbox Terrain-RGB, -10000 + (R·65536 + G·256 + B)·0.1).
     floor - нижний предел высот. У Земли 0: подложка рисует воду
     на уровне моря, дно под ней не нужно. У Марса и Луны None - впадины
     вроде равнины Эллада глубже нуля на километры и остаются.
     """
     rgb = np.asarray(rgba)[..., :3].astype(np.float32)
-    heights = rgb[..., 0] * 256.0 + rgb[..., 1] + rgb[..., 2] / 256.0 \
-        - 32768.0
+    if encoding == "mapbox":
+        heights = (rgb[..., 0] * 65536.0 + rgb[..., 1] * 256.0
+                   + rgb[..., 2]) * 0.1 - 10000.0
+    else:
+        heights = rgb[..., 0] * 256.0 + rgb[..., 1] + rgb[..., 2] / 256.0 \
+            - 32768.0
     return heights if floor is None else np.maximum(heights, floor)
 
 
-def make_tile(z, x, y, rgba, floor=0.0):
-    heights = decode(rgba, floor)
+def make_tile(z, x, y, rgba, floor=0.0, encoding="terrarium"):
+    heights = decode(rgba, floor, encoding)
     return HeightTile(z, x, y, heights, float(heights.min()),
                       float(heights.max()))
 

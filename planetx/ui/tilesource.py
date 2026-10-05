@@ -79,13 +79,21 @@ def taken_names():
     return names
 
 
-class TileSourceDialog(QDialog):
-    """Новый источник тайлов. point - (широта, долгота) точки взгляда
-    глобуса, в ней ищется наибольший уровень."""
+def remove_connection(name):
+    """Удалить подключение XYZ Tiles QGIS с названием name."""
+    QgsSettings().remove(XYZ_PREFIX + name)
 
-    def __init__(self, parent=None, point=(0.0, 0.0)):
+
+class TileSourceDialog(QDialog):
+    """Новый источник тайлов или правка готового. point - (широта,
+    долгота) точки взгляда глобуса, в ней ищется наибольший уровень.
+    edit - core.basemap.Source подключения XYZ для правки или None."""
+
+    def __init__(self, parent=None, point=(0.0, 0.0), edit=None):
         super().__init__(parent)
-        self.setWindowTitle(tr("Новый источник тайлов"))
+        self.edit = edit
+        self.setWindowTitle(tr("Источник тайлов") if edit is not None
+                            else tr("Новый источник тайлов"))
         self.point = point
         self.replies = []
         self.template = None
@@ -163,6 +171,16 @@ class TileSourceDialog(QDialog):
         self.address.textChanged.connect(lambda _: self.timer.start())
         self.tms.toggled.connect(lambda _: self._check())
         self._update()
+        if edit is not None:
+            # Правка: поля готового подключения, название и подпись
+            # уже заданы пользователем.
+            self.name.setText(edit.name)
+            self.name_edited = True
+            self.credit.setText(edit.attribution[0]
+                                if edit.attribution[0] != edit.name else "")
+            self.credit_edited = True
+            self.address.setText(edit.url)
+            self.level.setValue(edit.max_level)
 
     # Разбор адреса.
 
@@ -295,8 +313,11 @@ class TileSourceDialog(QDialog):
     def accept(self):
         self._abort()
         name = self.name.text().strip()
-        if name in taken_names():
+        old = self.edit.name if self.edit is not None else None
+        if name != old and name in taken_names():
             name = "%s (PlanetX)" % name
+        if old is not None and name != old:
+            remove_connection(old)
         save_connection(name, self.template, self.level.value(),
                         self.credit.text().strip())
         self.saved_name = name

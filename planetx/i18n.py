@@ -1494,6 +1494,139 @@ EN = {
     "Тоннели Vegas Loop": "Vegas Loop tunnels",
     "Аральское море": "Aral Sea",
     "Рельеф глобуса": "Globe terrain",
+    'Источники данных…':
+        'Data sources…',
+    "Все источники глобуса с условиями использования, проверка их "
+    "доступности, свой рельеф и своя векторная основа, добавление, правка и "
+    "удаление подложек.":
+        "All globe sources with their terms of use, an availability check, "
+        "own terrain and own vector base, adding, editing and removing base "
+        "maps.",
+    'Векторная основа':
+        'Vector base',
+    'Науки о Земле':
+        'Earth sciences',
+    'Проверить':
+        'Check',
+    "Запросить у каждого источника один тайл или файл мимо кэша и показать "
+    "ответ и время. Большие файлы вроде картинки звёздного неба не "
+    "запрашиваются.":
+        "Request one tile or file from each source bypassing the cache and "
+        "show the answer and the time. Large files such as the star sky image"
+        " are not requested.",
+    'Добавить подложку…':
+        'Add base map…',
+    "Окно нового источника тайлов. Источник записывается подключением XYZ "
+    "Tiles QGIS и становится подложкой.":
+        "The new tile source window. The source is saved as a QGIS XYZ Tiles "
+        "connection and becomes the base map.",
+    'Изменить…':
+        'Edit…',
+    "Адрес, название, уровни и подпись выбранной подложки из подключений XYZ "
+    "Tiles QGIS.":
+        "Address, name, levels and credit of the selected base map from the "
+        "QGIS XYZ Tiles connections.",
+    "Удалить выбранное подключение XYZ Tiles из QGIS. Оно пропадает и из "
+    "обозревателя QGIS.":
+        "Remove the selected XYZ Tiles connection from QGIS. It disappears "
+        "from the QGIS browser too.",
+    "Шаблон тайлов высот с {z}, {x}, {y}, например своё хранилище или сервер."
+    " Пустое поле - рельеф по умолчанию. Глобус просит тайлы до уровня 15, "
+    "глубже берёт их предков.":
+        "A height tile template with {z}, {x}, {y}, for example an own store "
+        "or server. An empty field gives the default terrain. The globe asks "
+        "for tiles down to level 15 and takes their ancestors deeper.",
+    "Как высота записана в цвете тайла. Terrarium - как у рельефа по "
+    "умолчанию, Mapbox Terrain-RGB - высота с шагом 0.1 м.":
+        "How the height is written in the tile colour. Terrarium is as in the"
+        " default terrain, Mapbox Terrain-RGB is the height in 0.1 m steps.",
+    'Подпись своего рельефа в углу вида и на снимках.':
+        'The credit of the own terrain in the view corner and on snapshots.',
+    'Свой рельеф':
+        'Own terrain',
+    'Запись высот':
+        'Height encoding',
+    "Адрес TileJSON векторных тайлов в схеме OpenMapTiles. Из них берутся "
+    "границы, дороги, воды, названия и 3D-здания. Пустое поле - OpenFreeMap.":
+        "The TileJSON address of vector tiles in the OpenMapTiles schema. "
+        "Borders, roads, waters, names and 3D buildings come from them. An "
+        "empty field gives OpenFreeMap.",
+    'Подпись своей основы в углу вида и на снимках.':
+        'The credit of the own base in the view corner and on snapshots.',
+    'Своя векторная основа':
+        'Own vector base',
+    'Применить':
+        'Apply',
+    'Глобус берёт данные по новому адресу.':
+        'The globe takes the data from the new address.',
+    'Как было':
+        'Reset',
+    'Вернуть источник по умолчанию.':
+        'Return the default source.',
+    'Снимок или карта под всеми слоями':
+        'Imagery or a map under all layers',
+    'Удалить подложку':
+        'Remove base map',
+    'Удалить подключение «{name}» из QGIS?':
+        'Remove the connection “{name}” from QGIS?',
+    'Источник':
+        'Source',
+    'Что показывает':
+        'Shows',
+    'Условия':
+        'Terms',
+    'Проверка':
+        'Check',
+    'Подложки':
+        'Base maps',
+    'ждём…':
+        'waiting…',
+    'ошибка':
+        'error',
+    '{ms} мс, {kb} КБ':
+        '{ms} ms, {kb} KB',
+    'Высоты суши и дна морей, уровни 0-15':
+        'Heights of land and sea floor, levels 0-15',
+    'Марс, Луна и другие тела':
+        'Mars, the Moon and other bodies',
+    'Высоты и снимки тел из хранилища planetx-terrain':
+        'Heights and imagery of bodies from the planetx-terrain store',
+    'Границы, дороги, воды, названия, 3D-здания':
+        'Borders, roads, waters, names, 3D buildings',
+    'Облака, температура, темы, огни городов':
+        'Clouds, temperature, themes, city lights',
+    'Пожары за 24 часа':
+        'Fires over 24 hours',
+    'Млечный путь, около 10 МБ':
+        'Milky Way, about 10 MB',
+    'Землетрясения за 30 суток':
+        'Earthquakes over 30 days',
+    'Плиты на разрезах':
+        'Slabs on sections',
+    'Кора на разрезах':
+        'Crust on sections',
+    'Границы плит, файл модуля':
+        'Plate boundaries, plugin file',
+    'открыть':
+        'open',
+    'без проверки':
+        'not checked',
+    'Адрес рельефа - шаблон с {z}, {x} и {y}.':
+        'The terrain address is a template with {z}, {x} and {y}.',
+    'Адрес TileJSON начинается с http, https или file.':
+        'A TileJSON address starts with http, https or file.',
+    'Рельеф Земли':
+        'Earth terrain',
+    'Своя основа':
+        'Own base',
+    'Подключение XYZ Tiles QGIS':
+        'QGIS XYZ Tiles connection',
+    'Источник тайлов':
+        'Tile source',
+    'Рельеф: свой источник':
+        'Terrain: own source',
+    'Основа: свой источник':
+        'Base: own source',
     "Пожары": "Fires",
     "Очаги пожаров за последние 24 часа по снимкам VIIRS спутника "
     "NOAA-20, сводка NASA FIRMS. Точка стоит на месте очага, цвет и "

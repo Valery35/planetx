@@ -215,18 +215,17 @@ def apply(entries, key, heights):
     return heights
 
 
-def terrain_prepare(entries, floor):
-    """Подготовка тайла высот в рабочем потоке: Terrarium, у тайла
-    глубже MAX_LEVEL - пересчёт из предка, затем врезки entries.
-    entries - кортеж, главный поток его не меняет, а заменяет."""
+def terrain_prepare(entries, floor, encoding="terrarium"):
+    """Подготовка тайла высот в рабочем потоке: высоты в записи encoding
+    (core.terrain.decode), у тайла глубже MAX_LEVEL - пересчёт из
+    предка, затем врезки entries. entries - кортеж, главный поток его
+    не меняет, а заменяет."""
     def make(key, rgba):
         z, x, y = key
+        heights = decode(rgba, floor, encoding)
         if z > MAX_LEVEL:
             parent = ancestor(key, MAX_LEVEL)
-            heights = decode(rgba, floor)
             heights = resample(HeightTile(*parent, heights, 0.0, 0.0), key)
-        else:
-            heights = decode(rgba, floor)
         if entries:
             heights = apply(entries, key, heights)
         return HeightTile(z, x, y, heights, float(np.nanmin(heights)),

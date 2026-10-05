@@ -498,6 +498,22 @@ sets its terms of use. OpenStreetMap comes next, then the XYZ Tiles
 connections from the QGIS browser. Terrain connections are not listed.
 A new connection appears in the list the next time the window opens.
 
+The Data sources… button next to the base map list opens a window with
+all globe sources. Its table lists by groups the base maps, terrain,
+vector base, NASA data and Earth science data. Each source shows what
+it gives and an open link to its terms of use. The Check button
+requests one tile or file from each source bypassing the cache and
+writes the answer time and size or an error. Large files, the star sky
+image, are not requested.
+
+The same window sets own terrain - a height tile template with {z},
+{x}, {y} in Terrarium or Mapbox Terrain-RGB encoding - and an own
+vector base - a TileJSON address in the OpenMapTiles schema. Each has a
+credit for the view corner. Apply takes the data from the new address,
+Reset returns the default source. The Add base map…, Edit… and Remove
+buttons work with the QGIS XYZ Tiles connections, a removed connection
+disappears from the QGIS browser too.
+
 The label language is chosen from a list. As in QGIS takes the QGIS
 interface language, Local names keep the names in the language of the
 country. Fifteen languages follow. When there is no name in the chosen

@@ -37,6 +37,7 @@ from qgis.PyQt.QtCore import (QObject, QRunnable, QSize, QThreadPool, QTimer,
 from qgis.PyQt.QtGui import QColor, QImage
 from qgis.PyQt.QtNetwork import QNetworkRequest
 
+from ..core import sources
 from ..core.mipmap import mip_chain
 from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
@@ -50,7 +51,7 @@ MAX_JOBS = 6  # отрисовок одновременно, считает QGIS
 # делит GIL с главным меньше двух, а успевает сотни картинок в секунду.
 PREPARE_THREADS = 1
 
-OPENFREEMAP_TILEJSON = "https://tiles.openfreemap.org/planet"
+OPENFREEMAP_TILEJSON = sources.VECTOR_TILEJSON  # core/sources.py
 OPENFREEMAP_ATTRIBUTION = (
     "OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors",
     "https://openfreemap.org/")

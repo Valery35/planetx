@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.38.0
+version=0.39.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.38.0 The Fires row of the Planet of Fire group shows fire
+changelog=0.39.0 The Data sources… button of the View properties window
+      opens a window with all globe sources, their terms of use and an
+      availability check. It sets own terrain (Terrarium or Mapbox
+      Terrain-RGB) and an own vector base (OpenMapTiles TileJSON), adds,
+      edits and removes base maps.
+      0.38.0 The Fires row of the Planet of Fire group shows fire
       spots over the last 24 hours from the NASA FIRMS feed. Fires are
       chosen in the same list as the NASA themes, either the fires or one
       theme is on. The colour and size of a dot show the radiative power,

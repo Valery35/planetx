@@ -5430,6 +5430,105 @@ def fires_check():
 
 
 @check(1500)
+def sources_open():
+    # Окно «Источники данных», состав утверждён автором 5 октября 2026
+    # года. Открывается кнопкой окна «Свойства вида».
+    window = state["window"]
+    window._show_properties()
+    window.properties.sources_requested.emit()
+    dialog = window.sources_dialog
+    rows = []
+    for n in range(dialog.tree.topLevelItemCount()):
+        group = dialog.tree.topLevelItem(n)
+        rows += [group.child(k).text(0) for k in range(group.childCount())]
+    result["sources"] = {"visible": dialog.isVisible(), "rows": rows}
+    dialog.probe()
+    state["sources_started"] = time.monotonic()
+
+
+@check(2000)
+def sources_wait():
+    window = state["window"]
+    if window.sources_dialog.replies \
+            and time.monotonic() - state["sources_started"] < 60.0:
+        return 500
+
+
+@check(1500)
+def sources_check():
+    window = state["window"]
+    dialog = window.sources_dialog
+    out = result["sources"]
+    checks = {}
+    for n in range(dialog.tree.topLevelItemCount()):
+        group = dialog.tree.topLevelItem(n)
+        for k in range(group.childCount()):
+            item = group.child(k)
+            checks[item.text(0)] = item.text(3)
+    out["checks"] = checks
+    # Свой рельеф: тот же Terrarium по своему адресу, с подписью.
+    own = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/" \
+        "{z}/{x}/{y}.png?own=1"
+    dialog.terrain_url.setText(own)
+    dialog.terrain_credit.setText("Test terrain")
+    dialog._apply("terrain")
+    loader = window.terrain_loader
+    out["terrain_url"] = loader.source.url if loader else None
+    out["terrain_credit"] = "Test terrain" in window.attribution.text()
+    dialog._reset("terrain")
+    out["terrain_reset"] = window.terrain_loader.source.url
+    # Своя векторная основа: тот же TileJSON с параметром.
+    dialog.vector_url.setText("https://tiles.openfreemap.org/planet?own=1")
+    dialog.vector_credit.setText("Test base")
+    dialog._apply("vector")
+    state["vector_started"] = time.monotonic()
+
+
+@check(2000)
+def sources_vector_wait():
+    window = state["window"]
+    if window._tilejson is not None \
+            and time.monotonic() - state["vector_started"] < 30.0:
+        return 500
+
+
+@check(1500)
+def sources_vector_check():
+    from qgis.PyQt.QtWidgets import QMessageBox
+    from planetx.ui.tilesource import save_connection
+    window = state["window"]
+    dialog = window.sources_dialog
+    out = result["sources"]
+    out["vector_layer"] = window.ofm_layer is not None
+    out["vector_credit"] = "Test base" in window.attribution.text()
+    dialog._reset("vector")
+    # Подложка: подключение XYZ появляется в списке и удаляется окном.
+    save_connection("PlanetX test XYZ", "https://tile.example/{z}/{x}/{y}"
+                    ".png", 12, "Test XYZ")
+    window.sources_changed("basemaps")
+    dialog.rebuild()
+    names = [s.name for s in window.sources]
+    out["xyz_added"] = "PlanetX test XYZ" in names
+    base = dialog.tree.topLevelItem(0)
+    for k in range(base.childCount()):
+        if base.child(k).text(0) == "PlanetX test XYZ":
+            dialog.tree.setCurrentItem(base.child(k))
+    out["edit_enabled"] = dialog.edit.isEnabled()
+    yes = getattr(QMessageBox.StandardButton, "Yes", None) \
+        or QMessageBox.Yes
+    question = QMessageBox.question
+    QMessageBox.question = staticmethod(lambda *a, **k: yes)
+    try:
+        dialog._remove()
+    finally:
+        QMessageBox.question = question
+    out["xyz_removed"] = "PlanetX test XYZ" not in [
+        s.name for s in window.sources]
+    out["gl"] = dict(window.view.gl_errors)
+    dialog.close()
+
+
+@check(1500)
 def overlays_clean():
     window = state["window"]
     out = result["overlays"]

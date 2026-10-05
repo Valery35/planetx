@@ -67,6 +67,7 @@ class PropertiesDialog(QDialog):
     assistant_requested = pyqtSignal()
     assistant_settings_requested = pyqtSignal()
     history_clear_requested = pyqtSignal()
+    sources_requested = pyqtSignal()
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -84,8 +85,16 @@ class PropertiesDialog(QDialog):
             "QGIS, кроме подключений рельефа. Новое подключение "
             "появляется здесь при следующем открытии окна."))
         self.basemap.currentIndexChanged.connect(self.basemap_chosen)
+        sources = QPushButton(tr("Источники данных…"), self)
+        sources.setToolTip(tr(
+            "Все источники глобуса с условиями использования, проверка "
+            "их доступности, свой рельеф и своя векторная основа, "
+            "добавление, правка и удаление подложек."))
+        sources.clicked.connect(lambda _=False: self.sources_requested.emit())
         base = QGroupBox(tr("Основа"), self)
-        QVBoxLayout(base).addWidget(self.basemap)
+        base_row = QHBoxLayout(base)
+        base_row.addWidget(self.basemap, 1)
+        base_row.addWidget(sources)
 
         self.scale = QDoubleSpinBox(self)
         self.scale.setRange(*SCALE_RANGE)

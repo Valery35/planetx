@@ -61,12 +61,13 @@ from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
 from ..core.places import Place as MarkPlace  # метка найденного места
 from ..i18n import tr, ui_language
-from ..net.loader import TERRARIUM_URL, TileLoader, set_moving
+from ..net.loader import TileLoader, set_moving
+from ..core import sources as datasources
 from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            PLACES,
                            RAIL_FROM, RAILWAYS, VECTOR_GROUPS, label_kinds,
                            railway_layer,
-                           OPENFREEMAP_TILEJSON, LayerOverlay, fetch_bytes,
+                           LayerOverlay, fetch_bytes,
                            fetch_json,
                            openfreemap_layer, plate_layer,
                            set_line_groups)
@@ -101,6 +102,7 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       set_visible_on_map, visible_on_map, write_flag,
                       write_insets, write_shown)
 from .inset import DeepSource, terrain_prepare
+from .sources import SourcesDialog
 from .inset import apply as apply_insets
 from .inset import prepare as prepare_inset
 from .navpad import NavPad
@@ -245,12 +247,12 @@ def prepare_clouds(key, rgba):
     return mip_chain(clouds.cloud_rgba(rgba, key))
 
 
-def slope_prepare(mode, floor, radius, insets=()):
+def slope_prepare(mode, floor, radius, insets=(), encoding="terrarium"):
     """Работа рабочего потока для тайла уклона или экспозиции: высоты
     Terrarium с врезками своего рельефа insets, расчёт core/slope.py,
     раскраска и уровни мипмапов."""
     def prepare(key, rgba):
-        heights = decode(rgba, floor)
+        heights = decode(rgba, floor, encoding)
         if insets:
             heights = apply_insets(insets, key, heights)
         grade, aspect = slope_aspect(heights, key[0], key[2], radius)
@@ -851,7 +853,7 @@ class GlobeWindow(QWidget):
         self.insets = ()
         self._load_insets()
         self._start_terrain(
-            DeepSource("Terrarium", TERRARIUM_URL, TERRAIN_MAX),
+            DeepSource("Terrarium", self._terrain_choice()[0], TERRAIN_MAX),
             self._earth_floor())
         self._shown_at = 0.0
         self.view.changed.connect(self._frame_done)
@@ -1259,7 +1261,7 @@ class GlobeWindow(QWidget):
             self.buildings_loader.loaded.connect(
                 lambda key, found, extra: self.view.add_buildings(key, found))
         elif on and self._tilejson is None:
-            self._tilejson = fetch_json(OPENFREEMAP_TILEJSON,
+            self._tilejson = fetch_json(self._vector_choice(),
                                         self._tilejson_done)
         self.view.set_buildings(on, self.buildings_loader)
         self._show_attribution()
@@ -1357,7 +1359,7 @@ class GlobeWindow(QWidget):
         """Тайлы высот тела для уклона: (источник, пол высот) или None,
         если высот у тела нет."""
         if self.planet.earth:
-            return basemap.Source("Terrarium", TERRARIUM_URL,
+            return basemap.Source("Terrarium", self._terrain_choice()[0],
                                   TERRAIN_MAX, builtin=True), \
                 self._earth_floor(), self.insets
         if self.planet.terrain is None:
@@ -1378,8 +1380,10 @@ class GlobeWindow(QWidget):
             return
         source, floor, insets = found
         self.view.gibs["slope"].max_level = source.max_level
+        encoding = self._terrain_choice()[1] if self.planet.earth \
+            else "terrarium"
         self._set_gibs("slope", True, (source, slope_prepare(
-            mode, floor, ellipsoid.A, insets)), cache=True)
+            mode, floor, ellipsoid.A, insets, encoding)), cache=True)
         self.slope_legend.set_mode(mode)
         self.slope_legend.show()
         self._place_attribution()
@@ -1463,17 +1467,76 @@ class GlobeWindow(QWidget):
         if source is not None:
             # Высоты Земли - с врезками своего рельефа и тайлами глубже
             # уровня 15 внутри их рамок (ui/inset.py).
-            insets = self.insets if isinstance(source, DeepSource) else ()
+            earth = isinstance(source, DeepSource)
+            insets = self.insets if earth else ()
+            encoding = self._terrain_choice()[1] if earth else "terrarium"
             self.view.store.deep = [entry.box() for entry in insets]
             self.terrain_loader = TileLoader(
                 source, parent=self,
-                prepare=terrain_prepare(insets, floor))
+                prepare=terrain_prepare(insets, floor, encoding))
             self.terrain_loader.loaded.connect(self._heights)
             self.terrain_loader.failed.connect(
                 self.terrain_errors.__setitem__)
             if self._relief:
                 self.terrain_loader.want((0, 0, 0), 1.0)
         self.view.terrain_loader = self.terrain_loader
+
+    # Источники данных.
+
+    def _terrain_choice(self):
+        """Адрес и запись высот рельефа Земли: свой из окна «Источники
+        данных» или Terrarium."""
+        settings = QgsSettings()
+        return datasources.terrain(
+            settings.value(datasources.TERRAIN_KEY, "") or "",
+            settings.value(datasources.ENCODING_KEY, "") or "")
+
+    def _terrain_credit(self):
+        url = self._terrain_choice()[0]
+        if url == datasources.TERRAIN_URL:
+            return TERRAIN_ATTRIBUTION
+        text = QgsSettings().value(datasources.TERRAIN_CREDIT_KEY, "") or ""
+        return html.escape(text or tr("Рельеф: свой источник"))
+
+    def _vector_choice(self):
+        """Адрес TileJSON векторной основы: свой или OpenFreeMap."""
+        return datasources.vector(
+            QgsSettings().value(datasources.VECTOR_KEY, "") or "")
+
+    def _vector_credit(self):
+        if self._vector_choice() == datasources.VECTOR_TILEJSON:
+            return link_html(*OPENFREEMAP_ATTRIBUTION)
+        text = QgsSettings().value(datasources.VECTOR_CREDIT_KEY, "") or ""
+        return html.escape(text or tr("Основа: свой источник"))
+
+    def sources_changed(self, what):
+        """Окно «Источники данных» сменило адрес: "terrain" - рельеф
+        заново, "vector" - векторная основа, надписи и здания заново,
+        "basemaps" - список подложек."""
+        if what == "terrain":
+            self._refresh_relief()
+        elif what == "vector":
+            if self.buildings_loader is not None:
+                self.buildings_loader.abort()
+                self.buildings_loader.deleteLater()
+                self.buildings_loader = None
+            self.ofm_layer = None
+            self.rail_layer = None
+            self._ofm_source = None
+            self._tilejson = fetch_json(self._vector_choice(),
+                                        self._tilejson_done)
+        elif what == "basemaps":
+            name = self.sources[self._basemap].name
+            self.sources = basemap.builtins() + xyz_sources()
+            names = [s.name for s in self.sources]
+            if self.properties is not None:
+                self.properties.close()
+                self.properties = None
+            if iface is not None and hasattr(iface, "reloadConnections"):
+                iface.reloadConnections()
+            self._panel_basemap(names.index(name) if name in names else 0)
+        self._show_attribution()
+        self.view.update()
 
     def _earth_floor(self):
         """Пол высот Земли: 0 - отрицательные высоты обнуляются, как
@@ -1816,7 +1879,8 @@ class GlobeWindow(QWidget):
         if planet.earth:
             self.view.store.max_level = TERRAIN_MAX
             self._start_terrain(DeepSource(
-                "Terrarium", TERRARIUM_URL, TERRAIN_MAX), self._earth_floor())
+                "Terrarium", self._terrain_choice()[0], TERRAIN_MAX),
+                self._earth_floor())
             return
         self.view.store.deep = []
         self._start_terrain(None, None)
@@ -2057,7 +2121,7 @@ class GlobeWindow(QWidget):
         self._applied_groups = set(self._groups)
         if self._groups and self.ofm_layer is None \
                 and self._tilejson is None:
-            self._tilejson = fetch_json(OPENFREEMAP_TILEJSON,
+            self._tilejson = fetch_json(self._vector_choice(),
                                         self._tilejson_done)
         self.view.label_kinds = label_kinds(self._groups) \
             if self.planet.earth else set()
@@ -2126,9 +2190,9 @@ class GlobeWindow(QWidget):
         if self.planet.earth and (
                 self._applied_groups and self.ofm_layer is not None
                 or self.buildings_loader is not None):
-            parts.append(link_html(*OPENFREEMAP_ATTRIBUTION))
+            parts.append(self._vector_credit())
         if self.view.store.scale or "slope" in self.gibs_loaders:
-            parts.append(TERRAIN_ATTRIBUTION if self.planet.earth
+            parts.append(self._terrain_credit() if self.planet.earth
                          else html.escape(self.planet.terrain[3])
                          if self.planet.terrain
                          and self.terrain_loader is not None else "")
@@ -2392,9 +2456,22 @@ class GlobeWindow(QWidget):
                 lambda: self._assistant().open_settings())
             self.properties.history_clear_requested.connect(
                 self.clear_search_history)
+            self.properties.sources_requested.connect(self.open_sources)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()
+
+    def open_sources(self):
+        """Окно «Источники данных», одно на окно глобуса."""
+        dialog = getattr(self, "sources_dialog", None)
+        if dialog is None:
+            dialog = self.sources_dialog = SourcesDialog(self, self)
+            dialog.changed.connect(self.sources_changed)
+        else:
+            dialog.rebuild()
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     # Загрузка.
 

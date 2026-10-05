@@ -32,15 +32,14 @@ from qgis.PyQt.QtCore import (QObject, QRunnable, Qt, QThreadPool, QTimer,
 from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 
-from ..core import basemap
+from ..core import basemap, sources
 from ..core.placeholder import (MAX_FILL_DEPTH, ancestor, crop_window,
                                 is_placeholder)
 from ..core.tile_queue import TileQueue
 from ..meta import plugin_version
 from ..qt_compat import enum, enum_int
 
-TERRARIUM_URL = ("https://s3.amazonaws.com/elevation-tiles-prod/terrarium/"
-                 "{z}/{x}/{y}.png")
+TERRARIUM_URL = sources.TERRAIN_URL  # адрес по умолчанию, core/sources.py
 DECODE_THREADS = 2
 START_GAP = 0.015  # секунд между запусками запросов, около кадра
 # Пока камера движется, запросы всех загрузчиков и запуски картинок
