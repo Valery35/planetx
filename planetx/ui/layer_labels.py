@@ -11,7 +11,8 @@
 Готовые подписи уходят в надписи вида, render/labels.py. Подписи по
 правилам берутся по каждому правилу со своим фильтром. Масштаб
 видимости подписей QGIS не учитывается, надписи вида сами уходят
-друг от друга.
+друг от друга. У слоя с действующими временными свойствами берутся
+объекты промежутка шкалы времени глобуса, как на картинке слоя.
 """
 from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsCoordinateTransform, QgsCsException, QgsExpression,
@@ -19,7 +20,8 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsFeatureRequest, QgsProject, QgsRectangle,
                        QgsRuleBasedLabeling, QgsVectorLayer,
                        QgsVectorLayerFeatureSource,
-                       QgsVectorLayerSimpleLabeling)
+                       QgsVectorLayerSimpleLabeling,
+                       QgsVectorLayerTemporalContext)
 from qgis.PyQt.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
 
 from ..core import layer_labels
@@ -27,6 +29,14 @@ from ..core.places import Place
 from ..render.labels import layer_style
 
 WGS84 = "EPSG:4326"
+
+
+def range_key(span):
+    """Промежуток QGIS парой строк для сравнения, None - без времени."""
+    if span is None:
+        return None
+    return (span.begin().toString("yyyy-MM-ddTHH:mm:ss.zzz"),
+            span.end().toString("yyyy-MM-ddTHH:mm:ss.zzz"))
 
 
 def _unit_name(unit):
@@ -68,8 +78,11 @@ class _Job:
     """Всё, что нужно рабочему потоку для одного слоя. Собирается
     в главном потоке, там же, где живёт слой."""
 
-    def __init__(self, layer, settings, rule, rect, to_wgs, center):
+    def __init__(self, layer, settings, rule, rect, to_wgs, center,
+                 when=""):
         self.layer_id = layer.id()
+        # Фильтр времени слоя по шкале глобуса, текст выражения QGIS.
+        self.when = when
         self.lat, self.lon = center  # точка взгляда, у неё подписи
         self.source = QgsVectorLayerFeatureSource(layer)
         self.geometry_kind = _geometry_kind(layer.geometryType())
@@ -136,6 +149,9 @@ class _ReadTask(QRunnable):
         request = QgsFeatureRequest().setFilterRect(job.rect)
         request.setLimit(layer_labels.MAX_READ)
         context = job.context
+        if job.when:
+            request.setFilterExpression(job.when)
+            request.setExpressionContext(context)
         job.expression.prepare(context)
         if job.rule is not None:
             job.rule.prepare(context)
@@ -177,10 +193,13 @@ class LayerLabels(QObject):
         self.generation = 0
         self.marks = []  # надписи core.places.Place для вида
         self._key = None
+        # Промежуток шкалы времени глобуса, QgsDateTimeRange или None.
+        self.time_range = None
 
     def update(self, layer_ids, lat, lon, width, force=False):
         """Перечитать подписи, если сменились слои или окно вида."""
-        key = (tuple(layer_ids), layer_labels.key(lat, lon, width))
+        key = (tuple(layer_ids), layer_labels.key(lat, lon, width),
+               range_key(self.time_range))
         if key == self._key and not force:
             return
         self._key = key
@@ -219,10 +238,21 @@ class LayerLabels(QObject):
             except QgsCsException:
                 rect = layer.extent()
             to_wgs = QgsCoordinateTransform(layer.crs(), wgs, context)
+            when = self._time_filter(layer)
             for settings, rule in pairs:
                 jobs.append(_Job(layer, settings, rule, rect, to_wgs,
-                                 center))
+                                 center, when))
         return jobs
+
+    def _time_filter(self, layer):
+        """Выражение отбора объектов слоя по промежутку шкалы времени.
+        Пустая строка - слой без времени или шкала закрыта."""
+        props = layer.temporalProperties()
+        if self.time_range is None or not props.isActive():
+            return ""
+        context = QgsVectorLayerTemporalContext()
+        context.setLayer(layer)
+        return props.createFilterString(context, self.time_range) or ""
 
     def _done(self, generation, found):
         if generation != self.generation:

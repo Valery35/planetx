@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.39.0.
+A 3D globe inside QGIS. PlanetX version 0.40.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -187,8 +187,9 @@ and atmosphere, from space down to single streets.
   places folder with its tour - saves to a file and opens on another
   computer.
 - **Tracks.** A point layer with a time field shows as growing paths of
-  its objects along the QGIS Temporal Controller. The camera can follow
-  along the motion.
+  its objects along the time slider of the globe. The camera can follow
+  along the motion. A project layer with QGIS time shows within the
+  range of the same slider.
 - **Place properties.** Name, description, icon, colors, time,
   height above ground
   and extending to the ground. A path becomes a wall, a polygon a block.

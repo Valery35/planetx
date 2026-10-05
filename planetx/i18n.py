@@ -568,8 +568,8 @@ EN = {
     "и кадрами PNG для видео, демо «Пермь».":
         "Tours over places and along paths, recording a tour from the "
         "screen and as PNG frames for a video, the Perm demo.",
-    "Растущие треки по «Временному контроллеру» QGIS.":
-        "Growing tracks along the QGIS Temporal Controller.",
+    "Растущие треки и слои проекта по шкале времени глобуса.":
+        "Growing tracks and project layers along the globe time slider.",
     "Сцены в файл, снимок вида в файл и в макет QGIS.":
         "Scenes to a file, view snapshot to a file and into a QGIS layout.",
     "В правом верхнем углу вида кольцо компаса, джойстики взгляда "

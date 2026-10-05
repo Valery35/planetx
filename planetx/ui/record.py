@@ -66,7 +66,7 @@ class TourRecorder(QObject):
         width = max(2, int(round(view.width() * self.ratio)) // 2 * 2)
         height = max(2, int(round(view.height() * self.ratio)) // 2 * 2)
         self.size = (width, height)
-        self.line = Timeline(stops, pause, self.window.tracks.data_span(),
+        self.line = Timeline(stops, pause, self.window.time_span(),
                              FPS, view.camera.fov_y)
         self.folder = folder
         self.n = 0

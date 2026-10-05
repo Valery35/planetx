@@ -1241,8 +1241,9 @@ added there.
 ## Tracks
 
 A track shows the path of moving objects over time. The source is a
-point layer of the project with a time field, and the QGIS Temporal
-Controller sets the time.
+point layer of the project with a time field, and the time slider of
+the globe sets the time. The QGIS Temporal Controller does not act on
+the globe.
 
 The Track… item in the menu of a point layer opens the settings window:
 
@@ -1253,14 +1254,24 @@ The Track… item in the menu of a point layer opens the settings window:
 | Color | Color of the travelled path |
 | Camera follows | The camera keeps the first object in the middle of the view along the motion |
 
-Each object grows its travelled path up to the end of the current
-controller range, and a label with its name marks the current point.
-With the controller off, whole tracks are shown. The Remove track button
-returns the layer to its usual look. Track settings are stored in the
-project.
+The time of a track enters the extent of the time slider. Each object
+grows its travelled path up to the right handle of the slider, and a
+label with its name marks the current point. With the slider closed,
+whole tracks are shown. The Remove track button returns the layer to
+its usual look. Track settings are stored in the project.
 
-During a tour recording the tracks grow along the tour over the whole
-controller range.
+During a tour recording the tracks grow along the tour over the range
+of the open slider, with the slider closed over the whole track time.
+
+---
+
+## Project layers with time
+
+A project layer with time switched on in its QGIS temporal properties
+is shown on the globe within the range of the time slider. The time of
+the layer enters the extent of the slider. The picture of the layer
+and its labels are redrawn after the handles stop. With the slider
+closed, the layer is shown in full.
 
 ---
 
@@ -1273,7 +1284,7 @@ the extension `.planetx`.
 A scene holds:
 
 - the camera pose.
-- the time of the Temporal Controller.
+- the range of the open time slider.
 - the project layers checked on the globe, as a link to their source.
 - the base map, terrain, terrain exaggeration, groups of the Layers
   section and the label language.
@@ -1578,7 +1589,8 @@ in the same menu.
 
 - Project layers lie on the terrain as a picture, a layer cannot be
   raised or extruded by a field. Your own places have lift and extrusion.
-- Pictures of project layers are not filtered by the controller time.
+- A layer with time from an expression does not enter the extent of
+  the time slider, its range is set with the handles manually.
 - Above latitude 85° the poles are covered with the ocean color, the Web
   Mercator tile grid ends there.
 - Recording a tour takes longer than the tour itself.

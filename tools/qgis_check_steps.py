@@ -1314,21 +1314,17 @@ def idle_rewant_check():
     result["idle_rewant"] = out
 
 
-def _navigation_mode(name):
-    """Режим временного контроллера: в QGIS 4 областное имя в Qgis."""
-    from qgis.core import Qgis, QgsTemporalNavigationObject
-    scoped = getattr(Qgis, "TemporalNavigationMode", None)
-    if scoped is not None and hasattr(scoped, name):
-        return getattr(scoped, name)
-    old = {"Animated": "Animated", "Disabled": "NavigationOff"}[name]
-    return getattr(QgsTemporalNavigationObject.NavigationMode, old)
+def _open_time(lo, hi):
+    """Открыть шкалу времени глобуса на промежутке, секунды."""
+    from planetx.core import when
+    state["window"]._show_time((when.text(lo), when.text(hi)))
 
 
 @check(1500)
 def tracks():
-    from qgis.core import (QgsDateTimeRange, QgsFeature, QgsGeometry,
-                           QgsInterval, QgsPointXY, QgsVectorLayer)
+    from qgis.core import QgsFeature, QgsGeometry, QgsPointXY, QgsVectorLayer
     from qgis.PyQt.QtCore import QDateTime
+    from planetx.ui.track import seconds
     window = state["window"]
     layer = QgsVectorLayer(
         "Point?crs=EPSG:4326&field=t:datetime&field=obj:string",
@@ -1350,18 +1346,20 @@ def tracks():
     window.tracks.set_track(layer, {"time": "t", "object": "obj",
                                     "color": [255, 80, 40, 255],
                                     "follow": True})
-    controller = window.tracks.controller
-    controller.setTemporalExtents(QgsDateTimeRange(base, base.addSecs(1200)))
-    controller.setFrameDuration(QgsInterval(60))
-    controller.setNavigationMode(_navigation_mode("Animated"))
-    controller.setCurrentFrameNumber(4)  # 10:04-10:05
+    t0 = seconds(base)
+    state["track_base"] = t0
+    # Охват шкалы - время трека.
+    extent = window.timebar.track.extent if window.timebar.known else None
+    _open_time(t0 + 240, t0 + 300)  # 10:04-10:05
     tracker = window.tracks
     moment = tracker.moment
     shapes = tracker.shapes()
     flight = window.view.navigator.flight
-    from planetx.ui.track import seconds
-    out = {"moment_min": round((moment - seconds(base))
-                               / 60.0, 1) if moment is not None else None,
+    out = {"moment_min": round((moment - t0) / 60.0, 1)
+           if moment is not None else None,
+           "bar_known": window.timebar.known,
+           "extent": [round((v - t0) / 60.0, 1) for v in extent]
+           if extent else None,
            "shapes": sorted((s.kind, s.name, len(s.points))
                             for s in shapes),
            "glide": type(flight[1]).__name__ if flight else None,
@@ -1370,17 +1368,19 @@ def tracks():
                       round(flight[1].end.heading, 1)] if flight else None,
            "on_globe": sum(1 for s in window.view.features.shapes
                            if s.name in ("car", "elk"))}
-    # Шаги анимации не должны перечитывать точки треков.
+    # Шаги шкалы не должны перечитывать точки треков.
     reloads = []
     reload = tracker.reload
     tracker.reload = lambda: reloads.append(1) or reload()
-    for _ in range(3):
-        controller.next()
+    for k in range(3):
+        window.timebar.set_range(t0 + 300 + 60 * k, t0 + 360 + 60 * k)
         QgsApplication.processEvents()
     del tracker.reload
     out["reloads_on_steps"] = len(reloads)
-    controller.setNavigationMode(_navigation_mode("Disabled"))
-    tracker._time_changed()
+    out["moment_after_steps"] = round((tracker.moment - t0) / 60.0, 1) \
+        if tracker.moment is not None else None
+    window._time_toggled(False)
+    window.toolbar.set_time_shown(False)
     out["whole"] = sorted((s.kind, s.name, len(s.points))
                           for s in tracker.shapes())
     result["tracks"] = out
@@ -1388,22 +1388,139 @@ def tracks():
 
 @check(200)
 def tracks_off():
+    from qgis.utils import iface
     window = state["window"]
+    tracker = window.tracks
+    # Временной контроллер QGIS трек не двигает: глобус слушает только
+    # свою шкалу.
+    _open_time(state["track_base"] + 240, state["track_base"] + 300)
+    before = tracker.moment
+    controller = iface.mapCanvas().temporalController()
+    from qgis.core import QgsDateTimeRange
+    from planetx.ui.track import clock
+    controller.setTemporalExtents(QgsDateTimeRange(
+        clock(state["track_base"]), clock(state["track_base"] + 1200)))
+    controller.updateTemporalRange.emit(QgsDateTimeRange(
+        clock(state["track_base"]), clock(state["track_base"] + 1200)))
+    QgsApplication.processEvents()
+    result["tracks"]["controller_ignored"] = tracker.moment == before
+    window._time_toggled(False)
+    window.toolbar.set_time_shown(False)
     window.tracks.set_track(state["track_layer"], None)
     result["tracks"]["after_remove"] = len(window.tracks.shapes())
-    # После close сигнал контроллера в менеджер треков не идёт: шаг
-    # времени не меняет его момент.
-    tracker = window.tracks
-    controller = tracker.controller
-    controller.setNavigationMode(_navigation_mode("Animated"))
-    controller.setCurrentFrameNumber(2)
-    QgsApplication.processEvents()
-    tracker.close()
-    before = tracker.moment
-    controller.setCurrentFrameNumber(7)
-    QgsApplication.processEvents()
-    result["tracks"]["moment_kept_after_close"] = tracker.moment == before
-    controller.setNavigationMode(_navigation_mode("Disabled"))
+
+
+@check(1500)
+def layer_time():
+    """Слой проекта со временем рисуется в промежутке шкалы глобуса."""
+    from qgis.core import (Qgis, QgsFeature, QgsGeometry, QgsPalLayerSettings,
+                           QgsPointXY, QgsVectorLayer,
+                           QgsVectorLayerSimpleLabeling)
+    from qgis.PyQt.QtCore import QDateTime
+    from planetx.core.navigation import Pose
+    from planetx.ui.track import seconds
+    window = state["window"]
+    layer = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=t:datetime&field=name:string",
+        "Слой со временем", "memory")
+    base = QDateTime.fromString("2026-09-28T10:00:00", "yyyy-MM-ddTHH:mm:ss")
+    features = []
+    for k in range(6):
+        f = QgsFeature(layer.fields())
+        f.setGeometry(QgsGeometry.fromPointXY(
+            QgsPointXY(56.20 + 0.02 * k, 58.00)))
+        f["t"] = base.addSecs(3600 * k)
+        f["name"] = "p%d" % k
+        features.append(f)
+    layer.dataProvider().addFeatures(features)
+    props = layer.temporalProperties()
+    mode = getattr(Qgis, "VectorTemporalMode", None)
+    props.setMode(mode.FeatureDateTimeInstantFromField if mode is not None
+                  else props.ModeFeatureDateTimeInstantFromField)
+    props.setStartField("t")
+    props.setIsActive(True)
+    settings = QgsPalLayerSettings()
+    settings.fieldName = "name"
+    layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+    layer.setLabelsEnabled(True)
+    QgsProject.instance().addMapLayer(layer)
+    state["time_layer"] = layer
+    window.set_layer_shown(layer.id(), True)
+    window.refresh()
+    nav = window.view.navigator
+    nav.stop()
+    nav.show(Pose(58.0, 56.25, 30000.0, 0.0, 0.0))
+    t0 = seconds(base)
+    state["time_layer_base"] = t0
+    out = {"temporal": [l.name() for l in window._temporal_layers()],
+           "marks": len(window._data_marks),
+           "bar_known": window.timebar.known}
+    # Два часа из пяти: 11:00-13:00, видны p1, p2, p3.
+    _open_time(t0 + 3600, t0 + 3 * 3600)
+    window._layer_time_timer.stop()
+    window._apply_layer_time()
+    span = window.overlay.time_range if window.overlay is not None \
+        else None
+    out["overlay_range"] = [span.begin().toString("HH:mm"),
+                            span.end().toString("HH:mm")] if span else None
+    out["labels_filter"] = window.layer_labels._time_filter(layer)
+    out["drawn"] = _drawn_points(window, layer)
+    result["layer_time"] = out
+
+
+def _drawn_points(window, layer):
+    """Нарисованы ли точки p0-p5 слоя со временем на картинке
+    с настройками наложения глобуса."""
+    from qgis.core import (QgsCoordinateReferenceSystem,
+                           QgsCoordinateTransform, QgsMapRendererSequentialJob,
+                           QgsPointXY, QgsRectangle)
+    from qgis.PyQt.QtCore import QSize
+    if window.overlay is None:
+        return None
+    settings = window.overlay._settings((12, 0, 0))
+    settings.setLayers([layer])
+    to_map = QgsCoordinateTransform(
+        QgsCoordinateReferenceSystem("EPSG:4326"),
+        QgsCoordinateReferenceSystem("EPSG:3857"), QgsProject.instance())
+    a = to_map.transform(QgsPointXY(56.18, 57.99))
+    b = to_map.transform(QgsPointXY(56.32, 58.01))
+    settings.setExtent(QgsRectangle(a.x(), a.y(), b.x(), b.y()))
+    settings.setOutputSize(QSize(700, 200))
+    job = QgsMapRendererSequentialJob(settings)
+    job.start()
+    job.waitForFinished()
+    image = job.renderedImage()
+    pixels = settings.mapToPixel()
+    drawn = []
+    for k in range(6):
+        p = to_map.transform(QgsPointXY(56.20 + 0.02 * k, 58.00))
+        c = pixels.transform(p.x(), p.y())
+        x, y = int(c.x()), int(c.y())
+        drawn.append(any(image.pixelColor(i, j).alpha() > 0
+                         for i in range(x - 3, x + 4)
+                         for j in range(y - 3, y + 4)
+                         if 0 <= i < image.width()
+                         and 0 <= j < image.height()))
+    return drawn
+
+
+@check(3000)
+def layer_time_check():
+    window = state["window"]
+    out = result["layer_time"]
+    out["labels"] = sorted(m.name for m in window.layer_labels.marks
+                           if m.name.startswith("p"))
+    # Шкала закрыта - слой целиком, наложение без промежутка.
+    window._time_toggled(False)
+    window.toolbar.set_time_shown(False)
+    window._layer_time_timer.stop()
+    window._apply_layer_time()
+    out["closed_range"] = window.overlay.time_range is None \
+        if window.overlay is not None else None
+    out["closed_drawn"] = _drawn_points(window, state["time_layer"])
+    QgsProject.instance().removeMapLayer(state.pop("time_layer"))
+    window.refresh()
+    out["marks_after_remove"] = len(window._data_marks)
 
 
 @check(300)
@@ -1454,10 +1571,8 @@ SCENE_EXPECT = os.path.join(TEMP, "planetx_scene_expect.json")
 @check(1500)
 def scene_save():
     # Шаг 12, первый запуск: сцена в файл. Второй запуск - scene_open.
-    from qgis.core import (QgsDateTimeRange, QgsFeature, QgsGeometry,
-                           QgsInterval, QgsPointXY, QgsVectorFileWriter,
-                           QgsVectorLayer)
-    from qgis.PyQt.QtCore import QDateTime
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPointXY,
+                           QgsVectorFileWriter, QgsVectorLayer)
     from planetx.core.features import Shape
     from planetx.core.navigation import Pose
     window = state["window"]
@@ -1482,20 +1597,18 @@ def scene_save():
     store.add(Shape("point", [(58.01, 56.25)], name="Старт"),
               view=(3000.0, 40.0, 50.0), folder=folder)
     store.add(Shape("point", [(58.05, 56.35)], name="Финиш"),
-              folder=folder)
+              folder=folder,
+              period=("2026-09-28T10:00:00Z", "2026-09-28T11:00:00Z"))
     window.panel.select_place(folder)
-    controller = window.tracks.controller
-    base = QDateTime.fromString("2026-09-28T10:00:00", "yyyy-MM-ddTHH:mm:ss")
-    controller.setTemporalExtents(QgsDateTimeRange(base, base.addSecs(3600)))
-    controller.setFrameDuration(QgsInterval(300))
-    controller.setNavigationMode(_navigation_mode("Animated"))
-    controller.setCurrentFrameNumber(3)
+    # Шкала времени на 10:15-10:20 по времени метки «Финиш».
+    window._show_time(("2026-09-28T10:15:00Z", "2026-09-28T10:20:00Z"))
     nav = window.view.navigator
     nav.stop()
     nav.set_pose(Pose(58.02, 56.28, 15000.0, 25.0, 60.0))
     ok = window.save_scene(SCENE_PATH)
     expect = {"camera": [58.02, 56.28, 15000.0, 25.0, 60.0],
-              "frame": 3, "source": layer.source(),
+              "time": ["2026-09-28T10:15:00Z", "2026-09-28T10:20:00Z"],
+              "source": layer.source(),
               "places": ["Старт", "Финиш"]}
     with open(SCENE_EXPECT, "w", encoding="utf-8") as fh:
         json.dump(expect, fh, ensure_ascii=False)
@@ -1523,7 +1636,8 @@ def scene_open_check():
     key = state["scene_key"]
     places = [p.name for p in window.myplaces.places_in(key)] if key \
         else []
-    controller = window.tracks.controller
+    from planetx.core import when
+    span = window._time_range
     window._place_action("tour", key or "")
     stops = [s.name for s in window.tour.stops]
     window.tour.stop()
@@ -1534,7 +1648,9 @@ def scene_open_check():
                                if i == 2 else round(v, 2)
                                for i, v in enumerate(expect["camera"])],
         "camera": got,
-        "frame_same": controller.currentFrameNumber() == expect["frame"],
+        "time": [when.text(v) for v in span] if span else None,
+        "time_same": span is not None
+        and [when.text(v) for v in span] == expect["time"],
         "layers": [l.source() for l in shown if l is not None],
         "layer_same": any(l is not None and l.source() == expect["source"]
                           for l in shown),
@@ -1553,6 +1669,15 @@ def scene_password():
            "password='s3cret' key='id' srid=4326 type=Point "
            "table=\"public\".\"wells\" (geom)")
     cleaned = clean_uri("postgres", uri)
+    # Время прежней сцены - временной контроллер QGIS - становится
+    # промежутком шкалы: кадр 3 по 300 с от 10:00.
+    from planetx.ui.scene import scene_span
+    result["scene_old_time"] = {
+        "animated": scene_span({"mode": 1, "start": "2026-09-28T10:00:00",
+                                "end": "2026-09-28T11:00:00", "frame": 3,
+                                "step": 300.0}),
+        "off": scene_span({"mode": 0, "start": "2026-09-28T10:00:00",
+                           "end": "2026-09-28T11:00:00"})}
     result["scene_password"] = {"left": "s3cret" in cleaned,
                                 "user_kept": "geo" in cleaned,
                                 "file_same": clean_uri("ogr", "a.gpkg")
@@ -1586,9 +1711,9 @@ def _record(folder):
 
 @check(500)
 def record_setup():
-    from qgis.core import (QgsDateTimeRange, QgsFeature, QgsGeometry,
-                           QgsInterval, QgsPointXY, QgsVectorLayer)
+    from qgis.core import QgsFeature, QgsGeometry, QgsPointXY, QgsVectorLayer
     from qgis.PyQt.QtCore import QDateTime
+    from planetx.ui.track import seconds
     window = state["window"]
     layer = QgsVectorLayer(
         "Point?crs=EPSG:4326&field=t:datetime&field=obj:string",
@@ -1608,11 +1733,8 @@ def record_setup():
     window.tracks.set_track(layer, {"time": "t", "object": "obj",
                                     "color": [255, 80, 40, 255],
                                     "follow": False})
-    controller = window.tracks.controller
-    controller.setTemporalExtents(QgsDateTimeRange(base, base.addSecs(1200)))
-    controller.setFrameDuration(QgsInterval(60))
-    controller.setNavigationMode(_navigation_mode("Animated"))
-    controller.setCurrentFrameNumber(0)
+    # Шкала на весь трек, 10:00-10:20: запись ведёт трек по ней.
+    _open_time(seconds(base), seconds(base) + 1200)
     _record(RECORD_DIRS[0])
 
 
@@ -1670,7 +1792,8 @@ def record_check():
         "first_pose": [round(v, 4) for v in a["frames"][0]["pose"]],
         "tracks_released": not window.tracks.held})
     window.tracks.set_track(state["record_layer"], None)
-    window.tracks.controller.setNavigationMode(_navigation_mode("Disabled"))
+    window._time_toggled(False)
+    window.toolbar.set_time_shown(False)
 
 
 @check(500)

@@ -432,11 +432,15 @@ class LayerOverlay(QObject):
     failed = pyqtSignal(object, str)
     idle = pyqtSignal()
 
-    def __init__(self, layers, parent=None, min_levels=None):
+    def __init__(self, layers, parent=None, min_levels=None,
+                 time_range=None):
         super().__init__(parent)
         self.layers = list(layers)
         # Наименьший уровень тайла, с которого слой рисуется, по id слоя.
         self.min_levels = dict(min_levels or {})
+        # Промежуток шкалы времени глобуса, QgsDateTimeRange или None.
+        # Слои с действующими временными свойствами рисуются в нём.
+        self.time_range = time_range
         self.crs = QgsCoordinateReferenceSystem("EPSG:3857")
         self.queue = TileQueue(max_active=MAX_JOBS)
         self.jobs = {}
@@ -530,6 +534,9 @@ class LayerOverlay(QObject):
         context.appendScope(QgsExpressionContextUtils.globalScope())
         context.appendScope(QgsExpressionContextUtils.projectScope(project))
         settings.setExpressionContext(context)
+        if self.time_range is not None:
+            settings.setIsTemporal(True)
+            settings.setTemporalRange(self.time_range)
         return settings
 
     def _pump(self):

@@ -75,7 +75,7 @@ from ..qt_compat import enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import Group, IdentifyDialog, identify, point_text
-from .layer_labels import LayerLabels
+from .layer_labels import LayerLabels, range_key
 from .legend import (BedsLegend, CutawayLegend, FireLegend,
                      InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend,
@@ -119,7 +119,8 @@ from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
-from .track import TrackDialog, TrackManager
+from .track import (TrackDialog, TrackManager, date_range, layer_span,
+                    timed_layer)
 from .sync import MapSync
 from .timebar import TimeBar
 from .toolbar import ViewToolbar
@@ -181,6 +182,9 @@ SUN_PERIOD = 60000  # мс между пересчётами солнца по �
 EXTRA_KEY = "PlanetX/show_"  # + ключ строки
 THEME_KEY = "PlanetX/theme"  # тема NASA GIBS, "" - выключена
 THEME_DELAY = 300  # мс после движения шкалы времени до смены дня темы
+# Пауза после движения шкалы времени до новых картинок слоёв проекта
+# со временем, мс.
+LAYER_TIME_DELAY = 300
 # Пауза после движения угла картинки на поверхности до пересборки её
 # растра, мс.
 GROUND_DELAY = 400
@@ -542,6 +546,16 @@ class GlobeWindow(QWidget):
         self._theme_timer.setSingleShot(True)
         self._theme_timer.setInterval(THEME_DELAY)
         self._theme_timer.timeout.connect(self._apply_theme)
+        # Слои проекта со временем рисуются в промежутке шкалы. Картинки
+        # слоёв пересобираются после паузы в движении бегунков.
+        self._layer_time_timer = QTimer(self)
+        self._layer_time_timer.setSingleShot(True)
+        self._layer_time_timer.setInterval(LAYER_TIME_DELAY)
+        self._layer_time_timer.timeout.connect(self._apply_layer_time)
+        # Промежуток, с которым собрано наложение, и охват времени
+        # треков и слоёв на шкале.
+        self._applied_time = None
+        self._data_marks = []
         # Наложения картинок: растры картинок на поверхности в наложении,
         # ключи показанных фото и картинок на экране, текстуры фото,
         # окна свойств и их правки.
@@ -804,9 +818,11 @@ class GlobeWindow(QWidget):
         self._update_timebar()
         self.tour.stop_reached.connect(
             lambda stop: self._show_time(stop.time))
-        # Растущие треки точечных слоёв по времени контроллера QGIS.
+        # Растущие треки точечных слоёв по шкале времени глобуса.
         self.tracks = TrackManager(self.view, self)
         self.tracks.changed.connect(self._refresh_shapes)
+        self.tracks.reloaded.connect(self._update_data_marks)
+        self._update_data_marks()
         self.panel.track_requested.connect(self._open_track)
         self.panel.inset_toggled.connect(self.set_inset)
         self.toolbar.scene_save_requested.connect(self.save_scene)
@@ -1134,7 +1150,8 @@ class GlobeWindow(QWidget):
             or bool(self.extras.get("quakes")
                     and self.view.quakes.events) \
             or bool(self.extras.get("fires")
-                    and self.view.fires.fires is not None)
+                    and self.view.fires.fires is not None) \
+            or bool(self._data_marks)
         if self.timebar.track.point != (bool(theme) and not events):
             self.timebar.set_point(bool(theme) and not events)
         self.timebar.set_stepper(self._theme_step if theme else None)
@@ -1274,6 +1291,7 @@ class GlobeWindow(QWidget):
             math.radians(self.view.camera.fov_y) / 2.0)
         # Слои проекта - земные, на другом теле подписей нет.
         layers = (self._applied_layers or []) if self.planet.earth else []
+        self.layer_labels.time_range = self._layer_range()
         self.layer_labels.update(layers, pose.lat,
                                  pose.lon, width, force)
 
@@ -2140,6 +2158,8 @@ class GlobeWindow(QWidget):
             self._update_overlay(keep=True)
             # Подписи слоёв - заново: сменились слои или их данные.
             self._update_layer_labels(force=True)
+            # Охват времени слоёв на шкале мог смениться.
+            self._update_data_marks()
         self._show_attribution()
 
     def _switch_basemap(self, source, coarse=False):
@@ -2169,6 +2189,65 @@ class GlobeWindow(QWidget):
     def _shown_in_order(self):
         return [layer.id() for layer in map_layers()
                 if layer.id() in self._shown]
+
+    # Время слоёв проекта и треков.
+
+    def _temporal_layers(self):
+        """Слои проекта на глобусе с действующими временными свойствами
+        QGIS."""
+        project = QgsProject.instance()
+        layers = (project.mapLayer(layer_id) for layer_id
+                  in getattr(self, "_applied_layers", None) or ())
+        return [layer for layer in layers if timed_layer(layer)]
+
+    def _layer_range(self):
+        """Промежуток шкалы времени для слоёв со временем,
+        QgsDateTimeRange. None - шкала закрыта или таких слоёв нет,
+        тогда слои рисуются целиком, как и метки."""
+        span = getattr(self, "_time_range", None)
+        if span is None or not self.planet.earth \
+                or not self._temporal_layers():
+            return None
+        return date_range(*span)
+
+    def _apply_layer_time(self):
+        """Картинки и подписи слоёв со временем заново, если промежуток
+        шкалы для них сменился."""
+        if range_key(self._layer_range()) == self._applied_time:
+            return
+        self._update_overlay(keep=True)
+        self._update_layer_labels(force=True)
+
+    def _update_data_marks(self):
+        """Охват времени треков и слоёв проекта со временем на шкале.
+        Охват слоя просматривает его поля, поэтому он считается при
+        смене треков и слоёв, а не при движении шкалы."""
+        spans = [self.tracks.data_span()] if hasattr(self, "tracks") \
+            else []
+        spans += [layer_span(layer) for layer in self._temporal_layers()]
+        self._data_marks = [when.stamp(when.text(t))
+                            for span in spans if span is not None
+                            for t in span]
+        self._update_timebar()
+
+    def _follow_time(self):
+        """Треки и слои проекта за шкалой времени: треки - к правому
+        бегунку сразу, слои - после паузы в движении бегунков."""
+        span = self._time_range
+        hi = span[1] if span is not None and math.isfinite(span[1]) \
+            else None
+        if hasattr(self, "tracks"):
+            self.tracks.set_time(hi)
+        if range_key(self._layer_range()) != self._applied_time:
+            self._layer_time_timer.start()
+
+    def time_span(self):
+        """Промежуток времени треков для записи тура: открытая шкала,
+        иначе охват треков. None - треков нет."""
+        span = self._time_range
+        if span is not None and all(math.isfinite(v) for v in span):
+            return span
+        return self.tracks.data_span()
 
     def _start_loader(self):
         """Загрузчик выбранной подложки и её подпись."""
@@ -2323,9 +2402,12 @@ class GlobeWindow(QWidget):
             self.overlay.abort()
             self.overlay.deleteLater()
             self.overlay = None
+        time_range = self._layer_range()
+        self._applied_time = range_key(time_range)
         if layers:
             self.overlay = LayerOverlay(layers, parent=self,
-                                        min_levels=min_levels)
+                                        min_levels=min_levels,
+                                        time_range=time_range)
             self.overlay.loaded.connect(self.view.add_overlay)
         self.view.set_overlay(self.overlay,
                               keep=keep and self.overlay is not None)
@@ -2824,6 +2906,8 @@ class GlobeWindow(QWidget):
             if getattr(self, "theme_key", "") and self._theme_on() else None
         if theme_span is not None:
             times += [when.stamp(when.text(t)) for t in theme_span]
+        # Треки и слои проекта со временем - их охват.
+        times += getattr(self, "_data_marks", [])
         extent = when.extent(times)
         if extent is None and getattr(self, "theme_key", "") \
                 and self._theme_on() \
@@ -2840,6 +2924,8 @@ class GlobeWindow(QWidget):
             if self.timebar.shown() else None
         if hasattr(self, "extras") and hasattr(self, "_theme_timer"):
             self._time_mode()
+        if hasattr(self, "_layer_time_timer"):
+            self._follow_time()
 
     def _time_bar_closed(self):
         """Шкалу закрыли кнопкой ⏹ на ней самой."""
@@ -2854,6 +2940,7 @@ class GlobeWindow(QWidget):
             self.timebar.close_bar()
         self._time_range = self.timebar.range() \
             if self.timebar.shown() else None
+        self._follow_time()
         self._refresh_shapes()
         self._update_sun()
         self._time_quakes()
@@ -2867,6 +2954,7 @@ class GlobeWindow(QWidget):
 
     def _time_changed(self, lo, hi):
         self._time_range = (lo, hi)
+        self._follow_time()
         self._time_quakes()
         self._refresh_shapes()
         self._update_sun()
@@ -5363,7 +5451,7 @@ class GlobeWindow(QWidget):
             # удаление после выхода роняло QGIS 3.36.
             self.watch.blockSignals(True)
             self.sync.close()
-            self.tracks.close()
+            self._layer_time_timer.stop()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

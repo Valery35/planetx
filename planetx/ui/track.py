@@ -5,27 +5,32 @@
 
 Трек - точечный слой проекта с полем времени и, если объектов
 несколько, полем объекта. Настройки трека слоя хранятся в проекте.
-Время берётся у временного контроллера QGIS: к концу его текущего
-промежутка у объекта растёт пройденный путь, в текущей точке стоит
-метка с названием объекта. Контроллер выключен - треки целиком.
+Время задаёт шкала времени глобуса: к правому бегунку у объекта растёт
+пройденный путь, в текущей точке стоит метка с названием объекта.
+Шкала закрыта - треки целиком. Временной контроллер QGIS не
+слушается, решение автора от 30 сентября 2026 года.
+
+Здесь же время слоёв проекта: слой с действующими временными
+свойствами QGIS рисуется на глобусе в промежутке шкалы.
 
 Камера следом держит объект в центре, азимут - по ходу движения,
 расстояние и наклон остаются. Между шагами времени камера доезжает
 до новой точки плавно (core.track.Glide).
 """
 import json
+import math
 import time
 
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsCsException, QgsFeatureRequest, QgsProject,
-                       QgsVectorLayer)
+                       QgsCsException, QgsDateTimeRange, QgsFeatureRequest,
+                       QgsProject, QgsVectorLayer)
 from qgis.gui import QgsColorButton
-from qgis.PyQt.QtCore import QDate, QDateTime, QObject, Qt, pyqtSignal
+from qgis.PyQt.QtCore import (QDate, QDateTime, QObject, Qt, QTime,
+                              pyqtSignal)
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QFormLayout, QPushButton,
                                  QVBoxLayout)
-from qgis.utils import iface
 
 from ..core.features import Shape
 from ..core.navigation import Pose
@@ -69,6 +74,59 @@ def seconds(value):
                                       enum(Qt, "DateFormat", "ISODate"))
         return seconds(parsed) if parsed.isValid() else None
     return None
+
+
+def clock(value):
+    """QDateTime с показаниями часов value секунд от 1970 года, без
+    часового пояса, как у seconds. Бесконечность - пустое время,
+    открытый край промежутка QGIS."""
+    if value is None or not math.isfinite(value):
+        return QDateTime()
+    days = math.floor(value / 86400.0)
+    msecs = int(round((value - days * 86400.0) * 1000.0))
+    if msecs >= 86400000:
+        days, msecs = days + 1, msecs - 86400000
+    return QDateTime(QDate.fromJulianDay(JULIAN_1970 + int(days)),
+                     QTime.fromMSecsSinceStartOfDay(msecs))
+
+
+def date_range(lo, hi):
+    """Промежуток QGIS из секунд шкалы времени."""
+    return QgsDateTimeRange(clock(lo), clock(hi))
+
+
+def timed_layer(layer):
+    """Действуют ли у слоя временные свойства QGIS."""
+    props = layer.temporalProperties() if layer is not None else None
+    return props is not None and props.isActive()
+
+
+def layer_span(layer):
+    """Охват времени слоя в секундах (от, до) или None.
+
+    У векторного слоя - наименьшее и наибольшее значение полей начала
+    и конца, иначе постоянный промежуток временных свойств. Слой со
+    временем по выражению охвата не даёт. Поиск наименьшего значения
+    у поставщика бывает просмотром всех объектов, поэтому охват
+    спрашивается при смене слоёв, а не при движении шкалы.
+    """
+    if not timed_layer(layer):
+        return None
+    props = layer.temporalProperties()
+    values = []
+    if isinstance(layer, QgsVectorLayer):
+        fields = layer.fields()
+        for name in {props.startField(), props.endField()}:
+            index = fields.indexOf(name) if name else -1
+            if index >= 0:
+                values += [seconds(layer.minimumValue(index)),
+                           seconds(layer.maximumValue(index))]
+    values = [v for v in values if v is not None]
+    if not values and hasattr(props, "fixedTemporalRange"):
+        fixed = props.fixedTemporalRange()
+        values = [v for v in (seconds(fixed.begin()), seconds(fixed.end()))
+                  if v is not None]
+    return (min(values), max(values)) if values else None
 
 
 def point_layer(layer):
@@ -187,9 +245,11 @@ class TrackDialog(QDialog):
 
 
 class TrackManager(QObject):
-    """Треки слоёв проекта, время контроллера QGIS и камера следом."""
+    """Треки слоёв проекта, время шкалы глобуса и камера следом."""
 
     changed = pyqtSignal()
+    # Точки треков перечитаны: охват шкалы времени мог смениться.
+    reloaded = pyqtSignal()
 
     def __init__(self, view, parent=None):
         super().__init__(parent)
@@ -197,25 +257,12 @@ class TrackManager(QObject):
         self.settings = {}  # номер слоя -> настройки
         self.tracks = {}  # номер слоя -> Track
         self.moment = None  # секунды или None - треки целиком
+        self._wanted = None  # момент шкалы, его возвращает release
         self._shapes = []
         self._last_step = None
-        # Момент держит запись тура, контроллер его не меняет.
+        # Момент держит запись тура, шкала его не меняет.
         self.held = False
-        controller = iface.mapCanvas().temporalController() \
-            if iface is not None else None
-        self.controller = controller
-        # Контроллер переживает окно глобуса. Связь с ним снимает close,
-        # иначе после закрытия окна сигнал шёл бы в удалённый объект,
-        # как у ProjectWatch в QGIS 3.40.15.
-        self._link = controller.updateTemporalRange.connect(
-            self._time_changed) if controller is not None else None
         self.load()
-
-    def close(self):
-        """Снять связь с временным контроллером QGIS."""
-        if self._link is not None:
-            QObject.disconnect(self._link)
-            self._link = None
 
     # Настройки в проекте.
 
@@ -252,49 +299,36 @@ class TrackManager(QObject):
                 continue
             self.tracks[layer_id] = read_track(layer, settings["time"],
                                                settings.get("object", ""))
-        self._time_changed()
+        self.reloaded.emit()
+        self._apply()
 
     # Время.
 
-    def _current_range(self):
-        """Текущий промежуток контроллера или None, если он выключен.
+    def set_time(self, moment):
+        """Момент правого бегунка шкалы времени, None - шкала закрыта,
+        треки целиком. Тот же момент второй раз ничего не делает."""
+        if moment == self._wanted and not self.held:
+            return
+        self._wanted = moment
+        self._apply()
 
-        Номер режима: 0 - выключен, 1 - анимация, 2 - неподвижный
-        промежуток, у QGIS 3 и 4 одинаково.
-        """
-        controller = self.controller
-        if controller is None:
-            return None
-        mode = enum_int(controller.navigationMode())
-        if mode == 0:
-            return None
-        if mode == 1:
-            return controller.dateTimeRangeForFrameNumber(
-                controller.currentFrameNumber())
-        return controller.temporalExtents()
-
-    def _time_changed(self, *args):
-        """Новый промежуток времени: сигнал контроллера даёт его сам."""
+    def _apply(self):
         if self.held:
             return
-        span = args[0] if args else self._current_range()
-        if self.controller is not None \
-                and enum_int(self.controller.navigationMode()) == 0:
-            span = None
-        self.moment = seconds(span.end()) if span is not None else None
+        self.moment = self._wanted
         self._build()
         self._follow()
         self.changed.emit()
 
     def data_span(self):
-        """Промежуток времени данных контроллера в секундах или None,
-        если контроллер выключен. По нему запись тура ведёт треки."""
-        controller = self.controller
-        if controller is None \
-                or enum_int(controller.navigationMode()) == 0:
+        """Охват времени всех треков в секундах или None, если треков
+        нет. По нему запись тура ведёт треки при закрытой шкале."""
+        starts = [t.start for t in self.tracks.values()
+                  if t.start is not None]
+        ends = [t.end for t in self.tracks.values() if t.end is not None]
+        if not starts:
             return None
-        extents = controller.temporalExtents()
-        return seconds(extents.begin()), seconds(extents.end())
+        return min(starts), max(ends)
 
     def set_moment(self, moment):
         """Момент треков от шкалы записи тура, без камеры следом.
@@ -308,9 +342,9 @@ class TrackManager(QObject):
         self.changed.emit()
 
     def release(self):
-        """Конец записи: момент снова от контроллера."""
+        """Конец записи: момент снова от шкалы времени."""
         self.held = False
-        self._time_changed()
+        self._apply()
 
     def _build(self):
         shapes = []

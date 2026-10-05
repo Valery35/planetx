@@ -3,11 +3,13 @@
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Сцена глобуса в файл и из файла (шаг 12).
 
-Снимок сцены берёт камеру, время временного контроллера, отмеченные
-на глобусе слои проекта, настройки вида и выбранную папку «Моих меток».
-Применение сцены ставит настройки, берёт слои из проекта или добавляет
-их по источнику, кладёт метки сцены в «Мои метки» новой папкой, ставит
-время и ведёт камеру в позу сцены.
+Снимок сцены берёт камеру, промежуток открытой шкалы времени,
+отмеченные на глобусе слои проекта, настройки вида и выбранную папку
+«Моих меток». Применение сцены ставит настройки, берёт слои из проекта
+или добавляет их по источнику, кладёт метки сцены в «Мои метки» новой
+папкой, открывает шкалу на промежутке сцены и ведёт камеру в позу
+сцены. Время временного контроллера QGIS из прежних сцен становится
+промежутком шкалы.
 
 Пароль из источника слоя базы данных при сохранении вырезается, файл
 сцены передают другим людям. Ссылка authcfg на настройку подключения
@@ -15,27 +17,52 @@ QGIS остаётся.
 """
 import math
 
-from qgis.core import (QgsDataSourceUri, QgsDateTimeRange, QgsInterval,
-                       QgsProject, QgsRasterLayer, QgsVectorLayer)
+from qgis.core import (QgsDataSourceUri, QgsProject, QgsRasterLayer,
+                       QgsVectorLayer)
 from qgis.PyQt.QtCore import QDateTime, Qt
 
+from ..core import when
 from ..core.kml import read_kml, write_kml
 from ..core.places import LABEL_LANGUAGES, LOCAL, AS_QGIS
 from ..core.scene import Scene
 from .project import read_insets
-from ..qt_compat import enum, enum_int
+from .track import seconds
+from ..qt_compat import enum
 
 # Поставщики, в источнике которых бывает пароль.
 DATABASES = ("postgres", "mssql", "oracle", "hana", "db2", "spatialite")
 
 
-def _iso(value):
-    return value.toString(enum(Qt, "DateFormat", "ISODate"))
-
-
 def _datetime(text):
     return QDateTime.fromString(text or "", enum(Qt, "DateFormat",
                                                  "ISODate"))
+
+
+def scene_span(time):
+    """Промежуток шкалы времени сцены парой строк KML или None.
+
+    Прежняя сцена хранила временной контроллер QGIS. Выключенный
+    контроллер - без времени, анимация - промежуток текущего кадра,
+    иначе весь промежуток контроллера.
+    """
+    if not isinstance(time, dict):
+        return None
+    if "mode" not in time:
+        start, end = time.get("start"), time.get("end")
+        if isinstance(start, str) and isinstance(end, str):
+            return (start, end)
+        return None
+    mode = time.get("mode")
+    lo = seconds(_datetime(time.get("start")))
+    hi = seconds(_datetime(time.get("end")))
+    if mode not in (1, 2, 3) or lo is None or hi is None:
+        return None
+    step, frame = time.get("step"), time.get("frame")
+    if mode == 1 and isinstance(step, (int, float)) and step > 0 \
+            and isinstance(frame, int):
+        lo = lo + frame * step
+        hi = lo + step
+    return (when.text(lo), when.text(hi))
 
 
 def clean_uri(provider, source):
@@ -82,13 +109,9 @@ def capture(window, folder=None, name=""):
                        "shown": layer_id in shown,
                        "relief": layer_id in reliefs})
     time = None
-    controller = window.tracks.controller
-    if controller is not None:
-        extents = controller.temporalExtents()
-        time = {"mode": enum_int(controller.navigationMode()),
-                "start": _iso(extents.begin()), "end": _iso(extents.end()),
-                "frame": int(controller.currentFrameNumber()),
-                "step": float(controller.frameDuration().seconds())}
+    span = window._time_range
+    if span is not None and all(math.isfinite(v) for v in span):
+        time = {"start": when.text(span[0]), "end": when.text(span[1])}
     view = {"basemap": window.sources[window._basemap].name,
             "relief": bool(window._relief), "scale": float(window._scale),
             "groups": sorted(window._groups),
@@ -137,18 +160,6 @@ def _add_layer(entry):
         return None
     QgsProject.instance().addMapLayer(layer)
     return layer
-
-
-def _navigation_mode(number):
-    """Режим временного контроллера по номеру, QGIS 3 и 4."""
-    from qgis.core import Qgis, QgsTemporalNavigationObject
-    names = {0: ("Disabled", "NavigationOff"), 1: ("Animated", "Animated"),
-             2: ("FixedRange", "FixedRange"), 3: ("Movie", "Movie")}
-    new, old = names.get(int(number), names[0])
-    scoped = getattr(Qgis, "TemporalNavigationMode", None)
-    if scoped is not None and hasattr(scoped, new):
-        return getattr(scoped, new)
-    return getattr(QgsTemporalNavigationObject.NavigationMode, old)
 
 
 def apply(window, scene, kml=b""):
@@ -201,21 +212,11 @@ def apply(window, scene, kml=b""):
         # Метки ложатся на тело сцены, в том числе на небо.
         key = window.myplaces.import_tree(read_kml(kml, scene.places),
                                           body=window.body_key())
-    controller = window.tracks.controller
-    if scene.time and controller is not None:
-        start = _datetime(scene.time.get("start"))
-        end = _datetime(scene.time.get("end"))
-        if start.isValid() and end.isValid():
-            controller.setTemporalExtents(QgsDateTimeRange(start, end))
-        step = scene.time.get("step")
-        if isinstance(step, (int, float)) and step > 0:
-            controller.setFrameDuration(QgsInterval(float(step)))
-        controller.setNavigationMode(_navigation_mode(
-            scene.time.get("mode", 0)))
-        frame = scene.time.get("frame")
-        if isinstance(frame, int):
-            controller.setCurrentFrameNumber(frame)
     window.refresh()
+    # Шкала - после слоёв и меток: их время входит в охват шкалы.
+    span = scene_span(scene.time)
+    if span is not None:
+        window._show_time(span)
     lat, lon, distance, heading, tilt = scene.camera
     window._fly_to(lat, lon, distance, heading, tilt)
     sky = view.get("sky")
