@@ -119,6 +119,8 @@ from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
+from .satellites import SatelliteManager
+from ..core import satellites as satellites_core
 from .track import (TrackDialog, TrackManager, date_range, layer_span,
                     timed_layer)
 from .sync import MapSync
@@ -162,12 +164,12 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False,
                   "quakes": False, "cutaway": False, "paleo": False,
-                  "plates": False, "fires": False}
+                  "plates": False, "fires": False, "satellites": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
-                "cutaway", "paleo", "plates", "fires")
+                "cutaway", "paleo", "plates", "fires", "satellites")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -913,6 +915,12 @@ class GlobeWindow(QWidget):
             settings.setValue(EXTRA_KEY + "paleo", False)
         self.panel.set_extras(self.extras)
         self.panel.extra_toggled.connect(self.set_extra)
+        # Спутники CelesTrak - строка с группами (ui/satellites.py).
+        self.satellite_manager = SatelliteManager(self)
+        self.satellite_manager.changed.connect(self._show_attribution)
+        self.panel.set_satellite_groups(self.satellite_manager.groups)
+        self.panel.satellite_groups_changed.connect(
+            self.satellite_manager.set_groups)
         self.grid_shapes = []
         self._grid_key = None
         self.layer_labels = LayerLabels(self)
@@ -1084,6 +1092,16 @@ class GlobeWindow(QWidget):
             self._set_paleo(on)
         elif key == "plates":
             self._set_plates(on)
+        elif key == "satellites":
+            self.satellite_manager.set_on(on)
+
+    def satellite_span(self):
+        """Момент спутников, секунды UTC: правый бегунок открытой шкалы
+        времени или None - часы компьютера."""
+        span = getattr(self, "_time_range", None)
+        if span is not None and math.isfinite(span[1]):
+            return span[1]
+        return None
 
     # Темы NASA GIBS.
 
@@ -2250,6 +2268,8 @@ class GlobeWindow(QWidget):
             self.tracks.set_time(hi)
         if range_key(self._layer_range()) != self._applied_time:
             self._layer_time_timer.start()
+        if hasattr(self, "satellite_manager"):
+            self.satellite_manager.time_changed()
 
     def time_span(self):
         """Промежуток времени треков для записи тура: открытая шкала,
@@ -2297,6 +2317,9 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*quakes.ATTRIBUTION))
         if self.view.fires.fires is not None:
             parts.append(link_html(*fires_core.ATTRIBUTION))
+        manager = getattr(self, "satellite_manager", None)
+        if manager is not None and manager.on and manager.count():
+            parts.append(link_html(*satellites_core.ATTRIBUTION))
         if self.planet.earth and getattr(self, "extras", {}).get("plates") \
                 and self.plates_data is not None:
             parts.append(link_html(*plates.ATTRIBUTION))
@@ -3023,6 +3046,9 @@ class GlobeWindow(QWidget):
             for point, name in sky]
         if getattr(self, "tracks", None) is not None and self.planet.earth:
             shapes += self.tracks.shapes()
+        if getattr(self, "satellite_manager", None) is not None \
+                and self.planet.earth:
+            shapes += self.satellite_manager.shapes()
         shapes += getattr(self, "grid_shapes", [])
         if self._ruler_open():
             shape = self.ruler.shape()
@@ -4809,6 +4835,13 @@ class GlobeWindow(QWidget):
         camera = view.camera
         point = ground_under(camera, px, py, view.navigator.pose.terrain)
         if point is None:
+            # Спутник на фоне неба опрашивается и без поверхности.
+            found = self._identify_satellites(px, py)
+            if found:
+                self._identify_at = None
+                if self.identified is None:
+                    self.identified = IdentifyDialog(self)
+                self.identified.show_result(found[0][1][0][0], found)
             return
         lat, lon, h = (float(v) for v in ecef_to_geodetic(point))
         # Метров на пиксель кадра в точке щелчка.
@@ -4837,6 +4870,7 @@ class GlobeWindow(QWidget):
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
         groups += self._identify_fires(px, py)
+        groups = self._identify_satellites(px, py) + groups
         under = self.subsurface.identify(
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
         if under:
@@ -5217,6 +5251,12 @@ class GlobeWindow(QWidget):
                              None))
         return [(Group(tr("Землетрясения")), features)] if features else []
 
+    def _identify_satellites(self, px, py):
+        """Спутник у точки щелчка на экране, группа окна «Объекты»."""
+        found = self.satellite_manager.identify(px, py)
+        features = [(name, values, None) for name, values in found]
+        return [(Group(tr("Спутники")), features)] if features else []
+
     def _identify_fires(self, px, py):
         """Очаги пожаров у точки щелчка на экране, не больше 20."""
         layer = self.view.fires
@@ -5511,6 +5551,7 @@ class GlobeWindow(QWidget):
             self.sync.close()
             self._layer_time_timer.stop()
             self._link_timer.stop()
+            self.satellite_manager.close()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

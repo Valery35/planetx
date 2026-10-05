@@ -1281,6 +1281,53 @@ closed, the layer is shown in full.
 
 ---
 
+## Satellites
+
+The Satellites row of the Layers section shows artificial satellites
+of the Earth as dots at their height. The groups stand under the row,
+any of them can be checked:
+
+| Group | What it holds |
+|---|---|
+| Space stations | the ISS, Tiangong and the docked spacecraft |
+| Bright satellites | about a hundred satellites and stages visible without binoculars |
+| Navigation | GPS, GLONASS, Galileo, BeiDou |
+| Weather satellites | weather satellites |
+| Earth observation | imaging satellites, Landsat and Sentinel among them |
+| Science | science satellites and observatories |
+| Geostationary | active satellites at about 36 000 km |
+| Starlink, OneWeb | communication satellites, thousands of dots |
+
+CelesTrak gives the orbital elements of the groups. The position is
+calculated by the SGP4 model for the right handle of the time slider.
+With the slider closed, the satellites follow the computer clock. A
+satellite whose elements are older than 30 days at that moment is not
+shown.
+
+CelesTrak updates the elements once in 2 hours and asks to download a
+group no more often. A downloaded group is kept in the QGIS profile,
+and a new request goes no earlier than 2 hours later. After a refusal
+of CelesTrak the group is not requested for 2 hours.
+
+A click on a satellite dot with identification on opens the Identify
+window with the name, the NORAD number, the group, the height, the
+speed and the age of the elements. The satellite becomes the selected
+one.
+
+The selected satellite shows its orbit loop at its height and its
+ground track. The loop shows one revolution ahead of the moment, the
+track shows the path of the point under the satellite half a
+revolution back and ahead. A right click on a satellite dot opens a
+menu with its name and two items:
+
+- Orbit and ground track shows or removes the loop and the track.
+- Camera follows puts the look point under the satellite, the view
+  turned along its motion. The distance and the tilt of the view
+  change with the wheel and the mouse as usual. Choosing the item
+  again releases the camera.
+
+---
+
 ## Scenes
 
 A scene saves the whole view and can be passed to other people. The

@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.41.0.
+A 3D globe inside QGIS. PlanetX version 0.42.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -190,6 +190,11 @@ and atmosphere, from space down to single streets.
   its objects along the time slider of the globe. The camera can follow
   along the motion. A project layer with QGIS time shows within the
   range of the same slider.
+- **Satellites.** The Satellites row shows stations, navigation,
+  weather, geostationary and other satellites from CelesTrak elements
+  for the moment of the time slider or by the clock. The selected
+  satellite shows its orbit loop and ground track, the camera can
+  follow it.
 - **Place properties.** Name, description, icon, colors, time,
   height above ground
   and extending to the ground. A path becomes a wall, a polygon a block.

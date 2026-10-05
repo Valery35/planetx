@@ -94,6 +94,7 @@ def show(window, px, py):
             title.setEnabled(False)
             menu.addAction(tr("Свойства…")).triggered.connect(
                 lambda *a, p=place: window._open_place_properties(p))
+        satellite_items(window, menu, px, py)
     ground = window._ground(px, py)
     if ground is not None:
         lat, lon = ground
@@ -111,6 +112,42 @@ def show(window, px, py):
         menu.deleteLater()
         return
     menu.popup(QCursor.pos())
+
+
+def satellite_items(window, menu, px, py):
+    """Пункты спутника под курсором: виток и след, камера следом. Если
+    камера идёт следом, а спутника под курсором нет, - пункт, который
+    её отпускает."""
+    manager = getattr(window, "satellite_manager", None)
+    if manager is None:
+        return
+    number = manager.under(px, py)
+    if number is None:
+        if not manager.follow:
+            return
+        number = manager.selected
+    if not menu.isEmpty():
+        menu.addSeparator()
+    title = menu.addAction(manager.name_of(number) or str(number))
+    title.setEnabled(False)
+    chosen = manager.selected == number
+    path = menu.addAction(tr("Орбита и след"))
+    path.setCheckable(True)
+    path.setChecked(chosen)
+    path.toggled.connect(
+        lambda on, n=number: manager.select(n if on else None))
+    follow = menu.addAction(tr("Камера следом"))
+    follow.setCheckable(True)
+    follow.setChecked(chosen and manager.follow)
+    follow.toggled.connect(
+        lambda on, n=number: follow_satellite(manager, n, on))
+
+
+def follow_satellite(manager, number, on):
+    """Камера следом за спутником, выбор - вместе с ней."""
+    if on and manager.selected != number:
+        manager.select(number)
+    manager.set_follow(on)
 
 
 def fly_here(view, lat, lon):

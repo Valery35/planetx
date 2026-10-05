@@ -5777,6 +5777,236 @@ def overlay_refresh_same():
     return None
 
 
+SAT_SAMPLES = os.environ.get(
+    "PLANETX_SAT_SAMPLES",
+    os.path.join(TEMP, "claude", "C--Dev-planetx",
+                 "7087209f-26e4-42e4-91cf-1a0075997747", "scratchpad",
+                 "sgp4ref"))
+
+
+def _file_server(files):
+    """Сервер файлов на 127.0.0.1 в потоке: путь /<имя> - байты files,
+    счёт запросов по имени."""
+    import http.server
+    import threading
+    counts = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return None
+
+        def do_GET(self):
+            name = self.path.strip("/").split("?")[0]
+            counts[name] = counts.get(name, 0) + 1
+            body = files.get(name)
+            if body is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "text/csv")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, counts
+
+
+@check(1000)
+def sat_on():
+    """Спутники трёх групп с сервера на 127.0.0.1 вместо CelesTrak."""
+    from qgis.core import QgsSettings
+    from planetx.core import satellites as core
+    from planetx.core.navigation import Pose
+    from planetx.ui import satellites as ui_sat
+    window = state["window"]
+    window.set_body("earth")
+    files = {}
+    for group, name in (("stations", "stations"), ("gnss", "gps-ops"),
+                        ("geo", "geo")):
+        with open(os.path.join(SAT_SAMPLES, name + ".csv"), "rb") as fh:
+            files[group + ".csv"] = fh.read()
+    server, counts = _file_server(files)
+    state["sat_server"] = (server, counts, core.FEED)
+    core.FEED = "http://127.0.0.1:{}/{{group}}.csv".format(
+        server.server_address[1])
+    for group in ("stations", "gnss", "geo", "science"):
+        path = ui_sat.group_file(group)
+        if os.path.exists(path):
+            os.remove(path)
+        QgsSettings().remove(ui_sat.FAILED_KEY + group)
+    manager = window.satellite_manager
+    window.set_extra("satellites", False)
+    manager.set_groups({"stations", "gnss", "geo"})
+    window.panel.set_satellite_groups(manager.groups)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(0.0, 60.0, 90000e3, 0.0, 0.0))
+    window.set_extra("satellites", True)
+    result["satellites"] = {"pending_at_start": len(manager.replies)}
+
+
+@check(4000)
+def sat_wait():
+    return None
+
+
+@check(1500)
+def sat_check():
+    import time as _time
+    from planetx.ui import satellites as ui_sat
+    window = state["window"]
+    manager = window.satellite_manager
+    view = window.view
+    server, counts, feed = state["sat_server"]
+    out = result["satellites"]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_sat.png"))
+    out.update({
+        "count": manager.count(),
+        "groups": sorted(manager.swarm.groups),
+        "requests": dict(counts),
+        "files": sorted(g for g in ("stations", "gnss", "geo")
+                        if os.path.exists(ui_sat.group_file(g))),
+        "drawn": view.satellites.drawn,
+        "tick": manager.tick.isActive(),
+        "credit": "CelesTrak" in window.attribution.text(),
+        "pending": view.data_pending})
+    seen = view.satellites.seen
+    if seen.size:
+        index = int(seen[0])
+        pixels, _ = view.camera.project(view.satellites.points[[index]])
+        px, py = (float(v) for v in pixels[0])
+        found = window._identify_satellites(px, py)
+        out["picked"] = [found[0][1][0][0]] + [
+            "{}: {}".format(k, v) for k, v in found[0][1][0][1]] \
+            if found else None
+    # Повторное включение берёт файлы, запросов не прибавляется.
+    window.set_extra("satellites", False)
+    window.set_extra("satellites", True)
+    while not manager.swarm.init_some():
+        pass
+    out["requests_after_toggle"] = dict(counts)
+    out["count_after_toggle"] = manager.count()
+    # Шкала на 2020 год: элементы старше 30 суток, точек нет, кадр
+    # не стоит секунды на интегрирование резонансов.
+    old = 1594771200.0  # 15 июля 2020 года
+    window._time_range = (old - 3600.0, old)
+    manager.time_changed()
+    start = _time.perf_counter()
+    view.grabFramebuffer()
+    out["old_frame_ms"] = round((_time.perf_counter() - start) * 1000, 1)
+    out["old_drawn"] = view.satellites.drawn
+    out["old_tick"] = manager.tick.isActive()
+    window._time_range = None
+    manager.time_changed()
+    # После отказа группа не просится два часа.
+    from qgis.core import QgsSettings
+    QgsSettings().setValue(ui_sat.FAILED_KEY + "science", _time.time())
+    manager.set_groups({"stations", "gnss", "geo", "science"})
+    out["refused_error"] = manager.errors.get("science")
+    out["science_requests"] = counts.get("science.csv", 0)
+    manager.set_groups({"stations", "gnss", "geo"})
+    QgsSettings().remove(ui_sat.FAILED_KEY + "science")
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(1000)
+def sat_path():
+    """Выбор МКС пунктом меню: виток с высотами и след на земле, потом
+    камера следом."""
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    window = state["window"]
+    view = window.view
+    manager = window.satellite_manager
+    manager.select(None)
+    index = manager.swarm.index_of(25544)
+    point, _ = manager.swarm.motion(index, manager.moment())
+    lat, lon, _ = (float(v) for v in ecef_to_geodetic_point(point))
+    # МКС над точкой взгляда с 20 000 км.
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(lat, lon, 20000e3, 0.0, 0.0))
+    view.grabFramebuffer()
+    pixels, _ = view.camera.project(point.reshape(1, 3))
+    px, py = (float(v) for v in pixels[0])
+    out = result.setdefault("sat_path", {})
+    out["under"] = manager.under(px, py)
+    before = set(window.findChildren(QMenu))
+    globemenu.show(window, px, py)
+    menus = [m for m in window.findChildren(QMenu) if m not in before]
+    actions = [a for m in menus for a in m.actions()]
+    out["menu"] = [a.text() for a in actions if a.text()]
+    for action in actions:
+        if action.text() == "Орбита и след" or \
+                action.text() == "Orbit and ground track":
+            action.trigger()
+    for menu in menus:
+        menu.close()
+    shapes = manager.shapes()
+    out["selected"] = manager.selected
+    out["shapes"] = len(shapes)
+    if shapes:
+        alts = shapes[0].alts
+        out["orbit_km"] = [round(min(alts) / 1000.0),
+                           round(max(alts) / 1000.0)]
+        out["orbit_points"] = len(shapes[0].points)
+        out["track_lat"] = round(max(abs(p[0]) for p in shapes[1].points), 2)
+    out["in_view"] = sum(1 for s in view.features.shapes if s.alts is not None
+                         and len(s.alts) == len(shapes[0].points)) \
+        if shapes else 0
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_sat_path.png"))
+    # Камера следом: шаг часов на минуту - точка взгляда под МКС.
+    manager.clock = manager.moment()
+    manager.set_follow(True)
+    out["follow_tick"] = manager.tick.interval()
+    manager.clock += 60.0
+    manager._tick()
+    point, _ = manager.swarm.motion(index, manager.moment())
+    lat, lon, _ = (float(v) for v in ecef_to_geodetic_point(point))
+    pose = view.navigator.pose
+    out["follow_offset"] = [round(pose.lat - lat, 4),
+                            round((pose.lon - lon + 180.0) % 360.0 - 180.0, 4)]
+    out["follow_distance"] = round(pose.distance / 1000.0)
+    out["follow_heading"] = round(pose.heading, 1)
+    out["gl"] = dict(view.gl_errors)
+
+
+def ecef_to_geodetic_point(point):
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    return ecef_to_geodetic(point)
+
+
+@check(500)
+def sat_path_off():
+    window = state["window"]
+    manager = window.satellite_manager
+    manager.clock = None
+    out = result["sat_path"]
+    # Снятие строки снимает выбор, витка и камеры следом больше нет.
+    window.set_extra("satellites", False)
+    out["after_off"] = {"selected": manager.selected,
+                        "follow": manager.follow,
+                        "shapes": len(manager.shapes()),
+                        "tick": manager.tick.isActive()}
+    window.set_extra("satellites", True)
+
+
+@check(500)
+def sat_off():
+    from planetx.core import satellites as core
+    window = state["window"]
+    window.set_extra("satellites", False)
+    server, counts, feed = state.pop("sat_server")
+    core.FEED = feed
+    server.shutdown()
+    out = result["satellites"]
+    out["after_off"] = {"source": window.view.satellites.source is None,
+                        "tick": window.satellite_manager.tick.isActive(),
+                        "credit": "CelesTrak" in window.attribution.text()}
+
+
 @check(1500)
 def overlay_refresh_check():
     window = state["window"]

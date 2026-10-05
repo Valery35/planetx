@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.41.0
+version=0.42.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.41.0 A linked image overlay is read again after the
+changelog=0.42.0 The Satellites row of the Layers section shows
+      artificial satellites of the Earth as dots at their height.
+      Stations, navigation, weather, geostationary, Starlink and
+      other groups are offered. CelesTrak gives the orbital elements,
+      the SGP4 model places them for the moment of the time slider
+      or the clock. A click shows the number, height and speed of a
+      satellite. The selected satellite shows its orbit loop and
+      ground track, and the camera can follow it.
+      0.41.0 A linked image overlay is read again after the
       interval of the new Refresh field while it is shown, a web
       address past the cache. The globe keeps a fresh image or map
       that a server updates by itself. KML refreshMode onInterval and

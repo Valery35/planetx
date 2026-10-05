@@ -43,6 +43,7 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            WATER_NAMES)
 from ..qt_compat import QAction, enum, enum_int
 from .placeprops import icon_image
+from .satellites import group_names as satellite_group_names
 from .spinner import BusySpinner
 from .themes import group_names, theme_names
 
@@ -64,8 +65,9 @@ FIRES = "fires"
 CUTAWAY = "cutaway"
 PALEO = "paleo"
 PLATES = "plates"
+SATELLITES = "satellites"
 EXTRAS = (GRID, STARS, CLOUDS, TEMPERATURE, BUILDINGS, SUN, SLOPE, ASPECT,
-          QUAKES, FIRES, PLATES, CUTAWAY, PALEO)
+          QUAKES, FIRES, PLATES, CUTAWAY, PALEO, SATELLITES)
 # Роль данных строки «Моих меток»: ключ метки «вид:номер».
 PLACE_ROLE = LAYER_ROLE + 1
 # Роль строки записанного тура: у неё своё меню.
@@ -80,6 +82,7 @@ RADIO_ROLE = BASEMAP_ROLE + 1
 RADIO_FOLDER_ROLE = RADIO_ROLE + 1
 THEME_ROLE = RADIO_FOLDER_ROLE + 1  # ключ темы NASA GIBS
 THEME_GROUP_ROLE = THEME_ROLE + 1  # ключ группы тем NASA GIBS
+SAT_GROUP_ROLE = THEME_GROUP_ROLE + 1  # ключ группы спутников CelesTrak
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 # Клавиши строки поиска и списка подсказок под ней.
 KEY_PRESS = enum(QEvent, "Type", "KeyPress")
@@ -431,6 +434,8 @@ class LayerPanel(QWidget):
     relief_toggled = pyqtSignal(bool)
     # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
     extra_toggled = pyqtSignal(str, bool)
+    # Отмеченные группы спутников, множество ключей CelesTrak.
+    satellite_groups_changed = pyqtSignal(object)
     # Тема NASA GIBS: ключ core.themes, "" - тема выключена.
     theme_chosen = pyqtSignal(str)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
@@ -693,13 +698,28 @@ class LayerPanel(QWidget):
                     "углу вида. Есть у Земли, Марса и Луны.")),
                 (ASPECT, tr("Экспозиция"), tr(
                     "Куда обращён склон - цвет стороны света, ровное "
-                    "место серое. Включается вместо уклона."))):
+                    "место серое. Включается вместо уклона.")),
+                (SATELLITES, tr("Спутники"), tr(
+                    "Искусственные спутники по орбитальным элементам "
+                    "CelesTrak, положение по модели SGP4. Время - правый "
+                    "бегунок шкалы времени, без шкалы - часы компьютера. "
+                    "Группы выбираются флажками ниже. Элементы группы "
+                    "обновляются не чаще раза в 2 часа."))):
             item = QTreeWidgetItem(self.geo, [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)
             item.setFlags(item.flags() | CHECKABLE)
             item.setCheckState(0, UNCHECKED)
             self.extra_items[key] = item
+        # Группы спутников - строки под «Спутниками», отмечаются любые.
+        self.sat_items = {}
+        for key, text, tip in satellite_group_names():
+            item = QTreeWidgetItem(self.extra_items[SATELLITES], [text])
+            item.setData(0, SAT_GROUP_ROLE, key)
+            item.setToolTip(0, tip)
+            item.setFlags(item.flags() | CHECKABLE)
+            item.setCheckState(0, UNCHECKED)
+            self.sat_items[key] = item
         # Темы NASA GIBS - группы строк, отмечена одна тема из всех.
         # Просьба автора от 5 октября 2026 года.
         # Флажок группы отмечен, когда включена её тема. Снятый флажок
@@ -985,7 +1005,7 @@ class LayerPanel(QWidget):
             if parent is not None:
                 parent.setDisabled(off)
         for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, FIRES,
-                    PLATES, CUTAWAY, PALEO):
+                    PLATES, CUTAWAY, PALEO, SATELLITES):
             self.extra_items[key].setDisabled(not earth)
         for group in self.theme_groups:
             group.setDisabled(not earth)
@@ -1039,7 +1059,19 @@ class LayerPanel(QWidget):
         self.set_theme(chosen)
         self.theme_chosen.emit(chosen)
 
+    def set_satellite_groups(self, groups):
+        """Отметить группы спутников. Сигналы при этом не идут."""
+        self.geo.blockSignals(True)
+        for key, item in self.sat_items.items():
+            item.setCheckState(0, CHECKED if key in groups else UNCHECKED)
+        self.geo.blockSignals(False)
+
     def _geo_changed(self, item):
+        if item.data(0, SAT_GROUP_ROLE):
+            self.satellite_groups_changed.emit(
+                {key for key, row in self.sat_items.items()
+                 if row.checkState(0) == CHECKED})
+            return
         if item.data(0, THEME_ROLE):
             self._theme_changed(item)
             return

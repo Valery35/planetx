@@ -170,6 +170,65 @@ EN = {
         "or a web address, the image is read when shown, an edit of the "
         "file shows on the globe.",
     "Хранение": "Storage",
+    "Спутники": "Satellites",
+    "Искусственные спутники по орбитальным элементам CelesTrak, положение "
+    "по модели SGP4. Время - правый бегунок шкалы времени, без шкалы - "
+    "часы компьютера. Группы выбираются флажками ниже. Элементы группы "
+    "обновляются не чаще раза в 2 часа.":
+        "Artificial satellites from CelesTrak orbital elements, positions "
+        "by the SGP4 model. The time is the right handle of the time "
+        "slider, without the slider - the computer clock. Groups are "
+        "chosen with the check boxes below. Group elements are updated "
+        "at most once in 2 hours.",
+    "Космические станции": "Space stations",
+    "Международная космическая станция, китайская станция «Тяньгун» "
+    "и пристыкованные к ним корабли.":
+        "The International Space Station, the Chinese Tiangong station "
+        "and the spacecraft docked to them.",
+    "Яркие спутники": "Bright satellites",
+    "Около ста спутников и ступеней ракет, которые видны с Земли без "
+    "бинокля.":
+        "About a hundred satellites and rocket stages visible from the "
+        "Earth without binoculars.",
+    "Навигация": "Navigation",
+    "Спутники GPS, ГЛОНАСС, Galileo и BeiDou на средних орбитах около "
+    "20 000 км и геосинхронных.":
+        "GPS, GLONASS, Galileo and BeiDou satellites on medium orbits "
+        "of about 20 000 km and geosynchronous ones.",
+    "Метеоспутники": "Weather satellites",
+    "Метеорологические спутники на полярных и геостационарных орбитах.":
+        "Weather satellites on polar and geostationary orbits.",
+    "Наблюдение Земли": "Earth observation",
+    "Спутники съёмки Земли, в том числе Landsat и Sentinel.":
+        "Earth imaging satellites, Landsat and Sentinel among them.",
+    "Научные": "Science",
+    "Научные спутники и обсерватории на околоземных орбитах.":
+        "Science satellites and observatories on Earth orbits.",
+    "Геостационарные": "Geostationary",
+    "Действующие спутники на геосинхронной орбите, около 36 000 км над "
+    "экватором. Над Землёй они почти неподвижны.":
+        "Active satellites on the geosynchronous orbit, about 36 000 km "
+        "above the equator. They stay almost still over the Earth.",
+    "Starlink": "Starlink",
+    "Спутники связи SpaceX на высоте 340-570 км, их тысячи. Загрузка "
+    "и первый расчёт идут дольше прочих групп.":
+        "SpaceX communication satellites at 340-570 km, thousands of "
+        "them. Loading and the first calculation take longer than for "
+        "other groups.",
+    "OneWeb": "OneWeb",
+    "Спутники связи OneWeb на высоте около 1200 км.":
+        "OneWeb communication satellites at about 1200 km.",
+    "CelesTrak отказал в группе, новый запрос - через 2 часа после "
+    "отказа.":
+        "CelesTrak refused the group, a new request goes 2 hours after "
+        "the refusal.",
+    "Ответ без элементов орбит.": "The answer has no orbital elements.",
+    "Номер NORAD": "NORAD number",
+    "Группа": "Group",
+    "{value} км/с": "{value} km/s",
+    "Возраст элементов": "Elements age",
+    "Орбита и след": "Orbit and ground track",
+    "{value} сут": "{value} d",
     "Обновлять": "Refresh",
     "не обновлять": "no refresh",
     "Картинка по ссылке читается заново через этот промежуток, "
