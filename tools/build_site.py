@@ -29,6 +29,7 @@ OUT = os.path.join(ROOT, "site", "planetx_landing.html")
 PDF_URL = "https://github.com/Valery35/planetx/releases/latest/download/"
 WEB_WIDTH = 960  # пикселей, ширина снимка на странице
 WEB_QUALITY = 70  # качество JPEG
+HALF_WIDTH = 560  # пикселей, снимок в паре или тройке
 
 
 def version():
@@ -37,13 +38,14 @@ def version():
         return re.search(r"^version=(\S+)", fh.read(), re.M).group(1)
 
 
-def image(name):
-    """Снимок в строке data: JPEG шириной не больше WEB_WIDTH."""
+def image(name, width=WEB_WIDTH):
+    """Снимок в строке data: JPEG шириной не больше width. Снимки пары
+    на странице - в половину ширины, им хватает HALF_WIDTH."""
     with Image.open(os.path.join(IMAGES, name)) as picture:
         picture = picture.convert("RGB")
-        if picture.width > WEB_WIDTH:
-            height = round(picture.height * WEB_WIDTH / picture.width)
-            picture = picture.resize((WEB_WIDTH, height), Image.LANCZOS)
+        if picture.width > width:
+            height = round(picture.height * width / picture.width)
+            picture = picture.resize((width, height), Image.LANCZOS)
         out = io.BytesIO()
         picture.save(out, "JPEG", quality=WEB_QUALITY, optimize=True,
                      progressive=True)
@@ -144,6 +146,55 @@ RU = {
     "places.c3.h": "Туры",
     "places.c3.p": "Тур облетает метки или проигрывает запись движения "
                    "камеры. Тур записывается кадрами PNG для ролика.",
+    "nav.deep": "Вглубь и NASA",
+    "deep.eyebrow": "Земля вглубь и во времени",
+    "deep.h2": "Разрезы, недра и прошлое планеты",
+    "deep.sub": "Строка «Разрез Земли» вынимает из шара сектор, на его "
+                "гранях видны кора CRUST1.0, мантия и ядро, погружающиеся "
+                "плиты Slab2 и очаги землетрясений USGS на своих "
+                "глубинах. Путь меток режется вниз окном «Разрез» на "
+                "глубину до центра Земли.",
+    "deep.cut": "Разрез Земли у Японского жёлоба. Оболочки PREM, кора "
+                "и очаги землетрясений за 30 суток.",
+    "deep.paleo": "Земля 100 млн лет назад по картам PaleoDEM, Scotese "
+                  "and Wright 2018.",
+    "deep.c1.h": "Подземный режим",
+    "deep.c1.p": "Скважины с интервалами и инклинометрией, кровли "
+                 "пластов, разрезы с картинкой, тоннели и вырез блока "
+                 "строятся из обычных слоёв проекта. Поверхность "
+                 "становится полупрозрачной.",
+    "deep.c2.h": "Свой рельеф",
+    "deep.c2.p": "Растр высот проекта, например съёмка карьера, "
+                 "заменяет рельеф глобуса в своём охвате и плавно "
+                 "переходит в общий рельеф у края. Внутри охвата рельеф "
+                 "подробнее, до 0.6 м на пиксель.",
+    "deep.c3.h": "Палеогеография",
+    "deep.c3.p": "Карты суши и моря на 109 возрастов от сегодняшнего "
+                 "дня до 540 млн лет назад. Ползунок возраста "
+                 "проигрывает смену материков.",
+    "nasa.eyebrow": "Данные NASA",
+    "nasa.h2": "Планета огня, планета воды и ночная Земля",
+    "nasa.sub": "Группы «Планета огня», «Планета воды», «Газы» "
+                "и «Земля и жизнь» включают 21 тему NASA GIBS по дням, "
+                "от осадков и снега до метана и растительности. День "
+                "темы задаёт шкала времени. Пожары за последние 24 часа "
+                "приходят из сводки NASA FIRMS.",
+    "nasa.fires": "Пожары в Южной Америке за 24 часа, 4 октября 2026 "
+                  "года. Цвет и размер точки - мощность излучения.",
+    "nasa.lights": "Европа ночью при строке «Солнце». Огни городов - "
+                   "снимок NASA Black Marble.",
+    "nasa.c1.h": "Темы и шкала времени",
+    "nasa.c1.p": "Тема лежит полупрозрачной раскраской поверх снимка, "
+                 "шкала стоит в углу вида. Кнопки шкалы времени "
+                 "проходят ряд тем по дням.",
+    "nasa.c2.h": "Картинки и KML",
+    "nasa.c2.p": "Картинки на поверхности, фото с камерой и картинки "
+                 "на экране, как в KML Google Earth. Картинка "
+                 "на поверхности ложится в проект QGIS слоем GeoTIFF.",
+    "nasa.c3.h": "Источники данных",
+    "nasa.c3.p": "Окно всех источников с условиями использования "
+                 "и проверкой доступности. В нём ставятся свой рельеф "
+                 "и своя векторная основа.",
     "nav.worlds": "Марс, Луна, небо",
     "worlds.eyebrow": "Другие тела и небо",
     "worlds.h2": "Марс, Луна и звёздное небо",
@@ -174,9 +225,11 @@ RU = {
                    "между удалёнными точками и сужает его у цели.",
     "worlds.c3.h": "Демо",
     "worlds.c3.p": "Значок с академической шапочкой открывает "
-                   "подготовленные сцены. На Земле это Пермь "
-                   "и Бока-Чика, на Марсе и Луне - места посадок "
-                   "аппаратов, на небе - созвездия и яркие объекты.",
+                   "подготовленные сцены. На Земле это Пермь, Бока-Чика, "
+                   "Японский жёлоб, пермские отложения, тоннели Vegas "
+                   "Loop, Аральское море и карьер, на Марсе и Луне - "
+                   "места посадок аппаратов, на небе - созвездия "
+                   "и яркие объекты.",
     "controls.eyebrow": "Управление",
     "controls.h2": "Навигация мышью и клавиатурой",
     "controls.sub": "Значок "
@@ -234,7 +287,10 @@ RU = {
                  "Рельеф Mapzen Terrain Tiles. Марс - NASA, USGS, Viking "
                  "MDIM2.1, Луна - USGS, LRO LOLA, тайлы "
                  "OpenPlanetaryMap. Созвездия и имена звёзд - "
-                 "d3-celestial, © Olaf Frohn.",
+                 "d3-celestial, © Olaf Frohn. Темы, огни и пожары - "
+                 "NASA GIBS, Black Marble, FIRMS. Землетрясения и плиты "
+                 "Slab2 - USGS, кора - CRUST1.0, палеогеография - "
+                 "PALEOMAP PaleoDEM.",
 }
 
 EN = {
@@ -334,6 +390,55 @@ EN = {
     "places.c3.p": "A tour flies over placemarks or plays a recorded "
                    "camera movement. A tour records to PNG frames for a "
                    "video.",
+    "nav.deep": "Depth and NASA",
+    "deep.eyebrow": "The Earth in depth and in time",
+    "deep.h2": "Sections, the underground and the past of the planet",
+    "deep.sub": "The Earth cutaway row removes a sector of the globe, its "
+                "faces show the CRUST1.0 crust, the mantle and the core, "
+                "Slab2 subducting slabs and USGS earthquake foci at their "
+                "depths. A placemark path is cut downwards by the "
+                "Section window down to the centre of the Earth.",
+    "deep.cut": "Earth cutaway at the Japan Trench. PREM shells, the "
+                "crust and earthquake foci over 30 days.",
+    "deep.paleo": "The Earth 100 million years ago from the PaleoDEM "
+                  "maps, Scotese and Wright 2018.",
+    "deep.c1.h": "Subsurface mode",
+    "deep.c1.p": "Boreholes with intervals and surveys, bed tops, "
+                 "sections with images, tunnels and a block cut are "
+                 "built from ordinary project layers. The surface "
+                 "becomes semi-transparent.",
+    "deep.c2.h": "Own terrain",
+    "deep.c2.p": "A project height raster, for example a quarry survey, "
+                 "replaces the globe terrain within its extent and blends "
+                 "into the common terrain at the edge. Within the extent "
+                 "the terrain is finer, down to 0.6 m per pixel.",
+    "deep.c3.h": "Paleogeography",
+    "deep.c3.p": "Land and sea maps for 109 ages from today to 540 "
+                 "million years ago. The age slider plays the movement "
+                 "of the continents.",
+    "nasa.eyebrow": "NASA data",
+    "nasa.h2": "Planet of fire, planet of water and the Earth at night",
+    "nasa.sub": "The Planet of Fire, Planet of Water, Gases and Land and "
+                "Life groups switch on 21 NASA GIBS themes by days, from "
+                "precipitation and snow to methane and vegetation. The "
+                "day of a theme is set by the time slider. Fires over "
+                "the last 24 hours come from the NASA FIRMS feed.",
+    "nasa.fires": "Fires in South America over 24 hours, 4 October 2026. "
+                  "The colour and size of a dot show the radiative power.",
+    "nasa.lights": "Europe at night with the Sun row. City lights are "
+                   "the NASA Black Marble image.",
+    "nasa.c1.h": "Themes and the time slider",
+    "nasa.c1.p": "A theme lies as semi-transparent colouring over the "
+                 "imagery, its legend stands in the view corner. The "
+                 "time slider buttons step through the theme by days.",
+    "nasa.c2.h": "Images and KML",
+    "nasa.c2.p": "Ground overlays, photos with a camera and screen "
+                 "overlays, as in Google Earth KML. A ground overlay goes "
+                 "into the QGIS project as a GeoTIFF layer.",
+    "nasa.c3.h": "Data sources",
+    "nasa.c3.p": "A window with all sources, their terms of use and an "
+                 "availability check. It sets own terrain and an own "
+                 "vector base.",
     "nav.worlds": "Mars, Moon, sky",
     "worlds.eyebrow": "Other bodies and the sky",
     "worlds.h2": "Mars, the Moon and the starry sky",
@@ -367,10 +472,11 @@ EN = {
                    "target.",
     "worlds.c3.h": "Demo",
     "worlds.c3.p": "The icon with an academic cap opens prepared "
-                   "scenes. On the Earth these are Perm and Boca Chica, "
-                   "on Mars and the Moon the landing sites of "
-                   "spacecraft, in the sky constellations and bright "
-                   "objects.",
+                   "scenes. On the Earth these are Perm, Boca Chica, the "
+                   "Japan Trench, Permian deposits, the Vegas Loop "
+                   "tunnels, the Aral Sea and a quarry, on Mars and the "
+                   "Moon the landing sites of spacecraft, in the sky "
+                   "constellations and bright objects.",
     "controls.eyebrow": "Controls",
     "controls.h2": "Mouse and keyboard navigation",
     "controls.sub": "The View "
@@ -427,7 +533,10 @@ EN = {
                  "Terrain Tiles. Mars - NASA, USGS, Viking MDIM2.1, the "
                  "Moon - USGS, LRO LOLA, tiles OpenPlanetaryMap. "
                  "Constellations and star names - d3-celestial, "
-                 "© Olaf Frohn.",
+                 "© Olaf Frohn. Themes, lights and fires - NASA GIBS, "
+                 "Black Marble, FIRMS. Earthquakes and Slab2 slabs - "
+                 "USGS, crust - CRUST1.0, paleogeography - PALEOMAP "
+                 "PaleoDEM.",
 }
 
 CONTROLS = "".join(
@@ -551,6 +660,7 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
         <a href="#idea" data-i18n="nav.idea"></a>
         <a href="#layers" data-i18n="nav.layers"></a>
         <a href="#project" data-i18n="nav.project"></a>
+        <a href="#deep" data-i18n="nav.deep"></a>
         <a href="#worlds" data-i18n="nav.worlds"></a>
         <a href="#controls" data-i18n="nav.controls"></a>
         <a href="#family" data-i18n="fam.eyebrow"></a>
@@ -638,6 +748,50 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
         <p data-i18n="places.c2.p"></p></div>
       <div class="card"><h3 data-i18n="places.c3.h"></h3>
         <p data-i18n="places.c3.p"></p></div>
+    </div>
+  </div>
+</section>
+
+<section id="deep">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="deep.eyebrow"></div>
+    <h2 data-i18n="deep.h2"></h2>
+    <p class="sub" data-i18n="deep.sub"></p>
+    <div class="pair">
+      <figure><img alt="" src="@CUTAWAY@">
+        <figcaption data-i18n="deep.cut"></figcaption></figure>
+      <figure><img alt="" src="@PALEO@">
+        <figcaption data-i18n="deep.paleo"></figcaption></figure>
+    </div>
+    <div class="trio">
+      <div class="card"><h3 data-i18n="deep.c1.h"></h3>
+        <p data-i18n="deep.c1.p"></p></div>
+      <div class="card"><h3 data-i18n="deep.c2.h"></h3>
+        <p data-i18n="deep.c2.p"></p></div>
+      <div class="card"><h3 data-i18n="deep.c3.h"></h3>
+        <p data-i18n="deep.c3.p"></p></div>
+    </div>
+  </div>
+</section>
+
+<section id="nasa">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="nasa.eyebrow"></div>
+    <h2 data-i18n="nasa.h2"></h2>
+    <p class="sub" data-i18n="nasa.sub"></p>
+    <div class="pair">
+      <figure><img alt="" src="@FIRES@">
+        <figcaption data-i18n="nasa.fires"></figcaption></figure>
+      <figure><img alt="" src="@LIGHTS@">
+        <figcaption data-i18n="nasa.lights"></figcaption></figure>
+    </div>
+    <div class="trio">
+      <div class="card"><h3 data-i18n="nasa.c1.h"></h3>
+        <p data-i18n="nasa.c1.p"></p></div>
+      <div class="card"><h3 data-i18n="nasa.c2.h"></h3>
+        <p data-i18n="nasa.c2.p"></p></div>
+      <div class="card"><h3 data-i18n="nasa.c3.h"></h3>
+        <p data-i18n="nasa.c3.p"></p></div>
     </div>
   </div>
 </section>
@@ -793,9 +947,13 @@ def main():
             ("@EARTH@", image("earth.jpg")),
             ("@PERM@", image("perm.jpg")),
             ("@DEMO@", image("demo.jpg")),
-            ("@MARS@", image("mars.jpg")),
-            ("@MOON@", image("moon.jpg")),
-            ("@SKY@", image("sky.jpg")),
+            ("@CUTAWAY@", image("cutaway.jpg", HALF_WIDTH)),
+            ("@PALEO@", image("paleo.jpg", HALF_WIDTH)),
+            ("@FIRES@", image("fires.jpg", HALF_WIDTH)),
+            ("@LIGHTS@", image("lights.jpg", HALF_WIDTH)),
+            ("@MARS@", image("mars.jpg", HALF_WIDTH)),
+            ("@MOON@", image("moon.jpg", HALF_WIDTH)),
+            ("@SKY@", image("sky.jpg", HALF_WIDTH)),
             ("@CONTROLS@", CONTROLS),
             ("@VERSION@", version()),
             ("@TEXTS@", json.dumps({"ru": RU, "en": EN},
