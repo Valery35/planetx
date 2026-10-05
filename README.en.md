@@ -194,7 +194,9 @@ and atmosphere, from space down to single streets.
   weather, geostationary and other satellites from CelesTrak elements
   for the moment of the time slider or by the clock. The selected
   satellite shows its orbit loop and ground track, the camera can
-  follow it.
+  follow it. The time slider runs at clock speeds up to a day per
+  second, the line between day and night and the satellites move
+  with it.
 - **Place properties.** Name, description, icon, colors, time,
   height above ground
   and extending to the ground. A path becomes a wall, a polygon a block.

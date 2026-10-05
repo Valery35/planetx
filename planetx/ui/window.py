@@ -1080,6 +1080,7 @@ class GlobeWindow(QWidget):
             self._set_buildings(on)
         elif key == "sun":
             self._update_sun()
+            self._update_timebar()
         elif key in SURFACE_EXTRAS:
             self._set_surface()
         elif key == "quakes":
@@ -1094,6 +1095,19 @@ class GlobeWindow(QWidget):
             self._set_plates(on)
         elif key == "satellites":
             self.satellite_manager.set_on(on)
+            self._update_timebar()
+
+    def _clock_on(self):
+        """Нужны ли часы глобуса: Солнце или спутники на Земле, вид
+        неба. Тогда шкала времени открывается и без данных."""
+        view = getattr(self, "view", None)
+        if view is not None and view.sky_view is not None:
+            return True
+        extras = getattr(self, "extras", {})
+        planet = getattr(self, "planet", None)
+        earth = planet is None or planet.earth
+        return earth and bool(extras.get("sun")
+                              or extras.get("satellites"))
 
     def satellite_span(self):
         """Момент спутников, секунды UTC: правый бегунок открытой шкалы
@@ -1180,8 +1194,10 @@ class GlobeWindow(QWidget):
             or bool(self.extras.get("fires")
                     and self.view.fires.fires is not None) \
             or bool(self._data_marks)
-        if self.timebar.track.point != (bool(theme) and not events):
-            self.timebar.set_point(bool(theme) and not events)
+        # Часам, как и покрытию, нужен момент.
+        point = (bool(theme) or self._clock_on()) and not events
+        if self.timebar.track.point != point:
+            self.timebar.set_point(point)
         self.timebar.set_stepper(self._theme_step if theme else None)
         self.timebar.ready = self._theme_ready if theme else None
 
@@ -2058,6 +2074,7 @@ class GlobeWindow(QWidget):
             button.setEnabled(False)
         self._show_attribution()
         self.sky_labels.sync()
+        self._update_timebar()
         view.update()
 
     def set_constellations(self, on):
@@ -2090,6 +2107,7 @@ class GlobeWindow(QWidget):
                                        and self.planet.earth)
         self.paleo_bar.setVisible(self._paleo_on())
         self.view.plain_base = self._paleo_on()
+        self._update_timebar()
         self._show_theme()
         self._set_surface()
         self.toolbar.set_body(self.planet.key)
@@ -2942,6 +2960,7 @@ class GlobeWindow(QWidget):
         # Треки и слои проекта со временем - их охват.
         times += getattr(self, "_data_marks", [])
         extent = when.extent(times)
+        self.timebar.set_clock(self._clock_on())
         if extent is None and getattr(self, "theme_key", "") \
                 and self._theme_on() \
                 and self.theme_key not in self._theme_domains:
@@ -2952,7 +2971,7 @@ class GlobeWindow(QWidget):
         # Панель значков заводится позже первого чтения меток.
         toolbar = getattr(self, "toolbar", None)
         if toolbar is not None:
-            toolbar.set_time_available(extent is not None)
+            toolbar.set_time_available(self.timebar.known)
         self._time_range = self.timebar.range() \
             if self.timebar.shown() else None
         if hasattr(self, "extras") and hasattr(self, "_theme_timer"):

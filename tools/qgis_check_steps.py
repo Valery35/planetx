@@ -5993,6 +5993,74 @@ def sat_path_off():
     window.set_extra("satellites", True)
 
 
+@check(800)
+def clock_on():
+    """Часы глобуса: строка «Солнце» без меток со временем открывает
+    шкалу на часах компьютера, показ ×3600."""
+    import time as _time
+    window = state["window"]
+    window.set_body("earth")
+    bar = window.timebar
+    out = result.setdefault("clock", {})
+    window.set_extra("sun", False)
+    out["before"] = {"known": bar.known, "data": bar.data}
+    window.set_extra("sun", True)
+    window._time_toggled(True)
+    window.toolbar.set_time_shown(True)
+    out["opened"] = {
+        "known": bar.known, "shown": bar.shown(),
+        "point": bar.track.point, "now_button": bar.now.isVisibleTo(bar),
+        "rate": bar.speed.currentData(), "label": bar.label.text(),
+        "from_now": round(bar.range()[1] - _time.time(), 1),
+        "available": window.toolbar.time.isEnabled()
+        if hasattr(window.toolbar, "time") else None}
+    bar.speed.setCurrentIndex(bar.speed.findData(3600.0))
+    bar.toggle()
+    state["clock_start"] = (bar.range()[1], _time.monotonic(),
+                            tuple(window.view.sun))
+
+
+@check(500)
+def clock_wait():
+    return None
+
+
+@check(500)
+def clock_check():
+    import time as _time
+    import numpy as np
+    window = state["window"]
+    bar = window.timebar
+    out = result["clock"]
+    moment, wall, sun_dir = state.pop("clock_start")
+    now = bar.range()[1]
+    out["rate_seen"] = round((now - moment) / (_time.monotonic() - wall))
+    cos = float(np.clip(np.dot(np.array(sun_dir),
+                               np.array(window.view.sun)), -1.0, 1.0))
+    out["sun_turned_deg"] = round(float(np.degrees(np.arccos(cos))), 2)
+    out["sun_moment"] = round(window.sun_time() - now, 1)
+    out["satellite_moment"] = round(
+        window.satellite_manager.moment() - now, 1)
+    # Край охвата: показ идёт дальше, охват сдвигается за моментом.
+    a, b = bar.extent()
+    bar.track.set_range(b - 1.0, b - 1.0)
+    bar._last = _time.monotonic() - 1.0
+    bar._step()
+    a2, b2 = bar.extent()
+    hi = bar.range()[1]
+    out["past_end"] = {"moved_s": round(hi - b),
+                       "inside": a2 <= hi <= b2,
+                       "playing": bar.timer.isActive()}
+    bar.to_now()
+    out["now"] = {"from_now": round(bar.range()[1] - _time.time(), 1),
+                  "rate": bar.speed.currentData(),
+                  "playing": bar.timer.isActive()}
+    bar.stop()
+    window.set_extra("sun", False)
+    out["after_off"] = {"known": bar.known, "shown": bar.shown()}
+    out["gl"] = dict(window.view.gl_errors)
+
+
 @check(500)
 def sat_off():
     from planetx.core import satellites as core

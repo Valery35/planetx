@@ -1855,10 +1855,19 @@ EN = {
     "Закрыть шкалу времени. Закрытая шкала метки "
     "не скрывает.":
         "Close the time slider. A closed slider does not hide placemarks.",
-    "Скорость проигрывания. При ×1 промежуток проходит шкалу "
-    "за 20 секунд.":
-        "Playback speed. At ×1 the interval crosses the slider in 20 "
-        "seconds.",
+    "Скорость проигрывания. «Шкала за 20 с» проходит всю шкалу "
+    "за 20 секунд. ×1 - время идёт как на часах, ×3600 - час "
+    "за секунду, ×86400 - сутки за секунду.":
+        "Playback speed. Slider in 20 s crosses the whole slider in 20 "
+        "seconds. ×1 - time runs as on a clock, ×3600 - an hour per "
+        "second, ×86400 - a day per second.",
+    "Шкала за 20 с": "Slider in 20 s",
+    "Сейчас": "Now",
+    "Момент - по часам компьютера, время идёт со скоростью ×1. "
+    "Солнце и спутники встают на свои места в настоящий момент.":
+        "The moment follows the computer clock, time runs at ×1. The "
+        "Sun and the satellites take their places at the present "
+        "moment.",
     "Снимок вида метки": "Snapshot view",
     "Вид метки": "Place view",
     "Откуда смотрит камера, когда летит к метке или стоит на ней "

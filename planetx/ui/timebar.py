@@ -19,6 +19,14 @@ QGIS не опирается, решение автора от 30 сентябр
 и землетрясения - промежуток. Без событий шкала - один бегунок
 (point). Шаги ◂ ▸ двигают момент по дням ряда покрытия (stepper),
 показ при покрытии идёт по этим дням и ждёт загрузки дня (ready).
+
+Часы глобуса - core/clock.py, просьба автора от 6 октября 2026 года
+о разумном движке времени для спутников и Солнца. Скорость показа -
+во сколько раз быстрее часов (×1 ... ×86400) или вся шкала за 20 с.
+Когда включены Солнце, спутники или небо (clock), шкала открывается
+и без данных, её охват держит окно вокруг момента и при показе
+сдвигается за ним. Кнопка «Сейчас» ставит момент на часы компьютера
+и пускает показ со скоростью ×1.
 """
 import math
 import time
@@ -28,7 +36,7 @@ from qgis.PyQt.QtGui import QColor, QPainter, QPen
 from qgis.PyQt.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel,
                                  QToolButton, QWidget)
 
-from ..core import when
+from ..core import clock, when
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -39,21 +47,21 @@ TRACK_WIDTH = 320  # логических пикселей
 HANDLE = 6.0  # полуширина бегунка
 PLAY_PERIOD = 40  # мс между шагами проигрывания
 STEP_PERIOD = 900  # мс на шаг показа по дням ряда покрытия
-# Проигрывание проходит шкалу за столько секунд при скорости 1.
-PLAY_SECONDS = 20.0
-SPEEDS = (0.25, 0.5, 1.0, 2.0, 4.0)
+# Скорость часов по умолчанию, когда шкала открыта без данных.
+CLOCK_RATE = 60.0
 SELECTION = QColor(255, 214, 0, 150)
 # Шкала длиннее - у дат до нашей эры подписан только год.
 LONG_SPAN = 3 * 366 * 86400
 
 
-def time_text(seconds, span):
+def time_text(seconds, span, exact=False):
     """Дата для подписи: время суток показывается, если промежуток
-    шкалы короче двух суток."""
+    шкалы короче двух суток, с секундами - у часов (exact)."""
     if not math.isfinite(seconds):
         return "…"
     if seconds >= 0.0:
-        fmt = "%Y-%m-%d %H:%M" if span < 2 * 86400 else "%Y-%m-%d"
+        fmt = "%Y-%m-%d %H:%M:%S" if exact else \
+            "%Y-%m-%d %H:%M" if span < 2 * 86400 else "%Y-%m-%d"
         return time.strftime(fmt, time.localtime(seconds))
     # До 1970 года - дата UTC своим счётом: time.localtime на Windows
     # таких моментов не берёт. Годы до нашей эры - словами.
@@ -249,13 +257,23 @@ class TimeBar(QFrame):
             "начинает с начала."))
         layout.addWidget(self.loop)
         self.speed = QComboBox(self)
-        for value in SPEEDS:
+        self.speed.addItem(tr("Шкала за 20 с"), None)
+        for value in clock.RATES:
             self.speed.addItem("×{:g}".format(value), value)
-        self.speed.setCurrentIndex(SPEEDS.index(1.0))
         self.speed.setToolTip(tr(
-            "Скорость проигрывания. При ×1 промежуток проходит шкалу "
-            "за 20 секунд."))
+            "Скорость проигрывания. «Шкала за 20 с» проходит всю шкалу "
+            "за 20 секунд. ×1 - время идёт как на часах, ×3600 - час "
+            "за секунду, ×86400 - сутки за секунду."))
         layout.addWidget(self.speed)
+        self.now = QToolButton(self)
+        self.now.setText(tr("Сейчас"))
+        self.now.setAutoRaise(True)
+        self.now.setToolTip(tr(
+            "Момент - по часам компьютера, время идёт со скоростью ×1. "
+            "Солнце и спутники встают на свои места в настоящий момент."))
+        self.now.clicked.connect(self.to_now)
+        self.now.hide()
+        layout.addWidget(self.now)
         close = QToolButton(self)
         close.setText("⏹")
         close.setToolTip(tr("Закрыть шкалу времени. Закрытая шкала метки "
@@ -271,6 +289,10 @@ class TimeBar(QFrame):
         # угол. Ставит окно - под панелью значков.
         self.anchor = None
         self.known = False  # охват задан, у видимых меток есть время
+        # Охват данных без окна часов и нужны ли часы: Солнце,
+        # спутники или небо.
+        self.data = None
+        self.clock = False
         parent.installEventFilter(self)
         self.hide()
 
@@ -283,20 +305,44 @@ class TimeBar(QFrame):
     def range(self):
         return self.track.lo, self.track.hi
 
+    def set_clock(self, on):
+        """Нужны ли часы. Охват пересчитывает следующий set_extent.
+        Шкала без данных начинает со скорости CLOCK_RATE."""
+        on = bool(on)
+        if on and not self.clock and self.data is None \
+                and self.speed.currentData() is None:
+            self.speed.setCurrentIndex(self.speed.findData(CLOCK_RATE))
+        self.clock = on
+        self.now.setVisible(on)
+
     def set_extent(self, extent):
-        """Охват шкалы по временам меток или None - шкалы нет.
-        Промежуток, которого не было, - вся шкала."""
+        """Охват шкалы по временам данных или None. С часами к нему
+        добавляется окно вокруг момента, без часов и данных шкалы нет.
+        Промежуток, которого не было, - вся шкала, у часов правый
+        бегунок встаёт на часы компьютера."""
+        self.data = extent
+        fresh = not self.known
+        moment = time.time() if fresh else self.track.hi
+        extent = clock.extent(extent, moment,
+                              None if fresh else self.track.lo,
+                              on=self.clock)
         if extent is None:
             self.known = False
             self.close_bar()
             return
-        fresh = not self.known
         self.known = True
         old = self.track.extent
         self.track.set_extent(*extent)
-        if self.track.point:
+        if fresh and self.clock:
+            start = extent[0] if self.data is not None else moment
+            self.track.set_range(moment if self.track.point else start,
+                                 moment)
+        elif self.track.point:
             # Момент остаётся на месте, в пределах нового охвата.
             self.track.set_range(self.track.hi, self.track.hi)
+        elif self.clock:
+            # У часов промежуток остаётся, охват сдвигается за ним.
+            self.track.set_range(self.track.lo, self.track.hi)
         elif fresh or old != self.track.extent:
             self.track.set_range(*self.track.extent)
         self._label()
@@ -372,10 +418,11 @@ class TimeBar(QFrame):
         lo, hi = self.track.lo, self.track.hi
         span = b - a
         if hi - lo < 1.0:
-            self.label.setText(time_text(lo, span))
+            self.label.setText(time_text(lo, span, self.clock))
         else:
-            self.label.setText("{} - {}".format(time_text(lo, span),
-                                                time_text(hi, span)))
+            self.label.setText("{} - {}".format(
+                time_text(lo, span, self.clock),
+                time_text(hi, span, self.clock)))
 
     def _close_clicked(self):
         self.close_bar()
@@ -396,12 +443,29 @@ class TimeBar(QFrame):
         self.track.set_range(b - width, b)
         self._moved(self.track.lo, self.track.hi)
 
+    def to_now(self):
+        """Момент - часы компьютера, показ со скоростью ×1."""
+        moment = time.time()
+        width = 0.0 if self.track.point else self.track.hi - self.track.lo
+        self.track.set_extent(*clock.extent(self.data, moment,
+                                            moment - width))
+        self.track.set_range(moment - width, moment)
+        self._moved(self.track.lo, self.track.hi)
+        self.speed.setCurrentIndex(self.speed.findData(1.0))
+        if not self.timer.isActive():
+            self.toggle()
+
+    def _grows(self):
+        """Идёт ли показ за край охвата: часы и скорость часов."""
+        return self.clock and self.stepper is None \
+            and self.speed.currentData() is not None
+
     def toggle(self):
         if self.timer.isActive():
             self.stop()
             return
         a, b = self.track.extent
-        if self.track.hi >= b:
+        if self.track.hi >= b and not self._grows():
             # Проигрывание с начала шкалы, ширина промежутка та же.
             width = self.track.hi - self.track.lo
             self.track.set_range(a, a + width)
@@ -429,19 +493,17 @@ class TimeBar(QFrame):
         now = time.monotonic()
         dt = now - (self._last or now)
         self._last = now
-        a, b = self.track.extent
-        shift = (b - a) * dt * self.speed.currentData() / PLAY_SECONDS
-        lo, hi = self.track.lo + shift, self.track.hi + shift
-        if hi >= b:
-            if self.loop.isChecked():
-                # По кругу: промежуток той же ширины снова с начала.
-                width = hi - lo
-                lo, hi = a, a + width
-            else:
-                lo, hi = lo - (hi - b), b
-                self.stop()
+        step = clock.shift(self.track.extent, self.speed.currentData(), dt)
+        lo, hi, extent, going = clock.advance(
+            self.track.lo, self.track.hi, self.track.extent, step,
+            self._grows(), self.loop.isChecked())
+        if extent is None:
+            # Часы дошли до края: охват - окно вокруг нового момента.
+            self.track.set_extent(*clock.extent(self.data, hi, lo))
         self.track.set_range(lo, hi)
         self._moved(self.track.lo, self.track.hi)
+        if not going:
+            self.stop()
 
     def _place(self):
         if self.anchor is not None:

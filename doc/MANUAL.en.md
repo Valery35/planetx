@@ -828,14 +828,24 @@ closed slider hides no placemarks, all of them show.
 | ⏮, ⏭ | The interval of the same width moves to the start or the end of the slider |
 | ▶, ⏸ | Playback and pause, the interval moves along the slider |
 | 🔁 | Playback in a loop, after the end of the slider the interval starts from the beginning |
-| ×1 | Playback speed, at ×1 the slider is crossed in 20 seconds |
+| Speed | Slider in 20 s crosses the whole slider in 20 seconds. ×1 - time runs as on a clock, ×60 - a minute per second, ×3600 - an hour, ×86400 - a day |
+| Now | The moment goes to the computer clock, time runs at ×1. The button is there when the Sun, satellites or the sky are on |
 | ⏹ | Closes the slider |
 
 A flight to a placemark and a tour set the slider to the time of the
 placemark view, without it to the time of the placemark itself. A
 closed slider opens then. The
-slider is its own and does not depend on the QGIS Temporal Controller
-that drives tracks.
+slider is its own and does not depend on the QGIS Temporal
+Controller.
+
+The Sun and Satellites rows and the sky view depend on the moment,
+not on data. With them the slider opens without timed placemarks
+too, on the computer clock, with one handle. The slider spans a day
+before the moment and a day after it. Playback at a clock speed
+does not stop at the edge of the span, the span moves after the
+moment. So at ×3600 the line between day and night runs over the
+Earth, and the satellites pass their revolutions. A closed slider
+returns the Sun and the satellites to the computer clock.
 
 ### KML and KMZ
 
