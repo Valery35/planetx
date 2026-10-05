@@ -30,6 +30,19 @@ TWILIGHT = math.sin(math.radians(-12.0))
 DAYLIGHT = math.sin(math.radians(6.0))
 FLAT = AMBIENT + (1.0 - AMBIENT) * math.sin(math.radians(45.0))
 
+# Огни городов на ночной стороне: NASA Black Marble 2016, слой
+# VIIRS_Night_Lights - только огни, вне них прозрачно. Уровни 0-8,
+# пиксель около 600 м у экватора. Огни прибавляются к снимку там, где
+# солнце ниже TWILIGHT, к DAYLIGHT гаснут, под облаками слабее.
+LIGHTS_URL = ("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/"
+              "VIIRS_Night_Lights/default/2016-01-01/"
+              "GoogleMapsCompatible_Level8/{z}/{y}/{x}.png")
+LIGHTS_LEVEL = 8
+LIGHTS_GAIN = 1.0  # яркость огней к яркости картинки слоя
+LIGHTS_ATTRIBUTION = ("NASA Black Marble",
+                      "https://earthobservatory.nasa.gov/features/"
+                      "NightLights")
+
 
 def equatorial(unix_time):
     """Прямое восхождение и склонение солнца в радианах."""

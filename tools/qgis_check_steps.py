@@ -5281,6 +5281,67 @@ def middle_turn():
             dialog.close()
 
 
+@check(300)
+def lights_on():
+    # Огни городов при солнце, просьба автора от 5 октября 2026 года.
+    # Европа в 21:00 UTC - ночь, с 2500 км отвесно.
+    from planetx.core import sun
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.set_extra("stars", False)
+    for key in ("cutaway", "quakes", "clouds", "temperature"):
+        window.set_extra(key, False)
+    window.set_extra("sun", True)
+    window.sun_timer.stop()
+    t = SUN_TIME + 15.0 * 3600.0
+    view.sun = sun.direction(t)
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(52.0, 20.0, 2.5e6, 0.0, 0.0))
+    result["lights"] = {"elevation": round(sun.elevation(52.0, 20.0, t), 1),
+                        "loader": "lights" in window.gibs_loaders}
+    view.update()
+
+
+@check(3000)
+def lights_wait():
+    window = state["window"]
+    started = state.setdefault("lights_wait", time.monotonic())
+    loader = window.gibs_loaders.get("lights")
+    if loader is not None and loader.busy() \
+            and time.monotonic() - started < 40.0:
+        return 500
+
+
+@check(1500)
+def lights_check():
+    from planetx.net.loader import image_to_rgba
+    window = state["window"]
+    view = window.view
+    out = result["lights"]
+    out["textures"] = len(view.gibs["lights"].textures)
+    out["attribution"] = "Black Marble" in window.attribution.text()
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_lights.png"))
+    rgba = image_to_rgba(image).astype(float)
+    bright = rgba[..., :3].mean(axis=2)
+    out["bright_px"] = int((bright > 120).sum())
+    out["mean"] = round(float(bright.mean()), 1)
+    # Без огней тот же кадр: слой скрыт на время одного кадра.
+    view.gibs["lights"].shown = False
+    image = view.grabFramebuffer()
+    view.gibs["lights"].shown = True
+    plain = image_to_rgba(image).astype(float)[..., :3].mean(axis=2)
+    out["bright_px_without"] = int((plain > 120).sum())
+    out["gl"] = dict(view.gl_errors)
+    window.set_body("mars")
+    out["mars_loader"] = "lights" in window.gibs_loaders
+    window.set_body("earth")
+    out["earth_loader"] = "lights" in window.gibs_loaders
+    window.set_extra("sun", False)
+    out["off_loader"] = "lights" in window.gibs_loaders
+
+
 @check(1500)
 def overlays_clean():
     window = state["window"]

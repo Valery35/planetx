@@ -269,8 +269,18 @@ def prepare_theme(key, rgba):
     return mip_chain(themes.overlay_rgba(rgba))
 
 
+def prepare_lights(key, rgba):
+    """Работа рабочего потока для тайла огней городов: премноженная
+    альфа и уровни мипмапов."""
+    return mip_chain(themes.overlay_rgba(rgba, 1.0))
+
+
 def gibs_source(name):
     """Источник и подготовка тайла слоя GIBS по имени слоя вида."""
+    if name == "lights":
+        return (basemap.Source("NASA Black Marble", sun.LIGHTS_URL,
+                               sun.LIGHTS_LEVEL, sun.LIGHTS_ATTRIBUTION,
+                               builtin=True), prepare_lights)
     if name == "clouds":
         return (basemap.Source("NASA GIBS", clouds.url_template(
             time.time()), clouds.MAX_LEVEL, clouds.ATTRIBUTION,
@@ -1201,6 +1211,10 @@ class GlobeWindow(QWidget):
         on = getattr(self, "extras", {}).get("sun", False) \
             and self.planet.earth
         self.view.sun = sun.direction(self.sun_time()) if on else None
+        # Огни городов - вместе с солнцем, загрузчик - при смене.
+        if on != getattr(self, "_lights_on", False):
+            self._lights_on = on
+            self._set_gibs("lights", on, cache=True)
         timer = getattr(self, "sun_timer", None)
         if timer is None:
             timer = self.sun_timer = QTimer(self)
@@ -2052,6 +2066,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*clouds.ATTRIBUTION))
         if "theme" in self.gibs_loaders:
             parts.append(link_html(*themes.ATTRIBUTION))
+        if "lights" in self.gibs_loaders:
+            parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
         if "sea" in self.gibs_loaders:
             parts.append(link_html(*temperature.ATTRIBUTION))
         if self.view.quakes.events:

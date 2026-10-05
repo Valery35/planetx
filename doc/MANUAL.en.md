@@ -235,7 +235,7 @@ take effect at once, without the Refresh button.
 | Clouds | Clouds from NASA GIBS VIIRS imagery of the last complete day |
 | Temperature | Surface temperature of land by day over 8 days (MODIS) and of the sea over a day (GHRSST MUR) with a scale in degrees |
 | 3D buildings | OpenStreetMap buildings as blocks from OpenFreeMap tiles, off by default |
-| Sun | Light of the terrain, buildings and air by the position of the sun, the night side of the Earth is dark, off by default |
+| Sun | Light of the terrain, buildings and air by the position of the sun, the night side of the Earth is dark with city lights on it, off by default |
 | Earthquakes | Earthquake foci of magnitude 4.5 and above over 30 days from the USGS feed, off by default |
 | Earth cutaway | A sector removed from the Earth with the shells on its faces, off by default |
 | Slope | Surface slope from the heights in classes from flat to steeper than 35°, off by default |
@@ -261,7 +261,9 @@ near the surface over a day.
 
 The Sun row lights the terrain and buildings from the side of the
 sun. The night side of the Earth is dark, the air over it does not
-glow. The sun time is the end of the interval of the open time
+glow. City lights shine on it - the NASA Black Marble image of 2016,
+pixel about 600 m. In the twilight the lights fade together with the
+night, under clouds they are weaker. The sun time is the end of the interval of the open time
 slider, so the light of the hour of a placemark shows. Without the
 slider the sun follows the computer clock. Without the Sun row the
 light falls from the north-west at 45°, as on a relief map. The

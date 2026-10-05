@@ -12,7 +12,7 @@
 """
 import time
 
-from ..core import clouds, temperature, terrain
+from ..core import clouds, sun, temperature, terrain
 from ..core.clouds import source_key
 from ..core.overlay import window
 from . import gpu
@@ -42,6 +42,9 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # Тема NASA GIBS (core/themes.py) - блок 9, одна тема за раз,
           # уровень ставит окно по слою темы.
           ("theme", 9, 9, "u_theme", "u_theme_uv"),
+          # Огни городов (core/sun.py) - блок 10, видны на ночной стороне
+          # при включённом солнце, поверх снимка и под облаками.
+          ("lights", sun.LIGHTS_LEVEL, 10, "u_lights", "u_lights_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
 
 

@@ -288,6 +288,10 @@ uniform vec4 u_insolation_uv;
 // Тема NASA GIBS: осадки, газы, снег и другие, см. core/themes.py.
 uniform sampler2D u_theme;
 uniform vec4 u_theme_uv;
+// Огни городов на ночной стороне, см. core/sun.py.
+uniform sampler2D u_lights;
+uniform vec4 u_lights_uv;
+const float LIGHTS_GAIN = """ + repr(float(_sun.LIGHTS_GAIN)) + """;
 // Маска подземного режима, см. ui/subsurface.py. Альфа маски - вырез
 // блока, там поверхности нет. Красный канал - рамка модели, там
 // непрозрачность поверхности u_alpha, вне её поверхность непрозрачна.
@@ -362,6 +366,17 @@ void main() {
         shade = sun_brightness(dot(normalize(v_normal), u_sun));
     }
     vec3 ground = clamp(base * shade, 0.0, 1.0);
+    // Огни городов: ночью по высоте солнца над горизонтом точки, не по
+    // нормали склона, под облаками слабее.
+    if (u_sun_on > 0.5 && u_plain < 0.5 && u_water < 0.5) {
+        float day = smoothstep(TWILIGHT, DAYLIGHT,
+                               dot(normalize(v_up), u_sun));
+        vec4 glow = texture(u_lights, u_lights_uv.xy + u_lights_uv.z * v_uv);
+        float cover = texture(u_clouds,
+                              u_clouds_uv.xy + u_clouds_uv.z * v_uv).a;
+        ground = min(ground + glow.rgb * LIGHTS_GAIN * (1.0 - day)
+                     * (1.0 - cover), vec3(1.0));
+    }
     // Дымка: воздух между глазом и поверхностью.
     vec3 pass;
     // Белая подложка под дымкой остаётся белой: pass + (1 - pass) = 1.
