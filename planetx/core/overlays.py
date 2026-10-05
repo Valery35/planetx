@@ -40,6 +40,21 @@ NEW_SHARE = 0.5
 NEAR_SHARE = 0.2
 MIN_NEAR = 10.0  # метров
 MAX_TILT = 85.0  # градусов, круче точка взгляда не берётся по лучу
+# Наименьший промежуток обновления картинки по ссылке, секунд. Чаще
+# запросы к чужому серверу не уходят.
+MIN_REFRESH = 10.0
+
+
+def refresh_interval(value):
+    """Промежуток обновления картинки по ссылке в секундах: 0 - картинка
+    не обновляется, иначе не меньше MIN_REFRESH."""
+    try:
+        value = float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    if not math.isfinite(value) or value <= 0.0:
+        return 0.0
+    return max(value, MIN_REFRESH)
 
 
 class Overlay:
@@ -53,6 +68,8 @@ class Overlay:
     rotation - градусы. У фото camera и fov, near. box - рамка
     LatLonBox (север, юг, восток, запад, поворот) или None - четыре
     свободных угла gx:LatLonQuad. С рамкой углы считаются по ней.
+    refresh - промежуток обновления картинки по ссылке в секундах,
+    0 - не обновляется, как refreshMode onInterval в Icon KML.
     """
 
     def __init__(self, kind, corners=None, color=WHITE, order=0,
@@ -60,8 +77,9 @@ class Overlay:
                  screen_xy=(0.0, 0.0, "fraction", "fraction"),
                  size=(-1.0, -1.0, "fraction", "fraction"), rotation=0.0,
                  camera=None, fov=(-30.0, 30.0, -20.0, 20.0), near=100.0,
-                 box=None):
+                 box=None, refresh=0.0):
         self.kind = kind
+        self.refresh = refresh_interval(refresh)
         self.box = tuple(float(v) for v in box) if box else None
         if self.box is not None:
             corners = box_corners(*self.box)
@@ -89,6 +107,8 @@ class Overlay:
     def params(self):
         """Свойства для поля файла, JSON."""
         data = {"color": list(self.color), "order": self.order}
+        if self.refresh:
+            data["refresh"] = self.refresh
         if self.kind == "ground":
             data["corners"] = [list(c) for c in self.corners]
             if self.box is not None:
@@ -135,7 +155,8 @@ def from_params(kind, text, corners=None):
         rotation=float(data.get("rotation", 0.0) or 0.0),
         camera=data.get("camera") or None,
         fov=tuple(data.get("fov") or base.fov),
-        near=float(data.get("near", base.near) or base.near))
+        near=float(data.get("near", base.near) or base.near),
+        refresh=data.get("refresh", 0.0))
 
 
 def _metres_per_degree(lat):

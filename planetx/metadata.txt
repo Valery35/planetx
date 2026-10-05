@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.40.0
+version=0.41.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.40.0 Tracks and project layers with QGIS time follow the
+changelog=0.41.0 A linked image overlay is read again after the
+      interval of the new Refresh field while it is shown, a web
+      address past the cache. The globe keeps a fresh image or map
+      that a server updates by itself. KML refreshMode onInterval and
+      refreshInterval are read and written.
+      0.40.0 Tracks and project layers with QGIS time follow the
       time slider of the globe. A track grows up to the right handle,
       a layer with time shows only its objects within the slider range,
       on the picture and in the labels. The QGIS Temporal Controller no

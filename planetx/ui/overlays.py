@@ -18,6 +18,7 @@
 поверхности тянутся мышью, пока окно открыто, середин отрезков у них
 нет.
 """
+import glob
 import hashlib
 import os
 
@@ -30,7 +31,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QComboBox, QDialog,
                                  QDoubleSpinBox, QFileDialog, QFormLayout,
                                  QGraphicsOpacityEffect, QHBoxLayout, QLabel,
                                  QLineEdit, QPlainTextEdit, QPushButton,
-                                 QSlider)
+                                 QSlider, QSpinBox)
 
 from ..core import editing, overlays
 from ..i18n import tr
@@ -163,6 +164,9 @@ class GroundLayers:
 
     def __init__(self):
         self._layers = {}  # (номер, картинка, углы) - растр
+        # Начала имён файлов прежних растров тех же наложений. Картинка
+        # по ссылке с обновлением давала бы новые файлы каждый раз.
+        self._stale = set()
         self.errors = []
 
     def layers(self, entries):
@@ -170,6 +174,8 @@ class GroundLayers:
         номер наложения, название, core.overlays.Overlay, байты())."""
         wanted = {}
         self.errors = []
+        # Прежние растры отпущены наложением окна после прошлого вызова.
+        self._remove_stale()
         for token, fid, name, overlay, data in sorted(
                 entries, key=lambda e: -e[3].order):
             key = (fid, token, tuple(overlay.corners), overlay.color)
@@ -186,8 +192,33 @@ class GroundLayers:
                     continue
                 layer.renderer().setOpacity(overlay.color[3] / 255.0)
             wanted[key] = layer
+        sources = {layer.source() for layer in wanted.values()}
+        fids = {key[0] for key in wanted}
+        for key, layer in self._layers.items():
+            # Растр того же наложения с другой картинкой или углами.
+            if key not in wanted and key[0] in fids \
+                    and layer.source() not in sources:
+                self._stale.add(os.path.splitext(layer.source())[0])
         self._layers = wanted
         return list(wanted.values())
+
+    def _remove_stale(self):
+        """Удалить файлы прежних растров. Файл, который ещё держит GDAL,
+        остаётся до следующего вызова."""
+        used = {os.path.splitext(layer.source())[0]
+                for layer in self._layers.values()}
+        for base in list(self._stale):
+            if base in used:
+                self._stale.discard(base)
+                continue
+            locked = []
+            for path in glob.glob(glob.escape(base) + "*"):
+                try:
+                    os.remove(path)
+                except OSError:
+                    locked.append(path)
+            if not locked:
+                self._stale.discard(base)
 
     def clear(self):
         """Отпустить все растры."""
@@ -399,6 +430,21 @@ class OverlayDialog(QDialog):
         form.addRow(tr("Картинка"), row)
         self.file = QLabel(self)
         form.addRow("", self.file)
+        self.refresh = QSpinBox(self)
+        self.refresh.setRange(0, 86400)
+        self.refresh.setSingleStep(10)
+        self.refresh.setSuffix(tr(" с"))
+        self.refresh.setSpecialValueText(tr("не обновлять"))
+        self.refresh.setValue(int(round(self.overlay.refresh)))
+        self.refresh.setToolTip(tr(
+            "Картинка по ссылке читается заново через этот промежуток, "
+            "пока она видна. Так на глобусе стоит свежий снимок или "
+            "карта, которую сервер или программа обновляет сама. Ноль - "
+            "картинка читается при показе. Промежуток короче {low} с "
+            "поднимается до {low} с.", low=int(overlays.MIN_REFRESH)))
+        self.refresh.setKeyboardTracking(False)
+        self.refresh.valueChanged.connect(self._refresh_edited)
+        form.addRow(tr("Обновлять"), self.refresh)
         self.opacity = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
         self.opacity.setRange(0, 100)
         self.opacity.setValue(int(round(self.overlay.color[3] / 2.55)))
@@ -504,6 +550,11 @@ class OverlayDialog(QDialog):
     def _store_shown(self):
         linked = self.store.currentData() == "link"
         self.path.setEnabled(linked)
+        self.refresh.setEnabled(linked)
+
+    def _refresh_edited(self, value):
+        self.overlay.refresh = overlays.refresh_interval(value)
+        self.changed.emit()
 
     def _store_changed(self, *args):
         linked = self.store.currentData() == "link"

@@ -5667,6 +5667,128 @@ def overlays_clean():
     out["screen_after"] = len(window.screen_overlays.labels)
     out["gl"] = dict(window.view.gl_errors)
 
+
+def _image_server():
+    """Сервер картинки на 127.0.0.1 в потоке: отдаёт байты из словаря
+    и считает запросы."""
+    import http.server
+    import threading
+    served = {"data": b"", "count": 0}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return None
+
+        def do_GET(self):
+            served["count"] += 1
+            body = served["data"]
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("Content-Length", str(len(body)))
+            # Ответ годен час: обновление обязано идти мимо кэша QGIS.
+            self.send_header("Cache-Control", "max-age=3600")
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, served
+
+
+@check(3000)
+def overlay_refresh():
+    """Картинка на поверхности по адресу с обновлением через 10 с."""
+    from planetx.core.kml import read_kml
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    # Наложения прерванных прогонов этого шага.
+    old = [o.key for o in window.myplaces.overlays if o.name == "Свежая"]
+    if old:
+        window.myplaces.remove_many(old)
+    red = _overlay_png("planetx_rf_red.png", (230, 20, 20, 255))
+    with open(red, "rb") as fh:
+        red_bytes = fh.read()
+    server, served = _image_server()
+    served["data"] = red_bytes
+    state["image_server"] = (server, served)
+    url = "http://127.0.0.1:{}/img.png".format(server.server_address[1])
+    state["refresh_url"] = url
+    text = ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
+            '<name>Обновление</name><GroundOverlay><name>Свежая</name>'
+            '<Icon><href>{}</href><refreshMode>onInterval</refreshMode>'
+            '<refreshInterval>10</refreshInterval></Icon><LatLonBox>'
+            '<north>21</north><south>19</south><east>31</east>'
+            '<west>29</west></LatLonBox></GroundOverlay></Document></kml>'
+            ).format(url)
+    state["refresh_key"] = window.myplaces.import_tree(
+        read_kml(text.encode("utf-8")))
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(20.0, 30.0, 400000.0, 0.0, 0.0))
+    window._refresh_overlays()
+    result["overlay_refresh"] = {"url_requests_start": served["count"]}
+
+
+def _refresh_state(window):
+    from planetx.ui.overlays import folder
+    url = state["refresh_url"]
+    sources = [layer.source() for layer in window._ground_rasters]
+    fid = [o.fid for o in window.myplaces.overlays
+           if o.href == url][0]
+    mine = [os.path.basename(s) for s in sources
+            if os.path.basename(s).startswith("{}_".format(fid))]
+    files = [n for n in os.listdir(folder())
+             if n.startswith("{}_".format(fid))]
+    return {"gen": window._link_gen.get(url),
+            "requests": state["image_server"][1]["count"],
+            "source": mine,
+            "files": len(files),
+            "refresh": [o.overlay.refresh for o in window.myplaces.overlays
+                        if o.href == url]}
+
+
+@check(500)
+def overlay_refresh_first():
+    window = state["window"]
+    out = result["overlay_refresh"]
+    out["first"] = _refresh_state(window)
+    # Сервер меняет картинку, глобус берёт её через промежуток.
+    blue = _overlay_png("planetx_rf_blue.png", (20, 20, 230, 255))
+    with open(blue, "rb") as fh:
+        state["image_server"][1]["data"] = fh.read()
+
+
+@check(12000)
+def overlay_refresh_wait():
+    # Пауза дольше промежутка 10 с.
+    return None
+
+
+@check(1500)
+def overlay_refresh_second():
+    window = state["window"]
+    out = result["overlay_refresh"]
+    out["second"] = _refresh_state(window)
+
+
+@check(12000)
+def overlay_refresh_same():
+    # Та же картинка ещё раз: номер не растёт, прежний файл удалён.
+    return None
+
+
+@check(1500)
+def overlay_refresh_check():
+    window = state["window"]
+    out = result["overlay_refresh"]
+    window._refresh_overlays()
+    out["third"] = _refresh_state(window)
+    window.myplaces.remove(state.pop("refresh_key"))
+    server, _ = state.pop("image_server")
+    server.shutdown()
+    out["ground_after"] = len(window._ground_rasters)
+    out["gl"] = dict(window.view.gl_errors)
+
 @check(2000)
 def section_open():
     # Разрез вниз поперёк Японского жёлоба: с востока на запад по 38.5°

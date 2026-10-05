@@ -170,6 +170,17 @@ EN = {
         "or a web address, the image is read when shown, an edit of the "
         "file shows on the globe.",
     "Хранение": "Storage",
+    "Обновлять": "Refresh",
+    "не обновлять": "no refresh",
+    "Картинка по ссылке читается заново через этот промежуток, "
+    "пока она видна. Так на глобусе стоит свежий снимок или "
+    "карта, которую сервер или программа обновляет сама. Ноль - "
+    "картинка читается при показе. Промежуток короче {low} с "
+    "поднимается до {low} с.":
+        "A linked image is read again after this interval while it is "
+        "shown. The globe then keeps a fresh image or map that a server "
+        "or a program updates by itself. Zero - the image is read when "
+        "shown. An interval shorter than {low} s is raised to {low} s.",
     "Путь к файлу или адрес http(s)": "File path or http(s) address",
     "Путь к файлу картинки или её адрес в сети. Картинка читается заново "
     "при каждом показе.":

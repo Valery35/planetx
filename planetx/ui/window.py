@@ -188,6 +188,8 @@ LAYER_TIME_DELAY = 300
 # Пауза после движения угла картинки на поверхности до пересборки её
 # растра, мс.
 GROUND_DELAY = 400
+# Шаг проверки картинок по ссылке с обновлением, мс.
+LINK_TICK = 1000
 # Новая картинка на экране - под панелью значков, пикселей от верха.
 SCREEN_TOP = 60.0
 GRID_COLOR = (220, 220, 220, 255)
@@ -569,6 +571,14 @@ class GlobeWindow(QWidget):
         self.overlay_dialogs = {}
         self._href_replies = {}
         self._link_images = {}
+        # Картинки по ссылке с обновлением: номер пришедшей картинки
+        # адреса - часть метки картинки, время последнего запроса.
+        self._link_gen = {}
+        self._link_asked = {}
+        self._link_timer = QTimer(self)
+        self._link_timer.setInterval(LINK_TICK)
+        self._link_timer.timeout.connect(self._refresh_links)
+        self._link_timer.start()
         # Выгрузка в проект, ждущая картинок по ссылкам: (ключи, место).
         self._ground_export = None
         self._overlay_edits = {}
@@ -4045,7 +4055,8 @@ class GlobeWindow(QWidget):
         if not link:
             return "link:"
         if link.startswith(("http://", "https://")):
-            return "link:{}:{}".format(link, link in self._link_images)
+            # Номер картинки растёт с каждой новой картинкой адреса.
+            return "link:{}:{}".format(link, self._link_gen.get(link))
         try:
             stamp = os.path.getmtime(link)
         except OSError:
@@ -4061,10 +4072,7 @@ class GlobeWindow(QWidget):
         if link.startswith(("http://", "https://")):
             if link in self._link_images:
                 return self._link_images[link]
-            if link not in self._href_replies:
-                self._href_replies[link] = fetch_bytes(
-                    link, lambda data, error, link=link:
-                    self._link_done(link, data, error))
+            self._ask_link(link)
             return None
         try:
             with open(link, "rb") as stream:
@@ -4072,11 +4080,55 @@ class GlobeWindow(QWidget):
         except OSError:
             return None
 
+    def _ask_link(self, link, fresh=False):
+        """Запросить картинку по адресу, если запроса ещё нет. fresh -
+        мимо кэша QGIS, для обновления по промежутку."""
+        self._link_asked[link] = time.monotonic()
+        if link not in self._href_replies:
+            self._href_replies[link] = fetch_bytes(
+                link, lambda data, error, link=link:
+                self._link_done(link, data, error), fresh=fresh)
+
+    def _refresh_links(self):
+        """Картинки по ссылке с обновлением: адрес просится заново мимо
+        кэша, файл перечитывается по времени правки. Обновляются только
+        видимые наложения, как у refreshMode onInterval в KML."""
+        files = False
+        now = time.monotonic()
+        if self.view.sky_view is not None:
+            return
+        for item in self.myplaces.overlays:
+            if not item.visible or item.body != self.planet.key \
+                    or not self._time_ok(item):
+                continue
+            _, overlay, _ = self._overlay_edit(item)
+            interval = overlays.refresh_interval(overlay.refresh)
+            edits = self._overlay_edits.get(item.key)
+            link = edits[2] if edits is not None and edits[2] is not None \
+                else (item.href if item.image is None else None)
+            if not interval or not link:
+                continue
+            asked = self._link_asked.get(link)
+            if asked is not None and now - asked < interval:
+                continue
+            if link.startswith(("http://", "https://")):
+                self._ask_link(link, fresh=True)
+            else:
+                self._link_asked[link] = now
+                files = True
+        if files:
+            # Метка картинки файла - время его правки.
+            self._refresh_overlays()
+
     def _link_done(self, link, data, error):
         self._href_replies.pop(link, None)
         if data and not QImage.fromData(data).isNull():
-            self._link_images[link] = bytes(data)
-            self._refresh_overlays()
+            data = bytes(data)
+            if data != self._link_images.get(link):
+                # Новая картинка - новая метка, растр и текстура заново.
+                self._link_images[link] = data
+                self._link_gen[link] = self._link_gen.get(link, 0) + 1
+                self._refresh_overlays()
         else:
             self.message = (tr("Картинка по ссылке не загрузилась: {link}",
                                link=link), time.monotonic())
@@ -4135,6 +4187,12 @@ class GlobeWindow(QWidget):
                                                  overlay.near) + (rgba,))
             self.view.photos.set_walls(walls)
             self.view.update()
+            # Текстуры прежних картинок, например до обновления по
+            # ссылке, не копятся.
+            tokens = {token for token, _, _ in photos}
+            self._photo_images = {token: rgba for token, rgba
+                                  in self._photo_images.items()
+                                  if token in tokens}
         key = [(token, overlay.params()) for token, overlay, _ in screens]
         if key != self._screen_key:
             self._screen_key = key
@@ -5452,6 +5510,7 @@ class GlobeWindow(QWidget):
             self.watch.blockSignals(True)
             self.sync.close()
             self._layer_time_timer.stop()
+            self._link_timer.stop()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

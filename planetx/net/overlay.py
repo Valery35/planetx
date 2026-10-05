@@ -42,7 +42,8 @@ from ..core.mipmap import mip_chain
 from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
-from .loader import (CACHE_CONTROL, MARK, NO_ERROR, PREFER_CACHE, STALL,
+from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, MARK, NO_ERROR,
+                     PREFER_CACHE, STALL,
                      Throttle)
 
 TILE_SIZE = 256
@@ -264,16 +265,20 @@ def set_line_groups(layer, groups):
     layer.setRenderer(renderer)
 
 
-def fetch_bytes(url, done, prefer_cache=True):
+def fetch_bytes(url, done, prefer_cache=True, fresh=False):
     """Асинхронно получить ответ и вызвать done(байты или None, ошибка).
 
     Запрос идёт через QgsNetworkAccessManager с меткой PlanetX, как
     запросы тайлов, ответ ложится в кэш QGIS. Возвращает ответ, его
-    нужно держать до конца.
+    нужно держать до конца. fresh - всегда с сервера: без него Qt
+    отдаёт из кэша ответ, который сервер разрешил хранить, и картинка
+    по ссылке с обновлением не менялась бы.
     """
     request = QNetworkRequest(QUrl(url))
     request.setAttribute(MARK, True)
-    if prefer_cache:
+    if fresh:
+        request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
+    elif prefer_cache:
         request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
     reply = QgsNetworkAccessManager.instance().get(request)
 

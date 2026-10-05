@@ -882,6 +882,12 @@ The image is kept in one of two ways, the Storage field:
 - Link to a file or address - a file path or an http(s) address. The
   image is read when shown, an edit of the file shows on the globe.
 
+The Refresh field sets the interval after which a linked image is read
+again while it is shown. A web address is requested past the cache, so
+the globe shows a fresh image or map that the server updates by itself.
+An interval shorter than 10 s is raised to 10 s. In KML this is
+`refreshMode` `onInterval` and `refreshInterval` of `Icon`.
+
 KML and KMZ with Google Earth overlays - GroundOverlay, ScreenOverlay
 and PhotoOverlay - open the same way. The image of a KMZ goes into the
 places file, the image of a plain KML stays a link to a file next to it

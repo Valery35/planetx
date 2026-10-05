@@ -223,5 +223,50 @@ class TestKml(unittest.TestCase):
         self.assertEqual(item.href, "files/a.png")
 
 
+class TestRefresh(unittest.TestCase):
+    """Обновление картинки по ссылке через промежуток."""
+
+    LINKED = GROUND.replace(
+        b"<Icon><href>files/a.png</href></Icon>\n<LatLonBox>",
+        b"<Icon><href>https://example.org/a.png</href>"
+        b"<refreshMode>onInterval</refreshMode>"
+        b"<refreshInterval>60</refreshInterval></Icon>\n<LatLonBox>")
+
+    def test_interval_has_floor(self):
+        self.assertEqual(overlays.refresh_interval(0), 0.0)
+        self.assertEqual(overlays.refresh_interval(None), 0.0)
+        self.assertEqual(overlays.refresh_interval(-5), 0.0)
+        self.assertEqual(overlays.refresh_interval("x"), 0.0)
+        self.assertEqual(overlays.refresh_interval(float("inf")), 0.0)
+        self.assertEqual(overlays.refresh_interval(4),
+                         overlays.MIN_REFRESH)
+        self.assertEqual(overlays.refresh_interval(300), 300.0)
+
+    def test_params_keep_interval(self):
+        overlay = overlays.Overlay("screen", refresh=120)
+        back = overlays.from_params("screen", overlay.params())
+        self.assertEqual(back.refresh, 120.0)
+        plain = overlays.Overlay("screen")
+        self.assertNotIn("refresh", plain.params())
+
+    def test_kml_round_trip(self):
+        self.assertIn(b"onInterval", self.LINKED)
+        tree = kml.read_file(self.LINKED)
+        box = tree.overlays()[0]
+        self.assertEqual(box.overlay.refresh, 60.0)
+        self.assertEqual(tree.overlays()[1].overlay.refresh, 0.0)
+        text = kml.write_kml(tree)
+        self.assertEqual(text.count("<refreshMode>onInterval"), 1)
+        back = kml.read_file(text.encode("utf-8"))
+        self.assertEqual(back.overlays()[0].overlay.refresh, 60.0)
+
+    def test_kml_default_interval_raised_to_floor(self):
+        text = self.LINKED.replace(
+            b"<refreshInterval>60</refreshInterval>", b"")
+        tree = kml.read_file(text)
+        self.assertEqual(tree.overlays()[0].overlay.refresh,
+                         overlays.MIN_REFRESH)
+
+
 if __name__ == "__main__":
     unittest.main()

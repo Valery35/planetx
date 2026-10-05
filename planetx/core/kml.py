@@ -717,6 +717,12 @@ def _overlay(node, styles, inherited):
                     _float(camera, "roll", 0.0)),
             fov=fov, near=_float(volume, "near", base.near)
             if volume is not None else base.near)
+    if icon is not None and _text(icon, "refreshMode").strip() \
+            == "onInterval":
+        # Без refreshInterval в KML действует 4 с, модуль поднимает
+        # промежуток до overlays.MIN_REFRESH.
+        overlay.refresh = overlays.refresh_interval(
+            _float(icon, "refreshInterval", 4.0))
     anchor = overlay.corners[0] if overlay.corners else (
         (overlay.camera[0], overlay.camera[1]) if overlay.camera else None)
     return KOverlay(_text(node, "name"), overlay, href=href,
@@ -966,7 +972,12 @@ def _overlay_kml(item, indent, href):
         parts.append(_look_kml(item.view))
     parts += ["<color>{}</color>".format(color_kml(overlay.color)),
               "<drawOrder>{}</drawOrder>".format(overlay.order)]
-    if href:
+    if href and overlay.refresh and item.image is None:
+        # Картинка по ссылке обновляется через промежуток.
+        parts.append("<Icon><href>{}</href><refreshMode>onInterval"
+                     "</refreshMode><refreshInterval>{:g}</refreshInterval>"
+                     "</Icon>".format(escape(href), overlay.refresh))
+    elif href:
         parts.append("<Icon><href>{}</href></Icon>".format(escape(href)))
     if overlay.kind == "ground":
         box = overlay.box
