@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.35.0
+version=0.36.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,18 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.35.0 A ground overlay, or all ground overlays of a folder,
+changelog=0.36.0 A height raster of the QGIS project becomes the globe
+      terrain within its extent, the Globe terrain item of the raster menu
+      in the Project layers section. At the edge of the extent the heights
+      change smoothly to the common terrain, within the extent the terrain
+      is more detailed, down to the raster pixel. The Quarry, own terrain
+      demo is a synthetic 1 m survey of a quarry with benches and a waste
+      dump near Berezniki. The right-click menu on the globe and dragging
+      of ruler points, new placemark vertices, Earth cutaway corners and
+      ground overlay corners work again, in 0.34.0 and 0.35.0 they broke
+      off with an error. A click on the base map checkbox no longer opens
+      a Python error window.
+      0.35.0 A ground overlay, or all ground overlays of a folder,
       goes into the QGIS project as GeoTIFF raster layers by the corners
       of the image, in the PlanetX - images group. The Aral Sea demo
       shows the three kinds of overlays by links to web addresses. These

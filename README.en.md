@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.35.0.
+A 3D globe inside QGIS. PlanetX version 0.36.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -199,6 +199,9 @@ and atmosphere, from space down to single streets.
   with a camera and a screen overlay, as in Google Earth. The image is
   kept in the places file or as a link to a file or address. A
   ground overlay goes into the QGIS project as a GeoTIFF layer.
+- **Own terrain.** A height raster of the project, for example a
+  quarry survey, becomes the globe terrain within its extent, more
+  detailed than the common terrain, down to the raster pixel.
 - **Copy and paste.** Places and folders are copied to the clipboard
   as KML text and pasted back, also after editing in a text editor and
   from Google Earth.
