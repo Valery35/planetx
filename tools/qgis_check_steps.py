@@ -5973,6 +5973,136 @@ def sat_path():
     out["gl"] = dict(view.gl_errors)
 
 
+@check(4500)
+def sat_follow_stress():
+    """Камера следом за спутником при часах ×3600 и одновременно мышь:
+    колесо, перетаскивание, взгляд с Ctrl, поворот средней кнопкой.
+    Каждые 30 мс поза проверяется на NaN. Повтор ошибки автора от
+    6 октября 2026 года - NaN в nearest_terrain из paintGL."""
+    import math as _math
+    from qgis.PyQt.QtCore import Qt, QTimer
+    window = state["window"]
+    view = window.view
+    manager = window.satellite_manager
+    manager.clock = None
+    manager.select(25544)
+    manager.set_follow(True)
+    window._time_toggled(True)
+    bar = window.timebar
+    bar.speed.setCurrentIndex(bar.speed.findData(3600.0))
+    if not bar.timer.isActive():
+        bar.toggle()
+    left = _qt(Qt, "MouseButton", "LeftButton")
+    middle = _qt(Qt, "MouseButton", "MiddleButton")
+    none = _qt(Qt, "MouseButton", "NoButton")
+    ctrl = _qt(Qt, "KeyboardModifier", "ControlModifier")
+    w, h = view.width(), view.height()
+    geo = [i for i, g in enumerate(manager.swarm.group_of) if g == "geo"]
+    out = result.setdefault("sat_follow", {"ticks": 0, "bad": [],
+                                           "errors": []})
+    seq = {"k": 0}
+
+    def finite(pose):
+        return all(_math.isfinite(x) for x in (
+            pose.lat, pose.lon, pose.distance, pose.heading, pose.tilt,
+            pose.h))
+
+    def tick():
+        k = seq["k"]
+        seq["k"] += 1
+        out["ticks"] = k
+        x = w * (0.2 + 0.6 * ((k * 37) % 100) / 100.0)
+        y = h * (0.2 + 0.6 * ((k * 53) % 100) / 100.0)
+        try:
+            mode = k % 6
+            if mode == 0:
+                view.navigator.wheel(x * view.devicePixelRatioF(),
+                                     y * view.devicePixelRatioF(),
+                                     0.5 if k % 12 else 2.0,
+                                     time.monotonic())
+            elif mode == 1:
+                _send_mouse(view, "MouseButtonPress", x, y, left, left)
+                _send_mouse(view, "MouseMove", x + 40, y + 25, none, left)
+                _send_mouse(view, "MouseButtonRelease", x + 40, y + 25,
+                            left, none)
+            elif mode == 2:
+                _send_mouse(view, "MouseButtonPress", x, y, left, left,
+                            ctrl)
+                _send_mouse(view, "MouseMove", x + 30, y - 20, none, left,
+                            ctrl)
+                _send_mouse(view, "MouseButtonRelease", x + 30, y - 20,
+                            left, none, ctrl)
+            elif mode == 3:
+                _send_mouse(view, "MouseButtonPress", x, y, middle, middle)
+                _send_mouse(view, "MouseMove", x + 20, y - 60, none,
+                            middle)
+                _send_mouse(view, "MouseButtonRelease", x + 20, y - 60,
+                            middle, none)
+            if k == 60 and geo:
+                # Геостационарный: скорость относительно Земли около нуля.
+                manager.select(int(manager.swarm.numbers[geo[0]]))
+                manager.set_follow(True)
+            view.repaint()
+        except (ValueError, ZeroDivisionError, RuntimeError) as error:
+            out["errors"].append("{}: {}".format(k, error))
+        pose = view.navigator.pose
+        if not finite(pose) and len(out["bad"]) < 5:
+            out["bad"].append([k, pose.lat, pose.lon, pose.distance,
+                               pose.heading, pose.tilt, pose.h])
+        if k >= 120:
+            state.pop("follow_timer").stop()
+
+    timer = QTimer()
+    timer.setInterval(30)
+    timer.timeout.connect(tick)
+    state["follow_timer"] = timer
+    timer.start()
+
+
+@check(500)
+def sat_follow_check():
+    window = state["window"]
+    out = result["sat_follow"]
+    timer = state.pop("follow_timer", None)
+    if timer is not None:
+        timer.stop()
+    window.timebar.stop()
+    window.satellite_manager.set_follow(False)
+    pose = window.view.navigator.pose
+    out["pose"] = [pose.lat, pose.lon, pose.distance, pose.heading,
+                   pose.tilt]
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(1500)
+def pole_view():
+    """Камера отвесно над Северным полюсом с 20 000 км. До 6 октября
+    2026 года высота глаза выходила NaN и кадр падал в nearest_terrain."""
+    import math as _math
+    import traceback as _tb
+    from planetx.core.navigation import Pose, nearest_terrain
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    out = result.setdefault("pole_view", {})
+    for km in (1500, 3000, 5000, 20000):
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(90.0, 0.0, km * 1e3, 0.0, 0.0))
+        view.makeCurrent()
+        try:
+            view._render(view.devicePixelRatioF())
+            error = None
+        except (ValueError, ZeroDivisionError, FloatingPointError) as exc:
+            error = "".join(_tb.format_exception_only(exc)).strip()
+        finally:
+            view.doneCurrent()
+        near = nearest_terrain(view.camera.eye, view.terrain_at)
+        out[str(km)] = {"render_error": error,
+                        "nearest_km": round(near / 1000.0)
+                        if _math.isfinite(near) else str(near)}
+    out["gl"] = dict(view.gl_errors)
+
+
 def ecef_to_geodetic_point(point):
     from planetx.core.ellipsoid import ecef_to_geodetic
     return ecef_to_geodetic(point)

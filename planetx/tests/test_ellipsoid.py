@@ -80,6 +80,21 @@ class TestRoundTrip(unittest.TestCase):
         self.assertLess(np.abs(lat2 - lat).max(), 1e-8)
         self.assertLess(np.abs(h2 - h).max(), MM)
 
+    def test_near_axis_high_above_pole(self):
+        # Глаз почти над полюсом с 4000-40 000 км. До 6 октября 2026 года
+        # подкоренное уходило в минус, широта и высота выходили NaN,
+        # и кадр падал в nearest_terrain.
+        for z in (1e7, 2e7, 4e7, 4.6e7, 1e8):
+            for p in (0.0, 1e-3, 0.5, 30.0):
+                for sign in (1.0, -1.0):
+                    xyz = np.array([p, 0.0, sign * z])
+                    lat, lon, h = (float(v)
+                                   for v in el.ecef_to_geodetic(xyz))
+                    self.assertTrue(np.isfinite(lat) and np.isfinite(h),
+                                    (p, z))
+                    back = el.geodetic_to_ecef(lat, lon, h)
+                    self.assertLess(np.abs(back - xyz).max(), MM, (p, z))
+
     def test_matches_proj_backwards(self):
         for lat, lon, h, xyz in PROJ:
             lat2, lon2, h2 = el.ecef_to_geodetic(np.array(xyz))

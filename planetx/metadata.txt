@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.42.0
+version=0.42.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.42.0 The Satellites row of the Layers section shows
+changelog=0.42.1 A view straight down at a pole from thousands of
+      kilometres no longer brings a Python error window. It also
+      happened with the camera following a polar satellite.
+      0.42.0 The Satellites row of the Layers section shows
       artificial satellites of the Earth as dots at their height.
       Stations, navigation, weather, geostationary, Starlink and
       other groups are offered. CelesTrak gives the orbital elements,
