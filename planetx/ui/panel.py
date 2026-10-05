@@ -1031,6 +1031,10 @@ class LayerPanel(QWidget):
             self._geo_timer.start(0)
 
     def _geo_clicked(self, item, column):
+        # Строка могла исчезнуть между нажатием и отпусканием кнопки,
+        # тогда Qt присылает щелчок без строки.
+        if item is None:
+            return
         index = item.data(0, BASEMAP_ROLE)
         if index == ADD_SOURCE:
             self.add_source_requested.emit()
@@ -1054,12 +1058,31 @@ class LayerPanel(QWidget):
                                     else UNCHECKED)
         self.geo.blockSignals(False)
 
+    def _basemap_names(self):
+        """Названия источников в строках группы «Основа»."""
+        group = self.base_group
+        names = []
+        for i in range(group.childCount()):
+            child = group.child(i)
+            value = child.data(0, BASEMAP_ROLE)
+            if value is None:
+                return None
+            if value != ADD_SOURCE:
+                names.append(child.text(0))
+        return names
+
     def set_basemaps(self, names, index, own=None):
         """Строки группы «Основа»: названия источников и выбранный.
         own - название снимков другого тела, тогда группа показывает
         только его и выбор недоступен."""
-        self.geo.blockSignals(True)
         group = self.base_group
+        if own is None and self._basemap_names() == list(names):
+            # Те же источники - меняется только отметка. Строки
+            # не пересоздаются, иначе щелчок по флажку, который сам
+            # выбрал подложку, приходит в _geo_clicked без строки.
+            self._mark_basemap(index)
+            return
+        self.geo.blockSignals(True)
         group.takeChildren()
         self._basemap = index
         if own is not None:

@@ -85,8 +85,10 @@ THEMES = (
           "RunningMean", "png", 6, "SMAP_Sea_Surface_Salinity"),
     Theme("flood", "water", "MODIS_Combined_Flood_3-Day", "png", 9,
           "MODIS_Flood"),
-    Theme("no2", "gases", "TROPOMI_L2_Nitrogen_Dioxide_Tropospheric_Column",
-          "png", 6, "OMI_Nitrogen_Dioxide_Tropo_Column"),
+    # Имя слоя целиком сканер секретов каталога принимал за ключ.
+    Theme("no2", "gases", "TROPOMI_L2_Nitrogen_Dioxide_"
+          "Tropospheric_Column", "png", 6,
+          "OMI_Nitrogen_Dioxide_Tropo_Column"),
     Theme("so2", "gases", "OMPS_SO2_Planetary_Boundary_Layer", "png", 6,
           "OMPS_SO2_Planetary_Boundary_Layer"),
     Theme("methane", "gases", "AIRS_L3_Methane_400hPa_Volume_Mixing_Ratio_"

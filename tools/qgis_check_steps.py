@@ -5234,6 +5234,54 @@ def globe_menu():
 
 
 @check(1500)
+def middle_turn():
+    # Прижатое колесо поворачивает и наклоняет вид. Замечание автора
+    # от 5 октября 2026 года - на рабочем компьютере не работает.
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    view = window.view
+    middle = _qt(Qt, "MouseButton", "MiddleButton")
+    none = _qt(Qt, "MouseButton", "NoButton")
+    before = view.navigator.pose
+    x, y = view.width() / 2.0, view.height() / 2.0
+    _send_mouse(view, "MouseButtonPress", x, y, middle, middle)
+    for k in range(1, 11):
+        _send_mouse(view, "MouseMove", x + 10.0 * k, y - 6.0 * k, none,
+                    middle)
+    _send_mouse(view, "MouseButtonRelease", x + 100.0, y - 60.0, middle,
+                none)
+    after = view.navigator.pose
+    result["middle_turn"] = {
+        "heading": [round(before.heading, 2), round(after.heading, 2)],
+        "tilt": [round(before.tilt, 2), round(after.tilt, 2)],
+        "turning_after": view.turning}
+    # То же с открытыми окнами «Новая метка» и «Линейка»: щелчок ставит
+    # точку, потом колесо.
+    left = _qt(Qt, "MouseButton", "LeftButton")
+    for name, opener in (("place", window._open_place),
+                         ("ruler", window._open_ruler)):
+        opener()
+        QgsApplication.processEvents()
+        _send_mouse(view, "MouseButtonPress", x - 50.0, y, left, left)
+        _send_mouse(view, "MouseButtonRelease", x - 50.0, y, left, none)
+        QgsApplication.processEvents()
+        start = view.navigator.pose
+        _send_mouse(view, "MouseButtonPress", x, y, middle, middle)
+        for k in range(1, 11):
+            _send_mouse(view, "MouseMove", x - 10.0 * k, y + 3.0 * k, none,
+                        middle)
+        _send_mouse(view, "MouseButtonRelease", x - 100.0, y + 30.0,
+                    middle, none)
+        end = view.navigator.pose
+        result["middle_turn"][name] = [round(start.heading, 2),
+                                       round(end.heading, 2)]
+        dialog = window.place_dialog if name == "place" \
+            else window.ruler_dialog
+        if dialog is not None:
+            dialog.close()
+
+
+@check(1500)
 def overlays_clean():
     window = state["window"]
     out = result["overlays"]
@@ -6215,6 +6263,55 @@ def tile_source_check():
     for key in settings.allKeys():
         if key.startswith(prefix):
             settings.remove(key)
+
+
+@check(500)
+def basemap_checkbox():
+    # Щелчок мышью по флажку подложки. До 2 октября 2026 года флажок
+    # выбирал подложку, строки группы пересоздавались, и Qt присылал
+    # itemClicked без строки - AttributeError в _geo_clicked, нашёл
+    # автор на QGIS 3.40.15. Ошибки слотов идут в sys.excepthook.
+    from qgis.PyQt.QtCore import Qt
+    from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtWidgets import QStyle, QStyleOptionViewItem
+    from planetx.qt_compat import enum
+    window = state["window"]
+    panel = window.panel
+    base = next(s for s in panel.sections if s.name == "base")
+    was_open = base.is_open()
+    base.set_open(True)
+    tree = panel.geo
+    group = panel.base_group
+    osm = next(i for i in range(group.childCount())
+               if group.child(i).text(0) == "OpenStreetMap")
+    row = group.child(osm)
+    tree.scrollToItem(row)
+    QgsApplication.processEvents()
+    option = QStyleOptionViewItem()
+    option.rect = tree.visualItemRect(row)
+    option.features |= enum(QStyleOptionViewItem, "ViewItemFeature",
+                            "HasCheckIndicator")
+    box = tree.style().subElementRect(
+        enum(QStyle, "SubElement", "SE_ItemViewItemCheckIndicator"),
+        option, tree)
+    caught = []
+    hook = sys.excepthook
+    sys.excepthook = lambda kind, value, tb: caught.append(repr(value))
+    try:
+        QTest.mouseClick(tree.viewport(),
+                         enum(Qt, "MouseButton", "LeftButton"),
+                         enum(Qt, "KeyboardModifier", "NoModifier"),
+                         box.center())
+        QgsApplication.processEvents()
+    finally:
+        sys.excepthook = hook
+    result["basemap_checkbox"] = {
+        "visible": not option.rect.isEmpty(),
+        "source": window.source.name,
+        "same_row": group.child(osm) is row,
+        "errors": caught}
+    panel._geo_clicked(group.child(0), 0)
+    base.set_open(was_open)
 
 
 @check(2000)
