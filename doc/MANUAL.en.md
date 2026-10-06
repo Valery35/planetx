@@ -345,6 +345,28 @@ on 40 %. Snow mass is a SMAP model calculation from satellite data,
 it has no gaps under clouds. The snow themes show land only. Lake ice
 is in the 8-day summary, sea ice is the Sea ice theme.
 
+#### Weather
+
+The Weather group stands first among the theme groups. Its rows are
+Air temperature at 2 m, Precipitation in mm/h, Wind at 10 m in m/s
+and Clouds in percent. The fields come from the NOAA GFS forecast
+model with a 0.25° grid, about 28 km. Choosing a field works as for
+NASA themes: one field or one theme of all groups is on.
+
+The time slider sets the moment of the field. A chosen field opens
+the slider at the present moment. The slider spans 10 days before
+the latest model run and 16 days of forecast after it. The future is
+the forecast of the latest run, hourly for the first 5 days, then
+every 3 hours. The past is the model analysis for the nearest hour.
+The ◂ and ▸ buttons of the slider move the moment by an hour, ▶ shows
+the hours one after another and waits for each to load. The model
+runs 4 times a day, a new run is published 4-5 hours later.
+
+A field for the whole world weighs 0.5-0.8 MB and arrives in a few
+seconds. The legend in the bottom left corner shows the units and the
+valid time of the field in UTC. It is a model calculation. Model
+clouds are not a cloud image, the Clouds row gives the image.
+
 The first row of the Planet of Fire is Fires, a radio button in the same
 choice as the themes: either the fires or one theme is on. The row shows
 fire spots over the last 24 hours from VIIRS
@@ -744,6 +766,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
+| Weather here | A weather forecast window for the point from MET Norway: hourly for two days and daily for 10 days - weather in words, temperature, precipitation, wind with direction, clouds. Time is the computer clock |
 | Measure distance | Opens the Ruler with its first point here |
 | Copy link to place | A link to the point on the OpenStreetMap map to the clipboard, the scale follows the view. Any browser opens the link |
 | Paste | KML placemarks from the clipboard into My Places |

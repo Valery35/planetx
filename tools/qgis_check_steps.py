@@ -6442,6 +6442,107 @@ def menu_actions_check():
     window.identified.close()
 
 
+@check(500)
+def weather_open():
+    """Поле температуры GFS на нынешний момент над Европой."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_theme("")
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(55.0, 40.0, 6000000.0, 0.0, 0.0))
+    window.set_theme("weather_temperature")
+    state["weather_started"] = time.monotonic()
+    result["weather"] = {}
+
+
+def _weather_wait(name, limit=60.0):
+    window = state["window"]
+    manager = window.weather
+    layer = window.view.gibs["theme"]
+    spent = time.monotonic() - state["weather_started"]
+    if (not manager.ready() or not layer.textures or layer.missing) \
+            and spent < limit and not manager.error:
+        return 500
+    run, hour, key = manager.shown or (None, None, None)
+    result["weather"][name] = {
+        "seconds": round(spent, 1), "field": key, "hour": hour,
+        "run": time.strftime("%Y-%m-%d %H", time.gmtime(run))
+        if run else None,
+        "error": manager.error, "textures": len(layer.textures),
+        "legend": window.theme_legend.isVisible(),
+        "legend_title": str(getattr(window.theme_legend, "title", "")),
+        "bar": [window.timebar.shown(), window.timebar.track.point],
+        "credit": "NOAA GFS" in window.attribution.text()}
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_weather_%s.png" % name))
+    return None
+
+
+@check(500)
+def weather_wait():
+    return _weather_wait("temperature")
+
+
+@check(500)
+def weather_step():
+    """Шаг шкалы вперёд - следующий час прогноза."""
+    window = state["window"]
+    before = window.weather.shown
+    window.timebar.step(1)
+    window._apply_theme()
+    result["weather"]["step_from"] = before[1] if before else None
+    state["weather_started"] = time.monotonic()
+
+
+@check(500)
+def weather_step_wait():
+    return _weather_wait("step")
+
+
+@check(500)
+def weather_rain():
+    window = state["window"]
+    window.set_theme("weather_precipitation")
+    state["weather_started"] = time.monotonic()
+
+
+@check(500)
+def weather_rain_wait():
+    return _weather_wait("precipitation")
+
+
+@check(500)
+def weather_point():
+    window = state["window"]
+    state["forecast"] = window.weather_here(58.0105, 56.2294)
+    state["weather_started"] = time.monotonic()
+
+
+@check(500)
+def weather_point_wait():
+    dialog = state["forecast"]
+    if dialog.reply is not None \
+            and time.monotonic() - state["weather_started"] < 30.0:
+        return 500
+    hours = dialog.hours
+    result["weather"]["point"] = {
+        "status": dialog.status.text(),
+        "hours": hours.rowCount(), "days": dialog.days.rowCount(),
+        "first": [hours.item(0, c).text() for c in range(
+            hours.columnCount())] if hours.rowCount() else None}
+    dialog.close()
+    window = state["window"]
+    window.set_theme("")
+    result["weather"]["off"] = {
+        "loader": "theme" in window.gibs_loaders,
+        "legend": window.theme_legend.isVisible(),
+        "active": window.weather.active()}
+    result["weather"]["gl"] = dict(window.view.gl_errors)
+    return None
+
+
 def ecef_to_geodetic_point(point):
     from planetx.core.ellipsoid import ecef_to_geodetic
     return ecef_to_geodetic(point)

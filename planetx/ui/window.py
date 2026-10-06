@@ -35,6 +35,7 @@ from ..core import graticule, paleo, placetree
 from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, Spin, fit_view
+from ..core import weather as weather_core
 from ..core.geocode import (SEARCH_INTERVAL, normalize, osm_link,
                             parse_places, parse_reverse, place_text,
                             reverse_url, search_url)
@@ -121,6 +122,8 @@ from .scene import apply as apply_scene, capture as capture_scene
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
 from .routing import RouteManager
+from .weather import (LEVEL as WEATHER_LEVEL, PointForecast,
+                      WeatherManager, units_text as weather_units)
 from .satellites import SatelliteManager
 from ..core import satellites as satellites_core
 from .track import (TrackDialog, TrackManager, date_range, layer_span,
@@ -932,6 +935,11 @@ class GlobeWindow(QWidget):
         self.panel.satellite_groups_changed.connect(
             self.satellite_manager.set_groups)
         self.route_manager = RouteManager(self)
+        # Погода: поля прогноза GFS темой группы «Погода», окна прогноза
+        # в точке.
+        self.weather = WeatherManager(self)
+        self.weather.changed.connect(self._weather_changed)
+        self.forecasts = []
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
@@ -1158,12 +1166,20 @@ class GlobeWindow(QWidget):
         """Тема на глобус или с глобуса. Ряд дат и шкала слоя
         просятся при первом показе темы, ответы помнятся."""
         self._time_mode()
+        if not self._theme_on() or not themes.is_weather(self.theme_key):
+            self.weather.hide()
         if not self._theme_on():
             self._theme_shown = None
             self.theme_day = None
             self._set_gibs("theme", False)
             self.theme_legend.hide()
             self._place_attribution()
+            return
+        if themes.is_weather(self.theme_key):
+            # Поле прогноза GFS: ряд и картинки даёт ui/weather.py.
+            self._theme_shown = None
+            self.weather.show(self.theme_key, self.theme_moment())
+            self._update_timebar()
             return
         theme = themes.BY_KEY[self.theme_key]
         if theme.key not in self._theme_domains:
@@ -1215,7 +1231,10 @@ class GlobeWindow(QWidget):
         self.timebar.ready = self._theme_ready if theme else None
 
     def _theme_step(self, moment, delta):
-        """Момент соседнего дня ряда темы для шага шкалы или None."""
+        """Момент соседнего дня ряда темы для шага шкалы или None.
+        У поля прогноза - соседний час."""
+        if themes.is_weather(self.theme_key):
+            return self.weather.step(moment, delta)
         intervals = self._theme_domains.get(self.theme_key)
         if not intervals:
             return None
@@ -1231,6 +1250,8 @@ class GlobeWindow(QWidget):
     def _theme_ready(self):
         """Показан ли день темы: все картинки кадра пришли. Показ дней
         подряд ждёт этого."""
+        if themes.is_weather(self.theme_key):
+            return self.weather.ready()
         layer = self.view.gibs["theme"]
         return not layer.missing and not layer.pending
 
@@ -1247,6 +1268,9 @@ class GlobeWindow(QWidget):
         """День темы по шкале времени, слой вида и шкала в углу. Смена
         дня той же темы держит прежние картинки до замены."""
         if not self._theme_on():
+            return
+        if themes.is_weather(self.theme_key):
+            self.weather.set_moment(self.theme_moment())
             return
         theme = themes.BY_KEY[self.theme_key]
         intervals = self._theme_domains.get(theme.key)
@@ -2339,7 +2363,9 @@ class GlobeWindow(QWidget):
         if "clouds" in self.gibs_loaders:
             parts.append(link_html(*clouds.ATTRIBUTION))
         if "theme" in self.gibs_loaders:
-            parts.append(link_html(*themes.ATTRIBUTION))
+            parts.append(link_html(*(
+                weather_core.ATTRIBUTION if themes.is_weather(self.theme_key)
+                else themes.ATTRIBUTION)))
         if "lights" in self.gibs_loaders:
             parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
         if "sea" in self.gibs_loaders:
@@ -2966,7 +2992,10 @@ class GlobeWindow(QWidget):
         if fire_span is not None:
             times += [when.stamp(when.text(t)) for t in fire_span]
         # Тема NASA на шкале - первый и последний день её ряда.
-        theme_span = themes.span(self._theme_domains.get(self.theme_key)) \
+        weather_on = getattr(self, "theme_key", "") \
+            and self._theme_on() and themes.is_weather(self.theme_key)
+        theme_span = self.weather.span() if weather_on \
+            else themes.span(self._theme_domains.get(self.theme_key)) \
             if getattr(self, "theme_key", "") and self._theme_on() else None
         if theme_span is not None:
             times += [when.stamp(when.text(t)) for t in theme_span]
@@ -2976,7 +3005,8 @@ class GlobeWindow(QWidget):
         self.timebar.set_clock(self._clock_on())
         if extent is None and getattr(self, "theme_key", "") \
                 and self._theme_on() \
-                and self.theme_key not in self._theme_domains:
+                and (self.weather.span() is None if weather_on
+                     else self.theme_key not in self._theme_domains):
             # Ряд новой темы ещё грузится: шкала остаётся как есть,
             # иначе она закрывалась бы на время загрузки.
             return
@@ -3416,6 +3446,51 @@ class GlobeWindow(QWidget):
         self.message = (tr("Ссылка на место скопирована."),
                         time.monotonic())
         self._show_state()
+
+    def _show_weather_tiles(self, tiles, field, grid):
+        """Поле прогноза на месте темы, шкала и подпись поля. Прежние
+        картинки видны, пока их не заменят новые."""
+        old = self.gibs_loaders.pop("theme", None)
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        self.gibs_loaders["theme"] = tiles
+        self.view.gibs["theme"].max_level = WEATHER_LEVEL
+        self.view.set_gibs("theme", True, tiles, keep=True)
+        name = theme_names()[self.theme_key][0]
+        units = weather_units(field)
+        scale = dict(weather_core.legend(field), units=units)
+        self.theme_legend.set_theme(tr(
+            "{name}, {units} · {time} UTC", name=name, units=units,
+            time=weather_core.valid_text(grid.run, grid.hour)), scale)
+        self.theme_legend.show()
+        self._place_attribution()
+        self._show_attribution()
+        if getattr(self, "_theme_open_time", False) and self.timebar.known:
+            # Выбранное поле открывает шкалу на нынешнем моменте.
+            self._theme_open_time = False
+            if not self.timebar.shown():
+                self.timebar.open_bar()
+                self.toolbar.set_time_shown(True)
+            now = time.time()
+            self.timebar.set_range(now, now)
+            self._time_range = self.timebar.range()
+
+    def _weather_changed(self):
+        if self.weather.error:
+            self.message = (self.weather.error, time.monotonic())
+            self._show_state()
+
+    def weather_here(self, lat, lon):
+        """«Погода здесь» меню на глобусе: прогноз MET Norway в точке."""
+        dialog = PointForecast(self, lat, lon)
+        dialog.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        dialog.destroyed.connect(
+            lambda *a, d=dialog: self.forecasts.remove(d)
+            if d in self.forecasts else None)
+        self.forecasts.append(dialog)
+        dialog.show()
+        return dialog
 
     def spin_here(self, lat, lon):
         """«Вращаться вокруг» меню на глобусе."""
@@ -5697,6 +5772,7 @@ class GlobeWindow(QWidget):
             self._link_timer.stop()
             self.satellite_manager.close()
             self.route_manager.close()
+            self.weather.close()
             self._address_timer.stop()
             reply, self._address_reply = self._address_reply, None
             if reply is not None:

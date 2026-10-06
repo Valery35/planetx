@@ -265,17 +265,20 @@ def set_line_groups(layer, groups):
     layer.setRenderer(renderer)
 
 
-def fetch_bytes(url, done, prefer_cache=True, fresh=False):
+def fetch_bytes(url, done, prefer_cache=True, fresh=False, headers=None):
     """Асинхронно получить ответ и вызвать done(байты или None, ошибка).
 
     Запрос идёт через QgsNetworkAccessManager с меткой PlanetX, как
     запросы тайлов, ответ ложится в кэш QGIS. Возвращает ответ, его
     нужно держать до конца. fresh - всегда с сервера: без него Qt
     отдаёт из кэша ответ, который сервер разрешил хранить, и картинка
-    по ссылке с обновлением не менялась бы.
+    по ссылке с обновлением не менялась бы. headers - свои заголовки,
+    например Range для части файла прогноза погоды.
     """
     request = QNetworkRequest(QUrl(url))
     request.setAttribute(MARK, True)
+    for name, value in (headers or {}).items():
+        request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
     if fresh:
         request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
     elif prefer_cache:

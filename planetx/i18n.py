@@ -228,6 +228,125 @@ EN = {
     "{value} км/с": "{value} km/s",
     "Возраст элементов": "Elements age",
     "Орбита и след": "Orbit and ground track",
+    "м/с":
+        "m/s",
+    "мм/ч":
+        "mm/h",
+    "Погода здесь":
+        "Weather here",
+    "Погода":
+        "Weather",
+    "Температура, осадки, ветер и облачность по модели NOAA GFS. Прогноз - "
+    "до 16 суток вперёд от свежего выпуска, прошлое - анализ модели. Момент "
+    "задаёт шкала времени, при показе поле идёт по часам прогноза.":
+        "Temperature, precipitation, wind and clouds from the NOAA GFS "
+        "model. The forecast reaches 16 days ahead of the latest run, the "
+        "past is the model analysis. The time slider sets the moment, "
+        "playback steps through the forecast hours.",
+    "{weather}, гроза":
+        "{weather}, thunder",
+    "°C":
+        "°C",
+    "°C макс":
+        "°C max",
+    "°C мин":
+        "°C min",
+    "В файле прогноза нет поля «{name}».":
+        "The forecast file has no {name} field.",
+    "Ветер":
+        "Wind",
+    "Ветер до, м/с":
+        "Wind up to, m/s",
+    "Ветер, м/с":
+        "Wind, m/s",
+    "Время - часы компьютера. Прогноз до {last}.":
+        "Time is the computer clock. The forecast runs to {last}.",
+    "Данные: MET Norway, лицензия CC BY 4.0":
+        "Data: MET Norway, CC BY 4.0 licence",
+    "Индекс прогноза не получен: {error}":
+        "The forecast index was not received: {error}",
+    "Интенсивность осадков в момент шкалы по модели NOAA GFS, мм/ч. Слабее "
+    "0.1 мм/ч поле прозрачно.":
+        "Precipitation rate at the slider moment from the NOAA GFS model, "
+        "mm/h. Below 0.1 mm/h the field is transparent.",
+    "Облачность":
+        "Clouds",
+    "Облачность, %":
+        "Clouds, %",
+    "Общая облачность по модели NOAA GFS, доля неба в процентах. Это расчёт "
+    "модели, а не снимок облаков.":
+        "Total cloud cover from the NOAA GFS model, the share of the sky in "
+        "percent. It is a model calculation, not a cloud image.",
+    "Осадки, мм":
+        "Precipitation, mm",
+    "По суткам":
+        "By day",
+    "По часам":
+        "By hour",
+    "Поле прогноза не получено: {error}":
+        "The forecast field was not received: {error}",
+    "Поле прогноза не прочитано.":
+        "The forecast field was not read.",
+    "Прогноз GFS не найден: {error}":
+        "No GFS forecast found: {error}",
+    "Прогноз загружается…":
+        "The forecast is loading…",
+    "Прогноз не получен: {error}":
+        "The forecast was not received: {error}",
+    "Скорость ветра на высоте 10 м по модели NOAA GFS, м/с.":
+        "Wind speed at 10 m from the NOAA GFS model, m/s.",
+    "Сутки":
+        "Day",
+    "Температура воздуха":
+        "Air temperature",
+    "Температура воздуха на высоте 2 м по модели NOAA GFS, шаг сетки 0.25°, "
+    "около 28 км. Прогноз - до 16 суток вперёд, прошлое - анализ модели. "
+    "Момент задаёт шкала времени.":
+        "Air temperature at 2 m from the NOAA GFS model, a 0.25° grid of "
+        "about 28 km. The forecast reaches 16 days ahead, the past is the "
+        "model analysis. The time slider sets the moment.",
+    "дождь":
+        "rain",
+    "заряды мокрого снега":
+        "sleet showers",
+    "ливень":
+        "rain showers",
+    "малооблачно":
+        "fair",
+    "мокрый снег":
+        "sleet",
+    "небольшой дождь":
+        "light rain",
+    "небольшой ливень":
+        "light rain showers",
+    "небольшой мокрый снег":
+        "light sleet",
+    "небольшой снег":
+        "light snow",
+    "облачно":
+        "cloudy",
+    "переменная облачность":
+        "partly cloudy",
+    "пустой ответ":
+        "empty response",
+    "сильный дождь":
+        "heavy rain",
+    "сильный ливень":
+        "heavy rain showers",
+    "сильный мокрый снег":
+        "heavy sleet",
+    "сильный снег":
+        "heavy snow",
+    "снег":
+        "snow",
+    "снежные заряды":
+        "snow showers",
+    "туман":
+        "fog",
+    "ясно":
+        "clear sky",
+    "{name}, {units} · {time} UTC":
+        "{name}, {units} · {time} UTC",
     "1920 × 1080 (Full HD)":
         "1920 × 1080 (Full HD)",
     "2560 × 1440":

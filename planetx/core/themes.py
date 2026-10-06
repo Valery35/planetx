@@ -30,7 +30,10 @@ COLORMAP = ROOT + "/colormaps/v1.3/{name}.xml"
 ATTRIBUTION = ("NASA GIBS", "https://earthdata.nasa.gov/gibs")
 OPACITY = 0.8  # непрозрачность раскраски поверх снимка
 
-GROUPS = ("fire", "water", "gases", "life")
+# Группа «weather» - поля прогноза NOAA GFS, не слои GIBS: их грузит
+# ui/weather.py, адрес и ряд дат у них свои (core/weather.py).
+GROUPS = ("weather", "fire", "water", "gases", "life")
+WEATHER = "GFS"  # слой темы-поля прогноза
 
 
 class Theme:
@@ -61,6 +64,10 @@ class Theme:
 
 
 THEMES = (
+    Theme("weather_temperature", "weather", WEATHER, "", 6, None),
+    Theme("weather_precipitation", "weather", WEATHER, "", 6, None),
+    Theme("weather_wind", "weather", WEATHER, "", 6, None),
+    Theme("weather_clouds", "weather", WEATHER, "", 6, None),
     Theme("smoke", "fire", "OMPS_Aerosol_Index", "png", 6,
           "OMPS_Aerosol_Index"),
     Theme("aerosol", "fire", "MODIS_Combined_Value_Added_AOD", "png", 6,
@@ -115,6 +122,12 @@ THEMES = (
           "Annual", "png", 8, "MODIS_IGBP_Land_Cover_Type"),
 )
 BY_KEY = {theme.key: theme for theme in THEMES}
+
+
+def is_weather(key):
+    """Тема - поле прогноза погоды, а не слой GIBS."""
+    theme = BY_KEY.get(key)
+    return theme is not None and theme.layer == WEATHER
 
 _INTERVAL = re.compile(r"(\d{4}-\d{2}-\d{2})(?:T[\d:]+Z)?/"
                        r"(\d{4}-\d{2}-\d{2})(?:T[\d:]+Z)?/P(\d+)([DMY])")

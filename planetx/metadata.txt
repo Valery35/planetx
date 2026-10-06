@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.44.0
+version=0.45.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.44.0 A tour records to an MP4 video at the window size
+changelog=0.45.0 The Weather group of the Layers section shows air
+      temperature, precipitation, wind and clouds of the NOAA GFS
+      model at the moment of the time slider, a forecast up to 16
+      days ahead and the model analysis behind. The Weather here
+      item of the globe menu opens the MET Norway forecast at the
+      point, hourly for two days and daily for 10 days.
+      0.44.0 A tour records to an MP4 video at the window size
       right away, Windows itself encodes it. PNG frame recording gets
       a size choice up to 3840 x 2160. The globe menu shows the point
       coordinates first, a click copies them. Its items are now Fly
