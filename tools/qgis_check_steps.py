@@ -653,6 +653,136 @@ def save_view_check():
     result["save_view"] = out
 
 @check(500)
+def draw_circle():
+    """Вкладка «Круг» окна «Новая метка»: центр и точка окружности,
+    правка точки мышью без середин, запись многоугольником."""
+    import math
+    window = state["window"]
+    store = window.myplaces
+    window._open_place()
+    dialog = window.place_dialog
+    dialog.tabs.setCurrentIndex(3)
+    d = window.drawer
+    out = {"mode": d.mode, "name": dialog.name.text(),
+           "save_before": dialog.save.isEnabled()}
+    d.add(58.0, 56.25)
+    d.add(58.0 + 1000.0 / 111320.0, 56.25)  # 1 км к северу
+    out["middles"] = len(window.draw_vertices.middles())
+    out["save_after"] = dialog.save.isEnabled()
+    d.move(1, 58.0 + 2000.0 / 111320.0, 56.25)
+    window._save_place()
+    place = [p for p in store.places if p.name == out["name"]][0]
+    lat0, lon0 = 58.0, 56.25
+    radii = [math.hypot((la - lat0) * 111320.0,
+                        (lo - lon0) * 111320.0 * math.cos(math.radians(la)))
+             for la, lo in place.shape.points]
+    out.update(kind=place.kind, points=len(place.shape.points),
+               radius_min=round(min(radii)), radius_max=round(max(radii)))
+    out["next_name"] = dialog.name.text()
+    dialog.close()
+    store.remove_many([place.key]) if hasattr(store, "remove_many") \
+        else None
+    result["draw_circle"] = out
+
+
+@check(500)
+def snow_ready():
+    """Суточный снег открывается на готовом дне: не позже вчерашнего
+    по UTC, картинки тайлов не пустые."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(72.0, -40.0, 6000000.0, 0.0, 0.0))
+    window.set_theme("snow")
+    state["snow_started"] = time.monotonic()
+    result["snow_ready"] = {}
+
+
+@check(500)
+def snow_ready_wait():
+    window = state["window"]
+    layer = window.view.gibs["theme"]
+    spent = time.monotonic() - state["snow_started"]
+    if (not layer.textures or layer.missing or layer.pending) \
+            and spent < 60.0:
+        return 500
+    image = window.view.grabFramebuffer()
+    out = result["snow_ready"]
+    out.update(day=getattr(window, "theme_day", None),
+               seconds=round(spent, 1), textures=len(layer.textures),
+               utc_today=time.strftime("%Y-%m-%d", time.gmtime()))
+    image.save(os.path.join(TEMP, "planetx_snow_ready.png"))
+    window.set_theme("")
+
+
+@check(500)
+def gallery_open():
+    """Витрина «Карты NASA и погода»: строка в «Слоях» и значок, группы
+    «Слоёв», превью, выбор карты, температура в общем выборе."""
+    window = state["window"]
+    window.set_body("earth")
+    window.set_theme("")
+    panel = window.panel
+    out = {"headers": [panel.geo.topLevelItem(i).text(0)
+                       for i in range(panel.geo.topLevelItemCount())],
+           "row": panel.gallery_item.text(0)}
+    homes = {}
+    for key, item in panel.extra_items.items():
+        parent = item.parent()
+        homes[key] = parent.text(0) if parent is not None else None
+    out["homes"] = homes
+    panel._geo_clicked(panel.gallery_item, 0)
+    gallery = window.gallery
+    out["visible"] = gallery.isVisible()
+    out["items"] = gallery.list.count()
+    state["gallery_started"] = time.monotonic()
+    result["gallery"] = out
+
+
+@check(500)
+def gallery_wait():
+    window = state["window"]
+    gallery = window.gallery
+    spent = time.monotonic() - state["gallery_started"]
+    if (gallery._queue or gallery._replies) and spent < 60.0:
+        return 500
+    out = result["gallery"]
+    out["seconds"] = round(spent, 1)
+    out["thumbs"] = len(gallery.thumbs)
+    out["base"] = gallery.base is not None
+    snow = gallery.items["snow"][0]
+    out["snow_text"] = snow.text()
+    gallery._clicked(snow)
+    out["chosen"] = [window.theme_key, panel_row(window)]
+    from planetx.ui.nasamaps import KEY_ROLE
+    out["selected"] = [i.data(KEY_ROLE)
+                       for i in gallery.list.selectedItems()]
+    gallery._clicked(gallery.items["temperature"][0])
+    out["temperature"] = [window.theme_key,
+                          bool(window.extras.get("temperature")),
+                          panel_row(window)]
+    gallery._clicked(gallery.items["temperature"][0])
+    out["off"] = [window.gallery_key(), panel_row(window)]
+    gallery._set_group("fire")
+    out["fire_group"] = [k for k, (it, g, kind) in gallery.items.items()
+                         if not it.isHidden()]
+    gallery._set_group("")
+    gallery.search.setText("снег")
+    out["search"] = [k for k, (it, g, kind) in gallery.items.items()
+                     if not it.isHidden()]
+    gallery.search.setText("")
+    gallery.grab().save(os.path.join(TEMP, "planetx_gallery.png"))
+    window.panel.geo.grab().save(os.path.join(TEMP, "planetx_layers.png"))
+    gallery.close()
+
+
+def panel_row(window):
+    return window.panel.gallery_item.text(0)
+
+
+@check(500)
 def big_polygon():
     import time
     from qgis.PyQt.QtCore import Qt
@@ -4994,9 +5124,7 @@ def themes_time_check():
     window.set_extra("quakes", True)
     out["quakes_started"] = time.monotonic()
     geo = window.panel.geo
-    for group in window.panel.theme_groups:
-        group.setExpanded(True)
-    geo.scrollToItem(window.panel.theme_items["rain"])
+    geo.scrollToItem(window.panel.gallery_item)
     geo.grab().save(os.path.join(TEMP, "planetx_theme_panel.png"))
 
 
@@ -5028,23 +5156,13 @@ def themes_off():
                       "shown": window.view.gibs["theme"].shown}
     window.set_body("earth")
     out["back_on_earth"] = window.view.gibs["theme"].shown
-    # Галка группы: снята - тема выключена, поставлена - прежняя тема
-    # группы снова. Замечание автора от 5 октября 2026 года.
-    from planetx.core import themes
-    from planetx.ui.panel import CHECKED, THEME_GROUP_ROLE, UNCHECKED
+    # Строка витрины в «Слоях» называет карту на глобусе.
     panel = window.panel
-    current = themes.BY_KEY[window.theme_key].group
-    water = next(g for g in panel.theme_groups
-                 if g.data(0, THEME_GROUP_ROLE) == current)
-    out["group_checked"] = water.checkState(0) == CHECKED
-    water.setCheckState(0, UNCHECKED)
-    out["group_off"] = (window.theme_key, window.view.gibs["theme"].shown)
-    water.setCheckState(0, CHECKED)
-    out["group_on"] = window.theme_key
+    out["row_on"] = panel.gallery_item.text(0)
     window.set_theme("")
     out["bar_after_off"] = window.timebar.track.point
     window.myplaces.set_visible_many(state.pop("timed_places", {}))
-    out["group_after_off"] = water.checkState(0) == CHECKED
+    out["row_off"] = panel.gallery_item.text(0)
     out["off"] = {"legend": window.theme_legend.isVisible(),
                   "shown": window.view.gibs["theme"].shown,
                   "loader": "theme" in window.gibs_loaders}
@@ -5658,24 +5776,14 @@ def fires_check():
         out["identify"] = [(name, dict(values))
                            for name, values, _ in found[0][1][:1]] \
             if found else []
-    # Строка «Пожары» - первая в группе «Планета огня», переключатель
-    # общего выбора тем: тема снимает пожары, пожары снимают тему.
-    panel = window.panel
-    row = panel.extra_items["fires"]
-    group = row.parent()
-    out["row_parent"] = group.text(0) if group is not None else None
-    from qgis.PyQt.QtCore import Qt
-    checked = _qt(Qt, "CheckState", "Checked")
-    smoke = panel.theme_items["smoke"]
-    smoke.setCheckState(0, checked)
+    # Пожары - карта витрины: тема снимает пожары, пожары снимают тему.
+    window.set_theme("smoke")
     QgsApplication.processEvents()
-    after_theme = [window.theme_key, bool(window.extras.get("fires")),
-                   row.checkState(0) == checked]
-    row.setCheckState(0, checked)
+    after_theme = [window.theme_key, bool(window.extras.get("fires"))]
+    window.set_theme("fires")
     QgsApplication.processEvents()
     after_fires = [window.theme_key, bool(window.extras.get("fires")),
-                   smoke.checkState(0) == checked,
-                   group.checkState(0) == checked]
+                   window.gallery_key()]
     out["radio"] = [after_theme, after_fires]
     out["gl"] = dict(view.gl_errors)
     window.set_extra("fires", False)

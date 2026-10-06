@@ -123,6 +123,7 @@ from .snapshot import SnapshotDialog
 from .tour import TourPlayer
 from .routing import RouteManager
 from .sheets import SheetsDialog
+from .nasamaps import NasaMaps, map_names
 from .weather import (LEVEL as WEATHER_LEVEL, PointForecast,
                       WeatherManager, units_text as weather_units)
 from .satellites import SatelliteManager
@@ -281,10 +282,12 @@ def prepare_temperature(key, rgba):
     return mip_chain(temperature.overlay_rgba(rgba))
 
 
-def prepare_theme(key, rgba):
-    """Работа рабочего потока для тайла темы NASA GIBS: прозрачность
-    и уровни мипмапов."""
-    return mip_chain(themes.overlay_rgba(rgba))
+def prepare_theme(theme_key):
+    """Работа рабочего потока для тайла темы NASA GIBS: прозрачность,
+    прозрачные классы темы и уровни мипмапов."""
+    clear = themes.CLEAR.get(theme_key, ())
+    return lambda key, rgba: mip_chain(themes.overlay_rgba(rgba,
+                                                           clear=clear))
 
 
 def prepare_lights(key, rgba):
@@ -951,11 +954,13 @@ class GlobeWindow(QWidget):
         self.view.changed.connect(self._update_grid)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
-        self.panel.theme_chosen.connect(self.set_theme)
-        # Включённые пожары - тоже выбор темы, иначе пустая тема
-        # выключила бы их.
-        self.set_theme("fires" if self.extras.get("fires")
-                       else settings.value(THEME_KEY, "") or "")
+        self.panel.gallery_requested.connect(self.open_gallery)
+        self.toolbar.gallery_requested.connect(self.open_gallery)
+        # Включённые пожары и температура - тоже выбор карты витрины,
+        # иначе пустая тема выключила бы их.
+        self.set_theme(self.gallery_key() if any(
+            self.extras.get(extra) for extra in themes.EXCLUSIVE)
+            else settings.value(THEME_KEY, "") or "")
         self.refresh()
 
     # Выбранное состояние. Его же меняют проверочные скрипты, на глобус
@@ -1094,6 +1099,9 @@ class GlobeWindow(QWidget):
         elif key == "clouds":
             self._set_gibs("clouds", on)
         elif key == "temperature":
+            if on and (self.theme_key or self.extras.get("fires")):
+                self.set_theme("temperature")
+            self._mark_gallery()
             self._set_gibs("sea", on)
             self._set_gibs("land", on)
             self.legend.setVisible(on)
@@ -1148,16 +1156,45 @@ class GlobeWindow(QWidget):
         Новая тема при открытой шкале берёт её момент."""
         # Пожары - в том же выборе: пожары или одна тема. Просьба
         # автора от 5 октября 2026 года.
-        fires = key == "fires"
-        if bool(self.extras.get("fires")) != fires:
-            self.set_extra("fires", fires)
+        # Температура суши и моря - тоже карта витрины, просьба автора
+        # от 7 октября 2026 года.
+        chosen = key
         key = key if key in themes.BY_KEY else ""
         self._theme_open_time = bool(key) and key != self.theme_key \
             and not self.timebar.shown()
         self.theme_key = key
+        for extra in themes.EXCLUSIVE:
+            if bool(self.extras.get(extra)) != (chosen == extra):
+                self.set_extra(extra, chosen == extra)
         QgsSettings().setValue(THEME_KEY, key)
-        self.panel.set_theme("fires" if fires else key)
+        self._mark_gallery()
         self._show_theme()
+
+    def gallery_key(self):
+        """Карта витрины на глобусе: пожары, температура, тема или ""."""
+        for extra in themes.EXCLUSIVE:
+            if getattr(self, "extras", {}).get(extra):
+                return extra
+        return getattr(self, "theme_key", "")
+
+    def _mark_gallery(self):
+        """Строка витрины в «Слоях» и сама витрина - по выбранной карте."""
+        if getattr(self, "panel", None) is None:
+            return
+        key = self.gallery_key()
+        self.panel.set_theme(key, map_names()[key][0] if key else "")
+        gallery = getattr(self, "gallery", None)
+        if gallery is not None:
+            gallery.refresh()
+
+    def open_gallery(self):
+        """Окно «Карты NASA и погода», одно на глобус."""
+        if getattr(self, "gallery", None) is None:
+            self.gallery = NasaMaps(self)
+        self.gallery.refresh()
+        self.gallery.show()
+        self.gallery.raise_()
+        return self.gallery
 
     def _theme_on(self):
         return bool(self.theme_key) and self.planet.earth \
@@ -1205,8 +1242,11 @@ class GlobeWindow(QWidget):
                                    error=error), time.monotonic())
                 self._show_state()
                 return
-            self._theme_domains[key] = themes.parse_domains(data)
+            self._theme_domains[key] = themes.ready_intervals(
+                themes.parse_domains(data), time.time())
             self._update_timebar()
+            if getattr(self, "gallery", None) is not None:
+                self.gallery.domains_arrived(key)
         else:
             self._theme_scales[key] = themes.parse_colormap(data) \
                 if data else None
@@ -1314,7 +1354,8 @@ class GlobeWindow(QWidget):
                                 themes.ATTRIBUTION, builtin=True,
                                 missing=(404,))
         self.view.gibs["theme"].max_level = theme.level
-        self._set_gibs("theme", True, (source, prepare_theme), keep=keep)
+        self._set_gibs("theme", True, (source, prepare_theme(theme.key)),
+                       keep=keep)
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой
         шкалы времени, иначе часы компьютера."""
@@ -1876,9 +1917,9 @@ class GlobeWindow(QWidget):
         """Пожары - строка группы «Планета огня» в общем выборе тем.
         Сводка NASA FIRMS за 24 часа загружается при каждом включении.
         Включённые пожары снимают тему."""
-        if on and self.theme_key:
+        if on and (self.theme_key or self.extras.get("temperature")):
             self.set_theme("fires")
-        self.panel.set_theme("fires" if on else self.theme_key)
+        self._mark_gallery()
         self.fire_legend.setVisible(on and self.planet.earth
                                     and self.view.sky_view is None)
         self._place_attribution()
@@ -3355,7 +3396,8 @@ class GlobeWindow(QWidget):
 
     def _draw_name(self, mode):
         bases = {"point": tr("Моя метка"), "path": tr("Мой путь"),
-                 "polygon": tr("Мой многоугольник")}
+                 "polygon": tr("Мой многоугольник"),
+                 "circle": tr("Мой круг")}
         return self.new_name(bases[mode])
 
     def add_place_here(self, lat, lon):

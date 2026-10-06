@@ -223,23 +223,21 @@ place. The globe remembers which sections are collapsed.
 Its check boxes
 take effect at once, without the Refresh button.
 
-| Group | Rows |
+| Part | Rows |
 |---|---|
 | Base map | Sources of imagery and maps, one is checked, the last row is Add tile source… |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |
-| Borders and names | Borders, Places, Water names |
-| Transport | Roads, Road numbers, Railways, Airports |
-| Nature | Rivers, Lakes and reservoirs, Peaks, Reserves and national parks |
-| Grid | Parallels and meridians with labels, the equator, tropics and polar circles in yellow |
-| Stars | Stars brighter than magnitude 6 and the Milky Way at their places in the sky |
-| Clouds | Clouds from NASA GIBS VIIRS imagery of the last complete day |
-| Temperature | Surface temperature of land by day over 8 days (MODIS) and of the sea over a day (GHRSST MUR) with a scale in degrees |
-| 3D buildings | OpenStreetMap buildings as blocks from OpenFreeMap tiles, off by default |
-| Sun | Light of the terrain, buildings and air by the position of the sun, the night side of the Earth is dark with city lights on it, off by default |
-| Earthquakes | Earthquake foci of magnitude 4.5 and above over 30 days from the USGS feed, off by default |
-| Earth cutaway | A sector removed from the Earth with the shells on its faces, off by default |
-| Slope | Surface slope from the heights in classes from flat to steeper than 35°, off by default |
-| Aspect | The direction a slope faces, in the colours of the compass directions, switched on instead of the slope |
+| NASA maps and weather | The row opens the map gallery, see NASA maps and weather |
+| Map | Borders and names, Transport, Nature - the vector base, Coordinate grid, 3D buildings |
+| Sky and light | Stars, Clouds, Sun, Satellites |
+| Inside the Earth | Earthquakes, Plate boundaries, Earth cutaway, Paleogeography |
+| Terrain analysis | Slope, Aspect |
+
+The part headings have no check boxes, the rows have them. The vector
+base has three groups. Borders and names holds Borders, Places and
+Water names. Transport holds Roads, Road numbers, Railways and
+Airports. Nature holds Rivers, Lakes and reservoirs, Peaks, Reserves
+and national parks.
 
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
@@ -253,8 +251,9 @@ shown and comes from the QGIS cache afterwards.
 Clouds lie as a veil over the imagery. Snow and ice get into the
 clouds too, they have the same colour.
 
-Temperature colours land and sea with their own scales, the scales in
-degrees Celsius are in the bottom left corner of the view. Land shows
+The Surface temperature map of the gallery colours land and sea with
+their own scales. The scales in degrees Celsius are in the bottom left
+corner of the view. Land shows
 the temperature of the surface itself by day, not of the air, over 8
 days. Land may have gaps under clouds. Sea shows the water temperature
 near the surface over a day.
@@ -313,22 +312,30 @@ the planetx-terrain repository, the first showing of an age needs the
 internet. A new age appears at once in a coarse form and sharpens as
 it loads. When the window opens, the row is off.
 
-The Planet of Fire, Planet of Water, Gases and Land and Life groups at
-the bottom of the Layers section hold NASA themes. A theme is a raster
-by days, months or years from the NASA GIBS service. The groups hold:
+#### NASA maps and weather
+
+The NASA maps and weather row and its icon open the map gallery. Each map has a preview - its tile
+over Eurasia on the latest ready day over the base map. Forecast fields
+and fires show a strip of the scale colours instead of a tile. The name
+and the day of the map stand under the preview. The buttons at the top
+keep the maps of one group, the Find a map field searches by name. A
+click on a map shows it on the globe, a second click or the Turn off
+button removes it. The globe shows one map of the gallery, its name
+stands in the row of the Layers section.
+
+NASA themes are rasters by days, months or years from the NASA GIBS
+service. A day of a series counts as ready a day later, before that
+its image is empty. The groups of the gallery hold:
 - Planet of Fire - fire spots, smoke, aerosol optical depth, carbon
   monoxide and its emission.
 - Planet of Water - precipitation, soil moisture, daily snow, snow over
   8 days, snow mass, sea ice, water vapour, chlorophyll, sea salinity
   and floods.
-- Gases - nitrogen dioxide, sulphur dioxide, methane, carbon dioxide
-  and ozone.
+- Planet of Air - nitrogen dioxide, sulphur dioxide, methane, carbon
+  dioxide and ozone.
 - Land and Life - vegetation, dust, night lights and land cover.
 
-Themes are radio buttons, one theme of all groups is on. Checking
-another theme clears the previous one. The group check box is checked
-while its theme is on. Clearing it turns the theme off, checking it
-turns the previous theme of the group on. The theme lies as semi-transparent colouring over the
+The theme lies as semi-transparent colouring over the
 imagery, where there is no data the imagery shows. A legend with the
 name, units and date stands in the bottom left corner of the view. The
 day of the theme is set by the right handle of the time slider, see
@@ -347,11 +354,12 @@ is in the 8-day summary, sea ice is the Sea ice theme.
 
 #### Weather
 
-The Weather group stands first among the theme groups. Its rows are
-Air temperature at 2 m, Precipitation in mm/h, Wind at 10 m in m/s
+The Weather group stands first in the gallery. Its first map is
+Surface temperature of land and sea from NASA. The others are Air
+temperature at 2 m, Precipitation in mm/h, Wind at 10 m in m/s
 and Clouds in percent. The fields come from the NOAA GFS forecast
-model with a 0.25° grid, about 28 km. Choosing a field works as for
-NASA themes: one field or one theme of all groups is on.
+model with a 0.25° grid, about 28 km. A field is chosen in the
+gallery, as a NASA theme.
 
 The time slider sets the moment of the field. A chosen field opens
 the slider at the present moment. The slider spans 10 days before
@@ -367,8 +375,7 @@ seconds. The legend in the bottom left corner shows the units and the
 valid time of the field in UTC. It is a model calculation. Model
 clouds are not a cloud image, the Clouds row gives the image.
 
-The first row of the Planet of Fire is Fires, a radio button in the same
-choice as the themes: either the fires or one theme is on. The row shows
+The first map of the Planet of Fire is Fires. It shows
 fire spots over the last 24 hours from VIIRS
 images of the NOAA-20 satellite from the NASA FIRMS feed, about 78
 thousand spots. A dot stands at the fire, its colour and size show the
@@ -730,13 +737,17 @@ undo are the standard ones.
 
 ### New placemark
 
-The New placemark icon opens a window with the tabs Placemark, Path and
-Polygon.
+The New placemark icon opens a window with the tabs Placemark, Path,
+Polygon and Circle.
 
 - A placemark is put with a click on the globe, a new click moves it.
 - Path points and polygon vertices are put with clicks on the globe.
+- A circle is set by two clicks - the centre and a point of the
+  circle. Both points can be dragged with the mouse. The circle is
+  saved as a polygon of 128 vertices along the circle on the
+  ellipsoid.
 - The Name field is filled at once with a numbered name - My placemark
-  1, My path 1, My polygon 1. Each kind counts on its own. The name can
+  1, My path 1, My polygon 1, My circle 1. Each kind counts on its own. The name can
   be changed in the same field.
 - Color sets the color of the line and outline, the polygon fill has the
   same color, half transparent. Width is set in screen pixels.

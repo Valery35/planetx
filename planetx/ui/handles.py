@@ -62,9 +62,10 @@ class DrawVertices:
         return self.tool.mode == "polygon" and len(self.tool.points) >= 3
 
     def middles(self):
-        """Середины отрезков, (широта, долгота). У метки их нет."""
+        """Середины отрезков, (широта, долгота). У метки и у круга -
+        центр и точка окружности - их нет."""
         tool = self.tool
-        if tool.mode == "point" or len(tool.points) < 2:
+        if tool.mode in ("point", "circle") or len(tool.points) < 2:
             return []
         return segment_midpoints(tool.points, self.closed())
 

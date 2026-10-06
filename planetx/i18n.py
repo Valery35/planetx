@@ -236,6 +236,99 @@ EN = {
         "Weather here",
     "Номенклатура листа":
         "Map sheet designation",
+    "Планета воздуха":
+        "Planet of Air",
+    "Карты NASA и погода":
+        "NASA maps and weather",
+    "Все":
+        "All",
+    "Все карты витрины.":
+        "All maps of the gallery.",
+    "Выключить":
+        "Turn off",
+    "Убрать карту с глобуса.":
+        "Remove the map from the globe.",
+    "Найти карту":
+        "Find a map",
+    "На глобусе: {name}. Повторный щелчок убирает карту.":
+        "On the globe: {name}. A second click removes the map.",
+    "Щелчок по карте показывает её на глобусе. День задаёт шкала времени.":
+        "A click on a map shows it on the globe. The time slider sets the "
+        "day.",
+    "Очаги пожаров за последние 24 часа по снимкам VIIRS спутника NOAA-20, "
+    "сводка NASA FIRMS. Цвет и размер точки показывают мощность излучения.":
+        "Fire spots of the last 24 hours from VIIRS images of the NOAA-20 "
+        "satellite, the NASA FIRMS feed. The color and size of a dot show "
+        "the radiative power.",
+    "Температура поверхности":
+        "Surface temperature",
+    "Температура суши днём по MODIS за 8 суток и моря по GHRSST MUR за "
+    "сутки, данные NASA GIBS.":
+        "Daytime land temperature from MODIS over 8 days and sea temperature "
+        "from GHRSST MUR for a day, NASA GIBS data.",
+    "прогноз GFS":
+        "GFS forecast",
+    "24 часа":
+        "24 hours",
+    "суша и море":
+        "land and sea",
+    "{title}: {name}":
+        "{title}: {name}",
+    "Карта":
+        "Map",
+    "Небо и свет":
+        "Sky and light",
+    "Недра":
+        "Inside the Earth",
+    "Анализ рельефа":
+        "Terrain analysis",
+    "Векторная основа OpenFreeMap, координатная сетка и 3D-здания.":
+        "The OpenFreeMap vector base, the coordinate grid and 3D buildings.",
+    "Солнце и ночная сторона, звёзды, облака и искусственные спутники.":
+        "The sun and the night side, stars, clouds and artificial "
+        "satellites.",
+    "Землетрясения, границы плит, разрез Земли и палеогеография.":
+        "Earthquakes, plate boundaries, the Earth cutaway and "
+        "paleogeography.",
+    "Раскраска поверхности по уклону или по стороне света склона. Включается "
+    "одна из двух.":
+        "Surface coloring by slope or by the direction a slope faces. One of "
+        "the two is on.",
+    "Карты NASA, поля прогноза погоды, пожары и температура поверхности с "
+    "превью. Щелчок открывает витрину, на глобусе одна карта.":
+        "NASA maps, weather forecast fields, fires and surface temperature "
+        "with previews. A click opens the gallery, the globe shows one map.",
+    "Карты NASA и погода. Витрина с превью - снег, лёд, осадки, газы, "
+    "растительность, пожары, прогноз погоды.":
+        "NASA maps and weather. A gallery with previews - snow, ice, "
+        "precipitation, gases, vegetation, fires, weather forecast.",
+    "Температура, осадки, ветер и облачность по модели NOAA GFS и "
+    "температура поверхности по NASA. Прогноз - до 16 суток вперёд, момент "
+    "задаёт шкала времени.":
+        "Temperature, precipitation, wind and clouds of the NOAA GFS model "
+        "and surface temperature from NASA. The forecast goes up to 16 days "
+        "ahead, the time slider sets the moment.",
+    "Очаги пожаров, дым, аэрозоль и угарный газ пожаров и промышленности по "
+    "данным NASA.":
+        "Fire spots, smoke, aerosol and carbon monoxide of fires and "
+        "industry from NASA data.",
+    "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
+    "наводнения по данным NASA.":
+        "Precipitation, soil moisture, snow, ice, water vapor, chlorophyll, "
+        "salinity and floods from NASA data.",
+    "Диоксид азота, диоксид серы, метан, углекислый газ и озон по данным "
+    "NASA.":
+        "Nitrogen dioxide, sulfur dioxide, methane, carbon dioxide and ozone "
+        "from NASA data.",
+    "Растительность, пыль, ночные огни и типы покрова по данным NASA.":
+        "Vegetation, dust, night lights and land cover types from NASA data.",
+    "Мой круг":
+        "My circle",
+    "Первый щелчок по глобусу ставит центр круга, второй - точку окружности. "
+    "Обе точки перетаскиваются мышью. Круг сохраняется многоугольником.":
+        "The first click on the globe sets the centre of the circle, the "
+        "second sets a point of the circle. Both points can be dragged with "
+        "the mouse. The circle is saved as a polygon.",
     "Все номера в окне…":
         "All numbers in a window…",
     "Международная карта мира (IMW)":
@@ -267,13 +360,6 @@ EN = {
         "Copied: {number}",
     "Погода":
         "Weather",
-    "Температура, осадки, ветер и облачность по модели NOAA GFS. Прогноз - "
-    "до 16 суток вперёд от свежего выпуска, прошлое - анализ модели. Момент "
-    "задаёт шкала времени, при показе поле идёт по часам прогноза.":
-        "Temperature, precipitation, wind and clouds from the NOAA GFS "
-        "model. The forecast reaches 16 days ahead of the latest run, the "
-        "past is the model analysis. The time slider sets the moment, "
-        "playback steps through the forecast hours.",
     "{weather}, гроза":
         "{weather}, thunder",
     "°C":
@@ -849,15 +935,6 @@ EN = {
         "They show when the camera is closer than 6 km to the ground. "
         "The height comes from OSM or from the number of floors. A "
         "building without either gets a height of 5 m.",
-    "Температура": "Temperature",
-    "Температура поверхности по данным NASA GIBS: суша "
-    "днём за 8 дней по MODIS, море за сутки по GHRSST "
-    "MUR. Под облаками на суше бывают пропуски. Шкала "
-    "в градусах стоит в левом нижнем углу вида.":
-        "Surface temperature from NASA GIBS: land by day over 8 days from "
-        "MODIS, sea over a day from GHRSST MUR. Land may have gaps under "
-        "clouds. The scale in degrees is in the bottom left corner of the "
-        "view.",
     "Суша, °C": "Land, °C",
     "Море, °C": "Sea, °C",
     "{angle} с. ш.": "{angle}N",
@@ -1967,14 +2044,6 @@ EN = {
     'Основа: свой источник':
         'Base: own source',
     "Пожары": "Fires",
-    "Очаги пожаров за последние 24 часа по снимкам VIIRS спутника "
-    "NOAA-20, сводка NASA FIRMS. Точка стоит на месте очага, цвет и "
-    "размер показывают мощность излучения. Сводка загружается при "
-    "включении строки, около 6 МБ.":
-        "Fire spots over the last 24 hours from VIIRS images of the "
-        "NOAA-20 satellite, NASA FIRMS feed. A dot stands at the fire, "
-        "its colour and size show the radiative power. The feed is "
-        "loaded when the row is switched on, about 6 MB.",
     "Мощность пожара, МВт": "Fire power, MW",
     "Сводка пожаров не загрузилась: {error}":
         "The fire feed did not load: {error}",
@@ -2327,36 +2396,8 @@ EN = {
         "left corner of the view sets the age. The imagery, borders and "
         "labels are removed meanwhile.",
     "Планета огня": "Planet of Fire",
-    "Очаги пожаров, дым, аэрозоль и угарный газ пожаров и "
-    "промышленности по данным NASA. Включены пожары или одна тема из "
-    "всех групп. Флажок группы выключает её выбор и включает снова. День "
-    "темы задаёт правый бегунок шкалы времени.":
-        "Fire spots, smoke, aerosol and carbon monoxide of fires and "
-        "industry from NASA data. Either the fires or one theme of all "
-        "groups is on. The group check box turns its choice off and on "
-        "again. The day of the theme is set by the right handle of the "
-        "time slider.",
     "Планета воды": "Planet of Water",
-    "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
-    "наводнения по данным NASA. Включена одна тема из всех групп. "
-    "Флажок группы выключает её тему и включает снова.":
-        "Precipitation, soil moisture, snow, ice, vapour, chlorophyll, "
-        "salinity and floods from NASA data. One theme of all groups is on."
-        " The group check box turns its theme off and on again.",
-    "Газы": "Gases",
-    "Диоксид азота, диоксид серы, метан, углекислый газ и озон по "
-    "данным NASA. Включена одна тема из всех групп. Флажок группы "
-    "выключает её тему и включает снова.":
-        "Nitrogen dioxide, sulphur dioxide, methane, carbon dioxide and "
-        "ozone from NASA data. One theme of all groups is on. The group "
-        "check box turns its theme off and on again.",
     "Земля и жизнь": "Land and Life",
-    "Растительность, пыль, ночные огни и типы покрова по данным NASA. "
-    "Включена одна тема из всех групп. Флажок группы выключает её тему "
-    "и включает снова.":
-        "Vegetation, dust, night lights and land cover from NASA data. One "
-        "theme of all groups is on. The group check box turns its theme off"
-        " and on again.",
     "Дым, аэрозольный индекс": "Smoke, aerosol index",
     "Поглощающий аэрозоль - дым пожаров и пыль - по OMPS за сутки, "
     "с 2012 года.":

@@ -66,6 +66,7 @@ class ViewToolbar(QFrame):
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
     subsurface_clicked = pyqtSignal()
+    gallery_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -117,6 +118,11 @@ class ViewToolbar(QFrame):
                "промежутка скрыты. Закрытая шкала показывает все метки."),
             self.time_toggled, checkable=True)
         self.time.setEnabled(False)
+        self.gallery = self._button(
+            QIcon(os.path.join(ROOT, "maps.svg")),
+            tr("Карты NASA и погода. Витрина с превью - снег, лёд, "
+               "осадки, газы, растительность, пожары, прогноз погоды."),
+            self.gallery_requested)
         self._button(
             QgsApplication.getThemeIcon("/mActionSaveMapAsImage.svg"),
             tr("Снимок вида в файл PNG или JPEG, в том числе больше окна."),

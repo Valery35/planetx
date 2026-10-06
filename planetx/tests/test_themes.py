@@ -56,6 +56,17 @@ class TestDomains(unittest.TestCase):
         self.assertEqual(themes.pick_day(themes.parse_domains(SMAP)),
                          "2026-10-01")
 
+    def test_unprocessed_day_is_dropped(self):
+        # 1 октября в 12:00 UTC этот день ещё не готов: последним
+        # остаётся 29 сентября, промежуток 1 октября отброшен.
+        ready = themes.ready_intervals(themes.parse_domains(SMAP),
+                                       stamp(2026, 10, 1) + 43200)
+        self.assertEqual(themes.pick_day(ready), "2026-09-29")
+        self.assertEqual(len(ready), 4)
+        ready = themes.ready_intervals(themes.parse_domains(SIXTEEN),
+                                       stamp(2026, 9, 1))
+        self.assertEqual(themes.pick_day(ready), "2026-08-29")
+
     def test_gap_gives_previous_day(self):
         # 3 сентября в ряду нет: берётся 2 сентября.
         intervals = themes.parse_domains(SMAP)
@@ -127,6 +138,26 @@ class TestThemes(unittest.TestCase):
         data = COLORMAP.replace('showLabel="true"', "")
         labels = themes.parse_colormap(data)["labels"]
         self.assertEqual(labels, [(0.0, "0.1"), (1.0, "≥ 53.0")])
+
+    def test_gallery_has_every_map_once(self):
+        items = themes.gallery_items()
+        keys = [k for k, _, _ in items]
+        self.assertEqual(len(keys), len(set(keys)))
+        self.assertEqual(set(keys), set(themes.BY_KEY) | {"fires",
+                                                          "temperature"})
+        self.assertEqual(themes.gallery_group("fires"), "fire")
+        self.assertEqual(themes.gallery_group("temperature"), "weather")
+        self.assertEqual(dict((k, v) for k, _, v in items)["snow"], "gibs")
+        self.assertIn("/1/0/1.png", themes.thumb_url(themes.BY_KEY["snow"],
+                                                     "2026-10-05"))
+
+    def test_overlay_clears_no_snow_class(self):
+        rgba = np.array([[[82, 98, 106, 255], [89, 94, 111, 255]]],
+                        np.uint8)
+        out = themes.overlay_rgba(rgba, 1.0,
+                                  clear=themes.CLEAR["snow_mass"])
+        self.assertEqual(out[0, 0, 3], 0)
+        self.assertEqual(out[0, 1, 3], 255)
 
     def test_overlay_keeps_no_data_clear(self):
         rgba = np.array([[[200, 100, 50, 255], [9, 9, 9, 0]]], np.uint8)

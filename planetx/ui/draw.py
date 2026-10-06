@@ -18,7 +18,7 @@ from ..i18n import tr
 from ..qt_compat import enum
 from .myplaces import DEFAULT_COLOR, DEFAULT_FILL, DEFAULT_WIDTH
 
-MODES = ("point", "path", "polygon")
+MODES = ("point", "path", "polygon", "circle")
 
 
 def _rgba(color):
@@ -41,7 +41,8 @@ class PlaceDialog(QDialog):
         self.setWindowTitle(tr("Новая метка"))
         self.setModal(False)
         self.tabs = QTabBar(self)
-        for title in (tr("Метка"), tr("Путь"), tr("Многоугольник")):
+        for title in (tr("Метка"), tr("Путь"), tr("Многоугольник"),
+                      tr("Круг")):
             self.tabs.addTab(title)
         self.tabs.currentChanged.connect(self._mode)
         self.hint = QLabel(self)
@@ -88,7 +89,8 @@ class PlaceDialog(QDialog):
 
     def _mode(self, index):
         mode = MODES[index]
-        default = DEFAULT_COLOR["line" if mode == "path" else mode]
+        default = DEFAULT_COLOR[{"path": "line", "circle": "polygon"}
+                                .get(mode, mode)]
         self.color.setColor(QColor(*default))
         self.ruler.set_mode(mode)
         self.reset_name()
@@ -127,7 +129,11 @@ class PlaceDialog(QDialog):
                        "по первой - замыкает фигуру."),
             "polygon": tr("Щелчками по глобусу отметьте вершины "
                           "многоугольника. Щелчок по первой вершине "
-                          "завершает рисование.")}
+                          "завершает рисование."),
+            "circle": tr("Первый щелчок по глобусу ставит центр круга, "
+                         "второй - точку окружности. Обе точки "
+                         "перетаскиваются мышью. Круг сохраняется "
+                         "многоугольником.")}
         text = hints[self.ruler.mode]
         if self.ruler.finished:
             text = tr("Вершины перетаскиваются мышью. Кружок в середине "

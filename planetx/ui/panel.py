@@ -20,11 +20,12 @@
 Панель только показывает и сообщает сигналами, решает окно.
 """
 import html
+import os
 
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsSettings, QgsVectorLayer)
 from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QFont, QKeySequence
+from qgis.PyQt.QtGui import QFont, QIcon, QKeySequence
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
@@ -35,7 +36,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
 
-from ..core import icons, lookat, themes
+from ..core import icons, lookat
 from ..core.placetree import is_folder
 from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
@@ -45,7 +46,6 @@ from ..qt_compat import QAction, enum, enum_int
 from .placeprops import icon_image
 from .satellites import group_names as satellite_group_names
 from .spinner import BusySpinner
-from .themes import group_names, theme_names
 
 # Роль данных строки: номер слоя QGIS, у строки «Глобус» - None.
 LAYER_ROLE = enum_int(enum(Qt, "ItemDataRole", "UserRole"))
@@ -80,9 +80,7 @@ ADD_SOURCE = -1
 RADIO_ROLE = BASEMAP_ROLE + 1
 # Строка самой папки-переключателя.
 RADIO_FOLDER_ROLE = RADIO_ROLE + 1
-THEME_ROLE = RADIO_FOLDER_ROLE + 1  # ключ темы NASA GIBS
-THEME_GROUP_ROLE = THEME_ROLE + 1  # ключ группы тем NASA GIBS
-SAT_GROUP_ROLE = THEME_GROUP_ROLE + 1  # ключ группы спутников CelesTrak
+SAT_GROUP_ROLE = RADIO_FOLDER_ROLE + 1  # ключ группы спутников CelesTrak
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 # Клавиши строки поиска и списка подсказок под ней.
 KEY_PRESS = enum(QEvent, "Type", "KeyPress")
@@ -196,14 +194,6 @@ def hint_text(item):
     if item.kind == "constellation":
         return tr("{name} - созвездие", name=item.text)
     return tr("{name} - прежний запрос", name=item.text)
-
-
-def theme_group(key):
-    """Группа темы key или пожаров, "" - без группы."""
-    if key == FIRES:
-        return "fire"
-    theme = themes.BY_KEY.get(key)
-    return theme.group if theme is not None else ""
 
 
 class RadioDelegate(QStyledItemDelegate):
@@ -430,6 +420,8 @@ class LayerPanel(QWidget):
     inset_toggled = pyqtSignal(str, bool)
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
+    # Строка витрины карт NASA и погоды: открыть витрину.
+    gallery_requested = pyqtSignal()
     # Подложка выбрана в группе «Основа» - номер источника.
     basemap_chosen = pyqtSignal(int)
     add_source_requested = pyqtSignal()
@@ -438,8 +430,6 @@ class LayerPanel(QWidget):
     extra_toggled = pyqtSignal(str, bool)
     # Отмеченные группы спутников, множество ключей CelesTrak.
     satellite_groups_changed = pyqtSignal(object)
-    # Тема NASA GIBS: ключ core.themes, "" - тема выключена.
-    theme_chosen = pyqtSignal(str)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -603,8 +593,35 @@ class LayerPanel(QWidget):
             "подложки, условия её использования задаёт Esri. Свой источник "
             "добавляет строка «Добавить источник тайлов…»."))
         self.geo.itemClicked.connect(self._geo_clicked)
+        # Разделы списка «Слои» - заголовки без флажков. Решение автора
+        # от 7 октября 2026 года: «Основа», «Карта», «Небо и свет»,
+        # «Недра», «Анализ рельефа», карты NASA - одной строкой витрины.
+        self.headers = {}
+        for key, title, tip in (
+                ("map", tr("Карта"), tr(
+                    "Векторная основа OpenFreeMap, координатная сетка "
+                    "и 3D-здания.")),
+                ("sky", tr("Небо и свет"), tr(
+                    "Солнце и ночная сторона, звёзды, облака "
+                    "и искусственные спутники.")),
+                ("depths", tr("Недра"), tr(
+                    "Землетрясения, границы плит, разрез Земли "
+                    "и палеогеография.")),
+                ("terrain", tr("Анализ рельефа"), tr(
+                    "Раскраска поверхности по уклону или по стороне "
+                    "света склона. Включается одна из двух."))):
+            header = QTreeWidgetItem([title])
+            header.setToolTip(0, tip)
+            header.setFlags(enum(Qt, "ItemFlag", "ItemIsEnabled"))
+            font = QFont(header.font(0))
+            font.setBold(True)
+            header.setFont(0, font)
+            self.headers[key] = header
+        font = QFont(self.base_group.font(0))
+        font.setBold(True)
+        self.base_group.setFont(0, font)
         for title, tip, rows in geo_tree():
-            group = QTreeWidgetItem(self.geo, [title])
+            group = QTreeWidgetItem(self.headers["map"], [title])
             group.setToolTip(0, tip)
             group.setFlags(group.flags() | CHECKABLE | TRISTATE)
             for key, text, row_tip in rows:
@@ -627,8 +644,22 @@ class LayerPanel(QWidget):
         relief.setFlags(relief.flags() | CHECKABLE)
         relief.setCheckState(0, UNCHECKED)
         self.geo_items[RELIEF] = relief
+        # Витрина карт NASA и погоды - одна строка под рельефом, щелчок
+        # открывает окно витрины. Просьба автора от 7 октября 2026 года.
+        self.gallery_item = QTreeWidgetItem(self.geo, relief)
+        self.gallery_item.setIcon(0, QIcon(os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "maps.svg")))
+        self.gallery_item.setToolTip(0, tr(
+            "Карты NASA, поля прогноза погоды, пожары и температура "
+            "поверхности с превью. Щелчок открывает витрину, на глобусе "
+            "одна карта."))
+        self.geo.addTopLevelItems(list(self.headers.values()))
         self.extra_items = {}
         self._extras = {}
+        homes = {GRID: "map", BUILDINGS: "map", SUN: "sky", STARS: "sky",
+                 CLOUDS: "sky", SATELLITES: "sky", QUAKES: "depths",
+                 PLATES: "depths", CUTAWAY: "depths", PALEO: "depths",
+                 SLOPE: "terrain", ASPECT: "terrain"}
         for key, text, tip in (
                 (GRID, tr("Координатная сетка"), tr(
                     "Параллели и меридианы с подписями градусов, экватор, "
@@ -645,11 +676,6 @@ class LayerPanel(QWidget):
                     "полные сутки. Они лежат полупрозрачной пеленой "
                     "поверх снимка. Снег и лёд тоже белые и остаются "
                     "видны.")),
-                (TEMPERATURE, tr("Температура"), tr(
-                    "Температура поверхности по данным NASA GIBS: суша "
-                    "днём за 8 дней по MODIS, море за сутки по GHRSST "
-                    "MUR. Под облаками на суше бывают пропуски. Шкала "
-                    "в градусах стоит в левом нижнем углу вида.")),
                 (BUILDINGS, tr("3D-здания"), tr(
                     "Объёмные здания из OpenStreetMap по векторным "
                     "тайлам OpenFreeMap. Они видны, когда камера ближе "
@@ -668,12 +694,6 @@ class LayerPanel(QWidget):
                     "глубине, линия ведёт к эпицентру на поверхности. "
                     "Цвет показывает глубину очага, размер - магнитуду. "
                     "Сводка загружается при включении строки.")),
-                (FIRES, tr("Пожары"), tr(
-                    "Очаги пожаров за последние 24 часа по снимкам VIIRS "
-                    "спутника NOAA-20, сводка NASA FIRMS. Точка стоит на "
-                    "месте очага, цвет и размер показывают мощность "
-                    "излучения. Сводка загружается при включении строки, "
-                    "около 6 МБ.")),
                 (PLATES, tr("Границы плит"), tr(
                     "Границы литосферных плит по модели PB2002. Красные - "
                     "раздвиг плит на хребтах и рифтах, зелёные - сдвиг "
@@ -707,7 +727,7 @@ class LayerPanel(QWidget):
                     "бегунок шкалы времени, без шкалы - часы компьютера. "
                     "Группы выбираются флажками ниже. Элементы группы "
                     "обновляются не чаще раза в 2 часа."))):
-            item = QTreeWidgetItem(self.geo, [text])
+            item = QTreeWidgetItem(self.headers[homes[key]], [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)
             item.setFlags(item.flags() | CHECKABLE)
@@ -722,46 +742,10 @@ class LayerPanel(QWidget):
             item.setFlags(item.flags() | CHECKABLE)
             item.setCheckState(0, UNCHECKED)
             self.sat_items[key] = item
-        # Темы NASA GIBS - группы строк, отмечена одна тема из всех.
-        # Просьба автора от 5 октября 2026 года.
-        # Флажок группы отмечен, когда включена её тема. Снятый флажок
-        # выключает тему, поставленный - включает прежнюю тему группы.
-        # Замечание автора того же дня - «как отключить все слои из воды
-        # или огня».
-        self.theme_items = {}
-        self.theme_groups = []
         self._theme = ""
-        self._group_last = {}
-        names = theme_names()
-        for group_key, title, tip in group_names():
-            group = QTreeWidgetItem(self.geo, [title])
-            group.setToolTip(0, tip)
-            group.setData(0, THEME_GROUP_ROLE, group_key)
-            group.setFlags(group.flags() | CHECKABLE)
-            group.setCheckState(0, UNCHECKED)
-            self.theme_groups.append(group)
-            for theme in themes.THEMES:
-                if theme.group != group_key:
-                    continue
-                text, row_tip = names[theme.key]
-                item = QTreeWidgetItem(group, [text])
-                item.setData(0, THEME_ROLE, theme.key)
-                item.setData(0, RADIO_ROLE, True)
-                item.setToolTip(0, row_tip)
-                item.setFlags(item.flags() | CHECKABLE)
-                item.setCheckState(0, UNCHECKED)
-                self.theme_items[theme.key] = item
-            if group_key == "fire":
-                # Пожары - первой строкой «Планеты огня», переключателем
-                # в общем выборе тем: пожары или одна тема. Просьбы
-                # автора от 5 октября 2026 года.
-                fires = self.extra_items[FIRES]
-                self.geo.takeTopLevelItem(
-                    self.geo.indexOfTopLevelItem(fires))
-                group.insertChild(0, fires)
-                fires.setData(0, THEME_ROLE, FIRES)
-                fires.setData(0, RADIO_ROLE, True)
-                self.theme_items[FIRES] = fires
+        for header in self.headers.values():
+            header.setExpanded(True)
+        self.base_group.setExpanded(True)
         self.geo.itemChanged.connect(self._geo_changed)
         # Слои проекта - свой список, отдельно от меток.
         # Растры проекта - рельеф глобуса, отметки меню слоя.
@@ -1014,60 +998,25 @@ class LayerPanel(QWidget):
             parent = item.parent()
             if parent is not None:
                 parent.setDisabled(off)
-        for key in (CLOUDS, TEMPERATURE, BUILDINGS, SUN, QUAKES, FIRES,
-                    PLATES, CUTAWAY, PALEO, SATELLITES):
+        for key in (CLOUDS, BUILDINGS, SUN, QUAKES, PLATES, CUTAWAY, PALEO,
+                    SATELLITES):
             self.extra_items[key].setDisabled(not earth)
-        for group in self.theme_groups:
-            group.setDisabled(not earth)
+        self.gallery_item.setDisabled(not earth)
         # Уклон и экспозиция - там, где есть высоты.
         for key in (SLOPE, ASPECT):
             self.extra_items[key].setDisabled(not (earth or relief))
         self.layers.setEnabled(earth)
 
-    def set_theme(self, key):
-        """Отметить тему key, "" - ни одной, FIRES - пожары. Сигналы
-        не идут."""
+    def set_theme(self, key, name=""):
+        """Карта витрины key на глобусе, "" - ни одной, name - её
+        название для строки витрины. Сигналы не идут."""
         self._theme = key or ""
-        current = theme_group(self._theme)
-        if current:
-            self._group_last[current] = self._theme
-        self.geo.blockSignals(True)
-        for name, item in self.theme_items.items():
-            item.setCheckState(0, CHECKED if name == self._theme
-                               else UNCHECKED)
         self._extras[FIRES] = self._theme == FIRES
-        for group in self.theme_groups:
-            on = bool(current) \
-                and group.data(0, THEME_GROUP_ROLE) == current
-            group.setCheckState(0, CHECKED if on else UNCHECKED)
-        self.geo.blockSignals(False)
-
-    def _theme_changed(self, item):
-        key = item.data(0, THEME_ROLE)
-        if item.checkState(0) == CHECKED:
-            chosen = key
-        elif key == self._theme:
-            chosen = ""
-        else:
-            return
-        # Отмечена одна тема: прежняя отметка снимается.
-        self.set_theme(chosen)
-        self.theme_chosen.emit(chosen)
-
-    def _theme_group_changed(self, item):
-        """Флажок группы тем: снят - тема группы выключена, поставлен -
-        включена прежняя тема группы, без неё - первая."""
-        group = item.data(0, THEME_GROUP_ROLE)
-        if item.checkState(0) == CHECKED:
-            chosen = self._group_last.get(group) or next(
-                t.key for t in themes.THEMES if t.group == group)
-        else:
-            if theme_group(self._theme) != group:
-                self.set_theme(self._theme)
-                return
-            chosen = ""
-        self.set_theme(chosen)
-        self.theme_chosen.emit(chosen)
+        self._extras[TEMPERATURE] = self._theme == TEMPERATURE
+        title = tr("Карты NASA и погода")
+        if self._theme and name:
+            title = tr("{title}: {name}", title=title, name=name)
+        self.gallery_item.setText(0, title)
 
     def set_satellite_groups(self, groups):
         """Отметить группы спутников. Сигналы при этом не идут."""
@@ -1081,12 +1030,6 @@ class LayerPanel(QWidget):
             self.satellite_groups_changed.emit(
                 {key for key, row in self.sat_items.items()
                  if row.checkState(0) == CHECKED})
-            return
-        if item.data(0, THEME_ROLE):
-            self._theme_changed(item)
-            return
-        if item.data(0, THEME_GROUP_ROLE):
-            self._theme_group_changed(item)
             return
         index = item.data(0, BASEMAP_ROLE)
         if index is not None and index != ADD_SOURCE:
@@ -1103,6 +1046,9 @@ class LayerPanel(QWidget):
         # Строка могла исчезнуть между нажатием и отпусканием кнопки,
         # тогда Qt присылает щелчок без строки.
         if item is None:
+            return
+        if item is self.gallery_item:
+            self.gallery_requested.emit()
             return
         index = item.data(0, BASEMAP_ROLE)
         if index == ADD_SOURCE:

@@ -29,6 +29,11 @@ DOMAINS = (ROOT + "/wmts/epsg3857/best/1.0.0/{layer}/default/"
 COLORMAP = ROOT + "/colormaps/v1.3/{name}.xml"
 ATTRIBUTION = ("NASA GIBS", "https://earthdata.nasa.gov/gibs")
 OPACITY = 0.8  # непрозрачность раскраски поверх снимка
+READY_LAG = 86400.0  # день ряда считается готовым через сутки
+# Цвета классов «нет явления», которые темы делают прозрачными. У массы
+# снега SMAP класс 0-0.8 кг/м² покрывал серо-синим 97 % суши у Перми
+# 2 октября 2026 года.
+CLEAR = {"snow_mass": ((82, 98, 106),)}
 
 # Группа «weather» - поля прогноза NOAA GFS, не слои GIBS: их грузит
 # ui/weather.py, адрес и ряд дат у них свои (core/weather.py).
@@ -124,6 +129,46 @@ THEMES = (
 BY_KEY = {theme.key: theme for theme in THEMES}
 
 
+# Карты витрины, которые не темы GIBS: пожары FIRMS и температура
+# суши и моря. Они в том же выборе - включена одна карта витрины.
+FIRES = "fires"
+TEMPERATURE = "temperature"
+EXCLUSIVE = (FIRES, TEMPERATURE)
+THUMB_TILE = (1, 1, 0)  # z, x, y тайла превью: Евразия, северо-восток
+
+
+def gallery_items():
+    """Карты витрины по порядку: (ключ, группа, вид). Вид - "gibs"
+    (тайл темы на день), "weather" (поле прогноза), "fires",
+    "temperature"."""
+    out = []
+    for group in GROUPS:
+        if group == "weather":
+            out.append((TEMPERATURE, group, TEMPERATURE))
+        if group == "fire":
+            out.append((FIRES, group, FIRES))
+        for theme in THEMES:
+            if theme.group == group:
+                kind = "weather" if theme.layer == WEATHER else "gibs"
+                out.append((theme.key, group, kind))
+    return out
+
+
+def gallery_group(key):
+    """Группа карты витрины key или ""."""
+    for item_key, group, _ in gallery_items():
+        if item_key == key:
+            return group
+    return ""
+
+
+def thumb_url(theme, day):
+    """Адрес тайла превью темы на день."""
+    z, x, y = THUMB_TILE
+    return theme.url(day).replace("{z}", str(z)).replace(
+        "{x}", str(x)).replace("{y}", str(y))
+
+
 def is_weather(key):
     """Тема - поле прогноза погоды, а не слой GIBS."""
     theme = BY_KEY.get(key)
@@ -177,6 +222,25 @@ def _floor(start, end, count, unit, day):
         if found > day:
             found = _add(start, (months // step - 1) * step, "M")
     return min(found, end)
+
+
+def ready_intervals(intervals, now):
+    """Ряд без дней, которые ещё не обработаны. Каталог GIBS объявляет
+    день, когда он только начался, тайлы такого дня пусты. 7 октября
+    2026 года суточный снег на 7 октября пуст у Таймыра и Гренландии,
+    на 6 октября - 16 и 37 %. Последним остаётся день не позже
+    now - READY_LAG."""
+    cap = datetime.datetime.fromtimestamp(
+        now - READY_LAG, datetime.timezone.utc).date()
+    out = []
+    for start, end, count, unit in intervals:
+        if start > cap:
+            continue
+        # Конец ряда бывает не на шаге от начала, готовый конец остаётся.
+        if end > cap:
+            end = _floor(start, end, count, unit, cap)
+        out.append((start, end, count, unit))
+    return out
 
 
 def pick_day(intervals, moment=None):
@@ -274,11 +338,14 @@ def parse_colormap(data):
     return best
 
 
-def overlay_rgba(rgba, opacity=OPACITY):
+def overlay_rgba(rgba, opacity=OPACITY, clear=()):
     """Тайл темы в RGBA uint8 с премноженной альфой и непрозрачностью
-    opacity. Где данных нет, прозрачно."""
+    opacity. Где данных нет и где цвет из clear, прозрачно."""
     rgba = np.asarray(rgba, dtype=np.float32)
     alpha = rgba[..., 3:4] / 255.0 * opacity
+    for color in clear:
+        same = np.all(rgba[..., :3] == np.asarray(color, np.float32), axis=-1)
+        alpha[same] = 0.0
     out = np.empty(rgba.shape, dtype=np.uint8)
     out[..., :3] = np.rint(rgba[..., :3] * alpha)
     out[..., 3:] = np.rint(alpha * 255.0)

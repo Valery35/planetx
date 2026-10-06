@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Витрина карт: шар с цветными полосами раскраски. -->
+  <defs>
+    <clipPath id="ball"><circle cx="16" cy="16" r="12"/></clipPath>
+  </defs>
+  <g clip-path="url(#ball)">
+    <rect x="4" y="4" width="24" height="6" fill="#3b6fd8"/>
+    <rect x="4" y="10" width="24" height="5" fill="#2fb4c8"/>
+    <rect x="4" y="15" width="24" height="4" fill="#7cc84a"/>
+    <rect x="4" y="19" width="24" height="4" fill="#f2b632"/>
+    <rect x="4" y="23" width="24" height="5" fill="#e0582c"/>
+  </g>
+  <circle cx="16" cy="16" r="12" fill="none" stroke="#1c2740"
+          stroke-width="1.4"/>
+  <path d="M16 4 c-4.5 3.5 -4.5 20.5 0 24 M16 4 c4.5 3.5 4.5 20.5 0 24"
+        fill="none" stroke="#1c2740" stroke-width="0.9" opacity="0.6"/>
+</svg>
