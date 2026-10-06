@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.47.0.
+A 3D globe inside QGIS. PlanetX version 0.48.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -54,8 +54,8 @@ and atmosphere, from space down to single streets.
   celestial sphere. It shows the Milky Way, stars, constellation lines
   and names, the Sun, the Moon and the planets at the chosen time.
 - **Inside the Earth.** The terrain shows sea and ocean depths under
-  semi-transparent water. The Earthquakes row shows the foci of the last
-  30 days from the USGS feed at their depth. The Earth cutaway row
+  semi-transparent water. The Earthquakes layer shows the foci of the last
+  30 days from the USGS feed at their depth. The Earth cutaway layer
   removes a sector, its faces show the CRUST1.0 crust, the mantle and
   core of the PREM model and the Slab2 subducting slabs. The corners of
   the sector can be dragged with the mouse. The Section down… item in
@@ -76,9 +76,9 @@ and atmosphere, from space down to single streets.
   and Life groups of the map gallery show 23 NASA GIBS rasters by
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,
   vegetation, night lights. The time slider sets the day of a theme.
-  The NASA maps and weather row of the Layers section and an icon
+  The Maps and layers row of the Layers section and an icon
   open the gallery, each map has a preview.
-- **Paleogeography.** The Paleogeography row shows land relief and sea
+- **Paleogeography.** The Paleogeography layer shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.
 - **Assistant.** A conversation window with an AI model - Claude, Grok,
@@ -201,7 +201,7 @@ and atmosphere, from space down to single streets.
   its objects along the time slider of the globe. The camera can follow
   along the motion. A project layer with QGIS time shows within the
   range of the same slider.
-- **Satellites.** The Satellites row shows stations, navigation,
+- **Satellites.** The Satellites layer shows stations, navigation,
   weather, geostationary and other satellites from CelesTrak elements
   for the moment of the time slider or by the clock. The selected
   satellite shows its orbit loop and ground track, the camera can

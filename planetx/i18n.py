@@ -171,15 +171,6 @@ EN = {
         "file shows on the globe.",
     "Хранение": "Storage",
     "Спутники": "Satellites",
-    "Искусственные спутники по орбитальным элементам CelesTrak, положение "
-    "по модели SGP4. Время - правый бегунок шкалы времени, без шкалы - "
-    "часы компьютера. Группы выбираются флажками ниже. Элементы группы "
-    "обновляются не чаще раза в 2 часа.":
-        "Artificial satellites from CelesTrak orbital elements, positions "
-        "by the SGP4 model. The time is the right handle of the time "
-        "slider, without the slider - the computer clock. Groups are "
-        "chosen with the check boxes below. Group elements are updated "
-        "at most once in 2 hours.",
     "Космические станции": "Space stations",
     "Международная космическая станция, китайская станция «Тяньгун» "
     "и пристыкованные к ним корабли.":
@@ -236,10 +227,38 @@ EN = {
         "Weather here",
     "Номенклатура листа":
         "Map sheet designation",
+    "Щелчок по карте показывает её на глобусе. День задаёт шкала времени. "
+    "Слои включаются независимо от карты.":
+        "A click on a map shows it on the globe. The time slider sets the "
+        "day. Layers are switched on independently of the map.",
+    "Карты и слои":
+        "Maps and layers",
+    "Группы спутников":
+        "Satellite groups",
+    "Какие группы спутников CelesTrak показывает слой «Спутники».":
+        "Which CelesTrak satellite groups the Satellites layer shows.",
+    "✓ вкл":
+        "✓ on",
+    "Искусственные спутники по орбитальным элементам CelesTrak, положение по "
+    "модели SGP4. Время - правый бегунок шкалы времени, без шкалы - часы "
+    "компьютера. Группы выбирает кнопка «Группы спутников». Элементы группы "
+    "обновляются не чаще раза в 2 часа.":
+        "Artificial satellites from CelesTrak orbital elements, positions by "
+        "the SGP4 model. The time is the right handle of the time slider, "
+        "without the slider the computer clock. The Satellite groups button "
+        "chooses the groups. The elements of a group update at most once in "
+        "2 hours.",
+    "Карты NASA, прогноз погоды, пожары, небо, недра и анализ рельефа с "
+    "превью. Щелчок открывает витрину.":
+        "NASA maps, weather forecast, fires, sky, inside the Earth and "
+        "terrain analysis with previews. A click opens the gallery.",
+    "Карты и слои. Витрина с превью - карты NASA, прогноз погоды, пожары, "
+    "звёзды, облака, солнце, спутники, недра и анализ рельефа.":
+        "Maps and layers. A gallery with previews - NASA maps, weather "
+        "forecast, fires, stars, clouds, sun, satellites, inside the Earth "
+        "and terrain analysis.",
     "Планета воздуха":
         "Planet of Air",
-    "Карты NASA и погода":
-        "NASA maps and weather",
     "Все":
         "All",
     "Все карты витрины.":
@@ -252,9 +271,6 @@ EN = {
         "Find a map",
     "На глобусе: {name}. Повторный щелчок убирает карту.":
         "On the globe: {name}. A second click removes the map.",
-    "Щелчок по карте показывает её на глобусе. День задаёт шкала времени.":
-        "A click on a map shows it on the globe. The time slider sets the "
-        "day.",
     "Очаги пожаров за последние 24 часа по снимкам VIIRS спутника NOAA-20, "
     "сводка NASA FIRMS. Цвет и размер точки показывают мощность излучения.":
         "Fire spots of the last 24 hours from VIIRS images of the NOAA-20 "
@@ -294,14 +310,6 @@ EN = {
     "одна из двух.":
         "Surface coloring by slope or by the direction a slope faces. One of "
         "the two is on.",
-    "Карты NASA, поля прогноза погоды, пожары и температура поверхности с "
-    "превью. Щелчок открывает витрину, на глобусе одна карта.":
-        "NASA maps, weather forecast fields, fires and surface temperature "
-        "with previews. A click opens the gallery, the globe shows one map.",
-    "Карты NASA и погода. Витрина с превью - снег, лёд, осадки, газы, "
-    "растительность, пожары, прогноз погоды.":
-        "NASA maps and weather. A gallery with previews - snow, ice, "
-        "precipitation, gases, vegetation, fires, weather forecast.",
     "Температура, осадки, ветер и облачность по модели NOAA GFS и "
     "температура поверхности по NASA. Прогноз - до 16 суток вперёд, момент "
     "задаёт шкала времени.":

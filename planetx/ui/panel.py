@@ -44,7 +44,6 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            WATER_NAMES)
 from ..qt_compat import QAction, enum, enum_int
 from .placeprops import icon_image
-from .satellites import group_names as satellite_group_names
 from .spinner import BusySpinner
 
 # Роль данных строки: номер слоя QGIS, у строки «Глобус» - None.
@@ -80,7 +79,6 @@ ADD_SOURCE = -1
 RADIO_ROLE = BASEMAP_ROLE + 1
 # Строка самой папки-переключателя.
 RADIO_FOLDER_ROLE = RADIO_ROLE + 1
-SAT_GROUP_ROLE = RADIO_FOLDER_ROLE + 1  # ключ группы спутников CelesTrak
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 # Клавиши строки поиска и списка подсказок под ней.
 KEY_PRESS = enum(QEvent, "Type", "KeyPress")
@@ -428,8 +426,6 @@ class LayerPanel(QWidget):
     relief_toggled = pyqtSignal(bool)
     # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
     extra_toggled = pyqtSignal(str, bool)
-    # Отмеченные группы спутников, множество ключей CelesTrak.
-    satellite_groups_changed = pyqtSignal(object)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -594,22 +590,13 @@ class LayerPanel(QWidget):
             "добавляет строка «Добавить источник тайлов…»."))
         self.geo.itemClicked.connect(self._geo_clicked)
         # Разделы списка «Слои» - заголовки без флажков. Решение автора
-        # от 7 октября 2026 года: «Основа», «Карта», «Небо и свет»,
-        # «Недра», «Анализ рельефа», карты NASA - одной строкой витрины.
+        # от 7 октября 2026 года: «Основа», «Карта» и строка витрины
+        # карт и слоёв. Небо, недра и анализ рельефа - в витрине.
         self.headers = {}
         for key, title, tip in (
                 ("map", tr("Карта"), tr(
                     "Векторная основа OpenFreeMap, координатная сетка "
-                    "и 3D-здания.")),
-                ("sky", tr("Небо и свет"), tr(
-                    "Солнце и ночная сторона, звёзды, облака "
-                    "и искусственные спутники.")),
-                ("depths", tr("Недра"), tr(
-                    "Землетрясения, границы плит, разрез Земли "
-                    "и палеогеография.")),
-                ("terrain", tr("Анализ рельефа"), tr(
-                    "Раскраска поверхности по уклону или по стороне "
-                    "света склона. Включается одна из двух."))):
+                    "и 3D-здания.")),):
             header = QTreeWidgetItem([title])
             header.setToolTip(0, tip)
             header.setFlags(enum(Qt, "ItemFlag", "ItemIsEnabled"))
@@ -650,98 +637,28 @@ class LayerPanel(QWidget):
         self.gallery_item.setIcon(0, QIcon(os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "maps.svg")))
         self.gallery_item.setToolTip(0, tr(
-            "Карты NASA, поля прогноза погоды, пожары и температура "
-            "поверхности с превью. Щелчок открывает витрину, на глобусе "
-            "одна карта."))
+            "Карты NASA, прогноз погоды, пожары, небо, недра и анализ "
+            "рельефа с превью. Щелчок открывает витрину."))
         self.geo.addTopLevelItems(list(self.headers.values()))
         self.extra_items = {}
         self._extras = {}
-        homes = {GRID: "map", BUILDINGS: "map", SUN: "sky", STARS: "sky",
-                 CLOUDS: "sky", SATELLITES: "sky", QUAKES: "depths",
-                 PLATES: "depths", CUTAWAY: "depths", PALEO: "depths",
-                 SLOPE: "terrain", ASPECT: "terrain"}
         for key, text, tip in (
                 (GRID, tr("Координатная сетка"), tr(
                     "Параллели и меридианы с подписями градусов, экватор, "
                     "тропики и полярные круги. Шаг сетки меняется с высотой "
                     "камеры.")),
-                (STARS, tr("Звёзды"), tr(
-                    "Звёзды каталога ярких звёзд Йельского университета "
-                    "и Млечный путь по карте неба NASA. Картинка неба "
-                    "скачивается при первом показе. Звёзды видны "
-                    "из космоса и гаснут, когда камера опускается "
-                    "в атмосферу.")),
-                (CLOUDS, tr("Облака"), tr(
-                    "Облака по снимкам VIIRS из NASA GIBS за последние "
-                    "полные сутки. Они лежат полупрозрачной пеленой "
-                    "поверх снимка. Снег и лёд тоже белые и остаются "
-                    "видны.")),
                 (BUILDINGS, tr("3D-здания"), tr(
                     "Объёмные здания из OpenStreetMap по векторным "
                     "тайлам OpenFreeMap. Они видны, когда камера ближе "
                     "6 км к земле. Высота взята из OSM, иначе из "
                     "этажности. Здание без этих сведений получает "
-                    "высоту 5 м.")),
-                (SUN, tr("Солнце"), tr(
-                    "Свет рельефа, зданий и воздуха по положению солнца. "
-                    "Ночная сторона Земли тёмная. Время солнца - конец "
-                    "промежутка открытой шкалы времени, без неё - часы "
-                    "компьютера. Без флажка свет падает с северо-запада, "
-                    "как на карте рельефа.")),
-                (QUAKES, tr("Землетрясения"), tr(
-                    "Землетрясения магнитудой от 4.5 за последние 30 "
-                    "суток по сводке USGS. Кружок стоит в очаге на его "
-                    "глубине, линия ведёт к эпицентру на поверхности. "
-                    "Цвет показывает глубину очага, размер - магнитуду. "
-                    "Сводка загружается при включении строки.")),
-                (PLATES, tr("Границы плит"), tr(
-                    "Границы литосферных плит по модели PB2002. Красные - "
-                    "раздвиг плит на хребтах и рифтах, зелёные - сдвиг "
-                    "по трансформным разломам, синие - схождение "
-                    "в зонах субдукции и коллизии. Названия плит стоят "
-                    "надписями. Тип границы и скорость плит показывает "
-                    "окно «Объекты».")),
-                (CUTAWAY, tr("Разрез Земли"), tr(
-                    "Вынимает из Земли сектор под точкой взгляда - "
-                    "четверть полушария шириной 90° по долготе. На его "
-                    "гранях видны кора, мантия и ядро по радиусам "
-                    "модели PREM. Где грань проходит через зону "
-                    "субдукции, на ней видна погружающаяся плита. "
-                    "Углы сектора тянутся мышью. Сектор ставится заново "
-                    "при каждом включении строки.")),
-                (PALEO, tr("Палеогеография"), tr(
-                    "Рельеф суши и глубины моря в прошлом, до 540 млн "
-                    "лет назад, по картам PaleoDEM PALEOMAP. Возраст "
-                    "задаёт ползунок в левом нижнем углу вида. Снимок, "
-                    "границы и подписи на это время убраны.")),
-                (SLOPE, tr("Уклон"), tr(
-                    "Уклон поверхности по высотам рельефа, классами от "
-                    "ровного до круче 35°. Шкала стоит в левом нижнем "
-                    "углу вида. Есть у Земли, Марса и Луны.")),
-                (ASPECT, tr("Экспозиция"), tr(
-                    "Куда обращён склон - цвет стороны света, ровное "
-                    "место серое. Включается вместо уклона.")),
-                (SATELLITES, tr("Спутники"), tr(
-                    "Искусственные спутники по орбитальным элементам "
-                    "CelesTrak, положение по модели SGP4. Время - правый "
-                    "бегунок шкалы времени, без шкалы - часы компьютера. "
-                    "Группы выбираются флажками ниже. Элементы группы "
-                    "обновляются не чаще раза в 2 часа."))):
-            item = QTreeWidgetItem(self.headers[homes[key]], [text])
+                    "высоту 5 м."))):
+            item = QTreeWidgetItem(self.headers["map"], [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)
             item.setFlags(item.flags() | CHECKABLE)
             item.setCheckState(0, UNCHECKED)
             self.extra_items[key] = item
-        # Группы спутников - строки под «Спутниками», отмечаются любые.
-        self.sat_items = {}
-        for key, text, tip in satellite_group_names():
-            item = QTreeWidgetItem(self.extra_items[SATELLITES], [text])
-            item.setData(0, SAT_GROUP_ROLE, key)
-            item.setToolTip(0, tip)
-            item.setFlags(item.flags() | CHECKABLE)
-            item.setCheckState(0, UNCHECKED)
-            self.sat_items[key] = item
         self._theme = ""
         for header in self.headers.values():
             header.setExpanded(True)
@@ -998,13 +915,7 @@ class LayerPanel(QWidget):
             parent = item.parent()
             if parent is not None:
                 parent.setDisabled(off)
-        for key in (CLOUDS, BUILDINGS, SUN, QUAKES, PLATES, CUTAWAY, PALEO,
-                    SATELLITES):
-            self.extra_items[key].setDisabled(not earth)
-        self.gallery_item.setDisabled(not earth)
-        # Уклон и экспозиция - там, где есть высоты.
-        for key in (SLOPE, ASPECT):
-            self.extra_items[key].setDisabled(not (earth or relief))
+        self.extra_items[BUILDINGS].setDisabled(not earth)
         self.layers.setEnabled(earth)
 
     def set_theme(self, key, name=""):
@@ -1013,24 +924,12 @@ class LayerPanel(QWidget):
         self._theme = key or ""
         self._extras[FIRES] = self._theme == FIRES
         self._extras[TEMPERATURE] = self._theme == TEMPERATURE
-        title = tr("Карты NASA и погода")
+        title = tr("Карты и слои")
         if self._theme and name:
             title = tr("{title}: {name}", title=title, name=name)
         self.gallery_item.setText(0, title)
 
-    def set_satellite_groups(self, groups):
-        """Отметить группы спутников. Сигналы при этом не идут."""
-        self.geo.blockSignals(True)
-        for key, item in self.sat_items.items():
-            item.setCheckState(0, CHECKED if key in groups else UNCHECKED)
-        self.geo.blockSignals(False)
-
     def _geo_changed(self, item):
-        if item.data(0, SAT_GROUP_ROLE):
-            self.satellite_groups_changed.emit(
-                {key for key, row in self.sat_items.items()
-                 if row.checkState(0) == CHECKED})
-            return
         index = item.data(0, BASEMAP_ROLE)
         if index is not None and index != ADD_SOURCE:
             if item.checkState(0) == CHECKED:

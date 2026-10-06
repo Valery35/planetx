@@ -227,11 +227,8 @@ take effect at once, without the Refresh button.
 |---|---|
 | Base map | Sources of imagery and maps, one is checked, the last row is Add tile source… |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |
-| NASA maps and weather | The row opens the map gallery, see NASA maps and weather |
+| Maps and layers | The row opens the gallery of maps and layers, see Maps and layers |
 | Map | Borders and names, Transport, Nature - the vector base, Coordinate grid, 3D buildings |
-| Sky and light | Stars, Clouds, Sun, Satellites |
-| Inside the Earth | Earthquakes, Plate boundaries, Earth cutaway, Paleogeography |
-| Terrain analysis | Slope, Aspect |
 
 The part headings have no check boxes, the rows have them. The vector
 base has three groups. Borders and names holds Borders, Places and
@@ -258,13 +255,13 @@ the temperature of the surface itself by day, not of the air, over 8
 days. Land may have gaps under clouds. Sea shows the water temperature
 near the surface over a day.
 
-The Sun row lights the terrain and buildings from the side of the
+The Sun layer lights the terrain and buildings from the side of the
 sun. The night side of the Earth is dark, the air over it does not
 glow. City lights shine on it - the NASA Black Marble image of 2016,
 pixel about 600 m. In the twilight the lights fade together with the
 night, under clouds they are weaker. The sun time is the end of the interval of the open time
 slider, so the light of the hour of a placemark shows. Without the
-slider the sun follows the computer clock. Without the Sun row the
+slider the sun follows the computer clock. Without the Sun layer the
 light falls from the north-west at 45°, as on a relief map. The
 position of the sun is computed to about 0.01°, there are no
 shadows.
@@ -272,7 +269,7 @@ shadows.
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
 
-The Slope and Aspect rows colour the surface by the terrain heights.
+The Slope and Aspect layers colour the surface by the terrain heights.
 Slope is the angle of the surface to the horizontal, in classes 0-2°,
 2-5°, 5-10°, 10-15°, 15-25°, 25-35° and steeper than 35°, from green
 to purple. Aspect is the compass direction a slope faces downhill,
@@ -299,7 +296,7 @@ Sea and ocean depths box in the Terrain group of the view properties
 switches them off, then heights below sea level count as zero and the
 sea is flat. Depths exist only on the Earth.
 
-The Paleogeography row shows the Earth in the past, up to 540 million
+The Paleogeography layer shows the Earth in the past, up to 540 million
 years ago, after the PALEOMAP PaleoDEM maps (Scotese and Wright, 2018).
 The map of an age holds land heights and sea depths on a 0.1° grid,
 about 11 km, coloured by height with hill shading. A slider in the
@@ -312,16 +309,25 @@ the planetx-terrain repository, the first showing of an age needs the
 internet. A new age appears at once in a coarse form and sharpens as
 it loads. When the window opens, the row is off.
 
-#### NASA maps and weather
+#### Maps and layers
 
-The NASA maps and weather row and its icon open the map gallery. Each map has a preview - its tile
+The Maps and layers row of the Layers section and its icon open the
+gallery. It holds NASA and weather maps and three groups of layers.
+Sky and light holds Stars, Clouds, Sun and Satellites. Inside the
+Earth holds Earthquakes, Plate boundaries, Earth cutaway and
+Paleogeography. Terrain analysis holds Slope and Aspect. A click switches a layer on or off
+independently of other layers and of the map, a layer that is on has
+a green badge. The Satellite groups button chooses the groups of the
+Satellites layer.
+
+Each map has a preview - its tile
 over Eurasia on the latest ready day over the base map. Forecast fields
 and fires show a strip of the scale colours instead of a tile. The name
 and the day of the map stand under the preview. The buttons at the top
 keep the maps of one group, the Find a map field searches by name. A
 click on a map shows it on the globe, a second click or the Turn off
 button removes it. The globe shows one map of the gallery, its name
-stands in the row of the Layers section.
+stands in the Maps and layers row.
 
 NASA themes are rasters by days, months or years from the NASA GIBS
 service. A day of a series counts as ready a day later, before that
@@ -373,7 +379,7 @@ runs 4 times a day, a new run is published 4-5 hours later.
 A field for the whole world weighs 0.5-0.8 MB and arrives in a few
 seconds. The legend in the bottom left corner shows the units and the
 valid time of the field in UTC. It is a model calculation. Model
-clouds are not a cloud image, the Clouds row gives the image.
+clouds are not a cloud image, the Clouds layer gives the image.
 
 The first map of the Planet of Fire is Fires. It shows
 fire spots over the last 24 hours from VIIRS
@@ -385,7 +391,7 @@ switched on. The spots stand on the time slider by the image time. A
 click on a spot in the Identify mode shows its power, image time and
 confidence.
 
-The Plate boundaries row shows the lithospheric plate boundaries after
+The Plate boundaries layer shows the lithospheric plate boundaries after
 the PB2002 model (Bird, 2003). Red lines are plates moving apart at
 oceanic ridges and continental rifts, green - plates sliding along
 transform faults, blue - plates converging in subduction and collision
@@ -395,7 +401,7 @@ their relative motion in mm/yr. In the plate pair a slash in Bird's
 notation shows which plate goes under which: "PA\OK" is the Pacific
 plate under the Okhotsk plate.
 
-The Earthquakes row shows earthquakes of magnitude 4.5 and above
+The Earthquakes layer shows earthquakes of magnitude 4.5 and above
 over the last 30 days from the feed of the U.S. Geological Survey
 (USGS). The feed is loaded each time the row is switched on. A circle
 marks the focus at its depth, and a thin line leads from it to the
@@ -408,7 +414,7 @@ of the terrain, like the heights. Each event has a time. With the row
 on, the time slider becomes available, and it shows the events of the
 chosen interval. The row exists only on the Earth.
 
-The Earth cutaway row removes a sector of the Earth under the look-at
+The Earth cutaway layer removes a sector of the Earth under the look-at
 point. The sector is a quarter of a hemisphere 90° wide in longitude,
 from the equator to the pole of the hemisphere of the look-at point.
 Its three faces are coloured by shells after the radii of the PREM
@@ -914,7 +920,7 @@ closed slider opens then. The
 slider is its own and does not depend on the QGIS Temporal
 Controller.
 
-The Sun and Satellites rows and the sky view depend on the moment,
+The Sun and Satellites layers and the sky view depend on the moment,
 not on data. With them the slider opens without timed placemarks
 too, on the computer clock, with one handle. The slider spans a day
 before the moment and a day after it. Playback at a clock speed
@@ -1380,9 +1386,9 @@ closed, the layer is shown in full.
 
 ## Satellites
 
-The Satellites row of the Layers section shows artificial satellites
-of the Earth as dots at their height. The groups stand under the row,
-any of them can be checked:
+The Satellites layer of the Maps and layers gallery shows artificial
+satellites of the Earth as dots at their height. The Satellite groups
+button of the gallery chooses the groups, any of them can be checked:
 
 | Group | What it holds |
 |---|---|

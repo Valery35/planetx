@@ -765,6 +765,24 @@ def gallery_wait():
                           panel_row(window)]
     gallery._clicked(gallery.items["temperature"][0])
     out["off"] = [window.gallery_key(), panel_row(window)]
+    # Слои неба, недр и рельефа - флажками в витрине.
+    plates_item = gallery.items["plates"][0]
+    gallery._clicked(plates_item)
+    out["plates_on"] = [bool(window.extras.get("plates")),
+                        window.gallery_key()]
+    gallery._clicked(plates_item)
+    out["plates_off"] = bool(window.extras.get("plates"))
+    gallery._clicked(gallery.items["slope"][0])
+    gallery._clicked(gallery.items["aspect"][0])
+    out["slope_aspect"] = [bool(window.extras.get("slope")),
+                           bool(window.extras.get("aspect"))]
+    gallery._clicked(gallery.items["aspect"][0])
+    gallery.sat_actions["gnss"].setChecked(True)
+    out["sat_groups"] = sorted(window.satellite_manager.groups)
+    gallery.sat_actions["gnss"].setChecked(False)
+    gallery._set_group("depths")
+    out["depths_group"] = [k for k, (it, g, kind) in gallery.items.items()
+                           if not it.isHidden()]
     gallery._set_group("fire")
     out["fire_group"] = [k for k, (it, g, kind) in gallery.items.items()
                          if not it.isHidden()]
@@ -774,6 +792,8 @@ def gallery_wait():
                      if not it.isHidden()]
     gallery.search.setText("")
     gallery.grab().save(os.path.join(TEMP, "planetx_gallery.png"))
+    gallery.list.scrollToItem(gallery.items["aspect"][0])
+    gallery.grab().save(os.path.join(TEMP, "planetx_gallery_layers.png"))
     window.panel.geo.grab().save(os.path.join(TEMP, "planetx_layers.png"))
     gallery.close()
 
@@ -6078,7 +6098,6 @@ def sat_on():
     manager = window.satellite_manager
     window.set_extra("satellites", False)
     manager.set_groups({"stations", "gnss", "geo"})
-    window.panel.set_satellite_groups(manager.groups)
     window.view.navigator.stop()
     window.view.navigator.set_pose(Pose(0.0, 60.0, 90000e3, 0.0, 0.0))
     window.set_extra("satellites", True)
@@ -6431,6 +6450,31 @@ def route_view():
 def route_shot():
     state["window"].view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_route.png"))
+
+
+@check(6000)
+def article_circle():
+    """Снимки для статьи: круг 1 км у Эспланады в окне «Новая метка»
+    и окно «Номенклатура листа» у Перми."""
+    window = state["window"]
+    window._open_place()
+    dialog = window.place_dialog
+    dialog.tabs.setCurrentIndex(3)
+    d = window.drawer
+    d.add(*ROUTE_A)
+    d.add(ROUTE_A[0] + 1000.0 / 111320.0, ROUTE_A[1])
+    sheets = window.sheets_here(*ROUTE_A)
+    sheets.grab().save(os.path.join(TEMP, "planetx_article_sheets.png"))
+    dialog.grab().save(os.path.join(TEMP, "planetx_article_place.png"))
+
+
+@check(500)
+def article_circle_shot():
+    window = state["window"]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_article_circle.png"))
+    window.place_dialog.close()
+    window.sheets_dialog.close()
 
 
 @check(500)

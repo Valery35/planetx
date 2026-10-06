@@ -97,12 +97,11 @@ RU = {
                  "не дрожит.",
     "layers.eyebrow": "Панель «Слои»",
     "layers.h2": "Границы, дороги и названия поверх снимков",
-    "layers.sub": "Внизу слева лежат группы "
-                  "«Границы и названия», «Транспорт» и «Природа». "
-                  "Данные берутся из векторных тайлов OpenFreeMap "
-                  "и ложатся по рельефу. Там же координатная сетка "
-                  "с экватором и тропиками, звёзды и облака NASA "
-                  "за последние полные сутки. Флажки срабатывают сразу.",
+    "layers.sub": "Раздел «Слои» делится на части «Основа», «Карта», «Небо и "
+                  "свет», «Недра» и «Анализ рельефа». Векторная основа "
+                  "OpenFreeMap - границы, дороги, реки и названия - ложится "
+                  "по рельефу. Там же координатная сетка, звёзды, облака "
+                  "NASA, солнце и спутники. Флажки срабатывают сразу.",
     "layers.fig": "Евразия с высоты 9000 км. Названия стран и городов, "
                   "границы стран жёлтые, границы областей тонкие белые.",
     "layers.c1.h": "Ровные подписи",
@@ -139,13 +138,15 @@ RU = {
     "places.c1.p": "35 значков меток окрашиваются цветом метки. Момент "
                    "или промежуток метки задаёт её место на шкале "
                    "времени, метки вне промежутка скрыты.",
-    "places.c2.h": "Линейка и профиль высот",
-    "places.c2.p": "Длина на карте и по рельефу, курс, площадь. Профиль "
-                   "высот пути с набором высоты и уклонами. Координаты "
-                   "в градусах, UTM или MGRS.",
+    "places.c2.h": "Измерения, маршруты, листы карт",
+    "places.c2.p": "Длина на карте и по рельефу, курс, площадь, профиль "
+                   "высот. Маршрут по дорогам на машине или пешком. Номер "
+                   "листа карты в точке - IMW, российская номенклатура до "
+                   "1:200 000, NATO JOG и MGRS.",
     "places.c3.h": "Туры",
     "places.c3.p": "Тур облетает метки или проигрывает запись движения "
-                   "камеры. Тур записывается кадрами PNG для ролика.",
+                   "камеры. Тур записывается сразу в видео MP4 или кадрами "
+                   "PNG любого размера.",
     "nav.deep": "Вглубь и NASA",
     "deep.eyebrow": "Земля вглубь и во времени",
     "deep.h2": "Разрезы, недра и прошлое планеты",
@@ -173,20 +174,22 @@ RU = {
                  "дня до 540 млн лет назад. Ползунок возраста "
                  "проигрывает смену материков.",
     "nasa.eyebrow": "Данные NASA",
-    "nasa.h2": "Планета огня, планета воды и ночная Земля",
-    "nasa.sub": "Группы «Планета огня», «Планета воды», «Газы» "
-                "и «Земля и жизнь» включают 21 тему NASA GIBS по дням, "
-                "от осадков и снега до метана и растительности. День "
-                "темы задаёт шкала времени. Пожары за последние 24 часа "
-                "приходят из сводки NASA FIRMS.",
+    "nasa.h2": "Карты NASA, погода и ночная Земля",
+    "nasa.sub": "Витрина «Карты NASA и погода» собирает 29 карт с превью - "
+                "снег, лёд, осадки, газы, растительность, пожары NASA FIRMS, "
+                "температуру поверхности и прогноз погоды NOAA GFS на 16 "
+                "суток. Группы «Погода», «Планета огня», «Планета воды», "
+                "«Планета воздуха» и «Земля и жизнь». День карты задаёт шкала "
+                "времени.",
     "nasa.fires": "Пожары в Южной Америке за 24 часа, 4 октября 2026 "
                   "года. Цвет и размер точки - мощность излучения.",
     "nasa.lights": "Европа ночью при строке «Солнце». Огни городов - "
                    "снимок NASA Black Marble.",
-    "nasa.c1.h": "Темы и шкала времени",
-    "nasa.c1.p": "Тема лежит полупрозрачной раскраской поверх снимка, "
-                 "шкала стоит в углу вида. Кнопки шкалы времени "
-                 "проходят ряд тем по дням.",
+    "nasa.c1.h": "Витрина и шкала времени",
+    "nasa.c1.p": "Превью показывает карту над Евразией на последний готовый "
+                 "день. Карта лежит полупрозрачной раскраской поверх снимка, "
+                 "шкала стоит в углу вида. Пункт «Погода здесь» меню на "
+                 "глобусе даёт прогноз в точке.",
     "nasa.c2.h": "Картинки и KML",
     "nasa.c2.p": "Картинки на поверхности, фото с камерой и картинки "
                  "на экране, как в KML Google Earth. Картинка "
@@ -198,15 +201,14 @@ RU = {
     "nav.worlds": "Марс, Луна, небо",
     "worlds.eyebrow": "Другие тела и небо",
     "worlds.h2": "Марс, Луна и звёздное небо",
-    "worlds.sub": "Значок «Тело» заменяет Землю Марсом или Луной. Снимки "
-                  "Марса - цветная мозаика Viking MDIM2.1, около 650 м "
-                  "на пиксель, снимки Луны - карта альбедо LOLA "
-                  "с отмывкой рельефа, около 670 м. Навигация, метки, "
-                  "туры, линейка и сцены "
-                  "работают на любом теле, метка хранит своё тело. Пункт "
-                  "«Небо» показывает небесную сферу изнутри - 5080 "
-                  "звёзд, 88 созвездий, Солнце, Луну и планеты "
-                  "на выбранный момент.",
+    "worlds.sub": "Значок «Тело» заменяет Землю Марсом, Луной и другими "
+                  "телами. Снимки Марса - цветная мозаика Viking MDIM2.1, "
+                  "снимки Луны - карта альбедо LOLA с отмывкой рельефа. "
+                  "Навигация, метки, туры, линейка и сцены работают на любом "
+                  "теле. Пункт «Небо» показывает 5080 звёзд, 88 созвездий, "
+                  "Солнце, Луну и планеты на выбранный момент. Над Землёй "
+                  "летают спутники CelesTrak с витком орбиты и следом, часы "
+                  "глобуса идут с выбранной скоростью.",
     "worlds.mars": "Марс. Вулканы Фарсиды и долины Маринер, мозаика "
                    "Viking.",
     "worlds.moon": "Видимая сторона Луны, карта альбедо LOLA с отмывкой "
@@ -339,12 +341,12 @@ EN = {
                  "pixel, and the picture does not jitter.",
     "layers.eyebrow": "The Layers panel",
     "layers.h2": "Borders, roads and names over the imagery",
-    "layers.sub": "At the bottom left there are the "
-                  "groups Borders and names, Transport and Nature. The "
-                  "data come from OpenFreeMap vector tiles and follow the "
-                  "terrain. The same panel holds a coordinate grid with "
-                  "the equator and tropics, stars and NASA clouds of the "
-                  "last complete day. Check boxes take effect at once.",
+    "layers.sub": "The Layers section has the parts Base map, Map, Sky and "
+                  "light, Inside the Earth and Terrain analysis. The "
+                  "OpenFreeMap vector base - borders, roads, rivers and names "
+                  "- follows the terrain. The same section holds the "
+                  "coordinate grid, stars, NASA clouds, the sun and "
+                  "satellites. Check boxes take effect at once.",
     "layers.fig": "Eurasia from 9000 km. Names of countries and cities, "
                   "country borders in yellow, region borders thin and "
                   "white.",
@@ -382,14 +384,15 @@ EN = {
     "places.c1.p": "35 placemark icons take the placemark colour. A "
                    "moment or interval puts the placemark on the time "
                    "slider, placemarks outside the interval are hidden.",
-    "places.c2.h": "Ruler and elevation profile",
-    "places.c2.p": "Map and ground length, heading, area. The elevation "
-                   "profile of a path with ascent and slopes. Coordinates "
-                   "in degrees, UTM or MGRS.",
+    "places.c2.h": "Measuring, routes, map sheets",
+    "places.c2.p": "Map and ground length, heading, area, elevation profile. "
+                   "A route along roads by car or on foot. The map sheet "
+                   "number at a point - IMW, the Russian designation down to "
+                   "1:200,000, NATO JOG and MGRS.",
     "places.c3.h": "Tours",
-    "places.c3.p": "A tour flies over placemarks or plays a recorded "
-                   "camera movement. A tour records to PNG frames for a "
-                   "video.",
+    "places.c3.p": "A tour flies over placemarks or plays a recorded camera "
+                   "movement. A tour records straight to an MP4 video or to "
+                   "PNG frames of any size.",
     "nav.deep": "Depth and NASA",
     "deep.eyebrow": "The Earth in depth and in time",
     "deep.h2": "Sections, the underground and the past of the planet",
@@ -417,20 +420,22 @@ EN = {
                  "million years ago. The age slider plays the movement "
                  "of the continents.",
     "nasa.eyebrow": "NASA data",
-    "nasa.h2": "Planet of fire, planet of water and the Earth at night",
-    "nasa.sub": "The Planet of Fire, Planet of Water, Gases and Land and "
-                "Life groups switch on 21 NASA GIBS themes by days, from "
-                "precipitation and snow to methane and vegetation. The "
-                "day of a theme is set by the time slider. Fires over "
-                "the last 24 hours come from the NASA FIRMS feed.",
+    "nasa.h2": "NASA maps, weather and the Earth at night",
+    "nasa.sub": "The NASA maps and weather gallery gathers 29 maps with "
+                "previews - snow, ice, precipitation, gases, vegetation, NASA "
+                "FIRMS fires, surface temperature and the NOAA GFS weather "
+                "forecast for 16 days. The groups are Weather, Planet of "
+                "Fire, Planet of Water, Planet of Air and Land and Life. The "
+                "time slider sets the day of a map.",
     "nasa.fires": "Fires in South America over 24 hours, 4 October 2026. "
                   "The colour and size of a dot show the radiative power.",
     "nasa.lights": "Europe at night with the Sun row. City lights are "
                    "the NASA Black Marble image.",
-    "nasa.c1.h": "Themes and the time slider",
-    "nasa.c1.p": "A theme lies as semi-transparent colouring over the "
-                 "imagery, its legend stands in the view corner. The "
-                 "time slider buttons step through the theme by days.",
+    "nasa.c1.h": "Gallery and time slider",
+    "nasa.c1.p": "A preview shows the map over Eurasia on the latest ready "
+                 "day. A map lies as semi-transparent colouring over the "
+                 "imagery, its legend stands in the view corner. The Weather "
+                 "here item of the globe menu gives the forecast at a point.",
     "nasa.c2.h": "Images and KML",
     "nasa.c2.p": "Ground overlays, photos with a camera and screen "
                  "overlays, as in Google Earth KML. A ground overlay goes "
@@ -442,16 +447,15 @@ EN = {
     "nav.worlds": "Mars, Moon, sky",
     "worlds.eyebrow": "Other bodies and the sky",
     "worlds.h2": "Mars, the Moon and the starry sky",
-    "worlds.sub": "The Body icon replaces the Earth with Mars or the "
-                  "Moon. Mars imagery is the Viking MDIM2.1 colour "
-                  "mosaic, about 650 m per pixel, Moon imagery is the "
-                  "LOLA albedo map with hill shading, about 670 m. "
-                  "Navigation, places, "
-                  "tours, the ruler and scenes work on any body, and a "
-                  "place keeps its body. The Sky item shows the "
-                  "celestial sphere from inside - 5080 stars, 88 "
-                  "constellations, the Sun, the Moon and the planets at "
-                  "the chosen moment.",
+    "worlds.sub": "The Body icon replaces the Earth with Mars, the Moon and "
+                  "other bodies. Mars imagery is the Viking MDIM2.1 colour "
+                  "mosaic, Moon imagery is the LOLA albedo map with hill "
+                  "shading. Navigation, places, tours, the ruler and scenes "
+                  "work on any body. The Sky item shows 5080 stars, 88 "
+                  "constellations, the Sun, the Moon and the planets at the "
+                  "chosen moment. CelesTrak satellites fly over the Earth "
+                  "with their orbit and ground track, the globe clock runs at "
+                  "the chosen speed.",
     "worlds.mars": "Mars. The Tharsis volcanoes and Valles Marineris, "
                    "Viking mosaic.",
     "worlds.moon": "The near side of the Moon, LOLA albedo map with hill "

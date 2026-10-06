@@ -120,8 +120,9 @@ class ViewToolbar(QFrame):
         self.time.setEnabled(False)
         self.gallery = self._button(
             QIcon(os.path.join(ROOT, "maps.svg")),
-            tr("Карты NASA и погода. Витрина с превью - снег, лёд, "
-               "осадки, газы, растительность, пожары, прогноз погоды."),
+            tr("Карты и слои. Витрина с превью - карты NASA, прогноз "
+               "погоды, пожары, звёзды, облака, солнце, спутники, недра "
+               "и анализ рельефа."),
             self.gallery_requested)
         self._button(
             QgsApplication.getThemeIcon("/mActionSaveMapAsImage.svg"),

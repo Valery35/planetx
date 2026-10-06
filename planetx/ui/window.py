@@ -935,9 +935,6 @@ class GlobeWindow(QWidget):
         # Спутники CelesTrak - строка с группами (ui/satellites.py).
         self.satellite_manager = SatelliteManager(self)
         self.satellite_manager.changed.connect(self._show_attribution)
-        self.panel.set_satellite_groups(self.satellite_manager.groups)
-        self.panel.satellite_groups_changed.connect(
-            self.satellite_manager.set_groups)
         self.route_manager = RouteManager(self)
         # Погода: поля прогноза GFS темой группы «Погода», окна прогноза
         # в точке.
@@ -1083,6 +1080,8 @@ class GlobeWindow(QWidget):
         QgsSettings().setValue(EXTRA_KEY + key, bool(on))
         self.panel.set_extras({key: bool(on)})
         self._apply_extra(key, bool(on))
+        # Слои неба, недр и рельефа включаются и в витрине.
+        self._mark_gallery()
 
     def _apply_extra(self, key, on):
         if key in EARTH_EXTRAS and not self.planet.earth:
@@ -1188,7 +1187,7 @@ class GlobeWindow(QWidget):
             gallery.refresh()
 
     def open_gallery(self):
-        """Окно «Карты NASA и погода», одно на глобус."""
+        """Окно «Карты и слои», одно на глобус."""
         if getattr(self, "gallery", None) is None:
             self.gallery = NasaMaps(self)
         self.gallery.refresh()
@@ -2094,6 +2093,7 @@ class GlobeWindow(QWidget):
         self.toolbar.identify.setEnabled(planet.earth)
         self.panel.set_earth(planet.earth,
                              relief=planet.terrain is not None)
+        self._mark_gallery()
         self._fill_basemaps()
         self._grid_key = None
         self._update_grid()
