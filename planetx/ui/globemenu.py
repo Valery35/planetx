@@ -70,6 +70,7 @@ def show(window, px, py):
     menu.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
     drawer = window.drawer
     drawing = window._place_open() and bool(drawer.points)
+    place = None
     if drawing:
         found = window.draw_vertices.under(px, py)
         if found is not None and found[0] == editing.VERTEX:
@@ -103,15 +104,41 @@ def show(window, px, py):
         if not drawing:
             menu.addAction(tr("Добавить метку здесь")).triggered.connect(
                 lambda *a: window.add_place_here(lat, lon))
+            menu.addSeparator()
         menu.addAction(tr("Переместиться сюда")).triggered.connect(
             lambda *a: fly_here(view, lat, lon))
+        menu.addAction(tr("Вращаться вокруг")).triggered.connect(
+            lambda *a: window.spin_here(lat, lon))
+        if not drawing and window.planet.earth:
+            route_items(window, menu, place, lat, lon)
+        menu.addSeparator()
+        if not drawing and window.planet.earth:
+            menu.addAction(tr("Получить сведения")).triggered.connect(
+                lambda *a: window.identify_here(px, py))
         menu.addAction(tr("Скопировать координаты")).triggered.connect(
             lambda *a: QApplication.clipboard().setText(
                 "{:.6f}, {:.6f}".format(lat, lon)))
+        if not drawing:
+            menu.addAction(tr("Вставить из буфера обмена")).triggered.connect(
+                lambda *a: window.paste_places(window.panel.current_folder()))
     if menu.isEmpty():
         menu.deleteLater()
         return
     menu.popup(QCursor.pos())
+
+
+def route_items(window, menu, place, lat, lon):
+    """«Маршрут отсюда» и «Маршрут сюда». Точечная метка под курсором
+    даёт маршруту свою точку и название, иначе - точка поверхности."""
+    name = ""
+    if place is not None and place.kind == "point" and place.shape.points:
+        lat, lon = place.shape.points[0]
+        name = place.name
+    menu.addSeparator()
+    menu.addAction(tr("Маршрут отсюда")).triggered.connect(
+        lambda *a: window.route_point(lat, lon, name, end=False))
+    menu.addAction(tr("Маршрут сюда")).triggered.connect(
+        lambda *a: window.route_point(lat, lon, name, end=True))
 
 
 def satellite_items(window, menu, px, py):

@@ -75,6 +75,14 @@ THEMES = (
           "png", 6, "SMAP_Soil_Moisture"),
     Theme("snow", "water", "MODIS_Terra_NDSI_Snow_Cover", "png", 8,
           "MODIS_NDSI_Snow_Cover"),
+    # Суточный снег зимой над Сибирью - 22 % тайла, остальное облака
+    # и полярная ночь, 15 января 2026 года. Сводка за 8 суток - 60 %,
+    # модель SMAP - 98 %. Слои добавлены по решению автора от 6 октября
+    # 2026 года.
+    Theme("snow_8day", "water", "MODIS_Terra_L3_Snow_Extent_8Day", "png",
+          8, "MODIS_L3_Snow_Extent"),
+    Theme("snow_mass", "water", "SMAP_L4_Snow_Mass", "png", 6,
+          "SMAP_Snow_Mass"),
     Theme("sea_ice", "water", "GHRSST_L4_MUR_Sea_Ice_Concentration", "png",
           7, "GHRSST_Sea_Ice_Concentration"),
     Theme("vapor", "water", "MODIS_Terra_Water_Vapor_5km_Day", "png", 6,

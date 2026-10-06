@@ -4765,7 +4765,10 @@ def themes_open():
     window.set_extra("paleo", False)
     window.view.navigator.stop()
     window.view.navigator.set_pose(Pose(20.0, 30.0, 15000000.0, 0.0, 0.0))
-    result["themes"] = {"keys": [t.key for t in themes.THEMES],
+    # PLANETX_THEMES - ключи тем через запятую, обход только их.
+    only = [k for k in os.environ.get("PLANETX_THEMES", "").split(",") if k]
+    result["themes"] = {"keys": [t.key for t in themes.THEMES
+                                 if not only or t.key in only],
                         "index": 0, "each": {}, "started": None}
 
 
@@ -4830,6 +4833,60 @@ def themes_cycle():
         "scale": (window._theme_scales.get(key) or {}).get("kind")}
     window.view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_theme_%s.png" % key))
+    out["index"] += 1
+    return 500
+
+
+@check(500)
+def snow_winter():
+    """Снежные темы на 15 января 2026 года над Западной Сибирью: доля
+    кадра, раскрашенная темой, по снимку с темой и без неё."""
+    import numpy as np
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result.setdefault("snow_winter", {"index": 0})
+    keys = ("snow", "snow_8day", "snow_mass")
+    if out["index"] >= len(keys):
+        window.set_theme("")
+        return None
+    key = keys[out["index"]]
+    view = window.view
+    if window.theme_key != key:
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(60.0, 70.0, 4500000.0, 0.0, 0.0))
+        window.set_theme(key)
+        out["started"] = time.monotonic()
+        return 500
+    if key not in window._theme_domains and \
+            time.monotonic() - out["started"] < 30.0:
+        return 500
+    moment = 1768435200.0  # 15 января 2026 года
+    if not window.timebar.shown():
+        window._time_toggled(True)
+    window.timebar.set_range(moment, moment)
+    window._apply_theme()
+    layer = view.gibs["theme"]
+    waited = time.monotonic() - out["started"]
+    if (not layer.textures or layer.missing) and waited < 40.0:
+        return 500
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_snow_%s.png" % key))
+    window.set_theme("")
+    view.grabFramebuffer()
+    plain = view.grabFramebuffer()
+    window.set_theme(key)
+
+    def array(img):
+        img = img.convertToFormat(img.Format.Format_RGBA8888)
+        ptr = img.constBits()
+        ptr.setsize(img.sizeInBytes())
+        return np.frombuffer(ptr, np.uint8).reshape(
+            img.height(), img.width(), 4)[..., :3].astype(int)
+
+    diff = np.abs(array(image) - array(plain)).sum(axis=2) > 30
+    out[key] = {"day": window.theme_day, "textures": len(layer.textures),
+                "coloured_share": round(float(diff.mean()), 3),
+                "legend": (window._theme_scales.get(key) or {}).get("kind")}
     out["index"] += 1
     return 500
 
@@ -6101,6 +6158,158 @@ def pole_view():
                         "nearest_km": round(near / 1000.0)
                         if _math.isfinite(near) else str(near)}
     out["gl"] = dict(view.gl_errors)
+
+
+ROUTE_A = (58.0105, 56.2294)  # Эспланада, Пермь
+ROUTE_B = (58.0186, 56.2930)  # Мотовилиха
+
+
+@check(500)
+def route_car():
+    """Маршрут на машине по тайлам векторной основы из меню глобуса."""
+    import time as _time
+    window = state["window"]
+    window.set_body("earth")
+    manager = window.route_manager
+    manager.clear()
+    manager.set_mode("car")
+    state["route_start"] = _time.monotonic()
+    state["route_keys"] = []
+    manager.finished.connect(lambda key: state["route_keys"].append(
+        (key, round(_time.monotonic() - state["route_start"], 1))))
+    window.route_point(*ROUTE_A, "Эспланада", end=False)
+    window.route_point(*ROUTE_B, "Мотовилиха", end=True)
+
+
+def _route_wait(limit=60.0):
+    """Ждать конца расчёта маршрута, не дольше limit секунд."""
+    import time as _time
+    manager = state["window"].route_manager
+    start = _time.monotonic()
+    while manager.busy() and _time.monotonic() - start < limit:
+        QgsApplication.processEvents()
+        _time.sleep(0.02)
+
+
+def _route_report(window):
+    """Маршрут: длина, время, метка и проход только по дугам графа."""
+    import numpy as np
+    from planetx.core import routing
+    manager = window.route_manager
+    route = manager.last
+    out = {"keys": list(state.get("route_keys", [])),
+           "answer": window.panel.answer.text()[:200]}
+    if route is None:
+        return out
+    out["km"] = round(route.length / 1000.0, 2)
+    out["minutes"] = round(route.seconds / 60.0, 1)
+    out["points"] = len(route.points)
+    g = manager.graph
+    index = {tuple(np.rint(n).astype(np.int64)): i
+             for i, n in enumerate(g.nodes)}
+    arcs = set(zip(g.start.tolist(), g.target.tolist()))
+    inner = []
+    for lat, lon in route.points[2:-2]:
+        x, y = routing.to_grid(lat, lon)
+        inner.append(index.get((int(round(x)), int(round(y)))))
+    pairs = list(zip(inner[:-1], inner[1:]))
+    out["nodes_known"] = sum(i is not None for i in inner)
+    out["arcs_ok"] = sum((a, b) in arcs for a, b in pairs)
+    out["arcs_total"] = len(pairs)
+    return out
+
+
+@check(500)
+def route_car_check():
+    _route_wait()
+    window = state["window"]
+    result["route"] = {"car": _route_report(window)}
+    place = [p for p in window.myplaces.places
+             if p.name.startswith("Маршрут") or p.name.startswith("Route")]
+    result["route"]["places"] = [(p.name, p.measure) for p in place]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_route.png"))
+    state["route_keys"].clear()
+    state["route_start"] = __import__("time").monotonic()
+    window.route_manager.link("foot")
+
+
+@check(8000)
+def route_view():
+    """Вид над серединой маршрута: обе метки, на машине и пешком."""
+    from planetx.core.navigation import Pose
+    _route_wait()
+    view = state["window"].view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(0.5 * (ROUTE_A[0] + ROUTE_B[0]),
+                                 0.5 * (ROUTE_A[1] + ROUTE_B[1]), 6500.0,
+                                 0.0, 0.0))
+
+
+@check(500)
+def route_shot():
+    state["window"].view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_route.png"))
+
+
+@check(500)
+def route_foot_check():
+    _route_wait()
+    window = state["window"]
+    result["route"]["foot"] = _route_report(window)
+    # Меню на глобусе в середине вида: новые пункты.
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(ROUTE_A[0], ROUTE_A[1], 3000.0, 0.0,
+                                 0.0))
+    view.grabFramebuffer()
+    before = set(window.findChildren(QMenu))
+    ratio = view.devicePixelRatioF()
+    globemenu.show(window, view.width() * ratio / 2.0,
+                   view.height() * ratio / 2.0)
+    menus = [m for m in window.findChildren(QMenu) if m not in before]
+    result["route"]["menu"] = [a.text() for m in menus
+                               for a in m.actions() if a.text()]
+    for menu in menus:
+        menu.close()
+    # Вращение вокруг точки: перелёт, потом азимут растёт.
+    window.spin_here(*ROUTE_B)
+    state["spin_heading"] = None
+
+
+@check(500)
+def route_spin_wait():
+    return None
+
+
+@check(500)
+def route_spin_check():
+    import time as _time
+    window = state["window"]
+    nav = window.view.navigator
+    first = (nav.pose.heading, nav.pose.lat, nav.pose.lon, nav.pose.tilt)
+    start = _time.monotonic()
+    while _time.monotonic() - start < 1.0:
+        QgsApplication.processEvents()
+        _time.sleep(0.02)
+    second = nav.pose.heading
+    result["route"]["spin"] = {
+        "at_point": [round(first[1] - ROUTE_B[0], 4),
+                     round(first[2] - ROUTE_B[1], 4)],
+        "tilt": round(first[3], 1),
+        "turned_deg_per_s": round((second - first[0]) % 360.0, 1),
+        "flying": nav.flight is not None}
+    nav.stop()
+    result["route"]["stopped"] = nav.flight is None
+    # Метки маршрутов убираются.
+    for p in list(window.myplaces.places):
+        if p.name.startswith("Маршрут") or p.name.startswith("Route"):
+            window.myplaces.remove(p.key)
+    window.route_manager.clear()
+    result["route"]["gl"] = dict(window.view.gl_errors)
 
 
 def ecef_to_geodetic_point(point):

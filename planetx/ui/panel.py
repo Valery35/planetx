@@ -417,6 +417,8 @@ class LayerPanel(QWidget):
     # Ссылка «Остановить» под счётом меток, идущих потоком.
     stop_requested = pyqtSignal()
     accept_requested = pyqtSignal()
+    # Ссылка строки маршрута под строкой поиска: «car», «foot», «clear».
+    route_link = pyqtSignal(str)
     layer_toggled = pyqtSignal(str, bool)
     fly_to_layer = pyqtSignal(object)
     # Непрозрачность слоя 0-1 из меню слоя, свойства слоя QGIS.
@@ -931,17 +933,20 @@ class LayerPanel(QWidget):
             self._make()
         elif link == "accept":
             self.accept_requested.emit()
+        elif link.startswith("route:"):
+            self.route_link.emit(link[len("route:"):])
         else:
             self.assistant_requested.emit()
 
     def set_answer(self, text, undo=False, make="", stop=False,
-                   accept=False):
+                   accept=False, links=(), talk=True):
         """Ответ помощника под строкой поиска со ссылкой на разговор.
         Пустой текст прячет его. undo - ещё ссылка «Отменить» для
         только что созданных меток. make - тема строки: ссылка «Создать
         метки по теме» после поиска по названию. accept - ссылка
         «Записать в «Мои метки»» для документа, который предложила
-        модель."""
+        модель. links - свои ссылки (адрес, текст), talk=False - без
+        ссылки на разговор, это строка маршрута."""
         if not text:
             self.answer.clear()
             self.answer.setVisible(False)
@@ -960,8 +965,13 @@ class LayerPanel(QWidget):
             # Метки идут потоком: остановка оставляет пришедшие целиком.
             body += ' <a href="stop">{}</a>'.format(
                 html.escape(tr("Остановить")))
-        self.answer.setText('{} <a href="assistant">{}</a>'.format(
-            body, html.escape(tr("Разговор…"))))
+        for href, label in links:
+            body += ' <a href="{}">{}</a>'.format(html.escape(href),
+                                                 html.escape(label))
+        if talk:
+            body += ' <a href="assistant">{}</a>'.format(
+                html.escape(tr("Разговор…")))
+        self.answer.setText(body)
         self.answer.setVisible(True)
 
     def set_found(self, texts):

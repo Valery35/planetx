@@ -34,7 +34,7 @@ from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
 from ..core import graticule, paleo, placetree
 from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
-from ..core.flight import Flight, fit_view
+from ..core.flight import Flight, Spin, fit_view
 from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                             place_text, search_url)
 from ..core.mipmap import mip_chain
@@ -119,6 +119,7 @@ from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
+from .routing import RouteManager
 from .satellites import SatelliteManager
 from ..core import satellites as satellites_core
 from .track import (TrackDialog, TrackManager, date_range, layer_span,
@@ -921,6 +922,9 @@ class GlobeWindow(QWidget):
         self.panel.set_satellite_groups(self.satellite_manager.groups)
         self.panel.satellite_groups_changed.connect(
             self.satellite_manager.set_groups)
+        self.route_manager = RouteManager(self)
+        self.route_manager.finished.connect(self._route_done)
+        self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
         self._grid_key = None
         self.layer_labels = LayerLabels(self)
@@ -3310,6 +3314,29 @@ class GlobeWindow(QWidget):
         self.drawer.clear()
         self.drawer.add(lat, lon)
 
+    def route_point(self, lat, lon, name, end):
+        """Начало (end=False) или конец маршрута из меню на глобусе."""
+        if end:
+            self.route_manager.set_target(lat, lon, name)
+        else:
+            self.route_manager.set_origin(lat, lon, name)
+
+    def _route_done(self, key):
+        """Маршрут лёг в «Мои метки»: перелёт к нему."""
+        for place in self.myplaces.places:
+            if place.key == key:
+                self.fly_to_place(place)
+                return
+
+    def spin_here(self, lat, lon):
+        """«Вращаться вокруг» меню на глобусе."""
+        navigator = self.view.navigator
+        navigator.start_flight(Spin(navigator.pose, lat, lon,
+                                    fov_y=self.view.camera.fov_y),
+                               time.monotonic())
+        self.view.setFocus()
+        self.view.update()
+
     def _globe_menu(self, px, py):
         """Щелчок правой кнопкой по глобусу без сдвига."""
         globemenu.show(self, px, py)
@@ -4850,6 +4877,12 @@ class GlobeWindow(QWidget):
             return
         if not self.identifying:
             return
+        self.identify_here(px, py)
+
+    def identify_here(self, px, py):
+        """Опрос объектов под пикселем кадра: окно «Объекты». Его зовут
+        щелчок в режиме «Определить объекты» и пункт «Получить сведения»
+        меню на глобусе."""
         view = self.view
         camera = view.camera
         point = ground_under(camera, px, py, view.navigator.pose.terrain)
@@ -5571,6 +5604,7 @@ class GlobeWindow(QWidget):
             self._layer_time_timer.stop()
             self._link_timer.stop()
             self.satellite_manager.close()
+            self.route_manager.close()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

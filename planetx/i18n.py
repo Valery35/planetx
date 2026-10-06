@@ -228,6 +228,66 @@ EN = {
     "{value} км/с": "{value} km/s",
     "Возраст элементов": "Elements age",
     "Орбита и след": "Orbit and ground track",
+    "Маршрут отсюда":
+        "Directions from here",
+    "Маршрут сюда":
+        "Directions to here",
+    "Вращаться вокруг":
+        "Orbit around",
+    "Получить сведения":
+        "Get info",
+    "Вставить из буфера обмена":
+        "Paste from clipboard",
+    "на машине":
+        "by car",
+    "пешком":
+        "on foot",
+    "{value} мин":
+        "{value} min",
+    "{hours} ч {minutes} мин":
+        "{hours} h {minutes} min",
+    "Начало маршрута поставлено. Конец - пункт «Маршрут сюда» меню на "
+    "глобусе.":
+        "The route start is set. The end is the Directions to here item of "
+        "the globe menu.",
+    "Конец маршрута поставлен. Начало - пункт «Маршрут отсюда» меню на "
+    "глобусе.":
+        "The route end is set. The start is the Directions from here item of "
+        "the globe menu.",
+    "Точки дальше {limit} км по прямой. Маршрут строится по дорогам района, "
+    "для дальних поездок он не подходит.":
+        "The points are more than {limit} km apart in a straight line. The "
+        "route follows the roads of the area and does not suit long trips.",
+    "Маршрут: адрес дорог векторной основы…":
+        "Route: address of the vector base roads…",
+    "Маршрут не построен: нет адреса тайлов векторной основы. {error}":
+        "No route: the vector base has no tile address. {error}",
+    "Маршрут не построен: коридор между точками - {count} тайлов дорог, "
+    "предел {limit}.":
+        "No route: the corridor between the points is {count} road tiles, "
+        "the limit is {limit}.",
+    "Маршрут: тайлы дорог {done} из {total}":
+        "Route: road tiles {done} of {total}",
+    "Маршрут: расчёт…":
+        "Route: calculating…",
+    "Маршрут не найден: точки не связаны дорогами векторной основы или "
+    "дальше {reach} м от них.":
+        "No route found: the points are not linked by the vector base roads "
+        "or lie more than {reach} m from them.",
+    "Маршрут":
+        "Route",
+    "{name}: {summary}":
+        "{name}: {summary}",
+    "точка":
+        "point",
+    "{a} - {b}, {km} км, {time} {mode}":
+        "{a} - {b}, {km} km, {time} {mode}",
+    "Пешком":
+        "On foot",
+    "На машине":
+        "By car",
+    "Сбросить":
+        "Clear",
     "{value} сут": "{value} d",
     "Обновлять": "Refresh",
     "не обновлять": "no refresh",
@@ -2116,10 +2176,25 @@ EN = {
         "Moisture of the top centimetres of soil from SMAP per day, since "
         "2015. The series has missing days.",
     "Снежный покров": "Snow cover",
-    "Снег по снимкам MODIS Terra за сутки, с 2000 года. Под облаками "
-    "пропуски.":
-        "Snow from MODIS Terra imagery per day, since 2000. There are "
-        "gaps under clouds.",
+    "Снег по снимкам MODIS Terra за сутки, с 2000 года. Под облаками и в "
+    "полярную ночь пропуски, моря и озёра не раскрашиваются.":
+        "Snow from MODIS Terra imagery per day, since 2000. There are gaps "
+        "under clouds and in the polar night, seas and lakes are not "
+        "coloured.",
+    "Снег за 8 суток":
+        "Snow over 8 days",
+    "Снег и лёд на озёрах по снимкам MODIS Terra, сводка за 8 суток, с 2000 "
+    "года. Пропусков под облаками меньше, чем в суточном слое.":
+        "Snow and lake ice from MODIS Terra imagery, an 8-day summary, since "
+        "2000. There are fewer gaps under clouds than in the daily layer.",
+    "Масса снега":
+        "Snow mass",
+    "Запас снега в килограммах на квадратный метр по модели SMAP Level 4 за "
+    "сутки, с 2015 года, ячейка около 9 км. Это расчёт модели по данным "
+    "спутника, облака пропусков не дают.":
+        "Snow amount in kilograms per square metre from the SMAP Level 4 "
+        "model per day, since 2015, a cell of about 9 km. It is a model "
+        "calculation from satellite data, clouds leave no gaps.",
     "Морской лёд": "Sea ice",
     "Сплочённость морского льда по GHRSST MUR за сутки, с 2002 года.":
         "Sea ice concentration from GHRSST MUR per day, since 2002.",

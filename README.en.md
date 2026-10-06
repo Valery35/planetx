@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.42.1.
+A 3D globe inside QGIS. PlanetX version 0.43.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -64,7 +64,7 @@ and atmosphere, from space down to single streets.
   underground. The Permian deposits and Vegas Loop tunnels demos show
   the mode.
 - **NASA themes.** The Planet of Fire, Planet of Water, Gases and Land
-  and Life groups of the Layers section show 21 NASA GIBS rasters by
+  and Life groups of the Layers section show 23 NASA GIBS rasters by
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,
   vegetation, night lights. The time slider sets the day of a theme.
 - **Paleogeography.** The Paleogeography row shows land relief and sea
@@ -197,6 +197,10 @@ and atmosphere, from space down to single streets.
   follow it. The time slider runs at clock speeds up to a day per
   second, the line between day and night and the satellites move
   with it.
+- **Route.** Directions from here and Directions to here in the globe
+  menu build a path by OpenStreetMap roads by car or on foot. The path
+  with the length and travel time goes into My Places. The points lie
+  up to 50 km apart.
 - **Place properties.** Name, description, icon, colors, time,
   height above ground
   and extending to the ground. A path becomes a wall, a polygon a block.

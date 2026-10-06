@@ -318,8 +318,9 @@ the bottom of the Layers section hold NASA themes. A theme is a raster
 by days, months or years from the NASA GIBS service. The groups hold:
 - Planet of Fire - fire spots, smoke, aerosol optical depth, carbon
   monoxide and its emission.
-- Planet of Water - precipitation, soil moisture, snow, sea ice, water
-  vapour, chlorophyll, sea salinity and floods.
+- Planet of Water - precipitation, soil moisture, daily snow, snow over
+  8 days, snow mass, sea ice, water vapour, chlorophyll, sea salinity
+  and floods.
 - Gases - nitrogen dioxide, sulphur dioxide, methane, carbon dioxide
   and ozone.
 - Land and Life - vegetation, dust, night lights and land cover.
@@ -336,6 +337,13 @@ the last day of its series. The handle gives the nearest day of the
 series that is not later, missing days of the series are skipped. A new
 theme takes the same moment while the slider is open. Some series lag
 behind today by months, the tooltip of the theme says so. Themes exist only on the Earth.
+
+Daily snow from MODIS imagery shows only where the day had no clouds
+and was light. On 15 January 2026 over West Siberia clouds and the
+polar night hid snow on 78 % of the area. The 8-day summary is hidden
+on 40 %. Snow mass is a SMAP model calculation from satellite data,
+it has no gaps under clouds. The snow themes show land only. Lake ice
+is in the 8-day summary, sea ice is the Sea ice theme.
 
 The first row of the Planet of Fire is Fires, a radio button in the same
 choice as the themes: either the fires or one theme is on. The row shows
@@ -732,11 +740,42 @@ A right click on the globe opens a menu.
 | Properties… | Opens the properties of the placemark under the cursor |
 | Add placemark here | Opens the New placemark window with the point under the cursor |
 | Fly here | Flies to the point with the same altitude and tilt |
+| Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
+| Directions from here, Directions to here | The start and the end of a route, see Route |
+| Get info | The Identify window for the point under the cursor without the Identify features mode |
 | Copy coordinates | Latitude and longitude of the point to the clipboard |
+| Paste from clipboard | KML placemarks from the clipboard into My Places |
 
 The shape of a 3D path, a 3D polygon and a tour is not edited this way.
 A placemark with a saved measurement loses the measurement text after
 its shape is edited.
+
+### Route
+
+A route by roads is built between two points on the Earth. The
+Directions from here item of the globe menu sets the start,
+Directions to here sets the end. With a point placemark under the
+cursor the route takes its point and name. When both points are set,
+the route is built by itself and goes into My Places as a path named
+Route N. The camera flies to it. The length and the travel time stand
+under the search line. The On foot or By car link builds the route
+the other way, Clear removes the points.
+
+The roads come from the vector base, that is OpenStreetMap data in
+OpenFreeMap tiles. A car drives on roads from motorways to tracks,
+keeps one-way traffic and does not go on paths. A walker goes on all
+roads and paths except motorways, in both directions. The travel time
+follows the road class, from 90 km/h on a motorway to 15 km/h on a
+track, on foot 5 km/h. The data hold no traffic, speed limits or
+turn restrictions.
+
+The route points lie no more than 50 km apart in a straight line.
+Road tiles load in a strip along the straight line between the
+points, the line under the search shows the loading. Without a way
+in the strip the strip widens. A route from the centre of Perm to
+Motovilikha, 5 km, is built in 3 s together with loading. The ready
+path is an ordinary placemark, it has an elevation profile, a tour
+and a KML record.
 
 ### Saved view
 

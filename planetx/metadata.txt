@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.42.1
+version=0.43.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.42.1 A view straight down at a pole from thousands of
+changelog=0.43.0 Directions from here and Directions to here in the
+      globe menu build a route by OpenStreetMap roads by car or on
+      foot. The path goes into My Places with the length and travel
+      time, the line under the search builds it the other way. The
+      points lie up to 50 km apart. The globe menu also has Orbit
+      around, Get info and Paste from clipboard. The Planet of Water
+      group has the Snow over 8 days and Snow mass themes with fewer
+      gaps under clouds and in the polar night than daily snow.
+      0.42.1 A view straight down at a pole from thousands of
       kilometres no longer brings a Python error window. It also
       happened with the camera following a polar satellite.
       0.42.0 The Satellites row of the Layers section shows

@@ -138,6 +138,32 @@ class Flight:
         return pose
 
 
+SPIN_RATE = 6.0  # градусов азимута в секунду, оборот за минуту
+SPIN_TILT = 45.0  # наклон при вращении, если вид был отвесным
+
+
+class Spin:
+    """Вращение вокруг точки: перелёт к ней с прежним расстоянием, потом
+    азимут растёт на SPIN_RATE в секунду. Конца нет, вращение гасит
+    любое движение мыши или клавиш, как перелёт. Пункт «Вращаться
+    вокруг» меню на глобусе, как в Google Earth."""
+
+    duration = math.inf
+
+    def __init__(self, start, lat, lon, fov_y=45.0):
+        tilt = start.tilt if start.tilt > 5.0 else SPIN_TILT
+        self.flight = Flight(start, lat, lon, start.distance, start.heading,
+                             tilt, fov_y)
+
+    def pose_at(self, t):
+        if t < self.flight.duration:
+            return self.flight.pose_at(t)
+        pose = self.flight.end.copy()
+        pose.heading = (pose.heading + SPIN_RATE
+                        * (t - self.flight.duration)) % 360.0
+        return pose
+
+
 FIT_MARGIN = 1.2  # запас вокруг охвата при перелёте к слою
 MIN_FIT_DISTANCE = 300.0  # метров, ближе к точечному слою не подлетаем
 M_PER_DEGREE = 111320.0
