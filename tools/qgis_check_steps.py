@@ -1796,6 +1796,79 @@ def record_check():
     window.toolbar.set_time_shown(False)
 
 
+VIDEO_PATH = os.path.join(TEMP, "planetx_tour.mp4")
+HIRES_DIR = os.path.join(TEMP, "planetx_record_hires")
+
+
+def _record_mode(target, mode, size=(0, 0)):
+    """Тур из двух остановок без трека: видео MP4 или кадры размера
+    size."""
+    import shutil
+    import time as _time
+    from planetx.core.tour import Stop
+    window = state["window"]
+    if mode == "video":
+        if os.path.exists(target):
+            os.remove(target)
+    else:
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        os.makedirs(target)
+    state["record_done"] = None
+    if "record_link" not in state:
+        state["record_link"] = window.recorder.done.connect(
+            lambda ok, text: state.__setitem__("record_done", (ok, text)))
+    window.tour.bar.pause.setValue(0.4)
+    window.tour.start([Stop("A", 58.00, 56.02, 9000.0, 10.0, 40.0),
+                       Stop("B", 58.03, 56.06, 7000.0, 40.0, 50.0)])
+    state["record_started"] = _time.monotonic()
+    state["record_began"] = window.record_tour(target, mode, size)
+
+
+@check(500)
+def record_video():
+    _record_mode(VIDEO_PATH, "video")
+
+
+@check(500)
+def record_video_wait():
+    return _record_wait("video")
+
+
+@check(500)
+def record_hires():
+    _record_mode(HIRES_DIR, "frames", (1920, 1080))
+
+
+@check(500)
+def record_hires_wait():
+    return _record_wait("hires")
+
+
+@check(200)
+def record_modes_check():
+    from qgis.PyQt.QtGui import QImage
+    window = state["window"]
+    out = result["record"]
+    with open(VIDEO_PATH, "rb") as fh:
+        head = fh.read(12)
+    out["video_file"] = {"bytes": os.path.getsize(VIDEO_PATH),
+                         "ftyp": head[4:8] == b"ftyp",
+                         "window": [window.view.width(),
+                                    window.view.height()],
+                         "ratio": window.view.devicePixelRatioF()}
+    with open(os.path.join(HIRES_DIR, "frames.json"),
+              encoding="utf-8") as fh:
+        data = json.load(fh)
+    pngs = sorted(n for n in os.listdir(HIRES_DIR) if n.endswith(".png"))
+    image = QImage(os.path.join(HIRES_DIR, pngs[0]))
+    out["hires"] = {"count": data["count"], "png": len(pngs),
+                    "size": [data["width"], data["height"]],
+                    "png_size": [image.width(), image.height()],
+                    "incomplete": len(data["incomplete"])}
+    out["gl"] = dict(window.view.gl_errors)
+
+
 @check(500)
 def place_names():
     # Названия новых меток с номером по виду и значки строк списка.
@@ -6310,6 +6383,63 @@ def route_spin_check():
             window.myplaces.remove(p.key)
     window.route_manager.clear()
     result["route"]["gl"] = dict(window.view.gl_errors)
+
+
+@check(500)
+def menu_actions():
+    """Меню на глобусе после причёсывания терминов: координаты первой
+    строкой, «Что здесь?» с адресом Nominatim, «Измерить расстояние»,
+    «Скопировать ссылку на место». Один живой запрос к Nominatim."""
+    from qgis.PyQt.QtWidgets import QApplication, QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(ROUTE_A[0], ROUTE_A[1], 3000.0, 0.0, 0.0))
+    view.grabFramebuffer()
+    ratio = view.devicePixelRatioF()
+    px, py = view.width() * ratio / 2.0, view.height() * ratio / 2.0
+    before = set(window.findChildren(QMenu))
+    globemenu.show(window, px, py)
+    menus = [m for m in window.findChildren(QMenu) if m not in before]
+    actions = {a.text(): a for m in menus for a in m.actions() if a.text()}
+    out = result.setdefault("menu_actions", {})
+    out["items"] = list(actions)
+    first = [a for m in menus for a in m.actions()][0]
+    first.trigger()
+    out["coords_copied"] = QApplication.clipboard().text() == first.text()
+    actions["Скопировать ссылку на место"].trigger()
+    out["link"] = QApplication.clipboard().text()
+    actions["Измерить расстояние"].trigger()
+    out["ruler"] = {"open": window._ruler_open(),
+                    "points": len(window.ruler.points)}
+    window.ruler_dialog.close()
+    actions["Что здесь?"].trigger()
+    out["identified"] = window.identified is not None \
+        and window.identified.isVisible()
+    for menu in menus:
+        menu.close()
+    state["what_at"] = window._identify_at[:2]
+
+
+@check(500)
+def menu_actions_check():
+    import time as _time
+    window = state["window"]
+    out = result["menu_actions"]
+    start = _time.monotonic()
+    lat, lon = state.pop("what_at")
+    while window._address_value(lat, lon) == "загружается" \
+            and _time.monotonic() - start < 15.0:
+        QgsApplication.processEvents()
+        _time.sleep(0.05)
+    out["address"] = window._address_value(lat, lon)
+    groups = window._identify_site(lat, lon, None)
+    out["site_rows"] = [row[0] for row in groups[0][1][0][1]] \
+        if groups else []
+    window.identified.close()
 
 
 def ecef_to_geodetic_point(point):

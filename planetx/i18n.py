@@ -228,16 +228,90 @@ EN = {
     "{value} км/с": "{value} km/s",
     "Возраст элементов": "Elements age",
     "Орбита и след": "Orbit and ground track",
-    "Маршрут отсюда":
-        "Directions from here",
-    "Маршрут сюда":
-        "Directions to here",
-    "Вращаться вокруг":
+    "1920 × 1080 (Full HD)":
+        "1920 × 1080 (Full HD)",
+    "2560 × 1440":
+        "2560 × 1440",
+    "3840 × 2160 (4K)":
+        "3840 × 2160 (4K)",
+    "Видео MP4 в размере окна":
+        "MP4 video at the window size",
+    "Видео не дописано: {error}":
+        "The video is not finished: {error}",
+    "Видео не начато: {error}":
+        "The video did not start: {error}",
+    "Видео прервано: {error}":
+        "The video stopped: {error}",
+    "Видео сразу пишется только в Windows.":
+        "A video is written directly only on Windows.",
+    "Видео тура записано в {path}. Кадров {count}, {fps} в секунду.":
+        "The tour video is written to {path}. {count} frames, {fps} per "
+        "second.",
+    "Готовый ролик H.264, 25 кадров в секунду. Кодирует Windows, сторонние "
+    "программы не нужны. Каждый кадр ждёт загрузки, поэтому запись идёт "
+    "дольше тура.":
+        "A ready H.264 clip, 25 frames per second. Windows encodes it, no "
+        "other programs are needed. Each frame waits for loading, so "
+        "recording takes longer than the tour.",
+    "Запись тура":
+        "Tour recording",
+    "Кадр видео не того формата.":
+        "The video frame has a wrong format.",
+    "Кадры PNG в папку":
+        "PNG frames to a folder",
+    "Кадры без потери качества в выбранном размере и файл frames.json с "
+    "позами камеры. Из кадров ролик собирают программой монтажа или ffmpeg, "
+    "см. руководство.":
+        "Frames without quality loss at the chosen size and a frames.json "
+        "file with camera poses. A clip is assembled from the frames by an "
+        "editing program or ffmpeg, see the manual.",
+    "Как окно":
+        "As the window",
+    "Размер кадров PNG. Кадр крупнее окна рисуется заново в этом размере, "
+    "надписи и линии крупнее в той же доле.":
+        "The size of PNG frames. A frame larger than the window is drawn "
+        "anew at this size, labels and lines grow in the same proportion.",
+    "Записать тур, 25 кадров в секунду тура: сразу видео MP4 в размере окна "
+    "или кадры PNG в папку в выбранном размере. Каждый кадр ждёт загрузки "
+    "тайлов, поэтому запись идёт дольше тура.":
+        "Record the tour, 25 frames per second of the tour: an MP4 video at "
+        "the window size right away or PNG frames to a folder at the chosen "
+        "size. Each frame waits for tiles to load, so recording takes longer "
+        "than the tour.",
+    "Видео MP4 (*.mp4)":
+        "MP4 video (*.mp4)",
+    "Видео тура":
+        "Tour video",
+    "Измерить расстояние":
+        "Measure distance",
+    "Облететь вокруг":
         "Orbit around",
-    "Получить сведения":
-        "Get info",
-    "Вставить из буфера обмена":
-        "Paste from clipboard",
+    "Подлететь сюда":
+        "Fly here",
+    "Проложить маршрут отсюда":
+        "Directions from here",
+    "Проложить маршрут сюда":
+        "Directions to here",
+    "Скопировать координаты в буфер обмена.":
+        "Copy the coordinates to the clipboard.",
+    "Скопировать ссылку на место":
+        "Copy link to place",
+    "Что здесь?":
+        "What's here?",
+    "Конец маршрута поставлен. Начало - пункт «Проложить маршрут отсюда» "
+    "меню на глобусе.":
+        "The route end is set. The start is the Directions from here item of "
+        "the globe menu.",
+    "Начало маршрута поставлено. Конец - пункт «Проложить маршрут сюда» меню "
+    "на глобусе.":
+        "The route start is set. The end is the Directions to here item of "
+        "the globe menu.",
+    "Ссылка на место скопирована.":
+        "The link to the place is copied.",
+    "не получен: {error}":
+        "not received: {error}",
+    "нет":
+        "none",
     "на машине":
         "by car",
     "пешком":
@@ -246,14 +320,6 @@ EN = {
         "{value} min",
     "{hours} ч {minutes} мин":
         "{hours} h {minutes} min",
-    "Начало маршрута поставлено. Конец - пункт «Маршрут сюда» меню на "
-    "глобусе.":
-        "The route start is set. The end is the Directions to here item of "
-        "the globe menu.",
-    "Конец маршрута поставлен. Начало - пункт «Маршрут отсюда» меню на "
-    "глобусе.":
-        "The route end is set. The start is the Directions from here item of "
-        "the globe menu.",
     "Точки дальше {limit} км по прямой. Маршрут строится по дорогам района, "
     "для дальних поездок он не подходит.":
         "The points are more than {limit} km apart in a straight line. The "
@@ -1104,13 +1170,6 @@ EN = {
     "встаёт в эту точку, тур идёт дальше с неё.":
         "How much of the tour has passed. The slider winds the tour. The "
         "camera moves to that point at once, and the tour goes on from it.",
-    "Записать тур кадрами PNG, 25 кадров в секунду тура, в размере "
-    "окна. Каждый кадр ждёт загрузки тайлов, поэтому запись идёт "
-    "дольше тура. Кадры с теми же номерами в папке заменяются.":
-        "Record the tour as PNG frames, 25 frames per second of the tour, "
-        "at the window size. Each frame waits for tiles to load, so "
-        "recording takes longer than the tour. Frames with the same "
-        "numbers in the folder are replaced.",
     "Запись: кадр {n} из {count}": "Recording: frame {n} of {count}",
     "Тур по кругу. После последней остановки тур начинается "
     "с первой. Остановить его - пауза или крестик.":
@@ -2288,8 +2347,6 @@ EN = {
     "Продолжить рисование": "Continue drawing",
     "Завершить рисование": "Finish drawing",
     "Добавить метку здесь": "Add placemark here",
-    "Переместиться сюда": "Fly here",
-    "Скопировать координаты": "Copy coordinates",
     "Щелчок по глобусу ставит метку. Метка перетаскивается мышью.":
         "A click on the globe sets the placemark. The placemark can be "
         "dragged with the mouse.",

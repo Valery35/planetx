@@ -72,5 +72,38 @@ class TestParse(unittest.TestCase):
                          ("A", "B", None))
 
 
+class TestReverseAndLink(unittest.TestCase):
+
+    def test_reverse_url(self):
+        url = gc.reverse_url(58.0105, 56.2294, "ru")
+        query = parse_qs(urlsplit(url).query)
+        self.assertTrue(url.startswith(gc.REVERSE))
+        self.assertEqual(query["lat"], ["58.010500"])
+        self.assertEqual(query["lon"], ["56.229400"])
+        self.assertEqual(query["accept-language"], ["ru"])
+        self.assertEqual(query["format"], ["jsonv2"])
+
+    def test_parse_reverse(self):
+        self.assertEqual(gc.parse_reverse(
+            {"display_name": "Эспланада, Пермь, Россия"}),
+            "Эспланада, Пермь, Россия")
+        self.assertEqual(gc.parse_reverse({"error": "Unable to geocode"}),
+                         "")
+        self.assertEqual(gc.parse_reverse([]), "")
+
+    def test_osm_link_zoom_follows_view(self):
+        # Полоса 1 км на экваторе в окне 1000 пикселей - метр на пиксель,
+        # уровень 17. Полоса 1000 км - уровень 7.
+        self.assertEqual(gc.link_zoom(0.0, 1000.0), 17)
+        self.assertEqual(gc.link_zoom(0.0, 1e6), 7)
+        self.assertEqual(gc.link_zoom(0.0, 1e9), 1)
+        self.assertEqual(gc.link_zoom(0.0, 0.1), 19)
+        link = gc.osm_link(58.0105, 56.2294, 3000.0)
+        self.assertTrue(link.startswith(
+            "https://www.openstreetmap.org/?mlat=58.010500&mlon=56.229400"
+            "#map="))
+        self.assertTrue(link.endswith("/58.01050/56.22940"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -17,6 +17,7 @@ from ..core import editing
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import has_alts
 from ..i18n import tr
+from .identify import point_text
 from ..qt_compat import enum
 
 HIT_PIXELS = 8.0  # логических пикселей до линии или контура
@@ -71,6 +72,17 @@ def show(window, px, py):
     drawer = window.drawer
     drawing = window._place_open() and bool(drawer.points)
     place = None
+    ground = window._ground(px, py)
+    if ground is not None:
+        # Координаты - первой строкой, щелчок копирует их в формате
+        # строки состояния. Просьба автора от 6 октября 2026 года.
+        text = point_text(ground[0], ground[1], fmt=window.coords)
+        copy = menu.addAction(text)
+        copy.setToolTip(tr("Скопировать координаты в буфер обмена."))
+        copy.triggered.connect(
+            lambda *a: QApplication.clipboard().setText(text))
+        menu.setToolTipsVisible(True)
+        menu.addSeparator()
     if drawing:
         found = window.draw_vertices.under(px, py)
         if found is not None and found[0] == editing.VERTEX:
@@ -96,30 +108,32 @@ def show(window, px, py):
             menu.addAction(tr("Свойства…")).triggered.connect(
                 lambda *a, p=place: window._open_place_properties(p))
         satellite_items(window, menu, px, py)
-    ground = window._ground(px, py)
     if ground is not None:
         lat, lon = ground
-        if not menu.isEmpty():
+        if not menu.actions()[-1].isSeparator():
             menu.addSeparator()
         if not drawing:
             menu.addAction(tr("Добавить метку здесь")).triggered.connect(
                 lambda *a: window.add_place_here(lat, lon))
             menu.addSeparator()
-        menu.addAction(tr("Переместиться сюда")).triggered.connect(
+        menu.addAction(tr("Подлететь сюда")).triggered.connect(
             lambda *a: fly_here(view, lat, lon))
-        menu.addAction(tr("Вращаться вокруг")).triggered.connect(
+        menu.addAction(tr("Облететь вокруг")).triggered.connect(
             lambda *a: window.spin_here(lat, lon))
         if not drawing and window.planet.earth:
             route_items(window, menu, place, lat, lon)
         menu.addSeparator()
         if not drawing and window.planet.earth:
-            menu.addAction(tr("Получить сведения")).triggered.connect(
-                lambda *a: window.identify_here(px, py))
-        menu.addAction(tr("Скопировать координаты")).triggered.connect(
-            lambda *a: QApplication.clipboard().setText(
-                "{:.6f}, {:.6f}".format(lat, lon)))
+            menu.addAction(tr("Что здесь?")).triggered.connect(
+                lambda *a: window.what_here(px, py))
         if not drawing:
-            menu.addAction(tr("Вставить из буфера обмена")).triggered.connect(
+            menu.addAction(tr("Измерить расстояние")).triggered.connect(
+                lambda *a: window.measure_from(lat, lon))
+        if window.planet.earth:
+            menu.addAction(tr("Скопировать ссылку на место")) \
+                .triggered.connect(lambda *a: window.copy_link(lat, lon))
+        if not drawing:
+            menu.addAction(tr("Вставить")).triggered.connect(
                 lambda *a: window.paste_places(window.panel.current_folder()))
     if menu.isEmpty():
         menu.deleteLater()
@@ -128,16 +142,16 @@ def show(window, px, py):
 
 
 def route_items(window, menu, place, lat, lon):
-    """«Маршрут отсюда» и «Маршрут сюда». Точечная метка под курсором
+    """«Проложить маршрут отсюда» и «сюда». Точечная метка под курсором
     даёт маршруту свою точку и название, иначе - точка поверхности."""
     name = ""
     if place is not None and place.kind == "point" and place.shape.points:
         lat, lon = place.shape.points[0]
         name = place.name
     menu.addSeparator()
-    menu.addAction(tr("Маршрут отсюда")).triggered.connect(
+    menu.addAction(tr("Проложить маршрут отсюда")).triggered.connect(
         lambda *a: window.route_point(lat, lon, name, end=False))
-    menu.addAction(tr("Маршрут сюда")).triggered.connect(
+    menu.addAction(tr("Проложить маршрут сюда")).triggered.connect(
         lambda *a: window.route_point(lat, lon, name, end=True))
 
 

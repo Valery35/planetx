@@ -735,6 +735,7 @@ A right click on the globe opens a menu.
 
 | Item | What it does |
 |---|---|
+| Point coordinates, the first line | A click copies them to the clipboard in the format of the status line |
 | Delete vertex | Removes the vertex of the drawn object under the cursor |
 | Finish drawing, Continue drawing | Stops and resumes adding points with clicks |
 | Properties… | Opens the properties of the placemark under the cursor |
@@ -742,9 +743,10 @@ A right click on the globe opens a menu.
 | Fly here | Flies to the point with the same altitude and tilt |
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Directions from here, Directions to here | The start and the end of a route, see Route |
-| Get info | The Identify window for the point under the cursor without the Identify features mode |
-| Copy coordinates | Latitude and longitude of the point to the clipboard |
-| Paste from clipboard | KML placemarks from the clipboard into My Places |
+| What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
+| Measure distance | Opens the Ruler with its first point here |
+| Copy link to place | A link to the point on the OpenStreetMap map to the clipboard, the scale follows the view. Any browser opens the link |
+| Paste | KML placemarks from the clipboard into My Places |
 
 The shape of a 3D path, a 3D polygon and a tour is not edited this way.
 A placemark with a saved measurement loses the measurement text after
@@ -1232,7 +1234,7 @@ The tour bar appears at the bottom of the view:
 | ⏸, ▶ | Pause and continue |
 | Pause | How many seconds the camera stays at a stop |
 | 🔁 | Loops the tour. After the last stop the tour starts again from the first. The button state is kept between sessions |
-| ⏺ | Records the tour as PNG frames |
+| ⏺ | Records the tour to an MP4 video or PNG frames |
 | ⏹ | Ends the tour |
 
 Moving the camera with the mouse pauses the tour.
@@ -1247,33 +1249,44 @@ icon and is not drawn on the globe.
 
 Play tour in the menu of such a tour plays the recording. The camera
 first flies to the start of the recording. The slider of the tour bar
-and recording to PNG frames work as for a tour over places. In KML a
+and tour recording work as for a tour over places. In KML a
 recorded tour is saved as `gx:Tour`, and Google Earth plays it.
 
 ### Recording a tour for a video
 
-The ⏺ button asks for a folder and records the tour into it as PNG
-frames, 25 frames per second of the tour. The frame size equals the
-window size. The source credits stand in the corner of each frame. The
-files are named `frame_00000.png`, `frame_00001.png` and on, frames
-with the same numbers in the folder are replaced.
+The ⏺ button opens the Tour recording window with two modes. Both
+write 25 frames per second of the tour, the source credits stand in
+the corner of each frame.
+
+- MP4 video at the window size is the quick mode. The window asks for
+  a file name, at the end of recording an H.264 clip is ready.
+  Windows itself encodes it, no other programs are needed. The mode
+  exists only on Windows. A tour of two stops, 71 frames of 2592 ×
+  1860, is written in about 45 s and takes 10 MB.
+- PNG frames to a folder is the professional mode. The window asks
+  for a folder and a size: as the window, 1920 × 1080, 2560 × 1440 or
+  3840 × 2160. A frame larger than the window is drawn anew at this
+  size, labels and lines grow in the same proportion. The files are
+  named `frame_00000.png`, `frame_00001.png` and on, frames with the
+  same numbers in the folder are replaced.
 
 Each frame waits for the tiles, so recording takes longer than the tour
 and the frames have no blurred spots. A frame that waits longer than 20
 seconds is taken as it is. Recording always starts at the first stop, so
 a repeated recording gives the same frames.
 
-A file `frames.json` lies next to the frames - frame rate, size, camera
+A file `frames.json` lies next to the PNG frames - frame rate, size, camera
 pose and data time of each frame, numbers of frames that did not fully
 load.
 
 The bar shows the frame number. The cross on the bar stops the
-recording.
+recording. A stopped video stays a valid file of the frames already
+written.
 
 ### Making a video from the frames
 
-PlanetX writes frames, not a video file. Any program that opens an image
-sequence assembles a video from them.
+Any program that opens an image sequence assembles a video from the
+PNG frames.
 
 The free program ffmpeg (ffmpeg.org) makes an MP4 with one command in
 the folder with the frames:

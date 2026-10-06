@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.43.0.
+A 3D globe inside QGIS. PlanetX version 0.44.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -173,8 +173,8 @@ and atmosphere, from space down to single streets.
   flies over the checked places in the list order, along a path the
   camera travels the line. Places and folders are rearranged by
   dragging. The bar at the bottom of the view pauses the tour, steps
-  between stops, repeats the tour in a loop and records it as PNG
-  frames for a video. The record button records a tour from the
+  between stops and repeats the tour in a loop. It records the tour to
+  an MP4 video right away or as PNG frames of any size for editing. The record button records a tour from the
   screen.
 - **Placemark time.** A placemark can have a moment or an interval. The
   time slider opens with a button on the icon bar and hides placemarks

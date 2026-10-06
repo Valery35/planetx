@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.43.0
+version=0.44.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.43.0 Directions from here and Directions to here in the
+changelog=0.44.0 A tour records to an MP4 video at the window size
+      right away, Windows itself encodes it. PNG frame recording gets
+      a size choice up to 3840 x 2160. The globe menu shows the point
+      coordinates first, a click copies them. Its items are now Fly
+      here, Orbit around, Directions from here and to here, What's
+      here? with the place address, Measure distance, Copy link to
+      place with an OpenStreetMap link, and Paste.
+      0.43.0 Directions from here and Directions to here in the
       globe menu build a route by OpenStreetMap roads by car or on
       foot. The path goes into My Places with the length and travel
       time, the line under the search builds it the other way. The

@@ -35,8 +35,9 @@ from ..core import graticule, paleo, placetree
 from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, Spin, fit_view
-from ..core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
-                            place_text, search_url)
+from ..core.geocode import (SEARCH_INTERVAL, normalize, osm_link,
+                            parse_places, parse_reverse, place_text,
+                            reverse_url, search_url)
 from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
 from ..core.planets import EARTH_PLANET, PLANETS, planet_by_key
@@ -114,7 +115,7 @@ from .viewshed import ResultTiles, ViewshedDialog, display_level
 from .insolation import InsolationDialog
 from .subsurface import SubsurfaceManager, add_to_project, subsurface_ids
 from .subsection import ModelSectionDialog, build as model_section
-from .record import TourRecorder
+from .record import RecordDialog, TourRecorder
 from .placeprops import PlaceProperties
 from .scene import apply as apply_scene, capture as capture_scene
 from .snapshot import SnapshotDialog
@@ -710,6 +711,14 @@ class GlobeWindow(QWidget):
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._send_search)
+        # Адреса пункта «Что здесь?»: ответы по ключу (широта, долгота,
+        # язык), очередь - общая с поиском по SEARCH_INTERVAL.
+        self._addresses = {}
+        self._address_key = None
+        self._address_reply = None
+        self._address_timer = QTimer(self)
+        self._address_timer.setSingleShot(True)
+        self._address_timer.timeout.connect(self._send_address)
         # Подсказки строки «Поиск»: метки, прежние запросы, на небе
         # звёзды и созвездия (core/searchbar.py). Панель спрашивает их
         # при вводе. Объекты неба читаются из файла один раз.
@@ -3102,19 +3111,31 @@ class GlobeWindow(QWidget):
 
     # Сцена.
 
-    def record_tour(self, folder=None):
-        """Записать показанный тур кадрами PNG в папку. Без folder -
-        выбор папки. Возвращает True, если запись началась."""
+    def record_tour(self, folder=None, mode="frames", size=(0, 0)):
+        """Записать показанный тур: кадры PNG в папку folder или видео
+        MP4 в файл folder (mode «video»). Без folder - окно выбора
+        записи, потом папки или файла. Возвращает True, если запись
+        началась."""
         if self.recorder.active or not self.tour.stops:
             return False
         if folder is None:
-            folder = QFileDialog.getExistingDirectory(
-                self, tr("Папка для кадров тура"))
+            dialog = RecordDialog(self)
+            if not dialog.exec():
+                return False
+            mode, size = dialog.choice()
+            if mode == "video":
+                folder, _ = QFileDialog.getSaveFileName(
+                    self, tr("Видео тура"), "tour.mp4",
+                    tr("Видео MP4 (*.mp4)"))
+            else:
+                folder = QFileDialog.getExistingDirectory(
+                    self, tr("Папка для кадров тура"))
             if not folder:
                 return False
         self.tour.pause_for_record()
         return self.recorder.start(self.tour.stops,
-                                   self.tour.bar.pause.value(), folder)
+                                   self.tour.bar.pause.value(), folder,
+                                   mode, size)
 
     def _recorded(self, ok, text):
         self.message = (text, time.monotonic())
@@ -3327,6 +3348,74 @@ class GlobeWindow(QWidget):
             if place.key == key:
                 self.fly_to_place(place)
                 return
+
+    def what_here(self, px, py):
+        """«Что здесь?» меню на глобусе: окно «Объекты» и адрес места
+        от Nominatim обратным запросом. Запрос - только по этому пункту
+        и не чаще раза в SEARCH_INTERVAL, правила Nominatim."""
+        self.identify_here(px, py)
+        at = getattr(self, "_identify_at", None)
+        if at is None or not self.planet.earth:
+            return
+        key = (round(at[0], 6), round(at[1], 6), self._search_language())
+        self._address_key = key
+        if key in self._addresses:
+            self._show_identified()
+            return
+        self._address_timer.start(max(0, int(
+            (SEARCH_INTERVAL - (time.monotonic() - self._search_at))
+            * 1000)))
+        self._show_identified()
+
+    def _send_address(self):
+        key = getattr(self, "_address_key", None)
+        if key is None or key in self._addresses:
+            return
+        if self._search_reply is not None or \
+                self._address_reply is not None:
+            self._address_timer.start(int(SEARCH_INTERVAL * 1000))
+            return
+        self._search_at = time.monotonic()
+        self._address_reply = fetch_json(
+            reverse_url(*key),
+            lambda data, error, key=key: self._address_done(key, data,
+                                                            error))
+
+    def _address_done(self, key, data, error):
+        self._address_reply = None
+        if data is None:
+            self._addresses[key] = tr("не получен: {error}", error=error)
+        else:
+            self._addresses[key] = parse_reverse(data) or tr("нет")
+        if key == getattr(self, "_address_key", None):
+            self._show_identified()
+
+    def _address_value(self, lat, lon):
+        """Строка «Адрес» группы «Место» или None, если адрес не
+        просили для этой точки."""
+        key = getattr(self, "_address_key", None)
+        if key is None or (round(lat, 6), round(lon, 6)) != key[:2]:
+            return None
+        return self._addresses.get(key, tr("загружается"))
+
+    def measure_from(self, lat, lon):
+        """«Измерить расстояние» меню на глобусе: линейка с первой
+        точкой здесь."""
+        self._open_ruler()
+        self.ruler.clear()
+        self.ruler.add(lat, lon)
+        self._refresh_shapes()
+
+    def copy_link(self, lat, lon):
+        """Ссылка на точку на карте OpenStreetMap в буфер обмена. Масштаб
+        - по ширине видимой полосы."""
+        pose = self.view.navigator.pose
+        width = 2.0 * pose.distance * math.tan(
+            math.radians(self.view.camera.fov_y) / 2.0)
+        QApplication.clipboard().setText(osm_link(lat, lon, width))
+        self.message = (tr("Ссылка на место скопирована."),
+                        time.monotonic())
+        self._show_state()
 
     def spin_here(self, lat, lon):
         """«Вращаться вокруг» меню на глобусе."""
@@ -5401,6 +5490,9 @@ class GlobeWindow(QWidget):
         if not self.planet.earth:
             return []
         values = []
+        address = self._address_value(lat, lon)
+        if address is not None:
+            values.append((tr("Адрес"), address))
         if height is not None:
             kind, value = surface_level(height)
             values.append((tr("Глубина") if kind == "depth"
@@ -5605,6 +5697,10 @@ class GlobeWindow(QWidget):
             self._link_timer.stop()
             self.satellite_manager.close()
             self.route_manager.close()
+            self._address_timer.stop()
+            reply, self._address_reply = self._address_reply, None
+            if reply is not None:
+                reply.abort()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

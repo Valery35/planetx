@@ -8,6 +8,7 @@ Nominatim соблюдает окно: запрос только по Enter, н�
 в SEARCH_INTERVAL, заголовок PlanetX, ответы запоминаются.
 https://operations.osmfoundation.org/policies/nominatim/
 """
+import math
 from collections import namedtuple
 from urllib.parse import urlencode
 
@@ -74,6 +75,50 @@ def parse_places(data):
             parts = parts[1:]
         out.append(Place(name, ", ".join(parts), lat, lon, _box(item)))
     return out
+
+
+REVERSE = "https://nominatim.openstreetmap.org/reverse"
+REVERSE_ZOOM = 18  # подробность адреса Nominatim: 18 - здание
+
+
+def reverse_url(lat, lon, language=None, zoom=REVERSE_ZOOM):
+    """Адрес обратного запроса: что находится в точке. Пункт «Что
+    здесь?» меню на глобусе, просьба автора от 6 октября 2026 года."""
+    query = {"lat": "{:.6f}".format(lat), "lon": "{:.6f}".format(lon),
+             "format": "jsonv2", "zoom": str(zoom)}
+    if language:
+        query["accept-language"] = language
+    return REVERSE + "?" + urlencode(query)
+
+
+def parse_reverse(data):
+    """Адрес из ответа обратного запроса или "" - адреса нет (вода,
+    пустая местность отвечают полем error)."""
+    if not isinstance(data, dict) or data.get("error"):
+        return ""
+    return str(data.get("display_name") or "")
+
+
+OSM_LINK = "https://www.openstreetmap.org/?mlat={lat:.6f}&mlon={lon:.6f}" \
+    "#map={zoom}/{lat:.5f}/{lon:.5f}"
+# Метров на пиксель уровня 0 у экватора, тайл 256 пикселей.
+EQUATOR_METRES = 156543.03392
+LINK_PIXELS = 1000.0  # ширина окна браузера, по ней берётся масштаб
+
+
+def link_zoom(lat, width):
+    """Уровень масштаба карты OpenStreetMap, на котором в окне шириной
+    LINK_PIXELS видна полоса width метров на широте lat, от 1 до 19."""
+    per_pixel = max(width, 1.0) / LINK_PIXELS
+    zoom = math.log2(EQUATOR_METRES * math.cos(math.radians(lat))
+                     / per_pixel)
+    return int(min(max(round(zoom), 1), 19))
+
+
+def osm_link(lat, lon, width):
+    """Ссылка на точку на карте OpenStreetMap с меткой в ней. Её
+    открывает любой браузер, PlanetX для этого не нужен."""
+    return OSM_LINK.format(lat=lat, lon=lon, zoom=link_zoom(lat, width))
 
 
 def place_text(place):
