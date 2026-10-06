@@ -6443,6 +6443,51 @@ def menu_actions_check():
 
 
 @check(500)
+def sheets_menu():
+    """Пункт «Номенклатура листа» меню на глобусе: окно с номерами
+    листов у Перми, щелчок по строке копирует номер, вторая точка
+    (Нарвик) заменяет первую в том же окне."""
+    from qgis.PyQt.QtWidgets import QApplication, QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.01, 56.23, 3000.0, 0.0, 0.0))
+    view.grabFramebuffer()
+    ratio = view.devicePixelRatioF()
+    px, py = view.width() * ratio / 2.0, view.height() * ratio / 2.0
+    before = set(window.findChildren(QMenu))
+    globemenu.show(window, px, py)
+    menus = [m for m in window.findChildren(QMenu) if m not in before]
+    actions = {a.text(): a for m in menus for a in m.actions() if a.text()}
+    out = result.setdefault("sheets_menu", {})
+    out["item"] = "Номенклатура листа" in actions
+    out["submenu"] = [t for t in actions if "\t" in t]
+    [a for t, a in actions.items() if t.startswith("O-40-А\t")][0].trigger()
+    out["menu_copied"] = QApplication.clipboard().text()
+    actions["Все номера в окне…"].trigger()
+    for menu in menus:
+        menu.close()
+    dialog = window.sheets_dialog
+    table = dialog.table
+
+    def rows():
+        return [[table.item(r, c).text() for c in range(3)]
+                for r in range(table.rowCount())]
+    out["visible"] = dialog.isVisible()
+    out["perm"] = rows()
+    table.cellClicked.emit(3, 0)
+    out["copied"] = QApplication.clipboard().text()
+    out["status"] = dialog.status.text()
+    again = window.sheets_here(68.44, 17.43)
+    out["same_dialog"] = again is dialog
+    out["narvik"] = rows()
+    dialog.close()
+
+
+@check(500)
 def weather_open():
     """Поле температуры GFS на нынешний момент над Европой."""
     from planetx.core.navigation import Pose

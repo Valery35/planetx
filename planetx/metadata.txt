@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.45.0
+version=0.46.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.45.0 The Weather group of the Layers section shows air
+changelog=0.46.0 The Map sheet designation submenu of the globe
+      menu shows map sheet numbers at the point - the International
+      Map of the World 1:1,000,000, the Russian designation at
+      1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000
+      sheet and the MGRS 100 km square. A click copies the number.
+      0.45.0 The Weather group of the Layers section shows air
       temperature, precipitation, wind and clouds of the NOAA GFS
       model at the moment of the time slider, a forecast up to 16
       days ahead and the model analysis behind. The Weather here

@@ -13,11 +13,12 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QCursor
 from qgis.PyQt.QtWidgets import QApplication, QMenu
 
-from ..core import editing
+from ..core import editing, sheets
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import has_alts
 from ..i18n import tr
 from .identify import point_text
+from .sheets import scale_text, system_names
 from ..qt_compat import enum
 
 HIT_PIXELS = 8.0  # логических пикселей до линии или контура
@@ -128,6 +129,7 @@ def show(window, px, py):
                 lambda *a: window.what_here(px, py))
             menu.addAction(tr("Погода здесь")).triggered.connect(
                 lambda *a: window.weather_here(lat, lon))
+            sheet_items(window, menu, lat, lon)
         if not drawing:
             menu.addAction(tr("Измерить расстояние")).triggered.connect(
                 lambda *a: window.measure_from(lat, lon))
@@ -141,6 +143,28 @@ def show(window, px, py):
         menu.deleteLater()
         return
     menu.popup(QCursor.pos())
+
+
+def sheet_items(window, menu, lat, lon):
+    """Подменю «Номенклатура листа»: номер листа в каждой системе
+    разграфки, щелчок копирует номер. Последний пункт открывает окно
+    с теми же номерами."""
+    sub = menu.addMenu(tr("Номенклатура листа"))
+    mark = " ({})".format(tr("Ю. П."))
+    names = system_names()
+    for system, scale, number in sheets.sheets(lat, lon, south_mark=mark):
+        if not number:
+            continue
+        label = names[system]
+        if scale is not None:
+            label = "{}, {}".format(label, scale_text(scale))
+        action = sub.addAction("{}\t{}".format(number, label))
+        action.triggered.connect(
+            lambda *a, n=number: window.copy_sheet(n))
+    sub.addSeparator()
+    sub.addAction(tr("Все номера в окне…")).triggered.connect(
+        lambda *a: window.sheets_here(lat, lon))
+    return sub
 
 
 def route_items(window, menu, place, lat, lon):

@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.45.0.
+A 3D globe inside QGIS. PlanetX version 0.46.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -25,6 +25,10 @@ and atmosphere, from space down to single streets.
 - **Terrain.** Mountains and valleys are three-dimensional, slopes are
   shaded by light from the north-west. Vertical exaggeration is set in
   the view properties. The camera stays at least 50 m above the terrain.
+- **Map sheet designation.** The globe menu gives map sheet numbers
+  at the point. They are IMW 1:1,000,000, the Russian designation
+  down to 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS
+  square. Russian State Geological Map sheets use the same numbers.
 - **Atmosphere.** A blue glow surrounds the planet. From a low altitude
   the sky is visible at the horizon, and distant mountains fade into haze.
 - **Grid, stars, clouds.** A coordinate grid with labels, the equator,

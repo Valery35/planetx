@@ -122,6 +122,7 @@ from .scene import apply as apply_scene, capture as capture_scene
 from .snapshot import SnapshotDialog
 from .tour import TourPlayer
 from .routing import RouteManager
+from .sheets import SheetsDialog
 from .weather import (LEVEL as WEATHER_LEVEL, PointForecast,
                       WeatherManager, units_text as weather_units)
 from .satellites import SatelliteManager
@@ -3480,6 +3481,26 @@ class GlobeWindow(QWidget):
         if self.weather.error:
             self.message = (self.weather.error, time.monotonic())
             self._show_state()
+
+    def copy_sheet(self, number):
+        """Номер листа из подменю «Номенклатура листа» в буфер обмена."""
+        QApplication.clipboard().setText(number)
+        self.message = (tr("Скопировано: {number}", number=number),
+                        time.monotonic())
+        self._show_state()
+
+    def sheets_here(self, lat, lon):
+        """«Номенклатура листа» меню на глобусе: номера листов карт
+        в точке. Окно одно, новая точка заменяет прежнюю."""
+        dialog = getattr(self, "sheets_dialog", None)
+        if dialog is None:
+            dialog = SheetsDialog(self, self.coords)
+            self.sheets_dialog = dialog
+        dialog.coords = self.coords
+        dialog.show_point(lat, lon)
+        dialog.show()
+        dialog.raise_()
+        return dialog
 
     def weather_here(self, lat, lon):
         """«Погода здесь» меню на глобусе: прогноз MET Norway в точке."""

@@ -234,6 +234,37 @@ EN = {
         "mm/h",
     "Погода здесь":
         "Weather here",
+    "Номенклатура листа":
+        "Map sheet designation",
+    "Все номера в окне…":
+        "All numbers in a window…",
+    "Международная карта мира (IMW)":
+        "International Map of the World (IMW)",
+    "Российская номенклатура":
+        "Russian sheet designation",
+    "NATO, JOG":
+        "NATO, JOG",
+    "MGRS, квадрат 100 км":
+        "MGRS, 100 km square",
+    "Система":
+        "System",
+    "Масштаб":
+        "Scale",
+    "Номер листа":
+        "Sheet number",
+    "Щелчок по строке копирует номер листа в буфер обмена.":
+        "A click on a row copies the sheet number to the clipboard.",
+    "Щелчок по строке копирует номер листа. По российской номенклатуре "
+    "нумеруются и листы Госгеолкарты-1000 и 200.":
+        "A click on a row copies the sheet number. Sheets of the Russian "
+        "State Geological Map at 1:1,000,000 and 1:200,000 use the Russian "
+        "designation too.",
+    "Ю. П.":
+        "S. H.",
+    "нет листа":
+        "no sheet",
+    "Скопировано: {number}":
+        "Copied: {number}",
     "Погода":
         "Weather",
     "Температура, осадки, ветер и облачность по модели NOAA GFS. Прогноз - "
