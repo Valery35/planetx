@@ -70,8 +70,7 @@ and atmosphere, from space down to single streets.
 - **Weather.** The Weather group of the map gallery shows air
   temperature, precipitation, wind and clouds of the NOAA GFS model
   at the moment of the time slider. It covers a forecast up to 16
-  days and the past. The Weather here item of the globe menu gives the MET Norway
-  forecast at the point.
+  days and the past.
 - **NASA themes.** The Planet of Fire, Planet of Water, Planet of Air and Land
   and Life groups of the map gallery show 23 NASA GIBS rasters by
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,
