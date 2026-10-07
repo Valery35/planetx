@@ -127,8 +127,6 @@ def show(window, px, py):
         if not drawing and window.planet.earth:
             menu.addAction(tr("Что здесь?")).triggered.connect(
                 lambda *a: window.what_here(px, py))
-            menu.addAction(tr("Погода здесь")).triggered.connect(
-                lambda *a: window.weather_here(lat, lon))
             sheet_items(window, menu, lat, lon)
         if not drawing:
             menu.addAction(tr("Измерить расстояние")).triggered.connect(

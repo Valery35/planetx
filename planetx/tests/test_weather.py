@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Тесты core/weather.py: часы и выпуски GFS, индекс, поле, MET."""
+"""Тесты core/weather.py: часы и выпуски GFS, индекс, поле."""
 import calendar
 import datetime
 import os
@@ -129,58 +129,3 @@ class TestGrid(unittest.TestCase):
         self.assertEqual(scale["units"], "°C")
         self.assertEqual(scale["labels"][0], (0.0, "-40"))
         self.assertEqual(scale["labels"][-1], (1.0, "40"))
-
-
-MET = {"properties": {"timeseries": [
-    {"time": "2026-10-06T18:00:00Z", "data": {
-        "instant": {"details": {"air_temperature": 4.1, "wind_speed": 3.2,
-                                "wind_from_direction": 250.0,
-                                "cloud_area_fraction": 90.0,
-                                "relative_humidity": 81.0}},
-        "next_1_hours": {"summary": {"symbol_code": "lightrain_night"},
-                         "details": {"precipitation_amount": 0.4}}}},
-    {"time": "2026-10-06T19:00:00Z", "data": {
-        "instant": {"details": {"air_temperature": 3.0, "wind_speed": 5.0}},
-        "next_1_hours": {"summary": {"symbol_code": "cloudy"},
-                         "details": {"precipitation_amount": 0.0}}}},
-    {"time": "2026-10-07T00:00:00Z", "data": {
-        "instant": {"details": {"air_temperature": 1.5, "wind_speed": 2.0}},
-        "next_6_hours": {"summary": {"symbol_code": "fair_day"},
-                         "details": {"precipitation_amount": 1.2}}}},
-    {"time": "bad", "data": {}}]}}
-
-
-class TestMet(unittest.TestCase):
-
-    def test_url_rounds_to_four_digits(self):
-        self.assertTrue(w.met_url(58.0105123, 56.2294987).endswith(
-            "lat=58.0105&lon=56.2295"))
-
-    def test_parse_and_daily(self):
-        rows = w.parse_met(MET)
-        self.assertEqual(len(rows), 3)
-        first = rows[0]
-        self.assertEqual(first.time, utc(2026, 10, 6, 18))
-        self.assertEqual(first.temperature, 4.1)
-        self.assertEqual(first.precipitation, 0.4)
-        self.assertEqual(first.symbol, "lightrain_night")
-        self.assertEqual(w.symbol_base(first.symbol), "lightrain")
-        self.assertEqual(rows[2].precipitation, 1.2)
-        self.assertEqual(w.parse_met({}), [])
-        # Пермь, UTC+5: 18 UTC 6 октября - 23:00 того же дня, 19 UTC -
-        # уже 7 октября.
-        days = w.daily(rows, 5 * 3600.0)
-        self.assertEqual(len(days), 2)
-        self.assertEqual(days[0][1:3], (4.1, 4.1))
-        day, low, high, rain, wind = days[1]
-        self.assertEqual(day, utc(2026, 10, 6, 19))
-        self.assertEqual((low, high), (1.5, 3.0))
-        self.assertAlmostEqual(rain, 1.2)
-        self.assertEqual(wind, 5.0)
-        # По UTC: 18 и 19 часов - 6 октября, полночь - 7 октября.
-        days = w.daily(rows, 0.0)
-        self.assertEqual([round(d[3], 1) for d in days], [0.4, 1.2])
-
-
-if __name__ == "__main__":
-    unittest.main()

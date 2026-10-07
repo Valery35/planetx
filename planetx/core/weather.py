@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Погода: прогноз модели NOAA GFS полями и прогноз MET Norway в точке.
+"""Погода: прогноз модели NOAA GFS полями.
 
 Просьба автора от 6 октября 2026 года - температура и прогноз погоды.
 В NASA GIBS прогнозов нет. Поля - модель GFS 0.25° из открытых данных
@@ -17,14 +17,10 @@ public and can be used as desired», NOAA просит указывать ист
 шкалы до выпуска берётся из прежнего выпуска, архив на AWS хранится
 годами.
 
-Прогноз в точке - Locationforecast 2.0 MET Norway (api.met.no), CC BY
-4.0. Условия сверены 6 октября 2026 года: заголовок с названием
-приложения и контактом, координаты не точнее 4 знаков, ответы
-кэшируются по заголовкам.
+Прогноз MET Norway в точке убран 8 октября 2026 года, см. AGENTS.md.
 
 Модуль Qt не знает.
 """
-import calendar
 import datetime
 import math
 from collections import namedtuple
@@ -47,9 +43,6 @@ LAST = 384  # последний час прогноза
 OPACITY = 0.7  # непрозрачность раскраски поля
 
 ATTRIBUTION = ("NOAA GFS", "https://registry.opendata.aws/noaa-gfs-bdp-pds/")
-MET_ATTRIBUTION = ("MET Norway, CC BY 4.0", "https://api.met.no/")
-MET_URL = ("https://api.met.no/weatherapi/locationforecast/2.0/compact"
-           "?lat={lat:.4f}&lon={lon:.4f}")
 
 
 class Field:
@@ -266,78 +259,3 @@ def valid_text(run, hour):
     """Срок поля: момент UTC, на который дан прогноз."""
     return datetime.datetime.fromtimestamp(
         run + hour * 3600, datetime.timezone.utc).strftime("%Y-%m-%d %H:00")
-
-
-# Прогноз в точке MET Norway.
-
-Forecast = namedtuple("Forecast", "time temperature precipitation wind "
-                                  "direction clouds humidity symbol")
-Forecast.__doc__ = """Строка прогноза в точке: время (секунды UTC),
-температура °C, осадки мм за следующий час или 6 часов, ветер м/с,
-откуда дует (градусы), облачность %, влажность %, код погоды MET
-(например «partlycloudy_day»)."""
-
-
-def met_url(lat, lon):
-    """Адрес прогноза в точке, координаты не точнее 4 знаков - условие
-    MET Norway."""
-    return MET_URL.format(lat=round(lat, 4), lon=round(lon, 4))
-
-
-def _seconds(text):
-    stamp = datetime.datetime.strptime(str(text)[:19], "%Y-%m-%dT%H:%M:%S")
-    return float(calendar.timegm(stamp.timetuple()))
-
-
-def parse_met(data):
-    """Строки Forecast из ответа Locationforecast 2.0 в формате JSON.
-    Пустой список - ответ без ряда."""
-    try:
-        series = data["properties"]["timeseries"]
-    except (KeyError, TypeError):
-        return []
-    rows = [_met_row(item) for item in series]
-    return [row for row in rows if row is not None]
-
-
-def _met_row(item):
-    """Строка Forecast из элемента ряда или None, если он неполный."""
-    try:
-        details = item["data"]["instant"]["details"]
-        moment = _seconds(item["time"])
-    except (KeyError, TypeError, ValueError):
-        return None
-    nxt = item["data"].get("next_1_hours") or \
-        item["data"].get("next_6_hours") or {}
-    return Forecast(
-        moment, details.get("air_temperature"),
-        (nxt.get("details") or {}).get("precipitation_amount"),
-        details.get("wind_speed"), details.get("wind_from_direction"),
-        details.get("cloud_area_fraction"),
-        details.get("relative_humidity"),
-        (nxt.get("summary") or {}).get("symbol_code", ""))
-
-
-def symbol_base(code):
-    """Код погоды без части суток: «rain_day» - «rain»."""
-    return str(code or "").split("_")[0]
-
-
-def daily(rows, offset=0.0):
-    """Сводка по суткам местного времени (offset - секунды от UTC):
-    список (полночь суток, мин и макс температуры, осадки мм, наибольший
-    ветер м/с). Осадки - сумма часовых, где они есть."""
-    days = {}
-    for row in rows:
-        local = row.time + offset
-        day = math.floor(local / 86400.0) * 86400.0 - offset
-        entry = days.setdefault(day, [math.inf, -math.inf, 0.0, 0.0])
-        if row.temperature is not None:
-            entry[0] = min(entry[0], row.temperature)
-            entry[1] = max(entry[1], row.temperature)
-        if row.precipitation is not None:
-            entry[2] += row.precipitation
-        if row.wind is not None:
-            entry[3] = max(entry[3], row.wind)
-    return [(day,) + tuple(values) for day, values in sorted(days.items())
-            if math.isfinite(values[0])]

@@ -124,7 +124,7 @@ from .tour import TourPlayer
 from .routing import RouteManager
 from .sheets import SheetsDialog
 from .nasamaps import NasaMaps, map_names
-from .weather import (LEVEL as WEATHER_LEVEL, PointForecast,
+from .weather import (LEVEL as WEATHER_LEVEL,
                       WeatherManager, units_text as weather_units)
 from .satellites import SatelliteManager
 from ..core import satellites as satellites_core
@@ -953,7 +953,6 @@ class GlobeWindow(QWidget):
         # в точке.
         self.weather = WeatherManager(self)
         self.weather.changed.connect(self._weather_changed)
-        self.forecasts = []
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
@@ -3623,17 +3622,6 @@ class GlobeWindow(QWidget):
         dialog.show_point(lat, lon)
         dialog.show()
         dialog.raise_()
-        return dialog
-
-    def weather_here(self, lat, lon):
-        """«Погода здесь» меню на глобусе: прогноз MET Norway в точке."""
-        dialog = PointForecast(self, lat, lon)
-        dialog.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
-        dialog.destroyed.connect(
-            lambda *a, d=dialog: self.forecasts.remove(d)
-            if d in self.forecasts else None)
-        self.forecasts.append(dialog)
-        dialog.show()
         return dialog
 
     def spin_here(self, lat, lon):

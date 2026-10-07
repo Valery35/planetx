@@ -6889,25 +6889,7 @@ def weather_rain_wait():
 
 
 @check(500)
-def weather_point():
-    window = state["window"]
-    state["forecast"] = window.weather_here(58.0105, 56.2294)
-    state["weather_started"] = time.monotonic()
-
-
-@check(500)
-def weather_point_wait():
-    dialog = state["forecast"]
-    if dialog.reply is not None \
-            and time.monotonic() - state["weather_started"] < 30.0:
-        return 500
-    hours = dialog.hours
-    result["weather"]["point"] = {
-        "status": dialog.status.text(),
-        "hours": hours.rowCount(), "days": dialog.days.rowCount(),
-        "first": [hours.item(0, c).text() for c in range(
-            hours.columnCount())] if hours.rowCount() else None}
-    dialog.close()
+def weather_off():
     window = state["window"]
     window.set_theme("")
     result["weather"]["off"] = {
@@ -6916,6 +6898,25 @@ def weather_point_wait():
         "active": window.weather.active()}
     result["weather"]["gl"] = dict(window.view.gl_errors)
     return None
+
+
+@check(500)
+def reply_owner():
+    """Кому принадлежит ответ сети: Python или C++. Если Python, то
+    deleteLater и сборка мусора удаляют ответ дважды."""
+    try:
+        from PyQt6 import sip
+    except ImportError:
+        import sip
+    from qgis.core import QgsNetworkAccessManager
+    from qgis.PyQt.QtCore import QUrl
+    from qgis.PyQt.QtNetwork import QNetworkRequest
+    reply = QgsNetworkAccessManager.instance().get(
+        QNetworkRequest(QUrl("http://127.0.0.1:9/")))
+    result["reply_owner"] = {"py_owned": sip.ispyowned(reply),
+                             "parent": str(reply.parent())}
+    reply.abort()
+    reply.deleteLater()
 
 
 def ecef_to_geodetic_point(point):

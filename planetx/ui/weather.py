@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Погода на глобусе: поля прогноза GFS и прогноз MET Norway в точке.
+"""Погода на глобусе: поля прогноза GFS.
 
 Расчёт и адреса - core/weather.py. Поле - тема группы «Погода» раздела
 «Слои», оно занимает место темы NASA (слой вида «theme»), тема одна
@@ -11,20 +11,18 @@
 в главном потоке, это 0.05 с. Поля помнятся в памяти, не больше
 MAX_GRIDS, по 4 МБ.
 
-Прогноз в точке - окно «Погода здесь» по пункту меню на глобусе.
+Прогноз в точке по пункту «Погода здесь» убран 8 октября 2026 года,
+см. AGENTS.md.
 """
 import time
 import uuid
 from collections import OrderedDict
 
-from qgis.PyQt.QtCore import QObject, Qt, pyqtSignal
-from qgis.PyQt.QtWidgets import (QDialog, QLabel, QTableWidget,
-                                 QTableWidgetItem, QTabWidget, QVBoxLayout)
+from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 from ..core import ellipsoid, weather
 from ..i18n import tr
-from ..net.overlay import fetch_bytes, fetch_json
-from ..qt_compat import enum
+from ..net.overlay import fetch_bytes
 from .viewshed import ResultTiles
 
 MAX_GRIDS = 12
@@ -290,133 +288,3 @@ def read_grid(data, field, run, hour):
                                  run, hour)
     finally:
         gdal.Unlink(path)
-
-
-# Прогноз в точке.
-
-def symbol_text(code):
-    """Погода словами по коду MET: «lightrain_day» - «небольшой дождь»."""
-    base = weather.symbol_base(code)
-    thunder = base.endswith("andthunder")
-    if thunder:
-        base = base[:-len("andthunder")]
-    words = {
-        "clearsky": tr("ясно"), "fair": tr("малооблачно"),
-        "partlycloudy": tr("переменная облачность"),
-        "cloudy": tr("облачно"), "fog": tr("туман"),
-        "lightrain": tr("небольшой дождь"), "rain": tr("дождь"),
-        "heavyrain": tr("сильный дождь"),
-        "lightrainshowers": tr("небольшой ливень"),
-        "rainshowers": tr("ливень"), "heavyrainshowers": tr("сильный ливень"),
-        "lightsleet": tr("небольшой мокрый снег"),
-        "sleet": tr("мокрый снег"), "heavysleet": tr("сильный мокрый снег"),
-        "lightsleetshowers": tr("заряды мокрого снега"),
-        "sleetshowers": tr("заряды мокрого снега"),
-        "heavysleetshowers": tr("заряды мокрого снега"),
-        "lightsnow": tr("небольшой снег"), "snow": tr("снег"),
-        "heavysnow": tr("сильный снег"),
-        "lightsnowshowers": tr("снежные заряды"),
-        "snowshowers": tr("снежные заряды"),
-        "heavysnowshowers": tr("снежные заряды")}
-    text = words.get(base, base)
-    return tr("{weather}, гроза", weather=text) if thunder else text
-
-
-def direction_text(degrees):
-    """Откуда дует ветер: «С», «СВ» и так далее."""
-    if degrees is None:
-        return ""
-    names = (tr("С"), tr("СВ"), tr("В"), tr("ЮВ"), tr("Ю"), tr("ЮЗ"),
-             tr("З"), tr("СЗ"))
-    return names[int((float(degrees) + 22.5) % 360.0 // 45.0)]
-
-
-def number(value, digits=0):
-    return "" if value is None else "{:.{}f}".format(value, digits)
-
-
-HOURS_SHOWN = 48  # строк прогноза по часам
-
-
-class PointForecast(QDialog):
-    """Окно «Погода здесь»: прогноз MET Norway по часам и по суткам."""
-
-    def __init__(self, parent, lat, lon):
-        super().__init__(parent)
-        self.setWindowTitle(tr("Погода здесь"))
-        self.resize(560, 520)
-        layout = QVBoxLayout(self)
-        self.place = QLabel("{:.4f}, {:.4f}".format(lat, lon), self)
-        layout.addWidget(self.place)
-        self.tabs = QTabWidget(self)
-        self.hours = self._table([tr("Время"), tr("Погода"), tr("°C"),
-                                  tr("Осадки, мм"), tr("Ветер, м/с"),
-                                  tr("Облачность, %")])
-        self.days = self._table([tr("Сутки"), tr("°C мин"), tr("°C макс"),
-                                 tr("Осадки, мм"), tr("Ветер до, м/с")])
-        self.tabs.addTab(self.hours, tr("По часам"))
-        self.tabs.addTab(self.days, tr("По суткам"))
-        layout.addWidget(self.tabs)
-        self.status = QLabel(tr("Прогноз загружается…"), self)
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        credit = QLabel('<a href="{}">{}</a>'.format(
-            weather.MET_ATTRIBUTION[1], tr(
-                "Данные: MET Norway, лицензия CC BY 4.0")), self)
-        credit.setOpenExternalLinks(True)
-        layout.addWidget(credit)
-        self.reply = fetch_json(weather.met_url(lat, lon), self._done)
-
-    def _table(self, headers):
-        table = QTableWidget(0, len(headers), self)
-        table.setHorizontalHeaderLabels(headers)
-        table.setEditTriggers(enum(QTableWidget, "EditTrigger",
-                                   "NoEditTriggers"))
-        table.verticalHeader().setVisible(False)
-        return table
-
-    def _done(self, data, error):
-        self.reply = None
-        rows = weather.parse_met(data) if data is not None else []
-        if not rows:
-            self.status.setText(tr("Прогноз не получен: {error}",
-                                   error=error or tr("пустой ответ")))
-            return
-        self.rows = rows
-        offset = -time.altzone if time.localtime().tm_isdst \
-            else -time.timezone
-        self._fill(self.hours, [
-            (time.strftime("%d.%m %H:%M", time.localtime(row.time)),
-             symbol_text(row.symbol), number(row.temperature, 1),
-             number(row.precipitation, 1),
-             "{} {}".format(number(row.wind, 1),
-                            direction_text(row.direction)).strip(),
-             number(row.clouds))
-            for row in rows[:HOURS_SHOWN]])
-        self._fill(self.days, [
-            (time.strftime("%a %d.%m", time.localtime(day + 43200)),
-             number(low, 1), number(high, 1), number(rain, 1),
-             number(wind, 1))
-            for day, low, high, rain, wind in weather.daily(rows, offset)])
-        self.status.setText(tr(
-            "Время - часы компьютера. Прогноз до {last}.",
-            last=time.strftime("%d.%m %H:%M", time.localtime(
-                rows[-1].time))))
-
-    @staticmethod
-    def _fill(table, rows):
-        table.setRowCount(len(rows))
-        align = enum(Qt, "AlignmentFlag", "AlignCenter")
-        for r, values in enumerate(rows):
-            for c, value in enumerate(values):
-                item = QTableWidgetItem(value)
-                if c:
-                    item.setTextAlignment(align)
-                table.setItem(r, c, item)
-        table.resizeColumnsToContents()
-
-    def closeEvent(self, event):
-        if self.reply is not None:
-            reply, self.reply = self.reply, None
-            reply.abort()
-        super().closeEvent(event)
