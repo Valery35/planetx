@@ -32,7 +32,8 @@ from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
                        QgsProject, QgsVectorFileWriter, QgsVectorLayer)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from ..core import ellipsoid, icons, lookat, overlays, placetree, when
+from ..core import (ellipsoid, icons, lookat, overlays, placetree,
+                    region, when)
 from ..core.features import Shape
 from ..core.kml import KFolder, KOverlay, KPlace
 from ..i18n import tr
@@ -55,7 +56,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Высоты вершин 3D-пути и 3D-многоугольника, JSON.
           ("alts", "string(0)"),
           # Тело метки: earth, mars или moon. Пустое - Земля.
-          ("body", "string"))
+          ("body", "string"),
+          # Region KML - видна только вблизи, core/region.py, JSON.
+          ("region", "string"))
 FOLDER_TABLE = "folders"
 # Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
 # на поверхности, у картинки на экране и фото пусто. params - свойства
@@ -79,7 +82,7 @@ FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("position", "integer"), ("visible", "integer"),
                  ("expanded", "integer"), ("description", "string"),
                  ("view", "string"), ("radio", "integer"),
-                 ("expandable", "integer"))
+                 ("expandable", "integer"), ("region", "string"))
 # Цвета по умолчанию, как у Google Earth: жёлтая метка и линия, белый
 # контур многоугольника с полупрозрачной заливкой.
 DEFAULT_COLOR = {"point": (255, 214, 0, 255), "line": (255, 214, 0, 255),
@@ -237,7 +240,7 @@ def _kplace(place):
                   height=shape.height, extrude=shape.extrude,
                   icon=shape.icon, time=place.time,
                   view_time=place.view_time, tour=place.tour,
-                  alts=shape.alts)
+                  alts=shape.alts, region=place.region)
 
 
 class Place:
@@ -245,8 +248,11 @@ class Place:
 
     def __init__(self, kind, fid, shape, visible, measure="", view=None,
                  position=None, folder=None, description="",
-                 time=None, view_time=None, tour=None, body="earth"):
+                 time=None, view_time=None, tour=None, body="earth",
+                 region=None):
         self.kind = kind
+        # Region KML: метка видна только вблизи, core.region или None.
+        self.region = region
         # Тело, на котором стоит метка: earth, mars или moon.
         self.body = body
         # Записанный тур: позы core.tour.RecordedStop или None.
@@ -277,13 +283,16 @@ def _kfolder(folder):
     """Папка «Моих меток» папкой core.kml, без детей."""
     return KFolder(folder.name, folder.visible,
                    description=folder.description, view=folder.view,
-                   radio=folder.radio, expandable=folder.expandable)
+                   radio=folder.radio, expandable=folder.expandable,
+                   region=folder.region)
 
 class Folder:
     """Папка «Моих меток»."""
 
     def __init__(self, fid, name, parent, position, visible, expanded,
-                 description="", view=None, radio=False, expandable=True):
+                 description="", view=None, radio=False, expandable=True,
+                 region=None):
+        self.region = region  # Region KML папки, core.region или None
         self.fid = fid
         self.name = name
         self.parent = parent  # ключ папки-родителя или None - корень
@@ -461,7 +470,8 @@ class MyPlaces(QObject):
                     when.unpack(_value(feature, layer, "time")),
                     when.unpack(_value(feature, layer, "view_time")),
                     tour_from_text(_value(feature, layer, "tour")),
-                    str(_value(feature, layer, "body") or "earth")))
+                    str(_value(feature, layer, "body") or "earth"),
+                    region.parse(_value(feature, layer, "region"))))
         self.overlays = []
         layer = self.overlay_layer
         if layer is not None:
@@ -503,7 +513,8 @@ class MyPlaces(QObject):
                     str(_value(feature, layer, "description") or ""),
                     lookat.parse(_value(feature, layer, "view"), None),
                     bool(_int(_value(feature, layer, "radio")) or 0),
-                    bool(1 if expandable is None else expandable)))
+                    bool(1 if expandable is None else expandable),
+                    region.parse(_value(feature, layer, "region"))))
         # Метка или папка в папке, которой нет, стоит в корне.
         known = {f.key for f in self.folders}
         for place in self.places + self.overlays:
@@ -886,7 +897,8 @@ class MyPlaces(QObject):
                     ("view", lookat.text(getattr(node, "view", None))),
                     ("radio", int(bool(getattr(node, "radio", False)))),
                     ("expandable",
-                     int(bool(getattr(node, "expandable", True))))):
+                     int(bool(getattr(node, "expandable", True)))),
+                    ("region", region.text(getattr(node, "region", None)))):
                 if layer.fields().indexOf(field) >= 0:
                     feature[field] = value
             ok, added = layer.dataProvider().addFeatures([feature])
@@ -940,7 +952,8 @@ class MyPlaces(QObject):
                     "view_time": when.pack(place.view_time),
                     "tour": tour_text(place.tour),
                     "alts": alts_text(getattr(place, "alts", None)),
-                    "body": body or ellipsoid.BODY.key}
+                    "body": body or ellipsoid.BODY.key,
+                    "region": region.text(getattr(place, "region", None))}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

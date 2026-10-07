@@ -109,6 +109,32 @@ class TestGrid(unittest.TestCase):
         self.assertAlmostEqual(float(w.sample(grid, 0.0, -179.5)), 0.5,
                                places=3)
 
+    def test_value_marks_follow_view(self):
+        # Вид шириной 300 км над Пермью: шаг 0.5°, около 6 чисел поперёк.
+        self.assertEqual(w.value_step(300000.0), 0.5)
+        self.assertEqual(w.value_step(30.0), 0.25)
+        self.assertEqual(w.value_step(1e9), 30.0)
+        lats, lons = w.value_points(58.0, 56.2, 300000.0)
+        self.assertTrue(np.allclose(lats % 0.5, 0.0))
+        self.assertLess(abs(lats.mean() - 58.0), 0.5)
+        self.assertTrue(20 <= len(lats) <= 200)
+        # Сдвиг точки взгляда меньше шага узлов не меняет.
+        self.assertEqual(w.value_key(58.0, 56.1, 300000.0),
+                         w.value_key(58.1, 56.2, 300000.0))
+        # С орбиты - весь пояс широт, долготы по кругу без повторов.
+        lats, lons = w.value_points(0.0, 0.0, 4e7)
+        self.assertEqual(len(set(zip(lats, lons))), len(lats))
+        self.assertLessEqual(np.abs(lats).max(), 80.0)
+        self.assertTrue(((lons >= -180.0) & (lons < 180.0)).all())
+        lat = np.repeat(np.linspace(90, -90, 181)[:, None], 360, axis=1)
+        marks = w.value_marks(self.grid(lat.astype(np.float32)),
+                              w.BY_KEY["temperature"], 58.0, 56.2, 300000.0)
+        self.assertTrue(all(abs(v - la) < 1e-3 for la, _, v in marks))
+        # Осадки ниже порога не подписываются.
+        rain = self.grid(np.zeros((181, 360), dtype=np.float32))
+        self.assertEqual(w.value_marks(rain, w.BY_KEY["precipitation"],
+                                       58.0, 56.2, 300000.0), [])
+
     def test_wind_speed_and_units(self):
         u = np.full((2, 2), 3.0)
         v = np.full((2, 2), 4.0)

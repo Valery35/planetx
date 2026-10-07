@@ -31,7 +31,7 @@ from ..core import (basemap, clouds, ellipsoid, lookat, stars, sun,
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
-from ..core import graticule, paleo, placetree
+from ..core import graticule, paleo, placetree, region
 from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, Spin, fit_view
@@ -125,7 +125,7 @@ from .routing import RouteManager
 from .sheets import SheetsDialog
 from .menulinks import MenuLinksDialog, open_link
 from .nasamaps import NasaMaps, map_names
-from .weather import (LEVEL as WEATHER_LEVEL,
+from .weather import (LEVEL as WEATHER_LEVEL, value_text,
                       WeatherManager, units_text as weather_units)
 from .satellites import SatelliteManager
 from ..core import satellites as satellites_core
@@ -140,6 +140,9 @@ VIEWSHED_POLL = 250  # мс между проверками высот види�
 VIEWSHED_WAIT = 30.0  # с, дальше расчёт идёт по тем высотам, что есть
 HEIGHT_CHUNK = 20000  # узлов сетки инсоляции за проход цикла событий
 CALC_BUDGET = 0.004  # с расчёта инсоляции за проход цикла событий
+# Region KML пересчитывается, когда глаз ушёл на эту долю расстояния
+# до точки взгляда.
+REGION_MOVE = 0.02
 
 TERRAIN_ATTRIBUTION = (
     '<a href="https://github.com/tilezen/joerd/blob/master/docs/'
@@ -769,6 +772,13 @@ class GlobeWindow(QWidget):
         # Открытые окна свойств меток и их правки для глобуса по ключу.
         self.previews = {}
         self.prop_dialogs = {}
+        # Region KML: метки, скрытые по расстоянию, и цепочки Region
+        # метки и папок над ней, см. _update_regions.
+        self._region_hidden = frozenset()
+        self._region_eye = None
+        self._region_items = None
+        self.myplaces.changed.connect(self._regions_changed)
+        self.view.changed.connect(self._update_regions)
         self.myplaces.changed.connect(self._places_changed)
         self.panel.places_toggled.connect(self._places_toggled)
         self.panel.folder_expanded.connect(self.myplaces.set_expanded)
@@ -962,6 +972,11 @@ class GlobeWindow(QWidget):
         self.layer_labels.changed.connect(self._show_layer_labels)
         self.view.changed.connect(self._update_layer_labels)
         self.view.changed.connect(self._update_grid)
+        # Числа поля прогноза: поле на глобусе (Field, Grid) и ключ
+        # узлов, см. _update_values.
+        self._value_field = None
+        self._value_key = None
+        self.view.changed.connect(self._update_values)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
         self.panel.gallery_requested.connect(self.open_gallery)
@@ -1221,6 +1236,8 @@ class GlobeWindow(QWidget):
         self._time_mode()
         if not self._theme_on() or not themes.is_weather(self.theme_key):
             self.weather.hide()
+            self._value_field = None
+            self._update_values()
         if not self._theme_on() or themes.is_weather(self.theme_key):
             self.set_compare(False)
         if not self._theme_on():
@@ -3181,6 +3198,47 @@ class GlobeWindow(QWidget):
             self.view.sky_time = self.sky_moment()
             self.view.update()
 
+    def _regions_changed(self):
+        """Метки с Region у себя или у папок над ними, после правки
+        «Моих меток»."""
+        folders = {f.key: f for f in self.myplaces.folders}
+        items = []
+        for place in self.myplaces.places:
+            chain = [place.region] if place.region is not None else []
+            folder, seen = folders.get(place.folder), set()
+            while folder is not None and folder.key not in seen:
+                seen.add(folder.key)
+                if folder.region is not None:
+                    chain.append(folder.region)
+                folder = folders.get(folder.parent)
+            if chain:
+                items.append((place.key, chain))
+        self._region_items = items
+        self._region_eye = None
+        self._update_regions()
+
+    def _update_regions(self):
+        """Метки, скрытые Region по расстоянию от глаза. Пересчёт идёт,
+        когда глаз ушёл на REGION_MOVE расстояния до точки взгляда."""
+        items = self._region_items
+        if not items:
+            if self._region_hidden:
+                self._region_hidden = frozenset()
+                self._refresh_shapes()
+            return
+        eye = np.array(self.view.camera.eye, dtype=np.float64)
+        reach = REGION_MOVE * self.view.navigator.pose.distance
+        if self._region_eye is not None \
+                and np.linalg.norm(eye - self._region_eye) < reach:
+            return
+        self._region_eye = eye
+        hidden = frozenset(key for key, chain in items
+                           if not all(region.active(r, eye)
+                                      for r in chain))
+        if hidden != self._region_hidden:
+            self._region_hidden = hidden
+            self._refresh_shapes()
+
     def _time_ok(self, place):
         """Попадает ли время метки в промежуток шкалы."""
         span = self._time_range
@@ -3214,7 +3272,8 @@ class GlobeWindow(QWidget):
         shapes = [self._timed_shape(p)
                   for p in self.myplaces.places
                   if p.visible and self._time_ok(p) and not p.tour
-                  and p.body == self.planet.key]
+                  and p.body == self.planet.key
+                  and p.key not in self._region_hidden]
         # Метки неба подписывает слой подписей неба.
         # Точка метки неба - (склонение, прямое восхождение), как
         # (широта, долгота) у меток глобуса.
@@ -3604,6 +3663,9 @@ class GlobeWindow(QWidget):
         self.theme_legend.show()
         self._place_attribution()
         self._show_attribution()
+        self._value_field = (field, grid)
+        self._value_key = None
+        self._update_values()
         if getattr(self, "_theme_open_time", False) and self.timebar.known:
             # Выбранное поле открывает шкалу на нынешнем моменте.
             self._theme_open_time = False
@@ -3613,6 +3675,33 @@ class GlobeWindow(QWidget):
             now = time.time()
             self.timebar.set_range(now, now)
             self._time_range = self.timebar.range()
+
+    def _update_values(self):
+        """Числа поля прогноза поверх раскраски, просьба автора от
+        8 октября 2026 года. Узлы - core.weather.value_points, значения -
+        из поля на глобусе, новых запросов в сеть нет. Строятся заново,
+        только когда меняется шаг узлов или вид уходит на шаг."""
+        shown = getattr(self, "_value_field", None)
+        if shown is None or self.view.sky_view is not None:
+            if self.view.value_marks:
+                self.view.value_marks = []
+                self._value_key = None
+                self.view.update()
+            return
+        field, grid = shown
+        pose = self.view.navigator.pose
+        width = self._view_width()
+        key = (id(grid),) + weather_core.value_key(pose.lat, pose.lon,
+                                                   width)
+        if key == self._value_key:
+            return
+        self._value_key = key
+        self.view.value_marks = [
+            MarkPlace(-500000 - n, value_text(field, value), "value", 1,
+                      lat, lon)
+            for n, (lat, lon, value) in enumerate(weather_core.value_marks(
+                grid, field, pose.lat, pose.lon, width))]
+        self.view.update()
 
     def _weather_changed(self):
         if self.weather.error:
@@ -4377,7 +4466,10 @@ class GlobeWindow(QWidget):
             self.myplaces.update(key, {"view": lookat.text(
                 self.current_view())})
         elif action == "properties":
-            dialog = FolderDialog(folder, self.current_view, self)
+            dialog = FolderDialog(
+                folder, self.current_view, self,
+                [point for p in self.myplaces.places_in(key)
+                 for point in p.shape.points])
             if dialog.exec():
                 self.myplaces.update(key, dialog.values())
         elif action == "remove":

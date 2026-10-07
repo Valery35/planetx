@@ -16,18 +16,22 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
                                  QPushButton, QTabWidget, QVBoxLayout,
                                  QWidget)
 
-from ..core import lookat
+from ..core import lookat, region
 from ..i18n import tr
 from ..qt_compat import enum
+from . import regionfield
 
 
 class FolderDialog(QDialog):
     """Свойства папки «Моих меток». current_view - функция без
     аргументов, вид глобуса сейчас, или None."""
 
-    def __init__(self, folder, current_view=None, parent=None):
+    def __init__(self, folder, current_view=None, parent=None,
+                 points=()):
         super().__init__(parent)
         self.folder = folder
+        # Точки меток папки - рамка Region поля «Скрывать дальше».
+        self.points = list(points)
         self.current_view = current_view
         self.setWindowTitle(tr("Свойства папки"))
         self.setMinimumWidth(460)
@@ -63,6 +67,8 @@ class FolderDialog(QDialog):
         indent.addWidget(self.radio)
         checks.addLayout(indent)
         form.addRow("", checks)
+        self.far = regionfield.make(self, folder.region)
+        form.addRow(tr("Скрывать дальше"), self.far)
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Ok")
             | enum(QDialogButtonBox, "StandardButton", "Cancel"), self)
@@ -150,6 +156,8 @@ class FolderDialog(QDialog):
         return {"name": self.name.text().strip(),
                 "description": self.description.toPlainText().strip(),
                 "view": lookat.text(view),
+                "region": region.text(regionfield.value(
+                    self.far, self.points, self.folder.region)),
                 "expandable": int(self.expandable.isChecked()),
                 "radio": int(self.radio.isChecked()
                              and self.expandable.isChecked())}

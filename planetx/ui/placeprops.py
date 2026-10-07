@@ -25,11 +25,12 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
                                  QPlainTextEdit, QPushButton, QSlider,
                                  QVBoxLayout, QWidget)
 
-from ..core import icons, lookat, when
+from ..core import icons, lookat, region, when
 from ..core.features import MAX_HEIGHT, height_share, share_height
 from ..i18n import tr
 from ..qt_compat import enum
 from ..render.labels import svg_file
+from . import regionfield
 from .myplaces import DEFAULT_FILL
 
 SLIDER_STEPS = 1000  # делений ползунка высоты
@@ -285,6 +286,8 @@ class PlaceProperties(QDialog):
             "попадает в промежуток шкалы времени вверху вида. Метка "
             "без времени видна всегда."))
         form.addRow(tr("Время"), self.time)
+        self.far = regionfield.make(self, getattr(place, "region", None))
+        form.addRow(tr("Скрывать дальше"), self.far)
         self.look = self._view_group(place.view)
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Ok")
@@ -445,6 +448,9 @@ class PlaceProperties(QDialog):
                "height": float(self.height.value()),
                "extrude": int(self.extrude.isChecked()),
                "view": lookat.text(self.view()),
+               "region": region.text(regionfield.value(
+                   self.far, self.points,
+                   getattr(self.place, "region", None))),
                "time": when.pack(self.time.value()),
                "view_time": when.pack(self.view_time.value()
                                      if self.look.isChecked() else None)}

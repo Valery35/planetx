@@ -225,6 +225,19 @@ EN = {
         "mm/h",
     "Номенклатура листа":
         "Map sheet designation",
+    "Группы искусственных спутников CelesTrak. Щелчок по группе показывает "
+    "её на глобусе или убирает.":
+        "Groups of artificial satellites from CelesTrak. A click on a group "
+        "shows it on the globe or removes it.",
+    "Скрывать дальше":
+        "Hide beyond",
+    "не скрывать":
+        "do not hide",
+    "Метка видна, только пока глаз ближе этого расстояния, как Region в KML. "
+    "У папки - все её метки. 0 - видна всегда.":
+        "The placemark is visible only while the eye is closer than this "
+        "distance, as Region in KML. For a folder - all its placemarks. 0 - "
+        "always visible.",
     "Открыть в браузере":
         "Open in browser",
     "Свои пункты…":
@@ -274,21 +287,17 @@ EN = {
         "day. Layers are switched on independently of the map.",
     "Карты и слои":
         "Maps and layers",
-    "Группы спутников":
-        "Satellite groups",
-    "Какие группы спутников CelesTrak показывает слой «Спутники».":
-        "Which CelesTrak satellite groups the Satellites layer shows.",
     "✓ вкл":
         "✓ on",
     "Искусственные спутники по орбитальным элементам CelesTrak, положение по "
     "модели SGP4. Время - правый бегунок шкалы времени, без шкалы - часы "
-    "компьютера. Группы выбирает кнопка «Группы спутников». Элементы группы "
+    "компьютера. Группы выбирает вкладка «Спутники» витрины. Элементы группы "
     "обновляются не чаще раза в 2 часа.":
         "Artificial satellites from CelesTrak orbital elements, positions by "
         "the SGP4 model. The time is the right handle of the time slider, "
-        "without the slider the computer clock. The Satellite groups button "
-        "chooses the groups. The elements of a group update at most once in "
-        "2 hours.",
+        "without the slider the computer clock. The Satellites tab of the "
+        "gallery chooses the groups. The elements of a group update at "
+        "most once in 2 hours.",
     "Карты NASA, прогноз погоды, пожары, небо, недра и анализ рельефа с "
     "превью. Щелчок открывает витрину.":
         "NASA maps, weather forecast, fires, sky, inside the Earth and "

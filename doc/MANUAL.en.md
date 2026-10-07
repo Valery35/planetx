@@ -317,8 +317,10 @@ Sky and light holds Stars, Clouds, Sun and Satellites. Inside the
 Earth holds Earthquakes, Plate boundaries, Earth cutaway and
 Paleogeography. Terrain analysis holds Slope and Aspect. A click switches a layer on or off
 independently of other layers and of the map, a layer that is on has
-a green badge. The Satellite groups button chooses the groups of the
-Satellites layer.
+a green badge. The Satellites tab of the gallery shows cards of the
+satellite groups. A click on a card shows or removes a group. The
+first group switches the Satellites layer on, the last removed one
+switches it off.
 
 Each map has a preview - its tile
 over Eurasia on the latest ready day over the base map. Forecast fields
@@ -398,6 +400,14 @@ A field for the whole world weighs 0.5-0.8 MB and arrives in a few
 seconds. The legend in the bottom left corner shows the units and the
 valid time of the field in UTC. It is a model calculation. Model
 clouds are not a cloud image, the Clouds layer gives the image.
+
+The values of the field stand over its colours. Temperature is in
+degrees, precipitation in mm/h, wind in m/s, clouds in percent. The
+values stand at the nodes of a latitude and longitude grid, about six
+across the view. The node step changes with the eye height, from 30°
+from space to 0.25° close up. The values come from the same field,
+there are no new network requests. Where precipitation is below
+0.1 mm/h, there are no precipitation values.
 
 The first map of the Planet of Fire is Fires. It shows
 fire spots over the last 24 hours from VIIRS
@@ -741,6 +751,7 @@ The Folder properties window opens from the folder menu:
 | Name | The folder name in the list |
 | Allow the folder to be expanded | Without the box the folder does not expand in the list, the folder box shows and hides all its contents |
 | Show contents as option buttons | One row of the folder shows on the globe, checking one clears the others |
+| Hide beyond | All placemarks of the folder are visible only while the eye is closer than this distance. In KML the field is written as the Region of the folder |
 | Description | Text about the folder, the tooltip of its row |
 | View | Look point, range, heading and tilt, buttons Snapshot current view and Reset |
 
@@ -867,6 +878,7 @@ previous look and shape back.
 | Height above ground | Lift of the object above the terrain in metres. The Ground - Space slider under the field sets it from the ground to 100 km |
 | Extend to ground | A wall from the object to the ground, a post for a placemark |
 | Time | Moment or interval of the placemark for the time slider |
+| Hide beyond | The placemark is visible only while the eye is closer than this distance. 0 - always visible. In KML the field is written as Region |
 | Place view | Look point, range, heading, tilt of the camera at the place and the view date |
 
 Extending works with a height above zero. A path becomes a wall, a
@@ -951,8 +963,14 @@ returns the Sun and the satellites to the computer clock.
 
 Open KML or KMZ… puts a KML or KMZ file, including one from Google
 Earth, into My Places as a new folder named after the file.
-Folders, styles, icons, times and placemark views are kept, `gx:Tour` becomes a recorded tour. The
-camera flies to the contents of the file.
+Folders, styles, icons, times and placemark views are kept.
+`gx:Tour` becomes a recorded tour. The
+Region of placemarks and folders is kept too. A placemark is visible
+while its box on the screen is not smaller than `minLodPixels` and
+not larger than `maxLodPixels`. The box size is counted for a window
+1000 pixels high with a 60° field of view. A placemark therefore hides
+at the same distance in any globe window. The camera flies to the
+contents of the file.
 
 Save as KML… saves a folder or the whole My Places to KMZ or KML. The
 file extension chooses the format.
@@ -1424,8 +1442,8 @@ closed, the layer is shown in full.
 ## Satellites
 
 The Satellites layer of the Maps and layers gallery shows artificial
-satellites of the Earth as dots at their height. The Satellite groups
-button of the gallery chooses the groups, any of them can be checked:
+satellites of the Earth as dots at their height. The Satellites tab
+of the gallery chooses the groups, any of them can be on:
 
 | Group | What it holds |
 |---|---|

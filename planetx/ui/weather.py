@@ -54,6 +54,18 @@ def units_text(field):
                                                       field.units)
 
 
+def value_text(field, value):
+    """Число поля на глобусе: «7°», «1.2», «5», «80%». Единицы стоят
+    в шкале поля в углу вида."""
+    if field.key == "temperature":
+        return "{:.0f}°".format(value).replace("-0°", "0°")
+    if field.key == "precipitation":
+        return "{:.1f}".format(value)
+    if field.key == "clouds":
+        return "{:.0f}%".format(value)
+    return "{:.0f}".format(value)
+
+
 def field_of(key):
     """Field поля темы key или None, если тема не погодная."""
     if not key.startswith("weather_"):

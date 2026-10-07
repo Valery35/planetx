@@ -955,9 +955,23 @@ def gallery_wait():
     out["slope_aspect"] = [bool(window.extras.get("slope")),
                            bool(window.extras.get("aspect"))]
     gallery._clicked(gallery.items["aspect"][0])
-    gallery.sat_actions["gnss"].setChecked(True)
+    # Вкладка «Спутники»: карточки групп, щелчок включает группу и слой.
+    gallery._set_group("satellites")
+    out["sat_tab"] = [k for k, (it, g, kind) in gallery.items.items()
+                      if not it.isHidden()]
+    before = bool(window.extras.get("satellites"))
+    groups = set(window.satellite_manager.groups)
+    gallery._clicked(gallery.items["sat:gnss"][0])
     out["sat_groups"] = sorted(window.satellite_manager.groups)
-    gallery.sat_actions["gnss"].setChecked(False)
+    out["sat_layer_on"] = bool(window.extras.get("satellites"))
+    gallery.grab().save(os.path.join(TEMP, "planetx_gallery_sat.png"))
+    gallery._clicked(gallery.items["sat:gnss"][0])
+    window.satellite_manager.set_groups(groups)
+    window.set_extra("satellites", before)
+    gallery._set_group("")
+    out["sat_in_all"] = any(not gallery.items[k][0].isHidden()
+                            for k in gallery.items if k.startswith("sat:"))
+    out["bottom_button"] = hasattr(gallery, "sat_button")
     gallery._set_group("depths")
     out["depths_group"] = [k for k, (it, g, kind) in gallery.items.items()
                            if not it.isHidden()]
@@ -6811,6 +6825,60 @@ def menu_links():
 
 
 @check(500)
+def region_hide():
+    """Region KML: метка со «Скрывать дальше 50 км» видна с 40 км
+    и скрыта со 100 км, Region папки скрывает её метки, поле окна
+    свойств показывает и меняет расстояние, KML туда и обратно."""
+    from planetx.core import kml, region
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    from planetx.ui.placeprops import PlaceProperties
+    window = state["window"]
+    window.set_body("earth")
+    store = window.myplaces
+    view = window.view
+    folder = store.add_folder("Region")
+    key = store.add(Shape("point", [(58.0105, 56.2294)], name="Близко"),
+                    folder=folder)
+    store.update(key, {"region": region.text(
+        region.for_distance([(58.0105, 56.2294)], 50.0))})
+    out = {}
+
+    def hidden_at(height):
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(58.0105, 56.2294, height, 0.0, 0.0))
+        view.grabFramebuffer()
+        window._region_eye = None
+        window._update_regions()
+        return key in window._region_hidden
+    out["at_40km"] = hidden_at(40000.0)
+    out["at_100km"] = hidden_at(100000.0)
+    place = store.find(key)
+    dialog = PlaceProperties(place, window)
+    out["field_km"] = round(dialog.far.value(), 1)
+    dialog.show()
+    dialog.grab().save(os.path.join(TEMP, "planetx_place_far.png"))
+    dialog.far.setValue(200.0)
+    store.update(key, dialog.values())
+    dialog.close()
+    out["after_edit_km"] = round(region.distance_km(store.find(key).region),
+                                 1)
+    out["edited_at_100km"] = hidden_at(100000.0)
+    store.update(key, {"region": ""})
+    store.update(folder, {"region": region.text(
+        region.for_distance([(58.0105, 56.2294)], 30.0))})
+    out["folder_at_100km"] = hidden_at(100000.0)
+    out["folder_at_20km"] = hidden_at(20000.0)
+    text = kml.write_kml(store.export_tree(folder))
+    back = kml.read_kml(text.encode("utf-8"))
+    out["kml_folder_km"] = round(region.distance_km(back.region), 1)
+    store.remove_many([folder]) if hasattr(store, "remove_many") \
+        else store.remove(folder)
+    out["after_remove"] = len(window._region_hidden)
+    result["region_hide"] = out
+
+
+@check(500)
 def menu_actions_check():
     import time as _time
     window = state["window"]
@@ -6917,6 +6985,26 @@ def weather_wait():
 
 
 @check(500)
+def weather_values():
+    """Числа поля температуры на глобусе: есть, градусы, при перелёте
+    к Перми с 600 км пересчитываются, без поля сняты."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    marks = list(view.value_marks)
+    out = {"far": len(marks), "texts": [m.name for m in marks[:6]]}
+    view.navigator.set_pose(Pose(58.0, 56.2, 600000.0, 0.0, 0.0))
+    window._update_values()
+    near = view.value_marks
+    out["near"] = len(near)
+    out["near_texts"] = [m.name for m in near[:6]]
+    out["degrees"] = all(m.name.endswith("°") for m in near)
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_weather_values.png"))
+    result["weather"]["values"] = out
+
+
+@check(500)
 def weather_step():
     """Шаг шкалы вперёд - следующий час прогноза."""
     window = state["window"]
@@ -6951,7 +7039,8 @@ def weather_off():
     result["weather"]["off"] = {
         "loader": "theme" in window.gibs_loaders,
         "legend": window.theme_legend.isVisible(),
-        "active": window.weather.active()}
+        "active": window.weather.active(),
+        "values": len(window.view.value_marks)}
     result["weather"]["gl"] = dict(window.view.gl_errors)
     return None
 

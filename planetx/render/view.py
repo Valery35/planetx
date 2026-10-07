@@ -431,6 +431,8 @@ class GlobeView(QOpenGLWidget):
         self.layer_marks = []
         # Названия литосферных плит, строка «Границы плит».
         self.plate_marks = []
+        # Числа поля прогноза погоды, ставит окно (_update_values).
+        self.value_marks = []
         # Подписи устьев скважин подземного режима.
         self.subsurface_marks = []
         # Длины отрезков линейки и точка профиля высот.
@@ -2286,7 +2288,8 @@ class GlobeView(QOpenGLWidget):
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
         own = self._own_marks() + self.layer_marks + self.grid_marks \
-            + self.plate_marks + self.subsurface_marks \
+            + self.plate_marks + self.value_marks \
+            + self.subsurface_marks \
             + self.tool_marks
         if mark is not None or own:
             head = ([mark] if mark is not None else []) + own

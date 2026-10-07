@@ -212,6 +212,69 @@ def sample(grid, lats, lons):
     return top * (1.0 - fy) + bottom * fy
 
 
+# Числа поля на глобусе: просьба автора от 8 октября 2026 года -
+# «по температуре точек бы со значениями». Точки - узлы сетки широт
+# и долгот с шагом по ширине вида, около VALUES_ACROSS чисел поперёк
+# вида, в окне VALUE_WINDOW ширин вокруг точки взгляда. Сетка стоит
+# на месте, пока вид не уходит на шаг, числа не прыгают при сдвиге.
+VALUES_ACROSS = 6
+VALUE_WINDOW = 1.5
+VALUE_STEPS = (30.0, 20.0, 10.0, 5.0, 2.0, 1.0, 0.5, 0.25)  # градусы
+VALUE_LAT = 80.0  # выше по широте чисел нет, узлы там сходятся
+M_PER_DEGREE = 111320.0
+
+
+def value_step(width):
+    """Шаг узлов чисел в градусах для видимой полосы width метров. Мельче
+    шага сетки GFS 0.25° не бывает."""
+    wanted = width / VALUES_ACROSS / M_PER_DEGREE
+    fitting = [s for s in VALUE_STEPS if s >= wanted]
+    return min(fitting) if fitting else VALUE_STEPS[0]
+
+
+def value_key(lat, lon, width):
+    """Ключ перестройки чисел: узлы те же, пока ключ не меняется."""
+    step = value_step(width)
+    return step, round(lat / step), round(lon / step)
+
+
+def value_points(lat, lon, width):
+    """Узлы чисел вокруг точки взгляда: массивы широт и долгот."""
+    step = value_step(width)
+    half = VALUE_WINDOW * width / 2.0 / M_PER_DEGREE
+    south = max(-VALUE_LAT, lat - half)
+    north = min(VALUE_LAT, lat + half)
+    span = half / max(math.cos(math.radians(lat)), 0.05)
+    lats = np.arange(math.ceil(south / step), math.floor(north / step) + 1)
+    if span >= 180.0:
+        lons = np.arange(math.ceil(-180.0 / step), math.floor(
+            (180.0 - 1e-9) / step) + 1)
+    else:
+        lons = np.arange(math.ceil((lon - span) / step),
+                         math.floor((lon + span) / step) + 1)
+    grid_lat, grid_lon = np.meshgrid(lats * step, lons * step,
+                                     indexing="ij")
+    flat_lon = (grid_lon.ravel() + 180.0) % 360.0 - 180.0
+    return grid_lat.ravel(), flat_lon
+
+
+def value_marks(grid, field, lat, lon, width):
+    """Числа поля у точки взгляда: список (широта, долгота, значение).
+    Осадки ниже порога прозрачности поля не подписываются."""
+    lats, lons = value_points(lat, lon, width)
+    if not len(lats):
+        return []
+    values = sample(grid, lats, lons)
+    out = []
+    for la, lo, value in zip(lats, lons, values):
+        if not np.isfinite(value):
+            continue
+        if field.clear is not None and value < field.clear:
+            continue
+        out.append((float(la), float(lo), float(value)))
+    return out
+
+
 def colorize(field, values):
     """RGBA uint8 по раскраске поля, без премножения."""
     stops = np.array([s for s, _ in field.ramp], dtype=np.float64)

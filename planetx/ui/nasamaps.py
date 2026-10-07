@@ -25,11 +25,12 @@ from qgis.PyQt.QtCore import QSize, Qt
 from qgis.PyQt.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
 from qgis.PyQt.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel,
                                  QLineEdit, QListView, QListWidget,
-                                 QListWidgetItem, QMenu, QToolButton,
+                                 QListWidgetItem, QToolButton,
                                  QVBoxLayout)
 
 from ..core import (clouds, cutaway, fires, paleo, plates, quakes, slope,
                     stars, sun, temperature, themes, weather)
+from ..core import satellites as satellites_core
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum, enum_int
@@ -41,6 +42,11 @@ PARALLEL = 4  # запросов превью сразу
 KEY_ROLE = enum_int(enum(Qt, "ItemDataRole", "UserRole"))
 ALL = ""  # кнопка «Все» групп
 LAYER = "layer"  # вид строки витрины: слой глобуса со своим флажком
+# Вкладка «Спутники»: карточки групп CelesTrak, ключ - SAT + группа.
+# Просьба автора от 8 октября 2026 года - меню «Группы спутников»
+# внизу окна висело некрасиво. Во вкладке «Все» карточек групп нет.
+SAT = "sat:"
+SAT_GROUP = "satellites"
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
@@ -65,7 +71,10 @@ def layer_group_names():
             "и палеогеография.")),
         ("terrain", tr("Анализ рельефа"), tr(
             "Раскраска поверхности по уклону или по стороне "
-            "света склона. Включается одна из двух.")))
+            "света склона. Включается одна из двух.")),
+        (SAT_GROUP, tr("Спутники"), tr(
+            "Группы искусственных спутников CelesTrak. Щелчок по группе "
+            "показывает её на глобусе или убирает.")))
 
 
 def layer_names():
@@ -92,7 +101,7 @@ def layer_names():
             "Искусственные спутники по орбитальным элементам CelesTrak, "
             "положение по модели SGP4. Время - правый бегунок шкалы "
             "времени, без шкалы - часы компьютера. Группы выбирает "
-            "кнопка «Группы спутников». Элементы группы обновляются "
+            "вкладка «Спутники» витрины. Элементы группы обновляются "
             "не чаще раза в 2 часа.")),
         "quakes": (tr("Землетрясения"), tr(
             "Землетрясения магнитудой от 4.5 за последние 30 "
@@ -302,6 +311,46 @@ def satellites_image(base=None):
     return image
 
 
+# Орбиты превью групп спутников: доля радиуса шара, сплющенность
+# эллипса, наклон в градусах, количество точек.
+SAT_ORBITS = {
+    "stations": (1.18, 0.35, 25, 2), "visual": (1.22, 0.4, -30, 10),
+    "gnss": (1.75, 0.55, 35, 12), "weather": (1.25, 0.95, 80, 8),
+    "resource": (1.22, 0.9, 75, 10), "science": (1.4, 0.5, -20, 8),
+    "geo": (2.25, 0.18, 0, 16), "starlink": (1.15, 0.45, 40, 60),
+    "oneweb": (1.3, 0.85, 70, 36)}
+
+
+def satellite_group_image(group, color):
+    """Превью группы спутников: шар и орбита группы её цветом."""
+    image = _blank((8, 10, 22))
+    painter = QPainter(image)
+    painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+    reach, flat, tilt, count = SAT_ORBITS.get(group, (1.3, 0.5, 20, 8))
+    radius = THUMB * 0.42 / reach
+    cx = cy = THUMB / 2.0
+    painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+    painter.setBrush(QColor(40, 90, 160))
+    painter.drawEllipse(int(cx - radius), int(cy - radius),
+                        int(2 * radius), int(2 * radius))
+    painter.translate(cx, cy)
+    painter.rotate(tilt)
+    a, b = radius * reach, radius * reach * flat
+    painter.setBrush(enum(Qt, "BrushStyle", "NoBrush"))
+    painter.setPen(QColor(*color, 140))
+    painter.drawEllipse(int(-a), int(-b), int(2 * a), int(2 * b))
+    painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+    painter.setBrush(QColor(*color))
+    size = 3 if count > 20 else 5
+    for k in range(count):
+        angle = 2 * math.pi * (k / count + 0.05)
+        painter.drawEllipse(int(a * math.cos(angle)) - size // 2,
+                            int(b * math.sin(angle)) - size // 2,
+                            size, size)
+    painter.end()
+    return image
+
+
 def cutaway_image():
     """Превью разреза: оболочки PREM кольцами, вынут сектор."""
     image = _blank((8, 10, 22))
@@ -451,29 +500,10 @@ class NasaMaps(QDialog):
         self.list.itemClicked.connect(self._clicked)
         self.note = QLabel(self)
         self.note.setWordWrap(True)
-        # Группы спутников - меню флажков, любые сразу.
-        self.sat_button = QToolButton(self)
-        self.sat_button.setText(tr("Группы спутников"))
-        self.sat_button.setToolTip(tr(
-            "Какие группы спутников CelesTrak показывает слой «Спутники»."))
-        self.sat_button.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
-                                          "InstantPopup"))
-        self.sat_menu = QMenu(self.sat_button)
-        self.sat_actions = {}
-        for key, title, tip in satellite_group_names():
-            action = self.sat_menu.addAction(title)
-            action.setToolTip(tip)
-            action.setCheckable(True)
-            action.toggled.connect(self._sat_groups)
-            self.sat_actions[key] = action
-        self.sat_button.setMenu(self.sat_menu)
-        bottom = QHBoxLayout()
-        bottom.addWidget(self.note, 1)
-        bottom.addWidget(self.sat_button)
         layout = QVBoxLayout(self)
         layout.addLayout(top)
         layout.addWidget(self.list, 1)
-        layout.addLayout(bottom)
+        layout.addWidget(self.note)
         for key, group, kind in themes.gallery_items():
             name, tip = self.names[key]
             item = QListWidgetItem(name, self.list)
@@ -491,6 +521,17 @@ class NasaMaps(QDialog):
             item.setTextAlignment(enum(Qt, "AlignmentFlag", "AlignHCenter"))
             self.items[key] = (item, group, LAYER)
             self.thumbs[key] = self._layer_thumb(key)
+        for group, title, tip in satellite_group_names():
+            key = SAT + group
+            self.names[key] = (title, tip)
+            item = QListWidgetItem(title, self.list)
+            item.setData(KEY_ROLE, key)
+            item.setToolTip(tip)
+            item.setTextAlignment(enum(Qt, "AlignmentFlag", "AlignHCenter"))
+            self.items[key] = (item, SAT_GROUP, SAT)
+            self.thumbs[key] = satellite_group_image(
+                group, satellites_core.COLORS[group])
+        self._filter()
         self._load_base()
         self.refresh()
 
@@ -512,6 +553,8 @@ class NasaMaps(QDialog):
                 self._queue.append(key)
             elif kind == LAYER:
                 self._set_thumb(key, self._layer_thumb(key))
+            elif kind == SAT:
+                self._label(key)
             else:
                 self._set_thumb(key, ramp_image(ramp_of(key), self.base))
         self._pump()
@@ -626,6 +669,12 @@ class NasaMaps(QDialog):
             item.setText(name)
             self._show_icon(key, tr("✓ вкл") if on else "", on)
             return
+        if kind == SAT:
+            on = bool(self.window.extras.get("satellites")) \
+                and key[len(SAT):] in self.window.satellite_manager.groups
+            item.setText(name)
+            self._show_icon(key, tr("✓ вкл") if on else "", on)
+            return
         if kind == "gibs":
             intervals = self.window._theme_domains.get(key)
             day = themes.pick_day(intervals) if intervals else None
@@ -655,14 +704,11 @@ class NasaMaps(QDialog):
         for key, (item, group, kind) in self.items.items():
             usable = planet.earth or key in ANY_BODY \
                 or (key in RELIEF_BODY and relief)
+            # Спутники только у Земли, как и слой.
+            usable = usable and (kind != SAT or planet.earth)
             flags = item.flags()
             enabled = enum(Qt, "ItemFlag", "ItemIsEnabled")
             item.setFlags(flags | enabled if usable else flags & ~enabled)
-        groups = self.window.satellite_manager.groups
-        for key, action in self.sat_actions.items():
-            action.blockSignals(True)
-            action.setChecked(key in groups)
-            action.blockSignals(False)
         if current in self.items:
             self.note.setText(tr("На глобусе: {name}. Повторный щелчок "
                                  "убирает карту.",
@@ -674,6 +720,9 @@ class NasaMaps(QDialog):
 
     def _clicked(self, item):
         key = item.data(KEY_ROLE)
+        if self.items[key][2] == SAT:
+            self._toggle_satellites(key[len(SAT):])
+            return
         if self.items[key][2] == LAYER:
             self.window.set_extra(key, not self.window.extras.get(key))
             self.refresh()
@@ -682,11 +731,22 @@ class NasaMaps(QDialog):
             key = ""
         self.window.set_theme(key)
 
-    def _sat_groups(self, *args):
-        """Отметки меню групп спутников в окно глобуса."""
-        self.window.satellite_manager.set_groups(
-            {key for key, action in self.sat_actions.items()
-             if action.isChecked()})
+    def _toggle_satellites(self, group):
+        """Группа спутников на глобус или с глобуса. Первая группа
+        включает слой «Спутники», последняя снятая - выключает."""
+        manager = self.window.satellite_manager
+        on = bool(self.window.extras.get("satellites"))
+        groups = set(manager.groups)
+        if on and group in groups:
+            groups.discard(group)
+        else:
+            groups.add(group)
+        manager.set_groups(groups)
+        if groups and not on:
+            self.window.set_extra("satellites", True)
+        elif not groups and on:
+            self.window.set_extra("satellites", False)
+        self.refresh()
 
     def _set_group(self, group):
         self._group = group
@@ -695,8 +755,14 @@ class NasaMaps(QDialog):
     def _filter(self, *args):
         text = self.search.text().strip().lower()
         for key, (item, group, kind) in self.items.items():
-            shown = (self._group == ALL or group == self._group) and (
-                not text or text in self.names[key][0].lower())
+            # Во «Все» групп спутников нет, во вкладке «Спутники» есть
+            # и сам слой.
+            if self._group == ALL:
+                fits = kind != SAT
+            else:
+                fits = group == self._group or (
+                    self._group == SAT_GROUP and key == "satellites")
+            shown = fits and (not text or text in self.names[key][0].lower())
             item.setHidden(not shown)
 
     def closeEvent(self, event):

@@ -470,5 +470,42 @@ class TestFolderProperties(unittest.TestCase):
         self.assertFalse(y.radio)
 
 
+
+class TestRegion(unittest.TestCase):
+    """Region с Lod у метки и папки: чтение и запись туда и обратно."""
+
+    DOC = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>R</name>
+<Folder><name>Ближние</name>
+  <Region><LatLonAltBox><north>58.1</north><south>57.9</south>
+    <east>56.4</east><west>56.0</west></LatLonAltBox>
+    <Lod><minLodPixels>128</minLodPixels></Lod></Region>
+  <Placemark><name>Пермь</name>
+    <Region><LatLonAltBox><north>58.02</north><south>58.0</south>
+      <east>56.24</east><west>56.22</west></LatLonAltBox>
+      <Lod><minLodPixels>64</minLodPixels><maxLodPixels>2048</maxLodPixels>
+      </Lod></Region>
+    <Point><coordinates>56.2294,58.0105,0</coordinates></Point>
+  </Placemark>
+  <Placemark><name>Без рамки</name><Region><Lod><minLodPixels>8
+    </minLodPixels></Lod></Region>
+    <Point><coordinates>56,58,0</coordinates></Point></Placemark>
+</Folder></Document></kml>"""
+
+    def test_round_trip(self):
+        tree = kml.read_kml(self.DOC.encode("utf-8"))
+        folder = tree.children[0]
+        self.assertEqual(folder.region.min_lod, 128.0)
+        self.assertEqual(folder.region.max_lod, -1.0)
+        place, bare = folder.children
+        self.assertEqual(place.region[:4], (58.02, 58.0, 56.24, 56.22))
+        self.assertEqual((place.region.min_lod, place.region.max_lod),
+                         (64.0, 2048.0))
+        self.assertIsNone(bare.region)
+        again = kml.read_kml(kml.write_kml(tree).encode("utf-8"))
+        self.assertEqual(again.children[0].region, folder.region)
+        self.assertEqual(again.children[0].children[0].region, place.region)
+
+
 if __name__ == "__main__":
     unittest.main()

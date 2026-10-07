@@ -51,11 +51,12 @@ from urllib.parse import unquote
 from xml.parsers import expat
 
 try:  # внутри плагина QGIS
-    from . import icons, lookat, overlays
+    from . import icons, lookat, overlays, region
 except ImportError:  # headless-тесты
     import icons
     import lookat
     import overlays
+    import region
 
 NS = "http://www.opengis.net/kml/2.2"
 GX = "http://www.google.com/kml/ext/2.2"
@@ -177,7 +178,9 @@ class KFolder:
     """
 
     def __init__(self, name="", visible=True, children=None,
-                 description="", view=None, radio=False, expandable=True):
+                 description="", view=None, radio=False, expandable=True,
+                 region=None):
+        self.region = region  # core.region.Region или None
         self.name = name
         self.visible = visible
         self.children = children if children is not None else []
@@ -220,7 +223,8 @@ class KPlace:
                  width=LINE_WIDTH, fill=None, visible=True, view=None,
                  description="", height=0.0, extrude=False,
                  icon=icons.DEFAULT, time=None, view_time=None,
-                 tour=None, alts=None):
+                 tour=None, alts=None, region=None):
+        self.region = region  # core.region.Region или None
         self.alts = alts
         self.tour = tour
         self.icon = icon
@@ -537,6 +541,24 @@ def _view_time(node):
     return _time_of(look) if look is not None else None
 
 
+def _region(node):
+    """Region узла: рамка LatLonAltBox и Lod, или None. Без Lod
+    пределов нет, без рамки Region не действует."""
+    found = _child(node, "Region")
+    rect = _child(found, "LatLonAltBox") if found is not None else None
+    if rect is None:
+        return None
+    lod = _child(found, "Lod")
+    try:
+        return region.Region(
+            float(_text(rect, "north")), float(_text(rect, "south")),
+            float(_text(rect, "east")), float(_text(rect, "west")),
+            _float(lod, "minLodPixels", 0.0) if lod is not None else 0.0,
+            _float(lod, "maxLodPixels", -1.0) if lod is not None else -1.0)
+    except ValueError:
+        return None
+
+
 def _visible(node):
     return _text(node, "visibility", "1") != "0"
 
@@ -575,7 +597,8 @@ def _placemark(node, styles, inherited=None):
                           icon=icons.from_href(style.get("href"))
                           if kind == "point" else icons.DEFAULT,
                           time=time,
-                          view_time=_view_time(node), alts=alts))
+                          view_time=_view_time(node), alts=alts,
+                          region=_region(node)))
     return out
 
 
@@ -740,7 +763,8 @@ def _walk(node, styles, folder, inherited=None):
                           description=_text(child, "description"),
                           view=_view(child, None),
                           radio=kind == "radioFolder",
-                          expandable=kind != "checkHideChildren")
+                          expandable=kind != "checkHideChildren",
+                          region=_region(child))
             _walk(child, styles, sub, _time_of(child) or inherited)
             folder.children.append(sub)
         elif name == "Placemark":
@@ -777,7 +801,7 @@ def read_kml(data, name=""):
         only = top.children[0]
         top = KFolder(only.name or name, only.visible, only.children,
                       only.description, only.view, only.radio,
-                      only.expandable)
+                      only.expandable, only.region)
     return top
 
 
@@ -908,6 +932,7 @@ def _placemark_kml(place, indent):
         parts.append("<description>{}</description>".format(
             escape(place.description)))
     parts += ["<visibility>{}</visibility>".format(int(place.visible)),
+              region.kml(getattr(place, "region", None)),
               _time_kml(place.time), look,
               "<Style>{}</Style>".format(style), geometry, "</Placemark>"]
     return pad + "".join(p for p in parts if p)
@@ -1026,6 +1051,8 @@ def _folder_kml(folder, indent, tag="Folder", hrefs=None):
             escape(folder.description)))
     if getattr(folder, "view", None) is not None:
         lines.append(pad + "  " + _look_kml(folder.view))
+    if getattr(folder, "region", None) is not None:
+        lines.append(pad + "  " + region.kml(folder.region))
     kind = "radioFolder" if getattr(folder, "radio", False) else \
         "checkHideChildren" if not getattr(folder, "expandable", True) \
         else ""
