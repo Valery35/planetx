@@ -6755,6 +6755,62 @@ def menu_actions():
 
 
 @check(500)
+def menu_links():
+    """Свои пункты меню на глобусе: подменю «Открыть в браузере», адрес
+    с точкой и масштабом браузеру, окно списка с проверкой строк."""
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu, menulinks
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(ROUTE_A[0], ROUTE_A[1], 3000.0, 0.0, 0.0))
+    view.grabFramebuffer()
+    old = menulinks.QgsSettings().value(menulinks.LINKS_KEY, "")
+    opened = []
+
+    class Browser:
+        @staticmethod
+        def openUrl(url):
+            opened.append(url.toString())
+    real = menulinks.QDesktopServices
+    menulinks.QDesktopServices = Browser
+    out = {}
+    try:
+        menulinks.save([("Пример", "https://example.org/?p={lat},{lon}"
+                         "&z={zoom}")])
+        ratio = view.devicePixelRatioF()
+        px, py = view.width() * ratio / 2.0, view.height() * ratio / 2.0
+        before = set(window.findChildren(QMenu))
+        globemenu.show(window, px, py)
+        menus = [m for m in window.findChildren(QMenu) if m not in before]
+        sub = [m for m in menus if m.title() == "Открыть в браузере"]
+        out["submenu"] = [a.text() for a in sub[0].actions()] if sub \
+            else None
+        if sub:
+            sub[0].actions()[0].trigger()
+        out["opened"] = opened
+        for menu in menus:
+            menu.close()
+        dialog = menulinks.MenuLinksDialog(window)
+        out["rows"] = dialog.table.rowCount()
+        dialog._add()
+        dialog.table.item(1, 1).setText("https://x.org/{lat}")
+        dialog.accept()
+        out["bad_status"] = dialog.status.text()
+        out["bad_saved"] = len(menulinks.saved())
+        dialog.table.item(1, 1).setText("https://x.org/{lat}/{lon}")
+        dialog.accept()
+        out["good_saved"] = [name for name, _ in menulinks.saved()]
+        dialog.deleteLater()
+    finally:
+        menulinks.QDesktopServices = real
+        menulinks.QgsSettings().setValue(menulinks.LINKS_KEY, old)
+    result["menu_links"] = out
+
+
+@check(500)
 def menu_actions_check():
     import time as _time
     window = state["window"]

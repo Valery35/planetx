@@ -225,6 +225,35 @@ EN = {
         "mm/h",
     "Номенклатура листа":
         "Map sheet designation",
+    "Открыть в браузере":
+        "Open in browser",
+    "Свои пункты…":
+        "Custom items…",
+    "Свои пункты меню":
+        "Custom menu items",
+    "Адрес начинается не с https:// или http://.":
+        "The address does not start with https:// or http://.",
+    "В адресе лишние фигурные скобки или места кроме {lat}, {lon} и {zoom}.":
+        "The address has extra braces or places other than {lat}, {lon} and "
+        "{zoom}.",
+    "В адресе нет {lat} или {lon}.":
+        "The address has no {lat} or {lon}.",
+    "Новая строка с примером адреса, его можно заменить своим.":
+        "A new row with an example address, it can be replaced with your "
+        "own.",
+    "Пункт подменю «Открыть в браузере» меню на глобусе открывает адрес с "
+    "точкой под курсором. В адресе {{lat}} и {{lon}} - широта и долгота в "
+    "градусах, {{zoom}} - масштаб карты по виду. Пример: {example}":
+        "An item of the Open in browser submenu of the globe menu opens an "
+        "address with the point under the cursor. In the address {{lat}} and "
+        "{{lon}} are the latitude and longitude in degrees, {{zoom}} is the "
+        "map scale by the view. Example: {example}",
+    "Строка {n}: {reason}":
+        "Row {n}: {reason}",
+    "У пункта нет названия.":
+        "The item has no name.",
+    "Удалить выделенные строки.":
+        "Delete the selected rows.",
     "Шторка сравнения. Левее шторки тема показана на другой день, правее - "
     "на день шкалы. Шторка тянется мышью, её день меняют кнопки ‹ и › над "
     "ней.":

@@ -18,6 +18,7 @@ from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import has_alts
 from ..i18n import tr
 from .identify import point_text
+from .menulinks import saved as saved_links
 from .sheets import scale_text, system_names
 from ..qt_compat import enum
 
@@ -134,6 +135,7 @@ def show(window, px, py):
         if window.planet.earth:
             menu.addAction(tr("Скопировать ссылку на место")) \
                 .triggered.connect(lambda *a: window.copy_link(lat, lon))
+            link_items(window, menu, lat, lon)
         if not drawing:
             menu.addAction(tr("Вставить")).triggered.connect(
                 lambda *a: window.paste_places(window.panel.current_folder()))
@@ -162,6 +164,21 @@ def sheet_items(window, menu, lat, lon):
     sub.addSeparator()
     sub.addAction(tr("Все номера в окне…")).triggered.connect(
         lambda *a: window.sheets_here(lat, lon))
+    return sub
+
+
+def link_items(window, menu, lat, lon):
+    """Подменю «Открыть в браузере»: свои пункты пользователя - адреса
+    с точкой под курсором (ui/menulinks.py). Последний пункт открывает
+    окно списка."""
+    sub = menu.addMenu(tr("Открыть в браузере"))
+    for name, template in saved_links():
+        sub.addAction(name).triggered.connect(
+            lambda *a, t=template: window.open_menu_link(t, lat, lon))
+    if not sub.isEmpty():
+        sub.addSeparator()
+    sub.addAction(tr("Свои пункты…")).triggered.connect(
+        lambda *a: window.edit_menu_links())
     return sub
 
 

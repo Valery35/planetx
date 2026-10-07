@@ -36,9 +36,9 @@ from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, Spin, fit_view
 from ..core import weather as weather_core
-from ..core.geocode import (SEARCH_INTERVAL, normalize, osm_link,
-                            parse_places, parse_reverse, place_text,
-                            reverse_url, search_url)
+from ..core.geocode import (SEARCH_INTERVAL, link_zoom, normalize,
+                            osm_link, parse_places, parse_reverse,
+                            place_text, reverse_url, search_url)
 from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
 from ..core.planets import EARTH_PLANET, PLANETS, planet_by_key
@@ -123,6 +123,7 @@ from .snapshot import SnapshotDialog
 from .tour import TourPlayer
 from .routing import RouteManager
 from .sheets import SheetsDialog
+from .menulinks import MenuLinksDialog, open_link
 from .nasamaps import NasaMaps, map_names
 from .weather import (LEVEL as WEATHER_LEVEL,
                       WeatherManager, units_text as weather_units)
@@ -3559,13 +3560,27 @@ class GlobeWindow(QWidget):
         self.ruler.add(lat, lon)
         self._refresh_shapes()
 
+    def _view_width(self):
+        """Ширина видимой полосы в метрах - масштаб ссылок на место."""
+        pose = self.view.navigator.pose
+        return 2.0 * pose.distance * math.tan(
+            math.radians(self.view.camera.fov_y) / 2.0)
+
+    def open_menu_link(self, template, lat, lon):
+        """Свой пункт меню на глобусе: адрес точки - браузеру."""
+        open_link(template, lat, lon, link_zoom(lat, self._view_width()))
+
+    def edit_menu_links(self):
+        """Окно «Свои пункты меню»."""
+        dialog = MenuLinksDialog(self)
+        dialog.exec()
+        return dialog
+
     def copy_link(self, lat, lon):
         """Ссылка на точку на карте OpenStreetMap в буфер обмена. Масштаб
         - по ширине видимой полосы."""
-        pose = self.view.navigator.pose
-        width = 2.0 * pose.distance * math.tan(
-            math.radians(self.view.camera.fov_y) / 2.0)
-        QApplication.clipboard().setText(osm_link(lat, lon, width))
+        QApplication.clipboard().setText(
+            osm_link(lat, lon, self._view_width()))
         self.message = (tr("Ссылка на место скопирована."),
                         time.monotonic())
         self._show_state()
