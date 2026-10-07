@@ -366,7 +366,7 @@ The ⇆ button of the time slider splits the view with a swipe. Right
 of the swipe the theme is shown for the day of the slider, left of it
 for a day of its own. By default this is the same day a year ago, for
 a series shorter than a year its first day. Tags with the days of both
-sides stand above the swipe. The ◂ and ▸ buttons of the left tag move
+sides stand above the swipe. The ‹ and › buttons of the left tag move
 its day along the theme series, the cross removes the swipe. The swipe
 is dragged with the mouse by the strip with a circle.
 
@@ -390,7 +390,7 @@ the slider at the present moment. The slider spans 10 days before
 the latest model run and 16 days of forecast after it. The future is
 the forecast of the latest run, hourly for the first 5 days, then
 every 3 hours. The past is the model analysis for the nearest hour.
-The ◂ and ▸ buttons of the slider move the moment by an hour, ▶ shows
+The ‹ and › buttons of the slider move the moment by an hour, ▶ shows
 the hours one after another and waits for each to load. The model
 runs 4 times a day, a new run is published 4-5 hours later.
 
@@ -901,7 +901,7 @@ same way.
 The time slider is one time of the whole view. Coverages - NASA themes -
 take the moment, the right handle. Events - placemarks with time and
 earthquakes - take the range between the handles. When a theme is on
-and there are no events, the slider has one handle. The ◂ and ▸ buttons
+and there are no events, the slider has one handle. The ‹ and › buttons
 move the moment by a step of the theme series, ▶ shows the days of the
 series one after another and waits until each day has loaded. The
 legends of the layers - theme, foci, cutaway, beds, insolation, slope
@@ -1284,7 +1284,8 @@ place selected it tours the folder holding the place. A tour goes
 through the places of the body now on the globe. When no places are
 checked, the status line says so.
 
-The tour bar appears at the bottom of the view:
+The tour bar appears at the top of the view as a second row under the
+time slider, and without the slider in its place:
 
 | Button | What it does |
 |---|---|

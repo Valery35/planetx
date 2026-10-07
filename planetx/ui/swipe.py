@@ -8,16 +8,16 @@
 render/gibs.py), правее - на день шкалы времени. Белую линию по
 границе рисует шейдер тайла, поэтому она есть и на снимке вида
 и в записи тура. Здесь - полоса, за которую тянется шторка, кружок
-посередине и бирки с днями: слева со шагами ◂ ▸ по ряду темы,
+посередине и бирки с днями: слева с шагами ‹ › по ряду темы,
 справа - день шкалы. Окно глобуса ставит дни и слушает сигналы.
 """
 from qgis.PyQt.QtCore import QEvent, QPointF, QRectF, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QColor, QCursor, QPainter, QPen
-from qgis.PyQt.QtWidgets import (QFrame, QHBoxLayout, QLabel, QToolButton,
-                                 QWidget)
+from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
 
 from ..i18n import tr
 from ..qt_compat import enum
+from .timebar import icon_button
 
 GRIP = 28  # ширина полосы, за которую тянется шторка, логических пикселей
 KNOB = 11.0  # радиус кружка посередине
@@ -49,22 +49,17 @@ class SwipeBar(QWidget):
         row.setContentsMargins(2, 1, 2, 1)
         row.setSpacing(2)
         for text, tip, delta in (
-                ("◂", tr("День левой части на шаг ряда темы назад."), -1),
-                ("▸", tr("День левой части на шаг ряда темы вперёд."), 1)):
-            button = QToolButton(self.left)
-            button.setText(text)
-            button.setToolTip(tip)
-            button.setAutoRaise(True)
+                ("‹", tr("День левой части на шаг ряда темы назад."), -1),
+                ("›", tr("День левой части на шаг ряда темы вперёд."), 1)):
+            button = icon_button(self.left, text, tip)
             button.clicked.connect(
                 lambda _=False, d=delta: self.stepped.emit(d))
             row.addWidget(button)
             if delta < 0:
                 self.left_day = QLabel(self.left)
                 row.addWidget(self.left_day)
-        close = QToolButton(self.left)
-        close.setText("✕")
-        close.setToolTip(tr("Убрать шторку сравнения."))
-        close.setAutoRaise(True)
+        close = icon_button(self.left, "✕",
+                            tr("Убрать шторку сравнения."))
         close.clicked.connect(self.closed.emit)
         row.addWidget(close)
         self.right = QLabel(parent)
@@ -80,8 +75,11 @@ class SwipeBar(QWidget):
             widget.setVisible(bool(on))
         if on:
             self._place()
-            for widget in (self, self.left, self.right):
-                widget.raise_()
+            # Полоса - под панелями вида: линия не режет шкалу времени
+            # и панель значков. Бирки - над ними.
+            self.lower()
+            self.left.raise_()
+            self.right.raise_()
 
     def set_days(self, left, right):
         """Дни левой и правой части, строки YYYY-MM-DD."""

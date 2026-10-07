@@ -17,7 +17,7 @@ QGIS не опирается, решение автора от 30 сентябр
 Шкала - одно время вида, решение автора от 5 октября 2026 года.
 Покрытия - темы NASA - берут момент, правый бегунок, события - метки
 и землетрясения - промежуток. Без событий шкала - один бегунок
-(point). Шаги ◂ ▸ двигают момент по дням ряда покрытия (stepper),
+(point). Шаги ‹ › двигают момент по дням ряда покрытия (stepper),
 показ при покрытии идёт по этим дням и ждёт загрузки дня (ready).
 
 Часы глобуса - core/clock.py, просьба автора от 6 октября 2026 года
@@ -31,8 +31,9 @@ QGIS не опирается, решение автора от 30 сентябр
 import math
 import time
 
-from qgis.PyQt.QtCore import QEvent, QRectF, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QColor, QPainter, QPen
+from qgis.PyQt.QtCore import QEvent, QRectF, QSize, Qt, QTimer, pyqtSignal
+from qgis.PyQt.QtGui import (QColor, QFont, QIcon, QImage, QLinearGradient,
+                             QPainter, QPen, QPixmap)
 from qgis.PyQt.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel,
                                  QToolButton, QWidget)
 
@@ -52,6 +53,50 @@ CLOCK_RATE = 60.0
 SELECTION = QColor(255, 214, 0, 150)
 # Шкала длиннее - у дат до нашей эры подписан только год.
 LONG_SPAN = 3 * 366 * 86400
+
+
+ICON_SIDE = 20  # сторона значка кнопки, логических пикселей
+
+
+def blue_icon(symbol):
+    """Значок кнопки в виде синих значков ⏮ ▶ ⏭: белый знак на синем
+    квадрате. Простые знаки ‹ › ⇆ шрифтом выходили мелкими и чёрными,
+    замечание автора от 7 октября 2026 года."""
+    ratio = 2
+    image = QImage(ICON_SIDE * ratio, ICON_SIDE * ratio,
+                   enum(QImage, "Format", "Format_ARGB32_Premultiplied"))
+    image.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(image)
+    painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+    side = float(ICON_SIDE * ratio)
+    gradient = QLinearGradient(0.0, 0.0, 0.0, side)
+    gradient.setColorAt(0.0, QColor(92, 170, 240))
+    gradient.setColorAt(1.0, QColor(30, 116, 206))
+    painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+    painter.setBrush(gradient)
+    painter.drawRoundedRect(QRectF(1.0, 1.0, side - 2.0, side - 2.0),
+                            7.0, 7.0)
+    font = QFont(painter.font())
+    font.setPixelSize(int(side * 0.72))
+    font.setBold(True)
+    painter.setFont(font)
+    painter.setPen(QColor(255, 255, 255))
+    painter.drawText(QRectF(0.0, -side * 0.06, side, side),
+                     int(enum(Qt, "AlignmentFlag", "AlignCenter")), symbol)
+    painter.end()
+    pixmap = QPixmap.fromImage(image)
+    pixmap.setDevicePixelRatio(ratio)
+    return QIcon(pixmap)
+
+
+def icon_button(parent, symbol, tip):
+    """Кнопка с синим значком blue_icon."""
+    button = QToolButton(parent)
+    button.setIcon(blue_icon(symbol))
+    button.setIconSize(QSize(ICON_SIDE, ICON_SIDE))
+    button.setToolTip(tip)
+    button.setAutoRaise(True)
+    return button
 
 
 def time_text(seconds, span, exact=False):
@@ -210,7 +255,7 @@ class TimeBar(QFrame):
             "всегда.")
         self._point_tip = tr(
             "Момент времени темы NASA. Щелчок по полосе или протяжка "
-            "бегунка ставят день, кнопки ◂ и ▸ сдвигают его на шаг ряда "
+            "бегунка ставят день, кнопки ‹ и › сдвигают его на шаг ряда "
             "темы.")
         self.track.setToolTip(self._range_tip)
         self.track.moved.connect(self._moved)
@@ -223,26 +268,20 @@ class TimeBar(QFrame):
         self.ready = None
         self.steps = []
         for text, tip, delta in (
-                ("◂", tr("На шаг ряда темы назад."), -1),
-                ("▸", tr("На шаг ряда темы вперёд."), 1)):
-            button = QToolButton(self)
-            button.setText(text)
-            button.setToolTip(tip)
-            button.setAutoRaise(True)
+                ("‹", tr("На шаг ряда темы назад."), -1),
+                ("›", tr("На шаг ряда темы вперёд."), 1)):
+            button = icon_button(self, text, tip)
             button.clicked.connect(lambda _=False, d=delta: self.step(d))
             button.hide()
             layout.addWidget(button)
             self.steps.append(button)
         # Шторка сравнения двух дней темы (ui/swipe.py). Кнопку
         # показывает окно, когда на глобусе тема NASA.
-        self.compare = QToolButton(self)
-        self.compare.setText("⇆")
-        self.compare.setCheckable(True)
-        self.compare.setAutoRaise(True)
-        self.compare.setToolTip(tr(
+        self.compare = icon_button(self, "⇆", tr(
             "Шторка сравнения. Левее шторки тема показана на другой день, "
             "правее - на день шкалы. Шторка тянется мышью, её день "
-            "меняют кнопки ◂ и ▸ над ней."))
+            "меняют кнопки ‹ и › над ней."))
+        self.compare.setCheckable(True)
         self.compare.clicked.connect(self.compare_toggled.emit)
         self.compare.hide()
         layout.addWidget(self.compare)

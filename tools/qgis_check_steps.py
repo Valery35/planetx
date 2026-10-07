@@ -753,6 +753,8 @@ def swipe_wait():
         return 500
     image = view.grabFramebuffer()
     image.save(os.path.join(TEMP, "planetx_swipe.png"))
+    # Окно целиком: панели и шторка поверх вида.
+    window.grab().save(os.path.join(TEMP, "planetx_swipe_window.png"))
     x = int(image.width() * view.swipe)
     white = sum(1 for y in range(image.height())
                 if image.pixelColor(x, y).lightness() > 250)
@@ -774,6 +776,42 @@ def swipe_wait():
                       loader="compare" in window.gibs_loaders,
                       shown=view.gibs["compare"].shown,
                       at=window._compare_at)
+
+
+@check(500)
+def tour_panel():
+    """Панель тура - строкой под шкалой времени, без шкалы - на её
+    месте под панелью значков. Синие значки шагов и шторки шкалы."""
+    from qgis.PyQt.QtWidgets import QApplication
+    window = state["window"]
+    timebar, bar = window.timebar, window.tour.bar
+    window.set_body("earth")
+    timebar.set_stepper(lambda moment, delta: None)
+    timebar.set_compare(True, False)
+    timebar.set_extent((time.time() - 86400.0, time.time()))
+    timebar.open_bar()
+    out_shown = timebar.shown()
+    bar.show()
+    bar.set_state(True, 0, 3, "Проба", "")
+    bar.set_time(10.0, 60.0)
+    QApplication.processEvents()
+    out = {"time": [timebar.x(), timebar.y(), timebar.width(),
+                    timebar.height()],
+           "tour": [bar.x(), bar.y(), bar.width(), bar.height()]}
+    out["time_shown"] = out_shown
+    out["joined"] = bar.y() == timebar.y() + timebar.height() - 1 \
+        and bar.x() == timebar.x()
+    out["icons"] = [not b.icon().isNull()
+                    for b in timebar.steps + [timebar.compare]]
+    window.grab().save(os.path.join(TEMP, "planetx_tour_panel.png"))
+    timebar.close_bar()
+    QApplication.processEvents()
+    out["alone"] = [bar.x(), bar.y()]
+    out["alone_at_anchor"] = (bar.x(), bar.y()) == tuple(timebar.anchor())
+    bar.hide()
+    timebar.set_stepper(None)
+    timebar.set_compare(False, False)
+    result["tour_panel"] = out
 
 
 @check(500)

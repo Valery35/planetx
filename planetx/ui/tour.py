@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Показ тура: панель управления внизу вида и проигрыватель.
+"""Показ тура: панель управления под шкалой времени и проигрыватель.
 
 Тур строится в core/tour.py и проигрывается навигатором как перелёт.
 Пауза останавливает навигатор и запоминает время тура. Продолжение
@@ -25,7 +25,7 @@ from ..qt_compat import enum
 
 PAUSE_KEY = "PlanetX/tour_pause"
 LOOP_KEY = "PlanetX/tour_loop"
-MARGIN = 12  # пикселей от нижнего края вида
+MARGIN = 12  # пикселей от нижнего края вида, если шкалы времени нет
 STYLE = ("QFrame#planetxTour { background: rgba(250, 250, 250, 230); "
          "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
 # Поза камеры сдвинута мышью, если ушла дальше этой доли расстояния.
@@ -103,6 +103,9 @@ class TourBar(QFrame):
         layout.addWidget(self.loop)
         self.info = QLabel(self)
         layout.addWidget(self.info)
+        # Под шкалой времени панель растягивается на её ширину, лишнее
+        # место - между названием остановки и паузой.
+        layout.addStretch(1)
         self.pause = QDoubleSpinBox(self)
         self.pause.setRange(0.0, 60.0)
         self.pause.setDecimals(1)
@@ -166,13 +169,38 @@ class TourBar(QFrame):
         self.adjustSize()
         self._place()
 
+    def attach(self, timebar):
+        """Панель тура - строкой под шкалой времени, одной панелью
+        с ней, а без шкалы - на её месте. Решение автора от 7 октября
+        2026 года - две панели мультипликации, вверху и внизу вида,
+        лишние."""
+        self.follow = timebar
+        timebar.installEventFilter(self)
+
     def _place(self):
+        follow = getattr(self, "follow", None)
+        if follow is not None and follow.anchor is not None:
+            x, y = follow.anchor()
+            if not follow.isHidden():
+                # Общая граница: панель тура заходит под шкалу на пиксель.
+                x, y = follow.x(), follow.y() + follow.height() - 1
+                self.setMinimumWidth(follow.width())
+            else:
+                self.setMinimumWidth(0)
+            self.adjustSize()
+            self.move(x, y)
+            self.raise_()
+            return
         parent = self.parentWidget()
         self.move(max(0, (parent.width() - self.width()) // 2),
                   parent.height() - self.height() - MARGIN)
 
     def eventFilter(self, watched, event):
-        if event.type() == enum(QEvent, "Type", "Resize"):
+        kinds = [enum(QEvent, "Type", "Resize")]
+        if watched is getattr(self, "follow", None):
+            kinds += [enum(QEvent, "Type", name)
+                      for name in ("Show", "Hide", "Move")]
+        if event.type() in kinds and not self.isHidden():
             self._place()
         return False
 

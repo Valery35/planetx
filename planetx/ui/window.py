@@ -844,6 +844,7 @@ class GlobeWindow(QWidget):
         self.myplaces.load()
         # Тур по отмеченным «Моим меткам».
         self.tour = TourPlayer(self.view, self._tour_stops, self)
+        self.tour.bar.attach(self.timebar)
         # Запись тура с экрана, как в Google Earth.
         self._recording = None
         self._record_timer = QTimer(self)

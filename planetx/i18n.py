@@ -228,11 +228,11 @@ EN = {
     "Номенклатура листа":
         "Map sheet designation",
     "Шторка сравнения. Левее шторки тема показана на другой день, правее - "
-    "на день шкалы. Шторка тянется мышью, её день меняют кнопки ◂ и ▸ над "
+    "на день шкалы. Шторка тянется мышью, её день меняют кнопки ‹ и › над "
     "ней.":
         "Comparison swipe. Left of the swipe the theme is shown for another "
         "day, right of it for the day of the time slider. Drag the swipe "
-        "with the mouse, the ◂ and ▸ buttons above it change its day.",
+        "with the mouse, the ‹ and › buttons above it change its day.",
     "Шторка сравнения: тянется мышью.":
         "Comparison swipe: drag it with the mouse.",
     "День левой части на шаг ряда темы назад.":
@@ -700,9 +700,9 @@ EN = {
         "Placemarks outside the range are hidden, placemarks without time "
         "are always shown.",
     "Момент времени темы NASA. Щелчок по полосе или протяжка бегунка "
-    "ставят день, кнопки ◂ и ▸ сдвигают его на шаг ряда темы.":
+    "ставят день, кнопки ‹ и › сдвигают его на шаг ряда темы.":
         "The moment of the NASA theme. A click on the bar or dragging the "
-        "handle sets the day, the ◂ and ▸ buttons move it by a step of the "
+        "handle sets the day, the ‹ and › buttons move it by a step of the "
         "theme series.",
     "На шаг ряда темы назад.": "One step of the theme series back.",
     "На шаг ряда темы вперёд.": "One step of the theme series forward.",

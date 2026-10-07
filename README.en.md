@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.49.0.
+A 3D globe inside QGIS. PlanetX version 0.50.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -184,7 +184,7 @@ and atmosphere, from space down to single streets.
 - **Tour.** Play tour in the menu of My Places or any of its folders
   flies over the checked places in the list order, along a path the
   camera travels the line. Places and folders are rearranged by
-  dragging. The bar at the bottom of the view pauses the tour, steps
+  dragging. The bar under the time slider pauses the tour, steps
   between stops and repeats the tour in a loop. It records the tour to
   an MP4 video right away or as PNG frames of any size for editing. The record button records a tour from the
   screen.
