@@ -225,7 +225,7 @@ take effect at once, without the Refresh button.
 
 | Part | Rows |
 |---|---|
-| Base map | Sources of imagery and maps, one is checked, the last row is Add tile source… |
+| Base map | Sources of imagery and maps, an option button selects one, the last row is Add tile source… |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |
 | Maps and layers | The row opens the gallery of maps and layers, see Maps and layers |
 | Map | Borders and names, Transport, Nature - the vector base, Coordinate grid, 3D buildings |
@@ -1206,6 +1206,32 @@ a section, a tunnel and a cut - and adds it to the project as the
 Subsurface template group. The template tables are filled with your own
 data.
 
+### Grids by elevations
+
+A project raster whose values are absolute elevations in metres lies
+under the ground as a surface. For this the Surface by elevations item
+is checked in the raster menu of the Project layers section. The layer
+box shows and hides the surface. The raster coordinate system comes
+from the QGIS layer, so an ASCII Grid without a .prj file also fits.
+
+The surface colour is the QGIS raster colouring. A grey raster without
+settings takes the bed colour. Grids whose names end with _top and
+_bottom, for example B_top and B_bottom, are the top and the base of
+one bed. They take one colour, end walls stand between them along the
+data edge, and the bed looks like a slab. The endings roof, base and
+their Russian words also fit.
+
+A block is built under the grids. Walls with beds stand along the data
+edge from the terrain to the model bottom, a floor lies at the model
+bottom. The walls darken with depth. A wall facing the camera from
+outside is not drawn, so the block is seen from inside from any side.
+Above the block the ground is transparent by the Ground above grids
+slider of the Layers section, outside the data outline it is opaque.
+The slider row appears together with the underground model.
+
+Thin beds are easier to see with the vertical terrain scale of the View
+properties window. The scale stretches depths too.
+
 ### Display
 
 The model is built when at least one geological layer is checked. The
@@ -1235,7 +1261,8 @@ terrain off, elevations are counted from the surface.
 
 The Surface opacity slider makes the terrain inside the model frame
 transparent, the drill holes and roofs show through it. Outside the
-frame the surface stays opaque. The Block cut checkbox removes the
+frame the surface stays opaque, with grids - outside their data
+outline. The Block cut checkbox removes the
 surface and the roofs inside the cut polygon. Walls with beds stand
 along the cut edge, a plane at the model bottom lies at its floor. The
 Camera under ground checkbox lets the camera go below the terrain down

@@ -225,6 +225,26 @@ EN = {
         "mm/h",
     "Номенклатура листа":
         "Map sheet designation",
+    "Земля над гридами":
+        "Ground above grids",
+    "Поверхность по отметкам":
+        "Surface by elevations",
+    "Значения растра - абсолютные отметки, растр ложится поверхностью на "
+    "свою высоту, под землёй или над ней. Цвет - стиль слоя QGIS. Флажок "
+    "слоя показывает и скрывает поверхность, ползунок «Земля над гридами» "
+    "раздела «Слои» делает землю над ней прозрачной.":
+        "The raster values are absolute elevations, the raster lies as a "
+        "surface at its height, under the ground or above it. The colour is "
+        "the QGIS layer style. The layer box shows and hides the surface, "
+        "the Ground above grids slider of the Layers section makes the "
+        "ground above it transparent.",
+    "Непрозрачность земли над подземной моделью - гридами по отметкам, "
+    "кровлями, скважинами. Вправо земля непрозрачна, влево прозрачнее, у "
+    "левого края её не видно. Вне рамки модели земля не меняется.":
+        "Opacity of the ground above the underground model - grids by "
+        "elevations, bed tops, wells. To the right the ground is opaque, to "
+        "the left more transparent, at the left edge it is not visible. "
+        "Outside the model frame the ground does not change.",
     "Группы искусственных спутников CelesTrak. Щелчок по группе показывает "
     "её на глобусе или убирает.":
         "Groups of artificial satellites from CelesTrak. A click on a group "

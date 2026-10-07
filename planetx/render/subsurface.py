@@ -39,6 +39,10 @@ class Subsurface:
     def __init__(self, offset=False, xray=False):
         self.offset = offset
         self.xray = xray
+        # Имя сетки - отбрасываемые грани (GL_FRONT, GL_BACK): у стенок
+        # блока гридов грани, обращённые к глазу снаружи, не рисуются,
+        # и сквозь ближнюю стенку виден блок изнутри.
+        self.cull = {"block": GL.GL_FRONT}
         self.program = None
         self.locations = {}
         self.buffers = {}  # имя - _Buffers
@@ -98,7 +102,8 @@ class Subsurface:
         if self.program is None:
             return
         self.prepare()
-        items = list(self.buffers.values())
+        names = list(self.buffers)
+        items = [self.buffers[name] for name in names]
         if not items:
             return
         mvps = np.ascontiguousarray(
@@ -128,10 +133,17 @@ class Subsurface:
             for i, item in enumerate(items):
                 gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                                     ctypes.c_void_p(base + stride * i))
+                face = self.cull.get(names[i])
+                if face is not None:
+                    GL.glEnable(GL.GL_CULL_FACE)
+                    GL.glCullFace(face)
                 gpu._bind_vao(item.vao)
                 gpu._draw_elements(GL.GL_TRIANGLES, item.count,
                                    GL.GL_UNSIGNED_INT, null)
+                if face is not None:
+                    GL.glDisable(GL.GL_CULL_FACE)
         finally:
+            GL.glDisable(GL.GL_CULL_FACE)
             gpu._bind_vao(0)
             gl.glDisable(GL.GL_BLEND)
             if self.offset:

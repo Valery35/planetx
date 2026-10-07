@@ -416,6 +416,10 @@ class LayerPanel(QWidget):
     track_requested = pyqtSignal(object)
     # Растр проекта включён или выключен рельефом глобуса.
     inset_toggled = pyqtSignal(str, bool)
+    # Растр - поверхность по отметкам, пункт меню слоя.
+    grid_toggled = pyqtSignal(str, bool)
+    # Непрозрачность земли над подземной моделью, от 0 до 1.
+    ground_alpha = pyqtSignal(float)
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
     # Строка витрины карт NASA и погоды: открыть витрину.
@@ -639,6 +643,28 @@ class LayerPanel(QWidget):
         self.gallery_item.setToolTip(0, tr(
             "Карты NASA, прогноз погоды, пожары, небо, недра и анализ "
             "рельефа с превью. Щелчок открывает витрину."))
+        # Земля над подземной моделью: ползунок непрозрачности, виден,
+        # пока модель есть. Просьба автора от 8 октября 2026 года -
+        # прозрачность и невидимость поверхности над гридами.
+        self.ground_item = QTreeWidgetItem(self.geo, self.gallery_item)
+        self.ground_item.setFlags(enum(Qt, "ItemFlag", "ItemIsEnabled"))
+        ground = QWidget(self.geo)
+        row = QHBoxLayout(ground)
+        row.setContentsMargins(0, 0, 4, 0)
+        row.addWidget(QLabel(tr("Земля над гридами"), ground))
+        self.ground_slider = QSlider(enum(Qt, "Orientation", "Horizontal"),
+                                     ground)
+        self.ground_slider.setRange(0, 100)
+        self.ground_slider.setToolTip(tr(
+            "Непрозрачность земли над подземной моделью - гридами "
+            "по отметкам, кровлями, скважинами. Вправо земля "
+            "непрозрачна, влево прозрачнее, у левого края её не видно. "
+            "Вне рамки модели земля не меняется."))
+        self.ground_slider.valueChanged.connect(
+            lambda value: self.ground_alpha.emit(value / 100.0))
+        row.addWidget(self.ground_slider, 1)
+        self.geo.setItemWidget(self.ground_item, 0, ground)
+        self.ground_item.setHidden(True)
         self.geo.addTopLevelItems(list(self.headers.values()))
         self.extra_items = {}
         self._extras = {}
@@ -667,6 +693,8 @@ class LayerPanel(QWidget):
         # Слои проекта - свой список, отдельно от меток.
         # Растры проекта - рельеф глобуса, отметки меню слоя.
         self.inset_ids = set()
+        # Растры проекта - поверхности по отметкам под землёй.
+        self.grid_ids = set()
         self.layers = QTreeWidget(self)
         self.layers.setHeaderHidden(True)
         self.layers.setRootIsDecorated(False)
@@ -839,6 +867,14 @@ class LayerPanel(QWidget):
         else:
             self.assistant_requested.emit()
 
+    def set_ground(self, shown, alpha=1.0):
+        """Строка «Земля над гридами»: видна ли и непрозрачность."""
+        self.ground_item.setHidden(not shown)
+        if shown:
+            self.ground_slider.blockSignals(True)
+            self.ground_slider.setValue(int(round(float(alpha) * 100)))
+            self.ground_slider.blockSignals(False)
+
     def set_answer(self, text, undo=False, make="", stop=False,
                    accept=False, links=(), talk=True):
         """Ответ помощника под строкой поиска со ссылкой на разговор.
@@ -1006,6 +1042,9 @@ class LayerPanel(QWidget):
             for i, name in enumerate(names):
                 item = QTreeWidgetItem(group, [name])
                 item.setData(0, BASEMAP_ROLE, i)
+                # Подложка одна - кружок выбора, а не флажок. Просьба
+                # автора от 8 октября 2026 года.
+                item.setData(0, RADIO_ROLE, "basemap")
                 item.setFlags(item.flags() | CHECKABLE)
                 item.setCheckState(0, CHECKED if i == index else UNCHECKED)
             add = QTreeWidgetItem(group, [tr("Добавить источник тайлов…")])
@@ -1399,6 +1438,17 @@ class LayerPanel(QWidget):
                 "растра."))
             relief.toggled.connect(
                 lambda on: self.inset_toggled.emit(layer.id(), on))
+            grid = menu.addAction(tr("Поверхность по отметкам"))
+            grid.setCheckable(True)
+            grid.setChecked(layer.id() in self.grid_ids)
+            grid.setToolTip(tr(
+                "Значения растра - абсолютные отметки, растр ложится "
+                "поверхностью на свою высоту, под землёй или над ней. "
+                "Цвет - стиль слоя QGIS. Флажок слоя показывает "
+                "и скрывает поверхность, ползунок «Земля над гридами» "
+                "раздела «Слои» делает землю над ней прозрачной."))
+            grid.toggled.connect(
+                lambda on: self.grid_toggled.emit(layer.id(), on))
         menu.addAction(tr("Свойства слоя…")).triggered.connect(
             lambda: self.layer_properties.emit(layer))
         menu.exec(self.layers.viewport().mapToGlobal(point))

@@ -6879,6 +6879,109 @@ def region_hide():
 
 
 @check(500)
+def grids_open():
+    """Гриды по отметкам: копии гридов автора в %TEMP%\\planetx_grids
+    со стилями и системой координат его проекта, пункт «Поверхность
+    по отметкам» у каждого."""
+    import glob
+    from qgis.core import (QgsCoordinateReferenceSystem, QgsProject,
+                           QgsRasterLayer)
+    window = state["window"]
+    window.set_body("earth")
+    folder = os.path.join(TEMP, "planetx_grids")
+    with open(os.path.join(folder, "crs.wkt"), encoding="utf-8") as fh:
+        crs = QgsCoordinateReferenceSystem.fromWkt(fh.read())
+    ids = []
+    for path in sorted(glob.glob(os.path.join(folder, "*.asc"))):
+        name = os.path.splitext(os.path.basename(path))[0]
+        layer = QgsRasterLayer(path, name, "gdal")
+        layer.setCrs(crs)
+        qml = os.path.splitext(path)[0] + ".qml"
+        if os.path.exists(qml):
+            layer.loadNamedStyle(qml)
+        QgsProject.instance().addMapLayer(layer)
+        ids.append(layer.id())
+    for layer_id in ids:
+        window.set_layer_shown(layer_id, True)
+        window.set_grid(layer_id, True)
+    state["grids_ids"] = ids
+    state["grids_started"] = time.monotonic()
+    result["grids"] = {"layers": len(ids)}
+
+
+@check(500)
+def grids_wait():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    manager = window.subsurface
+    spent = time.monotonic() - state["grids_started"]
+    if (manager.model is None or manager.job is not None
+            or not window.view.subsurface.active) and spent < 60.0:
+        return 500
+    out = result["grids"]
+    model = manager.model
+    out["seconds"] = round(spent, 1)
+    out["horizons"] = len(model.horizons) if model else 0
+    out["panel_row"] = not window.panel.ground_item.isHidden()
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(59.545, 56.80, 9000.0, 25.0, 62.0))
+    state["grids_step"] = 0
+    state["grids_shot_at"] = time.monotonic()
+    return None
+
+
+@check(500)
+def grids_shots():
+    window = state["window"]
+    view = window.view
+    if time.monotonic() - state["grids_shot_at"] < 12.0:
+        return 500
+    out = result["grids"]
+    for alpha in (1.0, 0.35, 0.0):
+        window.panel.ground_slider.setValue(int(alpha * 100))
+        view.repaint()
+        image = view.grabFramebuffer()
+        image.save(os.path.join(
+            TEMP, "planetx_grids_%d.png" % int(alpha * 100)))
+    out["surface_alpha"] = view.surface_alpha
+    out["gl"] = dict(view.gl_errors)
+    mesh = view.subsurface.meshes.get("horizons") \
+        if hasattr(view.subsurface, "meshes") else None
+    out["vertices"] = len(mesh.vertices) if mesh is not None else None
+    # Масштаб рельефа 5 - пласты толщиной 5-10 м видны плитами.
+    window.set_relief_scale(5.0)
+    state["grids_shot_at"] = time.monotonic()
+    return None
+
+
+@check(500)
+def grids_scaled():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    if time.monotonic() - state["grids_shot_at"] < 15.0:
+        return 500
+    out = result["grids"]
+    out["scale"] = window.subsurface.scale
+    for name, pose in (("s5", Pose(59.545, 56.80, 9000.0, 25.0, 62.0)),
+                       ("edge", Pose(59.535, 56.80, 3500.0, 15.0, 70.0))):
+        view.navigator.set_pose(pose)
+        deadline = time.monotonic() + 20.0
+        while time.monotonic() < deadline:
+            QgsApplication.processEvents()
+            time.sleep(0.05)
+        for alpha in (0.35, 0.0):
+            window.panel.ground_slider.setValue(int(alpha * 100))
+            view.repaint()
+            view.grabFramebuffer().save(os.path.join(
+                TEMP, "planetx_grids_%s_%d.png" % (name, int(alpha * 100))))
+    window.set_relief_scale(1.0)
+    out["gl_scaled"] = dict(view.gl_errors)
+    return None
+
+
+@check(500)
 def menu_actions_check():
     import time as _time
     window = state["window"]

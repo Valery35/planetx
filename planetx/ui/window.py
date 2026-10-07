@@ -100,9 +100,9 @@ from .myplaces import MyPlaces, OverlayItem
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
-                      read_flag, read_insets, read_shown,
+                      read_flag, read_grids, read_insets, read_shown,
                       set_visible_on_map, visible_on_map, write_flag,
-                      write_insets, write_shown)
+                      write_grids, write_insets, write_shown)
 from .inset import DeepSource, terrain_prepare
 from .sources import SourcesDialog
 from .inset import apply as apply_insets
@@ -878,6 +878,10 @@ class GlobeWindow(QWidget):
         self._update_data_marks()
         self.panel.track_requested.connect(self._open_track)
         self.panel.inset_toggled.connect(self.set_inset)
+        self.panel.grid_toggled.connect(self.set_grid)
+        self.panel.ground_alpha.connect(
+            lambda value: self.subsurface.set_opacity(value))
+        self.panel.grid_ids = set(read_grids())
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
         self.toolbar.demo_requested.connect(self.open_demo)
@@ -2723,6 +2727,7 @@ class GlobeWindow(QWidget):
         self.tracks.load()
         self.subsurface.project_reloaded()
         self._load_insets()
+        self.panel.grid_ids = set(read_grids())
         self._refresh_relief()
 
     def _mark_dirty(self, dirty):
@@ -3814,6 +3819,17 @@ class GlobeWindow(QWidget):
         if on:
             ids.append(layer_id)
         self.set_insets(ids)
+
+    def set_grid(self, layer_id, on):
+        """Растр проекта layer_id - поверхность по отметкам или нет.
+        Подземная модель собирается заново, как после «Обновить»."""
+        ids = [i for i in read_grids() if i != layer_id]
+        if on:
+            ids.append(layer_id)
+        write_grids(ids)
+        self.panel.grid_ids = set(ids)
+        self._apply_vector(force=True)
+        self._show_state()
 
     def set_insets(self, ids):
         """Растры проекта ids - рельеф глобуса, прочие - нет."""

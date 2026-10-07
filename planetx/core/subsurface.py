@@ -32,6 +32,7 @@ except ImportError:  # headless-тесты
     from ellipsoid import geodetic_to_ecef, surface_normal
 
 SIDES = 8  # граней трубки ствола
+BLOCK_FADE = 0.45  # насколько темнее стенка блока у низа, выбор помощника
 
 Part = namedtuple("Part", "positions normals colors indices")
 Part.__doc__ = """Кусок сетки в ECEF: positions (n, 3) float64, normals
@@ -109,6 +110,101 @@ def _latlon(point):
             np.degrees(np.arctan2(y, x)))
 
 
+def grid_triangles(valid):
+    """Треугольники сетки узлов (rows, cols) по признаку valid: (k, 3)
+    номеров узлов. Ячейка с четырьмя узлами - два треугольника, с тремя -
+    один, так край растра идёт косой линией, а не ступенями."""
+    rows, cols = valid.shape
+    idx = np.arange(rows * cols).reshape(rows, cols)
+    a, b = idx[:-1, :-1], idx[:-1, 1:]
+    c, d = idx[1:, :-1], idx[1:, 1:]
+    va, vb = valid[:-1, :-1], valid[:-1, 1:]
+    vc, vd = valid[1:, :-1], valid[1:, 1:]
+    full = va & vb & vc & vd
+    count = va.astype(int) + vb + vc + vd
+    three = count == 3
+    pieces = [np.stack([a, b, c], -1)[full],
+              np.stack([b, d, c], -1)[full],
+              np.stack([a, b, c], -1)[three & ~vd],
+              np.stack([b, d, c], -1)[three & ~va],
+              np.stack([a, d, c], -1)[three & ~vb],
+              np.stack([a, b, d], -1)[three & ~vc]]
+    return np.concatenate(pieces).reshape(-1, 3)
+
+
+def boundary_edges(valid):
+    """Край треугольников сетки valid (grid_triangles): рёбра, которые
+    принадлежат одному треугольнику, (m, 2) номеров узлов по росту."""
+    tris = grid_triangles(valid)
+    if not len(tris):
+        return np.zeros((0, 2), dtype=np.int64)
+    edges = np.concatenate([tris[:, [0, 1]], tris[:, [1, 2]],
+                            tris[:, [2, 0]]]).astype(np.int64)
+    # Направление ребра - обход треугольника, у всех треугольников
+    # один, поэтому нормали стенок смотрят в одну сторону от данных.
+    keys = np.sort(edges, axis=1)
+    _, first, counts = np.unique(keys, axis=0, return_index=True,
+                                 return_counts=True)
+    return edges[np.sort(first[counts == 1])]
+
+
+def grid_walls(top, bottom, valid, color, skip=None):
+    """Боковые стенки пласта между поверхностями top и bottom (rows,
+    cols, 3) ECEF на одной сетке узлов: по краю треугольников valid.
+    Так пласт выглядит плитой с торцами по краю данных и по краю
+    выреза. skip - рёбра (m, 2) без стенки: там стоит стенка блока."""
+    edges = boundary_edges(valid)
+    if skip is not None and len(skip) and len(edges):
+        size = valid.size
+        a, s = np.sort(edges, axis=1), np.sort(skip, axis=1)
+        edges = edges[~np.isin(a[:, 0] * size + a[:, 1],
+                               s[:, 0] * size + s[:, 1])]
+    if not len(edges):
+        return None
+    return _edge_quads(top, bottom, edges, color)
+
+
+def block_walls(surfaces, valid, colors):
+    """Стенки блока по краю сетки valid: между поверхностями surfaces
+    (k, rows, cols, 3) ECEF сверху вниз - пласты цветов colors (k - 1).
+    Край блока закрывает вид сквозь прозрачную землю мимо гридов.
+    Цвет темнеет с глубиной до доли 1 - BLOCK_FADE у низа блока."""
+    edges = boundary_edges(valid)
+    if not len(edges):
+        return []
+    flat = [s.reshape(-1, 3) for s in surfaces]
+    depth = [np.linalg.norm(s - flat[0], axis=1) for s in flat]
+    deepest = max(float(depth[-1].max()), 1e-6)
+    shades = [1.0 - BLOCK_FADE * d / deepest for d in depth]
+    return [_edge_quads(top, bottom, edges, color, (s0, s1))
+            for top, bottom, color, s0, s1 in zip(
+                surfaces[:-1], surfaces[1:], colors, shades[:-1],
+                shades[1:])]
+
+
+def _edge_quads(top, bottom, edges, color, shade=None):
+    """Четырёхугольники между top и bottom по рёбрам edges. shade -
+    множители цвета узлов верха и низа или None."""
+    top = top.reshape(-1, 3)
+    bottom = bottom.reshape(-1, 3)
+    p0, p1 = top[edges[:, 0]], top[edges[:, 1]]
+    q0, q1 = bottom[edges[:, 0]], bottom[edges[:, 1]]
+    side = _unit(np.cross(p1 - p0, _unit(p0)))
+    n = len(edges)
+    positions = np.concatenate([p0, p1, q0, q1])
+    normals = np.concatenate([side] * 4)
+    i = np.arange(n)
+    tris = np.concatenate([np.stack([i, n + i, 2 * n + i], -1),
+                           np.stack([n + i, 3 * n + i, 2 * n + i], -1)])
+    colors = _rgba(color, 4 * n)
+    if shade is not None:
+        a, b = edges[:, 0], edges[:, 1]
+        k = np.concatenate([shade[0][a], shade[0][b], shade[1][a],
+                            shade[1][b]])
+        colors[:, :3] = (colors[:, :3] * k[:, None]).astype(np.uint8)
+    return Part(positions, normals, colors, tris.astype(np.uint32))
+
+
 def grid_surface(points, valid, colors):
     """Сетка поверхности по узлам points (rows, cols, 3) ECEF.
 
@@ -124,12 +220,7 @@ def grid_surface(points, valid, colors):
     normals = _unit(np.cross(d_col, d_row)).reshape(-1, 3)
     outward = np.einsum("ij,ij->i", normals, flat) < 0.0
     normals[outward] *= -1.0
-    idx = np.arange(rows * cols).reshape(rows, cols)
-    a, b = idx[:-1, :-1], idx[:-1, 1:]
-    c, d = idx[1:, :-1], idx[1:, 1:]
-    cell = valid[:-1, :-1] & valid[:-1, 1:] & valid[1:, :-1] & valid[1:, 1:]
-    tris = np.concatenate([np.stack([a, b, c], -1)[cell],
-                           np.stack([b, d, c], -1)[cell]])
+    tris = grid_triangles(valid)
     if not len(tris):
         return None
     colors = np.asarray(colors, dtype=np.uint8)

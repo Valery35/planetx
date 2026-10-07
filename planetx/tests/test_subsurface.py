@@ -47,11 +47,32 @@ class TestSurface(unittest.TestCase):
         valid = np.ones(lats.shape, dtype=bool)
         full = ss.grid_surface(points, valid, (0, 200, 0))
         self.assertEqual(len(full.indices), 8)
-        valid[1, 1] = False  # средний узел пуст - все 4 ячейки пропадают
+        valid[1, 1] = False  # средний узел пуст - у ячеек по треугольнику
+        self.assertEqual(len(ss.grid_surface(points, valid,
+                                             (0, 200, 0)).indices), 4)
+        valid[:] = False
+        valid[0, :2] = True  # два узла - ни одного треугольника
         self.assertIsNone(ss.grid_surface(points, valid, (0, 200, 0)))
         # Нормали смотрят вверх, от центра Земли.
         up = el.surface_normal(LAT, LON)
         self.assertGreater(float(np.dot(full.normals[4], up)), 0.99)
+
+    def test_walls_follow_outer_edges(self):
+        lats, lons = np.meshgrid(LAT + np.arange(3) * 0.001,
+                                 LON + np.arange(3) * 0.001, indexing="ij")
+        top = ss.ecef(lats, lons, np.full(lats.shape, -50.0))
+        bottom = ss.ecef(lats, lons, np.full(lats.shape, -60.0))
+        valid = np.ones(lats.shape, dtype=bool)
+        part = ss.grid_walls(top, bottom, valid, (10, 20, 30))
+        # Край 2×2 ячеек - 8 рёбер, на ребро два треугольника.
+        self.assertEqual(len(part.indices), 16)
+        # Стенка горизонтальна: нормаль поперёк вертикали.
+        up = el.surface_normal(LAT, LON)
+        self.assertLess(abs(float(np.dot(part.normals[0], up))), 0.01)
+        # Средний узел пуст - край идёт и по косым рёбрам вокруг него.
+        valid[1, 1] = False
+        part = ss.grid_walls(top, bottom, valid, (10, 20, 30))
+        self.assertEqual(len(part.indices), 2 * (8 + 4))
 
 
 class TestWall(unittest.TestCase):

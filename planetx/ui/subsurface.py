@@ -50,7 +50,7 @@ from ..core import subsurface as core
 from ..core.places import Place
 from ..i18n import tr
 from ..qt_compat import enum
-from .project import ENTRY
+from .project import ENTRY, read_grids
 from .layer_labels import label_settings
 from .viewshed import ResultTiles, fit_status
 
@@ -63,6 +63,20 @@ MIN_TUBE = 2.0  # м
 SECTION_POINTS = 400  # точек стенки разреза на линию, не больше
 BOTTOM_MARGIN = 20.0  # м ниже самой глубокой кровли, если скважин нет
 EMPTY_COLOR = (150, 150, 150)
+# Цвета пластов из гридов без таблицы пластов и без раскраски QGIS,
+# сверху вниз - спокойные тона геологических карт, выбор помощника.
+BED_COLORS = ((214, 168, 96), (122, 172, 112), (96, 146, 196),
+              (186, 116, 150), (204, 128, 86), (118, 178, 184),
+              (160, 150, 200), (190, 180, 110))
+# Кровля и подошва одного пласта - имена слоёв с этими окончаниями,
+# пара даёт плиту пласта с торцами (core.grid_walls).
+TOPS = ("top", "roof", "кровля", "кр")
+BOTTOMS = ("bottom", "bot", "base", "подошва", "под")
+WALL_SHADE = 0.8  # торец пласта темнее его поверхности
+HOST_COLOR = (176, 168, 156)  # вмещающая порода между пластами гридов
+FLOOR_COLOR = (74, 68, 62)  # дно блока под гридами
+BLOCK_RIM = 15.0  # м, на сколько верх стенки блока выше рельефа
+FOOTPRINT_SIDE = 2048  # клеток контура гридов на сторону, не больше
 POLL = 250  # мс между проверками высот
 WAIT = 30.0  # с ожидания высот
 MARK_ID = -700000  # номера подписей устьев
@@ -391,6 +405,19 @@ def label_by_field(layer, field):
     layer.setLabelsEnabled(True)
 
 
+def bed_key(code):
+    """Пласт и сторона по имени грида: («В», "top») у «В_top», («В»,
+    "bottom») у «В подошва», (code, None) без такого окончания."""
+    text = str(code).strip()
+    lower = text.lower()
+    for side, words in (("top", TOPS), ("bottom", BOTTOMS)):
+        for word in words:
+            for sep in ("_", " ", "-", "."):
+                if lower.endswith(sep + word):
+                    return text[:-len(word) - 1].strip(" _-."), side
+    return text, None
+
+
 def _with_alpha(color, alpha):
     """Цвет (r, g, b) с прозрачностью alpha от 0 до 1."""
     return tuple(color[:3]) + (int(round(255 * alpha)),)
@@ -425,9 +452,12 @@ def shapes_of(layer, kind, step):
 
 
 class Horizon:
-    """Кровля пласта: растр отметок и пересчёт широт в его систему."""
+    """Кровля пласта: растр отметок и пересчёт широт в его систему.
+    proj - система координат слоя QGIS строкой PROJ. Она главнее
+    системы файла: у ASCII Grid без файла .prj своей системы нет,
+    её задаёт проект. Нашлось 8 октября 2026 года на гридах автора."""
 
-    def __init__(self, code, path):
+    def __init__(self, code, path, proj=""):
         ds = gdal.Open(path)
         band = ds.GetRasterBand(1)
         cols, rows = ds.RasterXSize, ds.RasterYSize
@@ -444,7 +474,12 @@ class Horizon:
         self.alpha = 1.0
         self.grid = core.Grid(gt[0] + dx / 2, gt[3] + dy / 2, dx, dy, z)
         srs = osr.SpatialReference()
-        srs.ImportFromWkt(ds.GetProjection())
+        if proj:
+            srs.ImportFromProj4(proj)
+        elif ds.GetProjection():
+            srs.ImportFromWkt(ds.GetProjection())
+        else:
+            raise RuntimeError("no coordinate system")
         srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
         wgs = osr.SpatialReference()
         wgs.ImportFromEPSG(4326)
@@ -492,13 +527,15 @@ class Model:
             return EMPTY_COLOR
         return drillholes.code_color(code, self.palette)
 
-    def box(self):
-        """Рамка данных: (юг, север, запад, восток) или None."""
+    def box(self, grids=True):
+        """Рамка данных: (юг, север, запад, восток) или None. grids -
+        учитывать ли кровли, без них - рамка скважин, разрезов, выреза,
+        тоннелей и картинок."""
         lats, lons = [], []
         for _, lat, lon in self.holes:
             lats.append(lat)
             lons.append(lon)
-        for h in self.horizons:
+        for h in self.horizons if grids else ():
             lats += [np.nanmin(h.lats), np.nanmax(h.lats)]
             lons += [np.nanmin(h.lons), np.nanmax(h.lons)]
         for shape in self.sections + self.rings + [
@@ -508,6 +545,40 @@ class Model:
         if not lats:
             return None
         return min(lats), max(lats), min(lons), max(lons)
+
+    def footprint(self):
+        """Контур кровель - клетки широт и долгот с узлами данных:
+        (юг, север, запад, восток, массив (ny, nx) bool) или None без
+        кровель. Над ним земля прозрачна, вне его - нет. Клетка - шаг
+        узлов, контур расширен на клетку, чтобы край не мерцал."""
+        grids = [h for h in self.horizons if np.any(np.isfinite(h.grid.z))]
+        if not grids:
+            return None
+        south, north, west, east = self.box()
+        if north <= south or east <= west:
+            return None
+        rows =[h.lats.shape[0] for h in grids]
+        cols = [h.lats.shape[1] for h in grids]
+        dlat = min((np.nanmax(h.lats) - np.nanmin(h.lats)) / max(r - 1, 1)
+                   for h, r in zip(grids, rows))
+        dlon = min((np.nanmax(h.lons) - np.nanmin(h.lons)) / max(c - 1, 1)
+                   for h, c in zip(grids, cols))
+        ny = min(FOOTPRINT_SIDE, int((north - south) / dlat) + 1)
+        nx = min(FOOTPRINT_SIDE, int((east - west) / dlon) + 1)
+        cells = np.zeros((ny, nx), dtype=bool)
+        for h in grids:
+            ok = np.isfinite(h.grid.z)
+            if h.colors is not None:
+                ok &= h.colors[..., 3] > 0
+            i = ((h.lats[ok] - south) / (north - south) * (ny - 1)).round()
+            j = ((h.lons[ok] - west) / (east - west) * (nx - 1)).round()
+            cells[i.astype(int).clip(0, ny - 1),
+                  j.astype(int).clip(0, nx - 1)] = True
+        # Расширение и сужение закрывают клетки без узла внутри данных,
+        # второе сужение держит прозрачную землю внутри стенок блока.
+        # Иначе под косым взглядом в щель за стенкой виден чёрный фон.
+        cells = _erode(_erode(_dilate(cells)))
+        return south, north, west, east, cells
 
     def extent(self):
         """Поперечник рамки, метры."""
@@ -531,6 +602,28 @@ class Model:
         return min(lows) if lows else 0.0
 
 
+
+
+def _dilate(cells):
+    """Клетки с соседом-клеткой в окне 3×3."""
+    ny, nx = cells.shape
+    padded = np.pad(cells, 1)
+    out = np.zeros_like(cells)
+    for di in (0, 1, 2):
+        for dj in (0, 1, 2):
+            out |= padded[di:di + ny, dj:dj + nx]
+    return out
+
+
+def _erode(cells):
+    """Клетки, у которых всё окно 3×3 - клетки, за краем клеток нет."""
+    ny, nx = cells.shape
+    padded = np.pad(cells, 1)
+    out = np.ones_like(cells)
+    for di in (0, 1, 2):
+        for dj in (0, 1, 2):
+            out &= padded[di:di + ny, dj:dj + nx]
+    return out
 
 
 def _file_of_source(source):
@@ -647,7 +740,8 @@ def project_roles(layers):
     """Слои подземного режима среди layers - слоёв проекта по порядку
     карты: ({роль: номер слоя}, [номера растров кровель]). Кровля -
     растр, файл которого назван в поле surface таблицы пластов любого
-    слоя проекта."""
+    слоя проекта, или растр с пунктом «Поверхность по отметкам» меню
+    слоя (read_grids), просьба автора от 8 октября 2026 года."""
     roles = {}
     for layer in layers:
         role = detect_role(layer)
@@ -661,9 +755,11 @@ def project_roles(layers):
                 value = _value(feature["surface"])
                 if value:
                     surfaces.add(os.path.basename(str(value)).lower())
+    grids = set(read_grids())
     roofs = [layer.id() for layer in layers
              if isinstance(layer, QgsRasterLayer)
-             and os.path.basename(_file_of(layer)).lower() in surfaces]
+             and (layer.id() in grids
+                  or os.path.basename(_file_of(layer)).lower() in surfaces)]
     return roles, roofs
 
 
@@ -706,12 +802,14 @@ def load(settings):
                     src)).lower() == name else c, src)
                     for c, src in rasters]
     for code, path in rasters:
+        layer = raster_layers.get(path)
+        proj = layer.crs().toProj() if layer is not None \
+            and layer.crs().isValid() else ""
         try:
-            horizon = Horizon(code, path)
+            horizon = Horizon(code, path, proj)
         except RuntimeError:
             model.missing.append(os.path.basename(path))
             continue
-        layer = raster_layers.get(path)
         if layer is not None:
             horizon.colors = raster_colors(layer, horizon.grid.z.shape)
             horizon.alpha = layer.opacity()
@@ -726,6 +824,19 @@ def load(settings):
     else:
         order = {code: i for i, code in enumerate(model.beds)}
         model.horizons.sort(key=lambda h: order.get(h.code, len(order)))
+    # Гриды без цвета в таблице пластов - цвет пласта по порядку сверху,
+    # кровля и подошва одного пласта - одним цветом.
+    keys = []
+    for h in model.horizons:
+        key = bed_key(h.code)[0]
+        if key not in keys:
+            keys.append(key)
+    for h in model.horizons:
+        if h.code not in model.palette:
+            key = bed_key(h.code)[0]
+            model.palette[h.code] = model.palette.get(
+                key, "#%02x%02x%02x" % BED_COLORS[
+                    keys.index(key) % len(BED_COLORS)])
     if layers["collar"]:
         lost = {}
         collars = rows_of(layers["collar"], points=True, skipped=lost)
@@ -798,6 +909,59 @@ Pick.__doc__ = """Ось скважины или тоннеля для окна 
 числа в точках оси (n, k), их значения называет SubsurfaceManager."""
 
 
+def _same_grid(a, b):
+    """Кровли a и b на одной сетке узлов."""
+    return a.lats.shape == b.lats.shape and np.allclose(
+        a.lats, b.lats) and np.allclose(a.lons, b.lons)
+
+
+def _block(model, scale, ground, cut, walls, floor):
+    """Блок под гридами: стенки по краю данных от рельефа до низа модели
+    пластами - в walls, дно на отметке низа - в floor. Сетка блока - кровля
+    с наибольшим количеством узлов, данные - узлы любой кровли той же
+    сетки. Возвращает (кровля сетки, рёбра края) или None."""
+    grids = [h for h in model.horizons if np.any(np.isfinite(h.grid.z))]
+    if not grids:
+        return None
+    base = max(grids, key=lambda h: int(np.isfinite(h.grid.z).sum()))
+    lats, lons = base.lats, base.lons
+    valid = np.zeros(lats.shape, dtype=bool)
+    rows = []
+    for h in model.horizons:
+        if _same_grid(h, base):
+            z = h.grid.z
+            ok = np.isfinite(z)
+            if h.colors is not None:
+                ok &= h.colors[..., 3] > 0
+            valid |= ok
+            z = np.where(ok, z, np.nan)
+        else:
+            z = h.at(lats.ravel(), lons.ravel()).reshape(lats.shape)
+        rows.append(z)
+    if cut:
+        for ring in model.mask_rings:
+            valid &= ~core.inside(lats, lons, ring)
+    g = ground(lats.ravel(), lons.ravel()).reshape(lats.shape)
+    bottom = model.bottom()
+    stack = core.stack([g] + rows + [np.full(lats.shape, bottom)])
+    shown = core.display(stack, scale, g)
+    # Верх стенки - чуть выше рельефа: вдали глобус рисует рельеф
+    # грубыми тайлами выше настоящего, и над стенкой был виден фон.
+    shown[0] = shown[0] + BLOCK_RIM * max(scale, 1.0)
+    points = [core.ecef(lats, lons, s) for s in shown]
+    # Пласт под подошвой и над первой кровлей без таблицы пластов -
+    # вмещающая порода.
+    colors = []
+    above = model.beds[0] if model.beds else ""
+    colors.append(model.color(above) if above else HOST_COLOR)
+    for h in model.horizons:
+        colors.append(HOST_COLOR if bed_key(h.code)[1] == "bottom"
+                      else model.color(h.code))
+    walls += core.block_walls(points, valid, colors)
+    floor.append(core.grid_surface(points[-1], valid, FLOOR_COLOR))
+    return base, core.boundary_edges(valid)
+
+
 def build(model, scale, ground, cut):
     """Сетки, подписи и оси: словарь имя - Mesh, список подписей
     устьев, список Pick для опроса щелчком.
@@ -845,6 +1009,7 @@ def build(model, scale, ground, cut):
     meshes["wells"] = core.merge(wells, "wells")
     bottom = model.bottom()
     surfaces = []
+    sides = {}  # пласт - {"top"/"bottom": (кровля, точки, valid)}
     for h in model.horizons:
         valid = np.isfinite(h.grid.z)
         if cut:
@@ -861,8 +1026,26 @@ def build(model, scale, ground, cut):
         else:
             colors = np.array(_with_alpha(model.color(h.code), h.alpha),
                               dtype=np.uint8)
-        surfaces.append(core.grid_surface(
-            core.ecef(h.lats, h.lons, alt), valid, colors))
+        points = core.ecef(h.lats, h.lons, alt)
+        surfaces.append(core.grid_surface(points, valid, colors))
+        key, side = bed_key(h.code)
+        if side:
+            sides.setdefault(key, {})[side] = (h, points, valid)
+    block = []
+    edge = _block(model, scale, ground, cut, block, surfaces)
+    meshes["block"] = core.merge(block, "block")
+    # Кровля и подошва пласта на одной сетке - торцы плиты по краю.
+    for key, pair in sides.items():
+        if len(pair) < 2:
+            continue
+        (top, up, v1), (low, down, v2) = pair["top"], pair["bottom"]
+        if not _same_grid(top, low):
+            continue
+        shade = tuple(int(c * WALL_SHADE) for c in model.color(top.code))
+        surfaces.append(core.grid_walls(
+            up, down, v1 & v2, _with_alpha(shade, min(top.alpha, low.alpha)),
+            skip=edge[1] if edge is not None and _same_grid(edge[0], top)
+            else None))
     meshes["horizons"] = core.merge(surfaces, "horizons")
     lines = list(model.sections)
     if cut:
@@ -895,20 +1078,44 @@ def build(model, scale, ground, cut):
 
 class CutMask:
     """Маска слоя вида «cut»: рамка модели (box - юг, север, запад,
-    восток) и кольца выреза блока, пустой список - выреза нет."""
+    восток) и кольца выреза блока, пустой список - выреза нет.
+    footprint - контур кровель (Model.footprint) или None. С ним
+    прозрачна только земля над кровлями и в рамке прочих данных
+    (others - рамка без кровель или None). Иначе внутри рамки без
+    данных сквозь землю был виден чёрный фон, нашлось 8 октября
+    2026 года на гридах автора."""
 
-    def __init__(self, box, rings):
+    def __init__(self, box, rings, footprint=None, others=None):
         self.box = box
         self.rings = rings
+        self.footprint = footprint
+        self.others = others
+
+
+def _in_box(box, lats, lons):
+    south, north, west, east = box
+    return (lats >= south) & (lats <= north) & (lons >= west) \
+        & (lons <= east)
 
 
 def cut_rgba(mask, lats, lons, radius):
     """Картинка тайла маски. Красный канал - внутри рамки модели, там
     поверхность прозрачна. Альфа - внутри выреза, там её нет."""
-    south, north, west, east = mask.box
+    lats = np.asarray(lats)
+    lons = np.asarray(lons)
     out = np.zeros(np.shape(lats) + (4,), dtype=np.uint8)
-    region = (lats >= south) & (lats <= north) & (lons >= west) \
-        & (lons <= east)
+    if mask.footprint is None:
+        region = _in_box(mask.box, lats, lons)
+    else:
+        south, north, west, east, cells = mask.footprint
+        ny, nx = cells.shape
+        region = _in_box((south, north, west, east), lats, lons)
+        i = ((lats - south) / (north - south) * (ny - 1)).round()
+        j = ((lons - west) / (east - west) * (nx - 1)).round()
+        region &= cells[i.astype(int).clip(0, ny - 1),
+                        j.astype(int).clip(0, nx - 1)]
+        if mask.others is not None:
+            region |= _in_box(mask.others, lats, lons)
     out[region, 0] = 255
     hit = np.zeros(np.shape(lats), dtype=bool)
     for ring in mask.rings:
@@ -959,7 +1166,8 @@ class SubsurfaceDialog(QDialog):
         layout.addWidget(intro)
         options = QFormLayout()
         self.opacity = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
-        self.opacity.setRange(10, 100)
+        # До нуля: поверхность над моделью можно убрать совсем.
+        self.opacity.setRange(0, 100)
         self.opacity.setValue(int(round(settings["opacity"] * 100)))
         self.opacity.setToolTip(tr(
             "Непрозрачность поверхности. Меньше - сквозь рельеф видны "
@@ -1219,7 +1427,7 @@ class SubsurfaceManager(QObject):
         self.view.image_walls.set_walls(build_images(model, scale,
                                                      self._ground))
         self._show_legend(model)
-        for name in ("wells", "horizons", "sections"):
+        for name in ("wells", "horizons", "sections", "block"):
             self.view.subsurface.set_mesh(name, meshes.get(name))
         self.view.subsurface_marks = marks
         self._set_cut(cut, model)
@@ -1253,7 +1461,8 @@ class SubsurfaceManager(QObject):
         model = model or self.model
         rings = model.mask_rings if (on and model) else []
         key = None if model is None else (
-            model.box(), tuple(r.tobytes() for r in rings))
+            model.box(), tuple(r.tobytes() for r in rings),
+            tuple(h.code for h in model.horizons))
         if key is not None and key == self._mask_key \
                 and self.tiles is not None:
             return
@@ -1266,12 +1475,23 @@ class SubsurfaceManager(QObject):
         if self.model is None:
             self.view.set_gibs("cut", False)
             return
-        mask = CutMask(model.box(), rings)
+        mask = CutMask(model.box(), rings, model.footprint(),
+                       model.box(grids=False))
         tiles = ResultTiles(mask, ellipsoid.A, cut_rgba, parent=self)
         tiles.loaded.connect(lambda key, rgba, levels:
                              self.view.add_gibs("cut", key, levels))
         self.view.set_gibs("cut", True, tiles, keep=old is not None)
         self.tiles = tiles
+
+    def set_opacity(self, value):
+        """Непрозрачность земли над моделью от 0 до 1 - ползунок
+        «Земля над гридами» раздела «Слои»."""
+        self.set_options(dict(self.settings, opacity=float(value)),
+                         rebuild=False)
+        if self.dialog is not None:
+            self.dialog.opacity.blockSignals(True)
+            self.dialog.opacity.setValue(int(round(value * 100)))
+            self.dialog.opacity.blockSignals(False)
 
     def set_options(self, settings, rebuild=True):
         """Прозрачность, вырез и камера под землёй без чтения данных."""
@@ -1283,6 +1503,7 @@ class SubsurfaceManager(QObject):
             return
         self.view.surface_alpha = float(self.settings["opacity"])
         self.view.floor = self._floor() if self.settings["under"] else None
+        self.window.panel.set_ground(True, self.settings["opacity"])
         if rebuild and cut_changed:
             self.apply()
             return
@@ -1380,6 +1601,7 @@ class SubsurfaceManager(QObject):
         self._set_cut(False)
         self.view.surface_alpha = 1.0
         self.view.floor = None
+        self.window.panel.set_ground(False)
         self._status("")
         self.view.update()
 

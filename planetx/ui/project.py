@@ -19,6 +19,9 @@ AUTO_REFRESH = "auto_refresh"  # обновлять глобус без кноп
 SHOWN = "layers"  # номера слоёв, отмеченных в списке глобуса
 FOLLOW = "follow_legend"  # видимость на глобусе как в легенде QGIS
 INSETS = "insets"  # растры проекта - рельеф глобуса
+# Растры проекта - поверхности по абсолютным отметкам под землёй,
+# пункт «Поверхность по отметкам» меню слоя.
+GRIDS = "grids"
 
 
 def map_layers(project=None):
@@ -76,6 +79,18 @@ def read_insets(project=None):
 def write_insets(ids, project=None):
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, INSETS, list(ids))
+
+
+def read_grids(project=None):
+    """Номера растров проекта - поверхностей по отметкам."""
+    project = project or QgsProject.instance()
+    value, ok = project.readListEntry(ENTRY, GRIDS, [])
+    return list(value) if ok else []
+
+
+def write_grids(ids, project=None):
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, GRIDS, list(ids))
 
 
 class ProjectWatch(QObject):
