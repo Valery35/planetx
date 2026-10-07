@@ -288,6 +288,13 @@ uniform vec4 u_insolation_uv;
 // Тема NASA GIBS: осадки, газы, снег и другие, см. core/themes.py.
 uniform sampler2D u_theme;
 uniform vec4 u_theme_uv;
+// Шторка сравнения дат (ui/swipe.py): левее доли u_swipe ширины кадра
+// вместо темы - та же тема на другой день u_compare, по границе - белая
+// линия. Шторка выключена - u_swipe меньше нуля.
+uniform sampler2D u_compare;
+uniform vec4 u_compare_uv;
+uniform float u_swipe;
+const float SWIPE_LINE = 1.5;  // полуширина линии шторки в пикселях кадра
 // Огни городов на ночной стороне, см. core/sun.py.
 uniform sampler2D u_lights;
 uniform vec4 u_lights_uv;
@@ -356,9 +363,17 @@ void main() {
         base = lay(base, u_slope, u_slope_uv);
         base = lay(base, u_viewshed, u_viewshed_uv);
         base = lay(base, u_insolation, u_insolation_uv);
-        base = lay(base, u_theme, u_theme_uv);
+        float edge = gl_FragCoord.x - u_swipe * u_viewport.x;
+        if (u_swipe >= 0.0 && edge < 0.0) {
+            base = lay(base, u_compare, u_compare_uv);
+        } else {
+            base = lay(base, u_theme, u_theme_uv);
+        }
         base = lay(base, u_overlay, u_overlay_uv);
         base = lay(base, u_clouds, u_clouds_uv);
+        if (u_swipe >= 0.0 && abs(edge) < SWIPE_LINE) {
+            base = vec3(1.0);
+        }
     }
     // Отмывка рельефа: множитель яркости, на равнине 1. С солнцем -
     // свет по нормали и направлению на солнце, с ночной стороной.

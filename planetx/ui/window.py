@@ -130,6 +130,7 @@ from .satellites import SatelliteManager
 from ..core import satellites as satellites_core
 from .track import (TrackDialog, TrackManager, date_range, layer_span,
                     timed_layer)
+from .swipe import SwipeBar
 from .sync import MapSync
 from .timebar import TimeBar
 from .toolbar import ViewToolbar
@@ -502,6 +503,14 @@ class GlobeWindow(QWidget):
         self._time_range = None
         self.timebar.range_changed.connect(self._time_changed)
         self.timebar.closed.connect(self._time_bar_closed)
+        self.timebar.compare_toggled.connect(self.set_compare)
+        # Шторка сравнения двух дней темы: момент левой части или None.
+        self.swipe_bar = SwipeBar(self.view)
+        self.swipe_bar.moved.connect(self._swipe_moved)
+        self.swipe_bar.stepped.connect(self._compare_step)
+        self.swipe_bar.closed.connect(lambda: self.set_compare(False))
+        self._compare_at = None
+        self._compare_shown = None
         self.view.on_motion = set_moving
         self.view.load_changed.connect(self._show_state)
         self.panel = LayerPanel(self)
@@ -543,6 +552,9 @@ class GlobeWindow(QWidget):
         self._theme_scales = {}
         self._theme_replies = {}
         self.theme_legend = ThemeLegend(self.view)
+        # Крестик на шкале карты витрины убирает карту.
+        for legend in (self.theme_legend, self.fire_legend, self.legend):
+            legend.closer = lambda: self.set_theme("")
         # Шкалы - одной панелью, сверху вниз: тема, пласты, оболочки
         # разреза, очаги, пожары, инсоляция, уклон, температура.
         self.legend_panel = LegendPanel(self.view)
@@ -1182,6 +1194,8 @@ class GlobeWindow(QWidget):
             return
         key = self.gallery_key()
         self.panel.set_theme(key, map_names()[key][0] if key else "")
+        if getattr(self, "toolbar", None) is not None:
+            self.toolbar.set_map_shown(bool(key))
         gallery = getattr(self, "gallery", None)
         if gallery is not None:
             gallery.refresh()
@@ -1190,7 +1204,8 @@ class GlobeWindow(QWidget):
         """Окно «Карты и слои», одно на глобус."""
         if getattr(self, "gallery", None) is None:
             self.gallery = NasaMaps(self)
-        self.gallery.refresh()
+        # Щелчок по значку переключил его отметку, она - по карте.
+        self._mark_gallery()
         self.gallery.show()
         self.gallery.raise_()
         return self.gallery
@@ -1205,6 +1220,8 @@ class GlobeWindow(QWidget):
         self._time_mode()
         if not self._theme_on() or not themes.is_weather(self.theme_key):
             self.weather.hide()
+        if not self._theme_on() or themes.is_weather(self.theme_key):
+            self.set_compare(False)
         if not self._theme_on():
             self._theme_shown = None
             self.theme_day = None
@@ -1269,6 +1286,9 @@ class GlobeWindow(QWidget):
             self.timebar.set_point(point)
         self.timebar.set_stepper(self._theme_step if theme else None)
         self.timebar.ready = self._theme_ready if theme else None
+        self.timebar.set_compare(
+            bool(theme) and not themes.is_weather(self.theme_key),
+            getattr(self, "_compare_at", None) is not None)
 
     def _theme_step(self, moment, delta):
         """Момент соседнего дня ряда темы для шага шкалы или None.
@@ -1292,8 +1312,9 @@ class GlobeWindow(QWidget):
         подряд ждёт этого."""
         if themes.is_weather(self.theme_key):
             return self.weather.ready()
-        layer = self.view.gibs["theme"]
-        return not layer.missing and not layer.pending
+        return all(not layer.missing and not layer.pending
+                   for name, layer in self.view.gibs.items()
+                   if name in ("theme", "compare") and layer.shown)
 
     def theme_moment(self):
         """Момент дня темы: правый бегунок открытой шкалы времени, без
@@ -1344,6 +1365,7 @@ class GlobeWindow(QWidget):
         self.theme_legend.set_theme(title, scale)
         self.theme_legend.show()
         self._place_attribution()
+        self._apply_compare(theme, intervals, day)
         if (theme.key, day) == self._theme_shown:
             return
         keep = self._theme_shown is not None \
@@ -1355,6 +1377,64 @@ class GlobeWindow(QWidget):
         self.view.gibs["theme"].max_level = theme.level
         self._set_gibs("theme", True, (source, prepare_theme(theme.key)),
                        keep=keep)
+
+    def set_compare(self, on):
+        """Шторка сравнения двух дней темы NASA. Левая часть по
+        умолчанию - тот же день год назад (themes.compare_day), правая -
+        день шкалы времени. Поле прогноза GFS шторки не получает."""
+        intervals = self._theme_domains.get(self.theme_key) \
+            if on and self._theme_on() \
+            and not themes.is_weather(self.theme_key) else None
+        if on and intervals:
+            if self._compare_at is None:
+                self._compare_at = themes.moment(themes.compare_day(
+                    intervals, self.theme_moment()))
+            self.view.swipe = self.swipe_bar.share
+            self.swipe_bar.set_shown(True)
+            self._apply_theme()
+        elif self._compare_at is not None \
+                or "compare" in getattr(self, "gibs_loaders", {}):
+            self._compare_at = None
+            self._compare_shown = None
+            self.view.swipe = None
+            self.swipe_bar.set_shown(False)
+            self._set_gibs("compare", False)
+        self.timebar.set_compare(self.timebar.compare.isVisibleTo(
+            self.timebar), self._compare_at is not None)
+
+    def _apply_compare(self, theme, intervals, day):
+        """День левой части шторки и её слой вида."""
+        if self._compare_at is None:
+            return
+        left = themes.pick_day(intervals, self._compare_at)
+        self.swipe_bar.set_days(left, day)
+        if (theme.key, left) == self._compare_shown:
+            return
+        keep = self._compare_shown is not None \
+            and self._compare_shown[0] == theme.key
+        self._compare_shown = (theme.key, left)
+        source = basemap.Source("NASA GIBS", theme.url(left), theme.level,
+                                themes.ATTRIBUTION, builtin=True,
+                                missing=(404,))
+        self.view.gibs["compare"].max_level = theme.level
+        self._set_gibs("compare", True, (source, prepare_theme(theme.key)),
+                       keep=keep)
+
+    def _compare_step(self, delta):
+        """Шаг дня левой части шторки по ряду темы."""
+        intervals = self._theme_domains.get(self.theme_key)
+        if self._compare_at is None or not intervals:
+            return
+        day = themes.step_day(
+            intervals, themes.pick_day(intervals, self._compare_at), delta)
+        if day is not None:
+            self._compare_at = themes.moment(day)
+            self._apply_theme()
+
+    def _swipe_moved(self, share):
+        self.view.swipe = share
+        self.view.update()
+
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой
         шкалы времени, иначе часы компьютера."""

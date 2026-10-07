@@ -718,6 +718,146 @@ def snow_ready_wait():
 
 
 @check(500)
+def swipe_on():
+    """Шторка сравнения: морской лёд над Арктикой, левая часть - год
+    назад, белая линия по границе, шаг дня, выключение с темой."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(80.0, 30.0, 6000000.0, 0.0, 0.0))
+    window.set_theme("sea_ice")
+    state["swipe_started"] = time.monotonic()
+    state.pop("swipe_asked", None)
+    result["swipe"] = {}
+
+
+@check(500)
+def swipe_wait():
+    window = state["window"]
+    view = window.view
+    spent = time.monotonic() - state["swipe_started"]
+    out = result["swipe"]
+    if "swipe_asked" not in state:
+        if "sea_ice" not in window._theme_domains and spent < 60.0:
+            return 500
+        out["button_shown"] = window.timebar.compare.isVisibleTo(
+            window.timebar)
+        window.set_compare(True)
+        state["swipe_asked"] = True
+        return 500
+    layers = [view.gibs[name] for name in ("theme", "compare")]
+    if any(not layer.textures or layer.missing or layer.pending
+           for layer in layers) and spent < 90.0:
+        return 500
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_swipe.png"))
+    x = int(image.width() * view.swipe)
+    white = sum(1 for y in range(image.height())
+                if image.pixelColor(x, y).lightness() > 250)
+    out.update(seconds=round(spent, 1), swipe=view.swipe,
+               theme_day=window.theme_day,
+               compare=window._compare_shown,
+               bar=window.swipe_bar.isVisible(),
+               left_tag=window.swipe_bar.left_day.text(),
+               checked=window.timebar.compare.isChecked(),
+               textures=[len(layer.textures) for layer in layers],
+               white_line=white, height=image.height())
+    before = window._compare_shown
+    window._compare_step(-1)
+    out["stepped"] = (before, window._compare_shown)
+    window._swipe_moved(0.3)
+    out["moved"] = view.swipe
+    window.set_theme("")
+    out["off"] = dict(swipe=view.swipe, bar=window.swipe_bar.isVisible(),
+                      loader="compare" in window.gibs_loaders,
+                      shown=view.gibs["compare"].shown,
+                      at=window._compare_at)
+
+
+@check(500)
+def gallery_flip():
+    """Витрина закрыта, пока грузятся превью: запросы сняты, новых нет.
+    На прежнем коде закрытие запускало запросы и теряло ссылки на них,
+    QGIS падал в обработчике ответа."""
+    window = state["window"]
+    window.set_body("earth")
+    gallery = window.open_gallery()
+    gallery.close()
+    out = {"replies_after_close": len(gallery._replies),
+           "queue_after_close": len(gallery._queue)}
+    gallery = window.open_gallery()
+    out["replies_after_reopen"] = len(gallery._replies)
+    state["gallery_flip_started"] = time.monotonic()
+    result["gallery_flip"] = out
+
+
+@check(500)
+def gallery_flip_wait():
+    window = state["window"]
+    gallery = window.gallery
+    spent = time.monotonic() - state["gallery_flip_started"]
+    if (gallery._queue or gallery._replies) and spent < 60.0:
+        return 500
+    out = result["gallery_flip"]
+    out["seconds"] = round(spent, 1)
+    out["left"] = len(gallery._queue) + len(gallery._replies)
+    gallery.close()
+
+
+@check(500)
+def fires_flip():
+    """Пожары включены и сразу выключены: запрос сводки снят до ответа."""
+    window = state["window"]
+    window.set_body("earth")
+    window.set_theme("fires")
+    window.set_theme("")
+    result["fires_flip"] = {"pending": window.view.data_pending,
+                            "reply": window._fire_reply is not None}
+
+
+@check(500)
+def map_close():
+    """Карта витрины: значок нажат, пока карта на глобусе, крестик на
+    шкале убирает карту, щелчок мимо крестика уходит виду. Ряд дат
+    морского льда пришёл в шаге swipe_wait."""
+    from qgis.PyQt.QtCore import QPoint, Qt
+    from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtWidgets import QAbstractButton
+    window = state["window"]
+    out = {}
+
+    def click(widget, x, y):
+        QTest.mouseClick(widget, Qt.MouseButton.LeftButton,
+                         Qt.KeyboardModifier.NoModifier,
+                         QPoint(int(x), int(y)))
+
+    window.set_theme("sea_ice")
+    legend = window.theme_legend
+    out["checked_on"] = window.toolbar.gallery.isChecked()
+    out["legend_shown"] = not legend.isHidden()
+    click(legend, 5, legend.height() - 3)
+    out["after_miss"] = window.theme_key
+    rect = legend._close_rect()
+    click(legend, rect.center().x(), rect.center().y())
+    out["after_hit"] = window.theme_key
+    out["checked_off"] = window.toolbar.gallery.isChecked()
+    window.set_theme("fires")
+    out["fires_checked"] = window.toolbar.gallery.isChecked()
+    fire = window.fire_legend
+    rect = fire._close_rect()
+    click(fire, rect.center().x(), rect.center().y())
+    out["fires_after"] = (window.gallery_key(),
+                          window.toolbar.gallery.isChecked())
+    gallery = window.open_gallery()
+    out["off_button"] = any(b.text() in ("Выключить", "Turn off")
+                            for b in gallery.findChildren(QAbstractButton))
+    gallery.close()
+    result["map_close"] = out
+
+
+@check(500)
 def gallery_open():
     """Витрина «Карты NASA и погода»: строка в «Слоях» и значок, группы
     «Слоёв», превью, выбор карты, температура в общем выборе."""

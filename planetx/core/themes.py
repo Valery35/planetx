@@ -30,6 +30,8 @@ COLORMAP = ROOT + "/colormaps/v1.3/{name}.xml"
 ATTRIBUTION = ("NASA GIBS", "https://earthdata.nasa.gov/gibs")
 OPACITY = 0.8  # непрозрачность раскраски поверх снимка
 READY_LAG = 86400.0  # день ряда считается готовым через сутки
+# Шторка сравнения: левая часть по умолчанию - тот же день год назад.
+COMPARE_BACK = 365 * 86400.0
 # Цвета классов «нет явления», которые темы делают прозрачными. У массы
 # снега SMAP класс 0-0.8 кг/м² покрывал серо-синим 97 % суши у Перми
 # 2 октября 2026 года.
@@ -277,6 +279,27 @@ def days(intervals):
 def moment(day):
     """Начало дня YYYY-MM-DD в секундах UTC."""
     return float(calendar.timegm(_date(day).timetuple()))
+
+
+def compare_day(intervals, at=None):
+    """День левой части шторки сравнения по умолчанию: тот же день
+    год назад, COMPARE_BACK. Короткий ряд - его первый день. at -
+    момент правой части, None - последний день ряда."""
+    day = pick_day(intervals, at)
+    if day is None:
+        return None
+    back = pick_day(intervals, moment(day) - COMPARE_BACK)
+    return back if back != day else min(days(intervals))
+
+
+def step_day(intervals, day, delta):
+    """Соседний день ряда: delta = -1 или 1. None - за краем ряда или
+    дня нет в ряду."""
+    ordered = days(intervals)
+    if day not in ordered:
+        return None
+    index = ordered.index(day) + delta
+    return ordered[index] if 0 <= index < len(ordered) else None
 
 
 def span(intervals):

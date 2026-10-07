@@ -12,7 +12,7 @@
 """
 import math
 
-from qgis.PyQt.QtCore import QEvent, QRectF, Qt, QTimer
+from qgis.PyQt.QtCore import QEvent, QPointF, QRectF, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QFontMetrics, QLinearGradient, QPainter
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
@@ -26,15 +26,47 @@ BAR_HEIGHT = 9
 PAD = 6
 BACKGROUND = QColor(255, 255, 255, 190)
 TEXT = QColor(30, 30, 30)
+CLOSE = 14  # сторона крестика шкалы карты, логических пикселей
 
 
-class TemperatureLegend(QWidget):
+class Closable:
+    """Крестик в правом верхнем углу шкалы карты витрины: щелчок по нему
+    убирает карту с глобуса. Решение автора от 7 октября 2026 года -
+    кнопка «Выключить» витрины далеко от карты. closer ставит окно,
+    без него крестика нет. Прочие щелчки уходят виду под шкалой."""
+
+    closer = None
+
+    def _close_rect(self):
+        return QRectF(self.width() - CLOSE - 3, 3, CLOSE, CLOSE)
+
+    def _paint_close(self, painter):
+        if self.closer is None:
+            return
+        rect = self._close_rect()
+        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+        painter.setBrush(QColor(0, 0, 0, 40))
+        painter.drawEllipse(rect)
+        painter.setPen(TEXT)
+        painter.drawText(rect, int(enum(Qt, "AlignmentFlag", "AlignCenter")),
+                         "✕")
+
+    def mousePressEvent(self, event):
+        point = event.position() if hasattr(event, "position") \
+            else event.pos()
+        if self.closer is not None and self._close_rect().contains(
+                QPointF(point.x(), point.y())):
+            event.accept()
+            self.closer()
+            return
+        event.ignore()
+
+
+class TemperatureLegend(Closable, QWidget):
     """Две шкалы: суша и море."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAttribute(enum(Qt, "WidgetAttribute",
-                               "WA_TransparentForMouseEvents"))
         self.rows = ((tr("Суша, °C"), temperature.LAND_STOPS,
                       temperature.LAND_TICKS),
                      (tr("Море, °C"), temperature.SEA_STOPS,
@@ -72,6 +104,7 @@ class TemperatureLegend(QWidget):
                 painter.drawText(int(x - width / 2),
                                  int(bar.bottom()) + 2 + metrics.ascent(),
                                  text)
+        self._paint_close(painter)
         painter.end()
 
 
@@ -215,14 +248,12 @@ class QuakeLegend(QWidget):
         painter.end()
 
 
-class FireLegend(QWidget):
+class FireLegend(Closable, QWidget):
     """Шкала мощности излучения очагов пожаров, МВт, логарифмическая,
     цвета core.fires."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAttribute(enum(Qt, "WidgetAttribute",
-                               "WA_TransparentForMouseEvents"))
         line = QFontMetrics(self.font()).height()
         self.setFixedSize(BAR_WIDTH + 2 * PAD + 8,
                           line * 2 + BAR_HEIGHT + 2 + PAD)
@@ -256,6 +287,7 @@ class FireLegend(QWidget):
             left = min(max(x - width / 2, 0.0), self.width() - width)
             painter.drawText(int(left),
                              int(bar.bottom()) + 2 + metrics.ascent(), text)
+        self._paint_close(painter)
         painter.end()
 
 
@@ -419,7 +451,7 @@ class BedsLegend(QWidget):
         painter.end()
 
 
-class ThemeLegend(QWidget):
+class ThemeLegend(Closable, QWidget):
     """Шкала темы NASA GIBS: название с датой, ниже полоса цветов
     с подписями (непрерывная шкала) или квадраты классов. scale -
     словарь core.themes.parse_colormap или None, тогда только строка
@@ -431,8 +463,6 @@ class ThemeLegend(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAttribute(enum(Qt, "WidgetAttribute",
-                               "WA_TransparentForMouseEvents"))
         self.title = ""
         self.scale = None
         self.hide()
@@ -443,7 +473,8 @@ class ThemeLegend(QWidget):
         metrics = QFontMetrics(self.font())
         line = metrics.height()
         width = max(BAR_WIDTH + 2 * PAD + 8,
-                    metrics.horizontalAdvance(title) + 2 * PAD)
+                    metrics.horizontalAdvance(title) + 2 * PAD
+                    + CLOSE + 6)
         height = line + PAD
         if scale and scale["kind"] != "classification":
             height += line + BAR_HEIGHT + 2
@@ -506,6 +537,7 @@ class ThemeLegend(QWidget):
                                      name, enum(Qt, "TextElideMode",
                                                 "ElideRight"),
                                      self.COLUMN - self.SWATCH - 10))
+        self._paint_close(painter)
         painter.end()
 
 
@@ -527,8 +559,7 @@ class LegendPanel(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setAttribute(enum(Qt, "WidgetAttribute",
-                               "WA_TransparentForMouseEvents"))
+        # Щелчок мимо крестика шкалы уходит виду под панелью.
         self.layout_ = QVBoxLayout(self)
         self.layout_.setContentsMargins(0, PAD // 2, 0, PAD // 2)
         self.layout_.setSpacing(2)

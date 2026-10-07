@@ -227,6 +227,20 @@ EN = {
         "Weather here",
     "Номенклатура листа":
         "Map sheet designation",
+    "Шторка сравнения. Левее шторки тема показана на другой день, правее - "
+    "на день шкалы. Шторка тянется мышью, её день меняют кнопки ◂ и ▸ над "
+    "ней.":
+        "Comparison swipe. Left of the swipe the theme is shown for another "
+        "day, right of it for the day of the time slider. Drag the swipe "
+        "with the mouse, the ◂ and ▸ buttons above it change its day.",
+    "Шторка сравнения: тянется мышью.":
+        "Comparison swipe: drag it with the mouse.",
+    "День левой части на шаг ряда темы назад.":
+        "Left side day one step of the theme series back.",
+    "День левой части на шаг ряда темы вперёд.":
+        "Left side day one step of the theme series forward.",
+    "Убрать шторку сравнения.":
+        "Remove the comparison swipe.",
     "Щелчок по карте показывает её на глобусе. День задаёт шкала времени. "
     "Слои включаются независимо от карты.":
         "A click on a map shows it on the globe. The time slider sets the "
@@ -253,20 +267,20 @@ EN = {
         "NASA maps, weather forecast, fires, sky, inside the Earth and "
         "terrain analysis with previews. A click opens the gallery.",
     "Карты и слои. Витрина с превью - карты NASA, прогноз погоды, пожары, "
-    "звёзды, облака, солнце, спутники, недра и анализ рельефа.":
+    "звёзды, облака, солнце, спутники, недра и анализ рельефа. Значок "
+    "нажат, пока карта витрины на глобусе. Крестик на её шкале в углу "
+    "вида убирает карту.":
         "Maps and layers. A gallery with previews - NASA maps, weather "
         "forecast, fires, stars, clouds, sun, satellites, inside the Earth "
-        "and terrain analysis.",
+        "and terrain analysis. The icon stays pressed while a gallery map "
+        "is on the globe. The cross on its scale in the corner of the "
+        "view removes the map.",
     "Планета воздуха":
         "Planet of Air",
     "Все":
         "All",
     "Все карты витрины.":
         "All maps of the gallery.",
-    "Выключить":
-        "Turn off",
-    "Убрать карту с глобуса.":
-        "Remove the map from the globe.",
     "Найти карту":
         "Find a map",
     "На глобусе: {name}. Повторный щелчок убирает карту.":

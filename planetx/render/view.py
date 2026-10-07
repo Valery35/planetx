@@ -468,6 +468,9 @@ class GlobeView(QOpenGLWidget):
         # Слои NASA GIBS: облака, температура моря и суши.
         self.gibs = {name: GibsLayer(level)
                      for name, level, _, _, _ in GIBS_LAYERS}
+        # Шторка сравнения: доля ширины кадра от левого края или None.
+        # Левее неё - слой «compare», ставит окно (ui/swipe.py).
+        self.swipe = None
         self._feature_marks = ([], None)
         self._marked = (None, None, [])
         self._context = None
@@ -1242,6 +1245,7 @@ class GlobeView(QOpenGLWidget):
                                                   "u_wedge_on")
         self.u_wedge = GL.glGetUniformLocation(self.program, "u_wedge")
         self.u_plain = GL.glGetUniformLocation(self.program, "u_plain")
+        self.u_swipe = GL.glGetUniformLocation(self.program, "u_swipe")
         self.u_wedge_lat = GL.glGetUniformLocation(self.program,
                                                    "u_wedge_lat")
         GL.glUseProgram(self.program)
@@ -1760,6 +1764,8 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glUseProgram(self.program)
         gpu.gl.glUniform1f(self.u_wedge_on, 0.0 if wedge is None else 1.0)
         gpu.gl.glUniform1f(self.u_plain, 1.0 if self.plain_base else 0.0)
+        swipe = self.swipe if self.gibs["compare"].shown else None
+        gpu.gl.glUniform1f(self.u_swipe, -1.0 if swipe is None else swipe)
         if wedge is not None:
             cx, cy, cos_half, sin_s, sin_n = cutaway.uniform(wedge)
             gpu.gl.glUniform4f(self.u_wedge, cx, cy, cos_half, 0.0)

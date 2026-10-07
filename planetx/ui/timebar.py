@@ -189,6 +189,7 @@ class TimeBar(QFrame):
 
     range_changed = pyqtSignal(float, float)
     closed = pyqtSignal()
+    compare_toggled = pyqtSignal(bool)
 
     def __init__(self, parent):
         super().__init__(parent)
@@ -232,6 +233,19 @@ class TimeBar(QFrame):
             button.hide()
             layout.addWidget(button)
             self.steps.append(button)
+        # Шторка сравнения двух дней темы (ui/swipe.py). Кнопку
+        # показывает окно, когда на глобусе тема NASA.
+        self.compare = QToolButton(self)
+        self.compare.setText("⇆")
+        self.compare.setCheckable(True)
+        self.compare.setAutoRaise(True)
+        self.compare.setToolTip(tr(
+            "Шторка сравнения. Левее шторки тема показана на другой день, "
+            "правее - на день шкалы. Шторка тянется мышью, её день "
+            "меняют кнопки ◂ и ▸ над ней."))
+        self.compare.clicked.connect(self.compare_toggled.emit)
+        self.compare.hide()
+        layout.addWidget(self.compare)
         buttons = []
         for text, tip, slot in (
                 ("⏮", tr("К началу шкалы"), self.to_start),
@@ -384,6 +398,13 @@ class TimeBar(QFrame):
         for button in self.steps:
             button.setVisible(stepper is not None)
         self.adjustSize()
+
+    def set_compare(self, available, on):
+        """Кнопка шторки сравнения: видна ли и нажата ли."""
+        self.compare.setChecked(bool(on))
+        if self.compare.isVisibleTo(self) != bool(available):
+            self.compare.setVisible(bool(available))
+            self.adjustSize()
 
     def step(self, delta):
         """Правый бегунок - на соседний день ряда покрытия, ширина

@@ -25,8 +25,8 @@ from qgis.PyQt.QtCore import QSize, Qt
 from qgis.PyQt.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
 from qgis.PyQt.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel,
                                  QLineEdit, QListView, QListWidget,
-                                 QListWidgetItem, QMenu, QPushButton,
-                                 QToolButton, QVBoxLayout)
+                                 QListWidgetItem, QMenu, QToolButton,
+                                 QVBoxLayout)
 
 from ..core import (clouds, cutaway, fires, paleo, plates, quakes, slope,
                     stars, sun, temperature, themes, weather)
@@ -414,6 +414,8 @@ class NasaMaps(QDialog):
         self.base = None  # тайл подложки под превью
         self._queue = []
         self._replies = {}
+        self._loaded = set()  # превью по тайлу, которые пришли
+        self._stopped = False  # окно закрыто, запросов нет
         self._group = ALL
         top = QHBoxLayout()
         self.chips = QButtonGroup(self)
@@ -449,9 +451,6 @@ class NasaMaps(QDialog):
         self.list.itemClicked.connect(self._clicked)
         self.note = QLabel(self)
         self.note.setWordWrap(True)
-        off = QPushButton(tr("Выключить"), self)
-        off.setToolTip(tr("Убрать карту с глобуса."))
-        off.clicked.connect(lambda *a: self.window.set_theme(""))
         # Группы спутников - меню флажков, любые сразу.
         self.sat_button = QToolButton(self)
         self.sat_button.setText(tr("Группы спутников"))
@@ -471,7 +470,6 @@ class NasaMaps(QDialog):
         bottom = QHBoxLayout()
         bottom.addWidget(self.note, 1)
         bottom.addWidget(self.sat_button)
-        bottom.addWidget(off)
         layout = QVBoxLayout(self)
         layout.addLayout(top)
         layout.addWidget(self.list, 1)
@@ -508,6 +506,7 @@ class NasaMaps(QDialog):
         self._replies.pop("base", None)
         image = QImage.fromData(data) if data else QImage()
         self.base = None if image.isNull() else image
+        self._queue = []
         for key, (item, group, kind) in self.items.items():
             if kind in ("gibs", themes.TEMPERATURE) or layer_url(key):
                 self._queue.append(key)
@@ -545,6 +544,8 @@ class NasaMaps(QDialog):
     def _pump(self):
         """Следующие запросы превью, не больше PARALLEL сразу. Теме
         нужен ряд дат - его просит окно глобуса."""
+        if self._stopped:
+            return
         waiting = []
         while self._queue and len(self._replies) < PARALLEL:
             key = self._queue.pop(0)
@@ -575,6 +576,8 @@ class NasaMaps(QDialog):
 
     def _thumb_done(self, key, data):
         self._replies.pop(key, None)
+        if data:
+            self._loaded.add(key)
         if self.items[key][2] == LAYER:
             self._set_thumb(key, self._layer_thumb(key, data))
         else:
@@ -697,8 +700,30 @@ class NasaMaps(QDialog):
             item.setHidden(not shown)
 
     def closeEvent(self, event):
+        # Снятый запрос отвечает сразу, и обработчик ответа запускал
+        # следующие. Прежде их ссылки тут же терялись очисткой словаря,
+        # и QGIS падал в обработчике ответа, 7 октября 2026 года. Теперь
+        # закрытое окно новых запросов не запускает, а ответ снятого
+        # убирает его из словаря сам.
+        self._stopped = True
+        self._queue = []
         for reply in list(self._replies.values()):
             reply.abort()
-        self._replies.clear()
-        self._queue = []
         super().closeEvent(event)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._stopped:
+            return
+        self._stopped = False
+        if self.base is None and "base" not in self._replies:
+            self._load_base()
+        else:
+            self._queue = [key for key, (_, _, kind) in self.items.items()
+                           if self._thumb_missing(key, kind)]
+            self._pump()
+
+    def _thumb_missing(self, key, kind):
+        """Превью по тайлу, которое не пришло, - закрытие сняло запрос."""
+        return (kind in ("gibs", themes.TEMPERATURE) or layer_url(key)) \
+            and key not in self._replies and key not in self._loaded

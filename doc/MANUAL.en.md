@@ -325,9 +325,11 @@ over Eurasia on the latest ready day over the base map. Forecast fields
 and fires show a strip of the scale colours instead of a tile. The name
 and the day of the map stand under the preview. The buttons at the top
 keep the maps of one group, the Find a map field searches by name. A
-click on a map shows it on the globe, a second click or the Turn off
-button removes it. The globe shows one map of the gallery, its name
-stands in the Maps and layers row.
+click on a map shows it on the globe, a second click removes it. The
+cross on its scale in the lower left corner of the view also removes
+the map. The globe shows one map of the gallery, its name stands in
+the Maps and layers row. The Maps and layers icon stays pressed while
+a map is on the globe.
 
 NASA themes are rasters by days, months or years from the NASA GIBS
 service. A day of a series counts as ready a day later, before that
@@ -357,6 +359,22 @@ polar night hid snow on 78 % of the area. The 8-day summary is hidden
 on 40 %. Snow mass is a SMAP model calculation from satellite data,
 it has no gaps under clouds. The snow themes show land only. Lake ice
 is in the 8-day summary, sea ice is the Sea ice theme.
+
+#### Comparison swipe
+
+The ⇆ button of the time slider splits the view with a swipe. Right
+of the swipe the theme is shown for the day of the slider, left of it
+for a day of its own. By default this is the same day a year ago, for
+a series shorter than a year its first day. Tags with the days of both
+sides stand above the swipe. The ◂ and ▸ buttons of the left tag move
+its day along the theme series, the cross removes the swipe. The swipe
+is dragged with the mouse by the strip with a circle.
+
+The white line along the border is also on a view snapshot and in
+a tour recording. The swipe works with NASA themes. GFS forecast
+fields, fires and surface temperature have no swipe. A change of
+theme keeps the swipe, its day is looked up in the series of the new
+theme. Switching the theme off removes the swipe.
 
 #### Weather
 
@@ -1292,6 +1310,24 @@ Play tour in the menu of such a tour plays the recording. The camera
 first flies to the start of the recording. The slider of the tour bar
 and tour recording work as for a tour over places. In KML a
 recorded tour is saved as `gx:Tour`, and Google Earth plays it.
+
+### How to make a video
+
+1. Put the stop places into one folder of My Places. Snapshot view
+   in the menu of a place sets its view.
+2. Check the places you need and drag them into the flight order.
+3. Switch on the layers of the video - a NASA theme, the sun, clouds
+   or the time slider at the day you need.
+4. Play tour in the folder menu plays the tour. The pause at a stop
+   is set on the tour bar.
+5. The ⏺ button of the tour bar opens the Tour recording window. The
+   MP4 video at the window size mode gives the video at once. The
+   video size equals the size of the globe window, so stretch the
+   window beforehand.
+
+Instead of places, the ⏺ button on the icon bar can record the camera
+movement, see Recording a tour from the screen. A tour along a My
+Places path leads the camera along the line.
 
 ### Recording a tour for a video
 

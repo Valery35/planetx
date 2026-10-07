@@ -67,6 +67,29 @@ class TestDomains(unittest.TestCase):
                                        stamp(2026, 9, 1))
         self.assertEqual(themes.pick_day(ready), "2026-08-29")
 
+    def test_compare_day_is_year_back(self):
+        # Шторка: левая часть - день ряда год назад, у ряда через
+        # 16 суток - ближайший шаг не позже. Короткий ряд - первый день.
+        daily = themes.parse_domains("<Domain>2000-01-01/2026-10-05/P1D"
+                                     "</Domain>")
+        self.assertEqual(themes.compare_day(daily), "2025-10-05")
+        self.assertEqual(themes.compare_day(daily, stamp(2020, 3, 1)),
+                         "2019-03-02")
+        sixteen = themes.parse_domains(SIXTEEN)
+        self.assertEqual(themes.compare_day(sixteen), "2025-08-17")
+        self.assertEqual(themes.compare_day(themes.parse_domains(SMAP)),
+                         "2026-08-01")
+        self.assertIsNone(themes.compare_day([]))
+
+    def test_step_day_follows_series(self):
+        intervals = themes.parse_domains(SMAP)
+        self.assertEqual(themes.step_day(intervals, "2026-09-02", 1),
+                         "2026-09-04")
+        self.assertEqual(themes.step_day(intervals, "2026-09-04", -1),
+                         "2026-09-02")
+        self.assertIsNone(themes.step_day(intervals, "2026-10-01", 1))
+        self.assertIsNone(themes.step_day(intervals, "2026-09-03", 1))
+
     def test_gap_gives_previous_day(self):
         # 3 сентября в ряду нет: берётся 2 сентября.
         intervals = themes.parse_domains(SMAP)

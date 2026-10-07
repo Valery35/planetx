@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.48.0
+version=0.49.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.48.0 The gallery is called Maps and layers. Next to the
+changelog=0.49.0 A comparison swipe shows a NASA theme for two
+      days side by side, by default a year apart. The Maps and
+      layers icon stays pressed while a gallery map is on the globe,
+      the cross on the map scale removes the map. Closing the
+      gallery while previews load no longer crashes QGIS. The
+      manual describes how to make a video step by step.
+      0.48.0 The gallery is called Maps and layers. Next to the
       NASA maps it holds the sky, inside the Earth and terrain
       analysis layers - stars, clouds, sun, satellites,
       earthquakes, plate boundaries, Earth cutaway, paleogeography,

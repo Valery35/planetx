@@ -45,6 +45,9 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # Огни городов (core/sun.py) - блок 10, видны на ночной стороне
           # при включённом солнце, поверх снимка и под облаками.
           ("lights", sun.LIGHTS_LEVEL, 10, "u_lights", "u_lights_uv"),
+          # Та же тема на другой день - левая часть шторки сравнения
+          # (ui/swipe.py), блок 11, рисуется вместо темы левее шторки.
+          ("compare", 9, 11, "u_compare", "u_compare_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
 
 

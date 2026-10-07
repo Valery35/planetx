@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.48.0.
+A 3D globe inside QGIS. PlanetX version 0.49.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -77,7 +77,8 @@ and atmosphere, from space down to single streets.
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,
   vegetation, night lights. The time slider sets the day of a theme.
   The Maps and layers row of the Layers section and an icon
-  open the gallery, each map has a preview.
+  open the gallery, each map has a preview. A comparison swipe shows
+  a theme for two days side by side.
 - **Paleogeography.** The Paleogeography layer shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.
