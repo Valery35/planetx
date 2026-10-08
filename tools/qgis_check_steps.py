@@ -873,21 +873,18 @@ def map_close():
 
     window.set_theme("sea_ice")
     legend = window.theme_legend
-    out["checked_on"] = window.toolbar.gallery.isChecked()
+    out["gallery_icon"] = hasattr(window.toolbar, "gallery")
     out["legend_shown"] = not legend.isHidden()
     click(legend, 5, legend.height() - 3)
     out["after_miss"] = window.theme_key
     rect = legend._close_rect()
     click(legend, rect.center().x(), rect.center().y())
     out["after_hit"] = window.theme_key
-    out["checked_off"] = window.toolbar.gallery.isChecked()
     window.set_theme("fires")
-    out["fires_checked"] = window.toolbar.gallery.isChecked()
     fire = window.fire_legend
     rect = fire._close_rect()
     click(fire, rect.center().x(), rect.center().y())
-    out["fires_after"] = (window.gallery_key(),
-                          window.toolbar.gallery.isChecked())
+    out["fires_after"] = window.gallery_key()
     gallery = window.open_gallery()
     out["off_button"] = any(b.text() in ("Выключить", "Turn off")
                             for b in gallery.findChildren(QAbstractButton))
@@ -6734,6 +6731,83 @@ def route_spin_check():
             window.myplaces.remove(p.key)
     window.route_manager.clear()
     result["route"]["gl"] = dict(window.view.gl_errors)
+
+
+@check(500)
+def sentinel_open():
+    """Снимок Sentinel-2 у Перми: каталог года по сети, сцены тайла
+    40VDK, первая сцена - слоем проекта на глобусе."""
+    import time as _time
+    window = state["window"]
+    window.set_body("earth")
+    dialog = window.sentinel_here(*ROUTE_A)
+    from osgeo import gdal, ogr
+    out = {"tile": dialog.tile, "years": dialog.year.count(),
+           "gdal": gdal.__version__,
+           "parquet": ogr.GetDriverByName("Parquet") is not None}
+    start = _time.monotonic()
+    while dialog.job is not None and _time.monotonic() - start < 120.0:
+        QgsApplication.processEvents()
+        _time.sleep(0.05)
+    out["seconds"] = round(_time.monotonic() - start, 1)
+    out["scenes"] = len(dialog.scenes)
+    out["listed"] = dialog.list.count()
+    out["status"] = dialog.status.text()
+    dialog.add()
+    start = _time.monotonic()
+    while dialog.job is not None and _time.monotonic() - start < 60.0:
+        QgsApplication.processEvents()
+        _time.sleep(0.05)
+    out["add_seconds"] = round(_time.monotonic() - start, 1)
+    from qgis.core import QgsProject
+    group = QgsProject.instance().layerTreeRoot().findGroup("Sentinel-2")
+    layers = group.findLayers() if group is not None else []
+    out["layers"] = [n.layer().name() for n in layers]
+    out["valid"] = [n.layer().isValid() for n in layers]
+    out["after"] = dialog.status.text()
+    dialog.grab().save(os.path.join(TEMP, "planetx_sentinel_dialog.png"))
+    from planetx.core.navigation import Pose
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(58.02, 56.25, 25000.0, 0.0, 30.0))
+    result["sentinel"] = out
+
+
+@check(500)
+def sentinel_diag():
+    """Почему каталог не открылся: размер файла и ошибка GDAL."""
+    from osgeo import gdal, ogr
+    from planetx.core import sentinel
+    url = "/vsicurl/" + sentinel.year_files(2025, 2026, 1)[0]
+    gdal.ErrorReset()
+    stat = gdal.VSIStatL(url)
+    out = {"size": stat.size if stat else None,
+           "stat_error": gdal.GetLastErrorMsg()}
+    gdal.ErrorReset()
+    try:
+        ds = ogr.Open(url)
+    except RuntimeError as error:
+        ds, out["raised"] = None, str(error)
+    out["opened"] = ds is not None
+    out["open_error"] = gdal.GetLastErrorMsg()
+    result["sentinel_diag"] = out
+
+
+@check(25000)
+def sentinel_wait():
+    state["window"].view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_sentinel_25s.png"))
+
+
+@check(40000)
+def sentinel_check():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_sentinel.png"))
+    result["sentinel"]["pending"] = [view.load_missing,
+                                     getattr(window, "overlay", None)
+                                     is not None]
+    window.sentinel_dialog.close()
+    result["sentinel"]["gl"] = dict(window.view.gl_errors)
 
 
 @check(500)

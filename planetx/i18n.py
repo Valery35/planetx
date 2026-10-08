@@ -216,6 +216,62 @@ EN = {
         "mm/h",
     "Номенклатура листа":
         "Map sheet designation",
+    "GDAL {version} этого QGIS не читает файлы каталога, они читаются в QGIS "
+    "4.":
+        "GDAL {version} of this QGIS does not read the catalogue files, QGIS "
+        "4 reads them.",
+    "Каталог не ответил. {error}":
+        "The catalogue did not answer. {error}",
+    "Снимок Sentinel-2 здесь…":
+        "Sentinel-2 image here…",
+    "{when} UTC, облачность {cloud} %":
+        "{when} UTC, clouds {cloud} %",
+    "В проект QGIS":
+        "To QGIS project",
+    "Вне зон UTM снимков Sentinel-2 нет.":
+        "There are no Sentinel-2 images outside the UTM zones.",
+    "Год":
+        "Year",
+    "Год съёмки. Каталог по году - один файл, его чтение по сети идёт 10-20 "
+    "секунд.":
+        "Year of acquisition. The catalogue of a year is one file, reading "
+        "it over the network takes 10-20 seconds.",
+    "Каталог ещё читается.":
+        "The catalogue is still being read.",
+    "Каталог не прочитан: {error}":
+        "The catalogue was not read: {error}",
+    "Наибольшая облачность сцены по оценке ESA. Меньше - меньше сцен в "
+    "списке и чище снимки.":
+        "The largest scene cloud cover by the ESA estimate. Less means fewer "
+        "scenes in the list and cleaner images.",
+    "Найти":
+        "Find",
+    "Облачность до":
+        "Clouds up to",
+    "Открытие файла сцены…":
+        "Opening the scene file…",
+    "Слой «{name}» в проекте.":
+        "Layer {name} is in the project.",
+    "Снимки Copernicus Sentinel-2 (ESA), файлы Element 84 на AWS, каталог "
+    "s2-stac-geoparquet Taylor Geospatial.":
+        "Copernicus Sentinel-2 images (ESA), Element 84 files on AWS, the "
+        "s2-stac-geoparquet catalogue by Taylor Geospatial.",
+    "Снимки Sentinel-2":
+        "Sentinel-2 images",
+    "Сцен за год {total}, не облачнее {cloud} % - {count}.":
+        "Scenes in the year {total}, with clouds up to {cloud} % - {count}.",
+    "Сцена в естественных цветах, 10 м, ложится слоем проекта по ссылке на "
+    "файл в сети в группу «Sentinel-2». Слой виден на карте и на глобусе, "
+    "данные загружаются при показе.":
+        "The scene in natural colours, 10 m, becomes a project layer linked "
+        "to the file on the network, in the Sentinel-2 group. The layer is "
+        "visible on the map and on the globe, data load when shown.",
+    "Тайл {tile}, точка {lat}, {lon}":
+        "Tile {tile}, point {lat}, {lon}",
+    "Файл сцены не открылся: {url}":
+        "The scene file did not open: {url}",
+    "Чтение каталога сцен {year} года…":
+        "Reading the scene catalogue of {year}…",
     "Маршрут не построен: сервис ответил «{error}», а по дорогам векторной "
     "основы маршрут строится до {limit} км по прямой.":
         "No route: the service answered '{error}', and over the roads of the "
@@ -404,15 +460,6 @@ EN = {
     "превью. Щелчок открывает витрину.":
         "NASA maps, weather forecast, fires, sky, inside the Earth and "
         "terrain analysis with previews. A click opens the gallery.",
-    "Карты и слои. Витрина с превью - карты NASA, прогноз погоды, пожары, "
-    "звёзды, облака, солнце, спутники, недра и анализ рельефа. Значок "
-    "нажат, пока карта витрины на глобусе. Крестик на её шкале в углу "
-    "вида убирает карту.":
-        "Maps and layers. A gallery with previews - NASA maps, weather "
-        "forecast, fires, stars, clouds, sun, satellites, inside the Earth "
-        "and terrain analysis. The icon stays pressed while a gallery map "
-        "is on the globe. The cross on its scale in the corner of the "
-        "view removes the map.",
     "Планета воздуха":
         "Planet of Air",
     "Все":

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.54.0
+version=0.55.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.54.0 The route of the globe menu is built at any
+changelog=0.55.0 The Sentinel-2 image here… item of the globe
+      menu lists Sentinel-2 acquisition days over the point with
+      cloud cover and preview. The chosen scene, 10 m in natural
+      colours, becomes a QGIS project layer shown on the globe.
+      QGIS 4 is needed. The Windy custom item example opens the
+      forecast in degrees Celsius and metres per second. The Maps
+      and layers gallery opens from its Layers row, the icon bar
+      has no icon for it.
+      0.54.0 The route of the globe menu is built at any
       distance: Perm - Sochi, 2664 km, arrives within a second. The
       open OSRM service builds it from OpenStreetMap data, without
       network the plugin builds it over vector base roads up to

@@ -985,7 +985,6 @@ class GlobeWindow(QWidget):
         for key, on in self.extras.items():
             self._apply_extra(key, on)
         self.panel.gallery_requested.connect(self.open_gallery)
-        self.toolbar.gallery_requested.connect(self.open_gallery)
         # Включённые пожары и температура - тоже выбор карты витрины,
         # иначе пустая тема выключила бы их.
         self.set_theme(self.gallery_key() if any(
@@ -1215,8 +1214,6 @@ class GlobeWindow(QWidget):
             return
         key = self.gallery_key()
         self.panel.set_theme(key, map_names()[key][0] if key else "")
-        if getattr(self, "toolbar", None) is not None:
-            self.toolbar.set_map_shown(bool(key))
         gallery = getattr(self, "gallery", None)
         if gallery is not None:
             gallery.refresh()
@@ -3733,6 +3730,19 @@ class GlobeWindow(QWidget):
             dialog = SheetsDialog(self, self.coords)
             self.sheets_dialog = dialog
         dialog.coords = self.coords
+        dialog.show_point(lat, lon)
+        dialog.show()
+        dialog.raise_()
+        return dialog
+
+    def sentinel_here(self, lat, lon):
+        """«Снимок Sentinel-2 здесь…» меню на глобусе: сцены тайла
+        в точке. Окно одно, новая точка заменяет прежнюю."""
+        from .sentinel import SentinelDialog
+        dialog = getattr(self, "sentinel_dialog", None)
+        if dialog is None:
+            dialog = SentinelDialog(self, self)
+            self.sentinel_dialog = dialog
         dialog.show_point(lat, lon)
         dialog.show()
         dialog.raise_()

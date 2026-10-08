@@ -310,8 +310,7 @@ it loads. When the window opens, the row is off.
 
 #### Maps and layers
 
-The Maps and layers row of the Layers section and its icon open the
-gallery. It holds NASA and weather maps and three groups of layers.
+The Maps and layers row of the Layers section opens the gallery. It holds NASA and weather maps and three groups of layers.
 Sky and light holds Stars, Clouds, Sun and Satellites. Inside the
 Earth holds Earthquakes, Plate boundaries, Earth cutaway and
 Paleogeography. Terrain analysis holds Slope and Aspect. A click switches a layer on or off
@@ -329,8 +328,7 @@ keep the maps of one group, the Find a map field searches by name. A
 click on a map shows it on the globe, a second click removes it. The
 cross on its scale in the lower left corner of the view also removes
 the map. The globe shows one map of the gallery, its name stands in
-the Maps and layers row. The Maps and layers icon stays pressed while
-a map is on the globe.
+the Maps and layers row.
 
 NASA themes are rasters by days, months or years from the NASA GIBS
 service. A day of a series counts as ready a day later, before that
@@ -813,6 +811,7 @@ A right click on the globe opens a menu.
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
+| Sentinel-2 image here… | The Sentinel-2 images window for the point under the cursor, see Sentinel-2 images |
 | Measure distance | Opens the Ruler with its first point here |
 | Copy link to place | A link to the point on the OpenStreetMap map to the clipboard, the scale follows the view. Any browser opens the link |
 | Open in browser | A submenu of custom items. An item opens in the browser an address with the point under the cursor, for example the weather forecast at the point on windy.com. The Custom items… item opens the list window. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
@@ -821,6 +820,29 @@ A right click on the globe opens a menu.
 The shape of a 3D path, a 3D polygon and a tour is not edited this way.
 A placemark with a saved measurement loses the measurement text after
 its shape is edited.
+
+### Sentinel-2 images
+
+The Sentinel-2 image here… item of the globe menu opens the Sentinel-2
+images window. The window looks for scenes of the Sentinel-2
+satellites over the point in the chosen year, L2A scenes, 10 m per
+pixel. A scene belongs to a 110 × 110 km MGRS tile, for example 40VDK
+at Perm.
+
+The list holds the acquisition days with cloud cover not above the
+Clouds up to field, newest first. The chosen row shows the scene
+preview. The To QGIS project button or a double click adds the scene
+in natural colours as a project layer to the Sentinel-2 group. The
+layer links to the file on the network, it is checked on the globe
+and visible on the QGIS map. The image data load when shown, the
+first view of a large area takes tens of seconds.
+
+The s2-stac-geoparquet catalogue (Taylor Geospatial), a mirror of the
+Earth Search index (Element 84), gives the scene list. Reading the
+catalogue of a year over the network takes 10-30 s. GDAL of QGIS 4
+reads the catalogue files, GDAL 3.8 of QGIS 3.36 does not, and the
+window says so. The images are Copernicus Sentinel-2 (ESA), Element 84
+files on the open AWS storage.
 
 ### Route
 

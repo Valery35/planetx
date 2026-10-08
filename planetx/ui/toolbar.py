@@ -65,7 +65,6 @@ class ViewToolbar(QFrame):
     scene_open_requested = pyqtSignal()
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
-    gallery_requested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -126,17 +125,8 @@ class ViewToolbar(QFrame):
                "карты - на последний день."),
             self.time_toggled, checkable=True)
         self.time.setEnabled(False)
-        self.gallery = self._button(
-            QIcon(os.path.join(ROOT, "maps.svg")),
-            tr("Карты и слои. Витрина с превью - карты NASA, прогноз "
-               "погоды, пожары, звёзды, облака, солнце, спутники, недра "
-               "и анализ рельефа. Значок нажат, пока карта витрины "
-               "на глобусе. Крестик на её шкале в углу вида убирает "
-               "карту."),
-            self.gallery_requested)
-        # Нажатый значок - карта витрины на глобусе, ставит окно
-        # (set_map_shown). Щелчок всегда открывает витрину.
-        self.gallery.setCheckable(True)
+        # Значка «Карты и слои» нет: витрину открывает её строка
+        # раздела «Слои», решение автора от 9 октября 2026 года.
         self._button(
             QgsApplication.getThemeIcon("/mActionSaveMapAsImage.svg"),
             tr("Снимок вида в файл PNG или JPEG, в том числе больше окна."),
@@ -283,10 +273,6 @@ class ViewToolbar(QFrame):
         action = self.body_actions.get(key)
         if action is not None:
             action.setChecked(True)
-
-    def set_map_shown(self, on):
-        """Значок «Карты и слои» нажат, пока карта витрины на глобусе."""
-        self.gallery.setChecked(bool(on))
 
     def set_time_available(self, available):
         """Кнопка шкалы доступна, когда у видимых данных есть время.

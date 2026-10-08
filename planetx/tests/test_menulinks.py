@@ -19,9 +19,11 @@ class TestMenuLinks(unittest.TestCase):
                       58.0105, 56.2294, 12.6)
         self.assertEqual(url,
                          "https://example.org/?q=58.010500,56.229400&z=12")
-        self.assertEqual(ml.fill(ml.EXAMPLE[1], 1.5, -2.25, 9),
-                         "https://www.windy.com/1.500000/-2.250000"
-                         "?1.500000,-2.250000,9")
+        url = ml.fill(ml.EXAMPLE[1], 1.5, -2.25, 9)
+        self.assertTrue(url.startswith("https://embed.windy.com/"))
+        self.assertIn("metricTemp=%C2%B0C", url)
+        self.assertIn("&zoom=9&lat=1.500000&lon=-2.250000"
+                      "&detailLat=1.500000&detailLon=-2.250000", url)
 
     def test_check_names_the_reason(self):
         good = "https://example.org/{lat}/{lon}"

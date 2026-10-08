@@ -16,7 +16,14 @@ import json
 
 FIELDS = ("lat", "lon", "zoom")
 SCHEMES = ("https://", "http://")
-EXAMPLE = ("Windy", "https://www.windy.com/{lat}/{lon}?{lat},{lon},{zoom}")
+# Карта Windy для встраивания: на ней единицы задаёт адрес - °C и м/с,
+# у windy.com их задают только настройки сайта в браузере. Просьба
+# автора от 9 октября 2026 года, проверено в браузере в тот же день.
+EXAMPLE = ("Windy", "https://embed.windy.com/embed.html?type=map"
+           "&location=coordinates&metricTemp=%C2%B0C&metricWind=m%2Fs"
+           "&overlay=temp&product=ecmwf&level=surface&zoom={zoom}"
+           "&lat={lat}&lon={lon}&detailLat={lat}&detailLon={lon}"
+           "&detail=true")
 
 
 def check(name, template):

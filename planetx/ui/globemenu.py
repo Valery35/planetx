@@ -129,6 +129,8 @@ def show(window, px, py):
             menu.addAction(tr("Что здесь?")).triggered.connect(
                 lambda *a: window.what_here(px, py))
             sheet_items(window, menu, lat, lon)
+            menu.addAction(tr("Снимок Sentinel-2 здесь…")).triggered.connect(
+                lambda *a: window.sentinel_here(lat, lon))
         if not drawing:
             menu.addAction(tr("Измерить расстояние")).triggered.connect(
                 lambda *a: window.measure_from(lat, lon))
