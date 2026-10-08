@@ -28,8 +28,8 @@ from qgis.PyQt.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel,
                                  QListWidgetItem, QToolButton,
                                  QVBoxLayout)
 
-from ..core import (clouds, cutaway, fires, paleo, plates, quakes, slope,
-                    stars, sun, temperature, themes, weather)
+from ..core import (clouds, contours, cutaway, fires, paleo, plates, quakes,
+                    slope, stars, sun, temperature, themes, weather)
 from ..core import satellites as satellites_core
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
@@ -51,10 +51,10 @@ SAT_GROUP = "satellites"
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
           ("cutaway", "depths"), ("paleo", "depths"), ("slope", "terrain"),
-          ("aspect", "terrain"))
+          ("aspect", "terrain"), ("contours", "terrain"))
 # Слои, которые есть и вне Земли: звёзды везде, уклон - где есть высоты.
 ANY_BODY = ("stars",)
-RELIEF_BODY = ("slope", "aspect")
+RELIEF_BODY = ("slope", "aspect", "contours")
 PALEO_AGE = 100  # млн лет, возраст карты на превью палеогеографии
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "data")
@@ -71,7 +71,8 @@ def layer_group_names():
             "и палеогеография.")),
         ("terrain", tr("Анализ рельефа"), tr(
             "Раскраска поверхности по уклону или по стороне "
-            "света склона. Включается одна из двух.")),
+            "света склона, включается одна из двух. Горизонтали "
+            "рельефа поверх них.")),
         (SAT_GROUP, tr("Спутники"), tr(
             "Группы искусственных спутников CelesTrak. Щелчок по группе "
             "показывает её на глобусе или убирает.")))
@@ -136,6 +137,13 @@ def layer_names():
         "aspect": (tr("Экспозиция"), tr(
             "Куда обращён склон - цвет стороны света, ровное "
             "место серое. Включается вместо уклона.")),
+        "contours": (tr("Горизонтали"), tr(
+            "Линии равных высот рельефа, как на топографической карте. "
+            "Сечение подбирается по масштабу вида - от сотен метров "
+            "издалека до 5-10 м вблизи, каждая пятая горизонталь "
+            "утолщённая. Ниже "
+            "уровня моря - синие изобаты. Строятся по высотам глобуса "
+            "и по своему рельефу растром проекта.")),
     }
 
 
@@ -349,6 +357,16 @@ def satellite_group_image(group, color):
                             size, size)
     painter.end()
     return image
+
+
+def contours_image(base=None):
+    """Превью горизонталей: два холма, линии core/contours.py поверх
+    подложки."""
+    y, x = np.mgrid[0:THUMB, 0:THUMB].astype(np.float64)
+    hills = 400.0 * np.exp(-((x - 36) ** 2 + (y - 40) ** 2) / 900.0) \
+        + 260.0 * np.exp(-((x - 74) ** 2 + (y - 70) ** 2) / 500.0)
+    lines = contours.contour_rgba(hills, 0, 0, 1.0, step=25.0)
+    return _over(base, _rgba_image(lines, premultiplied=True))
 
 
 def cutaway_image():
@@ -567,6 +585,8 @@ class NasaMaps(QDialog):
             return satellites_image()
         if key == "cutaway":
             return cutaway_image()
+        if key == "contours":
+            return contours_image(self.base)
         if key == "plates":
             return plates_image(self.base)
         if key == "sun":

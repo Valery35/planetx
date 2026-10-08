@@ -205,6 +205,29 @@ def _edge_quads(top, bottom, edges, color, shade=None):
     return Part(positions, normals, colors, tris.astype(np.uint32))
 
 
+def ribbons(p0, p1, width, color, lift=0.0):
+    """Изолинии на поверхности - полосы ширины width метров по отрезкам
+    p0-p1 (n, 3) ECEF, поднятые на lift метров от центра Земли, чтобы
+    не мерцать с поверхностью. Нормаль - вверх."""
+    p0 = np.asarray(p0, dtype=np.float64)
+    p1 = np.asarray(p1, dtype=np.float64)
+    n = len(p0)
+    if not n:
+        return None
+    up = _unit(p0)
+    side = _unit(np.cross(p1 - p0, up)) * (width / 2.0)
+    p0 = p0 + up * lift
+    p1 = p1 + up * lift
+    positions = np.concatenate([p0 - side, p0 + side, p1 - side,
+                                p1 + side])
+    normals = np.concatenate([up] * 4)
+    i = np.arange(n)
+    tris = np.concatenate([np.stack([i, n + i, 2 * n + i], -1),
+                           np.stack([n + i, 3 * n + i, 2 * n + i], -1)])
+    return Part(positions, normals, _rgba(color, 4 * n),
+                tris.astype(np.uint32))
+
+
 def grid_surface(points, valid, colors):
     """Сетка поверхности по узлам points (rows, cols, 3) ECEF.
 

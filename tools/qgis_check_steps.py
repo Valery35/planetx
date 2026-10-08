@@ -6734,6 +6734,50 @@ def route_spin_check():
 
 
 @check(500)
+def contours_on():
+    """Горизонтали рельефа над Пермью: строка «Горизонтали» витрины."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("contours",
+                     os.environ.get("PLANETX_CONTOURS_OFF") is None)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(57.98, 56.20, 7000.0, 30.0, 60.0))
+    result["contours"] = {"on": window.extras.get("contours")}
+
+
+@check(35000)
+def contours_check():
+    window = state["window"]
+    view = window.view
+    layer = view.gibs["contours"]
+    out = result["contours"]
+    out["textures"] = len(layer.textures)
+    out["missing"] = layer.missing
+    sel = view.selection
+    out["levels"] = sorted({k[0] for k in sel.draw}) if sel else None
+    out["want"] = len(sel.want) if sel else None
+    out["busy"] = view.loader.busy() if view.loader else None
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_contours.png"))
+    from planetx.core.navigation import Pose
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(43.35, 42.44, 14000.0, 200.0, 55.0))
+
+
+@check(25000)
+def contours_mountain():
+    window = state["window"]
+    view = window.view
+    result["contours"]["mountain_textures"] = len(
+        view.gibs["contours"].textures)
+    view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_contours_elbrus.png"))
+    window.set_extra("contours", False)
+    result["contours"]["off"] = (view.gibs["contours"].loader is None)
+    result["contours"]["gl"] = dict(view.gl_errors)
+
+
+@check(500)
 def sentinel_open():
     """Снимок Sentinel-2 у Перми: каталог года по сети, сцены тайла
     40VDK, первая сцена - слоем проекта на глобусе."""

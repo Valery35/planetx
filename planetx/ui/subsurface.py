@@ -45,7 +45,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
                                  QFileDialog, QFormLayout, QLabel, QPushButton,
                                  QSlider, QVBoxLayout)
 
-from ..core import drillholes, ellipsoid, viewshed
+from ..core import contours, drillholes, ellipsoid, viewshed
 from ..core import subsurface as core
 from ..core.places import Place
 from ..i18n import tr
@@ -76,6 +76,14 @@ WALL_SHADE = 0.8  # торец пласта темнее его поверхно
 HOST_COLOR = (176, 168, 156)  # вмещающая порода между пластами гридов
 FLOOR_COLOR = (74, 68, 62)  # дно блока под гридами
 BLOCK_RIM = 15.0  # м, на сколько верх стенки блока выше рельефа
+# Изолинии на гридах: около ISO_LINES линий на размах отметок, ширина -
+# доля поперечника модели, утолщённая - в ISO_INDEX раз шире. Выбор
+# помощника, утверждает автор.
+ISO_LINES = 12.0
+ISO_WIDTH = 1.0 / 1500.0
+ISO_INDEX = 2.0
+ISO_COLOR = (35, 28, 22, 200)
+ISO_INDEX_COLOR = (15, 10, 8, 235)
 FOOTPRINT_SIDE = 2048  # клеток контура гридов на сторону, не больше
 POLL = 250  # мс между проверками высот
 WAIT = 30.0  # с ожидания высот
@@ -909,6 +917,50 @@ Pick.__doc__ = """Ось скважины или тоннеля для окна 
 числа в точках оси (n, k), их значения называет SubsurfaceManager."""
 
 
+def isolines(h, valid, alt, scale, extent):
+    """Изолинии грида h - полосы на его поверхности, просьба автора
+    от 9 октября 2026 года. Шаг - около ISO_LINES линий на размах
+    отметок (contours.grid_step), каждая INDEX-я толще и темнее.
+    alt - высоты узлов на экране, по ним линии ложатся на поверхность
+    при любом масштабе рельефа."""
+    z = np.where(valid, h.grid.z, np.nan)
+    step = contours.grid_step(z, ISO_LINES)
+    if step <= 0.0:
+        return []
+    alt = np.broadcast_to(np.asarray(alt, dtype=np.float64), z.shape)
+    width = max(extent * ISO_WIDTH, 1.0)
+    lift = width * 0.2
+    parts = []
+    for level in contours.levels(z, step):
+        segs = contours.segments(z, level)
+        if not len(segs):
+            continue
+        ends = []
+        for k in (0, 1):
+            r, c = segs[:, k, 0], segs[:, k, 1]
+            ends.append(core.ecef(_bilinear(h.lats, r, c),
+                                  _bilinear(h.lons, r, c),
+                                  _bilinear(alt, r, c)))
+        index = abs(level / step / contours.INDEX
+                    - round(level / step / contours.INDEX)) < 1e-6
+        parts.append(core.ribbons(
+            ends[0], ends[1], width * (ISO_INDEX if index else 1.0),
+            ISO_INDEX_COLOR if index else ISO_COLOR, lift))
+    return parts
+
+
+def _bilinear(grid, r, c):
+    """Значения сетки grid в дробных узлах (r, c)."""
+    rows, cols = grid.shape
+    r0 = np.clip(np.floor(r).astype(int), 0, rows - 2)
+    c0 = np.clip(np.floor(c).astype(int), 0, cols - 2)
+    fr, fc = r - r0, c - c0
+    return (grid[r0, c0] * (1 - fr) * (1 - fc)
+            + grid[r0, c0 + 1] * (1 - fr) * fc
+            + grid[r0 + 1, c0] * fr * (1 - fc)
+            + grid[r0 + 1, c0 + 1] * fr * fc)
+
+
 def _same_grid(a, b):
     """Кровли a и b на одной сетке узлов."""
     return a.lats.shape == b.lats.shape and np.allclose(
@@ -1028,6 +1080,7 @@ def build(model, scale, ground, cut):
                               dtype=np.uint8)
         points = core.ecef(h.lats, h.lons, alt)
         surfaces.append(core.grid_surface(points, valid, colors))
+        surfaces += isolines(h, valid, alt, scale, model.extent())
         key, side = bed_key(h.code)
         if side:
             sides.setdefault(key, {})[side] = (h, points, valid)

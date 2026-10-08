@@ -280,6 +280,15 @@ bodies have no heights. The accuracy is limited by the height pixel.
 It is about 5 m at the equator on the most detailed level on the Earth,
 2.6 km on Mars, 1.3 km on the Moon.
 
+The Contours layer draws lines of equal height on the surface, as on
+a topographic map. The contour interval depends on the zoom. It is
+1, 2, 2.5 or 5 metres times a power of ten. Close up at middle
+latitudes it is 5 m, from tens of kilometres up it is 20-50 m. Every
+fifth contour is thicker. Below sea level the lines are blue, these
+are depth contours. Where contours merge on a steep slope, they fade.
+Contours are built from the same heights as the slope and have the
+same accuracy. The layer exists on the Earth, Mars and the Moon.
+
 Sea and ocean depths are part of the terrain. The floor lies at its
 depths, and semi-transparent water lies above it at sea level. Water
 shallower than 200 m is more transparent, the floor shows near the
@@ -313,7 +322,7 @@ it loads. When the window opens, the row is off.
 The Maps and layers row of the Layers section opens the gallery. It holds NASA and weather maps and three groups of layers.
 Sky and light holds Stars, Clouds, Sun and Satellites. Inside the
 Earth holds Earthquakes, Plate boundaries, Earth cutaway and
-Paleogeography. Terrain analysis holds Slope and Aspect. A click switches a layer on or off
+Paleogeography. Terrain analysis holds Slope, Aspect and Contours. A click switches a layer on or off
 independently of other layers and of the map, a layer that is on has
 a green badge. The Satellites tab of the gallery shows cards of the
 satellite groups. A click on a card shows or removes a group. The
@@ -1257,6 +1266,10 @@ _bottom, for example B_top and B_bottom, are the top and the base of
 one bed. They take one colour, end walls stand between them along the
 data edge, and the bed looks like a slab. The endings roof, base and
 their Russian words also fit.
+
+Contour lines lie on a grid surface, about 12 lines over the range of
+elevations, with an interval from the same series as the terrain
+contours. Every fifth line is thicker and darker.
 
 A block is built under the grids. Walls with beds stand along the data
 edge from the terrain to the model bottom, a floor lies at the model

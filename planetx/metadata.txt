@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.55.0
+version=0.56.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.55.0 The Sentinel-2 image here… item of the globe
+changelog=0.56.0 The Contours layer of the Maps and layers gallery
+      draws lines of equal height on the terrain, as on a
+      topographic map. The interval changes with the zoom, every
+      fifth contour is thicker, below sea level the lines are blue.
+      The layer exists on the Earth, Mars and the Moon. Grids under
+      the ground show elevation contours, every fifth one thicker.
+      0.55.0 The Sentinel-2 image here… item of the globe
       menu lists Sentinel-2 acquisition days over the point with
       cloud cover and preview. The chosen scene, 10 m in natural
       colours, becomes a QGIS project layer shown on the globe.

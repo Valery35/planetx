@@ -216,6 +216,22 @@ EN = {
         "mm/h",
     "Номенклатура листа":
         "Map sheet designation",
+    "Горизонтали":
+        "Contours",
+    "Линии равных высот рельефа, как на топографической карте. Сечение "
+    "подбирается по масштабу вида - от сотен метров издалека до 5-10 м "
+    "вблизи, каждая пятая горизонталь утолщённая. Ниже уровня моря - синие "
+    "изобаты. Строятся по высотам глобуса и по своему рельефу растром "
+    "проекта.":
+        "Lines of equal terrain height, as on a topographic map. The "
+        "interval follows the view scale - hundreds of metres from afar, "
+        "5-10 m close up, every fifth contour is thicker. Below sea level "
+        "they are blue isobaths. They are built from the globe heights and "
+        "from an own terrain raster of the project.",
+    "Раскраска поверхности по уклону или по стороне света склона, включается "
+    "одна из двух. Горизонтали рельефа поверх них.":
+        "Colouring of the surface by slope or by the direction a slope "
+        "faces, one of the two is on. Terrain contours lie over them.",
     "GDAL {version} этого QGIS не читает файлы каталога, они читаются в QGIS "
     "4.":
         "GDAL {version} of this QGIS does not read the catalogue files, QGIS "
@@ -505,10 +521,6 @@ EN = {
     "Землетрясения, границы плит, разрез Земли и палеогеография.":
         "Earthquakes, plate boundaries, the Earth cutaway and "
         "paleogeography.",
-    "Раскраска поверхности по уклону или по стороне света склона. Включается "
-    "одна из двух.":
-        "Surface coloring by slope or by the direction a slope faces. One of "
-        "the two is on.",
     "Температура, осадки, ветер и облачность по модели NOAA GFS и "
     "температура поверхности по NASA. Прогноз - до 16 суток вперёд, момент "
     "задаёт шкала времени.":

@@ -293,6 +293,9 @@ uniform vec4 u_theme_uv;
 // линия. Шторка выключена - u_swipe меньше нуля.
 uniform sampler2D u_compare;
 uniform vec4 u_compare_uv;
+// Горизонтали рельефа, core/contours.py.
+uniform sampler2D u_contours;
+uniform vec4 u_contours_uv;
 uniform float u_swipe;
 const float SWIPE_LINE = 1.5;  // полуширина линии шторки в пикселях кадра
 // Огни городов на ночной стороне, см. core/sun.py.
@@ -369,6 +372,7 @@ void main() {
         } else {
             base = lay(base, u_theme, u_theme_uv);
         }
+        base = lay(base, u_contours, u_contours_uv);
         base = lay(base, u_overlay, u_overlay_uv);
         base = lay(base, u_clouds, u_clouds_uv);
         if (u_swipe >= 0.0 && abs(edge) < SWIPE_LINE) {

@@ -47,8 +47,10 @@ from ..core import searchbar, skydata
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
+from ..core.contours import LEVEL as CONTOUR_LEVEL, contour_rgba
 from ..core.slope import aspect_rgba, slope_aspect, slope_rgba
-from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, decode
+from ..core.terrain import (MAX_LEVEL as TERRAIN_MAX, HeightTile, ancestor,
+                            decode, resample)
 from ..core.kml import KOverlay, KmlError, image_ext as kml_image_ext, \
     read_file as read_kml_file, read_kml, write_kml, write_kmz
 from ..core.placetree import is_folder, numbered_name
@@ -174,7 +176,7 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 # Солнце выключено, умолчание плана работ после 0.16.0.
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
-                  "slope": False, "aspect": False,
+                  "slope": False, "aspect": False, "contours": False,
                   "quakes": False, "cutaway": False, "paleo": False,
                   "plates": False, "fires": False, "satellites": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
@@ -278,6 +280,20 @@ def slope_prepare(mode, floor, radius, insets=(), encoding="terrarium"):
         grade, aspect = slope_aspect(heights, key[0], key[2], radius)
         return mip_chain(aspect_rgba(aspect) if mode == "aspect"
                          else slope_rgba(grade))
+    return prepare
+
+
+def contours_prepare(floor, radius, insets=(), encoding="terrarium"):
+    """Работа рабочего потока для тайла горизонталей: высоты Terrarium
+    с врезками своего рельефа, линии core/contours.py и мипмапы."""
+    def prepare(key, rgba):
+        heights = decode(rgba, floor, encoding)
+        if key[0] > TERRAIN_MAX:
+            parent = ancestor(key, TERRAIN_MAX)
+            heights = resample(HeightTile(*parent, heights, 0.0, 0.0), key)
+        if insets:
+            heights = apply_insets(insets, key, heights)
+        return mip_chain(contour_rgba(heights, key[0], key[2], radius))
     return prepare
 
 
@@ -1142,7 +1158,7 @@ class GlobeWindow(QWidget):
         elif key == "sun":
             self._update_sun()
             self._update_timebar()
-        elif key in SURFACE_EXTRAS:
+        elif key in SURFACE_EXTRAS or key == "contours":
             self._set_surface()
         elif key == "quakes":
             self._set_quakes(on)
@@ -1614,6 +1630,7 @@ class GlobeWindow(QWidget):
         mode = next((k for k in SURFACE_EXTRAS if self.extras.get(k)),
                     None)
         found = self._surface_source()
+        self._set_contours(found)
         if mode is None or found is None or self.view.sky_view is not None:
             self._set_gibs("slope", False)
             self.slope_legend.hide()
@@ -1627,6 +1644,24 @@ class GlobeWindow(QWidget):
         self.slope_legend.set_mode(mode)
         self.slope_legend.show()
         self._place_attribution()
+
+    def _set_contours(self, found):
+        """Слой горизонталей по строке «Горизонтали» и телу, независимо
+        от уклона. found - источник высот тела, как у уклона."""
+        if not self.extras.get("contours") or found is None \
+                or self.view.sky_view is not None:
+            self._set_gibs("contours", False)
+            return
+        source, floor, insets = found
+        if self.planet.earth:
+            # Глубже уровня высот - по предку (DeepSource, resample).
+            source = DeepSource("Terrarium", source.url, TERRAIN_MAX)
+        self.view.gibs["contours"].max_level = CONTOUR_LEVEL \
+            if self.planet.earth else source.max_level
+        encoding = self._terrain_choice()[1] if self.planet.earth \
+            else "terrarium"
+        self._set_gibs("contours", True, (source, contours_prepare(
+            floor, ellipsoid.A, insets, encoding)), cache=True)
 
     def _set_gibs(self, name, on, made=None, cache=False, keep=False):
         """Слой NASA GIBS вида - облака, море или суша: новый загрузчик
