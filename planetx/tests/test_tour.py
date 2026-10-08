@@ -138,6 +138,30 @@ class TestRecorded(unittest.TestCase):
         end = stop.end_pose()
         self.assertAlmostEqual(end.lat, 58.2, places=9)
 
+    def test_key_points_spread_along_path(self):
+        samples = [(t, 58.0 + 0.001 * t, 56.0, 3000.0, 0.0, 45.0)
+                   for t in range(101)]
+        keys = tr.key_indices(samples, 11)
+        self.assertEqual(keys, list(range(0, 101, 10)))
+        # Камера вращалась на месте - опорные по времени.
+        still = [(t, 58.0, 56.0, 3000.0, 3.6 * t, 45.0) for t in range(50)]
+        self.assertEqual(len(tr.key_indices(still, 5)), 5)
+
+    def test_edit_moves_neighbours_smoothly(self):
+        samples = [(t, 58.0 + 0.001 * t, 56.0, 3000.0, 10.0, 45.0)
+                   for t in range(21)]
+        keys = [0, 10, 20]
+        points = [(s[1], s[2]) for s in (samples[k] for k in keys)]
+        points[1] = (points[1][0], 56.01)  # середина на восток
+        out = tr.edit_samples(samples, keys, points, factor=2.0)
+        self.assertAlmostEqual(out[10][2], 56.01)
+        self.assertAlmostEqual(out[5][2], 56.005)
+        self.assertAlmostEqual(out[0][2], 56.0)
+        self.assertAlmostEqual(out[20][2], 56.0)
+        self.assertTrue(all(o[3] == 6000.0 for o in out))
+        self.assertEqual([o[0] for o in out], [s[0] for s in samples])
+        self.assertEqual([o[4] for o in out], [10.0] * 21)
+
     def test_in_tour(self):
         stop = tr.RecordedStop("Запись", self.SAMPLES)
         tour = tr.Tour(Pose(55.0, 37.0, 2.0e6), [stop], pause=1.0)

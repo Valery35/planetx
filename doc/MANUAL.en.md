@@ -289,6 +289,22 @@ are depth contours. Where contours merge on a steep slope, they fade.
 Contours are built from the same heights as the slope and have the
 same accuracy. The layer exists on the Earth, Mars and the Moon.
 
+Thicker contours are labelled with their height, as on a topographic
+map. The number stands in a gap of the line, the top of the digits
+faces uphill. There is no label at a tile edge, on a sharp bend of
+the line and where the neighbouring contours are closer than the
+height of the digits. A flat lake surface at a contour height does
+not count as a line and is not filled.
+
+The View contours to the QGIS project… item of the globe menu exports
+the contours of an area around the view point as a GeoPackage layer.
+The item exists while the Contours layer is on, and only on the Earth.
+The area is the view strip at the view point with the width and height
+of the window, the interval is as on the screen. Heights are loaded for
+up to 30 s. The layer goes to the PlanetX - contours group at the top
+of the layer tree. The `elev` field is the height, thicker lines are
+wider and labelled.
+
 Sea and ocean depths are part of the terrain. The floor lies at its
 depths, and semi-transparent water lies above it at sea level. Water
 shallower than 200 m is more transparent, the floor shows near the
@@ -630,7 +646,27 @@ The right-click menu:
   changes on the map too.
 - Track… - for point layers, see [Tracks](#tracks).
 - Globe terrain - for rasters, see [Own terrain](#own-terrain).
+- Extrusion… - for vector layers, see
+  [Extrusion by field](#extrusion-by-field).
 - Layer Properties… - the standard QGIS layer properties window.
+
+### Extrusion by field
+
+Features of a project vector layer rise above the terrain to a height
+from a numeric field. A polygon becomes a prism, a point an octagonal
+column, a line a wall. The Extrusion… item of the layer menu opens a
+window with the height field and a factor. The height in metres is
+the field value times the factor. For a field of storeys the factor
+is about 3. A feature with an empty, zero or negative value is not
+extruded. The No extrusion row removes the extrusion.
+
+The colour of a feature is its symbol in the QGIS layer style, as on
+the map. The bottom of a prism and a column lies at the lowest terrain
+point under the feature, the roof is flat. A line wall follows the
+terrain. The column radius is 1/150 of the layer span, from 2 m to
+2 km. The layer is extruded while it is checked on the globe. The
+settings are kept in the project. Up to 20 000 features of a layer are
+read.
 
 ### Own terrain
 
@@ -1020,6 +1056,38 @@ contents of the file.
 Save as KML… saves a folder or the whole My Places to KMZ or KML. The
 file extension chooses the format.
 
+#### Network links
+
+A network link is a My Places folder with the contents of a KML or
+KMZ document at an address, as `NetworkLink` in KML. The address is a
+web page (http, https) or a file on disk. The Add - Network link…
+item of a folder menu opens a window with the name, the address and
+the refresh interval. A network link from an opened KML file goes into
+My Places as the same kind of folder.
+
+The document is loaded while the folder and its parents are checked.
+Without an interval it is loaded once per session, with an interval
+it is loaded again after it, but not more often than every 10 s. A
+file on disk is read again when another program changes it. A new
+document replaces the folder contents, edits inside the folder are
+lost then. Addresses inside the document count from the address of
+the document itself. Nested network links are loaded the same way,
+down to the third level. The Reload item of the link menu loads the
+document at once, Properties… change the name, the address and the
+interval. On a loading error the status bar shows its reason, the old
+contents stay. In KML a link is saved as `NetworkLink`, without
+contents.
+
+An example lies in the plugin repository, folder
+`examples/network_link`. The `link.kml` file opens with Open KML or
+KMZ…. It holds two links. The first is the `planetx_demos.kml` file
+with demo places from the same repository on GitHub, it is loaded
+again once an hour. The second is the USGS feed of earthquakes of
+magnitude 2.5 and above for a week, it is loaded again every 5
+minutes. USGS gives ready link files for its feeds with the
+`_link.kml` ending, for example
+`https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week_depth_link.kml`.
+
 ### Image overlays
 
 The Add submenu of a folder adds an image from a PNG, JPEG or GIF file
@@ -1271,6 +1339,11 @@ Contour lines lie on a grid surface, about 12 lines over the range of
 elevations, with an interval from the same series as the terrain
 contours. Every fifth line is thicker and darker.
 
+The Contours to the QGIS project… item of the raster menu exports
+contours of the raster values as a GeoPackage layer to the PlanetX -
+contours group. The interval is the same as on the globe grid, every
+fifth line is thicker and labelled.
+
 A block is built under the grids. Walls with beds stand along the data
 edge from the terrain to the model bottom, a floor lies at the model
 bottom. The walls darken with depth. A wall facing the camera from
@@ -1406,6 +1479,15 @@ Play tour in the menu of such a tour plays the recording. The camera
 first flies to the start of the recording. The slider of the tour bar
 and tour recording work as for a tour over places. In KML a
 recorded tour is saved as `gx:Tour`, and Google Earth plays it.
+
+The path of a recorded fly-around is edited in the Properties… window
+of the tour. While the window is open, the path of the view point is
+shown on the globe as a line with twenty key points. A key point is
+dragged with the mouse, the poses between key points follow it
+smoothly. The Fly-around height slider lowers the camera in all poses
+down to a quarter of the recorded height or raises it up to four
+heights. Time, heading and tilt of the poses do not change. OK saves
+the edit, Cancel discards it.
 
 ### How to make a video
 

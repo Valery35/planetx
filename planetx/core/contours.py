@@ -31,6 +31,11 @@ import math
 
 import numpy as np
 
+try:  # внутри плагина QGIS
+    from .tiling import lonlat_to_tile
+except ImportError:  # headless-тесты
+    from tiling import lonlat_to_tile
+
 SIZE = 256
 NICE = (1.0, 2.0, 2.5, 5.0)
 STEP_PIXELS = 2.0  # пикселей тайла на шаг сечения при уклоне 45°
@@ -46,6 +51,22 @@ LEVEL = 17
 LAND = (150, 85, 30)  # коричневый топографических карт
 WATER = (40, 95, 175)  # изобаты
 OPACITY = 0.85
+# Подписи утолщённых горизонталей: соседние линии дальше LABEL_ROOM
+# высот цифр, подписи не ближе LABEL_GAP пикселей, не больше LABEL_MAX
+# на тайл, проверяется LABEL_TRIES точек. LABEL_PAD - разрыв линии
+# вокруг цифр, пиксели.
+LABEL_ROOM = 0.7
+LABEL_GAP = 110.0
+LABEL_MAX = 4
+LABEL_TRIES = 4000
+LABEL_PAD = 2.0
+# Выгрузка горизонталей вида: около EXPORT_PIXELS пикселей высот поперёк
+# участка, не больше EXPORT_TILES тайлов.
+EXPORT_PIXELS = 1024
+EXPORT_TILES = 64
+# Склон положе FLAT метров на пиксель считается ровным местом, линий
+# там нет. Шаг высот Terrarium - 1/256 м, сглаживание делит его ещё.
+FLAT = 2e-3
 
 
 def nice(value):
@@ -67,30 +88,175 @@ def tile_step(z, y, radius):
     return max(nice(pixel * STEP_PIXELS), MIN_STEP)
 
 
-def contour_rgba(heights, z, y, radius, step=None):
-    """Картинка горизонталей тайла: RGBA uint8 с премноженной альфой."""
+def contour_rgba(heights, z, y, radius, step=None, glyphs=None):
+    """Картинка горизонталей тайла: RGBA uint8 с премноженной альфой.
+    glyphs - картинки цифр для подписей утолщённых горизонталей
+    (label_strip), без них подписей нет."""
     h = smooth(np.asarray(heights, dtype=np.float64))
     step = step or tile_step(z, y, radius)
-    d_row, d_col = np.gradient(h)
-    # Градиент в метрах высоты на пиксель.
-    grad = np.hypot(d_row, d_col)
-    level = h / step
-    near = np.rint(level)
-    gap = np.abs(level - near) * step / np.maximum(grad, 1e-6)
-    index = (np.mod(near, INDEX) == 0)
+    d_row, d_col, gap, spacing, index = line_fields(h, step)
     width = np.where(index, INDEX_WIDTH, WIDTH)
     alpha = np.clip(width + 0.5 - gap, 0.0, 1.0)
-    # Расстояние между соседними горизонталями в пикселях.
-    spacing = step / np.maximum(grad, 1e-6)
     alpha *= np.clip(spacing / FADE, 0.0, 1.0)
     alpha = (alpha * OPACITY).astype(np.float32)
     rgb = np.where((h < 0.0)[..., None], np.array(WATER, np.float32),
                    np.array(LAND, np.float32))
     rgb = np.where(index[..., None], rgb * 0.75, rgb)
+    if glyphs:
+        labels = place_labels(h, d_row, d_col, step,
+                              label_spots(gap, index, spacing,
+                                          glyphs["height"]), glyphs)
+        for (text, box, value) in labels:
+            rows, cols, ink, clear = box
+            # Разрыв линии под подписью, потом цифры цветом линии.
+            alpha[rows, cols] *= 1.0 - clear
+            color = np.array(WATER if value < 0.0 else LAND,
+                             np.float32) * 0.75
+            rgb[rows, cols] = color
+            alpha[rows, cols] = np.maximum(alpha[rows, cols],
+                                           ink * OPACITY)
     out = np.empty(h.shape + (4,), dtype=np.uint8)
     out[..., :3] = np.rint(rgb * alpha[..., None])
     out[..., 3] = np.rint(alpha * 255.0)
     return out
+
+
+def label_spots(gap, index, spacing, height):
+    """Где может стоять подпись: на утолщённой горизонтали, соседние
+    линии дальше LABEL_ROOM высот цифр."""
+    return index & (gap < 0.5) & (spacing >= LABEL_ROOM * height)
+
+
+def line_fields(h, step):
+    """Поля линий по сглаженным высотам h: производные по строкам
+    и столбцам, расстояние до горизонтали и между горизонталями
+    в пикселях, утолщённая ли ближняя горизонталь."""
+    d_row, d_col = np.gradient(h)
+    grad = np.maximum(np.hypot(d_row, d_col), 1e-6)
+    level = h / step
+    near = np.rint(level)
+    gap = np.abs(level - near) * step / grad
+    # Ровная гладь озера на самой отметке - не линия: без склона
+    # расстояние до горизонтали выходило нулём по всей глади.
+    gap[grad < FLAT] = np.inf
+    index = np.mod(near, INDEX) == 0
+    return d_row, d_col, gap, step / grad, index
+
+
+def label_text(value):
+    """Подпись отметки: целые метры без точки, дробные - с одним знаком."""
+    if abs(value - round(value)) < 1e-6:
+        return str(int(round(value)))
+    return "%.1f" % value
+
+
+def label_strip(text, glyphs):
+    """Картинка подписи - альфа цифр подряд (высота, длина), float."""
+    parts = [glyphs[c] for c in text if c in glyphs]
+    if not parts:
+        return None
+    gap = np.zeros((glyphs["height"], 1), np.float32)
+    strip = [parts[0]]
+    for p in parts[1:]:
+        strip += [gap, p]
+    return np.hstack(strip)
+
+
+def place_labels(h, d_row, d_col, step, candidates, glyphs):
+    """Подписи утолщённых горизонталей тайла.
+
+    Подпись стоит на линии, где соседние горизонтали дальше высоты
+    цифр (candidates), вдоль линии, верхом к подъёму, как на
+    топографической карте. Подпись целиком внутри тайла, концы её
+    лежат на той же горизонтали, поэтому у края тайла и на крутом
+    изгибе её нет. Подписи не ближе LABEL_GAP пикселей друг к другу,
+    первыми - ближние к середине тайла, так у соседних кадров одна
+    раскладка. Возвращает (текст, (строки, столбцы, цифры, разрыв),
+    отметка)."""
+    size = h.shape[0]
+    rows, cols = np.nonzero(candidates)
+    if not len(rows):
+        return []
+    mid = (size - 1) / 2.0
+    order = np.argsort((rows - mid) ** 2 + (cols - mid) ** 2,
+                       kind="stable")
+    height = glyphs["height"]
+    placed = []
+    out = []
+    for i in order[:LABEL_TRIES]:
+        r, c = int(rows[i]), int(cols[i])
+        if any((r - pr) ** 2 + (c - pc) ** 2 < LABEL_GAP ** 2
+               for pr, pc in placed):
+            continue
+        gx, gy = d_col[r, c], d_row[r, c]
+        norm = math.hypot(gx, gy)
+        if norm <= 0.0:
+            continue
+        value = round(h[r, c] / step) * step
+        strip = label_strip(label_text(value), glyphs)
+        if strip is None:
+            continue
+        box = _label_box(h, r, c, gx / norm, gy / norm, norm, value,
+                         strip, height)
+        if box is None:
+            continue
+        placed.append((r, c))
+        out.append((label_text(value), box, value))
+        if len(out) >= LABEL_MAX:
+            break
+    return out
+
+
+def _label_box(h, r, c, ux_up, uy_up, grad, value, strip, height):
+    """Пиксели подписи в точке (r, c): направление подъёма (ux_up,
+    uy_up) в столбцах и строках. None, если подпись не помещается
+    в тайл или концы её уходят с горизонтали."""
+    size = h.shape[0]
+    length = strip.shape[1]
+    # Ось текста вдоль линии, «вниз» текста - под уклон.
+    ux, uy = -uy_up, ux_up
+    vx, vy = -ux_up, -uy_up
+    half = length / 2.0 + LABEL_PAD
+    reach = math.hypot(half, height / 2.0 + LABEL_PAD)
+    if not (reach + 1 <= r <= size - 2 - reach
+            and reach + 1 <= c <= size - 2 - reach):
+        return None
+    # Концы подписи на той же горизонтали не дальше трети высоты цифр.
+    for sign in (-1.0, 1.0):
+        er = int(round(r + sign * uy * length / 2.0))
+        ec = int(round(c + sign * ux * length / 2.0))
+        if abs(h[er, ec] - value) / max(grad, 1e-6) > height / 3.0:
+            return None
+    r0, r1 = int(r - reach), int(r + reach) + 1
+    c0, c1 = int(c - reach), int(c + reach) + 1
+    gr, gc = np.mgrid[r0:r1, c0:c1].astype(np.float64)
+    dx, dy = gc - c, gr - r
+    lx = dx * ux + dy * uy + length / 2.0 - 0.5
+    ly = dx * vx + dy * vy + height / 2.0 - 0.5
+    clear = np.clip(np.minimum(half - np.abs(dx * ux + dy * uy),
+                               height / 2.0 + 1.0
+                               - np.abs(dx * vx + dy * vy)) + 0.5,
+                    0.0, 1.0)
+    ink = _bilinear(strip, ly, lx)
+    return gr.astype(int), gc.astype(int), ink.astype(np.float32), \
+        clear.astype(np.float32)
+
+
+def _bilinear(img, y, x):
+    """Значения img в дробных точках (y, x), вне картинки - 0."""
+    hgt, wid = img.shape
+    pad = np.pad(img, 1)
+    y = y + 1.0
+    x = x + 1.0
+    inside = (y >= 0) & (y <= hgt + 1) & (x >= 0) & (x <= wid + 1)
+    y = np.clip(y, 0, hgt + 0.999)
+    x = np.clip(x, 0, wid + 0.999)
+    y0 = np.floor(y).astype(int)
+    x0 = np.floor(x).astype(int)
+    fy, fx = y - y0, x - x0
+    v = (pad[y0, x0] * (1 - fy) * (1 - fx) + pad[y0, x0 + 1] * (1 - fy) * fx
+         + pad[y0 + 1, x0] * fy * (1 - fx) + pad[y0 + 1, x0 + 1] * fy * fx)
+    return np.where(inside, v, 0.0)
 
 
 def smooth(h):
@@ -99,6 +265,64 @@ def smooth(h):
     p = np.pad(h, 1, mode="edge")
     rows = (p[:-2] + 2.0 * p[1:-1] + p[2:]) / 4.0
     return (rows[:, :-2] + 2.0 * rows[:, 1:-1] + rows[:, 2:]) / 4.0
+
+
+def export_tiles(lat, lon, width, height, radius, max_level):
+    """Тайлы высот участка width × height метров с серединой (lat, lon)
+    для выгрузки горизонталей: (уровень, ключи). Уровень - тот, у
+    которого поперёк участка около EXPORT_PIXELS пикселей, не глубже
+    max_level и не больше EXPORT_TILES тайлов."""
+    coslat = max(math.cos(math.radians(lat)), 1e-6)
+    dlat = math.degrees(height / 2.0 / radius)
+    dlon = math.degrees(width / 2.0 / (radius * coslat))
+    north = min(lat + dlat, 85.0)
+    south = max(lat - dlat, -85.0)
+    west = max(lon - dlon, -180.0)
+    east = min(lon + dlon, 179.999999)
+    pixel = max(width, 1.0) / EXPORT_PIXELS
+    ground = 2.0 * math.pi * radius * coslat / SIZE
+    level = int(min(max_level, max(0, math.ceil(math.log2(ground
+                                                          / pixel)))))
+    while True:
+        x0, y0 = lonlat_to_tile(north, west, level)
+        x1, y1 = lonlat_to_tile(south, east, level)
+        if (x1 - x0 + 1) * (y1 - y0 + 1) <= EXPORT_TILES or level == 0:
+            break
+        level -= 1
+    return level, [(level, x, y) for y in range(y0, y1 + 1)
+                   for x in range(x0, x1 + 1)]
+
+
+def mosaic(keys, heights_of):
+    """Высоты тайлов keys одного уровня одним массивом: (массив, x0,
+    y0) - номера левого верхнего тайла. heights_of(key) - массив
+    (256, 256) или None, пустые тайлы - NaN."""
+    xs = [k[1] for k in keys]
+    ys = [k[2] for k in keys]
+    x0, y0 = min(xs), min(ys)
+    grid = np.full(((max(ys) - y0 + 1) * SIZE, (max(xs) - x0 + 1) * SIZE),
+                   np.nan, dtype=np.float32)
+    for key in keys:
+        heights = heights_of(key)
+        if heights is None:
+            continue
+        r, c = (key[2] - y0) * SIZE, (key[1] - x0) * SIZE
+        grid[r:r + SIZE, c:c + SIZE] = heights
+    return grid, x0, y0
+
+
+def mercator_transform(z, x0, y0, radius):
+    """Геопреобразование GDAL мозаики с левым верхним тайлом (x0, y0)
+    уровня z в метрах EPSG:3857."""
+    world = 2.0 * math.pi * radius
+    pixel = world / (SIZE * (1 << z))
+    return (-world / 2.0 + x0 * SIZE * pixel, pixel, 0.0,
+            world / 2.0 - y0 * SIZE * pixel, 0.0, -pixel)
+
+
+def index_step(step):
+    """Шаг утолщённых горизонталей при сечении step."""
+    return step * INDEX
 
 
 def levels(values, step):

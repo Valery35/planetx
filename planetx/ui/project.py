@@ -9,6 +9,7 @@
 считаются порядок, добавление и удаление слоя и перерисовка слоя QGIS.
 Перерисовку слой просит при правке данных и стиля.
 """
+import json
 from functools import partial
 
 from qgis.core import QgsProject
@@ -22,6 +23,8 @@ INSETS = "insets"  # растры проекта - рельеф глобуса
 # Растры проекта - поверхности по абсолютным отметкам под землёй,
 # пункт «Поверхность по отметкам» меню слоя.
 GRIDS = "grids"
+# Векторные слои, выдавленные по полю, - строка JSON.
+EXTRUDE = "extrude"
 
 
 def map_layers(project=None):
@@ -91,6 +94,26 @@ def read_grids(project=None):
 def write_grids(ids, project=None):
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, GRIDS, list(ids))
+
+
+def read_extrude(project=None):
+    """Выдавливание векторных слоёв: {номер слоя: {"field": поле,
+    "factor": множитель}}."""
+    project = project or QgsProject.instance()
+    value, ok = project.readEntry(ENTRY, EXTRUDE, "")
+    if not ok or not value:
+        return {}
+    try:
+        data = json.loads(value)
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_extrude(settings, project=None):
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, EXTRUDE, json.dumps(settings,
+                                                  ensure_ascii=False))
 
 
 class ProjectWatch(QObject):

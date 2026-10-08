@@ -131,6 +131,10 @@ def show(window, px, py):
             sheet_items(window, menu, lat, lon)
             menu.addAction(tr("Снимок Sentinel-2 здесь…")).triggered.connect(
                 lambda *a: window.sentinel_here(lat, lon))
+            if window.extras.get("contours"):
+                menu.addAction(tr("Горизонтали вида в проект QGIS…")) \
+                    .triggered.connect(
+                        lambda *a: window.contour_export.view_contours())
         if not drawing:
             menu.addAction(tr("Измерить расстояние")).triggered.connect(
                 lambda *a: window.measure_from(lat, lon))

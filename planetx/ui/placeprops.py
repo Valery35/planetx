@@ -13,6 +13,8 @@
 по кнопке «OK», «Отмена» возвращает прежний вид. Решение автора
 от 29 сентября 2026 года.
 """
+import math
+
 from qgis.core import QgsApplication
 from qgis.gui import QgsColorButton
 from qgis.PyQt.QtCore import (QDateTime, QPointF, QRectF, Qt,
@@ -25,7 +27,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
                                  QPlainTextEdit, QPushButton, QSlider,
                                  QVBoxLayout, QWidget)
 
-from ..core import icons, lookat, region, when
+from ..core import icons, lookat, region, tour, when
 from ..core.features import MAX_HEIGHT, height_share, share_height
 from ..i18n import tr
 from ..qt_compat import enum
@@ -186,6 +188,15 @@ class PlaceProperties(QDialog):
         # Вершины формы. Пока окно открыто, их тянут мышью на глобусе
         # (ui/handles.py, PropVertices), set_points ставит новые.
         self.points = list(shape.points)
+        # Записанный облёт: вершины - опорные позы пути, ползунок -
+        # множитель высоты камеры (core.tour.edit_samples).
+        self.tour_keys = None
+        self.factor = 1.0
+        if place.tour:
+            self.tour_keys = tour.key_indices(place.tour)
+            self.points = [(place.tour[k][1], place.tour[k][2])
+                           for k in self.tour_keys]
+            self.key_points = list(self.points)
         self.setModal(False)
         self.setWindowTitle(tr("Свойства: {name}",
                                name=place.name or tr("Без названия")))
@@ -279,6 +290,8 @@ class PlaceProperties(QDialog):
             "Работает при высоте больше нуля."))
         self.extrude.toggled.connect(self._changed)
         form.addRow("", self.extrude)
+        if self.tour_keys is not None:
+            form.addRow(tr("Высота облёта"), self._factor_row())
         self.time = TimeField(place.time, self)
         self.time.setToolTip(tr(
             "Собственное время метки, как TimeStamp и TimeSpan "
@@ -298,6 +311,46 @@ class PlaceProperties(QDialog):
         layout.addLayout(form)
         layout.addWidget(self.look)
         layout.addWidget(buttons)
+
+    def _factor_row(self):
+        """Ползунок высоты облёта: множитель расстояния камеры по
+        логарифмической шкале, посередине - запись как есть."""
+        row = QWidget(self)
+        box = QHBoxLayout(row)
+        box.setContentsMargins(0, 0, 0, 0)
+        self.factor_slider = QSlider(enum(Qt, "Orientation", "Horizontal"),
+                                     row)
+        self.factor_slider.setRange(0, SLIDER_STEPS)
+        self.factor_slider.setValue(SLIDER_STEPS // 2)
+        self.factor_slider.setToolTip(tr(
+            "Камера облёта ближе к земле или дальше от неё во всех позах "
+            "записи. Посередине - высота записи, края - вчетверо ниже "
+            "и вчетверо выше. Точки пути тянутся мышью на глобусе, позы "
+            "между ними следуют за ними."))
+        self.factor_label = QLabel("×1.00", row)
+        self.factor_slider.valueChanged.connect(self._factor_slid)
+        box.addWidget(self.factor_slider, 1)
+        box.addWidget(self.factor_label)
+        return row
+
+    def _factor_slid(self, position):
+        low, high = tour.HEIGHT_FACTORS
+        share = position / float(SLIDER_STEPS)
+        self.factor = math.exp(math.log(low)
+                               + share * (math.log(high) - math.log(low)))
+        self.factor_label.setText("×{:.2f}".format(self.factor))
+        self._changed()
+
+    def edited_tour(self):
+        """Позы облёта после правки или None, если правок нет."""
+        if self.tour_keys is None:
+            return None
+        if [tuple(p) for p in self.points] \
+                == [tuple(p) for p in self.key_points] \
+                and abs(self.factor - 1.0) < 1e-9:
+            return None
+        return tour.edit_samples(self.place.tour, self.tour_keys,
+                                 self.points, self.factor)
 
     def _view_group(self, view):
         """Раздел «Вид»: точка взгляда, расстояние, азимут, наклон.
@@ -422,12 +475,19 @@ class PlaceProperties(QDialog):
 
     def shape_changed(self):
         """Изменена ли форма в окне."""
+        if self.tour_keys is not None:
+            return self.edited_tour() is not None
         return [tuple(p) for p in self.points] \
             != [tuple(p) for p in self.place.shape.points]
 
     def preview(self):
         """Объект метки с правками окна, для глобуса."""
-        values = {"points": list(self.points),
+        points = list(self.points)
+        if self.tour_keys is not None:
+            # Путь облёта целиком - точки взгляда всех поз.
+            samples = self.edited_tour() or self.place.tour
+            points = [(s[1], s[2]) for s in samples]
+        values = {"points": points,
                   "name": self.name.text().strip(),
                   "height": float(self.height.value()),
                   "extrude": self.extrude.isChecked()}

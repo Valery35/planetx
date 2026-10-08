@@ -45,6 +45,11 @@ PATH_SPEED = 0.25  # расстояний камеры в секунду
 # Азимут берётся по хорде пути длиной в расстояние камеры, повороты
 # линии не дёргают камеру.
 PATH_LOOK = 0.5
+# Опорных точек пути записанного облёта в окне свойств: их тянут
+# мышью, позы между ними следуют за ними.
+KEY_POINTS = 20
+# Пределы множителя высоты облёта в окне свойств.
+HEIGHT_FACTORS = (0.25, 4.0)
 
 
 class Stop:
@@ -175,6 +180,52 @@ class RecordedStop(Stop):
 
     def end_pose(self):
         return self.pose_at(self.glide)
+
+
+def key_indices(samples, count=KEY_POINTS):
+    """Номера опорных поз записи для правки пути: count поз поровну
+    по длине пути точки взгляда, первая и последняя всегда."""
+    data = np.asarray(samples, dtype=np.float64).reshape(-1, 6)
+    if len(data) <= count:
+        return list(range(len(data)))
+    lat = np.radians(data[:, 1])
+    lon = np.unwrap(np.radians(data[:, 2]))
+    step = np.hypot(np.diff(data[:, 1]),
+                    np.degrees(np.diff(lon)) * np.cos(lat[1:]))
+    s = np.concatenate([[0.0], np.cumsum(step)])
+    if s[-1] <= 0.0:
+        # Камера стояла на месте и вращалась: опорные - по времени.
+        s = data[:, 0] - data[0, 0]
+    targets = np.linspace(0.0, s[-1], count)
+    right = np.searchsorted(s, targets).clip(1, len(data) - 1)
+    # Ближайшая поза к доле пути, а не следующая за ней.
+    picks = np.where(targets - s[right - 1] <= s[right] - targets,
+                     right - 1, right)
+    picks[0], picks[-1] = 0, len(data) - 1
+    return sorted(set(int(p) for p in picks))
+
+
+def edit_samples(samples, keys, points, factor=1.0):
+    """Записанный тур после правки пути.
+
+    keys - номера опорных поз, points - их новые точки взгляда
+    (широта, долгота). Позы между опорными сдвигаются на сдвиг
+    соседних опорных, смешанный по номеру позы, так путь меняется
+    плавно. factor - множитель расстояния камеры, то есть высоты
+    облёта. Время, азимут и наклон прежние."""
+    data = np.array(samples, dtype=np.float64).reshape(-1, 6)
+    if not len(data):
+        return []
+    keys = np.asarray(keys, dtype=np.float64)
+    points = np.asarray(points, dtype=np.float64).reshape(-1, 2)
+    shift = points - data[keys.astype(int), 1:3]
+    index = np.arange(len(data), dtype=np.float64)
+    data[:, 1] += np.interp(index, keys, shift[:, 0])
+    data[:, 2] += np.interp(index, keys, shift[:, 1])
+    data[:, 1] = np.clip(data[:, 1], -89.9, 89.9)
+    data[:, 2] = (data[:, 2] + 180.0) % 360.0 - 180.0
+    data[:, 3] *= factor
+    return [tuple(float(v) for v in row) for row in data]
 
 
 def thin(samples):

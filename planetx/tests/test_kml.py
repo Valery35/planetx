@@ -471,6 +471,52 @@ class TestFolderProperties(unittest.TestCase):
 
 
 
+USGS_LINK = b"""<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Earthquakes</name>
+<NetworkLink><visibility>1</visibility><name>USGS 4.5+ Week</name>
+<Link><href>https://earthquake.usgs.gov/feed/4.5_week_depth.kml</href>
+<refreshMode>onInterval</refreshMode><refreshInterval>60</refreshInterval>
+</Link></NetworkLink>
+<NetworkLink><name>Tectonic Plates</name><visibility>0</visibility>
+<Link><href>https://earthquake.usgs.gov/learn/plate-boundaries.kmz</href>
+</Link></NetworkLink></Document></kml>"""
+
+
+class TestNetworkLink(unittest.TestCase):
+
+    def test_usgs_link_file(self):
+        tree = kml.read_kml(USGS_LINK, "file")
+        self.assertEqual(tree.name, "Earthquakes")
+        week, plates = tree.children
+        self.assertEqual(week.link,
+                         "https://earthquake.usgs.gov/feed/4.5_week_depth.kml")
+        self.assertEqual(week.refresh, 60.0)
+        self.assertTrue(week.visible)
+        self.assertEqual(plates.refresh, 0.0)
+        self.assertFalse(plates.visible)
+        self.assertEqual(week.children, [])
+
+    def test_single_link_is_not_unwrapped(self):
+        data = (b'<kml xmlns="http://www.opengis.net/kml/2.2"><NetworkLink>'
+                b"<name>One</name><Url><href>a.kml</href></Url>"
+                b"</NetworkLink></kml>")
+        tree = kml.read_kml(data, "file")
+        self.assertEqual(tree.name, "file")
+        self.assertEqual(tree.children[0].link, "a.kml")
+
+    def test_round_trip_keeps_link_without_children(self):
+        tree = kml.read_kml(USGS_LINK, "file")
+        tree.children[0].children.append(
+            kml.read_kml(USGS_LINK).children[1])
+        text = kml.write_kml(tree)
+        self.assertEqual(text.count("<NetworkLink>"), 2)
+        self.assertNotIn("<Folder>", text)
+        again = kml.read_kml(text.encode("utf-8"))
+        self.assertEqual([c.link for c in again.children],
+                         [c.link for c in tree.children])
+        self.assertEqual(again.children[0].refresh, 60.0)
+
+
 class TestRegion(unittest.TestCase):
     """Region с Lod у метки и папки: чтение и запись туда и обратно."""
 

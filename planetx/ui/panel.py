@@ -418,6 +418,10 @@ class LayerPanel(QWidget):
     inset_toggled = pyqtSignal(str, bool)
     # Растр - поверхность по отметкам, пункт меню слоя.
     grid_toggled = pyqtSignal(str, bool)
+    # Растр - изолинии в проект QGIS, пункт меню слоя.
+    contours_requested = pyqtSignal(object)
+    # Векторный слой - выдавливание по полю, пункт меню слоя.
+    extrude_requested = pyqtSignal(object)
     # Непрозрачность земли над подземной моделью, от 0 до 1.
     ground_alpha = pyqtSignal(float)
     # Кнопка строки «Земля над гридами» - окно «Подземный режим».
@@ -706,6 +710,8 @@ class LayerPanel(QWidget):
         self.inset_ids = set()
         # Растры проекта - поверхности по отметкам под землёй.
         self.grid_ids = set()
+        # Папка - сетевая ссылка KML: её меню получает «Загрузить заново».
+        self.is_link = lambda key: False
         self.layers = QTreeWidget(self)
         self.layers.setHeaderHidden(True)
         self.layers.setRootIsDecorated(False)
@@ -1330,6 +1336,8 @@ class LayerPanel(QWidget):
                        None,
                        ("tour", tr("Запустить тур")),
                        ("properties", tr("Свойства…"))]
+            if self.is_link(key):
+                actions[0:0] = [("reload_link", tr("Загрузить заново"))]
         elif key:
             actions = [("fly", tr("Подлететь"))]
             if item.data(0, TOUR_ROLE):
@@ -1397,7 +1405,8 @@ class LayerPanel(QWidget):
                              ("record_tour", tr("Записанный тур")),
                              ("add_ground", tr("Картинку на поверхности")),
                              ("add_photo", tr("Фото")),
-                             ("add_screen", tr("Картинку на экране"))):
+                             ("add_screen", tr("Картинку на экране")),
+                             ("add_link", tr("Сетевую ссылку…"))):
             sub.addAction(text).triggered.connect(
                 lambda _=False, a=action: self.place_action.emit(a, key))
 
@@ -1437,6 +1446,15 @@ class LayerPanel(QWidget):
                 and enum_int(layer.geometryType()) == 0:
             menu.addAction(tr("Трек…")).triggered.connect(
                 lambda: self.track_requested.emit(layer))
+        if isinstance(layer, QgsVectorLayer) \
+                and enum_int(layer.geometryType()) in (0, 1, 2):
+            raise_ = menu.addAction(tr("Выдавливание…"))
+            raise_.setToolTip(tr(
+                "Объекты слоя поднимаются над рельефом на высоту из "
+                "числового поля: многоугольник - призмой, точка - "
+                "столбиком, линия - стенкой. Цвет - стиль слоя."))
+            raise_.triggered.connect(
+                lambda: self.extrude_requested.emit(layer))
         if isinstance(layer, QgsRasterLayer) \
                 and layer.providerType() == "gdal":
             relief = menu.addAction(tr("Рельеф глобуса"))
@@ -1460,6 +1478,14 @@ class LayerPanel(QWidget):
                 "раздела «Слои» делает землю над ней прозрачной."))
             grid.toggled.connect(
                 lambda on: self.grid_toggled.emit(layer.id(), on))
+            lines = menu.addAction(tr("Изолинии в проект QGIS…"))
+            lines.setToolTip(tr(
+                "Изолинии значений растра с тем же шагом, что на гриде "
+                "глобуса, - около 12 линий на размах значений. Линии "
+                "ложатся слоем GeoPackage в группу «PlanetX - "
+                "горизонтали», каждая пятая толще и подписана."))
+            lines.triggered.connect(
+                lambda: self.contours_requested.emit(layer))
         menu.addAction(tr("Свойства слоя…")).triggered.connect(
             lambda: self.layer_properties.emit(layer))
         menu.exec(self.layers.viewport().mapToGlobal(point))

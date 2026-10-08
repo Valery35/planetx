@@ -65,7 +65,8 @@ class DrawVertices:
         """Середины отрезков, (широта, долгота). У метки и у круга -
         центр и точка окружности - их нет."""
         tool = self.tool
-        if tool.mode in ("point", "circle") or len(tool.points) < 2:
+        if tool.mode in ("point", "circle") or len(tool.points) < 2 \
+                or getattr(tool, "fixed", False):
             return []
         return segment_midpoints(tool.points, self.closed())
 
@@ -185,6 +186,19 @@ class ShapeEdit:
         self.changed(list(self.points))
 
     def finish(self):
+        return None
+
+
+class TourEdit(ShapeEdit):
+    """Опорные точки пути записанного облёта: тянутся, новых нет -
+    их количество задаёт core.tour.key_indices."""
+
+    fixed = True
+
+    def __init__(self, points, changed):
+        super().__init__("line", points, changed)
+
+    def insert(self, index, lat, lon):
         return None
 
 

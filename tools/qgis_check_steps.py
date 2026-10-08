@@ -6764,6 +6764,73 @@ def contours_check():
     view.navigator.set_pose(Pose(43.35, 42.44, 14000.0, 200.0, 55.0))
 
 
+@check(500)
+def contours_export():
+    """Горизонтали вида над Эльбрусом - слоем GeoPackage в проект."""
+    window = state["window"]
+    path = os.path.join(TEMP, "planetx_contours_view.gpkg")
+    state["contours_path"] = path
+    state["contours_started"] = time.monotonic()
+    window.contour_export.view_contours(path=path)
+
+
+def _contour_layers(path):
+    from qgis.core import QgsProject
+    return [layer for layer in QgsProject.instance().mapLayers().values()
+            if layer.source().replace("\\", "/").startswith(
+                path.replace("\\", "/"))]
+
+
+def _contour_report(path, window):
+    from qgis.core import QgsProject
+    layers = _contour_layers(path)
+    out = {"layers": len(layers),
+           "message": window.message[0] if window.message else None}
+    if layers:
+        layer = layers[0]
+        elevs = sorted({round(f["elev"], 3) for f in layer.getFeatures()})
+        out["features"] = layer.featureCount()
+        out["crs"] = layer.crs().authid() or layer.crs().description()
+        out["elev"] = [elevs[0], elevs[-1]] if elevs else None
+        out["levels"] = len(elevs)
+        out["labels"] = layer.labelsEnabled()
+        node = QgsProject.instance().layerTreeRoot().findLayer(layer.id())
+        out["group"] = node.parent().name() if node is not None else None
+    return out
+
+
+@check(500)
+def contours_export_wait():
+    window = state["window"]
+    if window.contour_export.job is not None \
+            and time.monotonic() - state["contours_started"] < 45.0:
+        return 500
+    result["contours"]["export"] = _contour_report(state["contours_path"],
+                                                   window)
+    _render_layers(_contour_layers(state["contours_path"]),
+                   os.path.join(TEMP, "planetx_contours_layer.png"))
+    return None
+
+
+def _render_layers(layers, path):
+    """Снимок слоёв средствами QGIS, как на карте, в файл path."""
+    from qgis.core import QgsMapRendererParallelJob, QgsMapSettings
+    from qgis.PyQt.QtCore import QSize
+    if not layers:
+        return
+    settings = QgsMapSettings()
+    settings.setLayers(layers)
+    settings.setDestinationCrs(layers[0].crs())
+    extent = layers[0].extent()
+    extent.scale(0.35)
+    settings.setExtent(extent)
+    settings.setOutputSize(QSize(1200, 900))
+    job = QgsMapRendererParallelJob(settings)
+    job.start()
+    job.waitForFinished()
+    job.renderedImage().save(path)
+
+
 @check(25000)
 def contours_mountain():
     window = state["window"]
@@ -6775,6 +6842,225 @@ def contours_mountain():
     window.set_extra("contours", False)
     result["contours"]["off"] = (view.gibs["contours"].loader is None)
     result["contours"]["gl"] = dict(view.gl_errors)
+
+
+@check(500)
+def extrude_layers_on():
+    """Выдавливание: кварталы, точки и линия в памяти у Перми с полем
+    высоты h, слои отмечены на глобусе."""
+    from qgis.core import (QgsFeature, QgsField, QgsGeometry, QgsProject,
+                           QgsVectorLayer)
+    from qgis.PyQt.QtCore import QVariant
+    from planetx.core.navigation import Pose
+    from planetx.ui.project import write_extrude
+    window = state["window"]
+    window.set_body("earth")
+    made = []
+    specs = (("Polygon", "blocks"), ("Point", "towers"),
+             ("LineString", "fence"))
+    for geom, name in specs:
+        layer = QgsVectorLayer(geom + "?crs=EPSG:4326", name, "memory")
+        layer.dataProvider().addAttributes([QgsField("h", QVariant.Double)])
+        layer.updateFields()
+        feats = []
+        if geom == "Polygon":
+            for i in range(3):
+                for j in range(3):
+                    lat, lon = 58.010 + i * 0.002, 56.230 + j * 0.004
+                    wkt = "POLYGON(({0} {1}, {2} {1}, {2} {3}, {0} {3}, " \
+                        "{0} {1}))".format(lon, lat, lon + 0.0025,
+                                           lat + 0.0012)
+                    f = QgsFeature(layer.fields())
+                    f.setGeometry(QgsGeometry.fromWkt(wkt))
+                    f["h"] = 30.0 + 40.0 * (i * 3 + j)
+                    feats.append(f)
+        elif geom == "Point":
+            for k in range(5):
+                f = QgsFeature(layer.fields())
+                f.setGeometry(QgsGeometry.fromWkt("POINT({} {})".format(
+                    56.226 + k * 0.004, 58.0065)))
+                f["h"] = 60.0 + 30.0 * k
+                feats.append(f)
+        else:
+            f = QgsFeature(layer.fields())
+            f.setGeometry(QgsGeometry.fromWkt(
+                "LINESTRING(56.226 58.0085, 56.242 58.0085, 56.244 58.017)"))
+            f["h"] = 25.0
+            feats.append(f)
+        layer.dataProvider().addFeatures(feats)
+        layer.updateExtents()
+        QgsProject.instance().addMapLayer(layer)
+        made.append(layer.id())
+    state["extrude_ids"] = made
+    write_extrude({i: {"field": "h", "factor": 1.0} for i in made})
+    for layer_id in made:
+        window.set_layer_shown(layer_id, True)
+    window._apply_vector(force=True)
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.0125, 56.236, 2600.0, 20.0, 62.0))
+    result["extrude"] = {"counts": dict(window.extruder.counts)}
+
+
+@check(15000)
+def extrude_layers_check():
+    window = state["window"]
+    view = window.view
+    out = result["extrude"]
+    out["meshes"] = sorted(view.extruded.buffers)
+    out["vertices"] = view.extruded.vertex_count()
+    out["drawn"] = view.extruded.drawn
+    out["gl"] = dict(view.gl_errors)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_extrude.png"))
+
+
+@check(500)
+def extrude_layers_off():
+    from planetx.ui.project import write_extrude
+    window = state["window"]
+    write_extrude({})
+    window._apply_vector(force=True)
+    view = window.view
+    view.grabFramebuffer()
+    result["extrude"]["after_off"] = view.extruded.vertex_count()
+
+
+@check(500)
+def tour_edit_open():
+    """Правка пути записанного облёта в окне «Свойства…»."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    samples = [(0.25 * k, 58.00 + 0.0004 * k, 56.20 + 0.0008 * k,
+                3000.0, 45.0, 55.0) for k in range(120)]
+    place = window.save_recorded(samples, "Облёт для правки")
+    if not hasattr(place, "key"):
+        place = window.myplaces.find(place)
+    state["tour_key"] = place.key
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(58.024, 56.248, 9000.0, 0.0, 0.0))
+    window._open_place_properties(place)
+    dialog = window.prop_dialogs[place.key]
+    out = result["tour_edit"] = {}
+    out["keys"] = len(dialog.points)
+    tool = window.handles.tool
+    out["tool"] = type(tool).__name__
+    out["middles"] = len(tool.middles())
+    out["drawn_in_preview"] = place.key in window.previews
+
+
+@check(3000)
+def tour_edit_check():
+    window = state["window"]
+    key = state["tour_key"]
+    dialog = window.prop_dialogs[key]
+    out = result["tour_edit"]
+    tool = window.handles.tool
+    middle = len(dialog.points) // 2
+    lat, lon = dialog.points[middle]
+    out["key_sample"] = dialog.tour_keys[middle]
+    tool.edit.move(middle, lat, lon + 0.01)
+    dialog.factor_slider.setValue(dialog.factor_slider.maximum())
+    out["preview_points"] = len(window.previews[key].points)
+    out["factor"] = round(dialog.factor, 3)
+    dialog.accept()
+    place = window.myplaces.find(key)
+    tour = place.tour
+    k = out["key_sample"]
+    out["moved_lon"] = round(tour[k][2] - (56.20 + 0.0008 * k), 6)
+    out["first_lon"] = round(tour[0][2] - 56.20, 6)
+    out["distance"] = round(tour[k][3], 1)
+    out["samples"] = len(tour)
+    out["line_points"] = len(place.shape.points)
+    out["gl"] = dict(window.view.gl_errors)
+    window.myplaces.remove(key)
+
+
+NETLINK_DOC = """<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Local</name>
+{}</Document></kml>"""
+NETLINK_PLACE = ("<Placemark><name>P{0}</name><Point><coordinates>"
+                 "56.2{0},58.0,0</coordinates></Point></Placemark>")
+
+
+def _netlink_file(count):
+    path = os.path.join(TEMP, "planetx_netlink_local.kml")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(NETLINK_DOC.format("".join(
+            NETLINK_PLACE.format(n) for n in range(count))))
+    return path
+
+
+@check(2000)
+def netlink_local():
+    """Сетевая ссылка на файл на диске: две метки."""
+    window = state["window"]
+    window.set_body("earth")
+    path = _netlink_file(2)
+    key = window.myplaces.add_folder("Local link")
+    window.myplaces.set_link(key, path, 0.0)
+    state["netlink_key"] = key
+    window.netlinks.tick()
+
+
+@check(2000)
+def netlink_local_check():
+    import time as _time
+    from planetx.core import placetree
+    window = state["window"]
+    key = state["netlink_key"]
+    out = result["netlink"] = {}
+    nodes = window.myplaces.nodes()
+    out["first"] = len(placetree.children(nodes, key))
+    # Файл правит другая программа: время правки новое.
+    _time.sleep(1.1)
+    _netlink_file(3)
+    window.netlinks.tick()
+    out["second"] = len(placetree.children(window.myplaces.nodes(), key))
+    out["is_link_menu"] = window.panel.is_link(key)
+
+
+@check(500)
+def netlink_example():
+    """Пример examples/network_link/link.kml: USGS и GitHub."""
+    from planetx.core import kml
+    window = state["window"]
+    window.myplaces.remove(state["netlink_key"])
+    import planetx
+    root = os.path.dirname(os.path.dirname(os.path.realpath(
+        planetx.__file__)))
+    path = os.path.join(root, "examples", "network_link", "link.kml")
+    result["netlink"]["example_path"] = path
+    with open(path, "rb") as fh:
+        tree = kml.read_kml(fh.read(), "link")
+    top = window.myplaces.import_tree(tree)
+    state["netlink_top"] = top
+    state["netlink_started"] = time.monotonic()
+    window.netlinks.tick()
+
+
+@check(500)
+def netlink_example_wait():
+    from planetx.core import placetree
+    window = state["window"]
+    links = window.netlinks
+    if (links.replies or not links.loaded) \
+            and time.monotonic() - state["netlink_started"] < 60.0:
+        return 500
+    out = result["netlink"]
+    nodes = window.myplaces.nodes()
+    rows = {}
+    for folder in links.links():
+        rows[folder.link.rsplit("/", 1)[-1]] = {
+            "children": len(placetree.children(nodes, folder.key)),
+            "error": links.errors.get(folder.key)}
+    out["example"] = rows
+    out["places"] = sum(1 for p in window.myplaces.places
+                        if p.body == "earth")
+    out["message"] = window.message[0] if window.message else None
+    out["gl"] = dict(window.view.gl_errors)
+    window.myplaces.remove(state["netlink_top"])
+    return None
 
 
 @check(500)
@@ -7176,6 +7462,21 @@ def grids_shots():
     window.set_relief_scale(5.0)
     state["grids_shot_at"] = time.monotonic()
     return None
+
+
+@check(500)
+def grids_contours():
+    """Изолинии первого грида - слоем GeoPackage в проект."""
+    from qgis.core import QgsProject
+    window = state["window"]
+    layer = QgsProject.instance().mapLayer(state["grids_ids"][0])
+    path = os.path.join(TEMP, "planetx_grid_contours.gpkg")
+    window.contour_export.grid_contours(layer, path=path)
+    result["grids"]["contours"] = _contour_report(path, window)
+    _render_layers(_contour_layers(path),
+                   os.path.join(TEMP, "planetx_grid_contours.png"))
+    result["grids"]["contours"]["grid_crs"] = layer.crs().authid() \
+        or layer.crs().description()
 
 
 @check(500)

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.56.0
+version=0.57.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.56.0 The Contours layer of the Maps and layers gallery
+changelog=0.57.0 Thicker contours are labelled with their height in
+      a gap of the line, the top of the digits faces uphill. View
+      contours and grid contours go to the QGIS project as a
+      GeoPackage layer. A project vector layer is extruded by a
+      numeric field, polygons as prisms, points as columns, lines
+      as walls. The path of a recorded fly-around is edited in its
+      Properties window. KML network links load a document from the
+      web or disk into a My Places folder and refresh it, an example
+      lies in examples/network_link. A flat lake at a contour height
+      is no longer filled.
+      0.56.0 The Contours layer of the Maps and layers gallery
       draws lines of equal height on the terrain, as on a
       topographic map. The interval changes with the zoom, every
       fifth contour is thicker, below sea level the lines are blue.

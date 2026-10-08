@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Места демо PlanetX / PlanetX demo places</name>
+  <description>Документ лежит в хранилище github.com/Valery35/planetx и открывается сетевой ссылкой link.kml. Правка файла в хранилище видна в «Моих метках» после обновления ссылки. The document lives in the github.com/Valery35/planetx repository and opens through the link.kml network link. An edit of the file in the repository shows in My Places after the link refreshes.</description>
+  <Style id="demo">
+    <IconStyle><color>ff00d7ff</color><scale>1.1</scale></IconStyle>
+  </Style>
+  <Placemark>
+    <name>Пермь / Perm</name>
+    <description>Демо «Пермь»: метки со временем, маршрут, облёт центра. The Perm demo: places with time, a route, a fly-around of the centre.</description>
+    <LookAt><longitude>56.2294</longitude><latitude>58.0105</latitude><range>6000</range><tilt>55</tilt><heading>0</heading></LookAt>
+    <styleUrl>#demo</styleUrl>
+    <Point><coordinates>56.2294,58.0105,0</coordinates></Point>
+  </Placemark>
+  <Placemark>
+    <name>Березники, Верхнекамское месторождение / Berezniki, Verkhnekamskoye deposit</name>
+    <description>Демо «Пермские отложения» и «Карьер, свой рельеф». The Permian deposits and Quarry, own terrain demos.</description>
+    <LookAt><longitude>56.88</longitude><latitude>59.45</latitude><range>9000</range><tilt>60</tilt><heading>20</heading></LookAt>
+    <styleUrl>#demo</styleUrl>
+    <Point><coordinates>56.88,59.45,0</coordinates></Point>
+  </Placemark>
+  <Placemark>
+    <name>Аральское море / Aral Sea</name>
+    <description>Демо «Аральское море»: снимки MODIS 2000, 2014 и 2023 годов. The Aral Sea demo: MODIS images of 2000, 2014 and 2023.</description>
+    <LookAt><longitude>60.0</longitude><latitude>45.0</latitude><range>600000</range><tilt>0</tilt><heading>0</heading></LookAt>
+    <styleUrl>#demo</styleUrl>
+    <Point><coordinates>60.0,45.0,0</coordinates></Point>
+  </Placemark>
+  <Placemark>
+    <name>Японский жёлоб / Japan Trench</name>
+    <description>Демо «Японский жёлоб»: разрез Земли, плита и очаги. The Japan Trench demo: Earth cutaway, slab and hypocentres.</description>
+    <LookAt><longitude>142.9</longitude><latitude>38.3</latitude><range>1500000</range><tilt>60</tilt><heading>0</heading></LookAt>
+    <styleUrl>#demo</styleUrl>
+    <Point><coordinates>142.9,38.3,0</coordinates></Point>
+  </Placemark>
+  <Placemark>
+    <name>Тоннели Vegas Loop / Vegas Loop tunnels</name>
+    <description>Демо «Тоннели Vegas Loop» - подземный режим. The Vegas Loop tunnels demo, the underground mode.</description>
+    <LookAt><longitude>-115.1572</longitude><latitude>36.1316</latitude><range>3000</range><tilt>60</tilt><heading>0</heading></LookAt>
+    <styleUrl>#demo</styleUrl>
+    <Point><coordinates>-115.1572,36.1316,0</coordinates></Point>
+  </Placemark>
+  <Placemark>
+    <name>Бока-Чика, Starbase / Boca Chica, Starbase</name>
+    <description>Демо «Бока-Чика, Starbase». The Boca Chica, Starbase demo.</description>
+    <LookAt><longitude>-97.155</longitude><latitude>25.997</latitude><range>5000</range><tilt>55</tilt><heading>0</heading></LookAt>
+    <styleUrl>#demo</styleUrl>
+    <Point><coordinates>-97.155,25.997,0</coordinates></Point>
+  </Placemark>
+</Document>
+</kml>

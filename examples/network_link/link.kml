@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Сетевые ссылки PlanetX / PlanetX network links</name>
+  <description>Пример сетевых ссылок. Файл открывается пунктом «Открыть KML или KMZ…» «Моих меток». Network link example. The file opens with Open KML or KMZ… of My Places.</description>
+  <NetworkLink>
+    <name>Места демо PlanetX с GitHub / PlanetX demo places from GitHub</name>
+    <visibility>1</visibility>
+    <description>Файл planetx_demos.kml из хранилища PlanetX на GitHub, загружается заново раз в час. The planetx_demos.kml file from the PlanetX repository on GitHub, loaded again once an hour.</description>
+    <Link>
+      <href>https://raw.githubusercontent.com/Valery35/planetx/main/examples/network_link/planetx_demos.kml</href>
+      <refreshMode>onInterval</refreshMode><refreshInterval>3600</refreshInterval>
+    </Link>
+  </NetworkLink>
+  <NetworkLink>
+    <name>Землетрясения M2.5+ за неделю, USGS / Earthquakes M2.5+ past week, USGS</name>
+    <visibility>1</visibility>
+    <description>Лента USGS, загружается заново раз в 5 минут. Данные USGS - общественное достояние США. The USGS feed, loaded again every 5 minutes. USGS data are in the US public domain.</description>
+    <Link>
+      <href>https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_week_age.kml</href>
+      <refreshMode>onInterval</refreshMode><refreshInterval>300</refreshInterval>
+    </Link>
+  </NetworkLink>
+</Document>
+</kml>

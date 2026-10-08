@@ -82,7 +82,10 @@ FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("position", "integer"), ("visible", "integer"),
                  ("expanded", "integer"), ("description", "string"),
                  ("view", "string"), ("radio", "integer"),
-                 ("expandable", "integer"), ("region", "string"))
+                 ("expandable", "integer"), ("region", "string"),
+                 # Сетевая ссылка KML: адрес документа и промежуток
+                 # обновления, с. Содержимое папки загружает окно.
+                 ("link", "string(0)"), ("refresh", "double"))
 # Цвета по умолчанию, как у Google Earth: жёлтая метка и линия, белый
 # контур многоугольника с полупрозрачной заливкой.
 DEFAULT_COLOR = {"point": (255, 214, 0, 255), "line": (255, 214, 0, 255),
@@ -284,15 +287,20 @@ def _kfolder(folder):
     return KFolder(folder.name, folder.visible,
                    description=folder.description, view=folder.view,
                    radio=folder.radio, expandable=folder.expandable,
-                   region=folder.region)
+                   region=folder.region, link=folder.link,
+                   refresh=folder.refresh)
 
 class Folder:
     """Папка «Моих меток»."""
 
     def __init__(self, fid, name, parent, position, visible, expanded,
                  description="", view=None, radio=False, expandable=True,
-                 region=None):
+                 region=None, link="", refresh=0.0):
         self.region = region  # Region KML папки, core.region или None
+        # Сетевая ссылка: адрес документа KML или KMZ и промежуток
+        # обновления в секундах, 0 - один раз за сеанс.
+        self.link = link
+        self.refresh = refresh
         self.fid = fid
         self.name = name
         self.parent = parent  # ключ папки-родителя или None - корень
@@ -514,7 +522,9 @@ class MyPlaces(QObject):
                     lookat.parse(_value(feature, layer, "view"), None),
                     bool(_int(_value(feature, layer, "radio")) or 0),
                     bool(1 if expandable is None else expandable),
-                    region.parse(_value(feature, layer, "region"))))
+                    region.parse(_value(feature, layer, "region")),
+                    str(_value(feature, layer, "link") or ""),
+                    float(_value(feature, layer, "refresh") or 0.0)))
         # Метка или папка в папке, которой нет, стоит в корне.
         known = {f.key for f in self.folders}
         for place in self.places + self.overlays:
@@ -763,6 +773,24 @@ class MyPlaces(QObject):
                 self._images.pop(fid, None)
         self._read()
 
+    def replace_contents(self, key, tree):
+        """Содержимое папки key - дерево core.kml tree: прежнее
+        удаляется, новое пишется. Так обновляется сетевая ссылка, правки
+        внутри неё при этом теряются. Сигнал changed - один раз."""
+        old = [n.key for n in placetree.children(self.nodes(), key)]
+        if old:
+            self.blockSignals(True)
+            try:
+                self.remove_many(old)
+            finally:
+                self.blockSignals(False)
+        # KML тела не хранит, сетевая ссылка - земная.
+        self.import_tree(tree, parent=key, wrap=False, body="earth")
+
+    def set_link(self, key, link, refresh):
+        """Адрес и промежуток обновления сетевой ссылки - папки key."""
+        self._write({key: {"link": link, "refresh": float(refresh)}})
+
     # Наложения.
 
     def image(self, fid):
@@ -898,7 +926,9 @@ class MyPlaces(QObject):
                     ("radio", int(bool(getattr(node, "radio", False)))),
                     ("expandable",
                      int(bool(getattr(node, "expandable", True)))),
-                    ("region", region.text(getattr(node, "region", None)))):
+                    ("region", region.text(getattr(node, "region", None))),
+                    ("link", getattr(node, "link", "")),
+                    ("refresh", float(getattr(node, "refresh", 0.0)))):
                 if layer.fields().indexOf(field) >= 0:
                     feature[field] = value
             ok, added = layer.dataProvider().addFeatures([feature])

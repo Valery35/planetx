@@ -218,14 +218,112 @@ EN = {
         "Map sheet designation",
     "Горизонтали":
         "Contours",
+    "Сетевую ссылку…":
+        "Network link…",
+    "Загрузить заново":
+        "Reload",
+    "Сетевая ссылка":
+        "Network link",
+    "Папка «Моих меток» с содержимым документа KML или KMZ по адресу. "
+    "Содержимое загружается заново через промежуток обновления, правки "
+    "внутри папки при этом теряются.":
+        "A My Places folder with the contents of a KML or KMZ document at an "
+        "address. The contents are loaded again after the refresh interval, "
+        "edits inside the folder are lost then.",
+    "Название папки в «Моих метках».":
+        "The folder name in My Places.",
+    "Адрес документа KML или KMZ в сети (http, https) или путь файла на "
+    "диске. Файл перечитывается, когда его меняет другая программа.":
+        "The address of a KML or KMZ document on the web (http, https) or a "
+        "file path on disk. The file is read again when another program "
+        "changes it.",
+    "Один раз":
+        "Once",
+    "Через сколько секунд документ загружается заново. Ноль - один раз за "
+    "сеанс. Короче 10 с промежуток не бывает.":
+        "After how many seconds the document is loaded again. Zero is once "
+        "per session. The interval is never shorter than 10 s.",
+    "Сетевая ссылка «{name}» не загружена: {error}":
+        "The network link {name} was not loaded, {error}",
+    "Высота облёта":
+        "Fly-around height",
+    "Камера облёта ближе к земле или дальше от неё во всех позах записи. "
+    "Посередине - высота записи, края - вчетверо ниже и вчетверо выше. Точки "
+    "пути тянутся мышью на глобусе, позы между ними следуют за ними.":
+        "The fly-around camera is closer to the ground or farther from it in "
+        "all recorded poses. The middle is the recorded height, the ends are "
+        "four times lower and four times higher. Path points are dragged "
+        "with the mouse on the globe, the poses between them follow.",
+    "Выдавливание…":
+        "Extrusion…",
+    "Объекты слоя поднимаются над рельефом на высоту из числового поля: "
+    "многоугольник - призмой, точка - столбиком, линия - стенкой. Цвет - "
+    "стиль слоя.":
+        "Layer features rise above the terrain to a height from a numeric "
+        "field, a polygon as a prism, a point as a column, a line as a wall. "
+        "The colour is the layer style.",
+    "Выдавливание - {name}":
+        "Extrusion - {name}",
+    "Объекты слоя поднимаются над рельефом на высоту из поля: многоугольник "
+    "- призмой, точка - столбиком, линия - стенкой. Цвет - стиль слоя.":
+        "Layer features rise above the terrain to a height from a field, a "
+        "polygon as a prism, a point as a column, a line as a wall. The "
+        "colour is the layer style.",
+    "Не выдавливать":
+        "No extrusion",
+    "Числовое поле высоты объекта. Объект с пустым, нулевым или "
+    "отрицательным значением не выдавливается.":
+        "The numeric field with the feature height. A feature with an empty, "
+        "zero or negative value is not extruded.",
+    "Высота из поля":
+        "Height from field",
+    "Высота в метрах - значение поля, умноженное на множитель. У поля этажей "
+    "множитель около 3.":
+        "The height in metres is the field value times the factor. For a "
+        "field of storeys the factor is about 3.",
+    "Множитель, м":
+        "Factor, m",
+    "Горизонтали вида в проект QGIS…":
+        "View contours to the QGIS project…",
+    "Изолинии в проект QGIS…":
+        "Contours to the QGIS project…",
+    "Изолинии значений растра с тем же шагом, что на гриде глобуса, - около "
+    "12 линий на размах значений. Линии ложатся слоем GeoPackage в группу "
+    "«PlanetX - горизонтали», каждая пятая толще и подписана.":
+        "Contours of the raster values with the same interval as on the "
+        "globe grid, about 12 lines over the range of values. The lines go "
+        "to a GeoPackage layer in the PlanetX - contours group, every fifth "
+        "one is thicker and labelled.",
+    "PlanetX - горизонтали":
+        "PlanetX - contours",
+    "Горизонтали в проект выгружаются только на Земле.":
+        "Contours go to the project only on the Earth.",
+    "Горизонтали вида в проект QGIS":
+        "View contours to the QGIS project",
+    "Растр «{name}» не читается.":
+        "The raster {name} cannot be read.",
+    "У растра «{name}» нет перепада значений.":
+        "The raster {name} has no range of values.",
+    "Изолинии в проект QGIS":
+        "Contours to the QGIS project",
+    "Горизонтали не записаны в «{path}».":
+        "The contours were not written to {path}.",
+    "В проект добавлено горизонталей {count}, сечение {step} м.":
+        "{count} contours added to the project, interval {step} m.",
+    "Загружены не все высоты, часть горизонталей построена по менее "
+    "подробным.":
+        "Not all heights were loaded, some contours are built from less "
+        "detailed ones.",
     "Линии равных высот рельефа, как на топографической карте. Сечение "
     "подбирается по масштабу вида - от сотен метров издалека до 5-10 м "
-    "вблизи, каждая пятая горизонталь утолщённая. Ниже уровня моря - синие "
+    "вблизи, каждая пятая горизонталь утолщённая и подписана отметкой. "
+    "Ниже уровня моря - синие "
     "изобаты. Строятся по высотам глобуса и по своему рельефу растром "
     "проекта.":
         "Lines of equal terrain height, as on a topographic map. The "
         "interval follows the view scale - hundreds of metres from afar, "
-        "5-10 m close up, every fifth contour is thicker. Below sea level "
+        "5-10 m close up, every fifth contour is thicker and labelled with "
+        "its height. Below sea level "
         "they are blue isobaths. They are built from the globe heights and "
         "from an own terrain raster of the project.",
     "Раскраска поверхности по уклону или по стороне света склона, включается "

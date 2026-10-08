@@ -344,6 +344,9 @@ class GlobeView(QOpenGLWidget):
         # Стенка разреза вдоль линии (окно «Разрез»): видна сквозь
         # поверхность.
         self.section_wall = Subsurface(xray=True)
+        # Выдавленные слои проекта (ui/extrude.py): призмы, столбики
+        # и стенки над рельефом, сетка на слой.
+        self.extruded = Subsurface()
         # Надписи без пунктов вынутого сектора: список, сектор, итог.
         self._wedged = (None, None, [])
         # Землетрясения: очаги точками поверх поверхности.
@@ -1299,6 +1302,7 @@ class GlobeView(QOpenGLWidget):
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
         self.section_wall.init_gl()
+        self.extruded.init_gl()
         self.quakes.init_gl()
         self.fires.init_gl()
         self.satellites.init_gl()
@@ -1324,6 +1328,7 @@ class GlobeView(QOpenGLWidget):
         self.cutaway.release_gl()
         self.cutaway_slabs.release_gl()
         self.section_wall.release_gl()
+        self.extruded.release_gl()
         self.quakes.release_gl()
         self.fires.release_gl()
         self.satellites.release_gl()
@@ -1752,6 +1757,11 @@ class GlobeView(QOpenGLWidget):
             self.image_walls.draw(self.camera)
         if self.photos.active and not self.show_holes:
             self.photos.draw(self.camera)
+        self.extruded.prepare()
+        if self.extruded.active and not self.show_holes:
+            self.extruded.draw(self.camera)
+        else:
+            self.extruded.drawn = 0
         wedge = self.wedge if not self.show_holes else None
         if wedge is not None:
             self._follow_wedge_gain()

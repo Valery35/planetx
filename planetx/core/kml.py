@@ -179,8 +179,13 @@ class KFolder:
 
     def __init__(self, name="", visible=True, children=None,
                  description="", view=None, radio=False, expandable=True,
-                 region=None):
+                 region=None, link="", refresh=0.0):
         self.region = region  # core.region.Region или None
+        # Сетевая ссылка (NetworkLink): адрес документа и промежуток
+        # обновления в секундах, 0 - один раз. Детей у неё в файле нет,
+        # их загружает окно глобуса.
+        self.link = link
+        self.refresh = refresh
         self.name = name
         self.visible = visible
         self.children = children if children is not None else []
@@ -767,6 +772,10 @@ def _walk(node, styles, folder, inherited=None):
                           region=_region(child))
             _walk(child, styles, sub, _time_of(child) or inherited)
             folder.children.append(sub)
+        elif name == "NetworkLink":
+            sub = _network_link(child)
+            if sub is not None:
+                folder.children.append(sub)
         elif name == "Placemark":
             folder.children.extend(_placemark(child, styles, inherited))
         elif name in GEOMETRY:
@@ -779,6 +788,25 @@ def _walk(node, styles, folder, inherited=None):
             item = _overlay(child, styles, inherited)
             if item is not None:
                 folder.children.append(item)
+
+
+def _network_link(node):
+    """Папка сетевой ссылки: адрес из Link или старого Url, промежуток
+    по refreshMode onInterval, иначе 0. viewRefreshMode не читается -
+    документ по виду глобус не просит. Без адреса - None."""
+    link = _child(node, "Link")
+    if link is None:
+        link = _child(node, "Url")
+    href = _text(link, "href").strip() if link is not None else ""
+    if not href:
+        return None
+    refresh = 0.0
+    if _text(link, "refreshMode").strip() == "onInterval":
+        refresh = max(_float(link, "refreshInterval", 4.0), 0.0)
+    return KFolder(_text(node, "name"), _visible(node),
+                   description=_text(node, "description"),
+                   view=_view(node, None), region=_region(node),
+                   link=href, refresh=refresh)
 
 
 def read_kml(data, name=""):
@@ -797,7 +825,8 @@ def read_kml(data, name=""):
     _walk(root, styles, top)
     # Один Document - его содержимое и есть корень. Название - имя
     # документа, как в Google Earth, без него - name, обычно имя файла.
-    if len(top.children) == 1 and isinstance(top.children[0], KFolder):
+    if len(top.children) == 1 and isinstance(top.children[0], KFolder) \
+            and not top.children[0].link:
         only = top.children[0]
         top = KFolder(only.name or name, only.visible, only.children,
                       only.description, only.view, only.radio,
@@ -1040,7 +1069,34 @@ def _overlay_kml(item, indent, href):
     parts.append("</{}>".format(tag))
     return pad + "".join(p for p in parts if p)
 
+def _link_kml(folder, indent):
+    """NetworkLink папки сетевой ссылки, без содержимого."""
+    pad = "  " * indent
+    lines = [pad + "<NetworkLink>",
+             pad + "  <name>{}</name>".format(escape(folder.name)),
+             pad + "  <visibility>{}</visibility>".format(
+                 int(folder.visible))]
+    if getattr(folder, "description", ""):
+        lines.append(pad + "  <description>{}</description>".format(
+            escape(folder.description)))
+    if getattr(folder, "view", None) is not None:
+        lines.append(pad + "  " + _look_kml(folder.view))
+    if getattr(folder, "region", None) is not None:
+        lines.append(pad + "  " + region.kml(folder.region))
+    lines.append(pad + "  <Link><href>{}</href>".format(
+        escape(folder.link)))
+    if folder.refresh:
+        lines.append(pad + "    <refreshMode>onInterval</refreshMode>"
+                     "<refreshInterval>{:g}</refreshInterval>".format(
+                         folder.refresh))
+    lines.append(pad + "  </Link>")
+    lines.append(pad + "</NetworkLink>")
+    return lines
+
+
 def _folder_kml(folder, indent, tag="Folder", hrefs=None):
+    if getattr(folder, "link", "") and tag == "Folder":
+        return _link_kml(folder, indent)
     pad = "  " * indent
     lines = [pad + "<{}>".format(tag),
              pad + "  <name>{}</name>".format(escape(folder.name)),

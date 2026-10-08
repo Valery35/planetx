@@ -91,14 +91,15 @@ from .overlays import (OUTLINE, BoxVertices, CornerVertices,
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
-from .handles import DrawVertices, Handles, PropVertices, ShapeEdit
+from .handles import (DrawVertices, Handles, PropVertices, ShapeEdit,
+                      TourEdit)
 from .measure import GRAB_PIXELS, Ruler, RulerDialog, unit_short
 from .measure import _xy as ruler_xy
 from .elevation import HeightSource, ProfileDialog
 from .section import SectionDialog
 from .assistant import (AssistantDialog, current_provider, ready,
                         search_enabled)
-from .myplaces import MyPlaces, OverlayItem
+from .myplaces import MyPlaces, OverlayItem, tour_text
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
@@ -106,6 +107,9 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       set_visible_on_map, visible_on_map, write_flag,
                       write_grids, write_insets, write_shown)
 from .inset import DeepSource, terrain_prepare
+from .contours import ContourExport, digit_glyphs
+from .netlink import LinkDialog, NetLinks
+from .extrude import ExtrudeManager
 from .sources import SourcesDialog
 from .inset import apply as apply_insets
 from .inset import prepare as prepare_inset
@@ -283,9 +287,11 @@ def slope_prepare(mode, floor, radius, insets=(), encoding="terrarium"):
     return prepare
 
 
-def contours_prepare(floor, radius, insets=(), encoding="terrarium"):
+def contours_prepare(floor, radius, insets=(), encoding="terrarium",
+                     glyphs=None):
     """Работа рабочего потока для тайла горизонталей: высоты Terrarium
-    с врезками своего рельефа, линии core/contours.py и мипмапы."""
+    с врезками своего рельефа, линии и подписи core/contours.py
+    цифрами glyphs и мипмапы."""
     def prepare(key, rgba):
         heights = decode(rgba, floor, encoding)
         if key[0] > TERRAIN_MAX:
@@ -293,7 +299,8 @@ def contours_prepare(floor, radius, insets=(), encoding="terrarium"):
             heights = resample(HeightTile(*parent, heights, 0.0, 0.0), key)
         if insets:
             heights = apply_insets(insets, key, heights)
-        return mip_chain(contour_rgba(heights, key[0], key[2], radius))
+        return mip_chain(contour_rgba(heights, key[0], key[2], radius,
+                                      glyphs=glyphs))
     return prepare
 
 
@@ -785,6 +792,9 @@ class GlobeWindow(QWidget):
         self.toolbar.save_view_requested.connect(self.save_view)
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
         self.myplaces = MyPlaces(parent=self)
+        self.netlinks = NetLinks(self)
+        self.panel.is_link = lambda key: bool(
+            getattr(self.myplaces.find(key), "link", ""))
         # Открытые окна свойств меток и их правки для глобуса по ключу.
         self.previews = {}
         self.prop_dialogs = {}
@@ -829,6 +839,8 @@ class GlobeWindow(QWidget):
         self.viewshed_job = None
         self.viewshed_tiles = None
         self.viewshed_result = None
+        self.contour_export = ContourExport(self)
+        self.extruder = ExtrudeManager(self)
         self.viewshed_timer = QTimer(self)
         self.viewshed_timer.setInterval(VIEWSHED_POLL)
         self.viewshed_timer.timeout.connect(self._viewshed_poll)
@@ -896,6 +908,10 @@ class GlobeWindow(QWidget):
         self.panel.track_requested.connect(self._open_track)
         self.panel.inset_toggled.connect(self.set_inset)
         self.panel.grid_toggled.connect(self.set_grid)
+        self.panel.contours_requested.connect(
+            lambda layer: self.contour_export.grid_contours(layer))
+        self.panel.extrude_requested.connect(
+            lambda layer: self.extruder.configure(layer))
         self.panel.ground_alpha.connect(
             lambda value: self.subsurface.set_opacity(value))
         self.panel.grid_ids = set(read_grids())
@@ -1661,7 +1677,8 @@ class GlobeWindow(QWidget):
         encoding = self._terrain_choice()[1] if self.planet.earth \
             else "terrarium"
         self._set_gibs("contours", True, (source, contours_prepare(
-            floor, ellipsoid.A, insets, encoding)), cache=True)
+            floor, ellipsoid.A, insets, encoding, digit_glyphs())),
+            cache=True)
 
     def _set_gibs(self, name, on, made=None, cache=False, keep=False):
         """Слой NASA GIBS вида - облака, море или суша: новый загрузчик
@@ -2188,6 +2205,7 @@ class GlobeWindow(QWidget):
         self._clear_viewshed()
         self._clear_insolation()
         self.subsurface.clear()
+        self.view.extruded.clear()
         # Разрез вниз - земной: кора, плиты и очаги есть только у Земли.
         if self.section_dialog is not None:
             self.section_dialog.close()
@@ -2391,6 +2409,9 @@ class GlobeWindow(QWidget):
             # Геологические слои - в 3D, как обычные слои глобуса.
             self.subsurface.sync_project(self._shown_in_order(),
                                          restyle=self._layers_stale)
+        if force and hasattr(self, "extruder"):
+            # Выдавленные слои - только на Земле, sync это проверяет.
+            self.extruder.sync(self._shown_in_order())
         layers = self._overlay_layers() if force else self._applied_layers
         if layers is None:
             layers = self._overlay_layers()
@@ -3313,7 +3334,8 @@ class GlobeWindow(QWidget):
         # Метка с открытым окном свойств показывается с правками окна.
         shapes = [self._timed_shape(p)
                   for p in self.myplaces.places
-                  if p.visible and self._time_ok(p) and not p.tour
+                  if p.visible and self._time_ok(p)
+                  and (not p.tour or p.key in self.previews)
                   and p.body == self.planet.key
                   and p.key not in self._region_hidden]
         # Метки неба подписывает слой подписей неба.
@@ -4392,6 +4414,12 @@ class GlobeWindow(QWidget):
         if action in ("add_ground", "add_photo", "add_screen"):
             self.add_overlay(action[4:], key or None)
             return
+        if action == "add_link":
+            self.add_link(key or None)
+            return
+        if action == "reload_link":
+            self.netlinks.reload(key)
+            return
         if action == "ground_project":
             self.ground_to_project(key or None)
             return
@@ -4523,6 +4551,22 @@ class GlobeWindow(QWidget):
         self.made_folder = None
         return True
 
+    def add_link(self, parent=None):
+        """«Добавить - Сетевую ссылку…»: папка-ссылка в папке parent,
+        содержимое приходит загрузкой."""
+        dialog = LinkDialog(tr("Сетевая ссылка"), "", 0.0, self)
+        if not dialog.exec():
+            return None
+        name, link, refresh = dialog.values()
+        if not link:
+            return None
+        key = self.myplaces.add_folder(name or link, parent)
+        if key is not None:
+            self.myplaces.set_link(key, link, refresh)
+            self.panel.select_place(key)
+            self.netlinks.tick()
+        return key
+
     def _folder_action(self, action, folder):
         """Перелёт к виду папки, снимок вида, свойства, имя, удаление."""
         key = folder.key
@@ -4531,6 +4575,14 @@ class GlobeWindow(QWidget):
         elif action == "snapshot":
             self.myplaces.update(key, {"view": lookat.text(
                 self.current_view())})
+        elif action == "properties" and folder.link:
+            dialog = LinkDialog(folder.name, folder.link, folder.refresh,
+                                self)
+            if dialog.exec():
+                name, link, refresh = dialog.values()
+                self.myplaces.update(key, {"name": name or folder.name})
+                self.myplaces.set_link(key, link, refresh)
+                self.netlinks.reload(key)
         elif action == "properties":
             dialog = FolderDialog(
                 folder, self.current_view, self,
@@ -4981,13 +5033,20 @@ class GlobeWindow(QWidget):
                 self.previews.pop(key, None)
                 self._end_prop_vertices(dialog)
                 if result:
+                    samples = dialog.edited_tour()
                     if dialog.shape_changed():
                         self.myplaces.set_shape(key, dialog.preview())
-                    self.myplaces.update(key, dialog.values())
+                    values = dialog.values()
+                    if samples is not None:
+                        values["tour"] = tour_text(samples)
+                    self.myplaces.update(key, values)
                 else:
                     self._refresh_shapes()
             dialog.changed.connect(preview)
             dialog.finished.connect(done)
+            if place.tour:
+                # Путь облёта на глобусе не рисуется, пока окно закрыто.
+                preview(dialog.preview())
         dialog.show()
         dialog.raise_()
         dialog.activateWindow()
@@ -4997,11 +5056,12 @@ class GlobeWindow(QWidget):
         """Вершины метки тянутся мышью, пока открыто её окно свойств.
         Окно «Новая метка» и линейка главнее - при них вершины свойств
         не берутся."""
-        if not globemenu.editable(place) or self._place_open() \
-                or self._ruler_open():
+        if not (globemenu.editable(place) or place.tour) \
+                or self._place_open() or self._ruler_open():
             return
-        tool = PropVertices(self, dialog, ShapeEdit(
-            place.kind, dialog.points, dialog.set_points))
+        edit = TourEdit(dialog.points, dialog.set_points) if place.tour \
+            else ShapeEdit(place.kind, dialog.points, dialog.set_points)
+        tool = PropVertices(self, dialog, edit)
         self.view.vertex_tool = tool
         self.handles.tool = tool
         self.handles.sync()
@@ -6073,6 +6133,7 @@ class GlobeWindow(QWidget):
             # удаление после выхода роняло QGIS 3.36.
             self.watch.blockSignals(True)
             self.sync.close()
+            self.netlinks.stop()
             self._layer_time_timer.stop()
             self._link_timer.stop()
             self.satellite_manager.close()
