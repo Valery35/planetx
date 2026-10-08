@@ -51,21 +51,20 @@ dragged with the mouse.
 | Icon | What it does |
 |---|---|
 | Sidebar | Hides and shows the left panel, the view takes its place |
-| Refresh | Shows new settings and layers. It turns orange when there is something to show |
+| Refresh | Shows new settings and layers. The icon is visible only when automatic update is off in the View properties window. It turns orange when there is something to show |
 | Synchronization | Links the globe with the QGIS map window |
 | Identify features | Turns on identify by a click on the globe |
 | Ruler | Opens the Ruler window |
 | New placemark | Opens the New placemark window |
 | Save view | Puts a placemark at the look-at point with height, heading and tilt |
-| Record tour | Records the camera movement as a tour into My Places |
-| Time slider | Opens and closes the placemark time slider. It is available when visible placemarks have a time |
+| Record a flight | Records the camera movement as a tour into My Places. The ⏺ button of the tour bar records a tour to video |
+| Time slider | Opens and closes the time slider. The slider is shared by placemarks, tracks, project layers, events, maps and the globe clock. It is available when visible data has a time |
 | View snapshot | Saves the view to a PNG or JPEG file |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
-| Subsurface mode | Drill holes, bed roofs, sections, tunnels and a block cut under the surface, see [Subsurface mode](#subsurface-mode) |
 | Demo | Ready scenes by body, see [Demo](#demo) |
 | Body | The menu of planets, moons, asteroids and Sky, see [Other bodies](#other-bodies) and [Starry sky](#starry-sky) |
-| View properties | Base map, terrain, labels, link with the map, update, coordinate format |
+| View properties | Base map and data sources, terrain, labels, link with the map, update, coordinate format, subsurface mode, assistant |
 | About | Controls, data sources, links |
 
 ### Status line
@@ -563,6 +562,7 @@ window. The window does not block work with the globe.
 | QGIS map | New layers straight to the globe | A new project layer is checked on the globe at once |
 | Update | Update automatically | The globe refreshes after every change without the Refresh button, on by default |
 | Coordinates | Format | Decimal degrees, degrees-minutes-seconds, UTM or MGRS in the status line and the Features window. North of 84° and south of 80° UTM and MGRS are replaced with decimal degrees |
+| Inside the Earth | Subsurface mode… | Opens the Subsurface mode window, see [Subsurface mode](#subsurface-mode) |
 
 The default base map is Esri World Imagery, listed as an example. Esri
 sets its terms of use. OpenStreetMap comes next, then the XYZ Tiles
@@ -591,8 +591,8 @@ country. Fifteen languages follow. When there is no name in the chosen
 language, Latin-script languages get the Latin name, the others the
 local one.
 
-A change of base map, terrain exaggeration or project layers shows after
-the Refresh button on the icon bar. The status line reminds about it.
+Without automatic update a change of base map, terrain exaggeration or
+project layers shows after the Refresh button on the icon bar. The status line reminds about it.
 The label language changes at once.
 
 ### Project layers section
@@ -830,18 +830,32 @@ Directions to here sets the end. With a point placemark under the
 cursor the route takes its point and name. When both points are set,
 the route is built by itself and goes into My Places as a path named
 Route N. The camera flies to it. The length and the travel time stand
-under the search line. The On foot or By car link builds the route
-the other way, Clear removes the points.
+under the search line. The By car, By bike and On foot links build
+the route the other way, Clear removes the points.
 
-The roads come from the vector base, that is OpenStreetMap data in
-OpenFreeMap tiles. A car drives on roads from motorways to tracks,
+The OSRM service on the FOSSGIS server builds the route from
+OpenStreetMap data, at any distance. The route from Perm to Sochi,
+2664 km, arrives in 1 s. The route points go to the service server.
+The service updates its data every two days. The Map error link opens
+the OpenStreetMap page where errors in roads are reported. Requests
+to the server go no more often than once per second, a FOSSGIS
+condition. The Build routes with the service box and the address of
+an own OSRM server are the Routes group of the Data sources window.
+
+Without the box or when the service did not answer, the plugin builds
+the route itself. It uses the roads of the vector base, that is
+OpenStreetMap data in OpenFreeMap tiles. A car drives on roads from motorways to tracks,
 keeps one-way traffic and does not go on paths. A walker goes on all
-roads and paths except motorways, in both directions. The travel time
-follows the road class, from 90 km/h on a motorway to 15 km/h on a
-track, on foot 5 km/h. The data hold no traffic, speed limits or
+roads and paths except motorways, in both directions. A bike goes
+where a walker goes, except trunk roads. The travel time follows the
+road class, from 90 km/h on a motorway to 15 km/h on a track, by bike
+15 km/h, on foot 5 km/h. The data hold no traffic, speed limits or
 turn restrictions.
 
-The route points lie no more than 50 km apart in a straight line.
+Over tiles the route points lie no more than 50 km apart in a
+straight line. A point goes to the nearest road of the connected
+network, an island of roads without an exit, for example inside the
+Kremlin, is skipped.
 Road tiles load in a strip along the straight line between the
 points, the line under the search shows the loading. Without a way
 in the strip the strip widens. A route from the centre of Perm to
@@ -1147,8 +1161,9 @@ Insolation is computed only for the Earth.
 
 ## Subsurface mode
 
-The Subsurface mode icon on the icon bar opens a window of the same
-name. The mode shows drill holes, bed roofs, section walls and a block
+The Subsurface mode… button of the View properties window and the …
+button of the Ground above grids row of the Layers section open the
+Subsurface mode window. The mode shows drill holes, bed roofs, section walls and a block
 cut under the surface.
 
 ### Data
@@ -1810,7 +1825,7 @@ and the planets stay.
 
 Places and tours work in the sky. Save view puts a place with the
 view direction and the field of view. New place puts a point with a
-click on the sky. Record tour records the motion over the sky. Sky
+click on the sky. Record a flight records the motion over the sky. Sky
 places are kept in My Places with the others and are shown in the sky
 as yellow circles with a label. A tour and the ▶ button in the sky go through the
 sky places, between distant points the field of view widens on the

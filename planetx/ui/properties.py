@@ -68,6 +68,7 @@ class PropertiesDialog(QDialog):
     assistant_settings_requested = pyqtSignal()
     history_clear_requested = pyqtSignal()
     sources_requested = pyqtSignal()
+    subsurface_requested = pyqtSignal()
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -195,6 +196,17 @@ class PropertiesDialog(QDialog):
         coordinates = QGroupBox(tr("Координаты"), self)
         QFormLayout(coordinates).addRow(tr("Формат"), self.coords)
 
+        under = QPushButton(tr("Подземный режим…"), self)
+        under.setToolTip(tr(
+            "Окно «Подземный режим» - прозрачность земли над моделью, "
+            "вырез блока, камера под землёй и шаблон данных. Скважины, "
+            "кровли, гриды, разрезы и тоннели - слои проекта, их "
+            "показывают флажки «Слоёв проекта»."))
+        under.clicked.connect(
+            lambda _=False: self.subsurface_requested.emit())
+        subsurface = QGroupBox(tr("Недра"), self)
+        QHBoxLayout(subsurface).addWidget(under)
+
         assistant = QGroupBox(tr("Помощник"), self)
         row = QHBoxLayout(assistant)
         for text, tip, signal in (
@@ -224,6 +236,7 @@ class PropertiesDialog(QDialog):
         layout.addWidget(canvas)
         layout.addWidget(layers)
         layout.addWidget(coordinates)
+        layout.addWidget(subsurface)
         layout.addWidget(assistant)
         layout.addStretch(1)
         layout.addWidget(buttons)

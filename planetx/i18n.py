@@ -130,15 +130,6 @@ EN = {
         "Collapse or expand the QGIS project layers.",
     "Свернуть или развернуть векторную основу и рельеф.":
         "Collapse or expand the vector base and terrain.",
-    "Свойства вида: подложка, масштаб рельефа, язык подписей, "
-    "связь с картой, обновление, формат координат.":
-        "View properties: base map, terrain exaggeration, label language, "
-        "link with the map, update, coordinate format.",
-    "Шкала времени меток. Пока шкала открыта, метки вне её "
-    "промежутка скрыты. Закрытая шкала показывает все метки.":
-        "Placemark time slider. While the slider is open, placemarks "
-        "outside its interval are hidden. A closed slider shows all "
-        "placemarks.",
     "Основа": "Base map",
     "Картинки на поверхности в проект QGIS…":
         "Ground overlays to the QGIS project…",
@@ -225,6 +216,104 @@ EN = {
         "mm/h",
     "Номенклатура листа":
         "Map sheet designation",
+    "Маршрут не построен: сервис ответил «{error}», а по дорогам векторной "
+    "основы маршрут строится до {limit} км по прямой.":
+        "No route: the service answered '{error}', and over the roads of the "
+        "vector base a route is built up to {limit} km in a straight line.",
+    "Маршрут: запрос к сервису…":
+        "Route: asking the service…",
+    "На велосипеде":
+        "By bike",
+    "на велосипеде":
+        "by bike",
+    "Ошибка на карте":
+        "Map error",
+    "Сервис OSRM, данные © OpenStreetMap":
+        "OSRM service, data © OpenStreetMap",
+    "Сервис не ответил ({error}), маршрут по тайлам дорог":
+        "The service did not answer ({error}), route over road tiles",
+    "Точки дальше {limit} км по прямой. Без сервиса маршрут строится по "
+    "дорогам района, для дальних поездок он не подходит. Сервис маршрутов "
+    "включает окно «Источники данных».":
+        "The points are more than {limit} km apart in a straight line. "
+        "Without the service a route is built over the roads of the area, it "
+        "does not suit long trips. The Data sources window turns the route "
+        "service on.",
+    "Адрес сервиса маршрутов OSRM с {mode} - профиль car, bike или foot - и "
+    "{coords} - точки. Пустое поле - сервер FOSSGIS, к нему не больше "
+    "запроса в секунду.":
+        "Address of the OSRM route service with {mode} - the car, bike or "
+        "foot profile - and {coords} - the points. An empty field is the "
+        "FOSSGIS server, at most one request per second goes to it.",
+    "Адрес сервиса маршрутов начинается с http или https и содержит "
+    "{coords}.":
+        "The route service address starts with http or https and contains "
+        "{coords}.",
+    "Маршруты":
+        "Routes",
+    "Маршруты на машине, велосипеде и пешком":
+        "Routes by car, by bike and on foot",
+    "С флажком маршрут меню на глобусе строит сервис OSRM - на любое "
+    "расстояние за секунды, точки маршрута уходят на его сервер. Без флажка "
+    "или когда сервис не ответил, маршрут строится по тайлам дорог векторной "
+    "основы, до 50 км по прямой.":
+        "With the box the OSRM service builds the route of the globe menu - "
+        "at any distance within seconds, the route points go to its server. "
+        "Without the box or when the service did not answer, the route is "
+        "built over the road tiles of the vector base, up to 50 km in a "
+        "straight line.",
+    "Свой сервис":
+        "Own service",
+    "Строить маршрут через сервис":
+        "Build routes with the service",
+    "Записать облёт. Движение камеры мышью, клавишами или перелётами "
+    "становится туром в «Моих метках», повторный щелчок останавливает "
+    "запись. Видео тура пишет кнопка ⏺ панели тура.":
+        "Record a flight. Camera movement by mouse, keys or flights becomes "
+        "a tour in My Places, a second click stops the recording. The ⏺ "
+        "button of the tour bar records a tour to video.",
+    "Подземный режим…":
+        "Subsurface mode…",
+    "Окно «Подземный режим» - прозрачность земли над моделью, вырез блока, "
+    "камера под землёй и шаблон данных. Скважины, кровли, гриды, разрезы и "
+    "тоннели - слои проекта, их показывают флажки «Слоёв проекта».":
+        "The Subsurface mode window - ground transparency above the model, "
+        "the block cut, the camera under the ground and the data template. "
+        "Drill holes, roofs, grids, sections and tunnels are project layers, "
+        "the Project layers boxes show them.",
+    "Окно «Подземный режим» - вырез блока, камера под землёй и шаблон "
+    "данных.":
+        "The Subsurface mode window - the block cut, the camera under the "
+        "ground and the data template.",
+    "Непрозрачность земли над подземной моделью - гридами по отметкам, "
+    "кровлями, скважинами. Вправо земля непрозрачна, влево прозрачнее, у "
+    "левого края её не видно. Вне контура данных земля не меняется.":
+        "Opacity of the ground above the underground model - grids by "
+        "elevations, bed tops, wells. To the right the ground is opaque, to "
+        "the left more transparent, at the left edge it is not visible. "
+        "Outside the data outline the ground does not change.",
+    "Определить объекты. Щелчок по глобусу показывает координаты, высоту или "
+    "глубину точки, кору под ней, объекты отмеченных слоёв проекта, метки, "
+    "очаги землетрясений, спутники и подземную модель.":
+        "Identify features. A click on the globe shows the coordinates, the "
+        "elevation or depth of the point, the crust under it, the features "
+        "of the checked project layers, placemarks, earthquakes, satellites "
+        "and the underground model.",
+    "Шкала времени. Она общая для меток, треков, слоёв проекта, "
+    "землетрясений, пожаров, карт NASA, прогноза, Солнца и спутников. Пока "
+    "шкала открыта, данные вне её промежутка скрыты. Закрытая шкала "
+    "показывает все метки и события, карты - на последний день.":
+        "Time slider. It is shared by placemarks, tracks, project layers, "
+        "earthquakes, fires, NASA maps, the forecast, the Sun and "
+        "satellites. While the slider is open, data outside its interval is "
+        "hidden. A closed slider shows all placemarks and events, maps show "
+        "the last day.",
+    "Свойства вида: основа и источники данных, масштаб рельефа и глубины "
+    "морей, язык подписей, связь с картой, обновление, формат координат, "
+    "помощник.":
+        "View properties: base map and data sources, terrain exaggeration "
+        "and sea depths, label language, link with the map, update, "
+        "coordinate format, assistant.",
     "Земля над гридами":
         "Ground above grids",
     "Поверхность по отметкам":
@@ -238,13 +327,6 @@ EN = {
         "the QGIS layer style. The layer box shows and hides the surface, "
         "the Ground above grids slider of the Layers section makes the "
         "ground above it transparent.",
-    "Непрозрачность земли над подземной моделью - гридами по отметкам, "
-    "кровлями, скважинами. Вправо земля непрозрачна, влево прозрачнее, у "
-    "левого края её не видно. Вне рамки модели земля не меняется.":
-        "Opacity of the ground above the underground model - grids by "
-        "elevations, bed tops, wells. To the right the ground is opaque, to "
-        "the left more transparent, at the left edge it is not visible. "
-        "Outside the model frame the ground does not change.",
     "Группы искусственных спутников CelesTrak. Щелчок по группе показывает "
     "её на глобусе или убирает.":
         "Groups of artificial satellites from CelesTrak. A click on a group "
@@ -564,10 +646,6 @@ EN = {
         "{value} min",
     "{hours} ч {minutes} мин":
         "{hours} h {minutes} min",
-    "Точки дальше {limit} км по прямой. Маршрут строится по дорогам района, "
-    "для дальних поездок он не подходит.":
-        "The points are more than {limit} km apart in a straight line. The "
-        "route follows the roads of the area and does not suit long trips.",
     "Маршрут: адрес дорог векторной основы…":
         "Route: address of the vector base roads…",
     "Маршрут не построен: нет адреса тайлов векторной основы. {error}":
@@ -1338,11 +1416,6 @@ EN = {
     "Синхронизация с окном карты QGIS. Направление - в свойствах вида.":
         "Synchronization with the QGIS map window. The direction is set "
         "in the view properties.",
-    "Определить объекты. Щелчок по глобусу показывает координаты и высоту "
-    "точки и объекты слоёв проекта, отмеченных на глобусе.":
-        "Identify features. A click on the globe shows the coordinates and "
-        "elevation of the point and the features of the project layers "
-        "checked on the globe.",
     "В обе стороны": "Both ways",
     "Карта ведёт глобус": "Map leads the globe",
     "Глобус ведёт карту": "Globe leads the map",
@@ -1525,12 +1598,6 @@ EN = {
         "Date and time of the view. A flight to the "
         "placemark and a tour set the time slider to this time.",
     "Дата/время": "Date/time",
-    "Записать тур с экрана. Двигайте камеру "
-    "мышью, клавишами или перелётами, повторный щелчок "
-    "останавливает запись. Тур ложится в «Мои метки».":
-        "Record a tour from the screen. Move the camera with the mouse, "
-        "keys or flights, a second click stops recording. The tour goes "
-        "into My Places.",
     "Тур": "Tour",
     "Сохранить тур": "Save tour",
     "Тур не записан, камера не двигалась.":
@@ -2074,10 +2141,6 @@ EN = {
     "Растр «{name}» не стал рельефом глобуса: {why}.":
         "The raster “{name}” did not become globe terrain: {why}.",
     "Подземный режим": "Subsurface mode",
-    "Подземный режим - скважины, горизонты, разрезы и вырез "
-    "блока под поверхностью.":
-        "Subsurface mode - drill holes, horizons, sections and a block "
-        "cut under the surface.",
     "Пласты": "Beds",
     "Непрозрачность поверхности. Меньше - сквозь рельеф видны "
     "скважины и кровли пластов.":

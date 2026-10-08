@@ -420,6 +420,8 @@ class LayerPanel(QWidget):
     grid_toggled = pyqtSignal(str, bool)
     # Непрозрачность земли над подземной моделью, от 0 до 1.
     ground_alpha = pyqtSignal(float)
+    # Кнопка строки «Земля над гридами» - окно «Подземный режим».
+    subsurface_requested = pyqtSignal()
     # Группы векторной основы, включённые в панели «Слои», множество.
     geo_changed = pyqtSignal(object)
     # Строка витрины карт NASA и погоды: открыть витрину.
@@ -659,10 +661,19 @@ class LayerPanel(QWidget):
             "Непрозрачность земли над подземной моделью - гридами "
             "по отметкам, кровлями, скважинами. Вправо земля "
             "непрозрачна, влево прозрачнее, у левого края её не видно. "
-            "Вне рамки модели земля не меняется."))
+            "Вне контура данных земля не меняется."))
         self.ground_slider.valueChanged.connect(
             lambda value: self.ground_alpha.emit(value / 100.0))
         row.addWidget(self.ground_slider, 1)
+        under = QToolButton(ground)
+        under.setText("…")
+        under.setAutoRaise(True)
+        under.setToolTip(tr(
+            "Окно «Подземный режим» - вырез блока, камера под землёй "
+            "и шаблон данных."))
+        under.clicked.connect(
+            lambda _=False: self.subsurface_requested.emit())
+        row.addWidget(under)
         self.geo.setItemWidget(self.ground_item, 0, ground)
         self.ground_item.setHidden(True)
         self.geo.addTopLevelItems(list(self.headers.values()))

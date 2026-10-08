@@ -13,14 +13,15 @@ import time
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import Qt, QUrl, pyqtSignal
 from qgis.PyQt.QtGui import QDesktopServices
-from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
+                                 QDialogButtonBox,
                                  QFormLayout, QGroupBox, QHBoxLayout,
                                  QLabel, QLineEdit, QMessageBox,
                                  QPushButton, QTreeWidget, QTreeWidgetItem,
                                  QVBoxLayout)
 
-from ..core import (basemap, crust, fires, paleo, planets, quakes, slabs,
-                    sources, sun)
+from ..core import (basemap, crust, fires, paleo, planets, quakes, routing,
+                    slabs, sources, sun)
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
@@ -32,7 +33,7 @@ URL_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 SOURCE_ROLE = URL_ROLE + 1  # индекс подложки в списке источников окна
 
 
-def catalogue(terrain_url, vector_url):
+def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL):
     """Источники по группам: (группа, [(название, что показывает,
     условия, адрес проверки или None)])."""
     terrain_probe = sources.tile_probe(terrain_url)
@@ -48,6 +49,14 @@ def catalogue(terrain_url, vector_url):
             (tr("Марс, Луна и другие тела"),
              tr("Высоты и снимки тел из хранилища planetx-terrain"),
              SOURCES_DOC, sources.tile_probe(mars))]),
+        (tr("Маршруты"), [
+            ("OSRM FOSSGIS" if router_url == routing.ROUTER_URL
+             else tr("Свой сервис"),
+             tr("Маршруты на машине, велосипеде и пешком"),
+             routing.ROUTER_TERMS if router_url == routing.ROUTER_URL
+             else SOURCES_DOC,
+             routing.service_url(router_url, "car", (58.0105, 56.2346),
+                                 (58.0094, 56.3002)))]),
         (tr("Векторная основа"), [
             ("OpenFreeMap" if vector_url == sources.VECTOR_TILEJSON
              else tr("Своя основа"),
@@ -172,6 +181,28 @@ class SourcesDialog(QDialog):
         form.addRow(tr("Подпись"), self.vector_credit)
         form.addRow(self._apply_row("vector"))
 
+        self.router_on = QCheckBox(tr("Строить маршрут через сервис"), self)
+        self.router_on.setChecked(settings.value(
+            sources.ROUTER_ON_KEY, True, type=bool))
+        self.router_on.setToolTip(tr(
+            "С флажком маршрут меню на глобусе строит сервис OSRM - "
+            "на любое расстояние за секунды, точки маршрута уходят на его "
+            "сервер. Без флажка или когда сервис не ответил, маршрут "
+            "строится по тайлам дорог векторной основы, до 50 км по "
+            "прямой."))
+        self.router_url = QLineEdit(
+            settings.value(sources.ROUTER_KEY, "") or "", self)
+        self.router_url.setPlaceholderText(routing.ROUTER_URL)
+        self.router_url.setToolTip(tr(
+            "Адрес сервиса маршрутов OSRM с {mode} - профиль car, bike "
+            "или foot - и {coords} - точки. Пустое поле - сервер FOSSGIS, "
+            "к нему не больше запроса в секунду."))
+        router = QGroupBox(tr("Маршруты"), self)
+        form = QFormLayout(router)
+        form.addRow(self.router_on)
+        form.addRow(tr("Адрес"), self.router_url)
+        form.addRow(self._apply_row("router"))
+
         self.status = QLabel(self)
         self.status.setWordWrap(True)
         close = QDialogButtonBox(
@@ -182,6 +213,7 @@ class SourcesDialog(QDialog):
         layout.addLayout(buttons_row)
         layout.addWidget(terrain)
         layout.addWidget(vector)
+        layout.addWidget(router)
         layout.addWidget(self.status)
         layout.addWidget(close)
         self.rebuild()
@@ -219,7 +251,9 @@ class SourcesDialog(QDialog):
                              sources.tile_probe(source.url))
             item.setData(NAME, SOURCE_ROLE, index)
         terrain, encoding = self.window._terrain_choice()
-        for group, rows in catalogue(terrain, self.window._vector_choice()):
+        router = sources.router(QgsSettings().value(sources.ROUTER_KEY, ""))
+        for group, rows in catalogue(terrain, self.window._vector_choice(),
+                                     router):
             parent = QTreeWidgetItem(self.tree, [group])
             for name, what, terms, probe in rows:
                 self._row(parent, name, what, terms, probe)
@@ -309,6 +343,16 @@ class SourcesDialog(QDialog):
                               sources.ENCODINGS[self.encoding.currentIndex()])
             settings.setValue(sources.TERRAIN_CREDIT_KEY,
                               self.terrain_credit.text().strip())
+        elif what == "router":
+            url = self.router_url.text().strip()
+            if url and not routing.router_ok(url):
+                self.status.setText(tr(
+                    "Адрес сервиса маршрутов начинается с http или https "
+                    "и содержит {coords}."))
+                return
+            settings.setValue(sources.ROUTER_KEY, url)
+            settings.setValue(sources.ROUTER_ON_KEY,
+                              self.router_on.isChecked())
         else:
             url = self.vector_url.text().strip()
             if url and not sources.tilejson_ok(url):
@@ -327,6 +371,9 @@ class SourcesDialog(QDialog):
             self.terrain_url.clear()
             self.encoding.setCurrentIndex(0)
             self.terrain_credit.clear()
+        elif what == "router":
+            self.router_url.clear()
+            self.router_on.setChecked(True)
         else:
             self.vector_url.clear()
             self.vector_credit.clear()

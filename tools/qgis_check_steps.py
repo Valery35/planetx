@@ -6560,6 +6560,10 @@ ROUTE_B = (58.0186, 56.2930)  # Мотовилиха
 def route_car():
     """Маршрут на машине по тайлам векторной основы из меню глобуса."""
     import time as _time
+    from qgis.core import QgsSettings
+    from planetx.core import sources
+    # Этот шаг проверяет расчёт по тайлам, сервис выключен.
+    QgsSettings().setValue(sources.ROUTER_ON_KEY, False)
     window = state["window"]
     window.set_body("earth")
     manager = window.route_manager
@@ -6596,6 +6600,9 @@ def _route_report(window):
     out["km"] = round(route.length / 1000.0, 2)
     out["minutes"] = round(route.seconds / 60.0, 1)
     out["points"] = len(route.points)
+    out["via"] = manager.via
+    if manager.via != "tiles":
+        return out
     g = manager.graph
     index = {tuple(np.rint(n).astype(np.int64)): i
              for i, n in enumerate(g.nodes)}
@@ -6727,6 +6734,61 @@ def route_spin_check():
             window.myplaces.remove(p.key)
     window.route_manager.clear()
     result["route"]["gl"] = dict(window.view.gl_errors)
+
+
+@check(500)
+def route_long():
+    """Дальний маршрут через сервис OSRM: Пермь - Сочи, около
+    2900 км. Три запроса к серверу FOSSGIS с паузой не меньше 1 с."""
+    import time as _time
+    from qgis.core import QgsSettings
+    from planetx.core import sources
+    QgsSettings().setValue(sources.ROUTER_ON_KEY, True)
+    window = state["window"]
+    window.set_body("earth")
+    manager = window.route_manager
+    manager.clear()
+    manager.set_mode("car")
+    state["route_keys"] = []
+    state["route_start"] = _time.monotonic()
+    manager.finished.connect(lambda key: state["route_keys"].append(
+        (key, round(_time.monotonic() - state["route_start"], 1))))
+    window.route_point(*ROUTE_A, "Пермь", end=False)
+    window.route_point(43.5855, 39.7231, "Сочи", end=True)
+
+
+@check(500)
+def route_long_check():
+    _route_wait()
+    window = state["window"]
+    out = {"car": _route_report(window)}
+    from planetx.core.navigation import Pose
+    view = window.view
+    for name, pose in (("long", Pose(51.0, 48.0, 3500000.0, 0.0, 0.0)),
+                       ("near", Pose(58.00, 56.27, 15000.0, 0.0, 0.0))):
+        view.navigator.stop()
+        view.navigator.set_pose(pose)
+        until = __import__("time").monotonic() + 8.0
+        while __import__("time").monotonic() < until:
+            QgsApplication.processEvents()
+            __import__("time").sleep(0.05)
+        view.grabFramebuffer().save(
+            os.path.join(TEMP, "planetx_route_%s.png" % name))
+    # Велосипед по короткому пути, ссылка строки под поиском.
+    manager = window.route_manager
+    manager.clear()
+    window.route_point(*ROUTE_A, "Эспланада", end=False)
+    window.route_point(*ROUTE_B, "Мотовилиха", end=True)
+    _route_wait()
+    manager.link("bike")
+    _route_wait()
+    out["bike"] = _route_report(window)
+    out["links"] = window.panel.answer.text()[-300:]
+    for p in list(window.myplaces.places):
+        if p.name.startswith("Маршрут") or p.name.startswith("Route"):
+            window.myplaces.remove(p.key)
+    manager.clear()
+    result["route_long"] = out
 
 
 @check(500)
@@ -6876,6 +6938,49 @@ def region_hide():
         else store.remove(folder)
     out["after_remove"] = len(window._region_hidden)
     result["region_hide"] = out
+
+
+@check(500)
+def toolbar_buttons():
+    """Панель значков: «Обновить» видна только без автообновления,
+    окно «Подземный режим» открывают свойства вида и строка «Земля над
+    гридами», значка подземного режима нет."""
+    from qgis.PyQt.QtWidgets import QPushButton, QToolButton
+    window = state["window"]
+    bar = window.toolbar
+    out = {"subsurface_icon": hasattr(bar, "subsurface")}
+    auto = window.auto_refresh
+    window._set_auto(True)
+    out["refresh_with_auto"] = bar.refresh.isVisibleTo(bar)
+    window._set_auto(False)
+    out["refresh_without_auto"] = bar.refresh.isVisibleTo(bar)
+    window._set_auto(auto)
+    out["record_tip"] = bar.record.toolTip()[:15]
+    window._show_properties()
+    buttons = [b for b in window.properties.findChildren(QPushButton)
+               if b.text() == tr_text("Подземный режим…")]
+    out["properties_button"] = len(buttons)
+    manager = window.subsurface
+    if buttons:
+        buttons[0].click()
+        out["dialog_from_properties"] = manager.dialog is not None \
+            and manager.dialog.isVisible()
+        manager.dialog.close()
+    window.properties.close()
+    row = window.panel.geo.itemWidget(window.panel.ground_item, 0)
+    under = [b for b in row.findChildren(QToolButton) if b.text() == "…"]
+    out["panel_button"] = len(under)
+    if under:
+        under[0].click()
+        out["dialog_from_panel"] = manager.dialog is not None \
+            and manager.dialog.isVisible()
+        manager.dialog.close()
+    result["toolbar_buttons"] = out
+
+
+def tr_text(text):
+    from planetx.i18n import tr
+    return tr(text)
 
 
 @check(500)
@@ -7536,7 +7641,7 @@ def vegas_open():
     action = next(a for a in window.toolbar.demo.menu().actions()
                   if a.text() in ("Тоннели Vegas Loop", "Vegas Loop tunnels"))
     action.trigger()
-    result["vegas"] = {"icon": window.toolbar.subsurface.isVisible(),
+    result["vegas"] = {"icon": not hasattr(window.toolbar, "subsurface"),
                        "started": window.subsurface.job is not None
                        or window.subsurface.model is not None}
 

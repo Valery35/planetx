@@ -23,6 +23,9 @@ ENCODING_KEY = PREFIX + "terrain_encoding"
 TERRAIN_CREDIT_KEY = PREFIX + "terrain_attribution"
 VECTOR_KEY = PREFIX + "vector_tilejson"
 VECTOR_CREDIT_KEY = PREFIX + "vector_attribution"
+# Сервис маршрутов OSRM: шаблон адреса и флажок «через сервис».
+ROUTER_KEY = PREFIX + "router_url"
+ROUTER_ON_KEY = PREFIX + "router_on"
 
 
 def template_ok(url):
@@ -51,6 +54,17 @@ def vector(url):
     """Адрес TileJSON векторной основы по настройкам."""
     url = (url or "").strip()
     return url if tilejson_ok(url) else VECTOR_TILEJSON
+
+
+def router(url):
+    """Шаблон адреса сервиса маршрутов по настройкам: пустой или
+    негодный - сервер FOSSGIS."""
+    try:  # внутри плагина QGIS
+        from . import routing
+    except ImportError:  # headless-тесты
+        import routing
+    url = (url or "").strip()
+    return url if routing.router_ok(url) else routing.ROUTER_URL
 
 
 def tile_probe(template, z=0, x=0, y=0):

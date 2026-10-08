@@ -65,7 +65,6 @@ class ViewToolbar(QFrame):
     scene_open_requested = pyqtSignal()
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
-    subsurface_clicked = pyqtSignal()
     gallery_requested = pyqtSignal()
 
     def __init__(self, parent=None):
@@ -78,9 +77,12 @@ class ViewToolbar(QFrame):
         self.sidebar = self._button(
             QIcon(os.path.join(ROOT, "sidebar.svg")),
             tr("Скрыть боковую панель"), self.sidebar_clicked)
+        # «Обновить» нужна только без автообновления, окно зовёт
+        # set_auto. Решение автора от 8 октября 2026 года.
         self.refresh = self._button(
             QgsApplication.getThemeIcon("/mActionRefresh.svg"),
             tr("Обновить глобус"), self.refresh_clicked)
+        self.refresh.setVisible(False)
         self.sync = self._button(
             QIcon(os.path.join(ROOT, "sync.svg")),
             tr("Синхронизация с окном карты QGIS. Направление - "
@@ -88,8 +90,10 @@ class ViewToolbar(QFrame):
         self.identify = self._button(
             QgsApplication.getThemeIcon("/mActionIdentify.svg"),
             tr("Определить объекты. Щелчок по глобусу показывает "
-               "координаты и высоту точки и объекты слоёв проекта, "
-               "отмеченных на глобусе."), self.identify_toggled,
+               "координаты, высоту или глубину точки, кору под ней, "
+               "объекты отмеченных слоёв проекта, метки, очаги "
+               "землетрясений, спутники и подземную модель."),
+            self.identify_toggled,
             checkable=True)
         self.ruler_button = self._button(
             QgsApplication.getThemeIcon("/mActionMeasure.svg"),
@@ -106,16 +110,20 @@ class ViewToolbar(QFrame):
                "и наклон."), self.save_view_requested)
         self.record = self._button(
             QgsApplication.getThemeIcon("/mActionRecord.svg"),
-            tr("Записать тур с экрана. Двигайте камеру "
-               "мышью, клавишами или перелётами, повторный щелчок "
-               "останавливает запись. Тур ложится в «Мои метки»."),
+            tr("Записать облёт. Движение камеры мышью, клавишами "
+               "или перелётами становится туром в «Моих метках», "
+               "повторный щелчок останавливает запись. Видео тура "
+               "пишет кнопка ⏺ панели тура."),
             self.record_toggled, checkable=True)
-        # Шкала времени меток. Кнопка доступна, когда у видимых меток
+        # Шкала времени вида. Кнопка доступна, когда у видимых данных
         # есть время, окно зовёт set_time_available.
         self.time = self._button(
             QgsApplication.getThemeIcon("/propertyicons/temporal.svg"),
-            tr("Шкала времени меток. Пока шкала открыта, метки вне её "
-               "промежутка скрыты. Закрытая шкала показывает все метки."),
+            tr("Шкала времени. Она общая для меток, треков, слоёв проекта, "
+               "землетрясений, пожаров, карт NASA, прогноза, Солнца "
+               "и спутников. Пока шкала открыта, данные вне её промежутка "
+               "скрыты. Закрытая шкала показывает все метки и события, "
+               "карты - на последний день."),
             self.time_toggled, checkable=True)
         self.time.setEnabled(False)
         self.gallery = self._button(
@@ -137,11 +145,9 @@ class ViewToolbar(QFrame):
             QgsApplication.getThemeIcon("/mActionNewLayout.svg"),
             tr("Вид в макет QGIS неизменной картинкой, вставленной "
                "в проект."), self.layout_clicked)
-        self.subsurface = self._button(
-            QIcon(os.path.join(ROOT, "subsurface.svg")),
-            tr("Подземный режим - скважины, горизонты, разрезы и вырез "
-               "блока под поверхностью."), self.subsurface_clicked)
-        self.subsurface.setVisible(SUBSURFACE)
+        # Окно «Подземный режим» открывают свойства вида и строка
+        # «Земля над гридами», значка на панели нет, решение автора
+        # от 8 октября 2026 года.
         # Сцена: вид целиком в файл и из файла.
         scene = QToolButton(self)
         scene.setIcon(QgsApplication.getThemeIcon("/mActionFileSave.svg"))
@@ -247,11 +253,13 @@ class ViewToolbar(QFrame):
         self.body = body
         self.properties = self._button(
             QgsApplication.getThemeIcon("/mActionOptions.svg"),
-            tr("Свойства вида: подложка, масштаб рельефа, язык подписей, "
-               "связь с картой, обновление, формат координат."),
+            tr("Свойства вида: основа и источники данных, масштаб "
+               "рельефа и глубины морей, язык подписей, связь с картой, "
+               "обновление, формат координат, помощник."),
             self.properties_clicked)
-        # Значка помощника на панели нет: помощник - кнопка у строки
-        # «Поиск», решение автора от 4 октября 2026 года.
+        # Значка помощника на панели нет. Разговор и настройки
+        # помощника - группа «Помощник» окна свойств вида, решение
+        # автора от 5 октября 2026 года.
         self._button(QIcon(os.path.join(ROOT, "about.svg")),
                      tr("О модуле"), self.about_clicked)
         self.adjustSize()
@@ -281,8 +289,8 @@ class ViewToolbar(QFrame):
         self.gallery.setChecked(bool(on))
 
     def set_time_available(self, available):
-        """Кнопка шкалы доступна, когда у видимых меток есть время.
-        Без таких меток шкала закрывается."""
+        """Кнопка шкалы доступна, когда у видимых данных есть время.
+        Без таких данных шкала закрывается."""
         self.time.setEnabled(available)
         if not available:
             self.time.setChecked(False)
@@ -297,6 +305,10 @@ class ViewToolbar(QFrame):
         """Подсказка значка боковой панели по её состоянию."""
         self.sidebar.setToolTip(tr("Скрыть боковую панель") if shown
                                 else tr("Показать боковую панель"))
+
+    def set_auto(self, on):
+        """Кнопка «Обновить» видна только без автообновления."""
+        self.refresh.setVisible(not on)
 
     def set_dirty(self, dirty):
         """Кнопка «Обновить» горит, пока глобус не показывает выбранное."""

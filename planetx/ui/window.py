@@ -851,7 +851,8 @@ class GlobeWindow(QWidget):
         # Подземный режим: скважины, кровли, разрезы, вырез блока.
         self.subsurface = SubsurfaceManager(self)
         self.model_section_dialog = None
-        self.toolbar.subsurface_clicked.connect(self.subsurface.open_dialog)
+        self.panel.subsurface_requested.connect(self.subsurface.open_dialog)
+        self.toolbar.set_auto(self.auto_refresh)
         self.myplaces.load()
         # Тур по отмеченным «Моим меткам».
         self.tour = TourPlayer(self.view, self._tour_stops, self)
@@ -2723,6 +2724,7 @@ class GlobeWindow(QWidget):
     def _project_reloaded(self):
         """Открыт другой проект: его настройки глобуса."""
         self.auto_refresh = read_flag(AUTO_REFRESH, AUTO_DEFAULT)
+        self.toolbar.set_auto(self.auto_refresh)
         self._read_shown()
         self.tracks.load()
         self.subsurface.project_reloaded()
@@ -2738,6 +2740,7 @@ class GlobeWindow(QWidget):
     def _set_auto(self, on):
         self.auto_refresh = bool(on)
         write_flag(AUTO_REFRESH, on)
+        self.toolbar.set_auto(self.auto_refresh)
         if on and self.dirty:
             self.refresh()
 
@@ -2774,6 +2777,8 @@ class GlobeWindow(QWidget):
             self.properties.history_clear_requested.connect(
                 self.clear_search_history)
             self.properties.sources_requested.connect(self.open_sources)
+            self.properties.subsurface_requested.connect(
+                self.subsurface.open_dialog)
         self.properties.show()
         self.properties.raise_()
         self.properties.activateWindow()

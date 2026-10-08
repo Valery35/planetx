@@ -25,6 +25,14 @@ OpenFreeMap сверены 6 октября 2026 года - запросы бе�
 в главном потоке: поток с Python отнимал бы у вида GIL, см. запись
 журнала AGENTS «Расчёт в рабочем потоке отнимал у вида GIL».
 
+Дальние маршруты, просьба автора от 8 октября 2026 года - «наши
+расстояния 2-3 тысячи км», строит сервис OSRM (service_url,
+parse_service). По умолчанию - сервер FOSSGIS routing.openstreetmap.de,
+условия сверены 8 октября 2026 года: не больше запроса в секунду,
+User-Agent программы, подпись OpenStreetMap и ссылка «сообщить об
+ошибке», адрес сервиса не зашивать - он меняется в окне «Источники
+данных». Расчёт по тайлам остаётся запасным без сети, до MAX_DISTANCE.
+
 Модуль Qt не знает.
 """
 import heapq
@@ -64,9 +72,25 @@ CAR_SPEED = {"motorway": 90.0, "trunk": 80.0, "primary": 60.0,
              "secondary": 50.0, "tertiary": 40.0, "minor": 30.0,
              "service": 15.0, "track": 15.0, "busway": 0.0}
 FOOT_SPEED = 5.0
+BIKE_SPEED = 15.0
 FOOT_NO = {"motorway", "rail", "transit", "ferry", "raceway",
            "bus_guideway"}
-MODES = ("car", "foot")
+BIKE_NO = FOOT_NO | {"trunk"}
+MODES = ("car", "bike", "foot")
+# Конец маршрута ложится на дорогу связной сети: от отрезка вперёд
+# и назад достижимо не меньше CONNECTED узлов. Иначе точка у Кремля
+# садилась на его внутренние дороги, 37 узлов без выезда, и маршрут
+# не находился. Кандидатов не больше CANDIDATES ближайших.
+CONNECTED = 300
+CANDIDATES = 200
+# Сервис маршрутов OSRM: шаблон адреса с {mode} - профиль
+# (car, bike, foot) и {coords} - «долгота,широта;долгота,широта».
+ROUTER_URL = ("https://routing.openstreetmap.de/routed-{mode}/route/v1/"
+              "driving/{coords}")
+ROUTER_TERMS = ("https://www.fossgis.de/arbeitsgruppen/osm-server/"
+                "nutzungsbedingungen/")
+FIX_MAP = "https://www.openstreetmap.org/fixthemap"
+SERVICE_GAP = 1.0  # с между запросами к сервису, условие FOSSGIS
 STEP_POPS = 3000  # узлов A* за шаг генератора
 # Множитель ключа клетки решётки: больше количества клеток по оси.
 CELL_KEY = 1 << 21
@@ -234,6 +258,10 @@ def speed(line, mode):
         if cls in FOOT_NO or line.foot == "no":
             return 0.0
         return FOOT_SPEED / 3.6
+    if mode == "bike":
+        if cls in BIKE_NO:
+            return 0.0
+        return BIKE_SPEED / 3.6
     if line.access == "no":
         return 0.0
     return CAR_SPEED.get(cls, 0.0) / 3.6
@@ -424,8 +452,10 @@ def _metres(lat1, lon1, lat2, lon2):
 # Поиск пути.
 
 def attach(graph, lat, lon):
-    """Ближайшая точка дороги графа к точке (lat, lon): номер отрезка,
-    доля вдоль него, расстояние в метрах. None - дальше REACH."""
+    """Ближайшая точка дороги связной сети графа к точке (lat, lon):
+    номер отрезка, доля вдоль него, расстояние в метрах. Отрезок
+    островка дорог без выезда пропускается, если рядом есть связный.
+    None - дорог ближе REACH нет."""
     if graph is None or not len(graph.seg_a):
         return None
     p = np.array(to_grid(lat, lon))
@@ -435,10 +465,94 @@ def attach(graph, lat, lon):
     t = np.clip(np.einsum("ij,ij->i", p - pa, d)
                 / np.maximum(np.einsum("ij,ij->i", d, d), 1e-12), 0.0, 1.0)
     dist = np.hypot(*(p - pa - t[:, None] * d).T) * unit_metres(lat)
-    i = int(np.argmin(dist))
-    if dist[i] > REACH:
+    near = np.argsort(dist)[:CANDIDATES]
+    near = near[dist[near] <= REACH]
+    if not len(near):
         return None
+    island = set()
+    for i in near.tolist():
+        node = int(graph.seg_a[i])
+        if node in island:
+            continue
+        seen = _connected(graph, node)
+        if seen is None:
+            return i, float(t[i]), float(dist[i])
+        island |= seen
+    i = int(near[0])
     return i, float(t[i]), float(dist[i])
+
+
+def _connected(graph, node, limit=CONNECTED):
+    """None, если от узла и до него достижимо не меньше limit узлов -
+    узел в связной сети. Иначе множество узлов островка."""
+    for keys, values in ((graph.start, graph.target),
+                         _reverse(graph)):
+        seen = {node}
+        frontier = [node]
+        while frontier and len(seen) < limit:
+            nxt = []
+            for u in frontier:
+                lo = np.searchsorted(keys, u, "left")
+                hi = np.searchsorted(keys, u, "right")
+                for v in values[lo:hi].tolist():
+                    if v not in seen:
+                        seen.add(v)
+                        nxt.append(v)
+            frontier = nxt
+        if len(seen) < limit:
+            return seen
+    return None
+
+
+_REVERSE = {}
+
+
+def _reverse(graph):
+    """Дуги графа, сортированные по концу: (концы, начала)."""
+    key = id(graph.target)
+    hit = _REVERSE.get(key)
+    if hit is None or hit[0] is not graph.target:
+        order = np.argsort(graph.target, kind="stable")
+        hit = (graph.target, graph.target[order], graph.start[order])
+        _REVERSE.clear()
+        _REVERSE[key] = hit
+    return hit[1], hit[2]
+
+
+# Сервис маршрутов.
+
+def service_url(template, mode, a, b):
+    """Адрес запроса маршрута от a до b (широта, долгота) к сервису
+    OSRM по шаблону template, путь целиком в GeoJSON."""
+    coords = "{:.6f},{:.6f};{:.6f},{:.6f}".format(a[1], a[0], b[1], b[0])
+    url = template.replace("{mode}", mode).replace("{coords}", coords)
+    return url + ("&" if "?" in url else "?") + \
+        "overview=full&geometries=geojson&steps=false"
+
+
+def router_ok(template):
+    """Годится ли шаблон адреса сервиса: http(s) и {coords}."""
+    template = (template or "").strip()
+    return template.startswith(("http://", "https://")) \
+        and "{coords}" in template
+
+
+def parse_service(data):
+    """Ответ OSRM в Route. ValueError - маршрута нет, текст - код
+    ответа сервиса."""
+    if not isinstance(data, dict) or data.get("code") != "Ok":
+        code = data.get("code") if isinstance(data, dict) else ""
+        raise ValueError(str(code or "no data"))
+    routes = data.get("routes") or []
+    if not routes:
+        raise ValueError("NoRoute")
+    best = routes[0]
+    coords = (best.get("geometry") or {}).get("coordinates") or []
+    points = _clean([(float(c[1]), float(c[0])) for c in coords])
+    if len(points) < 2:
+        raise ValueError("NoRoute")
+    return Route(points, float(best.get("distance", 0.0)),
+                 float(best.get("duration", 0.0)))
 
 
 def route_steps(graph, a, b, mode="car"):
@@ -461,12 +575,12 @@ def route_steps(graph, a, b, mode="car"):
     forward, back = graph.seg_cost[si], graph.seg_back[si]
     slen = graph.seg_len[si]
     extra.setdefault(source, []).extend([
-        (sb, (1.0 - st) * forward, (1.0 - st) * slen),
-        (sa, st * back, st * slen)])
+        (sb, _share(1.0 - st, forward), (1.0 - st) * slen),
+        (sa, _share(st, back), st * slen)])
     forward, back = graph.seg_cost[ei], graph.seg_back[ei]
     elen = graph.seg_len[ei]
-    extra.setdefault(ea, []).append((sink, et * forward, et * elen))
-    extra.setdefault(eb, []).append((sink, (1.0 - et) * back,
+    extra.setdefault(ea, []).append((sink, _share(et, forward), et * elen))
+    extra.setdefault(eb, []).append((sink, _share(1.0 - et, back),
                                      (1.0 - et) * elen))
     if si == ei:
         # Обе точки на одном отрезке: прямо по нему, если можно.
@@ -474,7 +588,8 @@ def route_steps(graph, a, b, mode="car"):
             else (st - et) * graph.seg_back[si]
         extra[source].append((sink, cost, abs(et - st) * slen))
     # Оценка A*: прямая до финиша на наибольшей скорости.
-    top = (max(CAR_SPEED.values()) if mode == "car" else FOOT_SPEED) / 3.6
+    top = {"car": max(CAR_SPEED.values()), "bike": BIKE_SPEED}.get(
+        mode, FOOT_SPEED) / 3.6
     goal = np.array(to_grid(*b))
     per_unit = unit_metres(0.5 * (a[0] + b[0]))
     first = np.searchsorted(graph.start, np.arange(n + 1))
@@ -531,6 +646,12 @@ def route_steps(graph, a, b, mode="car"):
     lons = np.array([p[1] for p in points])
     length = float(_metres(lats[:-1], lons[:-1], lats[1:], lons[1:]).sum())
     yield Route(points, length, float(best[sink]))
+
+
+def _share(part, cost):
+    """Доля part времени cost по отрезку. Ноль пути - ноль времени
+    и по отрезку, где ехать нельзя: inf * 0 дало бы NaN."""
+    return 0.0 if part <= 0.0 else float(part * cost)
 
 
 def _clean(points):

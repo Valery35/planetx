@@ -9,14 +9,19 @@
 просятся через кэш QGIS не больше PARALLEL сразу, тот же адрес, что
 у векторной основы, - OpenFreeMap или своя основа в схеме OpenMapTiles.
 Граф и путь считаются генераторами частями в главном потоке, шаг -
-проход цикла событий. Готовый путь ложится в «Мои метки», окно летит
-к нему, строка под поиском показывает длину и время и пересчитывает
-путь другим способом.
+проход цикла событий. С флажком «через сервис» окна «Источники данных»
+маршрут сначала просится у сервиса OSRM, не чаще раза в секунду, по
+тайлам - только если сервис не ответил и точки не дальше MAX_DISTANCE.
+Готовый путь ложится в «Мои метки», окно летит к нему, строка под
+поиском показывает длину и время и пересчитывает путь другим способом.
 """
-from qgis.core import QgsSettings
-from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
+import time
 
-from ..core import routing
+from qgis.core import QgsSettings
+from qgis.PyQt.QtCore import QObject, QTimer, QUrl, pyqtSignal
+from qgis.PyQt.QtGui import QDesktopServices
+
+from ..core import routing, sources
 from ..core.features import Shape
 from ..i18n import tr
 from ..net.overlay import fetch_bytes, fetch_json
@@ -28,7 +33,23 @@ ROUTE_WIDTH = 4.0
 
 
 def mode_names():
-    return {"car": tr("на машине"), "foot": tr("пешком")}
+    return {"car": tr("на машине"), "bike": tr("на велосипеде"),
+            "foot": tr("пешком")}
+
+
+def mode_links():
+    return {"car": tr("На машине"), "bike": tr("На велосипеде"),
+            "foot": tr("Пешком")}
+
+
+def service_on():
+    """Строить ли маршрут через сервис, флажок окна «Источники
+    данных», по умолчанию да."""
+    return QgsSettings().value(sources.ROUTER_ON_KEY, True, type=bool)
+
+
+def service_template():
+    return sources.router(QgsSettings().value(sources.ROUTER_KEY, ""))
 
 
 def duration_text(seconds):
@@ -67,6 +88,13 @@ class RouteManager(QObject):
         self.timer.setSingleShot(True)
         self.timer.timeout.connect(self._advance)
         self.last = None  # последний маршрут, core.routing.Route
+        self.via = ""  # кто построил: "service" или "tiles"
+        self.service_reply = None
+        self._service_at = -routing.SERVICE_GAP  # время прошлого запроса
+        self.service_timer = QTimer(self)
+        self.service_timer.setSingleShot(True)
+        self.service_timer.timeout.connect(self._ask_service)
+        self._service_error = ""
 
     # Точки.
 
@@ -96,7 +124,9 @@ class RouteManager(QObject):
         self.window.panel.set_answer("")
 
     def busy(self):
-        return bool(self.replies or self.queue or self._steps)
+        return bool(self.replies or self.queue or self._steps
+                    or self.service_reply is not None
+                    or self.service_timer.isActive())
 
     # Расчёт.
 
@@ -104,12 +134,58 @@ class RouteManager(QObject):
         if self.origin is None or self.target is None:
             return
         self.abort()
+        self._service_error = ""
+        if service_on():
+            self._show(tr("Маршрут: запрос к сервису…"), links=False)
+            wait = routing.SERVICE_GAP - (time.monotonic()
+                                          - self._service_at)
+            self.service_timer.start(int(max(wait, 0.0) * 1000))
+            return
+        self._tiles()
+
+    def _ask_service(self):
+        """Один запрос маршрута к сервису OSRM."""
+        if self.origin is None or self.target is None:
+            return
+        self._service_at = time.monotonic()
+        url = routing.service_url(service_template(), self.mode,
+                                  self.origin[:2], self.target[:2])
+        self.service_reply = fetch_json(
+            url, self._service_done, prefer_cache=False)
+
+    def _service_done(self, data, error):
+        if self.service_reply is None:
+            return
+        self.service_reply = None
+        try:
+            route = routing.parse_service(data) if data is not None \
+                else None
+        except ValueError as problem:
+            route, error = None, str(problem)
+        if route is not None:
+            self.via = "service"
+            self._done(route)
+            return
+        self._service_error = error or "no data"
+        self._tiles()
+
+    def _tiles(self):
+        """Маршрут по тайлам дорог векторной основы."""
         a, b = self.origin[:2], self.target[:2]
         distance = float(routing._metres(a[0], a[1], b[0], b[1]))
+        if distance > routing.MAX_DISTANCE and self._service_error:
+            self._show(tr(
+                "Маршрут не построен: сервис ответил «{error}», а по "
+                "дорогам векторной основы маршрут строится до {limit} км "
+                "по прямой.", error=self._service_error,
+                limit="{:.0f}".format(routing.MAX_DISTANCE / 1000.0)))
+            return
         if distance > routing.MAX_DISTANCE:
             self._show(tr(
-                "Точки дальше {limit} км по прямой. Маршрут строится по "
-                "дорогам района, для дальних поездок он не подходит.",
+                "Точки дальше {limit} км по прямой. Без сервиса маршрут "
+                "строится по дорогам района, для дальних поездок он не "
+                "подходит. Сервис маршрутов включает окно «Источники "
+                "данных».",
                 limit="{:.0f}".format(routing.MAX_DISTANCE / 1000.0)),
                 links=False)
             return
@@ -220,6 +296,7 @@ class RouteManager(QObject):
             self.timer.start(0)
             return
         self._steps = None
+        self.via = "tiles"
         self._done(value)
 
     def _done(self, route):
@@ -249,13 +326,23 @@ class RouteManager(QObject):
     def _summary(self, route):
         a = self.origin[2] or tr("точка")
         b = self.target[2] or tr("точка")
-        return tr("{a} - {b}, {km} км, {time} {mode}", a=a, b=b,
+        text = tr("{a} - {b}, {km} км, {time} {mode}", a=a, b=b,
                   km="{:.1f}".format(route.length / 1000.0),
                   time=duration_text(route.seconds),
                   mode=mode_names()[self.mode])
+        if self.via == "service":
+            text += ". " + tr("Сервис OSRM, данные © OpenStreetMap")
+        elif self._service_error:
+            text += ". " + tr("Сервис не ответил ({error}), маршрут по "
+                              "тайлам дорог", error=self._service_error)
+        return text
 
     def abort(self):
         self.timer.stop()
+        self.service_timer.stop()
+        reply, self.service_reply = self.service_reply, None
+        if reply is not None:
+            reply.abort()
         self._steps = None
         self.queue = []
         replies, self.replies = self.replies, {}
@@ -271,10 +358,11 @@ class RouteManager(QObject):
     def _show(self, text, links=True):
         options = []
         if links and self.origin is not None and self.target is not None:
-            other = "foot" if self.mode == "car" else "car"
-            options.append(("route:" + other,
-                            tr("Пешком") if other == "foot"
-                            else tr("На машине")))
+            for mode, title in mode_links().items():
+                if mode != self.mode:
+                    options.append(("route:" + mode, title))
+            if self.via == "service":
+                options.append(("route:fix", tr("Ошибка на карте")))
         if self.origin is not None or self.target is not None:
             options.append(("route:clear", tr("Сбросить")))
         self.window.panel.set_answer(text, links=options, talk=False)
@@ -282,6 +370,8 @@ class RouteManager(QObject):
     def link(self, name):
         if name == "clear":
             self.clear()
+        elif name == "fix":
+            QDesktopServices.openUrl(QUrl(routing.FIX_MAP))
         elif name in routing.MODES:
             self.set_mode(name)
 

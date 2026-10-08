@@ -210,6 +210,60 @@ class TestRoute(unittest.TestCase):
             g, far, (far[0] + 1.0, far[1]))))
 
 
+    def test_point_skips_island_road(self):
+        # Ближе к точке старта - островок дорог без выезда, как у
+        # Кремля. На прежней привязке к ближайшей дороге пути нет.
+        main = [(x, 0) for x in range(0, 4010, 10)]
+        g = graph([
+            (main, {"class": "minor"}),
+            ([(450, 100), (550, 100), (550, 150)], {"class": "service"})])
+        route = routing.run(routing.route_steps(
+            g, grid_to_latlon(500, 90), grid_to_latlon(3900, 0)))
+        self.assertIsNotNone(route)
+
+    def test_bike_mode(self):
+        roads = [([(0, 0), (1000, 0)], {"class": "trunk"}),
+                 ([(0, 0), (0, 1000), (1000, 1000), (1000, 0)],
+                  {"class": "path"})]
+        bike = routing.run(routing.route_steps(
+            graph(roads, "bike"), grid_to_latlon(0, 0),
+            grid_to_latlon(1000, 0), "bike"))
+        unit = routing.unit_metres(grid_to_latlon(0, 0)[0])
+        # По трассе велосипед не едет: в обход по тропе, 3000 единиц.
+        self.assertAlmostEqual(bike.length, 3000 * unit, delta=30 * unit)
+        self.assertAlmostEqual(bike.seconds, bike.length / (15 / 3.6),
+                               delta=1.0)
+
+
+class TestService(unittest.TestCase):
+
+    def test_url_and_parse(self):
+        url = routing.service_url(routing.ROUTER_URL, "foot",
+                                  (58.0, 56.2), (57.9, 56.0))
+        self.assertTrue(url.startswith(
+            "https://routing.openstreetmap.de/routed-foot/route/v1/driving/"
+            "56.200000,58.000000;56.000000,57.900000?"))
+        self.assertIn("geometries=geojson", url)
+        route = routing.parse_service({
+            "code": "Ok", "routes": [{
+                "distance": 2500.5, "duration": 300.0,
+                "geometry": {"type": "LineString", "coordinates": [
+                    [56.2, 58.0], [56.2, 58.0], [56.0, 57.9]]}}]})
+        self.assertEqual(route.points, [(58.0, 56.2), (57.9, 56.0)])
+        self.assertEqual((route.length, route.seconds), (2500.5, 300.0))
+        with self.assertRaises(ValueError):
+            routing.parse_service({"code": "NoRoute", "routes": []})
+        with self.assertRaises(ValueError):
+            routing.parse_service(None)
+
+    def test_template_check(self):
+        self.assertTrue(routing.router_ok(routing.ROUTER_URL))
+        self.assertTrue(routing.router_ok(
+            "http://localhost:5000/route/v1/driving/{coords}"))
+        self.assertFalse(routing.router_ok("ftp://x/{coords}"))
+        self.assertFalse(routing.router_ok("https://x/route"))
+
+
 class TestCorridor(unittest.TestCase):
 
     def test_tiles_along_line(self):
