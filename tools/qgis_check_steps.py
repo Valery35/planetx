@@ -7206,79 +7206,160 @@ def journal_check():
 
 @check(500)
 def sentinel_open():
-    """Снимок Sentinel-2 у Перми: каталог года по сети, сцены тайла
-    40VDK, первая сцена - слоем проекта на глобусе."""
-    import time as _time
+    """Снимки Sentinel-2 у Перми: участок 2 км вокруг точки, поиск
+    через STAC Earth Search за год, облачность над участком по SCL."""
     window = state["window"]
     window.set_body("earth")
     dialog = window.sentinel_here(*ROUTE_A)
-    from osgeo import gdal, ogr
-    out = {"tile": dialog.tile, "years": dialog.year.count(),
-           "gdal": gdal.__version__,
-           "parquet": ogr.GetDriverByName("Parquet") is not None}
-    start = _time.monotonic()
-    while dialog.job is not None and _time.monotonic() - start < 120.0:
-        QgsApplication.processEvents()
-        _time.sleep(0.05)
-    out["seconds"] = round(_time.monotonic() - start, 1)
-    out["scenes"] = len(dialog.scenes)
-    out["listed"] = dialog.list.count()
-    out["status"] = dialog.status.text()
-    dialog.add()
-    start = _time.monotonic()
-    while dialog.job is not None and _time.monotonic() - start < 60.0:
-        QgsApplication.processEvents()
-        _time.sleep(0.05)
-    out["add_seconds"] = round(_time.monotonic() - start, 1)
-    from qgis.core import QgsProject
-    group = QgsProject.instance().layerTreeRoot().findGroup("Sentinel-2")
-    layers = group.findLayers() if group is not None else []
-    out["layers"] = [n.layer().name() for n in layers]
-    out["valid"] = [n.layer().isValid() for n in layers]
-    out["after"] = dialog.status.text()
-    dialog.grab().save(os.path.join(TEMP, "planetx_sentinel_dialog.png"))
-    from planetx.core.navigation import Pose
-    window.view.navigator.stop()
-    window.view.navigator.set_pose(Pose(58.02, 56.25, 25000.0, 0.0, 30.0))
-    result["sentinel"] = out
+    dialog.side.setValue(2.0)
+    dialog.search()
+    state["s2_started"] = time.monotonic()
+    result["sentinel"] = {}
 
 
 @check(500)
-def sentinel_diag():
-    """Почему каталог не открылся: размер файла и ошибка GDAL."""
-    from osgeo import gdal, ogr
-    from planetx.core import sentinel
-    url = "/vsicurl/" + sentinel.year_files(2025, 2026, 1)[0]
-    gdal.ErrorReset()
-    stat = gdal.VSIStatL(url)
-    out = {"size": stat.size if stat else None,
-           "stat_error": gdal.GetLastErrorMsg()}
-    gdal.ErrorReset()
-    try:
-        ds = ogr.Open(url)
-    except RuntimeError as error:
-        ds, out["raised"] = None, str(error)
-    out["opened"] = ds is not None
-    out["open_error"] = gdal.GetLastErrorMsg()
-    result["sentinel_diag"] = out
+def sentinel_wait():
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["s2_started"]
+    busy = dialog.reply is not None or dialog.cloud_jobs
+    if busy and spent < 180.0:
+        return 500
+    out = result["sentinel"]
+    out["seconds"] = round(spent, 1)
+    out["scenes"] = len(dialog.scenes)
+    out["clouds"] = len(dialog.clouds)
+    out["unread"] = sum(1 for c, _ in dialog.clouds.values() if c is None)
+    shown = [dialog.list.topLevelItem(n)
+             for n in range(dialog.list.topLevelItemCount())
+             if not dialog.list.topLevelItem(n).isHidden()]
+    out["shown"] = len(shown)
+    out["first"] = [shown[0].text(c) for c in range(5)] if shown else None
+    out["status"] = dialog.status.text()
+    if shown:
+        dialog.list.setCurrentItem(shown[0])
+    return None
+
+
+@check(500)
+def sentinel_build():
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    want = ("natural", "infrared", "ndvi", "ndmi")
+    for n in range(dialog.products.count()):
+        item = dialog.products.item(n)
+        item.setCheckState(Qt.CheckState.Checked
+                           if item.data(Qt.ItemDataRole.UserRole) in want
+                           else Qt.CheckState.Unchecked)
+    folder = os.path.join(TEMP, "planetx_s2")
+    state["s2_folder"] = folder
+    dialog.mode.setCurrentIndex(0)
+    dialog.add(folder=folder)
+    state["s2_build"] = time.monotonic()
+
+
+@check(500)
+def sentinel_built():
+    from osgeo import gdal
+    import numpy as np
+    from qgis.core import QgsProject
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["s2_build"]
+    if dialog.build_job is not None and spent < 240.0:
+        return 500
+    out = result["sentinel"]
+    out["build_seconds"] = round(spent, 1)
+    out["build_status"] = dialog.status.text()
+    group = QgsProject.instance().layerTreeRoot().findGroup("Sentinel-2")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["layers"] = [(l.name(), l.isValid(), l.renderer().type(),
+                      l.metadata().rights()) for l in layers]
+    files = sorted(os.listdir(state["s2_folder"])) \
+        if os.path.isdir(state["s2_folder"]) else []
+    out["files"] = files
+    for name in files:
+        if name.endswith("_ndvi.tif"):
+            ds = gdal.Open(os.path.join(state["s2_folder"], name))
+            a = ds.ReadAsArray()
+            finite = a[np.isfinite(a)]
+            out["ndvi"] = {"size": [ds.RasterXSize, ds.RasterYSize],
+                           "res": ds.GetGeoTransform()[1],
+                           "valid": round(finite.size / a.size, 3),
+                           "mean": round(float(finite.mean()), 3)
+                           if finite.size else None}
+            ds = None
+        if name.endswith("_natural.tif"):
+            ds = gdal.Open(os.path.join(state["s2_folder"], name))
+            a = ds.ReadAsArray()
+            out["natural_median"] = [round(float(np.nanmedian(b)), 3)
+                                     for b in a]
+            ds = None
+    dialog.grab().save(os.path.join(TEMP, "planetx_sentinel_dialog.png"))
+    return None
+
+
+@check(500)
+def sentinel_link():
+    """Вся сцена ссылкой VRT: естественные цвета."""
+    from qgis.PyQt.QtCore import Qt
+    dialog = state["window"].sentinel_dialog
+    for n in range(dialog.products.count()):
+        item = dialog.products.item(n)
+        item.setCheckState(Qt.CheckState.Checked
+                           if item.data(Qt.ItemDataRole.UserRole) ==
+                           "natural" else Qt.CheckState.Unchecked)
+    dialog.mode.setCurrentIndex(1)
+    dialog.add(folder=os.path.join(TEMP, "planetx_s2_link"))
+    state["s2_build"] = time.monotonic()
+
+
+@check(500)
+def sentinel_link_done():
+    from qgis.core import QgsProject
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["s2_build"]
+    if dialog.build_job is not None and spent < 120.0:
+        return 500
+    group = QgsProject.instance().layerTreeRoot().findGroup("Sentinel-2")
+    vrt = [n.layer() for n in group.findLayers()
+           if n.layer().source().endswith(".vrt")] if group else []
+    result["sentinel"]["link"] = {
+        "seconds": round(spent, 1), "status": dialog.status.text(),
+        "layers": [(l.name(), l.isValid(), l.width(), l.height())
+                   for l in vrt]}
+    dialog.mode.setCurrentIndex(0)
+    return None
+
+
+@check(500)
+def sentinel_place():
+    """Участок - многоугольник «Моих меток»: поиск по контуру."""
+    from planetx.core.features import Shape
+    window = state["window"]
+    lat, lon = ROUTE_A
+    ring = [(lat - 0.004, lon - 0.008), (lat - 0.004, lon + 0.008),
+            (lat + 0.006, lon)]
+    key = window.myplaces.add(Shape("polygon", ring, name="S2 area"))
+    place = window.myplaces.find(key)
+    dialog = window.sentinel_place(place)
+    result["sentinel"]["place"] = {
+        "side_hidden": dialog.side.isHidden(),
+        "ring": len(dialog.ring_used), "where": dialog.where.text()}
+    window.myplaces.remove(key)
+    from planetx.core.navigation import Pose
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 6000.0, 0.0, 30.0))
 
 
 @check(25000)
-def sentinel_wait():
-    state["window"].view.grabFramebuffer().save(
-        os.path.join(TEMP, "planetx_sentinel_25s.png"))
-
-
-@check(40000)
 def sentinel_check():
     window = state["window"]
     view = window.view
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_sentinel.png"))
-    result["sentinel"]["pending"] = [view.load_missing,
-                                     getattr(window, "overlay", None)
-                                     is not None]
     window.sentinel_dialog.close()
-    result["sentinel"]["gl"] = dict(window.view.gl_errors)
+    result["sentinel"]["gl"] = dict(view.gl_errors)
 
 
 @check(500)

@@ -877,7 +877,7 @@ A right click on the globe opens a menu.
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
-| Sentinel-2 image here… | The Sentinel-2 images window for the point under the cursor, see Sentinel-2 images |
+| Sentinel-2 images here… | The Sentinel-2 images window for an area around the point under the cursor, see Sentinel-2 images |
 | Measure distance | Opens the Ruler with its first point here |
 | Copy link to place | A link to the point on the OpenStreetMap map to the clipboard, the scale follows the view. Any browser opens the link |
 | Open in browser | A submenu of custom items. An item opens in the browser an address with the point under the cursor, for example the weather forecast at the point on windy.com. The Custom items… item opens the list window. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
@@ -889,26 +889,65 @@ its shape is edited.
 
 ### Sentinel-2 images
 
-The Sentinel-2 image here… item of the globe menu opens the Sentinel-2
-images window. The window looks for scenes of the Sentinel-2
-satellites over the point in the chosen year, L2A scenes, 10 m per
-pixel. A scene belongs to a 110 × 110 km MGRS tile, for example 40VDK
-at Perm.
+The Sentinel-2 images window looks for scenes of the Sentinel-2
+satellites over an area and adds the chosen bands and indices to the
+QGIS project. The scenes are L2A, that is surface reflectance, 10-20 m
+per pixel. Two items open the window:
 
-The list holds the acquisition days with cloud cover not above the
-Clouds up to field, newest first. The chosen row shows the scene
-preview. The To QGIS project button or a double click adds the scene
-in natural colours as a project layer to the Sentinel-2 group. The
-layer links to the file on the network, it is checked on the globe
-and visible on the QGIS map. The image data load when shown, the
-first view of a large area takes tens of seconds.
+- Sentinel-2 images here… of the globe menu takes a square around the
+  point, the Area side field sets its side.
+- Sentinel-2 images… of the My Places menu takes the area from the
+  placemark. A polygon gives its outline, a path gives its bounding
+  box, a point gives a square around it.
 
-The s2-stac-geoparquet catalogue (Taylor Geospatial), a mirror of the
-Earth Search index (Element 84), gives the scene list. Reading the
-catalogue of a year over the network takes 10-30 s. GDAL of QGIS 4
-reads the catalogue files, GDAL 3.8 of QGIS 3.36 does not, and the
-window says so. The images are Copernicus Sentinel-2 (ESA), Element 84
-files on the open AWS storage.
+The Acquired from and to fields set the date range. Scene cloud cover
+up to limits the cloud cover of the whole 110 × 110 km scene by the
+catalogue. Over the area up to limits clouds and shadows over the area
+itself. The window computes it from the SCL scene class mask after the
+search and hides scenes above the limit. The Find button fills the
+list, newest first. The columns are the acquisition date and time in
+UTC, the cloud cover over the area, the scene cloud cover, the Sun
+elevation and the MGRS tile. The chosen row shows a natural colour
+preview of the area.
+
+The checkboxes of the product list choose what goes to the project:
+
+| Product | Bands | What it shows |
+|---|---|---|
+| Natural colour | B4 B3 B2 | as the eye sees |
+| False colour, near infrared | B8 B4 B3 | vegetation in red |
+| Agriculture | B11 B8 B2 | crops and ploughland |
+| Shortwave infrared | B12 B8A B4 | moisture and burns, haze is almost transparent |
+| Geology | B12 B11 B2 | rocks and outcrops |
+| Urban | B12 B11 B4 | built-up areas and bare soil |
+| NDVI - vegetation | (B8 - B4) / (B8 + B4) | green biomass |
+| NDWI - open water | (B3 - B8) / (B3 + B8) | water above zero |
+| NDMI - vegetation moisture | (B8A - B11) / (B8A + B11) | moisture in foliage |
+| NBR - burned areas | (B8 - B12) / (B8 + B12) | burns lower, the difference of two dates gives burn severity |
+| NDSI - snow | (B3 - B11) / (B3 + B11) | snow and ice above 0.4 |
+
+The list at the bottom of the window chooses the method:
+
+- Clip to the area, GeoTIFF writes float32 reflectance files to the
+  folder set by the Folder… button. Pixels outside the polygon are
+  empty. With the Clouds and shadows empty checkbox the pixels of
+  clouds, shadows and snow by the SCL mask are empty too. The pixel
+  size is 10 m, for a large area 20 or 60 m, so that a side stays
+  within 4000 pixels.
+- Whole scene by link, no download writes a VRT file, links to the
+  scene bands on the network. Only band combinations go by link,
+  indices go by clipping to the area.
+
+The To QGIS project button puts the layers into a group of the day
+inside the Sentinel-2 group. Band combinations are stretched by 2-98 %
+of the values, indices are coloured with their own scale. The layers
+are checked on the globe, their metadata carry the notice «Contains
+modified Copernicus Sentinel data» with the acquisition year. Loading
+a 3 km area takes 10-20 s.
+
+The scene catalogue is Earth Search (Element 84), the images are
+Copernicus Sentinel-2 (ESA), Element 84 files on the open AWS storage.
+No key or account is needed.
 
 ### Route
 

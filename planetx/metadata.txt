@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.60.0
+version=0.61.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.60.0 Closing the properties window of a ground image
+changelog=0.61.0 The Sentinel-2 images window searches scenes over
+      an area, a square around a point or a My Places placemark, for
+      a date range, with cloud cover over the area itself. Band
+      combinations and the NDVI, NDWI, NDMI, NBR and NDSI indices go
+      to the QGIS project as styled layers, clipped to GeoTIFF with
+      clouds optionally empty or linked to the whole scene. The
+      previous Sentinel-2 window crashed QGIS 4.2.1 while reading
+      its catalogue, the new window does not read it.
+      0.60.0 Closing the properties window of a ground image
       fitted by a box no longer brings a Python error window while
       moving the globe. Unchecking a radio folder, for example the
       MODIS images of the Aral Sea demo, hides all its places, before

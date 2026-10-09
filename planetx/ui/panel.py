@@ -1367,6 +1367,8 @@ class LayerPanel(QWidget):
             elif key.startswith("ground:"):
                 actions.append(("ground_project",
                                 tr("Картинку в проект QGIS…")))
+            if key.split(":")[0] in ("point", "line", "polygon"):
+                actions.append(("sentinel", tr("Снимки Sentinel-2…")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),

@@ -3856,14 +3856,24 @@ class GlobeWindow(QWidget):
         return dialog
 
     def sentinel_here(self, lat, lon):
-        """«Снимок Sentinel-2 здесь…» меню на глобусе: сцены тайла
-        в точке. Окно одно, новая точка заменяет прежнюю."""
+        """«Снимки Sentinel-2 здесь…» меню на глобусе: сцены участка
+        вокруг точки. Окно одно, новый участок заменяет прежний."""
+        dialog = self._sentinel_dialog()
+        dialog.show_point(lat, lon)
+        return dialog
+
+    def sentinel_place(self, place):
+        """«Снимки Sentinel-2…» меню метки: участок - метка."""
+        dialog = self._sentinel_dialog()
+        dialog.show_place(place)
+        return dialog
+
+    def _sentinel_dialog(self):
         from .sentinel import SentinelDialog
         dialog = getattr(self, "sentinel_dialog", None)
         if dialog is None:
             dialog = SentinelDialog(self, self)
             self.sentinel_dialog = dialog
-        dialog.show_point(lat, lon)
         dialog.show()
         dialog.raise_()
         return dialog
@@ -4550,6 +4560,8 @@ class GlobeWindow(QWidget):
             self.tour.start([stop])
         elif action == "properties":
             self._open_place_properties(item)
+        elif action == "sentinel":
+            self.sentinel_place(item)
         elif action == "profile":
             points = list(item.shape.points)
             self._open_profile(item.name, lambda: points, HeightSource(

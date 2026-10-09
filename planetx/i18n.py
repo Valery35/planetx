@@ -233,6 +233,135 @@ EN = {
         "Map sheet designation",
     "Горизонтали":
         "Contours",
+    "Снимки Sentinel-2 здесь…":
+        "Sentinel-2 images here…",
+    "Снимки Sentinel-2…":
+        "Sentinel-2 images…",
+    "Copernicus Sentinel-2 L2A (ESA), файлы и каталог Earth Search Element "
+    "84 на AWS. Слои несут подпись «Contains modified Copernicus Sentinel "
+    "data» с годом снимка.":
+        "Copernicus Sentinel-2 L2A (ESA), files and the Earth Search "
+        "catalogue by Element 84 on AWS. Layers carry the Contains modified "
+        "Copernicus Sentinel data notice with the image year.",
+    "NBR - гари":
+        "NBR - burned areas",
+    "NDMI - влажность растительности":
+        "NDMI - vegetation moisture",
+    "NDSI - снег":
+        "NDSI - snow",
+    "NDVI - растительность":
+        "NDVI - vegetation",
+    "NDWI - открытая вода":
+        "NDWI - open water",
+    "{cloud} %, данных {valid} %":
+        "{cloud} %, data {valid} %",
+    "В проект добавлено слоёв {count}: {path}":
+        "{count} layers added to the project, {path}",
+    "Вся сцена по ссылке, без скачивания":
+        "Whole scene by link, no download",
+    "Геология (B12 B11 B2)":
+        "Geology (B12 B11 B2)",
+    "Дата, UTC":
+        "Date, UTC",
+    "Естественные цвета (B4 B3 B2)":
+        "Natural colour (B4 B3 B2)",
+    "Загрузка каналов сцены {when}…":
+        "Loading the bands of scene {when}…",
+    "Застройка (B12 B11 B4)":
+        "Urban (B12 B11 B4)",
+    "Каталог не ответил: {error}":
+        "The catalogue did not answer, {error}",
+    "Коротковолновый ИК (B12 B8A B4)":
+        "Shortwave infrared (B12 B8A B4)",
+    "Ложные цвета, ближний ИК (B8 B4 B3)":
+        "False colour, near infrared (B8 B4 B3)",
+    "Над участком":
+        "Over the area",
+    "Наибольшая доля облаков и их теней над участком по маске классов сцены. "
+    "Сцены облачнее в списке скрыты.":
+        "The largest share of clouds and their shadows over the area by the "
+        "scene classification mask. Cloudier scenes are hidden in the list.",
+    "Наибольшая облачность всей сцены 110 × 110 км по оценке ESA. Это отсев "
+    "до расчёта облачности над участком. Сцена с облаками бывает чистой над "
+    "участком.":
+        "The largest cloud cover of the whole 110 × 110 km scene by the ESA "
+        "estimate. It filters before the cloud cover over the area is "
+        "counted. A cloudy scene can be clear over the area.",
+    "Найдено сцен {count}, считается облачность над участком…":
+        "{count} scenes found, counting the cloud cover over the area…",
+    "Не отмечено ни одного продукта.":
+        "No product is checked.",
+    "Облака и тени - пусто":
+        "Clouds and shadows empty",
+    "Облачность сцены до":
+        "Scene cloud cover up to",
+    "Обрезка загружает только участок, значения - отражение, файлы годятся "
+    "для расчётов. Ссылка показывает всю сцену 110 × 110 км из сети, данные "
+    "загружаются при показе, индексы так не строятся.":
+        "Clipping loads only the area, values are reflectance, the files "
+        "suit calculations. A link shows the whole 110 × 110 km scene from "
+        "the web, data load when shown, indices are not built this way.",
+    "Обрезка по участку, GeoTIFF":
+        "Clip to the area, GeoTIFF",
+    "Отмеченные продукты выбранной сцены - слоями проекта в группу дня "
+    "внутри группы «Sentinel-2». Слои видны на карте и на глобусе.":
+        "The checked products of the selected scene become project layers in "
+        "a group of the day inside the Sentinel-2 group. The layers show on "
+        "the map and on the globe.",
+    "Папка снимков":
+        "Image folder",
+    "Папка файлов: {path}":
+        "File folder, {path}",
+    "Папка…":
+        "Folder…",
+    "Первый день съёмки в поиске.":
+        "The first acquisition day searched.",
+    "Пиксели облаков, их теней и перистых облаков по маске классов сцены "
+    "остаются пустыми, индексы по ним не считаются.":
+        "Pixels of clouds, their shadows and cirrus by the scene "
+        "classification mask stay empty, indices are not computed on them.",
+    "Поиск сцен…":
+        "Searching scenes…",
+    "Последний день съёмки в поиске.":
+        "The last acquisition day searched.",
+    "Сельское хозяйство (B11 B8 B2)":
+        "Agriculture (B11 B8 B2)",
+    "Снимок не загружен: {error}":
+        "The image was not loaded, {error}",
+    "Сочетания каналов - картинка из трёх каналов отражения, индексы - "
+    "нормированная разность двух каналов со шкалой цветов. Каждый отмеченный "
+    "продукт ложится своим слоем.":
+        "Band combinations are a picture of three reflectance bands, indices "
+        "are a normalized difference of two bands with a colour scale. Each "
+        "checked product becomes its own layer.",
+    "Ссылкой ложатся только сочетания каналов, индексы - обрезкой по "
+    "участку.":
+        "Only band combinations go by link, indices need clipping to the "
+        "area.",
+    "Сторона квадрата участка вокруг точки. По участку считается облачность "
+    "и обрезаются снимки. Больше участок - дольше загрузка каналов.":
+        "The side of the square area around the point. The cloud cover is "
+        "counted and images are clipped by the area. A larger area loads the "
+        "bands longer.",
+    "Сторона участка":
+        "Area side",
+    "Сцен {total}, над участком не облачнее {cloud} % - {count}.":
+        "{total} scenes, {count} with at most {cloud} % clouds over the "
+        "area.",
+    "Сцена":
+        "Scene",
+    "Съёмка с":
+        "Acquired from",
+    "Тайл":
+        "Tile",
+    "Точка {lat}, {lon}":
+        "Point {lat}, {lon}",
+    "Участок: {name}":
+        "Area, {name}",
+    "над участком до":
+        "over the area up to",
+    "по":
+        "to",
     "через {step} м, утолщённые через {index} м":
         "every {step} m, thicker every {index} m",
     "В проект QGIS…":
@@ -349,62 +478,12 @@ EN = {
     "одна из двух. Горизонтали рельефа поверх них.":
         "Colouring of the surface by slope or by the direction a slope "
         "faces, one of the two is on. Terrain contours lie over them.",
-    "GDAL {version} этого QGIS не читает файлы каталога, они читаются в QGIS "
-    "4.":
-        "GDAL {version} of this QGIS does not read the catalogue files, QGIS "
-        "4 reads them.",
-    "Каталог не ответил. {error}":
-        "The catalogue did not answer. {error}",
-    "Снимок Sentinel-2 здесь…":
-        "Sentinel-2 image here…",
-    "{when} UTC, облачность {cloud} %":
-        "{when} UTC, clouds {cloud} %",
     "В проект QGIS":
         "To QGIS project",
-    "Вне зон UTM снимков Sentinel-2 нет.":
-        "There are no Sentinel-2 images outside the UTM zones.",
-    "Год":
-        "Year",
-    "Год съёмки. Каталог по году - один файл, его чтение по сети идёт 10-20 "
-    "секунд.":
-        "Year of acquisition. The catalogue of a year is one file, reading "
-        "it over the network takes 10-20 seconds.",
-    "Каталог ещё читается.":
-        "The catalogue is still being read.",
-    "Каталог не прочитан: {error}":
-        "The catalogue was not read: {error}",
-    "Наибольшая облачность сцены по оценке ESA. Меньше - меньше сцен в "
-    "списке и чище снимки.":
-        "The largest scene cloud cover by the ESA estimate. Less means fewer "
-        "scenes in the list and cleaner images.",
     "Найти":
         "Find",
-    "Облачность до":
-        "Clouds up to",
-    "Открытие файла сцены…":
-        "Opening the scene file…",
-    "Слой «{name}» в проекте.":
-        "Layer {name} is in the project.",
-    "Снимки Copernicus Sentinel-2 (ESA), файлы Element 84 на AWS, каталог "
-    "s2-stac-geoparquet Taylor Geospatial.":
-        "Copernicus Sentinel-2 images (ESA), Element 84 files on AWS, the "
-        "s2-stac-geoparquet catalogue by Taylor Geospatial.",
     "Снимки Sentinel-2":
         "Sentinel-2 images",
-    "Сцен за год {total}, не облачнее {cloud} % - {count}.":
-        "Scenes in the year {total}, with clouds up to {cloud} % - {count}.",
-    "Сцена в естественных цветах, 10 м, ложится слоем проекта по ссылке на "
-    "файл в сети в группу «Sentinel-2». Слой виден на карте и на глобусе, "
-    "данные загружаются при показе.":
-        "The scene in natural colours, 10 m, becomes a project layer linked "
-        "to the file on the network, in the Sentinel-2 group. The layer is "
-        "visible on the map and on the globe, data load when shown.",
-    "Тайл {tile}, точка {lat}, {lon}":
-        "Tile {tile}, point {lat}, {lon}",
-    "Файл сцены не открылся: {url}":
-        "The scene file did not open: {url}",
-    "Чтение каталога сцен {year} года…":
-        "Reading the scene catalogue of {year}…",
     "Маршрут не построен: сервис ответил «{error}», а по дорогам векторной "
     "основы маршрут строится до {limit} км по прямой.":
         "No route: the service answered '{error}', and over the roads of the "
