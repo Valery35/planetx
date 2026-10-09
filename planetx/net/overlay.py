@@ -34,6 +34,7 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsWkbTypes)
 from qgis.PyQt.QtCore import (QObject, QRunnable, QSize, QThreadPool, QTimer,
                               QUrl, pyqtSignal)
+from qgis.PyQt import sip
 from qgis.PyQt.QtGui import QColor, QImage
 from qgis.PyQt.QtNetwork import QNetworkRequest
 
@@ -519,6 +520,13 @@ class LayerOverlay(QObject):
         return len(self.queue) + len(self.preparing)
 
     def _settings(self, key):
+        # Слой могли удалить из проекта, пока наложение ещё не
+        # пересобрано, например повторная загрузка Pythagoras снимает
+        # прежнюю группу. Обращение к удалённому слою давало ошибку
+        # Python в конце отрисовки, и QGIS падал в окне этой ошибки,
+        # 10 октября 2026 года.
+        self.layers = [layer for layer in self.layers
+                       if not sip.isdeleted(layer)]
         settings = QgsMapSettings()
         settings.setLayers([layer for layer in self.layers
                             if key[0] >= self.min_levels.get(layer.id(), 0)])

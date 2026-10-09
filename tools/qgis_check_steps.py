@@ -7480,6 +7480,35 @@ def journal_foreign():
 
 
 @check(300)
+def overlay_deleted_layer():
+    """Наложение со слоем, удалённым из проекта до пересборки, готовит
+    отрисовку тайла без ошибки. 10 октября 2026 года ошибка Python
+    в конце отрисовки роняла QGIS 3.36 в окне этой ошибки."""
+    from qgis.core import QgsProject, QgsVectorLayer
+    from planetx.net.overlay import LayerOverlay
+    out = result.setdefault("overlay_deleted_layer", {})
+    layer = QgsVectorLayer("Point?crs=EPSG:4326", "gone", "memory")
+    QgsProject.instance().addMapLayer(layer)
+    overlay = LayerOverlay([layer])
+    QgsProject.instance().removeMapLayer(layer.id())
+    from qgis.PyQt import sip
+    from qgis.PyQt.QtCore import QCoreApplication, QEvent
+    from planetx.qt_compat import enum
+    QCoreApplication.sendPostedEvents(
+        None, enum(QEvent, "Type", "DeferredDelete"))
+    out["deleted"] = sip.isdeleted(layer)
+    try:
+        settings = overlay._settings((5, 10, 10))
+        out["error"] = ""
+        out["layers"] = len(settings.layers())
+    except RuntimeError as error:
+        out["error"] = str(error)
+    finally:
+        overlay.abort()
+        overlay.deleteLater()
+
+
+@check(300)
 def journal_crash():
     """Сеанс умершего процесса с файлом стеков QGIS даёт записи
     о падении, ошибки рабочего потока и «неподнимаемые» ошибки идут
