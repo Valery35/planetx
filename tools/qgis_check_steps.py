@@ -7417,7 +7417,7 @@ def pyt_import():
     out["again"] = dialog.status.text()
 
 
-@check(500)
+@check(6000)
 def pyt_demo():
     """Пример карьера ссылкой окна: система координат примера, файл
     в профиле QGIS, а не в папке модуля."""
@@ -7434,6 +7434,9 @@ def pyt_demo():
                           "pythagoras", "quarry.gpkg")
     if os.path.exists(target):
         os.remove(target)
+    window = state["window"]
+    window.follow = False
+    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_demo.png"))
     dialog.convert()
     out["status"] = dialog.status.text()
     out["written"] = os.path.exists(target)
@@ -7442,10 +7445,29 @@ def pyt_demo():
     group = QgsProject.instance().layerTreeRoot().findGroup(
         "Pythagoras - quarry")
     out["layers"] = len(group.findLayers()) if group else 0
+    # После записи итог виден сразу - окно закрыто, слои отмечены
+    # на глобусе, глобус летит к карьеру у Березников.
+    out["dialog_hidden"] = not dialog.isVisible()
+    ids = group.findLayerIds() if group else []
+    out["on_globe"] = sum(1 for i in ids if i in window._shown)
+    out["names"] = sorted(n.layer().name() for n in group.findLayers())[:3] \
+        if group else []
+    state["pyt_demo_group"] = ids
+
+
+@check(300)
+def pyt_demo_wait():
+    """Глобус долетел до карьера примера, слои убираются."""
+    from qgis.core import QgsProject
+    out = result.setdefault("pyt_demo", {})
+    nav = state["window"].view.navigator
+    out["camera"] = [round(nav.pose.lat, 3), round(nav.pose.lon, 3),
+                     round(nav.pose.distance)]
+    project = QgsProject.instance()
+    group = project.layerTreeRoot().findGroup("Pythagoras - quarry")
     if group is not None:
-        QgsProject.instance().removeMapLayers(group.findLayerIds())
-        QgsProject.instance().layerTreeRoot().removeChildNode(group)
-    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_demo.png"))
+        project.removeMapLayers(group.findLayerIds())
+        project.layerTreeRoot().removeChildNode(group)
 
 
 @check(300)
@@ -7604,7 +7626,7 @@ def pyt_click():
         window.follow = follow
         for i in range(layers.topLevelItemCount()):
             item = layers.topLevelItem(i)
-            if "lines" not in item.text(0):
+            if pythagoras.kind_name("line") not in item.text(0):
                 continue
             before = str(item.checkState(0))
             click(layers, item)
@@ -7638,11 +7660,13 @@ def pyt_check():
     for group in groups:
         for node in group.findLayers():
             layer = node.layer()
-            kind = layer.name().rsplit("_", 1)[1]
+            kind = layer.name().rsplit(" - ", 1)[1]
             counts[kind] = counts.get(kind, 0) + layer.featureCount()
     out["counts"] = counts
     out["sublayers"] = len(groups[0].children()) if groups else 0
-    road = project.mapLayersByName("Дороги_склады_polygons")
+    from planetx.ui import pythagoras
+    road = project.mapLayersByName("Дороги склады - {}".format(
+        pythagoras.kind_name("polygon")))
     if road:
         areas = [(f["ObjectId"], round(f.geometry().area(), 2),
                   round(f["area"], 2)) for f in road[0].getFeatures()]

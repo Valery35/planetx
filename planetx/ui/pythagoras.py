@@ -5,9 +5,10 @@
 слоями по слоям Pythagoras и видам геометрии, группа в дереве слоёв."""
 import os
 
-from qgis.core import (QgsApplication, QgsCoordinateReferenceSystem,
+from qgis.core import (Qgis, QgsApplication, QgsCoordinateReferenceSystem,
+                       QgsCoordinateTransform, QgsCsException,
                        QgsMarkerSymbol,
-                       QgsPalLayerSettings, QgsProject,
+                       QgsPalLayerSettings, QgsProject, QgsRectangle,
                        QgsSingleSymbolRenderer, QgsVectorLayer,
                        QgsVectorLayerSimpleLabeling)
 from qgis.gui import QgsCustomDropHandler, QgsProjectionSelectionWidget
@@ -136,16 +137,30 @@ def drop_group(title):
     root.removeChildNode(group)
 
 
+def kind_name(kind):
+    return {"point": tr("точки"), "line": tr("линии"),
+            "polygon": tr("площади"), "text": tr("надписи")}[kind]
+
+
+def readable(name):
+    """Имя слоя Pythagoras для дерева слоёв - подчёркивания пробелами."""
+    return " ".join(name.replace("_", " ").split()) or name
+
+
 def add_to_project(path, title, made):
     """Слои файла path группой title вверху дерева, внутри - группы
-    по слоям Pythagoras. Надписи подписаны полем text."""
+    по слоям Pythagoras. Надписи подписаны полем text. Слой назван
+    «Имя слоя - вид», так он узнаётся и в списке слоёв глобуса.
+    Возвращает номера слоёв и их общий охват."""
     project = QgsProject.instance()
     top = project.layerTreeRoot().insertGroup(0, title)
     groups = {}
-    count = 0
+    ids = []
+    extent = QgsRectangle()
     for name, lname, kind in made:
+        shown = "{} - {}".format(readable(name), kind_name(kind))
         layer = QgsVectorLayer("{}|layername={}".format(path, lname),
-                               lname, "ogr")
+                               shown, "ogr")
         if not layer.isValid():
             continue
         if kind == "text":
@@ -153,10 +168,35 @@ def add_to_project(path, title, made):
         project.addMapLayer(layer, False)
         group = groups.get(name)
         if group is None:
-            group = groups[name] = top.addGroup(name)
+            group = groups[name] = top.addGroup(readable(name))
         group.addLayer(layer)
-        count += 1
-    return count
+        ids.append(layer.id())
+        if not layer.extent().isEmpty():
+            extent.combineExtentWith(layer.extent())
+    return ids, extent
+
+
+def show_result(ids, extent, crs):
+    """Карта QGIS и открытое окно глобуса - к новым слоям."""
+    from qgis.utils import iface
+    if extent.isEmpty():
+        return
+    if iface is not None:
+        canvas = iface.mapCanvas()
+        transform = QgsCoordinateTransform(
+            crs, canvas.mapSettings().destinationCrs(),
+            QgsProject.instance())
+        try:
+            box = transform.transformBoundingBox(extent)
+        except QgsCsException:
+            box = None
+        if box is not None and not box.isEmpty():
+            box.scale(1.1)
+            canvas.setExtent(box)
+            canvas.refresh()
+    for widget in QApplication.topLevelWidgets():
+        if hasattr(widget, "show_added_layers") and widget.isVisible():
+            widget.show_added_layers(ids, extent, crs)
 
 
 def _label(layer):
@@ -324,12 +364,14 @@ class PythagorasDialog(QDialog):
         head.addWidget(title, 1)
         lay.addLayout(head)
 
+        lay.addWidget(self._step(1, tr("Файл проекта - свой или пример")))
         self.drop = DropBox(self)
         self.drop.pick.clicked.connect(self._pick_file)
         self.drop.dropped.connect(self.open_file)
         self.drop.demo.clicked.connect(self.open_demo)
         lay.addWidget(self.drop)
 
+        lay.addWidget(self._step(2, tr("Слои, которые нужны в QGIS")))
         self.table = QTreeWidget(self)
         self.table.setRootIsDecorated(False)
         self.table.setAlternatingRowColors(True)
@@ -357,6 +399,8 @@ class PythagorasDialog(QDialog):
         marks.addWidget(links)
         lay.addLayout(marks)
 
+        lay.addWidget(self._step(3, tr("Система координат и папка "
+                                       "результата")))
         form = QFormLayout()
         self.crs = QgsProjectionSelectionWidget(self)
         self.crs.setToolTip(tr(
@@ -398,6 +442,9 @@ class PythagorasDialog(QDialog):
             3 * self.status.fontMetrics().lineSpacing())
         self.status.setAlignment(enum(Qt, "AlignmentFlag", "AlignTop"))
         self.status.setTextFormat(enum(Qt, "TextFormat", "RichText"))
+        lay.addWidget(self._step(4, tr(
+            "«В проект QGIS» - слои лягут в проект группой, карта QGIS "
+            "и глобус покажут участок, окно закроется.")))
         lay.addWidget(self.status)
         ok = enum(QDialogButtonBox, "StandardButton", "Ok")
         close = enum(QDialogButtonBox, "StandardButton", "Close")
@@ -409,6 +456,17 @@ class PythagorasDialog(QDialog):
         buttons.accepted.connect(self.convert)
         buttons.rejected.connect(self.reject)
         lay.addWidget(buttons)
+
+    def _step(self, number, text):
+        """Заголовок шага окна - номер в кружке и текст."""
+        label = QLabel(self)
+        label.setWordWrap(True)
+        label.setTextFormat(enum(Qt, "TextFormat", "RichText"))
+        label.setText(
+            "<span style='background:#1e88e5; color:white; "
+            "font-weight:600'>&nbsp;{}&nbsp;</span>&nbsp; "
+            "<b>{}</b>".format(number, text))
+        return label
 
     # Перетаскивание на всё окно.
     def dragEnterEvent(self, event):
@@ -486,7 +544,7 @@ class PythagorasDialog(QDialog):
         for number in order:
             row = counts[number]
             item = QTreeWidgetItem(
-                [layer_title(self.names, number)]
+                [readable(layer_title(self.names, number))]
                 + [str(row[k]) if row[k] else "" for k in COLUMNS])
             item.setData(0, LAYER_ROLE, number)
             item.setFlags(item.flags() | CHECKABLE)
@@ -571,7 +629,8 @@ class PythagorasDialog(QDialog):
         try:
             drop_group(title)
             made = write_gpkg(target, self.names, feats, crs.toWkt())
-            count = add_to_project(target, title, made) if made else 0
+            ids, extent = add_to_project(target, title, made) if made \
+                else ([], QgsRectangle())
         except OSError as error:
             made = None
             failure = tr("Файл не записан: {error}", error=error)
@@ -585,9 +644,21 @@ class PythagorasDialog(QDialog):
             kinds[f["kind"]] += 1
         text = tr("Готово. В проект добавлена группа «{title}» - слоёв "
                   "{count}: точек {points}, линий {lines}, площадей "
-                  "{areas}, надписей {texts}.", title=title, count=count,
+                  "{areas}, надписей {texts}.", title=title, count=len(ids),
                   points=kinds["point"], lines=kinds["line"],
                   areas=kinds["polygon"], texts=kinds["text"])
         if self.lost:
             text += " " + tr("Площадей без контура: {n}.", n=self.lost)
         self._say(text)
+        # Итог должен быть виден сразу - карта и глобус летят к участку,
+        # окно закрывается, сообщение остаётся в полосе QGIS. Замечание
+        # автора 10 октября 2026 года - после «В проект QGIS» глобус
+        # стоял на прежнем месте, и было непонятно, что произошло.
+        show_result(ids, extent, crs)
+        from qgis.utils import iface
+        if iface is not None:
+            iface.messageBar().pushMessage(
+                tr("Проект Pythagoras"),
+                text + " " + tr("Файл: {path}", path=target),
+                Qgis.MessageLevel.Success, 15)
+        self.hide()

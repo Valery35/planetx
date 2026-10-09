@@ -3234,6 +3234,19 @@ class GlobeWindow(QWidget):
         """Перелёт к охвату слоя, камера смотрит отвесно."""
         self._fly_extent(layer.extent(), layer.crs())
 
+    def show_added_layers(self, ids, extent, crs):
+        """Слои, только что добавленные модулем в проект (проект
+        Pythagoras), - сразу на глобус и перелёт к ним. В режиме «как
+        на карте QGIS» они видны и так, слои включены в дереве."""
+        if not self.planet.earth:
+            return
+        if not self.follow:
+            self._shown |= set(ids)
+            write_shown(self._shown)
+            self._changed()
+        if extent is not None and not extent.isEmpty():
+            self._fly_extent(extent, crs)
+
     # «Мои метки».
 
     def _places_changed(self):

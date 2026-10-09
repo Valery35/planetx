@@ -316,6 +316,18 @@ EN = {
         "points, lines, areas and texts - and to the project as a group.",
     "Pythagoras - {name}":
         "Pythagoras - {name}",
+    "площади": "areas",
+    "надписи": "texts",
+    "Файл: {path}": "File: {path}",
+    "Файл проекта - свой или пример": "A project file, your own or the "
+        "example",
+    "Слои, которые нужны в QGIS": "The layers needed in QGIS",
+    "Система координат и папка результата":
+        "Coordinate system and result folder",
+    "«В проект QGIS» - слои лягут в проект группой, карта QGIS и глобус "
+    "покажут участок, окно закроется.":
+        "To the QGIS project puts the layers into the project as a group, "
+        "the QGIS map and the globe show the area, the window closes.",
     "Pythagoras хранит каждую вершину линии точкой. Без флажка в слои точек "
     "попадают только точки со знаком, как при выгрузке в SHP из самого "
     "Pythagoras. С флажком - и все вершины.":

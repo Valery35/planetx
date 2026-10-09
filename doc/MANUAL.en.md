@@ -746,10 +746,15 @@ the .pyt file.
 
 The To QGIS project button writes a GeoPackage file with the same name
 next to it. Each Pythagoras layer gives up to four layers - points,
-lines, areas and texts, for example Roads_lines for the layer Roads. They go to
-the project as the group «Pythagoras - file name» at the top of the
-tree, with groups by Pythagoras layers inside. Converting the same
-file again replaces both the file and the group.
+lines, areas and texts, for example "Roads - lines" for the layer
+Roads. They go to the project as the group «Pythagoras - file name» at
+the top of the tree, with groups by Pythagoras layers inside.
+Converting the same file again replaces both the file and the group.
+
+After writing, the window closes, and the result stays in the QGIS
+message bar. The QGIS map shows the extent of the new layers. When the
+globe window is open, the new layers are checked in its Project layers
+and the globe flies to the area.
 
 | Field | Content |
 |---|---|
