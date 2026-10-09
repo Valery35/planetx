@@ -670,6 +670,8 @@ The right-click menu:
 - Extrusion… - for vector layers, see
   [Extrusion by field](#extrusion-by-field).
 - Layer Properties… - the standard QGIS layer properties window.
+- Add Pythagoras project… - also in the menu of an empty place of the
+  list, see [Pythagoras project](#pythagoras-project).
 
 ### Extrusion by field
 
@@ -714,6 +716,64 @@ on top. The choice is kept in the project and in the scene.
 
 On the first switch-on the raster is converted into a file of the QGIS
 profile. For a survey of 2400 × 2400 pixels this takes about 2 s.
+
+### Pythagoras project
+
+A Pythagoras project file (.pyt) goes to the QGIS project without an
+intermediate DXF or SHP. Pythagoras is a program for topographic
+surveys and mine plans. The Pythagoras project window opens in three
+ways, the globe window is not needed for it:
+
+- the Add Pythagoras project (.pyt)… item of the QGIS Layer - Add
+  Layer menu, also in the Web - PlanetX menu,
+- a .pyt file dragged from the file manager into the QGIS window,
+- the triangle icon on the header of the Project layers section of the
+  globe panel or the Add Pythagoras project… item of the section menu.
+
+The file is chosen with the Choose file… button or dragged into the
+window. The Open example button opens the plugin example - an invented quarry
+near Berezniki, the same as in the Quarry, own terrain demo. It holds
+ten benches as crests and toes, a dump, a ramp with an arc bend,
+survey points, a mining allotment and elevation labels. The button sets
+the coordinate system of the example, UTM 40N, and its GeoPackage goes
+to the PlanetX/pythagoras folder of the QGIS profile. The window reads it at once and shows a table of Pythagoras
+layers with the counts of points, lines, areas and texts in each. The
+checkbox of a row decides whether the layer goes to the project, the
+All and None links check all rows at once. Below are the coordinate
+system and the output folder. The .pyt file holds no coordinate
+system, the user sets it. An empty output folder means the folder of
+the .pyt file.
+
+The To QGIS project button writes a GeoPackage file with the same name
+next to it. Each Pythagoras layer gives up to four layers - points,
+lines, areas and texts, for example Roads_lines for the layer Roads. They go to
+the project as the group «Pythagoras - file name» at the top of the
+tree, with groups by Pythagoras layers inside. Converting the same
+file again replaces both the file and the group.
+
+| Field | Content |
+|---|---|
+| ObjectId | the Pythagoras object number, the same as in its SHP export |
+| layer | the Pythagoras layer name |
+| code | the object code, for example a fence material |
+| color | the Pythagoras colour number |
+| z | for points - the elevation |
+| symbol | for points - the symbol number |
+| area | for areas - the area computed by Pythagoras |
+| text | for texts - the text, the text layer is labelled with it |
+
+Pythagoras stores every line vertex as a separate point. Without the
+Construction points too checkbox the point layers get only points with
+a symbol, as the SHP export of Pythagoras itself. With it they get all
+vertices too. A line is a segment between two points, as in the SHP
+export of Pythagoras. Arcs and curves become polylines, an area with an
+arc in its outline gets the arc as segments.
+
+The .pyt format is closed, its reading is derived from a user project
+and the SHP export of Pythagoras itself. On this project 3193 objects
+of 3194 matched, polygon areas to hundredths of a square metre. Objects
+of other kinds, for example blocks and hatches, are not converted. A
+650 KB project converts in 4 s.
 
 ### Places section
 
@@ -2022,8 +2082,18 @@ profile folder. The Log button of the About window opens it in the
 system program. The log records the versions of the plugin, QGIS, Qt
 and Python, the graphics card, the opening and closing of the globe
 window, the choice of maps and layers, the base map, the body and
-the demo, the Python errors of the plugin and the SSL errors of
-QGIS network requests with the certificate owner.
+the demo, the SSL errors of QGIS network requests with the
+certificate owner. The log receives all unhandled Python errors in
+QGIS, including those in worker threads. An error of another plugin
+is marked with its name. Every 15 minutes the log records the memory
+of QGIS and the count of Windows GDI and USER objects.
+
+The log records a QGIS crash at the next start. The log gets the
+process number and the start time of the crashed session, the Python
+stacks at the crash and the path to the Windows dump, if there is
+one. While the Windows error window keeps the crashed QGIS open, the
+session counts as alive. A normal QGIS exit is marked with the line
+"QGIS is closed".
 
 When QGIS does not respond for more than 10 s, the log receives the
 stacks of all Python threads. When QGIS responds again, the log gets

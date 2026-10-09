@@ -7363,6 +7363,268 @@ def sentinel_check():
 
 
 @check(500)
+def pyt_import():
+    """Проект Pythagoras из меню «Слоёв проекта»: файл .pyt из
+    PLANETX_PYT, GeoPackage в TEMP, группа слоёв в проекте."""
+    from qgis.core import QgsCoordinateReferenceSystem
+    path = os.environ.get("PLANETX_PYT", "")
+    out = result["pyt"] = {"file": os.path.basename(path)}
+    if not os.path.isfile(path):
+        out["skipped"] = "no PLANETX_PYT"
+        return
+    from qgis.utils import iface
+    from planetx.ui import pythagoras
+    window = state["window"]
+    # Кнопка на заголовке «Слоёв проекта».
+    window.panel.pyt_button.click()
+    dialog = window.pyt_dialog
+    out["shown"] = dialog.isVisible()
+    # Пункт меню «Слой» - «Добавить слой» и бросок файла в окно QGIS.
+    menu = iface.addLayerMenu()
+    out["add_layer_menu"] = any(
+        "Pythagoras" in a.text() for a in menu.actions())
+    out["drop"] = pythagoras.PytDropHandler().handleFileDrop(path)
+    out["drop_other"] = pythagoras.PytDropHandler().handleFileDrop(
+        os.path.join(TEMP, "none.shp"))
+    out["same_dialog"] = pythagoras.show_dialog() is dialog
+    out["rows"] = dialog.table.topLevelItemCount()
+    out["total"] = dialog.total.text()
+    dialog.folder.setText(TEMP)
+    dialog.all_points.setChecked(False)
+    dialog.crs.setCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
+    dialog.resize(700, 640)
+    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_dialog.png"))
+    target = os.path.join(
+        TEMP, os.path.splitext(os.path.basename(path))[0] + ".gpkg")
+    if os.path.exists(target):
+        os.remove(target)
+    import time as _time
+    started = _time.monotonic()
+    dialog.convert()
+    out["seconds"] = round(_time.monotonic() - started, 2)
+    out["status"] = dialog.status.text()
+    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_done.png"))
+    # Повтор - прежняя группа снимается, файл пишется заново.
+    from qgis.PyQt.QtWidgets import QMessageBox
+    from planetx.qt_compat import enum
+    keep = QMessageBox.question
+    QMessageBox.question = staticmethod(
+        lambda *a: enum(QMessageBox, "StandardButton", "Yes"))
+    try:
+        dialog.convert()
+    finally:
+        QMessageBox.question = keep
+    out["again"] = dialog.status.text()
+
+
+@check(500)
+def pyt_demo():
+    """Пример карьера ссылкой окна: система координат примера, файл
+    в профиле QGIS, а не в папке модуля."""
+    from qgis.core import QgsApplication, QgsProject
+    from planetx.ui import pythagoras
+    dialog = pythagoras.show_dialog()
+    dialog.folder.setText("")
+    out = result.setdefault("pyt_demo", {})
+    out["button"] = dialog.drop.demo.isVisible()
+    dialog.drop.demo.click()
+    out["crs"] = dialog.crs.crs().authid()
+    out["rows"] = dialog.table.topLevelItemCount()
+    target = os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
+                          "pythagoras", "quarry.gpkg")
+    if os.path.exists(target):
+        os.remove(target)
+    dialog.convert()
+    out["status"] = dialog.status.text()
+    out["written"] = os.path.exists(target)
+    out["in_module"] = os.path.exists(os.path.join(
+        os.path.dirname(pythagoras.DEMO), "quarry.gpkg"))
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        "Pythagoras - quarry")
+    out["layers"] = len(group.findLayers()) if group else 0
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_demo.png"))
+
+
+@check(300)
+def journal_foreign():
+    """Журнал пишет и чужие необработанные ошибки Python с именем
+    модуля, и свои. Обработчик QGIS на время шага снят."""
+    import sys
+    from planetx import journal
+    out = result.setdefault("journal_foreign", {})
+    prior = journal._state["prior"]
+    journal._state["prior"] = None
+    try:
+        for name, path in (
+                ("foreign", os.path.join("python", "plugins", "otherone",
+                                         "render.py")),
+                ("own", os.path.join("python", "plugins", "planetx",
+                                     "net", "overlay.py"))):
+            code = compile("def slot():\n    raise ValueError('" + name
+                           + " test')\nslot()\n", path, "exec")
+            try:
+                exec(code, {})
+            except ValueError:
+                sys.excepthook(*sys.exc_info())
+    finally:
+        journal._state["prior"] = prior
+    with open(journal.path(), encoding="utf-8") as handle:
+        tail = handle.read()[-3000:]
+    out["hook"] = sys.excepthook is journal._state["hook"]
+    out["foreign"] = "не PlanetX (otherone)" in tail \
+        and "foreign test" in tail
+    out["own"] = "own test" in tail
+
+
+@check(300)
+def journal_crash():
+    """Сеанс умершего процесса с файлом стеков QGIS даёт записи
+    о падении, ошибки рабочего потока и «неподнимаемые» ошибки идут
+    в журнал, строка памяти пишется, свой сеанс жив."""
+    import gc
+    import tempfile
+    import threading
+    from planetx import journal
+    out = result.setdefault("journal_crash", {})
+    pid = 4000000
+    while journal.alive(pid):
+        pid += 4
+    os.makedirs(journal.sessions(), exist_ok=True)
+    session = os.path.join(journal.sessions(), "{}.txt".format(pid))
+    with open(session, "w", encoding="utf-8") as handle:
+        handle.write("2026-10-10 12:00:00")
+    stacks = os.path.join(tempfile.gettempdir(),
+                          "qgis-python-crash-info-{}".format(pid))
+    with open(stacks, "w", encoding="utf-8") as handle:
+        handle.write("Windows fatal exception: access violation\n\n"
+                     "Current thread:\n  File \"fake_crash.py\", line 7\n")
+    try:
+        out["found"] = journal.harvest() == [pid]
+    finally:
+        os.remove(stacks)
+    out["session_removed"] = not os.path.exists(session)
+    out["own_session"] = os.path.exists(os.path.join(
+        journal.sessions(), "{}.txt".format(os.getpid())))
+    out["alive_self"] = journal.alive(os.getpid())
+
+    def worker():
+        raise ValueError("thread test")
+    thread = threading.Thread(target=worker, name="planetx-test")
+    thread.start()
+    thread.join()
+
+    class Bad:
+        def __del__(self):
+            raise ValueError("unraisable test")
+    Bad()
+    gc.collect()
+    journal.note_resources()
+    with open(journal.path(), encoding="utf-8") as handle:
+        tail = handle.read()[-6000:]
+    out["crash_line"] = "{}".format(pid) in tail and "fake_crash.py" in tail
+    out["thread"] = "thread test" in tail and "planetx-test" in tail
+    out["unraisable"] = "unraisable test" in tail
+    out["resources"] = "GDI" in tail
+
+
+@check(1500)
+def pyt_click():
+    """Щелчки мышью по флажкам: строки «Слоёв проекта» глобуса после
+    выгрузки примера и строки таблицы окна. Падение QGIS 10 октября
+    2026 года - щелчок по флажку строки QTreeWidget."""
+    from qgis.PyQt.QtCore import QPoint
+    from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtCore import Qt
+    from planetx.qt_compat import enum
+    from planetx.ui import pythagoras
+    left = enum(Qt, "MouseButton", "LeftButton")
+    window = state["window"]
+    out = result.setdefault("pyt_click", {"clicks": []})
+    from qgis.core import QgsApplication
+    dialog = pythagoras.show_dialog()
+    dialog.open_demo()
+    dialog.folder.setText("")
+    target = os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
+                          "pythagoras", "quarry.gpkg")
+    if os.path.exists(target):
+        os.remove(target)
+    dialog.convert()
+
+    def click(tree, item):
+        rect = tree.visualItemRect(item)
+        QTest.mouseClick(tree.viewport(), left, enum(
+            Qt, "KeyboardModifier", "NoModifier"),
+            QPoint(rect.left() + 10, rect.center().y()))
+
+    tree = dialog.table
+    for i in range(min(3, tree.topLevelItemCount())):
+        before = tree.topLevelItem(i).checkState(0)
+        click(tree, tree.topLevelItem(i))
+        out["clicks"].append(("dialog", i, str(before),
+                              str(tree.topLevelItem(i).checkState(0))))
+    # Флажок слоя перестраивал список глобуса прямо из обработчика
+    # щелчка: строка удалялась, пока Qt ещё меняла её флажок. Строка
+    # обязана пережить щелчок.
+    window._show_layers()
+    layers = window.panel.layers
+    out["panel_rows"] = layers.topLevelItemCount()
+    for follow in (False, True):
+        window.follow = follow
+        for i in range(layers.topLevelItemCount()):
+            item = layers.topLevelItem(i)
+            if "lines" not in item.text(0):
+                continue
+            before = str(item.checkState(0))
+            click(layers, item)
+            alive = not _deleted(item)
+            out["clicks"].append((
+                "panel", follow, alive, before,
+                str(item.checkState(0)) if alive else "-"))
+            break
+    window.follow = False
+
+
+def _deleted(item):
+    try:
+        item.text(0)
+        return False
+    except RuntimeError:
+        return True
+
+
+@check(1000)
+def pyt_check():
+    from qgis.core import QgsProject
+    out = result["pyt"]
+    if out.get("skipped"):
+        return
+    project = QgsProject.instance()
+    groups = [g for g in project.layerTreeRoot().children()
+              if g.name().startswith("Pythagoras - ")]
+    out["groups"] = [g.name() for g in groups]
+    counts = {}
+    for group in groups:
+        for node in group.findLayers():
+            layer = node.layer()
+            kind = layer.name().rsplit("_", 1)[1]
+            counts[kind] = counts.get(kind, 0) + layer.featureCount()
+    out["counts"] = counts
+    out["sublayers"] = len(groups[0].children()) if groups else 0
+    road = project.mapLayersByName("Дороги_склады_polygons")
+    if road:
+        areas = [(f["ObjectId"], round(f.geometry().area(), 2),
+                  round(f["area"], 2)) for f in road[0].getFeatures()]
+        out["road_areas"] = areas[:3]
+    for group in groups:
+        project.removeMapLayers(group.findLayerIds())
+        project.layerTreeRoot().removeChildNode(group)
+    state["window"].pyt_dialog.close()
+
+
+@check(500)
 def route_long():
     """Дальний маршрут через сервис OSRM: Пермь - Сочи, около
     2900 км. Три запроса к серверу FOSSGIS с паузой не меньше 1 с."""

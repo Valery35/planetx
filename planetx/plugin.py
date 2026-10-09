@@ -26,6 +26,8 @@ class PlanetXPlugin:
         self.iface = iface
         self.action = None
         self.about_action = None
+        self.pyt_action = None
+        self.pyt_drop = None
         self.toolbar = None
         self.window = None
 
@@ -47,6 +49,18 @@ class PlanetXPlugin:
         self.toolbar.setToolTip("PlanetX")
         self.toolbar.addAction(self.action)
         self.toolbar.addAction(self.about_action)
+        # Проект Pythagoras: меню «Слой» - «Добавить слой», меню модуля
+        # и файл .pyt, брошенный в окно QGIS. Глобус для этого не нужен.
+        from .ui import pythagoras
+        self.pyt_action = QAction(pythagoras.icon(),
+                                  tr("Добавить проект Pythagoras (.pyt)…"),
+                                  self.iface.mainWindow())
+        self.pyt_action.triggered.connect(
+            lambda: pythagoras.show_dialog(self.iface.mainWindow()))
+        self.iface.insertAddLayerAction(self.pyt_action)
+        self.iface.addPluginToWebMenu("PlanetX", self.pyt_action)
+        self.pyt_drop = pythagoras.PytDropHandler()
+        self.iface.registerCustomDropHandler(self.pyt_drop)
 
     def _window_gone(self, window):
         # Ссылка снимается в момент закрытия. Закрытое окно Qt уничтожает
@@ -76,6 +90,13 @@ class PlanetXPlugin:
         if self.about_action is not None:
             self.iface.removePluginWebMenu("PlanetX", self.about_action)
             self.about_action = None
+        if self.pyt_action is not None:
+            self.iface.removeAddLayerAction(self.pyt_action)
+            self.iface.removePluginWebMenu("PlanetX", self.pyt_action)
+            self.pyt_action = None
+        if self.pyt_drop is not None:
+            self.iface.unregisterCustomDropHandler(self.pyt_drop)
+            self.pyt_drop = None
         if self.toolbar is not None:
             self.iface.mainWindow().removeToolBar(self.toolbar)
             self.toolbar.deleteLater()

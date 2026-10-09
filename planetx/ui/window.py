@@ -931,6 +931,7 @@ class GlobeWindow(QWidget):
             lambda layer: self.contour_export.grid_contours(layer))
         self.panel.extrude_requested.connect(
             lambda layer: self.extruder.configure(layer))
+        self.panel.pythagoras_requested.connect(self.pythagoras_dialog)
         self.panel.ground_alpha.connect(
             lambda value: self.subsurface.set_opacity(value))
         self.panel.grid_ids = set(read_grids())
@@ -3877,6 +3878,12 @@ class GlobeWindow(QWidget):
         dialog.show()
         dialog.raise_()
         return dialog
+
+    def pythagoras_dialog(self):
+        """Окно «Проект Pythagoras» из раздела «Слои проекта»."""
+        from .pythagoras import show_dialog
+        self.pyt_dialog = show_dialog(self)
+        return self.pyt_dialog
 
     def spin_here(self, lat, lon):
         """«Вращаться вокруг» меню на глобусе."""

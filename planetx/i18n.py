@@ -25,6 +25,21 @@ EN = {
     "Ошибка Python:": "Python error:",
     "Ошибки SSL запроса {number}:": "SSL errors of request {number}:",
     "Модуль выгружен.": "The plugin is unloaded.",
+    "QGIS закрыт.": "QGIS is closed.",
+    "Прошлый сеанс QGIS (процесс {pid}, начат {began}) завершился без "
+    "выгрузки модуля - падение или снятие задачи.":
+        "The previous QGIS session (process {pid}, started {began}) "
+        "ended without unloading the plugin, a crash or a killed task.",
+    "Стеки Python в момент падения:": "Python stacks at the crash:",
+    "Файла стеков Python этого процесса нет или он пуст.":
+        "The Python stack file of this process is missing or empty.",
+    "Дамп Windows:": "Windows dump:",
+    "{name} ({size} МБ)": "{name} ({size} MB)",
+    "Поток {name}.": "Thread {name}.",
+    "Память {memory} МБ, выделено {committed} МБ, объектов GDI {gdi}, "
+    "USER {user}.":
+        "Memory {memory} MB, committed {committed} MB, GDI objects "
+        "{gdi}, USER {user}.",
     "Окно глобуса открыто.": "The globe window is open.",
     "Окно глобуса закрыто.": "The globe window is closed.",
     "Загрузка подложки: {done} из {total}":
@@ -233,6 +248,111 @@ EN = {
         "Map sheet designation",
     "Горизонтали":
         "Contours",
+    "Ошибка Python не PlanetX ({owner}):":
+        "Python error not from PlanetX ({owner}):",
+    "Открыть пример":
+        "Open example",
+    "Выдуманный карьер у Березников - уступы, отвал, дорога, опорные пункты "
+    "и подписи. Система координат ставится сама.":
+        "An invented quarry near Berezniki - benches, a dump, a road, survey "
+        "points and labels. The coordinate system is set automatically.",
+    "Добавить проект Pythagoras (.pyt). Слои Pythagoras ложатся в GeoPackage "
+    "и группой в проект QGIS.":
+        "Add a Pythagoras project (.pyt). Pythagoras layers go to a "
+        "GeoPackage and to the QGIS project as a group.",
+    "Добавить проект Pythagoras (.pyt)…":
+        "Add Pythagoras project (.pyt)…",
+    "{size} МБ":
+        "{size} MB",
+    "Выбрать файл…":
+        "Choose file…",
+    "Готово. В проект добавлена группа «{title}» - слоёв {count}: точек "
+    "{points}, линий {lines}, площадей {areas}, надписей {texts}.":
+        "Done. The group «{title}» is added to the project - layers {count}: "
+        "points {points}, lines {lines}, areas {areas}, texts {texts}.",
+    "Линии":
+        "Lines",
+    "Надписи":
+        "Texts",
+    "Не отмечено ни одного слоя.":
+        "No layer is checked.",
+    "Ни одного":
+        "None",
+    "Отметьте слои и нажмите «В проект QGIS».":
+        "Check the layers and press To QGIS project.",
+    "Отмечено слоёв {layers} из {all}, объектов {count}.":
+        "Layers checked {layers} of {all}, objects {count}.",
+    "Папка файла .pyt":
+        "Folder of the .pyt file",
+    "Перетащите сюда файл <b>.pyt</b> из проводника или нажмите «Выбрать "
+    "файл…».":
+        "Drag a <b>.pyt</b> file here from the file manager or press Choose "
+        "file….",
+    "Площади":
+        "Areas",
+    "Проект Pythagoras в QGIS":
+        "Pythagoras project in QGIS",
+    "Слои файла и количество объектов в них. Флажок решает, попадёт ли слой "
+    "в проект.":
+        "The layers of the file and their object counts. The checkbox "
+        "decides whether a layer goes to the project.",
+    "Слой Pythagoras":
+        "Pythagoras layer",
+    "Слоёв {layers}, объектов {count}.":
+        "Layers {layers}, objects {count}.",
+    "Точки":
+        "Points",
+    "Файл .pyt читается напрямую, без DXF и SHP. Каждый слой Pythagoras "
+    "становится слоями точек, линий, площадей и надписей в GeoPackage и "
+    "группой в проекте.":
+        "The .pyt file is read directly, without DXF or SHP. Each Pythagoras "
+        "layer becomes layers of points, lines, areas and texts in a "
+        "GeoPackage and a group in the project.",
+    "Добавить проект Pythagoras…":
+        "Add Pythagoras project…",
+    "Файл .pyt ложится в GeoPackage слоями по слоям Pythagoras - точки, "
+    "линии, площади и надписи - и группой в проект.":
+        "The .pyt file goes to a GeoPackage as layers by Pythagoras layers - "
+        "points, lines, areas and texts - and to the project as a group.",
+    "Pythagoras - {name}":
+        "Pythagoras - {name}",
+    "Pythagoras хранит каждую вершину линии точкой. Без флажка в слои точек "
+    "попадают только точки со знаком, как при выгрузке в SHP из самого "
+    "Pythagoras. С флажком - и все вершины.":
+        "Pythagoras stores every line vertex as a point. Without the "
+        "checkbox the point layers get only points with a symbol, as the SHP "
+        "export of Pythagoras itself. With it they get all vertices too.",
+    "В файле не найдено объектов.":
+        "No objects found in the file.",
+    "Не выбрана система координат.":
+        "No coordinate system is chosen.",
+    "Папка результата":
+        "Output folder",
+    "Папка файла GeoPackage. Пустое поле - папка файла .pyt.":
+        "The folder of the GeoPackage file. An empty field means the folder "
+        "of the .pyt file.",
+    "Площадей без контура: {n}.":
+        "Areas without an outline: {n}.",
+    "Проект Pythagoras":
+        "Pythagoras project",
+    "Проект Pythagoras (*.pyt)":
+        "Pythagoras project (*.pyt)",
+    "Система координат":
+        "Coordinate system",
+    "Система координат проекта Pythagoras. В файле .pyt её нет, она задаётся "
+    "здесь и записывается в GeoPackage.":
+        "The coordinate system of the Pythagoras project. The .pyt file does "
+        "not hold it, it is set here and written to the GeoPackage.",
+    "Слой {n}":
+        "Layer {n}",
+    "Точки построения тоже":
+        "Construction points too",
+    "Файл .pyt не найден.":
+        "The .pyt file is not found.",
+    "Файл {path} уже есть. Заменить его?":
+        "The file {path} already exists. Replace it?",
+    "Файл не записан: {path}":
+        "The file is not written: {path}",
     "Снимки Sentinel-2 здесь…":
         "Sentinel-2 images here…",
     "Снимки Sentinel-2…":

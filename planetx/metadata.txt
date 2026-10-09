@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.61.0
+version=0.62.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.61.0 The Sentinel-2 images window searches scenes over
+changelog=0.62.0 A Pythagoras project (.pyt) opens in QGIS as
+      GeoPackage layers, a group of point, line, area and text layers
+      for every Pythagoras layer, with arcs. The window opens from
+      Layer - Add Layer, from an icon above the globe Project layers
+      and by dropping a .pyt file on QGIS. The Open example button
+      shows an invented quarry project. A click on a layer check box
+      in the globe Project layers could crash QGIS, it no longer
+      does. The log records all Python errors in QGIS, memory and
+      Windows objects, and a QGIS crash at the next start with the
+      Python stacks of the crash.
+      0.61.0 The Sentinel-2 images window searches scenes over
       an area, a square around a point or a My Places placemark, for
       a date range, with cloud cover over the area itself. Band
       combinations and the NDVI, NDWI, NDMI, NBR and NDSI indices go

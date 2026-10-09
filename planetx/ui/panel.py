@@ -422,6 +422,7 @@ class LayerPanel(QWidget):
     contours_requested = pyqtSignal(object)
     # Векторный слой - выдавливание по полю, пункт меню слоя.
     extrude_requested = pyqtSignal(object)
+    pythagoras_requested = pyqtSignal()
     # Непрозрачность земли над подземной моделью, от 0 до 1.
     ground_alpha = pyqtSignal(float)
     # Кнопка строки «Земля над гридами» - окно «Подземный режим».
@@ -738,6 +739,16 @@ class LayerPanel(QWidget):
             Section("base", tr("Слои"), self.geo, tr(
                 "Свернуть или развернуть векторную основу и рельеф."),
                 self)]
+        # Значок на заголовке «Слоёв проекта» - проект Pythagoras.
+        self.pyt_button = QToolButton(self)
+        self.pyt_button.setIcon(QIcon(os.path.join(
+            os.path.dirname(os.path.dirname(__file__)), "pythagoras.svg")))
+        self.pyt_button.setAutoRaise(True)
+        self.pyt_button.setToolTip(tr(
+            "Добавить проект Pythagoras (.pyt). Слои Pythagoras ложатся "
+            "в GeoPackage и группой в проект QGIS."))
+        self.pyt_button.clicked.connect(self.pythagoras_requested.emit)
+        self.sections[1].add_button(self.pyt_button)
         split = QSplitter(enum(Qt, "Orientation", "Vertical"), self)
         split.setChildrenCollapsible(False)
         for n, section in enumerate(self.sections):
@@ -1233,8 +1244,25 @@ class LayerPanel(QWidget):
         """Слои проекта под «Глобусом» и «Моими метками». shown - номера
         отмеченных.
 
-        Сигналы при этом не идут.
+        Сигналы при этом не идут. При тех же слоях меняются только
+        флажки: список перестраивается и из обработчика щелчка по
+        флажку, а строка, которую Qt ещё меняет, удаляться не должна.
         """
+        rows = [self.layers.topLevelItem(i)
+                for i in range(self.layers.topLevelItemCount())]
+        if [r.data(0, LAYER_ROLE) for r in rows] == \
+                [layer.id() for layer in layers] and \
+                [r.text(0) for r in rows] == [
+                    tr("{name} · {kind}", name=layer.name(),
+                       kind=layer_kind(layer)) for layer in layers]:
+            self.layers.blockSignals(True)
+            for row in rows:
+                state = CHECKED if row.data(0, LAYER_ROLE) in shown \
+                    else UNCHECKED
+                if row.checkState(0) != state:
+                    row.setCheckState(0, state)
+            self.layers.blockSignals(False)
+            return
         self.layers.blockSignals(True)
         self.layers.clear()
         for layer in layers:
@@ -1443,15 +1471,26 @@ class LayerPanel(QWidget):
 
     def _layer_menu(self, point):
         """Меню слоя проекта: перелёт, прозрачность, трек, рельеф
-        глобуса у растра, свойства."""
+        глобуса у растра, свойства. Под ним и на пустом месте списка -
+        добавление проекта Pythagoras."""
         item = self.layers.itemAt(point)
         layer_id = item.data(0, LAYER_ROLE) if item is not None else None
         layer = QgsProject.instance().mapLayer(layer_id) if layer_id \
             else None
-        if layer is None:
-            return
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
+        if layer is not None:
+            self._fill_layer_menu(menu, layer)
+            menu.addSeparator()
+        pyt = menu.addAction(tr("Добавить проект Pythagoras…"))
+        pyt.setToolTip(tr(
+            "Файл .pyt ложится в GeoPackage слоями по слоям Pythagoras - "
+            "точки, линии, площади и надписи - и группой в проект."))
+        pyt.triggered.connect(self.pythagoras_requested.emit)
+        menu.exec(self.layers.viewport().mapToGlobal(point))
+
+    def _fill_layer_menu(self, menu, layer):
+        """Пункты меню слоя проекта layer."""
         menu.addAction(tr("Подлететь")).triggered.connect(
             lambda: self.fly_to_layer.emit(layer))
         menu.addAction(self._opacity_action(menu, layer))
@@ -1501,4 +1540,3 @@ class LayerPanel(QWidget):
                 lambda: self.contours_requested.emit(layer))
         menu.addAction(tr("Свойства слоя…")).triggered.connect(
             lambda: self.layer_properties.emit(layer))
-        menu.exec(self.layers.viewport().mapToGlobal(point))

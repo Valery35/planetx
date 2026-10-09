@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.61.0.
+A 3D globe inside QGIS. PlanetX version 0.62.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -225,6 +225,9 @@ and atmosphere, from space down to single streets.
 - **Own terrain.** A height raster of the project, for example a
   quarry survey, becomes the globe terrain within its extent, more
   detailed than the common terrain, down to the raster pixel.
+- **Pythagoras project.** A .pyt file goes to the QGIS project as
+  GeoPackage layers by Pythagoras layers - points, lines, areas and
+  texts with numbers, codes and elevations.
 - **Copy and paste.** Places and folders are copied to the clipboard
   as KML text and pasted back, also after editing in a text editor and
   from Google Earth.
