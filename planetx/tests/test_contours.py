@@ -2,6 +2,7 @@
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Горизонтали тайла и изолинии сетки."""
+import math
 import os
 import sys
 import unittest
@@ -114,6 +115,77 @@ class TestLabels(unittest.TestCase):
         rgba = ct.contour_rgba(h, 15, 10000, R, step=2.0,
                                glyphs=fake_glyphs())
         self.assertTrue(np.array_equal(bare, rgba))
+
+
+class TestUpsample(unittest.TestCase):
+
+    def test_plane_is_exact_inside(self):
+        # Плоскость на предке уровня 12 - та же плоскость на внуке 14.
+        r, c = np.mgrid[0:256, 0:256].astype(np.float64)
+        parent = 100.0 + 2.0 * c + 3.0 * r
+        key = (14, 4 * 10 + 1, 4 * 20 + 2)
+        child = ct.upsample(parent, (12, 10, 20), key)
+        pos = (np.arange(256) + 0.5) / 4.0 - 0.5
+        cols = 1 * 64 + pos
+        rows = 2 * 64 + pos
+        want = 100.0 + 2.0 * cols[None, :] + 3.0 * rows[:, None]
+        self.assertTrue(np.allclose(child, want, atol=1e-9))
+
+    def test_no_kinks_between_parent_pixels(self):
+        # Кубический пересчёт гладкий: вторая разность вдоль строки
+        # у параболы постоянна, у линейного пересчёта - всплески.
+        c = np.arange(256, dtype=np.float64)
+        parent = np.tile(0.01 * (c - 128.0) ** 2, (256, 1))
+        child = ct.upsample(parent, (12, 0, 0), (15, 3, 3))
+        second = np.diff(child[100], 2)
+        self.assertLess(float(np.ptp(second)), 1e-6)
+
+    def test_crop_refine_matches_tile_upsample(self):
+        # Мозаика двух предков уровня 12, обрезка по тайлу уровня 14 -
+        # то же, что пересчёт этого тайла из своего предка.
+        rng = np.random.default_rng(1)
+        a = rng.normal(size=(256, 256))
+        b = rng.normal(size=(256, 256))
+        grid = np.hstack([a, b])
+        out, x0, y0 = ct.crop_refine(grid, 10, 20, 4, (41, 82, 41, 82))
+        self.assertEqual((x0, y0, out.shape), (41, 82, (256, 256)))
+        want = ct.upsample(a, (12, 10, 20), (14, 41, 82))
+        self.assertTrue(np.allclose(out, want))
+
+    def test_min_step(self):
+        self.assertEqual(ct.tile_step(18, 80000, R), ct.MIN_STEP)
+        self.assertEqual(ct.MIN_STEP, 5.0)
+
+
+class TestPalette(unittest.TestCase):
+
+    def test_imagery_detection(self):
+        self.assertTrue(ct.is_imagery(
+            "Esri World Imagery - пример",
+            "https://server.arcgisonline.com/ArcGIS/rest/services/"
+            "World_Imagery/MapServer/tile/{z}/{y}/{x}"))
+        self.assertTrue(ct.is_imagery("Google", "https://mt1.google.com/"
+                                      "vt/lyrs=s&x={x}&y={y}&z={z}"))
+        self.assertTrue(ct.is_imagery("Марс", "", builtin_body=True))
+        self.assertFalse(ct.is_imagery(
+            "OpenStreetMap", "https://tile.openstreetmap.org/{z}/{x}/{y}.png"))
+        self.assertFalse(ct.is_imagery(
+            "Topo", "https://server.arcgisonline.com/ArcGIS/rest/services/"
+            "World_Topo_Map/MapServer/tile/{z}/{y}/{x}"))
+
+    def test_yellow_on_imagery(self):
+        h = np.tile(np.arange(256, dtype=np.float64), (256, 1))
+        rgba = ct.contour_rgba(h, 15, 10000, R, step=10.0,
+                               palette="imagery")
+        on = rgba[..., 3] > 150
+        r, g, b = (rgba[..., i][on].astype(float) for i in range(3))
+        self.assertTrue(np.all(r > b + 60) and np.all(g > b + 60))
+
+    def test_view_step_grows_with_distance(self):
+        near = ct.view_step(1600.0, 58.0, math.radians(30.0), 900, R)
+        far = ct.view_step(50000.0, 58.0, math.radians(30.0), 900, R)
+        self.assertEqual(near, ct.MIN_STEP)
+        self.assertGreater(far, near)
 
 
 class TestSegments(unittest.TestCase):

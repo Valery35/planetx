@@ -47,10 +47,14 @@ from ..core import searchbar, skydata
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS
-from ..core.contours import LEVEL as CONTOUR_LEVEL, contour_rgba
+from ..core.contours import (LEVEL as CONTOUR_LEVEL,
+                             SOURCE_LEVEL as CONTOUR_SOURCE, contour_rgba)
+from ..core.contours import is_imagery as contour_is_imagery
+from ..core.contours import view_step as contour_view_step
+from ..core.contours import smooth as contour_smooth
+from ..core.contours import upsample as contour_upsample
 from ..core.slope import aspect_rgba, slope_aspect, slope_rgba
-from ..core.terrain import (MAX_LEVEL as TERRAIN_MAX, HeightTile, ancestor,
-                            decode, resample)
+from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, ancestor, decode
 from ..core.kml import KOverlay, KmlError, image_ext as kml_image_ext, \
     read_file as read_kml_file, read_kml, write_kml, write_kmz
 from ..core.placetree import is_folder, numbered_name
@@ -80,7 +84,7 @@ from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels, range_key
-from .legend import (BedsLegend, CutawayLegend, FireLegend,
+from .legend import (BedsLegend, ContourLegend, CutawayLegend, FireLegend,
                      InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend,
                      TemperatureLegend, ThemeLegend)
@@ -288,19 +292,21 @@ def slope_prepare(mode, floor, radius, insets=(), encoding="terrarium"):
 
 
 def contours_prepare(floor, radius, insets=(), encoding="terrarium",
-                     glyphs=None):
+                     glyphs=None, source_level=TERRAIN_MAX, palette="map"):
     """Работа рабочего потока для тайла горизонталей: высоты Terrarium
     с врезками своего рельефа, линии и подписи core/contours.py
     цифрами glyphs и мипмапы."""
     def prepare(key, rgba):
         heights = decode(rgba, floor, encoding)
-        if key[0] > TERRAIN_MAX:
-            parent = ancestor(key, TERRAIN_MAX)
-            heights = resample(HeightTile(*parent, heights, 0.0, 0.0), key)
+        if key[0] > source_level:
+            # Глубже уровня съёмки - сглаженный предок, пересчитанный
+            # кубически (core.contours.SOURCE_LEVEL).
+            heights = contour_upsample(contour_smooth(heights),
+                                       ancestor(key, source_level), key)
         if insets:
             heights = apply_insets(insets, key, heights)
         return mip_chain(contour_rgba(heights, key[0], key[2], radius,
-                                      glyphs=glyphs))
+                                      glyphs=glyphs, palette=palette))
     return prepare
 
 
@@ -579,6 +585,12 @@ class GlobeWindow(QWidget):
         self._theme_scales = {}
         self._theme_replies = {}
         self.theme_legend = ThemeLegend(self.view)
+        # Горизонтали: сечение, крестик и выгрузка в проект.
+        self.contour_legend = ContourLegend(self.view)
+        self.contour_legend.hide()
+        self.contour_legend.closer = \
+            lambda: self.set_extra("contours", False)
+        self._contour_palette = "map"
         # Крестик на шкале карты витрины убирает карту.
         for legend in (self.theme_legend, self.fire_legend, self.legend):
             legend.closer = lambda: self.set_theme("")
@@ -588,7 +600,8 @@ class GlobeWindow(QWidget):
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.insolation_legend,
-                       self.slope_legend, self.legend):
+                       self.slope_legend, self.contour_legend,
+                       self.legend):
             self.legend_panel.add(legend)
         self.legend_panel.changed = self._place_attribution
         # День темы - правый бегунок шкалы времени, смена дня - после
@@ -1014,6 +1027,7 @@ class GlobeWindow(QWidget):
         self._value_field = None
         self._value_key = None
         self.view.changed.connect(self._update_values)
+        self.view.changed.connect(self._update_contour_legend)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
         self.panel.gallery_requested.connect(self.open_gallery)
@@ -1667,18 +1681,48 @@ class GlobeWindow(QWidget):
         if not self.extras.get("contours") or found is None \
                 or self.view.sky_view is not None:
             self._set_gibs("contours", False)
+            self.contour_legend.hide()
             return
+        # Жёлтые линии на снимке, коричневые на карте.
+        self._contour_palette = self._palette_for(self.source)
+        self.contour_legend.export = \
+            self.contour_export.view_contours if self.planet.earth else None
+        self.contour_legend.show()
+        self._update_contour_legend()
         source, floor, insets = found
+        level = source.max_level
         if self.planet.earth:
-            # Глубже уровня высот - по предку (DeepSource, resample).
-            source = DeepSource("Terrarium", source.url, TERRAIN_MAX)
+            # Глубже уровня съёмки - по предку (DeepSource, upsample).
+            # Свой источник высот бывает подробнее, у него - уровень 15.
+            level = CONTOUR_SOURCE if source.url == datasources.TERRAIN_URL \
+                else TERRAIN_MAX
+            source = DeepSource("Terrarium", source.url, level)
         self.view.gibs["contours"].max_level = CONTOUR_LEVEL \
             if self.planet.earth else source.max_level
         encoding = self._terrain_choice()[1] if self.planet.earth \
             else "terrarium"
         self._set_gibs("contours", True, (source, contours_prepare(
-            floor, ellipsoid.A, insets, encoding, digit_glyphs())),
-            cache=True)
+            floor, ellipsoid.A, insets, encoding, digit_glyphs(), level,
+            self._contour_palette)), cache=True)
+
+    def _palette_for(self, source):
+        """Цвета горизонталей по подложке: imagery - снимок, map -
+        карта (core.contours.is_imagery)."""
+        imagery = contour_is_imagery(source.name, source.url,
+                                     builtin_body=not self.planet.earth)
+        return "imagery" if imagery else "map"
+
+    def _update_contour_legend(self):
+        """Сечение горизонталей в середине вида на шкале."""
+        if self.contour_legend.isHidden():
+            return
+        pose = self.view.navigator.pose
+        camera = self.view.camera
+        self.contour_legend.set_step(contour_view_step(
+            pose.distance, pose.lat, math.radians(camera.fov_y),
+            self.view.height() * self.view.devicePixelRatioF(),
+            ellipsoid.A, self.view.gibs["contours"].max_level),
+            self._contour_palette)
 
     def _set_gibs(self, name, on, made=None, cache=False, keep=False):
         """Слой NASA GIBS вида - облака, море или суша: новый загрузчик
@@ -2453,6 +2497,10 @@ class GlobeWindow(QWidget):
         self.source = source
         self._start_loader()
         self.view.change_source(source.max_level, coarse=coarse)
+        if self.extras.get("contours") \
+                and self._palette_for(source) != self._contour_palette:
+            # Подложка сменилась со снимка на карту или обратно.
+            self._set_contours(self._surface_source())
         # Уровни 0-2 просятся сразу. Вид не рисует кадр, пока их нет,
         # и сам их не попросит. Без этого смена подложки до прихода
         # уровней 0-2 оставляла окно пустым, нашлось 26 сентября 2026.

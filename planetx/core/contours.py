@@ -39,7 +39,9 @@ except ImportError:  # headless-тесты
 SIZE = 256
 NICE = (1.0, 2.0, 2.5, 5.0)
 STEP_PIXELS = 2.0  # пикселей тайла на шаг сечения при уклоне 45°
-MIN_STEP = 2.0  # м, мельче сечение высоты Terrarium не держат
+# Мельче сечение данные Terrarium не держат: на равнине горизонтали
+# через 2 м обводили целые метры исходной съёмки ступенями.
+MIN_STEP = 5.0
 INDEX = 5  # каждая пятая горизонталь утолщённая
 WIDTH = 0.45  # полутолщина линии, пиксели
 INDEX_WIDTH = 0.9
@@ -48,9 +50,27 @@ FADE = 4.0  # пикселей между горизонталями, чаще -
 # пересчитанным билинейно, иначе линии предка растягивались бы на
 # экране вчетверо и вшестнадцатеро.
 LEVEL = 17
+# Высоты Terrarium глубже уровня 12 - та же съёмка 20-90 м, пересчитанная
+# мельче: на уровне 13 у Перми целые метры площадками по 2-3 пикселя,
+# на 14-15 - их сглаженный пересчёт с изломами по старой сетке.
+# Горизонтали по ним шли ступенями и петлями. Глубже SOURCE_LEVEL
+# горизонтали считаются по сглаженному тайлу этого уровня, пересчитанному
+# кубически (upsample). Замер 9 октября 2026 года, жалоба автора
+# «плохо строит».
+SOURCE_LEVEL = 12
 LAND = (150, 85, 30)  # коричневый топографических карт
 WATER = (40, 95, 175)  # изобаты
 OPACITY = 0.85
+# Цвета линий: (суша, изобаты, яркость обычных, яркость утолщённых).
+# На карте - коричневый топографических карт, на космоснимке - жёлтый
+# и голубой, их видно на тёмной земле и воде. Просьба автора от
+# 9 октября 2026 года.
+PALETTES = {"map": (LAND, WATER, 1.0, 0.75),
+            "imagery": ((255, 214, 0), (120, 205, 255), 0.85, 1.0)}
+# Слова в адресе или названии подложки, по которым она - снимок.
+IMAGERY_WORDS = ("imagery", "satellite", "sentinel", "landsat", "aerial",
+                 "ortho", "орто", "снимк", "спутник", "lyrs=s", "lyrs=y",
+                 "=sat", "/sat", "_sat", "bing")
 # Подписи утолщённых горизонталей: соседние линии дальше LABEL_ROOM
 # высот цифр, подписи не ближе LABEL_GAP пикселей, не больше LABEL_MAX
 # на тайл, проверяется LABEL_TRIES точек. LABEL_PAD - разрыв линии
@@ -88,7 +108,31 @@ def tile_step(z, y, radius):
     return max(nice(pixel * STEP_PIXELS), MIN_STEP)
 
 
-def contour_rgba(heights, z, y, radius, step=None, glyphs=None):
+def is_imagery(name, url, builtin_body=False):
+    """Подложка - снимок, а не карта: снимки тел (builtin_body) или
+    слова IMAGERY_WORDS в названии или адресе."""
+    if builtin_body:
+        return True
+    text = "{} {}".format(name or "", url or "").lower()
+    return any(word in text for word in IMAGERY_WORDS)
+
+
+def view_step(distance, lat, fov_y, height_px, radius, max_level=LEVEL):
+    """Сечение горизонталей в середине вида: камера на расстоянии
+    distance от точки взгляда на широте lat, поле зрения fov_y (рад),
+    окно height_px пикселей. Уровень тайла - тот, у которого тексель
+    не больше 1.5 пикселя экрана, как у выбора тайлов вида."""
+    screen = 2.0 * distance * math.tan(fov_y / 2.0) / max(height_px, 1)
+    ground = 2.0 * math.pi * radius * max(math.cos(math.radians(lat)),
+                                          1e-6) / SIZE
+    level = int(min(max_level, max(0, math.ceil(math.log2(
+        ground / max(1.5 * screen, 1e-9))))))
+    pixel = ground / (1 << level)
+    return max(nice(pixel * STEP_PIXELS), MIN_STEP)
+
+
+def contour_rgba(heights, z, y, radius, step=None, glyphs=None,
+                 palette="map"):
     """Картинка горизонталей тайла: RGBA uint8 с премноженной альфой.
     glyphs - картинки цифр для подписей утолщённых горизонталей
     (label_strip), без них подписей нет."""
@@ -99,9 +143,10 @@ def contour_rgba(heights, z, y, radius, step=None, glyphs=None):
     alpha = np.clip(width + 0.5 - gap, 0.0, 1.0)
     alpha *= np.clip(spacing / FADE, 0.0, 1.0)
     alpha = (alpha * OPACITY).astype(np.float32)
-    rgb = np.where((h < 0.0)[..., None], np.array(WATER, np.float32),
-                   np.array(LAND, np.float32))
-    rgb = np.where(index[..., None], rgb * 0.75, rgb)
+    land, water, shade, index_shade = PALETTES[palette]
+    rgb = np.where((h < 0.0)[..., None], np.array(water, np.float32),
+                   np.array(land, np.float32))
+    rgb = rgb * np.where(index, index_shade, shade)[..., None]
     if glyphs:
         labels = place_labels(h, d_row, d_col, step,
                               label_spots(gap, index, spacing,
@@ -110,8 +155,8 @@ def contour_rgba(heights, z, y, radius, step=None, glyphs=None):
             rows, cols, ink, clear = box
             # Разрыв линии под подписью, потом цифры цветом линии.
             alpha[rows, cols] *= 1.0 - clear
-            color = np.array(WATER if value < 0.0 else LAND,
-                             np.float32) * 0.75
+            color = np.array(water if value < 0.0 else land,
+                             np.float32) * index_shade
             rgb[rows, cols] = color
             alpha[rows, cols] = np.maximum(alpha[rows, cols],
                                            ink * OPACITY)
@@ -257,6 +302,60 @@ def _bilinear(img, y, x):
     v = (pad[y0, x0] * (1 - fy) * (1 - fx) + pad[y0, x0 + 1] * (1 - fy) * fx
          + pad[y0 + 1, x0] * fy * (1 - fx) + pad[y0 + 1, x0 + 1] * fy * fx)
     return np.where(inside, v, 0.0)
+
+
+def _cubic(p0, p1, p2, p3, t):
+    """Кубическая кривая Катмулла-Рома через четыре значения."""
+    return p1 + 0.5 * t * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2
+                                          - p3 + t * (3.0 * (p1 - p2)
+                                                      + p3 - p0)))
+
+
+def upsample(heights, source, key):
+    """Высоты тайла key по высотам тайла-предка source (z, x, y):
+    кубический пересчёт без изломов по сетке предка, массив (256,
+    256). За краем предка - его крайние значения."""
+    scale = 1 << (key[0] - source[0])
+    pos = (np.arange(SIZE) + 0.5) / scale - 0.5
+    off_x = (key[1] - (source[1] * scale)) * SIZE / scale
+    off_y = (key[2] - (source[2] * scale)) * SIZE / scale
+    return _resample(heights, off_y + pos, off_x + pos)
+
+
+def crop_refine(grid, x0, y0, factor, box):
+    """Мозаика уровня предков (левый верхний тайл x0, y0), обрезанная
+    по тайлам box (x0, y0, x1, y1) уровня в factor раз подробнее
+    и пересчитанная до него: (мозаика, x0, y0) этого уровня. Без
+    обрезки мозаика предков, пересчитанная в 16 раз, весила бы сотни
+    мегабайт."""
+    bx0, by0, bx1, by1 = box
+    size = SIZE / factor  # пикселей предка на тайл подробного уровня
+    c0 = (bx0 - x0 * factor) * size
+    r0 = (by0 - y0 * factor) * size
+    cols = (bx1 - bx0 + 1) * SIZE
+    rows = (by1 - by0 + 1) * SIZE
+    xs = c0 + (np.arange(cols) + 0.5) / factor - 0.5
+    ys = r0 + (np.arange(rows) + 0.5) / factor - 0.5
+    return _resample(grid, ys, xs), bx0, by0
+
+
+def _resample(values, ys, xs):
+    """Значения values в дробных строках ys и столбцах xs (отсчёт от
+    центров пикселей) кубически, за краем - крайние значения."""
+    values = np.asarray(values, dtype=np.float64)
+    big = np.pad(values, 2, mode="edge")
+    xs = np.clip(xs, 0.0, values.shape[1] - 1.0) + 2.0
+    ys = np.clip(ys, 0.0, values.shape[0] - 1.0) + 2.0
+    x0 = np.floor(xs).astype(int)
+    y0 = np.floor(ys).astype(int)
+    tx = (xs - x0)[None, :]
+    ty = (ys - y0)[:, None]
+    rows = []
+    for dy in (-1, 0, 1, 2):
+        r = big[(y0 + dy)[:, None], x0[None, :] + np.array(
+            [-1, 0, 1, 2])[:, None, None]]
+        rows.append(_cubic(r[0], r[1], r[2], r[3], tx))
+    return _cubic(rows[0], rows[1], rows[2], rows[3], ty)
 
 
 def smooth(h):

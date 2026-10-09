@@ -289,6 +289,13 @@ are depth contours. Where contours merge on a steep slope, they fade.
 Contours are built from the same heights as the slope and have the
 same accuracy. The layer exists on the Earth, Mars and the Moon.
 
+The interval is never finer than 5 m. The open Earth heights were
+surveyed with a 20-90 m spacing, detailed tiles are their resampling.
+Close up the contours are therefore built from smoothed heights with
+about a 20 m spacing, resampled smoothly. The lines have no steps,
+small terrain forms do not show on them. Own terrain from a project
+raster and an own height source give contours at full detail.
+
 Thicker contours are labelled with their height, as on a topographic
 map. The number stands in a gap of the line, the top of the digits
 faces uphill. There is no label at a tile edge, on a sharp bend of
@@ -296,9 +303,21 @@ the line and where the neighbouring contours are closer than the
 height of the digits. A flat lake surface at a contour height does
 not count as a line and is not filled.
 
-The View contours to the QGIS project… item of the globe menu exports
-the contours of an area around the view point as a GeoPackage layer.
-The item exists while the Contours layer is on, and only on the Earth.
+On satellite imagery contours are yellow and depth contours light
+blue, on a map they are brown and blue. Imagery means Esri World
+Imagery and the imagery of other bodies. Basemaps with imagery,
+satellite, aerial, ortho and similar words in the name or address
+count as imagery too.
+
+While the layer is on, its scale stands in the bottom left corner of
+the view. It shows the line colour, the interval in the middle of the
+view and the step of thicker contours. The cross of the scale switches
+the contours off.
+
+The To the QGIS project… link of the scale exports the contours of an
+area around the view point as a GeoPackage layer. The View contours to
+the QGIS project… item of the globe menu does the same. Export exists
+only on the Earth.
 The area is the view strip at the view point with the width and height
 of the window, the interval is as on the screen. Heights are loaded for
 up to 30 s. The layer goes to the PlanetX - contours group at the top

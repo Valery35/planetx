@@ -6764,6 +6764,52 @@ def contours_check():
     view.navigator.set_pose(Pose(43.35, 42.44, 14000.0, 200.0, 55.0))
 
 
+@check(20000, manual=True)
+def contours_perm():
+    """Горизонтали над окраиной Перми с 1.6 км, отвесно."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("contours", True)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(57.955, 56.255, 1600.0, 0.0, 0.0))
+
+
+@check(500, manual=True)
+def contours_perm_shot():
+    view = state["window"].view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_contours_perm.png"))
+    window = state["window"]
+    legend = window.contour_legend
+    out = result["contours_perm"] = {
+        "textures": len(view.gibs["contours"].textures),
+        "gl": dict(view.gl_errors),
+        "basemap": window.source.name,
+        "palette": window._contour_palette,
+        "legend": not legend.isHidden(),
+        "legend_step": legend.step,
+        "legend_export": legend.export is not None}
+    legend.grab().save(os.path.join(TEMP, "planetx_contour_legend.png"))
+    osm = next(s for s in window.sources if "OpenStreetMap" in s.name)
+    state["contours_basemap"] = window.source
+    window._switch_basemap(osm)
+    out["palette_osm"] = window._contour_palette
+
+
+@check(15000, manual=True)
+def contours_perm_osm():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_contours_perm_osm.png"))
+    window._switch_basemap(state["contours_basemap"])
+    result["contours_perm"]["palette_back"] = window._contour_palette
+    window.set_extra("contours", False)
+    result["contours_perm"]["legend_off"] = \
+        window.contour_legend.isHidden()
+
+
 @check(500)
 def contours_export():
     """Горизонтали вида над Эльбрусом - слоем GeoPackage в проект."""

@@ -16,6 +16,7 @@ from qgis.PyQt.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter
 from qgis.PyQt.QtWidgets import QFileDialog
 
 from ..core import contours, ellipsoid
+from ..core import sources as datasources
 from ..core.sync import ground_size
 from ..core.terrain import ancestor, resample
 from ..i18n import tr
@@ -149,7 +150,16 @@ class ContourExport(QObject):
                 tr("GeoPackage (*.gpkg)"))
         if not path:
             return
-        self.job = {"keys": keys, "level": level, "path": path,
+        # Высоты - с уровня съёмки, как у горизонталей на глобусе
+        # (core.contours.SOURCE_LEVEL), свой источник - как есть.
+        source = level
+        if window._terrain_choice()[0] == datasources.TERRAIN_URL:
+            source = min(level, contours.SOURCE_LEVEL)
+        box = (min(k[1] for k in keys), min(k[2] for k in keys),
+               max(k[1] for k in keys), max(k[2] for k in keys))
+        keys = sorted({ancestor(key, source) for key in keys})
+        self.job = {"keys": keys, "level": level, "source": source,
+                    "box": box, "path": path,
                     "started": time.monotonic()}
         self.timer.start()
         self._poll()
@@ -173,13 +183,20 @@ class ContourExport(QObject):
         grid, x0, y0 = contours.mosaic(job["keys"],
                                        lambda key: heights_of(store, key))
         level = job["level"]
+        # Сглаживание и кубический пересчёт до экранного уровня - как
+        # у горизонталей на глобусе. Пустые тайлы (NaN) сглаживание
+        # растащило бы на соседей, тогда мозаика как есть.
+        if np.isfinite(grid).all():
+            grid = contours.smooth(grid.astype(np.float64))
+            factor = 1 << (level - job["source"])
+            if factor > 1:
+                grid, x0, y0 = contours.crop_refine(grid, x0, y0, factor,
+                                                    job["box"])
+        else:
+            level = job["source"]
         middle_y = y0 + grid.shape[0] // (2 * contours.SIZE)
         step = contours.tile_step(level, middle_y, ellipsoid.A)
         wkt = QgsCoordinateReferenceSystem("EPSG:3857").toWkt()
-        # Сглаживание - как у горизонталей на глобусе. Пустые тайлы
-        # (NaN) оно растащило бы на соседей, тогда мозаика как есть.
-        if np.isfinite(grid).all():
-            grid = contours.smooth(grid.astype(np.float64))
         count = write_contours(
             grid, contours.mercator_transform(level, x0, y0, ellipsoid.A),
             wkt, step, job["path"])

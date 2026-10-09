@@ -218,6 +218,10 @@ EN = {
         "Map sheet designation",
     "Горизонтали":
         "Contours",
+    "через {step} м, утолщённые через {index} м":
+        "every {step} m, thicker every {index} m",
+    "В проект QGIS…":
+        "To the QGIS project…",
     "Сетевую ссылку…":
         "Network link…",
     "Загрузить заново":

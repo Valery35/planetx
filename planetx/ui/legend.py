@@ -16,7 +16,7 @@ from qgis.PyQt.QtCore import QEvent, QPointF, QRectF, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QFontMetrics, QLinearGradient, QPainter
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
-from ..core import (cutaway, fires, insolation, quakes, slope,
+from ..core import (contours, cutaway, fires, insolation, quakes, slope,
                     temperature)
 from ..i18n import tr
 from ..qt_compat import enum
@@ -106,6 +106,90 @@ class TemperatureLegend(Closable, QWidget):
                                  text)
         self._paint_close(painter)
         painter.end()
+
+
+class ContourLegend(Closable, QWidget):
+    """Шкала горизонталей: цвет линии, сечение в середине вида, шаг
+    утолщённых и ссылка «В проект QGIS…» - выгрузка горизонталей вида.
+    Крестик выключает горизонтали. Просьба автора от 9 октября 2026
+    года - выгрузку из меню на глобусе было не найти."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.step = 0.0
+        self.index = 0.0
+        self.color = QColor(*contours.LAND)
+        self.export = None  # окно ставит выгрузку
+        metrics = QFontMetrics(self.font())
+        self.line = metrics.height()
+        self.setFixedSize(BAR_WIDTH + 2 * PAD + 8, 3 * self.line + PAD + 2)
+        self.setCursor(enum(Qt, "CursorShape", "ArrowCursor"))
+
+    def set_step(self, step, palette):
+        land, _, _, shade = contours.PALETTES[palette]
+        color = QColor(*(int(c * shade) for c in land))
+        if step == self.step and color == self.color:
+            return
+        self.step = step
+        self.index = contours.index_step(step)
+        self.color = color
+        metrics = QFontMetrics(self.font())
+        text = tr("через {step} м, утолщённые через {index} м",
+                  step=contours.label_text(step),
+                  index=contours.label_text(self.index))
+        self.setFixedWidth(max(BAR_WIDTH + 2 * PAD + 8,
+                               PAD + 30 + metrics.horizontalAdvance(text)
+                               + PAD + CLOSE))
+        self.update()
+
+    def _link_rect(self):
+        top = PAD // 2 + 2 * self.line
+        return QRectF(PAD, top, BAR_WIDTH, self.line)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        _background(self, painter)
+        metrics = QFontMetrics(self.font())
+        top = PAD // 2
+        painter.setPen(TEXT)
+        painter.drawText(PAD, top + metrics.ascent(), tr("Горизонтали"))
+        y = top + self.line + self.line // 2
+        pen = painter.pen()
+        pen.setColor(self.color)
+        pen.setWidthF(2.0)
+        painter.setPen(pen)
+        painter.drawLine(PAD, y, PAD + 24, y)
+        painter.setPen(TEXT)
+        painter.drawText(PAD + 30, top + self.line + metrics.ascent(), tr(
+            "через {step} м, утолщённые через {index} м",
+            step=contours.label_text(self.step),
+            index=contours.label_text(self.index)))
+        if self.export is not None:
+            font = painter.font()
+            font.setUnderline(True)
+            painter.setFont(font)
+            painter.setPen(QColor(20, 90, 200))
+            rect = self._link_rect()
+            painter.drawText(int(rect.left()),
+                             int(rect.top()) + metrics.ascent(),
+                             tr("В проект QGIS…"))
+        self._paint_close(painter)
+        painter.end()
+
+    def mousePressEvent(self, event):
+        point = event.position() if hasattr(event, "position") \
+            else event.pos()
+        width = QFontMetrics(self.font()).horizontalAdvance(
+            tr("В проект QGIS…"))
+        link = self._link_rect()
+        link.setWidth(width)
+        if self.export is not None and link.contains(
+                QPointF(point.x(), point.y())):
+            event.accept()
+            self.export()
+            return
+        super().mousePressEvent(event)
 
 
 class InsolationLegend(QWidget):
