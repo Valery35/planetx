@@ -4440,8 +4440,11 @@ class GlobeWindow(QWidget):
                 for key in placetree.descendants(nodes, folder.key):
                     states[key] = states[folder.key]
         radio = {f.key for f in self.myplaces.folders if f.radio}
+        shown = {item.key for item in self.myplaces.places
+                 + self.myplaces.overlays + self.myplaces.folders
+                 if item.visible}
         self.myplaces.set_visible_many(
-            placetree.radio_states(nodes, radio, states))
+            placetree.radio_states(nodes, radio, states, shown))
 
     def _place_action(self, action, key):
         """Действие меню «Моих меток»: тур, папка, перелёт, имя,
@@ -5122,8 +5125,13 @@ class GlobeWindow(QWidget):
         self.handles.sync()
 
     def _end_prop_vertices(self, dialog):
+        """Снять ручки окна свойств dialog. Ручки рамки картинки
+        (BoxVertices) не наследуют PropVertices, поэтому окно узнаётся
+        по полю dialog. Иначе после закрытия окна с WA_DeleteOnClose
+        ручки обращались к удалённому окну, QGIS 3.40.15, 9 октября
+        2026 года."""
         tool = self.handles.tool
-        if isinstance(tool, PropVertices) and tool.dialog is dialog:
+        if getattr(tool, "dialog", None) is dialog:
             self.handles.tool = self.draw_vertices
             if self.view.vertex_tool is tool:
                 self.view.vertex_tool = self.wedge_corners \

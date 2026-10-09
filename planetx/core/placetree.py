@@ -115,17 +115,30 @@ def sort_plan(nodes, parent):
     return {n.key: i for i, n in enumerate(kids)}
 
 
-def radio_states(nodes, radio, states):
+def radio_states(nodes, radio, states, shown=()):
     """Флажки с учётом папок-переключателей radio (ключи папок): в такой
     папке включён не больше чем один ребёнок. Если включили одного -
     соседи гаснут. Если включили сразу несколько, как флажком самой
     папки, остаётся первый по списку. Выбранный ребёнок щелчком
     по нему не гаснет, как переключатель, погасить всех можно только
-    флажком самой папки. states - {ключ: включён}, возвращается
-    дополненный словарь."""
+    флажком самой папки. states - {ключ: включён}, shown - ключи,
+    видимые до щелчка. Возвращается дополненный словарь.
+
+    Флажок папки-переключателя в панели не трёхпозиционный, детям он
+    сам не передаётся. Снятый флажок папки гасит всех детей,
+    поставленный включает первого, если ни один не виден. Прежде
+    папка с одним видимым ребёнком была «частично отмечена», щелчок
+    по ней включал всех, и погасить снимки было нельзя, 9 октября
+    2026 года."""
     out = dict(states)
     for folder in radio:
         kids = [n.key for n in children(nodes, folder)]
+        if folder in states and not any(k in states for k in kids):
+            if not states[folder]:
+                out.update({k: False for k in kids})
+            elif kids and not any(k in shown for k in kids):
+                out[kids[0]] = True
+            continue
         lit = [k for k in kids if states.get(k)]
         if not lit:
             if folder not in states:

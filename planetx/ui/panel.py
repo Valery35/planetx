@@ -1101,7 +1101,14 @@ class LayerPanel(QWidget):
                 item.setData(0, RADIO_ROLE, self._radio_parent(parent))
                 item.setData(0, RADIO_FOLDER_ROLE, bool(folder.radio))
                 item.setIcon(0, folder_icon)
-                item.setFlags(item.flags() | CHECKABLE | TRISTATE)
+                # Флажок папки-переключателя не трёхпозиционный: он
+                # отмечен, пока виден ребёнок, и сам детям не передаётся.
+                # Снятый гасит всех (core/placetree.radio_states).
+                radio = bool(folder.radio and folder.expandable and kids)
+                flags = item.flags() | CHECKABLE
+                if not radio:
+                    flags |= TRISTATE
+                item.setFlags(flags)
                 if folder.description:
                     item.setToolTip(0, folder.description)
                 if folder.expandable:
@@ -1110,7 +1117,11 @@ class LayerPanel(QWidget):
                     # Папка без раскрытия: строки детей не показываются,
                     # их видимость следует флажку самой папки.
                     kids = []
-                if not kids:
+                if radio:
+                    lit = any(getattr(k[0] if isinstance(k, tuple) else k,
+                                      "visible", False) for k in kids)
+                    item.setCheckState(0, CHECKED if lit else UNCHECKED)
+                elif not kids:
                     item.setCheckState(0, CHECKED if folder.visible
                                        else UNCHECKED)
                 item.setExpanded(folder.expanded)

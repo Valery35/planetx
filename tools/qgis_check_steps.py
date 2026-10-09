@@ -5428,6 +5428,31 @@ def overlays_add():
         dialog.reject()
 
 
+@check(200)
+def overlays_box_close():
+    # Окно рамки картинки закрыто в overlays_add, Qt его удалил. До
+    # 9 октября 2026 года ручки рамки (BoxVertices) оставались на виде
+    # и падали на удалённом окне в sync и paintEvent, QGIS 3.40.15.
+    # Ошибки слотов и событий идут в sys.excepthook.
+    window = state["window"]
+    tool = window.handles.tool
+    caught = []
+    hook = sys.excepthook
+    sys.excepthook = lambda kind, value, tb: caught.append(repr(value))
+    try:
+        try:
+            window.handles.sync()
+            window.handles.grab()
+        except RuntimeError as error:
+            caught.append(repr(error))
+    finally:
+        sys.excepthook = hook
+    result["overlays"]["box_close"] = {
+        "tool": type(tool).__name__,
+        "dialog_tool": hasattr(tool, "dialog"),
+        "errors": caught}
+
+
 @check(1500)
 def overlays_check():
     window = state["window"]

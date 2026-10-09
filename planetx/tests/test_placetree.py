@@ -159,6 +159,23 @@ class TestFolderTools(unittest.TestCase):
                                "folder:2": False})
         self.assertFalse(any(out.values()))
 
+    def test_radio_folder_unchecked_hides_children(self):
+        # Флажок папки-переключателя снят, дети в states не пришли:
+        # все гаснут. Прежде снимки демо «Аральское море» погасить
+        # было нельзя, 9 октября 2026 года.
+        out = pt.radio_states(tree(), {"folder:1"}, {"folder:1": False},
+                              shown={"line:2"})
+        self.assertEqual(out, {"folder:1": False, "line:2": False,
+                               "folder:2": False})
+
+    def test_radio_folder_checked_shows_first_once(self):
+        out = pt.radio_states(tree(), {"folder:1"}, {"folder:1": True})
+        self.assertEqual(out, {"folder:1": True, "line:2": True})
+        # Уже виден второй - отметка папки ничего не меняет.
+        out = pt.radio_states(tree(), {"folder:1"}, {"folder:1": True},
+                              shown={"folder:2"})
+        self.assertEqual(out, {"folder:1": True})
+
     def test_plain_folder_untouched(self):
         states = {"line:2": True, "folder:2": True}
         self.assertEqual(pt.radio_states(tree(), set(), states), states)
