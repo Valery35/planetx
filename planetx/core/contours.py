@@ -58,6 +58,15 @@ LEVEL = 17
 # кубически (upsample). Замер 9 октября 2026 года, жалоба автора
 # «плохо строит».
 SOURCE_LEVEL = 12
+# Рамка тайла высот из строк соседей перед пересчётом, пиксели.
+FRAME = 3
+# Глубины морей у Terrarium надёжны до уровня SEA_LEVEL. Глубже в морях
+# нули (Японский жёлоб, Чёрное море на 11-12) или пятна до -13 км, в
+# Атлантике - глубины. Замер 9 октября 2026 года, жалоба автора -
+# изолинии на воде «зависают и не строятся». Тайл, у которого тайл
+# уровня SEA_LEVEL целиком глубже SEA_DEPTH метров, берёт глубины оттуда.
+SEA_LEVEL = 10
+SEA_DEPTH = -50.0
 LAND = (150, 85, 30)  # коричневый топографических карт
 WATER = (40, 95, 175)  # изобаты
 OPACITY = 0.85
@@ -304,6 +313,30 @@ def _bilinear(img, y, x):
     return np.where(inside, v, 0.0)
 
 
+def footprint_high(tile_heights, tile_key, key):
+    """Наибольшая высота тайла высот tile_key (предка key) под
+    тайлом key с полосой в пиксель вокруг."""
+    scale = 1 << (key[0] - tile_key[0])
+    size = SIZE / scale
+    c0 = (key[1] - tile_key[1] * scale) * size
+    r0 = (key[2] - tile_key[2] * scale) * size
+    lo_c = max(int(math.floor(c0)) - 1, 0)
+    lo_r = max(int(math.floor(r0)) - 1, 0)
+    hi_c = min(int(math.ceil(c0 + size)) + 1, SIZE)
+    hi_r = min(int(math.ceil(r0 + size)) + 1, SIZE)
+    return float(np.max(tile_heights[lo_r:hi_r, lo_c:hi_c]))
+
+
+def source_level(key, sea_high, land_level=SOURCE_LEVEL):
+    """Уровень тайла высот, по которому строятся горизонтали тайла key.
+    sea_high - наибольшая высота тайла уровня SEA_LEVEL над key или
+    None, если его нет: целиком глубже SEA_DEPTH - открытое море, глубины
+    с SEA_LEVEL, иначе - land_level. Не глубже самого key."""
+    if sea_high is not None and sea_high < SEA_DEPTH:
+        return min(key[0], SEA_LEVEL)
+    return min(key[0], land_level)
+
+
 def _cubic(p0, p1, p2, p3, t):
     """Кубическая кривая Катмулла-Рома через четыре значения."""
     return p1 + 0.5 * t * (p2 - p0 + t * (2.0 * p0 - 5.0 * p1 + 4.0 * p2
@@ -311,15 +344,50 @@ def _cubic(p0, p1, p2, p3, t):
                                                       + p3 - p0)))
 
 
-def upsample(heights, source, key):
+def upsample(heights, source, key, neighbor=None, smoothed=False):
     """Высоты тайла key по высотам тайла-предка source (z, x, y):
     кубический пересчёт без изломов по сетке предка, массив (256,
-    256). За краем предка - его крайние значения."""
+    256). neighbor(ключ) - высоты соседнего тайла уровня source или
+    None: их строки встают за край, без них значения за краем
+    продолжаются линейно. smoothed - сначала сгладить предка вместе
+    с этой рамкой (smooth)."""
+    big = _framed(heights, source, neighbor)
+    if smoothed:
+        big = smooth(big)
     scale = 1 << (key[0] - source[0])
     pos = (np.arange(SIZE) + 0.5) / scale - 0.5
     off_x = (key[1] - (source[1] * scale)) * SIZE / scale
     off_y = (key[2] - (source[2] * scale)) * SIZE / scale
-    return _resample(heights, off_y + pos, off_x + pos)
+    return _sample(big, FRAME, off_y + pos, off_x + pos)
+
+
+def _framed(heights, source, neighbor):
+    """Тайл высот с рамкой FRAME пикселей: строки соседей, где они
+    есть, иначе линейное продолжение. Без соседей у тайлов из разных
+    предков уровня 10 горизонтали расходились на шве на 3-5 м при шаге
+    высот 0.15 м внутри, у Японского жёлоба 9 октября 2026 года."""
+    big = np.pad(np.asarray(heights, dtype=np.float64), FRAME,
+                 mode="reflect", reflect_type="odd")
+    if neighbor is None:
+        return big
+    z, x, y = source
+    n = 1 << z
+    parts = {-1: (slice(0, FRAME), slice(SIZE - FRAME, SIZE)),
+             0: (slice(FRAME, FRAME + SIZE), slice(0, SIZE)),
+             1: (slice(FRAME + SIZE, None), slice(0, FRAME))}
+    for dy in (-1, 0, 1):
+        if not 0 <= y + dy < n:
+            continue
+        for dx in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            other = neighbor((z, (x + dx) % n, y + dy))
+            if other is None:
+                continue
+            rows, src_rows = parts[dy]
+            cols, src_cols = parts[dx]
+            big[rows, cols] = np.asarray(other)[src_rows, src_cols]
+    return big
 
 
 def crop_refine(grid, x0, y0, factor, box):
@@ -341,21 +409,29 @@ def crop_refine(grid, x0, y0, factor, box):
 
 def _resample(values, ys, xs):
     """Значения values в дробных строках ys и столбцах xs (отсчёт от
-    центров пикселей) кубически, за краем - крайние значения."""
-    values = np.asarray(values, dtype=np.float64)
-    big = np.pad(values, 2, mode="edge")
-    xs = np.clip(xs, 0.0, values.shape[1] - 1.0) + 2.0
-    ys = np.clip(ys, 0.0, values.shape[0] - 1.0) + 2.0
+    центров пикселей) кубически, за краем - линейное продолжение."""
+    big = np.pad(np.asarray(values, dtype=np.float64), 2, mode="reflect",
+                 reflect_type="odd")
+    return _sample(big, 2, ys, xs)
+
+
+def _sample(big, pad, ys, xs):
+    """Кубическая выборка массива big с рамкой pad пикселей вокруг
+    данных: ys и xs - строки и столбцы данных, не дальше полупикселя
+    за краем."""
+    rows, cols = big.shape[0] - 2 * pad, big.shape[1] - 2 * pad
+    xs = np.clip(xs, -0.5, cols - 0.5) + pad
+    ys = np.clip(ys, -0.5, rows - 0.5) + pad
     x0 = np.floor(xs).astype(int)
     y0 = np.floor(ys).astype(int)
     tx = (xs - x0)[None, :]
     ty = (ys - y0)[:, None]
-    rows = []
+    out = []
     for dy in (-1, 0, 1, 2):
         r = big[(y0 + dy)[:, None], x0[None, :] + np.array(
             [-1, 0, 1, 2])[:, None, None]]
-        rows.append(_cubic(r[0], r[1], r[2], r[3], tx))
-    return _cubic(rows[0], rows[1], rows[2], rows[3], ty)
+        out.append(_cubic(r[0], r[1], r[2], r[3], tx))
+    return _cubic(out[0], out[1], out[2], out[3], ty)
 
 
 def smooth(h):

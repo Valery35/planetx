@@ -6810,6 +6810,58 @@ def contours_perm_osm():
         window.contour_legend.isHidden()
 
 
+def _isobath_pixels(view):
+    """Голубые пиксели изобат на снимке (палитра imagery) в кадре."""
+    import numpy as np
+    from planetx.net.loader import image_to_rgba
+    rgba = image_to_rgba(view.grabFramebuffer()).astype(int)
+    r, g, b = rgba[..., 0], rgba[..., 1], rgba[..., 2]
+    return int(((b > 200) & (g > 160) & (r < 170) & (b - r > 60)).sum())
+
+
+@check(25000, manual=True)
+def contours_japan():
+    """Изобаты над Японским жёлобом с 30 км."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_sea_depths(True)
+    window.set_extra("contours", True)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(38.0, 143.9, 30000.0, 0.0, 0.0))
+
+
+@check(25000, manual=True)
+def contours_japan_far():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_japan_30km.png"))
+    source = window.gibs_loaders["contours"].source
+    out = result["contours_japan"] = {
+        "far_pixels": _isobath_pixels(view),
+        "far_levels": sorted(set(source.levels.values())),
+        "far_textures": len(view.gibs["contours"].textures)}
+    out["palette"] = window._contour_palette
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(38.0, 143.9, 5000.0, 0.0, 0.0))
+
+
+@check(500, manual=True)
+def contours_japan_near():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_japan_5km.png"))
+    source = window.gibs_loaders["contours"].source
+    out = result["contours_japan"]
+    out["near_pixels"] = _isobath_pixels(view)
+    out["near_levels"] = sorted(set(source.levels.values()))
+    out["legend_step"] = window.contour_legend.step
+    out["gl"] = dict(view.gl_errors)
+
+
 @check(500)
 def contours_export():
     """Горизонтали вида над Эльбрусом - слоем GeoPackage в проект."""

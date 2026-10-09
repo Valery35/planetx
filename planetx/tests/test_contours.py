@@ -152,6 +152,58 @@ class TestUpsample(unittest.TestCase):
         want = ct.upsample(a, (12, 10, 20), (14, 41, 82))
         self.assertTrue(np.allclose(out, want))
 
+    def test_footprint_high_reads_own_window(self):
+        heights = np.full((256, 256), -5000.0)
+        heights[:, 200:] = 100.0  # берег справа
+        # Тайл на 4 уровня глубже, левый верхний - глубина.
+        self.assertEqual(ct.footprint_high(heights, (10, 0, 0),
+                                           (14, 0, 0)), -5000.0)
+        self.assertEqual(ct.footprint_high(heights, (10, 0, 0),
+                                           (14, 15, 0)), 100.0)
+
+    def test_seam_between_parents_is_small(self):
+        # Плавная поверхность на двух соседних предках: пересчёт каждого
+        # из своего предка у шва почти совпадает.
+        c = np.arange(512, dtype=np.float64)
+        surface = np.tile(0.001 * (c - 200.0) ** 2, (256, 1))
+        left, right = surface[:, :256], surface[:, 256:]
+        a = ct.upsample(left, (10, 0, 0), (15, 31, 0))
+        b = ct.upsample(right, (10, 1, 0), (15, 32, 0))
+        # Последний столбец левого и первый правого - соседние пиксели.
+        step = abs(b[:, 0] - a[:, -1]).max()
+        slope = abs(np.diff(a[0])).max()
+        self.assertLess(step, 2.0 * slope)
+
+    def test_neighbour_rows_close_the_seam(self):
+        # Шероховатая поверхность на двух предках одна над другой: без
+        # соседей шов на краю, с их строками - как шаг внутри тайла.
+        rng = np.random.default_rng(3)
+        surface = np.cumsum(rng.normal(size=(512, 256)), axis=0) * 3.0
+        upper, lower = surface[:256], surface[256:]
+        tiles = {(10, 0, 0): upper, (10, 0, 1): lower}
+        key_up, key_down = (14, 5, 15), (14, 5, 16)
+
+        def seam(neighbor):
+            a = ct.upsample(upper, (10, 0, 0), key_up, neighbor, True)
+            b = ct.upsample(lower, (10, 0, 1), key_down, neighbor, True)
+            inner = np.abs(np.diff(a, axis=0)).mean()
+            return np.abs(b[0] - a[-1]).mean() / inner
+        self.assertLess(seam(tiles.get), 3.0)
+        self.assertGreater(seam(None), 6.0)
+
+    def test_open_sea_takes_depths_from_sea_level(self):
+        # Японский жёлоб: тайл уровня 10 целиком глубже 5 км - глубины
+        # с уровня 10, на 11-12 у Terrarium там нули.
+        self.assertEqual(ct.source_level((15, 1, 1), -5483.0), ct.SEA_LEVEL)
+        # Берег и суша - уровень съёмки, без сведений - тоже.
+        self.assertEqual(ct.source_level((15, 1, 1), 120.0),
+                         ct.SOURCE_LEVEL)
+        self.assertEqual(ct.source_level((15, 1, 1), None), ct.SOURCE_LEVEL)
+        self.assertEqual(ct.source_level((15, 1, 1), -10.0),
+                         ct.SOURCE_LEVEL)
+        # Не глубже самого тайла.
+        self.assertEqual(ct.source_level((8, 1, 1), -5000.0), 8)
+
     def test_min_step(self):
         self.assertEqual(ct.tile_step(18, 80000, R), ct.MIN_STEP)
         self.assertEqual(ct.MIN_STEP, 5.0)

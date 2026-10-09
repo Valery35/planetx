@@ -293,7 +293,9 @@ The interval is never finer than 5 m. The open Earth heights were
 surveyed with a 20-90 m spacing, detailed tiles are their resampling.
 Close up the contours are therefore built from smoothed heights with
 about a 20 m spacing, resampled smoothly. The lines have no steps,
-small terrain forms do not show on them. Own terrain from a project
+small terrain forms do not show on them. Open sea depths exist in these
+data only on overview levels, so depth contours in the open sea are
+built from them close up too. Own terrain from a project
 raster and an own height source give contours at full detail.
 
 Thicker contours are labelled with their height, as on a topographic

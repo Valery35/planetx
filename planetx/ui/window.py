@@ -51,7 +51,6 @@ from ..core.contours import (LEVEL as CONTOUR_LEVEL,
                              SOURCE_LEVEL as CONTOUR_SOURCE, contour_rgba)
 from ..core.contours import is_imagery as contour_is_imagery
 from ..core.contours import view_step as contour_view_step
-from ..core.contours import smooth as contour_smooth
 from ..core.contours import upsample as contour_upsample
 from ..core.slope import aspect_rgba, slope_aspect, slope_rgba
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, ancestor, decode
@@ -111,7 +110,7 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       set_visible_on_map, visible_on_map, write_flag,
                       write_grids, write_insets, write_shown)
 from .inset import DeepSource, terrain_prepare
-from .contours import ContourExport, digit_glyphs
+from .contours import ContourExport, ContourSource, digit_glyphs
 from .netlink import LinkDialog, NetLinks
 from .extrude import ExtrudeManager
 from .sources import SourcesDialog
@@ -292,17 +291,23 @@ def slope_prepare(mode, floor, radius, insets=(), encoding="terrarium"):
 
 
 def contours_prepare(floor, radius, insets=(), encoding="terrarium",
-                     glyphs=None, source_level=TERRAIN_MAX, palette="map"):
+                     glyphs=None, levels=None, palette="map", store=None):
     """Работа рабочего потока для тайла горизонталей: высоты Terrarium
     с врезками своего рельефа, линии и подписи core/contours.py
     цифрами glyphs и мипмапы."""
     def prepare(key, rgba):
         heights = decode(rgba, floor, encoding)
+        # Соседи тайла высот - из хранилища вида, только читаются.
+        neighbor = None if store is None else \
+            (lambda k: getattr(store.tiles.get(k), "heights", None))
+        # Уровень тайла высот решён при запросе (ContourSource), у тел -
+        # сам тайл.
+        source_level = levels(key) if levels is not None else key[0]
         if key[0] > source_level:
             # Глубже уровня съёмки - сглаженный предок, пересчитанный
             # кубически (core.contours.SOURCE_LEVEL).
-            heights = contour_upsample(contour_smooth(heights),
-                                       ancestor(key, source_level), key)
+            heights = contour_upsample(heights, ancestor(key, source_level),
+                                       key, neighbor, smoothed=True)
         if insets:
             heights = apply_insets(insets, key, heights)
         return mip_chain(contour_rgba(heights, key[0], key[2], radius,
@@ -1690,20 +1695,22 @@ class GlobeWindow(QWidget):
         self.contour_legend.show()
         self._update_contour_legend()
         source, floor, insets = found
-        level = source.max_level
+        levels = None
         if self.planet.earth:
-            # Глубже уровня съёмки - по предку (DeepSource, upsample).
-            # Свой источник высот бывает подробнее, у него - уровень 15.
-            level = CONTOUR_SOURCE if source.url == datasources.TERRAIN_URL \
+            # Глубже уровня съёмки - по предку (ContourSource, upsample),
+            # в открытом море - по уровню глубин. Свой источник высот
+            # бывает подробнее, у него - уровень 15.
+            land = CONTOUR_SOURCE if source.url == datasources.TERRAIN_URL \
                 else TERRAIN_MAX
-            source = DeepSource("Terrarium", source.url, level)
+            source = ContourSource(source.url, self.view.store, land)
+            levels = source.level_of
         self.view.gibs["contours"].max_level = CONTOUR_LEVEL \
             if self.planet.earth else source.max_level
         encoding = self._terrain_choice()[1] if self.planet.earth \
             else "terrarium"
         self._set_gibs("contours", True, (source, contours_prepare(
-            floor, ellipsoid.A, insets, encoding, digit_glyphs(), level,
-            self._contour_palette)), cache=True)
+            floor, ellipsoid.A, insets, encoding, digit_glyphs(), levels,
+            self._contour_palette, self.view.store)), cache=True)
 
     def _palette_for(self, source):
         """Цвета горизонталей по подложке: imagery - снимок, map -

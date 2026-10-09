@@ -15,7 +15,7 @@ from qgis.PyQt.QtCore import QObject, QTimer
 from qgis.PyQt.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter
 from qgis.PyQt.QtWidgets import QFileDialog
 
-from ..core import contours, ellipsoid
+from ..core import basemap, contours, ellipsoid
 from ..core import sources as datasources
 from ..core.sync import ground_size
 from ..core.terrain import ancestor, resample
@@ -23,12 +23,15 @@ from ..i18n import tr
 from ..net.loader import image_to_rgba
 from ..net.overlay import STROKE_WIDTH
 from ..qt_compat import enum
-from .inset import warm
+from .inset import DeepSource, warm
 
 NODATA = -99999.0
 LINE_COLOR = "150,85,30"  # как у горизонталей на глобусе
 LINE_WIDTH = 0.25  # мм, утолщённые - вдвое толще
 WAIT = 30.0  # с ожидания тайлов высот, дальше - по тем, что есть
+# Самый мелкий уровень тайла высот, по которому решается, открытое ли
+# море под тайлом горизонталей (sea_high).
+SEA_COARSEST = 5
 POLL = 300  # мс между проверками пришедших тайлов
 
 # Кегль цифр подписи в пикселях тайла. Тексель тайла на экране -
@@ -107,6 +110,48 @@ def write_contours(values, transform, wkt, step, path):
     return None if code != 0 else count
 
 
+def sea_high(store, key):
+    """Наибольшая высота под тайлом key по ближайшему загруженному
+    тайлу высот уровней contours.SEA_LEVEL и мельче, или None."""
+    if key[0] < contours.SEA_LEVEL:
+        return None
+    for level in range(contours.SEA_LEVEL, SEA_COARSEST - 1, -1):
+        parent = ancestor(key, level)
+        tile = store.tiles.get(parent)
+        if tile is not None:
+            return contours.footprint_high(tile.heights, parent, key)
+    return None
+
+
+class ContourSource(DeepSource):
+    """Источник высот горизонталей: тайл глубже уровня съёмки -
+    адрес предка (core.contours.source_level). Уровень решается при
+    запросе по хранилищу высот вида и помнится в levels, по нему
+    рабочий поток пересчитывает тайл (window.contours_prepare)."""
+
+    __slots__ = ("store", "land_level", "levels")
+
+    def __init__(self, url, store, land_level):
+        super().__init__("Terrarium", url, land_level)
+        self.store = store
+        self.land_level = land_level
+        self.levels = {}
+
+    def level_of(self, key):
+        level = self.levels.get(key)
+        if level is None:
+            level = contours.source_level(key, sea_high(self.store, key),
+                                          self.land_level)
+            self.levels[key] = level
+        return level
+
+    def tile_url(self, z, x, y):
+        level = self.level_of((z, x, y))
+        if z > level:
+            z, x, y = ancestor((z, x, y), level)
+        return basemap.tile_url(self.url, z, x, y)
+
+
 class ContourExport(QObject):
     """Выгрузка горизонталей в проект QGIS.
 
@@ -154,7 +199,13 @@ class ContourExport(QObject):
         # (core.contours.SOURCE_LEVEL), свой источник - как есть.
         source = level
         if window._terrain_choice()[0] == datasources.TERRAIN_URL:
-            source = min(level, contours.SOURCE_LEVEL)
+            # Открытое море - глубины с уровня SEA_LEVEL, если он
+            # целиком глубже SEA_DEPTH у всех тайлов участка.
+            highs = [sea_high(view.store, key) for key in keys]
+            deep = all(h is not None and h < contours.SEA_DEPTH
+                       for h in highs)
+            source = min(level, contours.SEA_LEVEL if deep
+                         else contours.SOURCE_LEVEL)
         box = (min(k[1] for k in keys), min(k[2] for k in keys),
                max(k[1] for k in keys), max(k[2] for k in keys))
         keys = sorted({ancestor(key, source) for key in keys})
