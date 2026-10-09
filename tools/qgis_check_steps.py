@@ -7187,6 +7187,24 @@ def netlink_example_wait():
 
 
 @check(500)
+def journal_check():
+    """Журнал работы модуля: файл, строка загрузки, сторож зависания."""
+    from planetx import journal
+    name = journal.path()
+    with open(name, encoding="utf-8") as fh:
+        lines = fh.read().splitlines()
+    timer = journal._state["timer"]
+    result["journal"] = {
+        "path": name,
+        "lines": len(lines),
+        "started": any("PlanetX" in line and "QGIS" in line
+                       for line in lines),
+        "watchdog": timer is not None and timer.isActive(),
+        "hangs": sum("не отвечал" in line or "not respond" in line
+                     for line in lines)}
+
+
+@check(500)
 def sentinel_open():
     """Снимок Sentinel-2 у Перми: каталог года по сети, сцены тайла
     40VDK, первая сцена - слоем проекта на глобусе."""
