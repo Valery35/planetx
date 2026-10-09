@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.59.0
+version=0.60.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.59.0 Depth contours in the open sea stay visible close
+changelog=0.60.0 Closing the properties window of a ground image
+      fitted by a box no longer brings a Python error window while
+      moving the globe. Unchecking a radio folder, for example the
+      MODIS images of the Aral Sea demo, hides all its places, before
+      it switched to the next image. The Work log button of the About
+      window opens the plugin log, if QGIS does not respond for more
+      than 10 s the log records where it stopped.
+      0.59.0 Depth contours in the open sea stay visible close
       up, before they vanished or broke, for example east of Japan.
       Contours no longer break at tile borders.
       0.58.0 Contours run smoothly without steps and square
