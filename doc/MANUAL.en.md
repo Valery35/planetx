@@ -1976,6 +1976,23 @@ in the same menu.
 
 ---
 
+## Log
+
+The plugin keeps a log in the file `PlanetX/planetx.log` of the QGIS
+profile folder. The Log button of the About window opens it in the
+system program. The log records the versions of the plugin, QGIS, Qt
+and Python, the graphics card, the opening and closing of the globe
+window, the choice of maps and layers, the base map, the body and
+the demo, the Python errors of the plugin and the SSL errors of
+QGIS network requests with the certificate owner.
+
+When QGIS does not respond for more than 10 s, the log receives the
+stacks of all Python threads. When QGIS responds again, the log gets
+a line with the length of the pause. This shows where QGIS hung even
+when it had to be closed. A log larger than 1 MB is renamed to
+`planetx.1.log`, and a new one starts. The log file helps with an
+error report.
+
 ## Limitations
 
 - Project layers lie on the terrain as a picture, a layer cannot be

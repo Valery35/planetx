@@ -182,12 +182,25 @@ class AboutDialog(QDialog):
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Close"), self)
         buttons.rejected.connect(self.reject)
+        log = buttons.addButton(
+            tr("Журнал работы"),
+            enum(QDialogButtonBox, "ButtonRole", "ActionRole"))
+        log.setToolTip(tr(
+            "Открывает журнал модуля программой системы. В журнале - "
+            "события модуля, ошибки Python и стеки потоков, если QGIS "
+            "не отвечал дольше 10 с. Файл пригодится при сообщении "
+            "об ошибке."))
+        log.clicked.connect(self._open_journal)
         body = QHBoxLayout()
         body.addWidget(logo, 0)
         body.addWidget(text, 1)
         layout = QVBoxLayout(self)
         layout.addLayout(body)
         layout.addWidget(buttons)
+
+    def _open_journal(self):
+        from .. import journal
+        journal.open_journal()
 
 
 def show_about(parent=None):

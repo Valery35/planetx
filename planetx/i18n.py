@@ -12,6 +12,21 @@ import os
 __all__ = ["tr", "is_russian", "set_language", "EN"]
 
 EN = {
+    "Журнал работы": "Log",
+    "Открывает журнал модуля программой системы. В журнале - события "
+    "модуля, ошибки Python и стеки потоков, если QGIS не отвечал "
+    "дольше 10 с. Файл пригодится при сообщении об ошибке.":
+        "Opens the plugin log in the system program. The log holds "
+        "plugin events, Python errors and the stacks of threads when "
+        "QGIS did not respond for more than 10 s. The file helps with "
+        "an error report.",
+    "Главный поток QGIS не отвечал {seconds} с.":
+        "The QGIS main thread did not respond for {seconds} s.",
+    "Ошибка Python:": "Python error:",
+    "Ошибки SSL запроса {number}:": "SSL errors of request {number}:",
+    "Модуль выгружен.": "The plugin is unloaded.",
+    "Окно глобуса открыто.": "The globe window is open.",
+    "Окно глобуса закрыто.": "The globe window is closed.",
     "Загрузка подложки: {done} из {total}":
         "Loading base map: {done} of {total}",
     "Подложка не загрузилась: {error}":

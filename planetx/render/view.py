@@ -19,6 +19,7 @@ from qgis.PyQt.QtCore import (QObject, QRunnable, QThreadPool, Qt, QTimer,
 from qgis.PyQt.QtGui import QImage, QSurfaceFormat
 from qgis.PyQt.QtWidgets import QApplication
 
+from .. import journal
 from ..core import cutaway, lod, skydata
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
@@ -1231,6 +1232,8 @@ class GlobeView(QOpenGLWidget):
             "renderer": GL.glGetString(GL.GL_RENDERER).decode(),
             "gl": GL.glGetString(GL.GL_VERSION).decode(),
         }
+        journal.note("OpenGL {}, {}".format(self.gl_info["gl"],
+                                            self.gl_info["renderer"]))
         if self.gl_info["version"] < (3, 3):
             self.error = self.gl_info["gl"]
             return

@@ -7,7 +7,9 @@ import os
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QIcon
 
+from . import journal
 from .i18n import tr
+from .meta import plugin_version
 from .qt_compat import QAction, enum
 
 MINIMIZED = enum(Qt, "WindowState", "WindowMinimized")
@@ -28,6 +30,7 @@ class PlanetXPlugin:
         self.window = None
 
     def initGui(self):
+        journal.start(plugin_version())
         self.action = QAction(QIcon(ICON), "PlanetX", self.iface.mainWindow())
         self.action.triggered.connect(self.run)
         self.iface.addPluginToWebMenu("PlanetX", self.action)
@@ -83,6 +86,7 @@ class PlanetXPlugin:
         loader = sys.modules.get(__package__ + ".net.loader")
         if loader is not None:
             loader.remove_user_agent()
+        journal.stop()
 
     def about(self):
         from .ui.about import show_about
@@ -107,6 +111,7 @@ class PlanetXPlugin:
             window.closed.connect(
                 lambda window=window: self._window_gone(window))
             self.window = window
+            journal.note(tr("Окно глобуса открыто."))
         # Окно глобуса принадлежит главному окну QGIS, своей кнопки
         # на панели задач Windows у него нет. Свёрнутое окно
         # разворачивается значком PlanetX, show() одно этого не делает.

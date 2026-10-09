@@ -26,6 +26,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QVBoxLayout, QWidget)
 from qgis.utils import iface
 
+from .. import journal
 from ..core import (basemap, clouds, ellipsoid, lookat, stars, sun,
                     temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
@@ -1137,6 +1138,8 @@ class GlobeWindow(QWidget):
         без кнопки «Обновить». Решение автора от 27 сентября 2026 года.
         """
         self._groups = set(groups) & set(VECTOR_GROUPS)
+        journal.note("line_groups {}".format(
+            ",".join(sorted(self._groups)) or "-"))
         settings = QgsSettings()
         for group in VECTOR_GROUPS:
             settings.setValue(LINES_KEY.format(group), group in self._groups)
@@ -1160,6 +1163,7 @@ class GlobeWindow(QWidget):
             QgsSettings().setValue(EXTRA_KEY + other, False)
             self.panel.set_extras({other: False})
         self.extras[key] = bool(on)
+        journal.note("set_extra {} {}".format(key, bool(on)))
         QgsSettings().setValue(EXTRA_KEY + key, bool(on))
         self.panel.set_extras({key: bool(on)})
         self._apply_extra(key, bool(on))
@@ -1241,6 +1245,7 @@ class GlobeWindow(QWidget):
         # Температура суши и моря - тоже карта витрины, просьба автора
         # от 7 октября 2026 года.
         chosen = key
+        journal.note("set_theme {}".format(chosen or "-"))
         key = key if key in themes.BY_KEY else ""
         self._theme_open_time = bool(key) and key != self.theme_key \
             and not self.timebar.shown()
@@ -2241,6 +2246,7 @@ class GlobeWindow(QWidget):
         """Земля, Марс или Луна. Размеры тела, подложка, воздух,
         земные слои и вид - всё сразу. Камера встаёт над домашней
         точкой тела."""
+        journal.note("set_body {}".format(key))
         if key == "sky":
             self.show_sky()
             return
@@ -2497,6 +2503,7 @@ class GlobeWindow(QWidget):
     def _switch_basemap(self, source, coarse=False):
         if source is self.source:
             return
+        journal.note("basemap {}".format(source.name))
         old = self.loader
         old.abort()
         old.deleteLater()
@@ -3503,6 +3510,7 @@ class GlobeWindow(QWidget):
         subsurface после
         сцены строится подземное из planetx/demo/subsurface. У japan
         открывается окно «Разрез» по первому пути папки демо без тура."""
+        journal.note("open_demo {}".format(name))
         demo = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                             "demo")
         key = self.open_scene(os.path.join(demo, name + EXTENSION))
@@ -6189,6 +6197,7 @@ class GlobeWindow(QWidget):
     def closeEvent(self, event):
         # Сообщение о закрытии уходит и после ошибки по дороге, иначе
         # плагин держит ссылку на окно, которое Qt уже уничтожил.
+        journal.note(tr("Окно глобуса закрыто."))
         try:
             # Закрытое окно Qt удаляет позже. До того правки проекта, в том
             # числе его очистка при выходе QGIS, будили бы окно, и оно
