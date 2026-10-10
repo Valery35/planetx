@@ -2,6 +2,7 @@
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Снимки Sentinel-2: каталог STAC, участок, облачность, продукты."""
+import math
 import os
 import sys
 import unittest
@@ -179,6 +180,39 @@ def landsat_item(platform="landsat-9", thermal="lwir11"):
                            "landsat:wrs_path": "166",
                            "landsat:wrs_row": "020"},
             "assets": assets}
+
+
+class TestThermalFill(unittest.TestCase):
+    def test_formula_inverts_radiance_and_keeps_usgs(self):
+        # Излучение сцены, построенное из 300 К и ε травы, формула
+        # обращает обратно. Где USGS дал значение, оно остаётся.
+        k1, k2 = s2.THERMAL_K["9"]
+        ndvi = 0.7
+        eps = float(s2.emissivity(np.array([ndvi]))[0])
+        self.assertAlmostEqual(eps, 0.99, places=4)
+        black = k1 / (math.exp(k2 / 300.0) - 1.0)
+        tau, up, down = 0.8, 1.2, 2.0
+        trad = tau * eps * black + up + tau * (1.0 - eps) * down
+        red, nir = 0.03, 0.03 * (1 + ndvi) / (1 - ndvi)
+        shape = (1, 2)
+        bands = {"lwir": np.array([[np.nan, 290.0]], np.float32),
+                 "trad": np.full(shape, trad, np.float32),
+                 "atran": np.full(shape, tau, np.float32),
+                 "urad": np.full(shape, up, np.float32),
+                 "drad": np.full(shape, down, np.float32),
+                 "red": np.full(shape, red, np.float32),
+                 "nir08": np.full(shape, nir, np.float32)}
+        kelvin, share = s2.thermal_fill(bands, "9")
+        self.assertAlmostEqual(float(kelvin[0, 0]), 300.0, places=2)
+        self.assertEqual(float(kelvin[0, 1]), 290.0)
+        self.assertAlmostEqual(share, 0.5)
+        self.assertIn("trad", s2.needed(["lst"], "landsat", fill=True))
+        self.assertNotIn("trad", s2.needed(["lst"], "landsat"))
+
+    def test_emissivity_classes(self):
+        eps = s2.emissivity(np.array([-0.3, 0.1, 0.35, 0.8]))
+        self.assertEqual([round(float(e), 3) for e in eps],
+                         [0.991, 0.973, 0.987, 0.99])
 
 
 class TestSide(unittest.TestCase):

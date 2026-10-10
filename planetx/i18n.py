@@ -73,6 +73,121 @@ EN = {
     "остаются пустыми, индексы по ним не считаются.":
         "Pixels of clouds, their shadows and cirrus by the cloud mask of the "
         "scene stay empty, indices are not computed over them.",
+    "Дыры температуры - по формуле":
+        "Temperature gaps by formula",
+    "USGS не считает температуру там, где нет излучательной способности "
+    "из базы ASTER GED, на большей части России это половина участка "
+    "и больше. С флажком такие пиксели считаются той же формулой USGS из "
+    "излучения и атмосферы сцены, излучательная способность - по NDVI. Где "
+    "USGS посчитал, отличие в среднем меньше 0.5 °C.":
+        "USGS does not compute the temperature where the ASTER GED database "
+        "has no emissivity, over most of Russia that is half of the area or "
+        "more. With the check box such pixels are computed by the same USGS "
+        "formula from the radiance and atmosphere of the scene, the "
+        "emissivity comes from NDVI. Where USGS computed the value, the "
+        "mean difference is below 0.5 °C.",
+    "Температура поверхности USGS Collection 2 Level-2. {share} % пикселей "
+    "посчитаны формулой USGS с излучательной способностью по NDVI - там, "
+    "где у USGS значения нет.":
+        "Surface temperature of USGS Collection 2 Level-2. {share} % of the "
+        "pixels are computed by the USGS formula with the emissivity from "
+        "NDVI - where USGS has no value.",
+    "Батиметрия водоёма":
+        "Water body bathymetry",
+    "Батиметрия водоёма…":
+        "Water body bathymetry…",
+    "Растр глубин или отметок дна озера, моря или водохранилища ложится в "
+    "рельеф глобуса, над ним - полупрозрачная вода на уровне водоёма. В окне "
+    "задаются, что в растре, и уровень воды.":
+        "A raster of depths or bed elevations of a lake, sea or reservoir "
+        "goes into the globe terrain, above it - semi-transparent water at "
+        "the water body level. The window sets what the raster holds and "
+        "the water level.",
+    "Растр «{name}» ложится в рельеф глобуса дном водоёма, над ним рисуется "
+    "вода на уровне водоёма. Уровень по умолчанию - высота рельефа в "
+    "середине растра, у озера это обычно поверхность воды.":
+        "The raster \"{name}\" goes into the globe terrain as the bed of "
+        "the water body, water is drawn above it at the water body level. "
+        "The default level is the terrain height in the middle of the "
+        "raster, for a lake it is usually the water surface.",
+    "Значения - глубины":
+        "Values are depths",
+    "Глубина под поверхностью воды, со знаком плюс или минус. Отметка дна - "
+    "уровень воды минус глубина.":
+        "The depth below the water surface, with a plus or minus sign. The "
+        "bed elevation is the water level minus the depth.",
+    "Значения - отметки дна":
+        "Values are bed elevations",
+    "Высота дна над уровнем моря, как у рельефа. Уровень воды нужен только "
+    "для поверхности воды.":
+        "The bed height above sea level, like the terrain. The water level "
+        "is needed only for the water surface.",
+    "Высота поверхности воды над уровнем моря. Вода рисуется на этой высоте "
+    "над всеми точками, где дно ниже.":
+        "The height of the water surface above sea level. The water is "
+        "drawn at this height over all points where the bed is lower.",
+    "Уровень воды":
+        "Water level",
+    "Убрать батиметрию":
+        "Remove bathymetry",
+    "Растр перестаёт быть рельефом глобуса, вода над ним не рисуется.":
+        "The raster is no longer the globe terrain, no water is drawn over "
+        "it.",
+    "Бриенцское озеро, своя батиметрия":
+        "Lake Brienz, own bathymetry",
+    "Бриенцское озеро, дно":
+        "Lake Brienz, bed",
+    "Благородные металлы":
+        "Precious metals",
+    "Цветные металлы":
+        "Base metals",
+    "Чёрные и легирующие металлы":
+        "Iron and alloy metals",
+    "Редкие металлы, литий, алюминий":
+        "Rare metals, lithium, aluminum",
+    "Уголь, уран, геотермальные":
+        "Coal, uranium, geothermal",
+    "Алмазы и самоцветы":
+        "Diamonds and gems",
+    "Нерудные и строительные":
+        "Industrial and construction",
+    "Прочие":
+        "Other",
+    "Месторождения USGS":
+        "USGS mineral deposits",
+    "Крупное месторождение мира":
+        "Major deposit of the world",
+    "Месторождения":
+        "Mineral deposits",
+    "Месторождения, рудники и проявления полезных ископаемых USGS - база "
+    "MRDS, около 300 тысяч точек, больше всего в США, и 3 тысячи крупных "
+    "месторождений мира. Цвет - группа полезного ископаемого, большая точка "
+    "- крупное месторождение. Щелчок показывает название, ископаемые, тип и "
+    "ссылку на запись USGS. Первое включение скачивает около 25 МБ.":
+        "Mineral deposits, mines and occurrences of USGS - the MRDS "
+        "database, about 300 thousand points, most of them in the USA, and "
+        "3 thousand major deposits of the world. The colour is the "
+        "commodity group, a large point is a major deposit. A click shows "
+        "the name, commodities, type and a link to the USGS record. The "
+        "first switch-on downloads about 25 MB.",
+    "Загрузка месторождений USGS, около 25 МБ…":
+        "Loading USGS mineral deposits, about 25 MB…",
+    "Месторождения не загрузились: {error}":
+        "Mineral deposits did not load: {error}",
+    "Месторождения не разобраны: {error}":
+        "Mineral deposits were not parsed: {error}",
+    "Полезные ископаемые":
+        "Commodities",
+    "Стадия или модель":
+        "Status or model",
+    "Страна":
+        "Country",
+    "Набор":
+        "Dataset",
+    "Крупные месторождения мира, USGS OFR 2005-1294":
+        "Major mineral deposits of the world, USGS OFR 2005-1294",
+    "Запись USGS":
+        "USGS record",
     "Запрос ключа доступа к файлам…":
         "Requesting the file access key…",
     "Температура поверхности днём, °C":

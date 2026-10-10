@@ -28,8 +28,9 @@ from qgis.PyQt.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel,
                                  QListWidgetItem, QToolButton,
                                  QVBoxLayout)
 
-from ..core import (clouds, contours, cutaway, fires, paleo, plates, quakes,
-                    slope, stars, sun, temperature, themes, weather)
+from ..core import (clouds, contours, cutaway, deposits, fires, paleo,
+                    plates, quakes, slope, stars, sun, temperature, themes,
+                    weather)
 from ..core import satellites as satellites_core
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
@@ -50,6 +51,7 @@ SAT_GROUP = "satellites"
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
+          ("deposits", "depths"),
           ("cutaway", "depths"), ("paleo", "depths"), ("slope", "terrain"),
           ("aspect", "terrain"), ("contours", "terrain"))
 # Слои, которые есть и вне Земли: звёзды везде, уклон - где есть высоты.
@@ -110,6 +112,14 @@ def layer_names():
             "глубине, линия ведёт к эпицентру на поверхности. "
             "Цвет показывает глубину очага, размер - магнитуду. "
             "Сводка загружается при включении строки.")),
+        "deposits": (tr("Месторождения"), tr(
+            "Месторождения, рудники и проявления полезных ископаемых "
+            "USGS - база MRDS, около 300 тысяч точек, больше всего в США, "
+            "и 3 тысячи крупных месторождений мира. Цвет - группа "
+            "полезного ископаемого, большая точка - крупное "
+            "месторождение. Щелчок показывает название, ископаемые, тип "
+            "и ссылку на запись USGS. Первое включение скачивает около "
+            "25 МБ.")),
         "plates": (tr("Границы плит"), tr(
             "Границы литосферных плит по модели PB2002. Красные - "
             "раздвиг плит на хребтах и рифтах, зелёные - сдвиг "
@@ -438,6 +448,8 @@ def layer_ramp(key):
     """Цвета шкалы слоя без своей картинки."""
     if key == "quakes":
         return [color for _, color in quakes.DEPTH_STOPS]
+    if key == "deposits":
+        return [group[2] for group in deposits.GROUPS]
     if key == "slope":
         return [color for _, color in slope.SLOPE_STOPS]
     return [color for _, color in slope.ASPECT_STOPS]

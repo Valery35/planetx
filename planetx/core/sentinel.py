@@ -75,6 +75,20 @@ TEMPERATURE = ((-20.0, 45.0),
                 (10.0, (224, 243, 248)), (20.0, (254, 224, 144)),
                 (30.0, (244, 109, 67)), (45.0, (165, 0, 38))))
 KELVIN = 273.15
+# Дыры температуры Landsat. USGS считает температуру поверхности по
+# излучательной способности из ASTER GED, где её нет - нет и
+# температуры: у Якутска летом 2024 года пусто 86-100 % участка, хотя
+# излучение и атмосфера (ST_TRAD, ST_ATRAN, ST_URAD, ST_DRAD) целые.
+# Формула та же, что у USGS: L = (TRAD - URAD - τ(1 - ε)DRAD) / (τε),
+# T = K2 / ln(K1 / L + 1), ε - по NDVI сцены (порог NDVI, Sobrino и др.
+# 2004): вода 0.991, голая почва 0.973, растительность 0.986-0.99.
+# K1, K2 теплового канала - из метаданных Landsat. Сверка 10 октября
+# 2026 года там, где USGS посчитал, - средняя разница -0.5…+0.1 K, 95 %
+# точек не дальше 1.9 K (Пермь, L5 и L9, Якутск, L9).
+THERMAL_K = {"4": (671.62, 1284.30), "5": (607.76, 1260.56),
+             "7": (666.09, 1282.71), "8": (774.8853, 1321.0789),
+             "9": (799.0284, 1329.2405)}
+FILL_BANDS = ("trad", "atran", "urad", "drad", "red", "nir08")
 PAGE = 100  # сцен на страницу ответа каталога
 MAX_SCENES = 400  # сцен в поиске, дальше страницы не просятся
 # Классы SCL: 0 нет данных, 1 насыщенные и дефектные, 3 тени облаков,
@@ -473,14 +487,15 @@ def clear_mask(scene, raw):
 
 # Каналы и выдача.
 
-def needed(products, mission="sentinel2"):
-    """Каналы сцены для продуктов: ключи ресурсов STAC."""
+def needed(products, mission="sentinel2", fill=False):
+    """Каналы сцены для продуктов: ключи ресурсов STAC. fill - дыры
+    температуры Landsat закрываются формулой (thermal_fill)."""
     if modis.is_modis(mission):
         return modis.needed(products)
     keys = []
     for product in products:
         if product == "lst":
-            bands = ("lwir",)
+            bands = ("lwir",) + (FILL_BANDS if fill else ())
         elif product in COMPOSITES:
             bands = COMPOSITES[product]
         else:
@@ -511,6 +526,37 @@ def normalized_difference(a, b):
     out[~(total > MIN_SUM)] = np.nan
     np.clip(out, -1.0, 1.0, out=out)
     return out.astype(np.float32)
+
+
+def emissivity(ndvi):
+    """Излучательная способность по NDVI: вода, почва, смесь почвы
+    и растительности по доле покрытия, сплошная растительность."""
+    cover = np.clip((ndvi - 0.2) / 0.3, 0.0, 1.0) ** 2
+    out = np.where(ndvi < 0.2, 0.973, 0.986 + 0.004 * cover)
+    out = np.where(ndvi < 0.0, 0.991, out)
+    out = np.where(ndvi > 0.5, 0.99, out)
+    return out.astype(np.float32)
+
+
+def thermal_fill(bands, number):
+    """Температура поверхности, К: значения USGS, а их дыры - по формуле
+    (см. THERMAL_K). bands - каналы с масштабом каталога, number - номер
+    Landsat. Возвращает (кельвины, доля пикселей по формуле)."""
+    kelvin = bands["lwir"].astype(np.float32, copy=True)
+    k1, k2 = THERMAL_K.get(str(number), THERMAL_K["8"])
+    ndvi = normalized_difference(bands["nir08"], bands["red"])
+    eps = emissivity(ndvi)
+    tau = bands["atran"]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        radiance = (bands["trad"] - bands["urad"]
+                    - tau * (1.0 - eps) * bands["drad"]) / (tau * eps)
+        formula = k2 / np.log(k1 / radiance + 1.0)
+    formula[~(radiance > 0.0)] = np.nan
+    holes = ~np.isfinite(kelvin) & np.isfinite(formula)
+    kelvin[holes] = formula[holes]
+    known = np.isfinite(kelvin).sum()
+    share = float(holes.sum() / known) if known else 0.0
+    return kelvin.astype(np.float32), share
 
 
 def product(name, bands, mission="sentinel2"):

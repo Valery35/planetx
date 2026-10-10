@@ -16,8 +16,8 @@ from qgis.PyQt.QtCore import QEvent, QPointF, QRectF, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QFontMetrics, QLinearGradient, QPainter
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
-from ..core import (contours, cutaway, fires, insolation, quakes, slope,
-                    temperature)
+from ..core import (contours, cutaway, deposits, fires, insolation, quakes,
+                    slope, temperature)
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -371,6 +371,61 @@ class FireLegend(Closable, QWidget):
             left = min(max(x - width / 2, 0.0), self.width() - width)
             painter.drawText(int(left),
                              int(bar.bottom()) + 2 + metrics.ascent(), text)
+        self._paint_close(painter)
+        painter.end()
+
+
+def deposit_group_names():
+    """Названия групп полезных ископаемых по core.deposits.GROUPS и
+    прочих."""
+    return {"precious": tr("Благородные металлы"),
+            "base": tr("Цветные металлы"),
+            "iron": tr("Чёрные и легирующие металлы"),
+            "rare": tr("Редкие металлы, литий, алюминий"),
+            "energy": tr("Уголь, уран, геотермальные"),
+            "gems": tr("Алмазы и самоцветы"),
+            "industrial": tr("Нерудные и строительные"),
+            "other": tr("Прочие")}
+
+
+class DepositLegend(Closable, QWidget):
+    """Шкала месторождений: цвет - группа полезного ископаемого
+    (core.deposits.GROUPS), крупное месторождение мира - большая
+    точка."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        line = QFontMetrics(self.font()).height()
+        self.setFixedSize(BAR_WIDTH + 2 * PAD + 8,
+                          line * (len(deposits.GROUPS) + 3) + PAD)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        _background(self, painter)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        top = PAD // 2
+        painter.setPen(TEXT)
+        painter.drawText(PAD, top + metrics.ascent(),
+                         tr("Месторождения USGS"))
+        names = deposit_group_names()
+        rows = [(g[2], names[g[0]]) for g in deposits.GROUPS] \
+            + [(deposits.OTHER_COLOR, names["other"])]
+        y = top + line
+        for rgb, name in rows:
+            painter.setPen(QColor(*rgb).darker(250))
+            painter.setBrush(QColor(*rgb))
+            painter.drawEllipse(QPointF(PAD + 8, y + line / 2), 4.0, 4.0)
+            painter.setPen(TEXT)
+            painter.drawText(PAD + 18, y + metrics.ascent(), name)
+            y += line
+        painter.setPen(QColor(*deposits.GROUPS[0][2]).darker(250))
+        painter.setBrush(QColor(*deposits.GROUPS[0][2]))
+        painter.drawEllipse(QPointF(PAD + 8, y + line / 2), 6.5, 6.5)
+        painter.setPen(TEXT)
+        painter.drawText(PAD + 18, y + metrics.ascent(),
+                         tr("Крупное месторождение мира"))
         self._paint_close(painter)
         painter.end()
 

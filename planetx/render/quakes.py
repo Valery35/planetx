@@ -19,7 +19,7 @@ from ..core import quakes as core
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.fires import colors as fire_colors
 from ..core.fires import sizes as fire_sizes
-from ..core.subsurface import display
+from ..core.subsurface import display, ecef
 from . import gpu
 
 GL_PROGRAM_POINT_SIZE = 0x8642
@@ -214,3 +214,106 @@ class FirePoints(Quakes):
         self.lats = lat
         self.lons = lon
         self.times = fires.time
+
+
+class DepositPoints(Quakes):
+    """Месторождения USGS (core/deposits.py): точки на рельефе, цвет -
+    группа полезного ископаемого, размер - крупное месторождение или
+    стадия освоения. Точек около 300 тысяч, поэтому нормали считаются
+    один раз, а в кадре - не больше LIMIT видимых точек в порядке
+    важности: крупные месторождения мира, действующие и прежние
+    рудники, остальные - в постоянном перемешанном порядке."""
+
+    LIMIT = 80000
+    NEAR = 6.0  # высот глаза до самой дальней точки низко над Землёй
+    FAR = 3.0e6  # м, выше глаз берёт всю видимую полусферу
+
+    def __init__(self):
+        super().__init__()
+        self.stems = False
+        self.data = None
+        self.up = np.zeros((0, 3))
+
+    def set_deposits(self, data, scale, ground):
+        """Месторождения core.deposits.Deposits или None. scale -
+        масштаб рельефа, ground(lats, lons) - отметки рельефа."""
+        from ..core import deposits as dp
+        self.data = data if data is not None and len(data) else None
+        if self.data is None:
+            self.focus = np.zeros((0, 3))
+            self.epicenter = self.focus
+            return
+        lat, lon = data.lat, data.lon
+        # Порядок важности: крупные, рудники, остальные перемешаны -
+        # при пределе точек вид заполняется ровно, а не по порядку
+        # файла.
+        rank = np.where(data.major, 0,
+                        np.where(data.status <= 2, 1, 2)).astype(np.int64)
+        shuffle = np.random.default_rng(0).permutation(len(data))
+        order = np.lexsort((shuffle, rank))
+        self.order = order
+        lat, lon = lat[order], lon[order]
+        g = np.asarray(ground(lat, lon), dtype=np.float64)
+        self.focus = ecef(lat, lon, display(g, scale, g))
+        self.epicenter = self.focus
+        self.up = core.surface_normal(lat, lon)
+        rgb = dp.colors(data.group[order])
+        self.colors = np.hstack([rgb / 255.0, np.full((len(rgb), 1), 0.9)]) \
+            .astype(np.float32)
+        self.sizes = dp.sizes(data.major[order],
+                              data.status[order]).astype(np.float32)
+        self.lats = lat
+        self.lons = lon
+        self.times = np.full(len(lat), np.nan)
+
+    def visible(self, eye):
+        """Номера видимых точек (в порядке важности), не больше LIMIT.
+        Низко над Землёй точки дальше NEAR высот глаза не берутся: предел
+        тратится на то, что в кадре, а не на всю видимую полусферу."""
+        eye = np.asarray(eye, dtype=np.float64)
+        to_eye = eye - self.focus
+        seen = np.einsum("ij,ij->i", self.up, to_eye) > 0.0
+        height = float(np.linalg.norm(eye)) - 6371000.0
+        if height < self.FAR:
+            reach = self.NEAR * max(height, 1000.0)
+            seen &= np.einsum("ij,ij->i", to_eye, to_eye) < reach * reach
+        return np.nonzero(seen)[0][:self.LIMIT]
+
+    def draw(self, camera, ratio):
+        self.drawn = 0
+        if self.program is None or self.data is None:
+            return
+        eye = np.asarray(camera.eye, dtype=np.float64)
+        seen = self.visible(eye)
+        n = len(seen)
+        if not n:
+            return
+        dots = np.empty((n, 8), dtype=np.float32)
+        dots[:, 0:3] = self.focus[seen] - eye
+        dots[:, 3] = self.sizes[seen]
+        dots[:, 4:8] = self.colors[seen]
+        mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
+                                   dtype=np.float32)
+        loc = self.locations
+        GL.glUseProgram(self.program)
+        GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
+        GL.glUniform1f(loc["u_ratio"], float(ratio))
+        GL.glBindVertexArray(self.vao)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, dots.nbytes, dots,
+                        GL.GL_STREAM_DRAW)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL_PROGRAM_POINT_SIZE)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                               GL.GL_ZERO, GL.GL_ONE)
+        try:
+            GL.glUniform1f(loc["u_points"], 1.0)
+            GL.glDrawArrays(GL.GL_POINTS, 0, n)
+            self.drawn = n
+        finally:
+            GL.glBindVertexArray(0)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            GL.glDisable(GL.GL_BLEND)
+            GL.glDisable(GL_PROGRAM_POINT_SIZE)
+            GL.glEnable(GL.GL_DEPTH_TEST)

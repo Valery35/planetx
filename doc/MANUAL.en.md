@@ -358,8 +358,8 @@ it loads. When the window opens, the row is off.
 
 The Maps and layers row of the Layers section opens the gallery. It holds NASA and weather maps and three groups of layers.
 Sky and light holds Stars, Clouds, Sun and Satellites. Inside the
-Earth holds Earthquakes, Plate boundaries, Earth cutaway and
-Paleogeography. Terrain analysis holds Slope, Aspect and Contours. A click switches a layer on or off
+Earth holds Earthquakes, Plate boundaries, Mineral deposits, Earth
+cutaway and Paleogeography. Terrain analysis holds Slope, Aspect and Contours. A click switches a layer on or off
 independently of other layers and of the map, a layer that is on has
 a green badge. The Satellites tab of the gallery shows cards of the
 satellite groups. A click on a card shows or removes a group. The
@@ -471,6 +471,23 @@ Identify mode shows the boundary type, the plate pair and the speed of
 their relative motion in mm/yr. In the plate pair a slash in Bird's
 notation shows which plate goes under which: "PA\OK" is the Pacific
 plate under the Okhotsk plate.
+
+The Mineral deposits layer shows mineral deposits, mines and
+occurrences of the U.S. Geological Survey (USGS) from two datasets. The
+MRDS database is about 300 thousand points, about 267 thousand of them
+in the USA and about 1400 in Russia, USGS has not updated it since
+2011. Major mineral deposits of the world (USGS OFR 2005-1294) is 3161
+deposits, 300 of them in Russia, they show as large points. The point
+colour is the group of the first commodity, the group scale is in the
+lower left corner of the view. The size of an MRDS point is the
+development status, a producing mine is larger than an occurrence. A
+click in the Identify mode shows the name, commodities, type, status,
+country and a link to the USGS record. The first switch-on downloads
+the USGS archives, about 25 MB, and parses them in a background thread,
+which takes 15-20 s. The result is kept as a file in the QGIS profile,
+later switch-ons read it in 1-2 s. Over a large area, for example the
+whole USA, no more than 80 thousand points show. The major
+deposits and mines come first, then the rest.
 
 The Earthquakes layer shows earthquakes of magnitude 4.5 and above
 over the last 30 days from the feed of the U.S. Geological Survey
@@ -735,6 +752,32 @@ on top. The choice is kept in the project and in the scene.
 On the first switch-on the raster is converted into a file of the QGIS
 profile. For a survey of 2400 × 2400 pixels this takes about 2 s.
 
+### Own bathymetry
+
+A raster of depths or bed elevations of a lake, sea or reservoir goes
+into the globe terrain like own terrain, and semi-transparent water at
+the water body level is drawn above it. The Water body bathymetry… item
+of the raster menu in the Project layers section opens a window with
+three fields:
+
+- Values are depths - the depth below the water surface, with a plus or
+  minus sign. The bed elevation is the water level minus the absolute
+  depth.
+- Values are bed elevations - the bed height above sea level.
+- Water level - the height of the water surface. The default is the
+  terrain height in the middle of the raster, for a lake it is usually
+  the water surface.
+
+The water is drawn over all raster points where the bed is below the
+level, the bed is seen through it. Without terrain no water is drawn -
+the bed and the water would lie in one plane. Remove bathymetry turns
+off both the inset and the water. The choice is kept in the project.
+
+The Lake Brienz, own bathymetry demo of the Demo icon is the bed of Lake
+Brienz in Switzerland from swisstopo swissBATHY3D data with a 10 m step,
+water at 564 m. The deepest point is 308 m, 256 m below the water. The
+elevation profile across the lake shows the basin.
+
 ### Places section
 
 The section holds the My Places folder, described in the chapter
@@ -995,7 +1038,17 @@ product (ST_B10 of Landsat 8-9, ST_B6 of Landsat 4-7), not brightness
 temperature. USGS has already converted the radiance with the surface
 emissivity from the ASTER GED database and the atmosphere. The plugin
 converts the file value to kelvins by the scale and offset of the
-product and subtracts 273.15. The layers go to the Landsat group with the credit
+product and subtracts 273.15. Where the ASTER GED database has no
+emissivity, USGS does not compute the temperature. Over most of Russia
+that is half of the area or more, at Yakutsk in summer 2024 it is
+86-100 %. The Temperature gaps by formula check box, on by default,
+computes such pixels by the same USGS formula from the radiance and
+atmosphere of the scene (the ST_TRAD, ST_ATRAN, ST_URAD, ST_DRAD layers),
+the emissivity comes from NDVI. It is 0.991 for water, 0.973 for bare
+soil and 0.986-0.99 for vegetation. Where USGS computed the value itself, the mean difference is
+below 0.5 °C, for 95 % of the pixels not above 1.9 °C. The layer
+description tells what share of the pixels the formula computed. The
+layers go to the Landsat group with the credit
 "Landsat N image courtesy of the U.S. Geological Survey". The Whole
 scene by link method is not available for Landsat - the key lives an
 hour, and a layer of a saved project would not open later. Landsat 7

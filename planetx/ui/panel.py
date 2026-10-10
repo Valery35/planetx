@@ -417,6 +417,8 @@ class LayerPanel(QWidget):
     track_requested = pyqtSignal(object)
     # Растр проекта включён или выключен рельефом глобуса.
     inset_toggled = pyqtSignal(str, bool)
+    # Растр проекта - батиметрия водоёма: номер слоя (окно уровня воды).
+    bathymetry_requested = pyqtSignal(str)
     # Растр - поверхность по отметкам, пункт меню слоя.
     grid_toggled = pyqtSignal(str, bool)
     # Растр - изолинии в проект QGIS, пункт меню слоя.
@@ -1552,6 +1554,14 @@ class LayerPanel(QWidget):
                 "растра."))
             relief.toggled.connect(
                 lambda on: self.inset_toggled.emit(layer.id(), on))
+            lake = menu.addAction(tr("Батиметрия водоёма…"))
+            lake.setToolTip(tr(
+                "Растр глубин или отметок дна озера, моря или водохранилища "
+                "ложится в рельеф глобуса, над ним - полупрозрачная вода "
+                "на уровне водоёма. В окне задаются, что в растре, "
+                "и уровень воды."))
+            lake.triggered.connect(
+                lambda: self.bathymetry_requested.emit(layer.id()))
             grid = menu.addAction(tr("Поверхность по отметкам"))
             grid.setCheckable(True)
             grid.setChecked(layer.id() in self.grid_ids)

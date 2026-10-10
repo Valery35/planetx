@@ -44,7 +44,7 @@ from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
 from .subsurface import ImageWalls, Subsurface
-from .quakes import FirePoints, Quakes
+from .quakes import DepositPoints, FirePoints, Quakes
 from .satellites import SatellitePoints
 from .constellations import Constellations
 from .sky import Sky
@@ -345,6 +345,9 @@ class GlobeView(QOpenGLWidget):
         # Стенка разреза вдоль линии (окно «Разрез»): видна сквозь
         # поверхность.
         self.section_wall = Subsurface(xray=True)
+        # Вода водоёмов своей батиметрии (core/bathymetry.py): после
+        # поверхности, дно видно сквозь неё. Сетка на врезку.
+        self.lake_water = Subsurface(glass=True)
         # Выдавленные слои проекта (ui/extrude.py): призмы, столбики
         # и стенки над рельефом, сетка на слой.
         self.extruded = Subsurface()
@@ -354,6 +357,8 @@ class GlobeView(QOpenGLWidget):
         self.quakes = Quakes()
         # Пожары NASA FIRMS: очаги точками на рельефе.
         self.fires = FirePoints()
+        # Месторождения USGS (core/deposits.py): точки на рельефе.
+        self.deposits = DepositPoints()
         # Спутники - своей проекцией, геостационарные дальше дальней
         # плоскости вида (render/satellites.py).
         self.satellites = SatellitePoints()
@@ -1305,9 +1310,11 @@ class GlobeView(QOpenGLWidget):
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
         self.section_wall.init_gl()
+        self.lake_water.init_gl()
         self.extruded.init_gl()
         self.quakes.init_gl()
         self.fires.init_gl()
+        self.deposits.init_gl()
         self.satellites.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
@@ -1331,9 +1338,11 @@ class GlobeView(QOpenGLWidget):
         self.cutaway.release_gl()
         self.cutaway_slabs.release_gl()
         self.section_wall.release_gl()
+        self.lake_water.release_gl()
         self.extruded.release_gl()
         self.quakes.release_gl()
         self.fires.release_gl()
+        self.deposits.release_gl()
         self.satellites.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
@@ -1899,11 +1908,20 @@ class GlobeView(QOpenGLWidget):
                 self.camera, self.store.heights_at if self.store.scale
                 else None, self.store.version, ratio,
                 still=shot or not motion)
+        self.lake_water.prepare()
+        if self.lake_water.active and not self.show_holes:
+            self.lake_water.draw(self.camera)
+        else:
+            self.lake_water.drawn = 0
         self.section_wall.prepare()
         if self.section_wall.active and not self.show_holes:
             self.section_wall.draw(self.camera)
         else:
             self.section_wall.drawn = 0
+        if self.deposits.data is not None and not self.show_holes:
+            self.deposits.draw(self.camera, ratio)
+        else:
+            self.deposits.drawn = 0
         if self.fires.fires is not None and not self.show_holes:
             self.fires.draw(self.camera, ratio)
         else:

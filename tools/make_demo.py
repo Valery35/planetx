@@ -141,6 +141,14 @@ def around_folder():
     return KFolder("Окрестности", children=places)
 
 
+# Все строки раздела «Слои» выключены, кроме звёзд: демо своего рельефа
+# и батиметрии открываются без разреза Земли, очагов, тем и прочего,
+# что было включено до них. Замечание автора от 10 октября 2026 года.
+QUIET_EXTRAS = {key: key == "stars" for key in (
+    "grid", "stars", "clouds", "temperature", "buildings", "sun", "slope",
+    "aspect", "contours", "quakes", "cutaway", "paleo", "plates", "fires",
+    "satellites", "deposits")}
+
 EARTH_VIEW = {"basemap": "Esri World Imagery", "relief": True, "scale": 1.0,
               "groups": ["borders", "places", "roads", "water_names"],
               "extras": {"grid": False, "stars": True, "clouds": False,
@@ -581,11 +589,44 @@ def quarry():
                description="Отвал высотой 40 м в два яруса."),
     ]
     root = KFolder(title, children=places)
-    view = dict(EARTH_VIEW, scale=1.0,
-                extras=dict(EARTH_VIEW["extras"], buildings=False))
+    view = dict(EARTH_VIEW, scale=1.0, extras=QUIET_EXTRAS)
     scene = Scene((lat - 0.004, lon, 2600.0, 10.0, 62.0), None, [], view,
                   title, "Карьер")
     save("quarry", scene, root)
+
+
+# Бриенцское озеро: дно swissBATHY3D, planetx/demo/brienz/
+# brienzersee_bed.tif, его собирает tools/make_bathy_demo.py. Окно
+# кладёт растр в проект и включает его батиметрией - отметки дна,
+# уровень воды BRIENZ_LEVEL (GlobeWindow.open_demo). Точки - самое
+# глубокое место растра и концы профиля через него, вид - выбор
+# помощника.
+BRIENZ_DEEP = (46.72744, 7.9565)
+BRIENZ_PROFILE = ((46.7341, 7.95657), (46.70711, 7.95631))
+BRIENZ_LEVEL = 564.0
+
+
+def brienz():
+    title = "PlanetX: демо, Бриенцское озеро"
+    lat, lon = BRIENZ_DEEP
+    places = [
+        KPlace("Профиль через озеро", "line", list(BRIENZ_PROFILE),
+               color=YELLOW, width=3.0,
+               description="Путь с севера на юг через самое глубокое "
+                           "место, 3 км. В меню - «Профиль высот»: склоны "
+                           "котловины и плоское дно на 256 м ниже воды."),
+        KPlace("Самое глубокое место", "point", [(lat, lon)], color=ORANGE,
+               icon="water", view=(lat, lon, 2500.0, 250.0, 65.0),
+               description="Дно 308 м над уровнем моря, вода на 564 м. "
+                           "Данные - swissBATHY3D swisstopo, шаг 10 м. Растр "
+                           "в проекте QGIS, в меню слоя раздела «Слои "
+                           "проекта» - «Батиметрия водоёма…»."),
+    ]
+    root = KFolder(title, children=places)
+    view = dict(EARTH_VIEW, scale=1.0, extras=QUIET_EXTRAS)
+    scene = Scene((lat - 0.03, lon, 6000.0, 20.0, 65.0), None, [], view,
+                  title, "Бриенцское озеро")
+    save("brienz", scene, root)
 
 
 def main():
@@ -597,6 +638,7 @@ def main():
     vegas()
     aral()
     quarry()
+    brienz()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,

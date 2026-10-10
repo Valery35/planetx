@@ -12,6 +12,7 @@ import hashlib
 import html
 import math
 import os
+import zipfile
 import sys
 import time
 
@@ -62,6 +63,7 @@ from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
+from ..core import deposits as deposits_core
 from ..core import fires as fires_core
 from ..core import (crust, cutaway, insolation, pick, plates, quakes,
                     overlays, section, slabs, themes, viewshed)
@@ -72,6 +74,7 @@ from ..core.places import Place as MarkPlace  # метка найденного 
 from ..i18n import tr, ui_language
 from ..net.loader import TileLoader, set_moving
 from ..core import sources as datasources
+from ..net.gdalnet import executor
 from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            PLACES,
                            RAIL_FROM, RAILWAYS, VECTOR_GROUPS, label_kinds,
@@ -85,7 +88,8 @@ from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
 from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels, range_key
-from .legend import (BedsLegend, ContourLegend, CutawayLegend, FireLegend,
+from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
+                     FireLegend,
                      InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend,
                      TemperatureLegend, ThemeLegend)
@@ -109,9 +113,10 @@ from ..core import opacity
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
-                      read_flag, read_grids, read_insets, read_shown,
-                      set_visible_on_map, visible_on_map, write_flag,
-                      write_grids, write_insets, write_shown)
+                      read_bathymetry, read_flag, read_grids, read_insets,
+                      read_shown, set_visible_on_map, visible_on_map,
+                      write_bathymetry, write_flag, write_grids,
+                      write_insets, write_shown)
 from .inset import DeepSource, DemSource, terrain_prepare
 from .contours import ContourExport, ContourSource, digit_glyphs
 from .netlink import LinkDialog, NetLinks
@@ -120,6 +125,10 @@ from .sources import SourcesDialog
 from .inset import apply as apply_insets
 from .inset import prepare as prepare_inset
 from .inset import warm as warm_gdal
+from .inset import water_mesh
+from .bathymetry import REMOVE as BATHY_REMOVE, BathymetryDialog
+from .deposits import deposits_path, parse_deposits
+from .legend import deposit_group_names
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
@@ -156,6 +165,10 @@ CALC_BUDGET = 0.004  # с расчёта инсоляции за проход ц
 # Region KML пересчитывается, когда глаз ушёл на эту долю расстояния
 # до точки взгляда.
 REGION_MOVE = 0.02
+DEPOSIT_POLL = 300  # мс между проверками разбора месторождений
+# Уровень воды Бриенцского озера в демо, м: средний уровень 563.7 м
+# по swisstopo, округлён.
+BRIENZ_LEVEL = 564.0
 
 TERRAIN_ATTRIBUTION = (
     '<a href="https://github.com/tilezen/joerd/blob/master/docs/'
@@ -189,12 +202,14 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False, "contours": False,
                   "quakes": False, "cutaway": False, "paleo": False,
-                  "plates": False, "fires": False, "satellites": False}
+                  "plates": False, "fires": False, "satellites": False,
+                  "deposits": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
-                "cutaway", "paleo", "plates", "fires", "satellites")
+                "cutaway", "paleo", "plates", "fires", "satellites",
+                "deposits")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -585,6 +600,10 @@ class GlobeWindow(QWidget):
         self.quake_legend.hide()
         self.fire_legend = FireLegend(self.view)
         self.fire_legend.hide()
+        self.deposit_legend = DepositLegend(self.view)
+        self.deposit_legend.hide()
+        self.deposit_legend.closer = \
+            lambda: self.set_extra("deposits", False)
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -610,7 +629,8 @@ class GlobeWindow(QWidget):
         self.legend_panel = LegendPanel(self.view)
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
-                       self.fire_legend, self.insolation_legend,
+                       self.fire_legend, self.deposit_legend,
+                       self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
             self.legend_panel.add(legend)
@@ -676,6 +696,12 @@ class GlobeWindow(QWidget):
         # Пожары NASA FIRMS: очаги сводки и ждущий ответ.
         self.fire_data = None
         self._fire_reply = None
+        # Месторождения USGS: данные, ждущие ответы двух архивов, задача
+        # разбора в рабочем потоке.
+        self.deposit_data = None
+        self._deposit_replies = {}
+        self._deposit_bytes = {}
+        self._deposit_job = None
         # Плиты Slab2 на разрезах: указатель зон с рамками, пришедшие
         # зоны, ждущие ответы. Зона просится, когда разрез её касается.
         # slab_base - шаблон адреса зоны вместо slabs.URL, для проверки
@@ -746,6 +772,7 @@ class GlobeWindow(QWidget):
         # Масштаб ставится до первой загрузки, сетки сразу собираются
         # с ним.
         self.view.set_relief(self._relief_target())
+        self._update_water()
         self._applied_groups = None
         self._applied_layers = None
         # Слои проекта изменились с последнего обновления.
@@ -942,6 +969,7 @@ class GlobeWindow(QWidget):
         self._update_data_marks()
         self.panel.track_requested.connect(self._open_track)
         self.panel.inset_toggled.connect(self.set_inset)
+        self.panel.bathymetry_requested.connect(self.edit_bathymetry)
         self.panel.grid_toggled.connect(self.set_grid)
         self.panel.contours_requested.connect(
             lambda layer: self.contour_export.grid_contours(layer))
@@ -1221,6 +1249,8 @@ class GlobeWindow(QWidget):
             self._set_quakes(on)
         elif key == "fires":
             self._set_fires(on)
+        elif key == "deposits":
+            self._set_deposits(on)
         elif key == "cutaway":
             self._set_cutaway(on)
         elif key == "paleo":
@@ -1780,9 +1810,11 @@ class GlobeWindow(QWidget):
         QgsSettings().setValue(RELIEF_KEY, self._relief)
         self.panel.set_geo(self._groups, self._relief)
         self.view.set_relief(self._relief_target())
+        self._update_water()
         self.subsurface.relief_changed()
         self._place_quakes()
         self._place_fires()
+        self._place_deposits()
         if self._relief and self.terrain_loader is not None:
             self.terrain_loader.want((0, 0, 0), 1.0)
         self._sync_properties()
@@ -2101,8 +2133,10 @@ class GlobeWindow(QWidget):
         self.view.plain_base = shown
         if self._relief_target() != self.view.store.scale:
             self.view.set_relief(self._relief_target())
+            self._update_water()
             self._place_quakes()
             self._place_fires()
+            self._place_deposits()
         self._place_attribution()
         if not shown:
             self.paleo_bar.stop()
@@ -2177,6 +2211,7 @@ class GlobeWindow(QWidget):
                 self._fire_reply.abort()
             self._fire_reply = None
             self._place_fires()
+            self._place_deposits()
             return
         if self._fire_reply is None:
             self._fire_reply = fetch_bytes(fires_core.FEED, self._fires_done,
@@ -2195,6 +2230,93 @@ class GlobeWindow(QWidget):
                                error=error), time.monotonic())
             self._show_state()
         self._place_fires()
+        self._place_deposits()
+
+    def _set_deposits(self, on):
+        """Месторождения USGS - строка витрины. Первое включение
+        скачивает архивы MRDS и крупных месторождений мира, разбор идёт
+        в рабочем потоке, итог ложится файлом в профиль
+        (core/deposits.py). Дальше файл читается без сети."""
+        self._mark_gallery()
+        self.deposit_legend.setVisible(on and self.planet.earth
+                                       and self.view.sky_view is None)
+        if not on:
+            for reply in list(self._deposit_replies.values()):
+                reply.abort()
+            self._deposit_replies.clear()
+            self._place_deposits()
+            return
+        if self.deposit_data is None:
+            path = deposits_path()
+            if os.path.exists(path):
+                try:
+                    self.deposit_data = deposits_core.load(path)
+                except (OSError, ValueError, KeyError) as error:
+                    journal.note("deposits file: {}".format(error))
+        if self.deposit_data is not None:
+            self._place_deposits()
+            return
+        if self._deposit_replies or self._deposit_job is not None:
+            return
+        self._deposit_bytes = {}
+        for key, url in (("mrds", deposits_core.MRDS_URL),
+                         ("major", deposits_core.MAJOR_URL)):
+            self._deposit_replies[key] = fetch_bytes(
+                url, lambda data, error, key=key:
+                self._deposit_arrived(key, data, error))
+            self.view.data_pending += 1
+        self.message = (tr("Загрузка месторождений USGS, около 25 МБ…"),
+                        time.monotonic())
+        self._show_state()
+
+    def _deposit_arrived(self, key, data, error):
+        if self._deposit_replies.pop(key, None) is not None:
+            self.view.data_pending = max(0, self.view.data_pending - 1)
+        if data is None:
+            for reply in list(self._deposit_replies.values()):
+                reply.abort()
+            self._deposit_replies.clear()
+            self.message = (tr("Месторождения не загрузились: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+            return
+        self._deposit_bytes[key] = bytes(data)
+        if self._deposit_replies:
+            return
+        mrds = self._deposit_bytes.pop("mrds", None)
+        major = self._deposit_bytes.pop("major", None)
+        self._deposit_job = executor("deposits", 1).submit(
+            parse_deposits, mrds, major, deposits_path())
+        self.view.data_pending += 1
+        QTimer.singleShot(DEPOSIT_POLL, self._deposit_poll)
+
+    def _deposit_poll(self):
+        job = self._deposit_job
+        if job is None:
+            return
+        if not job.done():
+            QTimer.singleShot(DEPOSIT_POLL, self._deposit_poll)
+            return
+        self._deposit_job = None
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        try:
+            self.deposit_data = job.result()
+        except (OSError, ValueError, KeyError, StopIteration,
+                zipfile.BadZipFile) as error:
+            self.message = (tr("Месторождения не разобраны: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+            return
+        self._place_deposits()
+
+    def _place_deposits(self):
+        """Месторождения на глобус по нынешнему масштабу рельефа."""
+        on = self.extras.get("deposits", False) and self.planet.earth
+        self.view.deposits.set_deposits(
+            self.deposit_data if on else None, self.view.store.scale,
+            self._surface_ground)
+        self._show_attribution()
+        self.view.update()
 
     def _place_fires(self):
         """Очаги на глобус по нынешнему масштабу рельефа."""
@@ -2328,6 +2450,7 @@ class GlobeWindow(QWidget):
         self.view.sea_floor = self.sea_depths and planet.earth
         self._body_terrain(planet)
         self.view.set_relief(self._relief_target())
+        self._update_water()
         self.view.reset_places(self.source.max_level)
         self.view.label_kinds = label_kinds(self._groups) \
             if planet.earth else set()
@@ -2397,6 +2520,7 @@ class GlobeWindow(QWidget):
         self.insolation_legend.hide()
         self.quake_legend.hide()
         self.fire_legend.hide()
+        self.deposit_legend.hide()
         self.cutaway_legend.hide()
         self.theme_legend.hide()
         self.paleo_bar.hide()
@@ -2434,6 +2558,8 @@ class GlobeWindow(QWidget):
         self._quake_legend_state()
         self.fire_legend.setVisible(self.extras.get("fires", False)
                                     and self.planet.earth)
+        self.deposit_legend.setVisible(self.extras.get("deposits", False)
+                                       and self.planet.earth)
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
                                        and self.planet.earth)
         self.paleo_bar.setVisible(self._paleo_on())
@@ -2491,9 +2617,11 @@ class GlobeWindow(QWidget):
         if self.planet.earth:
             self._switch_basemap(self._earth_source())
         self.view.set_relief(self._relief_target())
+        self._update_water()
         self.subsurface.relief_changed()
         self._place_quakes()
         self._place_fires()
+        self._place_deposits()
         self._apply_vector(force=True)
         self._mark_dirty(False)
         self._show_attribution()
@@ -2676,6 +2804,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*quakes.ATTRIBUTION))
         if self.view.fires.fires is not None:
             parts.append(link_html(*fires_core.ATTRIBUTION))
+        if self.view.deposits.data is not None:
+            parts.append(link_html(*deposits_core.ATTRIBUTION))
         manager = getattr(self, "satellite_manager", None)
         if manager is not None and manager.on and manager.count():
             parts.append(link_html(*satellites_core.ATTRIBUTION))
@@ -3633,6 +3763,20 @@ class GlobeWindow(QWidget):
                 os.path.join(demo, "quarry", "quarry_dem.tif"))
             if layer_id is not None:
                 self.set_insets(read_insets() + [layer_id])
+        if name in ("quarry", "brienz") and self.theme_key:
+            # Демо своего рельефа - без карты витрины поверх снимка.
+            self.set_theme("")
+        if name == "brienz":
+            # Дно озера swissBATHY3D - отметки дна, вода на уровне озера.
+            layer_id = self._demo_raster(
+                tr("Бриенцское озеро, своя батиметрия"),
+                tr("Бриенцское озеро, дно"),
+                os.path.join(demo, "brienz", "brienzersee_bed.tif"))
+            if layer_id is not None:
+                lakes = read_bathymetry()
+                lakes[layer_id] = ("bed", BRIENZ_LEVEL)
+                write_bathymetry(lakes)
+                self.set_insets(read_insets() + [layer_id])
         return key
 
     def _demo_raster(self, title, name, path):
@@ -4020,6 +4164,7 @@ class GlobeWindow(QWidget):
         """Врезки своего рельефа из записи проекта. Нижний в проекте
         растр врезается первым, верхний - последним."""
         ids = read_insets()
+        lakes = read_bathymetry()
         order = {layer.id(): n for n, layer in enumerate(map_layers())}
         entries = []
         for layer_id in sorted(ids, key=lambda i: -order.get(i, -1)):
@@ -4029,7 +4174,7 @@ class GlobeWindow(QWidget):
             QApplication.setOverrideCursor(enum(Qt, "CursorShape",
                                                 "WaitCursor"))
             try:
-                entry = prepare_inset(layer)
+                entry = prepare_inset(layer, lakes.get(layer_id))
             finally:
                 QApplication.restoreOverrideCursor()
             if isinstance(entry, str):
@@ -4040,6 +4185,66 @@ class GlobeWindow(QWidget):
             entries.append(entry)
         self.insets = tuple(entries)
         self.panel.inset_ids = set(ids)
+        self._update_water()
+
+    def _update_water(self):
+        """Вода врезок с батиметрией на уровне водоёма (ui.inset.
+        water_mesh). Без рельефа и вне Земли воды нет: дно и вода
+        легли бы в одну плоскость."""
+        water = self.view.lake_water
+        water.clear()
+        scale = self._relief_target()
+        if not scale or not getattr(self, "planet", EARTH_PLANET).earth:
+            self.view.update()
+            return
+        for entry in getattr(self, "insets", ()):
+            if entry.lake is not None:
+                water.set_mesh(entry.layer_id, water_mesh(entry, scale))
+        self.view.update()
+
+    def edit_bathymetry(self, layer_id):
+        """Окно «Батиметрия водоёма» растра layer_id. OK - растр
+        становится врезкой с батиметрией, «Убрать» - перестаёт."""
+        layer = QgsProject.instance().mapLayer(layer_id)
+        if layer is None:
+            return None
+        lakes = read_bathymetry()
+        level = 0.0
+        extent = layer.extent()
+        if not extent.isEmpty():
+            # Высота рельефа в середине растра - обычно поверхность воды.
+            lat, lon = self._layer_center(layer)
+            if lat is not None:
+                level = float(self.view.store.heights_at(
+                    [lat], [lon], scaled=False)[0])
+                level = round(level, 1) if math.isfinite(level) else 0.0
+        dialog = BathymetryDialog(layer.name(), lakes.get(layer_id), level,
+                                  self)
+        result = dialog.exec()
+        ids = [i for i in read_insets() if i != layer_id]
+        if result == BATHY_REMOVE:
+            lakes.pop(layer_id, None)
+        elif result:
+            lakes[layer_id] = dialog.setting()
+            ids.append(layer_id)
+        else:
+            return None
+        write_bathymetry(lakes)
+        self.set_insets(ids)
+        return lakes.get(layer_id)
+
+    def _layer_center(self, layer):
+        """Середина охвата слоя в широте и долготе или (None, None)."""
+        from qgis.core import (QgsCoordinateReferenceSystem,
+                               QgsCoordinateTransform)
+        wgs = QgsCoordinateReferenceSystem("EPSG:4326")
+        try:
+            transform = QgsCoordinateTransform(layer.crs(), wgs,
+                                               QgsProject.instance())
+            point = transform.transform(layer.extent().center())
+        except QgsCsException:
+            return None, None
+        return point.y(), point.x()
 
     def set_inset(self, layer_id, on):
         """Растр проекта layer_id - рельеф глобуса или нет."""
@@ -5617,6 +5822,7 @@ class GlobeWindow(QWidget):
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
         groups += self._identify_fires(px, py)
+        groups += self._identify_deposits(px, py)
         groups = self._identify_satellites(px, py) + groups
         under = self.subsurface.identify(
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
@@ -6034,6 +6240,46 @@ class GlobeWindow(QWidget):
                                                      data.lon[n]),
                              values, None))
         return [(Group(tr("Пожары")), features)] if features else []
+
+    def _identify_deposits(self, px, py):
+        """Месторождения у точки щелчка на экране, не больше 20."""
+        layer = self.view.deposits
+        data = layer.data
+        if data is None:
+            return []
+        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
+        seen = layer.visible(eye)
+        if not len(seen):
+            return []
+        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
+        pixels, front = self.view.camera.project(layer.focus[seen])
+        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
+        near = np.nonzero(front & (gap <= radius))[0]
+        near = near[np.argsort(gap[near])][:20]
+        names = deposit_group_names()
+        keys = [g[0] for g in deposits_core.GROUPS] + ["other"]
+        features = []
+        for n in near:
+            record = int(layer.order[seen[n]])
+            name, country, commodities, kind, status, number = \
+                (data.text(record) + [""] * 6)[:6]
+            values = [(tr("Полезные ископаемые"), commodities),
+                      (tr("Группа"), names[keys[int(data.group[record])]])]
+            if kind:
+                values.append((tr("Тип"), kind))
+            if status:
+                values.append((tr("Стадия или модель"), status))
+            if country:
+                values.append((tr("Страна"), country))
+            values.append((tr("Набор"), tr("Крупные месторождения мира, "
+                                           "USGS OFR 2005-1294")
+                           if data.major[record] else "USGS MRDS"))
+            if number:
+                values.append((tr("Запись USGS"),
+                               deposits_core.MRDS_PAGE.format(number)))
+            features.append((name or "{:.4f}, {:.4f}".format(
+                data.lat[record], data.lon[record]), values, None))
+        return [(Group(tr("Месторождения")), features)] if features else []
 
     def _plate_names(self):
         """Подписи групп и классов границ плит на языке интерфейса."""

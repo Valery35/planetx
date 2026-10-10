@@ -34,11 +34,15 @@ class Subsurface:
     xray - сетки видны сквозь поверхность, без проверки и записи
     глубины, как стенка разреза вдоль линии (core.section.wall_mesh).
     Рисуются после поверхности, порядок полос - порядок в сетке.
+    glass - полупрозрачные сетки после поверхности с проверкой глубины,
+    но без её записи: вода водоёмов своей батиметрии
+    (core/bathymetry.py), дно под ней видно сквозь неё.
     """
 
-    def __init__(self, offset=False, xray=False):
+    def __init__(self, offset=False, xray=False, glass=False):
         self.offset = offset
         self.xray = xray
+        self.glass = glass
         # Имя сетки - отбрасываемые грани (GL_FRONT, GL_BACK): у стенок
         # блока гридов грани, обращённые к глазу снаружи, не рисуются,
         # и сквозь ближнюю стенку виден блок изнутри.
@@ -126,6 +130,8 @@ class Subsurface:
         if self.xray:
             GL.glDisable(GL.GL_DEPTH_TEST)
             GL.glDepthMask(GL.GL_FALSE)
+        if self.glass:
+            GL.glDepthMask(GL.GL_FALSE)
         base = mvps.ctypes.data
         stride = mvps.strides[0]
         null = ctypes.c_void_p(0)
@@ -151,6 +157,8 @@ class Subsurface:
             if self.xray:
                 GL.glDepthMask(GL.GL_TRUE)
                 GL.glEnable(GL.GL_DEPTH_TEST)
+            if self.glass:
+                GL.glDepthMask(GL.GL_TRUE)
         self.drawn = len(items)
 
 

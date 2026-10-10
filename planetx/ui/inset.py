@@ -22,7 +22,7 @@ from concurrent.futures import TimeoutError
 import numpy as np
 from qgis.core import QgsApplication
 
-from ..core import basemap, dem, inset
+from ..core import basemap, bathymetry, dem, inset, subsurface
 from ..net.gdalnet import executor, thread_gdal
 from ..core.terrain import (MAX_LEVEL, SIZE, HeightTile, ancestor, decode,
                             resample)
@@ -62,17 +62,21 @@ class DeepSource(basemap.Source):
 
 class Entry:
     """Подготовленный растр врезки: файлы высот и веса в EPSG:3857,
-    рамка, уровень высот, название слоя."""
+    рамка, уровень высот, название слоя. lake - батиметрия (вид, уровень
+    воды) или None: в файле высот тогда отметки дна."""
 
-    __slots__ = ("layer_id", "name", "path", "weight", "bounds", "level")
+    __slots__ = ("layer_id", "name", "path", "weight", "bounds", "level",
+                 "lake")
 
-    def __init__(self, layer_id, name, path, weight, bounds, level):
+    def __init__(self, layer_id, name, path, weight, bounds, level,
+                 lake=None):
         self.layer_id = layer_id
         self.name = name
         self.path = path
         self.weight = weight
         self.bounds = bounds
         self.level = level
+        self.lake = lake
 
     def box(self):
         """Рамка в долях мира с уровнем, для HeightStore.deep."""
@@ -91,14 +95,19 @@ def _stamp(source):
     return hashlib.sha256(mark.encode("utf-8")).hexdigest()[:16]
 
 
-def prepare(layer):
-    """Растр слоя QGIS в Entry или текст ошибки. Главный поток."""
+def prepare(layer, lake=None):
+    """Растр слоя QGIS в Entry или текст ошибки. lake - батиметрия
+    (вид, уровень воды): глубины пересчитываются в отметки дна
+    (core.bathymetry.to_bed). Главный поток."""
     from osgeo import gdal
     warm()
     if layer.providerType() != "gdal":
         return "provider"
     source = layer.source()
-    base = os.path.join(folder(), _stamp(source))
+    stamp = _stamp(source)
+    if lake is not None:
+        stamp += "_{}_{:.3f}".format(*lake)
+    base = os.path.join(folder(), stamp)
     path, weight = base + ".tif", base + "_w.tif"
     if not (os.path.exists(path) and os.path.exists(weight)):
         src = gdal.Open(source)
@@ -114,6 +123,11 @@ def prepare(layer):
         src = None
         if out is None:
             return "warp"
+        if lake is not None and lake[0] == "depth":
+            band = out.GetRasterBand(1)
+            band.WriteArray(bathymetry.to_bed(
+                band.ReadAsArray(), *lake).astype(np.float32))
+            band.FlushCache()
         factors = []
         side = max(out.RasterXSize, out.RasterYSize)
         while side > SIZE:
@@ -131,7 +145,39 @@ def prepare(layer):
     bounds = (x0, y0 + dy * data.RasterYSize, x0 + dx * data.RasterXSize, y0)
     level = inset.level_for(abs(dx))
     data = None
-    return Entry(layer.id(), layer.name(), path, weight, bounds, level)
+    return Entry(layer.id(), layer.name(), path, weight, bounds, level,
+                 lake)
+
+
+def water_mesh(entry, scale):
+    """Сетка воды врезки с батиметрией на уровне водоёма, высота на
+    экране - уровень, умноженный на масштаб рельефа. Растр дна читается
+    сеткой не больше bathymetry.WATER_SIDE узлов по стороне. Главный
+    поток. subsurface.Mesh или None."""
+    from osgeo import gdal
+    if entry.lake is None:
+        return None
+    data = gdal.Open(entry.path)
+    if data is None:
+        return None
+    width, height = data.RasterXSize, data.RasterYSize
+    step = max(1.0, max(width, height) / float(bathymetry.WATER_SIDE))
+    cols = max(2, int(round(width / step)))
+    rows = max(2, int(round(height / step)))
+    small = gdal.Translate("", data, format="MEM", width=cols, height=rows,
+                           resampleAlg="average")
+    data = None
+    if small is None:
+        return None
+    x0, dx, _, y0, _, dy = small.GetGeoTransform()
+    bed = small.GetRasterBand(1).ReadAsArray().astype(np.float64)
+    small = None
+    xs = x0 + (np.arange(cols) + 0.5) * dx
+    ys = y0 + (np.arange(rows) + 0.5) * dy
+    lats, lons = bathymetry.mercator_latlon(*np.meshgrid(xs, ys))
+    level = entry.lake[1]
+    part = bathymetry.water_part(lats, lons, bed, level, level * scale)
+    return subsurface.merge([part], key=entry.layer_id)
 
 
 def _write_weight(path, weight):

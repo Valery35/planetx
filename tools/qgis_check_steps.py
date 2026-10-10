@@ -215,6 +215,16 @@ def open_globe():
     state["plugin"] = plugin
     state["window"] = plugin.window
     plugin.window.showNormal()
+    # Строки «Слоёв» и карта витрины, оставшиеся в настройках
+    # проверочного профиля от прежних шагов, выключаются: вырез разреза
+    # Земли закрывал кадры рельефа шагов dem_* (замечание автора от
+    # 10 октября 2026 года). Нужное шаг включает сам.
+    window = plugin.window
+    for key, on in list(window.extras.items()):
+        if on and key != "stars":
+            window.set_extra(key, False)
+    if window.theme_key:
+        window.set_theme("")
 
 
 
@@ -5897,6 +5907,167 @@ def quarry_wait():
     return _quarry_wait(40.0)
 
 
+@check(1000)
+def deposits_on():
+    """Месторождения USGS: первое включение качает архивы (около 25 МБ),
+    разбор в потоке, файл профиля. Вид - Невада, где точек MRDS много."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(40.9, -116.3, 400000.0, 0.0, 0.0))
+    state["dep_start"] = time.monotonic()
+    window.set_extra("deposits", True)
+    result["deposits"] = {}
+
+
+@check(1000)
+def deposits_wait():
+    window = state["window"]
+    spent = time.monotonic() - state["dep_start"]
+    if window.deposit_data is None and spent < 300.0:
+        return 1000
+    out = result["deposits"]
+    out["load_seconds"] = round(spent, 1)
+    data = window.deposit_data
+    out["records"] = len(data) if data is not None else 0
+    out["major"] = int(data.major.sum()) if data is not None else 0
+    out["message"] = (getattr(window, "message", None) or ("",))[0]
+    return None
+
+
+@check(1500)
+def deposits_check():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    out = result["deposits"]
+    frames = []
+    for _ in range(5):
+        started = time.monotonic()
+        image = view.grabFramebuffer()
+        frames.append(round((time.monotonic() - started) * 1000.0, 1))
+    image.save(os.path.join(TEMP, "planetx_deposits.png"))
+    out["drawn_nevada"] = view.deposits.drawn
+    out["frame_ms"] = frames
+    out["legend"] = window.deposit_legend.isVisible()
+    out["credit"] = "USGS MRDS" in window.attribution.text()
+    ratio = view.devicePixelRatioF()
+    px, py = view.width() * ratio / 2.0, view.height() * ratio / 2.0
+    found = window._identify_deposits(px, py)
+    out["identify"] = [(f[0], dict(f[1]).get("Полезные ископаемые",
+                                              dict(f[1]).get("Commodities")))
+                       for _, features in found for f in features][:3]
+    view.navigator.show(Pose(30.0, 60.0, 1.8e7, 0.0, 0.0))
+    view.update()
+
+
+@check(1000)
+def deposits_world():
+    window = state["window"]
+    view = window.view
+    out = result["deposits"]
+    started = time.monotonic()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_deposits_world.png"))
+    out["world_frame_ms"] = round((time.monotonic() - started) * 1000.0, 1)
+    out["drawn_world"] = view.deposits.drawn
+    window.set_extra("deposits", False)
+    out["after_off"] = view.deposits.data is None
+
+
+BRIENZ_DEEP = (46.72744, 7.9565)
+
+
+@check(3000)
+def brienz_open():
+    """Своя батиметрия, демо «Бриенцское озеро»: растр отметок дна
+    swissBATHY3D, вода на 564 м."""
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Бриенцское озеро, своя батиметрия",
+                                  "Lake Brienz, own bathymetry"))
+    started = time.monotonic()
+    action.trigger()
+    result["brienz"] = {
+        "prepare_s": round(time.monotonic() - started, 2),
+        "insets": [(e.name, e.lake) for e in window.insets]}
+
+
+@check(3000)
+def brienz_wait():
+    return _quarry_wait(60.0)
+
+
+def _brienz_depth():
+    window = state["window"]
+    lat, lon = BRIENZ_DEEP
+    return round(float(window.view.store.heights_at(
+        [lat], [lon], scaled=False)[0]), 1)
+
+
+@check(2000)
+def brienz_check():
+    """Дно, вода, кадр. Потом тот же растр глубинами: глубина =
+    564 - отметка, слой с видом depth даёт то же дно."""
+    import numpy as np
+    from osgeo import gdal
+    from qgis.core import QgsProject, QgsRasterLayer
+    from planetx.ui.project import (read_bathymetry, read_insets,
+                                    write_bathymetry)
+    window = state["window"]
+    out = result["brienz"]
+    out["bed_deepest"] = _brienz_depth()
+    out["water_vertices"] = window.view.lake_water.vertex_count()
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_brienz.png"))
+    out["water_drawn"] = window.view.lake_water.drawn
+    window.set_relief(False)
+    # Сетки снимаются в кадре: смотрится очередь, без вызовов OpenGL.
+    pending = window.view.lake_water.pending
+    out["water_removed_without_relief"] = bool(pending) and all(
+        mesh is None for mesh in pending.values())
+    window.set_relief(True)
+    # Глубины: растр 564 - дно в папке TEMP.
+    src = os.path.join(ROOT, "planetx", "demo", "brienz",
+                       "brienzersee_bed.tif")
+    path = os.path.join(TEMP, "planetx_brienz_depth.tif")
+    ds = gdal.Open(src)
+    bed = ds.GetRasterBand(1).ReadAsArray()
+    depth = np.where(bed == -9999.0, -9999.0, 564.0 - bed)
+    copy = gdal.GetDriverByName("GTiff").CreateCopy(path, ds)
+    copy.GetRasterBand(1).WriteArray(depth.astype(np.float32))
+    copy = ds = None
+    layer = QgsRasterLayer(path, "Brienz depths", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    old = [i for i in read_insets()
+           if read_bathymetry().get(i, ("", 0))[0] == "bed"]
+    lakes = {layer.id(): ("depth", 564.0)}
+    write_bathymetry(lakes)
+    window.set_insets([layer.id()])
+    state["brienz_depth_layer"] = (layer.id(), old)
+    out["depth_entry"] = [(e.name, e.lake) for e in window.insets]
+
+
+@check(3000)
+def brienz_depth_wait():
+    return _quarry_wait(60.0)
+
+
+@check(1000)
+def brienz_depth_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["brienz"]
+    out["bed_from_depths"] = _brienz_depth()
+    out["water_vertices_depths"] = window.view.lake_water.vertex_count()
+    layer_id, _ = state["brienz_depth_layer"]
+    window.set_insets([])
+    QgsProject.instance().removeMapLayer(layer_id)
+    pending = window.view.lake_water.pending
+    out["water_removed_after_off"] = bool(pending) and all(
+        mesh is None for mesh in pending.values())
+
+
 def _dem_at(lat, lon):
     from osgeo import gdal, osr
     path = os.path.join(ROOT, "planetx", "demo", "quarry", "quarry_dem.tif")
@@ -7420,7 +7591,9 @@ def landsat_open():
     from qgis.PyQt.QtCore import QDate
     window = state["window"]
     window.set_body("earth")
-    dialog = window.sentinel_here(*ROUTE_A)
+    point = os.environ.get("PLANETX_LANDSAT_POINT")
+    dialog = window.sentinel_here(*(tuple(map(float, point.split(",")))
+                                    if point else ROUTE_A))
     year = int(os.environ.get("PLANETX_LANDSAT_YEAR", "2024"))
     dialog.side.setValue(2.0)
     dialog.start.setDate(QDate(year, 5, 1))
@@ -7497,7 +7670,8 @@ def landsat_built():
     group = QgsProject.instance().layerTreeRoot().findGroup("Landsat")
     layers = [n.layer() for n in group.findLayers()] if group else []
     out["layers"] = [(l.name(), l.isValid(), l.renderer().type(),
-                      l.metadata().rights()) for l in layers]
+                      l.metadata().rights(), l.metadata().abstract())
+                     for l in layers]
     folder = state["ls_folder"]
     files = sorted(os.listdir(folder)) if os.path.isdir(folder) else []
     out["files"] = files

@@ -25,6 +25,8 @@ INSETS = "insets"  # растры проекта - рельеф глобуса
 GRIDS = "grids"
 # Векторные слои, выдавленные по полю, - строка JSON.
 EXTRUDE = "extrude"
+# Батиметрия врезок своего рельефа - строка JSON, core/bathymetry.py.
+BATHYMETRY = "bathymetry"
 
 
 def map_layers(project=None):
@@ -82,6 +84,20 @@ def read_insets(project=None):
 def write_insets(ids, project=None):
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, INSETS, list(ids))
+
+
+def read_bathymetry(project=None):
+    """Батиметрия растров-врезок: {номер слоя: (вид, уровень воды)}."""
+    from ..core.bathymetry import parse
+    project = project or QgsProject.instance()
+    value, ok = project.readEntry(ENTRY, BATHYMETRY, "")
+    return parse(value) if ok else {}
+
+
+def write_bathymetry(settings, project=None):
+    from ..core.bathymetry import dump
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, BATHYMETRY, dump(settings))
 
 
 def read_grids(project=None):

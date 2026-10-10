@@ -250,14 +250,18 @@ def free_path(folder, stem, ext):
         return path
 
 
-def build(scene, ring, products, folder, clear_clouds, sas=""):
+def build(scene, ring, products, folder, clear_clouds, sas="",
+          fill=False):
     """Продукты сцены по участку в GeoTIFF: список (продукт, путь,
-    пределы растяжения по каналам). Рабочий поток."""
+    пределы растяжения по каналам[, доля пикселей температуры по
+    формуле]). fill - дыры температуры Landsat закрываются формулой
+    (core.sentinel.thermal_fill). Рабочий поток."""
+    fill = fill and scene.mission == "landsat" and "lst" in products
     gdal = _thread_gdal()
     xy = s2.ring_utm(ring, scene.epsg)
     res = s2.step_for(xy, scene.mission)
     box = s2.bounds(xy, res)
-    keys = s2.needed(products, scene.mission)
+    keys = s2.needed(products, scene.mission, fill)
     cloud_key = s2.CLOUD_ASSET[scene.mission][0]
     if clear_clouds:
         keys = keys + [cloud_key]
@@ -281,6 +285,9 @@ def build(scene, ring, products, folder, clear_clouds, sas=""):
     bands = {k: s2.reflectance(v, scene.assets[k]) for k, v in raw.items()}
     for values in bands.values():
         values[~inside] = np.nan
+    filled = None
+    if fill:
+        bands["lwir"], filled = s2.thermal_fill(bands, scene.tile[1:2])
     os.makedirs(folder, exist_ok=True)
     out = []
     for name in products:
@@ -293,7 +300,7 @@ def build(scene, ring, products, folder, clear_clouds, sas=""):
             ranges = [s2.TEMPERATURE[0]]
         else:
             ranges = [s2.INDICES[name][1]]
-        out.append((name, path, ranges))
+        out.append((name, path, ranges, filled if name == "lst" else None))
     return out
 
 
@@ -542,6 +549,16 @@ class SentinelDialog(QDialog):
             "Пиксели облаков, их теней и перистых облаков по маске "
             "облаков сцены остаются пустыми, индексы по ним не "
             "считаются."))
+        self.fill = QCheckBox(tr("Дыры температуры - по формуле"), self)
+        self.fill.setChecked(True)
+        self.fill.setVisible(False)  # только у Landsat, _mission_changed
+        self.fill.setToolTip(tr(
+            "USGS не считает температуру там, где нет излучательной "
+            "способности из базы ASTER GED, на большей части России это "
+            "половина участка и больше. С флажком такие пиксели считаются "
+            "той же формулой USGS из излучения и атмосферы сцены, "
+            "излучательная способность - по NDVI. Где USGS посчитал, "
+            "отличие в среднем меньше 0.5 °C."))
         self.mode = QComboBox(self)
         self.mode.addItem(tr("Обрезка по участку, GeoTIFF"), "clip")
         self.mode.addItem(tr("Вся сцена по ссылке, без скачивания"), "link")
@@ -559,6 +576,7 @@ class SentinelDialog(QDialog):
         out_row = QHBoxLayout()
         out_row.addWidget(self.mode)
         out_row.addWidget(self.clear)
+        out_row.addWidget(self.fill)
         out_row.addStretch(1)
         folder_row = QHBoxLayout()
         folder_row.addWidget(self.folder_label, 1)
@@ -643,6 +661,7 @@ class SentinelDialog(QDialog):
             self.mode.setCurrentIndex(0)
         # У MODIS облачности сцены в каталоге нет.
         self.scene_cloud.setEnabled(not modis.is_modis(mission))
+        self.fill.setVisible(mission == "landsat")
         self.search()
 
     # Ключ SAS Planetary Computer.
@@ -978,7 +997,7 @@ class SentinelDialog(QDialog):
         else:
             job = self.pool().submit(build, s, self.ring_used, products,
                                    folder, self.clear.isChecked(),
-                                   self.sas)
+                                   self.sas, self.fill.isChecked())
         self.build_job = (s, job)
         self.status.setText(tr("Загрузка каналов сцены {when}…",
                                when=s.when))
@@ -1014,7 +1033,7 @@ class SentinelDialog(QDialog):
         day = top.findGroup(name) or top.insertGroup(0, name)
         names = titles(s.mission)
         layers = []
-        for product, path, ranges in made:
+        for product, path, ranges, *extra in made:
             layer = QgsRasterLayer(path, "{} - {}".format(
                 names[product], s.when[:10]), "gdal")
             if not layer.isValid():
@@ -1025,6 +1044,13 @@ class SentinelDialog(QDialog):
                 style_index(layer, product)
             metadata = layer.metadata()
             metadata.setRights([s2.credit(s)])
+            if extra and extra[0]:
+                metadata.setAbstract(tr(
+                    "Температура поверхности USGS Collection 2 Level-2. "
+                    "{share} % пикселей посчитаны формулой USGS "
+                    "с излучательной способностью по NDVI - там, где "
+                    "у USGS значения нет.",
+                    share="{:.0f}".format(100.0 * extra[0])))
             layer.setMetadata(metadata)
             project.addMapLayer(layer, False)
             day.addLayer(layer)
