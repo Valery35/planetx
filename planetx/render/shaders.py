@@ -297,6 +297,9 @@ uniform vec4 u_compare_uv;
 uniform sampler2D u_contours;
 uniform vec4 u_contours_uv;
 uniform float u_swipe;
+// Шторка старых карт (core/oldmaps.py): левее шторки u_compare - то же
+// наложение слоёв проекта с картой другого года, вместо u_overlay.
+uniform float u_swipe_maps;
 const float SWIPE_LINE = 1.5;  // полуширина линии шторки в пикселях кадра
 // Огни городов на ночной стороне, см. core/sun.py.
 uniform sampler2D u_lights;
@@ -367,13 +370,19 @@ void main() {
         base = lay(base, u_viewshed, u_viewshed_uv);
         base = lay(base, u_insolation, u_insolation_uv);
         float edge = gl_FragCoord.x - u_swipe * u_viewport.x;
-        if (u_swipe >= 0.0 && edge < 0.0) {
+        bool left = u_swipe >= 0.0 && edge < 0.0;
+        bool maps = u_swipe_maps > 0.5;
+        if (left && !maps) {
             base = lay(base, u_compare, u_compare_uv);
         } else {
             base = lay(base, u_theme, u_theme_uv);
         }
         base = lay(base, u_contours, u_contours_uv);
-        base = lay(base, u_overlay, u_overlay_uv);
+        if (left && maps) {
+            base = lay(base, u_compare, u_compare_uv);
+        } else {
+            base = lay(base, u_overlay, u_overlay_uv);
+        }
         base = lay(base, u_clouds, u_clouds_uv);
         if (u_swipe >= 0.0 && abs(edge) < SWIPE_LINE) {
             base = vec3(1.0);

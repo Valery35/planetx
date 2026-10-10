@@ -28,7 +28,7 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsProperty, QgsSimpleLineSymbolLayer,
                        QgsSymbolLayer,
                        QgsMapRendererParallelJob, QgsMapSettings,
-                       QgsNetworkAccessManager, QgsRectangle,
+                       QgsRectangle,
                        QgsVectorTileBasicRenderer,
                        QgsVectorTileBasicRendererStyle, QgsVectorTileLayer,
                        QgsWkbTypes)
@@ -45,7 +45,7 @@ from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
 from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, MARK, NO_ERROR,
                      PREFER_CACHE, STALL,
-                     Throttle)
+                     Throttle, network)
 
 TILE_SIZE = 256
 MAX_JOBS = 6  # отрисовок одновременно, считает QGIS в своих потоках
@@ -269,8 +269,8 @@ def set_line_groups(layer, groups):
 def fetch_bytes(url, done, prefer_cache=True, fresh=False, headers=None):
     """Асинхронно получить ответ и вызвать done(байты или None, ошибка).
 
-    Запрос идёт через QgsNetworkAccessManager с меткой PlanetX, как
-    запросы тайлов, ответ ложится в кэш QGIS. Возвращает ответ, его
+    Запрос идёт через менеджер PlanetX (loader.network), как запросы
+    тайлов, ответ ложится в кэш QGIS. Возвращает ответ, его
     нужно держать до конца. fresh - всегда с сервера: без него Qt
     отдаёт из кэша ответ, который сервер разрешил хранить, и картинка
     по ссылке с обновлением не менялась бы. headers - свои заголовки,
@@ -284,7 +284,7 @@ def fetch_bytes(url, done, prefer_cache=True, fresh=False, headers=None):
         request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
     elif prefer_cache:
         request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
-    reply = QgsNetworkAccessManager.instance().get(request)
+    reply = network().get(request)
 
     def finished():
         if reply.error() != NO_ERROR:
@@ -311,7 +311,7 @@ def post_json(url, headers, body, done):
         request.setRawHeader(name.encode("ascii"), value.encode("utf-8"))
     if hasattr(request, "setTransferTimeout"):
         request.setTransferTimeout(POST_TIMEOUT)
-    reply = QgsNetworkAccessManager.instance().post(
+    reply = network().post(
         request, json.dumps(body, ensure_ascii=False).encode("utf-8"))
 
     def finished():
@@ -337,8 +337,8 @@ def post_stream(url, headers, body, chunk, done):
     по мере прихода данных, done(ошибка сети или пустая строка) -
     в конце. Так принимается длинный ответ модели: пока идут байты,
     соединение не считается простаивающим. Ответ целиком ждать нельзя -
-    QgsNetworkAccessManager обрывает запрос без движения данных по
-    своему сроку из настроек сети QGIS. Возвращает ответ, его нужно
+    запрос без движения данных обрывается по сроку из настроек сети
+    QGIS, у потока срок свой, STREAM_TIMEOUT. Возвращает ответ, его нужно
     держать до конца, abort() обрывает поток и тоже приводит к done."""
     request = QNetworkRequest(QUrl(url))
     request.setAttribute(MARK, True)
@@ -347,7 +347,7 @@ def post_stream(url, headers, body, chunk, done):
     request.setRawHeader(b"Accept", b"text/event-stream")
     if hasattr(request, "setTransferTimeout"):
         request.setTransferTimeout(STREAM_TIMEOUT)
-    reply = QgsNetworkAccessManager.instance().post(
+    reply = network().post(
         request, json.dumps(body, ensure_ascii=False).encode("utf-8"))
 
     def ready():
@@ -369,8 +369,8 @@ def post_stream(url, headers, body, chunk, done):
 def fetch_json(url, done, prefer_cache=True):
     """Асинхронно получить JSON и вызвать done(данные или None, ошибка).
 
-    Запрос идёт через QgsNetworkAccessManager с меткой PlanetX, как
-    запросы тайлов. Возвращает ответ, его нужно держать до конца.
+    Запрос идёт через менеджер PlanetX (loader.network), как запросы
+    тайлов. Возвращает ответ, его нужно держать до конца.
     prefer_cache=False - для данных, которые меняются каждую минуту:
     кэш QGIS тогда отдаёт ответ только по заголовкам сервера.
     """
@@ -378,7 +378,7 @@ def fetch_json(url, done, prefer_cache=True):
     request.setAttribute(MARK, True)
     if prefer_cache:
         request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
-    reply = QgsNetworkAccessManager.instance().get(request)
+    reply = network().get(request)
 
     def finished():
         if reply.error() != NO_ERROR:

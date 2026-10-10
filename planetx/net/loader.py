@@ -26,11 +26,13 @@ import time
 from collections import OrderedDict
 
 import numpy as np
-from qgis.core import QgsApplication, QgsNetworkAccessManager
+from qgis.core import (QgsApplication, QgsAuthCertUtils,
+                       QgsNetworkAccessManager)
 from qgis.PyQt.QtCore import (QObject, QRunnable, Qt, QThreadPool, QTimer,
                               QUrl, pyqtSignal)
 from qgis.PyQt.QtGui import QImage
-from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
+from qgis.PyQt.QtNetwork import (QNetworkAccessManager, QNetworkReply,
+                                 QNetworkRequest)
 
 from ..core import basemap, sources
 from ..core.placeholder import (MAX_FILL_DEPTH, ancestor, crop_window,
@@ -76,35 +78,75 @@ FILL_PRIORITY = 1.0e9  # предок для вырезки нужнее про�
 USER_AGENT = "PlanetX/{} (+https://github.com/Valery35/planetx)".format(
     plugin_version())
 
-_preprocessor = None
+_manager = None
 
 
-def _set_user_agent(request):
-    """Заголовок PlanetX для запросов с меткой.
+class _Manager(QgsNetworkAccessManager):
+    """Свой менеджер запросов PlanetX в главном потоке.
 
     QgsNetworkAccessManager заменяет User-Agent любого запроса своим.
-    Обработчик вызывается после этой замены. Он общий для всех запросов
-    QGIS, в том числе из рабочих потоков, поэтому трогает только запросы
-    с меткой и не порождает ни исключений, ни предупреждений.
+    Прежде заголовок PlanetX ставил обработчик setRequestPreprocessor,
+    но QGIS зовёт обработчики для каждого запроса любого потока, и
+    обработчик на Python тащил GIL в потоки отрисовки QGIS. 10 октября
+    2026 года QGIS 3.36 с ним висел на слоях XYZ проекта, см. AGENTS.md.
+    Здесь createRequest ставит заголовок, сертификаты QGIS и предел
+    ожидания сам и отдаёт запрос Qt мимо обработки QGIS. Прокси
+    и общий дисковый кэш - из setupDefaultProxyAndCache, как у
+    менеджеров потоков QGIS.
     """
-    if request.attribute(MARK):
+
+    def createRequest(self, operation, request, data=None):
+        request = QNetworkRequest(request)
         request.setRawHeader(b"User-Agent", USER_AGENT.encode())
+        if not request.transferTimeout():
+            request.setTransferTimeout(QgsNetworkAccessManager.timeout())
+        _trusted_cas(request)
+        return QNetworkAccessManager.createRequest(self, operation, request,
+                                                   data)
 
 
-def install_user_agent():
-    global _preprocessor
-    if _preprocessor is None:
-        _preprocessor = QgsNetworkAccessManager.setRequestPreprocessor(
-            _set_user_agent)
+def _trusted_cas(request):
+    """Сертификаты центров, которым доверяет QGIS, - как в
+    QgsNetworkAccessManager::createRequest."""
+    if request.url().scheme().lower() != "https":
+        return
+    auth = QgsApplication.authManager()
+    if auth is None or auth.isDisabled():
+        return
+    config = request.sslConfiguration()
+    config.setCaCertificates(QgsAuthCertUtils.casMerge(
+        auth.trustedCaCertsCache(), config.caCertificates()))
+    request.setSslConfiguration(config)
 
 
-def remove_user_agent():
-    """Снять обработчик. Вызывается при выгрузке плагина."""
-    global _preprocessor
-    if _preprocessor is not None:
-        QgsNetworkAccessManager.removeRequestPreprocessor(_preprocessor)
-        _preprocessor = None
+def _ssl_errors(reply, errors):
+    """Ошибки SSL запросов PlanetX - в журнал работы. Решение о запросе
+    остаётся за Qt - сертификат без доверия запрос обрывает."""
+    from .. import journal
+    journal.ssl_errors(reply.url().toString(), errors)
 
+
+def network():
+    """Менеджер запросов PlanetX, один на модуль, в главном потоке."""
+    global _manager
+    if _manager is None:
+        _manager = _Manager()
+        # Связь с главным менеджером QGIS (ошибки SSL, пароль прокси) -
+        # прямая. По умолчанию она BlockingQueuedConnection, она для
+        # менеджеров рабочих потоков. Менеджер в главном потоке ждал бы
+        # сам себя, 11 октября 2026 года QGIS 4 так висел на ошибке SSL.
+        _manager.setupDefaultProxyAndCache(
+            enum(Qt, "ConnectionType", "DirectConnection"))
+        _manager.sslErrors.connect(_ssl_errors)
+    return _manager
+
+
+def close_network():
+    """Отпустить менеджер. Вызывается при выгрузке плагина."""
+    global _manager
+    if _manager is not None:
+        _manager.deleteLater()
+        _manager = None
 
 def image_to_rgba(image):
     """QImage в массив (h, w, 4) uint8, первая строка - верх картинки."""
@@ -272,7 +314,6 @@ class TileLoader(QObject):
         self.from_cache = {}
         self.aborted = []
         self.last_user_agent = ""
-        install_user_agent()
 
     def want(self, key, priority=0.0):
         self.queue.want(key, priority, now=time.monotonic())
@@ -357,7 +398,7 @@ class TileLoader(QObject):
             return
         z, x, y = key
         request = self._request(z, x, y)
-        reply = QgsNetworkAccessManager.instance().get(request)
+        reply = network().get(request)
         self.last_start = time.monotonic()
         Throttle.started()
         self.replies[key] = reply

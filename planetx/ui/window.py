@@ -8,6 +8,7 @@
 панель значков (ui/toolbar.py), в правом нижнем подпись источников.
 Окно связывает части и решает, панели только показывают.
 """
+from urllib.parse import quote
 import hashlib
 import html
 import math
@@ -18,8 +19,8 @@ import time
 
 import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsCsException, QgsProject, QgsRasterLayer,
-                       QgsSettings)
+                       QgsApplication, QgsCsException, QgsProject,
+                       QgsRasterLayer, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, QMimeData, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon, QImage
 from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
@@ -33,7 +34,7 @@ from ..core import (basemap, clouds, ellipsoid, lookat, stars, sun,
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
-from ..core import graticule, paleo, placetree, region
+from ..core import graticule, oldmaps, paleo, placetree, region
 from ..core import dem as dem_model
 from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
@@ -113,10 +114,11 @@ from ..core import opacity
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
-                      read_bathymetry, read_flag, read_grids, read_insets,
-                      read_shown, set_visible_on_map, visible_on_map,
-                      write_bathymetry, write_flag, write_grids,
-                      write_insets, write_shown)
+                      layer_group, read_bathymetry, read_flag, read_grids,
+                      read_insets, read_map_years, read_shown,
+                      set_visible_on_map, visible_on_map, write_bathymetry,
+                      write_flag, write_grids, write_insets,
+                      write_map_years, write_shown)
 from .inset import DeepSource, DemSource, terrain_prepare
 from .contours import ContourExport, ContourSource, digit_glyphs
 from .netlink import LinkDialog, NetLinks
@@ -169,6 +171,21 @@ DEPOSIT_POLL = 300  # мс между проверками разбора мес
 # Уровень воды Бриенцского озера в демо, м: средний уровень 563.7 м
 # по swisstopo, округлён.
 BRIENZ_LEVEL = 564.0
+# Старые карты Москвы в демо: год, название, тайлы карты Wikimedia
+# Commons (общественное достояние), привязанной в Wikimaps Warper.
+# Состав - выбор помощника.
+WARPER_TILES = ("https://warper.wmflabs.org/maps/tile/{}/"
+                "{{z}}/{{x}}/{{y}}.png")
+
+
+def moscow_maps():
+    return ((1813, tr("План Москвы"), WARPER_TILES.format(2423)),
+            (1860, tr("Москва, карта Шуберта"), WARPER_TILES.format(2129)),
+            (1900, tr("Окрестности Москвы"), WARPER_TILES.format(2127)),
+            (1917, tr("План Москвы"), WARPER_TILES.format(2407)),
+            (1935, tr("Генеральный план Москвы"),
+             WARPER_TILES.format(2692)))
+
 
 TERRAIN_ATTRIBUTION = (
     '<a href="https://github.com/tilezen/joerd/blob/master/docs/'
@@ -570,6 +587,12 @@ class GlobeWindow(QWidget):
         self.swipe_bar.closed.connect(lambda: self.set_compare(False))
         self._compare_at = None
         self._compare_shown = None
+        # Шторка старых карт: момент левой части, ключ её сборки, растры
+        # картинок на поверхности левой части и загрузчик её наложения.
+        self._map_compare_at = None
+        self._map_compare_key = None
+        self.compare_grounds = GroundLayers()
+        self.map_compare_overlay = None
         self.view.on_motion = set_moving
         self.view.load_changed.connect(self._show_state)
         self.panel = LayerPanel(self)
@@ -652,6 +675,10 @@ class GlobeWindow(QWidget):
         # треков и слоёв на шкале.
         self._applied_time = None
         self._data_marks = []
+        # Годы старых карт проекта и растры-карты, скрытые при сборке
+        # наложения правилом «последняя карта не позже момента».
+        self._map_years = read_map_years()
+        self._applied_maps = frozenset()
         # Наложения картинок: растры картинок на поверхности в наложении,
         # ключи показанных фото и картинок на экране, текстуры фото,
         # окна свойств и их правки.
@@ -970,6 +997,9 @@ class GlobeWindow(QWidget):
         self.panel.track_requested.connect(self._open_track)
         self.panel.inset_toggled.connect(self.set_inset)
         self.panel.bathymetry_requested.connect(self.edit_bathymetry)
+        self.panel.map_year_requested.connect(self.edit_map_year)
+        self.panel.sounding_requested.connect(self.sounding_bathymetry)
+        self.panel.volume_requested.connect(self.volume_compare)
         self.panel.grid_toggled.connect(self.set_grid)
         self.panel.contours_requested.connect(
             lambda layer: self.contour_export.grid_contours(layer))
@@ -1404,15 +1434,23 @@ class GlobeWindow(QWidget):
             or bool(self.extras.get("fires")
                     and self.view.fires.fires is not None) \
             or bool(self._data_marks)
-        # Часам, как и покрытию, нужен момент.
-        point = (bool(theme) or self._clock_on()) and not events
+        maps = bool(self._map_moments())
+        # Часам и старым картам, как и покрытию, нужен момент.
+        point = (bool(theme) or self._clock_on() or maps) and not events
         if self.timebar.track.point != point:
             self.timebar.set_point(point)
-        self.timebar.set_stepper(self._theme_step if theme else None)
+        self.timebar.set_stepper(self._theme_step if theme
+                                 else self._map_step if maps else None)
         self.timebar.ready = self._theme_ready if theme else None
         self.timebar.set_compare(
-            bool(theme) and not themes.is_weather(self.theme_key),
-            getattr(self, "_compare_at", None) is not None)
+            bool(theme) and not themes.is_weather(self.theme_key)
+            or maps and not theme,
+            getattr(self, "_compare_at", None) is not None
+            or getattr(self, "_map_compare_at", None) is not None)
+        if (theme or not maps) \
+                and getattr(self, "_map_compare_at", None) is not None:
+            # Тема включена поверх старых карт - шторка карт снимается.
+            self._map_compare_off()
 
     def _theme_step(self, moment, delta):
         """Момент соседнего дня ряда темы для шага шкалы или None.
@@ -1505,7 +1543,25 @@ class GlobeWindow(QWidget):
     def set_compare(self, on):
         """Шторка сравнения двух дней темы NASA. Левая часть по
         умолчанию - тот же день год назад (themes.compare_day), правая -
-        день шкалы времени. Поле прогноза GFS шторки не получает."""
+        день шкалы времени. Поле прогноза GFS шторки не получает. Без
+        темы при старых картах - шторка карт двух лет."""
+        if not (getattr(self, "theme_key", "") and self._theme_on()):
+            if self._compare_at is not None \
+                    or "compare" in getattr(self, "gibs_loaders", {}):
+                # Шторка темы осталась от снятой темы.
+                self._compare_at = None
+                self._compare_shown = None
+                self.view.swipe = None
+                self.swipe_bar.set_shown(False)
+                self._set_gibs("compare", False)
+                on = False
+            if on and self._map_moments():
+                self._map_compare_start()
+            else:
+                self._map_compare_off()
+            self.timebar.set_compare(self.timebar.compare.isVisibleTo(
+                self.timebar), self._map_compare_at is not None)
+            return
         intervals = self._theme_domains.get(self.theme_key) \
             if on and self._theme_on() \
             and not themes.is_weather(self.theme_key) else None
@@ -1546,6 +1602,9 @@ class GlobeWindow(QWidget):
 
     def _compare_step(self, delta):
         """Шаг дня левой части шторки по ряду темы."""
+        if self._map_compare_at is not None:
+            self._map_compare_step(delta)
+            return
         intervals = self._theme_domains.get(self.theme_key)
         if self._compare_at is None or not intervals:
             return
@@ -2699,6 +2758,96 @@ class GlobeWindow(QWidget):
         under = subsurface_ids(shown)
         return [i for i in shown if i not in under]
 
+    # Старые карты по годам.
+
+    def _map_moment(self):
+        """Момент шкалы для старых карт - правый бегунок, None - шкала
+        закрыта, видны все карты."""
+        span = getattr(self, "_time_range", None)
+        if span is None or not math.isfinite(span[1]):
+            return None
+        return span[1]
+
+    def _map_layer_entries(self):
+        """Растры проекта с годом карты на глобусе: (номер, группа,
+        секунды)."""
+        years = getattr(self, "_map_years", {})
+        applied = set(getattr(self, "_applied_layers", None) or ())
+        return [(i, layer_group(i), when.parse(oldmaps.year_time(y)[0]))
+                for i, y in years.items() if i in applied]
+
+    def _map_ground_entries(self):
+        """Картинки на поверхности с моментом времени: (ключ, папка,
+        секунды)."""
+        entries = []
+        for item in self.myplaces.overlays:
+            at = oldmaps.start(item.time) if item.kind == "ground" \
+                else None
+            if at is not None and item.visible \
+                    and item.body == self.planet.key:
+                entries.append((item.key, item.folder, at))
+        return entries
+
+    def _maps_hidden(self):
+        """Номера растров-карт, скрытых правилом «последняя карта
+        не позже момента». Запоминается для слежения за шкалой."""
+        entries = self._map_layer_entries()
+        seen = oldmaps.shown(entries, self._map_moment())
+        hidden = frozenset(i for i, _, _ in entries if i not in seen)
+        self._applied_maps = hidden
+        return hidden
+
+    def _map_moments(self):
+        """Моменты всех карт с годом на глобусе - для охвата и шагов
+        шкалы."""
+        return [at for _, _, at in self._map_layer_entries()
+                + self._map_ground_entries()]
+
+    def _map_step(self, moment, delta):
+        """Шаг шкалы ◂ ▸ по годам карт."""
+        return oldmaps.step(self._map_moments(), moment, delta)
+
+    def edit_map_year(self, layer_id):
+        """Пункт «Год карты…» меню растра."""
+        layer = QgsProject.instance().mapLayer(layer_id)
+        if layer is None:
+            return
+        years = read_map_years()
+        year = years.get(layer_id)
+        current = "" if year is None else str(year if year > 0
+                                                else year - 1)
+        while True:
+            text, ok = QInputDialog.getText(
+                self, tr("Год карты"),
+                tr("Год карты «{name}». Пустое поле - карта без года, "
+                   "год до н. э. - со знаком минус.", name=layer.name()),
+                text=current)
+            if not ok:
+                return
+            try:
+                year = oldmaps.parse_year(text)
+            except ValueError:
+                current = text
+                QMessageBox.warning(self, tr("Год карты"),
+                                    tr("Год - целое число, например 1890."))
+                continue
+            break
+        if year is None:
+            years.pop(layer_id, None)
+        else:
+            years[layer_id] = year
+        write_map_years(years)
+        self._read_map_years()
+        if year is not None:
+            # Шкала открывается на годе карты.
+            self._show_time(oldmaps.year_time(year))
+
+    def _read_map_years(self):
+        """Годы карт из проекта, охват шкалы и наложение заново."""
+        self._map_years = read_map_years()
+        self._update_timebar()
+        self._update_overlay(keep=True)
+
     def _shown_in_order(self):
         return [layer.id() for layer in map_layers()
                 if layer.id() in self._shown]
@@ -2723,10 +2872,21 @@ class GlobeWindow(QWidget):
             return None
         return date_range(*span)
 
+    def _maps_changed(self):
+        """Сменился ли набор видимых растров-карт с прошлой сборки."""
+        entries = self._map_layer_entries()
+        if not entries:
+            return bool(self._applied_maps)
+        seen = oldmaps.shown(entries, self._map_moment())
+        return frozenset(i for i, _, _ in entries if i not in seen) \
+            != self._applied_maps
+
     def _apply_layer_time(self):
         """Картинки и подписи слоёв со временем заново, если промежуток
         шкалы для них сменился."""
-        if range_key(self._layer_range()) == self._applied_time:
+        self._apply_map_compare()
+        if range_key(self._layer_range()) == self._applied_time \
+                and not self._maps_changed():
             return
         self._update_overlay(keep=True)
         self._update_layer_labels(force=True)
@@ -2751,7 +2911,8 @@ class GlobeWindow(QWidget):
             else None
         if hasattr(self, "tracks"):
             self.tracks.set_time(hi)
-        if range_key(self._layer_range()) != self._applied_time:
+        if range_key(self._layer_range()) != self._applied_time \
+                or self._maps_changed():
             self._layer_time_timer.start()
         if hasattr(self, "satellite_manager"):
             self.satellite_manager.time_changed()
@@ -2899,9 +3060,31 @@ class GlobeWindow(QWidget):
         векторная основа. keep=True - прежние картинки видны, пока их
         не заменят новые, так обновление после правки не мигает.
         """
+        layers, min_levels = self._overlay_stack(
+            self._maps_hidden(), getattr(self, "_ground_rasters", []))
+        if self.overlay is not None:
+            self.overlay.abort()
+            self.overlay.deleteLater()
+            self.overlay = None
+        time_range = self._layer_range()
+        self._applied_time = range_key(time_range)
+        if layers:
+            self.overlay = LayerOverlay(layers, parent=self,
+                                        min_levels=min_levels,
+                                        time_range=time_range)
+            self.overlay.loaded.connect(self.view.add_overlay)
+        self.view.set_overlay(self.overlay,
+                              keep=keep and self.overlay is not None)
+        self._apply_map_compare()
+
+    def _overlay_stack(self, hidden, grounds):
+        """Слои наложения сверху вниз и наименьшие уровни слоёв. hidden -
+        скрытые растры-карты, grounds - растры картинок на поверхности."""
         project = QgsProject.instance()
+        # Старые карты с годом - только последняя на момент шкалы.
         layers = [project.mapLayer(layer_id)
-                  for layer_id in self._applied_layers or ()]
+                  for layer_id in self._applied_layers or ()
+                  if layer_id not in hidden]
         layers = [layer for layer in layers if layer is not None]
         groups = self._applied_groups or set()
         if not self.planet.earth:
@@ -2919,21 +3102,114 @@ class GlobeWindow(QWidget):
             layers.append(self.rail_layer)
             min_levels[self.rail_layer.id()] = RAIL_FROM
         # Картинки на поверхности - под всеми, сразу над снимком.
-        layers += getattr(self, "_ground_rasters", [])
-        if self.overlay is not None:
-            self.overlay.abort()
-            self.overlay.deleteLater()
-            self.overlay = None
-        time_range = self._layer_range()
-        self._applied_time = range_key(time_range)
-        if layers:
-            self.overlay = LayerOverlay(layers, parent=self,
-                                        min_levels=min_levels,
-                                        time_range=time_range)
-            self.overlay.loaded.connect(self.view.add_overlay)
-        self.view.set_overlay(self.overlay,
-                              keep=keep and self.overlay is not None)
+        layers += list(grounds)
+        return layers, min_levels
 
+    # Шторка старых карт.
+
+    def _map_compare_start(self):
+        """Шторка карт: слева карта прошлого года карт, справа - карта
+        момента шкалы. До первой карты слева нет ни одной карты."""
+        moments = self._map_moments()
+        if self._map_compare_at is None:
+            moment = self._map_moment()
+            if moment is None:
+                moment = max(moments)
+            before = oldmaps.step(moments, moment, -1)
+            self._map_compare_at = before if before is not None \
+                else min(moments) - oldmaps.YEAR
+        self.view.swipe = self.swipe_bar.share
+        self.view.swipe_maps = True
+        self.swipe_bar.set_shown(True)
+        self._map_compare_key = None
+        self._apply_map_compare()
+
+    def _map_compare_off(self):
+        if self._map_compare_at is None \
+                and self.map_compare_overlay is None:
+            return
+        self._map_compare_at = None
+        self._map_compare_key = None
+        self.view.swipe = None
+        self.view.swipe_maps = False
+        self.swipe_bar.set_shown(False)
+        if self.map_compare_overlay is not None:
+            self.map_compare_overlay.abort()
+            self.map_compare_overlay.deleteLater()
+            self.map_compare_overlay = None
+        self.view.set_gibs("compare", False)
+        self.compare_grounds.clear()
+
+    def _map_compare_step(self, delta):
+        """Шаг года левой части шторки карт."""
+        moments = self._map_moments()
+        if not moments:
+            return
+        at = oldmaps.step(moments, self._map_compare_at, delta)
+        if at is None and delta < 0 \
+                and self._map_compare_at >= min(moments):
+            at = min(moments) - oldmaps.YEAR
+        if at is not None:
+            self._map_compare_at = at
+            self._apply_map_compare()
+
+    def _apply_map_compare(self):
+        """Наложение левой части шторки карт: те же слои с картами на
+        её момент. Собирается заново, только если сменился состав."""
+        at = getattr(self, "_map_compare_at", None)
+        if at is None:
+            return
+        entries = self._map_layer_entries()
+        seen = oldmaps.shown(entries, at)
+        hidden = frozenset(i for i, _, _ in entries if i not in seen)
+        maps = oldmaps.shown(self._map_ground_entries(), at)
+        grounds = []
+        for item in self.myplaces.overlays:
+            if item.kind != "ground" or not item.visible \
+                    or item.body != self.planet.key \
+                    or self.view.sky_view is not None:
+                continue
+            if oldmaps.start(item.time) is not None:
+                if item.key not in maps:
+                    continue
+            elif not self._time_ok(item):
+                continue
+            token, overlay, data = self._overlay_edit(item)
+            grounds.append((token, item.fid, item.name, overlay, data))
+        rasters = self.compare_grounds.layers(grounds)
+        key = (hidden, tuple(layer.id() for layer in rasters),
+               tuple(self._applied_layers or ()),
+               range_key(self._layer_range()))
+        moment = self._map_moment()
+        self.swipe_bar.set_days(
+            oldmaps.year_label(at),
+            oldmaps.year_label(moment) if moment is not None else "")
+        if key == self._map_compare_key:
+            return
+        self._map_compare_key = key
+        layers, min_levels = self._overlay_stack(hidden, rasters)
+        old = self.map_compare_overlay
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        self.map_compare_overlay = LayerOverlay(
+            layers, parent=self, min_levels=min_levels,
+            time_range=self._layer_range())
+        self.map_compare_overlay.loaded.connect(
+            lambda key, levels, extra: self.view.add_gibs(
+                "compare", key, levels if levels is not None
+                else self._clear_levels()))
+        self.view.gibs["compare"].max_level = basemap.MAX_LEVEL
+        self.view.set_gibs("compare", True, self.map_compare_overlay,
+                           keep=old is not None)
+
+    def _clear_levels(self):
+        """Мипмапы пустой картинки тайла - для пустого тайла наложения
+        левой части шторки."""
+        if getattr(self, "_clear_mips", None) is None:
+            self._clear_mips = mip_chain(
+                np.zeros((TILE_SIZE, TILE_SIZE, 4), dtype=np.uint8))
+        return self._clear_mips
     def _show_layers(self):
         self.panel.set_layers(map_layers(), self._shown)
 
@@ -3016,6 +3292,7 @@ class GlobeWindow(QWidget):
         self.tracks.load()
         self.subsurface.project_reloaded()
         self._load_insets()
+        self._read_map_years()
         self.panel.grid_ids = set(read_grids())
         self._refresh_relief()
 
@@ -3479,6 +3756,9 @@ class GlobeWindow(QWidget):
             times += [when.stamp(when.text(t)) for t in theme_span]
         # Треки и слои проекта со временем - их охват.
         times += getattr(self, "_data_marks", [])
+        # Старые карты с годом - от первой до последней.
+        if hasattr(self, "_map_years"):
+            times += [when.stamp(when.text(t)) for t in self._map_moments()]
         extent = when.extent(times)
         self.timebar.set_clock(self._clock_on())
         if extent is None and getattr(self, "theme_key", "") \
@@ -3581,6 +3861,19 @@ class GlobeWindow(QWidget):
         """Попадает ли время метки в промежуток шкалы."""
         span = self._time_range
         return span is None or when.visible(place.time, *span)
+
+    def _map_grounds(self):
+        """Ключи картинок на поверхности с моментом времени, видных
+        по правилу «последняя карта не позже момента»."""
+        return oldmaps.shown(self._map_ground_entries(), self._map_moment())
+
+    def _overlay_time_ok(self, item, maps):
+        """Видно ли наложение в момент шкалы. Картинка на поверхности
+        с моментом - старая карта, видна последняя в папке, прочие -
+        в промежутке шкалы, как метки."""
+        if item.kind == "ground" and oldmaps.start(item.time) is not None:
+            return item.key in maps
+        return self._time_ok(item)
 
     def _timed_shape(self, place):
         """Объект метки в момент шкалы времени. Путь с промежутком
@@ -3777,7 +4070,41 @@ class GlobeWindow(QWidget):
                 lakes[layer_id] = ("bed", BRIENZ_LEVEL)
                 write_bathymetry(lakes)
                 self.set_insets(read_insets() + [layer_id])
+        if name == "moscow":
+            self._demo_maps(tr("Москва, старые карты"), moscow_maps())
         return key
+
+    def _demo_maps(self, title, maps):
+        """Старые карты демо - тайлы XYZ в группе title вверху проекта,
+        отмечены на глобусе, с годами карт. Прежняя группа с тем же
+        названием заменяется. Шкала времени открывается на первой карте."""
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        old = root.findGroup(title)
+        if old is not None:
+            for node in old.findLayers():
+                project.removeMapLayer(node.layerId())
+            root.removeChildNode(old)
+        group = root.insertGroup(0, title)
+        years = read_map_years()
+        for year, name, url in maps:
+            layer = QgsRasterLayer(
+                "type=xyz&zmin=0&zmax=18&url=" + quote(url, safe=":/"),
+                "{} {}".format(name, year), "wms")
+            if not layer.isValid():
+                continue
+            project.addMapLayer(layer, False)
+            group.addLayer(layer)
+            years[layer.id()] = year
+            self._shown.add(layer.id())
+            if self.follow:
+                set_visible_on_map(layer.id(), True)
+        write_shown(self._shown)
+        write_map_years(years)
+        self._map_years = years
+        self._show_layers()
+        self.refresh()
+        self._show_time(oldmaps.year_time(min(y for y, _, _ in maps)))
 
     def _demo_raster(self, title, name, path):
         """Растр демо path в группе title вверху проекта. Прежняя группа
@@ -4232,6 +4559,127 @@ class GlobeWindow(QWidget):
         write_bathymetry(lakes)
         self.set_insets(ids)
         return lakes.get(layer_id)
+
+    def sounding_bathymetry(self, layer_id, values=None):
+        """Пункт «Батиметрия по промерам…» точечного слоя: растр глубин
+        по промерам в проект, своей батиметрией с уровнем воды. values -
+        готовые значения окна для проверочных шагов. Возвращает номер
+        растра или None."""
+        from .sentinel import free_path
+        from .sounding import SoundingDialog, build_grid
+        layer = QgsProject.instance().mapLayer(layer_id)
+        if layer is None:
+            return None
+        if values is None:
+            lat, lon = self._layer_center(layer)
+            level = 0.0
+            if lat is not None:
+                level = float(self.view.store.heights_at(
+                    [lat], [lon], scaled=False)[0])
+                level = round(level, 1) if math.isfinite(level) else 0.0
+            folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                                  "PlanetX", "bathymetry")
+            stem = "".join(c if c.isalnum() or c in "-_" else "_"
+                           for c in layer.name()) or "soundings"
+            path = os.path.join(folder, stem + ".tif")
+            dialog = SoundingDialog(layer, level, path, self)
+            if not dialog.exec():
+                return None
+            values = dialog.values()
+        (xs, ys, zs, epsg), cell, limit, level, path = values
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        stem, ext = os.path.splitext(os.path.basename(path))
+        path = free_path(os.path.dirname(path), stem, ext or ".tif")
+        QApplication.setOverrideCursor(enum(Qt, "CursorShape", "WaitCursor"))
+        try:
+            done = build_grid(xs, ys, zs, epsg, cell, limit, path)
+        finally:
+            QApplication.restoreOverrideCursor()
+        if isinstance(done, str) or not done:
+            QMessageBox.warning(self, tr("Батиметрия по промерам"), tr(
+                "Растр глубин не построен. Ошибка - {error}.",
+                error=done or "0"))
+            return None
+        raster = QgsRasterLayer(path, tr("{name} - глубины",
+                                         name=layer.name()), "gdal")
+        if not raster.isValid():
+            return None
+        project = QgsProject.instance()
+        project.addMapLayer(raster, False)
+        root = project.layerTreeRoot()
+        title = tr("PlanetX - батиметрия")
+        group = root.findGroup(title) or root.insertGroup(0, title)
+        group.addLayer(raster)
+        lakes = read_bathymetry()
+        lakes[raster.id()] = ("depth", level)
+        write_bathymetry(lakes)
+        self.set_insets(read_insets() + [raster.id()])
+        self.message = (tr(
+            "Растр глубин построен, ячеек {cells} по {cell:g} м.",
+            cells=done, cell=cell), time.monotonic())
+        self._show_state()
+        return raster.id()
+
+    def volume_compare(self, layer_id, values=None):
+        """Пункт «Выемка и насыпь…» растра: разность с прежней съёмкой
+        в проект и сводка объёмов. values - (прежняя, участок, порог)
+        для проверочных шагов, тогда окна сводки нет. Возвращает
+        (номер растра разности, сводка) или None."""
+        from .sentinel import free_path
+        from .volumes import (VolumeDialog, compute, style_difference,
+                              summary_text)
+        project = QgsProject.instance()
+        layer = project.mapLayer(layer_id)
+        if layer is None:
+            return None
+        quiet = values is not None
+        if values is None:
+            dialog = VolumeDialog(layer, self)
+            if not dialog.exec():
+                return None
+            values = dialog.values()
+        old_id, area_id, threshold = values
+        old = project.mapLayer(old_id)
+        area = project.mapLayer(area_id) if area_id else None
+        if old is None:
+            return None
+        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                              "PlanetX", "volumes")
+        os.makedirs(folder, exist_ok=True)
+        stem = "".join(c if c.isalnum() or c in "-_" else "_"
+                       for c in "{} - {}".format(layer.name(), old.name()))
+        path = free_path(folder, stem or "difference", ".tif")
+        QApplication.setOverrideCursor(enum(Qt, "CursorShape", "WaitCursor"))
+        try:
+            out, error = compute(old, layer, area, threshold, path)
+        finally:
+            QApplication.restoreOverrideCursor()
+        if out is None:
+            QMessageBox.warning(self, tr("Выемка и насыпь"), tr(
+                "Разность съёмок не посчитана. Ошибка - {error}.",
+                error=error))
+            return None
+        raster = QgsRasterLayer(path, tr("{new} - {old}, разность",
+                                         new=layer.name(), old=old.name()),
+                                "gdal")
+        if not raster.isValid():
+            return None
+        style_difference(raster, out)
+        project.addMapLayer(raster, False)
+        root = project.layerTreeRoot()
+        title = tr("PlanetX - выемка и насыпь")
+        group = root.findGroup(title) or root.insertGroup(0, title)
+        group.addLayer(raster)
+        self._shown.add(raster.id())
+        if self.follow:
+            set_visible_on_map(raster.id(), True)
+        write_shown(self._shown)
+        self._show_layers()
+        self.refresh()
+        if not quiet:
+            QMessageBox.information(self, tr("Выемка и насыпь"),
+                                    summary_text(out))
+        return raster.id(), out
 
     def _layer_center(self, layer):
         """Середина охвата слоя в широте и долготе или (None, None)."""
@@ -5056,9 +5504,10 @@ class GlobeWindow(QWidget):
         now = time.monotonic()
         if self.view.sky_view is not None:
             return
+        maps = self._map_grounds()
         for item in self.myplaces.overlays:
             if not item.visible or item.body != self.planet.key \
-                    or not self._time_ok(item):
+                    or not self._overlay_time_ok(item, maps):
                 continue
             _, overlay, _ = self._overlay_edit(item)
             interval = overlays.refresh_interval(overlay.refresh)
@@ -5106,8 +5555,9 @@ class GlobeWindow(QWidget):
         наложения тела на глобусе в промежутке шкалы времени."""
         if not hasattr(self, "ground_layers"):
             return
+        maps = self._map_grounds()
         items = [o for o in self.myplaces.overlays
-                 if o.visible and self._time_ok(o)
+                 if o.visible and self._overlay_time_ok(o, maps)
                  and o.body == self.planet.key
                  and self.view.sky_view is None]
         entries = []
@@ -5127,6 +5577,8 @@ class GlobeWindow(QWidget):
             self._ground_rasters = layers
             self._ground_ids = ids
             self._update_overlay(keep=True)
+        else:
+            self._apply_map_compare()
         key = [(token, overlay.params()) for token, overlay, _ in photos]
         if key != self._photo_key:
             self._photo_key = key
@@ -6590,6 +7042,9 @@ class GlobeWindow(QWidget):
                     loader.abort()
             if self.overlay is not None:
                 self.overlay.abort()
+            if self.map_compare_overlay is not None:
+                self.map_compare_overlay.abort()
+            self.compare_grounds.clear()
             # Растры картинок на поверхности не входят в проект, их держит
             # окно. Они отпускаются здесь, пока QGIS жив, а не при разборе
             # Python после выхода.

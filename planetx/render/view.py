@@ -482,6 +482,9 @@ class GlobeView(QOpenGLWidget):
         # Шторка сравнения: доля ширины кадра от левого края или None.
         # Левее неё - слой «compare», ставит окно (ui/swipe.py).
         self.swipe = None
+        # Шторка старых карт: слой «compare» левее шторки заменяет
+        # наложение слоёв проекта, а не тему.
+        self.swipe_maps = False
         self._feature_marks = ([], None)
         self._marked = (None, None, [])
         self._context = None
@@ -1259,6 +1262,8 @@ class GlobeView(QOpenGLWidget):
         self.u_wedge = GL.glGetUniformLocation(self.program, "u_wedge")
         self.u_plain = GL.glGetUniformLocation(self.program, "u_plain")
         self.u_swipe = GL.glGetUniformLocation(self.program, "u_swipe")
+        self.u_swipe_maps = GL.glGetUniformLocation(self.program,
+                                                    "u_swipe_maps")
         self.u_wedge_lat = GL.glGetUniformLocation(self.program,
                                                    "u_wedge_lat")
         GL.glUseProgram(self.program)
@@ -1790,6 +1795,7 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glUniform1f(self.u_plain, 1.0 if self.plain_base else 0.0)
         swipe = self.swipe if self.gibs["compare"].shown else None
         gpu.gl.glUniform1f(self.u_swipe, -1.0 if swipe is None else swipe)
+        gpu.gl.glUniform1f(self.u_swipe_maps, 1.0 if self.swipe_maps else 0.0)
         if wedge is not None:
             cx, cy, cos_half, sin_s, sin_n = cutaway.uniform(wedge)
             gpu.gl.glUniform4f(self.u_wedge, cx, cy, cos_half, 0.0)

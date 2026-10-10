@@ -6068,6 +6068,303 @@ def brienz_depth_check():
         mesh is None for mesh in pending.values())
 
 
+@check(2000)
+def volume_check():
+    """Выемка и насыпь: новая съёмка - съёмка карьера демо, дно углублено
+    на 15 м в круге 60 м, отвал 20 м квадратом 80 м. Объёмы сверяются
+    с точными по пикселям."""
+    import numpy as np
+    from osgeo import gdal
+    from qgis.core import QgsProject, QgsRasterLayer
+    window = state["window"]
+    src = os.path.join(ROOT, "planetx", "demo", "quarry", "quarry_dem.tif")
+    old = QgsRasterLayer(src, "survey 2025", "gdal")
+    QgsProject.instance().addMapLayer(old)
+    ds = gdal.Open(src)
+    dem = ds.GetRasterBand(1).ReadAsArray().astype(np.float64)
+    rows, cols = dem.shape
+    yy, xx = np.mgrid[0:rows, 0:cols]
+    pit = (yy - rows // 2) ** 2 + (xx - cols // 2) ** 2 <= 60 ** 2
+    dump = (yy >= 200) & (yy < 280) & (xx >= 200) & (xx < 280)
+    new = dem.copy()
+    new[pit] -= 15.0
+    new[dump] += 20.0
+    path = os.path.join(TEMP, "planetx_survey_2026.tif")
+    copy = gdal.GetDriverByName("GTiff").CreateCopy(path, ds)
+    copy.GetRasterBand(1).WriteArray(new.astype(np.float32))
+    copy = None
+    _, dx, _, _, _, dy = ds.GetGeoTransform()
+    cell = abs(dx * dy)
+    layer = QgsRasterLayer(path, "survey 2026", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    started = time.monotonic()
+    done = window.volume_compare(layer.id(), (old.id(), "", 0.1))
+    raster_id, out = done
+    result["volumes"] = {
+        "seconds": round(time.monotonic() - started, 2),
+        "cut": round(out["cut"]), "cut_expected": round(
+            pit.sum() * 15.0 * cell),
+        "fill": round(out["fill"]), "fill_expected": round(
+            dump.sum() * 20.0 * cell),
+        "deepest": round(out["deepest"], 2),
+        "highest": round(out["highest"], 2),
+        "on_globe": raster_id in window._shown}
+    for layer_id in (raster_id, layer.id(), old.id()):
+        QgsProject.instance().removeMapLayer(layer_id)
+
+
+@check(3000)
+def sounding_build():
+    """Батиметрия по промерам: галсы с севера на юг через 50 м, точка
+    через 5 м, глубины 564 - дно растра swissBATHY3D. Грид по ним -
+    своя батиметрия."""
+    import numpy as np
+    from osgeo import gdal, osr
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPoint, QgsProject,
+                           QgsVectorLayer)
+    from planetx.ui.project import write_bathymetry, write_insets
+    from planetx.ui.sounding import read_points
+    from planetx.core import sounding
+    window = state["window"]
+    write_insets([])
+    write_bathymetry({})
+    window.set_insets([])
+    path = os.path.join(ROOT, "planetx", "demo", "brienz",
+                        "brienzersee_bed.tif")
+    ds = gdal.Open(path)
+    x0, dx, _, y0, _, dy = ds.GetGeoTransform()
+    bed = ds.GetRasterBand(1).ReadAsArray()
+    srs = osr.SpatialReference(wkt=ds.GetProjection())
+    epsg = srs.GetAuthorityCode(None)
+    layer = QgsVectorLayer("PointZ?crs=EPSG:{}".format(epsg), "soundings",
+                           "memory")
+    features = []
+    step_col = max(1, int(round(50.0 / dx)))
+    step_row = max(1, int(round(5.0 / abs(dy))))
+    for col in range(0, bed.shape[1], step_col):
+        for row in range(0, bed.shape[0], step_row):
+            value = float(bed[row, col])
+            if value == -9999.0 or not np.isfinite(value):
+                continue
+            feature = QgsFeature()
+            feature.setGeometry(QgsGeometry(QgsPoint(
+                x0 + (col + 0.5) * dx, y0 + (row + 0.5) * dy,
+                -(564.0 - value))))
+            features.append(feature)
+    layer.dataProvider().addFeatures(features)
+    QgsProject.instance().addMapLayer(layer)
+    state["sounding_layer"] = layer.id()
+    started = time.monotonic()
+    points = read_points(layer, "")
+    xs, ys = points[0], points[1]
+    cell = sounding.auto_cell(xs, ys)
+    raster = window.sounding_bathymetry(layer.id(), (
+        points, cell, cell * sounding.MAX_GAP_CELLS, 564.0,
+        os.path.join(TEMP, "planetx_soundings.tif")))
+    result["sounding"] = {
+        "points": len(xs), "cell": cell,
+        "build_s": round(time.monotonic() - started, 2),
+        "raster": raster is not None,
+        "insets": [(e.name, e.lake) for e in window.insets]}
+    state["sounding_raster"] = raster
+
+
+@check(3000)
+def sounding_wait():
+    return _quarry_wait(60.0)
+
+
+@check(1000)
+def sounding_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["sounding"]
+    out["bed_deepest"] = _brienz_depth()
+    out["water_vertices"] = window.view.lake_water.vertex_count()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_sounding.png"))
+    window.set_insets([])
+    for key in ("sounding_raster", "sounding_layer"):
+        if state.get(key):
+            QgsProject.instance().removeMapLayer(state[key])
+
+
+def _year(window):
+    from planetx.core import oldmaps
+    moment = window._map_moment()
+    return None if moment is None else oldmaps.year_label(moment)
+
+
+def _map_names(window):
+    """Названия растров-карт наложения, видные сейчас."""
+    from qgis.core import QgsProject
+    hidden = window._maps_hidden()
+    return sorted(QgsProject.instance().mapLayer(i).name()
+                  for i in window._map_years
+                  if i in (window._applied_layers or ()) and i not in hidden)
+
+
+@check(500)
+def ua_send():
+    """Заголовок User-Agent на сервере: запрос PlanetX несёт свой,
+    запрос QGIS - заголовок QGIS. Прежний обработчик запросов на Python
+    QGIS звал для всех запросов всех потоков, см. AGENTS.md."""
+    import http.server
+    import threading
+    from qgis.core import QgsNetworkAccessManager
+    from qgis.PyQt.QtCore import QUrl
+    from qgis.PyQt.QtNetwork import QNetworkRequest
+    from planetx.net.overlay import fetch_bytes
+    seen = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return None
+
+        def do_GET(self):
+            seen[self.path] = self.headers.get("User-Agent", "")
+            body = b"ok"
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:{}".format(server.server_address[1])
+    got = {}
+    state["ua"] = (server, seen, got, [
+        fetch_bytes(base + "/planetx", lambda data, error:
+                    got.update(planetx=(data, error)), fresh=True),
+        QgsNetworkAccessManager.instance().get(
+            QNetworkRequest(QUrl(base + "/qgis")))])
+
+
+@check(500)
+def ssl_send():
+    """Запрос PlanetX к серверу с самоподписанным сертификатом: Qt его
+    обрывает, ошибка SSL пишется в журнал работы."""
+    from planetx.net.overlay import fetch_bytes
+    got = {}
+    state["ssl"] = (got, fetch_bytes(
+        "https://self-signed.badssl.com/",
+        lambda data, error: got.update(done=(data, error)), fresh=True))
+
+
+@check(500)
+def ssl_check():
+    from qgis.core import QgsApplication
+    got, _ = state["ssl"]
+    if "done" not in got and state.setdefault("ssl_wait", 0) < 40:
+        state["ssl_wait"] += 1
+        return 500
+    path = os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
+                        "planetx.log")
+    with open(path, encoding="utf-8") as stream:
+        tail = stream.read()[-4000:]
+    data, error = got.get("done", (None, "timeout"))
+    result["ssl"] = {"data": data is not None, "error": error,
+                     "journal": "self-signed.badssl.com" in tail}
+
+
+@check(500)
+def ua_check():
+    server, seen, got, replies = state["ua"]
+    if len(seen) < 2 and state.setdefault("ua_wait", 0) < 20:
+        state["ua_wait"] += 1
+        return 500
+    server.shutdown()
+    result["user_agent"] = {
+        "planetx": seen.get("/planetx"), "qgis": seen.get("/qgis"),
+        "reply": got.get("planetx", (None, ""))[0]}
+
+
+@check(3000)
+def oldmaps_open():
+    """Старые карты, демо «Москва, старые карты»: пять планов Wikimedia
+    Commons тайлами XYZ Wikimaps Warper с годами карт."""
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Москва, старые карты",
+                                  "Moscow, old maps"))
+    action.trigger()
+    result["oldmaps"] = {
+        "years": sorted(window._map_years.values()),
+        "bar_shown": window.timebar.shown(),
+        "point": window.timebar.track.point,
+        "stepper": window.timebar.stepper is not None,
+        "compare_button": window.timebar.compare.isVisibleTo(window.timebar),
+        "year": _year(window),
+        "shown_maps": _map_names(window)}
+
+
+def _overlay_wait(name, limit, loader=None):
+    window = state["window"]
+    started = state.setdefault(name, time.monotonic())
+    loader = loader or window.overlay
+    busy = loader is not None and loader.busy()
+    # Вид просит тайлы наложения в кадре: сразу после пересборки
+    # загрузчик ещё пуст.
+    elapsed = time.monotonic() - started
+    if (busy or window.view.load_missing or elapsed < 6.0) \
+            and elapsed < limit:
+        return 500
+    state.pop(name, None)
+
+
+@check(3000)
+def oldmaps_wait():
+    return _overlay_wait("oldmaps_wait", 60.0)
+
+
+@check(1000)
+def oldmaps_check():
+    """Кадр 1813 года, два шага шкалы вперёд - 1912 год, шторка."""
+    window = state["window"]
+    out = result["oldmaps"]
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_oldmaps_1813.png"))
+    window.timebar.step(1)
+    window.timebar.step(1)
+    window._apply_layer_time()
+    out["after_steps"] = _year(window)
+    out["shown_after_steps"] = _map_names(window)
+    out["applied_hidden"] = len(window._applied_maps)
+    window.set_compare(True)
+    out["swipe"] = {
+        "left": window.swipe_bar.left_day.text(),
+        "right": window.swipe_bar.right.text(),
+        "compare_shown": window.view.gibs["compare"].shown,
+        "swipe_maps": window.view.swipe_maps}
+
+
+@check(3000)
+def oldmaps_swipe_wait():
+    window = state["window"]
+    return _overlay_wait("oldmaps_swipe", 60.0) \
+        or _overlay_wait("oldmaps_swipe_left", 60.0,
+                         window.map_compare_overlay)
+
+
+@check(1000)
+def oldmaps_swipe_check():
+    window = state["window"]
+    out = result["oldmaps"]
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_oldmaps_swipe.png"))
+    out["swipe"]["left_textures"] = len(window.view.gibs["compare"].textures)
+    window._compare_step(-1)
+    out["swipe"]["left_after_step"] = window.swipe_bar.left_day.text()
+    window.set_compare(False)
+    out["swipe"]["off"] = (window._map_compare_at is None
+                           and window.map_compare_overlay is None
+                           and not window.view.swipe_maps)
+    window.timebar.close_bar()
+    window._time_toggled(False)
+    window._apply_layer_time()
+    out["closed_bar_shown"] = len(_map_names(window))
+
+
 def _dem_at(lat, lon):
     from osgeo import gdal, osr
     path = os.path.join(ROOT, "planetx", "demo", "quarry", "quarry_dem.tif")

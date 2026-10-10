@@ -629,6 +629,41 @@ def brienz():
     save("brienz", scene, root)
 
 
+# Москва, старые карты: карты 1813, 1860, 1900, 1917 и 1935 годов из
+# Wikimedia Commons (общественное достояние), привязанные в Wikimaps
+# Warper. Окно кладёт их тайлы XYZ в проект с годами карт
+# (GlobeWindow.open_demo, MOSCOW_MAPS). Точки и вид - выбор помощника.
+KREMLIN = (55.7517, 37.6178)
+CATHEDRAL = (55.7446, 37.6055)
+
+
+def moscow():
+    title = "PlanetX: демо, Москва, старые карты"
+    lat, lon = KREMLIN
+    places = [
+        KPlace("Кремль", "point", [(lat, lon)], color=ORANGE, icon="flag",
+               view=(lat, lon, 9000.0, 0.0, 0.0),
+               description="Карты Москвы 1813, 1860, 1900, 1917 и 1935 "
+                           "годов - слои проекта QGIS с годом карты. На "
+                           "шкале времени видна последняя карта не позже "
+                           "момента, шаги ◂ ▸ идут по годам карт, кнопка ⇆ "
+                           "открывает шторку двух лет. Карты - Wikimedia "
+                           "Commons, общественное достояние, привязка - "
+                           "Wikimaps Warper."),
+        KPlace("Храм Христа Спасителя", "point", [CATHEDRAL], color=WHITE,
+               icon="church", view=(CATHEDRAL[0], CATHEDRAL[1], 3000.0, 0.0,
+                                  0.0),
+               description="Храм строился с 1839 по 1883 год, на плане "
+                           "1813 года его нет, на картах 1860-1917 годов "
+                           "он есть, в 1931 году его снесли."),
+    ]
+    root = KFolder(title, children=places)
+    view = dict(EARTH_VIEW, scale=1.0, extras=QUIET_EXTRAS)
+    scene = Scene((lat, lon, 22000.0, 0.0, 0.0), None, [], view,
+                  title, "Москва, старые карты")
+    save("moscow", scene, root)
+
+
 def main():
     perm()
     bocachica()
@@ -639,6 +674,7 @@ def main():
     aral()
     quarry()
     brienz()
+    moscow()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,

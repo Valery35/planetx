@@ -419,6 +419,9 @@ class LayerPanel(QWidget):
     inset_toggled = pyqtSignal(str, bool)
     # Растр проекта - батиметрия водоёма: номер слоя (окно уровня воды).
     bathymetry_requested = pyqtSignal(str)
+    map_year_requested = pyqtSignal(str)
+    sounding_requested = pyqtSignal(str)
+    volume_requested = pyqtSignal(str)
     # Растр - поверхность по отметкам, пункт меню слоя.
     grid_toggled = pyqtSignal(str, bool)
     # Растр - изолинии в проект QGIS, пункт меню слоя.
@@ -1533,6 +1536,13 @@ class LayerPanel(QWidget):
                 and enum_int(layer.geometryType()) == 0:
             menu.addAction(tr("Трек…")).triggered.connect(
                 lambda: self.track_requested.emit(layer))
+            sounding = menu.addAction(tr("Батиметрия по промерам…"))
+            sounding.setToolTip(tr(
+                "Точки слоя - промеры глубин эхолотом. Из них строится "
+                "растр глубин, он ложится в рельеф глобуса дном водоёма, "
+                "над ним - вода на уровне водоёма."))
+            sounding.triggered.connect(
+                lambda: self.sounding_requested.emit(layer.id()))
         if isinstance(layer, QgsVectorLayer) \
                 and enum_int(layer.geometryType()) in (0, 1, 2):
             raise_ = menu.addAction(tr("Выдавливание…"))
@@ -1542,6 +1552,15 @@ class LayerPanel(QWidget):
                 "столбиком, линия - стенкой. Цвет - стиль слоя."))
             raise_.triggered.connect(
                 lambda: self.extrude_requested.emit(layer))
+        if isinstance(layer, QgsRasterLayer):
+            year = menu.addAction(tr("Год карты…"))
+            year.setToolTip(tr(
+                "Год старой карты - растра или тайлов. Карты одной группы "
+                "слоёв сменяют друг друга на шкале времени - видна "
+                "последняя карта не позже момента шкалы. Шаги ◂ ▸ шкалы "
+                "идут по годам карт."))
+            year.triggered.connect(
+                lambda: self.map_year_requested.emit(layer.id()))
         if isinstance(layer, QgsRasterLayer) \
                 and layer.providerType() == "gdal":
             relief = menu.addAction(tr("Рельеф глобуса"))
@@ -1554,6 +1573,13 @@ class LayerPanel(QWidget):
                 "растра."))
             relief.toggled.connect(
                 lambda on: self.inset_toggled.emit(layer.id(), on))
+            volume = menu.addAction(tr("Выемка и насыпь…"))
+            volume.setToolTip(tr(
+                "Растр - новая съёмка рельефа, например карьера с "
+                "отвалами. Разность с прежней съёмкой даёт объёмы выемки "
+                "и насыпи и растр разности в проекте."))
+            volume.triggered.connect(
+                lambda: self.volume_requested.emit(layer.id()))
             lake = menu.addAction(tr("Батиметрия водоёма…"))
             lake.setToolTip(tr(
                 "Растр глубин или отметок дна озера, моря или водохранилища "

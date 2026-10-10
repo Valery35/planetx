@@ -27,6 +27,9 @@ GRIDS = "grids"
 EXTRUDE = "extrude"
 # Батиметрия врезок своего рельефа - строка JSON, core/bathymetry.py.
 BATHYMETRY = "bathymetry"
+# Годы старых карт - растров и тайлов проекта, строка JSON
+# {номер слоя: год}, core/oldmaps.py.
+MAP_YEARS = "map_years"
 
 
 def map_layers(project=None):
@@ -98,6 +101,42 @@ def write_bathymetry(settings, project=None):
     from ..core.bathymetry import dump
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, BATHYMETRY, dump(settings))
+
+
+def read_map_years(project=None):
+    """Годы старых карт проекта: {номер слоя: год}, год
+    астрономический."""
+    project = project or QgsProject.instance()
+    value, ok = project.readEntry(ENTRY, MAP_YEARS, "")
+    if not ok or not value:
+        return {}
+    try:
+        data = json.loads(value)
+    except ValueError:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): int(v) for k, v in data.items()
+            if isinstance(v, int) and not isinstance(v, bool)}
+
+
+def write_map_years(years, project=None):
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, MAP_YEARS, json.dumps(
+        {k: int(v) for k, v in years.items()}, sort_keys=True))
+
+
+def layer_group(layer_id, project=None):
+    """Имя пути группы слоя в дереве проекта, «» - корень. Карты одной
+    группы сменяют друг друга на шкале времени."""
+    project = project or QgsProject.instance()
+    node = project.layerTreeRoot().findLayer(layer_id)
+    names = []
+    parent = node.parent() if node is not None else None
+    while parent is not None and parent.parent() is not None:
+        names.append(parent.name())
+        parent = parent.parent()
+    return "/".join(reversed(names))
 
 
 def read_grids(project=None):

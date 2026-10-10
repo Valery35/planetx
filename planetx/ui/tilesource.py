@@ -19,7 +19,7 @@
 и в обозревателе QGIS. Подпись источника лежит в поле
 planetx-attribution того же подключения.
 """
-from qgis.core import QgsNetworkAccessManager, QgsSettings
+from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QTimer, QUrl
 from qgis.PyQt.QtGui import QImage, QPainter, QPixmap
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
@@ -32,7 +32,7 @@ from ..core.basemap import MAX_LEVEL, attribution_for, tile_url
 from ..core.placeholder import PLACEHOLDER_SHARE
 from ..core.tiling import lonlat_to_tile
 from ..i18n import tr
-from ..net.loader import MARK, REDIRECT, SAFE_REDIRECT, install_user_agent
+from ..net.loader import MARK, REDIRECT, SAFE_REDIRECT, network
 from ..qt_compat import enum
 
 XYZ_PREFIX = "connections/xyz/items/"
@@ -99,7 +99,6 @@ class TileSourceDialog(QDialog):
         self.template = None
         self.name_edited = False
         self.credit_edited = False
-        install_user_agent()
         self.setMinimumWidth(620)
 
         self.address = QLineEdit(self)
@@ -230,7 +229,7 @@ class TileSourceDialog(QDialog):
         request = QNetworkRequest(QUrl(url))
         request.setAttribute(MARK, True)
         request.setAttribute(REDIRECT, SAFE_REDIRECT)
-        reply = QgsNetworkAccessManager.instance().get(request)
+        reply = network().get(request)
         self.replies.append(reply)
         reply.finished.connect(lambda reply=reply: done(reply))
 

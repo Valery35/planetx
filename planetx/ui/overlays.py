@@ -33,7 +33,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QComboBox, QDialog,
                                  QLineEdit, QPlainTextEdit, QPushButton,
                                  QSlider, QSpinBox)
 
-from ..core import editing, overlays
+from ..core import editing, overlays, when
 from ..i18n import tr
 from ..qt_compat import enum
 from .handles import DrawVertices, PropVertices
@@ -402,6 +402,15 @@ class OverlayDialog(QDialog):
         self.description.setToolTip(tr(
             "Описание наложения. Оно уходит в KML вместе с картинкой."))
         form.addRow(tr("Описание"), self.description)
+        self.time = QLineEdit(when.pack(item.time), self)
+        self.time.setPlaceholderText(tr("1890 или 1890/1910"))
+        self.time.setToolTip(tr(
+            "Время картинки, как в KML. Год или дата - момент, у старой "
+            "карты это год карты. Карты-моменты одной папки сменяют друг "
+            "друга на шкале времени - видна последняя карта не позже "
+            "момента шкалы. Два значения через косую черту - промежуток, "
+            "картинка видна в нём. Пустое поле - картинка видна всегда."))
+        form.addRow(tr("Время"), self.time)
         self.store = QComboBox(self)
         self.store.addItem(tr("В файле меток"), "file")
         self.store.addItem(tr("Ссылка на файл или адрес"), "link")
@@ -677,5 +686,17 @@ class OverlayDialog(QDialog):
 
     def values(self):
         """Поля файла по «OK»."""
-        return {"name": self.name.text(),
-                "description": self.description.toPlainText()}
+        values = {"name": self.name.text(),
+                  "description": self.description.toPlainText()}
+        time = self.time_value()
+        if time != self.item.time:
+            values["time"] = time
+        return values
+
+    def time_value(self):
+        """Время из поля: пара строк core.when или None. Неверная
+        запись - прежнее время."""
+        time = when.unpack(self.time.text())
+        if time is not None and when.interval(time) is None:
+            return self.item.time
+        return time

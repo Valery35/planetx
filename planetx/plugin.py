@@ -80,12 +80,11 @@ class PlanetXPlugin:
             self.iface.mainWindow().removeToolBar(self.toolbar)
             self.toolbar.deleteLater()
             self.toolbar = None
-        # Загрузчик мог поставить обработчик запросов QGIS. Он общий для
-        # всех запросов и после выгрузки плагина оставаться не должен.
+        # Менеджер запросов PlanetX после выгрузки плагина не нужен.
         import sys
         loader = sys.modules.get(__package__ + ".net.loader")
         if loader is not None:
-            loader.remove_user_agent()
+            loader.close_network()
         journal.stop()
 
     def about(self):

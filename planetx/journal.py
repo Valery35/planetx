@@ -447,6 +447,19 @@ def _ssl(request, errors):
          + "; ".join(lines))
 
 
+def ssl_errors(address, errors):
+    """Ошибки SSL запроса PlanetX по адресу address. Запросы PlanetX
+    идут своим менеджером мимо обработки QGIS (net/loader.py), поэтому
+    сигнал QGIS их не видит."""
+    lines = []
+    for error in errors:
+        names = error.certificate().subjectInfo(COMMON_NAME)
+        lines.append("{} ({})".format(error.errorString(),
+                                      ", ".join(names) or "-"))
+    note(tr("Ошибки SSL запроса PlanetX {address}:", address=address)
+         + " " + "; ".join(lines))
+
+
 def start(version):
     """Открыть журнал и поставить сторожа. Зовёт initGui."""
     if _state["file"] is not None:

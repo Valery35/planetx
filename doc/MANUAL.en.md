@@ -752,6 +752,26 @@ on top. The choice is kept in the project and in the scene.
 On the first switch-on the raster is converted into a file of the QGIS
 profile. For a survey of 2400 × 2400 pixels this takes about 2 s.
 
+### Cut and fill
+
+Two surveys of one site, for example a quarry with dumps, give the cut
+and fill volumes. The Cut and fill… item of the menu of the new survey
+raster in the Project layers section opens a window:
+
+- Earlier survey - a raster of the same site at an earlier date.
+- Site - polygons outside which the difference is not computed, or the
+  whole extent of the new survey.
+- Threshold - a difference smaller than the threshold in absolute value
+  does not enter the volumes, it is survey noise. The default is 0.1 m.
+
+The earlier survey is resampled to the grid of the new one. The
+computation goes in metres, in the coordinate system of the new survey
+or in the UTM zone if it is in degrees. The summary window shows the
+cut and fill volumes, their areas, the greatest cut depth and fill
+height and the difference of the volumes. The difference raster goes
+into the project in the PlanetX - cut and fill group and is shown on
+the globe, the cut in red, the fill in blue.
+
 ### Own bathymetry
 
 A raster of depths or bed elevations of a lake, sea or reservoir goes
@@ -777,6 +797,30 @@ The Lake Brienz, own bathymetry demo of the Demo icon is the bed of Lake
 Brienz in Switzerland from swisstopo swissBATHY3D data with a 10 m step,
 water at 564 m. The deepest point is 308 m, 256 m below the water. The
 elevation profile across the lake shows the basin.
+
+#### Bathymetry from soundings
+
+Echo sounder soundings are a point layer of the project with the depth
+in a field or in the point Z, for example a CSV with latitude,
+longitude and depth opened in QGIS as a delimited text layer. The
+Bathymetry from soundings… item of the point layer menu builds a depth
+raster from them and makes it own bathymetry. The window sets:
+
+- Depth - the field with the depth or the point Z. The sign of the
+  depth does not matter.
+- Cell - the raster cell size. The default is the square root of the
+  sounding area per point. For tracks 20 m apart with a point every
+  metre it is 5 m.
+- Limit from sounding - a cell farther than this distance from the
+  nearest sounding stays empty. The default is 10 cells. The limit has
+  to be larger than the distance between tracks.
+- Water level - the water height on the day of the soundings.
+- File - the GeoTIFF of the depth raster, by default in the QGIS
+  profile.
+
+The raster is built by triangulation in metres of the UTM zone of the
+middle of the soundings and goes into the project in the PlanetX -
+bathymetry group.
 
 ### Places section
 
@@ -1788,6 +1832,37 @@ closed, the layer is shown in full.
 
 ---
 
+## Old maps
+
+An old map is a raster, XYZ tiles or a ground image with a year. Maps
+of one group replace each other on the time slider. The last map not
+later than the slider moment is shown, before the year of the first
+map of the group none is shown. The ◂ ▸ steps of the slider go by the
+map years. With the slider closed, all maps are shown.
+
+The Map year… item of the layer menu in the Project layers section
+sets the year of a project raster or tiles. Maps of one QGIS layer
+group replace each other. The years are kept in the project.
+
+The year of a ground image is the Time field of its properties
+window, for example «1890». Maps of one My places folder replace each
+other. In KML the map year is a `TimeStamp` of a `GroundOverlay`. An
+image with a span, for example «1890/1910», is shown within its span,
+like a place.
+
+The ⇆ button of the slider opens the swipe of two years. Left of the
+swipe is the map of the previous map year, right of it is the map of
+the slider moment. The swipe is dragged with the mouse, the arrows on
+the left label change its year. A step before the first map leaves
+the imagery without maps on the left.
+
+The Moscow, old maps demo puts maps of Moscow of 1813, 1860, 1900,
+1917 and 1935 from Wikimedia Commons into the project. The maps are in
+the public domain, members of the Wikimaps Warper project
+georeferenced them, the tiles come from its server.
+
+---
+
 ## Satellites
 
 The Satellites layer of the Maps and layers gallery shows artificial
@@ -1877,6 +1952,7 @@ under the list plays a tour over them. The folder can be deleted.
 | Earth | Vegas Loop tunnels | The Boring Company tunnels under Las Vegas with their stations, see [Subsurface mode](#subsurface-mode) |
 | Earth | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
 | Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
+| Earth | Moscow, old maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Old maps](#old-maps) |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |

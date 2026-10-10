@@ -137,6 +137,162 @@ EN = {
         "Lake Brienz, own bathymetry",
     "Бриенцское озеро, дно":
         "Lake Brienz, bed",
+    "Выемка {cut:,.0f} м³ на площади {cut_area:,.0f} м², до {deepest:.1f} "
+    "м.\nНасыпь {fill:,.0f} м³ на площади {fill_area:,.0f} м², до "
+    "{highest:.1f} м.\nРазность насыпи и выемки {net:,.0f} м³. Площадь "
+    "сравнения {area:,.0f} м².":
+        "Cut {cut:,.0f} m³ over {cut_area:,.0f} m², down to {deepest:.1f} "
+        "m.\nFill {fill:,.0f} m³ over {fill_area:,.0f} m², up to "
+        "{highest:.1f} m.\nFill minus cut {net:,.0f} m³. Compared area "
+        "{area:,.0f} m².",
+    "Выемка и насыпь":
+        "Cut and fill",
+    "Выемка и насыпь…":
+        "Cut and fill…",
+    "Растр «{name}» - новая съёмка рельефа. Разность с прежней съёмкой даёт "
+    "выемку и насыпь, их объёмы и растр разности в проекте.":
+        "The raster «{name}» is the new terrain survey. The difference with "
+        "the earlier survey gives the cut and fill, their volumes and a "
+        "difference raster in the project.",
+    "Растр прежней съёмки того же участка. Он пересчитывается на сетку "
+    "новой съёмки.":
+        "The raster of the earlier survey of the same site. It is resampled "
+        "to the grid of the new survey.",
+    "Весь охват новой съёмки":
+        "Whole extent of the new survey",
+    "Многоугольники участка, например контур карьера и отвалов. Вне них "
+    "разность не считается.":
+        "Polygons of the site, for example the outline of the quarry and "
+        "dumps. Outside them the difference is not computed.",
+    "Разность меньше порога по модулю не входит в объёмы - это шум съёмки. "
+    "Порог больше погрешности съёмок занижает объёмы.":
+        "A difference smaller than the threshold in absolute value does not "
+        "enter the volumes, it is survey noise. A threshold larger than the "
+        "survey error underestimates the volumes.",
+    "Прежняя съёмка":
+        "Earlier survey",
+    "Участок":
+        "Site",
+    "Порог":
+        "Threshold",
+    "В проекте нет другого растра - прежней съёмки.":
+        "The project has no other raster for the earlier survey.",
+    "PlanetX - выемка и насыпь":
+        "PlanetX - cut and fill",
+    "{new} - {old}, разность":
+        "{new} - {old}, difference",
+    "Разность съёмок не посчитана. Ошибка - {error}.":
+        "The survey difference is not computed. Error - {error}.",
+    "Растр - новая съёмка рельефа, например карьера с отвалами. Разность "
+    "с прежней съёмкой даёт объёмы выемки и насыпи и растр разности "
+    "в проекте.":
+        "The raster is a new terrain survey, for example of a quarry with "
+        "dumps. The difference with the earlier survey gives the cut and "
+        "fill volumes and a difference raster in the project.",
+    "Ошибки SSL запроса PlanetX {address}:":
+        "SSL errors of the PlanetX request {address}:",
+    "Батиметрия по промерам":
+        "Bathymetry from soundings",
+    "Батиметрия по промерам…":
+        "Bathymetry from soundings…",
+    "Точки слоя «{name}» - промеры глубин, например галсы эхолота. Из них "
+    "строится растр глубин триангуляцией, он ложится в рельеф глобуса дном "
+    "водоёма, над ним - вода на уровне водоёма.":
+        "The points of the layer «{name}» are depth soundings, for example "
+        "echo sounder tracks. A depth raster is built from them by "
+        "triangulation, it goes into the globe terrain as the water body "
+        "bed, water at the water body level is drawn above it.",
+    "Точки слоя - промеры глубин эхолотом. Из них строится растр глубин, "
+    "он ложится в рельеф глобуса дном водоёма, над ним - вода на уровне "
+    "водоёма.":
+        "The points of the layer are echo sounder depth soundings. A depth "
+        "raster is built from them, it goes into the globe terrain as the "
+        "water body bed, water at the water body level is drawn above it.",
+    "Поле с глубиной или Z точки. Знак глубины не важен, берётся её модуль.":
+        "The field with the depth or the Z of the point. The sign of the "
+        "depth does not matter, its absolute value is taken.",
+    "Размер ячейки растра глубин. По умолчанию - по количеству точек на "
+    "площадь промеров. Мельче ячейка - подробнее дно и больше файл.":
+        "The cell size of the depth raster. By default it follows the "
+        "number of points per area of the soundings. A smaller cell gives "
+        "a more detailed bed and a larger file.",
+    "Ячейка дальше этого расстояния от ближайшего промера остаётся пустой. "
+    "Так растр не заливает берег и заливы без промеров. Предел больше "
+    "расстояния между галсами, иначе между ними остаются полосы.":
+        "A cell farther than this distance from the nearest sounding stays "
+        "empty. So the raster does not fill the shore and bays without "
+        "soundings. The limit is larger than the distance between tracks, "
+        "otherwise strips remain between them.",
+    "Высота поверхности воды над уровнем моря в день промеров. Отметка дна "
+    "- уровень воды минус глубина.":
+        "The height of the water surface above sea level on the day of the "
+        "soundings. The bed elevation is the water level minus the depth.",
+    "Файл GeoTIFF растра глубин.":
+        "The GeoTIFF file of the depth raster.",
+    "Ячейка":
+        "Cell",
+    "Предел от промера":
+        "Limit from sounding",
+    "Файл":
+        "File",
+    "Растр глубин":
+        "Depth raster",
+    "Промеров {count}, глубина от {low:.1f} до {high:.1f} м.":
+        "Soundings {count}, depth from {low:.1f} to {high:.1f} m.",
+    "Z точки":
+        "Point Z",
+    "У слоя нет числовых полей и Z точек.":
+        "The layer has no numeric fields and no point Z.",
+    "Промеров с глубиной меньше трёх.":
+        "Fewer than three soundings with a depth.",
+    "PlanetX - батиметрия":
+        "PlanetX - bathymetry",
+    "{name} - глубины":
+        "{name} - depths",
+    "Растр глубин построен, ячеек {cells} по {cell:g} м.":
+        "The depth raster is built, {cells} cells of {cell:g} m.",
+    "Растр глубин не построен. Ошибка - {error}.":
+        "The depth raster is not built. Error - {error}.",
+    "Год карты…":
+        "Map year…",
+    "Год старой карты - растра или тайлов. Карты одной группы слоёв "
+    "сменяют друг друга на шкале времени - видна последняя карта не позже "
+    "момента шкалы. Шаги ◂ ▸ шкалы идут по годам карт.":
+        "The year of an old map, a raster or tiles. Maps of one layer group "
+        "replace each other on the time slider - the last map not later "
+        "than the slider moment is shown. The ◂ ▸ steps of the slider go "
+        "by the map years.",
+    "Год карты":
+        "Map year",
+    "Год карты «{name}». Пустое поле - карта без года, год до н. э. - со "
+    "знаком минус.":
+        "Year of the map «{name}». An empty field is a map without a year, "
+        "a year BC has a minus sign.",
+    "Год - целое число, например 1890.":
+        "The year is an integer, for example 1890.",
+    "1890 или 1890/1910":
+        "1890 or 1890/1910",
+    "Время картинки, как в KML. Год или дата - момент, у старой карты это "
+    "год карты. Карты-моменты одной папки сменяют друг друга на шкале "
+    "времени - видна последняя карта не позже момента шкалы. Два значения "
+    "через косую черту - промежуток, картинка видна в нём. Пустое поле - "
+    "картинка видна всегда.":
+        "The time of the image, as in KML. A year or a date is a moment, "
+        "for an old map it is the map year. Moment maps of one folder "
+        "replace each other on the time slider - the last map not later "
+        "than the slider moment is shown. Two values with a slash are a "
+        "span, the image is shown within it. An empty field shows the "
+        "image always.",
+    "Москва, старые карты":
+        "Moscow, old maps",
+    "План Москвы":
+        "Plan of Moscow",
+    "Москва, карта Шуберта":
+        "Moscow, Schubert map",
+    "Окрестности Москвы":
+        "Moscow environs",
+    "Генеральный план Москвы":
+        "General plan of Moscow",
     "Благородные металлы":
         "Precious metals",
     "Цветные металлы":
