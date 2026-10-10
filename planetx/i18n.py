@@ -26,6 +26,16 @@ EN = {
     "Ошибки SSL запроса {number}:": "SSL errors of request {number}:",
     "Модуль выгружен.": "The plugin is unloaded.",
     "QGIS закрыт.": "QGIS is closed.",
+    "Стеки потоков C++ по дампу, имена функций приблизительные:":
+        "C++ thread stacks from the dump, function names are approximate:",
+    "Главный поток": "Main thread",
+    "Потоков в ожидании без своих кадров": "Waiting threads without own "
+        "frames",
+    "Поток": "Thread",
+    "Главный поток QGIS не отвечает {seconds} с, дамп процесса со стеками "
+    "потоков - {path}":
+        "The QGIS main thread does not respond for {seconds} s, the "
+        "process dump with thread stacks is {path}",
     "Прошлый сеанс QGIS (процесс {pid}, начат {began}) завершился без "
     "выгрузки модуля - падение или снятие задачи.":
         "The previous QGIS session (process {pid}, started {began}) "

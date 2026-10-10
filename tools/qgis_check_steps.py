@@ -2363,6 +2363,11 @@ def accordion():
     window.toolbar.properties.click()
     out["header_buttons"] = base.row.count()
     out["properties_button"] = len(asked)
+    # Подмена снимается, иначе следующие шаги полного прогона получали
+    # заглушку вместо окна свойств, 10 октября 2026 года.
+    del window._show_properties
+    window.toolbar.properties_clicked.disconnect()
+    window.toolbar.properties_clicked.connect(window._show_properties)
     flown = []
     panel.fly_to_layer.connect(lambda layer: flown.append(layer.name()))
     row = next(panel.layers.topLevelItem(i)
@@ -4264,6 +4269,131 @@ def vt_stress_run():
         return STRESS_PERIOD
     out["gl"] = dict(window.view.gl_errors)
     out["seconds"] = round(time.monotonic() - state["stress_started"], 1)
+
+
+GALLERY_SECONDS = float(os.environ.get("PLANETX_GALLERY_SECONDS", "240"))
+GALLERY_PERIOD = 1500  # мс между переключениями карт витрины
+GALLERY_EXTRAS = ("clouds", "plates", "quakes", "slope", "contours")
+
+
+@check(1000)
+def gallery_stress():
+    """Зависания рабочего компьютера 9 октября 2026 года - при
+    переключении карт витрины. Шаг переключает темы GIBS, поля погоды,
+    слои витрины и подложку, двигает камеру и меряет паузы главного
+    потока таймером 50 мс и длительность каждого
+    QgsNetworkAccessManager.get()."""
+    import random
+    from qgis.core import QgsNetworkAccessManager
+    from qgis.PyQt.QtCore import QTimer
+    from planetx.core import themes
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    seed = int(time.time())
+    out = result["gallery_stress"] = {"seed": seed, "switches": 0,
+                                      "gets": 0, "max_get_ms": 0.0,
+                                      "gets_over_100ms": 0,
+                                      "slow_gets": [], "gaps": []}
+    state["gallery_rnd"] = random.Random(seed)
+    state["gallery_started"] = time.monotonic()
+    state["gallery_keys"] = [t.key for t in themes.THEMES]
+    manager = QgsNetworkAccessManager.instance()
+    small = os.environ.get("PLANETX_GALLERY_CACHE_MB")
+    if small:
+        # Свой маленький кэш в отдельной папке: чистка идёт всё время,
+        # общий кэш QGIS пользователя не трогается.
+        from qgis.core import QgsSettings
+        settings = QgsSettings()
+        state["gallery_cache"] = (settings.value("cache/directory", ""),
+                                  settings.value("cache/size-bytes", 0))
+        folder = os.path.join(TEMP, "planetx_cache_small")
+        settings.setValue("cache/directory", folder)
+        settings.setValue("cache/size-bytes", int(small) * 1024 * 1024)
+        manager.setupDefaultProxyAndCache()
+        out["cache"] = [folder, int(small)]
+    original = manager.get
+
+    def timed(request):
+        started = time.perf_counter()
+        reply = original(request)
+        spent = (time.perf_counter() - started) * 1000.0
+        out["gets"] += 1
+        out["max_get_ms"] = round(max(out["max_get_ms"], spent), 1)
+        if spent > 100.0:
+            out["gets_over_100ms"] += 1
+            if len(out["slow_gets"]) < 20:
+                out["slow_gets"].append(
+                    [round(spent), request.url().host(),
+                     round(time.monotonic() - state["gallery_started"], 1)])
+        return reply
+    manager.get = timed
+    state["gallery_get"] = (manager, original)
+    beat = {"last": time.monotonic(), "max": 0.0}
+
+    def tick():
+        now = time.monotonic()
+        gap = now - beat["last"]
+        beat["last"] = now
+        beat["max"] = max(beat["max"], gap)
+        if gap > 0.5 and len(out["gaps"]) < 40:
+            out["gaps"].append([round(gap, 2), round(
+                now - state["gallery_started"], 1)])
+    timer = QTimer()
+    timer.timeout.connect(tick)
+    timer.start(50)
+    state["gallery_timer"] = (timer, beat)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(55.0, 40.0, 3000000.0, 0.0, 0.0))
+
+
+@check(GALLERY_PERIOD)
+def gallery_stress_run():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result["gallery_stress"]
+    rnd = state["gallery_rnd"]
+    now = time.monotonic()
+    if now - state["gallery_started"] < GALLERY_SECONDS:
+        choice = rnd.random()
+        if choice < 0.55:
+            window.set_theme(rnd.choice(state["gallery_keys"]))
+        elif choice < 0.8:
+            key = rnd.choice(GALLERY_EXTRAS)
+            window.set_extra(key, not window.extras.get(key, False))
+        elif choice < 0.9 and len(window.sources) > 1:
+            window._switch_basemap(rnd.choice(window.sources))
+        else:
+            window.set_theme("")
+        out["switches"] += 1
+        lat = rnd.uniform(-50.0, 65.0)
+        lon = rnd.uniform(-170.0, 170.0)
+        window.view.navigator.show(Pose(
+            lat, lon, rnd.uniform(300000.0, 6000000.0),
+            rnd.uniform(0.0, 360.0), rnd.uniform(0.0, 40.0)))
+        return GALLERY_PERIOD
+    timer, beat = state.pop("gallery_timer")
+    timer.stop()
+    manager, original = state.pop("gallery_get")
+    del manager.get
+    if "gallery_cache" in state:
+        from qgis.core import QgsSettings
+        folder = out["cache"][0]
+        out["cache_files"] = sum(len(f) for _, _, f in os.walk(folder))
+        out["cache_mb"] = round(sum(
+            os.path.getsize(os.path.join(d, n)) for d, _, f in
+            os.walk(folder) for n in f) / 1e6, 1)
+        directory, size = state.pop("gallery_cache")
+        settings = QgsSettings()
+        settings.setValue("cache/directory", directory)
+        settings.setValue("cache/size-bytes", size)
+        manager.setupDefaultProxyAndCache()
+    out["max_gap_s"] = round(beat["max"], 2)
+    out["gl"] = dict(window.view.gl_errors)
+    out["seconds"] = round(now - state["gallery_started"], 1)
+    window.set_theme("")
+    for key in GALLERY_EXTRAS:
+        window.set_extra(key, False)
 
 
 # Строки, какие бесплатная модель кладёт в названия 4 октября 2026
@@ -7530,6 +7660,91 @@ def overlay_deleted_layer():
         overlay.deleteLater()
 
 
+@check(2000)
+def journal_hang():
+    """Главный поток стоит внутри вызова Qt дольше journal.DUMP_AFTER -
+    журнал пишет дамп процесса и стеки потоков C++ по нему."""
+    import glob
+    import time as _time
+    from qgis.PyQt.QtCore import QThread
+    from planetx import journal
+    out = result.setdefault("journal_hang", {})
+    out["watch"] = journal._state["watch"] is not None
+    before = set(glob.glob(os.path.join(journal.folder(), "hang-*.dmp")))
+    started = _time.monotonic()
+    QThread.msleep(int((journal.DUMP_AFTER + 6) * 1000))
+    out["slept"] = round(_time.monotonic() - started, 1)
+    _time.sleep(1.5)
+    made = set(glob.glob(os.path.join(journal.folder(), "hang-*.dmp")))
+    made -= before
+    out["dumps"] = len(made)
+    out["dump_kb"] = [round(os.path.getsize(n) / 1024) for n in made]
+    with open(journal.path(), encoding="utf-8") as handle:
+        text = handle.read()
+    names = [os.path.basename(n) for n in made]
+    at = max((text.rfind(n) for n in names), default=-1)
+    out["noted"] = at >= 0
+    report = text[at:] if at >= 0 else ""
+    lines = report.split("\n")
+    out["main_frames"] = [line.strip() for line in lines[2:8]]
+    out["sleep"] = any("Sleep" in line for line in lines[2:6])
+    out["report_kb"] = round(len(report.encode("utf-8")) / 1024, 1)
+    out["threads"] = sum(1 for line in lines if not line.startswith(" ")
+                         and line[:1].isalpha())
+    for name in made:
+        os.remove(name)
+
+
+@check(2000)
+def journal_deadlock():
+    """Главный поток ждёт мьютекс Qt, который держит рабочий поток, -
+    так выглядит взаимная блокировка внутри QGIS. В разборе дампа
+    главный поток стоит в QMutex, рабочий - в своём ожидании."""
+    import glob
+    import threading
+    import time as _time
+    from qgis.PyQt.QtCore import QMutex, QThread
+    from planetx import journal
+    out = result.setdefault("journal_deadlock", {})
+    mutex = QMutex()
+    taken = threading.Event()
+
+    def holder():
+        mutex.lock()
+        taken.set()
+        QThread.msleep(int((journal.DUMP_AFTER + 6) * 1000))
+        mutex.unlock()
+    worker = threading.Thread(target=holder, name="planetx-holder")
+    before = set(glob.glob(os.path.join(journal.folder(), "hang-*.dmp")))
+    worker.start()
+    taken.wait(5)
+    started = _time.monotonic()
+    mutex.lock()
+    mutex.unlock()
+    out["waited"] = round(_time.monotonic() - started, 1)
+    worker.join()
+    _time.sleep(1.5)
+    made = set(glob.glob(os.path.join(journal.folder(), "hang-*.dmp")))
+    made -= before
+    out["dumps"] = len(made)
+    with open(journal.path(), encoding="utf-8") as handle:
+        text = handle.read()
+    names = [os.path.basename(n) for n in made]
+    at = max((text.rfind(n) for n in names), default=-1)
+    report = text[at:] if at >= 0 else ""
+    blocks = report.split("\n")
+    main = []
+    for line in blocks[3:]:
+        if not line.startswith(" "):
+            break
+        main.append(line.strip())
+    out["main_frames"] = main[:8]
+    out["main_in_mutex"] = any("Mutex" in line for line in main[:8])
+    out["holder_seen"] = report.count("msleep") + report.count("SleepEx")
+    for name in made:
+        os.remove(name)
+
+
 @check(300)
 def journal_crash():
     """Сеанс умершего процесса с файлом стеков QGIS даёт записи
@@ -8361,34 +8576,6 @@ def section_open():
                          "dialog": window.section_dialog is not None}
 
 
-@check(3000)
-def ground_refs():
-    # Сторож сбоя QGIS 3.36 на выходе, 5 октября 2026 года. Закрытое окно
-    # Qt удаляет позже, а очистка проекта при выходе будила его, и оно
-    # собирало новое наложение с растрами картинок вне проекта. Python
-    # удалял их после выхода QGIS. Шаг закрывает окно, очищает проект,
-    # как finish, и считает живые растры и наложение без сборки мусора.
-    import gc
-    from qgis.core import QgsRasterLayer
-    window = state["window"]
-    from qgis.PyQt import sip
-
-    def rasters():
-        return len([l for l in gc.get_objects()
-                    if isinstance(l, QgsRasterLayer)
-                    and not sip.isdeleted(l)])
-
-    before = rasters()
-    window.close()
-    QgsProject.instance().clear()
-    alive = rasters()
-    overlay = window.overlay
-    result["ground_refs"] = {
-        "before": before, "after": alive,
-        "overlay_after_close": overlay is not None
-        and not getattr(overlay, "stopped", True)}
-
-
 @check(1000)
 def section_wait():
     window = state["window"]
@@ -8455,6 +8642,41 @@ def section_check():
     out["wall_after_close"] = view.section_wall.drawn
     window.myplaces.remove(state["section_key"])
     out["gl"] = dict(window.view.gl_errors)
+
+
+@check(3000)
+def ground_refs():
+    # Сторож сбоя QGIS 3.36 на выходе, 5 октября 2026 года. Закрытое окно
+    # Qt удаляет позже, а очистка проекта при выходе будила его, и оно
+    # собирало новое наложение с растрами картинок вне проекта. Python
+    # удалял их после выхода QGIS. Шаг закрывает окно, очищает проект,
+    # как finish, и считает живые растры и наложение без сборки мусора.
+    import gc
+    from qgis.core import QgsRasterLayer
+    window = state["window"]
+    from qgis.PyQt import sip
+
+    def rasters():
+        return len([l for l in gc.get_objects()
+                    if isinstance(l, QgsRasterLayer)
+                    and not sip.isdeleted(l)])
+
+    before = rasters()
+    window.close()
+    QgsProject.instance().clear()
+    alive = rasters()
+    overlay = window.overlay
+    result["ground_refs"] = {
+        "before": before, "after": alive,
+        "overlay_after_close": overlay is not None
+        and not getattr(overlay, "stopped", True)}
+    # Шаг стоит в середине списка, следующим шагам нужно живое окно.
+    # Без этого полный прогон 10 октября 2026 года дал 97 ошибок
+    # про удалённое окно.
+    plugin = state["plugin"]
+    plugin.run()
+    state["window"] = plugin.window
+    plugin.window.showNormal()
 
 
 @check(10000)

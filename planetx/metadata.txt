@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.62.2
+version=0.62.3
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.62.2 The Pythagoras project window leads through four
+changelog=0.62.3 When QGIS does not respond for more than 30 s,
+      the work log writes a process dump and analyses it at once,
+      the log shows in which QGIS and Qt functions every thread
+      stands and what it waits for. A log with this analysis helps
+      to find the cause of a hang.
+      0.62.2 The Pythagoras project window leads through four
       numbered steps. After To QGIS project the window closes, the
       QGIS map and an open globe show the area, the new layers are
       checked on the globe, and the result stays in the QGIS message

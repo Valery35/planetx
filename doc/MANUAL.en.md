@@ -2093,6 +2093,13 @@ QGIS, including those in worker threads. An error of another plugin
 is marked with its name. Every 15 minutes the log records the memory
 of QGIS and the count of Windows GDI and USER objects.
 
+When QGIS does not respond for more than 30 s, the log writes next to
+itself a process dump `hang-<process number>-<time>.dmp` with the
+stacks of all threads, about 300 KB without memory contents, and
+writes its analysis at once - for every thread the QGIS and Qt
+functions it stands in. It shows which thread waits for what. The
+last three dumps are kept.
+
 The log records a QGIS crash at the next start. The log gets the
 process number and the start time of the crashed session, the Python
 stacks at the crash and the path to the Windows dump, if there is
