@@ -39,7 +39,10 @@ class VideoError(Exception):
 
 
 class _GUID(ctypes.Structure):
-    _fields_ = [("Data1", c_ulong), ("Data2", c_ushort),
+    # DWORD - 32 бита. unsigned long на Linux 64 бита, структура выходила
+    # в 24 байта, и импорт модуля падал - глобус не открывался на
+    # AltLinux с QGIS 4.2, письмо пользователя 10 октября 2026 года.
+    _fields_ = [("Data1", ctypes.c_uint32), ("Data2", c_ushort),
                 ("Data3", c_ushort), ("Data4", c_ubyte * 8)]
 
 

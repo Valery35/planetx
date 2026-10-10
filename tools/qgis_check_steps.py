@@ -7525,6 +7525,202 @@ def landsat_built():
     return None
 
 
+DEM_POINT = (65.0348, 60.1166)  # гора Народная, 1895 м
+
+
+def _dem_set(kind):
+    """Выбор рельефа kind окна «Источники данных», перелёт к Народной."""
+    from qgis.core import QgsSettings
+    from planetx.core import sources
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    QgsSettings().setValue(sources.DEM_KEY, kind)
+    window.sources_changed("terrain")
+    window.view.navigator.show(Pose(DEM_POINT[0], DEM_POINT[1], 6000.0,
+                                    0.0, 0.0))
+    window.view.update()
+    state["dem"] = {"kind": kind, "start": time.monotonic(), "still": 0}
+
+
+def _dem_wait():
+    """Ждать, пока загрузчик высот опустеет, и записать высоты у
+    вершины: наибольшая в квадрате 600 м и уровни тайлов."""
+    import numpy as np
+    window = state["window"]
+    info = state["dem"]
+    spent = time.monotonic() - info["start"]
+    loader = window.terrain_loader
+    busy = bool(loader.replies) or bool(loader.decoding)
+    info["still"] = 0 if busy else info["still"] + 1
+    if (info["still"] < 3 or spent < 5.0) and spent < 150.0:
+        return 1000
+    store = window.view.store
+    lat, lon = DEM_POINT
+    k = 1.0 / (111320.0 * math.cos(math.radians(lat)))
+    offsets = np.arange(-300.0, 300.0, 10.0)
+    lats = lat + offsets[:, None] / 111320.0 + 0 * offsets[None, :]
+    lons = lon + 0 * offsets[:, None] + offsets[None, :] * k
+    heights = store.heights_at(lats.ravel(), lons.ravel(), scaled=False)
+    model = window.dem
+    result.setdefault("dem", {})[info["kind"] or "terrarium"] = {
+        "seconds": round(spent, 1),
+        "peak": round(float(np.nanmax(heights)), 1),
+        "levels": max([key[0] for key in store.tiles] or [0]),
+        "errors": model.errors if model is not None else None,
+        "last_error": model.last_error[:200] if model is not None else None,
+        "credit": window._terrain_credit()[-60:],
+    }
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_dem_{}.png".format(info["kind"] or "terrarium")))
+    return None
+
+
+@check(1000)
+def dem_terrarium():
+    _dem_set("")
+
+
+@check(1000)
+def dem_terrarium_wait():
+    return _dem_wait()
+
+
+@check(1000)
+def dem_copernicus():
+    _dem_set("copernicus30")
+
+
+@check(1000)
+def dem_copernicus_wait():
+    return _dem_wait()
+
+
+@check(1000)
+def dem_gedtm():
+    _dem_set("gedtm30")
+
+
+@check(1000)
+def dem_gedtm_wait():
+    return _dem_wait()
+
+
+@check(500)
+def dem_off():
+    _dem_set("")
+    result["dem"]["off_model"] = state["window"].dem is None
+
+
+# Продукты MODIS: спутник окна, точка, даты, сторона участка, км.
+MODIS_CASES = (
+    ("modis_lst1", (58.0105, 56.2294), (2024, 7, 1),
+     (2024, 7, 31), 20.0),
+    ("modis_lst8", (58.0105, 56.2294), (2024, 6, 1), (2024, 8, 31), 20.0),
+    ("modis_veg", (58.0105, 56.2294), (2024, 6, 1), (2024, 8, 31), 20.0),
+    ("modis_snow1", (58.0105, 56.2294), (2025, 3, 1), (2025, 3, 31),
+     20.0),
+    ("modis_snow8", (58.0105, 56.2294), (2024, 12, 1), (2025, 2, 28),
+     20.0),
+    ("modis_burn", (-35.5, 150.0), (2019, 12, 1), (2019, 12, 31), 60.0),
+)
+
+
+@check(500)
+def modis_run():
+    """Все продукты MODIS по очереди: поиск, облачность, выгрузка всех
+    продуктов первой сцены в проект, значения файлов."""
+    names = os.environ.get("PLANETX_MODIS", "")
+    state["modis"] = {"n": -1, "phase": "next", "cases": [
+        c for c in MODIS_CASES if not names or c[0] in names.split(",")]}
+    result["modis"] = {}
+
+
+@check(1000)
+def modis_wait():
+    import numpy as np
+    from osgeo import gdal
+    from qgis.core import QgsProject
+    from qgis.PyQt.QtCore import QDate, Qt
+    window = state["window"]
+    st = state["modis"]
+    dialog = getattr(window, "sentinel_dialog", None)
+    if st["phase"] == "next":
+        st["n"] += 1
+        if st["n"] >= len(st["cases"]):
+            dialog.close()
+            return None
+        mission, point, start, end, side = st["cases"][st["n"]]
+        dialog = window.sentinel_here(*point)
+        dialog.side.setValue(side)
+        dialog.start.setDate(QDate(*start))
+        dialog.end.setDate(QDate(*end))
+        dialog.mission.setCurrentIndex(dialog.mission.findData(mission))
+        if dialog.searched != mission:
+            dialog.search()
+        st.update(phase="search", t=time.monotonic(), mission=mission)
+        return 1000
+    mission = st["mission"]
+    out = result["modis"].setdefault(mission, {})
+    spent = time.monotonic() - st["t"]
+    if st["phase"] == "search":
+        busy = dialog.reply is not None or dialog.cloud_jobs \
+            or dialog.sas_reply is not None or dialog.sas_waiting
+        if busy and spent < 240.0:
+            return 1000
+        shown = [dialog.list.topLevelItem(n)
+                 for n in range(dialog.list.topLevelItemCount())
+                 if not dialog.list.topLevelItem(n).isHidden()]
+        out.update(search_seconds=round(spent, 1),
+                   scenes=len(dialog.scenes),
+                   unread=sum(1 for c, _ in dialog.clouds.values()
+                              if c is None),
+                   shown=len(shown), status=dialog.status.text(),
+                   clouds=[[round(c or -1), round(v or -1)] for c, v in
+                           list(dialog.clouds.values())[:12]],
+                   first=[shown[0].text(c) for c in range(5)]
+                   if shown else None)
+        if not shown:
+            st["phase"] = "next"
+            return 500
+        dialog.list.setCurrentItem(shown[0])
+        for n in range(dialog.products.count()):
+            dialog.products.item(n).setCheckState(Qt.CheckState.Checked)
+        folder = os.path.join(TEMP, "planetx_modis")
+        dialog.add(folder=folder)
+        st.update(phase="build", t=time.monotonic())
+        return 1000
+    busy = dialog.build_job is not None or dialog.sas_waiting \
+        or dialog.preview_job is not None
+    if busy and spent < 240.0:
+        return 1000
+    out["build_seconds"] = round(spent, 1)
+    out["build_status"] = dialog.status.text()
+    out["preview"] = dialog.preview.pixmap() is not None \
+        and not dialog.preview.pixmap().isNull()
+    group = QgsProject.instance().layerTreeRoot().findGroup("MODIS")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["layers"] = []
+    for layer in layers:
+        ds = gdal.Open(layer.source())
+        a = ds.ReadAsArray() if ds is not None else None
+        ds = None
+        finite = a[np.isfinite(a)] if a is not None else np.array([])
+        out["layers"].append({
+            "name": layer.name(), "valid": layer.isValid(),
+            "crs": layer.crs().authid(),
+            "size": [layer.width(), layer.height()],
+            "data": round(finite.size / a.size, 3) if a is not None else 0,
+            "range": [round(float(finite.min()), 2),
+                      round(float(finite.max()), 2)] if finite.size
+            else None,
+            "rights": layer.metadata().rights()})
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    st["phase"] = "next"
+    return 500
+
+
 @check(500)
 def landsat_rebuild():
     """После landsat_build: та же сцена ещё раз, пока прежние слои в

@@ -31,6 +31,14 @@ EN = {
     "Снимки Sentinel-2 и Landsat…": "Sentinel-2 and Landsat images…",
     "Снимки Sentinel-2 и Landsat": "Sentinel-2 and Landsat images",
     "Температура поверхности, °C": "Surface temperature, °C",
+    "Температура поверхности из продукта USGS Collection 2 Level-2 - не "
+    "радиационная температура. USGS уже учёл излучательную способность "
+    "поверхности по ASTER GED и атмосферу. Модуль только переводит "
+    "кельвины в градусы Цельсия.":
+        "Surface temperature from the USGS Collection 2 Level-2 product, "
+        "not brightness temperature. USGS has already accounted for the "
+        "surface emissivity from ASTER GED and for the atmosphere. The "
+        "plugin only converts kelvins to degrees Celsius.",
     "Landsat 4-9 Collection 2 Level-2 (USGS), файлы и каталог Microsoft "
     "Planetary Computer. Слои несут подпись «Landsat image courtesy of the "
     "U.S. Geological Survey».":
@@ -41,11 +49,14 @@ EN = {
     "Landsat 4-9 - 30 м, с 1982 года": "Landsat 4-9 - 30 m, since 1982",
     "Sentinel-2 - 10 м, снимки с 2015 года, каждые 5 суток. Landsat - 30 м, "
     "снимки с 1982 года и тепловой канал, у Landsat 7 после мая 2003 года на "
-    "снимках пустые полосы. Смена спутника запускает новый поиск.":
+    "снимках пустые полосы. MODIS - готовые продукты NASA с 2000 года, "
+    "сцена - день или период, пиксель 250-1000 м. Смена спутника "
+    "запускает новый поиск.":
         "Sentinel-2 - 10 m, images since 2015, every 5 days. Landsat - "
         "30 m, images since 1982 and a thermal band, Landsat 7 images after "
-        "May 2003 have empty stripes. A change of the satellite starts a "
-        "new search.",
+        "May 2003 have empty stripes. MODIS - ready NASA products since "
+        "2000, a scene is a day or a period, a pixel is 250-1000 m. A "
+        "change of the satellite starts a new search.",
     "Наибольшая облачность всей сцены по оценке поставщика снимков, "
     "у Sentinel-2 сцена 110 × 110 км, у Landsat 185 × 180 км. Это отсев до "
     "расчёта облачности над участком. Сцена с облаками бывает чистой над "
@@ -62,8 +73,38 @@ EN = {
     "остаются пустыми, индексы по ним не считаются.":
         "Pixels of clouds, their shadows and cirrus by the cloud mask of the "
         "scene stay empty, indices are not computed over them.",
-    "Запрос ключа доступа к файлам Landsat…":
-        "Requesting the access key for Landsat files…",
+    "Запрос ключа доступа к файлам…":
+        "Requesting the file access key…",
+    "Температура поверхности днём, °C":
+        "Daytime surface temperature, °C",
+    "Температура поверхности ночью, °C":
+        "Nighttime surface temperature, °C",
+    "EVI - растительность":
+        "EVI - vegetation",
+    "Снег, % пикселя":
+        "Snow, % of pixel",
+    "Снег и лёд за 8 суток":
+        "Snow and ice over 8 days",
+    "Гари, день года":
+        "Burned areas, day of year",
+    "MODIS - температура за сутки, 1 км":
+        "MODIS - temperature per day, 1 km",
+    "MODIS - температура за 8 суток, 1 км":
+        "MODIS - temperature over 8 days, 1 km",
+    "MODIS - NDVI и EVI за 16 суток, 250 м":
+        "MODIS - NDVI and EVI over 16 days, 250 m",
+    "MODIS - снег за сутки, 500 м":
+        "MODIS - snow per day, 500 m",
+    "MODIS - снег за 8 суток, 500 м":
+        "MODIS - snow over 8 days, 500 m",
+    "MODIS - гари по месяцам, 500 м":
+        "MODIS - burned areas by month, 500 m",
+    "MODIS Terra и Aqua версии 061 (NASA LP DAAC, снег - NSIDC), файлы и "
+    "каталог Microsoft Planetary Computer. Слои несут подпись продукта "
+    "и архива NASA.":
+        "MODIS Terra and Aqua version 061 (NASA LP DAAC, snow - NSIDC), "
+        "files and catalogue of Microsoft Planetary Computer. The layers "
+        "carry the credit of the product and the NASA archive.",
     "Спутник": "Satellite",
     "Служба ключей Planetary Computer не ответила: {error}. Повторите "
     "поиск позже.":
@@ -2350,6 +2391,28 @@ EN = {
         'Own terrain',
     'Запись высот':
         'Height encoding',
+    "Только тайлы высот":
+        "Height tiles only",
+    "Copernicus DEM 30 м - поверхность с лесом и домами":
+        "Copernicus DEM 30 m - surface with forest and buildings",
+    "GEDTM30 - рельеф без леса и домов":
+        "GEDTM30 - terrain without forest and buildings",
+    "Высоты суши 30 м с уровня 9":
+        "Land heights of 30 m from level 9",
+    "Модель высот 30 м поверх тайлов высот. Тайлы дают дно морей и вид "
+    "издалека, ближе модель заменяет высоты суши. Copernicus DEM - "
+    "поверхность вместе с лесом и домами, файлы на AWS. GEDTM30 - рельеф "
+    "самой земли, один большой файл, загрузка медленнее. Модель читается "
+    "из сети по участкам.":
+        "A 30 m height model over the height tiles. The tiles give the sea "
+        "floor and the view from afar, closer the model replaces the land "
+        "heights. Copernicus DEM is the surface with forest and buildings, "
+        "files on AWS. GEDTM30 is the bare ground, one large file, loading "
+        "is slower. The model is read from the network piece by piece.",
+    "Модель 30 м":
+        "30 m model",
+    "Свои тайлы высот":
+        "Own height tiles",
     "Адрес TileJSON векторных тайлов в схеме OpenMapTiles. Из них берутся "
     "границы, дороги, воды, названия и 3D-здания. Пустое поле - OpenFreeMap.":
         "The TileJSON address of vector tiles in the OpenMapTiles schema. "

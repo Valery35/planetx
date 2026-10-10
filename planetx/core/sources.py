@@ -21,6 +21,8 @@ PREFIX = "PlanetX/sources/"
 TERRAIN_KEY = PREFIX + "terrain_url"
 ENCODING_KEY = PREFIX + "terrain_encoding"
 TERRAIN_CREDIT_KEY = PREFIX + "terrain_attribution"
+# Модель рельефа 30 м поверх Terrarium, core/dem.py.
+DEM_KEY = PREFIX + "terrain_dem"
 VECTOR_KEY = PREFIX + "vector_tilejson"
 VECTOR_CREDIT_KEY = PREFIX + "vector_attribution"
 # Сервис маршрутов OSRM: шаблон адреса и флажок «через сервис».

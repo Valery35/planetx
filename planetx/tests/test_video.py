@@ -23,6 +23,20 @@ FIRST_VIDEO = 0xFFFFFFFC
 ENABLE_PROCESSING = video._guid("fb394f3d-ccf1-42ee-bbb3-f9b845d5681d")
 
 
+class TestGuid(unittest.TestCase):
+    """Модуль импортируется на любой системе: GUID - ровно 16 байт.
+    С c_ulong у Data1 на Linux 64 бита структура была 24 байта, импорт
+    падал, и глобус не открывался (AltLinux, QGIS 4.2)."""
+
+    def test_guid_has_fixed_width_fields(self):
+        # На Windows c_ulong и c_uint32 - один тип, поэтому проверяется
+        # запись класса: c_long и c_ulong меняют ширину по системе.
+        import inspect
+        text = inspect.getsource(video._GUID)
+        self.assertNotRegex(text, r"\bc_u?long\b")
+        self.assertEqual(ctypes.sizeof(video._GUID), 16)
+
+
 def frame(n):
     """Кадр RGB32: серый фон, красный квадрат вверху слева, синий внизу
     справа, полоса едет слева направо."""

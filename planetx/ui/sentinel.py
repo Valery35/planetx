@@ -26,10 +26,9 @@ AGENTS.md.
 import json
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from qgis.core import (QgsColorRampShader, QgsContrastEnhancement,
+from qgis.core import (Qgis, QgsColorRampShader, QgsContrastEnhancement,
                        QgsMultiBandColorRenderer, QgsProject, QgsRasterLayer,
                        QgsRasterShader, QgsSingleBandPseudoColorRenderer)
 from qgis.PyQt.QtCore import QDate, Qt, QTimer
@@ -41,9 +40,12 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog,
                                  QPushButton, QSpinBox, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout)
 
+from ..core import modis
 from ..core import sentinel as s2
 from ..i18n import tr
-from ..net.loader import USER_AGENT
+from ..net.gdalnet import close_connections as _close_connections
+from ..net.gdalnet import executor
+from ..net.gdalnet import thread_gdal as _thread_gdal
 from ..net.overlay import fetch_bytes, post_json
 from ..qt_compat import enum
 from .inset import warm as warm_gdal
@@ -54,8 +56,6 @@ BAND_WORKERS = 4  # каналов сцены, читаемых сразу
 PREVIEW = 256  # пикселей стороны превью участка
 PREVIEW_WHITE = 0.25  # отражение белого в превью Landsat
 SAS_TRIES = 3  # запросов ключа SAS Landsat до отказа
-HTTP_TIMEOUT = 60  # с на запрос GDAL к файлу в сети
-HTTP_CONNECT = 15  # с на соединение
 SAS_PAUSE = 2000  # мс между запросами ключа
 SAS_LIFE = 45 * 60  # с, ключ просится заново раньше часа его жизни
 SIDE_DEFAULT = 3.0  # км, сторона участка точки
@@ -68,6 +68,7 @@ LINK_RANGE_OTHER = (0.0, 0.45)
 SCENE_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 GROUP = "Sentinel-2"
 GROUPS = {"sentinel2": GROUP, "landsat": "Landsat"}
+GROUPS.update({key: "MODIS" for key in modis.MISSIONS})
 STRETCH = enum(QgsContrastEnhancement, "ContrastEnhancementAlgorithm",
                "StretchToMinimumMaximum")
 
@@ -86,21 +87,38 @@ def titles(mission="sentinel2"):
              "ndmi": tr("NDMI - влажность растительности"),
              "nbr": tr("NBR - гари"),
              "ndsi": tr("NDSI - снег"),
-             "lst": tr("Температура поверхности, °C")}
+             "lst": tr("Температура поверхности, °C"),
+             "lst_day": tr("Температура поверхности днём, °C"),
+             "lst_night": tr("Температура поверхности ночью, °C"),
+             "modis_ndvi": tr("NDVI - растительность"),
+             "modis_evi": tr("EVI - растительность"),
+             "snow_cover": tr("Снег, % пикселя"),
+             "snow_extent": tr("Снег и лёд за 8 суток"),
+             "burn_date": tr("Гари, день года")}
     if mission == "landsat":
         names = {k: v.split(" (")[0] for k, v in names.items()}
     return names
 
 
-MISSIONS = ("sentinel2", "landsat")
+MISSIONS = ("sentinel2", "landsat") + tuple(modis.MISSIONS)
 
 
 def mission_title(mission):
     return {"sentinel2": tr("Sentinel-2 - 10 м, с 2015 года"),
-            "landsat": tr("Landsat 4-9 - 30 м, с 1982 года")}[mission]
+            "landsat": tr("Landsat 4-9 - 30 м, с 1982 года"),
+            "modis_lst1": tr("MODIS - температура за сутки, 1 км"),
+            "modis_lst8": tr("MODIS - температура за 8 суток, 1 км"),
+            "modis_veg": tr("MODIS - NDVI и EVI за 16 суток, 250 м"),
+            "modis_snow1": tr("MODIS - снег за сутки, 500 м"),
+            "modis_snow8": tr("MODIS - снег за 8 суток, 500 м"),
+            "modis_burn": tr("MODIS - гари по месяцам, 500 м")}[mission]
 
 
 def mission_credit(mission):
+    if modis.is_modis(mission):
+        return tr("MODIS Terra и Aqua версии 061 (NASA LP DAAC, снег - "
+                  "NSIDC), файлы и каталог Microsoft Planetary Computer. "
+                  "Слои несут подпись продукта и архива NASA.")
     if mission == "landsat":
         return tr("Landsat 4-9 Collection 2 Level-2 (USGS), файлы и каталог "
                   "Microsoft Planetary Computer. Слои несут подпись "
@@ -115,57 +133,18 @@ def warm():
     warm_gdal()
 
 
-_EXECUTORS = {}
-
-
-def executor(name, workers):
-    """Пул рабочих потоков name, один на всё время работы QGIS.
-
-    Поток, читавший файлы в сети через GDAL, при завершении закрывает
-    соединения curl внутри DllMain под блокировкой загрузчика Windows
-    и ждёт служебные потоки curl, а им для выхода нужна та же
-    блокировка. 10 октября 2026 года так навсегда повис QGIS автора
-    при загрузке Landsat - дамп процесса-сторожа показал рабочий поток
-    в curl_multi_cleanup внутри LdrShutdownThread, потоки curl
-    и новые потоки в ожидании блокировки загрузчика, главный поток - в
-    старте нового потока. Пулы на каждую загрузку завершали потоки
-    после каждой сцены, постоянные пулы их не завершают."""
-    pool = _EXECUTORS.get(name)
-    if pool is None:
-        pool = _EXECUTORS[name] = ThreadPoolExecutor(
-            max_workers=workers, thread_name_prefix="planetx-" + name)
-    return pool
-
-
-def _thread_gdal():
-    """Параметры GDAL рабочего потока: заголовок, без списка папки,
-    пределы времени - зависший запрос кончается ошибкой."""
-    from osgeo import gdal
-    gdal.SetThreadLocalConfigOption("GDAL_HTTP_USERAGENT", USER_AGENT)
-    gdal.SetThreadLocalConfigOption("GDAL_DISABLE_READDIR_ON_OPEN",
-                                    "EMPTY_DIR")
-    gdal.SetThreadLocalConfigOption("GDAL_HTTP_MULTIRANGE", "YES")
-    gdal.SetThreadLocalConfigOption("GDAL_HTTP_MAX_RETRY", "2")
-    gdal.SetThreadLocalConfigOption("GDAL_HTTP_TIMEOUT",
-                                    str(HTTP_TIMEOUT))
-    gdal.SetThreadLocalConfigOption("GDAL_HTTP_CONNECTTIMEOUT",
-                                    str(HTTP_CONNECT))
-    return gdal
-
-
-def _close_connections(gdal):
-    """Соединения curl этого потока закрываются здесь, вне DllMain:
-    при выходе QGIS поток завершится без работы curl под блокировкой
-    загрузчика."""
-    gdal.VSICurlClearCache()
-
-
-def read_window(href, box, res=None, size=None, nearest=False, count=1):
-    """Окно файла в сети по рамке box системы файла: шаг res или
-    размер size (столбцы, строки). Рабочий поток. Массив или None."""
+def read_window(href, box, res=None, size=None, nearest=False, count=1,
+                srs=None):
+    """Окно файла в сети по рамке box системы файла или системы srs
+    (EPSG): шаг res или размер size (столбцы, строки). href - адрес
+    или кортеж адресов тайлов. Рабочий поток. Массив или None."""
     gdal = _thread_gdal()
     options = {"format": "MEM", "outputBounds": box,
                "resampleAlg": "near" if nearest else "bilinear"}
+    if srs is not None:
+        options["dstSRS"] = "EPSG:{}".format(int(srs))
+    sources = ["/vsicurl/" + h for h in href] if isinstance(href, tuple) \
+        else "/vsicurl/" + href
     if size is not None:
         options["width"], options["height"] = size
     else:
@@ -173,7 +152,7 @@ def read_window(href, box, res=None, size=None, nearest=False, count=1):
     gdal.PushErrorHandler("CPLQuietErrorHandler")
     try:
         try:
-            ds = gdal.Warp("", "/vsicurl/" + href, **options)
+            ds = gdal.Warp("", sources, **options)
         except RuntimeError:
             ds = None
         if ds is None:
@@ -192,7 +171,12 @@ def read_window(href, box, res=None, size=None, nearest=False, count=1):
 def _href(scene, key, sas):
     """Адрес канала сцены, у Landsat - с ключом SAS."""
     href = scene.assets[key].href
-    return s2.sign(href, sas) if scene.mission == "landsat" else href
+    return s2.sign(href, sas) if s2.needs_key(scene.mission) else href
+
+
+def _srs(scene):
+    """Система вывода, если она не система файла: у MODIS - UTM."""
+    return scene.epsg if modis.is_modis(scene.mission) else None
 
 
 def scene_cloud(scene, ring, sas=""):
@@ -205,7 +189,8 @@ def scene_cloud(scene, ring, sas=""):
         return scene.id, None, None
     key, res = s2.CLOUD_ASSET[scene.mission]
     box = s2.bounds(xy, res)
-    raw = read_window(_href(scene, key, sas), box, res, nearest=True)
+    raw = read_window(_href(scene, key, sas), box, res, nearest=True,
+                      srs=_srs(scene))
     if raw is None:
         return scene.id, None, None
     cloud, valid = s2.clouds_of(scene, raw, s2.mask(xy, box, res))
@@ -221,6 +206,15 @@ def preview(scene, ring, sas=""):
     width, height = box[2] - box[0], box[3] - box[1]
     scale = PREVIEW / max(width, height)
     size = (max(int(width * scale), 1), max(int(height * scale), 1))
+    if modis.is_modis(scene.mission):
+        # Первый продукт спутника своей шкалой цветов.
+        name = modis.products_of(scene.mission)[0]
+        key, scale, _ = modis.PRODUCTS[name]
+        raw = read_window(_href(scene, key, sas), box, size=size,
+                          nearest=True, srs=scene.epsg)
+        if raw is None:
+            return None
+        return modis.colorize(modis.value(name, raw), scale)
     if scene.mission != "landsat":
         asset = scene.assets.get("visual")
         if asset is None:
@@ -267,15 +261,23 @@ def build(scene, ring, products, folder, clear_clouds, sas=""):
     cloud_key = s2.CLOUD_ASSET[scene.mission][0]
     if clear_clouds:
         keys = keys + [cloud_key]
+    srs = _srs(scene)
+    near = modis.is_modis(scene.mission)
     raw = dict(zip(keys, executor("bands", BAND_WORKERS).map(
         lambda k: read_window(_href(scene, k, sas), box, res,
-                              nearest=(k == cloud_key)), keys)))
+                              nearest=near or k == cloud_key, srs=srs),
+        keys)))
     missing = [k for k, v in raw.items() if v is None]
     if missing:
         raise OSError(", ".join(missing))
     inside = s2.mask(xy, box, res)
     if clear_clouds:
-        inside &= s2.clear_mask(scene, raw.pop(cloud_key))
+        quality = raw[cloud_key] if modis.is_modis(scene.mission) \
+            else raw.pop(cloud_key)
+        inside &= s2.clear_mask(scene, quality)
+    if modis.is_modis(scene.mission):
+        return _build_modis(gdal, scene, raw, inside, products, folder,
+                            box, res)
     bands = {k: s2.reflectance(v, scene.assets[k]) for k, v in raw.items()}
     for values in bands.values():
         values[~inside] = np.nan
@@ -292,6 +294,21 @@ def build(scene, ring, products, folder, clear_clouds, sas=""):
         else:
             ranges = [s2.INDICES[name][1]]
         out.append((name, path, ranges))
+    return out
+
+
+def _build_modis(gdal, scene, raw, inside, products, folder, box, res):
+    """Продукты MODIS: значения по core.modis.value, вне участка и под
+    облаками - NaN."""
+    os.makedirs(folder, exist_ok=True)
+    out = []
+    for name in products:
+        key, scale, _ = modis.PRODUCTS[name]
+        values = modis.value(name, raw[key])
+        values[~inside] = np.nan
+        path = free_path(folder, s2.file_name(scene, name), ".tif")
+        _write(gdal, path, values, box, res, scene.epsg)
+        out.append((name, path, [scale[0]]))
     return out
 
 
@@ -371,12 +388,22 @@ def style_composite(layer, ranges):
 
 def style_index(layer, name):
     """Индекс шкалой цветов core.sentinel.INDICES, температура -
-    шкалой core.sentinel.TEMPERATURE."""
-    if name == "lst":
+    шкалой core.sentinel.TEMPERATURE, продукты MODIS - своими шкалами
+    core.modis.PRODUCTS, классы - без переходов."""
+    discrete = False
+    if name in modis.PRODUCTS:
+        _, ((lo, hi), stops), discrete = modis.PRODUCTS[name]
+    elif name == "lst":
         (lo, hi), stops = s2.TEMPERATURE
     else:
         _, (lo, hi), stops = s2.INDICES[name]
     ramp = QgsColorRampShader(lo, hi)
+    if discrete:
+        # В QGIS 3.36 перечисления Qgis.ShaderInterpolationMethod нет,
+        # там плоское имя класса шейдера.
+        method = getattr(Qgis, "ShaderInterpolationMethod", None)
+        ramp.setColorRampType(method.Exact if method is not None
+                              else getattr(QgsColorRampShader, "Exact"))
     ramp.setColorRampItemList([
         QgsColorRampShader.ColorRampItem(value, QColor(*rgb),
                                          "{:g}".format(value))
@@ -398,9 +425,12 @@ class SentinelDialog(QDialog):
         self.window = window
         self.setWindowTitle(tr("Снимки Sentinel-2 и Landsat"))
         self.setModal(False)
-        # Ключ SAS Landsat и момент, после которого он просится заново.
+        # Ключ SAS коллекции нынешнего спутника и момент, после которого
+        # он просится заново. Ключи коллекций - в sas_keys.
         self.sas = ""
         self.sas_until = 0.0
+        self.sas_keys = {}
+        self.sas_mission = ""  # адрес службы ключа, который просится
         self.sas_reply = None
         self.sas_waiting = []
         self.sas_tries = 0
@@ -429,8 +459,9 @@ class SentinelDialog(QDialog):
         self.mission.setToolTip(tr(
             "Sentinel-2 - 10 м, снимки с 2015 года, каждые 5 суток. "
             "Landsat - 30 м, снимки с 1982 года и тепловой канал, у Landsat "
-            "7 после мая 2003 года на снимках пустые полосы. Смена спутника "
-            "запускает новый поиск."))
+            "7 после мая 2003 года на снимках пустые полосы. MODIS - "
+            "готовые продукты NASA с 2000 года, сцена - день или период, "
+            "пиксель 250-1000 м. Смена спутника запускает новый поиск."))
         self.mission.currentIndexChanged.connect(
             lambda *_: self._mission_changed())
         self.side = QDoubleSpinBox(self)
@@ -575,11 +606,21 @@ class SentinelDialog(QDialog):
         checked = set(self.chosen_products()) if self.products.count() \
             else set(DEFAULT_PRODUCTS)
         mission = self.current_mission()
+        if not checked & set(s2.products_of(mission)):
+            checked = set(s2.products_of(mission)) if modis.is_modis(
+                mission) else set(DEFAULT_PRODUCTS)
         names = titles(mission)
         self.products.clear()
         for key in s2.products_of(mission):
             item = QListWidgetItem(names[key])
             item.setData(SCENE_ROLE, key)
+            if key == "lst":
+                item.setToolTip(tr(
+                    "Температура поверхности из продукта USGS Collection 2 "
+                    "Level-2 - не радиационная температура. USGS уже учёл "
+                    "излучательную способность поверхности по ASTER GED "
+                    "и атмосферу. Модуль только переводит кельвины "
+                    "в градусы Цельсия."))
             item.setFlags(item.flags()
                           | enum(Qt, "ItemFlag", "ItemIsUserCheckable"))
             item.setCheckState(enum(Qt, "CheckState", "Checked")
@@ -597,20 +638,38 @@ class SentinelDialog(QDialog):
         self.credit.setText(mission_credit(mission))
         link = self.mode.model().item(1)
         if link is not None:
-            link.setEnabled(mission != "landsat")
-        if mission == "landsat":
+            link.setEnabled(mission == "sentinel2")
+        if mission != "sentinel2":
             self.mode.setCurrentIndex(0)
+        # У MODIS облачности сцены в каталоге нет.
+        self.scene_cloud.setEnabled(not modis.is_modis(mission))
         self.search()
 
-    # Ключ SAS Landsat.
+    # Ключ SAS Planetary Computer.
+
+    def _token_url(self, mission):
+        """Адрес службы ключа: по хранилищу файлов найденных сцен, до
+        поиска - по коллекции (core.sentinel.sas_url)."""
+        href = None
+        for s in self.scenes:
+            if s.mission == mission and s.assets:
+                href = next(iter(s.assets.values())).href
+                break
+        return s2.sas_url(mission, href)
 
     def _with_token(self, action):
-        """Выполнить action, когда есть действующий ключ SAS. У
-        Sentinel-2 ключ не нужен."""
-        if self.current_mission() != "landsat" or \
-                (self.sas and time.monotonic() < self.sas_until):
+        """Выполнить action, когда есть действующий ключ SAS хранилища
+        файлов спутника. У Sentinel-2 ключ не нужен."""
+        mission = self.current_mission()
+        if not s2.needs_key(mission):
             action()
             return
+        url = self._token_url(mission)
+        self.sas, self.sas_until = self.sas_keys.get(url, ("", 0.0))
+        if self.sas and time.monotonic() < self.sas_until:
+            action()
+            return
+        self.sas_mission = url
         self.sas_waiting.append(action)
         if self.sas_reply is None:
             self.sas_tries = 0
@@ -618,9 +677,9 @@ class SentinelDialog(QDialog):
 
     def _ask_token(self):
         self.sas_tries += 1
-        self.status.setText(tr("Запрос ключа доступа к файлам Landsat…"))
-        self.sas_reply = fetch_bytes(s2.LANDSAT_SAS_URL, self._token_done,
-                                       fresh=True)
+        self.status.setText(tr("Запрос ключа доступа к файлам…"))
+        self.sas_reply = fetch_bytes(self.sas_mission, self._token_done,
+                                     fresh=True)
 
     def _token_done(self, data, error):
         self.sas_reply = None
@@ -644,6 +703,7 @@ class SentinelDialog(QDialog):
             return
         self.sas = sas
         self.sas_until = time.monotonic() + SAS_LIFE
+        self.sas_keys[self.sas_mission] = (self.sas, self.sas_until)
         waiting, self.sas_waiting = self.sas_waiting, []
         for action in waiting:
             action()
@@ -743,18 +803,29 @@ class SentinelDialog(QDialog):
             return
         scenes, following = s2.parse_page(data)
         self.scenes += scenes
-        for s in scenes:
-            self._row(s)
+        grouped = modis.is_modis(self.searched)
+        if not grouped:
+            for s in scenes:
+                self._row(s)
         if following and len(self.scenes) < s2.MAX_SCENES:
             self._ask(following, generation)
             return
+        if grouped:
+            # Тайлы одного дня - одна сцена, система вывода - UTM
+            # середины участка.
+            epsg = modis.utm_epsg(self.ring_used)
+            self.scenes = [s._replace(epsg=epsg) for s in
+                           modis.merge_tiles(self.scenes)]
+            for s in self.scenes:
+                self._row(s)
         self.status.setText(tr(
             "Найдено сцен {count}, считается облачность над участком…",
             count=len(self.scenes)))
         self._with_token(lambda: self._start_clouds(generation))
 
     def _row(self, s):
-        item = QTreeWidgetItem([s.when, "…", "{:.0f} %".format(s.cloud),
+        item = QTreeWidgetItem([s.when, "…", "-" if modis.is_modis(
+            s.mission) else "{:.0f} %".format(s.cloud),
                                 "{:.0f}°".format(s.sun)
                                 if s.sun is not None else "-", s.tile])
         item.setData(0, SCENE_ROLE, s.id)
@@ -902,7 +973,7 @@ class SentinelDialog(QDialog):
 
     def _start_build(self, s, products, folder):
         warm()
-        if self.mode.currentData() == "link" and s.mission != "landsat":
+        if self.mode.currentData() == "link" and s.mission == "sentinel2":
             job = self.pool().submit(build_links, s, products, folder)
         else:
             job = self.pool().submit(build, s, self.ring_used, products,

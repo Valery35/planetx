@@ -15,11 +15,15 @@ FutureWarning модуля osgeo о режиме исключений выдаё
 """
 import hashlib
 import os
+import threading
+from collections import OrderedDict
+from concurrent.futures import TimeoutError
 
 import numpy as np
 from qgis.core import QgsApplication
 
-from ..core import basemap, inset
+from ..core import basemap, dem, inset
+from ..net.gdalnet import executor, thread_gdal
 from ..core.terrain import (MAX_LEVEL, SIZE, HeightTile, ancestor, decode,
                             resample)
 
@@ -200,11 +204,145 @@ def _window(path, bounds):
     return array
 
 
+class DemSource:
+    """Модель рельефа 30 м поверх Terrarium (core/dem.py): окно тайла
+    из файлов в сети через GDAL. Читает постоянный пул «dem»
+    (net/gdalnet.py), рабочий поток загрузчика ждёт его ответа.
+
+    Открытые файлы помнит каждый поток пула, файлы, которых нет
+    (Copernicus над морем отвечает 404), - общий список."""
+
+    WORKERS = 6  # тайлов, читаемых сразу
+    KEEP = 24  # открытых файлов на поток
+    WAIT = 120.0  # с ожидания окна, дальше тайл остаётся Terrarium
+    WINDOWS = 160  # прочитанных окон в памяти, по 256 КБ
+
+    def __init__(self, kind):
+        self.kind = kind
+        self.absent = set()
+        self.local = threading.local()
+        self.lock = threading.Lock()
+        self.jobs = OrderedDict()  # ключ уровня до READ_LEVEL -> задача
+        self.errors = 0  # окон, не прочитанных из-за сети
+        self.last_error = ""  # текст последней ошибки, для журнала
+
+    def merge(self, key, heights):
+        """Высоты тайла key с моделью. Рабочий поток загрузчика. Глубже
+        dem.READ_LEVEL окно - пересчёт окна предка: пиксель тайла
+        уровня 12 уже около 30 м, новые чтения сети не нужны."""
+        if key[0] < dem.MIN_LEVEL:
+            return heights
+        read = key if key[0] <= dem.READ_LEVEL \
+            else ancestor(key, dem.READ_LEVEL)
+        try:
+            window = self._job(read).result(timeout=self.WAIT)
+        except TimeoutError:
+            self.errors += 1
+            return heights
+        except OSError:
+            return heights
+        if window is None:
+            return heights
+        if read != key:
+            window = resample(HeightTile(*read, window, 0.0, 0.0), key)
+        return dem.merge(heights, window)
+
+    def _job(self, key):
+        """Задача чтения окна key, одна на ключ: тайлы-дети ждут одну
+        и ту же."""
+        with self.lock:
+            job = self.jobs.get(key)
+            if job is not None and not (job.done() and job.exception()):
+                self.jobs.move_to_end(key)
+                return job
+            job = executor("dem", self.WORKERS).submit(self.window, key)
+            self.jobs[key] = job
+            while len(self.jobs) > self.WINDOWS:
+                self.jobs.popitem(last=False)
+            return job
+
+    def _urls(self, key):
+        if self.kind == dem.GEDTM:
+            return [dem.GEDTM_URL]
+        west, south, east, north = dem.tile_degrees(*key)
+        return [dem.copernicus_url(lat, lon) for lat, lon in
+                dem.copernicus_cells(west, south, east, north)]
+
+    def _open(self, gdal, url):
+        cache = getattr(self.local, "files", None)
+        if cache is None:
+            cache = self.local.files = {}
+        if url in cache:
+            cache[url] = cache.pop(url)
+            return cache[url]
+        if url in self.absent:
+            return None
+        try:
+            data = gdal.Open("/vsicurl/" + url)
+        except RuntimeError as error:
+            if "404" in str(error):
+                self.absent.add(url)
+                return None
+            # Сеть: задача кончается ошибкой, окно прочитается заново
+            # при следующей просьбе (_job).
+            self.errors += 1
+            self.last_error = str(error)
+            raise OSError(str(error)) from error
+        if data is None:
+            # Без режима исключений GDAL ошибка - в последнем сообщении.
+            message = gdal.GetLastErrorMsg()
+            if "404" in message:
+                self.absent.add(url)
+                return None
+            self.errors += 1
+            self.last_error = message
+            raise OSError(message)
+        cache[url] = data
+        while len(cache) > self.KEEP:
+            cache.pop(next(iter(cache)))
+        return data
+
+    def window(self, key):
+        """Окно тайла key, 256 × 256 float32, NaN без данных, или None.
+        Поток пула «dem»."""
+        gdal = thread_gdal()
+        gdal.PushErrorHandler("CPLQuietErrorHandler")
+        try:
+            files = [d for d in (self._open(gdal, url)
+                                 for url in self._urls(key))
+                     if d is not None]
+            if not files:
+                return None
+            try:
+                out = gdal.Warp("", files, format="MEM",
+                                dstSRS="EPSG:3857",
+                                outputBounds=dem.tile_meters(*key),
+                                width=SIZE, height=SIZE,
+                                resampleAlg="bilinear",
+                                outputType=gdal.GDT_Float32,
+                                dstNodata=NODATA)
+            except RuntimeError as error:
+                self.last_error = str(error)
+                out = None
+            if out is None:
+                self.errors += 1
+                raise OSError(self.last_error or "warp")
+            array = out.GetRasterBand(1).ReadAsArray()
+            out = None
+            return array
+        finally:
+            gdal.PopErrorHandler()
+
+
 def apply(entries, key, heights):
     """Высоты тайла key с врезками entries: нижние в проекте первыми,
-    верхняя последней. Рабочий поток."""
+    верхняя последней. Модель рельефа DemSource стоит первой. Рабочий
+    поток."""
     bounds = inset.tile_bounds(*key)
     for entry in entries:
+        if isinstance(entry, DemSource):
+            heights = entry.merge(key, heights)
+            continue
         if not inset.overlaps(entry.bounds, *bounds):
             continue
         dem = _window(entry.path, bounds)

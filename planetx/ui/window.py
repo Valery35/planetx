@@ -33,6 +33,7 @@ from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
 from ..core import graticule, paleo, placetree, region
+from ..core import dem as dem_model
 from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
 from ..core.flight import Flight, Spin, fit_view
@@ -111,13 +112,14 @@ from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       read_flag, read_grids, read_insets, read_shown,
                       set_visible_on_map, visible_on_map, write_flag,
                       write_grids, write_insets, write_shown)
-from .inset import DeepSource, terrain_prepare
+from .inset import DeepSource, DemSource, terrain_prepare
 from .contours import ContourExport, ContourSource, digit_glyphs
 from .netlink import LinkDialog, NetLinks
 from .extrude import ExtrudeManager
 from .sources import SourcesDialog
 from .inset import apply as apply_insets
 from .inset import prepare as prepare_inset
+from .inset import warm as warm_gdal
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
@@ -991,6 +993,8 @@ class GlobeWindow(QWidget):
         # Врезки своего рельефа - растры проекта, кортеж ui.inset.Entry.
         self.insets = ()
         self._load_insets()
+        # Модель рельефа 30 м поверх Terrarium (core/dem.py) или None.
+        self.dem = self._make_dem()
         self._start_terrain(
             DeepSource("Terrarium", self._terrain_choice()[0], TERRAIN_MAX),
             self._earth_floor())
@@ -1671,7 +1675,7 @@ class GlobeWindow(QWidget):
         if self.planet.earth:
             return basemap.Source("Terrarium", self._terrain_choice()[0],
                                   TERRAIN_MAX, builtin=True), \
-                self._earth_floor(), self.insets
+                self._earth_floor(), self._height_entries()
         if self.planet.terrain is None:
             return None
         name, url, level, _ = self.planet.terrain
@@ -1830,9 +1834,10 @@ class GlobeWindow(QWidget):
             # Высоты Земли - с врезками своего рельефа и тайлами глубже
             # уровня 15 внутри их рамок (ui/inset.py).
             earth = isinstance(source, DeepSource)
-            insets = self.insets if earth else ()
+            insets = self._height_entries() if earth else ()
             encoding = self._terrain_choice()[1] if earth else "terrarium"
-            self.view.store.deep = [entry.box() for entry in insets]
+            self.view.store.deep = [entry.box() for entry in insets
+                                    if not isinstance(entry, DemSource)]
             self.terrain_loader = TileLoader(
                 source, parent=self,
                 prepare=terrain_prepare(insets, floor, encoding))
@@ -1853,12 +1858,34 @@ class GlobeWindow(QWidget):
             settings.value(datasources.TERRAIN_KEY, "") or "",
             settings.value(datasources.ENCODING_KEY, "") or "")
 
+    def _make_dem(self):
+        """Модель рельефа 30 м по выбору окна «Источники данных» или
+        None - только тайлы высот."""
+        kind = dem_model.choice(QgsSettings().value(datasources.DEM_KEY, ""))
+        if kind == dem_model.TERRARIUM:
+            return None
+        # Первый вызов GDAL - в главном потоке, см. ui/inset.py.
+        warm_gdal()
+        return DemSource(kind)
+
+    def _height_entries(self):
+        """Что ложится на тайлы высот Земли: модель рельефа, потом
+        врезки своего рельефа."""
+        model = getattr(self, "dem", None)
+        return ((model,) if model is not None else ()) + tuple(self.insets)
+
     def _terrain_credit(self):
         url = self._terrain_choice()[0]
         if url == datasources.TERRAIN_URL:
-            return TERRAIN_ATTRIBUTION
-        text = QgsSettings().value(datasources.TERRAIN_CREDIT_KEY, "") or ""
-        return html.escape(text or tr("Рельеф: свой источник"))
+            credit = TERRAIN_ATTRIBUTION
+        else:
+            text = QgsSettings().value(datasources.TERRAIN_CREDIT_KEY,
+                                       "") or ""
+            credit = html.escape(text or tr("Рельеф: свой источник"))
+        model = getattr(self, "dem", None)
+        if model is not None:
+            credit += " · " + link_html(*dem_model.ATTRIBUTION[model.kind])
+        return credit
 
     def _vector_choice(self):
         """Адрес TileJSON векторной основы: свой или OpenFreeMap."""
@@ -1876,6 +1903,7 @@ class GlobeWindow(QWidget):
         заново, "vector" - векторная основа, надписи и здания заново,
         "basemaps" - список подложек."""
         if what == "terrain":
+            self.dem = self._make_dem()
             self._refresh_relief()
         elif what == "vector":
             if self.buildings_loader is not None:

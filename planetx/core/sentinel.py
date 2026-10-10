@@ -31,6 +31,9 @@ Planetary Computer выдаёт без учётной записи, ключ ж�
 же берут продукты с nir (band). Тепловой канал - lwir11 у Landsat
 8-9 и lwir у 4-7, продукт lst - температура поверхности в °C.
 
+MODIS - core/modis.py, тоже Planetary Computer: спутник окна - одна
+коллекция, у сцены нет своей системы UTM, её даёт середина участка.
+
 Модуль Qt не знает.
 """
 import math
@@ -39,8 +42,10 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
+    from . import modis
     from .coords import to_utm
 except ImportError:  # headless-тесты
+    import modis
     from coords import to_utm
 
 SEARCH = "https://earth-search.aws.element84.com/v1/search"
@@ -49,10 +54,15 @@ LANDSAT_SEARCH = "https://planetarycomputer.microsoft.com/api/stac/v1/search"
 LANDSAT_COLLECTION = "landsat-c2-l2"
 LANDSAT_SAS_URL = ("https://planetarycomputer.microsoft.com/api/sas/v1/token/"
                  + LANDSAT_COLLECTION)
+SAS_URL = "https://planetarycomputer.microsoft.com/api/sas/v1/token/"
 SEARCHES = {"sentinel2": SEARCH, "landsat": LANDSAT_SEARCH}
 COLLECTIONS = {"sentinel2": COLLECTION, "landsat": LANDSAT_COLLECTION}
 # Маска облаков сцены: ключ ресурса и шаг чтения, м.
 CLOUD_ASSET = {"sentinel2": ("scl", 20.0), "landsat": ("qa_pixel", 30.0)}
+for _key in modis.MISSIONS:
+    SEARCHES[_key] = LANDSAT_SEARCH
+    COLLECTIONS[_key] = modis.collection(_key)
+    CLOUD_ASSET[_key] = (modis.quality_asset(_key), modis.step(_key))
 # Биты qa_pixel Landsat Collection 2.
 QA_FILL = 1 << 0
 QA_CLOUDY = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
@@ -123,8 +133,32 @@ LANDSAT_PRODUCTS = PRODUCTS + ("lst",)
 
 
 def products_of(mission):
-    """Продукты спутника: у Landsat ещё температура поверхности."""
+    """Продукты спутника: у Landsat ещё температура поверхности, у MODIS
+    свои."""
+    if modis.is_modis(mission):
+        return modis.products_of(mission)
     return LANDSAT_PRODUCTS if mission == "landsat" else PRODUCTS
+
+
+def needs_key(mission):
+    """Файлы спутника читаются по ключу SAS Planetary Computer."""
+    return mission == "landsat" or modis.is_modis(mission)
+
+
+def sas_url(mission, href=None):
+    """Адрес службы ключа SAS. По адресу файла href - ключ его хранилища
+    Azure (учётная запись и контейнер): ключ коллекции MODIS к файлам
+    modiseuwest не подходит, ответ 403, проверено 10 октября 2026 года.
+    Без href - ключ коллекции спутника."""
+    if isinstance(href, tuple):
+        href = href[0] if href else None
+    if href:
+        host, _, path = href.partition("://")[2].partition("/")
+        account = host.split(".")[0]
+        container = path.split("/")[0]
+        if host.endswith(".blob.core.windows.net") and container:
+            return SAS_URL + account + "/" + container
+    return SAS_URL + COLLECTIONS[mission]
 
 
 def band(key, mission):
@@ -140,13 +174,17 @@ def search_body(geometry, start, end, max_cloud, limit=PAGE,
                 mission="sentinel2"):
     """Тело запроса поиска: geometry - GeoJSON, start и end - дни
     «ГГГГ-ММ-ДД», max_cloud - облачность сцены по оценке поставщика."""
-    return {"collections": [COLLECTIONS[mission]],
+    body = {"collections": [COLLECTIONS[mission]],
             "intersects": geometry,
             "datetime": "{}T00:00:00Z/{}T23:59:59Z".format(start, end),
             "limit": int(limit),
             "query": {"eo:cloud_cover": {"lte": float(max_cloud)}},
             "sortby": [{"field": "properties.datetime",
                         "direction": "desc"}]}
+    if modis.is_modis(mission):
+        # У MODIS облачности сцены в каталоге нет.
+        del body["query"]
+    return body
 
 
 def parse_page(data):
@@ -166,6 +204,9 @@ def parse_page(data):
 def parse_item(feature):
     """Сцена из элемента STAC или None, если нет каналов."""
     props = feature.get("properties") or {}
+    mission = modis.mission_of(feature.get("collection"))
+    if mission is not None:
+        return _modis_item(feature, props, mission)
     if str(props.get("platform") or "").startswith("landsat"):
         return _landsat_item(feature, props)
     # Смещение -1000 уже вычтено из значений, а поле offset у каналов
@@ -233,8 +274,26 @@ def _landsat_item(feature, props):
                  "landsat")
 
 
+def _modis_item(feature, props, mission):
+    """Сцена MODIS: день или начало периода, спутник и тайл, каналы -
+    кортежи адресов (merge_tiles сводит тайлы одного дня)."""
+    assets = {}
+    for key, value in (feature.get("assets") or {}).items():
+        href = value.get("href") or ""
+        if href.startswith("https://") and "tiff" in str(value.get("type")):
+            assets[key] = Asset((href,), 1.0, 0.0, None, None)
+    if modis.quality_asset(mission) not in assets:
+        return None
+    number = str(feature.get("id") or "")
+    when = str(props.get("start_datetime") or "")[:10]
+    tile = "{} {}".format(modis.platform(number), modis.tile_of(props))
+    return Scene(number, when, 0.0, tile, None, None, "", assets, mission)
+
+
 def sign(href, sas):
-    """Адрес файла Planetary Computer с ключом SAS."""
+    """Адрес файла Planetary Computer с ключом SAS, у кортежа - каждый."""
+    if isinstance(href, tuple):
+        return tuple(sign(h, sas) for h in href)
     if not sas:
         return href
     return href + ("&" if "?" in href else "?") + sas
@@ -321,6 +380,8 @@ def bounds(xy, res):
 def step_for(xy, mission="sentinel2"):
     """Шаг выдачи: 10 м у Sentinel-2 и 30 м у Landsat, если сторона
     участка не больше MAX_PIXELS пикселей, иначе крупнее."""
+    if modis.is_modis(mission):
+        return modis.step(mission)
     steps = LANDSAT_STEPS if mission == "landsat" else STEPS
     box = bounds(xy, 1.0)
     side = max(box[2] - box[0], box[3] - box[1])
@@ -393,6 +454,8 @@ def cloud_share_qa(qa, inside):
 
 def clouds_of(scene, raw, inside):
     """Облачность над участком по маске сцены любого спутника."""
+    if modis.is_modis(scene.mission):
+        return modis.quality(scene.mission, raw, inside)
     if scene.mission == "landsat":
         return cloud_share_qa(raw, inside)
     return cloud_share(raw, inside)
@@ -400,6 +463,8 @@ def clouds_of(scene, raw, inside):
 
 def clear_mask(scene, raw):
     """Пиксели без облаков, теней и пропусков по маске сцены."""
+    if modis.is_modis(scene.mission):
+        return modis.clear(scene.mission, raw)
     if scene.mission == "landsat":
         cloudy, empty = qa_cloudy(raw)
         return ~(cloudy | empty)
@@ -410,6 +475,8 @@ def clear_mask(scene, raw):
 
 def needed(products, mission="sentinel2"):
     """Каналы сцены для продуктов: ключи ресурсов STAC."""
+    if modis.is_modis(mission):
+        return modis.needed(products)
     keys = []
     for product in products:
         if product == "lst":
@@ -475,6 +542,9 @@ def file_name(s, name):
     """Имя файла продукта: «S2_20260929_40VDK_ndvi»,
     «L9_20250923_166-020_ndvi»."""
     day = s.when[:10].replace("-", "")
+    if modis.is_modis(s.mission):
+        return "MODIS_{}_{}_{}".format(s.tile.split(" ")[0].replace("+", ""),
+                                       day, name)
     if s.mission == "landsat":
         sat, _, place = s.tile.partition(" ")
         return "{}_{}_{}_{}".format(sat, day, place.replace("/", "-"),
@@ -484,7 +554,9 @@ def file_name(s, name):
 
 def credit(s):
     """Подпись снимка: изменённые данные Copernicus с годом или
-    снимок Landsat от USGS."""
+    снимок Landsat от USGS, у MODIS - продукт и архив NASA."""
+    if modis.is_modis(s.mission):
+        return modis.credit(s.id)
     if s.mission == "landsat":
         return LANDSAT_ATTRIBUTION.format(number=s.tile.split(" ")[0][1:])
     return ATTRIBUTION.format(year=s.when[:4])

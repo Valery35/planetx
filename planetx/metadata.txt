@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.63.0
+version=0.64.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,18 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.63.0 The images window also finds Landsat 4-9
+changelog=0.64.0 The globe opens on Linux. In 0.63.0 and earlier it crashed
+      at start on AltLinux with QGIS 4.2 with the error "Buffer size too
+      small". Terrain to choose in the Data sources window - height tiles,
+      Copernicus DEM 30 m or GEDTM30 without forest and buildings. Up close
+      the land heights come from the 30 m model, at Mount Narodnaya 1888 m
+      instead of 1816 m. The images window finds MODIS products since 2000 -
+      the daytime and nighttime surface temperature per day and over 8 days,
+      NDVI and EVI over 16 days, snow per day and over 8 days and burned
+      areas by month. The Landsat temperature tooltip explains that this is
+      the surface temperature of the USGS Level-2 product, not brightness
+      temperature.
+      0.63.0 The images window also finds Landsat 4-9
       images since 1982, 30 m per pixel, with the thermal band and
       land surface temperature in °C. The window gets the access
       key to the files itself, no account is needed. The area around

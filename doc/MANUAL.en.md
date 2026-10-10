@@ -629,6 +629,26 @@ Reset returns the default source. The Add base map…, Edit… and Remove
 buttons work with the QGIS XYZ Tiles connections, a removed connection
 disappears from the QGIS browser too.
 
+The 30 m model list of the Terrain group in the same window puts a 30 m
+terrain model over the height tiles:
+
+- Height tiles only - the Mapzen Terrain Tiles relief, as before. It
+  loads the fastest. North of 60° on land its data is about 250 m.
+- Copernicus DEM 30 m - the Copernicus GLO-30 surface model, files per
+  degree on the open AWS storage. Forest and buildings are part of the
+  height.
+- GEDTM30 - the model of the bare ground without forest and buildings,
+  OpenGeoHub, CC BY 4.0. It is one large file, its pieces take longer
+  to read.
+
+The height tiles still give the sea floor and the view from afar. From
+level 9 the model gives the land heights, deeper than level 12 the model
+pieces are not read again but resampled from the ones already read. The
+model credit stands in the view corner. The model is read from the
+network for every new area, without the network the height tiles
+remain. At Mount Narodnaya the height tiles give 1816 m, Copernicus and
+GEDTM30 give 1888 m, the summit is 1895 m.
+
 The label language is chosen from a list. As in QGIS takes the QGIS
 interface language, Local names keep the names in the language of the
 country. Fifteen languages follow. When there is no name in the chosen
@@ -970,13 +990,41 @@ mask - clouds, cirrus and shadows. The tile column shows the
 satellite, the WRS path and row, for example "L9 167/020". The
 products are those of Sentinel-2 without band numbers, as Landsat 4-7
 and 8-9 number them differently, plus Surface temperature, °C from
-the thermal band. The layers go to the Landsat group with the credit
+the thermal band. This is the surface temperature of the USGS Level-2
+product (ST_B10 of Landsat 8-9, ST_B6 of Landsat 4-7), not brightness
+temperature. USGS has already converted the radiance with the surface
+emissivity from the ASTER GED database and the atmosphere. The plugin
+converts the file value to kelvins by the scale and offset of the
+product and subtracts 273.15. The layers go to the Landsat group with the credit
 "Landsat N image courtesy of the U.S. Geological Survey". The Whole
 scene by link method is not available for Landsat - the key lives an
 hour, and a layer of a saved project would not open later. Landsat 7
 images after May 2003 have empty stripes from an instrument failure.
 Over water, the near infrared reflectance of Landsat 4-5 can be above
 red, and the NDVI of water comes out about +0.1.
+
+The same Satellite list gives the ready MODIS products of the Terra and
+Aqua satellites, version 061, since 2000. The catalogue and the files
+are Planetary Computer, the window gets the access key itself:
+
+- Temperature per day, 1 km and over 8 days - the daytime and
+  nighttime surface temperature in °C (MOD11A1 and MOD11A2, MYD for
+  Aqua).
+- NDVI and EVI over 16 days, 250 m - the MOD13Q1 vegetation indices.
+- Snow per day, 500 m - the snow share of a pixel in percent, MOD10A1,
+  over 8 days - the classes no snow, snow and lake ice, MOD10A2.
+- Burned areas by month, 500 m - the day of year of burning, MCD64A1.
+
+A MODIS scene is a day or a period of one satellite. The MODIS tiles
+that the area touches are read together, the layers come in the UTM
+system of the area centre with the product step. The Over the area
+column of MODIS is the cloud share by the product quality band, for
+temperature the share of pixels without a value. MODIS has no cloud
+cover of the whole scene, its field is disabled. In winter at the
+latitude of Perm the daily products are often fully cloudy, the 8- and
+16-day composites have fewer gaps. The layers go to the MODIS group with
+the credit of the product and the NASA archive, for example "MOD11A1
+v061, NASA EOSDIS LP DAAC".
 
 ### Route
 

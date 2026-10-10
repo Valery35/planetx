@@ -20,8 +20,8 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QPushButton, QTreeWidget, QTreeWidgetItem,
                                  QVBoxLayout)
 
-from ..core import (basemap, crust, fires, paleo, planets, quakes, routing,
-                    slabs, sources, sun)
+from ..core import (basemap, crust, dem, fires, paleo, planets, quakes,
+                    routing, slabs, sources, sun)
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
@@ -33,13 +33,31 @@ URL_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 SOURCE_ROLE = URL_ROLE + 1  # индекс подложки в списке источников окна
 
 
-def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL):
+def dem_titles():
+    """Названия выбора рельефа по core.dem.CHOICES."""
+    return {dem.TERRARIUM: tr("Только тайлы высот"),
+            dem.COPERNICUS: tr("Copernicus DEM 30 м - поверхность с лесом "
+                               "и домами"),
+            dem.GEDTM: tr("GEDTM30 - рельеф без леса и домов")}
+
+
+def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
+              model=dem.TERRARIUM):
     """Источники по группам: (группа, [(название, что показывает,
-    условия, адрес проверки или None)])."""
+    условия, адрес проверки или None)]). model - выбор рельефа 30 м,
+    файлы моделей велики и не проверяются."""
     terrain_probe = sources.tile_probe(terrain_url)
     mars = planets.TERRAIN_TILES % "mars"
+    models = []
+    if model == dem.COPERNICUS:
+        models.append(("Copernicus DEM GLO-30",
+                       tr("Высоты суши 30 м с уровня 9"),
+                       dem.ATTRIBUTION[model][1], None))
+    elif model == dem.GEDTM:
+        models.append(("GEDTM30", tr("Высоты суши 30 м с уровня 9"),
+                       dem.ATTRIBUTION[model][1], None))
     return (
-        (tr("Рельеф"), [
+        (tr("Рельеф"), models + [
             (tr("Рельеф Земли") if terrain_url == sources.TERRAIN_URL
              else tr("Свой рельеф"),
              tr("Высоты суши и дна морей, уровни 0-15"),
@@ -157,9 +175,22 @@ class SourcesDialog(QDialog):
             settings.value(sources.TERRAIN_CREDIT_KEY, "") or "", self)
         self.terrain_credit.setToolTip(tr(
             "Подпись своего рельефа в углу вида и на снимках."))
-        terrain = QGroupBox(tr("Свой рельеф"), self)
+        self.model = QComboBox(self)
+        titles = dem_titles()
+        for key in dem.CHOICES:
+            self.model.addItem(titles[key], key)
+        self.model.setCurrentIndex(dem.CHOICES.index(dem.choice(
+            settings.value(sources.DEM_KEY, ""))))
+        self.model.setToolTip(tr(
+            "Модель высот 30 м поверх тайлов высот. Тайлы дают дно морей "
+            "и вид издалека, ближе модель заменяет высоты суши. "
+            "Copernicus DEM - поверхность вместе с лесом и домами, файлы "
+            "на AWS. GEDTM30 - рельеф самой земли, один большой файл, "
+            "загрузка медленнее. Модель читается из сети по участкам."))
+        terrain = QGroupBox(tr("Рельеф"), self)
         form = QFormLayout(terrain)
-        form.addRow(tr("Адрес"), self.terrain_url)
+        form.addRow(tr("Модель 30 м"), self.model)
+        form.addRow(tr("Свои тайлы высот"), self.terrain_url)
         form.addRow(tr("Запись высот"), self.encoding)
         form.addRow(tr("Подпись"), self.terrain_credit)
         form.addRow(self._apply_row("terrain"))
@@ -252,8 +283,9 @@ class SourcesDialog(QDialog):
             item.setData(NAME, SOURCE_ROLE, index)
         terrain, encoding = self.window._terrain_choice()
         router = sources.router(QgsSettings().value(sources.ROUTER_KEY, ""))
+        model = dem.choice(QgsSettings().value(sources.DEM_KEY, ""))
         for group, rows in catalogue(terrain, self.window._vector_choice(),
-                                     router):
+                                     router, model):
             parent = QTreeWidgetItem(self.tree, [group])
             for name, what, terms, probe in rows:
                 self._row(parent, name, what, terms, probe)
@@ -343,6 +375,7 @@ class SourcesDialog(QDialog):
                               sources.ENCODINGS[self.encoding.currentIndex()])
             settings.setValue(sources.TERRAIN_CREDIT_KEY,
                               self.terrain_credit.text().strip())
+            settings.setValue(sources.DEM_KEY, self.model.currentData())
         elif what == "router":
             url = self.router_url.text().strip()
             if url and not routing.router_ok(url):
@@ -369,6 +402,7 @@ class SourcesDialog(QDialog):
     def _reset(self, what):
         if what == "terrain":
             self.terrain_url.clear()
+            self.model.setCurrentIndex(0)
             self.encoding.setCurrentIndex(0)
             self.terrain_credit.clear()
         elif what == "router":
