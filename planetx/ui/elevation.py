@@ -95,12 +95,16 @@ class ProfileChart(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.profile = None
+        # Уровень своих водоёмов в точках профиля или NaN,
+        # core.bathymetry.profile_water.
+        self.water = None
         self.hover = None
         self.setMouseTracking(True)
         self.setMinimumSize(420, 180)
 
-    def set_profile(self, profile):
+    def set_profile(self, profile, water=None):
         self.profile = profile
+        self.water = water
         self.update()
 
     def _plot(self):
@@ -115,8 +119,51 @@ class ProfileChart(QWidget):
             # Ниже уровня моря в шкалу входит ноль - видна поверхность
             # воды над дном.
             high = max(high, 0.0)
+        if self.water is not None and np.isfinite(self.water).any():
+            # Уровень своего водоёма тоже входит в шкалу.
+            high = max(high, float(np.nanmax(self.water)))
         pad = max((high - low) * 0.08, 1.0)
         return 0.0, max(p.flat, 1.0), low - pad, high + pad
+
+    def _paint_lakes(self, painter, rect, to_screen):
+        """Вода своих водоёмов - от кривой дна до уровня на каждом
+        отрезке подряд мокрых точек, пунктир уровня с подписью."""
+        water = self.water
+        p = self.profile
+        if water is None or not np.isfinite(water).any():
+            return
+        wet = np.isfinite(water)
+        start = None
+        pen = QPen(WATER_LINE, 1.2)
+        pen.setStyle(enum(Qt, "PenStyle", "DashLine"))
+        for i in range(len(wet) + 1):
+            if i < len(wet) and wet[i]:
+                if start is None:
+                    start = i
+                continue
+            if start is None:
+                continue
+            end = i - 1
+            level = float(np.nanmax(water[start:end + 1]))
+            d0 = float(p.distance[start])
+            d1 = float(p.distance[end])
+            path = QPainterPath(to_screen(d0, level))
+            for k in range(start, end + 1):
+                path.lineTo(to_screen(float(p.distance[k]),
+                                      min(float(p.height[k]), level)))
+            path.lineTo(to_screen(d1, level))
+            path.closeSubpath()
+            painter.fillPath(path, WATER)
+            painter.setPen(pen)
+            left = to_screen(d0, level)
+            right = to_screen(d1, level)
+            painter.drawLine(left, right)
+            if right.x() - left.x() > 120:
+                painter.drawText(QRectF(right.x() - 200, left.y() - 17, 196,
+                                        16), RIGHT,
+                                 tr("уровень воды {level}",
+                                    level=height_text(level)))
+            start = None
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -183,6 +230,7 @@ class ProfileChart(QWidget):
                              QPointF(rect.right(), sea.y()))
             painter.drawText(QRectF(rect.right() - 160, sea.y() - 17, 156,
                                     16), RIGHT, tr("уровень моря"))
+        self._paint_lakes(painter, rect, to_screen)
         painter.setPen(QPen(LINE.darker(130), 1.6))
         for i in range(len(p.distance) - 1):
             painter.drawLine(to_screen(float(p.distance[i]),
@@ -248,11 +296,14 @@ class ProfileDialog(QDialog):
 
     point_hovered = pyqtSignal(object)
 
-    def __init__(self, title, points, source, parent=None):
+    def __init__(self, title, points, source, parent=None, water=None):
         super().__init__(parent)
         self.setModal(False)
         self.points = points
         self.source = source
+        # water(широты, долготы, высоты) - уровень своих водоёмов в
+        # точках или NaN, его даёт окно глобуса.
+        self.water = water
         self.chart = ProfileChart(self)
         self.chart.hovered.connect(self._hovered)
         self.stats = QLabel(self)
@@ -281,7 +332,11 @@ class ProfileDialog(QDialog):
             self.stats.setText(tr("Отметьте на глобусе хотя бы две точки."))
             return
         p, ready = found
-        self.chart.set_profile(p)
+        water = None
+        if self.water is not None and len(p.latlon):
+            latlon = np.asarray(p.latlon, dtype=np.float64)
+            water = self.water(latlon[:, 0], latlon[:, 1], p.height)
+        self.chart.set_profile(p, water)
         text = tr(
             "Длина по карте {flat}, по рельефу {ground}. Наименьшая "
             "высота {low}, наибольшая {high}. Набор высоты {gain}, "

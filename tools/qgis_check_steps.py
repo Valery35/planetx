@@ -6021,6 +6021,17 @@ def brienz_check():
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_brienz.png"))
     out["water_drawn"] = window.view.lake_water.drawn
+    # Профиль через озеро - вода над дном до уровня 564 м.
+    key = next(p.key for p in window.myplaces.places
+               if p.name == "Профиль через озеро")
+    window._place_action("profile", key)
+    dialog = window.profile_dialog
+    water = dialog.chart.water
+    out["profile_water"] = None if water is None else {
+        "wet": int(np.isfinite(water).sum()), "points": len(water),
+        "level": float(np.nanmax(water)) if np.isfinite(water).any()
+        else None}
+    dialog.grab().save(os.path.join(TEMP, "planetx_brienz_profile.png"))
     window.set_relief(False)
     # Сетки снимаются в кадре: смотрится очередь, без вызовов OpenGL.
     pending = window.view.lake_water.pending

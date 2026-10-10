@@ -792,6 +792,8 @@ The water is drawn over all raster points where the bed is below the
 level, the bed is seen through it. Without terrain no water is drawn -
 the bed and the water would lie in one plane. Remove bathymetry turns
 off both the inset and the water. The choice is kept in the project.
+The elevation profile across the water body shows the water above the
+bed and a dashed line of the water body level with a label.
 
 The Lake Brienz, own bathymetry demo of the Demo icon is the bed of Lake
 Brienz in Switzerland from swisstopo swissBATHY3D data with a 10 m step,

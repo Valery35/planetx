@@ -84,6 +84,25 @@ def mercator_latlon(x, y):
     return lat, lon
 
 
+def profile_water(lats, lons, heights, lakes):
+    """Уровень воды в точках профиля высот или NaN, где воды нет.
+    lakes - пары (рамка растра (запад, юг, восток, север) в EPSG:3857,
+    уровень водоёма). Вода - в рамке, где дно ниже уровня, как у сетки
+    воды (water_part). Из двух водоёмов над точкой берётся верхний."""
+    lats = np.radians(np.asarray(lats, dtype=np.float64))
+    lons = np.radians(np.asarray(lons, dtype=np.float64))
+    heights = np.asarray(heights, dtype=np.float64)
+    radius = 6378137.0
+    x = radius * lons
+    y = radius * np.log(np.tan(math.pi / 4.0 + lats / 2.0))
+    out = np.full(heights.shape, np.nan)
+    for (west, south, east, north), level in lakes:
+        wet = (x >= west) & (x <= east) & (y >= south) & (y <= north) \
+            & (heights < float(level) + SHORE)
+        out[wet] = np.fmax(out[wet], float(level))
+    return out
+
+
 def water_part(lats, lons, bed, level, height, color=WATER_COLOR):
     """Поверхность воды на высоте height (уровень на экране) над узлами
     сетки (rows, cols), где дно ниже уровня level: subsurface.Part или

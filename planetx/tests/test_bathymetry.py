@@ -53,5 +53,25 @@ class TestBathymetry(unittest.TestCase):
         self.assertAlmostEqual(float(lat), 46.75, places=1)
 
 
+class TestProfileWater(unittest.TestCase):
+
+    def test_water_only_inside_frame_and_below_level(self):
+        # Рамка озера в EPSG:3857 около долготы 0, широты 0.
+        frame = (-1000.0, -1000.0, 1000.0, 1000.0)
+        lats = [0.0, 0.0, 0.0, 0.0]
+        lons = [0.0, 0.001, 0.005, 0.05]  # 0, 111 м, 557 м, 5.6 км
+        heights = [300.0, 600.0, 400.0, 300.0]
+        out = bathymetry.profile_water(lats, lons, heights,
+                                       [(frame, 564.0)])
+        self.assertEqual(out[0], 564.0)
+        self.assertTrue(np.isnan(out[1]))  # берег выше уровня
+        self.assertEqual(out[2], 564.0)
+        self.assertTrue(np.isnan(out[3]))  # вне рамки растра
+
+    def test_no_lakes_no_water(self):
+        out = bathymetry.profile_water([0.0], [0.0], [100.0], [])
+        self.assertTrue(np.isnan(out[0]))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5017,7 +5017,8 @@ class GlobeWindow(QWidget):
     def _open_profile(self, title, points, source):
         """Окно «Профиль высот» для точек points() с высотами source."""
         if self.profile_dialog is None:
-            self.profile_dialog = ProfileDialog(title, points, source, self)
+            self.profile_dialog = ProfileDialog(title, points, source, self,
+                                                water=self._profile_water)
             self.profile_dialog.point_hovered.connect(self._profile_hover)
             self.profile_dialog.finished.connect(
                 lambda *args: self._profile_hover(None))
@@ -5025,6 +5026,17 @@ class GlobeWindow(QWidget):
             self.profile_dialog.set_points(title, points, source)
         self.profile_dialog.show()
         self.profile_dialog.raise_()
+
+    def _profile_water(self, lats, lons, heights):
+        """Уровень своих водоёмов в точках профиля: врезки с батиметрией
+        при включённом рельефе на Земле."""
+        from ..core.bathymetry import profile_water
+        lakes = [(entry.bounds, entry.lake[1])
+                 for entry in getattr(self, "insets", ())
+                 if getattr(entry, "lake", None) is not None]
+        if not lakes or not self.planet.earth:
+            return None
+        return profile_water(lats, lons, heights, lakes)
 
     def _open_section(self, title, points):
         """Окно «Разрез» вниз вдоль пути points [(широта, долгота)].

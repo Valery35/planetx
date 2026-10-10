@@ -191,6 +191,8 @@ EN = {
         "fill volumes and a difference raster in the project.",
     "Ошибки SSL запроса PlanetX {address}:":
         "SSL errors of the PlanetX request {address}:",
+    "уровень воды {level}":
+        "water level {level}",
     "Батиметрия по промерам":
         "Bathymetry from soundings",
     "Батиметрия по промерам…":
