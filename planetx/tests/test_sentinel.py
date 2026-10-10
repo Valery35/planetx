@@ -153,5 +153,113 @@ class TestProducts(unittest.TestCase):
                          "Contains modified Copernicus Sentinel data 2026")
 
 
+LANDSAT = ("https://landsateuwest.blob.core.windows.net/landsat-c2/level-2/"
+           "standard/oli-tirs/2025/166/020/LC09_L2SP_166020_20250923_"
+           "20250924_02_T1/LC09_L2SP_166020_20250923_20250924_02_T1_")
+
+
+def landsat_item(platform="landsat-9", thermal="lwir11"):
+    optical = {"scale": 2.75e-05, "offset": -0.2, "nodata": 0,
+               "spatial_resolution": 30}
+    keys = ("blue", "green", "red", "nir08", "swir16", "swir22")
+    assets = {k: {"href": LANDSAT + k + ".TIF", "raster:bands": [optical]}
+              for k in keys}
+    assets[thermal] = {"href": LANDSAT + "ST_B10.TIF", "raster:bands": [
+        {"scale": 0.00341802, "offset": 149, "nodata": 0}]}
+    assets["qa_pixel"] = {"href": LANDSAT + "QA_PIXEL.TIF",
+                          "raster:bands": [{"nodata": 1}]}
+    assets["rendered_preview"] = {
+        "href": "https://planetarycomputer.microsoft.com/api/data/v1/item/"
+                "preview.png?collection=landsat-c2-l2&item=x"}
+    return {"id": "LC09_L2SP_166020_20250923_02_T1",
+            "properties": {"datetime": "2025-09-23T07:14:45.55Z",
+                           "platform": platform, "proj:epsg": 32640,
+                           "eo:cloud_cover": 24.97,
+                           "view:sun_elevation": 31.7,
+                           "landsat:wrs_path": "166",
+                           "landsat:wrs_row": "020"},
+            "assets": assets}
+
+
+class TestSide(unittest.TestCase):
+    def test_side_follows_view_within_limits(self):
+        self.assertEqual(s2.side_for_view(16240.0), 16.2)
+        self.assertEqual(s2.side_for_view(300.0), s2.SIDE_MIN)
+        self.assertEqual(s2.side_for_view(5e6), s2.SIDE_MAX)
+
+
+class TestLandsat(unittest.TestCase):
+    def test_item(self):
+        s = s2.parse_item(landsat_item())
+        self.assertEqual(s.mission, "landsat")
+        self.assertEqual(s.tile, "L9 166/020")
+        self.assertEqual(s.epsg, 32640)
+        self.assertEqual(s.when, "2025-09-23 07:14")
+        self.assertIn("preview.png", s.thumbnail)
+        self.assertAlmostEqual(s.assets["red"].offset, -0.2)
+        # Тепловой канал Landsat 8-9 доступен под общим ключом lwir.
+        self.assertEqual(s.assets["lwir"].href, s.assets["lwir11"].href)
+        self.assertAlmostEqual(s.assets["lwir"].offset, 149.0)
+
+    def test_old_landsat_thermal(self):
+        s = s2.parse_item(landsat_item("landsat-5", "lwir"))
+        self.assertEqual(s.tile, "L5 166/020")
+        self.assertIn("lwir", s.assets)
+
+    def test_search_body(self):
+        body = s2.search_body({"type": "Point", "coordinates": [56, 58]},
+                              "1990-01-01", "1990-12-31", 50,
+                              mission="landsat")
+        self.assertEqual(body["collections"], ["landsat-c2-l2"])
+        self.assertEqual(s2.SEARCHES["landsat"], s2.LANDSAT_SEARCH)
+
+    def test_qa_clouds(self):
+        # Чистый 21824, облако 22280 (биты 3 и 1), тень 23888 (бит 4),
+        # нет данных 1 (бит 0).
+        qa = np.array([[21824, 22280], [23888, 1]], dtype=np.uint16)
+        inside = np.ones((2, 2), dtype=bool)
+        cloud, valid = s2.cloud_share_qa(qa, inside)
+        self.assertAlmostEqual(cloud, 200.0 / 3.0)
+        self.assertAlmostEqual(valid, 75.0)
+        scene = s2.parse_item(landsat_item())
+        clear = s2.clear_mask(scene, qa)
+        self.assertEqual(clear.tolist(), [[True, False], [False, False]])
+
+    def test_products_use_nir08(self):
+        self.assertEqual(s2.needed(["infrared", "ndvi"], "landsat"),
+                         ["nir08", "red", "green"])
+        self.assertEqual(s2.needed(["lst"], "landsat"), ["lwir"])
+        self.assertIn("lst", s2.products_of("landsat"))
+        self.assertNotIn("lst", s2.products_of("sentinel2"))
+        bands = {"nir08": np.full((1, 1), 0.4, np.float32),
+                 "red": np.full((1, 1), 0.1, np.float32)}
+        self.assertAlmostEqual(float(s2.product("ndvi", bands,
+                                                "landsat")[0, 0]), 0.6, 5)
+
+    def test_surface_temperature(self):
+        scene = s2.parse_item(landsat_item())
+        kelvin = s2.reflectance(np.array([[0, 43636]], dtype=np.uint16),
+                                scene.assets["lwir"])
+        lst = s2.product("lst", {"lwir": kelvin}, "landsat")
+        self.assertTrue(np.isnan(lst[0, 0]))
+        # 43636 * 0.00341802 + 149 = 298.15 K = 25 °C.
+        self.assertAlmostEqual(float(lst[0, 1]), 25.0, 1)
+
+    def test_names_and_credit(self):
+        s = s2.parse_item(landsat_item())
+        self.assertEqual(s2.file_name(s, "ndvi"), "L9_20250923_166-020_ndvi")
+        self.assertEqual(s2.credit(s), "Landsat 9 image courtesy of the "
+                                       "U.S. Geological Survey")
+        self.assertEqual(s2.step_for([(0, 0), (3000, 3000)], "landsat"),
+                         30.0)
+
+    def test_sign(self):
+        self.assertEqual(s2.sign("https://a/b.TIF", "st=1&sig=2"),
+                         "https://a/b.TIF?st=1&sig=2")
+        self.assertEqual(s2.sign("https://a/b.TIF?x=1", "sig=2"),
+                         "https://a/b.TIF?x=1&sig=2")
+        self.assertEqual(s2.sign("https://a/b.TIF", ""), "https://a/b.TIF")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.62.3
+version=0.63.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,21 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.62.3 When QGIS does not respond for more than 30 s,
+changelog=0.63.0 The images window also finds Landsat 4-9
+      images since 1982, 30 m per pixel, with the thermal band and
+      land surface temperature in °C. The window gets the access
+      key to the files itself, no account is needed. The area around
+      a point equals the width of the visible part of the globe when
+      the window opens, from 1 to 100 km. Loading the same scene
+      again while its layers are open no longer stops with a file
+      access error, new files get a number in the name. Loading
+      images could hang QGIS, it no longer does. A slider under
+      My Places changes the opacity of the selected places and
+      folders. Reading Pythagoras projects is removed from the
+      plugin. The hang watcher runs as a separate process and
+      writes its analysis to the log even when QGIS does not
+      respond at all.
+      0.62.3 When QGIS does not respond for more than 30 s,
       the work log writes a process dump and analyses it at once,
       the log shows in which QGIS and Qt functions every thread
       stands and what it waits for. A log with this analysis helps

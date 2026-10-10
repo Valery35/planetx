@@ -716,6 +716,24 @@ class MyPlaces(QObject):
                            "measure": ""}})
         return True
 
+    def set_colors(self, colors):
+        """Цвета меток и картинок одним проходом: {ключ: (цвет, заливка)},
+        у картинки заливка None, её цвет - непрозрачность. Ползунок
+        непрозрачности под списком."""
+        changes = {}
+        for key, (color, fill) in colors.items():
+            item = self.find(key)
+            if isinstance(item, OverlayItem):
+                overlay = overlays.from_params(
+                    item.kind, item.overlay.params(), item.overlay.corners)
+                overlay.color = tuple(int(c) for c in color)
+                changes[key] = {"params": overlay.params()}
+            elif isinstance(item, Place):
+                changes[key] = {"color": _color_text(color),
+                                "fill": _color_text(fill)}
+        if changes:
+            self._write(changes)
+
     def set_visible_many(self, states):
         """Флажки меток и папок разом: {ключ: включена}."""
         self._write({key: {"visible": 1 if on else 0}

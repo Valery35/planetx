@@ -20,6 +20,17 @@
 квадратом со стороной side метров. Рамка и маска считаются в системе
 UTM сцены (proj:epsg) рядами Крюгера core/coords.py.
 
+Landsat 4-9 - просьба автора от 10 октября 2026 года. Каталог - STAC
+API Microsoft Planetary Computer, коллекция landsat-c2-l2 (Collection 2
+Level-2, отражение и температура поверхности, 30 м, с 1982 года).
+Файлы лежат в Azure и читаются по временному ключу SAS, его служба
+Planetary Computer выдаёт без учётной записи, ключ живёт около часа
+(sign). Облака - битовая маска qa_pixel: бит 0 - нет данных, 1 -
+расширенная маска облака, 2 - перистые облака, 3 - облако, 4 - тень.
+Каналы Landsat называются как у Sentinel-2, ближний ИК - nir08, его
+же берут продукты с nir (band). Тепловой канал - lwir11 у Landsat
+8-9 и lwir у 4-7, продукт lst - температура поверхности в °C.
+
 Модуль Qt не знает.
 """
 import math
@@ -34,6 +45,26 @@ except ImportError:  # headless-тесты
 
 SEARCH = "https://earth-search.aws.element84.com/v1/search"
 COLLECTION = "sentinel-2-l2a"
+LANDSAT_SEARCH = "https://planetarycomputer.microsoft.com/api/stac/v1/search"
+LANDSAT_COLLECTION = "landsat-c2-l2"
+LANDSAT_SAS_URL = ("https://planetarycomputer.microsoft.com/api/sas/v1/token/"
+                 + LANDSAT_COLLECTION)
+SEARCHES = {"sentinel2": SEARCH, "landsat": LANDSAT_SEARCH}
+COLLECTIONS = {"sentinel2": COLLECTION, "landsat": LANDSAT_COLLECTION}
+# Маска облаков сцены: ключ ресурса и шаг чтения, м.
+CLOUD_ASSET = {"sentinel2": ("scl", 20.0), "landsat": ("qa_pixel", 30.0)}
+# Биты qa_pixel Landsat Collection 2.
+QA_FILL = 1 << 0
+QA_CLOUDY = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
+LANDSAT_STEPS = (30.0, 60.0, 120.0)
+LANDSAT_ATTRIBUTION = "Landsat {number} image courtesy of the U.S. " \
+    "Geological Survey"
+# Температура поверхности, °C: пределы шкалы и цвета.
+TEMPERATURE = ((-20.0, 45.0),
+               ((-20.0, (49, 54, 149)), (0.0, (116, 173, 209)),
+                (10.0, (224, 243, 248)), (20.0, (254, 224, 144)),
+                (30.0, (244, 109, 67)), (45.0, (165, 0, 38))))
+KELVIN = 273.15
 PAGE = 100  # сцен на страницу ответа каталога
 MAX_SCENES = 400  # сцен в поиске, дальше страницы не просятся
 # Классы SCL: 0 нет данных, 1 насыщенные и дефектные, 3 тени облаков,
@@ -49,10 +80,12 @@ STEPS = (10.0, 20.0, 60.0)
 ATTRIBUTION = "Contains modified Copernicus Sentinel data {year}"
 
 Asset = namedtuple("Asset", "href scale offset nodata res")
-Scene = namedtuple("Scene", "id when cloud tile epsg sun thumbnail assets")
+Scene = namedtuple("Scene", "id when cloud tile epsg sun thumbnail assets "
+                            "mission", defaults=("sentinel2",))
 Scene.__doc__ = """Сцена: номер, время UTC «ГГГГ-ММ-ДД ЧЧ:ММ», облачность
-сцены в процентах, тайл MGRS, EPSG системы UTM, высота солнца в
-градусах, адрес превью, каналы {ключ: Asset}."""
+сцены в процентах, тайл MGRS или спутник с витком и рядом WRS у Landsat,
+EPSG системы UTM, высота солнца в градусах, адрес превью, каналы
+{ключ: Asset}, спутник - sentinel2 или landsat."""
 
 # Сочетания каналов (красный, зелёный, синий канал картинки) и
 # отражение, растягиваемое на полную яркость, если по снимку не
@@ -86,14 +119,28 @@ INDICES = {
               (0.4, (166, 206, 227)), (1.0, (255, 255, 255)))),
 }
 PRODUCTS = tuple(COMPOSITES) + tuple(INDICES)
+LANDSAT_PRODUCTS = PRODUCTS + ("lst",)
+
+
+def products_of(mission):
+    """Продукты спутника: у Landsat ещё температура поверхности."""
+    return LANDSAT_PRODUCTS if mission == "landsat" else PRODUCTS
+
+
+def band(key, mission):
+    """Ключ ресурса канала у спутника: ближний ИК Landsat - nir08."""
+    if mission == "landsat" and key == "nir":
+        return "nir08"
+    return key
 
 
 # Каталог.
 
-def search_body(geometry, start, end, max_cloud, limit=PAGE):
+def search_body(geometry, start, end, max_cloud, limit=PAGE,
+                mission="sentinel2"):
     """Тело запроса поиска: geometry - GeoJSON, start и end - дни
-    «ГГГГ-ММ-ДД», max_cloud - облачность сцены по оценке ESA."""
-    return {"collections": [COLLECTION],
+    «ГГГГ-ММ-ДД», max_cloud - облачность сцены по оценке поставщика."""
+    return {"collections": [COLLECTIONS[mission]],
             "intersects": geometry,
             "datetime": "{}T00:00:00Z/{}T23:59:59Z".format(start, end),
             "limit": int(limit),
@@ -119,6 +166,8 @@ def parse_page(data):
 def parse_item(feature):
     """Сцена из элемента STAC или None, если нет каналов."""
     props = feature.get("properties") or {}
+    if str(props.get("platform") or "").startswith("landsat"):
+        return _landsat_item(feature, props)
     # Смещение -1000 уже вычтено из значений, а поле offset у каналов
     # осталось. Проверено 9 октября 2026 года - красный над лесом 224.
     applied = bool(props.get("earthsearch:boa_offset_applied"))
@@ -149,6 +198,48 @@ def parse_item(feature):
                  props.get("view:sun_elevation"), thumbnail, assets)
 
 
+def _landsat_item(feature, props):
+    """Сцена Landsat Planetary Computer: каналы с масштабом и сдвигом
+    из каталога, превью - картинка службы данных."""
+    assets = {}
+    preview = ""
+    for key, value in (feature.get("assets") or {}).items():
+        href = value.get("href") or ""
+        if not href.startswith("https://"):
+            continue
+        if key == "rendered_preview":
+            preview = href
+            continue
+        bands = value.get("raster:bands") or [{}]
+        info = bands[0] if bands else {}
+        assets[key] = Asset(href, float(info.get("scale") or 1.0),
+                            float(info.get("offset") or 0.0),
+                            info.get("nodata"),
+                            info.get("spatial_resolution"))
+    if "red" not in assets or "qa_pixel" not in assets:
+        return None
+    if "lwir11" in assets and "lwir" not in assets:
+        assets["lwir"] = assets["lwir11"]
+    number = str(props.get("platform") or "").split("-")[-1]
+    tile = "L{} {}/{}".format(number, props.get("landsat:wrs_path", ""),
+                              props.get("landsat:wrs_row", ""))
+    epsg = props.get("proj:epsg")
+    cloud = props.get("eo:cloud_cover")
+    return Scene(str(feature.get("id") or ""),
+                 str(props.get("datetime") or "").replace("T", " ")[:16],
+                 float(cloud) if cloud is not None else 100.0, tile,
+                 int(epsg) if epsg else None,
+                 props.get("view:sun_elevation"), preview, assets,
+                 "landsat")
+
+
+def sign(href, sas):
+    """Адрес файла Planetary Computer с ключом SAS."""
+    if not sas:
+        return href
+    return href + ("&" if "?" in href else "?") + sas
+
+
 def _tile(feature, props):
     zone = props.get("mgrs:utm_zone")
     band = props.get("mgrs:latitude_band")
@@ -168,6 +259,19 @@ def _epsg_from_tile(tile, props):
 
 
 # Участок.
+
+# Сторона участка точки, км - ширина видимой полосы глобуса в этих
+# пределах.
+SIDE_MIN = 1.0
+SIDE_MAX = 100.0
+
+
+def side_for_view(width):
+    """Сторона участка точки в км по ширине видимой полосы width метров,
+    с шагом 0.1 км."""
+    side = min(max(width / 1000.0, SIDE_MIN), SIDE_MAX)
+    return round(side, 1)
+
 
 def square(lat, lon, side):
     """Квадрат со стороной side метров вокруг точки: кольцо (широта,
@@ -214,15 +318,16 @@ def bounds(xy, res):
             math.ceil(max(xs) / res) * res, math.ceil(max(ys) / res) * res)
 
 
-def step_for(xy):
-    """Шаг выдачи: 10 м, если сторона участка не больше MAX_PIXELS
-    пикселей, иначе 20 или 60 м."""
+def step_for(xy, mission="sentinel2"):
+    """Шаг выдачи: 10 м у Sentinel-2 и 30 м у Landsat, если сторона
+    участка не больше MAX_PIXELS пикселей, иначе крупнее."""
+    steps = LANDSAT_STEPS if mission == "landsat" else STEPS
     box = bounds(xy, 1.0)
     side = max(box[2] - box[0], box[3] - box[1])
-    for res in STEPS:
+    for res in steps:
         if side / res <= MAX_PIXELS:
             return res
-    return STEPS[-1]
+    return steps[-1]
 
 
 def mask(xy, box, res):
@@ -266,19 +371,57 @@ def cloud_share(scl, inside):
             float(100.0 * count / area))
 
 
+def qa_cloudy(qa):
+    """Пиксели облаков и теней по qa_pixel Landsat: (облака, нет
+    данных) - массивы bool."""
+    qa = np.asarray(qa).astype(np.int64)
+    empty = (qa & QA_FILL) != 0
+    return ((qa & QA_CLOUDY) != 0) & ~empty, empty
+
+
+def cloud_share_qa(qa, inside):
+    """Облачность над участком по qa_pixel Landsat, как cloud_share."""
+    cloudy, empty = qa_cloudy(qa)
+    area = inside.sum()
+    valid = inside & ~empty
+    count = valid.sum()
+    if area == 0 or count == 0:
+        return 100.0, 0.0
+    return (float(100.0 * (cloudy & valid).sum() / count),
+            float(100.0 * count / area))
+
+
+def clouds_of(scene, raw, inside):
+    """Облачность над участком по маске сцены любого спутника."""
+    if scene.mission == "landsat":
+        return cloud_share_qa(raw, inside)
+    return cloud_share(raw, inside)
+
+
+def clear_mask(scene, raw):
+    """Пиксели без облаков, теней и пропусков по маске сцены."""
+    if scene.mission == "landsat":
+        cloudy, empty = qa_cloudy(raw)
+        return ~(cloudy | empty)
+    return ~np.isin(raw, SCL_CLOUDY + SCL_EMPTY)
+
+
 # Каналы и выдача.
 
-def needed(products):
+def needed(products, mission="sentinel2"):
     """Каналы сцены для продуктов: ключи ресурсов STAC."""
     keys = []
     for product in products:
-        if product in COMPOSITES:
+        if product == "lst":
+            bands = ("lwir",)
+        elif product in COMPOSITES:
             bands = COMPOSITES[product]
         else:
             bands = INDICES[product][0]
-        for band in bands:
-            if band not in keys:
-                keys.append(band)
+        for name in bands:
+            key = band(name, mission)
+            if key not in keys:
+                keys.append(key)
     return keys
 
 
@@ -303,13 +446,18 @@ def normalized_difference(a, b):
     return out.astype(np.float32)
 
 
-def product(name, bands):
-    """Массив продукта: сочетание - (3, строки, столбцы), индекс -
-    (строки, столбцы). bands - отражения {ключ: массив}."""
+def product(name, bands, mission="sentinel2"):
+    """Массив продукта: сочетание - (3, строки, столбцы), индекс и
+    температура - (строки, столбцы). bands - отражения {ключ: массив},
+    у теплового канала - кельвины."""
+    if name == "lst":
+        return (bands["lwir"] - np.float32(KELVIN)).astype(np.float32)
     if name in COMPOSITES:
-        return np.stack([bands[k] for k in COMPOSITES[name]])
+        return np.stack([bands[band(k, mission)]
+                         for k in COMPOSITES[name]])
     a, b = INDICES[name][0]
-    return normalized_difference(bands[a], bands[b])
+    return normalized_difference(bands[band(a, mission)],
+                                 bands[band(b, mission)])
 
 
 def stretch(values, low=2.0, high=98.0):
@@ -324,10 +472,19 @@ def stretch(values, low=2.0, high=98.0):
 
 
 def file_name(s, name):
-    """Имя файла продукта: «S2_20260929_40VDK_ndvi»."""
-    return "S2_{}_{}_{}".format(s.when[:10].replace("-", ""), s.tile, name)
+    """Имя файла продукта: «S2_20260929_40VDK_ndvi»,
+    «L9_20250923_166-020_ndvi»."""
+    day = s.when[:10].replace("-", "")
+    if s.mission == "landsat":
+        sat, _, place = s.tile.partition(" ")
+        return "{}_{}_{}_{}".format(sat, day, place.replace("/", "-"),
+                                    name)
+    return "S2_{}_{}_{}".format(day, s.tile, name)
 
 
 def credit(s):
-    """Подпись изменённых данных Copernicus с годом снимка."""
+    """Подпись снимка: изменённые данные Copernicus с годом или
+    снимок Landsat от USGS."""
+    if s.mission == "landsat":
+        return LANDSAT_ATTRIBUTION.format(number=s.tile.split(" ")[0][1:])
     return ATTRIBUTION.format(year=s.when[:4])

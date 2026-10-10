@@ -103,7 +103,8 @@ from .elevation import HeightSource, ProfileDialog
 from .section import SectionDialog
 from .assistant import (AssistantDialog, current_provider, ready,
                         search_enabled)
-from .myplaces import MyPlaces, OverlayItem, tour_text
+from .myplaces import MyPlaces, OverlayItem, Place, tour_text
+from ..core import opacity
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
@@ -250,6 +251,8 @@ SEARCH_MIN_DISTANCE = 3000.0
 SEARCH_MAX_DISTANCE = 1.2e7
 # Пауза после последней правки слоя до перерисовки наложения, мс.
 REFRESH_DELAY = 300
+# мс без движения ползунка непрозрачности до записи в «Мои метки».
+OPACITY_DELAY = 120
 PANEL_WIDTH = 300  # ширина левой панели при открытии, пикселей
 MARGIN = 8  # отступ панели значков и подписи от края вида
 ATTRIBUTION_STYLE = ("QLabel { background: rgba(255, 255, 255, 190); "
@@ -835,6 +838,17 @@ class GlobeWindow(QWidget):
             lambda keys, parent, index: self.myplaces.move_many(
                 keys, parent or None, index))
         self.panel.places_action.connect(self._places_action)
+        # Ползунок непрозрачности выделенного: цвета выделения снимаются
+        # при выделении, запись идёт после паузы OPACITY_DELAY в
+        # движении ползунка.
+        self._opacity_items = []
+        self._opacity_base = 1.0
+        self._opacity_value = 1.0
+        self._opacity_timer = QTimer(self)
+        self._opacity_timer.setSingleShot(True)
+        self._opacity_timer.timeout.connect(self._apply_opacity)
+        self.panel.places_selected.connect(self._opacity_selection)
+        self.panel.opacity_moved.connect(self._opacity_moved)
         self.ruler = Ruler(self)
         self.ruler.changed.connect(self._refresh_shapes)
         self.ruler.changed.connect(self._ruler_changed)
@@ -931,7 +945,6 @@ class GlobeWindow(QWidget):
             lambda layer: self.contour_export.grid_contours(layer))
         self.panel.extrude_requested.connect(
             lambda layer: self.extruder.configure(layer))
-        self.panel.pythagoras_requested.connect(self.pythagoras_dialog)
         self.panel.ground_alpha.connect(
             lambda value: self.subsurface.set_opacity(value))
         self.panel.grid_ids = set(read_grids())
@@ -3234,20 +3247,48 @@ class GlobeWindow(QWidget):
         """Перелёт к охвату слоя, камера смотрит отвесно."""
         self._fly_extent(layer.extent(), layer.crs())
 
-    def show_added_layers(self, ids, extent, crs):
-        """Слои, только что добавленные модулем в проект (проект
-        Pythagoras), - сразу на глобус и перелёт к ним. В режиме «как
-        на карте QGIS» они видны и так, слои включены в дереве."""
-        if not self.planet.earth:
-            return
-        if not self.follow:
-            self._shown |= set(ids)
-            write_shown(self._shown)
-            self._changed()
-        if extent is not None and not extent.isEmpty():
-            self._fly_extent(extent, crs)
-
     # «Мои метки».
+
+    @staticmethod
+    def _item_colors(item):
+        """Цвета объекта для ползунка непрозрачности: линия или значок
+        и заливка у метки, цвет у картинки, None у папки."""
+        if isinstance(item, OverlayItem):
+            return [item.overlay.color, None]
+        if isinstance(item, Place):
+            return [item.shape.color, item.shape.fill]
+        return None
+
+    def _opacity_selection(self, keys):
+        """Выделение сменилось: цвета выделенных объектов и содержимого
+        выделенных папок снимаются, ползунок встаёт на их
+        непрозрачность."""
+        if self._opacity_timer.isActive():
+            self._opacity_timer.stop()
+            self._apply_opacity()
+        items = []
+        for key in self.myplaces.with_contents(keys):
+            colors = self._item_colors(self.myplaces.find(key))
+            if colors is not None:
+                items.append((key, colors))
+        self._opacity_items = items
+        self._opacity_base = opacity.selection_opacity(
+            [colors for _, colors in items])
+        self._opacity_value = self._opacity_base
+        self.panel.set_opacity(self._opacity_base if items else None)
+
+    def _opacity_moved(self, value):
+        self._opacity_value = value
+        self._opacity_timer.start(OPACITY_DELAY)
+
+    def _apply_opacity(self):
+        """Новая непрозрачность выделения - в «Мои метки»."""
+        if not self._opacity_items:
+            return
+        self.myplaces.set_colors({
+            key: tuple(opacity.scaled(colors, self._opacity_base,
+                                      self._opacity_value))
+            for key, colors in self._opacity_items})
 
     def _places_changed(self):
         self.panel.set_places(self.myplaces.tree())
@@ -3870,16 +3911,16 @@ class GlobeWindow(QWidget):
         return dialog
 
     def sentinel_here(self, lat, lon):
-        """«Снимки Sentinel-2 здесь…» меню на глобусе: сцены участка
+        """«Снимки Sentinel-2 и Landsat здесь…» меню на глобусе: сцены участка
         вокруг точки. Окно одно, новый участок заменяет прежний."""
         dialog = self._sentinel_dialog()
-        dialog.show_point(lat, lon)
+        dialog.show_point(lat, lon, self._view_width())
         return dialog
 
     def sentinel_place(self, place):
-        """«Снимки Sentinel-2…» меню метки: участок - метка."""
+        """«Снимки Sentinel-2 и Landsat…» меню метки: участок - метка."""
         dialog = self._sentinel_dialog()
-        dialog.show_place(place)
+        dialog.show_place(place, self._view_width())
         return dialog
 
     def _sentinel_dialog(self):
@@ -3891,12 +3932,6 @@ class GlobeWindow(QWidget):
         dialog.show()
         dialog.raise_()
         return dialog
-
-    def pythagoras_dialog(self):
-        """Окно «Проект Pythagoras» из раздела «Слои проекта»."""
-        from .pythagoras import show_dialog
-        self.pyt_dialog = show_dialog(self)
-        return self.pyt_dialog
 
     def spin_here(self, lat, lon):
         """«Вращаться вокруг» меню на глобусе."""

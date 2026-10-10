@@ -26,6 +26,55 @@ EN = {
     "Ошибки SSL запроса {number}:": "SSL errors of request {number}:",
     "Модуль выгружен.": "The plugin is unloaded.",
     "QGIS закрыт.": "QGIS is closed.",
+    "Снимки Sentinel-2 и Landsat здесь…":
+        "Sentinel-2 and Landsat images here…",
+    "Снимки Sentinel-2 и Landsat…": "Sentinel-2 and Landsat images…",
+    "Снимки Sentinel-2 и Landsat": "Sentinel-2 and Landsat images",
+    "Температура поверхности, °C": "Surface temperature, °C",
+    "Landsat 4-9 Collection 2 Level-2 (USGS), файлы и каталог Microsoft "
+    "Planetary Computer. Слои несут подпись «Landsat image courtesy of the "
+    "U.S. Geological Survey».":
+        "Landsat 4-9 Collection 2 Level-2 (USGS), files and catalogue of "
+        "Microsoft Planetary Computer. The layers carry the credit "
+        "\"Landsat image courtesy of the U.S. Geological Survey\".",
+    "Sentinel-2 - 10 м, с 2015 года": "Sentinel-2 - 10 m, since 2015",
+    "Landsat 4-9 - 30 м, с 1982 года": "Landsat 4-9 - 30 m, since 1982",
+    "Sentinel-2 - 10 м, снимки с 2015 года, каждые 5 суток. Landsat - 30 м, "
+    "снимки с 1982 года и тепловой канал, у Landsat 7 после мая 2003 года на "
+    "снимках пустые полосы. Смена спутника запускает новый поиск.":
+        "Sentinel-2 - 10 m, images since 2015, every 5 days. Landsat - "
+        "30 m, images since 1982 and a thermal band, Landsat 7 images after "
+        "May 2003 have empty stripes. A change of the satellite starts a "
+        "new search.",
+    "Наибольшая облачность всей сцены по оценке поставщика снимков, "
+    "у Sentinel-2 сцена 110 × 110 км, у Landsat 185 × 180 км. Это отсев до "
+    "расчёта облачности над участком. Сцена с облаками бывает чистой над "
+    "участком.":
+        "The largest cloud cover of the whole scene by the image provider, "
+        "a Sentinel-2 scene is 110 × 110 km, a Landsat one 185 × 180 km. "
+        "This is a filter before the cloud cover over the area is computed. "
+        "A cloudy scene can be clear over the area.",
+    "Наибольшая доля облаков и их теней над участком по маске облаков "
+    "сцены. Сцены облачнее в списке скрыты.":
+        "The largest share of clouds and their shadows over the area by the "
+        "cloud mask of the scene. Cloudier scenes are hidden in the list.",
+    "Пиксели облаков, их теней и перистых облаков по маске облаков сцены "
+    "остаются пустыми, индексы по ним не считаются.":
+        "Pixels of clouds, their shadows and cirrus by the cloud mask of the "
+        "scene stay empty, indices are not computed over them.",
+    "Запрос ключа доступа к файлам Landsat…":
+        "Requesting the access key for Landsat files…",
+    "Спутник": "Satellite",
+    "Служба ключей Planetary Computer не ответила: {error}. Повторите "
+    "поиск позже.":
+        "The Planetary Computer key service did not answer: {error}. "
+        "Repeat the search later.",
+    "Непрозрачность выделенных меток, путей, многоугольников, картинок "
+    "и содержимого папок. Влево - прозрачнее. Значение сохраняется "
+    "в «Моих метках» и в KML.":
+        "Opacity of the selected placemarks, paths, polygons, images and "
+        "folder contents. To the left is more transparent. The value is "
+        "kept in My Places and in KML.",
     "Стеки потоков C++ по дампу, имена функций приблизительные:":
         "C++ thread stacks from the dump, function names are approximate:",
     "Главный поток": "Main thread",
@@ -260,125 +309,6 @@ EN = {
         "Contours",
     "Ошибка Python не PlanetX ({owner}):":
         "Python error not from PlanetX ({owner}):",
-    "Открыть пример":
-        "Open example",
-    "Выдуманный карьер у Березников - уступы, отвал, дорога, опорные пункты "
-    "и подписи. Система координат ставится сама.":
-        "An invented quarry near Berezniki - benches, a dump, a road, survey "
-        "points and labels. The coordinate system is set automatically.",
-    "Добавить проект Pythagoras (.pyt). Слои Pythagoras ложатся в GeoPackage "
-    "и группой в проект QGIS.":
-        "Add a Pythagoras project (.pyt). Pythagoras layers go to a "
-        "GeoPackage and to the QGIS project as a group.",
-    "Добавить проект Pythagoras (.pyt)…":
-        "Add Pythagoras project (.pyt)…",
-    "{size} МБ":
-        "{size} MB",
-    "Выбрать файл…":
-        "Choose file…",
-    "Готово. В проект добавлена группа «{title}» - слоёв {count}: точек "
-    "{points}, линий {lines}, площадей {areas}, надписей {texts}.":
-        "Done. The group «{title}» is added to the project - layers {count}: "
-        "points {points}, lines {lines}, areas {areas}, texts {texts}.",
-    "Линии":
-        "Lines",
-    "Надписи":
-        "Texts",
-    "Не отмечено ни одного слоя.":
-        "No layer is checked.",
-    "Ни одного":
-        "None",
-    "Отметьте слои и нажмите «В проект QGIS».":
-        "Check the layers and press To QGIS project.",
-    "Отмечено слоёв {layers} из {all}, объектов {count}.":
-        "Layers checked {layers} of {all}, objects {count}.",
-    "Папка файла .pyt":
-        "Folder of the .pyt file",
-    "Перетащите сюда файл <b>.pyt</b> из проводника или нажмите «Выбрать "
-    "файл…».":
-        "Drag a <b>.pyt</b> file here from the file manager or press Choose "
-        "file….",
-    "Площади":
-        "Areas",
-    "Проект Pythagoras в QGIS":
-        "Pythagoras project in QGIS",
-    "Слои файла и количество объектов в них. Флажок решает, попадёт ли слой "
-    "в проект.":
-        "The layers of the file and their object counts. The checkbox "
-        "decides whether a layer goes to the project.",
-    "Слой Pythagoras":
-        "Pythagoras layer",
-    "Слоёв {layers}, объектов {count}.":
-        "Layers {layers}, objects {count}.",
-    "Точки":
-        "Points",
-    "Файл .pyt читается напрямую, без DXF и SHP. Каждый слой Pythagoras "
-    "становится слоями точек, линий, площадей и надписей в GeoPackage и "
-    "группой в проекте.":
-        "The .pyt file is read directly, without DXF or SHP. Each Pythagoras "
-        "layer becomes layers of points, lines, areas and texts in a "
-        "GeoPackage and a group in the project.",
-    "Добавить проект Pythagoras…":
-        "Add Pythagoras project…",
-    "Файл .pyt ложится в GeoPackage слоями по слоям Pythagoras - точки, "
-    "линии, площади и надписи - и группой в проект.":
-        "The .pyt file goes to a GeoPackage as layers by Pythagoras layers - "
-        "points, lines, areas and texts - and to the project as a group.",
-    "Pythagoras - {name}":
-        "Pythagoras - {name}",
-    "площади": "areas",
-    "надписи": "texts",
-    "Файл: {path}": "File: {path}",
-    "Файл проекта - свой или пример": "A project file, your own or the "
-        "example",
-    "Слои, которые нужны в QGIS": "The layers needed in QGIS",
-    "Система координат и папка результата":
-        "Coordinate system and result folder",
-    "«В проект QGIS» - слои лягут в проект группой, карта QGIS и глобус "
-    "покажут участок, окно закроется.":
-        "To the QGIS project puts the layers into the project as a group, "
-        "the QGIS map and the globe show the area, the window closes.",
-    "Pythagoras хранит каждую вершину линии точкой. Без флажка в слои точек "
-    "попадают только точки со знаком, как при выгрузке в SHP из самого "
-    "Pythagoras. С флажком - и все вершины.":
-        "Pythagoras stores every line vertex as a point. Without the "
-        "checkbox the point layers get only points with a symbol, as the SHP "
-        "export of Pythagoras itself. With it they get all vertices too.",
-    "В файле не найдено объектов.":
-        "No objects found in the file.",
-    "Не выбрана система координат.":
-        "No coordinate system is chosen.",
-    "Папка результата":
-        "Output folder",
-    "Папка файла GeoPackage. Пустое поле - папка файла .pyt.":
-        "The folder of the GeoPackage file. An empty field means the folder "
-        "of the .pyt file.",
-    "Площадей без контура: {n}.":
-        "Areas without an outline: {n}.",
-    "Проект Pythagoras":
-        "Pythagoras project",
-    "Проект Pythagoras (*.pyt)":
-        "Pythagoras project (*.pyt)",
-    "Система координат":
-        "Coordinate system",
-    "Система координат проекта Pythagoras. В файле .pyt её нет, она задаётся "
-    "здесь и записывается в GeoPackage.":
-        "The coordinate system of the Pythagoras project. The .pyt file does "
-        "not hold it, it is set here and written to the GeoPackage.",
-    "Слой {n}":
-        "Layer {n}",
-    "Точки построения тоже":
-        "Construction points too",
-    "Файл .pyt не найден.":
-        "The .pyt file is not found.",
-    "Файл {path} уже есть. Заменить его?":
-        "The file {path} already exists. Replace it?",
-    "Файл не записан: {path}":
-        "The file is not written: {path}",
-    "Снимки Sentinel-2 здесь…":
-        "Sentinel-2 images here…",
-    "Снимки Sentinel-2…":
-        "Sentinel-2 images…",
     "Copernicus Sentinel-2 L2A (ESA), файлы и каталог Earth Search Element "
     "84 на AWS. Слои несут подпись «Contains modified Copernicus Sentinel "
     "data» с годом снимка.":
@@ -419,16 +349,6 @@ EN = {
         "False colour, near infrared (B8 B4 B3)",
     "Над участком":
         "Over the area",
-    "Наибольшая доля облаков и их теней над участком по маске классов сцены. "
-    "Сцены облачнее в списке скрыты.":
-        "The largest share of clouds and their shadows over the area by the "
-        "scene classification mask. Cloudier scenes are hidden in the list.",
-    "Наибольшая облачность всей сцены 110 × 110 км по оценке ESA. Это отсев "
-    "до расчёта облачности над участком. Сцена с облаками бывает чистой над "
-    "участком.":
-        "The largest cloud cover of the whole 110 × 110 km scene by the ESA "
-        "estimate. It filters before the cloud cover over the area is "
-        "counted. A cloudy scene can be clear over the area.",
     "Найдено сцен {count}, считается облачность над участком…":
         "{count} scenes found, counting the cloud cover over the area…",
     "Не отмечено ни одного продукта.":
@@ -458,10 +378,6 @@ EN = {
         "Folder…",
     "Первый день съёмки в поиске.":
         "The first acquisition day searched.",
-    "Пиксели облаков, их теней и перистых облаков по маске классов сцены "
-    "остаются пустыми, индексы по ним не считаются.":
-        "Pixels of clouds, their shadows and cirrus by the scene "
-        "classification mask stay empty, indices are not computed on them.",
     "Поиск сцен…":
         "Searching scenes…",
     "Последний день съёмки в поиске.":
@@ -480,11 +396,13 @@ EN = {
     "участку.":
         "Only band combinations go by link, indices need clipping to the "
         "area.",
-    "Сторона квадрата участка вокруг точки. По участку считается облачность "
-    "и обрезаются снимки. Больше участок - дольше загрузка каналов.":
-        "The side of the square area around the point. The cloud cover is "
-        "counted and images are clipped by the area. A larger area loads the "
-        "bands longer.",
+    "Сторона квадрата участка вокруг точки. При открытии окна она равна "
+    "ширине видимой полосы глобуса. По участку считается облачность и "
+    "обрезаются снимки. Больше участок - дольше загрузка каналов.":
+        "The side of the square area around the point. When the window "
+        "opens, it equals the width of the visible strip of the globe. The "
+        "cloud cover is counted and images are clipped by the area. A larger "
+        "area loads the bands longer.",
     "Сторона участка":
         "Area side",
     "Сцен {total}, над участком не облачнее {cloud} % - {count}.":
@@ -624,8 +542,6 @@ EN = {
         "To QGIS project",
     "Найти":
         "Find",
-    "Снимки Sentinel-2":
-        "Sentinel-2 images",
     "Маршрут не построен: сервис ответил «{error}», а по дорогам векторной "
     "основы маршрут строится до {limit} км по прямой.":
         "No route: the service answered '{error}', and over the roads of the "

@@ -4271,6 +4271,47 @@ def vt_stress_run():
     out["seconds"] = round(time.monotonic() - state["stress_started"], 1)
 
 
+REFRESH_SECONDS = float(os.environ.get("PLANETX_REFRESH_SECONDS", "120"))
+
+
+@check(500)
+def refresh_stress():
+    """Зависание проверочного QGIS 10 октября 2026 года: главный поток
+    больше 10 с стоял в LayerOverlay.abort при пересборке наложения,
+    пока прежнее грузило тайлы, сразу после открытия окна. Шаг каждые
+    300 мс переносит камеру в новое место и зовёт refresh."""
+    import random
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    state["refresh_rnd"] = random.Random(int(time.time()))
+    state["refresh_started"] = time.monotonic()
+    result["refresh_stress"] = {"rounds": 0, "max_ms": 0.0}
+
+
+@check(300)
+def refresh_stress_run():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result["refresh_stress"]
+    rnd = state["refresh_rnd"]
+    if time.monotonic() - state["refresh_started"] > REFRESH_SECONDS:
+        return None
+    window.view.navigator.show(Pose(rnd.uniform(-50.0, 65.0),
+                                    rnd.uniform(-170.0, 170.0),
+                                    rnd.uniform(20000.0, 3000000.0),
+                                    rnd.uniform(0.0, 360.0),
+                                    rnd.uniform(0.0, 50.0)))
+    started = time.perf_counter()
+    window.refresh()
+    out["max_ms"] = round(max(out["max_ms"],
+                              (time.perf_counter() - started) * 1000.0), 1)
+    out["rounds"] += 1
+    with open(os.path.join(TEMP, "planetx_refresh_progress.txt"), "w") as fh:
+        fh.write("{} {}\n".format(out["rounds"], out["max_ms"]))
+    return 300
+
+
 GALLERY_SECONDS = float(os.environ.get("PLANETX_GALLERY_SECONDS", "240"))
 GALLERY_PERIOD = 1500  # мс между переключениями карт витрины
 GALLERY_EXTRAS = ("clouds", "plates", "quakes", "slope", "contours")
@@ -7372,6 +7413,156 @@ def sentinel_wait():
 
 
 @check(500)
+def landsat_open():
+    """Снимки Landsat у Перми: тот же участок 2 км, каталог Planetary
+    Computer, ключ SAS без учётной записи, облачность по qa_pixel.
+    PLANETX_LANDSAT_YEAR - год съёмки, по умолчанию 2024, лето."""
+    from qgis.PyQt.QtCore import QDate
+    window = state["window"]
+    window.set_body("earth")
+    dialog = window.sentinel_here(*ROUTE_A)
+    year = int(os.environ.get("PLANETX_LANDSAT_YEAR", "2024"))
+    dialog.side.setValue(2.0)
+    dialog.start.setDate(QDate(year, 5, 1))
+    dialog.end.setDate(QDate(year, 9, 30))
+    dialog.mission.setCurrentIndex(dialog.mission.findData("landsat"))
+    state["ls_started"] = time.monotonic()
+    result["landsat"] = {"year": year,
+                         "link_enabled": dialog.mode.model().item(1)
+                         .isEnabled(),
+                         "products": [dialog.products.item(n).text()
+                                      for n in range(dialog.products.count())]}
+
+
+@check(500)
+def landsat_wait():
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["ls_started"]
+    busy = dialog.reply is not None or dialog.cloud_jobs \
+        or dialog.sas_reply is not None or dialog.sas_waiting
+    if busy and spent < 240.0:
+        return 500
+    out = result["landsat"]
+    out["seconds"] = round(spent, 1)
+    out["scenes"] = len(dialog.scenes)
+    out["platforms"] = sorted({s.tile.split(" ")[0] for s in dialog.scenes})
+    out["clouds"] = len(dialog.clouds)
+    out["unread"] = sum(1 for c, _ in dialog.clouds.values() if c is None)
+    out["key"] = bool(dialog.sas)
+    shown = [dialog.list.topLevelItem(n)
+             for n in range(dialog.list.topLevelItemCount())
+             if not dialog.list.topLevelItem(n).isHidden()]
+    out["shown"] = len(shown)
+    out["first"] = [shown[0].text(c) for c in range(5)] if shown else None
+    out["status"] = dialog.status.text()
+    if shown:
+        dialog.list.setCurrentItem(shown[0])
+    return None
+
+
+@check(500)
+def landsat_build():
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    want = ("natural", "ndvi", "lst")
+    for n in range(dialog.products.count()):
+        item = dialog.products.item(n)
+        item.setCheckState(Qt.CheckState.Checked
+                           if item.data(Qt.ItemDataRole.UserRole) in want
+                           else Qt.CheckState.Unchecked)
+    folder = os.path.join(TEMP, "planetx_landsat")
+    state["ls_folder"] = folder
+    dialog.add(folder=folder)
+    state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def landsat_built():
+    from osgeo import gdal
+    import numpy as np
+    from qgis.core import QgsProject
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["ls_build"]
+    if (dialog.build_job is not None or dialog.sas_waiting) \
+            and spent < 240.0:
+        return 500
+    out = result["landsat"]
+    out["build_seconds"] = round(spent, 1)
+    out["build_status"] = dialog.status.text()
+    out["preview"] = dialog.preview.pixmap() is not None \
+        and not dialog.preview.pixmap().isNull()
+    group = QgsProject.instance().layerTreeRoot().findGroup("Landsat")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["layers"] = [(l.name(), l.isValid(), l.renderer().type(),
+                      l.metadata().rights()) for l in layers]
+    folder = state["ls_folder"]
+    files = sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+    out["files"] = files
+    for name in files:
+        if not name.endswith(".tif"):
+            continue
+        ds = gdal.Open(os.path.join(folder, name))
+        a = ds.ReadAsArray()
+        finite = a[np.isfinite(a)]
+        key = name.rsplit("_", 1)[1][:-4]
+        out[key] = {"size": [ds.RasterXSize, ds.RasterYSize],
+                    "res": ds.GetGeoTransform()[1],
+                    "valid": round(finite.size / a.size, 3),
+                    "median": round(float(np.median(finite)), 3)
+                    if finite.size else None,
+                    "range": [round(float(finite.min()), 2),
+                              round(float(finite.max()), 2)]
+                    if finite.size else None}
+        ds = None
+    dialog.grab().save(os.path.join(TEMP, "planetx_landsat_dialog.png"))
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    dialog.close()
+    return None
+
+
+@check(500)
+def landsat_rebuild():
+    """После landsat_build: та же сцена ещё раз, пока прежние слои в
+    проекте держат свои файлы. На прежнем коде - «Снимок не загружен:
+    Deleting ... failed: Permission denied»."""
+    dialog = state["window"].sentinel_dialog
+    if dialog.build_job is not None or dialog.sas_waiting:
+        return 500
+    out = result.setdefault("landsat_again", {})
+    out["first_status"] = dialog.status.text()
+    dialog.add(folder=state["ls_folder"])
+    state["ls_build"] = time.monotonic()
+    return None
+
+
+@check(500)
+def landsat_rebuilt():
+    from qgis.core import QgsProject
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["ls_build"]
+    if (dialog.build_job is not None or dialog.sas_waiting) \
+            and spent < 240.0:
+        return 500
+    out = result["landsat_again"]
+    out["status"] = dialog.status.text()
+    group = QgsProject.instance().layerTreeRoot().findGroup("Landsat")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["layers"] = [(l.name(), l.isValid(),
+                      os.path.basename(l.source())) for l in layers]
+    out["files"] = sorted(os.listdir(state["ls_folder"]))
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    dialog.close()
+    return None
+
+
+@check(500)
 def sentinel_build():
     from qgis.PyQt.QtCore import Qt
     window = state["window"]
@@ -7492,114 +7683,6 @@ def sentinel_check():
     result["sentinel"]["gl"] = dict(view.gl_errors)
 
 
-@check(500)
-def pyt_import():
-    """Проект Pythagoras из меню «Слоёв проекта»: файл .pyt из
-    PLANETX_PYT, GeoPackage в TEMP, группа слоёв в проекте."""
-    from qgis.core import QgsCoordinateReferenceSystem
-    path = os.environ.get("PLANETX_PYT", "")
-    out = result["pyt"] = {"file": os.path.basename(path)}
-    if not os.path.isfile(path):
-        out["skipped"] = "no PLANETX_PYT"
-        return
-    from qgis.utils import iface
-    from planetx.ui import pythagoras
-    window = state["window"]
-    # Кнопка на заголовке «Слоёв проекта».
-    window.panel.pyt_button.click()
-    dialog = window.pyt_dialog
-    out["shown"] = dialog.isVisible()
-    # Пункт меню «Слой» - «Добавить слой» и бросок файла в окно QGIS.
-    menu = iface.addLayerMenu()
-    out["add_layer_menu"] = any(
-        "Pythagoras" in a.text() for a in menu.actions())
-    out["drop"] = pythagoras.PytDropHandler().handleFileDrop(path)
-    out["drop_other"] = pythagoras.PytDropHandler().handleFileDrop(
-        os.path.join(TEMP, "none.shp"))
-    out["same_dialog"] = pythagoras.show_dialog() is dialog
-    out["rows"] = dialog.table.topLevelItemCount()
-    out["total"] = dialog.total.text()
-    dialog.folder.setText(TEMP)
-    dialog.all_points.setChecked(False)
-    dialog.crs.setCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
-    dialog.resize(700, 640)
-    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_dialog.png"))
-    target = os.path.join(
-        TEMP, os.path.splitext(os.path.basename(path))[0] + ".gpkg")
-    if os.path.exists(target):
-        os.remove(target)
-    import time as _time
-    started = _time.monotonic()
-    dialog.convert()
-    out["seconds"] = round(_time.monotonic() - started, 2)
-    out["status"] = dialog.status.text()
-    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_done.png"))
-    # Повтор - прежняя группа снимается, файл пишется заново.
-    from qgis.PyQt.QtWidgets import QMessageBox
-    from planetx.qt_compat import enum
-    keep = QMessageBox.question
-    QMessageBox.question = staticmethod(
-        lambda *a: enum(QMessageBox, "StandardButton", "Yes"))
-    try:
-        dialog.convert()
-    finally:
-        QMessageBox.question = keep
-    out["again"] = dialog.status.text()
-
-
-@check(6000)
-def pyt_demo():
-    """Пример карьера ссылкой окна: система координат примера, файл
-    в профиле QGIS, а не в папке модуля."""
-    from qgis.core import QgsApplication, QgsProject
-    from planetx.ui import pythagoras
-    dialog = pythagoras.show_dialog()
-    dialog.folder.setText("")
-    out = result.setdefault("pyt_demo", {})
-    out["button"] = dialog.drop.demo.isVisible()
-    dialog.drop.demo.click()
-    out["crs"] = dialog.crs.crs().authid()
-    out["rows"] = dialog.table.topLevelItemCount()
-    target = os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
-                          "pythagoras", "quarry.gpkg")
-    if os.path.exists(target):
-        os.remove(target)
-    window = state["window"]
-    window.follow = False
-    dialog.grab().save(os.path.join(TEMP, "planetx_pyt_demo.png"))
-    dialog.convert()
-    out["status"] = dialog.status.text()
-    out["written"] = os.path.exists(target)
-    out["in_module"] = os.path.exists(os.path.join(
-        os.path.dirname(pythagoras.DEMO), "quarry.gpkg"))
-    group = QgsProject.instance().layerTreeRoot().findGroup(
-        "Pythagoras - quarry")
-    out["layers"] = len(group.findLayers()) if group else 0
-    # После записи итог виден сразу - окно закрыто, слои отмечены
-    # на глобусе, глобус летит к карьеру у Березников.
-    out["dialog_hidden"] = not dialog.isVisible()
-    ids = group.findLayerIds() if group else []
-    out["on_globe"] = sum(1 for i in ids if i in window._shown)
-    out["names"] = sorted(n.layer().name() for n in group.findLayers())[:3] \
-        if group else []
-    state["pyt_demo_group"] = ids
-
-
-@check(300)
-def pyt_demo_wait():
-    """Глобус долетел до карьера примера, слои убираются."""
-    from qgis.core import QgsProject
-    out = result.setdefault("pyt_demo", {})
-    nav = state["window"].view.navigator
-    out["camera"] = [round(nav.pose.lat, 3), round(nav.pose.lon, 3),
-                     round(nav.pose.distance)]
-    project = QgsProject.instance()
-    group = project.layerTreeRoot().findGroup("Pythagoras - quarry")
-    if group is not None:
-        project.removeMapLayers(group.findLayerIds())
-        project.layerTreeRoot().removeChildNode(group)
-
-
 @check(300)
 def journal_foreign():
     """Журнал пишет и чужие необработанные ошибки Python с именем
@@ -7691,6 +7774,39 @@ def journal_hang():
     out["report_kb"] = round(len(report.encode("utf-8")) / 1024, 1)
     out["threads"] = sum(1 for line in lines if not line.startswith(" ")
                          and line[:1].isalpha())
+    for name in made:
+        os.remove(name)
+
+
+@check(2000)
+def journal_hang_gil():
+    """Главный поток стоит в вызове C, не отпустив GIL, - так висел
+    проверочный QGIS 10 октября 2026 года. Поток Python внутри QGIS
+    тут бессилен, дамп пишет процесс-сторож hangwatch.py снаружи."""
+    import ctypes
+    import glob
+    import time as _time
+    from planetx import journal
+    out = result.setdefault("journal_hang_gil", {})
+    out["watch"] = bool(journal._state["watch"])
+    before = set(glob.glob(os.path.join(journal.folder(), "hang-*.dmp")))
+    started = _time.monotonic()
+    # PyDLL держит GIL на время вызова.
+    ctypes.PyDLL("kernel32").Sleep(int((journal.DUMP_AFTER + 8) * 1000))
+    out["slept"] = round(_time.monotonic() - started, 1)
+    _time.sleep(3.0)
+    made = set(glob.glob(os.path.join(journal.folder(), "hang-*.dmp")))
+    made -= before
+    out["dumps"] = len(made)
+    with open(journal.path(), encoding="utf-8") as handle:
+        text = handle.read()
+    names = [os.path.basename(n) for n in made]
+    at = max((text.rfind(n) for n in names), default=-1)
+    report = text[at:] if at >= 0 else ""
+    lines = report.split("\n")
+    out["main_frames"] = [line.strip() for line in lines[1:7]]
+    out["sleep"] = any("Sleep" in line for line in lines[1:6])
+    out["report_kb"] = round(len(report.encode("utf-8")) / 1024, 1)
     for name in made:
         os.remove(name)
 
@@ -7796,28 +7912,96 @@ def journal_crash():
     out["resources"] = "GDI" in tail
 
 
+@check(500)
+def opacity_slider():
+    """Ползунок непрозрачности под «Моими метками»: многоугольник,
+    затем папка с двумя метками. Значение пишется в файл меток,
+    выделение переживает перестройку списка."""
+    from qgis.PyQt.QtCore import QCoreApplication
+    from planetx.core.features import Shape
+    from planetx.ui.myplaces import MyPlaces
+    window = state["window"]
+    store = window.myplaces
+    panel = window.panel
+    out = result.setdefault("opacity_slider", {})
+
+    def settle():
+        _wait = time.monotonic() + 0.4
+        while time.monotonic() < _wait:
+            QCoreApplication.processEvents()
+
+    def select(keys):
+        panel.list.clearSelection()
+        for key in keys:
+            panel.select_place(key)
+            panel.list.currentItem().setSelected(True)
+        settle()
+
+    folder = store.add_folder("Прозрачность")
+    poly = store.add(Shape("polygon", [(57.9, 56.1), (57.9, 56.3),
+                                       (58.0, 56.2)],
+                           color=(255, 0, 0, 200), width=2.0,
+                           fill=(255, 0, 0, 100), name="Квадрат"),
+                     folder=folder)
+    line = store.add(Shape("line", [(57.8, 56.0), (57.85, 56.4)],
+                           color=(0, 0, 255, 255), width=2.0, name="Линия"),
+                     folder=folder)
+    settle()
+    select([poly])
+    out["enabled"] = panel.opacity.isEnabled()
+    out["start"] = panel.opacity.value()
+    panel.opacity.setValue(39)
+    settle()
+    shape = store.find(poly).shape
+    out["poly_after"] = [shape.color[3], shape.fill[3]]
+    out["still_selected"] = panel.list.selected_keys()
+    reread = MyPlaces(store.path)
+    reread.load()
+    out["file"] = [reread.find(poly).shape.color[3],
+                   reread.find(poly).shape.fill[3]]
+    panel.opacity.setValue(78)
+    settle()
+    shape = store.find(poly).shape
+    out["poly_back"] = [shape.color[3], shape.fill[3]]
+    select([folder])
+    out["folder_start"] = panel.opacity.value()
+    panel.opacity.setValue(0)
+    settle()
+    out["folder_zero"] = [store.find(poly).shape.color[3],
+                          store.find(line).shape.color[3]]
+    select([folder])
+    out["folder_reselect"] = panel.opacity.value()
+    panel.opacity.setValue(50)
+    settle()
+    out["folder_from_zero"] = [store.find(poly).shape.color[3],
+                               store.find(poly).shape.fill[3],
+                               store.find(line).shape.color[3]]
+    panel.list.clearSelection()
+    settle()
+    out["disabled_empty"] = not panel.opacity.isEnabled()
+    store.remove(folder)
+
+
 @check(1500)
-def pyt_click():
-    """Щелчки мышью по флажкам: строки «Слоёв проекта» глобуса после
-    выгрузки примера и строки таблицы окна. Падение QGIS 10 октября
-    2026 года - щелчок по флажку строки QTreeWidget."""
-    from qgis.PyQt.QtCore import QPoint
+def layer_click():
+    """Щелчки мышью по флажку строки «Слоёв проекта» глобуса в обоих
+    режимах follow. Падение QGIS 10 октября 2026 года - флажок
+    перестраивал список прямо из обработчика щелчка, строка удалялась,
+    пока Qt ещё меняла её флажок. Строка обязана пережить щелчок."""
+    from qgis.core import QgsProject, QgsVectorLayer
+    from qgis.PyQt.QtCore import QPoint, Qt
     from qgis.PyQt.QtTest import QTest
-    from qgis.PyQt.QtCore import Qt
     from planetx.qt_compat import enum
-    from planetx.ui import pythagoras
     left = enum(Qt, "MouseButton", "LeftButton")
     window = state["window"]
-    out = result.setdefault("pyt_click", {"clicks": []})
-    from qgis.core import QgsApplication
-    dialog = pythagoras.show_dialog()
-    dialog.open_demo()
-    dialog.folder.setText("")
-    target = os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
-                          "pythagoras", "quarry.gpkg")
-    if os.path.exists(target):
-        os.remove(target)
-    dialog.convert()
+    out = result.setdefault("layer_click", {"clicks": []})
+    layers_added = [QgsVectorLayer("LineString?crs=EPSG:4326",
+                                   "click {}".format(n), "memory")
+                    for n in range(3)]
+    QgsProject.instance().addMapLayers(layers_added)
+    window._show_layers()
+    layers = window.panel.layers
+    out["panel_rows"] = layers.topLevelItemCount()
 
     def click(tree, item):
         rect = tree.visualItemRect(item)
@@ -7825,32 +8009,21 @@ def pyt_click():
             Qt, "KeyboardModifier", "NoModifier"),
             QPoint(rect.left() + 10, rect.center().y()))
 
-    tree = dialog.table
-    for i in range(min(3, tree.topLevelItemCount())):
-        before = tree.topLevelItem(i).checkState(0)
-        click(tree, tree.topLevelItem(i))
-        out["clicks"].append(("dialog", i, str(before),
-                              str(tree.topLevelItem(i).checkState(0))))
-    # Флажок слоя перестраивал список глобуса прямо из обработчика
-    # щелчка: строка удалялась, пока Qt ещё меняла её флажок. Строка
-    # обязана пережить щелчок.
-    window._show_layers()
-    layers = window.panel.layers
-    out["panel_rows"] = layers.topLevelItemCount()
     for follow in (False, True):
         window.follow = follow
         for i in range(layers.topLevelItemCount()):
             item = layers.topLevelItem(i)
-            if pythagoras.kind_name("line") not in item.text(0):
+            if not item.text(0).startswith("click "):
                 continue
             before = str(item.checkState(0))
             click(layers, item)
             alive = not _deleted(item)
             out["clicks"].append((
-                "panel", follow, alive, before,
+                follow, alive, before,
                 str(item.checkState(0)) if alive else "-"))
             break
     window.follow = False
+    QgsProject.instance().removeMapLayers([l.id() for l in layers_added])
 
 
 def _deleted(item):
@@ -7859,37 +8032,6 @@ def _deleted(item):
         return False
     except RuntimeError:
         return True
-
-
-@check(1000)
-def pyt_check():
-    from qgis.core import QgsProject
-    out = result["pyt"]
-    if out.get("skipped"):
-        return
-    project = QgsProject.instance()
-    groups = [g for g in project.layerTreeRoot().children()
-              if g.name().startswith("Pythagoras - ")]
-    out["groups"] = [g.name() for g in groups]
-    counts = {}
-    for group in groups:
-        for node in group.findLayers():
-            layer = node.layer()
-            kind = layer.name().rsplit(" - ", 1)[1]
-            counts[kind] = counts.get(kind, 0) + layer.featureCount()
-    out["counts"] = counts
-    out["sublayers"] = len(groups[0].children()) if groups else 0
-    from planetx.ui import pythagoras
-    road = project.mapLayersByName("Дороги склады - {}".format(
-        pythagoras.kind_name("polygon")))
-    if road:
-        areas = [(f["ObjectId"], round(f.geometry().area(), 2),
-                  round(f["area"], 2)) for f in road[0].getFeatures()]
-        out["road_areas"] = areas[:3]
-    for group in groups:
-        project.removeMapLayers(group.findLayerIds())
-        project.layerTreeRoot().removeChildNode(group)
-    state["window"].pyt_dialog.close()
 
 
 @check(500)

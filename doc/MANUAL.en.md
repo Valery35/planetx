@@ -670,8 +670,6 @@ The right-click menu:
 - Extrusion… - for vector layers, see
   [Extrusion by field](#extrusion-by-field).
 - Layer Properties… - the standard QGIS layer properties window.
-- Add Pythagoras project… - also in the menu of an empty place of the
-  list, see [Pythagoras project](#pythagoras-project).
 
 ### Extrusion by field
 
@@ -716,69 +714,6 @@ on top. The choice is kept in the project and in the scene.
 
 On the first switch-on the raster is converted into a file of the QGIS
 profile. For a survey of 2400 × 2400 pixels this takes about 2 s.
-
-### Pythagoras project
-
-A Pythagoras project file (.pyt) goes to the QGIS project without an
-intermediate DXF or SHP. Pythagoras is a program for topographic
-surveys and mine plans. The Pythagoras project window opens in three
-ways, the globe window is not needed for it:
-
-- the Add Pythagoras project (.pyt)… item of the QGIS Layer - Add
-  Layer menu, also in the Web - PlanetX menu,
-- a .pyt file dragged from the file manager into the QGIS window,
-- the triangle icon on the header of the Project layers section of the
-  globe panel or the Add Pythagoras project… item of the section menu.
-
-The file is chosen with the Choose file… button or dragged into the
-window. The Open example button opens the plugin example - an invented quarry
-near Berezniki, the same as in the Quarry, own terrain demo. It holds
-ten benches as crests and toes, a dump, a ramp with an arc bend,
-survey points, a mining allotment and elevation labels. The button sets
-the coordinate system of the example, UTM 40N, and its GeoPackage goes
-to the PlanetX/pythagoras folder of the QGIS profile. The window reads it at once and shows a table of Pythagoras
-layers with the counts of points, lines, areas and texts in each. The
-checkbox of a row decides whether the layer goes to the project, the
-All and None links check all rows at once. Below are the coordinate
-system and the output folder. The .pyt file holds no coordinate
-system, the user sets it. An empty output folder means the folder of
-the .pyt file.
-
-The To QGIS project button writes a GeoPackage file with the same name
-next to it. Each Pythagoras layer gives up to four layers - points,
-lines, areas and texts, for example "Roads - lines" for the layer
-Roads. They go to the project as the group «Pythagoras - file name» at
-the top of the tree, with groups by Pythagoras layers inside.
-Converting the same file again replaces both the file and the group.
-
-After writing, the window closes, and the result stays in the QGIS
-message bar. The QGIS map shows the extent of the new layers. When the
-globe window is open, the new layers are checked in its Project layers
-and the globe flies to the area.
-
-| Field | Content |
-|---|---|
-| ObjectId | the Pythagoras object number, the same as in its SHP export |
-| layer | the Pythagoras layer name |
-| code | the object code, for example a fence material |
-| color | the Pythagoras colour number |
-| z | for points - the elevation |
-| symbol | for points - the symbol number |
-| area | for areas - the area computed by Pythagoras |
-| text | for texts - the text, the text layer is labelled with it |
-
-Pythagoras stores every line vertex as a separate point. Without the
-Construction points too checkbox the point layers get only points with
-a symbol, as the SHP export of Pythagoras itself. With it they get all
-vertices too. A line is a segment between two points, as in the SHP
-export of Pythagoras. Arcs and curves become polylines, an area with an
-arc in its outline gets the arc as segments.
-
-The .pyt format is closed, its reading is derived from a user project
-and the SHP export of Pythagoras itself. On this project 3193 objects
-of 3194 matched, polygon areas to hundredths of a square metre. Objects
-of other kinds, for example blocks and hatches, are not converted. A
-650 KB project converts in 4 s.
 
 ### Places section
 
@@ -853,6 +788,13 @@ folder. The tour follows the list order.
 
 Several rows are selected with Ctrl and Shift. The selection is dragged
 together, and the Del key deletes it after a question.
+
+The slider under the list changes the opacity of the selection -
+placemarks, paths, polygons, images and the whole contents of
+selected folders. It stands at the opacity of the selection, to the
+left is more transparent. A polygon fill stays more transparent than
+its line in the same share. The value is kept in My Places and in KML
+as the colour alpha, Google Earth sees it too.
 
 ### Menus
 
@@ -952,16 +894,17 @@ The shape of a 3D path, a 3D polygon and a tour is not edited this way.
 A placemark with a saved measurement loses the measurement text after
 its shape is edited.
 
-### Sentinel-2 images
+### Sentinel-2 and Landsat images
 
-The Sentinel-2 images window looks for scenes of the Sentinel-2
-satellites over an area and adds the chosen bands and indices to the
+The Sentinel-2 and Landsat images window looks for scenes of the
+Sentinel-2 or Landsat satellites over an area and adds the chosen bands and indices to the
 QGIS project. The scenes are L2A, that is surface reflectance, 10-20 m
 per pixel. Two items open the window:
 
-- Sentinel-2 images here… of the globe menu takes a square around the
-  point, the Area side field sets its side.
-- Sentinel-2 images… of the My Places menu takes the area from the
+- Sentinel-2 and Landsat images here… of the globe menu takes a square around the
+  point. The square side equals the width of the visible strip of the
+  globe, from 1 to 100 km. The Area side field changes it.
+- Sentinel-2 and Landsat images… of the My Places menu takes the area from the
   placemark. A polygon gives its outline, a path gives its bounding
   box, a point gives a square around it.
 
@@ -1013,6 +956,27 @@ a 3 km area takes 10-20 s.
 The scene catalogue is Earth Search (Element 84), the images are
 Copernicus Sentinel-2 (ESA), Element 84 files on the open AWS storage.
 No key or account is needed.
+
+The Satellite list at the top of the window switches to Landsat 4-9 -
+images since 1982, 30 m per pixel, surface reflectance and surface
+temperature of the Collection 2 Level-2 processing of the U.S.
+Geological Survey (USGS). The catalogue and the files are Microsoft
+Planetary Computer. The files are read with a temporary access key,
+the window gets it from Planetary Computer by itself, without an
+account, and asks again every 45 minutes. When the key service has
+not answered three times, the line at the bottom of the window says
+so. Over the area, Landsat cloud cover is computed from the qa_pixel
+mask - clouds, cirrus and shadows. The tile column shows the
+satellite, the WRS path and row, for example "L9 167/020". The
+products are those of Sentinel-2 without band numbers, as Landsat 4-7
+and 8-9 number them differently, plus Surface temperature, °C from
+the thermal band. The layers go to the Landsat group with the credit
+"Landsat N image courtesy of the U.S. Geological Survey". The Whole
+scene by link method is not available for Landsat - the key lives an
+hour, and a layer of a saved project would not open later. Landsat 7
+images after May 2003 have empty stripes from an instrument failure.
+Over water, the near infrared reflectance of Landsat 4-5 can be above
+red, and the NDVI of water comes out about +0.1.
 
 ### Route
 
@@ -2093,12 +2057,13 @@ QGIS, including those in worker threads. An error of another plugin
 is marked with its name. Every 15 minutes the log records the memory
 of QGIS and the count of Windows GDI and USER objects.
 
-When QGIS does not respond for more than 30 s, the log writes next to
-itself a process dump `hang-<process number>-<time>.dmp` with the
-stacks of all threads, about 300 KB without memory contents, and
-writes its analysis at once - for every thread the QGIS and Qt
-functions it stands in. It shows which thread waits for what. The
-last three dumps are kept.
+When QGIS does not respond for more than 30 s, a separate watch
+process of the plugin writes next to the log a process dump
+`hang-<process number>-<time>.dmp` with the stacks of all threads,
+about 300 KB without memory contents, and writes its analysis at once -
+for every thread the QGIS and Qt functions it stands in. It shows which
+thread waits for what. The watch runs outside QGIS and writes the dump
+even when QGIS hangs completely. The last three dumps are kept.
 
 The log records a QGIS crash at the next start. The log gets the
 process number and the start time of the crashed session, the Python

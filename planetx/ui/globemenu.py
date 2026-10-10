@@ -129,8 +129,8 @@ def show(window, px, py):
             menu.addAction(tr("Что здесь?")).triggered.connect(
                 lambda *a: window.what_here(px, py))
             sheet_items(window, menu, lat, lon)
-            menu.addAction(tr("Снимки Sentinel-2 здесь…")).triggered.connect(
-                lambda *a: window.sentinel_here(lat, lon))
+            menu.addAction(tr("Снимки Sentinel-2 и Landsat здесь…")) \
+                .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
             if window.extras.get("contours"):
                 menu.addAction(tr("Горизонтали вида в проект QGIS…")) \
                     .triggered.connect(

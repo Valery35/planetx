@@ -24,7 +24,8 @@ import os
 
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
                        QgsSettings, QgsVectorLayer)
-from qgis.PyQt.QtCore import QEvent, Qt, QTimer, pyqtSignal
+from qgis.PyQt.QtCore import (QEvent, QItemSelectionModel, Qt, QTimer,
+                              pyqtSignal)
 from qgis.PyQt.QtGui import QFont, QIcon, QKeySequence
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
                                  QLineEdit,
@@ -422,7 +423,6 @@ class LayerPanel(QWidget):
     contours_requested = pyqtSignal(object)
     # Векторный слой - выдавливание по полю, пункт меню слоя.
     extrude_requested = pyqtSignal(object)
-    pythagoras_requested = pyqtSignal()
     # Непрозрачность земли над подземной моделью, от 0 до 1.
     ground_alpha = pyqtSignal(float)
     # Кнопка строки «Земля над гридами» - окно «Подземный режим».
@@ -447,6 +447,10 @@ class LayerPanel(QWidget):
     places_moved = pyqtSignal(object, str, int)
     # Действие над несколькими выбранными строками и их ключи.
     places_action = pyqtSignal(str, object)
+    # Выделение «Моих меток» сменилось: ключи выделенных строк.
+    places_selected = pyqtSignal(object)
+    # Ползунок непрозрачности выделенного сдвинут: значение 0..1.
+    opacity_moved = pyqtSignal(float)
     # Папка раскрыта или свёрнута.
     folder_expanded = pyqtSignal(str, bool)
 
@@ -530,6 +534,21 @@ class LayerPanel(QWidget):
         self.tour_button.setEnabled(False)
         self.tour_button.clicked.connect(self._tour_clicked)
         self.list.currentItemChanged.connect(self._tour_state)
+        # Ползунок непрозрачности выделенного под списком, как под
+        # «Местами» Google Earth Pro. Просьба автора от 10 октября
+        # 2026 года.
+        self.opacity = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
+        self.opacity.setRange(0, 100)
+        self.opacity.setValue(100)
+        self.opacity.setEnabled(False)
+        self.opacity.setToolTip(tr(
+            "Непрозрачность выделенных меток, путей, многоугольников, "
+            "картинок и содержимого папок. Влево - прозрачнее. Значение "
+            "сохраняется в «Моих метках» и в KML."))
+        self.opacity.valueChanged.connect(self._opacity_moved)
+        self._opacity_quiet = False
+        self.list.itemSelectionChanged.connect(
+            lambda: self.places_selected.emit(self.list.selected_keys()))
         self.list.setHeaderHidden(True)
         self.list.place_moved.connect(self.place_moved)
         self.list.places_moved.connect(self.places_moved)
@@ -728,7 +747,7 @@ class LayerPanel(QWidget):
         upper_layout.setSpacing(2)
         upper_layout.addWidget(self.list, 1)
         tour_row = QHBoxLayout()
-        tour_row.addStretch(1)
+        tour_row.addWidget(self.opacity, 1)
         tour_row.addWidget(self.tour_button)
         upper_layout.addLayout(tour_row)
         self.sections = [
@@ -739,16 +758,6 @@ class LayerPanel(QWidget):
             Section("base", tr("Слои"), self.geo, tr(
                 "Свернуть или развернуть векторную основу и рельеф."),
                 self)]
-        # Значок на заголовке «Слоёв проекта» - проект Pythagoras.
-        self.pyt_button = QToolButton(self)
-        self.pyt_button.setIcon(QIcon(os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "pythagoras.svg")))
-        self.pyt_button.setAutoRaise(True)
-        self.pyt_button.setToolTip(tr(
-            "Добавить проект Pythagoras (.pyt). Слои Pythagoras ложатся "
-            "в GeoPackage и группой в проект QGIS."))
-        self.pyt_button.clicked.connect(self.pythagoras_requested.emit)
-        self.sections[1].add_button(self.pyt_button)
         split = QSplitter(enum(Qt, "Orientation", "Vertical"), self)
         split.setChildrenCollapsible(False)
         for n, section in enumerate(self.sections):
@@ -1092,14 +1101,35 @@ class LayerPanel(QWidget):
         и пары (Folder, дети). Сигналы при этом не идут."""
         self.list.blockSignals(True)
         group = self.places_group
+        # Выделение и текущая строка переживают перестройку списка: её
+        # зовёт любая запись «Моих меток», в том числе ползунок
+        # непрозрачности выделенного.
+        chosen = set(self.list.selected_keys())
+        current = self.list.currentItem()
+        current = current.data(0, PLACE_ROLE) if current is not None \
+            else None
         group.takeChildren()
         self._fill(group, tree)
         if not tree:
             # Пустая папка отмечена, новая метка сразу видна.
             group.setCheckState(0, CHECKED)
         group.setExpanded(True)
+        if chosen or current:
+            self._reselect(group, chosen, current)
         self.list.blockSignals(False)
         self._tour_state()
+
+    def _reselect(self, parent, chosen, current):
+        for i in range(parent.childCount()):
+            child = parent.child(i)
+            key = child.data(0, PLACE_ROLE)
+            if key == current:
+                self.list.setCurrentItem(
+                    child, 0, enum(QItemSelectionModel, "SelectionFlag",
+                                   "NoUpdate"))
+            if key in chosen:
+                child.setSelected(True)
+            self._reselect(child, chosen, current)
 
     def _fill(self, parent, nodes):
         folder_icon = QgsApplication.getThemeIcon("/mIconFolder.svg")
@@ -1204,6 +1234,19 @@ class LayerPanel(QWidget):
                 return ""
             return self._tour_key(parent)
         return None
+
+    def set_opacity(self, value):
+        """Ползунок непрозрачности: value 0..1 или None - выделено
+        нечего менять. Сигнал opacity_moved при этом не идёт."""
+        self._opacity_quiet = True
+        self.opacity.setEnabled(value is not None)
+        self.opacity.setValue(int(round(100 * (1.0 if value is None
+                                               else value))))
+        self._opacity_quiet = False
+
+    def _opacity_moved(self, value):
+        if not self._opacity_quiet:
+            self.opacity_moved.emit(value / 100.0)
 
     def _tour_state(self, *args):
         key = self._tour_key(self.list.currentItem())
@@ -1396,7 +1439,8 @@ class LayerPanel(QWidget):
                 actions.append(("ground_project",
                                 tr("Картинку в проект QGIS…")))
             if key.split(":")[0] in ("point", "line", "polygon"):
-                actions.append(("sentinel", tr("Снимки Sentinel-2…")))
+                actions.append(("sentinel",
+                                tr("Снимки Sentinel-2 и Landsat…")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),
@@ -1471,26 +1515,15 @@ class LayerPanel(QWidget):
 
     def _layer_menu(self, point):
         """Меню слоя проекта: перелёт, прозрачность, трек, рельеф
-        глобуса у растра, свойства. Под ним и на пустом месте списка -
-        добавление проекта Pythagoras."""
+        глобуса у растра, свойства."""
         item = self.layers.itemAt(point)
         layer_id = item.data(0, LAYER_ROLE) if item is not None else None
         layer = QgsProject.instance().mapLayer(layer_id) if layer_id \
             else None
+        if layer is None:
+            return
         menu = QMenu(self)
         menu.setToolTipsVisible(True)
-        if layer is not None:
-            self._fill_layer_menu(menu, layer)
-            menu.addSeparator()
-        pyt = menu.addAction(tr("Добавить проект Pythagoras…"))
-        pyt.setToolTip(tr(
-            "Файл .pyt ложится в GeoPackage слоями по слоям Pythagoras - "
-            "точки, линии, площади и надписи - и группой в проект."))
-        pyt.triggered.connect(self.pythagoras_requested.emit)
-        menu.exec(self.layers.viewport().mapToGlobal(point))
-
-    def _fill_layer_menu(self, menu, layer):
-        """Пункты меню слоя проекта layer."""
         menu.addAction(tr("Подлететь")).triggered.connect(
             lambda: self.fly_to_layer.emit(layer))
         menu.addAction(self._opacity_action(menu, layer))
@@ -1540,3 +1573,4 @@ class LayerPanel(QWidget):
                 lambda: self.contours_requested.emit(layer))
         menu.addAction(tr("Свойства слоя…")).triggered.connect(
             lambda: self.layer_properties.emit(layer))
+        menu.exec(self.layers.viewport().mapToGlobal(point))

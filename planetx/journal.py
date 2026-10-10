@@ -35,9 +35,11 @@ faulthandler, включённый самим QGIS) и имя дампа Windows
 без памяти кучи, около 300 КБ). Стеки Python взаимную блокировку внутри
 QGIS не показывают - на рабочем компьютере автора главный поток
 больше минуты стоял в QgsNetworkAccessManager.get(). Дамп пишет
-поток Python: Qt и QGIS отпускают GIL на время своих вызовов. Если
-главный поток держит GIL, дампа не будет, останутся стеки
-faulthandler. Дамп разбирает tools/hang_dump.py.
+отдельный процесс hangwatch.py: главный поток раз в секунду трогает
+файл отметок PlanetX/beat-<pid>, процесс-сторож видит паузу, снимает
+дамп снаружи, разбирает его и дописывает разбор в журнал. Поток Python
+внутри QGIS этого не может, когда главный поток держит GIL, так
+и было при зависании проверочного QGIS 10 октября 2026 года.
 """
 import atexit
 import ctypes
@@ -45,7 +47,6 @@ import faulthandler
 import glob
 import os
 import platform
-import struct
 import sys
 import tempfile
 import threading
@@ -53,12 +54,11 @@ import time
 import traceback
 
 from qgis.core import Qgis, QgsApplication, QgsNetworkAccessManager
-from qgis.PyQt.QtCore import (PYQT_VERSION_STR, QT_VERSION_STR, Qt,
-                              QTimer, QUrl)
+from qgis.PyQt.QtCore import (PYQT_VERSION_STR, QT_VERSION_STR, QProcess,
+                              Qt, QTimer, QUrl)
 from qgis.PyQt.QtNetwork import QSslCertificate
 from qgis.PyQt.QtGui import QDesktopServices
 
-from .core import minidump
 from .i18n import tr
 from .qt_compat import enum
 
@@ -73,10 +73,6 @@ CRASH_TEXT = 20000  # знаков файла стеков падения в ж�
 STILL_ACTIVE = 259  # код GetExitCodeProcess живого процесса
 QUERY = 0x1000  # PROCESS_QUERY_LIMITED_INFORMATION
 DUMP_AFTER = 30  # с без ответа главного потока до записи дампа
-DUMPS_KEPT = 3  # дампов зависаний в папке, старые удаляются
-# MiniDumpNormal (стеки потоков) | MiniDumpWithThreadInfo
-# | MiniDumpWithUnloadedModules.
-DUMP_TYPE = 0x0000 | 0x1000 | 0x0020
 
 DIRECT = enum(Qt, "ConnectionType", "DirectConnection")
 COMMON_NAME = enum(QSslCertificate, "SubjectInfo", "CommonName")
@@ -84,7 +80,7 @@ COMMON_NAME = enum(QSslCertificate, "SubjectInfo", "CommonName")
 _state = {"file": None, "timer": None, "beat": 0.0, "hook": None,
           "prior": None, "ssl": False, "thread_prior": None,
           "unraisable_prior": None, "state_at": 0.0, "watch": None,
-          "dumped": 0.0}
+          }
 _lock = threading.Lock()
 
 
@@ -231,6 +227,17 @@ def harvest():
         except OSError as error:
             note("session file: {}".format(error))
         found.append(pid)
+    # Файл отметок умершего процесса сторож не удаляет - он видит
+    # конец процесса и выходит сам.
+    for name in glob.glob(os.path.join(folder(), "beat-*")):
+        stem = os.path.basename(name)[len("beat-"):]
+        if not stem.isdigit() or int(stem) == os.getpid() \
+                or alive(int(stem)):
+            continue
+        try:
+            os.remove(name)
+        except OSError as error:
+            note("beat file: {}".format(error))
     return found
 
 
@@ -269,68 +276,60 @@ def _resources():
             "user": user.GetGuiResources(me, 1)}
 
 
-def write_dump(name):
-    """Дамп этого процесса в файл name, стеки всех потоков без кучи.
-    Только Windows. Возвращает True, если дамп записан."""
-    if os.name != "nt":
-        return False
-    import msvcrt
-    k = _kernel()
-    help_ = ctypes.WinDLL("dbghelp", use_last_error=True)
-    write = help_.MiniDumpWriteDump
-    write.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_void_p,
-                      ctypes.c_ulong, ctypes.c_void_p, ctypes.c_void_p,
-                      ctypes.c_void_p]
-    write.restype = ctypes.c_int
-    with open(name, "wb") as fh:
-        handle = msvcrt.get_osfhandle(fh.fileno())
-        ok = write(k.GetCurrentProcess(), os.getpid(), handle, DUMP_TYPE,
-                   None, None, None)
+def beat_path():
+    return os.path.join(folder(), "beat-{}".format(os.getpid()))
+
+
+def _touch():
+    """Отметка главного потока для процесса-сторожа."""
+    try:
+        with open(beat_path(), "a", encoding="utf-8"):
+            os.utime(beat_path(), None)
+    except OSError as error:
+        note("beat: {}".format(error))
+
+
+def _python():
+    """Python из состава QGIS для процесса-сторожа: sys.executable
+    внутри QGIS - qgis-bin.exe."""
+    for name in ("pythonw.exe", "python.exe"):
+        path = os.path.join(sys.prefix, name)
+        if os.path.isfile(path):
+            return path
+    return ""
+
+
+def _start_watch():
+    """Процесс-сторож hangwatch.py, см. описание модуля."""
+    python = _python()
+    if os.name != "nt" or not python:
+        return
+    _touch()
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "hangwatch.py")
+    header = tr("Главный поток QGIS не отвечает {seconds} с, дамп "
+                "процесса со стеками потоков - {path}") + " " + tr(
+        "Стеки потоков C++ по дампу, имена функций приблизительные:")
+    ok = QProcess.startDetached(python, [
+        "-I", script, str(os.getpid()), beat_path(), path(), folder(),
+        str(DUMP_AFTER), header,
+        tr("Главный поток"), tr("Поток"),
+        tr("Потоков в ожидании без своих кадров")])
+    ok = ok[0] if isinstance(ok, tuple) else ok
+    _state["watch"] = bool(ok)
     if not ok:
-        os.remove(name)
-    return bool(ok)
+        note("hang watch: not started")
 
 
-def _old_dumps():
-    """Оставить DUMPS_KEPT последних дампов зависаний."""
-    found = sorted(glob.glob(os.path.join(folder(), "hang-*.dmp")),
-                   key=os.path.getmtime)
-    for name in found[:-DUMPS_KEPT] if DUMPS_KEPT else found:
-        try:
-            os.remove(name)
-        except OSError as error:
-            note("dump: {}".format(error))
-
-
-def _watch(stop):
-    """Поток Python: главный поток молчит дольше DUMP_AFTER - дамп,
-    один на зависание."""
-    while not stop.wait(1.0):
-        beat = _state["beat"]
-        if not beat or _state["dumped"] == beat:
-            continue
-        if time.monotonic() - beat < DUMP_AFTER:
-            continue
-        _state["dumped"] = beat
-        name = os.path.join(folder(), "hang-{}-{}.dmp".format(
-            os.getpid(), time.strftime("%Y%m%d-%H%M%S")))
-        try:
-            ok = write_dump(name)
-        except OSError as error:
-            note("dump: {}".format(error))
-            continue
-        if ok:
-            note(tr("Главный поток QGIS не отвечает {seconds} с, дамп "
-                    "процесса со стеками потоков - {path}",
-                    seconds=round(time.monotonic() - beat), path=name))
-            _old_dumps()
-            try:
-                note(tr("Стеки потоков C++ по дампу, имена функций "
-                        "приблизительные:") + "\n" + minidump.report(
-                            name, tr("Главный поток"), tr("Поток"),
-                            tr("Потоков в ожидании без своих кадров")))
-            except (OSError, ValueError, struct.error) as error:
-                note("dump report: {}".format(error))
+def _stop_watch():
+    """Без файла отметок процесс-сторож заканчивает работу сам."""
+    _state["watch"] = None
+    try:
+        os.remove(beat_path())
+    except FileNotFoundError:
+        return
+    except OSError as error:
+        note("beat: {}".format(error))
 
 
 def note_resources():
@@ -362,6 +361,8 @@ def _beat():
     if late > HANG:
         note(tr("Главный поток QGIS не отвечал {seconds} с.",
                 seconds=round(late)))
+    if _state["watch"]:
+        _touch()
     if now - _state["state_at"] > STATE_EVERY:
         _state["state_at"] = now
         note_resources()
@@ -487,11 +488,7 @@ def start(version):
     _state["timer"] = timer
     _state["state_at"] = _state["beat"]
     _arm()
-    stop_event = threading.Event()
-    watch = threading.Thread(target=_watch, args=(stop_event,),
-                             name="planetx-hang-watch", daemon=True)
-    watch.start()
-    _state["watch"] = stop_event
+    _start_watch()
 
 
 def stop():
@@ -502,8 +499,7 @@ def stop():
         _state["timer"] = None
         faulthandler.cancel_dump_traceback_later()
     if _state["watch"] is not None:
-        _state["watch"].set()
-        _state["watch"] = None
+        _stop_watch()
     if sys.excepthook is _state["hook"]:
         sys.excepthook = _state["prior"]
     _state["hook"] = _state["prior"] = None
