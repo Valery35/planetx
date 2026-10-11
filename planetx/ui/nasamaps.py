@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Окно «Карты и слои»: витрина карт и слоёв глобуса с превью.
+"""Каталог «Добавить данные»: карты и слои глобуса с превью.
+
+С 12 октября 2026 года каталог стоит в левой панели на месте списка
+«Слоёв», а не отдельным окном, решение автора. История окна - ниже.
 
 Просьба автора от 7 октября 2026 года - «компактный красивый интерфейс
 к картам NASA». Карта - тема NASA GIBS, поле прогноза GFS, пожары FIRMS
@@ -16,6 +19,7 @@
 списка»). Слои включаются независимо, щелчок переключает строку окна
 глобуса (`GlobeWindow.set_extra`), включённый слой отмечен бирочкой.
 """
+import html
 import math
 import os
 import time
@@ -23,10 +27,9 @@ import time
 import numpy as np
 from qgis.PyQt.QtCore import QSize, Qt
 from qgis.PyQt.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
-from qgis.PyQt.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel,
-                                 QLineEdit, QListView, QListWidget,
-                                 QListWidgetItem, QToolButton,
-                                 QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
+                                 QListWidget, QListWidgetItem, QPushButton,
+                                 QToolButton, QVBoxLayout, QWidget)
 
 from ..core import (clouds, cutaway, deposits, fires, flow, paleo,
                     plants, plates, quakes, slope, stars, sun, temperature,
@@ -39,6 +42,8 @@ from .satellites import group_names as satellite_group_names
 from .themes import group_names, theme_names
 
 THUMB = 104  # пикселей стороны превью
+ICON = 40  # пикселей стороны значка строки каталога
+CATEGORY_WIDTH = 116  # пикселей, столбец категорий каталога
 PARALLEL = 4  # запросов превью сразу
 KEY_ROLE = enum_int(enum(Qt, "ItemDataRole", "UserRole"))
 ALL = ""  # кнопка «Все» групп
@@ -48,6 +53,35 @@ LAYER = "layer"  # вид строки витрины: слой глобуса �
 # внизу окна висело некрасиво. Во вкладке «Все» карточек групп нет.
 SAT = "sat:"
 SAT_GROUP = "satellites"
+# Категория «Карта»: группы векторной основы (ключ VECTOR + номер
+# группы панели) и строки, которые до 12 октября 2026 года стояли
+# в группе «Карта» раздела «Слои».
+MAP = "map"
+VECTOR = "vector:"
+MAP_ROWS = ("grid", "buildings", "contours")
+# ЛЭП, трубопроводы и кабели - категория «Энергетика», просьба автора
+# от 12 октября 2026 года.
+ENERGY_ROWS = ("infra_osm", "cables")
+# Цвета превью строк «Карты» - выбор помощника.
+VECTOR_COLORS = (((250, 220, 60), (240, 240, 240)),
+                 ((255, 200, 70), (250, 240, 180), (90, 90, 90)),
+                 ((60, 120, 220), (90, 170, 90), (150, 110, 70)))
+MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
+              "buildings": ((200, 190, 175), (150, 140, 130)),
+              "contours": ((150, 100, 60), (250, 220, 60)),
+              "infra_osm": ((220, 60, 60), (240, 150, 40), (90, 90, 200)),
+              "cables": ((60, 200, 200), (170, 110, 220))}
+# Вторая строка слоя в каталоге - источник.
+SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
+           "sun": "NASA Black Marble", "satellites": "CelesTrak",
+           "quakes": "USGS", "plates": "PB2002", "deposits": "USGS",
+           "mining": "Maus et al. 2022", "osm_mines": "OpenStreetMap",
+           "plants": "WRI", "currents": "NOAA CoastWatch",
+           "cutaway": "PREM, CRUST1.0, Slab2", "paleo": "PALEOMAP",
+           "slope": "Terrarium", "aspect": "Terrarium",
+           "grid": "", "buildings": "OpenFreeMap",
+           "contours": "Terrarium", "infra_osm": "OpenStreetMap",
+           "cables": "OpenStreetMap"}
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
@@ -78,9 +112,9 @@ def layer_group_names():
         ("depths", tr("Недра"), tr(
             "Землетрясения, границы плит, месторождения и горные "
             "разработки, разрез Земли и палеогеография.")),
-        ("infra", tr("Инфраструктура"), tr(
-            "Электростанции мира, линии электропередачи, подстанции "
-            "и трубопроводы.")),
+        ("infra", tr("Энергетика"), tr(
+            "Электростанции мира, линии электропередачи, подстанции, "
+            "трубопроводы и подводные кабели.")),
         ("terrain", tr("Анализ рельефа"), tr(
             "Раскраска поверхности по уклону или по стороне "
             "света склона, включается одна из двух. Горизонтали "
@@ -194,6 +228,15 @@ def layer_names():
         "aspect": (tr("Экспозиция"), tr(
             "Куда обращён склон - цвет стороны света, ровное "
             "место серое. Включается вместо уклона.")),
+        "grid": (tr("Координатная сетка"), tr(
+            "Параллели и меридианы с подписями градусов, экватор, "
+            "тропики и полярные круги. Шаг сетки меняется с высотой "
+            "камеры.")),
+        "buildings": (tr("3D-здания"), tr(
+            "Объёмные здания из OpenStreetMap по векторным тайлам "
+            "OpenFreeMap. Они видны, когда камера ближе 6 км к земле. "
+            "Высота взята из OSM, иначе из этажности. Здание без этих "
+            "сведений получает высоту 5 м.")),
         "contours": (tr("Горизонтали"), tr(
             "Линии равных высот рельефа, как на топографической карте. "
             "Сечение подбирается по масштабу вида - от сотен метров "
@@ -521,92 +564,146 @@ def day_text(day):
     return "{}.{}.{}".format(date, month, year)
 
 
-class NasaMaps(QDialog):
-    """Витрина карт и слоёв. window - окно глобуса."""
+class NasaMaps(QWidget):
+    """Каталог «Добавить данные» в левой панели. window - окно глобуса.
 
-    def __init__(self, window):
-        super().__init__(window)
+    До 12 октября 2026 года - отдельное окно «Карты и слои». Решение
+    автора того же дня - каталог выезжает в панели поверх списка
+    «Слоёв», глобус остаётся виден. Слева категории, справа строки
+    с флажками и описание выбранной строки. Карты витрины - одна на
+    глобусе, слои включаются вместе, строки «Карты» - категория
+    каталога.
+    """
+
+    def __init__(self, window, parent=None):
+        super().__init__(parent)
         self.window = window
-        self.setWindowTitle(tr("Карты и слои"))
-        self.resize(700, 580)
         self.names = dict(map_names(), **layer_names())
         self.lights = None  # тайл огней городов для превью солнца
         self.items = {}
+        self.heads = {}  # заголовки строк: «одна на глобусе», «вместе»
         self.thumbs = {}  # ключ - превью QImage
         self.base = None  # тайл подложки под превью
         self._queue = []
         self._replies = {}
         self._loaded = set()  # превью по тайлу, которые пришли
-        self._stopped = False  # окно закрыто, запросов нет
+        self._stopped = False  # каталог закрыт, запросов нет
         self._group = ALL
+        self._quiet = False  # флажки ставит сам каталог
+        self._chosen = ""  # строка, описание которой показано
         top = QHBoxLayout()
-        self.chips = QButtonGroup(self)
-        self.chips.setExclusive(True)
-        for key, title, tip in [(ALL, tr("Все"), tr("Все карты витрины."))] \
-                + list(group_names()) + list(layer_group_names()):
-            chip = QToolButton(self)
-            chip.setText(title)
-            chip.setToolTip(tip)
-            chip.setCheckable(True)
-            chip.setChecked(key == ALL)
-            chip.setAutoRaise(True)
-            chip.clicked.connect(lambda *a, k=key: self._set_group(k))
-            self.chips.addButton(chip)
-            top.addWidget(chip)
-        top.addStretch(1)
+        top.setContentsMargins(0, 0, 0, 0)
+        back = QToolButton(self)
+        back.setText("←")
+        back.setAutoRaise(True)
+        back.setToolTip(tr("Назад к списку слоёв"))
+        back.clicked.connect(self.close)
+        top.addWidget(back)
         self.search = QLineEdit(self)
-        self.search.setPlaceholderText(tr("Найти карту"))
+        self.search.setPlaceholderText(tr("снег, рудники, ветер"))
         self.search.setClearButtonEnabled(True)
-        self.search.setMinimumWidth(140)
-        self.search.setMaximumWidth(180)
         self.search.textChanged.connect(self._filter)
-        top.addWidget(self.search)
+        top.addWidget(self.search, 1)
+        self.groups = QListWidget(self)
+        self.groups.setFixedWidth(CATEGORY_WIDTH)
+        self.groups.setTextElideMode(enum(Qt, "TextElideMode", "ElideNone"))
+        self.groups.setWordWrap(True)
+        for key, title, tip in [
+                (ALL, tr("Все"), tr("Все карты и слои каталога.")),
+                (MAP, tr("Карта"), tr(
+                    "Векторная основа OpenFreeMap, координатная сетка, "
+                    "3D-здания и горизонтали."))] \
+                + list(group_names()) + list(layer_group_names()):
+            row = QListWidgetItem(title, self.groups)
+            row.setData(KEY_ROLE, key)
+            row.setToolTip(tip)
+        self.groups.setCurrentRow(0)
+        self.groups.currentItemChanged.connect(
+            lambda item, _: self._set_group(item.data(KEY_ROLE))
+            if item is not None else None)
         self.list = QListWidget(self)
-        self.list.setViewMode(enum(QListView, "ViewMode", "IconMode"))
-        self.list.setResizeMode(enum(QListView, "ResizeMode", "Adjust"))
-        self.list.setMovement(enum(QListView, "Movement", "Static"))
-        self.list.setIconSize(QSize(THUMB, THUMB))
-        self.list.setGridSize(QSize(THUMB + 44, THUMB + 66))
-        self.list.setTextElideMode(enum(Qt, "TextElideMode", "ElideNone"))
-        self.list.setWordWrap(True)
-        self.list.setSpacing(4)
-        self.list.itemClicked.connect(self._clicked)
-        self.note = QLabel(self)
-        self.note.setWordWrap(True)
+        self.list.setIconSize(QSize(ICON, ICON))
+        self.list.setTextElideMode(enum(Qt, "TextElideMode", "ElideRight"))
+        self.list.itemChanged.connect(self._changed)
+        self.list.itemClicked.connect(lambda item: self._describe(
+            item.data(KEY_ROLE)))
+        self.list.itemDoubleClicked.connect(self._clicked)
+        self.details = QLabel(self)
+        self.details.setWordWrap(True)
+        self.details.setTextFormat(enum(Qt, "TextFormat", "RichText"))
+        self.details.setAlignment(enum(Qt, "AlignmentFlag", "AlignTop"))
+        self.toggle = QPushButton(self)
+        self.toggle.clicked.connect(self._toggle_chosen)
+        self.export = QPushButton(tr("В проект QGIS…"), self)
+        self.export.setToolTip(tr(
+            "Видимое на глобусе слоем в проект QGIS - объекты в рамке "
+            "вида или картинка карты."))
+        self.export.clicked.connect(self._export_chosen)
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.toggle, 1)
+        buttons.addWidget(self.export, 1)
+        right = QVBoxLayout()
+        right.setContentsMargins(0, 0, 0, 0)
+        right.addWidget(self.list, 3)
+        right.addWidget(self.details, 1)
+        right.addLayout(buttons)
+        body = QHBoxLayout()
+        body.setContentsMargins(0, 0, 0, 0)
+        body.addWidget(self.groups)
+        body.addLayout(right, 1)
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(top)
-        layout.addWidget(self.list, 1)
-        layout.addWidget(self.note)
+        layout.addLayout(body, 1)
+        self._head("maps", tr("Карта на глобусе - одна"))
         for key, group, kind in themes.gallery_items():
-            name, tip = self.names[key]
-            item = QListWidgetItem(name, self.list)
-            item.setData(KEY_ROLE, key)
-            item.setToolTip(tip)
-            item.setTextAlignment(enum(Qt, "AlignmentFlag", "AlignHCenter"))
-            self.items[key] = (item, group, kind)
+            self._row(key, group, kind)
             self.thumbs[key] = ramp_image(ramp_of(key)) \
                 if kind in ("weather", themes.FIRES) else ramp_image([])
+        self._head("layers", tr("Слои - включаются вместе"))
+        from .panel import geo_tree
+        for n, (title, tip, rows) in enumerate(geo_tree()):
+            key = VECTOR + str(n)
+            self.names[key] = (title, tip)
+            self._row(key, MAP, VECTOR)
+            self.thumbs[key] = ramp_image(VECTOR_COLORS[n % 3])
+        for key in MAP_ROWS:
+            self._row(key, MAP, LAYER)
+            self.thumbs[key] = self._layer_thumb(key)
+        for key in ENERGY_ROWS:
+            self._row(key, "infra", LAYER)
+            self.thumbs[key] = self._layer_thumb(key)
         for key, group in LAYERS:
-            name, tip = self.names[key]
-            item = QListWidgetItem(name, self.list)
-            item.setData(KEY_ROLE, key)
-            item.setToolTip(tip)
-            item.setTextAlignment(enum(Qt, "AlignmentFlag", "AlignHCenter"))
-            self.items[key] = (item, group, LAYER)
+            self._row(key, group, LAYER)
             self.thumbs[key] = self._layer_thumb(key)
         for group, title, tip in satellite_group_names():
             key = SAT + group
             self.names[key] = (title, tip)
-            item = QListWidgetItem(title, self.list)
-            item.setData(KEY_ROLE, key)
-            item.setToolTip(tip)
-            item.setTextAlignment(enum(Qt, "AlignmentFlag", "AlignHCenter"))
-            self.items[key] = (item, SAT_GROUP, SAT)
+            self._row(key, SAT_GROUP, SAT)
             self.thumbs[key] = satellite_group_image(
                 group, satellites_core.COLORS[group])
         self._filter()
         self._load_base()
         self.refresh()
+
+    def _head(self, name, title):
+        """Заголовок строк каталога - без флажка и без выбора."""
+        item = QListWidgetItem(title, self.list)
+        item.setFlags(enum(Qt, "ItemFlag", "NoItemFlags"))
+        font = item.font()
+        font.setBold(True)
+        item.setFont(font)
+        self.heads[name] = item
+
+    def _row(self, key, group, kind):
+        name, tip = self.names[key]
+        item = QListWidgetItem(name, self.list)
+        item.setData(KEY_ROLE, key)
+        item.setToolTip(tip)
+        item.setFlags(item.flags()
+                      | enum(Qt, "ItemFlag", "ItemIsUserCheckable"))
+        item.setCheckState(enum(Qt, "CheckState", "Unchecked"))
+        self.items[key] = (item, group, kind)
 
     # Превью.
 
@@ -626,7 +723,7 @@ class NasaMaps(QDialog):
                 self._queue.append(key)
             elif kind == LAYER:
                 self._set_thumb(key, self._layer_thumb(key))
-            elif kind == SAT:
+            elif kind in (SAT, VECTOR):
                 self._label(key)
             else:
                 self._set_thumb(key, ramp_image(ramp_of(key), self.base))
@@ -655,6 +752,8 @@ class NasaMaps(QDialog):
         if key == "paleo":
             tile = QImage.fromData(data) if data else QImage()
             return _over(None if tile.isNull() else tile, None)
+        if key in MAP_COLORS:
+            return ramp_image(MAP_COLORS[key], self.base)
         return ramp_image(layer_ramp(key), self.base)
 
     def _pump(self):
@@ -705,25 +804,6 @@ class NasaMaps(QDialog):
         self.thumbs[key] = image
         self._label(key)
 
-    def _show_icon(self, key, badge, on=False):
-        """Значок карты: превью с бирочкой в левом верхнем углу. on -
-        включённый слой, бирочка зелёная."""
-        image = QImage(self.thumbs.get(key) or ramp_image([]))
-        if badge:
-            painter = QPainter(image)
-            font = painter.font()
-            font.setPixelSize(12)
-            painter.setFont(font)
-            width = painter.fontMetrics().horizontalAdvance(badge) + 8
-            painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-            painter.setBrush(QColor(30, 140, 70, 230) if on
-                             else QColor(20, 26, 36, 200))
-            painter.drawRoundedRect(3, 3, width, 17, 3, 3)
-            painter.setPen(QColor(240, 244, 250))
-            painter.drawText(7, 16, badge)
-            painter.end()
-        self.items[key][0].setIcon(QIcon(QPixmap.fromImage(image)))
-
     def domains_arrived(self, key):
         """Окно глобуса получило ряд дат темы: подпись дня и превью."""
         if key not in self.items:
@@ -734,75 +814,139 @@ class NasaMaps(QDialog):
 
     # Выбор и вид.
 
-    def _label(self, key):
-        item, group, kind = self.items[key]
-        name = self.names[key][0]
+    def is_on(self, key):
+        """Строка каталога показана на глобусе."""
+        kind = self.items[key][2]
+        window = self.window
         if kind == LAYER:
-            on = bool(self.window.extras.get(key))
-            item.setText(name)
-            self._show_icon(key, tr("✓ вкл") if on else "", on)
-            return
+            return bool(window.extras.get(key))
         if kind == SAT:
-            on = bool(self.window.extras.get("satellites")) \
-                and key[len(SAT):] in self.window.satellite_manager.groups
-            item.setText(name)
-            self._show_icon(key, tr("✓ вкл") if on else "", on)
-            return
+            return bool(window.extras.get("satellites")) \
+                and key[len(SAT):] in window.satellite_manager.groups
+        if kind == VECTOR:
+            return bool(self._vector_keys(key) & set(window._groups))
+        return key == window.gallery_key()
+
+    def _vector_keys(self, key):
+        from .panel import geo_tree
+        rows = geo_tree()[int(key[len(VECTOR):])][2]
+        return {row[0] for row in rows}
+
+    def subtitle(self, key):
+        """Вторая строка: источник и день карты."""
+        kind = self.items[key][2]
         if kind == "gibs":
             intervals = self.window._theme_domains.get(key)
             day = themes.pick_day(intervals) if intervals else None
-            sub = day_text(day) if day else ""
-        elif kind == "weather":
-            sub = tr("прогноз GFS")
-        elif kind == themes.FIRES:
-            sub = tr("24 часа")
-        else:
-            sub = tr("суша и море")
-        item.setText(name)
-        self._show_icon(key, sub)
+            return tr("NASA GIBS, {day}", day=day_text(day)) if day \
+                else tr("NASA GIBS")
+        if kind == "weather":
+            return tr("прогноз NOAA GFS")
+        if kind == themes.FIRES:
+            return tr("NASA FIRMS, 24 часа")
+        if kind == themes.TEMPERATURE:
+            return tr("NASA GIBS, суша и море")
+        if kind == VECTOR:
+            return tr("OpenFreeMap")
+        if kind == SAT:
+            return tr("CelesTrak")
+        return SOURCES.get(key, "")
+
+    def _label(self, key):
+        item = self.items[key][0]
+        sub = self.subtitle(key)
+        item.setText(self.names[key][0] + ("\n" + sub if sub else ""))
+        image = self.thumbs.get(key) or ramp_image([])
+        item.setIcon(QIcon(QPixmap.fromImage(image)))
 
     def refresh(self):
-        """Подписи, выбранная карта и строка внизу."""
-        for key in self.items:
-            self._label(key)
-        current = self.window.gallery_key()
-        self.list.blockSignals(True)
-        self.list.clearSelection()
-        if current in self.items:
-            self.items[current][0].setSelected(True)
-            self.list.setCurrentItem(self.items[current][0])
-        self.list.blockSignals(False)
+        """Флажки строк, доступность по телу и описание."""
+        self._quiet = True
+        checked = enum(Qt, "CheckState", "Checked")
+        unchecked = enum(Qt, "CheckState", "Unchecked")
         planet = self.window.planet
         relief = bool(getattr(planet, "terrain", None)) or planet.earth
+        enabled = enum(Qt, "ItemFlag", "ItemIsEnabled")
         for key, (item, group, kind) in self.items.items():
-            usable = planet.earth or key in ANY_BODY \
-                or (key in RELIEF_BODY and relief)
+            self._label(key)
+            item.setCheckState(checked if self.is_on(key) else unchecked)
+            usable = planet.earth or key in ANY_BODY + ("grid",) \
+                or (key in RELIEF_BODY + ("contours",) and relief)
             # Спутники только у Земли, как и слой.
             usable = usable and (kind != SAT or planet.earth)
             flags = item.flags()
-            enabled = enum(Qt, "ItemFlag", "ItemIsEnabled")
             item.setFlags(flags | enabled if usable else flags & ~enabled)
-        if current in self.items:
-            self.note.setText(tr("На глобусе: {name}. Повторный щелчок "
-                                 "убирает карту.",
-                                 name=self.names[current][0]))
+        self._quiet = False
+        self._describe(self._chosen)
+
+    def _changed(self, item):
+        """Флажок строки поставлен или снят мышью."""
+        if self._quiet:
+            return
+        key = item.data(KEY_ROLE)
+        if key not in self.items:
+            return
+        want = item.checkState() == enum(Qt, "CheckState", "Checked")
+        if want != self.is_on(key):
+            self._clicked(item)
         else:
-            self.note.setText(tr("Щелчок по карте показывает её на "
-                                 "глобусе. День задаёт шкала времени. "
-                                 "Слои включаются независимо от карты."))
+            self.refresh()
 
     def _clicked(self, item):
+        """Строка на глобус или с глобуса."""
         key = item.data(KEY_ROLE)
-        if self.items[key][2] == SAT:
+        if key not in self.items:
+            return
+        kind = self.items[key][2]
+        self._chosen = key
+        if kind == SAT:
             self._toggle_satellites(key[len(SAT):])
-            return
-        if self.items[key][2] == LAYER:
+        elif kind == LAYER:
             self.window.set_extra(key, not self.window.extras.get(key))
-            self.refresh()
+        elif kind == VECTOR:
+            keys = self._vector_keys(key)
+            groups = set(self.window._groups)
+            groups = groups - keys if keys & groups else groups | keys
+            self.window.set_line_groups(groups)
+        else:
+            self.window.set_theme("" if key == self.window.gallery_key()
+                                  else key)
+        self.refresh()
+
+    def _describe(self, key):
+        """Описание строки под списком и кнопки к ней."""
+        if key not in self.items:
+            self._chosen = ""
+            self.details.setText(tr(
+                "Флажок показывает карту или слой на глобусе. Строка - "
+                "описание. Карта на глобусе одна, слои включаются "
+                "вместе с ней."))
+            self.toggle.setVisible(False)
+            self.export.setVisible(False)
             return
-        if key == self.window.gallery_key():
-            key = ""
-        self.window.set_theme(key)
+        self._chosen = key
+        name, tip = self.names[key]
+        sub = self.subtitle(key)
+        text = "<b>{}</b>".format(html.escape(name))
+        if sub:
+            text += "<br><i>{}</i>".format(html.escape(sub))
+        self.details.setText(text + "<br>" + html.escape(tip))
+        on = self.is_on(key)
+        self.toggle.setVisible(True)
+        self.toggle.setEnabled(bool(self.items[key][0].flags() & enum(
+            Qt, "ItemFlag", "ItemIsEnabled")))
+        self.toggle.setText(tr("Убрать с глобуса") if on
+                            else tr("Показать на глобусе"))
+        self.export.setVisible(bool(self.window.export_key(key)))
+
+    def _toggle_chosen(self):
+        if self._chosen in self.items:
+            self._clicked(self.items[self._chosen][0])
+
+    def _export_chosen(self):
+        row = self.window.export_key(self._chosen)
+        if row:
+            self.window.active_export(row)
 
     def _toggle_satellites(self, group):
         """Группа спутников на глобус или с глобуса. Первая группа
@@ -823,35 +967,54 @@ class NasaMaps(QDialog):
 
     def _set_group(self, group):
         self._group = group
+        for n in range(self.groups.count()):
+            row = self.groups.item(n)
+            if row.data(KEY_ROLE) == group and self.groups.currentRow() != n:
+                self.groups.blockSignals(True)
+                self.groups.setCurrentRow(n)
+                self.groups.blockSignals(False)
         self._filter()
 
     def _filter(self, *args):
         text = self.search.text().strip().lower()
+        seen = {"maps": False, "layers": False}
         for key, (item, group, kind) in self.items.items():
-            # Во «Все» групп спутников нет, во вкладке «Спутники» есть
-            # и сам слой.
-            if self._group == ALL:
+            # Во «Всех» групп спутников нет, во вкладке «Спутники» есть
+            # и сам слой. Поиск идёт по всему каталогу.
+            if text:
+                fits = text in self.names[key][0].lower() \
+                    or text in self.names[key][1].lower()
+            elif self._group == ALL:
                 fits = kind != SAT
             else:
                 fits = group == self._group or (
                     self._group == SAT_GROUP and key == "satellites")
-            shown = fits and (not text or text in self.names[key][0].lower())
-            item.setHidden(not shown)
+            item.setHidden(not fits)
+            if fits:
+                seen["layers" if kind in (LAYER, SAT, VECTOR)
+                     else "maps"] = True
+        for name, head in self.heads.items():
+            head.setHidden(not seen[name])
 
-    def closeEvent(self, event):
+    def close(self):
+        """Каталог уходит, панель снова показывает список слоёв."""
+        self.stop()
+        self.window.close_gallery()
+        return True
+
+    def stop(self):
         # Снятый запрос отвечает сразу, и обработчик ответа запускал
         # следующие. Прежде их ссылки тут же терялись очисткой словаря,
         # и QGIS падал в обработчике ответа, 7 октября 2026 года. Теперь
-        # закрытое окно новых запросов не запускает, а ответ снятого
+        # закрытый каталог новых запросов не запускает, а ответ снятого
         # убирает его из словаря сам.
         self._stopped = True
         self._queue = []
         for reply in list(self._replies.values()):
             reply.abort()
-        super().closeEvent(event)
 
-    def showEvent(self, event):
-        super().showEvent(event)
+    def resume(self):
+        """Каталог снова открыт: недостающие превью просятся заново."""
         if not self._stopped:
             return
         self._stopped = False

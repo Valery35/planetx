@@ -17,6 +17,7 @@
 """
 import datetime
 import math
+from collections import namedtuple
 
 import numpy as np
 
@@ -24,11 +25,19 @@ RADIUS = 6371000.0
 TRAIL = 14  # положений в следе частицы
 AGE = (40, 100)  # век частицы, шагов, случайный в этих пределах
 SHARE = 0.12  # доля ширины вида за секунду при типичной скорости
-# Цвета струек течений по скорости, м/с, светлые - на синем океане
-# тёмные струйки не видны. Ветер рисуется белым поверх своей раскраски.
-CURRENT_STOPS = ((0.05, (200, 230, 255)), (0.25, (110, 240, 255)),
-                 (0.5, (140, 255, 140)), (1.0, (255, 240, 80)),
-                 (1.5, (255, 150, 40)), (2.5, (255, 60, 90)))
+# Цвета заливки скорости течений, м/с. С 12 октября 2026 года, просьба
+# автора, под струйками течений лежит заливка скорости, струйки белые,
+# как у ветра. Прежде светлые цвета были у самих струек.
+CURRENT_STOPS = ((0.05, (20, 40, 110)), (0.2, (30, 120, 200)),
+                 (0.4, (40, 200, 170)), (0.7, (150, 230, 70)),
+                 (1.0, (250, 220, 40)), (1.5, (250, 130, 30)),
+                 (2.5, (230, 40, 70)))
+# Непрозрачность заливки по скорости, 0..255: медленная вода почти
+# прозрачна, снимок океана под ней виден. Синие цвета медленной воды
+# терялись на синем океане, первый вариант это показал. Выбор помощника.
+FILL_ALPHA = ((0.0, 0.0), (0.08, 40.0), (0.2, 120.0), (0.5, 190.0),
+              (1.0, 220.0), (2.5, 230.0))
+FILL_LEVEL = 4  # предельный уровень тайлов заливки, пиксель 0.09°
 
 
 class VectorGrid:
@@ -67,9 +76,42 @@ class VectorGrid:
         return out[0], out[1]
 
 
+CAP = "cap"  # рамка-круг: (CAP, широта, долгота, угловой радиус, °)
+
+
+def cap_box(lat, lon, angle):
+    """Рамка-круг на шаре: центр и угловой радиус в градусах. Издалека
+    рамка - видимый круг Земли, прежде прямоугольник широт и долгот
+    захватывал обратную сторону шара, и там рождались две трети частиц,
+    12 октября 2026 года."""
+    return (CAP, float(lat), float(lon), float(angle))
+
+
+def _cap_cos(lats, lons, box):
+    """Косинус угла от центра круга до точек."""
+    _, lat0, lon0, _ = box
+    a = np.radians(lats)
+    b = math.radians(lat0)
+    return np.sin(a) * math.sin(b) + np.cos(a) * math.cos(b) * np.cos(
+        np.radians(np.asarray(lons) - lon0))
+
+
 def spawn(count, box, rng):
-    """Точки, равномерные по площади в рамке (запад, юг, восток, север),
-    рамка может переходить линию перемены дат."""
+    """Точки, равномерные по площади в рамке (запад, юг, восток, север)
+    или в круге cap_box, рамка может переходить линию перемены дат."""
+    if box[0] == CAP:
+        _, lat0, lon0, angle = box
+        d = np.arccos(rng.uniform(math.cos(math.radians(angle)), 1.0,
+                                  count))
+        az = rng.uniform(0.0, 2.0 * math.pi, count)
+        b = math.radians(lat0)
+        lat = np.arcsin(math.sin(b) * np.cos(d)
+                        + math.cos(b) * np.sin(d) * np.cos(az))
+        lon = math.radians(lon0) + np.arctan2(
+            np.sin(az) * np.sin(d) * math.cos(b),
+            np.cos(d) - math.sin(b) * np.sin(lat))
+        lons = (np.degrees(lon) + 180.0) % 360.0 - 180.0
+        return np.degrees(lat), lons
     west, south, east, north = box
     width = (east - west) % 360.0 or 360.0
     s = math.sin(math.radians(south))
@@ -80,6 +122,8 @@ def spawn(count, box, rng):
 
 
 def inside(lats, lons, box):
+    if box[0] == CAP:
+        return _cap_cos(lats, lons, box) >= math.cos(math.radians(box[3]))
     west, south, east, north = box
     keep = (lats >= south) & (lats <= north)
     if (east - west) % 360.0 == 0.0:
@@ -156,6 +200,28 @@ def metres_per_mps(view_width, typical):
     return SHARE * view_width / max(typical, 1e-6)
 
 
+# Доля клетки поля, которую типичная скорость проходит за шаг показа,
+# не больше. Замечание автора от 12 октября 2026 года со снимком
+# Атлантики с 12 800 км - «что-то не то с течениями». Издалека частица
+# течений за шаг перескакивала клетку 0.5°, след тянулся на 420 км через
+# вихри петлями. На поле течений того дня с долей 0.3 след - 110 км,
+# у десятой части частиц путь длиннее прямой на 23 % вместо 99 %.
+# Величина - выбор помощника.
+CELL_SHARE = 0.3
+
+
+def display_metres(view_width, typical, step_deg, dt, share=None):
+    """Метров за секунду показа на 1 м/с поля: доля SHARE ширины вида,
+    но типичная скорость за шаг dt секунд проходит не больше доли share
+    клетки поля шагом step_deg градусов. share None - без предела.
+    Предел действует издалека, вблизи остаётся доля ширины вида."""
+    metres = metres_per_mps(view_width, typical)
+    if share is None:
+        return metres
+    cell = math.radians(step_deg) * RADIUS
+    return min(metres, share * cell / (max(typical, 1e-6) * dt))
+
+
 def segments(particles):
     """Отрезки следов: пары точек (m, 2, 2) широта и долгота и доля
     от головы 0..1 у каждого отрезка. Отрезки через линию перемены дат
@@ -196,9 +262,33 @@ def day_seconds(day):
 
 
 def current_colors(speed):
-    """Цвета струек течений (n, 3) 0..255 по скорости, м/с."""
-    speed = np.asarray(speed, dtype=np.float64)
+    """Цвета заливки течений (n, 3) 0..255 по скорости, м/с."""
+    speed = np.asarray(speed, dtype=np.float64).ravel()
     values = np.array([s[0] for s in CURRENT_STOPS])
     colors = np.array([s[1] for s in CURRENT_STOPS], dtype=np.float64)
     return np.stack([np.interp(speed, values, colors[:, k])
                      for k in range(3)], axis=1)
+
+
+FillJob = namedtuple("FillJob", "grid box")
+FillJob.__doc__ = """Поле течений для картинок тайлов заливки: VectorGrid
+и рамка всего мира (юг, север, запад, восток)."""
+
+
+def fill_job(grid):
+    return FillJob(grid, (-90.0, 90.0, -180.0, 180.0))
+
+
+def speed_rgba(task, lats, lons, radius=None):
+    """Картинка тайла заливки скорости: RGBA uint8 с премноженной альфой
+    по сетке широт и долгот. Суша и места без данных прозрачны."""
+    u, v = task.grid.sample(np.ravel(lats), np.ravel(lons))
+    speed = np.hypot(u, v)
+    rgb = current_colors(np.nan_to_num(speed))
+    alpha = np.interp(np.nan_to_num(speed), [a for a, _ in FILL_ALPHA],
+                      [b for _, b in FILL_ALPHA])
+    alpha[~np.isfinite(speed)] = 0.0
+    out = np.empty((rgb.shape[0], 4), dtype=np.uint8)
+    out[:, :3] = np.rint(rgb * (alpha / 255.0)[:, None])
+    out[:, 3] = np.rint(alpha)
+    return out.reshape(np.shape(lats) + (4,))

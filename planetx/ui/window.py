@@ -194,7 +194,8 @@ POINT_LAYERS = {"deposits": "deposits", "osm_mines": "osm_mines",
 FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
-              "temperature": ("sea", "land"), "map": ("theme", "compare")}
+              "temperature": ("sea", "land"), "map": ("theme", "compare"),
+              "currents": ("currents",)}
 QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -202,7 +203,10 @@ OPACITY_KEY = "PlanetX/opacity/"
 OPACITY_PAUSE = 300  # мс, наложение пересобирается после ползунка
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
-    "contours", "infra_osm", "cables", "fires", "temperature")
+    "grid", "buildings", "contours", "infra_osm", "cables", "fires",
+    "temperature")
+# Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
+CATALOG_WIDTH = 460
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
 # пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
 # 9 - около 160 м. Выбор помощника.
@@ -963,6 +967,9 @@ class GlobeWindow(QWidget):
         self.panel.layer_toggled.connect(self.set_layer_shown)
         self.panel.geo_changed.connect(self.set_line_groups)
         self.panel.relief_toggled.connect(self.set_relief)
+        self.panel.relief_model_chosen.connect(self.set_relief_model)
+        self.panel.sea_toggled.connect(self.set_sea_depths)
+        self.panel.sources_requested.connect(self.open_sources)
         self.panel.fly_to_layer.connect(self.fly_to_layer)
         self.panel.opacity_changed.connect(self.set_layer_opacity)
         self.panel.layer_properties.connect(iface.showLayerProperties)
@@ -1181,6 +1188,7 @@ class GlobeWindow(QWidget):
         self._show_layers()
         self.panel.set_geo(self._groups, self._relief)
         self._fill_basemaps()
+        self._update_relief_menu()
         self.panel.basemap_chosen.connect(self._panel_basemap)
         self.panel.add_source_requested.connect(self.add_tile_source)
         settings = QgsSettings()
@@ -1454,7 +1462,7 @@ class GlobeWindow(QWidget):
             if not on and key not in parked:
                 continue
             if not earth and key not in ANY_BODY + RELIEF_BODY + (
-                    "contours",):
+                    "contours", "grid"):
                 continue
             title = (names.get(key) or maps.get(key) or (key,))[0]
             rows.append((key, title, self._row_opacity(key),
@@ -1781,6 +1789,18 @@ class GlobeWindow(QWidget):
         key = self.gallery_key()
         self.panel.set_theme(key, map_names()[key][0] if key else "")
         self._update_active()
+        gallery = getattr(self, "gallery", None)
+        if gallery is not None and gallery.isVisible():
+            gallery.refresh()
+
+    def export_key(self, key):
+        """Строка «На глобусе», которой выгружается карта или слой key
+        каталога, None - не выгружается или не на глобусе."""
+        for row, _, _, export, on in self._active_rows():
+            if export and on and (row == key or (
+                    row == "map" and key == self.theme_key)):
+                return row
+        return None
 
     def _side_changed(self):
         """Окно в панели свойств появилось или ушло: место панели
@@ -1810,14 +1830,42 @@ class GlobeWindow(QWidget):
         self.guide.start()
 
     def open_gallery(self):
-        """Окно «Карты и слои», одно на глобус."""
+        """Каталог «Добавить данные» на месте списка «Слоёв», один на
+        глобус. Панель уже CATALOG_WIDTH раздвигается за счёт вида,
+        закрытие каталога возвращает прежнюю ширину."""
         if getattr(self, "gallery", None) is None:
-            self.gallery = NasaMaps(self)
-        # Щелчок по значку переключил его отметку, она - по карте.
+            self.gallery = NasaMaps(self, self.panel)
+            self.panel.set_catalog(self.gallery)
+        if self.panel.isHidden():
+            self.set_sidebar(True)
+        sizes = self.splitter.sizes()
+        if not self.gallery.isVisible():
+            self._panel_width = sizes[0]
+        if sizes[0] < CATALOG_WIDTH:
+            grow = min(CATALOG_WIDTH - sizes[0], max(sizes[1] - 200, 0))
+            sizes[0] += grow
+            sizes[1] -= grow
+            self.splitter.setSizes(sizes)
+        self.panel.show_catalog(self.gallery, True)
+        self.gallery.resume()
         self._mark_gallery()
-        self.gallery.show()
-        self.gallery.raise_()
+        self.gallery.refresh()
         return self.gallery
+
+    def close_gallery(self):
+        """Каталог уходит, панель снова показывает список и прежнюю
+        ширину."""
+        gallery = getattr(self, "gallery", None)
+        if gallery is None:
+            return
+        self.panel.show_catalog(gallery, False)
+        width = getattr(self, "_panel_width", None)
+        sizes = self.splitter.sizes()
+        if width is not None and sizes[0] > width:
+            sizes[1] += sizes[0] - width
+            sizes[0] = width
+            self.splitter.setSizes(sizes)
+        self._panel_width = None
 
     def _theme_on(self):
         return bool(self.theme_key) and self.planet.earth \
@@ -2469,6 +2517,7 @@ class GlobeWindow(QWidget):
         if what == "terrain":
             self.dem = self._make_dem()
             self._refresh_relief()
+            self._update_relief_menu()
         elif what == "vector":
             if self.buildings_loader is not None:
                 self.buildings_loader.abort()
@@ -2503,6 +2552,34 @@ class GlobeWindow(QWidget):
         QgsSettings().setValue(SEA_KEY, self.sea_depths)
         self._set_sea_floor(self.sea_depths and self.planet.earth)
         self._sync_properties()
+        self._update_relief_menu()
+
+    def set_relief_model(self, kind):
+        """Высоты суши из меню строки «Рельеф»: только тайлы высот или
+        модель 30 м, как в окне «Источники данных»."""
+        QgsSettings().setValue(datasources.DEM_KEY, dem_model.choice(kind))
+        self.sources_changed("terrain")
+
+    def _update_relief_menu(self):
+        """Меню строки «Рельеф»: выбор высот суши и глубины морей есть
+        только у Земли."""
+        panel = getattr(self, "panel", None)
+        planet = getattr(self, "planet", None)
+        if panel is None or planet is None:
+            return
+        if not planet.earth:
+            panel.set_relief_menu([], "", False)
+            return
+        from .sources import dem_titles
+        titles = dem_titles()
+        own = self._terrain_choice()[0] != datasources.TERRAIN_URL
+        short = {dem_model.TERRARIUM: tr("свой источник") if own
+                 else "Terrarium",
+                 dem_model.COPERNICUS: tr("Copernicus 30 м"),
+                 dem_model.GEDTM: "GEDTM30"}
+        models = [(key, titles[key], short[key]) for key in dem_model.CHOICES]
+        kind = dem_model.choice(QgsSettings().value(datasources.DEM_KEY, ""))
+        panel.set_relief_menu(models, kind, getattr(self, "sea_depths", True))
 
     def _set_sea_floor(self, on):
         """Глубины морей и океанов: высоты Земли заново, с впадинами
@@ -3009,6 +3086,7 @@ class GlobeWindow(QWidget):
                              relief=planet.terrain is not None)
         self._mark_gallery()
         self._fill_basemaps()
+        self._update_relief_menu()
         self._grid_key = None
         self._update_grid()
         self._refresh_shapes()
@@ -6886,17 +6964,27 @@ class GlobeWindow(QWidget):
                            pose.heading, pose.tilt)
 
     def _fly_extent(self, extent, crs):
-        """Перелёт к охвату в системе координат crs, взгляд отвесный."""
+        """Перелёт к охвату в системе координат crs, взгляд отвесный.
+
+        Охват пустого слоя пуст, перелёта к нему нет. Прежде он давал
+        NaN позы, и каждый кадр QGIS 3.36 падал в paintGL на int(NaN)
+        высоты под глазом, 12 октября 2026 года."""
+        if extent.isNull():
+            return
         wgs = QgsCoordinateReferenceSystem("EPSG:4326")
         transform = QgsCoordinateTransform(crs, wgs, QgsProject.instance())
         try:
             box = transform.transformBoundingBox(extent)
         except QgsCsException:
             return
+        corners = (box.xMinimum(), box.yMinimum(), box.xMaximum(),
+                   box.yMaximum())
+        if box.isNull() or not all(math.isfinite(v) for v in corners):
+            return
         camera = self.view.camera
-        lat, lon, distance = fit_view(box.xMinimum(), box.yMinimum(),
-                                      box.xMaximum(), box.yMaximum(),
-                                      camera.fov_y, camera.aspect)
+        lat, lon, distance = fit_view(*corners, camera.fov_y, camera.aspect)
+        if not all(math.isfinite(v) for v in (lat, lon, distance)):
+            return
         self._fly_to(lat, lon, distance)
 
     # Определение объектов.
@@ -8147,6 +8235,8 @@ class GlobeWindow(QWidget):
             self.route_manager.close()
             self.weather.close()
             self.flow.close()
+            if getattr(self, "gallery", None) is not None:
+                self.gallery.stop()
             self._address_timer.stop()
             reply, self._address_reply = self._address_reply, None
             if reply is not None:

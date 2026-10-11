@@ -200,7 +200,7 @@ Suggestions of four kinds appear below the field while typing:
 
 - Placemarks of My Places on the body on the screen with a matching
   name.
-- Actions of the plugin - layers, gallery maps, sets, windows, icon bar
+- Actions of the plugin - layers, catalogue maps, windows, icon bar
   tools, demos and globe bodies. The suggestion names the action and
   what it will do, for example "Currents - turn on" or "Ruler - open
   the window". An action is also found by a related word - "power
@@ -239,32 +239,32 @@ Over a long distance the camera rises and lands smoothly. The mouse interrupts a
 
 ## Left panel
 
-The panel has three sections - Places, Project layers and Layers. A
-click on a header collapses the section, and the open sections take its
-place. The globe remembers which sections are collapsed.
+The panel has two sections - Places and Layers. A click on a header
+collapses the section, and the open section takes its place. The globe
+remembers which sections are collapsed.
 
 ### Layers section
 
-Its check boxes
-take effect at once, without the Refresh button.
+The section shows in one list what is on the globe now. Its check boxes
+take effect at once, without the Refresh button. The rows go like this:
 
-| Part | Rows |
+| Rows | What they hold |
 |---|---|
-| Base map | Sources of imagery and maps, an option button selects one, the last row is Add tile source… |
-| Terrain | Mapzen Terrain Tiles elevations and hill shading |
-| Maps and layers | The row opens the gallery of maps and layers, see Maps and layers |
-| On the globe | Layers switched on in the gallery and in Map, with an opacity slider and a menu, the section shows when something is on |
-| Map | Borders and names, Transport, Nature - the vector base, Coordinate grid, 3D buildings, Contours, OSM power lines, cables and pipelines, Submarine cables |
+| Base map | The base map - imagery or a map. A click on the row opens a menu - Esri World Imagery, OpenStreetMap, the QGIS XYZ Tiles connections and Add tile source… |
+| Relief | The check box turns heights and hill shading on. A click on the name opens a menu - land heights Terrarium, Copernicus DEM 30 m or GEDTM30, Sea and ocean depths and Data sources… |
+| Layers that are on | Layers and the map of the catalogue, the coordinate grid, 3D buildings, contours - everything that is switched on |
+| Vector base groups | Borders and names, Transport, Nature, while something in them is on |
+| QGIS project | Layers of the current project, see QGIS project group |
 
-The On the globe section shows everything that is switched on, one row
-per layer. Clearing the check box switches the layer off, the row stays, and the
-same check box switches the layer on again. The Remove from the globe
-item of the row menu removes the row too. The
-slider changes the opacity of the layer - points, surface colouring or
-lines, the value is remembered. The ⋯ menu of a row removes the layer,
-and for mineral deposits, power plants, mines, earthquakes, fires, plate
-boundaries, mining areas and power lines it also saves what is in view
-to the QGIS project. The To QGIS project… item asks for a GeoPackage
+A row takes one line. The ⋯ on the right of a row opens its menu, the
+right button opens the same menu. Clearing the check box switches the
+layer off, the row stays, and the same check box switches the layer on
+again. The Remove from the globe item of the menu removes the row too.
+The Opacity slider of the menu changes the opacity of the layer -
+points, surface colouring or lines, the value is remembered. For
+mineral deposits, power plants, mines, earthquakes, fires, plate
+boundaries, mining areas, power lines and cables the menu also saves
+what is in view to the QGIS project. The To QGIS project… item asks for a GeoPackage
 file and writes the objects inside the view frame with the record
 fields into it. The layer goes into the PlanetX - globe layers group at
 the top of the project tree. Points keep the globe colour and size,
@@ -275,11 +275,11 @@ the eastward and northward speeds) with the globe legend. A NASA theme,
 clouds and surface temperature go as a NASA GIBS image of the same date,
 the temperature as two rasters - sea and land.
 
-The part headings have no check boxes, the rows have them. The vector
-base has three groups. Borders and names holds Borders, Places and
-Water names. Transport holds Roads, Road numbers, Railways and
-Airports. Nature holds Rivers, Lakes and reservoirs, Peaks, Reserves
-and national parks.
+The Add data button at the top of the section puts the catalogue in
+place of the list, see Add data catalogue. The vector base groups hold
+rows. Borders and names holds Borders, Places and Water names.
+Transport holds Roads, Road numbers, Railways and Airports. Nature
+holds Rivers, Lakes and reservoirs, Peaks, Reserves and national parks.
 
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
@@ -293,7 +293,7 @@ shown and comes from the QGIS cache afterwards.
 Clouds lie as a veil over the imagery. Snow and ice get into the
 clouds too, they have the same colour.
 
-The Surface temperature map of the gallery colours land and sea with
+The Surface temperature map of the catalogue colours land and sea with
 their own scales. The scales in degrees Celsius are in the bottom left
 corner of the view. Land shows
 the temperature of the surface itself by day, not of the air, over 8
@@ -326,7 +326,7 @@ bodies have no heights. The accuracy is limited by the height pixel.
 It is about 5 m at the equator on the most detailed level on the Earth,
 2.6 km on Mars, 1.3 km on the Moon.
 
-The Contours row of the Map group draws lines of equal height on the
+The Contours layer of the Map category of the catalogue draws lines of equal height on the
 surface, as on
 a topographic map. The contour interval depends on the zoom. It is
 1, 2, 2.5 or 5 metres times a power of ten. Close up at middle
@@ -401,31 +401,35 @@ the planetx-terrain repository, the first showing of an age needs the
 internet. A new age appears at once in a coarse form and sharpens as
 it loads. When the window opens, the row is off.
 
-#### Maps and layers
+#### Add data catalogue
 
-The Maps and layers row of the Layers section opens the gallery. It holds NASA and weather maps and three groups of layers.
-Sky and light holds Stars, Clouds, Sun and Satellites. Inside the
-Earth holds Earthquakes, Plate boundaries, Mineral deposits, Earth
-cutaway and Paleogeography. Terrain analysis holds Slope and Aspect. A click switches a layer on or off
-independently of other layers and of the map, a layer that is on has
-a green badge. The Satellites tab of the gallery shows cards of the
-satellite groups. A click on a card shows or removes a group. The
-first group switches the Satellites layer on, the last removed one
-switches it off.
+The Add data button of the Layers section puts the catalogue in place
+of the list, the panel grows wider for that time, the globe stays
+visible. The ← arrow brings the list back. The categories stand on the
+left: Map (the vector base, coordinate grid, 3D buildings, contours),
+Weather, NASA themes by groups, Sky and light (Stars, Clouds, Sun,
+Satellites), Inside the Earth (Earthquakes, Plate boundaries, Mineral
+deposits, Mining areas, OSM mines and quarries, Earth cutaway,
+Paleogeography), Energy (Power plants, Power lines and pipelines,
+Submarine cables), Terrain analysis (Slope, Aspect) and Satellites -
+the satellite groups. The search field looks for a name and a
+description across the whole catalogue.
 
-Each map has a preview - its tile
-over Eurasia on the latest ready day over the base map. Forecast fields
-and fires show a strip of the scale colours instead of a tile. The name
-and the day of the map stand under the preview. The buttons at the top
-keep the maps of one group, the Find a map field searches by name. A
-click on a map shows it on the globe, a second click removes it. The
+The rows are split into One map on the globe and Layers - switched on
+together. A row has a check box, a preview, the name and the source
+and day of the map on a second line. The preview of a map is its tile
+over Eurasia on the latest ready day over the base map, forecast fields
+and fires show a strip of the scale colours. The check box shows a map
+or a layer on the globe. A click on a row shows its description under
+the list with the Show on the globe or Remove from the globe and To
+QGIS project… buttons. The globe shows one map of the catalogue, the
 cross on its scale in the lower left corner of the view also removes
-the map. The globe shows one map of the gallery, its name stands in
-the Maps and layers row.
+it. A satellite group card shows or removes the group. The first group
+switches the Satellites layer on, the last removed one switches it off.
 
 NASA themes are rasters by days, months or years from the NASA GIBS
 service. A day of a series counts as ready a day later, before that
-its image is empty. The groups of the gallery hold:
+its image is empty. The NASA theme groups of the catalogue hold:
 - Planet of Fire - fire spots, smoke, aerosol optical depth, carbon
   monoxide and its emission.
 - Planet of Water - precipitation, soil moisture, daily snow, snow over
@@ -470,12 +474,12 @@ theme. Switching the theme off removes the swipe.
 
 #### Weather
 
-The Weather group stands first in the gallery. Its first map is
+The Weather category stands in the catalogue before the NASA themes. Its first map is
 Surface temperature of land and sea from NASA. The others are Air
 temperature at 2 m, Precipitation in mm/h, Wind at 10 m in m/s
 and Clouds in percent. The fields come from the NOAA GFS forecast
 model with a 0.25° grid, about 28 km. A field is chosen in the
-gallery, as a NASA theme.
+catalogue, as a NASA theme.
 
 White streaks run over the Wind colouring - particles that float with
 the wind and drag a trail. A streak of a weak wind is paler. The streaks
@@ -483,9 +487,13 @@ are sped up - in a second a wind of typical strength passes about an
 eighth of the view width, so they are visible both from afar and close
 up. They are born within the view and follow it.
 
-The Currents layer of the Planet of water group of the gallery shows
-ocean surface currents with the same streaks, the streak colour is the
-speed, from pale blue for slow ones to red for 2.5 m/s. The currents are
+The Currents layer of the Planet of water group of the catalogue shows
+ocean surface currents with the same white streaks over a speed
+colouring from dark blue for slow ones to red for 2.5 m/s. Slow water is
+almost not coloured, the streak of a slow current is paler. From afar
+the particles are born within the visible circle of the Earth and pass
+no more than a third of a grid cell per frame, so the trail does not
+loop through the eddies. The currents are
 geostrophic, NOAA CoastWatch calculates them from satellite altimetry
 for a day, the data lag two to three weeks. The series starts on 13
 February 2017, the day of the currents is set by the right handle of
@@ -581,10 +589,10 @@ link to the OpenStreetMap object. In busy hours the Overpass server
 answers with a delay or a refusal. The request then repeats by itself
 on another Overpass server or on the same one after a pause.
 
-The Infrastructure group of the Maps and layers gallery holds the
-Power plants layer.
+The Energy category of the catalogue holds the Power plants, OSM power
+lines, cables and pipelines and Submarine cables layers.
 
-The Submarine cables row of the Map group shows submarine communication
+The Submarine cables layer shows submarine communication
 lines in turquoise and submarine power cables in purple from any
 altitude. The data is OpenStreetMap, extracted on 11 October 2026 - 909
 communication lines and 1040 power cables longer than 5 km. OSM holds
@@ -601,8 +609,7 @@ the record. Some plants are placed wrongly in the database. The first
 switch-on downloads an archive of about 4 MB, the result is kept as a
 file in the QGIS profile.
 
-The OSM power lines, cables and pipelines row of the Map group of the
-Layers section shows power lines, substations, cables and pipelines
+The OSM power lines, cables and pipelines layer shows power lines, substations, cables and pipelines
 from OpenStreetMap. A power cable, underground or under water, is a
 purple dashed line, a communication line is turquoise. The line colour
 and width show the
@@ -680,12 +687,12 @@ When the window closes, the wall disappears.
 
 ### Base map and a tile source of your own
 
-The Base map group lists Esri World Imagery, OpenStreetMap and the XYZ
-Tiles connections of the QGIS browser. Checking a row changes the base
-map on the globe at once. On other bodies the group shows the imagery
-of the body, the choice is not available.
+The menu of the Base map row lists Esri World Imagery, OpenStreetMap
+and the XYZ Tiles connections of the QGIS browser, the chosen base map
+is checked. A choice changes the base map on the globe at once. On other
+bodies the row shows the imagery of the body, there is no choice.
 
-The row Add tile source… opens the new source window. The Address
+The Add tile source… item of the menu opens the new source window. The Address
 field takes an address in any of these forms:
 
 - a template with `{z}`, `{x}`, `{y}`, for example
@@ -804,9 +811,9 @@ Without automatic update a change of base map, terrain exaggeration or
 project layers shows after the Refresh button on the icon bar. The status line reminds about it.
 The label language changes at once.
 
-### Project layers section
+### QGIS project group
 
-The section lists the layers of the current project in the order of the
+The group of the Layers section lists the layers of the current project in the order of the
 QGIS map, each with its type - raster, points, lines, polygons or
 table. The check box of a layer shows it on the globe and does not
 change its visibility on the map. In a new project the boxes are clear.
@@ -858,7 +865,7 @@ read.
 
 A height raster of the QGIS project becomes the globe terrain within
 its extent. An example is a quarry with a mine survey. The Globe
-terrain item of the raster menu in the Project layers section turns the
+terrain item of the raster menu in the QGIS project group turns the
 inset on and off. The raster can be in any coordinate system, it needs
 a file that GDAL reads. The checkbox that shows the layer on the globe
 is not needed for the inset.
@@ -884,7 +891,7 @@ profile. For a survey of 2400 × 2400 pixels this takes about 2 s.
 
 Two surveys of one site, for example a quarry with dumps, give the cut
 and fill volumes. The Cut and fill… item of the menu of the new survey
-raster in the Project layers section opens a window:
+raster in the QGIS project group opens a window:
 
 - Earlier survey - a raster of the same site at an earlier date.
 - Site - polygons outside which the difference is not computed, or the
@@ -905,7 +912,7 @@ the globe, the cut in red, the fill in blue.
 A raster of depths or bed elevations of a lake, sea or reservoir goes
 into the globe terrain like own terrain, and semi-transparent water at
 the water body level is drawn above it. The Water body bathymetry… item
-of the raster menu in the Project layers section opens a window with
+of the raster menu in the QGIS project group opens a window with
 three fields:
 
 - Values are depths - the depth below the water surface, with a plus or
@@ -1652,7 +1659,7 @@ elevations in metres in any coordinate system, GDAL reads it.
 Geological project layers show in 3D as ordinary globe layers. A
 layer is recognised by a table name from the list above or by its
 fields, for example a point layer with the fields hole_id and eoh is
-collars. A layer checked in Project layers goes under the surface, an
+collars. A layer checked in QGIS project goes under the surface, an
 unchecked box removes it. Such layers are not drawn as a flat image on
 the surface. A roof is a raster whose file is named in the surface
 field of the beds table. The interval, survey and beds tables are
@@ -1688,7 +1695,7 @@ data.
 
 A project raster whose values are absolute elevations in metres lies
 under the ground as a surface. For this the Surface by elevations item
-is checked in the raster menu of the Project layers section. The layer
+is checked in the raster menu of the QGIS project group. The layer
 box shows and hides the surface. The raster coordinate system comes
 from the QGIS layer, so an ASCII Grid without a .prj file also fits.
 
@@ -1970,7 +1977,7 @@ later than the slider moment is shown, before the year of the first
 map of the group none is shown. The ◂ ▸ steps of the slider go by the
 map years. With the slider closed, all maps are shown.
 
-The Map year… item of the layer menu in the Project layers section
+The Map year… item of the layer menu in the QGIS project group
 sets the year of a project raster or tiles. Maps of one QGIS layer
 group replace each other. The years are kept in the project.
 
@@ -2016,9 +2023,9 @@ the collection, for some maps it is rough or wrong.
 
 ## Satellites
 
-The Satellites layer of the Maps and layers gallery shows artificial
+The Satellites layer of the Add data catalogue shows artificial
 satellites of the Earth as dots at their height. The Satellites tab
-of the gallery chooses the groups, any of them can be on:
+of the catalogue chooses the groups, any of them can be on:
 
 | Group | What it holds |
 |---|---|

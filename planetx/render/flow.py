@@ -21,9 +21,19 @@ from ..core.subsurface import display
 from . import gpu
 from .quakes import FRAGMENT, GL_PROGRAM_POINT_SIZE, VERTEX
 
-WIND_COLOR = (0.96, 0.97, 1.0)  # струйки ветра поверх его раскраски
+WIND_COLOR = (0.96, 0.97, 1.0)  # струйки поверх раскраски скорости
 WIND_SLOW = 2.0  # м/с, медленнее струйка ветра бледнеет
 ALPHA = 1.0
+# Течения медленнее CURRENT_SLOW м/с бледнее, до доли SLOW_FLOOR: вихри
+# открытого океана не спорят с Гольфстримом. Замечание автора от
+# 12 октября 2026 года, величины - выбор помощника.
+CURRENT_SLOW = 0.2
+SLOW_FLOOR = 0.3
+
+
+def slow_fade(speed):
+    """Множитель непрозрачности струйки течений по скорости, м/с."""
+    return np.clip(np.asarray(speed) / CURRENT_SLOW, SLOW_FLOOR, 1.0)
 LIFT = 30.0  # м над рельефом, струйка не тонет в тайле
 HEAD_SIZE = 2.5  # логических пикселей - точка головы струйки
 LINE_WIDTH = 1.8  # логических пикселей - толщина следа
@@ -170,10 +180,11 @@ class FlowLines:
                                 / (core.TRAIL - 1.0), keep.shape)[keep]
         speed = np.broadcast_to(p.speed[:, None], keep.shape)[keep]
         alpha = ALPHA * (1.0 - share) * self.opacity
+        rgb = np.broadcast_to(np.array(WIND_COLOR), (len(speed), 3))
         if self.kind == "currents":
-            rgb = core.current_colors(speed) / 255.0
+            # Цвет скорости - у заливки под струйками, струйки белые.
+            alpha = alpha * slow_fade(speed)
         else:
-            rgb = np.broadcast_to(np.array(WIND_COLOR), (len(speed), 3))
             alpha = alpha * np.clip(speed / WIND_SLOW, 0.2, 1.0)
         m = len(a)
         data = np.empty((2 * m, 8), dtype=np.float32)
@@ -191,8 +202,8 @@ class FlowLines:
         dots[:, 0:3] = self.xyz[heads, 0] - eye
         dots[:, 3] = HEAD_SIZE
         if self.kind == "currents":
-            dots[:, 4:7] = core.current_colors(p.speed[heads]) / 255.0
-            dots[:, 7] = self.opacity
+            dots[:, 4:7] = WIND_COLOR
+            dots[:, 7] = self.opacity * slow_fade(p.speed[heads])
         else:
             dots[:, 4:7] = WIND_COLOR
             dots[:, 7] = self.opacity * np.clip(p.speed[heads] / WIND_SLOW,

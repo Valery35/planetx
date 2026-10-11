@@ -12,7 +12,7 @@
 """
 import time
 
-from ..core import clouds, sun, temperature, terrain
+from ..core import clouds, flow, sun, temperature, terrain
 from ..core.clouds import source_key
 from ..core.overlay import window
 from . import gpu
@@ -52,6 +52,9 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # высот, как уклон, поверх тем и под слоями проекта.
           ("contours", terrain.MAX_LEVEL, 12, "u_contours",
            "u_contours_uv"),
+          # Заливка скорости течений под струйками (core/flow.py) - блок
+          # 13, над темой и под горизонталями.
+          ("currents", flow.FILL_LEVEL, 13, "u_currents", "u_currents_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
 
 

@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.68.1.
+A 3D globe inside QGIS. PlanetX version 0.69.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -67,17 +67,17 @@ and atmosphere, from space down to single streets.
   transparent, a polygon of My Places cuts a block, the camera goes
   underground. The Permian deposits and Vegas Loop tunnels demos show
   the mode.
-- **Weather.** The Weather group of the map gallery shows air
+- **Weather.** The Weather category of the catalogue shows air
   temperature, precipitation, wind and clouds of the NOAA GFS model
   at the moment of the time slider. It covers a forecast up to 16
   days and the past.
 - **NASA themes.** The Planet of Fire, Planet of Water, Planet of Air and Land
-  and Life groups of the map gallery show 23 NASA GIBS rasters by
+  and Life groups of the catalogue show 23 NASA GIBS rasters by
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,
   vegetation, night lights. The time slider sets the day of a theme.
-  The Maps and layers row of the Layers section and an icon
-  open the gallery, each map has a preview. A comparison swipe shows
-  a theme for two days side by side.
+  The Add data button of the Layers section opens the catalogue, each
+  map has a preview and a description. A comparison swipe shows a
+  theme for two days side by side.
 - **Paleogeography.** The Paleogeography layer shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.
@@ -91,19 +91,20 @@ and atmosphere, from space down to single streets.
   document, they are written after confirmation. OpenRouter with free
   models is chosen by default, its key is free. Ollama works without a
   key.
-- **Left panel.** The sections Places, Project layers and Layers
-  collapse with a click on the header.
-- **Layers section.** It holds
-  the groups Borders and names, Transport and Nature. They hold borders,
-  places, water names, roads and road numbers, railways, airports,
-  rivers, lakes, peaks, nature reserves and national parks. Check boxes
-  take effect at once.
+- **Left panel.** The sections Places and Layers collapse with a click
+  on the header.
+- **Layers section.** One list of everything on the globe - the base
+  map and relief with choice menus, layers that are on, the vector
+  base groups Borders and names, Transport and Nature and the QGIS
+  project group. A row takes one line, its ⋯ menu sets the opacity,
+  saves to the QGIS project or removes the layer. Check boxes take
+  effect at once.
 - **Labels.** Labels stay upright at any turn and tilt and do not
   overlap. A place behind a mountain or beyond the horizon is not
   labelled. The label language follows QGIS or is chosen in the view
   properties.
 - **Project layers.** Vector and raster layers of the project lie on the
-  globe in the QGIS map order. A check mark in the window list shows
+  globe in the QGIS map order. A check mark in the QGIS project group shows
   a layer on the globe and leaves the map unchanged. Labels of vector
   layers stay level like city names, with the text and colour of the
   layer labels in QGIS.

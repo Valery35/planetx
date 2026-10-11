@@ -286,10 +286,6 @@ EN = {
         "of the plugin are found here too - type “currents”, “ruler” or "
         "“images” and choose a suggestion. Ctrl+K from anywhere in the "
         "window puts the cursor into this field.",
-    "Основа, рельеф и слои глобуса. Строка «Карты и слои» открывает "
-    "витрину карт NASA, погоды и слоёв недр.":
-        "The base map, relief and globe layers. The Maps and layers row "
-        "opens the gallery of NASA maps, weather and subsurface layers.",
     "Правая кнопка на глобусе открывает меню точки - что здесь, снимки "
     "Sentinel-2 и Landsat, исторические карты, маршрут, номенклатура "
     "листа, линейка и метка.":
@@ -335,8 +331,8 @@ EN = {
         "start",
     "остановить":
         "stop",
-    "открыть витрину":
-        "open the gallery",
+    "открыть каталог":
+        "open the catalogue",
     "открыть демо":
         "open the demo",
     "открыть окно":
@@ -463,13 +459,6 @@ EN = {
         "view when the camera is below 150 km. A click on a line shows "
         "the voltage, substance, operator and a link to the "
         "OpenStreetMap object.",
-    "На глобусе":
-        "On the globe",
-    "Включённые слои витрины и карты. Ползунок меняет непрозрачность, "
-    "меню строки сохраняет видимое в проект QGIS или убирает слой.":
-        "Layers switched on in the gallery and the map. The slider "
-        "changes the opacity, the row menu saves what is in view to the "
-        "QGIS project or removes the layer.",
     "Непрозрачность слоя. Вправо слой непрозрачен, влево прозрачнее.":
         "Layer opacity. To the right the layer is opaque, to the left "
         "more transparent.",
@@ -538,10 +527,6 @@ EN = {
         "Dot size - capacity",
     "Квадрат - подстанция":
         "Square - substation",
-    "Инфраструктура":
-        "Infrastructure",
-    "Электростанции мира, линии электропередачи, подстанции и трубопроводы.":
-        "Power plants of the world, power lines, substations and pipelines.",
     "Электростанции":
         "Power plants",
     "Около 35 тысяч электростанций мира из базы WRI Global Power Plant "
@@ -945,12 +930,7 @@ EN = {
     "Ничего не найдено: {text}": "Nothing found: {text}",
     "О модуле": "About",
     "Метки": "Places",
-    "Слои проекта": "Project layers",
     "Свернуть или развернуть «Мои метки».": "Collapse or expand My Places.",
-    "Свернуть или развернуть слои проекта QGIS.":
-        "Collapse or expand the QGIS project layers.",
-    "Свернуть или развернуть векторную основу и рельеф.":
-        "Collapse or expand the vector base and terrain.",
     "Основа": "Base map",
     "Картинки на поверхности в проект QGIS…":
         "Ground overlays to the QGIS project…",
@@ -1441,14 +1421,6 @@ EN = {
         "Left side day one step of the theme series forward.",
     "Убрать шторку сравнения.":
         "Remove the comparison swipe.",
-    "Щелчок по карте показывает её на глобусе. День задаёт шкала времени. "
-    "Слои включаются независимо от карты.":
-        "A click on a map shows it on the globe. The time slider sets the "
-        "day. Layers are switched on independently of the map.",
-    "Карты и слои":
-        "Maps and layers",
-    "✓ вкл":
-        "✓ on",
     "Искусственные спутники по орбитальным элементам CelesTrak, положение по "
     "модели SGP4. Время - правый бегунок шкалы времени, без шкалы - часы "
     "компьютера. Группы выбирает вкладка «Спутники» витрины. Элементы группы "
@@ -1458,20 +1430,10 @@ EN = {
         "without the slider the computer clock. The Satellites tab of the "
         "gallery chooses the groups. The elements of a group update at "
         "most once in 2 hours.",
-    "Карты NASA, прогноз погоды, пожары, небо, недра и анализ рельефа с "
-    "превью. Щелчок открывает витрину.":
-        "NASA maps, weather forecast, fires, sky, inside the Earth and "
-        "terrain analysis with previews. A click opens the gallery.",
     "Планета воздуха":
         "Planet of Air",
     "Все":
         "All",
-    "Все карты витрины.":
-        "All maps of the gallery.",
-    "Найти карту":
-        "Find a map",
-    "На глобусе: {name}. Повторный щелчок убирает карту.":
-        "On the globe: {name}. A second click removes the map.",
     "Очаги пожаров за последние 24 часа по снимкам VIIRS спутника NOAA-20, "
     "сводка NASA FIRMS. Цвет и размер точки показывают мощность излучения.":
         "Fire spots of the last 24 hours from VIIRS images of the NOAA-20 "
@@ -1483,14 +1445,6 @@ EN = {
     "сутки, данные NASA GIBS.":
         "Daytime land temperature from MODIS over 8 days and sea temperature "
         "from GHRSST MUR for a day, NASA GIBS data.",
-    "прогноз GFS":
-        "GFS forecast",
-    "24 часа":
-        "24 hours",
-    "суша и море":
-        "land and sea",
-    "{title}: {name}":
-        "{title}: {name}",
     "Карта":
         "Map",
     "Небо и свет":
@@ -1499,8 +1453,6 @@ EN = {
         "Inside the Earth",
     "Анализ рельефа":
         "Terrain analysis",
-    "Векторная основа OpenFreeMap, координатная сетка и 3D-здания.":
-        "The OpenFreeMap vector base, the coordinate grid and 3D buildings.",
     "Солнце и ночная сторона, звёзды, облака и искусственные спутники.":
         "The sun and the night side, stars, clouds and artificial "
         "satellites.",
@@ -1814,12 +1766,6 @@ EN = {
     "На шаг ряда темы назад.": "One step of the theme series back.",
     "На шаг ряда темы вперёд.": "One step of the theme series forward.",
     "{name} · {kind}": "{name} · {kind}",
-    "Отметка показывает слой на глобусе, видимость на карте QGIS "
-    "не меняется. Двойной щелчок переносит к слою, меню по правой "
-    "кнопке - перелёт, прозрачность и свойства.":
-        "The check shows the layer on the globe, its visibility on the "
-        "QGIS map does not change. Double-clicking flies to the layer, the "
-        "right-click menu flies there, sets opacity and opens properties.",
     "Подлететь": "Fly to",
     "растр": "raster",
     "точки": "points",
@@ -2243,15 +2189,6 @@ EN = {
         "Nature reserves, national parks and refuges, a green outline and a "
         "name. Names are shown below 3000 km, the outline together with "
         "motorways.",
-    "Высоты поднимают поверхность и дают отмывку склонов. "
-    "Высоты Земли - Mapzen Terrain Tiles, Марса - MOLA, Луны - "
-    "LOLA. Без рельефа шар гладкий, высоты не загружаются. "
-    "Вертикальный масштаб - в свойствах вида.":
-        "Heights raise the surface and shade the slopes. Earth heights "
-        "come from Mapzen Terrain Tiles, Mars heights from MOLA, Moon "
-        "heights from LOLA. Without terrain the globe is smooth and no "
-        "heights are loaded. Vertical exaggeration is in the view "
-        "properties.",
     "Без флажка глобус показывает новую подложку, масштаб рельефа и слои "
     "проекта после кнопки «Обновить». С флажком он обновляется сам после "
     "каждой смены настроек и каждой правки данных, стиля и порядка слоёв. "
@@ -2653,17 +2590,6 @@ EN = {
     "и скрываются по своему времени.":
         "Play: the interval moves along the slider, placemarks appear and "
         "hide by their time.",
-    "Снимки или карта на поверхности. Esri World Imagery - пример "
-    "подложки, условия её использования задаёт Esri. Свой источник "
-    "добавляет строка «Добавить источник тайлов…».":
-        "Imagery or a map on the surface. Esri World Imagery is an example "
-        "base map, Esri sets its terms of use. The row Add tile source… "
-        "adds a source of your own.",
-    "Свой источник тайлов по адресу. Окно разбирает адрес, "
-    "показывает пробную мозаику и находит самый подробный "
-    "уровень.":
-        "A tile source of your own by its address. The window parses the "
-        "address, shows a test mosaic and finds the most detailed level.",
     "Добавить источник тайлов…": "Add tile source…",
     "Новый источник тайлов": "New tile source",
     "Адрес тайлов в любом виде - шаблон с {z}, {x}, {y}, адрес "
@@ -3672,6 +3598,116 @@ EN = {
     "новую вершину. Правая кнопка открывает меню.":
         "Vertices are dragged with the mouse. The circle in the middle of "
         "a segment adds a new vertex. The right button opens the menu.",
+    "CelesTrak":
+        "CelesTrak",
+    "NASA FIRMS, 24 часа":
+        "NASA FIRMS, 24 hours",
+    "NASA GIBS":
+        "NASA GIBS",
+    "NASA GIBS, {day}":
+        "NASA GIBS, {day}",
+    "NASA GIBS, суша и море":
+        "NASA GIBS, land and sea",
+    "OpenFreeMap":
+        "OpenFreeMap",
+    "{name}. Флажок выключает слой, строка остаётся. Меню «⋯» - "
+    "непрозрачность, в проект QGIS, убрать с глобуса.":
+        "{name}. The check switches the layer off, the row stays. The ⋯ menu "
+        "sets the opacity, saves to the QGIS project or removes the layer "
+        "from the globe.",
+    "{text} · грид":
+        "{text} · grid",
+    "{text} · рельеф":
+        "{text} · relief",
+    "Видимое на глобусе слоем в проект QGIS - объекты в рамке вида или "
+    "картинка карты.":
+        "What is on the globe as a layer in the QGIS project - features in "
+        "the view frame or the map picture.",
+    "Все карты и слои каталога.":
+        "All maps and layers of the catalogue.",
+    "Всё, что сейчас на глобусе, - слои, слои проекта QGIS, основа и рельеф. "
+    "Кнопка «Добавить данные» открывает каталог карт NASA, погоды, слоёв недр "
+    "и инфраструктуры.":
+        "Everything on the globe now - layers, QGIS project layers, the base "
+        "map and relief. The Add data button opens the catalogue of NASA "
+        "maps, weather, subsurface and infrastructure layers.",
+    "Добавить данные":
+        "Add data",
+    "Карта на глобусе - одна":
+        "One map on the globe",
+    "Каталог карт и слоёв - карты NASA, прогноз погоды, пожары, небо, недра, "
+    "инфраструктура, анализ рельефа и строки векторной основы. Каталог встаёт "
+    "на место списка, глобус остаётся виден.":
+        "The catalogue of maps and layers - NASA maps, weather forecast, "
+        "fires, sky, subsurface, infrastructure, terrain analysis and the "
+        "vector base rows. The catalogue takes the place of the list, the "
+        "globe stays visible.",
+    "Назад к списку слоёв":
+        "Back to the layer list",
+    "Отметка показывает слой на глобусе, видимость на карте QGIS не меняется. "
+    "Двойной щелчок переносит к слою, меню «⋯» - перелёт, прозрачность, роль "
+    "на глобусе и свойства.":
+        "The check shows the layer on the globe, its visibility on the QGIS "
+        "map does not change. Double-clicking flies to the layer, the ⋯ menu "
+        "flies there, sets opacity, the role on the globe and opens "
+        "properties.",
+    "Проект QGIS":
+        "QGIS project",
+    "Свернуть или развернуть слои на глобусе.":
+        "Collapse or expand the layers on the globe.",
+    "Слои - включаются вместе":
+        "Layers - switched on together",
+    "Слои текущего проекта QGIS в порядке карты. Отметка показывает слой на "
+    "глобусе, видимость на карте QGIS не меняется. Меню слоя - «⋯» справа или "
+    "правая кнопка.":
+        "Layers of the current QGIS project in map order. The check shows the "
+        "layer on the globe, its visibility on the QGIS map does not change. "
+        "The layer menu is the ⋯ on the right or the right button.",
+    "Флажок показывает карту или слой на глобусе. Строка - описание. Карта на "
+    "глобусе одна, слои включаются вместе с ней.":
+        "The check shows a map or a layer on the globe. A row shows its "
+        "description. There is one map on the globe, layers are switched on "
+        "together with it.",
+    "прогноз NOAA GFS":
+        "NOAA GFS forecast",
+    "снег, рудники, ветер":
+        "snow, mines, wind",
+    "Copernicus 30 м":
+        "Copernicus 30 m",
+    "Векторная основа OpenFreeMap, координатная сетка, 3D-здания и "
+    "горизонтали.":
+        "The OpenFreeMap vector base, the coordinate grid, 3D buildings and "
+        "contours.",
+    "Высоты поднимают поверхность и дают отмывку склонов. Флажок включает "
+    "рельеф, щелчок по названию - выбор высот суши и глубины морей. Высоты "
+    "Земли - Mapzen Terrain Tiles, Марса - MOLA, Луны - LOLA. Вертикальный "
+    "масштаб - в свойствах вида.":
+        "Heights raise the surface and shade the slopes. The check turns "
+        "relief on, a click on the name chooses the land heights and sea "
+        "depths. Earth heights are Mapzen Terrain Tiles, Mars - MOLA, the "
+        "Moon - LOLA. The vertical scale is in the view properties.",
+    "Дно морей и океанов ниже нуля и вода над ним. Без флажка поверхность "
+    "моря ровная, на уровне нуля.":
+        "The sea and ocean floor below zero and the water over it. Without "
+        "the check the sea surface is flat at zero.",
+    "Основа · {name}":
+        "Base map · {name}",
+    "Рельеф · {name}":
+        "Relief · {name}",
+    "Снимки или карта на поверхности. Щелчок по строке - выбор подложки и "
+    "свой источник тайлов. Esri World Imagery - пример подложки, условия её "
+    "использования задаёт Esri.":
+        "Imagery or a map on the surface. A click on the row chooses the base "
+        "map or adds a tile source of your own. Esri World Imagery is an "
+        "example base map, Esri sets its terms of use.",
+    "Электростанции мира, линии электропередачи, подстанции, трубопроводы и "
+    "подводные кабели.":
+        "Power plants of the world, power lines, substations, pipelines and "
+        "submarine cables.",
+    "Энергетика":
+        "Energy",
+    "свой источник":
+        "own source",
 }
 
 _language = None

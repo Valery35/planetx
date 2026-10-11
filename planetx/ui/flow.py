@@ -7,7 +7,8 @@
 струйки белые поверх раскраски скорости. Течения - строка «Течения»
 витрины: геострофические течения NOAA CoastWatch по спутниковой
 альтиметрии, сутки, сетка 0.25°, выборка через 0.5° (ERDDAP
-nesdisSSH1day, около 4 МБ netCDF), струйки цветом скорости. Файл
+nesdisSSH1day, около 4 МБ netCDF), под белыми струйками - заливка
+скорости тайлами слоя вида «currents» (core.flow.speed_rgba). Файл
 читает GDAL в главном потоке.
 
 Шаг частиц - таймер TICK, пока поле есть, окно видно и вид не небо.
@@ -21,17 +22,23 @@ import uuid
 from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 
 from .. import journal
+from ..core import ellipsoid
 from ..core import flow as core
 from ..core.ellipsoid import ecef_to_geodetic
 from ..core.sync import ground_size, view_box
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
+from .viewshed import ResultTiles
 
 TICK = 40  # мс между шагами частиц
-COUNTS = {"wind": 5000, "currents": 4000}
+COUNTS = {"wind": 5000, "currents": 8000}
+HORIZON_SHARE = 0.95  # доля угла до горизонта у круга рождения частиц
 # Типичная скорость поля, м/с: она проходит долю core.flow.SHARE
 # ширины вида за секунду.
 TYPICAL = {"wind": 10.0, "currents": 0.3}
+# Предел шага частиц в клетках поля: у течений поле 0.5° полно вихрей,
+# издалека след петлял. Ветер - без предела.
+CELL_SHARES = {"currents": core.CELL_SHARE}
 DISK_FROM = 3.0e6  # м высоты глаза, выше рамка - видимый диск
 RESET_ZOOM = 2.0  # во сколько раз сменилась ширина вида - частицы заново
 DAYS_KEPT = 6  # полей течений в памяти
@@ -93,6 +100,8 @@ class FlowManager(QObject):
         self.currents_last = ""  # последний готовый день ряда
         self.currents_days = {}  # день - VectorGrid
         self.currents_reply = None
+        self.fill_tiles = None  # картинки тайлов заливки скорости течений
+        self.fill_grid = None  # поле, по которому они считаются
         self.moment = None
         self.day_timer = QTimer(self)
         self.day_timer.setSingleShot(True)
@@ -120,9 +129,11 @@ class FlowManager(QObject):
                 reply.abort()
                 self.view.data_pending = max(0, self.view.data_pending - 1)
             self._set_field("currents", None, keep=True)
+            self._hide_fill()
             return
         if self.fields["currents"] is not None:
             self._start("currents")
+            self._show_fill(self.fields["currents"])
         self._want_day()
 
     def set_moment(self, moment):
@@ -183,8 +194,35 @@ class FlowManager(QObject):
         self.fields["currents"] = grid
         if self.window.extras.get("currents"):
             self._start("currents")
+            self._show_fill(grid)
         if changed:
             self.changed.emit()
+
+    def _show_fill(self, grid):
+        """Заливка скорости течений под струйками. Картинки прежнего дня
+        видны, пока их не заменят новые."""
+        if grid is self.fill_grid and self.fill_tiles is not None:
+            return
+        old = self.fill_tiles
+        tiles = ResultTiles(core.fill_job(grid), ellipsoid.A,
+                            core.speed_rgba, parent=self.window)
+        tiles.loaded.connect(lambda key, rgba, levels:
+                             self.view.add_gibs("currents", key, levels))
+        self.fill_tiles = tiles
+        self.fill_grid = grid
+        self.view.set_gibs("currents", True, tiles, keep=old is not None)
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+
+    def _hide_fill(self):
+        tiles, self.fill_tiles = self.fill_tiles, None
+        self.fill_grid = None
+        if tiles is None:
+            return
+        self.view.set_gibs("currents", False)
+        tiles.abort()
+        tiles.deleteLater()
 
     def currents_span(self):
         """Охват ряда течений (первый, последний день) в секундах UTC или
@@ -222,11 +260,14 @@ class FlowManager(QObject):
         # Высоко над Землёй рамка - по видимому диску: угол от точки
         # под глазом до горизонта, иначе частицы уходили бы на обратную
         # сторону шара.
-        eye_h = float(ecef_to_geodetic(view.camera.eye)[2])
+        eye_lat, eye_lon, eye_h = (float(x) for x in
+                                   ecef_to_geodetic(view.camera.eye))
         if eye_h > DISK_FROM:
-            reach = 2.0 * core.RADIUS * math.acos(
-                core.RADIUS / (core.RADIUS + eye_h))
-            return view_box(pose.lat, pose.lon, reach, reach, 1.0), width
+            # Круг под глазом до горизонта, чуть уже его: у самого края
+            # диска струйки сливаются.
+            angle = math.degrees(math.acos(
+                core.RADIUS / (core.RADIUS + eye_h))) * HORIZON_SHARE
+            return core.cap_box(eye_lat, eye_lon, angle), width
         return view_box(pose.lat, pose.lon, width, height), width
 
     def _tick(self):
@@ -249,15 +290,16 @@ class FlowManager(QObject):
                 self.widths[kind] = width
             else:
                 particles.box = box
-            particles.step(field, dt,
-                           core.metres_per_mps(min(width, 2.0e7),
-                                               TYPICAL[kind]))
+            particles.step(field, dt, core.display_metres(
+                min(width, 2.0e7), TYPICAL[kind], field.step, dt,
+                CELL_SHARES.get(kind)))
             self.lines(kind).advance(particles, window._surface_ground,
                                      self.view.store.scale)
         self.view.update()
 
     def close(self):
         self.timer.stop()
+        self._hide_fill()
         if self.currents_reply is not None:
             reply, self.currents_reply = self.currents_reply, None
             reply.abort()

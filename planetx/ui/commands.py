@@ -98,9 +98,10 @@ def build(window):
                 tr("убрать карту") if on else tr("показать карту"),
                 lambda key=key, on=on: window.set_theme("" if on else key),
                 _words(key, *MAP_WORDS))
-        add("open:gallery", tr("Карты и слои"), tr("открыть витрину"),
+        add("open:gallery", tr("Добавить данные"), tr("открыть каталог"),
             window.open_gallery, ("витрина", "каталог", "gallery",
-                                  "nasa", "погода", "weather"))
+                                  "карты и слои", "nasa", "погода",
+                                  "weather", "add data"))
     _tools(window, add, earth)
     _menus(window, add)
     return items, run

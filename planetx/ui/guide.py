@@ -46,8 +46,9 @@ def stops():
             "«снимки» и выберите подсказку. Ctrl+K из любого места окна "
             "ставит курсор в эту строку.")),
         ("layers", tr("Раздел «Слои»"), tr(
-            "Основа, рельеф и слои глобуса. Строка «Карты и слои» "
-            "открывает витрину карт NASA, погоды и слоёв недр.")),
+            "Всё, что сейчас на глобусе, - слои, слои проекта QGIS, "
+            "основа и рельеф. Кнопка «Добавить данные» открывает каталог "
+            "карт NASA, погоды, слоёв недр и инфраструктуры.")),
         ("menu", tr("Меню правой кнопки"), tr(
             "Правая кнопка на глобусе открывает меню точки - что здесь, "
             "снимки Sentinel-2 и Landsat, исторические карты, маршрут, "
@@ -177,17 +178,21 @@ class Guide(QWidget):
             window.set_sidebar(True)
         if target == "layers":
             panel = window.panel
-            panel.sections[2].set_open(True)
+            section = panel.section("base")
+            section.set_open(True)
             # Раскрытый раздел разделитель оставляет высотой заголовка,
             # ему отдаётся треть панели от самого высокого раздела.
             sizes = panel.split.sizes()
-            if len(sizes) == 3 and sizes[2] < LAYERS_MIN:
+            last = panel.sections.index(section)
+            if len(sizes) == len(panel.sections) \
+                    and sizes[last] < LAYERS_MIN:
                 want = max(LAYERS_MIN, sum(sizes) // 3)
-                big = sizes.index(max(sizes[:2]))
-                give = min(want - sizes[2], sizes[big] - LAYERS_MIN)
+                others = [n for n in range(len(sizes)) if n != last]
+                big = max(others, key=lambda n: sizes[n])
+                give = min(want - sizes[last], sizes[big] - LAYERS_MIN)
                 if give > 0:
                     sizes[big] -= give
-                    sizes[2] += give
+                    sizes[last] += give
                     panel.split.setSizes(sizes)
 
     def target(self, name):

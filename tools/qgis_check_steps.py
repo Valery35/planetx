@@ -931,18 +931,17 @@ def gallery_open():
     window.set_body("earth")
     window.set_theme("")
     panel = window.panel
-    out = {"headers": [panel.geo.topLevelItem(i).text(0)
-                       for i in range(panel.geo.topLevelItemCount())],
-           "row": panel.gallery_item.text(0)}
-    homes = {}
-    for key, item in panel.extra_items.items():
-        parent = item.parent()
-        homes[key] = parent.text(0) if parent is not None else None
-    out["homes"] = homes
-    panel._geo_clicked(panel.gallery_item, 0)
+    out = {"tops": [panel.geo.topLevelItem(i).text(0)
+                    for i in range(panel.geo.topLevelItemCount())
+                    if not panel.geo.topLevelItem(i).isHidden()],
+           "row": panel_row(window)}
+    # Кнопка «Добавить данные» ставит каталог на место списка.
+    panel.add_data.click()
     gallery = window.gallery
     out["visible"] = gallery.isVisible()
-    out["items"] = gallery.list.count()
+    out["in_panel"] = panel.layers_stack.currentWidget() is gallery
+    out["items"] = len(gallery.items)
+    out["panel_width"] = window.splitter.sizes()[0]
     state["gallery_started"] = time.monotonic()
     result["gallery"] = out
 
@@ -962,9 +961,9 @@ def gallery_wait():
     out["snow_text"] = snow.text()
     gallery._clicked(snow)
     out["chosen"] = [window.theme_key, panel_row(window)]
-    from planetx.ui.nasamaps import KEY_ROLE
-    out["selected"] = [i.data(KEY_ROLE)
-                       for i in gallery.list.selectedItems()]
+    from qgis.PyQt.QtCore import Qt
+    out["selected"] = [k for k, (i, _, _) in gallery.items.items()
+                       if i.checkState() == Qt.CheckState.Checked]
     gallery._clicked(gallery.items["temperature"][0])
     out["temperature"] = [window.theme_key,
                           bool(window.extras.get("temperature")),
@@ -1014,12 +1013,15 @@ def gallery_wait():
     gallery.grab().save(os.path.join(TEMP, "planetx_gallery.png"))
     gallery.list.scrollToItem(gallery.items["aspect"][0])
     gallery.grab().save(os.path.join(TEMP, "planetx_gallery_layers.png"))
-    window.panel.geo.grab().save(os.path.join(TEMP, "planetx_layers.png"))
     gallery.close()
+    out["closed"] = [not gallery.isVisible(), window.splitter.sizes()[0]]
+    window.panel.geo.grab().save(os.path.join(TEMP, "planetx_layers.png"))
 
 
 def panel_row(window):
-    return window.panel.gallery_item.text(0)
+    """Строка карты каталога в списке «Слоёв», "" - её нет."""
+    row = window.panel.active_rows.get("map")
+    return row.text(0) if row is not None else ""
 
 
 @check(500)
@@ -2361,31 +2363,31 @@ def multi_select():
 @check(300)
 def accordion():
     # Разделы панели сворачиваются, место отходит открытым разделам.
-    # Слои проекта лежат в своём списке, не в дереве меток.
+    # Слои проекта - группа «Проект QGIS» списка «Слоёв», не дерево
+    # меток. Решение автора от 12 октября 2026 года.
     from qgis.core import QgsVectorLayer
     window = state["window"]
     panel = window.panel
     layer = QgsVectorLayer("Point?crs=EPSG:4326", "Слой раздела", "memory")
     QgsProject.instance().addMapLayer(layer)
     QgsApplication.processEvents()
-    places, project, base = panel.sections
+    places, base = panel.sections
     out = {"titles": [s.header.text() for s in panel.sections],
            "layer_in_own_list": any(
-               panel.layers.topLevelItem(i).text(0).startswith(
-                   "Слой раздела")
-               for i in range(panel.layers.topLevelItemCount())),
+               row.text(0).startswith("Слой раздела")
+               for row in panel.project_rows()),
            "tree_tops": panel.list.topLevelItemCount()}
     before = [s.height() for s in panel.sections]
-    project.set_open(False)
+    places.set_open(False)
     QgsApplication.processEvents()
     after = [s.height() for s in panel.sections]
     out["heights_open"] = before
-    out["heights_project_closed"] = after
-    out["closed_is_header"] = after[1] <= project.header.sizeHint().height()
-    out["others_grew"] = after[0] + after[2] > before[0] + before[2]
-    project.set_open(True)
+    out["heights_places_closed"] = after
+    out["closed_is_header"] = after[0] <= places.header.sizeHint().height()
+    out["others_grew"] = after[1] > before[1]
+    places.set_open(True)
     QgsApplication.processEvents()
-    out["reopened"] = project.height() > project.header.sizeHint().height()
+    out["reopened"] = places.height() > places.header.sizeHint().height()
     asked = []
     window.properties = None
     window._show_properties = lambda: asked.append(1)
@@ -2401,12 +2403,15 @@ def accordion():
     window.toolbar.properties_clicked.connect(window._show_properties)
     flown = []
     panel.fly_to_layer.connect(lambda layer: flown.append(layer.name()))
-    row = next(panel.layers.topLevelItem(i)
-               for i in range(panel.layers.topLevelItemCount())
-               if panel.layers.topLevelItem(i).text(0).startswith(
-                   "Слой раздела"))
-    panel.layers.itemDoubleClicked.emit(row, 0)
+    row = next(row for row in panel.project_rows()
+               if row.text(0).startswith("Слой раздела"))
+    window.view.navigator.flight = None
+    panel.geo.itemDoubleClicked.emit(row, 0)
     out["double_click_flies"] = flown
+    # Слой пустой: перелёта нет. На прежнем коде охват без объектов
+    # давал перелёт в NaN, QGIS 3.36 показывал ошибку paintGL каждый
+    # кадр, 12 октября 2026 года.
+    out["empty_layer_no_flight"] = window.view.navigator.flight is None
     panel.grab().save(os.path.join(TEMP, "planetx_panel.png"))
     QgsProject.instance().removeMapLayer(layer.id())
     result["accordion"] = out
@@ -5535,7 +5540,8 @@ def themes_time_check():
     window.set_extra("quakes", True)
     out["quakes_started"] = time.monotonic()
     geo = window.panel.geo
-    geo.scrollToItem(window.panel.gallery_item)
+    geo.scrollToItem(window.panel.active_rows.get("map")
+                     or geo.topLevelItem(0))
     geo.grab().save(os.path.join(TEMP, "planetx_theme_panel.png"))
 
 
@@ -5569,11 +5575,11 @@ def themes_off():
     out["back_on_earth"] = window.view.gibs["theme"].shown
     # Строка витрины в «Слоях» называет карту на глобусе.
     panel = window.panel
-    out["row_on"] = panel.gallery_item.text(0)
+    out["row_on"] = panel_row(window)
     window.set_theme("")
     out["bar_after_off"] = window.timebar.track.point
     window.myplaces.set_visible_many(state.pop("timed_places", {}))
-    out["row_off"] = panel.gallery_item.text(0)
+    out["row_off"] = panel_row(window)
     out["off"] = {"legend": window.theme_legend.isVisible(),
                   "shown": window.view.gibs["theme"].shown,
                   "loader": "theme" in window.gibs_loaders}
@@ -6213,18 +6219,25 @@ def infra_active():
     window = state["window"]
     view = window.view
     panel = window.panel
+    # Строки включённого - в одну линию, без виджетов, решение автора
+    # от 12 октября 2026 года. Непрозрачность - в меню «⋯» строки.
+    heights = {key: panel.geo.visualItemRect(item).height()
+               for key, item in panel.active_rows.items()}
     out = {"rows": list(panel.active_rows),
-           "shown": not panel.active_header.isHidden()}
+           "widgets": sum(panel.geo.itemWidget(item, 0) is not None
+                          for item in panel.active_rows.values()),
+           "heights": sorted(set(heights.values())),
+           "menu": {key: panel._active_values.get(key)
+                    for key in ("plants", "infra_osm")}}
     panel.grab().save(os.path.join(TEMP, "planetx_active_panel.png"))
-    slider = panel.active_rows["plants"][1]
-    slider.setValue(40)
+    panel.active_opacity.emit("plants", 0.4)
     out["plants_opacity"] = round(view.plants.opacity, 2)
-    panel.active_rows["infra_osm"][1].setValue(50)
+    panel.active_opacity.emit("infra_osm", 0.5)
     QApplication.processEvents()
     out["infra_opacity"] = round(window.infra_lines.opacity(), 2) \
         if window.infra_lines is not None else None
-    slider.setValue(100)
-    panel.active_rows["infra_osm"][1].setValue(100)
+    panel.active_opacity.emit("plants", 1.0)
+    panel.active_opacity.emit("infra_osm", 1.0)
     folder = os.path.join(TEMP, "planetx_active")
     os.makedirs(folder, exist_ok=True)
     counts = {}
@@ -6245,14 +6258,14 @@ def infra_active():
             QgsProject.instance().removeMapLayer(node.layerId())
         root.removeChildNode(group)
     # Снятие флажка строки убирает слой.
-    panel.active_rows["plants"][2].setChecked(False)
+    panel.set_active_checked("plants", False)
     QApplication.processEvents()
     QApplication.processEvents()
     # Снятый флажок выключает слой, строка остаётся до «Убрать».
     out["plants_off"] = not window.extras.get("plants") \
         and "plants" in panel.active_rows \
-        and not panel.active_rows["plants"][2].isChecked()
-    panel.active_rows["plants"][2].setChecked(True)
+        and not panel.active_checked("plants")
+    panel.set_active_checked("plants", True)
     QApplication.processEvents()
     QApplication.processEvents()
     out["plants_back"] = bool(window.extras.get("plants"))
@@ -6648,7 +6661,7 @@ def guide_tour():
     guide = window.guide
     out = {"setting": QgsSettings().value(GUIDE_KEY, False, type=bool),
            "stops": []}
-    window.panel.sections[2].set_open(False)
+    window.panel.section("base").set_open(False)
     for n in range(len(guide.items)):
         guide.show_stop(n)
         # Раздел раскрывается за проход цикла событий, вырез считается
@@ -6662,7 +6675,7 @@ def guide_tour():
             "hole": [hole.x(), hole.y(), hole.width(), hole.height()],
             "inside": window.rect().contains(box),
             "next": guide.next.text()})
-    out["layers_open"] = window.panel.sections[2].is_open()
+    out["layers_open"] = window.panel.section("base").is_open()
     out["action"] = [h.text for h in window.search_suggestions("знакомство")
                      if h.kind == "action"]
     guide.next.click()
@@ -9612,8 +9625,9 @@ def layer_click():
                     for n in range(3)]
     QgsProject.instance().addMapLayers(layers_added)
     window._show_layers()
-    layers = window.panel.layers
-    out["panel_rows"] = layers.topLevelItemCount()
+    # Слои проекта - группа «Проект QGIS» списка «Слоёв».
+    layers = window.panel.geo
+    out["panel_rows"] = len(window.panel.project_rows())
 
     def click(tree, item):
         rect = tree.visualItemRect(item)
@@ -9623,12 +9637,14 @@ def layer_click():
 
     for follow in (False, True):
         window.follow = follow
-        for i in range(layers.topLevelItemCount()):
-            item = layers.topLevelItem(i)
+        for item in window.panel.project_rows():
             if not item.text(0).startswith("click "):
                 continue
             before = str(item.checkState(0))
             click(layers, item)
+            # Флажки слоёв уходят окну через проход цикла событий.
+            QgsApplication.processEvents()
+            QgsApplication.processEvents()
             alive = not _deleted(item)
             out["clicks"].append((
                 follow, alive, before,
@@ -11232,13 +11248,11 @@ def tile_source():
     from planetx.ui.tilesource import TileSourceDialog
     window = state["window"]
     panel = window.panel
-    group = panel.base_group
-    rows = [group.child(i).text(0) for i in range(group.childCount())]
-    osm = next(i for i in range(group.childCount())
-               if group.child(i).text(0) == "OpenStreetMap")
-    panel._geo_clicked(group.child(osm), 0)
+    rows = panel.basemap_names()
+    osm = rows.index("OpenStreetMap")
+    panel._basemap_activated(osm)
     result["tile_source"] = {"rows": rows, "after_click": window.source.name}
-    panel._geo_clicked(group.child(0), 0)
+    panel._basemap_activated(0)
     pose = window.view.navigator.pose
     dialog = TileSourceDialog(window, (pose.lat, pose.lon))
     dialog.show()
@@ -11295,9 +11309,7 @@ def tile_source_save():
     out["saved"] = dialog.saved_name
     out["source"] = window.source.name
     out["source_url"] = window.source.url
-    group = window.panel.base_group
-    out["rows_after"] = [group.child(i).text(0)
-                         for i in range(group.childCount())]
+    out["rows_after"] = window.panel.basemap_names()
     settings = QgsSettings()
     prefix = "connections/xyz/items/%s/" % dialog.saved_name
     out["settings_url"] = settings.value(prefix + "url")
@@ -11314,7 +11326,7 @@ def tile_source_check():
         os.path.join(TEMP, "planetx_tile_source.png"))
     window.panel.geo.grab().save(os.path.join(TEMP, "planetx_geo.png"))
     # Подложка по умолчанию обратно, подключение убирается.
-    window.panel._geo_clicked(window.panel.base_group.child(0), 0)
+    window.panel._basemap_activated(0)
     settings = QgsSettings()
     prefix = "connections/xyz/items/%s/" % out["saved"]
     for key in settings.allKeys():
@@ -11324,51 +11336,43 @@ def tile_source_check():
 
 @check(500)
 def basemap_checkbox():
-    # Щелчок мышью по флажку подложки. До 2 октября 2026 года флажок
-    # выбирал подложку, строки группы пересоздавались, и Qt присылал
-    # itemClicked без строки - AttributeError в _geo_clicked, нашёл
-    # автор на QGIS 3.40.15. Ошибки слотов идут в sys.excepthook.
-    from qgis.PyQt.QtCore import Qt
-    from qgis.PyQt.QtTest import QTest
-    from qgis.PyQt.QtWidgets import QStyle, QStyleOptionViewItem
-    from planetx.qt_compat import enum
+    """Строки «Основа» и «Рельеф» наверху списка «Слоёв», выбор - меню
+    строки, решение автора от 12 октября 2026 года. Пункт «Добавить
+    источник тайлов…» открывает окно и подложку не меняет. До
+    12 октября здесь проверялся флажок подложки, который пересоздавал
+    свою строку."""
+    from planetx.ui.panel import ADD_SOURCE, MORE_ROLE, RELIEF
     window = state["window"]
     panel = window.panel
-    base = next(s for s in panel.sections if s.name == "base")
-    was_open = base.is_open()
-    base.set_open(True)
-    tree = panel.geo
-    group = panel.base_group
-    osm = next(i for i in range(group.childCount())
-               if group.child(i).text(0) == "OpenStreetMap")
-    row = group.child(osm)
-    tree.scrollToItem(row)
-    QgsApplication.processEvents()
-    option = QStyleOptionViewItem()
-    option.rect = tree.visualItemRect(row)
-    option.features |= enum(QStyleOptionViewItem, "ViewItemFeature",
-                            "HasCheckIndicator")
-    box = tree.style().subElementRect(
-        enum(QStyle, "SubElement", "SE_ItemViewItemCheckIndicator"),
-        option, tree)
+    names = panel.basemap_names()
+    osm = names.index("OpenStreetMap")
+    asked = []
+    panel.add_source_requested.disconnect()
+    panel.add_source_requested.connect(lambda: asked.append(1))
     caught = []
     hook = sys.excepthook
     sys.excepthook = lambda kind, value, tb: caught.append(repr(value))
     try:
-        QTest.mouseClick(tree.viewport(),
-                         enum(Qt, "MouseButton", "LeftButton"),
-                         enum(Qt, "KeyboardModifier", "NoModifier"),
-                         box.center())
+        panel._basemap_activated(osm)
+        source = window.source.name
+        panel._basemap_activated(ADD_SOURCE)
         QgsApplication.processEvents()
     finally:
         sys.excepthook = hook
+        panel.add_source_requested.disconnect()
+        panel.add_source_requested.connect(window.add_tile_source)
+    relief = panel.geo_items[RELIEF]
     result["basemap_checkbox"] = {
-        "visible": not option.rect.isEmpty(),
-        "source": window.source.name,
-        "same_row": group.child(osm) is row,
+        "rows": names, "source": source, "add_asked": len(asked),
+        "after_add": window.source.name,
+        "base_text": panel.base_item.text(0),
+        "top": [panel.geo.topLevelItem(i).text(0) for i in range(2)],
+        "menu_rows": [panel.base_item.data(0, MORE_ROLE),
+                      relief.data(0, MORE_ROLE)],
+        "relief_text": relief.text(0),
+        "relief_models": [k for k, _, _ in panel._relief_models],
         "errors": caught}
-    panel._geo_clicked(group.child(0), 0)
-    base.set_open(was_open)
+    panel._basemap_activated(0)
 
 
 @check(2000)

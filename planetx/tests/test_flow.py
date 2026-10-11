@@ -89,9 +89,61 @@ class TestFlow(unittest.TestCase):
             flow.day_seconds("2001-01-01"), last), flow.CURRENTS_FIRST)
 
     def test_current_colors(self):
-        colors = flow.current_colors([0.0, 0.5, 10.0])
-        self.assertEqual(tuple(colors[1]), (140.0, 255.0, 140.0))
-        self.assertEqual(tuple(colors[2]), (255.0, 60.0, 90.0))
+        colors = flow.current_colors([0.0, 0.4, 10.0])
+        self.assertEqual(tuple(colors[1]), (40.0, 200.0, 170.0))
+        self.assertEqual(tuple(colors[2]), (230.0, 40.0, 70.0))
+
+    def test_speed_fill_tile(self):
+        # Заливка скорости под струйками течений: суша прозрачна, быстрая
+        # вода непрозрачнее медленной, цвет с премноженной альфой.
+        row = [0.05, 0.05, 1.0, 1.0, np.nan, np.nan]
+        u = np.array([row, row])
+        grid = flow.VectorGrid(u, np.zeros_like(u), 0.0, 1.0, 1.0)
+        lats = np.array([[0.5, 0.5, 0.5]])
+        lons = np.array([[0.5, 2.5, 4.5]])
+        rgba = flow.speed_rgba(flow.fill_job(grid), lats, lons)
+        self.assertEqual(rgba.shape, (1, 3, 4))
+        slow, fast, land = rgba[0]
+        self.assertEqual(land[3], 0)
+        self.assertLess(slow[3], fast[3])
+        self.assertTrue(np.all(fast[:3] <= fast[3]))
+
+    def test_cap_spawn_stays_in_visible_circle(self):
+        # Издалека частицы рождаются в видимом круге Земли. Прежде
+        # прямоугольник широт и долгот с 12 800 км захватывал обратную
+        # сторону шара, видна была треть частиц, 12 октября 2026 года.
+        rng = np.random.default_rng(3)
+        box = flow.cap_box(35.0, -40.0, 60.0)
+        lats, lons = flow.spawn(20000, box, rng)
+        self.assertTrue(np.all(flow.inside(lats, lons, box)))
+        # Равномерно по площади: в круге половинной площади - половина.
+        half = np.degrees(np.arccos(0.5 * (1.0 + np.cos(np.radians(60.0)))))
+        share = np.mean(flow.inside(lats, lons,
+                                    flow.cap_box(35.0, -40.0, half)))
+        self.assertAlmostEqual(share, 0.5, delta=0.02)
+        # Точка за кругом снаружи, круг через линию перемены дат.
+        self.assertFalse(flow.inside(np.array([35.0]), np.array([140.0]),
+                                     box)[0])
+        pacific = flow.cap_box(0.0, 179.0, 10.0)
+        self.assertTrue(flow.inside(np.array([0.0]), np.array([-175.0]),
+                                    pacific)[0])
+
+    def test_far_view_step_stays_inside_cell_share(self):
+        # Издалека типичная скорость за шаг проходит не больше
+        # CELL_SHARE клетки поля, иначе след петлял через вихри, снимок
+        # автора от 12 октября 2026 года. На прежней скорости по доле
+        # ширины вида шаг с 13 000 км - 1.1 клетки 0.5°.
+        dt, typical, step = 0.04, 0.3, 0.5
+        cell = np.radians(step) * flow.RADIUS
+        far = flow.display_metres(1.3e7, typical, step, dt, flow.CELL_SHARE)
+        self.assertLessEqual(far * typical * dt / cell,
+                             flow.CELL_SHARE + 1e-9)
+        # Вблизи предел не действует: доля ширины вида прежняя.
+        near = flow.display_metres(5.0e5, typical, step, dt, flow.CELL_SHARE)
+        self.assertAlmostEqual(near, flow.metres_per_mps(5.0e5, typical))
+        # Без доли - прежняя скорость.
+        self.assertAlmostEqual(flow.display_metres(1.3e7, typical, step, dt),
+                               flow.metres_per_mps(1.3e7, typical))
 
 
 if __name__ == "__main__":
