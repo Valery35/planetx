@@ -16,7 +16,7 @@ import math
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsProject, QgsRenderContext,
                        QgsVectorLayer, QgsWkbTypes)
-from qgis.PyQt.QtCore import QObject, QTimer
+from qgis.PyQt.QtCore import QObject, Qt, QTimer
 from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
                                  QDoubleSpinBox, QFormLayout, QLabel)
 
@@ -120,13 +120,29 @@ class ExtrudeManager(QObject):
         settings = read_extrude()
         dialog = ExtrudeDialog(layer, settings.get(layer.id(), {}),
                                self.window)
-        if not dialog.exec():
+        dialog.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        layer_id = layer.id()
+        dialog.finished.connect(
+            lambda result, d=dialog: self._configured(layer_id, d, result))
+        # Окно - в панели свойств окна глобуса (ui/sidepanel.py).
+        side = getattr(self.window, "side", None)
+        if side is not None:
+            side.host(dialog)
+        else:
+            dialog.show()
+        return dialog
+
+    def _configured(self, layer_id, dialog, result):
+        """Окно «Выдавливание» закрыто. «OK» - настройки слоя в проект,
+        пересборка."""
+        if not result:
             return
+        settings = read_extrude()
         value = dialog.settings()
         if value is None:
-            settings.pop(layer.id(), None)
+            settings.pop(layer_id, None)
         else:
-            settings[layer.id()] = value
+            settings[layer_id] = value
         write_extrude(settings)
         self.sync(self.shown)
 

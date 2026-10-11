@@ -141,10 +141,11 @@ def view_step(distance, lat, fov_y, height_px, radius, max_level=LEVEL):
 
 
 def contour_rgba(heights, z, y, radius, step=None, glyphs=None,
-                 palette="map"):
+                 palette="map", sea=True):
     """Картинка горизонталей тайла: RGBA uint8 с премноженной альфой.
     glyphs - картинки цифр для подписей утолщённых горизонталей
-    (label_strip), без них подписей нет."""
+    (label_strip), без них подписей нет. sea=False - у тела нет моря,
+    линии ниже нуля цвета суши, а не изобат (Луна, Марс)."""
     h = smooth(np.asarray(heights, dtype=np.float64))
     step = step or tile_step(z, y, radius)
     d_row, d_col, gap, spacing, index = line_fields(h, step)
@@ -153,6 +154,8 @@ def contour_rgba(heights, z, y, radius, step=None, glyphs=None,
     alpha *= np.clip(spacing / FADE, 0.0, 1.0)
     alpha = (alpha * OPACITY).astype(np.float32)
     land, water, shade, index_shade = PALETTES[palette]
+    if not sea:
+        water = land
     rgb = np.where((h < 0.0)[..., None], np.array(water, np.float32),
                    np.array(land, np.float32))
     rgb = rgb * np.where(index, index_shade, shade)[..., None]

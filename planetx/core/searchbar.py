@@ -11,20 +11,29 @@ Nominatim при вводе не спрашивается: правила слу
 автодополнение, запрос к ней уходит только по Enter.
 
 Подсказка - Suggestion. Порядок - сначала совпадение с началом названия,
-потом с началом слова, потом внутри слова. При равенстве - метки, небо,
-история, короче выше.
+потом с началом слова, потом внутри слова. При равенстве - метки
+и действия, небо, история, короче выше.
+
+Действия модуля - слои, карты, окна, демо - тоже подсказки, вид
+"action". Просьба автора от 11 октября 2026 года - «хороший интерфейс
+над пачкой возможностей»: строка «Поиск» и Ctrl+K находят любую
+возможность по названию или по слову из words.
 """
 import re
 from collections import namedtuple
 
-Suggestion = namedtuple("Suggestion", "kind text key lat lon fov")
+Suggestion = namedtuple("Suggestion", "kind text key lat lon fov note words",
+                        defaults=("", ()))
 Suggestion.__doc__ = """Подсказка строки поиска.
 
 kind - "place" (своя метка, key - её ключ), "star", "constellation"
 (lat - склонение, lon - прямое восхождение, градусы, fov - поле
-зрения), "history" (text - прежний запрос). text - название."""
+зрения), "history" (text - прежний запрос), "action" (действие модуля,
+key - его ключ, note - что оно сделает, words - другие слова, по
+которым оно находится). text - название."""
 
-KIND_ORDER = {"place": 0, "constellation": 1, "star": 1, "history": 2}
+KIND_ORDER = {"place": 0, "action": 0, "constellation": 1, "star": 1,
+              "history": 2}
 LIMIT = 12  # подсказок в списке
 HISTORY = 30  # запросов в истории
 # Поле зрения при перелёте к объекту неба, градусы - выбор помощника.
@@ -55,15 +64,33 @@ def rank(query, name):
     return None
 
 
-def suggestions(query, places=(), history=(), sky=(), limit=LIMIT):
+def action_rank(query, item):
+    """Насколько действие подходит к query: лучшее из названия и слов
+    words, у слов на ступень ниже названия. query уже в norm."""
+    best = rank(query, item.text)
+    for word in item.words:
+        r = rank(query, word)
+        if r is not None:
+            r += 1
+            best = r if best is None else min(best, r)
+    return best
+
+
+def suggestions(query, places=(), history=(), sky=(), limit=LIMIT,
+                actions=()):
     """Подсказки к query. places - (ключ, название, широта, долгота),
     history - прежние запросы от новых к старым, sky - Suggestion
-    звёзд и созвездий. Пустой query - последние запросы истории."""
+    звёзд и созвездий, actions - Suggestion действий модуля. Пустой
+    query - последние запросы истории."""
     q = norm(query)
     if not q:
         return [Suggestion("history", h, None, None, None, None)
                 for h in list(history)[:limit]]
     found = []
+    for item in actions:
+        r = action_rank(q, item)
+        if r is not None:
+            found.append((r, item))
     for key, name, lat, lon in places:
         r = rank(q, name)
         if r is not None:
@@ -93,9 +120,13 @@ def suggestions(query, places=(), history=(), sky=(), limit=LIMIT):
 
 
 def exact(query, items):
-    """Подсказки, чьё название совпадает с query целиком."""
+    """Подсказки, чьё название совпадает с query целиком. У действия
+    совпадение и с любым словом words."""
     q = norm(query)
-    return [s for s in items if q and norm(s.text) == q]
+    return [s for s in items
+            if q and (norm(s.text) == q
+                      or (s.kind == "action"
+                          and any(norm(w) == q for w in s.words)))]
 
 
 def drop_repeats(items):

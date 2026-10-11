@@ -44,6 +44,23 @@ sits in the top left corner of the view, the data source credits in the
 bottom right corner. The border between the panel and the view is
 dragged with the mouse.
 
+The properties of a placemark, folder, image, water body bathymetry
+and layer extrusion open in the panel to the right of the view. The
+view narrows by its width, the panel width is changed with the
+splitter and remembered. The panel holds one properties window. A
+new one closes the previous one with its Cancel - changes of the
+previous one without OK are not saved. The ✕ button in the panel
+header works as Cancel.
+
+When the window opens for the first time in a QGIS profile, an
+introduction to the plugin runs - five hints over the window. They show
+the globe under the mouse, the Search field, the Layers section, the
+right-click menu and the time slider. A hint shades the window except
+its place, and the globe under it can be tried. The Back and Next
+buttons turn the hints, Close and Escape end the introduction. It is
+repeated from the Search field with the action Getting to know the
+plugin.
+
 ![The globe window over Perm](figures/en/window.jpg)
 
 ### Icon bar
@@ -179,15 +196,22 @@ of the globe together with the elevation.
 - The found place carries a red pin. Clearing the field removes the pin
   and closes the list.
 
-Suggestions of three kinds appear below the field while typing:
+Suggestions of four kinds appear below the field while typing:
 
 - Placemarks of My Places on the body on the screen with a matching
   name.
+- Actions of the plugin - layers, gallery maps, sets, windows, icon bar
+  tools, demos and globe bodies. The suggestion names the action and
+  what it will do, for example "Currents - turn on" or "Ruler - open
+  the window". An action is also found by a related word - "power
+  lines", "power plants", "imagery", "contours", "iss".
 - Earlier queries.
 - Stars and constellations when the sky view is open.
 
 A click on a suggestion or Enter on it starts a flight to the placemark
-or the sky object, an earlier query is searched again. The Down key
+or the sky object or runs the action, an earlier query is searched
+again. Ctrl+K from anywhere in the globe window puts the cursor into
+the field and shows the layers that are on and the earlier queries. The Down key
 moves into the list of suggestions, in an empty field it shows the
 earlier queries. Escape closes the list. Place names from the network
 are not suggested while typing. The Nominatim service takes a query
@@ -199,9 +223,11 @@ Enter in the field handles the query in this order:
 2. The exact name of an own placemark starts a flight to it with no
    network request. In the sky view the name of a star or
    a constellation works the same way.
-3. A request in words goes to the assistant, the Assistant section
+3. The exact name of an action or its word runs the action. Demos do
+   not open on Enter, "Perm" stays a place search.
+4. A request in words goes to the assistant, the Assistant section
    describes it.
-4. Anything else is searched as a place name.
+5. Anything else is searched as a place name.
 
 Queries entered with Enter are kept in the QGIS profile, 30 at most.
 The Clear search history button of the Assistant group in the View
@@ -224,6 +250,7 @@ take effect at once, without the Refresh button.
 
 | Part | Rows |
 |---|---|
+| Set | Layers for a task in one choice, see Sets for a task |
 | Base map | Sources of imagery and maps, an option button selects one, the last row is Add tile source… |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |
 | Maps and layers | The row opens the gallery of maps and layers, see Maps and layers |
@@ -374,6 +401,26 @@ the relief setting itself does not change. The maps lie as tiles in
 the planetx-terrain repository, the first showing of an age needs the
 internet. A new age appears at once in a coarse form and sharpens as
 it loads. When the window opens, the row is off.
+
+#### Sets for a task
+
+The Set row at the top of the section turns on layers for a task in one
+choice. A set turns on its layers and gallery map and turns off the
+other gallery layers and the rows of the Map group. The camera, base
+map, relief and project layers do not change.
+
+| Set | What is on |
+|---|---|
+| Clean globe | Only the base map, relief and stars |
+| Geologist | Plate boundaries, earthquakes, mineral deposits, contours |
+| Miner | Mineral deposits, mining areas, OSM mines and quarries, power lines and pipelines, power plants, contours |
+| Hydrologist | Currents, contours and isobaths, the NASA precipitation map |
+| Historian | The graticule and the window of Rumsey historical maps at the view |
+| Developer | The graticule, 3D buildings and contours - a check of the geometry and heights of own data |
+
+After your own changes of the check boxes the row shows Own choice.
+The sets are also in the Search field - Set "Geologist" and so on.
+Outside the Earth the row is disabled.
 
 #### Maps and layers
 

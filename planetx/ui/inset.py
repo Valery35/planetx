@@ -57,7 +57,8 @@ class DeepSource(basemap.Source):
     def tile_url(self, z, x, y):
         if z > self.max_level:
             z, x, y = ancestor((z, x, y), self.max_level)
-        return basemap.tile_url(self.url, z, x, y)
+        # Действующее зеркало: у высот тел из planetx-terrain оно есть.
+        return basemap.tile_url(self.urls[self.mirror], z, x, y)
 
 
 class Entry:

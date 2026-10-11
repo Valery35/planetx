@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.67.1
+version=0.68.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,21 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.67.1 Old maps are called historical maps throughout the plugin
+changelog=0.68.0 The Search field also finds features of the plugin -
+      layers, maps, windows, tools, demos and bodies. Type “currents”,
+      “ruler” or “images” and choose a suggestion. Ctrl+K from anywhere in
+      the window puts the cursor into the field. Sets for a task - the Set
+      row of the Layers section. Geologist, Miner, Hydrologist, Historian,
+      Developer and Clean globe turn on their layers in one choice. Getting
+      to know the plugin - five hints over the window on the first opening.
+      It is repeated from the Search field. The properties of a placemark,
+      folder, image, bathymetry and extrusion open in the panel to the right
+      of the view instead of separate windows. The globe stays usable under
+      them. Contours on Mars, the Moon and other bodies are thin and smooth
+      up close, lines below zero on bodies without a sea have the land
+      colour. A weather map after a historical map on the time slider no
+      longer gives a Python error.
+      0.67.1 Old maps are called historical maps throughout the plugin
       and the manual. Rumsey maps - the Whole catalogue check box finds a
       map by year or title among all 56 thousand maps. Frames of the listed
       maps are shown on the globe, the Show on the globe button flies to the

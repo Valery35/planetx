@@ -211,6 +211,23 @@ class TestUpsample(unittest.TestCase):
 
 class TestPalette(unittest.TestCase):
 
+    def test_body_without_sea_has_no_isobaths(self):
+        # Луна 11 октября 2026 года: линии ниже нуля шли голубым цветом
+        # изобат. У тела без моря они цвета суши.
+        rows = np.arange(256, dtype=np.float64)[:, None]
+        heights = np.repeat(-3000.0 + rows * 20.0, 256, axis=1)
+        sea = ct.contour_rgba(heights, 5, 10, 1737400.0, step=200.0)
+        dry = ct.contour_rgba(heights, 5, 10, 1737400.0, step=200.0,
+                              sea=False)
+        low = slice(0, 140)
+
+        def blue(rgba):
+            part = rgba[low].reshape(-1, 4).astype(int)
+            lit = part[part[:, 3] > 60]
+            return int(np.sum(lit[:, 2] > lit[:, 0]))
+        self.assertGreater(blue(sea), 0)
+        self.assertEqual(blue(dry), 0)
+
     def test_imagery_detection(self):
         self.assertTrue(ct.is_imagery(
             "Esri World Imagery - пример",

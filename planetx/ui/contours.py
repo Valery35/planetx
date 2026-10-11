@@ -149,7 +149,7 @@ class ContourSource(DeepSource):
         level = self.level_of((z, x, y))
         if z > level:
             z, x, y = ancestor((z, x, y), level)
-        return basemap.tile_url(self.url, z, x, y)
+        return basemap.tile_url(self.urls[self.mirror], z, x, y)
 
 
 class ContourExport(QObject):

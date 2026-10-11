@@ -23,7 +23,7 @@ from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsApplication, QgsCsException, QgsProject,
                        QgsRasterLayer, QgsRectangle, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, QMimeData, Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QIcon, QImage
+from qgis.PyQt.QtGui import QIcon, QImage, QKeySequence
 from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
                                  QLabel, QMessageBox, QSplitter,
                                  QVBoxLayout, QWidget)
@@ -48,7 +48,7 @@ from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
 from ..core.planets import EARTH_PLANET, PLANETS, planet_by_key
 from ..core import assistant as assistant_core
-from ..core import searchbar, skydata
+from ..core import presets, searchbar, skydata
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS, ground_size, view_box
@@ -95,9 +95,12 @@ from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            fetch_json,
                            openfreemap_layer, plate_layer, cable_layer,
                            set_line_groups)
-from ..qt_compat import enum
+from ..qt_compat import QAction, enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
 from .about import show_about
+from . import commands as commands_ui
+from . import guide as guide_ui
+from .sidepanel import SidePanel, save_width, saved_width
 from .identify import Group, IdentifyDialog, identify, point_text
 from .layer_labels import LayerLabels, range_key
 from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
@@ -200,6 +203,15 @@ OPACITY_PAUSE = 300  # мс, наложение пересобирается п�
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
     "contours", "infra_osm", "cables", "fires", "temperature")
+# Строки, которыми управляют наборы под задачу (core/presets.py): слои
+# витрины и строки группы «Карта».
+PRESET_KEYS = tuple(key for key, _ in GALLERY_LAYERS) + commands_ui.MAP_ROWS
+# Горизонтали тел - на столько уровней глубже уровня высот тела, по
+# пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
+# 9 - около 160 м. Выбор помощника.
+BODY_CONTOUR_DEEPER = 4
+# Знакомство с модулем при первом открытии - после первых кадров, мс.
+GUIDE_DELAY = 1500
 DEPOSIT_POLL = 300  # мс между проверками разбора месторождений
 # Шахты OSM: пауза после остановки вида перед запросом тайлов, мс,
 # и пауза после отказа Overpass, с. Выбор помощника.
@@ -368,10 +380,11 @@ def slope_prepare(mode, floor, radius, insets=(), encoding="terrarium"):
 
 
 def contours_prepare(floor, radius, insets=(), encoding="terrarium",
-                     glyphs=None, levels=None, palette="map", store=None):
+                     glyphs=None, levels=None, palette="map", store=None,
+                     sea=True):
     """Работа рабочего потока для тайла горизонталей: высоты Terrarium
     с врезками своего рельефа, линии и подписи core/contours.py
-    цифрами glyphs и мипмапы."""
+    цифрами glyphs и мипмапы. sea=False - тело без моря."""
     def prepare(key, rgba):
         heights = decode(rgba, floor, encoding)
         # Соседи тайла высот - из хранилища вида, только читаются.
@@ -388,7 +401,8 @@ def contours_prepare(floor, radius, insets=(), encoding="terrarium",
         if insets:
             heights = apply_insets(insets, key, heights)
         return mip_chain(contour_rgba(heights, key[0], key[2], radius,
-                                      glyphs=glyphs, palette=palette))
+                                      glyphs=glyphs, palette=palette,
+                                      sea=sea))
     return prepare
 
 
@@ -827,8 +841,15 @@ class GlobeWindow(QWidget):
         self.splitter = splitter
         splitter.addWidget(self.panel)
         splitter.addWidget(self.view)
+        # Панель свойств справа от вида (ui/sidepanel.py): окна свойств
+        # метки, папки, картинки, батиметрии и выдавливания.
+        self.side = SidePanel(self)
+        splitter.addWidget(self.side)
+        splitter.setCollapsible(2, False)
         splitter.setStretchFactor(1, 1)
-        splitter.setSizes([PANEL_WIDTH, 1300])
+        splitter.setSizes([PANEL_WIDTH, 1300, 0])
+        self.side.changed.connect(self._side_changed)
+        splitter.splitterMoved.connect(self._side_moved)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(splitter)
@@ -926,6 +947,23 @@ class GlobeWindow(QWidget):
         self._busy = set()
         self.panel.suggest_source = self.search_suggestions
         self.panel.suggestion_chosen.connect(self.choose_suggestion)
+        # Действия модуля в строке «Поиск» (ui/commands.py): функции
+        # последнего списка подсказок по ключу. Ctrl+K в окне глобуса
+        # ставит курсор в строку и показывает включённое и прежние
+        # запросы.
+        self._actions = {}
+        self.panel.preset_chosen.connect(self.apply_preset)
+        # Знакомство с модулем (ui/guide.py): при первом открытии окна
+        # в профиле, потом - по действию строки «Поиск».
+        self.guide = None
+        if guide_ui.first_time():
+            QTimer.singleShot(GUIDE_DELAY, self.start_guide)
+        find = QAction(self)
+        find.setShortcut(QKeySequence("Ctrl+K"))
+        find.setShortcutContext(
+            enum(Qt, "ShortcutContext", "WindowShortcut"))
+        find.triggered.connect(self.focus_search)
+        self.addAction(find)
         self.panel.layer_toggled.connect(self.set_layer_shown)
         self.panel.geo_changed.connect(self.set_line_groups)
         self.panel.relief_toggled.connect(self.set_relief)
@@ -1747,6 +1785,63 @@ class GlobeWindow(QWidget):
         key = self.gallery_key()
         self.panel.set_theme(key, map_names()[key][0] if key else "")
         self._update_active()
+        if hasattr(self.panel, "set_preset"):
+            planet = getattr(self, "planet", None)
+            self.panel.set_preset(self.current_preset(),
+                                  planet is None or planet.earth)
+
+    def _side_changed(self):
+        """Окно в панели свойств появилось или ушло: место панели
+        берётся у вида или отдаётся ему."""
+        sizes = self.splitter.sizes()
+        if len(sizes) < 3:
+            return
+        want = saved_width() if self.side.dialog is not None else 0
+        if (sizes[2] > 0) == (want > 0):
+            return
+        view = max(sizes[1] + sizes[2] - want, 100)
+        self.splitter.setSizes([sizes[0], view, want])
+
+    def _side_moved(self, pos, index):
+        """Разделитель панели свойств сдвинут - ширина помнится."""
+        sizes = self.splitter.sizes()
+        if len(sizes) >= 3 and self.side.dialog is not None:
+            save_width(sizes[2])
+
+    def start_guide(self):
+        """Знакомство с модулем с первой остановки. Прежнее закрывается."""
+        if not self.isVisible():
+            return
+        if self.guide is not None:
+            self.guide.finish()
+        self.guide = guide_ui.Guide(self)
+        self.guide.start()
+
+    # Наборы слоёв под задачу (core/presets.py).
+
+    def current_preset(self):
+        """Набор, с которым совпадает то, что на глобусе, или ""."""
+        return presets.current(PRESET_KEYS, getattr(self, "extras", {}),
+                               self.gallery_key())
+
+    def apply_preset(self, key):
+        """Включить набор: свои строки и карту, прочие строки наборов
+        выключены, отложенные строки «На глобусе» убраны. Камера,
+        основа, рельеф и слои проекта не меняются."""
+        preset = presets.BY_KEY.get(key)
+        if preset is None:
+            return
+        journal.note("preset {}".format(key))
+        for extra, on in presets.changes(preset, PRESET_KEYS,
+                                         self.extras).items():
+            self.set_extra(extra, on)
+        if self.gallery_key() != preset.theme:
+            self.set_theme(preset.theme)
+        self._parked.clear()
+        self._mark_gallery()
+        if preset.place == "rumsey" and self.planet.earth:
+            pose = self.view.navigator.pose
+            self.rumsey_here(pose.lat, pose.lon)
         gallery = getattr(self, "gallery", None)
         if gallery is not None:
             gallery.refresh()
@@ -2217,13 +2312,27 @@ class GlobeWindow(QWidget):
                 else TERRAIN_MAX
             source = ContourSource(source.url, self.view.store, land)
             levels = source.level_of
-        self.view.gibs["contours"].max_level = CONTOUR_LEVEL \
-            if self.planet.earth else source.max_level
+            deepest = CONTOUR_LEVEL
+        else:
+            # У тел высоты только до уровня тела (5). Глубже тайл
+            # горизонталей - предок, сглаженный и пересчитанный
+            # кубически, как на Земле глубже уровня съёмки. Иначе вблизи
+            # линии растягивались вместе с тайлом уровня 5. Просьба
+            # автора от 11 октября 2026 года.
+            top = source.max_level
+            source = DeepSource(source.name, source.url, top,
+                                source.attribution, missing=source.missing)
+
+            def levels(key, top=top):
+                return min(key[0], top)
+            deepest = min(CONTOUR_LEVEL, top + BODY_CONTOUR_DEEPER)
+        self.view.gibs["contours"].max_level = deepest
         encoding = self._terrain_choice()[1] if self.planet.earth \
             else "terrarium"
         self._set_gibs("contours", True, (source, contours_prepare(
             floor, ellipsoid.A, insets, encoding, digit_glyphs(), levels,
-            self._contour_palette, self.view.store)), cache=True)
+            self._contour_palette, self.view.store,
+            sea=self.planet.earth)), cache=True)
 
     def _palette_for(self, source):
         """Цвета горизонталей по подложке: imagery - снимок, map -
@@ -3879,6 +3988,12 @@ class GlobeWindow(QWidget):
         if own is not None:
             self._fly_suggestion(own)
             return
+        # Название действия целиком - «течения», «линейка» - выполняет
+        # его, как подсказка (ui/commands.py).
+        action = self._exact_action(text) if assistant else None
+        if action is not None:
+            self.run_action(action)
+            return
         # Просьба словами уходит помощнику, название места - Nominatim.
         # Вне Земли Nominatim не работает, туда идёт любой запрос.
         if query and assistant and (assistant_core.is_request(query)
@@ -4063,13 +4178,40 @@ class GlobeWindow(QWidget):
                                                       language)
         return self._sky_objects
 
+    def _search_actions(self):
+        """Действия модуля для подсказок (ui/commands.py). Функции
+        запоминаются до следующего списка. В виде неба действий нет."""
+        if self.view.sky_view is not None:
+            self._actions = {}
+            return []
+        items, self._actions = commands_ui.build(self)
+        return items
+
     def search_suggestions(self, text):
         """Подсказки строки «Поиск» к тексту, их спрашивает панель при
-        вводе. Пустой текст - прежние запросы."""
+        вводе. Пустой текст - включённые слои и карты, потом прежние
+        запросы."""
+        actions = self._search_actions()
+        if not str(text).strip():
+            on = [a for a in actions
+                  if a.key.split(":")[0] in ("layer", "map")
+                  and a.note in (tr("выключить"), tr("убрать карту"))]
+            history = searchbar.suggestions("", history=self.search_history())
+            return (on + history)[:searchbar.LIMIT]
         found = searchbar.suggestions(
             text, self._search_places(), self.search_history(),
-            self._search_sky(), searchbar.LIMIT + searchbar.HISTORY)
+            self._search_sky(), searchbar.LIMIT + searchbar.HISTORY,
+            actions=actions)
         return searchbar.drop_repeats(found)[:searchbar.LIMIT]
+
+    def focus_search(self):
+        """Ctrl+K: боковая панель видна, курсор в строке «Поиск», текст
+        выделен, подсказки открыты."""
+        if self.panel.isHidden():
+            self.set_sidebar(True)
+        self.place.setFocus()
+        self.place.selectAll()
+        self.panel.show_hints(self.place.text())
 
     def _exact_match(self, text):
         """Своя метка, а на небе звезда или созвездие, чьё название
@@ -4081,9 +4223,30 @@ class GlobeWindow(QWidget):
             text, places, sky=sky, limit=len(places) + len(sky) + 1))
         return found[0] if found else None
 
+    def _exact_action(self, text):
+        """Действие, чьё название или слово совпадает с text целиком.
+        Демо по Enter не открываются - «Пермь» остаётся поиском места."""
+        found = [a for a in searchbar.exact(text, self._search_actions())
+                 if not a.key.startswith("demo:")]
+        return found[0] if found else None
+
+    def run_action(self, item):
+        """Выполнить действие подсказки. Строка «Поиск» пустеет."""
+        func = self._actions.get(item.key)
+        if func is None:
+            return
+        journal.note("action {}".format(item.key))
+        self.place.clear()
+        self.panel.hide_hints()
+        func()
+
     def choose_suggestion(self, item):
-        """Выбрана подсказка строки «Поиск». Прежний запрос идёт в строку
-        и ищется заново, к метке и объекту неба начинается перелёт."""
+        """Выбрана подсказка строки «Поиск». Действие выполняется,
+        прежний запрос идёт в строку и ищется заново, к метке и объекту
+        неба начинается перелёт."""
+        if item.kind == "action":
+            self.run_action(item)
+            return
         self.place.setText(item.text)
         if item.kind == "history":
             self.fly(item.text)
@@ -5088,8 +5251,8 @@ class GlobeWindow(QWidget):
         self.view.update()
 
     def edit_bathymetry(self, layer_id):
-        """Окно «Батиметрия водоёма» растра layer_id. OK - растр
-        становится врезкой с батиметрией, «Убрать» - перестаёт."""
+        """Окно «Батиметрия водоёма» растра layer_id в панели свойств.
+        Возвращает окно, итог - _bathymetry_done."""
         layer = QgsProject.instance().mapLayer(layer_id)
         if layer is None:
             return None
@@ -5105,7 +5268,17 @@ class GlobeWindow(QWidget):
                 level = round(level, 1) if math.isfinite(level) else 0.0
         dialog = BathymetryDialog(layer.name(), lakes.get(layer_id), level,
                                   self)
-        result = dialog.exec()
+        dialog.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        dialog.finished.connect(
+            lambda result, d=dialog: self._bathymetry_done(layer_id, d,
+                                                           result))
+        self.side.host(dialog)
+        return dialog
+
+    def _bathymetry_done(self, layer_id, dialog, result):
+        """Окно «Батиметрия водоёма» закрыто: OK - растр врезкой
+        с батиметрией, «Убрать» - без неё, «Отмена» - без перемен."""
+        lakes = read_bathymetry()
         ids = [i for i in read_insets() if i != layer_id]
         if result == BATHY_REMOVE:
             lakes.pop(layer_id, None)
@@ -5113,10 +5286,9 @@ class GlobeWindow(QWidget):
             lakes[layer_id] = dialog.setting()
             ids.append(layer_id)
         else:
-            return None
+            return
         write_bathymetry(lakes)
         self.set_insets(ids)
-        return lakes.get(layer_id)
 
     def sounding_bathymetry(self, layer_id, values=None):
         """Пункт «Батиметрия по промерам…» точечного слоя: растр глубин
@@ -5972,8 +6144,14 @@ class GlobeWindow(QWidget):
                 folder, self.current_view, self,
                 [point for p in self.myplaces.places_in(key)
                  for point in p.shape.points])
-            if dialog.exec():
-                self.myplaces.update(key, dialog.values())
+            dialog.setAttribute(enum(Qt, "WidgetAttribute",
+                                     "WA_DeleteOnClose"))
+
+            def done(result, key=key, dialog=dialog):
+                if result:
+                    self.myplaces.update(key, dialog.values())
+            dialog.finished.connect(done)
+            self.side.host(dialog)
         elif action == "remove":
             answer = QMessageBox.question(
                 self, tr("Удалить папку"), tr(
@@ -6344,9 +6522,7 @@ class GlobeWindow(QWidget):
                 else:
                     self._refresh_shapes()
             dialog.finished.connect(done)
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
+        self.side.host(dialog)
         self._overlay_tool(dialog)
         self._overlay_preview(key)
 
@@ -6435,9 +6611,7 @@ class GlobeWindow(QWidget):
             if place.tour:
                 # Путь облёта на глобусе не рисуется, пока окно закрыто.
                 preview(dialog.preview())
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
+        self.side.host(dialog)
         self._begin_prop_vertices(place, dialog)
 
     def _begin_prop_vertices(self, place, dialog):

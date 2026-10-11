@@ -157,8 +157,11 @@ def file_url(run, hour):
 
 
 def file_path(run, hour):
-    """Путь файла часа hour выпуска run от корня зеркала."""
-    day = datetime.datetime.fromtimestamp(run, datetime.timezone.utc)
+    """Путь файла часа hour выпуска run от корня зеркала. Дата - от
+    начала эпохи сдвигом: fromtimestamp на Windows отказывает моменту
+    до 1970 года (OSError 22), шкала с исторической картой его даёт."""
+    day = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc) \
+        + datetime.timedelta(seconds=run)
     return PATH.format(day=day.strftime("%Y%m%d"), hour=day.hour,
                        step=hour)
 

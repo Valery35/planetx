@@ -38,7 +38,10 @@ from qgis.core import QgsApplication, QgsProject  # noqa: E402
 from qgis.PyQt.QtCore import QTimer  # noqa: E402
 from qgis.utils import iface  # noqa: E402
 
-OUT = os.path.join(TEMP, "planetx_steps.json")
+# PLANETX_STEPS_OUT - свой файл итога, когда два проверочных QGIS идут
+# одновременно.
+OUT = os.environ.get("PLANETX_STEPS_OUT") or os.path.join(
+    TEMP, "planetx_steps.json")
 result = {"errors": []}
 state = {}
 CHECKS = []
@@ -86,7 +89,7 @@ def run(index=0):
     try:
         again = function()
     except (AttributeError, KeyError, RuntimeError, TypeError,
-            ValueError, OSError, ImportError, IndexError):
+            ValueError, OSError, ImportError, IndexError, StopIteration):
         result["errors"].append("%s: %s" % (
             function.__name__, traceback.format_exc().splitlines()[-1]))
         # Полная трассировка - для разбора, в отчёте отдельно.
@@ -222,6 +225,11 @@ def open_globe():
         labels.NEW_ROWS_PER_FRAME = 10 ** 6
         labels.RASTER_TIME = 10.0
     from planetx.plugin import PlanetXPlugin
+    from planetx.ui.guide import GUIDE_KEY
+    from qgis.core import QgsSettings
+    # Знакомство с модулем закрывало бы кадры шагов, его проверяет
+    # свой шаг guide_tour.
+    QgsSettings().setValue(GUIDE_KEY, True)
     plugin = PlanetXPlugin(iface)
     plugin.initGui()
     plugin.run()
@@ -6555,6 +6563,183 @@ def rumsey_check():
         root.removeChildNode(group)
 
 
+BODY_CONTOUR_VIEWS = (
+    ("mars", "far", (18.65, -133.8, 1500000.0, 0.0, 0.0)),
+    ("mars", "near", (18.65, -133.8, 150000.0, 0.0, 40.0)),
+    ("moon", "far", (-43.3, -11.2, 800000.0, 0.0, 0.0)),
+    ("moon", "near", (-43.3, -11.2, 120000.0, 0.0, 40.0)))
+
+
+@check(1000)
+def contours_bodies():
+    """Горизонтали на Марсе (Олимп) и Луне (кратер Тихо) издалека
+    и вблизи: текстуры слоя, кадры, ошибки OpenGL."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    index = state.get("body_contours", 0)
+    out = result.setdefault("contours_bodies", {})
+    if index:
+        body, name, _ = BODY_CONTOUR_VIEWS[index - 1]
+        view = window.view
+        layer = view.gibs["contours"]
+        out[body + "_" + name] = {
+            "textures": len(layer.textures),
+            "levels": sorted({k[0] for k in layer.textures}),
+            "max_level": layer.max_level,
+            "legend": not window.contour_legend.isHidden(),
+            "palette": window._contour_palette,
+            "gl": dict(view.gl_errors)}
+        view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_contours_{}_{}.png".format(body, name)))
+    if index >= len(BODY_CONTOUR_VIEWS):
+        window.set_extra("contours", False)
+        window.set_body("earth")
+        state.pop("body_contours", None)
+        return None
+    body, name, pose = BODY_CONTOUR_VIEWS[index]
+    if window.planet.key != body:
+        window.set_body(body)
+    window.set_extra("contours", True)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(*pose))
+    state["body_contours"] = index + 1
+    return 20000
+
+
+@check(1000)
+def command_bar():
+    """Строка «Поиск» как строка действий: подсказки «течения»
+    и «линейка», Enter по названию включает слой, «Пермь» остаётся
+    поиском места, Ctrl+K ставит курсор в строку."""
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("currents", False)
+    out = {}
+    hints = window.search_suggestions("течения")
+    out["currents_hint"] = [(h.kind, h.text, h.note) for h in hints[:3]]
+    hints = window.search_suggestions("линей")
+    out["ruler_hint"] = [(h.kind, h.text) for h in hints[:3]]
+    window.fly("течения")
+    out["currents_on"] = bool(window.extras.get("currents"))
+    out["text_after"] = window.place.text()
+    window.fly("течения")
+    out["currents_off"] = not window.extras.get("currents")
+    out["perm_action"] = window._exact_action("Пермь") is not None
+    window.place.setText("слово")
+    window.focus_search()
+    out["focus"] = window.place.hasFocus() or not window.isActiveWindow()
+    out["selected"] = window.place.selectedText()
+    window.place.clear()
+    window.panel.hide_hints()
+    out["actions"] = len(window._actions)
+    result["command_bar"] = out
+
+
+@check(1000)
+def presets_apply():
+    """Наборы под задачу: «Геолог» включает свои слои, строка «Набор»
+    его показывает, правка флажка даёт «Свой выбор», «Гидролог» ставит
+    карту осадков, «Чистый глобус» снимает всё."""
+    window = state["window"]
+    window.set_body("earth")
+    out = {}
+    window.apply_preset("geologist")
+    out["geologist"] = sorted(k for k, v in window.extras.items() if v)
+    out["combo"] = window.panel.preset.currentData()
+    window.set_extra("sun", True)
+    out["combo_after_edit"] = window.panel.preset.currentData()
+    window.apply_preset("hydrologist")
+    out["hydro_theme"] = window.gallery_key()
+    out["hydro_on"] = sorted(k for k, v in window.extras.items() if v)
+    out["active_rows"] = list(window.panel.active_rows)
+    hints = window.search_suggestions("горняк")
+    out["miner_hint"] = [(h.kind, h.text) for h in hints[:2]]
+    index = window.panel.preset.findData("miner")
+    window.panel.preset.activated.emit(index)
+    out["miner_by_combo"] = window.current_preset()
+    window.apply_preset("clean")
+    out["clean"] = sorted(k for k, v in window.extras.items() if v)
+    out["clean_theme"] = window.gallery_key()
+    result["presets"] = out
+
+
+@check(1000)
+def guide_tour():
+    """Знакомство с модулем: пять остановок, у каждой - вырез вокруг
+    своего места и окошко внутри окна, раздел «Слои» раскрывается,
+    «Готово» на последней закрывает, настройка помнит показ."""
+    from qgis.core import QgsSettings
+    from planetx.ui.guide import GUIDE_KEY
+    window = state["window"]
+    QgsSettings().setValue(GUIDE_KEY, False)
+    window.start_guide()
+    guide = window.guide
+    out = {"setting": QgsSettings().value(GUIDE_KEY, False, type=bool),
+           "stops": []}
+    window.panel.sections[2].set_open(False)
+    for n in range(len(guide.items)):
+        guide.show_stop(n)
+        # Раздел раскрывается за проход цикла событий, вырез считается
+        # второй раз по таймеру окна.
+        QgsApplication.processEvents()
+        guide._place_if_alive()
+        hole = guide.shade.hole
+        box = guide.geometry()
+        out["stops"].append({
+            "title": guide.title.text(),
+            "hole": [hole.x(), hole.y(), hole.width(), hole.height()],
+            "inside": window.rect().contains(box),
+            "next": guide.next.text()})
+    out["layers_open"] = window.panel.sections[2].is_open()
+    out["action"] = [h.text for h in window.search_suggestions("знакомство")
+                     if h.kind == "action"]
+    guide.next.click()
+    out["closed"] = window.guide is None
+    path = os.path.join(TEMP, "planetx_guide.png")
+    window.start_guide()
+    window.guide.show_stop(1)
+    window.grab().save(path)
+    window.guide.finish()
+    result["guide"] = out
+
+
+@check(1000)
+def side_panel():
+    """Панель свойств справа: свойства метки встают в неё, вид
+    сужается, свойства папки заменяют метку её «Отменой», «OK» папки
+    пишет название, панель прячется, вид возвращает место."""
+    from planetx.core.features import Shape
+    window = state["window"]
+    store = window.myplaces
+    store.add(Shape("point", [(58.0, 56.2)], name="Панель теста"))
+    place = [p for p in store.places if p.name == "Панель теста"][0]
+    folder = store.add_folder("Папка панели теста")
+    out = {"sizes_before": window.splitter.sizes()}
+    window._place_action("properties", place.key)
+    dialog = window.prop_dialogs[place.key]
+    QgsApplication.processEvents()
+    out["hosted"] = window.side.dialog is dialog
+    out["embedded"] = not dialog.isWindow()
+    out["title"] = window.side.title.text()
+    out["sizes_open"] = window.splitter.sizes()
+    dialog.name.setText("Панель теста 2")
+    window._place_action("properties", folder)
+    QgsApplication.processEvents()
+    out["place_closed"] = place.key not in window.prop_dialogs
+    out["place_name"] = store.find(place.key).name
+    folder_dialog = window.side.dialog
+    out["folder_hosted"] = type(folder_dialog).__name__
+    folder_dialog.name.setText("Папка панели 2")
+    folder_dialog.accept()
+    QgsApplication.processEvents()
+    out["folder_name"] = store.find(folder).name
+    out["hidden"] = window.side.isHidden()
+    out["sizes_after"] = window.splitter.sizes()
+    store.remove(place.key)
+    store.remove(folder)
+    result["side_panel"] = out
+
+
 @check(500)
 def mirror_tiles():
     """Тайлы planetx-terrain: первое зеркало - закрытый порт, загрузчик
@@ -7069,12 +7254,12 @@ def ua_check():
 
 @check(3000)
 def oldmaps_open():
-    """Старые карты, демо «Москва, старые карты»: пять планов Wikimedia
-    Commons тайлами XYZ Wikimaps Warper с годами карт."""
+    """Исторические карты, демо «Москва, исторические карты»: пять планов
+    Wikimedia Commons тайлами XYZ Wikimaps Warper с годами карт."""
     window = state["window"]
     action = next(a for a in window.toolbar.demo.menu().actions()
-                  if a.text() in ("Москва, старые карты",
-                                  "Moscow, old maps"))
+                  if a.text() in ("Москва, исторические карты",
+                                  "Moscow, historical maps"))
     action.trigger()
     result["oldmaps"] = {
         "years": sorted(window._map_years.values()),

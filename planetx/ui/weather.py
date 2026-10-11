@@ -122,6 +122,10 @@ class WeatherManager(QObject):
         if self.newest is None:
             self._find_run()
             return
+        # Момент вне ряда прогноза - край ряда. Шкала после исторической
+        # карты стояла в 1813 году, и выпуск выходил до 1970 года.
+        low, high = self.span()
+        self.moment = min(max(self.moment, low), high)
         run = weather.source_run(self.newest, self.moment)
         hour = weather.pick_hour(run, self.moment)
         field = field_of(self.key)

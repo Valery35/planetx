@@ -71,6 +71,22 @@ class TestRuns(unittest.TestCase):
                          "gfs.t12z.pgrb2.0p25.f024")
 
 
+class TestFilePath(unittest.TestCase):
+
+    def test_path_of_run(self):
+        # 2026-10-11 12:00 UTC.
+        run = 1791720000
+        self.assertIn("20261011", w.file_path(run, 6))
+        self.assertIn("t12z", w.file_path(run, 6))
+
+    def test_run_before_1970(self):
+        # Шкала с картой 1813 года: на Windows fromtimestamp отказывал
+        # такому моменту, OSError 22, 11 октября 2026 года.
+        import calendar
+        run = w.run_time(calendar.timegm((1813, 1, 1, 0, 0, 0)))
+        self.assertIn("gfs.18130101/00", w.file_path(run, 0))
+
+
 class TestIndex(unittest.TestCase):
 
     def test_ranges(self):
