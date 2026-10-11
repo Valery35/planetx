@@ -35,10 +35,9 @@ SOURCE_ROLE = URL_ROLE + 1  # индекс подложки в списке ис
 
 def dem_titles():
     """Названия выбора рельефа по core.dem.CHOICES."""
-    return {dem.TERRARIUM: tr("Только тайлы высот"),
-            dem.COPERNICUS: tr("Copernicus DEM 30 м - поверхность с лесом "
-                               "и домами"),
-            dem.GEDTM: tr("GEDTM30 - рельеф без леса и домов")}
+    return {dem.TERRARIUM: tr("Нет - только тайлы высот"),
+            dem.COPERNICUS: tr("Copernicus DEM 30 м - с лесом и домами"),
+            dem.GEDTM: tr("GEDTM30 30 м - земля без леса и домов")}
 
 
 def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
@@ -159,8 +158,8 @@ class SourcesDialog(QDialog):
             settings.value(sources.TERRAIN_KEY, "") or "", self)
         self.terrain_url.setPlaceholderText(sources.TERRAIN_URL)
         self.terrain_url.setToolTip(tr(
-            "Шаблон тайлов высот с {z}, {x}, {y}, например своё "
-            "хранилище или сервер. Пустое поле - рельеф по умолчанию. "
+            "Адрес-шаблон тайлов высот с {z}, {x}, {y}, например свой "
+            "сервер или MapTiler. Пустое поле - тайлы Mapzen по умолчанию. "
             "Глобус просит тайлы до уровня 15, глубже берёт их предков."))
         self.encoding = QComboBox(self)
         self.encoding.addItems(["Terrarium", "Mapbox Terrain-RGB"])
@@ -187,12 +186,24 @@ class SourcesDialog(QDialog):
             "Copernicus DEM - поверхность вместе с лесом и домами, файлы "
             "на AWS. GEDTM30 - рельеф самой земли, один большой файл, "
             "загрузка медленнее. Модель читается из сети по участкам."))
-        terrain = QGroupBox(tr("Рельеф"), self)
+        terrain = QGroupBox(tr("Рельеф - откуда берутся высоты"), self)
         form = QFormLayout(terrain)
-        form.addRow(tr("Модель 30 м"), self.model)
-        form.addRow(tr("Свои тайлы высот"), self.terrain_url)
-        form.addRow(tr("Запись высот"), self.encoding)
-        form.addRow(tr("Подпись"), self.terrain_credit)
+        about = QLabel(tr(
+            "Высоты складываются из трёх слоёв. Тайлы высот покрывают весь "
+            "мир и дно морей. Модель 30 м уточняет сушу вблизи. Свой растр "
+            "проекта заменяет всё в своём охвате."), self)
+        about.setWordWrap(True)
+        form.addRow(about)
+        form.addRow(tr("Тайлы высот по миру"), self.terrain_url)
+        form.addRow(tr("Как записаны высоты"), self.encoding)
+        form.addRow(tr("Подпись тайлов"), self.terrain_credit)
+        form.addRow(tr("Уточнение суши 30 м"), self.model)
+        hint = QLabel(tr(
+            "Свой растр высот, например съёмку карьера, включает пункт "
+            "«Рельеф глобуса» меню растра в разделе «Слои проекта». Растр "
+            "глубин озера - пункт «Батиметрия водоёма…» того же меню."), self)
+        hint.setWordWrap(True)
+        form.addRow(hint)
         form.addRow(self._apply_row("terrain"))
 
         self.vector_url = QLineEdit(

@@ -13,11 +13,12 @@
 import math
 
 from qgis.PyQt.QtCore import QEvent, QPointF, QRectF, Qt, QTimer
-from qgis.PyQt.QtGui import QColor, QFontMetrics, QLinearGradient, QPainter
+from qgis.PyQt.QtGui import (QColor, QFontMetrics, QLinearGradient, QPainter,
+                             QPen)
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
-from ..core import (contours, cutaway, deposits, fires, insolation, quakes,
-                    slope, temperature)
+from ..core import (contours, cutaway, deposits, fires, flow, infra,
+                    insolation, plants, quakes, slope, temperature)
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -388,16 +389,152 @@ def deposit_group_names():
             "other": tr("Прочие")}
 
 
-class DepositLegend(Closable, QWidget):
-    """Шкала месторождений: цвет - группа полезного ископаемого
-    (core.deposits.GROUPS), крупное месторождение мира - большая
-    точка."""
+def fuel_names():
+    """Названия видов топлива электростанций по core.plants.FUELS."""
+    return {"coal": tr("Уголь"), "gas": tr("Газ"), "oil": tr("Мазут"),
+            "nuclear": tr("Атомные"), "hydro": tr("ГЭС"),
+            "wind": tr("Ветер"), "solar": tr("Солнце"),
+            "bio": tr("Биотопливо, отходы, геотермальные"),
+            "other": tr("Прочие")}
+
+
+def infra_names():
+    """Названия классов ЛЭП и трубопроводов по core.infra."""
+    return {"v500": tr("ЛЭП 500 кВ и выше"), "v220": tr("ЛЭП 220-330 кВ"),
+            "v110": tr("ЛЭП 110-150 кВ"),
+            "v35": tr("ЛЭП ниже 110 кВ и без напряжения"),
+            "cable": tr("Силовой кабель"), "telecom": tr("Линия связи"),
+            "gas": tr("Газопровод"), "oil": tr("Нефте- и продуктопровод"),
+            "water": tr("Вода, тепло, стоки"),
+            "other": tr("Трубопровод, вещество не указано")}
+
+
+class _RowsLegend(Closable, QWidget):
+    """Шкала строками: заголовок, кружки или отрезки цветов, подвал."""
+
+    title = ""
+    footer = ""
+
+    def rows(self):
+        """Строки (цвет, подпись, вид «dot» или «line», толщина)."""
+        return []
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        line = QFontMetrics(self.font()).height()
-        self.setFixedSize(BAR_WIDTH + 2 * PAD + 8,
-                          line * (len(deposits.GROUPS) + 3) + PAD)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        texts = [self.title, self.footer] + [r[1] for r in self.rows()]
+        width = max(_text_width(metrics, text) for text in texts if text)
+        self.setFixedSize(max(BAR_WIDTH + 2 * PAD + 8,
+                              width + PAD + 26 + PAD + 16),
+                          line * (len(self.rows()) + 1
+                                  + (1 if self.footer else 0)) + PAD)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        _background(self, painter)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        y = PAD // 2
+        painter.setPen(TEXT)
+        painter.drawText(PAD, y + metrics.ascent(), self.title)
+        y += line
+        for rgb, text, kind, width in self.rows():
+            middle = y + line / 2
+            if kind == "line":
+                pen = QPen(QColor(*rgb), width)
+                painter.setPen(pen)
+                painter.drawLine(QPointF(PAD + 2, middle),
+                                 QPointF(PAD + 20, middle))
+            else:
+                painter.setPen(QColor(*rgb).darker(250))
+                painter.setBrush(QColor(*rgb))
+                painter.drawEllipse(QPointF(PAD + 10, middle), 4.0, 4.0)
+            painter.setPen(TEXT)
+            painter.drawText(PAD + 26, y + metrics.ascent(), text)
+            y += line
+        if self.footer:
+            painter.drawText(PAD, y + metrics.ascent(), self.footer)
+        self._paint_close(painter)
+        painter.end()
+
+
+class PlantLegend(_RowsLegend):
+    """Шкала электростанций: цвет - вид топлива, размер - мощность."""
+
+    def __init__(self, parent=None):
+        self.title = tr("Электростанции WRI")
+        self.footer = tr("Размер точки - мощность")
+        super().__init__(parent)
+
+    def rows(self):
+        names = fuel_names()
+        return [(f[2], names[f[0]], "dot", 0.0) for f in plants.FUELS]
+
+
+class CurrentLegend(_RowsLegend):
+    """Шкала струек течений: цвет - скорость, м/с."""
+
+    def __init__(self, parent=None):
+        self.title = tr("Течения, м/с")
+        self.footer = tr("Геострофические, по спутниковой альтиметрии")
+        super().__init__(parent)
+
+    def rows(self):
+        return [(c, "{:g}".format(s), "line", 2.0)
+                for s, c in flow.CURRENT_STOPS]
+
+
+class InfraLegend(_RowsLegend):
+    """Шкала ЛЭП и трубопроводов OSM: классы напряжения и вещества."""
+
+    def __init__(self, parent=None):
+        self.title = tr("ЛЭП, кабели и трубопроводы OSM")
+        self.footer = tr("Квадрат - подстанция")
+        super().__init__(parent)
+
+    def rows(self):
+        names = infra_names()
+        return [(v[2], names[v[0]], "line", v[3]) for v in infra.VOLTAGES] \
+            + [(c[1], names[c[0]], "line", c[2]) for c in infra.CABLES] \
+            + [(s[2], names[s[0]], "line", infra.PIPE_WIDTH)
+               for s in infra.SUBSTANCES]
+
+
+def mine_kind_names():
+    """Виды шахт и карьеров OSM по ключам core.mining.KINDS."""
+    return {"mine": tr("Шахта или рудник"),
+            "shaft": tr("Ствол шахты"),
+            "quarry": tr("Карьер")}
+
+
+def _text_width(metrics, text):
+    """Ширина строки в пикселях. У QFontMetrics Qt 6 нет width."""
+    if hasattr(metrics, "horizontalAdvance"):
+        return metrics.horizontalAdvance(text)
+    return metrics.width(text)
+
+
+class DepositLegend(Closable, QWidget):
+    """Шкала месторождений: цвет - группа полезного ископаемого
+    (core.deposits.GROUPS), крупное месторождение мира - большая
+    точка, рудник или завод мира - точка поменьше. Ширина - по самой
+    длинной подписи, иначе длинные названия групп обрезались."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        names = deposit_group_names()
+        texts = [tr("Месторождения USGS")] + list(names.values()) \
+            + [tr("Размер точки, цвет - группа:"),
+               tr("Крупное месторождение мира"),
+               tr("Рудник или завод мира")]
+        width = max(_text_width(metrics, text) for text in texts)
+        self.setFixedSize(max(BAR_WIDTH + 2 * PAD + 8,
+                              width + PAD + 18 + PAD + 16),
+                          line * (len(deposits.GROUPS) + 5) + PAD)
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -420,12 +557,23 @@ class DepositLegend(Closable, QWidget):
             painter.setPen(TEXT)
             painter.drawText(PAD + 18, y + metrics.ascent(), name)
             y += line
-        painter.setPen(QColor(*deposits.GROUPS[0][2]).darker(250))
-        painter.setBrush(QColor(*deposits.GROUPS[0][2]))
-        painter.drawEllipse(QPointF(PAD + 8, y + line / 2), 6.5, 6.5)
-        painter.setPen(TEXT)
-        painter.drawText(PAD + 18, y + metrics.ascent(),
-                         tr("Крупное месторождение мира"))
+        # Размер - отдельно от цвета: кружки без цвета группы, иначе
+        # жёлтый кружок читался как благородные металлы, замечание автора
+        # от 11 октября 2026 года.
+        painter.drawText(PAD, y + metrics.ascent(),
+                         tr("Размер точки, цвет - группа:"))
+        y += line
+        for radius, text in ((deposits.MAJOR_SIZE / 2.0 + 1.0,
+                              tr("Крупное месторождение мира")),
+                             (deposits.FACILITY_SIZE / 2.0 + 1.0,
+                              tr("Рудник или завод мира"))):
+            painter.setPen(QColor(60, 60, 60))
+            painter.setBrush(QColor(255, 255, 255, 0))
+            painter.drawEllipse(QPointF(PAD + 8, y + line / 2), radius,
+                                radius)
+            painter.setPen(TEXT)
+            painter.drawText(PAD + 18, y + metrics.ascent(), text)
+            y += line
         self._paint_close(painter)
         painter.end()
 

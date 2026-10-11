@@ -12,8 +12,12 @@
   mrds-csv.zip (23 МБ), не обновляется с 2011 года, в архиве 2022 год.
 - Major mineral deposits of the world, USGS Open-File Report 2005-1294 -
   3 168 крупных месторождений мира, из них 300 в России.
+- Mineral operations outside the United States (minfac) - 6 478 рудников
+  и заводов мира вне США на 2006-2010 годы с оператором и мощностью, в том
+  числе Верхнекамское месторождение калийных солей, которого нет в двух
+  других наборах. Добавлен 11 октября 2026 года по замечанию автора.
 
-Оба файла скачиваются при первом включении строки, разбор - в рабочем
+Файлы скачиваются при первом включении строки, разбор - в рабочем
 потоке (parse_mrds, parse_major), итог - компактный файл в профиле QGIS
 (save, load), дальше сеть не нужна. Цвет точки - группа первого
 полезного ископаемого (group_of), размер - крупное месторождение
@@ -30,7 +34,8 @@ import numpy as np
 MRDS_URL = "https://mrdata.usgs.gov/mrds/mrds-csv.zip"
 MAJOR_URL = ("https://mrdata.usgs.gov/major-deposits/"
              "ofr20051294-csv.zip")
-ATTRIBUTION = ("Deposits: USGS MRDS, USGS OFR 2005-1294",
+MINFAC_URL = "https://mrdata.usgs.gov/mineral-operations/minfac-csv.zip"
+ATTRIBUTION = ("Deposits: USGS MRDS, OFR 2005-1294, mineral operations",
                "https://mrdata.usgs.gov/")
 MRDS_PAGE = "https://mrdata.usgs.gov/mrds/show-mrds.php?dep_id={}"
 
@@ -78,7 +83,10 @@ OTHER_COLOR = (235, 235, 235)
 STATUSES = ("Producer", "Past Producer", "Plant", "Prospect", "Occurrence",
             "Unknown")
 STATUS_SIZES = (4.5, 4.0, 4.0, 3.0, 2.5, 2.5)
-MAJOR_SIZE = 7.0
+# Крупное месторождение и рудник мира заметно крупнее точек MRDS -
+# просьба автора от 11 октября 2026 года «крупные посильнее выдели».
+MAJOR_SIZE = 10.0
+FACILITY_SIZE = 7.5  # рудник или завод мира, minfac
 SEPARATOR = "\x1f"  # поля записи
 END = "\x1e"  # конец записи
 
@@ -103,28 +111,34 @@ def colors(groups):
     return table[np.asarray(groups, dtype=np.int64)]
 
 
-def sizes(major, status):
-    """Размер точки: крупное месторождение мира или стадия MRDS."""
+def sizes(major, status, facility=None):
+    """Размер точки: крупное месторождение мира, рудник или завод мира
+    или стадия MRDS."""
     by_status = np.array(STATUS_SIZES, dtype=np.float32)
     out = by_status[np.asarray(status, dtype=np.int64)]
+    if facility is not None:
+        out = np.where(np.asarray(facility, dtype=bool), FACILITY_SIZE, out)
     return np.where(np.asarray(major, dtype=bool), MAJOR_SIZE, out)
 
 
 class Deposits:
     """Месторождения массивами: lat, lon, group, status (код STATUSES),
-    major (крупное месторождение мира), text - строка записей, offsets -
-    начала записей в ней (на одну больше записей)."""
+    major (крупное месторождение мира), facility (рудник или завод мира
+    minfac), text - строка записей, offsets - начала записей в ней (на
+    одну больше записей)."""
 
-    __slots__ = ("lat", "lon", "group", "status", "major", "blob",
-                 "offsets")
+    __slots__ = ("lat", "lon", "group", "status", "major", "facility",
+                 "blob", "offsets")
 
     def __init__(self, lat=(), lon=(), group=(), status=(), major=(),
-                 blob="", offsets=(0,)):
+                 blob="", offsets=(0,), facility=None):
         self.lat = np.asarray(lat, dtype=np.float64)
         self.lon = np.asarray(lon, dtype=np.float64)
         self.group = np.asarray(group, dtype=np.uint8)
         self.status = np.asarray(status, dtype=np.uint8)
         self.major = np.asarray(major, dtype=bool)
+        self.facility = np.zeros(len(self.lat), dtype=bool) \
+            if facility is None else np.asarray(facility, dtype=bool)
         self.blob = blob
         self.offsets = np.asarray(offsets, dtype=np.int64)
 
@@ -133,7 +147,9 @@ class Deposits:
 
     def text(self, n):
         """Поля записи n: название, страна, полезные ископаемые, тип,
-        стадия или модель, номер записи MRDS (пусто у крупных)."""
+        стадия или модель, номер записи MRDS (пусто у прочих наборов),
+        оператор, мощность и точность места - A примерная, F точная
+        (у рудников и заводов мира)."""
         part = self.blob[self.offsets[n]:self.offsets[n + 1]]
         return part.rstrip(END).split(SEPARATOR)
 
@@ -150,8 +166,10 @@ class _Builder:
     def __init__(self):
         self.lat, self.lon, self.group = [], [], []
         self.status, self.major, self.parts = [], [], []
+        self.facility = []
 
-    def add(self, lat, lon, commodities, major, status, fields):
+    def add(self, lat, lon, commodities, major, status, fields,
+            facility=False):
         if lat is None or lon is None or not (-90.0 <= lat <= 90.0) \
                 or not (-180.0 <= lon <= 180.0):
             return
@@ -160,6 +178,7 @@ class _Builder:
         self.group.append(group_of(commodities))
         self.status.append(status)
         self.major.append(major)
+        self.facility.append(facility)
         self.parts.append(SEPARATOR.join(
             str(f or "").replace(SEPARATOR, " ").replace(END, " ")
             for f in fields) + END)
@@ -169,21 +188,22 @@ class _Builder:
         offsets = np.concatenate([[0], np.cumsum(lengths)]) if lengths \
             else np.zeros(1)
         return Deposits(self.lat, self.lon, self.group, self.status,
-                        self.major, "".join(self.parts), offsets)
+                        self.major, "".join(self.parts), offsets,
+                        self.facility)
 
 
-def _rows(data, name):
+def _rows(data, name, encoding="utf-8"):
     """Строки CSV файла name архива ZIP data."""
     archive = zipfile.ZipFile(io.BytesIO(data))
     member = next(m for m in archive.namelist()
                   if m.lower().endswith(name))
-    text = archive.read(member).decode("utf-8", "replace")
+    text = archive.read(member).decode(encoding, "replace")
     return csv.DictReader(io.StringIO(text))
 
 
-def parse(mrds, major):
-    """Оба набора в одни массивы: сначала крупные месторождения мира,
-    потом MRDS. mrds, major - байты архивов или None."""
+def parse(mrds, major, minfac=None):
+    """Наборы в одни массивы: крупные месторождения мира, рудники
+    и заводы мира, потом MRDS. Аргументы - байты архивов или None."""
     out = _Builder()
     if major:
         for row in _rows(major, "deposit.csv"):
@@ -193,6 +213,20 @@ def parse(mrds, major):
                     (row.get("dep_name"), row.get("country"),
                      row.get("commodity"), row.get("dep_type"),
                      row.get("model_name") or row.get("type_detail"), ""))
+    if minfac:
+        # Файл в cp1252 - знак градуса в полях координат текстом.
+        for row in _rows(minfac, "minfac.csv", "cp1252"):
+            capacity = " ".join(c for c in (row.get("capacity"),
+                                            row.get("units")) if c)
+            name = row.get("fac_name") or row.get("location")
+            out.add(_number(row.get("latitude")),
+                    _number(row.get("longitude")), row.get("commodity"),
+                    False, len(STATUSES) - 1,
+                    (name, row.get("country"), row.get("commodity"),
+                     row.get("fac_type"), row.get("status"), "",
+                     row.get("op_comp") or row.get("maininvest"),
+                     "{} ({})".format(capacity, row.get("year")) if capacity
+                     else "", row.get("precision")), facility=True)
     if mrds:
         index = {name.lower(): n for n, name in enumerate(STATUSES)}
         for row in _rows(mrds, "mrds.csv"):
@@ -215,15 +249,17 @@ def save(deposits, path):
         path, lat=deposits.lat.astype(np.float32),
         lon=deposits.lon.astype(np.float32), group=deposits.group,
         status=deposits.status, major=deposits.major,
-        offsets=deposits.offsets,
+        facility=deposits.facility, offsets=deposits.offsets,
         blob=np.frombuffer(deposits.blob.encode("utf-8"), dtype=np.uint8))
 
 
 def load(path):
-    """Месторождения из файла save. Смещения - в символах строки."""
+    """Месторождения из файла save. Смещения - в символах строки. У файла
+    без рудников мира (до 0.66.2) нет поля facility - KeyError, окно
+    тогда скачивает наборы заново."""
     with np.load(path, allow_pickle=False) as data:
         blob = data["blob"].tobytes().decode("utf-8")
         return Deposits(data["lat"].astype(np.float64),
                         data["lon"].astype(np.float64), data["group"],
                         data["status"], data["major"], blob,
-                        data["offsets"])
+                        data["offsets"], data["facility"])

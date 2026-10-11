@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.66.1
+version=0.67.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,28 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.66.1 The elevation profile across an own water body shows the
+changelog=0.67.0 Historical maps of the David Rumsey collection - the Rumsey
+      historical maps here… item of the globe menu lists the maps at the
+      view by year. The chosen map is built, georeferenced and put into the
+      project with its year, then the time slider and the swipe of two years
+      work. The collection images are for non-commercial use only. Wind
+      streaks - white running trails over the Wind map. Ocean currents - the
+      Currents row of the Planet of water gallery group, streaks coloured by
+      speed from NOAA data. The On the globe section of Layers - layers that
+      are on, with an opacity slider and a menu. The To QGIS project… item
+      saves what is in view as a GeoPackage layer. Submarine cables -
+      communication lines and power cables from OpenStreetMap, a row of the
+      Map group. OpenStreetMap power lines, cables and pipelines - a row of
+      the Map group, the line colour is the voltage or the substance. Power
+      plants of the world - about 35 thousand plants of the WRI database,
+      the colour is the fuel, the size is the capacity. Mining areas -
+      outlines of open pits and dumps of the world, OpenStreetMap mines and
+      quarries at the view. Mineral deposits - world mines and plants added,
+      a click on a point opens the details without the identify mode, major
+      deposits stand out more. Contours moved to the Map group of the Layers
+      section. OpenStreetMap, weather and slab data loading switches to a
+      backup server by itself when the main one does not answer.
+      0.66.1 The elevation profile across an own water body shows the
       water above the bed and a dashed line of the water body level with a
       label.
       0.66.0 Old maps with a year - a raster or XYZ tiles of the project

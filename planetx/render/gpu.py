@@ -292,7 +292,8 @@ def draw_batch(items, mvps, u_mvp, layers=()):
     items - пары (GpuMesh, текстура), mvps - массив (N, 4, 4) float32
     по строкам, как его даёт Camera.tiles_mvp. Подложка идёт на блок 0.
     layers - слои поверх неё: (текстурный блок, место окна в шейдере,
-    пары (текстура, окно (сдвиг u, сдвиг v, масштаб)) по одной на сетку).
+    пары (текстура, окно (сдвиг u, сдвиг v, масштаб)) по одной на сетку
+    и необязательная доля прозрачности слоя, 0 - слой как есть).
     Это наложение слоёв проекта, облака и температура. Блоки слоёв,
     которых в списке нет, не трогаются.
 
@@ -307,8 +308,10 @@ def draw_batch(items, mvps, u_mvp, layers=()):
     last_texture = None
     last = [[None, None] for _ in layers]
     null = ctypes.c_void_p(0)
+    fades = [layer[3] if len(layer) > 3 else 0.0 for layer in layers]
     for i, (mesh, texture) in enumerate(items):
-        for n, (unit, u_uv, pairs) in enumerate(layers):
+        for n, layer in enumerate(layers):
+            unit, u_uv, pairs = layer[:3]
             image, window = pairs[i]
             seen = last[n]
             if image != seen[0]:
@@ -317,7 +320,8 @@ def draw_batch(items, mvps, u_mvp, layers=()):
                 _active_texture(GL.GL_TEXTURE0)
                 seen[0] = image
             if window != seen[1]:
-                _uniform4f(u_uv, window[0], window[1], window[2], 0.0)
+                _uniform4f(u_uv, window[0], window[1], window[2],
+                           fades[n])
                 seen[1] = window
         if texture != last_texture:
             _bind_texture(GL.GL_TEXTURE_2D, texture)

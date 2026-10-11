@@ -5950,6 +5950,9 @@ def deposits_check():
     out["drawn_nevada"] = view.deposits.drawn
     out["frame_ms"] = frames
     out["legend"] = window.deposit_legend.isVisible()
+    window.deposit_legend.grab().save(os.path.join(
+        TEMP, "planetx_deposit_legend.png"))
+    window.grab().save(os.path.join(TEMP, "planetx_deposits_window.png"))
     out["credit"] = "USGS MRDS" in window.attribution.text()
     ratio = view.devicePixelRatioF()
     px, py = view.width() * ratio / 2.0, view.height() * ratio / 2.0
@@ -5957,8 +5960,161 @@ def deposits_check():
     out["identify"] = [(f[0], dict(f[1]).get("Полезные ископаемые",
                                               dict(f[1]).get("Commodities")))
                        for _, features in found for f in features][:3]
-    view.navigator.show(Pose(30.0, 60.0, 1.8e7, 0.0, 0.0))
+    data = view.deposits.data
+    out["sets"] = {"major": int(data.major.sum()),
+                   "facility": int(data.facility.sum()), "all": len(data)}
+    # Североуральск - рудник бокситов набора minfac, щелчок без режима
+    # опроса открывает окно «Объекты».
+    view.navigator.show(Pose(60.15, 59.96, 60000.0, 0.0, 0.0))
+    state["deposits_world_pose"] = Pose(30.0, 60.0, 1.8e7, 0.0, 0.0)
+
+
+@check(1500)
+def deposits_click():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["deposits"]
+    window.identifying = False
+    # Точка рудника - как её рисует вид (на рельефе), по записи набора.
+    layer = view.deposits
+    data = layer.data
+    record = next(n for n in range(len(data))
+                  if data.text(n)[0].startswith("Severoural"))
+    spot = int(np.nonzero(layer.order == record)[0][0])
+    pixels, front = view.camera.project(layer.focus[spot:spot + 1])
+    px, py = float(pixels[0][0]), float(pixels[0][1])
+    found = window._identify_deposits(px, py)
+    out["click_debug"] = {
+        "pixel": [round(px), round(py)], "front": bool(front[0]),
+        "camera": [view.camera.width, view.camera.height],
+        "found": [f[0] for _, fs in found for f in fs][:5],
+        "under": window._point_under(px, py),
+        "pose": [round(view.navigator.pose.lat, 3),
+                 round(view.navigator.pose.lon, 3),
+                 round(view.navigator.pose.distance)]}
+    window._clicked(px, py)
+    dialog = window.identified
+    text = ""
+    if dialog is not None and dialog.isVisible():
+        parts = []
+
+        def walk(item):
+            parts.append(item.text(0) + " " + item.text(1))
+            for k in range(item.childCount()):
+                walk(item.child(k))
+        for k in range(dialog.tree.topLevelItemCount()):
+            walk(dialog.tree.topLevelItem(k))
+        text = " | ".join(parts)
+    out["click_without_mode"] = {"shown": dialog is not None
+                                 and dialog.isVisible(),
+                                 "severouralsk": "Severoural" in text,
+                                 "text": text[:300]}
+    if dialog is not None:
+        dialog.close()
+    view.navigator.show(state["deposits_world_pose"])
     view.update()
+
+
+def _mirror_failures():
+    """Отказы зеркал Overpass - выключение строки отказом не считается."""
+    from planetx.ui.overpass import MIRRORS
+    return sum(m.failures for m in MIRRORS.mirrors)
+
+
+@check(1000)
+def mining_on():
+    """Горные разработки и шахты OSM над Березниками: контуры Maus 2022
+    (файл 25 МБ в профиль) и тайлы Overpass по виду."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(59.45, 56.80, 40000.0, 0.0, 0.0))
+    state["mining_started"] = time.monotonic()
+    window.set_extra("mining", True)
+    window.set_extra("osm_mines", True)
+    # Выключение посреди запроса - не отказ сервера: сервер прежний.
+    window.set_extra("osm_mines", False)
+    window.set_extra("osm_mines", True)
+    state["osm_server_after_toggle"] = _mirror_failures()
+    result["mining"] = {"gallery": [k for k, _ in
+                                    __import__("planetx.ui.nasamaps",
+                                               fromlist=["LAYERS"]).LAYERS
+                                    if k in ("mining", "osm_mines")]}
+
+
+@check(2000)
+def mining_wait():
+    window = state["window"]
+    started = state["mining_started"]
+    waiting = window._mining_reply is not None \
+        or window.osm_mines_tiles.reply is not None \
+        or bool(window.osm_mines_tiles.queue) \
+        or window.view.data_pending or (window.overlay is not None
+                                        and window.overlay.busy())
+    if waiting and time.monotonic() - started < 120.0:
+        return 2000
+    result["mining"]["load_s"] = round(time.monotonic() - started, 1)
+
+
+@check(1500)
+def mining_check():
+    from qgis.core import QgsRectangle
+    window = state["window"]
+    view = window.view
+    out = result["mining"]
+    layer = window.mining_layer
+    out["layer"] = layer is not None and layer.featureCount()
+    out["in_overlay"] = layer is not None and window.overlay is not None \
+        and any(la is layer for la in window.overlay.layers)
+    out["osm_tiles"] = len(window.osm_mines_tiles.items)
+    out["osm_points"] = 0 if view.osm_mines.data is None \
+        else len(view.osm_mines.data)
+    names = [] if view.osm_mines.data is None else [
+        view.osm_mines.data.text(n)[0]
+        for n in range(len(view.osm_mines.data))]
+    out["osm_named"] = [n for n in names if n][:6]
+    # Контур под щелчком - середина ближайшего к виду контура.
+    found = []
+    if layer is not None:
+        box = QgsRectangle(56.5, 59.2, 57.1, 59.7)
+        request = __import__("qgis.core", fromlist=["QgsFeatureRequest"]) \
+            .QgsFeatureRequest().setFilterRect(box)
+        for feature in layer.getFeatures(request):
+            point = feature.geometry().pointOnSurface().asPoint()
+            found = window._identify_mining(point.y(), point.x())
+            break
+    out["polygon_click"] = [f[0] for _, fs in found for f in fs][:2]
+    out["polygon_values"] = [dict(f[1]) for _, fs in found for f in fs][:1]
+    # Точка OSM - щелчок без режима опроса.
+    window.identifying = False
+    clicked = None
+    if view.osm_mines.data is not None and len(view.osm_mines.data):
+        seen = view.osm_mines.visible(view.camera.eye)
+        if len(seen):
+            pixels, front = view.camera.project(view.osm_mines.focus[seen[:1]])
+            px, py = float(pixels[0][0]), float(pixels[0][1])
+            clicked = window._point_under(px, py)
+    out["osm_click"] = clicked
+    out["server_after_toggle"] = state["osm_server_after_toggle"]
+    # Длинное слово в строке состояния не раздвигает панель.
+    from qgis.PyQt.QtWidgets import QApplication
+    before = window.panel.width()
+    saved = window.message
+    window.message = ("x" * 600, time.monotonic())
+    window._show_state()
+    QApplication.processEvents()
+    out["panel_width"] = [before, window.panel.width()]
+    window.message = saved
+    window._show_state()
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_mining.png"))
+    out["credit"] = "Maus" in window.attribution.text() \
+        and "Mines" in window.attribution.text()
+    window.set_extra("mining", False)
+    window.set_extra("osm_mines", False)
+    out["after_off"] = view.osm_mines.data is None and (
+        window.overlay is None
+        or not any(la is layer for la in window.overlay.layers))
 
 
 @check(1000)
@@ -5973,6 +6129,409 @@ def deposits_world():
     out["drawn_world"] = view.deposits.drawn
     window.set_extra("deposits", False)
     out["after_off"] = view.deposits.data is None
+
+
+def _click_text(window):
+    """Текст окна «Объекты» после щелчка, окно закрывается."""
+    dialog = window.identified
+    if dialog is None or not dialog.isVisible():
+        return None
+    parts = []
+
+    def walk(item):
+        parts.append(item.text(0) + " " + item.text(1))
+        for k in range(item.childCount()):
+            walk(item.child(k))
+    for k in range(dialog.tree.topLevelItemCount()):
+        walk(dialog.tree.topLevelItem(k))
+    dialog.close()
+    return " | ".join(parts)
+
+
+@check(1000)
+def infra_on():
+    """Электростанции WRI и ЛЭП OSM над Березниками с 40 км."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(59.45, 56.80, 40000.0, 0.0, 0.0))
+    state["infra_started"] = time.monotonic()
+    window.set_extra("plants", True)
+    window.set_extra("infra_osm", True)
+    # Выключение посреди запроса - не отказ сервера.
+    window.set_extra("infra_osm", False)
+    window.set_extra("infra_osm", True)
+    state["infra_server_after_toggle"] = _mirror_failures()
+    from planetx.ui import nasamaps
+    # ЛЭП - строка «Карты» раздела «Слои», в витрине только станции.
+    result["infra"] = {"gallery": [k for k, _ in nasamaps.LAYERS
+                                   if k in ("plants", "infra_osm")],
+                       "map_row": "infra_osm" in window.panel.extra_items}
+
+
+@check(2000)
+def infra_wait():
+    window = state["window"]
+    started = state["infra_started"]
+    waiting = window._plant_reply is not None \
+        or window._plant_job is not None \
+        or window.infra_tiles.reply is not None \
+        or bool(window.infra_tiles.queue) or window.view.data_pending \
+        or (window.overlay is not None and window.overlay.busy())
+    if waiting and time.monotonic() - started < 150.0:
+        return 2000
+    result["infra"]["load_s"] = round(time.monotonic() - started, 1)
+
+
+@check(1500)
+def infra_active():
+    """Раздел «На глобусе»: строки включённого, ползунок непрозрачности
+    точек и слоя QGIS, «В проект QGIS» для станций и ЛЭП."""
+    from qgis.core import QgsProject
+    from qgis.PyQt.QtWidgets import QApplication
+    window = state["window"]
+    view = window.view
+    panel = window.panel
+    out = {"rows": list(panel.active_rows),
+           "shown": not panel.active_header.isHidden()}
+    panel.grab().save(os.path.join(TEMP, "planetx_active_panel.png"))
+    slider = panel.active_rows["plants"][1]
+    slider.setValue(40)
+    out["plants_opacity"] = round(view.plants.opacity, 2)
+    panel.active_rows["infra_osm"][1].setValue(50)
+    QApplication.processEvents()
+    out["infra_opacity"] = round(window.infra_lines.opacity(), 2) \
+        if window.infra_lines is not None else None
+    slider.setValue(100)
+    panel.active_rows["infra_osm"][1].setValue(100)
+    folder = os.path.join(TEMP, "planetx_active")
+    os.makedirs(folder, exist_ok=True)
+    counts = {}
+    for key in ("plants", "infra_osm"):
+        path = os.path.join(folder, key + ".gpkg")
+        if os.path.exists(path):
+            os.remove(path)
+        counts[key] = window.active_export(key, path)
+    out["exported"] = counts
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    out["group"] = [] if group is None else [
+        (node.name(), node.layer().featureCount())
+        for node in group.findLayers()]
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    # Снятие флажка строки убирает слой.
+    panel.active_rows["plants"][2].setChecked(False)
+    QApplication.processEvents()
+    QApplication.processEvents()
+    out["plants_off"] = not window.extras.get("plants") \
+        and "plants" not in panel.active_rows
+    window.set_extra("plants", True)
+    result["infra"]["active"] = out
+
+
+@check(1500)
+def infra_check():
+    window = state["window"]
+    view = window.view
+    out = result["infra"]
+    out["plants"] = 0 if window.plant_data is None \
+        else len(window.plant_data)
+    out["plants_drawn"] = view.plants.drawn
+    lines = window.infra_lines
+    out["lines"] = 0 if lines is None else lines.featureCount()
+    out["substations"] = 0 if window.infra_points is None \
+        else window.infra_points.featureCount()
+    out["styles"] = {} if lines is None else {
+        s: sum(1 for f in lines.getFeatures() if f["style"] == s)
+        for s in ("v500", "v220", "v110", "v35", "cable", "telecom",
+                  "gas", "oil", "water", "other")}
+    out["in_overlay"] = lines is not None and window.overlay is not None \
+        and any(la is lines for la in window.overlay.layers)
+    out["legends"] = [window.plant_legend.isVisible(),
+                      window.infra_legend.isVisible()]
+    out["server_after_toggle"] = state["infra_server_after_toggle"]
+    window.identifying = False
+    # Электростанция - щелчок без режима опроса по ближайшей к середине.
+    clicked = None
+    data = view.plants.data
+    if data is not None:
+        seen = view.plants.visible(view.camera.eye)
+        if len(seen):
+            pixels, front = view.camera.project(view.plants.focus[seen])
+            middle = (view.camera.width / 2.0, view.camera.height / 2.0)
+            gap = ((pixels[:, 0] - middle[0]) ** 2
+                   + (pixels[:, 1] - middle[1]) ** 2)
+            gap[~front] = 1e18
+            n = int(gap.argmin())
+            px, py = float(pixels[n][0]), float(pixels[n][1])
+            clicked = window._point_under(px, py)
+            window._clicked(px, py)
+    out["plant_click"] = clicked
+    out["plant_text"] = (_click_text(window) or "")[:300]
+    # Линия - середина отрезка самой мощной линии в кадре.
+    feature = None
+    if lines is not None:
+        for style in ("v500", "v220", "v110", "v35", "gas", "oil"):
+            feature = next((f for f in lines.getFeatures()
+                            if f["style"] == style), None)
+            if feature is not None:
+                break
+    if feature is not None:
+        from planetx.core.ellipsoid import geodetic_to_ecef
+        import numpy as np
+        vertices = feature.geometry().asPolyline()
+        a, b = vertices[len(vertices) // 2 - 1], vertices[len(vertices) // 2]
+        lat, lon = (a.y() + b.y()) / 2.0, (a.x() + b.x()) / 2.0
+        from planetx.core.navigation import Pose
+        view.navigator.show(Pose(lat, lon, 3000.0, 0.0, 0.0))
+        view.repaint()
+        pixels, front = view.camera.project(np.array([geodetic_to_ecef(
+            lat, lon, view.store.height_at(lat, lon) * view.store.scale)]))
+        px, py = float(pixels[0][0]), float(pixels[0][1])
+        out["line_under"] = bool(window._point_under(px, py))
+        window._clicked(px, py)
+        out["line_text"] = (_click_text(window) or "")[:300]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_infra.png"))
+    text = window.attribution.text()
+    out["credit"] = "WRI" in text and "OpenStreetMap" in text
+    window.set_extra("plants", False)
+    window.set_extra("infra_osm", False)
+    out["after_off"] = view.plants.data is None and (
+        window.overlay is None
+        or not any(la is lines for la in window.overlay.layers)) \
+        and not window.plant_legend.isVisible() \
+        and not window.infra_legend.isVisible()
+
+
+@check(3000)
+def cables_on():
+    """Подводные кабели над Северной Атлантикой с 6000 км."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(50.0, -30.0, 6000000.0, 0.0, 0.0))
+    window.set_extra("cables", True)
+    result["cables"] = {"map_row": "cables" in window.panel.extra_items}
+
+
+@check(1500)
+def cables_check():
+    import os as _os
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["cables"]
+    layer = window.cable_layer
+    out["features"] = 0 if layer is None else layer.featureCount()
+    out["in_overlay"] = layer is not None and window.overlay is not None \
+        and any(la is layer for la in window.overlay.layers)
+    data = window.cables_data
+    cable = next(c for c in data.cables if c.name == "TAT13")
+    n = len(cable.lats) // 2
+    lat = (cable.lats[n - 1] + cable.lats[n]) / 2.0
+    lon = (cable.lons[n - 1] + cable.lons[n]) / 2.0
+    found = window._identify_cables(lat, lon, 30000.0)
+    out["identify"] = [f[0] for _, fs in found for f in fs]
+    out["row"] = "cables" in window.panel.active_rows
+    out["credit"] = "OpenStreetMap" in window.attribution.text()
+    window.view.grabFramebuffer().save(_os.path.join(TEMP,
+                                                     "planetx_cables.png"))
+    path = _os.path.join(TEMP, "planetx_active", "cables.gpkg")
+    _os.makedirs(_os.path.dirname(path), exist_ok=True)
+    if _os.path.exists(path):
+        _os.remove(path)
+    out["exported"] = window.active_export("cables", path)
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.set_extra("cables", False)
+    out["after_off"] = window.overlay is None or not any(
+        la is layer for la in window.overlay.layers)
+
+
+@check(1000)
+def currents_on():
+    """Течения NOAA над Гольфстримом с 3000 км."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_theme("")
+    window.view.navigator.show(Pose(38.0, -65.0, 3000000.0, 0.0, 0.0))
+    window.set_extra("currents", True)
+    state["flow_started"] = time.monotonic()
+    result["flow"] = {"gallery": "currents" in [
+        k for k, _ in __import__("planetx.ui.nasamaps",
+                                 fromlist=["LAYERS"]).LAYERS]}
+
+
+@check(1000)
+def currents_wait():
+    window = state["window"]
+    if window.flow.fields["currents"] is None \
+            and window.flow.currents_reply is not None \
+            and time.monotonic() - state["flow_started"] < 90.0:
+        return 1000
+    result["flow"]["currents_load_s"] = round(
+        time.monotonic() - state["flow_started"], 1)
+
+
+@check(3000)
+def currents_check():
+    window = state["window"]
+    view = window.view
+    out = result["flow"]
+    out["day"] = window.flow.currents_day
+    out["error"] = window.flow.error
+    out["drawn"] = view.flows["currents"].drawn
+    out["legend"] = window.current_legend.isVisible()
+    out["row"] = "currents" in window.panel.active_rows
+    out["credit"] = "CoastWatch" in window.attribution.text()
+    # Цена шага частиц и кадра.
+    started = time.perf_counter()
+    for _ in range(40):
+        window.flow._tick()
+    out["tick_ms"] = round((time.perf_counter() - started) * 25.0, 2)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_currents.png"))
+    window.set_extra("currents", False)
+    out["after_off"] = view.flows["currents"].particles is None \
+        and not window.current_legend.isVisible()
+
+
+@check(1000)
+def wind_on():
+    """Ветер GFS: раскраска и струйки над Европой с 6000 км."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.view.navigator.show(Pose(50.0, 10.0, 6000000.0, 0.0, 0.0))
+    window.set_theme("weather_wind")
+    state["flow_started"] = time.monotonic()
+
+
+@check(1000)
+def wind_wait():
+    window = state["window"]
+    if window.flow.fields["wind"] is None \
+            and time.monotonic() - state["flow_started"] < 90.0:
+        return 1000
+    result["flow"]["wind_load_s"] = round(
+        time.monotonic() - state["flow_started"], 1)
+
+
+@check(3000)
+def wind_check():
+    window = state["window"]
+    view = window.view
+    out = result["flow"]
+    for _ in range(40):
+        window.flow._tick()
+    out["wind_drawn"] = view.flows["wind"].drawn
+    field = window.flow.fields["wind"]
+    out["wind_grid"] = None if field is None else list(field.u.shape)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_wind.png"))
+    window.set_theme("")
+    out["wind_after_off"] = view.flows["wind"].particles is None \
+        and window.flow.fields["wind"] is None
+
+
+@check(1000)
+def rumsey_open():
+    """Карты Рамсея у Москвы: каталог из локальной копии planetx-terrain
+    (PLANETX_TERRAIN_DIR, иначе C:/Dev/planetx-terrain)."""
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_theme("")
+    window.view.navigator.show(Pose(55.75, 37.62, 30000.0, 0.0, 0.0))
+    folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
+    # PLANETX_RUMSEY_NET - каталог из хранилища через зеркала.
+    window.rumsey_loader.base = None if os.environ.get("PLANETX_RUMSEY_NET") \
+        else QUrl.fromLocalFile(folder).toString()
+    window.rumsey_loader.catalogue = None
+    state["rumsey_dialog"] = window.rumsey_here(55.75, 37.62)
+    state["rumsey_started"] = time.monotonic()
+    result["rumsey"] = {}
+
+
+@check(1000)
+def rumsey_list():
+    window = state["window"]
+    dialog = state["rumsey_dialog"]
+    if window.rumsey_loader.catalogue is None \
+            and time.monotonic() - state["rumsey_started"] < 60.0:
+        return 1000
+    out = result["rumsey"]
+    out["catalogue"] = 0 if window.rumsey_loader.catalogue is None \
+        else len(window.rumsey_loader.catalogue)
+    out["rows"] = dialog.list.topLevelItemCount()
+    out["first"] = [dialog.list.topLevelItem(n).text(0) + " "
+                    + dialog.list.topLevelItem(n).text(1)[:50]
+                    for n in range(min(8, out["rows"]))]
+    # План Москвы 1739 года, иначе первая строка.
+    pick = 0
+    for n in range(out["rows"]):
+        item = dialog.list.topLevelItem(n)
+        if item.text(0) == "1739":
+            pick = n
+            break
+    item = dialog.list.topLevelItem(pick)
+    out["picked"] = item.text(0) + " " + item.text(1)[:60]
+    dialog.grab().save(os.path.join(TEMP, "planetx_rumsey_dialog.png"))
+    row = item.data(0, 0x0100)
+    number = int(window.rumsey_loader.catalogue.number[row])
+    from planetx.ui.rumsey import rumsey_folder
+    cached = os.path.join(rumsey_folder(), "{}.tif".format(number))
+    if os.path.exists(cached):
+        os.remove(cached)
+    dialog.list.setCurrentItem(item)
+    state["rumsey_started"] = time.monotonic()
+    dialog._load()
+
+
+@check(1000)
+def rumsey_wait():
+    window = state["window"]
+    if window.rumsey_loader.job is not None \
+            and time.monotonic() - state["rumsey_started"] < 180.0:
+        return 1000
+    result["rumsey"]["build_s"] = round(
+        time.monotonic() - state["rumsey_started"], 1)
+
+
+@check(3000)
+def rumsey_check():
+    from qgis.core import QgsProject
+    from planetx.ui.project import read_map_years
+    window = state["window"]
+    out = result["rumsey"]
+    dialog = state["rumsey_dialog"]
+    out["status"] = dialog.status.text()
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("Карты Рамсея") or root.findGroup("Rumsey maps")
+    layers = [] if group is None else [n.layer() for n in group.findLayers()]
+    out["layers"] = [la.name()[:60] for la in layers]
+    if layers:
+        e = layers[0].extent()
+        out["extent"] = [round(v, 3) for v in (e.xMinimum(), e.yMinimum(),
+                                                e.xMaximum(), e.yMaximum())]
+        out["size"] = [layers[0].width(), layers[0].height()]
+        out["year"] = read_map_years().get(layers[0].id())
+        out["on_globe"] = layers[0].id() in window.shown_layers()
+    out["credit"] = "Rumsey" in window.attribution.text()
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_rumsey.png"))
+    dialog.close()
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
 
 
 BRIENZ_DEEP = (46.72744, 7.9565)
@@ -6249,6 +6808,19 @@ def ua_send():
                     got.update(planetx=(data, error)), fresh=True),
         QgsNetworkAccessManager.instance().get(
             QNetworkRequest(QUrl(base + "/qgis")))])
+
+
+@check(1000)
+def sources_shot():
+    """Снимок окна «Источники данных» с группой рельефа."""
+    from planetx.ui.sources import SourcesDialog
+    window = state["window"]
+    dialog = SourcesDialog(window)
+    dialog.show()
+    dialog.grab().save(os.path.join(TEMP, "planetx_sources.png"))
+    result["sources_shot"] = {"models": [dialog.model.itemText(i) for i in
+                                         range(dialog.model.count())]}
+    dialog.close()
 
 
 @check(500)
@@ -9141,6 +9713,24 @@ def sheets_menu():
 
 
 @check(500)
+def weather_failover():
+    """Первое зеркало GFS - закрытый порт этой машины: запрос уходит на
+    следующее зеркало, закрытое выводится на паузу. Ставится до
+    weather_open, снимает weather_mirror_check."""
+    from planetx.core.mirrors import Mirrors
+    from planetx.core import weather
+    from planetx.ui import weather as ui_weather
+    state["weather_mirrors"] = ui_weather.MIRRORS
+    state["weather_dead"] = "https://127.0.0.1:9/gfs"
+    ui_weather.MIRRORS = Mirrors((state["weather_dead"],) + weather.BUCKETS)
+    window = state["window"]
+    window.weather.newest = None
+    window.weather.indexes.clear()
+    window.weather.sources.clear()
+    window.weather.grids.clear()
+
+
+@check(500)
 def weather_open():
     """Поле температуры GFS на нынешний момент над Европой."""
     from planetx.core.navigation import Pose
@@ -9181,6 +9771,24 @@ def _weather_wait(name, limit=60.0):
 @check(500)
 def weather_wait():
     return _weather_wait("temperature")
+
+
+@check(500)
+def weather_mirror_check():
+    from planetx.ui import weather as ui_weather
+    import time as _time
+    pool = ui_weather.MIRRORS
+    dead = next(m for m in pool.mirrors if m.url == state["weather_dead"])
+    result["weather"]["mirrors"] = {
+        "sources": sorted(set(window_sources())),
+        "dead_down": dead.down_until > _time.monotonic(),
+        "state": pool.describe(_time.monotonic())}
+    ui_weather.MIRRORS = state["weather_mirrors"]
+
+
+def window_sources():
+    return [s.split("//")[-1].split("/")[0]
+            for s in state["window"].weather.sources.values()]
 
 
 @check(500)

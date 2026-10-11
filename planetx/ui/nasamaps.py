@@ -28,9 +28,9 @@ from qgis.PyQt.QtWidgets import (QButtonGroup, QDialog, QHBoxLayout, QLabel,
                                  QListWidgetItem, QToolButton,
                                  QVBoxLayout)
 
-from ..core import (clouds, contours, cutaway, deposits, fires, paleo,
-                    plates, quakes, slope, stars, sun, temperature, themes,
-                    weather)
+from ..core import (clouds, cutaway, deposits, fires, flow, paleo,
+                    plants, plates, quakes, slope, stars, sun, temperature,
+                    themes, weather)
 from ..core import satellites as satellites_core
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
@@ -51,12 +51,19 @@ SAT_GROUP = "satellites"
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
-          ("deposits", "depths"),
+          ("deposits", "depths"), ("mining", "depths"),
+          ("osm_mines", "depths"), ("plants", "infra"),
+          ("currents", "water"),
           ("cutaway", "depths"), ("paleo", "depths"), ("slope", "terrain"),
-          ("aspect", "terrain"), ("contours", "terrain"))
+          ("aspect", "terrain"))
+# ЛЭП и кабели OSM и горизонтали - строки группы «Карта» раздела «Слои»,
+# решение автора от 11 октября 2026 года. Названия берутся отсюда.
 # Слои, которые есть и вне Земли: звёзды везде, уклон - где есть высоты.
 ANY_BODY = ("stars",)
-RELIEF_BODY = ("slope", "aspect", "contours")
+RELIEF_BODY = ("slope", "aspect")
+# Заливка и обвод контуров горных разработок, выбор помощника.
+MINING_FILL = (235, 125, 35, 90)
+MINING_LINE = (205, 85, 20, 255)
 PALEO_AGE = 100  # млн лет, возраст карты на превью палеогеографии
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "data")
@@ -69,8 +76,11 @@ def layer_group_names():
             "Солнце и ночная сторона, звёзды, облака "
             "и искусственные спутники.")),
         ("depths", tr("Недра"), tr(
-            "Землетрясения, границы плит, разрез Земли "
-            "и палеогеография.")),
+            "Землетрясения, границы плит, месторождения и горные "
+            "разработки, разрез Земли и палеогеография.")),
+        ("infra", tr("Инфраструктура"), tr(
+            "Электростанции мира, линии электропередачи, подстанции "
+            "и трубопроводы.")),
         ("terrain", tr("Анализ рельефа"), tr(
             "Раскраска поверхности по уклону или по стороне "
             "света склона, включается одна из двух. Горизонтали "
@@ -115,11 +125,48 @@ def layer_names():
         "deposits": (tr("Месторождения"), tr(
             "Месторождения, рудники и проявления полезных ископаемых "
             "USGS - база MRDS, около 300 тысяч точек, больше всего в США, "
-            "и 3 тысячи крупных месторождений мира. Цвет - группа "
+            "3 тысячи крупных месторождений мира и 6.5 тысячи рудников "
+            "и заводов мира с оператором и мощностью. Цвет - группа "
             "полезного ископаемого, большая точка - крупное "
-            "месторождение. Щелчок показывает название, ископаемые, тип "
-            "и ссылку на запись USGS. Первое включение скачивает около "
-            "25 МБ.")),
+            "месторождение, рудник или завод. Щелчок по точке показывает "
+            "название, ископаемые, тип и ссылку на запись USGS. Первое "
+            "включение скачивает около 25 МБ.")),
+        "mining": (tr("Горные разработки"), tr(
+            "Контуры карьеров, отвалов, хвостохранилищ и промплощадок "
+            "мира по снимкам Sentinel-2 2019 года - около 45 тысяч "
+            "участков, Maus и соавторы, 2022. Щелчок по контуру "
+            "показывает страну и площадь. Первое включение скачивает "
+            "около 25 МБ.")),
+        "osm_mines": (tr("Шахты и карьеры OSM"), tr(
+            "Шахты, рудники, стволы и карьеры из OpenStreetMap с "
+            "названиями и ископаемым. Загружаются по месту вида, когда "
+            "камера ниже 150 км. Цвет - группа ископаемого, как у "
+            "месторождений. Щелчок по точке показывает название, "
+            "оператора и ссылку на объект OpenStreetMap.")),
+        "plants": (tr("Электростанции"), tr(
+            "Около 35 тысяч электростанций мира из базы WRI Global Power "
+            "Plant Database, данные на 2021 год. Цвет - вид топлива, "
+            "размер - мощность. Щелчок по точке показывает название, "
+            "мощность, год ввода и владельца. У части станций место "
+            "в базе указано неверно. Первое включение скачивает около "
+            "4 МБ.")),
+        "currents": (tr("Течения"), tr(
+            "Поверхностные течения океана бегущими струйками, цвет - "
+            "скорость. Геострофические течения NOAA CoastWatch по "
+            "спутниковой альтиметрии за последние готовые сутки, сетка "
+            "0.5°. Первое включение за сеанс скачивает около 4 МБ.")),
+        "cables": (tr("Подводные кабели"), tr(
+            "Подводные линии связи (бирюзовые) и силовые кабели "
+            "(лиловые) из OpenStreetMap, видны с любой высоты. В OSM "
+            "нанесена часть кабелей мира, больше всего в Атлантике "
+            "и у Европы. Щелчок по линии показывает название, владельца "
+            "и ссылку на объект OpenStreetMap.")),
+        "infra_osm": (tr("ЛЭП, кабели и трубопроводы OSM"), tr(
+            "Линии электропередачи по напряжению, подстанции, кабели "
+            "и трубопроводы газа, нефти и воды из OpenStreetMap. "
+            "Загружаются по месту вида, когда камера ниже 150 км. Щелчок "
+            "по линии показывает напряжение, вещество, оператора и "
+            "ссылку на объект OpenStreetMap.")),
         "plates": (tr("Границы плит"), tr(
             "Границы литосферных плит по модели PB2002. Красные - "
             "раздвиг плит на хребтах и рифтах, зелёные - сдвиг "
@@ -369,16 +416,6 @@ def satellite_group_image(group, color):
     return image
 
 
-def contours_image(base=None):
-    """Превью горизонталей: два холма, линии core/contours.py поверх
-    подложки."""
-    y, x = np.mgrid[0:THUMB, 0:THUMB].astype(np.float64)
-    hills = 400.0 * np.exp(-((x - 36) ** 2 + (y - 40) ** 2) / 900.0) \
-        + 260.0 * np.exp(-((x - 74) ** 2 + (y - 70) ** 2) / 500.0)
-    lines = contours.contour_rgba(hills, 0, 0, 1.0, step=25.0)
-    return _over(base, _rgba_image(lines, premultiplied=True))
-
-
 def cutaway_image():
     """Превью разреза: оболочки PREM кольцами, вынут сектор."""
     image = _blank((8, 10, 22))
@@ -448,8 +485,14 @@ def layer_ramp(key):
     """Цвета шкалы слоя без своей картинки."""
     if key == "quakes":
         return [color for _, color in quakes.DEPTH_STOPS]
-    if key == "deposits":
+    if key in ("deposits", "osm_mines"):
         return [group[2] for group in deposits.GROUPS]
+    if key == "plants":
+        return [f[2] for f in plants.FUELS]
+    if key == "currents":
+        return [c for _, c in flow.CURRENT_STOPS]
+    if key == "mining":
+        return [MINING_FILL[:3], MINING_LINE[:3]]
     if key == "slope":
         return [color for _, color in slope.SLOPE_STOPS]
     return [color for _, color in slope.ASPECT_STOPS]
@@ -597,8 +640,6 @@ class NasaMaps(QDialog):
             return satellites_image()
         if key == "cutaway":
             return cutaway_image()
-        if key == "contours":
-            return contours_image(self.base)
         if key == "plates":
             return plates_image(self.base)
         if key == "sun":

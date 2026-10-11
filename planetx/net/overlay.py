@@ -20,6 +20,7 @@ busy, сигналы loaded, failed и idle. Окно глобуса работ�
 """
 import json
 import time
+from urllib.parse import urlencode
 
 import numpy as np
 from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
@@ -43,8 +44,8 @@ from ..core.mipmap import mip_chain
 from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
-from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, MARK, NO_ERROR,
-                     PREFER_CACHE, STALL,
+from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, HTTP_STATUS, MARK,
+                     NO_ERROR, PREFER_CACHE, STALL,
                      Throttle, network)
 
 TILE_SIZE = 256
@@ -231,6 +232,38 @@ def plate_layer(plates_data, names):
     return layer
 
 
+def cable_layer(cables_data, names):
+    """Слой в памяти с подводными кабелями core.cables.Cables, цвет по
+    виду кабеля. names - подписи видов для легенды слоя. Слой не входит
+    в проект, его рисует наложение глобуса, как границы плит."""
+    from qgis.core import (QgsCategorizedSymbolRenderer, QgsFeature,
+                           QgsGeometry, QgsPointXY, QgsRendererCategory,
+                           QgsVectorLayer)
+    from ..core import cables as core_cables
+    layer = QgsVectorLayer(
+        "LineString?crs=EPSG:4326&field=kind:string(8)"
+        "&field=name:string(200)&field=operator:string(200)"
+        "&field=voltage:string(40)&field=osm:string(40)",
+        "PlanetX cables", "memory")
+    features = []
+    for c in cables_data.cables:
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(QgsGeometry.fromPolylineXY(
+            [QgsPointXY(lo, la) for la, lo in zip(c.lats, c.lons)]))
+        feature.setAttributes([c.kind, c.name, c.operator, c.voltage,
+                               c.osm])
+        features.append(feature)
+    layer.dataProvider().addFeatures(features)
+    categories = []
+    for key, rgba in core_cables.COLORS.items():
+        symbol = QgsLineSymbol.createSimple(_line(
+            ",".join(str(v) for v in rgba), core_cables.WIDTH))
+        categories.append(QgsRendererCategory(key, symbol,
+                                              names.get(key, key)))
+    layer.setRenderer(QgsCategorizedSymbolRenderer("kind", categories))
+    return layer
+
+
 def openfreemap_layer(tiles_url, max_zoom=14, groups=LINE_GROUPS):
     """Слой векторных тайлов OpenFreeMap со стилем из линий."""
     uri = "type=xyz&url={}&zmin=0&zmax={}".format(tiles_url, max_zoom)
@@ -276,15 +309,7 @@ def fetch_bytes(url, done, prefer_cache=True, fresh=False, headers=None):
     по ссылке с обновлением не менялась бы. headers - свои заголовки,
     например Range для части файла прогноза погоды.
     """
-    request = QNetworkRequest(QUrl(url))
-    request.setAttribute(MARK, True)
-    for name, value in (headers or {}).items():
-        request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
-    if fresh:
-        request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
-    elif prefer_cache:
-        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
-    reply = network().get(request)
+    reply = _get(url, prefer_cache, fresh, headers)
 
     def finished():
         if reply.error() != NO_ERROR:
@@ -295,6 +320,95 @@ def fetch_bytes(url, done, prefer_cache=True, fresh=False, headers=None):
 
     reply.finished.connect(finished)
     return reply
+
+
+def _get(url, prefer_cache=True, fresh=False, headers=None):
+    request = QNetworkRequest(QUrl(url))
+    request.setAttribute(MARK, True)
+    for name, value in (headers or {}).items():
+        request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
+    if fresh:
+        request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
+    elif prefer_cache:
+        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+    return network().get(request)
+
+
+# Ответы, после которых сервер считается исправным: файла нет или
+# доступа к нему нет у всех зеркал одинаково.
+NOT_SERVER = (400, 401, 403, 404, 410, 416)
+
+
+class MirrorFetch:
+    """Запрос файла с зеркал службы (core/mirrors.py): fetch_mirror."""
+
+    def __init__(self, pool, path, done, base, kwargs):
+        self.pool = pool
+        self.path = path
+        self.done = done
+        self.base = base
+        self.kwargs = kwargs
+        self.tries = len(pool.mirrors)
+        self.reply = None
+        self.stopped = False
+        self._send()
+
+    def _send(self):
+        now = time.monotonic()
+        url = self.base or self.pool.pick(now)[0]
+        self.pool.sent(url, now)
+        self.tries -= 1
+        reply = _get(url + self.path, **self.kwargs)
+        self.reply = reply
+        reply.finished.connect(
+            lambda: self._finished(reply, url, now))
+
+    def abort(self):
+        """Снять запрос. done зовётся с ошибкой, отказом сервера это
+        не считается."""
+        self.stopped = True
+        if self.reply is not None:
+            self.reply.abort()
+
+    def _finished(self, reply, url, started):
+        reply.deleteLater()
+        if reply is not self.reply:
+            return
+        self.reply = None
+        now = time.monotonic()
+        if reply.error() == NO_ERROR:
+            self.pool.ok(url, now - started)
+            self.done(bytes(reply.readAll()), "", url)
+            return
+        error = reply.errorString()
+        status = reply.attribute(HTTP_STATUS)
+        if self.stopped or status in NOT_SERVER:
+            self.done(None, error, url)
+            return
+        pause = self.pool.failed(url, now - started, now)
+        journal_note("mirror {}: {}, pause {:.0f} s; {}".format(
+            url.split("//")[-1].split("/")[0], status or error, pause,
+            self.pool.describe(now)))
+        if self.base is None and self.tries > 0:
+            self._send()
+            return
+        self.done(None, error, url)
+
+
+def fetch_mirror(pool, path, done, base=None, **kwargs):
+    """Файл path с зеркал pool и вызов done(байты или None, ошибка,
+    адрес зеркала). Сервер выбирает pool по отказам и времени ответа,
+    отказ сервера (не 404 и не снятие) ведёт к следующему зеркалу, пока
+    они не кончатся. base - только это зеркало, без перехода: нужно,
+    когда файл должен прийти с того же зеркала, что и прежний, например
+    поле прогноза по индексу. kwargs - как у fetch_bytes. Возвращает
+    запрос с методом abort, его нужно держать до конца."""
+    return MirrorFetch(pool, path, done, base, kwargs)
+
+
+def journal_note(text):
+    from .. import journal
+    journal.note(text)
 
 
 POST_TIMEOUT = 120000  # мс: ответ модели помощника бывает долгим
@@ -321,6 +435,34 @@ def post_json(url, headers, body, done):
             data = json.loads(raw) if raw else None
         except ValueError:
             data = None
+        done(data, reply.errorString() if failed else "")
+        reply.deleteLater()
+
+    reply.finished.connect(finished)
+    return reply
+
+
+def post_form(url, fields, done):
+    """Асинхронный POST формы (application/x-www-form-urlencoded) и вызов
+    done(ответ JSON или None, ошибка). Так идут запросы Overpass:
+    запасной сервер на GET с длинным адресом отвечал 500. Возвращает
+    ответ, его нужно держать до конца."""
+    request = QNetworkRequest(QUrl(url))
+    request.setAttribute(MARK, True)
+    request.setHeader(enum(QNetworkRequest, "KnownHeaders",
+                           "ContentTypeHeader"),
+                      "application/x-www-form-urlencoded")
+    body = urlencode(fields).encode("utf-8")
+    reply = network().post(request, body)
+
+    def finished():
+        raw = bytes(reply.readAll())
+        failed = reply.error() != NO_ERROR
+        try:
+            data = json.loads(raw) if raw and not failed else None
+        except ValueError:
+            data = None
+            failed = True
         done(data, reply.errorString() if failed else "")
         reply.deleteLater()
 

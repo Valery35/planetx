@@ -28,13 +28,22 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
+    from . import flow
+except ImportError:  # headless-тесты
+    import flow
+
+try:  # внутри плагина QGIS
     from .themes import overlay_rgba
 except ImportError:  # headless-тесты
     from themes import overlay_rgba
 
 BUCKET = "https://noaa-gfs-bdp-pds.s3.amazonaws.com"
-FILE = ("{bucket}/gfs.{day}/{hour:02d}/atmos/"
-        "gfs.t{hour:02d}z.pgrb2.0p25.f{step:03d}")
+# Зеркала открытых данных NOAA с теми же путями: AWS, Google Cloud, Azure.
+# Индекс .idx у зеркал бывает разной длины, поэтому поле берётся с того
+# же зеркала, что и индекс. Проверено 11 октября 2026 года.
+BUCKETS = (BUCKET, "https://storage.googleapis.com/global-forecast-system",
+           "https://noaagfs.blob.core.windows.net/gfs")
+PATH = "/gfs.{day}/{hour:02d}/atmos/gfs.t{hour:02d}z.pgrb2.0p25.f{step:03d}"
 CYCLE = 6  # часов между выпусками
 DELAY = 4  # часов от выпуска до первой попытки взять его файлы
 RUNS_BACK = 4  # выпусков назад, если свежий ещё не выложен
@@ -86,13 +95,15 @@ FIELDS = (
 )
 BY_KEY = {field.key: field for field in FIELDS}
 
-Grid = namedtuple("Grid", "values west north step run hour box")
+Grid = namedtuple("Grid", "values west north step run hour box vectors",
+                  defaults=(None,))
 Grid.__doc__ = """Поле на сетке широт и долгот.
 
 values - (строки, столбцы) float32, строки с севера на юг. west, north -
 центр левого верхнего узла, step - шаг в градусах. run - выпуск модели
 (секунды UTC), hour - час прогноза. box - (юг, север, запад, восток)
-для ResultTiles.
+для ResultTiles. vectors - у ветра поле U, V (core.flow.VectorGrid) для
+струек, у прочих None.
 """
 
 
@@ -142,9 +153,14 @@ def step_moment(run, moment, delta):
 
 
 def file_url(run, hour):
+    return BUCKET + file_path(run, hour)
+
+
+def file_path(run, hour):
+    """Путь файла часа hour выпуска run от корня зеркала."""
     day = datetime.datetime.fromtimestamp(run, datetime.timezone.utc)
-    return FILE.format(bucket=BUCKET, day=day.strftime("%Y%m%d"),
-                       hour=day.hour, step=hour)
+    return PATH.format(day=day.strftime("%Y%m%d"), hour=day.hour,
+                       step=hour)
 
 
 def byte_range(index_text, field, hour):
@@ -186,12 +202,18 @@ def values_of(field, bands):
     return (np.asarray(bands[0], dtype=np.float32) * field.scale)
 
 
-def make_grid(values, geo, run, hour):
-    """Grid из массива и геопреобразования GDAL (центры узлов)."""
+def make_grid(values, geo, run, hour, bands=None):
+    """Grid из массива и геопреобразования GDAL (центры узлов). bands -
+    полосы U и V ветра для струек."""
     west = geo[0] + geo[1] / 2.0
     north = geo[3] + geo[5] / 2.0
+    vectors = None
+    if bands is not None:
+        vectors = flow.VectorGrid(bands[0], bands[1], west, north,
+                                  abs(geo[1]))
     return Grid(np.asarray(values, dtype=np.float32), west, north,
-                abs(geo[1]), run, hour, (-90.0, 90.0, -180.0, 180.0))
+                abs(geo[1]), run, hour, (-90.0, 90.0, -180.0, 180.0),
+                vectors)
 
 
 def sample(grid, lats, lons):

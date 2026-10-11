@@ -27,6 +27,12 @@ import numpy as np
 
 URL = ("https://raw.githubusercontent.com/Valery35/planetx-terrain/main/"
        "slab2/{code}.npz")
+# Зеркала хранилища planetx-terrain: GitHub и CDN jsDelivr с теми же
+# путями, проверено 11 октября 2026 года. Выбор - core/mirrors.py.
+TERRAIN_REPOS = ("https://raw.githubusercontent.com/Valery35/"
+                 "planetx-terrain/main",
+                 "https://cdn.jsdelivr.net/gh/Valery35/planetx-terrain@main")
+PATH = "/slab2/{code}.npz"
 EMPTY = -32768
 MAX_DIP = 75.0  # градусы: круче видимая толщина не растёт
 ATTRIBUTION = ("Slabs: USGS Slab2",

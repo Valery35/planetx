@@ -14,6 +14,8 @@
 """
 import math
 
+import numpy as np
+
 try:  # внутри плагина QGIS
     from . import ellipsoid
 except ImportError:  # headless-тесты
@@ -42,6 +44,35 @@ def ground_size(distance, fov_y, aspect):
     """Ширина и высота видимой полосы на местности при отвесном взгляде."""
     height = 2.0 * distance * math.tan(math.radians(fov_y) / 2.0)
     return min(height * aspect, MAX_GROUND), min(height, MAX_GROUND)
+
+
+def view_box(lat, lon, width, height, margin=1.5):
+    """Рамка вида (запад, юг, восток, север) в градусах вокруг точки
+    взгляда: полоса width × height метров с запасом margin на наклон.
+    У полюса рамка берёт все долготы, восток меньше запада - рамка
+    через линию перемены дат."""
+    half_lat = math.degrees(margin * height / 2.0 / ellipsoid.A)
+    south = max(-90.0, lat - half_lat)
+    north = min(90.0, lat + half_lat)
+    cos_lat = math.cos(math.radians(min(abs(lat) + half_lat, 89.9)))
+    half_lon = math.degrees(margin * width / 2.0 / ellipsoid.A) / cos_lat
+    if half_lon >= 180.0:
+        return -180.0, south, 180.0, north
+    west = (lon - half_lon + 180.0) % 360.0 - 180.0
+    east = (lon + half_lon + 180.0) % 360.0 - 180.0
+    return west, south, east, north
+
+
+def inside(lats, lons, box):
+    """Маска точек в рамке view_box, в том числе через линию перемены
+    дат."""
+    west, south, east, north = box
+    lats = np.asarray(lats, dtype=np.float64)
+    lons = np.asarray(lons, dtype=np.float64)
+    keep = (lats >= south) & (lats <= north)
+    if west <= east:
+        return keep & (lons >= west) & (lons <= east)
+    return keep & ((lons >= west) | (lons <= east))
 
 
 def distance_for(width, height, fov_y, aspect):

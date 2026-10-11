@@ -227,7 +227,20 @@ take effect at once, without the Refresh button.
 | Base map | Sources of imagery and maps, an option button selects one, the last row is Add tile source… |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |
 | Maps and layers | The row opens the gallery of maps and layers, see Maps and layers |
-| Map | Borders and names, Transport, Nature - the vector base, Coordinate grid, 3D buildings |
+| On the globe | Layers switched on in the gallery and in Map, with an opacity slider and a menu, the section shows when something is on |
+| Map | Borders and names, Transport, Nature - the vector base, Coordinate grid, 3D buildings, Contours, OSM power lines, cables and pipelines, Submarine cables |
+
+The On the globe section shows everything that is switched on, one row
+per layer. Clearing the check box removes the layer from the globe. The
+slider changes the opacity of the layer - points, surface colouring or
+lines, the value is remembered. The ⋯ menu of a row removes the layer,
+and for mineral deposits, power plants, mines, earthquakes, fires, plate
+boundaries, mining areas and power lines it also saves what is in view
+to the QGIS project. The To QGIS project… item asks for a GeoPackage
+file and writes the objects inside the view frame with the record
+fields into it. The layer goes into the PlanetX - globe layers group at
+the top of the project tree. Points keep the globe colour and size,
+lines and outlines keep their style.
 
 The part headings have no check boxes, the rows have them. The vector
 base has three groups. Borders and names holds Borders, Places and
@@ -280,7 +293,8 @@ bodies have no heights. The accuracy is limited by the height pixel.
 It is about 5 m at the equator on the most detailed level on the Earth,
 2.6 km on Mars, 1.3 km on the Moon.
 
-The Contours layer draws lines of equal height on the surface, as on
+The Contours row of the Map group draws lines of equal height on the
+surface, as on
 a topographic map. The contour interval depends on the zoom. It is
 1, 2, 2.5 or 5 metres times a power of ten. Close up at middle
 latitudes it is 5 m, from tens of kilometres up it is 20-50 m. Every
@@ -359,7 +373,7 @@ it loads. When the window opens, the row is off.
 The Maps and layers row of the Layers section opens the gallery. It holds NASA and weather maps and three groups of layers.
 Sky and light holds Stars, Clouds, Sun and Satellites. Inside the
 Earth holds Earthquakes, Plate boundaries, Mineral deposits, Earth
-cutaway and Paleogeography. Terrain analysis holds Slope, Aspect and Contours. A click switches a layer on or off
+cutaway and Paleogeography. Terrain analysis holds Slope and Aspect. A click switches a layer on or off
 independently of other layers and of the map, a layer that is on has
 a green badge. The Satellites tab of the gallery shows cards of the
 satellite groups. A click on a card shows or removes a group. The
@@ -430,6 +444,22 @@ and Clouds in percent. The fields come from the NOAA GFS forecast
 model with a 0.25° grid, about 28 km. A field is chosen in the
 gallery, as a NASA theme.
 
+White streaks run over the Wind colouring - particles that float with
+the wind and drag a trail. A streak of a weak wind is paler. The streaks
+are sped up - in a second a wind of typical strength passes about an
+eighth of the view width, so they are visible both from afar and close
+up. They are born within the view and follow it.
+
+The Currents layer of the Planet of water group of the gallery shows
+ocean surface currents with the same streaks, the streak colour is the
+speed, from pale blue for slow ones to red for 2.5 m/s. The currents are
+geostrophic, NOAA CoastWatch calculates them from satellite altimetry
+for a day, the data lag two to three weeks. The 0.25° grid is taken at
+every other node, 0.5°. The first switch-on in a QGIS session downloads
+about 4 MB. The Gulf Stream, Kuroshio, the current around Antarctica
+and eddies tens of kilometres across are visible. Near the coasts and
+under ice there is no data.
+
 The time slider sets the moment of the field. A chosen field opens
 the slider at the present moment. The slider spans 10 days before
 the latest model run and 16 days of forecast after it. The future is
@@ -473,21 +503,80 @@ notation shows which plate goes under which: "PA\OK" is the Pacific
 plate under the Okhotsk plate.
 
 The Mineral deposits layer shows mineral deposits, mines and
-occurrences of the U.S. Geological Survey (USGS) from two datasets. The
+occurrences of the U.S. Geological Survey (USGS) from three datasets. The
 MRDS database is about 300 thousand points, about 267 thousand of them
 in the USA and about 1400 in Russia, USGS has not updated it since
 2011. Major mineral deposits of the world (USGS OFR 2005-1294) is 3161
-deposits, 300 of them in Russia, they show as large points. The point
+deposits, 300 of them in Russia, they show as large points. World
+mines and plants (USGS Mineral operations outside the United States)
+is 6478 mines, processing and metallurgical plants outside the USA for
+2006-2010 with the operator and capacity, among them the Verkhnekamsk
+deposit, the North Urals bauxite and the Saranovsky chromite complex.
+For some records the place is given by district, the information
+window then says approximate, by district. The point
 colour is the group of the first commodity, the group scale is in the
 lower left corner of the view. The size of an MRDS point is the
 development status, a producing mine is larger than an occurrence. A
-click in the Identify mode shows the name, commodities, type, status,
-country and a link to the USGS record. The first switch-on downloads
+click on a point shows the name, commodities, type, status, operator,
+capacity, country and a link to the USGS record, the Identify mode is
+not needed for it. Earthquake foci, fires and satellites open the same
+way. The first switch-on downloads
 the USGS archives, about 25 MB, and parses them in a background thread,
 which takes 15-20 s. The result is kept as a file in the QGIS profile,
 later switch-ons read it in 1-2 s. Over a large area, for example the
-whole USA, no more than 80 thousand points show. The major
-deposits and mines come first, then the rest.
+whole USA, no more than 80 thousand points show. The major deposits,
+world mines and plants come first, then the rest. Large points are
+drawn over small ones.
+
+The Mining areas layer shows outlines of open pits, waste dumps,
+tailings and industrial sites of the world - about 45 thousand areas
+outlined on Sentinel-2 images of 2019 (Maus et al., 2022, CC BY-SA
+4.0). The outlines lie as an orange fill in the tile image. A click on
+an outline shows the country and area. The first switch-on downloads
+a file of about 25 MB into the QGIS profile.
+
+The OSM mines and quarries layer shows mines, shafts and quarries
+from OpenStreetMap with their names. They load for the place of the
+view when the camera is below 150 km - an area of about 100 km around
+the look point in one request to an Overpass server. The point colour
+is the commodity group from the resource tag, without it the point is
+white, Other. A click on a point shows the name, kind, operator and a
+link to the OpenStreetMap object. In busy hours the Overpass server
+answers with a delay or a refusal. The request then repeats by itself
+on another Overpass server or on the same one after a pause.
+
+The Infrastructure group of the Maps and layers gallery holds the
+Power plants layer.
+
+The Submarine cables row of the Map group shows submarine communication
+lines in turquoise and submarine power cables in purple from any
+altitude. The data is OpenStreetMap, extracted on 11 October 2026 - 909
+communication lines and 1040 power cables longer than 5 km. OSM holds
+part of the world's cables, most of them in the Atlantic and near
+Europe. A click on a line shows the name, kind, owner and a link to the
+OpenStreetMap object.
+
+The Power plants layer shows about 35 thousand power plants of the
+world from the WRI Global Power Plant Database, data as of 2021 (CC BY
+4.0). The point colour is the fuel, the size is the capacity. The
+points are visible from any altitude, a click on a point shows the
+name, capacity, commissioning year, owner and a link to the source of
+the record. Some plants are placed wrongly in the database. The first
+switch-on downloads an archive of about 4 MB, the result is kept as a
+file in the QGIS profile.
+
+The OSM power lines, cables and pipelines row of the Map group of the
+Layers section shows power lines, substations, cables and pipelines
+from OpenStreetMap. A power cable, underground or under water, is a
+purple dashed line, a communication line is turquoise. The line colour
+and width show the
+voltage class - 500 kV and above, 220-330 kV, 110-150 kV or below. A
+pipeline is dashed, its colour shows the substance - gas, oil and
+products, water and heat. A substation is a square in the colour of
+its voltage. The objects load for the place of the view when the
+camera is below 150 km, the same way as the OSM mines. A click on a
+line or substation shows the kind, voltage, substance, owner and a
+link to the OpenStreetMap object.
 
 The Earthquakes layer shows earthquakes of magnitude 4.5 and above
 over the last 30 days from the feed of the U.S. Geological Survey
@@ -646,15 +735,18 @@ Reset returns the default source. The Add base map…, Edit… and Remove
 buttons work with the QGIS XYZ Tiles connections, a removed connection
 disappears from the QGIS browser too.
 
-The 30 m model list of the Terrain group in the same window puts a 30 m
-terrain model over the height tiles:
+The Terrain - where the heights come from group of the same window
+explains that the heights are built from three layers - the world height
+tiles, the 30 m land refinement and an own raster of the project. The
+30 m land refinement list puts a 30 m terrain model over the height
+tiles:
 
-- Height tiles only - the Mapzen Terrain Tiles relief, as before. It
+- No - height tiles only - the Mapzen Terrain Tiles relief, as before. It
   loads the fastest. North of 60° on land its data is about 250 m.
 - Copernicus DEM 30 m - the Copernicus GLO-30 surface model, files per
   degree on the open AWS storage. Forest and buildings are part of the
   height.
-- GEDTM30 - the model of the bare ground without forest and buildings,
+- GEDTM30 30 m - the model of the bare ground without forest and buildings,
   OpenGeoHub, CC BY 4.0. It is one large file, its pieces take longer
   to read.
 
@@ -1862,6 +1954,24 @@ The Moscow, old maps demo puts maps of Moscow of 1813, 1860, 1900,
 1917 and 1935 from Wikimedia Commons into the project. The maps are in
 the public domain, members of the Wikimaps Warper project
 georeferenced them, the tiles come from its server.
+
+The Rumsey historical maps here… item of the globe menu opens the
+Rumsey maps window - maps of the David Rumsey collection at the view.
+The collection holds about 57 thousand georeferenced maps from the 13th
+to the 21st century. The list goes by year, a click on a column header
+sorts by title or scale. The list holds 400 maps closest to the place
+by extent. The search line picks maps by year or title. The To QGIS
+project button builds the chosen map from the collection image and
+georeferences it by the collection control points. The map goes into
+the Rumsey maps group at the top of the project with the map year and
+takes its place on the time slider, with maps changing by year and the
+swipe of two years. Building takes 5-15 s, a ready map is kept in the
+QGIS profile and is not downloaded again. The Map page button opens
+the page of the map on the collection site.
+
+The collection images are published under CC BY-NC-SA 3.0, it allows
+only non-commercial use with credit to the source. The georeferencing was done by members of
+the collection, for some maps it is rough or wrong.
 
 ---
 

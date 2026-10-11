@@ -13,7 +13,7 @@ import os
 
 from qgis.core import QgsApplication
 
-from ..core import deposits
+from ..core import deposits, plants
 
 
 def deposits_path():
@@ -23,9 +23,17 @@ def deposits_path():
     return os.path.join(folder, "deposits.npz")
 
 
-def parse_deposits(mrds, major, path):
-    """Разбор обоих архивов и запись файла path. Рабочий поток, Qt не
+def parse_deposits(mrds, major, minfac, path):
+    """Разбор архивов и запись файла path. Рабочий поток, Qt не
     трогает. Возвращает core.deposits.Deposits."""
-    data = deposits.parse(mrds, major)
+    data = deposits.parse(mrds, major, minfac)
     deposits.save(data, path)
     return data
+
+
+def parse_plants(data, path):
+    """Разбор архива электростанций WRI и запись файла path. Рабочий
+    поток, Qt не трогает. Возвращает core.plants.Plants."""
+    found = plants.parse(data)
+    plants.save(found, path)
+    return found

@@ -44,7 +44,8 @@ from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
 from .subsurface import ImageWalls, Subsurface
-from .quakes import DepositPoints, FirePoints, Quakes
+from .flow import FlowLines
+from .quakes import DepositPoints, FirePoints, PlantPoints, Quakes
 from .satellites import SatellitePoints
 from .constellations import Constellations
 from .sky import Sky
@@ -359,6 +360,13 @@ class GlobeView(QOpenGLWidget):
         self.fires = FirePoints()
         # Месторождения USGS (core/deposits.py): точки на рельефе.
         self.deposits = DepositPoints()
+        # Шахты и карьеры OpenStreetMap (core/mining.py) - так же.
+        self.osm_mines = DepositPoints()
+        # Электростанции WRI (core/plants.py) - так же.
+        self.plants = PlantPoints()
+        # Струйки ветра и течений (core/flow.py).
+        self.flows = {"wind": FlowLines("wind"),
+                      "currents": FlowLines("currents")}
         # Спутники - своей проекцией, геостационарные дальше дальней
         # плоскости вида (render/satellites.py).
         self.satellites = SatellitePoints()
@@ -1320,6 +1328,10 @@ class GlobeView(QOpenGLWidget):
         self.quakes.init_gl()
         self.fires.init_gl()
         self.deposits.init_gl()
+        self.osm_mines.init_gl()
+        self.plants.init_gl()
+        for lines in self.flows.values():
+            lines.init_gl()
         self.satellites.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
@@ -1348,6 +1360,10 @@ class GlobeView(QOpenGLWidget):
         self.quakes.release_gl()
         self.fires.release_gl()
         self.deposits.release_gl()
+        self.osm_mines.release_gl()
+        self.plants.release_gl()
+        for lines in self.flows.values():
+            lines.release_gl()
         self.satellites.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
@@ -1850,7 +1866,7 @@ class GlobeView(QOpenGLWidget):
                 layer.upload(self.pool, self.frame)
                 unit, _, u_uv = self.gibs_slots[name]
                 layers.append((unit, u_uv, clear + layer.items(
-                    sel.draw, self.clear_texture, self.frame)))
+                    sel.draw, self.clear_texture, self.frame), layer.fade))
             else:
                 layer.missing = 0
         if alpha < 1.0:
@@ -1928,6 +1944,17 @@ class GlobeView(QOpenGLWidget):
             self.deposits.draw(self.camera, ratio)
         else:
             self.deposits.drawn = 0
+        if self.osm_mines.data is not None and not self.show_holes:
+            self.osm_mines.draw(self.camera, ratio)
+        else:
+            self.osm_mines.drawn = 0
+        if self.plants.data is not None and not self.show_holes:
+            self.plants.draw(self.camera, ratio)
+        else:
+            self.plants.drawn = 0
+        for lines in self.flows.values():
+            if not self.show_holes:
+                lines.draw(self.camera, ratio)
         if self.fires.fires is not None and not self.show_holes:
             self.fires.draw(self.camera, ratio)
         else:

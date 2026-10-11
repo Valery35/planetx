@@ -62,5 +62,28 @@ class TestSameView(unittest.TestCase):
         self.assertFalse(sy.same_view(a, None))
 
 
+class TestViewBox(unittest.TestCase):
+    """Рамка вида для выгрузки видимого в проект QGIS."""
+
+    def test_box_around_look_point(self):
+        west, south, east, north = sy.view_box(59.45, 56.8, 40000.0,
+                                               30000.0)
+        self.assertLess(west, 56.8)
+        self.assertGreater(east, 56.8)
+        self.assertAlmostEqual((south + north) / 2.0, 59.45, places=6)
+        # 30 км с запасом 1.5 - около 0.4 градуса широты.
+        self.assertAlmostEqual(north - south, 0.404, places=2)
+
+    def test_box_across_date_line(self):
+        box = sy.view_box(0.0, 179.9, 100000.0, 100000.0)
+        self.assertGreater(box[0], box[2])
+        keep = sy.inside([0.0, 0.0, 0.0], [179.95, -179.95, 0.0], box)
+        self.assertEqual(list(keep), [True, True, False])
+
+    def test_whole_globe(self):
+        box = sy.view_box(80.0, 10.0, 2.0e7, 2.0e7)
+        self.assertEqual((box[0], box[2]), (-180.0, 180.0))
+
+
 if __name__ == "__main__":
     unittest.main()

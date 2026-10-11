@@ -331,8 +331,9 @@ uniform float u_shallow;
 uniform float u_plain;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
+// uv.w - доля прозрачности слоя (ползунок «На глобусе»), 0 - как есть.
 vec3 lay(vec3 under, sampler2D image, vec4 uv) {
-    vec4 top = texture(image, uv.xy + uv.z * v_uv);
+    vec4 top = texture(image, uv.xy + uv.z * v_uv) * (1.0 - uv.w);
     return under * (1.0 - top.a) + top.rgb;
 }
 void main() {

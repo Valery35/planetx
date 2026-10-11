@@ -21,11 +21,13 @@ from collections import OrderedDict
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 from ..core import ellipsoid, weather
+from ..core.mirrors import Mirrors
 from ..i18n import tr
-from ..net.overlay import fetch_bytes
+from ..net.overlay import fetch_mirror
 from .viewshed import ResultTiles
 
 MAX_GRIDS = 12
+MIRRORS = Mirrors(weather.BUCKETS)  # зеркала GFS, одно состояние на QGIS
 LEVEL = 6  # уровень тайлов поля: пиксель около 2.4 км, сетка 28 км
 PAST_DAYS = 10  # шкала погоды уходит в прошлое на столько суток
 
@@ -86,6 +88,7 @@ class WeatherManager(QObject):
         self.key = ""
         self.newest = None  # свежий выложенный выпуск, секунды UTC
         self.indexes = {}  # (выпуск, час) - текст индекса
+        self.sources = {}  # (выпуск, час) - зеркало индекса
         self.grids = OrderedDict()  # (выпуск, час, поле) - Grid
         self.replies = {}
         self.moment = None
@@ -163,17 +166,19 @@ class WeatherManager(QObject):
         if not self._tried:
             self._tried = weather.candidate_runs(time.time())
         run = self._tried[0]
-        self.replies["find"] = fetch_bytes(
-            weather.file_url(run, 0) + ".idx",
-            lambda data, error, run=run: self._found(run, data, error))
+        self.replies["find"] = fetch_mirror(
+            MIRRORS, weather.file_path(run, 0) + ".idx",
+            lambda data, error, base, run=run: self._found(run, data, error,
+                                                           base))
         self._count()
 
-    def _found(self, run, data, error):
+    def _found(self, run, data, error, base):
         if self.replies.pop("find", None) is None:
             return
         self._count()
         if data:
             self.indexes[(run, 0)] = data.decode("ascii", "replace")
+            self.sources[(run, 0)] = base
             self.newest = run
             self._tried = []
             self.window._update_timebar()
@@ -191,10 +196,10 @@ class WeatherManager(QObject):
         if index is None:
             name = ("idx", run, hour)
             if name not in self.replies:
-                self.replies[name] = fetch_bytes(
-                    weather.file_url(run, hour) + ".idx",
-                    lambda data, error, run=run, hour=hour:
-                    self._index_done(run, hour, data, error))
+                self.replies[name] = fetch_mirror(
+                    MIRRORS, weather.file_path(run, hour) + ".idx",
+                    lambda data, error, base, run=run, hour=hour:
+                    self._index_done(run, hour, data, error, base))
                 self._count()
             return
         field = field_of(self.key)
@@ -209,14 +214,14 @@ class WeatherManager(QObject):
         if name in self.replies:
             return
         value = "bytes={}-{}".format(start, "" if end is None else end)
-        self.replies[name] = fetch_bytes(
-            weather.file_url(run, hour),
-            lambda data, error, name=name: self._grid_done(name, data,
-                                                           error),
-            headers={"Range": value})
+        self.replies[name] = fetch_mirror(
+            MIRRORS, weather.file_path(run, hour),
+            lambda data, error, base, name=name: self._grid_done(
+                name, data, error),
+            base=self.sources.get((run, hour)), headers={"Range": value})
         self._count()
 
-    def _index_done(self, run, hour, data, error):
+    def _index_done(self, run, hour, data, error, base):
         if self.replies.pop(("idx", run, hour), None) is None:
             return
         self._count()
@@ -226,6 +231,7 @@ class WeatherManager(QObject):
             self.changed.emit()
             return
         self.indexes[(run, hour)] = data.decode("ascii", "replace")
+        self.sources[(run, hour)] = base
         if self.wanted is not None and self.wanted[:2] == (run, hour):
             self._fetch(run, hour)
 
@@ -296,7 +302,8 @@ def read_grid(data, field, run, hour):
             return None
         geo = dataset.GetGeoTransform()
         dataset = None
-        return weather.make_grid(weather.values_of(field, bands), geo,
-                                 run, hour)
+        return weather.make_grid(
+            weather.values_of(field, bands), geo, run, hour,
+            bands if field.key == "wind" else None)
     finally:
         gdal.Unlink(path)

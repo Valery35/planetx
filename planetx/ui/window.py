@@ -11,6 +11,7 @@
 from urllib.parse import quote
 import hashlib
 import html
+import datetime
 import math
 import os
 import zipfile
@@ -20,7 +21,7 @@ import time
 import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsApplication, QgsCsException, QgsProject,
-                       QgsRasterLayer, QgsSettings)
+                       QgsRasterLayer, QgsRectangle, QgsSettings)
 from qgis.PyQt.QtCore import QEvent, QMimeData, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QIcon, QImage
 from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
@@ -50,7 +51,8 @@ from ..core import assistant as assistant_core
 from ..core import searchbar, skydata
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
-from ..core.sync import BOTH, DIRECTIONS
+from ..core.sync import BOTH, DIRECTIONS, ground_size, view_box
+from ..core.sync import inside as in_box
 from ..core.contours import (LEVEL as CONTOUR_LEVEL,
                              SOURCE_LEVEL as CONTOUR_SOURCE, contour_rgba)
 from ..core.contours import is_imagery as contour_is_imagery
@@ -65,6 +67,14 @@ from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ..core.tiling import tile_mesh
 from ..core import deposits as deposits_core
+from ..core import infra, mining
+from ..core import cables as cables_core
+from ..core import rumsey as rumsey_core
+from ..core import plants as plants_core
+from .overpass import OverpassTiles, brief_error
+from .flow import CURRENTS_ATTRIBUTION, FlowManager
+from .rumsey import RumseyLoader
+from ..core.mirrors import Mirrors
 from ..core import fires as fires_core
 from ..core import (crust, cutaway, insolation, pick, plates, quakes,
                     overlays, section, slabs, themes, viewshed)
@@ -80,9 +90,9 @@ from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            PLACES,
                            RAIL_FROM, RAILWAYS, VECTOR_GROUPS, label_kinds,
                            railway_layer,
-                           LayerOverlay, fetch_bytes,
+                           LayerOverlay, fetch_bytes, fetch_mirror,
                            fetch_json,
-                           openfreemap_layer, plate_layer,
+                           openfreemap_layer, plate_layer, cable_layer,
                            set_line_groups)
 from ..qt_compat import enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
@@ -129,8 +139,9 @@ from .inset import prepare as prepare_inset
 from .inset import warm as warm_gdal
 from .inset import water_mesh
 from .bathymetry import REMOVE as BATHY_REMOVE, BathymetryDialog
-from .deposits import deposits_path, parse_deposits
-from .legend import deposit_group_names
+from .deposits import deposits_path, parse_deposits, parse_plants
+from .legend import (deposit_group_names, fuel_names, mine_kind_names,
+                     CurrentLegend, InfraLegend, PlantLegend)
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
@@ -148,7 +159,9 @@ from .tour import TourPlayer
 from .routing import RouteManager
 from .sheets import SheetsDialog
 from .menulinks import MenuLinksDialog, open_link
-from .nasamaps import NasaMaps, map_names
+from .nasamaps import (ANY_BODY, LAYERS as GALLERY_LAYERS,
+                       RELIEF_BODY, NasaMaps, layer_names, map_names)
+from . import export as layer_export
 from .weather import (LEVEL as WEATHER_LEVEL, value_text,
                       WeatherManager, units_text as weather_units)
 from .satellites import SatelliteManager
@@ -167,7 +180,27 @@ CALC_BUDGET = 0.004  # с расчёта инсоляции за проход ц
 # Region KML пересчитывается, когда глаз ушёл на эту долю расстояния
 # до точки взгляда.
 REGION_MOVE = 0.02
+# Зеркала хранилища planetx-terrain, одно состояние на QGIS.
+TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
+# Раздел «На глобусе»: непрозрачность и выгрузка слоёв. Точки - атрибут
+# вида, тайловые слои - слои вида GIBS, слои QGIS - в наложении.
+POINT_LAYERS = {"deposits": "deposits", "osm_mines": "osm_mines",
+                "plants": "plants", "quakes": "quakes", "fires": "fires"}
+# Струйки: ключ строки - поле вида.
+FLOW_LAYERS = {"currents": "currents"}
+GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
+              "aspect": ("slope",), "contours": ("contours",),
+              "temperature": ("sea", "land"), "map": ("theme", "compare")}
+QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
+OPACITY_KEY = "PlanetX/opacity/"
+OPACITY_PAUSE = 300  # мс, наложение пересобирается после ползунка
+# Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
+ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
+    "contours", "infra_osm", "cables", "fires", "temperature")
 DEPOSIT_POLL = 300  # мс между проверками разбора месторождений
+# Шахты OSM: пауза после остановки вида перед запросом тайлов, мс,
+# и пауза после отказа Overpass, с. Выбор помощника.
+OSM_PAUSE = 800
 # Уровень воды Бриенцского озера в демо, м: средний уровень 563.7 м
 # по swisstopo, округлён.
 BRIENZ_LEVEL = 564.0
@@ -220,13 +253,16 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "slope": False, "aspect": False, "contours": False,
                   "quakes": False, "cutaway": False, "paleo": False,
                   "plates": False, "fires": False, "satellites": False,
-                  "deposits": False}
+                  "deposits": False, "mining": False, "osm_mines": False,
+                  "plants": False, "infra_osm": False,
+                  "cables": False, "currents": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "plates", "fires", "satellites",
-                "deposits")
+                "deposits", "mining", "osm_mines", "plants", "infra_osm",
+                "cables", "currents")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -625,8 +661,13 @@ class GlobeWindow(QWidget):
         self.fire_legend.hide()
         self.deposit_legend = DepositLegend(self.view)
         self.deposit_legend.hide()
-        self.deposit_legend.closer = \
-            lambda: self.set_extra("deposits", False)
+        self.deposit_legend.closer = self._close_deposit_legend
+        self.plant_legend = PlantLegend(self.view)
+        self.plant_legend.hide()
+        self.plant_legend.closer = lambda: self.set_extra("plants", False)
+        self.infra_legend = InfraLegend(self.view)
+        self.infra_legend.hide()
+        self.infra_legend.closer = lambda: self.set_extra("infra_osm", False)
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -726,6 +767,31 @@ class GlobeWindow(QWidget):
         # Месторождения USGS: данные, ждущие ответы двух архивов, задача
         # разбора в рабочем потоке.
         self.deposit_data = None
+        # Контуры горных разработок (core/mining.py): слой QGIS из файла
+        # профиля и его загрузка.
+        self.mining_layer = None
+        self._mining_reply = None
+        # Шахты и карьеры OSM: объекты по тайлам, очередь тайлов, запрос
+        # Overpass в работе и время последнего запроса.
+        self.osm_mines_tiles = OverpassTiles(
+            self.view, "mines", mining.query, mining.parse,
+            self._place_osm_mines, self._overpass_failed)
+        # ЛЭП, подстанции и трубопроводы OSM (core/infra.py): тот же
+        # загрузчик, слои QGIS в памяти в картинке тайлов.
+        self.infra_tiles = OverpassTiles(
+            self.view, "infra", infra.query, infra.parse,
+            self._place_infra, self._overpass_failed)
+        self.infra_lines = None
+        self.infra_points = None
+        # Электростанции WRI (core/plants.py): файл профиля, загрузка
+        # архива и разбор в рабочем потоке.
+        self.plant_data = None
+        self._plant_reply = None
+        self._plant_job = None
+        self._osm_timer = QTimer(self)
+        self._osm_timer.setSingleShot(True)
+        self._osm_timer.setInterval(OSM_PAUSE)
+        self._osm_timer.timeout.connect(self._want_overpass)
         self._deposit_replies = {}
         self._deposit_bytes = {}
         self._deposit_job = None
@@ -739,6 +805,9 @@ class GlobeWindow(QWidget):
         # читаются при первом включении строки.
         self.plates_data = None
         self.plate_layer = None
+        # Подводные кабели OSM (core/cables.py), файл data/cables.json.
+        self.cables_data = None
+        self.cable_layer = None
         self._slab_replies = {}
         self.slab_errors = {}
         self.slab_base = None
@@ -1088,6 +1157,18 @@ class GlobeWindow(QWidget):
             settings.setValue(EXTRA_KEY + "paleo", False)
         self.panel.set_extras(self.extras)
         self.panel.extra_toggled.connect(self.set_extra)
+        # Раздел «На глобусе».
+        self.panel.active_off.connect(self._active_off)
+        self.panel.active_opacity.connect(self._active_opacity)
+        self.panel.active_export.connect(self.active_export)
+        self._opacity_overlay = QTimer(self)
+        self._opacity_overlay.setSingleShot(True)
+        self._opacity_overlay.setInterval(OPACITY_PAUSE)
+        self._opacity_overlay.timeout.connect(
+            lambda: self._update_overlay(keep=True))
+        for key in tuple(POINT_LAYERS) + tuple(GIBS_FADES) \
+                + tuple(FLOW_LAYERS):
+            self._apply_layer_opacity(key)
         # Спутники CelesTrak - строка с группами (ui/satellites.py).
         self.satellite_manager = SatelliteManager(self)
         self.satellite_manager.changed.connect(self._show_attribution)
@@ -1096,6 +1177,15 @@ class GlobeWindow(QWidget):
         # в точке.
         self.weather = WeatherManager(self)
         self.weather.changed.connect(self._weather_changed)
+        # Струйки ветра и течений (ui/flow.py).
+        self.flow = FlowManager(self)
+        # Карты Рамсея: каталог и сборка карт (ui/rumsey.py).
+        self.rumsey_loader = RumseyLoader(self)
+        self.flow.changed.connect(self._flow_changed)
+        self.current_legend = CurrentLegend(self.view)
+        self.current_legend.hide()
+        self.current_legend.closer = lambda: self.set_extra("currents",
+                                                            False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
@@ -1110,6 +1200,7 @@ class GlobeWindow(QWidget):
         self._value_key = None
         self.view.changed.connect(self._update_values)
         self.view.changed.connect(self._update_contour_legend)
+        self.view.changed.connect(self._overpass_view_changed)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
         self.panel.gallery_requested.connect(self.open_gallery)
@@ -1281,6 +1372,18 @@ class GlobeWindow(QWidget):
             self._set_fires(on)
         elif key == "deposits":
             self._set_deposits(on)
+        elif key == "mining":
+            self._set_mining(on)
+        elif key == "osm_mines":
+            self._set_osm_mines(on)
+        elif key == "plants":
+            self._set_plants(on)
+        elif key == "infra_osm":
+            self._set_infra(on)
+        elif key == "cables":
+            self._set_cables(on)
+        elif key == "currents":
+            self._set_currents(on)
         elif key == "cutaway":
             self._set_cutaway(on)
         elif key == "paleo":
@@ -1290,6 +1393,186 @@ class GlobeWindow(QWidget):
         elif key == "satellites":
             self.satellite_manager.set_on(on)
             self._update_timebar()
+
+    # Раздел «На глобусе»: включённые слои, непрозрачность, выгрузка.
+
+    def _active_rows(self):
+        """Строки раздела «На глобусе»: (ключ, название, непрозрачность
+        или None, можно ли в проект QGIS)."""
+        extras = getattr(self, "extras", {})
+        planet = getattr(self, "planet", None)
+        earth = planet is None or planet.earth
+        names = layer_names()
+        maps = map_names()
+        rows = []
+        for key in ACTIVE_ORDER:
+            if not extras.get(key):
+                continue
+            if not earth and key not in ANY_BODY + RELIEF_BODY + (
+                    "contours",):
+                continue
+            title = (names.get(key) or maps.get(key) or (key,))[0]
+            rows.append((key, title, self._row_opacity(key),
+                         key in POINT_LAYERS or key in QGIS_LAYERS))
+        theme = getattr(self, "theme_key", "")
+        if theme and earth and theme in maps:
+            rows.append(("map", maps[theme][0], self._row_opacity("map"),
+                         False))
+        return rows
+
+    def _row_opacity(self, key):
+        if key in POINT_LAYERS or key in GIBS_FADES or key in QGIS_LAYERS \
+                or key in FLOW_LAYERS:
+            return self._layer_opacity(key)
+        return None
+
+    def _update_active(self):
+        panel = getattr(self, "panel", None)
+        if panel is not None and hasattr(panel, "set_active"):
+            panel.set_active(self._active_rows())
+
+    def _layer_opacity(self, key):
+        return min(1.0, max(0.0, float(QgsSettings().value(
+            OPACITY_KEY + key, 1.0, type=float))))
+
+    def _active_off(self, key):
+        """Снять слой строки «На глобусе»."""
+        if key == "map" or key in themes.EXCLUSIVE:
+            self.set_theme("")
+        else:
+            self.set_extra(key, False)
+
+    def _active_opacity(self, key, value):
+        QgsSettings().setValue(OPACITY_KEY + key, float(value))
+        self._apply_layer_opacity(key)
+
+    def _apply_layer_opacity(self, key):
+        value = self._layer_opacity(key)
+        if key in POINT_LAYERS:
+            getattr(self.view, POINT_LAYERS[key]).opacity = value
+        if key in FLOW_LAYERS:
+            self.view.flows[FLOW_LAYERS[key]].opacity = value
+        for name in GIBS_FADES.get(key, ()):
+            self.view.gibs[name].fade = 1.0 - value
+        if key in QGIS_LAYERS:
+            for layer in self._qgis_layers(key):
+                layer.setOpacity(value)
+            if self.extras.get(key):
+                self._opacity_overlay.start()
+        self.view.update()
+
+    def _qgis_layers(self, key):
+        """Слои QGIS строки key, которые уже собраны."""
+        found = {"plates": [getattr(self, "plate_layer", None)],
+                 "mining": [getattr(self, "mining_layer", None)],
+                 "infra_osm": [getattr(self, "infra_lines", None),
+                               getattr(self, "infra_points", None)],
+                 "cables": [getattr(self, "cable_layer", None)]}
+        return [layer for layer in found.get(key, ()) if layer is not None]
+
+    def active_export(self, key, path=None):
+        """«В проект QGIS…» строки «На глобусе»: объекты слоя в рамке
+        вида слоем GeoPackage в группу «PlanetX - слои глобуса». path -
+        файл, без него - окно выбора."""
+        title = (layer_names().get(key) or (key,))[0]
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self, tr("В проект QGIS"),
+                os.path.join(QgsProject.instance().homePath()
+                             or os.path.expanduser("~"), key + ".gpkg"),
+                tr("GeoPackage (*.gpkg)"))
+        if not path:
+            return None
+        pose = self.view.navigator.pose
+        camera = self.view.camera
+        width, height = ground_size(pose.distance, camera.fov_y,
+                                    camera.aspect)
+        box = view_box(pose.lat, pose.lon, width, height)
+        if key in POINT_LAYERS:
+            count = self._export_points(key, title, path, box)
+        else:
+            count = self._export_qgis(key, title, path, box)
+        if count is None:
+            text = tr("Слой «{title}» не записан в «{path}».", title=title,
+                      path=path)
+        else:
+            text = tr("В проект добавлено объектов {count}: {title}.",
+                      count=count, title=title)
+        self.message = (text, time.monotonic())
+        self._show_state()
+        return count
+
+    def _export_points(self, key, title, path, box):
+        layer = getattr(self.view, POINT_LAYERS[key])
+        if not len(layer.focus):
+            return 0
+        keep = in_box(layer.lats, layer.lons, box)
+        if key in ("quakes", "fires"):
+            keep &= quakes.in_window(layer.times, layer.window)
+        index = np.nonzero(keep)[0]
+        fields, rows = self._point_rows(key, layer, index)
+        count = layer_export.write_points(
+            path, key, layer.lats[index], layer.lons[index],
+            layer.colors[index] * 255.0, layer.sizes[index], fields, rows)
+        if count is None or layer_export.add_points(path, key, title) is None:
+            return None
+        return count
+
+    def _point_rows(self, key, layer, index):
+        """Поля и значения точек index слоя вида key."""
+        def stamp(seconds):
+            if not math.isfinite(seconds):
+                return ""
+            return datetime.datetime.fromtimestamp(
+                seconds, datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
+        if key in ("deposits", "osm_mines"):
+            fields = [(name, "str") for name in (
+                "name", "country", "commodities", "type", "status",
+                "record", "operator", "capacity", "precision", "osm")]
+            rows = [(layer.data.text(int(layer.order[n])) + [""] * 10)[:10]
+                    for n in index]
+        elif key == "plants":
+            fields = [(name, "str") for name in (
+                "name", "country", "fuel", "year", "owner",
+                "source")] + [("capacity_mw", "real")]
+            rows = [(layer.data.text(int(layer.order[n])) + [""] * 6)[:6]
+                    + [float(layer.data.capacity[layer.order[n]])]
+                    for n in index]
+        elif key == "quakes":
+            fields = [("place", "str"), ("mag", "real"),
+                      ("depth_km", "real"), ("time", "str"), ("url", "str")]
+            rows = [(q.place, q.mag, q.depth, stamp(q.time), q.url)
+                    for q in (layer.events[n] for n in index)]
+        else:
+            fires = layer.fires
+            fields = [("frp_mw", "real"), ("time", "str"),
+                      ("confidence", "str")]
+            rows = [(float(fires.frp[n]), stamp(float(fires.time[n])),
+                     fires.confidence[n]) for n in index]
+        return fields, rows
+
+    def _export_qgis(self, key, title, path, box):
+        if key == "plates":
+            parts = [("plates", self.plate_layer, title)]
+        elif key == "mining":
+            parts = [("mining", self.mining_layer, title)]
+        elif key == "cables":
+            parts = [("cables", self.cable_layer, title)]
+        else:
+            parts = [("lines", self.infra_lines, title),
+                     ("substations", self.infra_points,
+                      title + " - " + tr("подстанции"))]
+        total = 0
+        for n, (name, source, layer_title) in enumerate(parts):
+            if source is None:
+                return None
+            count = layer_export.write_layer(path, name, source, box,
+                                             first=n == 0)
+            if count is None or layer_export.add_styled(
+                    path, name, layer_title, source) is None:
+                return None
+            total += count
+        return total
 
     def _clock_on(self):
         """Нужны ли часы глобуса: Солнце или спутники на Земле, вид
@@ -1348,6 +1631,7 @@ class GlobeWindow(QWidget):
             return
         key = self.gallery_key()
         self.panel.set_theme(key, map_names()[key][0] if key else "")
+        self._update_active()
         gallery = getattr(self, "gallery", None)
         if gallery is not None:
             gallery.refresh()
@@ -1370,6 +1654,8 @@ class GlobeWindow(QWidget):
         """Тема на глобус или с глобуса. Ряд дат и шкала слоя
         просятся при первом показе темы, ответы помнятся."""
         self._time_mode()
+        if not self._theme_on() or self.theme_key != "weather_wind":
+            self.flow.set_wind(None)
         if not self._theme_on() or not themes.is_weather(self.theme_key):
             self.weather.hide()
             self._value_field = None
@@ -2135,10 +2421,16 @@ class GlobeWindow(QWidget):
             if code in self.slab_zones or code in self._slab_replies \
                     or code in self.slab_errors:
                 continue
-            self._slab_replies[code] = fetch_bytes(
-                slabs.url_of(code, self.slab_base),
-                lambda data, error, code=code: self._slab_done(
-                    code, data, error))
+            if self.slab_base:
+                self._slab_replies[code] = fetch_bytes(
+                    slabs.url_of(code, self.slab_base),
+                    lambda data, error, code=code: self._slab_done(
+                        code, data, error))
+            else:
+                self._slab_replies[code] = fetch_mirror(
+                    TERRAIN_MIRRORS, slabs.PATH.format(code=code),
+                    lambda data, error, base, code=code: self._slab_done(
+                        code, data, error))
         self._count_pending()
         self.view.update()
 
@@ -2297,8 +2589,7 @@ class GlobeWindow(QWidget):
         в рабочем потоке, итог ложится файлом в профиль
         (core/deposits.py). Дальше файл читается без сети."""
         self._mark_gallery()
-        self.deposit_legend.setVisible(on and self.planet.earth
-                                       and self.view.sky_view is None)
+        self.deposit_legend.setVisible(self._deposit_legend_on())
         if not on:
             for reply in list(self._deposit_replies.values()):
                 reply.abort()
@@ -2319,7 +2610,8 @@ class GlobeWindow(QWidget):
             return
         self._deposit_bytes = {}
         for key, url in (("mrds", deposits_core.MRDS_URL),
-                         ("major", deposits_core.MAJOR_URL)):
+                         ("major", deposits_core.MAJOR_URL),
+                         ("minfac", deposits_core.MINFAC_URL)):
             self._deposit_replies[key] = fetch_bytes(
                 url, lambda data, error, key=key:
                 self._deposit_arrived(key, data, error))
@@ -2344,8 +2636,9 @@ class GlobeWindow(QWidget):
             return
         mrds = self._deposit_bytes.pop("mrds", None)
         major = self._deposit_bytes.pop("major", None)
+        minfac = self._deposit_bytes.pop("minfac", None)
         self._deposit_job = executor("deposits", 1).submit(
-            parse_deposits, mrds, major, deposits_path())
+            parse_deposits, mrds, major, minfac, deposits_path())
         self.view.data_pending += 1
         QTimer.singleShot(DEPOSIT_POLL, self._deposit_poll)
 
@@ -2617,8 +2910,11 @@ class GlobeWindow(QWidget):
         self._quake_legend_state()
         self.fire_legend.setVisible(self.extras.get("fires", False)
                                     and self.planet.earth)
-        self.deposit_legend.setVisible(self.extras.get("deposits", False)
-                                       and self.planet.earth)
+        self.deposit_legend.setVisible(self._deposit_legend_on())
+        self.plant_legend.setVisible(bool(self.extras.get("plants"))
+                                     and self.planet.earth)
+        self.infra_legend.setVisible(bool(self.extras.get("infra_osm"))
+                                     and self.planet.earth)
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
                                        and self.planet.earth)
         self.paleo_bar.setVisible(self._paleo_on())
@@ -2967,12 +3263,32 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*fires_core.ATTRIBUTION))
         if self.view.deposits.data is not None:
             parts.append(link_html(*deposits_core.ATTRIBUTION))
+        if self.view.osm_mines.data is not None \
+                or (self.infra_lines is not None
+                    and self.extras.get("infra_osm")):
+            parts.append(link_html(*mining.OSM_ATTRIBUTION))
+        if self.view.plants.data is not None:
+            parts.append(link_html(*plants_core.ATTRIBUTION))
+        if self.planet.earth and getattr(self, "extras", {}).get("mining") \
+                and self.mining_layer is not None:
+            parts.append(link_html(*mining.POLYGONS_ATTRIBUTION))
         manager = getattr(self, "satellite_manager", None)
         if manager is not None and manager.on and manager.count():
             parts.append(link_html(*satellites_core.ATTRIBUTION))
         if self.planet.earth and getattr(self, "extras", {}).get("plates") \
                 and self.plates_data is not None:
             parts.append(link_html(*plates.ATTRIBUTION))
+        if self.planet.earth and self._rumsey_shown():
+            parts.append(link_html(*rumsey_core.ATTRIBUTION))
+        if self.planet.earth \
+                and getattr(self, "extras", {}).get("currents") \
+                and getattr(self, "flow", None) is not None \
+                and self.flow.fields["currents"] is not None:
+            parts.append(link_html(*CURRENTS_ATTRIBUTION))
+        if self.planet.earth \
+                and getattr(self, "extras", {}).get("cables") \
+                and getattr(self, "cable_layer", None) is not None:
+            parts.append(link_html(*cables_core.ATTRIBUTION))
         if self.view.wedge_slabs:
             parts.append(link_html(*slabs.ATTRIBUTION))
         if self.view.wedge is not None and self.crust is not None:
@@ -3094,7 +3410,22 @@ class GlobeWindow(QWidget):
         if self.planet.earth and getattr(self, "extras", {}).get("plates") \
                 and self.plate_layer is not None:
             # Границы плит - над векторной основой.
+            self.plate_layer.setOpacity(self._layer_opacity("plates"))
             layers.append(self.plate_layer)
+        if self.planet.earth and getattr(self, "extras", {}).get("mining") \
+                and getattr(self, "mining_layer", None) is not None:
+            self.mining_layer.setOpacity(self._layer_opacity("mining"))
+            layers.append(self.mining_layer)
+        if self.planet.earth \
+                and getattr(self, "extras", {}).get("infra_osm") \
+                and getattr(self, "infra_lines", None) is not None:
+            for layer in (self.infra_points, self.infra_lines):
+                layer.setOpacity(self._layer_opacity("infra_osm"))
+                layers.append(layer)
+        if self.planet.earth and getattr(self, "extras", {}).get("cables") \
+                and getattr(self, "cable_layer", None) is not None:
+            self.cable_layer.setOpacity(self._layer_opacity("cables"))
+            layers.append(self.cable_layer)
         if groups & set(LINE_GROUPS) and self.ofm_layer is not None:
             layers.append(self.ofm_layer)
         min_levels = {}
@@ -4347,6 +4678,7 @@ class GlobeWindow(QWidget):
         self._value_field = (field, grid)
         self._value_key = None
         self._update_values()
+        self.flow.set_wind(grid.vectors)
         if getattr(self, "_theme_open_time", False) and self.timebar.known:
             # Выбранное поле открывает шкалу на нынешнем моменте.
             self._theme_open_time = False
@@ -4415,6 +4747,73 @@ class GlobeWindow(QWidget):
         dialog = self._sentinel_dialog()
         dialog.show_point(lat, lon, self._view_width())
         return dialog
+
+    def rumsey_here(self, lat, lon):
+        """«Старые карты Рамсея здесь…» меню на глобусе: карты коллекции
+        у вида. Окно одно, новый вид заменяет прежний."""
+        from .rumsey import RumseyDialog
+        dialog = getattr(self, "rumsey_dialog", None)
+        if dialog is None:
+            dialog = RumseyDialog(self)
+            self.rumsey_dialog = dialog
+        pose = self.view.navigator.pose
+        camera = self.view.camera
+        width, height = ground_size(pose.distance, camera.fov_y,
+                                    camera.aspect)
+        dialog.show_view(lat, lon, view_box(lat, lon, width, height, 1.0))
+        dialog.show()
+        dialog.raise_()
+        return dialog
+
+    def _rumsey_shown(self):
+        """Видна ли на глобусе карта Рамсея: слой из папки PlanetX/rumsey
+        профиля среди показанных слоёв проекта."""
+        project = QgsProject.instance()
+        for layer_id in getattr(self, "_applied_layers", None) or ():
+            layer = project.mapLayer(layer_id)
+            if layer is not None and "rumsey" in os.path.normcase(
+                    layer.source()).replace("\\", "/").split("/"):
+                return True
+        return False
+
+    def add_rumsey_map(self, path, year, title):
+        """Привязанная карта Рамсея слоем в группе «Карты Рамсея» вверху
+        проекта, с годом карты, отмечена на глобусе. Тот же файл заново
+        не добавляется."""
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        group_title = tr("Карты Рамсея")
+        group = root.findGroup(group_title)
+        if group is None:
+            group = root.insertGroup(0, group_title)
+        for node in group.findLayers():
+            if os.path.normcase(node.layer().source()) == \
+                    os.path.normcase(path):
+                return node.layerId()
+        name = "{} {}".format(year, title) if year is not None else title
+        layer = QgsRasterLayer(path, name[:100], "gdal")
+        if not layer.isValid():
+            return None
+        meta = layer.metadata()
+        meta.setRights([tr("David Rumsey Map Collection, CC BY-NC-SA 3.0, "
+                           "некоммерческое использование")])
+        layer.setMetadata(meta)
+        project.addMapLayer(layer, False)
+        group.addLayer(layer)
+        years = read_map_years()
+        if year is not None:
+            years[layer.id()] = year
+        write_map_years(years)
+        self._map_years = years
+        self._shown.add(layer.id())
+        if self.follow:
+            set_visible_on_map(layer.id(), True)
+        write_shown(self._shown)
+        self._show_layers()
+        self.refresh()
+        if year is not None:
+            self._show_time(oldmaps.year_time(year))
+        return layer.id()
 
     def sentinel_place(self, place):
         """«Снимки Sentinel-2 и Landsat…» меню метки: участок - метка."""
@@ -6239,9 +6638,39 @@ class GlobeWindow(QWidget):
             if found is not None:
                 tool.add(found[0], found[1])
             return
-        if not self.identifying:
+        if not self.identifying and not self._point_under(px, py):
             return
         self.identify_here(px, py)
+
+    def _point_under(self, px, py):
+        """Есть ли под курсором точка месторождения, очага землетрясения,
+        пожара или спутника. Щелчок по такой точке открывает окно
+        «Объекты» и без режима опроса - замечание автора от 11 октября
+        2026 года «клик по точкам ничего не даёт»."""
+        return bool(self._identify_deposits(px, py)
+                    or self._identify_deposits(px, py, osm=True)
+                    or self._identify_plants(px, py)
+                    or self._infra_under(px, py)
+                    or self._identify_quakes(px, py)
+                    or self._identify_fires(px, py)
+                    or self._identify_satellites(px, py))
+
+    def _infra_under(self, px, py):
+        """Линия или подстанция OSM под пикселем кадра."""
+        if not (self.extras.get("infra_osm") and self.planet.earth
+                and self.infra_lines is not None):
+            return []
+        camera = self.view.camera
+        point = ground_under(camera, px, py,
+                             self.view.navigator.pose.terrain)
+        if point is None:
+            return []
+        lat, lon, _ = (float(v) for v in ecef_to_geodetic(point))
+        metres = float(((point - camera.eye) ** 2).sum()) ** 0.5 \
+            / focal(camera)
+        return self._identify_infra(
+            lat, lon, IDENTIFY_PIXELS * self.view.devicePixelRatioF()
+            * metres)
 
     def identify_here(self, px, py):
         """Опрос объектов под пикселем кадра: окно «Объекты». Его зовут
@@ -6287,12 +6716,17 @@ class GlobeWindow(QWidget):
         groups += self._identify_quakes(px, py)
         groups += self._identify_fires(px, py)
         groups += self._identify_deposits(px, py)
+        groups += self._identify_deposits(px, py, osm=True)
+        groups += self._identify_mining(lat, lon)
+        groups += self._identify_plants(px, py)
+        groups += self._identify_infra(lat, lon, tolerance)
         groups = self._identify_satellites(px, py) + groups
         under = self.subsurface.identify(
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
         if under:
             groups.append((Group(tr("Подземное")), under))
         groups += self._identify_plates(lat, lon, tolerance)
+        groups += self._identify_cables(lat, lon, tolerance)
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)
@@ -6705,9 +7139,10 @@ class GlobeWindow(QWidget):
                              values, None))
         return [(Group(tr("Пожары")), features)] if features else []
 
-    def _identify_deposits(self, px, py):
-        """Месторождения у точки щелчка на экране, не больше 20."""
-        layer = self.view.deposits
+    def _identify_deposits(self, px, py, osm=False):
+        """Месторождения у точки щелчка на экране, не больше 20. osm -
+        шахты и карьеры OpenStreetMap."""
+        layer = self.view.osm_mines if osm else self.view.deposits
         data = layer.data
         if data is None:
             return []
@@ -6725,25 +7160,359 @@ class GlobeWindow(QWidget):
         features = []
         for n in near:
             record = int(layer.order[seen[n]])
-            name, country, commodities, kind, status, number = \
-                (data.text(record) + [""] * 6)[:6]
+            name, country, commodities, kind, status, number, operator, \
+                capacity, precision, osm_id = \
+                (data.text(record) + [""] * 10)[:10]
+            if osm:
+                kind = mine_kind_names().get(kind, kind)
             values = [(tr("Полезные ископаемые"), commodities),
                       (tr("Группа"), names[keys[int(data.group[record])]])]
             if kind:
                 values.append((tr("Тип"), kind))
             if status:
                 values.append((tr("Стадия или модель"), status))
+            if operator:
+                values.append((tr("Оператор"), operator))
+            if capacity:
+                values.append((tr("Мощность (год сведений)"), capacity))
             if country:
                 values.append((tr("Страна"), country))
-            values.append((tr("Набор"), tr("Крупные месторождения мира, "
-                                           "USGS OFR 2005-1294")
-                           if data.major[record] else "USGS MRDS"))
+            if precision == "A":
+                values.append((tr("Место"), tr("примерное, по району")))
+            source = "OpenStreetMap" if osm else tr(
+                "Крупные месторождения мира, USGS OFR 2005-1294") \
+                if data.major[record] else tr(
+                    "Рудники и заводы мира, USGS mineral operations") \
+                if data.facility[record] else "USGS MRDS"
+            values.append((tr("Набор"), source))
+            if osm_id:
+                values.append((tr("Объект OpenStreetMap"),
+                               mining.OSM_PAGE.format(*osm_id.split("/"))))
             if number:
                 values.append((tr("Запись USGS"),
                                deposits_core.MRDS_PAGE.format(number)))
             features.append((name or "{:.4f}, {:.4f}".format(
                 data.lat[record], data.lon[record]), values, None))
-        return [(Group(tr("Месторождения")), features)] if features else []
+        title = tr("Шахты и карьеры OSM") if osm else tr("Месторождения")
+        return [(Group(title), features)] if features else []
+
+    def _identify_mining(self, lat, lon):
+        """Контур горной разработки под точкой щелчка."""
+        layer = self.mining_layer
+        if layer is None or not self.extras.get("mining") \
+                or not self.planet.earth:
+            return []
+        from qgis.core import QgsFeatureRequest, QgsGeometry, QgsPointXY
+        point = QgsGeometry.fromPointXY(QgsPointXY(lon, lat))
+        step = 0.0005
+        request = QgsFeatureRequest().setFilterRect(QgsRectangle(
+            lon - step, lat - step, lon + step, lat + step))
+        features = []
+        for feature in layer.getFeatures(request):
+            if not feature.geometry().intersects(point):
+                continue
+            values = [(tr("Страна"), str(feature["COUNTRY_NAME"] or "")),
+                      (tr("Площадь"), tr("{value} км²", value="{:.2f}".format(
+                          float(feature["AREA"] or 0.0)))),
+                      (tr("Набор"), "Maus et al. 2022, PANGAEA")]
+            features.append((tr("Горная разработка"), values, None))
+        return [(Group(tr("Горные разработки")), features)] \
+            if features else []
+
+    # Горные разработки и шахты OSM.
+
+    def _deposit_legend_on(self):
+        """Шкала месторождений нужна месторождениям USGS и шахтам OSM."""
+        return bool(self.planet.earth and self.view.sky_view is None
+                    and (self.extras.get("deposits")
+                         or self.extras.get("osm_mines")))
+
+    def _close_deposit_legend(self):
+        """Крестик шкалы убирает месторождения и шахты OSM."""
+        self.set_extra("deposits", False)
+        self.set_extra("osm_mines", False)
+
+    def _mining_path(self):
+        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                              "PlanetX")
+        os.makedirs(folder, exist_ok=True)
+        return os.path.join(folder, mining.POLYGONS_FILE)
+
+    def _set_mining(self, on):
+        """Контуры горных разработок строкой витрины. Первое включение
+        скачивает GeoPackage в профиль, дальше файл читается без сети."""
+        self._mark_gallery()
+        if not on:
+            if self._mining_reply is not None:
+                self._mining_reply.abort()
+                self._mining_reply = None
+            self._update_overlay(keep=True)
+            self._show_attribution()
+            return
+        if self.mining_layer is None:
+            path = self._mining_path()
+            if os.path.exists(path):
+                self._open_mining(path)
+            elif self._mining_reply is None:
+                self._mining_reply = fetch_bytes(
+                    mining.POLYGONS_URL, self._mining_arrived)
+                self.view.data_pending += 1
+                self.message = (tr("Загрузка контуров горных разработок, "
+                                   "около 25 МБ…"), time.monotonic())
+                self._show_state()
+                return
+        self._update_overlay(keep=True)
+        self._show_attribution()
+
+    def _mining_arrived(self, data, error):
+        if self._mining_reply is not None:
+            self.view.data_pending = max(0, self.view.data_pending - 1)
+        self._mining_reply = None
+        if data is None:
+            journal.note("mining polygons: {}".format(brief_error(error)))
+            self.message = (tr("Контуры горных разработок не загрузились, "
+                               "проверьте сеть и включите строку снова."),
+                            time.monotonic())
+            self._show_state()
+            return
+        path = self._mining_path()
+        try:
+            with open(path + ".part", "wb") as stream:
+                stream.write(data)
+            os.replace(path + ".part", path)
+        except OSError as error:
+            self.message = (tr("Контуры горных разработок не записаны: "
+                               "{error}", error=str(error)), time.monotonic())
+            self._show_state()
+            return
+        self._open_mining(path)
+        if self.extras.get("mining"):
+            self._update_overlay(keep=True)
+            self._show_attribution()
+
+    def _open_mining(self, path):
+        """Слой QGIS контуров из файла профиля со своим стилем."""
+        from qgis.core import QgsFillSymbol, QgsVectorLayer
+        from .nasamaps import MINING_FILL, MINING_LINE
+        layer = QgsVectorLayer(path, "Mining areas", "ogr")
+        if not layer.isValid():
+            self.message = (tr("Файл контуров горных разработок не "
+                               "читается: {path}", path=path),
+                            time.monotonic())
+            self._show_state()
+            return
+        symbol = QgsFillSymbol.createSimple({
+            "color": "{},{},{},{}".format(*MINING_FILL),
+            "outline_color": "{},{},{},{}".format(*MINING_LINE),
+            "outline_width": "0.35"})
+        layer.renderer().setSymbol(symbol)
+        self.mining_layer = layer
+
+    def _set_osm_mines(self, on):
+        """Шахты и карьеры OSM строкой витрины: тайлы вокруг вида."""
+        self._mark_gallery()
+        self.deposit_legend.setVisible(self._deposit_legend_on())
+        if not on:
+            self.osm_mines_tiles.stop()
+        self._place_osm_mines()
+        if on:
+            self._want_overpass()
+
+    def _overpass_view_changed(self):
+        if self.planet.earth and (self.extras.get("osm_mines")
+                                  or self.extras.get("infra_osm")):
+            self._osm_timer.start()
+
+    def _want_overpass(self):
+        """Недостающие тайлы у точки взгляда - загрузчикам Overpass
+        включённых строк."""
+        if not self.planet.earth:
+            return
+        pose = self.view.navigator.pose
+        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
+        altitude = float(ecef_to_geodetic(eye)[2])
+        if self.extras.get("osm_mines"):
+            self.osm_mines_tiles.want(pose.lat, pose.lon, altitude)
+        if self.extras.get("infra_osm"):
+            self.infra_tiles.want(pose.lat, pose.lon, altitude)
+
+    def _overpass_failed(self):
+        """Отказ сервера Overpass: пользователю - короткая фраза,
+        подробности уже в журнале работы."""
+        self.message = (tr("Сервер OpenStreetMap не ответил, запрос "
+                           "повторится сам."), time.monotonic())
+        self._show_state()
+
+    def _place_osm_mines(self):
+        on = self.extras.get("osm_mines", False) and self.planet.earth
+        items = self.osm_mines_tiles.all_items()
+        self.view.osm_mines.set_deposits(
+            mining.to_deposits(items) if on and items else None,
+            self.view.store.scale, self._surface_ground)
+        self._show_attribution()
+        self.view.update()
+
+    # ЛЭП и трубопроводы OSM.
+
+    def _set_infra(self, on):
+        """ЛЭП, подстанции и трубопроводы OSM строкой витрины."""
+        self._mark_gallery()
+        self.infra_legend.setVisible(on and self.planet.earth)
+        if not on:
+            self.infra_tiles.stop()
+            self._update_overlay(keep=True)
+            self._show_attribution()
+            return
+        self._place_infra()
+        self._want_overpass()
+
+    def _place_infra(self):
+        """Слои QGIS в памяти по всем пришедшим объектам: линии - ЛЭП
+        и трубопроводы, точки - подстанции. Стиль - по классу."""
+        from .infra import infra_layers
+        items = infra.unique(self.infra_tiles.all_items())
+        self.infra_lines, self.infra_points = infra_layers(items)
+        if self.extras.get("infra_osm") and self.planet.earth:
+            self._update_overlay(keep=True)
+        self._show_attribution()
+
+    def _identify_infra(self, lat, lon, tolerance):
+        """Линия или подстанция OSM у точки щелчка."""
+        if not (self.extras.get("infra_osm") and self.planet.earth
+                and self.infra_lines is not None):
+            return []
+        from .infra import nearest_infra
+        found = nearest_infra(self.infra_lines, self.infra_points, lat, lon,
+                              tolerance)
+        if found is None:
+            return []
+        title, values = found
+        return [(Group(tr("ЛЭП, кабели и трубопроводы OSM")),
+                 [(title or tr("Без названия"), values, None)])]
+
+    # Электростанции WRI.
+
+    def _plants_path(self):
+        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                              "PlanetX")
+        os.makedirs(folder, exist_ok=True)
+        return os.path.join(folder, "power_plants.npz")
+
+    def _set_plants(self, on):
+        """Электростанции WRI строкой витрины. Первое включение скачивает
+        архив около 4 МБ, разбор - в рабочем потоке, итог - файл
+        профиля."""
+        self._mark_gallery()
+        self.plant_legend.setVisible(on and self.planet.earth)
+        if not on:
+            if self._plant_reply is not None:
+                reply, self._plant_reply = self._plant_reply, None
+                reply.abort()
+            self._place_plants()
+            return
+        if self.plant_data is None:
+            path = self._plants_path()
+            if os.path.exists(path):
+                try:
+                    self.plant_data = plants_core.load(path)
+                except (OSError, ValueError, KeyError) as error:
+                    journal.note("plants file: {}".format(error))
+        if self.plant_data is not None:
+            self._place_plants()
+            return
+        if self._plant_reply is not None or self._plant_job is not None:
+            return
+        self._plant_reply = fetch_bytes(plants_core.URL, self._plants_arrived)
+        self.view.data_pending += 1
+        self.message = (tr("Загрузка электростанций WRI, около 4 МБ…"),
+                        time.monotonic())
+        self._show_state()
+
+    def _plants_arrived(self, data, error):
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        if self._plant_reply is None:
+            return  # снят выключением строки
+        self._plant_reply = None
+        if data is None:
+            journal.note("plants: {}".format(brief_error(error)))
+            self.message = (tr("Электростанции не загрузились, проверьте "
+                               "сеть и включите строку снова."),
+                            time.monotonic())
+            self._show_state()
+            return
+        self._plant_job = executor("deposits", 1).submit(
+            parse_plants, bytes(data), self._plants_path())
+        self.view.data_pending += 1
+        QTimer.singleShot(DEPOSIT_POLL, self._plants_poll)
+
+    def _plants_poll(self):
+        job = self._plant_job
+        if job is None:
+            return
+        if not job.done():
+            QTimer.singleShot(DEPOSIT_POLL, self._plants_poll)
+            return
+        self._plant_job = None
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        try:
+            self.plant_data = job.result()
+        except (OSError, ValueError, KeyError, StopIteration,
+                zipfile.BadZipFile) as error:
+            journal.note("plants parse: {}".format(error))
+            self.message = (tr("Электростанции не разобраны."),
+                            time.monotonic())
+            self._show_state()
+            return
+        self.message = (tr("Электростанций {count}.",
+                           count=len(self.plant_data)), time.monotonic())
+        self._show_state()
+        self._place_plants()
+
+    def _place_plants(self):
+        on = self.extras.get("plants", False) and self.planet.earth
+        self.view.plants.set_plants(self.plant_data if on else None,
+                                    self.view.store.scale,
+                                    self._surface_ground)
+        self._show_attribution()
+        self.view.update()
+
+    def _identify_plants(self, px, py):
+        """Электростанции у точки щелчка на экране, не больше 10."""
+        layer = self.view.plants
+        data = layer.data
+        if data is None:
+            return []
+        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
+        seen = layer.visible(eye)
+        if not len(seen):
+            return []
+        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
+        pixels, front = self.view.camera.project(layer.focus[seen])
+        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
+        near = np.nonzero(front & (gap <= radius))[0]
+        near = near[np.argsort(gap[near])][:10]
+        fuels = fuel_names()
+        keys = [f[0] for f in plants_core.FUELS]
+        features = []
+        for n in near:
+            record = int(layer.order[seen[n]])
+            name, country, fuel, year, owner, url = \
+                (data.text(record) + [""] * 6)[:6]
+            values = [(tr("Мощность"), tr("{value} МВт", value="{:g}".format(
+                round(float(data.capacity[record]), 1)))),
+                      (tr("Топливо"), "{} ({})".format(
+                          fuels[keys[int(data.fuel[record])]], fuel))]
+            if year:
+                values.append((tr("Год ввода"), year))
+            if owner:
+                values.append((tr("Владелец"), owner))
+            if country:
+                values.append((tr("Страна"), country))
+            values.append((tr("Набор"), "WRI Global Power Plant Database"))
+            if url:
+                values.append((tr("Источник"), url))
+            features.append((name, values, None))
+        return [(Group(tr("Электростанции")), features)] if features else []
 
     def _plate_names(self):
         """Подписи групп и классов границ плит на языке интерфейса."""
@@ -6782,6 +7551,69 @@ class GlobeWindow(QWidget):
         self._update_overlay(keep=True)
         self._show_attribution()
         self.view.update()
+
+    def _set_currents(self, on):
+        """Строка «Течения» витрины: струйки течений и шкала."""
+        self._mark_gallery()
+        self.flow.set_currents(on and self.planet.earth)
+        self.current_legend.setVisible(on and self.planet.earth)
+        self._show_attribution()
+
+    def _flow_changed(self):
+        if self.flow.error:
+            self.message = (self.flow.error, time.monotonic())
+        elif self.flow.currents_day:
+            self.message = (tr("Течения на {day}.",
+                               day=self.flow.currents_day),
+                            time.monotonic())
+        self._show_state()
+        self._show_attribution()
+
+    def _cable_names(self):
+        return {"telecom": tr("Линия связи"),
+                "power": tr("Силовой кабель")}
+
+    def _set_cables(self, on):
+        """Строка «Подводные кабели» группы «Карта»: линии в наложении.
+        Файл data/cables.json читается при первом включении."""
+        if on and self.cables_data is None:
+            try:
+                with open(os.path.join(DATA_DIR, "cables.json"),
+                          encoding="utf-8") as fh:
+                    self.cables_data = cables_core.Cables.from_text(
+                        fh.read())
+            except (OSError, ValueError) as error:
+                journal.note("cables: {}".format(error))
+                self.message = (tr("Подводные кабели не прочитаны."),
+                                time.monotonic())
+                self._show_state()
+                return
+        if on and self.cable_layer is None:
+            self.cable_layer = cable_layer(self.cables_data,
+                                           self._cable_names())
+        self._update_overlay(keep=True)
+        self._show_attribution()
+        self.view.update()
+
+    def _identify_cables(self, lat, lon, tolerance):
+        """Подводный кабель у точки щелчка, когда строка включена."""
+        if not (self.planet.earth and self.extras.get("cables")
+                and self.cables_data is not None):
+            return []
+        found = cables_core.nearest(self.cables_data, lat, lon, tolerance)
+        if found is None:
+            return []
+        values = [(tr("Вид"), self._cable_names()[found.kind])]
+        if found.operator:
+            values.append((tr("Владелец"), found.operator))
+        kv = infra.kilovolts(found.voltage)
+        if kv is not None:
+            values.append((tr("Напряжение"), tr(
+                "{value} кВ", value="{:g}".format(kv))))
+        values.append((tr("Объект OSM"), "https://www.openstreetmap.org/"
+                       + found.osm))
+        return [(Group(tr("Подводные кабели")), [
+            (found.name or tr("Без названия"), values, None)])]
 
     def _identify_plates(self, lat, lon, tolerance):
         """Граница плит у точки щелчка, когда строка включена."""
@@ -7016,6 +7848,7 @@ class GlobeWindow(QWidget):
             self.satellite_manager.close()
             self.route_manager.close()
             self.weather.close()
+            self.flow.close()
             self._address_timer.stop()
             reply, self._address_reply = self._address_reply, None
             if reply is not None:

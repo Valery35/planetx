@@ -64,6 +64,48 @@ class TestDeposits(unittest.TestCase):
         self.assertTrue(np.allclose(back.lat, data.lat, atol=1e-4))
         self.assertEqual(list(back.group), list(data.group))
 
+    def test_world_operations(self):
+        # Строка набора minfac в cp1252, как у USGS: знак градуса - 0xB0.
+        text = ("position,rec_id,year,country,commodity,location,fac_name,"
+                "fac_type,dmslat,dmslong,latitude,longitude,precision,mm,"
+                "op_comp,maininvest,othinvest,status,capacity,units,notes,"
+                "cite\n"
+                "322,1850,2007,Russia,Bauxite,\"Severoural'sk Region\",,Mine,"
+                "\"60\xb0 09'  N\",\"060\xb0 00'  E\",60.15,60,A,,"
+                "Sevuralboksitruda,,,Active,3000,\"thousand metric tons\","
+                ",848\n")
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as out:
+            out.writestr("minfac.csv", text.encode("cp1252"))
+        data = dp.parse(None, None, archive.getvalue())
+        self.assertEqual(len(data), 1)
+        self.assertTrue(data.facility[0])
+        self.assertFalse(data.major[0])
+        fields = data.text(0)
+        self.assertEqual(fields[0], "Severoural'sk Region")
+        self.assertEqual(fields[6], "Sevuralboksitruda")
+        self.assertEqual(fields[7], "3000 thousand metric tons (2007)")
+        self.assertEqual(fields[8], "A")
+        self.assertEqual(dp.sizes(data.major, data.status, data.facility)[0],
+                         dp.FACILITY_SIZE)
+        names = [g[0] for g in dp.GROUPS]
+        self.assertEqual(names[data.group[0]], "rare")  # бокситы
+        path = os.path.join(tempfile.mkdtemp(), "d.npz")
+        dp.save(data, path)
+        self.assertTrue(dp.load(path).facility[0])
+
+    def test_old_file_without_facilities_is_refused(self):
+        path = os.path.join(tempfile.mkdtemp(), "old.npz")
+        np.savez_compressed(path, lat=np.zeros(1, np.float32),
+                            lon=np.zeros(1, np.float32),
+                            group=np.zeros(1, np.uint8),
+                            status=np.zeros(1, np.uint8),
+                            major=np.zeros(1, bool),
+                            offsets=np.array([0, 1]),
+                            blob=np.frombuffer(b"x", np.uint8))
+        with self.assertRaises(KeyError):
+            dp.load(path)
+
 
 if __name__ == "__main__":
     unittest.main()

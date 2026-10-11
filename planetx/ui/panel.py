@@ -27,7 +27,8 @@ from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
 from qgis.PyQt.QtCore import (QEvent, QItemSelectionModel, Qt, QTimer,
                               pyqtSignal)
 from qgis.PyQt.QtGui import QFont, QIcon, QKeySequence
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QHBoxLayout, QLabel,
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox,
+                                 QHBoxLayout, QLabel,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
                                  QSizePolicy, QSlider, QSplitter, QStyle,
@@ -44,6 +45,7 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
                            WATER_NAMES)
 from ..qt_compat import QAction, enum, enum_int
+from .nasamaps import layer_names
 from .placeprops import icon_image
 from .spinner import BusySpinner
 
@@ -58,6 +60,10 @@ RELIEF = "relief"  # строка рельефа в панели «Слои»
 GRID, STARS, CLOUDS = "grid", "stars", "clouds"
 TEMPERATURE = "temperature"
 BUILDINGS = "buildings"
+CONTOURS = "contours"
+INFRA = "infra_osm"
+CABLES = "cables"
+ACTIVE_SLIDER = 64  # ширина ползунка строки «На глобусе», пиксели
 SUN = "sun"
 SLOPE, ASPECT = "slope", "aspect"
 QUAKES = "quakes"
@@ -442,6 +448,11 @@ class LayerPanel(QWidget):
     relief_toggled = pyqtSignal(bool)
     # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
     extra_toggled = pyqtSignal(str, bool)
+    # Раздел «На глобусе»: снять слой, его непрозрачность 0..1, слой
+    # в проект QGIS. Ключ - ключ строки витрины или «map» - карта витрины.
+    active_off = pyqtSignal(str)
+    active_opacity = pyqtSignal(str, float)
+    active_export = pyqtSignal(str)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -705,9 +716,26 @@ class LayerPanel(QWidget):
         row.addWidget(under)
         self.geo.setItemWidget(self.ground_item, 0, ground)
         self.ground_item.setHidden(True)
+        # Включённые слои с ползунком непрозрачности и меню - раздел
+        # «На глобусе». Решение автора от 11 октября 2026 года: витрина -
+        # каталог, включённое видно здесь, в проект - по команде.
+        self.active_header = QTreeWidgetItem(self.geo, self.gallery_item)
+        self.active_header.setText(0, tr("На глобусе"))
+        self.active_header.setToolTip(0, tr(
+            "Включённые слои витрины и карты. Ползунок меняет "
+            "непрозрачность, меню строки сохраняет видимое в проект QGIS "
+            "или убирает слой."))
+        self.active_header.setFlags(enum(Qt, "ItemFlag", "ItemIsEnabled"))
+        font = QFont(self.active_header.font(0))
+        font.setBold(True)
+        self.active_header.setFont(0, font)
+        self.active_header.setHidden(True)
+        self.active_rows = {}
+        self._active_shape = None
         self.geo.addTopLevelItems(list(self.headers.values()))
         self.extra_items = {}
         self._extras = {}
+        names = layer_names()
         for key, text, tip in (
                 (GRID, tr("Координатная сетка"), tr(
                     "Параллели и меридианы с подписями градусов, экватор, "
@@ -718,7 +746,10 @@ class LayerPanel(QWidget):
                     "тайлам OpenFreeMap. Они видны, когда камера ближе "
                     "6 км к земле. Высота взята из OSM, иначе из "
                     "этажности. Здание без этих сведений получает "
-                    "высоту 5 м."))):
+                    "высоту 5 м.")),
+                (CONTOURS,) + names[CONTOURS],
+                (INFRA,) + names[INFRA],
+                (CABLES,) + names[CABLES]):
             item = QTreeWidgetItem(self.headers["map"], [text])
             item.setData(0, LAYER_ROLE, key)
             item.setToolTip(0, tip)
@@ -772,6 +803,12 @@ class LayerPanel(QWidget):
 
         self.status = QLabel(self)
         self.status.setWordWrap(True)
+        # Ширину строки задаёт панель, а не текст: длинное слово без
+        # пробелов, например адрес в ошибке сети, раздвигало панель на
+        # весь экран, 11 октября 2026 года.
+        self.status.setSizePolicy(
+            enum(QSizePolicy, "Policy", "Ignored"),
+            enum(QSizePolicy, "Policy", "Preferred"))
         # Высота на две строки: камера и точка под курсором. Когда точки
         # нет, строка не сжимается и панель над ней не прыгает.
         self.status.setMinimumHeight(
@@ -994,7 +1031,74 @@ class LayerPanel(QWidget):
             if parent is not None:
                 parent.setDisabled(off)
         self.extra_items[BUILDINGS].setDisabled(not earth)
+        self.extra_items[INFRA].setDisabled(not earth)
+        self.extra_items[CABLES].setDisabled(not earth)
         self.layers.setEnabled(earth)
+
+    def set_active(self, rows):
+        """Раздел «На глобусе»: строки (ключ, название, непрозрачность
+        0..1 или None - без ползунка, можно ли в проект). Сигналы при
+        этом не идут. При тех же строках меняются только ползунки."""
+        shape = [(key, title, opacity is None, export)
+                 for key, title, opacity, export in rows]
+        if shape != self._active_shape:
+            self._active_shape = shape
+            self.active_header.takeChildren()
+            self.active_rows = {}
+            for key, title, opacity, export in rows:
+                self._active_row(key, title, opacity, export)
+            self.active_header.setExpanded(True)
+        for key, _, opacity, _ in rows:
+            slider = self.active_rows[key][1]
+            if slider is not None:
+                slider.blockSignals(True)
+                slider.setValue(int(round(float(opacity) * 100)))
+                slider.blockSignals(False)
+        self.active_header.setHidden(not rows)
+
+    def _active_row(self, key, title, opacity, export):
+        item = QTreeWidgetItem(self.active_header)
+        item.setFlags(enum(Qt, "ItemFlag", "ItemIsEnabled"))
+        box = QWidget(self.geo)
+        row = QHBoxLayout(box)
+        row.setContentsMargins(0, 0, 2, 0)
+        check = QCheckBox(title, box)
+        check.setChecked(True)
+        check.setToolTip(title)
+        check.setSizePolicy(enum(QSizePolicy, "Policy", "Ignored"),
+                            enum(QSizePolicy, "Policy", "Preferred"))
+        # Снятие убирает строку, а Qt ещё в обработчике её флажка -
+        # сигнал уходит после прохода цикла событий.
+        check.toggled.connect(lambda on, key=key: on or QTimer.singleShot(
+            0, lambda: self.active_off.emit(key)))
+        row.addWidget(check, 1)
+        slider = None
+        if opacity is not None:
+            slider = QSlider(enum(Qt, "Orientation", "Horizontal"), box)
+            slider.setRange(0, 100)
+            slider.setFixedWidth(ACTIVE_SLIDER)
+            slider.setToolTip(tr("Непрозрачность слоя. Вправо слой "
+                                 "непрозрачен, влево прозрачнее."))
+            slider.valueChanged.connect(
+                lambda value, key=key: self.active_opacity.emit(
+                    key, value / 100.0))
+            row.addWidget(slider)
+        more = QToolButton(box)
+        more.setText("⋯")
+        more.setAutoRaise(True)
+        more.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
+                               "InstantPopup"))
+        menu = QMenu(more)
+        if export:
+            menu.addAction(tr("В проект QGIS…")).triggered.connect(
+                lambda _=False, key=key: self.active_export.emit(key))
+        menu.addAction(tr("Убрать с глобуса")).triggered.connect(
+            lambda _=False, key=key: QTimer.singleShot(
+                0, lambda: self.active_off.emit(key)))
+        more.setMenu(menu)
+        row.addWidget(more)
+        self.geo.setItemWidget(item, 0, box)
+        self.active_rows[key] = (item, slider, check)
 
     def set_theme(self, key, name=""):
         """Карта витрины key на глобусе, "" - ни одной, name - её

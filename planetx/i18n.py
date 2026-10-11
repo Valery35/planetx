@@ -193,6 +193,307 @@ EN = {
         "SSL errors of the PlanetX request {address}:",
     "уровень воды {level}":
         "water level {level}",
+    "Нет - только тайлы высот":
+        "No - height tiles only",
+    "Copernicus DEM 30 м - с лесом и домами":
+        "Copernicus DEM 30 m - with forest and buildings",
+    "GEDTM30 30 м - земля без леса и домов":
+        "GEDTM30 30 m - bare ground without forest and buildings",
+    "Рельеф - откуда берутся высоты":
+        "Terrain - where the heights come from",
+    "Высоты складываются из трёх слоёв. Тайлы высот покрывают весь мир и дно "
+    "морей. Модель 30 м уточняет сушу вблизи. Свой растр проекта заменяет всё "
+    "в своём охвате.":
+        "The heights are built from three layers. The height tiles cover the "
+        "whole world and the sea floor. The 30 m model refines the land up "
+        "close. An own raster of the project replaces everything within its "
+        "extent.",
+    "Тайлы высот по миру":
+        "World height tiles",
+    "Как записаны высоты":
+        "Height encoding",
+    "Подпись тайлов":
+        "Tiles credit",
+    "Уточнение суши 30 м":
+        "30 m land refinement",
+    "Свой растр высот, например съёмку карьера, включает пункт «Рельеф "
+    "глобуса» меню растра в разделе «Слои проекта». Растр глубин озера - "
+    "пункт «Батиметрия водоёма…» того же меню.":
+        "An own height raster, for example a quarry survey, is switched on by "
+        "the Globe terrain item of the raster menu in the Project layers "
+        "section. A lake depth raster - the Water body bathymetry… item of "
+        "the same menu.",
+    "Адрес-шаблон тайлов высот с {z}, {x}, {y}, например свой сервер или "
+    "MapTiler. Пустое поле - тайлы Mapzen по умолчанию. Глобус просит тайлы "
+    "до уровня 15, глубже берёт их предков.":
+        "An address template of height tiles with {z}, {x}, {y}, for example "
+        "an own server or MapTiler. An empty field means the default Mapzen "
+        "tiles. The globe requests tiles up to level 15 and takes their "
+        "ancestors deeper.",
+    "Рудники и заводы мира, USGS mineral operations":
+        "World mines and plants, USGS mineral operations",
+    "Оператор":
+        "Operator",
+    "Мощность (год сведений)":
+        "Capacity (year of data)",
+    "примерное, по району":
+        "approximate, by district",
+    "Рудник или завод мира":
+        "World mine or plant",
+    "Размер точки, цвет - группа:":
+        "Point size, the colour is the group:",
+    "Шахта или рудник":
+        "Mine",
+    "Ствол шахты":
+        "Mine shaft",
+    "Шахты и карьеры OSM":
+        "OSM mines and quarries",
+    "Старые карты Рамсея здесь…":
+        "Rumsey historical maps here…",
+    "Загрузка сведений о карте…":
+        "Loading map details…",
+    "Загрузка изображения карты…":
+        "Loading the map image…",
+    "Загрузка изображения карты: {done} из {total}":
+        "Loading the map image: {done} of {total}",
+    "Привязка карты…":
+        "Georeferencing the map…",
+    "Карта не собрана, подробности - в журнале работы.":
+        "The map was not built, details are in the work log.",
+    "Карты Рамсея":
+        "Rumsey maps",
+    "Год или название":
+        "Year or title",
+    "Карты коллекции Дэвида Рамсея, привязка - по его опорным точкам. "
+    "Изображения - CC BY-NC-SA 3.0: только для некоммерческого "
+    "использования, с указанием источника.":
+        "Maps of the David Rumsey collection, georeferenced by its "
+        "control points. The images are CC BY-NC-SA 3.0: non-commercial "
+        "use only, with credit to the source.",
+    "Карта собирается из изображения коллекции, привязывается и ложится "
+    "в группу «Карты Рамсея» с годом карты. Год ставит карту на шкалу "
+    "времени.":
+        "The map is built from the collection image, georeferenced and "
+        "put into the Rumsey maps group with the map year. The year "
+        "places the map on the time slider.",
+    "Страница карты":
+        "Map page",
+    "Страница карты на сайте коллекции в браузере.":
+        "The map page on the collection site in the browser.",
+    "Карт у вида: {count}, по годам. Щелчок по заголовку столбца "
+    "меняет порядок.":
+        "Maps at the view: {count}, by year. A click on a column "
+        "header changes the order.",
+    "Карта в проекте: {title}.":
+        "Map in the project: {title}.",
+    "Каталог карт Рамсея не загрузился, проверьте сеть.":
+        "The Rumsey map catalogue did not load, check the network.",
+    "Год":
+        "Year",
+    "Загрузка каталога карт…":
+        "Loading the map catalogue…",
+    "David Rumsey Map Collection, CC BY-NC-SA 3.0, некоммерческое "
+    "использование":
+        "David Rumsey Map Collection, CC BY-NC-SA 3.0, non-commercial use",
+    "Течения не загрузились, проверьте сеть и включите строку снова.":
+        "Currents did not load, check the network and turn the row on "
+        "again.",
+    "Течения, м/с":
+        "Currents, m/s",
+    "Геострофические, по спутниковой альтиметрии":
+        "Geostrophic, from satellite altimetry",
+    "Течения":
+        "Currents",
+    "Поверхностные течения океана бегущими струйками, цвет - скорость. "
+    "Геострофические течения NOAA CoastWatch по спутниковой альтиметрии "
+    "за последние готовые сутки, сетка 0.5°. Первое включение за сеанс "
+    "скачивает около 4 МБ.":
+        "Ocean surface currents as running streaks, the colour is the "
+        "speed. Geostrophic currents of NOAA CoastWatch from satellite "
+        "altimetry for the latest ready day, 0.5° grid. The first "
+        "switch-on in a session downloads about 4 MB.",
+    "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
+    "наводнения по данным NASA, течения по данным NOAA.":
+        "Precipitation, soil moisture, snow, ice, water vapor, "
+        "chlorophyll, salinity and floods from NASA data, currents from "
+        "NOAA data.",
+    "Течения на {day}.":
+        "Currents for {day}.",
+    "Подводные кабели":
+        "Submarine cables",
+    "Подводные линии связи (бирюзовые) и силовые кабели (лиловые) из "
+    "OpenStreetMap, видны с любой высоты. В OSM нанесена часть кабелей "
+    "мира, больше всего в Атлантике и у Европы. Щелчок по линии "
+    "показывает название, владельца и ссылку на объект OpenStreetMap.":
+        "Submarine communication lines (turquoise) and power cables "
+        "(purple) from OpenStreetMap, visible from any altitude. OSM "
+        "holds part of the world's cables, most of them in the Atlantic "
+        "and near Europe. A click on a line shows the name, owner and a "
+        "link to the OpenStreetMap object.",
+    "Подводные кабели не прочитаны.":
+        "Submarine cables could not be read.",
+    "PlanetX - слои глобуса":
+        "PlanetX - globe layers",
+    "Силовой кабель":
+        "Power cable",
+    "Линия связи":
+        "Communication line",
+    "ЛЭП, кабели и трубопроводы OSM":
+        "OSM power lines, cables and pipelines",
+    "Линии электропередачи по напряжению, подстанции, кабели и "
+    "трубопроводы газа, нефти и воды из OpenStreetMap. Загружаются по "
+    "месту вида, когда камера ниже 150 км. Щелчок по линии показывает "
+    "напряжение, вещество, оператора и ссылку на объект OpenStreetMap.":
+        "Power lines by voltage, substations, cables and gas, oil and "
+        "water pipelines from OpenStreetMap. They load for the place in "
+        "view when the camera is below 150 km. A click on a line shows "
+        "the voltage, substance, operator and a link to the "
+        "OpenStreetMap object.",
+    "На глобусе":
+        "On the globe",
+    "Включённые слои витрины и карты. Ползунок меняет непрозрачность, "
+    "меню строки сохраняет видимое в проект QGIS или убирает слой.":
+        "Layers switched on in the gallery and the map. The slider "
+        "changes the opacity, the row menu saves what is in view to the "
+        "QGIS project or removes the layer.",
+    "Непрозрачность слоя. Вправо слой непрозрачен, влево прозрачнее.":
+        "Layer opacity. To the right the layer is opaque, to the left "
+        "more transparent.",
+    "Убрать с глобуса":
+        "Remove from the globe",
+    "Слой «{title}» не записан в «{path}».":
+        "The layer «{title}» was not written to «{path}».",
+    "В проект добавлено объектов {count}: {title}.":
+        "{count} objects added to the project: {title}.",
+    "подстанции":
+        "substations",
+    "Сервер OpenStreetMap не ответил, запрос повторится сам.":
+        "The OpenStreetMap server did not answer, the request will repeat "
+        "by itself.",
+    "ЛЭП":
+        "Power line",
+    "Трубопровод":
+        "Pipeline",
+    "Подстанция":
+        "Substation",
+    "Класс":
+        "Class",
+    "Объект OSM":
+        "OSM object",
+    "Напряжение":
+        "Voltage",
+    "{value} кВ":
+        "{value} kV",
+    "Вещество":
+        "Substance",
+    "Прокладка":
+        "Location",
+    "Владелец":
+        "Owner",
+    "Уголь":
+        "Coal",
+    "Газ":
+        "Gas",
+    "Мазут":
+        "Oil",
+    "Атомные":
+        "Nuclear",
+    "ГЭС":
+        "Hydro",
+    "Биотопливо, отходы, геотермальные":
+        "Biomass, waste, geothermal",
+    "ЛЭП 500 кВ и выше":
+        "Power line 500 kV and above",
+    "ЛЭП 220-330 кВ":
+        "Power line 220-330 kV",
+    "ЛЭП 110-150 кВ":
+        "Power line 110-150 kV",
+    "ЛЭП ниже 110 кВ и без напряжения":
+        "Power line below 110 kV or without voltage",
+    "Газопровод":
+        "Gas pipeline",
+    "Нефте- и продуктопровод":
+        "Oil or product pipeline",
+    "Вода, тепло, стоки":
+        "Water, heat, sewage",
+    "Трубопровод, вещество не указано":
+        "Pipeline, substance not given",
+    "Электростанции WRI":
+        "WRI power plants",
+    "Размер точки - мощность":
+        "Dot size - capacity",
+    "Квадрат - подстанция":
+        "Square - substation",
+    "Инфраструктура":
+        "Infrastructure",
+    "Электростанции мира, линии электропередачи, подстанции и трубопроводы.":
+        "Power plants of the world, power lines, substations and pipelines.",
+    "Электростанции":
+        "Power plants",
+    "Около 35 тысяч электростанций мира из базы WRI Global Power Plant "
+    "Database, данные на 2021 год. Цвет - вид топлива, размер - "
+    "мощность. Щелчок по точке показывает название, мощность, год ввода "
+    "и владельца. У части станций место в базе указано неверно. Первое "
+    "включение скачивает около 4 МБ.":
+        "About 35 thousand power plants of the world from the WRI Global "
+        "Power Plant Database, data as of 2021. Colour is the fuel, size "
+        "is the capacity. A click on a dot shows the name, capacity, "
+        "commissioning year and owner. Some plants are placed wrongly in "
+        "the database. The first use downloads about 4 MB.",
+    "Загрузка электростанций WRI, около 4 МБ…":
+        "Loading WRI power plants, about 4 MB…",
+    "Электростанций {count}.":
+        "{count} power plants.",
+    "Электростанции не загрузились, проверьте сеть и включите строку снова.":
+        "Power plants did not load, check the network and turn the row "
+        "on again.",
+    "Электростанции не разобраны.":
+        "Power plants could not be read.",
+    "Мощность":
+        "Capacity",
+    "Топливо":
+        "Fuel",
+    "Год ввода":
+        "Commissioning year",
+    "Контуры горных разработок не загрузились, проверьте сеть и включите "
+    "строку снова.":
+        "Mining area outlines did not load, check the network and switch the "
+        "row on again.",
+    "Файл контуров горных разработок не читается: {path}":
+        "The mining area outline file cannot be read: {path}",
+    "{value} км²":
+        "{value} km²",
+    "Горная разработка":
+        "Mining area",
+    "Контуры горных разработок не записаны: {error}":
+        "Mining area outlines are not written: {error}",
+    "Объект OpenStreetMap":
+        "OpenStreetMap object",
+    "Горные разработки":
+        "Mining areas",
+    "Загрузка контуров горных разработок, около 25 МБ…":
+        "Loading mining area outlines, about 25 MB…",
+    "Землетрясения, границы плит, месторождения и горные разработки, разрез "
+    "Земли и палеогеография.":
+        "Earthquakes, plate boundaries, mineral deposits and mining areas, "
+        "the Earth cutaway and palaeogeography.",
+    "Контуры карьеров, отвалов, хвостохранилищ и промплощадок мира по "
+    "снимкам Sentinel-2 2019 года - около 45 тысяч участков, Maus и "
+    "соавторы, 2022. Щелчок по контуру показывает страну и площадь. Первое "
+    "включение скачивает около 25 МБ.":
+        "Outlines of open pits, waste dumps, tailings and industrial sites of "
+        "the world from Sentinel-2 images of 2019 - about 45 thousand areas, "
+        "Maus et al., 2022. A click on an outline shows the country and area. "
+        "The first switch-on downloads about 25 MB.",
+    "Шахты, рудники, стволы и карьеры из OpenStreetMap с названиями "
+    "и ископаемым. Загружаются по месту вида, когда камера ниже 150 км. "
+    "Цвет - группа ископаемого, как у месторождений. Щелчок по точке "
+    "показывает название, оператора и ссылку на объект OpenStreetMap.":
+        "Mines, shafts and quarries from OpenStreetMap with names and the "
+        "commodity. They load for the place of the view when the camera is "
+        "below 150 km. The colour is the commodity group, as for the "
+        "deposits. A click on a point shows the name, operator and a link to "
+        "the OpenStreetMap object.",
     "Батиметрия по промерам":
         "Bathymetry from soundings",
     "Батиметрия по промерам…":
@@ -318,15 +619,18 @@ EN = {
     "Месторождения":
         "Mineral deposits",
     "Месторождения, рудники и проявления полезных ископаемых USGS - база "
-    "MRDS, около 300 тысяч точек, больше всего в США, и 3 тысячи крупных "
-    "месторождений мира. Цвет - группа полезного ископаемого, большая точка "
-    "- крупное месторождение. Щелчок показывает название, ископаемые, тип и "
-    "ссылку на запись USGS. Первое включение скачивает около 25 МБ.":
-        "Mineral deposits, mines and occurrences of USGS - the MRDS "
-        "database, about 300 thousand points, most of them in the USA, and "
-        "3 thousand major deposits of the world. The colour is the "
-        "commodity group, a large point is a major deposit. A click shows "
-        "the name, commodities, type and a link to the USGS record. The "
+    "MRDS, около 300 тысяч точек, больше всего в США, 3 тысячи крупных "
+    "месторождений мира и 6.5 тысячи рудников и заводов мира с оператором и "
+    "мощностью. Цвет - группа полезного ископаемого, большая точка - крупное "
+    "месторождение, рудник или завод. Щелчок по точке показывает название, "
+    "ископаемые, тип и ссылку на запись USGS. Первое включение скачивает "
+    "около 25 МБ.":
+        "Mineral deposits, mines and occurrences of USGS - the MRDS database, "
+        "about 300 thousand points, most of them in the USA, 3 thousand major "
+        "deposits of the world and 6.5 thousand mines and plants of the world "
+        "with the operator and capacity. The colour is the commodity group, a "
+        "large point is a major deposit, mine or plant. A click on a point "
+        "shows the name, commodities, type and a link to the USGS record. The "
         "first switch-on downloads about 25 MB.",
     "Загрузка месторождений USGS, около 25 МБ…":
         "Loading USGS mineral deposits, about 25 MB…",
@@ -1086,9 +1390,6 @@ EN = {
     "Солнце и ночная сторона, звёзды, облака и искусственные спутники.":
         "The sun and the night side, stars, clouds and artificial "
         "satellites.",
-    "Землетрясения, границы плит, разрез Земли и палеогеография.":
-        "Earthquakes, plate boundaries, the Earth cutaway and "
-        "paleogeography.",
     "Температура, осадки, ветер и облачность по модели NOAA GFS и "
     "температура поверхности по NASA. Прогноз - до 16 суток вперёд, момент "
     "задаёт шкала времени.":
@@ -1099,10 +1400,6 @@ EN = {
     "данным NASA.":
         "Fire spots, smoke, aerosol and carbon monoxide of fires and "
         "industry from NASA data.",
-    "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
-    "наводнения по данным NASA.":
-        "Precipitation, soil moisture, snow, ice, water vapor, chlorophyll, "
-        "salinity and floods from NASA data.",
     "Диоксид азота, диоксид серы, метан, углекислый газ и озон по данным "
     "NASA.":
         "Nitrogen dioxide, sulfur dioxide, methane, carbon dioxide and ozone "
@@ -2648,12 +2945,6 @@ EN = {
     "обозревателя QGIS.":
         "Remove the selected XYZ Tiles connection from QGIS. It disappears "
         "from the QGIS browser too.",
-    "Шаблон тайлов высот с {z}, {x}, {y}, например своё хранилище или сервер."
-    " Пустое поле - рельеф по умолчанию. Глобус просит тайлы до уровня 15, "
-    "глубже берёт их предков.":
-        "A height tile template with {z}, {x}, {y}, for example an own store "
-        "or server. An empty field gives the default terrain. The globe asks "
-        "for tiles down to level 15 and takes their ancestors deeper.",
     "Как высота записана в цвете тайла. Terrarium - как у рельефа по "
     "умолчанию, Mapbox Terrain-RGB - высота с шагом 0.1 м.":
         "How the height is written in the tile colour. Terrarium is as in the"
@@ -2662,14 +2953,6 @@ EN = {
         'The credit of the own terrain in the view corner and on snapshots.',
     'Свой рельеф':
         'Own terrain',
-    'Запись высот':
-        'Height encoding',
-    "Только тайлы высот":
-        "Height tiles only",
-    "Copernicus DEM 30 м - поверхность с лесом и домами":
-        "Copernicus DEM 30 m - surface with forest and buildings",
-    "GEDTM30 - рельеф без леса и домов":
-        "GEDTM30 - terrain without forest and buildings",
     "Высоты суши 30 м с уровня 9":
         "Land heights of 30 m from level 9",
     "Модель высот 30 м поверх тайлов высот. Тайлы дают дно морей и вид "
@@ -2682,10 +2965,6 @@ EN = {
         "heights. Copernicus DEM is the surface with forest and buildings, "
         "files on AWS. GEDTM30 is the bare ground, one large file, loading "
         "is slower. The model is read from the network piece by piece.",
-    "Модель 30 м":
-        "30 m model",
-    "Свои тайлы высот":
-        "Own height tiles",
     "Адрес TileJSON векторных тайлов в схеме OpenMapTiles. Из них берутся "
     "границы, дороги, воды, названия и 3D-здания. Пустое поле - OpenFreeMap.":
         "The TileJSON address of vector tiles in the OpenMapTiles schema. "

@@ -81,6 +81,8 @@ class Quakes:
         self.drawn = 0
         # Линии от эпицентра к очагу. У пожаров (FirePoints) их нет.
         self.stems = True
+        # Непрозрачность слоя - ползунок раздела «На глобусе».
+        self.opacity = 1.0
 
     def init_gl(self):
         self.program = gpu.build_program(VERTEX, FRAGMENT)
@@ -154,6 +156,7 @@ class Quakes:
             stems[:, 7] = STEM_ALPHA
             lines = 2 * n
             dots = np.vstack([stems, dots])
+        dots[:, 7] *= self.opacity
         data = np.ascontiguousarray(dots)
         mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
                                    dtype=np.float32)
@@ -221,7 +224,7 @@ class DepositPoints(Quakes):
     группа полезного ископаемого, размер - крупное месторождение или
     стадия освоения. Точек около 300 тысяч, поэтому нормали считаются
     один раз, а в кадре - не больше LIMIT видимых точек в порядке
-    важности: крупные месторождения мира, действующие и прежние
+    важности: крупные месторождения и рудники мира, действующие и прежние
     рудники, остальные - в постоянном перемешанном порядке."""
 
     LIMIT = 80000
@@ -247,7 +250,7 @@ class DepositPoints(Quakes):
         # Порядок важности: крупные, рудники, остальные перемешаны -
         # при пределе точек вид заполняется ровно, а не по порядку
         # файла.
-        rank = np.where(data.major, 0,
+        rank = np.where(data.major | data.facility, 0,
                         np.where(data.status <= 2, 1, 2)).astype(np.int64)
         shuffle = np.random.default_rng(0).permutation(len(data))
         order = np.lexsort((shuffle, rank))
@@ -260,8 +263,8 @@ class DepositPoints(Quakes):
         rgb = dp.colors(data.group[order])
         self.colors = np.hstack([rgb / 255.0, np.full((len(rgb), 1), 0.9)]) \
             .astype(np.float32)
-        self.sizes = dp.sizes(data.major[order],
-                              data.status[order]).astype(np.float32)
+        self.sizes = dp.sizes(data.major[order], data.status[order],
+                              data.facility[order]).astype(np.float32)
         self.lats = lat
         self.lons = lon
         self.times = np.full(len(lat), np.nan)
@@ -284,7 +287,9 @@ class DepositPoints(Quakes):
         if self.program is None or self.data is None:
             return
         eye = np.asarray(camera.eye, dtype=np.float64)
-        seen = self.visible(eye)
+        # Отбор - по важности, рисование - в обратном порядке: крупные
+        # месторождения ложатся поверх мелких точек, а не под них.
+        seen = self.visible(eye)[::-1]
         n = len(seen)
         if not n:
             return
@@ -292,6 +297,7 @@ class DepositPoints(Quakes):
         dots[:, 0:3] = self.focus[seen] - eye
         dots[:, 3] = self.sizes[seen]
         dots[:, 4:8] = self.colors[seen]
+        dots[:, 7] *= self.opacity
         mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
                                    dtype=np.float32)
         loc = self.locations
@@ -317,3 +323,31 @@ class DepositPoints(Quakes):
             GL.glDisable(GL.GL_BLEND)
             GL.glDisable(GL_PROGRAM_POINT_SIZE)
             GL.glEnable(GL.GL_DEPTH_TEST)
+
+
+class PlantPoints(DepositPoints):
+    """Электростанции WRI (core/plants.py): цвет - вид топлива, размер -
+    мощность. Важность - мощность: при пределе точек первыми берутся
+    крупные станции, рисуются они поверх мелких."""
+
+    def set_plants(self, data, scale, ground):
+        from ..core import plants as pp
+        self.data = data if data is not None and len(data) else None
+        if self.data is None:
+            self.focus = np.zeros((0, 3))
+            self.epicenter = self.focus
+            return
+        order = np.argsort(-data.capacity, kind="stable")
+        self.order = order
+        lat, lon = data.lat[order], data.lon[order]
+        g = np.asarray(ground(lat, lon), dtype=np.float64)
+        self.focus = ecef(lat, lon, display(g, scale, g))
+        self.epicenter = self.focus
+        self.up = core.surface_normal(lat, lon)
+        rgb = pp.colors(data.fuel[order])
+        self.colors = np.hstack([rgb / 255.0, np.full((len(rgb), 1), 0.95)]) \
+            .astype(np.float32)
+        self.sizes = pp.sizes(data.capacity[order])
+        self.lats = lat
+        self.lons = lon
+        self.times = np.full(len(lat), np.nan)
