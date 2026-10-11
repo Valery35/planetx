@@ -276,10 +276,12 @@ EN = {
         "Layers section",
     "Строка «Поиск»":
         "Search field",
-    "Схватите Землю левой кнопкой и тяните. Колесо приближает к точке "
-    "под курсором. Средняя кнопка или левая с Shift наклоняет и "
-    "поворачивает вид. Двойной щелчок - перелёт к точке.":
-        "Grab the Earth with the left button and drag. The wheel zooms "
+    "С нажатой левой кнопкой Земля поворачивается вслед за курсором. "
+    "Колесо приближает к точке под курсором. Средняя кнопка или левая "
+    "с Shift наклоняет и поворачивает вид. Двойной щелчок - перелёт "
+    "к точке.":
+        "The Earth follows the cursor while the left button is pressed. "
+        "The wheel zooms "
         "to the point under the cursor. The middle button or the left "
         "one with Shift tilts and turns the view. A double click flies "
         "to the point.",
