@@ -38,6 +38,9 @@ from qgis.utils import iface  # noqa: E402
 WAIT = 60.0  # секунд на загрузку тайлов вида
 BUILDINGS_WAIT = 120.0  # секунд на загрузку зданий
 JPEG_WIDTH = 1400  # ширина снимка окна в руководстве
+# Качество JPEG. С 85 и снимками каталога и течений архив 0.69.1 вырос
+# до 10.8 МБ, а загрузка выпуска через браузер принимает до 10 МБ.
+JPEG_QUALITY = 62
 result = {"lang": LANG, "files": [], "errors": []}
 state = {}
 
@@ -49,7 +52,7 @@ def save(image, name, jpeg=False):
         image = image.scaledToWidth(
             JPEG_WIDTH, getattr(getattr(Qt, "TransformationMode", Qt),
                                 "SmoothTransformation"))
-        image.save(path, "JPG", 85)
+        image.save(path, "JPG", JPEG_QUALITY)
     else:
         image.save(path, "PNG")
     result["files"].append([name, image.width(), image.height()])
