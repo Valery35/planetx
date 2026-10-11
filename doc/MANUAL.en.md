@@ -427,6 +427,8 @@ cross on its scale in the lower left corner of the view also removes
 it. A satellite group card shows or removes the group. The first group
 switches the Satellites layer on, the last removed one switches it off.
 
+<img src="figures/en/catalog.png" width="460" alt="The Add data catalogue in the left panel">
+
 NASA themes are rasters by days, months or years from the NASA GIBS
 service. A day of a series counts as ready a day later, before that
 its image is empty. The NASA theme groups of the catalogue hold:
@@ -503,6 +505,8 @@ every other node, 0.5°. The first switch-on in a QGIS session downloads
 about 4 MB. The Gulf Stream, Kuroshio, the current around Antarctica
 and eddies tens of kilometres across are visible. Near the coasts and
 under ice there is no data.
+
+<img src="figures/en/currents.jpg" width="600" alt="Atlantic currents - streaks over the speed colouring">
 
 The time slider sets the moment of the field. A chosen field opens
 the slider at the present moment. The slider spans 10 days before

@@ -414,12 +414,13 @@ EN = {
         "Geostrophic, from satellite altimetry",
     "Течения":
         "Currents",
-    "Поверхностные течения океана бегущими струйками, цвет - скорость. "
+    "Поверхностные течения океана белыми бегущими струйками над заливкой "
+    "скорости. "
     "Геострофические течения NOAA CoastWatch по спутниковой альтиметрии "
     "за последние готовые сутки, сетка 0.5°. Первое включение за сеанс "
     "скачивает около 4 МБ.":
-        "Ocean surface currents as running streaks, the colour is the "
-        "speed. Geostrophic currents of NOAA CoastWatch from satellite "
+        "Ocean surface currents as white running streaks over a speed "
+        "colouring. Geostrophic currents of NOAA CoastWatch from satellite "
         "altimetry for the latest ready day, 0.5° grid. The first "
         "switch-on in a session downloads about 4 MB.",
     "Осадки, влажность почвы, снег, лёд, пар, хлорофилл, солёность и "
@@ -2780,7 +2781,8 @@ EN = {
     "Страница USGS": "USGS page",
     "Мохо": "Moho",
     "Толщина коры": "Crust thickness",
-    "Осадки": "Sediments",
+    "Осадки": "Precipitation",
+    "Осадочный чехол": "Sediments",
     "загружается": "loading",
     "{top}-{bottom} км": "{top}-{bottom} km",
     "Место": "Site",

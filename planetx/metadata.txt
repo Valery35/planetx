@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.69.0
+version=0.69.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.69.0 The Layers section shows in one list everything on the
+changelog=0.69.1 The manual figures are taken again with the new Layers
+      section. The manual has new pictures of the Add data catalogue and of
+      the currents over the Atlantic. The description of the currents in the
+      catalogue tells about white streaks over the speed colouring. In the
+      English interface the precipitation map is called Precipitation, not
+      Sediments.
+      0.69.0 The Layers section shows in one list everything on the
       globe. A row takes one line, the ⋯ menu on the right changes the
       opacity, saves what is in view to the QGIS project and removes the
       layer. Project layers are the QGIS project group of the same list.

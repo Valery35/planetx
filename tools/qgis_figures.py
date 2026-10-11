@@ -10,7 +10,8 @@
 Язык модуля задаёт PLANETX_LANG (ru или en). Картинки ложатся
 в doc/figures/<язык>: окно глобуса над Пермью, угол с инструментами
 управления, окна «Свойства вида» и свойств метки, 3D-здания в центре
-Перми. Глобус ждёт загрузки
+Перми, каталог «Добавить данные», течения над Атлантикой. Глобус ждёт
+загрузки
 тайлов, но не дольше WAIT секунд. Свои метки сценарий ставит
 в отдельную папку и в конце удаляет. QGIS пользователя не трогается,
 в конце QGIS закрывается.
@@ -73,6 +74,11 @@ def start():
     from planetx.core.features import Shape
     from planetx.core.navigation import Pose
     from planetx.plugin import PlanetXPlugin
+    from planetx.ui.guide import GUIDE_KEY
+    from qgis.core import QgsSettings
+    # Знакомство с модулем при первом открытии закрыло бы кадр окна
+    # своим окошком и затемнением, 12 октября 2026 года.
+    QgsSettings().setValue(GUIDE_KEY, True)
     plugin = PlanetXPlugin(iface)
     plugin.initGui()
     plugin.run()
@@ -247,6 +253,65 @@ def demo_wait():
     if state.get("demo"):
         window.myplaces.remove(state["demo"])
     window.set_extra("buildings", False)
+    window.toolbar.time.setChecked(False)
+    QTimer.singleShot(500, catalog_start)
+
+
+def catalog_start():
+    # Каталог «Добавить данные» на месте списка «Слоёв», категория
+    # «Планета воды» и описание течений.
+    window = state["window"]
+    gallery = window.open_gallery()
+    gallery._set_group("water")
+    gallery._describe("currents")
+    state["started"] = time.monotonic()
+    QTimer.singleShot(2000, catalog_wait)
+
+
+def catalog_wait():
+    window = state["window"]
+    gallery = window.gallery
+    spent = time.monotonic() - state["started"]
+    if (gallery._queue or gallery._replies) and spent < WAIT:
+        QTimer.singleShot(1000, catalog_wait)
+        return
+    QgsApplication.processEvents()
+    save(window.panel.grab().toImage(), "catalog.png")
+    gallery.close()
+    QTimer.singleShot(500, currents_start)
+
+
+def currents_start():
+    # Течения над Атлантикой: белые струйки над заливкой скорости.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(30.0, -55.0, 8.6e6, 0.0, 0.0))
+    window.set_extra("currents", True)
+    state["started"] = time.monotonic()
+    state["currents_seen"] = None
+    QTimer.singleShot(3000, currents_wait)
+
+
+def currents_wait():
+    window = state["window"]
+    view = window.view
+    view._heartbeat()
+    spent = time.monotonic() - state["started"]
+    field = window.flow.fields.get("currents")
+    busy = field is None or view.load_missing
+    if busy and spent < BUILDINGS_WAIT:
+        QTimer.singleShot(1000, currents_wait)
+        return
+    # Струйкам - несколько секунд, чтобы вытянулся след.
+    if state["currents_seen"] is None:
+        state["currents_seen"] = time.monotonic()
+        QTimer.singleShot(6000, currents_wait)
+        return
+    result["currents_field"] = field is not None
+    save(view.grabFramebuffer(), "currents.jpg", jpeg=True)
+    window.set_extra("currents", False)
     QTimer.singleShot(500, finish)
 
 

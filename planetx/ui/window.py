@@ -8041,7 +8041,9 @@ class GlobeWindow(QWidget):
             values.append((tr("Толщина коры"), tr("{value} км", value=(
                 "{:.1f}".format(bounds[1] - bounds[-1])))))
             if sediments > 0.0:
-                values.append((tr("Осадки"), tr("{value} км", value=(
+                # Не «Осадки»: эта строка перевода - осадки погоды,
+                # английский каталог показывал их как Sediments.
+                values.append((tr("Осадочный чехол"), tr("{value} км", value=(
                     "{:.1f}".format(sediments)))))
         elif self._crust_reply is not None:
             values.append((tr("Кора"), tr("загружается")))
