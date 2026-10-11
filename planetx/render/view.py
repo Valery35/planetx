@@ -490,7 +490,7 @@ class GlobeView(QOpenGLWidget):
         # Шторка сравнения: доля ширины кадра от левого края или None.
         # Левее неё - слой «compare», ставит окно (ui/swipe.py).
         self.swipe = None
-        # Шторка старых карт: слой «compare» левее шторки заменяет
+        # Шторка исторических карт: слой «compare» левее шторки заменяет
         # наложение слоёв проекта, а не тему.
         self.swipe_maps = False
         self._feature_marks = ([], None)

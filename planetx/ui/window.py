@@ -69,6 +69,7 @@ from ..core.tiling import tile_mesh
 from ..core import deposits as deposits_core
 from ..core import infra, mining
 from ..core import cables as cables_core
+from ..core import flow as flow_core
 from ..core import rumsey as rumsey_core
 from ..core import plants as plants_core
 from .overpass import OverpassTiles, brief_error
@@ -192,6 +193,8 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare")}
 QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
+# Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
+PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
 OPACITY_PAUSE = 300  # мс, наложение пересобирается после ползунка
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
@@ -204,7 +207,7 @@ OSM_PAUSE = 800
 # Уровень воды Бриенцского озера в демо, м: средний уровень 563.7 м
 # по swisstopo, округлён.
 BRIENZ_LEVEL = 564.0
-# Старые карты Москвы в демо: год, название, тайлы карты Wikimedia
+# Исторические карты Москвы в демо: год, название, тайлы карты Wikimedia
 # Commons (общественное достояние), привязанной в Wikimaps Warper.
 # Состав - выбор помощника.
 WARPER_TILES = ("https://warper.wmflabs.org/maps/tile/{}/"
@@ -623,7 +626,7 @@ class GlobeWindow(QWidget):
         self.swipe_bar.closed.connect(lambda: self.set_compare(False))
         self._compare_at = None
         self._compare_shown = None
-        # Шторка старых карт: момент левой части, ключ её сборки, растры
+        # Шторка исторических карт: момент левой части, ключ её сборки, растры
         # картинок на поверхности левой части и загрузчик её наложения.
         self._map_compare_at = None
         self._map_compare_key = None
@@ -694,6 +697,7 @@ class GlobeWindow(QWidget):
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.deposit_legend,
+                       self.plant_legend, self.infra_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -716,7 +720,7 @@ class GlobeWindow(QWidget):
         # треков и слоёв на шкале.
         self._applied_time = None
         self._data_marks = []
-        # Годы старых карт проекта и растры-карты, скрытые при сборке
+        # Годы исторических карт проекта и растры-карты, скрытые при сборке
         # наложения правилом «последняя карта не позже момента».
         self._map_years = read_map_years()
         self._applied_maps = frozenset()
@@ -1159,6 +1163,10 @@ class GlobeWindow(QWidget):
         self.panel.extra_toggled.connect(self.set_extra)
         # Раздел «На глобусе».
         self.panel.active_off.connect(self._active_off)
+        self.panel.active_toggled.connect(self._active_toggle)
+        # Строки «На глобусе», выключенные флажком: остаются в разделе
+        # до «Убрать с глобуса». У карты витрины - её ключ.
+        self._parked = {}
         self.panel.active_opacity.connect(self._active_opacity)
         self.panel.active_export.connect(self.active_export)
         self._opacity_overlay = QTimer(self)
@@ -1184,6 +1192,7 @@ class GlobeWindow(QWidget):
         self.flow.changed.connect(self._flow_changed)
         self.current_legend = CurrentLegend(self.view)
         self.current_legend.hide()
+        self.legend_panel.add(self.current_legend)
         self.current_legend.closer = lambda: self.set_extra("currents",
                                                             False)
         self.route_manager.finished.connect(self._route_done)
@@ -1405,19 +1414,22 @@ class GlobeWindow(QWidget):
         names = layer_names()
         maps = map_names()
         rows = []
+        parked = getattr(self, "_parked", {})
         for key in ACTIVE_ORDER:
-            if not extras.get(key):
+            on = bool(extras.get(key))
+            if not on and key not in parked:
                 continue
             if not earth and key not in ANY_BODY + RELIEF_BODY + (
                     "contours",):
                 continue
             title = (names.get(key) or maps.get(key) or (key,))[0]
             rows.append((key, title, self._row_opacity(key),
-                         key in POINT_LAYERS or key in QGIS_LAYERS))
-        theme = getattr(self, "theme_key", "")
+                         key in POINT_LAYERS or key in QGIS_LAYERS
+                         or key in PICTURE_LAYERS, on))
+        theme = getattr(self, "theme_key", "") or parked.get("map", "")
         if theme and earth and theme in maps:
             rows.append(("map", maps[theme][0], self._row_opacity("map"),
-                         False))
+                         True, bool(getattr(self, "theme_key", ""))))
         return rows
 
     def _row_opacity(self, key):
@@ -1436,10 +1448,35 @@ class GlobeWindow(QWidget):
             OPACITY_KEY + key, 1.0, type=float))))
 
     def _active_off(self, key):
-        """Снять слой строки «На глобусе»."""
+        """«Убрать с глобуса» строки «На глобусе»: слой выключен, строки
+        больше нет."""
+        self._parked.pop(key, None)
         if key == "map" or key in themes.EXCLUSIVE:
             self.set_theme("")
         else:
+            self.set_extra(key, False)
+        self._update_active()
+
+    def _active_toggle(self, key, on):
+        """Флажок строки «На глобусе»: слой выключен или включён снова,
+        строка остаётся."""
+        if on:
+            theme = self._parked.pop(key, None)
+            if key == "map":
+                self.set_theme(theme or "")
+            elif key in themes.EXCLUSIVE:
+                self.set_theme(key)
+            else:
+                self.set_extra(key, True)
+            return
+        if key == "map":
+            self._parked["map"] = self.theme_key
+            self.set_theme("")
+        elif key in themes.EXCLUSIVE:
+            self._parked[key] = key
+            self.set_theme("")
+        else:
+            self._parked[key] = key
             self.set_extra(key, False)
 
     def _active_opacity(self, key, value):
@@ -1474,7 +1511,10 @@ class GlobeWindow(QWidget):
         """«В проект QGIS…» строки «На глобусе»: объекты слоя в рамке
         вида слоем GeoPackage в группу «PlanetX - слои глобуса». path -
         файл, без него - окно выбора."""
-        title = (layer_names().get(key) or (key,))[0]
+        title = (layer_names().get(key) or map_names().get(key)
+                 or (key,))[0]
+        if key == "map":
+            title = map_names().get(self.theme_key, (title,))[0]
         if path is None:
             path, _ = QFileDialog.getSaveFileName(
                 self, tr("В проект QGIS"),
@@ -1490,8 +1530,12 @@ class GlobeWindow(QWidget):
         box = view_box(pose.lat, pose.lon, width, height)
         if key in POINT_LAYERS:
             count = self._export_points(key, title, path, box)
-        else:
+        elif key in QGIS_LAYERS:
             count = self._export_qgis(key, title, path, box)
+        else:
+            count = self._export_picture(key, title, path, box)
+            if count == "wait":
+                return None
         if count is None:
             text = tr("Слой «{title}» не записан в «{path}».", title=title,
                       path=path)
@@ -1550,6 +1594,77 @@ class GlobeWindow(QWidget):
             rows = [(float(fires.frp[n]), stamp(float(fires.time[n])),
                      fires.confidence[n]) for n in index]
         return fields, rows
+
+    def _export_picture(self, key, title, path, box):
+        """Раскраска вида в проект. Поля погоды и течения - числа сетки
+        GeoTIFF со шкалой, темы NASA, облака и температура - картинка
+        WMS GIBS по рамке вида на тот же день, ответ приходит позже
+        («wait»)."""
+        if key == "currents":
+            grid = self.flow.fields["currents"]
+            if grid is None:
+                return None
+            speed = np.hypot(grid.u, grid.v)
+            count = layer_export.write_grid(
+                path, [speed, grid.u, grid.v], grid.west, grid.north,
+                grid.step, box)
+            if count is None or layer_export.add_raster(
+                    path, "{} {}".format(title, self.flow.currents_day),
+                    flow_core.CURRENT_STOPS,
+                    CURRENTS_ATTRIBUTION[0]) is None:
+                return None
+            return count
+        if key == "map" and themes.is_weather(self.theme_key):
+            shown = getattr(self, "_value_field", None)
+            if shown is None:
+                return None
+            field, grid = shown
+            bands = [grid.values]
+            if grid.vectors is not None:
+                bands += [grid.vectors.u, grid.vectors.v]
+            count = layer_export.write_grid(path, bands, grid.west,
+                                            grid.north, grid.step, box)
+            stamp = weather_core.valid_text(grid.run, grid.hour)
+            if count is None or layer_export.add_raster(
+                    path, "{} {}".format(title, stamp),
+                    [(v, c) for v, c in field.ramp], "NOAA GFS") is None:
+                return None
+            return count
+        if key == "map":
+            theme = themes.BY_KEY.get(self.theme_key)
+            if theme is None:
+                return None
+            jobs = [(theme.layer, self.theme_day, path)]
+        elif key == "clouds":
+            jobs = [(clouds.LAYER, clouds.image_date(time.time()), path)]
+        else:
+            stem = os.path.splitext(path)[0]
+            jobs = [(temperature.SEA, None, stem + "_sea.tif"),
+                    (temperature.LAND, None, stem + "_land.tif")]
+        self._picture_jobs = getattr(self, "_picture_jobs", [])
+        for layer, day, out in jobs:
+            url, _, _ = themes.wms_url(layer, box, day)
+            name = "{} {}".format(title, str(day)[:10]) if day else title
+            self._picture_jobs.append(fetch_bytes(
+                url, lambda data, error, out=out, name=name, box=box:
+                self._picture_done(data, error, out, name, box)))
+        self.message = (tr("Загрузка картинки «{title}»…", title=title),
+                        time.monotonic())
+        self._show_state()
+        return "wait"
+
+    def _picture_done(self, data, error, path, name, box):
+        ok = bool(data) and layer_export.write_picture(path, data, box) \
+            and layer_export.add_raster(
+                path, name, rights="NASA GIBS") is not None
+        if not ok:
+            journal.note("picture {}: {}".format(name, error or "unreadable"))
+            text = tr("Слой «{title}» не записан в «{path}».", title=name,
+                      path=path)
+        else:
+            text = tr("В проект добавлена картинка: {title}.", title=name)
+        self.message = (text, time.monotonic())
+        self._show_state()
 
     def _export_qgis(self, key, title, path, box):
         if key == "plates":
@@ -1721,7 +1836,7 @@ class GlobeWindow(QWidget):
                     and self.view.fires.fires is not None) \
             or bool(self._data_marks)
         maps = bool(self._map_moments())
-        # Часам и старым картам, как и покрытию, нужен момент.
+        # Часам и историческим картам, как и покрытию, нужен момент.
         point = (bool(theme) or self._clock_on() or maps) and not events
         if self.timebar.track.point != point:
             self.timebar.set_point(point)
@@ -1735,7 +1850,7 @@ class GlobeWindow(QWidget):
             or getattr(self, "_map_compare_at", None) is not None)
         if (theme or not maps) \
                 and getattr(self, "_map_compare_at", None) is not None:
-            # Тема включена поверх старых карт - шторка карт снимается.
+            # Тема включена поверх исторических карт - шторка карт снимается.
             self._map_compare_off()
 
     def _theme_step(self, moment, delta):
@@ -1830,7 +1945,7 @@ class GlobeWindow(QWidget):
         """Шторка сравнения двух дней темы NASA. Левая часть по
         умолчанию - тот же день год назад (themes.compare_day), правая -
         день шкалы времени. Поле прогноза GFS шторки не получает. Без
-        темы при старых картах - шторка карт двух лет."""
+        темы при исторических картах - шторка карт двух лет."""
         if not (getattr(self, "theme_key", "") and self._theme_on()):
             if self._compare_at is not None \
                     or "compare" in getattr(self, "gibs_loaders", {}):
@@ -3054,10 +3169,10 @@ class GlobeWindow(QWidget):
         under = subsurface_ids(shown)
         return [i for i in shown if i not in under]
 
-    # Старые карты по годам.
+    # Исторические карты по годам.
 
     def _map_moment(self):
-        """Момент шкалы для старых карт - правый бегунок, None - шкала
+        """Момент шкалы для исторических карт - правый бегунок, None - шкала
         закрыта, видны все карты."""
         span = getattr(self, "_time_range", None)
         if span is None or not math.isfinite(span[1]):
@@ -3397,7 +3512,7 @@ class GlobeWindow(QWidget):
         """Слои наложения сверху вниз и наименьшие уровни слоёв. hidden -
         скрытые растры-карты, grounds - растры картинок на поверхности."""
         project = QgsProject.instance()
-        # Старые карты с годом - только последняя на момент шкалы.
+        # Исторические карты с годом - только последняя на момент шкалы.
         layers = [project.mapLayer(layer_id)
                   for layer_id in self._applied_layers or ()
                   if layer_id not in hidden]
@@ -3416,6 +3531,9 @@ class GlobeWindow(QWidget):
                 and getattr(self, "mining_layer", None) is not None:
             self.mining_layer.setOpacity(self._layer_opacity("mining"))
             layers.append(self.mining_layer)
+        if self.planet.earth \
+                and getattr(self, "rumsey_footprints", None) is not None:
+            layers.append(self.rumsey_footprints)
         if self.planet.earth \
                 and getattr(self, "extras", {}).get("infra_osm") \
                 and getattr(self, "infra_lines", None) is not None:
@@ -3436,7 +3554,7 @@ class GlobeWindow(QWidget):
         layers += list(grounds)
         return layers, min_levels
 
-    # Шторка старых карт.
+    # Шторка исторических карт.
 
     def _map_compare_start(self):
         """Шторка карт: слева карта прошлого года карт, справа - карта
@@ -4085,9 +4203,15 @@ class GlobeWindow(QWidget):
             if getattr(self, "theme_key", "") and self._theme_on() else None
         if theme_span is not None:
             times += [when.stamp(when.text(t)) for t in theme_span]
+        # Течения - ряд дней NOAA с 2017 года.
+        flow = getattr(self, "flow", None)
+        if flow is not None and self.extras.get("currents") \
+                and flow.currents_span() is not None:
+            times += [when.stamp(when.text(t))
+                      for t in flow.currents_span()]
         # Треки и слои проекта со временем - их охват.
         times += getattr(self, "_data_marks", [])
-        # Старые карты с годом - от первой до последней.
+        # Исторические карты с годом - от первой до последней.
         if hasattr(self, "_map_years"):
             times += [when.stamp(when.text(t)) for t in self._map_moments()]
         extent = when.extent(times)
@@ -4143,6 +4267,7 @@ class GlobeWindow(QWidget):
         self._refresh_shapes()
         self._update_sun()
         self._theme_timer.start()
+        self.flow.set_moment(self.theme_moment())
         if self.view.sky_view is not None:
             self.view.sky_time = self.sky_moment()
             self.view.update()
@@ -4200,7 +4325,7 @@ class GlobeWindow(QWidget):
 
     def _overlay_time_ok(self, item, maps):
         """Видно ли наложение в момент шкалы. Картинка на поверхности
-        с моментом - старая карта, видна последняя в папке, прочие -
+        с моментом - историческая карта, видна последняя в папке, прочие -
         в промежутке шкалы, как метки."""
         if item.kind == "ground" and oldmaps.start(item.time) is not None:
             return item.key in maps
@@ -4402,11 +4527,11 @@ class GlobeWindow(QWidget):
                 write_bathymetry(lakes)
                 self.set_insets(read_insets() + [layer_id])
         if name == "moscow":
-            self._demo_maps(tr("Москва, старые карты"), moscow_maps())
+            self._demo_maps(tr("Москва, исторические карты"), moscow_maps())
         return key
 
     def _demo_maps(self, title, maps):
-        """Старые карты демо - тайлы XYZ в группе title вверху проекта,
+        """Исторические карты демо - тайлы XYZ в группе title вверху проекта,
         отмечены на глобусе, с годами карт. Прежняя группа с тем же
         названием заменяется. Шкала времени открывается на первой карте."""
         project = QgsProject.instance()
@@ -4749,7 +4874,7 @@ class GlobeWindow(QWidget):
         return dialog
 
     def rumsey_here(self, lat, lon):
-        """«Старые карты Рамсея здесь…» меню на глобусе: карты коллекции
+        """«Исторические карты Рамсея здесь…» меню на глобусе: карты коллекции
         у вида. Окно одно, новый вид заменяет прежний."""
         from .rumsey import RumseyDialog
         dialog = getattr(self, "rumsey_dialog", None)
@@ -4764,6 +4889,40 @@ class GlobeWindow(QWidget):
         dialog.show()
         dialog.raise_()
         return dialog
+
+    def set_rumsey_footprints(self, boxes, selected):
+        """Рамки карт окна «Карты Рамсея» на глобусе: слой в памяти
+        в наложении, выбранная карта - отдельной яркой рамкой. Пустой
+        список убирает рамки."""
+        from qgis.core import (QgsFeature, QgsFillSymbol, QgsGeometry,
+                               QgsRuleBasedRenderer, QgsVectorLayer)
+        layer = None
+        if boxes or selected is not None:
+            layer = QgsVectorLayer("Polygon?crs=EPSG:4326&field=sel:integer",
+                                   "PlanetX rumsey", "memory")
+            features = []
+            for n, box in enumerate(list(boxes) + (
+                    [selected] if selected is not None else [])):
+                feature = QgsFeature(layer.fields())
+                feature.setGeometry(QgsGeometry.fromRect(QgsRectangle(
+                    box[0], box[1], box[2], box[3])))
+                feature.setAttributes([1 if n == len(boxes) else 0])
+                features.append(feature)
+            layer.dataProvider().addFeatures(features)
+            plain = QgsFillSymbol.createSimple({
+                "color": "0,0,0,0", "outline_color": "200,120,40,170",
+                "outline_width": "1.2", "outline_width_unit": "Pixel"})
+            bright = QgsFillSymbol.createSimple({
+                "color": "255,200,60,40", "outline_color": "255,210,40,255",
+                "outline_width": "3", "outline_width_unit": "Pixel"})
+            root = QgsRuleBasedRenderer.Rule(None)
+            root.appendChild(QgsRuleBasedRenderer.Rule(plain, 0, 0,
+                                                       '"sel" = 0'))
+            root.appendChild(QgsRuleBasedRenderer.Rule(bright, 0, 0,
+                                                       '"sel" = 1'))
+            layer.setRenderer(QgsRuleBasedRenderer(root))
+        self.rumsey_footprints = layer
+        self._update_overlay(keep=True)
 
     def _rumsey_shown(self):
         """Видна ли на глобусе карта Рамсея: слой из папки PlanetX/rumsey
@@ -7555,8 +7714,10 @@ class GlobeWindow(QWidget):
     def _set_currents(self, on):
         """Строка «Течения» витрины: струйки течений и шкала."""
         self._mark_gallery()
+        self.flow.moment = self.theme_moment()
         self.flow.set_currents(on and self.planet.earth)
         self.current_legend.setVisible(on and self.planet.earth)
+        self._update_timebar()
         self._show_attribution()
 
     def _flow_changed(self):

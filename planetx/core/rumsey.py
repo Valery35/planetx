@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Старые карты коллекции Дэвида Рамсея. Без Qt.
+"""Исторические карты коллекции Дэвида Рамсея. Без Qt.
 
 Просьба автора от 11 октября 2026 года - карты Рамсея на глобусе.
 Тайлы привязанных карт у Рамсея (Georeferencer) - по входу. Набор
@@ -85,6 +85,33 @@ def covering(catalogue, lat, lon, view):
     large = sizes > LARGE * max(view_area, 1e-6)
     order = np.lexsort((sizes, large, ~inside))
     return [int(i) for i in hits[order][:LIST_MAX]]
+
+
+def search(catalogue, text, limit=LIST_MAX):
+    """Номера строк указателя с text в названии или годе по всему
+    каталогу, не больше limit. Пустой текст - пустой список."""
+    words = [w for w in str(text).lower().split() if w]
+    if not words:
+        return []
+    found = []
+    for row, (title, year) in enumerate(zip(catalogue.title,
+                                            catalogue.year)):
+        line = "{} {}".format(year or "", title).lower()
+        if all(w in line for w in words):
+            found.append(row)
+            if len(found) >= limit:
+                break
+    return found
+
+
+def fly_distance(box, fov_deg=40.0):
+    """Расстояние камеры, с которого рамка карты видна целиком, м."""
+    west, south, east, north = box
+    middle = math.radians((south + north) / 2.0)
+    width = (east - west) * 111320.0 * max(math.cos(middle), 0.05)
+    height = (north - south) * 110540.0
+    size = max(width, height, 500.0)
+    return 0.6 * size / math.tan(math.radians(fov_deg) / 2.0)
 
 
 def image_url(image):

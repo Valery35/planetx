@@ -231,7 +231,9 @@ take effect at once, without the Refresh button.
 | Map | Borders and names, Transport, Nature - the vector base, Coordinate grid, 3D buildings, Contours, OSM power lines, cables and pipelines, Submarine cables |
 
 The On the globe section shows everything that is switched on, one row
-per layer. Clearing the check box removes the layer from the globe. The
+per layer. Clearing the check box switches the layer off, the row stays, and the
+same check box switches the layer on again. The Remove from the globe
+item of the row menu removes the row too. The
 slider changes the opacity of the layer - points, surface colouring or
 lines, the value is remembered. The ⋯ menu of a row removes the layer,
 and for mineral deposits, power plants, mines, earthquakes, fires, plate
@@ -240,7 +242,12 @@ to the QGIS project. The To QGIS project… item asks for a GeoPackage
 file and writes the objects inside the view frame with the record
 fields into it. The layer goes into the PlanetX - globe layers group at
 the top of the project tree. Points keep the globe colour and size,
-lines and outlines keep their style.
+lines and outlines keep their style. Colourings go to the project too.
+A weather forecast field and currents go as a raster of values inside
+the view frame (degrees, mm/h, m/s, for wind and currents also bands of
+the eastward and northward speeds) with the globe legend. A NASA theme,
+clouds and surface temperature go as a NASA GIBS image of the same date,
+the temperature as two rasters - sea and land.
 
 The part headings have no check boxes, the rows have them. The vector
 base has three groups. Borders and names holds Borders, Places and
@@ -454,7 +461,10 @@ The Currents layer of the Planet of water group of the gallery shows
 ocean surface currents with the same streaks, the streak colour is the
 speed, from pale blue for slow ones to red for 2.5 m/s. The currents are
 geostrophic, NOAA CoastWatch calculates them from satellite altimetry
-for a day, the data lag two to three weeks. The 0.25° grid is taken at
+for a day, the data lag two to three weeks. The series starts on 13
+February 2017, the day of the currents is set by the right handle of
+the time slider, without the slider it is the latest ready day. The
+0.25° grid is taken at
 every other node, 0.5°. The first switch-on in a QGIS session downloads
 about 4 MB. The Gulf Stream, Kuroshio, the current around Antarctica
 and eddies tens of kilometres across are visible. Near the coasts and
@@ -1926,9 +1936,9 @@ closed, the layer is shown in full.
 
 ---
 
-## Old maps
+## Historical maps
 
-An old map is a raster, XYZ tiles or a ground image with a year. Maps
+A historical map is a raster, XYZ tiles or a ground image with a year. Maps
 of one group replace each other on the time slider. The last map not
 later than the slider moment is shown, before the year of the first
 map of the group none is shown. The ◂ ▸ steps of the slider go by the
@@ -1950,7 +1960,7 @@ the slider moment. The swipe is dragged with the mouse, the arrows on
 the left label change its year. A step before the first map leaves
 the imagery without maps on the left.
 
-The Moscow, old maps demo puts maps of Moscow of 1813, 1860, 1900,
+The Moscow, historical maps demo puts maps of Moscow of 1813, 1860, 1900,
 1917 and 1935 from Wikimedia Commons into the project. The maps are in
 the public domain, members of the Wikimaps Warper project
 georeferenced them, the tiles come from its server.
@@ -1960,7 +1970,10 @@ Rumsey maps window - maps of the David Rumsey collection at the view.
 The collection holds about 57 thousand georeferenced maps from the 13th
 to the 21st century. The list goes by year, a click on a column header
 sorts by title or scale. The list holds 400 maps closest to the place
-by extent. The search line picks maps by year or title. The To QGIS
+by extent. The search line picks maps by year or title, the Whole
+catalogue check box searches among all maps of the collection. Frames
+of the listed maps are shown on the globe, the frame of the chosen map
+is brighter, the Show on the globe button flies to it. The To QGIS
 project button builds the chosen map from the collection image and
 georeferences it by the collection control points. The map goes into
 the Rumsey maps group at the top of the project with the map year and
@@ -2064,7 +2077,7 @@ under the list plays a tour over them. The folder can be deleted.
 | Earth | Vegas Loop tunnels | The Boring Company tunnels under Las Vegas with their stations, see [Subsurface mode](#subsurface-mode) |
 | Earth | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
 | Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
-| Earth | Moscow, old maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Old maps](#old-maps) |
+| Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |

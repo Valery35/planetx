@@ -26,6 +26,56 @@ WIND_SLOW = 2.0  # м/с, медленнее струйка ветра блед�
 ALPHA = 1.0
 LIFT = 30.0  # м над рельефом, струйка не тонет в тайле
 HEAD_SIZE = 2.5  # логических пикселей - точка головы струйки
+LINE_WIDTH = 1.8  # логических пикселей - толщина следа
+
+# Следы - отрезки толщиной u_width пикселей: геометрический шейдер
+# разворачивает отрезок в полосу на экране, как у линий меток
+# (render/shaders.py, FEATURE_LINE_GEOMETRY), цвет идёт с вершин.
+LINE_VERTEX = """#version 330 core
+layout(location = 0) in vec3 a_offset;
+layout(location = 2) in vec4 a_color;
+uniform mat4 u_mvp;
+out vec4 g_color;
+void main() {
+    gl_Position = u_mvp * vec4(a_offset, 1.0);
+    g_color = a_color;
+}
+"""
+
+LINE_GEOMETRY = """#version 330 core
+layout(lines) in;
+layout(triangle_strip, max_vertices = 4) out;
+uniform vec2 u_viewport;
+uniform float u_width;
+in vec4 g_color[];
+out vec4 f_color;
+void main() {
+    vec4 a = gl_in[0].gl_Position;
+    vec4 b = gl_in[1].gl_Position;
+    if (a.w <= 0.0 || b.w <= 0.0) return;
+    vec2 half_size = 0.5 * u_viewport;
+    vec2 d = b.xy / b.w * half_size - a.xy / a.w * half_size;
+    float len = length(d);
+    d = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+    vec2 n = vec2(-d.y, d.x) * (0.5 * u_width);
+    for (int i = 0; i < 4; i++) {
+        vec4 p = i < 2 ? a : b;
+        vec2 s = (i == 0 || i == 2) ? n : -n;
+        gl_Position = vec4(p.xy + s / half_size * p.w, p.zw);
+        f_color = i < 2 ? g_color[0] : g_color[1];
+        EmitVertex();
+    }
+    EndPrimitive();
+}
+"""
+
+LINE_FRAGMENT = """#version 330 core
+in vec4 f_color;
+out vec4 frag;
+void main() {
+    frag = f_color;
+}
+"""
 
 
 class FlowLines:
@@ -34,6 +84,8 @@ class FlowLines:
     def __init__(self, kind):
         self.kind = kind
         self.program = None
+        self.line_program = None
+        self.line_locations = {}
         self.vao = None
         self.vbo = None
         self.locations = {}
@@ -46,6 +98,11 @@ class FlowLines:
         self.program = gpu.build_program(VERTEX, FRAGMENT)
         self.locations = {name: GL.glGetUniformLocation(self.program, name)
                           for name in ("u_mvp", "u_ratio", "u_points")}
+        self.line_program = gpu.build_program(LINE_VERTEX, LINE_FRAGMENT,
+                                              LINE_GEOMETRY)
+        self.line_locations = {
+            name: GL.glGetUniformLocation(self.line_program, name)
+            for name in ("u_mvp", "u_viewport", "u_width")}
         self.vao = GL.glGenVertexArrays(1)
         self.vbo = GL.glGenBuffers(1)
         GL.glBindVertexArray(self.vao)
@@ -62,6 +119,8 @@ class FlowLines:
         if self.program is None:
             return
         GL.glDeleteProgram(self.program)
+        GL.glDeleteProgram(self.line_program)
+        self.line_program = None
         GL.glDeleteVertexArrays(1, [self.vao])
         GL.glDeleteBuffers(1, [self.vbo])
         self.program = None
@@ -141,11 +200,13 @@ class FlowLines:
         data = np.vstack([data, dots])
         mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
                                    dtype=np.float32)
+        line = self.line_locations
+        GL.glUseProgram(self.line_program)
+        GL.glUniformMatrix4fv(line["u_mvp"], 1, GL.GL_TRUE, mvp)
+        GL.glUniform2f(line["u_viewport"], float(camera.width),
+                       float(camera.height))
+        GL.glUniform1f(line["u_width"], LINE_WIDTH * float(ratio))
         loc = self.locations
-        GL.glUseProgram(self.program)
-        GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
-        GL.glUniform1f(loc["u_ratio"], float(ratio))
-        GL.glUniform1f(loc["u_points"], 0.0)
         GL.glBindVertexArray(self.vao)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
@@ -158,6 +219,9 @@ class FlowLines:
         try:
             GL.glDrawArrays(GL.GL_LINES, 0, 2 * m)
             if n:
+                GL.glUseProgram(self.program)
+                GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
+                GL.glUniform1f(loc["u_ratio"], float(ratio))
                 GL.glUniform1f(loc["u_points"], 1.0)
                 GL.glDrawArrays(GL.GL_POINTS, 2 * m, n)
             self.drawn = m

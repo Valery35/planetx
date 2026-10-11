@@ -27,7 +27,7 @@ GRIDS = "grids"
 EXTRUDE = "extrude"
 # Батиметрия врезок своего рельефа - строка JSON, core/bathymetry.py.
 BATHYMETRY = "bathymetry"
-# Годы старых карт - растров и тайлов проекта, строка JSON
+# Годы исторических карт - растров и тайлов проекта, строка JSON
 # {номер слоя: год}, core/oldmaps.py.
 MAP_YEARS = "map_years"
 
@@ -104,7 +104,7 @@ def write_bathymetry(settings, project=None):
 
 
 def read_map_years(project=None):
-    """Годы старых карт проекта: {номер слоя: год}, год
+    """Годы исторических карт проекта: {номер слоя: год}, год
     астрономический."""
     project = project or QgsProject.instance()
     value, ok = project.readEntry(ENTRY, MAP_YEARS, "")

@@ -448,8 +448,10 @@ class LayerPanel(QWidget):
     relief_toggled = pyqtSignal(bool)
     # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
     extra_toggled = pyqtSignal(str, bool)
-    # Раздел «На глобусе»: снять слой, его непрозрачность 0..1, слой
-    # в проект QGIS. Ключ - ключ строки витрины или «map» - карта витрины.
+    # Раздел «На глобусе»: флажок строки (слой выключен, строка
+    # остаётся), убрать строку, непрозрачность 0..1, слой в проект QGIS.
+    # Ключ - ключ строки витрины или «map» - карта витрины.
+    active_toggled = pyqtSignal(str, bool)
     active_off = pyqtSignal(str)
     active_opacity = pyqtSignal(str, float)
     active_export = pyqtSignal(str)
@@ -1037,22 +1039,29 @@ class LayerPanel(QWidget):
 
     def set_active(self, rows):
         """Раздел «На глобусе»: строки (ключ, название, непрозрачность
-        0..1 или None - без ползунка, можно ли в проект). Сигналы при
-        этом не идут. При тех же строках меняются только ползунки."""
+        0..1 или None - без ползунка, можно ли в проект, включён ли).
+        Выключенный флажком слой остаётся строкой, замечание автора от
+        11 октября 2026 года - иначе его приходилось искать в витрине
+        заново. Сигналы при этом не идут. При тех же строках меняются
+        только ползунки и флажки."""
         shape = [(key, title, opacity is None, export)
-                 for key, title, opacity, export in rows]
+                 for key, title, opacity, export, _ in rows]
         if shape != self._active_shape:
             self._active_shape = shape
             self.active_header.takeChildren()
             self.active_rows = {}
-            for key, title, opacity, export in rows:
+            for key, title, opacity, export, _ in rows:
                 self._active_row(key, title, opacity, export)
             self.active_header.setExpanded(True)
-        for key, _, opacity, _ in rows:
-            slider = self.active_rows[key][1]
+        for key, _, opacity, _, on in rows:
+            _, slider, check = self.active_rows[key]
+            check.blockSignals(True)
+            check.setChecked(bool(on))
+            check.blockSignals(False)
             if slider is not None:
                 slider.blockSignals(True)
                 slider.setValue(int(round(float(opacity) * 100)))
+                slider.setEnabled(bool(on))
                 slider.blockSignals(False)
         self.active_header.setHidden(not rows)
 
@@ -1067,10 +1076,10 @@ class LayerPanel(QWidget):
         check.setToolTip(title)
         check.setSizePolicy(enum(QSizePolicy, "Policy", "Ignored"),
                             enum(QSizePolicy, "Policy", "Preferred"))
-        # Снятие убирает строку, а Qt ещё в обработчике её флажка -
-        # сигнал уходит после прохода цикла событий.
-        check.toggled.connect(lambda on, key=key: on or QTimer.singleShot(
-            0, lambda: self.active_off.emit(key)))
+        # Флажок включает и выключает слой, строка остаётся. Сигнал -
+        # после прохода цикла событий: Qt ещё в обработчике флажка.
+        check.toggled.connect(lambda on, key=key: QTimer.singleShot(
+            0, lambda: self.active_toggled.emit(key, on)))
         row.addWidget(check, 1)
         slider = None
         if opacity is not None:
@@ -1659,8 +1668,8 @@ class LayerPanel(QWidget):
         if isinstance(layer, QgsRasterLayer):
             year = menu.addAction(tr("Год карты…"))
             year.setToolTip(tr(
-                "Год старой карты - растра или тайлов. Карты одной группы "
-                "слоёв сменяют друг друга на шкале времени - видна "
+                "Год исторической карты - растра или тайлов. Карты одной "
+                "группы слоёв сменяют друг друга на шкале времени - видна "
                 "последняя карта не позже момента шкалы. Шаги ◂ ▸ шкалы "
                 "идут по годам карт."))
             year.triggered.connect(

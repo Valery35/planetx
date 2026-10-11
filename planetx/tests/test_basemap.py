@@ -124,5 +124,31 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(bm.from_settings(items), [])
 
 
+
+class TestMirrors(unittest.TestCase):
+    """Зеркала тайлов planetx-terrain."""
+
+    def test_terrain_tiles_get_jsdelivr(self):
+        url = ("https://raw.githubusercontent.com/Valery35/planetx-terrain/"
+               "main/mars/{z}/{x}/{y}.png")
+        src = bm.Source("Mars", url)
+        self.assertEqual(len(src.urls), 2)
+        self.assertEqual(src.tile_url(1, 0, 1), url.replace(
+            "{z}/{x}/{y}", "1/0/1"))
+        self.assertTrue(src.next_mirror(100.0))
+        self.assertEqual(src.tile_url(1, 0, 1),
+                         "https://cdn.jsdelivr.net/gh/Valery35/"
+                         "planetx-terrain@main/mars/1/0/1.png")
+        # Не чаще паузы, потом - обратно на главный.
+        self.assertFalse(src.next_mirror(110.0))
+        self.assertTrue(src.next_mirror(100.0 + bm.MIRROR_PAUSE))
+        self.assertEqual(src.mirror, 0)
+
+    def test_other_sources_without_mirrors(self):
+        src = bm.Source("OSM", bm.OSM_URL)
+        self.assertEqual(src.urls, (bm.OSM_URL,))
+        self.assertFalse(src.next_mirror(1000.0))
+
+
 if __name__ == "__main__":
     unittest.main()

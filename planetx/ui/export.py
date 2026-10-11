@@ -14,16 +14,23 @@
 """
 import os
 
-from qgis.core import (QgsCoordinateTransformContext, QgsMarkerSymbol,
-                       QgsProject, QgsProperty, QgsRectangle,
+import uuid
+
+import numpy as np
+from qgis.core import (QgsColorRampShader, QgsCoordinateTransformContext,
+                       QgsMarkerSymbol, QgsProject, QgsProperty,
+                       QgsRasterLayer, QgsRasterShader, QgsRectangle,
+                       QgsSingleBandPseudoColorRenderer,
                        QgsSingleSymbolRenderer, QgsSymbolLayer,
                        QgsVectorFileWriter, QgsVectorLayer)
+from qgis.PyQt.QtGui import QColor
 
 from ..core.sync import inside
 from ..i18n import tr
 
 __all__ = ("inside", "write_points", "write_layer", "add_points",
-           "add_styled")
+           "add_styled", "write_grid", "write_picture", "add_raster")
+NODATA = -9999.0
 
 PIXEL_MM = 0.26  # мм на логический пиксель точки глобуса
 
@@ -132,6 +139,91 @@ def add_styled(path, name, title, source):
     layer.setRenderer(source.renderer().clone())
     layer.setOpacity(source.opacity())
     return _to_group(layer)
+
+
+def write_grid(path, bands, west, north, step, box):
+    """Сетку значений (строки с севера на юг, центр левого верхнего узла
+    west, north, шаг step) в рамке box - GeoTIFF float32 EPSG:4326, полосы
+    bands по порядку. Рамка через линию перемены дат берётся целиком по
+    долготе. Возвращает количество узлов или None."""
+    from osgeo import gdal, osr
+    first = np.asarray(bands[0])
+    rows, cols = first.shape
+    b_west, south, b_east, b_north = box
+    r0 = max(0, int(np.floor((north - b_north) / step)))
+    r1 = min(rows, int(np.ceil((north - south) / step)) + 1)
+    if b_west <= b_east:
+        c0 = max(0, int(np.floor((b_west - west) / step)))
+        c1 = min(cols, int(np.ceil((b_east - west) / step)) + 1)
+    else:
+        c0, c1 = 0, cols
+    if r1 <= r0 or c1 <= c0:
+        return None
+    driver = gdal.GetDriverByName("GTiff")
+    data = driver.Create(path, c1 - c0, r1 - r0, len(bands),
+                         gdal.GDT_Float32, ["COMPRESS=DEFLATE"])
+    data.SetGeoTransform((west + (c0 - 0.5) * step, step, 0.0,
+                          north - (r0 - 0.5) * step, 0.0, -step))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+    data.SetProjection(srs.ExportToWkt())
+    for n, band in enumerate(bands):
+        values = np.asarray(band, dtype=np.float32)[r0:r1, c0:c1]
+        out = data.GetRasterBand(n + 1)
+        out.WriteArray(np.where(np.isfinite(values), values, NODATA))
+        out.SetNoDataValue(NODATA)
+    data = None
+    return (r1 - r0) * (c1 - c0)
+
+
+def write_picture(path, data, box):
+    """Картинку (байты PNG или JPEG) рамки box - GeoTIFF EPSG:4326.
+    Истина - записан."""
+    from osgeo import gdal
+    source = "/vsimem/planetx_picture_{}".format(uuid.uuid4().hex)
+    gdal.FileFromMemBuffer(source, bytes(data))
+    try:
+        west, south, east, north = box
+        result = gdal.Translate(path, source, format="GTiff",
+                                outputSRS="EPSG:4326",
+                                outputBounds=[west, north, east, south],
+                                creationOptions=["COMPRESS=DEFLATE"])
+        ok = result is not None
+        result = None
+        return ok
+    finally:
+        gdal.Unlink(source)
+
+
+def add_raster(path, title, stops=None, rights=""):
+    """Растр файла в проект: stops - [(значение, (R, G, B[, A]))] -
+    раскраска первой полосы, иначе как есть. rights - строка прав."""
+    layer = QgsRasterLayer(path, title, "gdal")
+    if not layer.isValid():
+        return None
+    if stops:
+        shader = QgsColorRampShader()
+        shader.setColorRampType(_ramp_type())
+        shader.setColorRampItemList([
+            QgsColorRampShader.ColorRampItem(float(v), QColor(*c[:3]),
+                                             "{:g}".format(v))
+            for v, c in stops])
+        raster = QgsRasterShader()
+        raster.setRasterShaderFunction(shader)
+        layer.setRenderer(QgsSingleBandPseudoColorRenderer(
+            layer.dataProvider(), 1, raster))
+    if rights:
+        meta = layer.metadata()
+        meta.setRights([rights])
+        layer.setMetadata(meta)
+    return _to_group(layer)
+
+
+def _ramp_type():
+    scope = getattr(QgsColorRampShader, "Type", None)
+    if scope is not None:
+        return scope.Interpolated
+    return QgsColorRampShader.Interpolated
 
 
 def _to_group(layer):

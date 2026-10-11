@@ -444,7 +444,15 @@ class TileLoader(QObject):
                 self.queue.done(key, ok=True)
                 self._missing(key)
             else:
-                self.queue.done(key, ok=False, now=time.monotonic())
+                now = time.monotonic()
+                self.queue.done(key, ok=False, now=now)
+                status = reply.attribute(HTTP_STATUS)
+                # Отказ сервера, а не «тайла нет» - на зеркало, если есть.
+                if status not in (400, 401, 403, 404, 410) \
+                        and self.source.next_mirror(now):
+                    from .. import journal
+                    journal.note("tiles {}: mirror {}".format(
+                        self.source.name, self.source.mirror))
                 self.failed.emit(key, reply.errorString())
         else:
             self.queue.done(key, ok=True)

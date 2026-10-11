@@ -297,7 +297,7 @@ uniform vec4 u_compare_uv;
 uniform sampler2D u_contours;
 uniform vec4 u_contours_uv;
 uniform float u_swipe;
-// Шторка старых карт (core/oldmaps.py): левее шторки u_compare - то же
+// Шторка исторических карт (core/oldmaps.py): левее шторки u_compare - то же
 // наложение слоёв проекта с картой другого года, вместо u_overlay.
 uniform float u_swipe_maps;
 const float SWIPE_LINE = 1.5;  // полуширина линии шторки в пикселях кадра

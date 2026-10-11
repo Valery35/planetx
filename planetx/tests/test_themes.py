@@ -189,5 +189,19 @@ class TestThemes(unittest.TestCase):
         self.assertEqual(out[0, 0].tolist(), [100, 50, 25, 128])
 
 
+
+class TestWms(unittest.TestCase):
+
+    def test_wms_url_axis_order_and_size(self):
+        url, w, h = themes.wms_url("Layer_A", (30.0, 50.0, 40.0, 55.0),
+                               "2026-10-05T00:00:00Z")
+        self.assertIn("BBOX=50.000000,30.000000,55.000000,40.000000", url)
+        self.assertIn("TIME=2026-10-05", url)
+        self.assertEqual((w, h), (themes.WMS_SIDE, themes.WMS_SIDE // 2))
+        url, w, h = themes.wms_url("Layer_A", (30.0, 50.0, 31.0, 60.0))
+        self.assertNotIn("TIME", url)
+        self.assertEqual(h, themes.WMS_SIDE)
+
+
 if __name__ == "__main__":
     unittest.main()

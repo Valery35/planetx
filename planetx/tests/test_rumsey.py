@@ -28,6 +28,18 @@ class TestRumsey(unittest.TestCase):
         # Подробные сначала, карта мира - в конце, Париж не задет.
         self.assertEqual(numbers, [4, 0, 1, 2])
 
+    def test_search_whole_catalogue(self):
+        cat = rumsey.Catalogue.from_text(json.dumps(INDEX))
+        found = [int(cat.number[r]) for r in rumsey.search(cat, "moskva")]
+        self.assertEqual(found, [0, 4])
+        self.assertEqual(rumsey.search(cat, "moskva 1935"), [4])
+        self.assertEqual(rumsey.search(cat, "  "), [])
+
+    def test_fly_distance_grows_with_box(self):
+        small = rumsey.fly_distance((37.5, 55.6, 37.8, 55.9))
+        large = rumsey.fly_distance((20.0, 40.0, 60.0, 70.0))
+        self.assertGreater(large, 50 * small)
+
     def test_tile_plan(self):
         factor, w, h, pieces = rumsey.tile_plan(7984, 6160,
                                                 [1, 2, 4, 8, 16, 32])

@@ -41,6 +41,15 @@ KNOWN = (
 OSM_ATTRIBUTION = ("© OpenStreetMap contributors",
                    "https://www.openstreetmap.org/copyright")
 
+# Зеркала тайлов: начало адреса - запасные начала с теми же путями.
+# Хранилище planetx-terrain отдаёт и CDN jsDelivr, проверено 11 октября
+# 2026 года.
+MIRRORS = {
+    "https://raw.githubusercontent.com/Valery35/planetx-terrain/main/": (
+        "https://cdn.jsdelivr.net/gh/Valery35/planetx-terrain@main/",),
+}
+MIRROR_PAUSE = 30.0  # с, не чаще переходит источник на другое зеркало
+
 _FIELD = re.compile(r"\{([^{}]*)\}")
 _KNOWN_FIELDS = {"x", "y", "-y", "z", "q"}
 
@@ -57,6 +66,10 @@ class Source:
     сервер снимков Луны на тайл 6/57/39, 1 октября 2026 года. У прочих
     подложек 403 - запрет доступа, это ошибка.
 
+    urls - шаблон адреса и его зеркала (mirror_urls), mirror - номер
+    действующего. Отказ сервера уводит источник на следующее зеркало
+    (next_mirror), запросы идут туда же.
+
     Имя и пароль идут одной парой без значения по умолчанию. Параметр
     password="" сканер каталога QGIS (Bandit, правило B107) принял
     за пароль в коде и заблокировал выпуск 0.2.0.
@@ -64,7 +77,7 @@ class Source:
 
     __slots__ = ("name", "url", "max_level", "attribution", "headers",
                  "authcfg", "username", "password", "parallel", "builtin",
-                 "example", "missing")
+                 "example", "missing", "urls", "mirror", "switched")
 
     def __init__(self, name, url, max_level=MAX_LEVEL, attribution=None,
                  headers=None, authcfg="", login=None, builtin=False,
@@ -81,9 +94,29 @@ class Source:
         self.example = example
         self.missing = tuple(missing)
         self.parallel = OSM_PARALLEL if is_osm(url) else OTHER_PARALLEL
+        self.urls = mirror_urls(url)
+        self.mirror = 0
+        self.switched = -1e9
 
     def tile_url(self, z, x, y):
-        return tile_url(self.url, z, x, y)
+        return tile_url(self.urls[self.mirror], z, x, y)
+
+    def next_mirror(self, now):
+        """Перейти на следующее зеркало после отказа сервера, не чаще
+        MIRROR_PAUSE. Истина - перешёл."""
+        if len(self.urls) < 2 or now - self.switched < MIRROR_PAUSE:
+            return False
+        self.mirror = (self.mirror + 1) % len(self.urls)
+        self.switched = now
+        return True
+
+
+def mirror_urls(url):
+    """Шаблон и его зеркала по MIRRORS, главный - первым."""
+    for head, others in MIRRORS.items():
+        if url.startswith(head):
+            return (url,) + tuple(o + url[len(head):] for o in others)
+    return (url,)
 
 
 def is_osm(url):

@@ -629,7 +629,7 @@ def brienz():
     save("brienz", scene, root)
 
 
-# Москва, старые карты: карты 1813, 1860, 1900, 1917 и 1935 годов из
+# Москва, исторические карты: карты 1813, 1860, 1900, 1917 и 1935 годов из
 # Wikimedia Commons (общественное достояние), привязанные в Wikimaps
 # Warper. Окно кладёт их тайлы XYZ в проект с годами карт
 # (GlobeWindow.open_demo, MOSCOW_MAPS). Точки и вид - выбор помощника.
@@ -638,7 +638,7 @@ CATHEDRAL = (55.7446, 37.6055)
 
 
 def moscow():
-    title = "PlanetX: демо, Москва, старые карты"
+    title = "PlanetX: демо, Москва, исторические карты"
     lat, lon = KREMLIN
     places = [
         KPlace("Кремль", "point", [(lat, lon)], color=ORANGE, icon="flag",
@@ -660,7 +660,7 @@ def moscow():
     root = KFolder(title, children=places)
     view = dict(EARTH_VIEW, scale=1.0, extras=QUIET_EXTRAS)
     scene = Scene((lat, lon, 22000.0, 0.0, 0.0), None, [], view,
-                  title, "Москва, старые карты")
+                  title, "Москва, исторические карты")
     save("moscow", scene, root)
 
 

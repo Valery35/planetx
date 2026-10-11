@@ -24,6 +24,9 @@ import numpy as np
 ROOT = "https://gibs.earthdata.nasa.gov"
 URL = (ROOT + "/wmts/epsg3857/best/{layer}/default/{time}/"
        "GoogleMapsCompatible_Level{level}/{{z}}/{{y}}/{{x}}.{ext}")
+# Картинка слоя GIBS по рамке - WMS 1.3.0, для выгрузки в проект QGIS.
+WMS = ROOT + "/wms/epsg4326/best/wms.cgi"
+WMS_SIDE = 2048  # пикселей по большей стороне картинки выгрузки
 DOMAINS = (ROOT + "/wmts/epsg3857/best/1.0.0/{layer}/default/"
            "GoogleMapsCompatible_Level{level}/all/1900-01-01--2100-01-01.xml")
 COLORMAP = ROOT + "/colormaps/v1.3/{name}.xml"
@@ -179,6 +182,28 @@ def is_weather(key):
 _INTERVAL = re.compile(r"(\d{4}-\d{2}-\d{2})(?:T[\d:]+Z)?/"
                        r"(\d{4}-\d{2}-\d{2})(?:T[\d:]+Z)?/P(\d+)([DMY])")
 _DOMAIN = re.compile(r"<Domain>([^<]*)</Domain>")
+
+
+def wms_url(layer, box, day=None, side=WMS_SIDE, fmt="image/png"):
+    """Адрес GetMap WMS GIBS для рамки box (запад, юг, восток, север)
+    и размер картинки. В WMS 1.3.0 у EPSG:4326 порядок осей - широта,
+    долгота. day - «ГГГГ-ММ-ДД» или None - последний день."""
+    west, south, east, north = box
+    width_deg = max(east - west, 1e-6)
+    height_deg = max(north - south, 1e-6)
+    if width_deg >= height_deg:
+        width, height = side, max(16, int(round(side * height_deg
+                                                / width_deg)))
+    else:
+        width, height = max(16, int(round(side * width_deg
+                                          / height_deg))), side
+    url = ("{}?SERVICE=WMS&REQUEST=GetMap&VERSION=1.3.0&LAYERS={}"
+           "&STYLES=&CRS=EPSG:4326&BBOX={:.6f},{:.6f},{:.6f},{:.6f}"
+           "&WIDTH={}&HEIGHT={}&FORMAT={}&TRANSPARENT=TRUE").format(
+               WMS, layer, south, west, north, east, width, height, fmt)
+    if day:
+        url += "&TIME=" + str(day)[:10]
+    return url, width, height
 
 
 def _date(text):

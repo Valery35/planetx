@@ -3,7 +3,7 @@
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Окно «Карты Рамсея» и сборка привязанной карты (core/rumsey.py).
 
-Пункт «Старые карты Рамсея здесь…» меню на глобусе открывает список
+Пункт «Исторические карты Рамсея здесь…» меню на глобусе открывает список
 карт у вида. Каталог берётся из planetx-terrain через зеркала
 (TERRAIN_MIRRORS окна) или из локальной копии (base). Выбранная карта
 собирается из кусков IIIF не больше MAX_SIDE пикселей, поле вне обрезки
@@ -21,9 +21,9 @@ from qgis.PyQt.QtCore import (QObject, QPointF, Qt, QTimer, QUrl,
                               pyqtSignal)
 from qgis.PyQt.QtGui import (QColor, QDesktopServices, QImage, QPainter,
                              QPolygonF)
-from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QLabel, QLineEdit,
-                                 QPushButton, QTreeWidget, QTreeWidgetItem,
-                                 QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QHBoxLayout, QLabel,
+                                 QLineEdit, QPushButton, QTreeWidget,
+                                 QTreeWidgetItem, QVBoxLayout)
 
 from .. import journal
 from ..core import rumsey as core
@@ -313,6 +313,12 @@ class RumseyDialog(QDialog):
         self.filter.setPlaceholderText(tr("Год или название"))
         self.filter.setClearButtonEnabled(True)
         self.filter.textChanged.connect(self._fill)
+        self.everywhere = QCheckBox(tr("По всему каталогу"), self)
+        self.everywhere.setToolTip(tr(
+            "Искать по названию и году среди всех карт коллекции, а не "
+            "только у вида. Кнопка «Показать на глобусе» перелетает к "
+            "выбранной карте."))
+        self.everywhere.toggled.connect(self._fill)
         self.list = QTreeWidget(self)
         self.list.setHeaderLabels([tr("Год"), tr("Карта"), tr("Масштаб")])
         self.list.setRootIsDecorated(False)
@@ -323,6 +329,8 @@ class RumseyDialog(QDialog):
         self.list.setSortingEnabled(True)
         self.list.sortByColumn(0, enum(Qt, "SortOrder", "AscendingOrder"))
         self.list.itemDoubleClicked.connect(lambda *a: self._load())
+        self.list.currentItemChanged.connect(
+            lambda *a: self._show_footprints())
         self.status = QLabel(self)
         self.status.setWordWrap(True)
         note = QLabel(tr(
@@ -336,16 +344,23 @@ class RumseyDialog(QDialog):
             "и ложится в группу «Карты Рамсея» с годом карты. Год ставит "
             "карту на шкалу времени."))
         self.load_button.clicked.connect(self._load)
+        show = QPushButton(tr("Показать на глобусе"), self)
+        show.setToolTip(tr("Перелёт к рамке выбранной карты."))
+        show.clicked.connect(self._fly)
         page = QPushButton(tr("Страница карты"), self)
         page.setToolTip(tr("Страница карты на сайте коллекции в браузере."))
         page.clicked.connect(self._page)
         buttons = QHBoxLayout()
         buttons.addWidget(self.load_button)
+        buttons.addWidget(show)
         buttons.addWidget(page)
         buttons.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.place)
-        layout.addWidget(self.filter)
+        filters = QHBoxLayout()
+        filters.addWidget(self.filter, 1)
+        filters.addWidget(self.everywhere)
+        layout.addLayout(filters)
         layout.addWidget(self.list, 1)
         layout.addWidget(self.status)
         layout.addLayout(buttons)
@@ -370,8 +385,12 @@ class RumseyDialog(QDialog):
         if cat is None or self.view is None:
             return
         lat, lon, box = self.view
-        self.rows = core.covering(cat, lat, lon, box)
         text = self.filter.text().strip().lower()
+        if self.everywhere.isChecked():
+            self.rows = core.search(cat, text)
+            text = ""
+        else:
+            self.rows = core.covering(cat, lat, lon, box)
         shown = 0
         for row in self.rows:
             year = cat.year[row]
@@ -392,6 +411,7 @@ class RumseyDialog(QDialog):
             item.setToolTip(1, title)
             shown += 1
         self.list.setSortingEnabled(True)
+        self._show_footprints()
         self.place.setText(tr("Карт у вида: {count}, по годам. Щелчок "
                               "по заголовку столбца меняет порядок.",
                               count=shown))
@@ -410,6 +430,31 @@ class RumseyDialog(QDialog):
             return
         self.load_button.setEnabled(False)
         self.loader.build(row)
+
+    def _shown_rows(self):
+        role = enum(Qt, "ItemDataRole", "UserRole")
+        return [self.list.topLevelItem(n).data(0, role)
+                for n in range(self.list.topLevelItemCount())]
+
+    def _show_footprints(self):
+        """Рамки карт списка на глобусе, выбранная - ярче."""
+        cat = self.loader.catalogue
+        if cat is None or not self.isVisible():
+            return
+        rows = self._shown_rows()[:core.LIST_MAX]
+        selected = self._selected()
+        self.window.set_rumsey_footprints(
+            [tuple(cat.box[r]) for r in rows],
+            None if selected is None else tuple(cat.box[selected]))
+
+    def _fly(self):
+        row = self._selected()
+        if row is None:
+            return
+        box = self.loader.catalogue.box[row]
+        self.window.view.fly_pose(
+            (box[1] + box[3]) / 2.0, (box[0] + box[2]) / 2.0,
+            core.fly_distance(box), 0.0, 0.0)
 
     def _page(self):
         row = self._selected()
@@ -433,5 +478,6 @@ class RumseyDialog(QDialog):
 
     def closeEvent(self, event):
         self.loader.cancel()
+        self.window.set_rumsey_footprints([], None)
         self.load_button.setEnabled(True)
         super().closeEvent(event)

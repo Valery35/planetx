@@ -57,9 +57,16 @@ def check(delay, manual=False):
     return wrap
 
 
-def finish():
+def save():
+    """Итог на диск. Пишется после каждого шага: прогон, снятый по
+    сроку, оставляет итог пройденных шагов."""
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(result, fh, ensure_ascii=False, indent=1, default=str)
+
+
+def finish():
+    result["finished"] = True
+    save()
     if "plugin" in state:
         state["plugin"].unload()
     # С загруженными слоями QGIS падает на exit(0), и на экране автора
@@ -89,6 +96,12 @@ def run(index=0):
         # Шаг ждёт: повторяется через again мс.
         QTimer.singleShot(again, lambda: run(index))
         return
+    result["last_step"] = function.__name__
+    try:
+        save()
+    except (OSError, TypeError, ValueError):
+        result["errors"].append("save: " + traceback.format_exc()
+                                .splitlines()[-1])
     QTimer.singleShot(delay, lambda: run(index + 1))
 
 
@@ -6227,8 +6240,16 @@ def infra_active():
     panel.active_rows["plants"][2].setChecked(False)
     QApplication.processEvents()
     QApplication.processEvents()
+    # Снятый флажок выключает слой, строка остаётся до «Убрать».
     out["plants_off"] = not window.extras.get("plants") \
-        and "plants" not in panel.active_rows
+        and "plants" in panel.active_rows \
+        and not panel.active_rows["plants"][2].isChecked()
+    panel.active_rows["plants"][2].setChecked(True)
+    QApplication.processEvents()
+    QApplication.processEvents()
+    out["plants_back"] = bool(window.extras.get("plants"))
+    window._active_off("plants")
+    out["plants_removed"] = "plants" not in panel.active_rows
     window.set_extra("plants", True)
     result["infra"]["active"] = out
 
@@ -6532,6 +6553,190 @@ def rumsey_check():
         for node in group.findLayers():
             QgsProject.instance().removeMapLayer(node.layerId())
         root.removeChildNode(group)
+
+
+@check(500)
+def mirror_tiles():
+    """Тайлы planetx-terrain: первое зеркало - закрытый порт, загрузчик
+    уходит на jsDelivr и получает тайлы."""
+    from planetx.core import basemap
+    from planetx.net.loader import TileLoader
+    window = state["window"]
+    url = ("https://raw.githubusercontent.com/Valery35/planetx-terrain/"
+           "main/imagery/mercury/{z}/{x}/{y}.jpg")
+    source = basemap.Source("Mercury", url, 4)
+    source.urls = ("https://127.0.0.1:9/{z}/{x}/{y}.jpg",) + source.urls
+    loader = TileLoader(source, parent=window)
+    got = []
+    loader.loaded.connect(lambda key, *a: got.append(key))
+    state["mirror"] = (loader, source, got, time.monotonic())
+    for x in range(2):
+        for y in range(2):
+            loader.want((1, x, y), 1.0)
+
+
+@check(1000)
+def mirror_tiles_wait():
+    loader, source, got, started = state["mirror"]
+    if len(got) < 4 and time.monotonic() - started < 60.0:
+        loader._pump()
+        for x in range(2):
+            for y in range(2):
+                if (1, x, y) not in got:
+                    loader.want((1, x, y), 1.0)
+        return 1000
+    result["mirror_tiles"] = {"tiles": len(got), "mirror": source.mirror,
+                              "seconds": round(time.monotonic() - started,
+                                               1)}
+    loader.abort()
+
+
+@check(1000)
+def currents_time():
+    """Течения на день шкалы времени: 15 июля 2020 года."""
+    from planetx.core.navigation import Pose
+    from planetx.core import flow as flow_core
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(38.0, -65.0, 3000000.0, 0.0, 0.0))
+    window.set_extra("currents", True)
+    state["flow_started"] = time.monotonic()
+    state["currents_moment"] = flow_core.day_seconds("2020-07-15")
+
+
+@check(1000)
+def currents_time_wait():
+    window = state["window"]
+    flow = window.flow
+    out = result.setdefault("currents_time", {})
+    if not flow.currents_last:
+        if time.monotonic() - state["flow_started"] < 60.0:
+            return 1000
+        out["error"] = "no last day"
+        return None
+    if "span" not in out:
+        out["last"] = flow.currents_last
+        out["span"] = flow.currents_span() is not None
+        if not window.timebar.shown():
+            window.timebar.open_bar()
+        moment = state["currents_moment"]
+        window.timebar.set_range(moment, moment)
+        window._time_changed(*window.timebar.range())
+        state["flow_started"] = time.monotonic()
+        return 1000
+    if flow.currents_day != "2020-07-15" \
+            and time.monotonic() - state["flow_started"] < 60.0:
+        return 1000
+    out["day"] = flow.currents_day
+    out["kept"] = sorted(flow.currents_days)
+    out["drawn"] = window.view.flows["currents"].drawn
+    path = os.path.join(TEMP, "planetx_active", "currents.tif")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.remove(path)
+    out["exported"] = window.active_export("currents", path)
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_currents_2020.png"))
+    window.set_extra("currents", False)
+    from qgis.core import QgsProject
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    out["group"] = [] if group is None else [
+        n.layer().name() for n in group.findLayers()]
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.timebar.close_bar()
+
+
+@check(1000)
+def theme_export():
+    """Тема NASA в проект картинкой WMS GIBS по рамке вида."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.view.navigator.show(Pose(60.0, 60.0, 3000000.0, 0.0, 0.0))
+    window.set_theme("snow")
+    state["theme_started"] = time.monotonic()
+
+
+@check(1000)
+def theme_export_go():
+    window = state["window"]
+    if window.theme_day is None \
+            and time.monotonic() - state["theme_started"] < 60.0:
+        return 1000
+    path = os.path.join(TEMP, "planetx_active", "theme.tif")
+    if os.path.exists(path):
+        os.remove(path)
+    state["theme_path"] = path
+    result["theme_export"] = {"day": window.theme_day,
+                              "rows": list(window.panel.active_rows)}
+    window.active_export("map", path)
+    state["theme_started"] = time.monotonic()
+
+
+@check(1000)
+def theme_export_wait():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["theme_export"]
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    if group is None and time.monotonic() - state["theme_started"] < 60.0:
+        return 1000
+    layers = [] if group is None else [n.layer() for n in group.findLayers()]
+    out["layers"] = [(la.name(), la.width(), la.height()) for la in layers]
+    if layers:
+        e = layers[0].extent()
+        out["extent"] = [round(v, 2) for v in (
+            e.xMinimum(), e.yMinimum(), e.xMaximum(), e.yMaximum())]
+    out["message"] = window.message[0] if window.message else ""
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.set_theme("")
+
+
+@check(1000)
+def rumsey_search():
+    """Поиск карт Рамсея по всему каталогу, рамки на глобусе, перелёт."""
+    window = state["window"]
+    dialog = window.rumsey_here(55.75, 37.62)
+    state["rumsey_dialog"] = dialog
+    state["rumsey_started"] = time.monotonic()
+
+
+@check(1000)
+def rumsey_search_check():
+    window = state["window"]
+    dialog = state["rumsey_dialog"]
+    if window.rumsey_loader.catalogue is None \
+            and time.monotonic() - state["rumsey_started"] < 60.0:
+        return 1000
+    out = {}
+    out["footprints_view"] = window.rumsey_footprints.featureCount() \
+        if window.rumsey_footprints is not None else 0
+    dialog.everywhere.setChecked(True)
+    dialog.filter.setText("Perm")
+    out["found"] = dialog.list.topLevelItemCount()
+    out["first"] = [dialog.list.topLevelItem(n).text(0) + " "
+                    + dialog.list.topLevelItem(n).text(1)[:40]
+                    for n in range(min(5, out["found"]))]
+    if out["found"]:
+        dialog.list.setCurrentItem(dialog.list.topLevelItem(0))
+        dialog._fly()
+    out["footprints"] = window.rumsey_footprints.featureCount() \
+        if window.rumsey_footprints is not None else 0
+    out["in_overlay"] = window.rumsey_footprints is not None \
+        and window.overlay is not None and any(
+            la is window.rumsey_footprints for la in window.overlay.layers)
+    dialog.close()
+    out["after_close"] = window.rumsey_footprints is None
+    result["rumsey_search"] = out
 
 
 BRIENZ_DEEP = (46.72744, 7.9565)

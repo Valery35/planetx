@@ -34,10 +34,18 @@ COUNTS = {"wind": 5000, "currents": 4000}
 TYPICAL = {"wind": 10.0, "currents": 0.3}
 DISK_FROM = 3.0e6  # м высоты глаза, выше рамка - видимый диск
 RESET_ZOOM = 2.0  # во сколько раз сменилась ширина вида - частицы заново
+DAYS_KEPT = 6  # полей течений в памяти
+DAY_PAUSE = 400  # мс после движения бегунка до запроса дня
 CURRENTS_URL = (
     "https://coastwatch.pfeg.noaa.gov/erddap/griddap/nesdisSSH1day.nc?"
-    "ugos%5B(last)%5D%5B(-89.875):2:(89.875)%5D%5B(-179.875):2:(179.875)%5D,"
-    "vgos%5B(last)%5D%5B(-89.875):2:(89.875)%5D%5B(-179.875):2:(179.875)%5D")
+    "ugos%5B({t})%5D%5B(-89.875):2:(89.875)%5D%5B(-179.875):2:(179.875)%5D,"
+    "vgos%5B({t})%5D%5B(-89.875):2:(89.875)%5D%5B(-179.875):2:(179.875)%5D")
+
+
+def currents_url(day=None):
+    """Адрес выборки течений: день «ГГГГ-ММ-ДД» или последний (None)."""
+    return CURRENTS_URL.format(t="{}T00:00:00Z".format(day) if day
+                               else "last")
 CURRENTS_ATTRIBUTION = ("Currents: NOAA CoastWatch, NESDIS SSH",
                         "https://coastwatch.pfeg.noaa.gov/erddap/griddap/"
                         "nesdisSSH1day.html")
@@ -81,8 +89,15 @@ class FlowManager(QObject):
         self.fields = {"wind": None, "currents": None}
         self.particles = {}
         self.widths = {}
-        self.currents_day = ""
+        self.currents_day = ""  # день показанного поля течений
+        self.currents_last = ""  # последний готовый день ряда
+        self.currents_days = {}  # день - VectorGrid
         self.currents_reply = None
+        self.moment = None
+        self.day_timer = QTimer(self)
+        self.day_timer.setSingleShot(True)
+        self.day_timer.setInterval(DAY_PAUSE)
+        self.day_timer.timeout.connect(self._want_day)
         self.error = ""
         self.timer = QTimer(self)
         self.timer.setInterval(TICK)
@@ -108,31 +123,76 @@ class FlowManager(QObject):
             return
         if self.fields["currents"] is not None:
             self._start("currents")
+        self._want_day()
+
+    def set_moment(self, moment):
+        """Момент шкалы времени (секунды UTC) или None - последний день.
+        День течений просится после паузы DAY_PAUSE."""
+        self.moment = moment
+        if self.window.extras.get("currents"):
+            self.day_timer.start()
+
+    def _want_day(self):
+        """Поле дня по моменту: из памяти или запросом. Пока ряд не
+        известен, просится последний день."""
+        if not self.window.extras.get("currents") \
+                or self.currents_reply is not None:
             return
-        if self.currents_reply is not None:
+        day = core.current_day(self.moment, self.currents_last)
+        if day and day in self.currents_days:
+            self._show_day(day, self.currents_days[day])
+            return
+        if day and day == self.currents_day:
             return
         self.view.data_pending += 1
-        self.currents_reply = fetch_bytes(CURRENTS_URL, self._currents_done,
-                                          prefer_cache=False)
+        self.currents_reply = fetch_bytes(
+            currents_url(day if self.currents_last else None),
+            lambda data, error, day=day: self._currents_done(day, data,
+                                                             error),
+            prefer_cache=bool(day and day != self.currents_last))
 
-    def _currents_done(self, data, error):
+    def _currents_done(self, day, data, error):
         if self.currents_reply is None:
             return  # снято выключением строки
         self.currents_reply = None
         self.view.data_pending = max(0, self.view.data_pending - 1)
         found = read_currents(data) if data else None
         if found is None:
-            journal.note("currents: {}".format(error or "unreadable"))
+            journal.note("currents {}: {}".format(day or "last",
+                                                  error or "unreadable"))
             self.error = tr("Течения не загрузились, проверьте сеть "
                             "и включите строку снова.")
             self.changed.emit()
             return
-        grid, self.currents_day = found
+        grid, got = found
+        if not self.currents_last:
+            self.currents_last = got
+            self.window._update_timebar()
+        self.currents_days[got] = grid
+        while len(self.currents_days) > DAYS_KEPT:
+            self.currents_days.pop(next(iter(self.currents_days)))
+        self._show_day(got, grid)
+        # Бегунок мог уйти, пока шёл ответ.
+        if core.current_day(self.moment, self.currents_last) != got:
+            self._want_day()
+
+    def _show_day(self, day, grid):
         self.error = ""
+        changed = day != self.currents_day
+        self.currents_day = day
         self.fields["currents"] = grid
         if self.window.extras.get("currents"):
             self._start("currents")
-        self.changed.emit()
+        if changed:
+            self.changed.emit()
+
+    def currents_span(self):
+        """Охват ряда течений (первый, последний день) в секундах UTC или
+        None, пока последний день не известен."""
+        if not self.currents_last:
+            return None
+        return (core.day_seconds(core.CURRENTS_FIRST),
+                core.day_seconds(self.currents_last))
 
     def _set_field(self, kind, grid, keep=False):
         if not keep:

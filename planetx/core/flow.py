@@ -15,6 +15,7 @@
 Сетка поля - строки с севера на юг, как у core.weather.Grid. Величины -
 выбор помощника, утверждает автор.
 """
+import datetime
 import math
 
 import numpy as np
@@ -171,6 +172,27 @@ def segments(particles):
     pairs = np.stack([a[keep], b[keep]], axis=1)
     return pairs, share[keep], np.broadcast_to(
         particles.speed[:, None], keep.shape)[keep]
+
+
+CURRENTS_FIRST = "2017-02-13"  # первый день ряда течений NOAA CoastWatch
+
+
+def current_day(moment, last, first=CURRENTS_FIRST):
+    """День течений «ГГГГ-ММ-ДД» для момента moment (секунды UTC) или
+    последний готовый last при None. За краями ряда - первый или
+    последний день."""
+    if moment is None or not last:
+        return last
+    day = datetime.datetime.fromtimestamp(
+        moment, datetime.timezone.utc).strftime("%Y-%m-%d")
+    return min(max(day, first), last)
+
+
+def day_seconds(day):
+    """Полдень дня «ГГГГ-ММ-ДД» в секундах UTC."""
+    moment = datetime.datetime.strptime(day, "%Y-%m-%d").replace(
+        hour=12, tzinfo=datetime.timezone.utc)
+    return moment.timestamp()
 
 
 def current_colors(speed):

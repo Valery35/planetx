@@ -248,7 +248,22 @@ EN = {
         "Mine shaft",
     "Шахты и карьеры OSM":
         "OSM mines and quarries",
-    "Старые карты Рамсея здесь…":
+    "Загрузка картинки «{title}»…":
+        "Loading the image «{title}»…",
+    "В проект добавлена картинка: {title}.":
+        "Image added to the project: {title}.",
+    "По всему каталогу":
+        "Whole catalogue",
+    "Искать по названию и году среди всех карт коллекции, а не только у "
+    "вида. Кнопка «Показать на глобусе» перелетает к выбранной карте.":
+        "Search by title and year among all maps of the collection, not "
+        "only at the view. The Show on the globe button flies to the "
+        "chosen map.",
+    "Показать на глобусе":
+        "Show on the globe",
+    "Перелёт к рамке выбранной карты.":
+        "Flight to the frame of the chosen map.",
+    "Исторические карты Рамсея здесь…":
         "Rumsey historical maps here…",
     "Загрузка сведений о карте…":
         "Loading map details…",
@@ -558,13 +573,13 @@ EN = {
         "The depth raster is not built. Error - {error}.",
     "Год карты…":
         "Map year…",
-    "Год старой карты - растра или тайлов. Карты одной группы слоёв "
+    "Год исторической карты - растра или тайлов. Карты одной группы слоёв "
     "сменяют друг друга на шкале времени - видна последняя карта не позже "
     "момента шкалы. Шаги ◂ ▸ шкалы идут по годам карт.":
-        "The year of an old map, a raster or tiles. Maps of one layer group "
-        "replace each other on the time slider - the last map not later "
-        "than the slider moment is shown. The ◂ ▸ steps of the slider go "
-        "by the map years.",
+        "The year of a historical map, a raster or tiles. Maps of one "
+        "layer group replace each other on the time slider - the last "
+        "map not later than the slider moment is shown. The ◂ ▸ steps "
+        "of the slider go by the map years.",
     "Год карты":
         "Map year",
     "Год карты «{name}». Пустое поле - карта без года, год до н. э. - со "
@@ -575,19 +590,19 @@ EN = {
         "The year is an integer, for example 1890.",
     "1890 или 1890/1910":
         "1890 or 1890/1910",
-    "Время картинки, как в KML. Год или дата - момент, у старой карты это "
-    "год карты. Карты-моменты одной папки сменяют друг друга на шкале "
-    "времени - видна последняя карта не позже момента шкалы. Два значения "
-    "через косую черту - промежуток, картинка видна в нём. Пустое поле - "
-    "картинка видна всегда.":
+    "Время картинки, как в KML. Год или дата - момент, у исторической "
+    "карты это год карты. Карты-моменты одной папки сменяют друг друга "
+    "на шкале времени - видна последняя карта не позже момента шкалы. "
+    "Два значения через косую черту - промежуток, картинка видна в нём. "
+    "Пустое поле - картинка видна всегда.":
         "The time of the image, as in KML. A year or a date is a moment, "
-        "for an old map it is the map year. Moment maps of one folder "
+        "for a historical map it is the map year. Moment maps of one folder "
         "replace each other on the time slider - the last map not later "
         "than the slider moment is shown. Two values with a slash are a "
         "span, the image is shown within it. An empty field shows the "
         "image always.",
-    "Москва, старые карты":
-        "Moscow, old maps",
+    "Москва, исторические карты":
+        "Moscow, historical maps",
     "План Москвы":
         "Plan of Moscow",
     "Москва, карта Шуберта":

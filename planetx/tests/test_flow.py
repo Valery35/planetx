@@ -78,6 +78,16 @@ class TestFlow(unittest.TestCase):
                                (flow.TRAIL - 2) / (flow.TRAIL - 1.0))
         self.assertTrue(np.allclose(speed, 5.0))
 
+    def test_current_day_clamps_to_series(self):
+        last = "2026-09-28"
+        self.assertEqual(flow.current_day(None, last), last)
+        self.assertEqual(flow.current_day(
+            flow.day_seconds("2020-07-15"), last), "2020-07-15")
+        self.assertEqual(flow.current_day(
+            flow.day_seconds("2026-10-11"), last), last)
+        self.assertEqual(flow.current_day(
+            flow.day_seconds("2001-01-01"), last), flow.CURRENTS_FIRST)
+
     def test_current_colors(self):
         colors = flow.current_colors([0.0, 0.5, 10.0])
         self.assertEqual(tuple(colors[1]), (140.0, 255.0, 140.0))

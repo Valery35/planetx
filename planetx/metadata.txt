@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.67.0
+version=0.67.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,23 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.67.0 Historical maps of the David Rumsey collection - the Rumsey
+changelog=0.67.1 Old maps are called historical maps throughout the plugin
+      and the manual. Rumsey maps - the Whole catalogue check box finds a
+      map by year or title among all 56 thousand maps. Frames of the listed
+      maps are shown on the globe, the Show on the globe button flies to the
+      chosen one. Ocean currents follow the time slider - its handle sets
+      the day from February 2017 on. Wind and current streaks are thicker
+      and easier to see. The To QGIS project… item is available for
+      colourings too. Weather and currents go as a raster of values with a
+      legend, NASA themes, clouds and temperature as an image of the same
+      date. A layer of the On the globe section stays as a row after its
+      check box is cleared and comes back with the same check box. The
+      Remove from the globe item removes the row. Legends of power plants,
+      power lines and currents stand in the common legend panel at the
+      bottom left and do not cover the icon bar. Imagery of bodies,
+      palaeogeography and the relief of Mars and the Moon load from a backup
+      server when the main one does not answer.
+      0.67.0 Historical maps of the David Rumsey collection - the Rumsey
       historical maps here… item of the globe menu lists the maps at the
       view by year. The chosen map is built, georeferenced and put into the
       project with its year, then the time slider and the swipe of two years
@@ -117,7 +133,7 @@ changelog=0.67.0 Historical maps of the David Rumsey collection - the Rumsey
       0.66.1 The elevation profile across an own water body shows the
       water above the bed and a dashed line of the water body level with a
       label.
-      0.66.0 Old maps with a year - a raster or XYZ tiles of the project
+      0.66.0 Historical maps with a year - a raster or XYZ tiles of the project
       (the Map year… item of the layer menu) and a ground image (the Time
       field). Maps of one group replace each other on the time slider, the
       last map not later than the moment is shown, the ◂ ▸ steps go by the
