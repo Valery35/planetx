@@ -251,13 +251,6 @@ EN = {
     "Закрыть свойства без записи правок, как кнопка «Отмена».":
         "Close the properties without saving the changes, like the "
         "Cancel button.",
-    "Разработчик":
-        "Developer",
-    "Координатная сетка, 3D-здания и горизонтали - проверка геометрии и "
-    "высот своих данных. Журнал работы открывает строка «Поиск».":
-        "The graticule, 3D buildings and contours - a check of the "
-        "geometry and heights of own data. The Search field opens the "
-        "work log.",
     "Глобус":
         "Globe",
     "Готово":
@@ -293,14 +286,10 @@ EN = {
         "of the plugin are found here too - type “currents”, “ruler” or "
         "“images” and choose a suggestion. Ctrl+K from anywhere in the "
         "window puts the cursor into this field.",
-    "Основа, рельеф и слои глобуса. Строка «Набор» вверху включает слои "
-    "под задачу одним выбором - геолог, горняк, гидролог, историк. "
-    "Строка «Карты и слои» открывает витрину карт NASA, погоды и слоёв "
-    "недр.":
-        "The base map, relief and globe layers. The Set row at the top "
-        "turns on layers for a task in one choice - geologist, miner, "
-        "hydrologist, historian. The Maps and layers row opens the "
-        "gallery of NASA maps, weather and subsurface layers.",
+    "Основа, рельеф и слои глобуса. Строка «Карты и слои» открывает "
+    "витрину карт NASA, погоды и слоёв недр.":
+        "The base map, relief and globe layers. The Maps and layers row "
+        "opens the gallery of NASA maps, weather and subsurface layers.",
     "Правая кнопка на глобусе открывает меню точки - что здесь, снимки "
     "Sentinel-2 и Landsat, исторические карты, маршрут, номенклатура "
     "листа, линейка и метка.":
@@ -314,44 +303,6 @@ EN = {
         "placemarks with dates, earthquakes, NASA maps, currents, "
         "historical maps. The handle sets the day, the buttons play the "
         "time.",
-    "Геолог":
-        "Geologist",
-    "Гидролог":
-        "Hydrologist",
-    "Горняк":
-        "Miner",
-    "Историк":
-        "Historian",
-    "Свой выбор":
-        "Own choice",
-    "Чистый глобус":
-        "Clean globe",
-    "включить набор":
-        "turn on the set",
-    "Набор «{name}»":
-        "Set “{name}”",
-    "Только основа, рельеф и звёзды. Слои витрины, карта NASA и строки "
-    "группы «Карта» выключены.":
-        "Only the basemap, relief and stars. Gallery layers, the NASA "
-        "map and the rows of the Map group are off.",
-    "Границы плит, землетрясения, месторождения и горизонтали.":
-        "Plate boundaries, earthquakes, mineral deposits and contours.",
-    "Месторождения, горные разработки, шахты и карьеры OSM, ЛЭП и "
-    "трубопроводы, электростанции и горизонтали.":
-        "Mineral deposits, mining areas, OSM mines and quarries, power "
-        "lines and pipelines, power plants and contours.",
-    "Течения, горизонтали и изобаты, карта осадков NASA.":
-        "Currents, contours and isobaths, the NASA precipitation map.",
-    "Координатная сетка и окно исторических карт Рамсея у вида.":
-        "The graticule and the window of Rumsey historical maps at the "
-        "view.",
-    "Слои под задачу одним выбором. Набор включает свои слои и карту "
-    "витрины и выключает остальные. Камера, основа, рельеф и слои "
-    "проекта не меняются. После своих правок в строке стоит «Свой выбор».":
-        "Layers for a task in one choice. A set turns on its layers and "
-        "gallery map and turns the others off. The camera, basemap, "
-        "relief and project layers do not change. After your own changes "
-        "the row shows Own choice.",
     "{name} - {what}":
         "{name} - {what}",
     "Вид в макет QGIS":

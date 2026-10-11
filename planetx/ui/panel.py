@@ -27,7 +27,7 @@ from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
 from qgis.PyQt.QtCore import (QEvent, QItemSelectionModel, Qt, QTimer,
                               pyqtSignal)
 from qgis.PyQt.QtGui import QFont, QIcon, QKeySequence
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox,
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QCheckBox,
                                  QHBoxLayout, QLabel,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
@@ -45,7 +45,6 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
                            WATER_NAMES)
 from ..qt_compat import QAction, enum, enum_int
-from .commands import preset_names
 from .nasamaps import layer_names
 from .placeprops import icon_image
 from .spinner import BusySpinner
@@ -455,8 +454,6 @@ class LayerPanel(QWidget):
     # остаётся), убрать строку, непрозрачность 0..1, слой в проект QGIS.
     # Ключ - ключ строки витрины или «map» - карта витрины.
     active_toggled = pyqtSignal(str, bool)
-    # Строка «Набор» раздела «Слои»: ключ выбранного набора под задачу.
-    preset_chosen = pyqtSignal(str)
     active_off = pyqtSignal(str)
     active_opacity = pyqtSignal(str, float)
     active_export = pyqtSignal(str)
@@ -725,31 +722,6 @@ class LayerPanel(QWidget):
         row.addWidget(under)
         self.geo.setItemWidget(self.ground_item, 0, ground)
         self.ground_item.setHidden(True)
-        # Набор слоёв под задачу - первая строка раздела. Решение автора
-        # от 11 октября 2026 года, шаг 2 плана «интерфейс над
-        # возможностями». Набор, с которым совпадает глобус, виден
-        # в списке, иначе - «Свой выбор».
-        self.preset_item = QTreeWidgetItem()
-        self.preset_item.setFlags(enum(Qt, "ItemFlag", "ItemIsEnabled"))
-        self.geo.insertTopLevelItem(0, self.preset_item)
-        box = QWidget(self.geo)
-        row = QHBoxLayout(box)
-        row.setContentsMargins(0, 0, 4, 0)
-        row.addWidget(QLabel(tr("Набор"), box))
-        self.preset = QComboBox(box)
-        self.preset.setToolTip(tr(
-            "Слои под задачу одним выбором. Набор включает свои слои "
-            "и карту витрины и выключает остальные. Камера, основа, "
-            "рельеф и слои проекта не меняются. После своих правок в "
-            "строке стоит «Свой выбор»."))
-        self.preset.addItem(tr("Свой выбор"), "")
-        for key, (title, tip) in preset_names().items():
-            self.preset.addItem(title, key)
-            self.preset.setItemData(self.preset.count() - 1, tip,
-                                    enum(Qt, "ItemDataRole", "ToolTipRole"))
-        self.preset.activated.connect(self._preset_activated)
-        row.addWidget(self.preset, 1)
-        self.geo.setItemWidget(self.preset_item, 0, box)
         # Включённые слои с ползунком непрозрачности и меню - раздел
         # «На глобусе». Решение автора от 11 октября 2026 года: витрина -
         # каталог, включённое видно здесь, в проект - по команде.
@@ -979,21 +951,6 @@ class LayerPanel(QWidget):
             self.route_link.emit(link[len("route:"):])
         else:
             self.assistant_requested.emit()
-
-    def _preset_activated(self, index):
-        """Набор выбран в списке. «Свой выбор» ничего не меняет."""
-        key = self.preset.itemData(index)
-        if key:
-            self.preset_chosen.emit(key)
-
-    def set_preset(self, key, earth=True):
-        """Строка «Набор»: набор, с которым совпадает глобус, или «Свой
-        выбор». Сигнал не идёт. Вне Земли строка выключена."""
-        index = self.preset.findData(key or "")
-        self.preset.blockSignals(True)
-        self.preset.setCurrentIndex(max(index, 0))
-        self.preset.blockSignals(False)
-        self.preset.setEnabled(bool(earth))
 
     def set_ground(self, shown, alpha=1.0):
         """Строка «Земля над гридами»: видна ли и непрозрачность."""

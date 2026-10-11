@@ -250,7 +250,6 @@ take effect at once, without the Refresh button.
 
 | Part | Rows |
 |---|---|
-| Set | Layers for a task in one choice, see Sets for a task |
 | Base map | Sources of imagery and maps, an option button selects one, the last row is Add tile source… |
 | Terrain | Mapzen Terrain Tiles elevations and hill shading |
 | Maps and layers | The row opens the gallery of maps and layers, see Maps and layers |
@@ -401,26 +400,6 @@ the relief setting itself does not change. The maps lie as tiles in
 the planetx-terrain repository, the first showing of an age needs the
 internet. A new age appears at once in a coarse form and sharpens as
 it loads. When the window opens, the row is off.
-
-#### Sets for a task
-
-The Set row at the top of the section turns on layers for a task in one
-choice. A set turns on its layers and gallery map and turns off the
-other gallery layers and the rows of the Map group. The camera, base
-map, relief and project layers do not change.
-
-| Set | What is on |
-|---|---|
-| Clean globe | Only the base map, relief and stars |
-| Geologist | Plate boundaries, earthquakes, mineral deposits, contours |
-| Miner | Mineral deposits, mining areas, OSM mines and quarries, power lines and pipelines, power plants, contours |
-| Hydrologist | Currents, contours and isobaths, the NASA precipitation map |
-| Historian | The graticule and the window of Rumsey historical maps at the view |
-| Developer | The graticule, 3D buildings and contours - a check of the geometry and heights of own data |
-
-After your own changes of the check boxes the row shows Own choice.
-The sets are also in the Search field - Set "Geologist" and so on.
-Outside the Earth the row is disabled.
 
 #### Maps and layers
 

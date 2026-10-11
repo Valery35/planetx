@@ -1087,10 +1087,9 @@ QGIS 3.36 в QGIS 4, и `scene_password`.
 
 Шаг 1 - `ui/commands.py` (действия, слова поиска), подсказки вида
 "action" в `core/searchbar.py`, `GlobeWindow.focus_search`,
-`run_action`, Enter - `_exact_action` без демо. Шаг 2 -
-`core/presets.py`, строка «Набор» (`Panel.preset`),
-`GlobeWindow.apply_preset`, `current_preset`, `PRESET_KEYS`. Состав
-наборов предложил помощник, автор утвердил его 11 октября 2026 года.
+`run_action`, Enter - `_exact_action` без демо. Шаг 2 вышел
+в 0.68.0 (`core/presets.py`, строка «Набор») и убран решением автора
+от 11 октября 2026 года - «с ролями так себе, убирай».
 Шаг 3 - `ui/guide.py`, затемнение с вырезом и окошко поверх окна,
 мышь проходит сквозь затемнение, показ один раз (`GUIDE_KEY`), потом -
 действие «Знакомство с модулем». Шаг 4 - `ui/sidepanel.py`, третий
@@ -1100,7 +1099,7 @@ QGIS 3.36 в QGIS 4, и `scene_password`.
 итог - в обработчике finished (`_bathymetry_done`,
 `ExtrudeManager._configured`). В панели одно окно, новое закрывает
 прежнее «Отменой» - выбор помощника, утверждает автор. Шаги проверки -
-`command_bar`, `presets_apply`, `guide_tour`, `side_panel`,
+`command_bar`, `guide_tour`, `side_panel`,
 `open_globe` ставит `GUIDE_KEY`.
 
 Дальше - возможности по списку помощника того же дня, порядок решает

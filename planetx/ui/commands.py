@@ -59,28 +59,6 @@ WORDS = {
 MAP_WORDS = ("карта", "map", "nasa")
 
 
-def preset_names():
-    """Наборы под задачу (core/presets.py): ключ - (название,
-    подсказка)."""
-    return {
-        "clean": (tr("Чистый глобус"), tr(
-            "Только основа, рельеф и звёзды. Слои витрины, карта NASA "
-            "и строки группы «Карта» выключены.")),
-        "geologist": (tr("Геолог"), tr(
-            "Границы плит, землетрясения, месторождения и горизонтали.")),
-        "miner": (tr("Горняк"), tr(
-            "Месторождения, горные разработки, шахты и карьеры OSM, ЛЭП "
-            "и трубопроводы, электростанции и горизонтали.")),
-        "hydrologist": (tr("Гидролог"), tr(
-            "Течения, горизонтали и изобаты, карта осадков NASA.")),
-        "historian": (tr("Историк"), tr(
-            "Координатная сетка и окно исторических карт Рамсея у вида.")),
-        "developer": (tr("Разработчик"), tr(
-            "Координатная сетка, 3D-здания и горизонтали - проверка "
-            "геометрии и высот своих данных. Журнал работы открывает "
-            "строка «Поиск».")),
-    }
-
 
 def _words(key, *more):
     return tuple(WORDS.get(key, ())) + tuple(more)
@@ -123,14 +101,6 @@ def build(window):
         add("open:gallery", tr("Карты и слои"), tr("открыть витрину"),
             window.open_gallery, ("витрина", "каталог", "gallery",
                                   "nasa", "погода", "weather"))
-        chosen = window.current_preset()
-        for key, (title, _) in preset_names().items():
-            if key == chosen:
-                continue
-            add("preset:" + key, tr("Набор «{name}»", name=title),
-                tr("включить набор"),
-                lambda key=key: window.apply_preset(key),
-                (title, "набор", "preset"))
     _tools(window, add, earth)
     _menus(window, add)
     return items, run

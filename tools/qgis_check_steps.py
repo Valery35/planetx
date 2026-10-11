@@ -6636,34 +6636,6 @@ def command_bar():
 
 
 @check(1000)
-def presets_apply():
-    """Наборы под задачу: «Геолог» включает свои слои, строка «Набор»
-    его показывает, правка флажка даёт «Свой выбор», «Гидролог» ставит
-    карту осадков, «Чистый глобус» снимает всё."""
-    window = state["window"]
-    window.set_body("earth")
-    out = {}
-    window.apply_preset("geologist")
-    out["geologist"] = sorted(k for k, v in window.extras.items() if v)
-    out["combo"] = window.panel.preset.currentData()
-    window.set_extra("sun", True)
-    out["combo_after_edit"] = window.panel.preset.currentData()
-    window.apply_preset("hydrologist")
-    out["hydro_theme"] = window.gallery_key()
-    out["hydro_on"] = sorted(k for k, v in window.extras.items() if v)
-    out["active_rows"] = list(window.panel.active_rows)
-    hints = window.search_suggestions("горняк")
-    out["miner_hint"] = [(h.kind, h.text) for h in hints[:2]]
-    index = window.panel.preset.findData("miner")
-    window.panel.preset.activated.emit(index)
-    out["miner_by_combo"] = window.current_preset()
-    window.apply_preset("clean")
-    out["clean"] = sorted(k for k, v in window.extras.items() if v)
-    out["clean_theme"] = window.gallery_key()
-    result["presets"] = out
-
-
-@check(1000)
 def guide_tour():
     """Знакомство с модулем: пять остановок, у каждой - вырез вокруг
     своего места и окошко внутри окна, раздел «Слои» раскрывается,

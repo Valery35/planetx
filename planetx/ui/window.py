@@ -48,7 +48,7 @@ from ..core.mipmap import mip_chain
 from ..core.navigation import Pose, focal, ground_under
 from ..core.planets import EARTH_PLANET, PLANETS, planet_by_key
 from ..core import assistant as assistant_core
-from ..core import presets, searchbar, skydata
+from ..core import searchbar, skydata
 from ..core.skydata import direction as sky_direction
 from ..core.skyview import SkyView, ra_dec_of, ra_dec_text
 from ..core.sync import BOTH, DIRECTIONS, ground_size, view_box
@@ -203,9 +203,6 @@ OPACITY_PAUSE = 300  # мс, наложение пересобирается п�
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
     "contours", "infra_osm", "cables", "fires", "temperature")
-# Строки, которыми управляют наборы под задачу (core/presets.py): слои
-# витрины и строки группы «Карта».
-PRESET_KEYS = tuple(key for key, _ in GALLERY_LAYERS) + commands_ui.MAP_ROWS
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
 # пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
 # 9 - около 160 м. Выбор помощника.
@@ -952,7 +949,6 @@ class GlobeWindow(QWidget):
         # ставит курсор в строку и показывает включённое и прежние
         # запросы.
         self._actions = {}
-        self.panel.preset_chosen.connect(self.apply_preset)
         # Знакомство с модулем (ui/guide.py): при первом открытии окна
         # в профиле, потом - по действию строки «Поиск».
         self.guide = None
@@ -1785,10 +1781,6 @@ class GlobeWindow(QWidget):
         key = self.gallery_key()
         self.panel.set_theme(key, map_names()[key][0] if key else "")
         self._update_active()
-        if hasattr(self.panel, "set_preset"):
-            planet = getattr(self, "planet", None)
-            self.panel.set_preset(self.current_preset(),
-                                  planet is None or planet.earth)
 
     def _side_changed(self):
         """Окно в панели свойств появилось или ушло: место панели
@@ -1816,35 +1808,6 @@ class GlobeWindow(QWidget):
             self.guide.finish()
         self.guide = guide_ui.Guide(self)
         self.guide.start()
-
-    # Наборы слоёв под задачу (core/presets.py).
-
-    def current_preset(self):
-        """Набор, с которым совпадает то, что на глобусе, или ""."""
-        return presets.current(PRESET_KEYS, getattr(self, "extras", {}),
-                               self.gallery_key())
-
-    def apply_preset(self, key):
-        """Включить набор: свои строки и карту, прочие строки наборов
-        выключены, отложенные строки «На глобусе» убраны. Камера,
-        основа, рельеф и слои проекта не меняются."""
-        preset = presets.BY_KEY.get(key)
-        if preset is None:
-            return
-        journal.note("preset {}".format(key))
-        for extra, on in presets.changes(preset, PRESET_KEYS,
-                                         self.extras).items():
-            self.set_extra(extra, on)
-        if self.gallery_key() != preset.theme:
-            self.set_theme(preset.theme)
-        self._parked.clear()
-        self._mark_gallery()
-        if preset.place == "rumsey" and self.planet.earth:
-            pose = self.view.navigator.pose
-            self.rumsey_here(pose.lat, pose.lon)
-        gallery = getattr(self, "gallery", None)
-        if gallery is not None:
-            gallery.refresh()
 
     def open_gallery(self):
         """Окно «Карты и слои», одно на глобус."""
