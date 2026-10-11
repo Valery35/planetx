@@ -1581,14 +1581,11 @@ class LayerPanel(QWidget):
                 self.extra_toggled.emit(key, on)
 
     def _layer_text(self, layer):
-        """Строка слоя проекта: название, тип и роль на глобусе."""
-        text = tr("{name} · {kind}", name=layer.name(),
+        """Строка слоя проекта: название и тип. Роль на глобусе (рельеф,
+        грид) в строке не пишется - решение автора от 12 октября
+        2026 года, «не надо ролей, идея неудачная»."""
+        return tr("{name} · {kind}", name=layer.name(),
                   kind=layer_kind(layer))
-        if layer.id() in self.inset_ids:
-            text = tr("{text} · рельеф", text=text)
-        if layer.id() in self.grid_ids:
-            text = tr("{text} · грид", text=text)
-        return text
 
     def project_rows(self):
         """Строки слоёв проекта в группе «Проект QGIS»."""

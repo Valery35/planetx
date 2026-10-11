@@ -3617,10 +3617,6 @@ EN = {
         "{name}. The check switches the layer off, the row stays. The ⋯ menu "
         "sets the opacity, saves to the QGIS project or removes the layer "
         "from the globe.",
-    "{text} · грид":
-        "{text} · grid",
-    "{text} · рельеф":
-        "{text} · relief",
     "Видимое на глобусе слоем в проект QGIS - объекты в рамке вида или "
     "картинка карты.":
         "What is on the globe as a layer in the QGIS project - features in "
