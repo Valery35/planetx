@@ -5087,7 +5087,8 @@ class GlobeWindow(QWidget):
     def sentinel_here(self, lat, lon, mission=None):
         """«Снимки Sentinel-2 и Landsat здесь…» меню на глобусе: сцены участка
         вокруг точки. Окно одно, новый участок заменяет прежний. mission -
-        спутник окна, у пункта «Ранние снимки Landsat здесь…» - mss."""
+        спутник окна, у пункта «Ранние снимки Landsat здесь…» - mss,
+        у «Снимков ASTER здесь…» - aster."""
         dialog = self._sentinel_dialog()
         if mission:
             dialog.use_mission(mission)

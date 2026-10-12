@@ -64,6 +64,8 @@ EN = {
         "Early Landsat images 1972-1993 here…",
     "Ранние снимки Landsat 1972-1993 здесь":
         "Early Landsat images 1972-1993 here",
+    "Снимки ASTER здесь…": "ASTER images here…",
+    "Снимки ASTER здесь": "ASTER images here",
     "Landsat 1-5 MSS Collection 2 Level-1 (USGS), файлы и каталог "
     "Microsoft Planetary Computer. Значения - отражение на верху "
     "атмосферы, без поправки на атмосферу. Слои несут подпись «Landsat "

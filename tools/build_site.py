@@ -188,8 +188,8 @@ RU = {
     "nasa.c1.h": "Витрина и шкала времени",
     "nasa.c1.p": "Превью показывает карту над Евразией на последний готовый "
                  "день. Карта лежит полупрозрачной раскраской поверх снимка, "
-                 "шкала стоит в углу вида. Пункт «Погода здесь» меню на "
-                 "глобусе даёт прогноз в точке.",
+                 "шкала стоит в углу вида. Числа поля прогноза стоят "
+                 "на глобусе сеткой.",
     "nasa.c2.h": "Картинки и KML",
     "nasa.c2.p": "Картинки на поверхности, фото с камерой и картинки "
                  "на экране, как в KML Google Earth. Картинка "
@@ -293,6 +293,53 @@ RU = {
                  "NASA GIBS, Black Marble, FIRMS. Землетрясения и плиты "
                  "Slab2 - USGS, кора - CRUST1.0, палеогеография - "
                  "PALEOMAP PaleoDEM.",
+    "nav.imagery": "Снимки",
+    "imagery.eyebrow": "Космоснимки",
+    "imagery.h2": "Снимки спутников участком в проект QGIS",
+    "imagery.sub": "Правая кнопка на глобусе открывает окно снимков для "
+                   "участка вокруг точки. Окно ищет сцены за выбранные даты, "
+                   "считает облачность над самим участком и показывает "
+                   "превью. Сочетания каналов и индексы ложатся в проект QGIS "
+                   "слоями GeoTIFF со шкалой.",
+    "imagery.c1.h": "Sentinel-2 и Landsat",
+    "imagery.c1.p": "Sentinel-2 с 2015 года, 10 м. Landsat 4-9 с 1982 года, "
+                    "30 м, с температурой поверхности. Естественные и ложные "
+                    "цвета, NDVI, NDWI, NBR, снег и все каналы сцены одним "
+                    "файлом.",
+    "imagery.c2.h": "Ранние Landsat и ASTER",
+    "imagery.c2.p": "Landsat 1-5 MSS 1972-1993 годов, 60 м, сбойные строки "
+                    "заменяются соседними. ASTER 2000-2006 годов, 14 каналов, "
+                    "отношения каналов для поисков руд - каолинит, серицит, "
+                    "карбонаты, оксиды железа, кварц.",
+    "imagery.c3.h": "MODIS",
+    "imagery.c3.p": "Готовые продукты MODIS с 2000 года - температура "
+                    "поверхности днём и ночью, NDVI и EVI, снег, гари по "
+                    "месяцам.",
+    "key.h": "Ключ NASA Earthdata для снимков ASTER после 2006 года",
+    "key.p": "Снимки ASTER 2000-2006 годов загружаются без регистрации. Более "
+             "поздние снимки NASA отдаёт только по ключу Earthdata. Ключ "
+             "бесплатный, у каждого пользователя он свой.",
+    "key.s1": "<b>Учётная запись.</b> Откройте <a "
+              "href=\"https://urs.earthdata.nasa.gov/users/new\">"
+              "urs.earthdata.nasa.gov/users/new</a> "
+              "и заполните форму. Подтвердите почту по ссылке из письма NASA. "
+              "Если учётная запись уже есть, войдите на <a "
+              "href=\"https://urs.earthdata.nasa.gov\">"
+              "urs.earthdata.nasa.gov</a>.",
+    "key.s2": "<b>Ключ.</b> На странице профиля откройте вкладку «Generate "
+              "Token» и нажмите кнопку «Generate Token». Скопируйте длинную "
+              "строку ключа целиком.",
+    "key.s3": "<b>Ключ в PlanetX.</b> Правой кнопкой по глобусу выберите "
+              "«Снимки ASTER здесь…», в списке «Спутник» - «ASTER с 2007 года "
+              "- NASA, нужен ключ Earthdata». Нажмите «Найти», выберите сцену "
+              "и нажмите «В проект QGIS». Вставьте ключ в окно запроса и "
+              "нажмите «OK».",
+    "key.note": "Ключ действует 60 дней, потом окно спросит новый. Ключ "
+                "хранится в настройках QGIS этого компьютера и уходит только "
+                "на сервер NASA. Кто знает ключ, тот загружает данные от "
+                "имени его владельца, поэтому ключ никому не пересылается. "
+                "Ключ, попавший в чужие руки, отзывает кнопка «Revoke» на той "
+                "же вкладке.",
 }
 
 EN = {
@@ -434,8 +481,8 @@ EN = {
     "nasa.c1.h": "Gallery and time slider",
     "nasa.c1.p": "A preview shows the map over Eurasia on the latest ready "
                  "day. A map lies as semi-transparent colouring over the "
-                 "imagery, its legend stands in the view corner. The Weather "
-                 "here item of the globe menu gives the forecast at a point.",
+                 "imagery, its legend stands in the view corner. The numbers "
+                 "of a forecast field stand on the globe as a grid.",
     "nasa.c2.h": "Images and KML",
     "nasa.c2.p": "Ground overlays, photos with a camera and screen "
                  "overlays, as in Google Earth KML. A ground overlay goes "
@@ -541,6 +588,51 @@ EN = {
                  "Black Marble, FIRMS. Earthquakes and Slab2 slabs - "
                  "USGS, crust - CRUST1.0, paleogeography - PALEOMAP "
                  "PaleoDEM.",
+    "nav.imagery": "Imagery",
+    "imagery.eyebrow": "Satellite imagery",
+    "imagery.h2": "Satellite images of an area into the QGIS project",
+    "imagery.sub": "The right button on the globe opens the images window for "
+                   "an area around the point. The window finds scenes for the "
+                   "chosen dates, computes the cloud cover over the area "
+                   "itself and shows a preview. Band combinations and indices "
+                   "go to the QGIS project as GeoTIFF layers with a scale.",
+    "imagery.c1.h": "Sentinel-2 and Landsat",
+    "imagery.c1.p": "Sentinel-2 since 2015, 10 m. Landsat 4-9 since 1982, 30 "
+                    "m, with surface temperature. Natural and false colours, "
+                    "NDVI, NDWI, NBR, snow and all scene bands in one file.",
+    "imagery.c2.h": "Early Landsat and ASTER",
+    "imagery.c2.p": "Landsat 1-5 MSS of 1972-1993, 60 m, failed lines are "
+                    "replaced by neighbours. ASTER of 2000-2006, 14 bands, "
+                    "band ratios for ore exploration - kaolinite, sericite, "
+                    "carbonates, iron oxides, quartz.",
+    "imagery.c3.h": "MODIS",
+    "imagery.c3.p": "Ready MODIS products since 2000 - day and night surface "
+                    "temperature, NDVI and EVI, snow, monthly burned areas.",
+    "key.h": "NASA Earthdata key for ASTER images after 2006",
+    "key.p": "ASTER images of 2000-2006 load without registration. NASA gives "
+             "later images only by an Earthdata key. The key is free, each "
+             "user has a key of their own.",
+    "key.s1": "<b>Account.</b> Open <a "
+              "href=\"https://urs.earthdata.nasa.gov/users/new\">"
+              "urs.earthdata.nasa.gov/users/new</a> "
+              "and fill in the form. Confirm the email by the link in the "
+              "NASA letter. If you already have an account, sign in at <a "
+              "href=\"https://urs.earthdata.nasa.gov\">"
+              "urs.earthdata.nasa.gov</a>.",
+    "key.s2": "<b>Key.</b> On the profile page open the Generate Token tab "
+              "and press the Generate Token button. Copy the long key string "
+              "whole.",
+    "key.s3": "<b>Key in PlanetX.</b> Right-click the globe and choose ASTER "
+              "images here…, in the Satellite list choose ASTER since 2007 - "
+              "NASA, an Earthdata key is needed. Press Find, choose a scene "
+              "and press To QGIS project. Paste the key into the request "
+              "window and press OK.",
+    "key.note": "The key is valid for 60 days, then the window asks for a new "
+                "one. The key is kept in the QGIS settings of this computer "
+                "and goes only to the NASA server. Whoever knows the key "
+                "loads data on behalf of its owner, so the key is not sent to "
+                "anyone. A key that got into other hands is revoked by the "
+                "Revoke button on the same tab.",
 }
 
 CONTROLS = "".join(
@@ -629,6 +721,10 @@ section .sub{margin-top:16px;max-width:70ch;color:var(--ink-soft)}
 .card h3{font-size:19px;margin-bottom:10px}
 .card p{color:var(--ink-soft);font-size:16px}
 .card p + p{margin-top:10px}
+.card.key{margin-top:24px}
+.card ol{margin:10px 0;padding-left:22px;color:var(--ink-soft);font-size:16px}
+.card li + li{margin-top:6px}
+.card a{color:var(--teal-deep)}
 figure{margin:30px 0 0}
 figure img{width:100%;height:auto;display:block;border-radius:var(--r);
   border:1px solid var(--line);background:#000}
@@ -665,6 +761,7 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
         <a href="#layers" data-i18n="nav.layers"></a>
         <a href="#project" data-i18n="nav.project"></a>
         <a href="#deep" data-i18n="nav.deep"></a>
+        <a href="#imagery" data-i18n="nav.imagery"></a>
         <a href="#worlds" data-i18n="nav.worlds"></a>
         <a href="#controls" data-i18n="nav.controls"></a>
         <a href="#family" data-i18n="fam.eyebrow"></a>
@@ -797,6 +894,30 @@ figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
       <div class="card"><h3 data-i18n="nasa.c3.h"></h3>
         <p data-i18n="nasa.c3.p"></p></div>
     </div>
+  </div>
+</section>
+
+<section id="imagery">
+  <div class="wrap">
+    <div class="eyebrow" data-i18n="imagery.eyebrow"></div>
+    <h2 data-i18n="imagery.h2"></h2>
+    <p class="sub" data-i18n="imagery.sub"></p>
+    <div class="trio">
+      <div class="card"><h3 data-i18n="imagery.c1.h"></h3>
+        <p data-i18n="imagery.c1.p"></p></div>
+      <div class="card"><h3 data-i18n="imagery.c2.h"></h3>
+        <p data-i18n="imagery.c2.p"></p></div>
+      <div class="card"><h3 data-i18n="imagery.c3.h"></h3>
+        <p data-i18n="imagery.c3.p"></p></div>
+    </div>
+    <div class="card key"><h3 data-i18n="key.h"></h3>
+      <p data-i18n="key.p"></p>
+      <ol>
+        <li data-i18n="key.s1"></li>
+        <li data-i18n="key.s2"></li>
+        <li data-i18n="key.s3"></li>
+      </ol>
+      <p data-i18n="key.note"></p></div>
   </div>
 </section>
 

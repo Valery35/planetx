@@ -134,6 +134,9 @@ def show(window, px, py):
             menu.addAction(tr("Ранние снимки Landsat 1972-1993 здесь…")) \
                 .triggered.connect(lambda *a: window.sentinel_here(
                     lat, lon, "mss"))
+            menu.addAction(tr("Снимки ASTER здесь…")) \
+                .triggered.connect(lambda *a: window.sentinel_here(
+                    lat, lon, "aster"))
             menu.addAction(tr("Исторические карты Рамсея здесь…")) \
                 .triggered.connect(lambda *a: window.rumsey_here(lat, lon))
             if window.extras.get("contours"):

@@ -1146,7 +1146,9 @@ A right click on the globe opens a menu.
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
-| Sentinel-2 images here… | The Sentinel-2 images window for an area around the point under the cursor, see Sentinel-2 images |
+| Sentinel-2 and Landsat images here… | The Sentinel-2 and Landsat images window for an area around the point under the cursor, see Sentinel-2 and Landsat images |
+| Early Landsat images 1972-1993 here… | The same window right on the Landsat 1-5 MSS images |
+| ASTER images here… | The same window right on the ASTER images of 2000-2006. Images after 2006 are the ASTER since 2007 line of the Satellite list, see NASA Earthdata key |
 | Measure distance | Opens the Ruler with its first point here |
 | Copy link to place | A link to the point on the OpenStreetMap map to the clipboard, the scale follows the view. Any browser opens the link |
 | Open in browser | A submenu of custom items. An item opens in the browser an address with the point under the cursor, for example the weather forecast at the point on windy.com. The Custom items… item opens the list window. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
@@ -1268,6 +1270,9 @@ images after May 2003 have empty stripes from an instrument failure.
 Over water, the near infrared reflectance of Landsat 4-5 can be above
 red, and the NDVI of water comes out about +0.1.
 
+The ASTER images here… item of the globe menu and the same action of
+the Search line - by the words ASTER, minerals, kaolinite - open the
+window right on these images.
 The ASTER line of the same list gives ASTER images of the Terra
 satellite of 2000-2006 - 14 bands, visible and near infrared at 15 m,
 six shortwave infrared at 30 m, five thermal at 90 m. The catalogue and
@@ -1307,13 +1312,10 @@ The ASTER since 2007 - NASA, an Earthdata key is needed line gives
 ASTER images after 2006 from the NASA LP DAAC archive. The search in
 the NASA CMR catalogue goes without sign-in, the preview is the open
 picture of the whole scene. NASA gives the files only by an Earthdata
-key. The account is free - urs.earthdata.nasa.gov, the key is made by
-the Generate Token section of the profile, it lives 60 days. At the
-first load the window asks for the key and keeps it in the QGIS
-settings of this computer. If NASA does not accept the key, the window
-erases it and asks for a new one at the next load. The key goes only
-to the NASA server, the files are read by temporary addresses it
-gives. The ASTER shortwave bands failed in 2008, so these scenes have
+key. The key is free, how to get and enter it is told in the NASA
+Earthdata key section. If NASA does not accept the key, the window
+erases it and asks for a new one at the next load. The files are
+read by temporary addresses that NASA gives. The ASTER shortwave bands failed in 2008, so these scenes have
 only the VNIR and TIR bands - false colours, iron oxides, quartz and 8
 bands in All scene bands, the tile column says ASTER VNIR TIR. The
 2026 scenes at Cuprite have no thermal bands either, then All scene
@@ -1369,6 +1371,35 @@ latitude of Perm the daily products are often fully cloudy, the 8- and
 16-day composites have fewer gaps. The layers go to the MODIS group with
 the credit of the product and the NASA archive, for example "MOD11A1
 v061, NASA EOSDIS LP DAAC".
+
+### NASA Earthdata key
+
+NASA gives ASTER images after 2006 only by an Earthdata key. The key
+is free, each user has a key of their own.
+
+1. Account. Open https://urs.earthdata.nasa.gov/users/new and fill in
+   the form - user name, password, email address, country, occupation.
+   Confirm the email by the link in the NASA letter. If you already
+   have an account, sign in at https://urs.earthdata.nasa.gov.
+2. Key. On the profile page open the Generate Token tab at the top and
+   press the Generate Token button. A long string of Latin letters,
+   digits and dots appears - this is the key. Copy it whole.
+3. Key in PlanetX. Right-click the globe at the place you need and
+   choose ASTER images here…. In the Satellite list choose ASTER since
+   2007 - NASA, an Earthdata key is needed. Press Find, choose a scene
+   and press To QGIS project. The window asks for the key. Paste the
+   copied string and press OK. The window keeps the key and does not
+   ask for it again.
+
+The key is valid for 60 days. When it expires, the line The Earthdata
+key was not accepted appears at the bottom of the window, and the
+window asks for a new one at the next load. The same Generate Token
+button makes a new key. The key is kept in the QGIS settings of this
+computer and goes only to the NASA server. Whoever knows the key loads
+data on behalf of its owner, so the key is not sent to anyone. A key
+that got into other hands is revoked by the Revoke button next to it
+on the same tab. The scene search and the preview work without a key
+too.
 
 ### Route
 
