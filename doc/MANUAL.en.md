@@ -1255,6 +1255,33 @@ images after May 2003 have empty stripes from an instrument failure.
 Over water, the near infrared reflectance of Landsat 4-5 can be above
 red, and the NDVI of water comes out about +0.1.
 
+The Early Landsat images 1972-1993 here… item of the globe menu and
+the same action of the Search line - by the words MSS, early images,
+old images - open the window right on these images.
+The Landsat 1-5 MSS line of the same list gives the oldest Landsat
+images - the MSS scanner, 1972-1993, 60 m per pixel, USGS Collection 2
+Level-1 processing from the same Planetary Computer catalogue. Near Perm
+there are 778 scenes of 1973-1993. There are four bands - green, red
+and two near infrared, without blue and thermal. So the products differ -
+False colour, near infrared, All four MSS bands in one file, NDVI and
+NDWI. The values are top of atmosphere reflectance by the multipliers
+of the scene metadata file and the sun elevation, without atmospheric
+correction. NDVI from them is not directly comparable with NDVI of
+Landsat 4-9. Cloud cover over the area comes from the qa_pixel mask,
+for MSS it holds only clouds. If the search dates are later than 2013,
+the window sets the summer of 1975 when this line is chosen and returns
+the former dates when another satellite is chosen. Many MSS scenes
+have slanted stripes of failed lines - saturated pixels of one band
+and dips next to them. The window finds them by the qa_radsat
+saturation mask, by the ratio of a band to the others along the stripe
+and by spikes of one band and replaces them with the mean of the
+neighbouring sound pixels. Wide saturated areas - clouds and snow -
+stay as they are. The geolocation
+of all MSS scenes near Perm is class T2, coarser than that of Landsat
+4-9. MSS images were added after a discussion with Nadezhda
+(https://github.com/nadiopt-cell), the author of QGIS plugins for
+loading satellite images.
+
 The same Satellite list gives the ready MODIS products of the Terra and
 Aqua satellites, version 061, since 2000. The catalogue and the files
 are Planetary Computer, the window gets the access key itself:

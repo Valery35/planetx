@@ -9008,6 +9008,177 @@ def landsat_wait():
 
 
 @check(500)
+def mss_open():
+    """Снимки Landsat 1-5 MSS у Перми: участок 10 км, даты сегодняшние -
+    окно само ставит лето 1975 года и возвращает их при уходе с MSS."""
+    window = state["window"]
+    window.set_body("earth")
+    dialog = window.sentinel_here(*ROUTE_A)
+    dialog.side.setValue(10.0)
+    state["mss_dates"] = (dialog.start.date().toString("yyyy-MM-dd"),
+                          dialog.end.date().toString("yyyy-MM-dd"))
+    dialog.mission.setCurrentIndex(dialog.mission.findData("mss"))
+    state["ls_started"] = time.monotonic()
+    result["mss"] = {"dates": [dialog.start.date().toString("yyyy-MM-dd"),
+                               dialog.end.date().toString("yyyy-MM-dd")],
+                     "link_enabled": dialog.mode.model().item(1)
+                     .isEnabled(),
+                     "products": [dialog.products.item(n).text()
+                                  for n in range(dialog.products.count())]}
+
+
+@check(500)
+def mss_wait():
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["ls_started"]
+    busy = dialog.reply is not None or dialog.cloud_jobs \
+        or dialog.sas_reply is not None or dialog.sas_waiting
+    if busy and spent < 240.0:
+        return 500
+    out = result["mss"]
+    out["seconds"] = round(spent, 1)
+    out["scenes"] = len(dialog.scenes)
+    out["missions"] = sorted({s.mission for s in dialog.scenes})
+    out["platforms"] = sorted({s.tile.split(" ")[0] for s in dialog.scenes})
+    out["clouds"] = len(dialog.clouds)
+    out["unread"] = sum(1 for c, _ in dialog.clouds.values() if c is None)
+    shown = [dialog.list.topLevelItem(n)
+             for n in range(dialog.list.topLevelItemCount())
+             if not dialog.list.topLevelItem(n).isHidden()]
+    out["shown"] = len(shown)
+    out["first"] = [shown[0].text(c) for c in range(5)] if shown else None
+    out["status"] = dialog.status.text()
+    if shown:
+        dialog.list.setCurrentItem(shown[0])
+    return None
+
+
+@check(500)
+def mss_build():
+    from qgis.PyQt.QtCore import Qt
+    dialog = state["window"].sentinel_dialog
+    for n in range(dialog.products.count()):
+        dialog.products.item(n).setCheckState(Qt.CheckState.Checked)
+    folder = os.path.join(TEMP, "planetx_mss")
+    state["mss_folder"] = folder
+    dialog.add(folder=folder)
+    state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def mss_built():
+    from osgeo import gdal
+    import numpy as np
+    from qgis.core import QgsProject
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["ls_build"]
+    if (dialog.build_job is not None or dialog.sas_waiting) \
+            and spent < 240.0:
+        return 500
+    out = result["mss"]
+    out["build_seconds"] = round(spent, 1)
+    out["build_status"] = dialog.status.text()
+    out["preview"] = dialog.preview.pixmap() is not None \
+        and not dialog.preview.pixmap().isNull()
+    group = QgsProject.instance().layerTreeRoot().findGroup("Landsat")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["layers"] = [(l.name(), l.isValid(), l.renderer().type(),
+                      l.bandCount(), l.metadata().rights())
+                     for l in layers]
+    folder = state["mss_folder"]
+    files = sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+    out["files"] = files
+    for name in files:
+        if not name.endswith(".tif"):
+            continue
+        ds = gdal.Open(os.path.join(folder, name))
+        a = ds.ReadAsArray()
+        finite = a[np.isfinite(a)]
+        key = name[len("LM1_19750601_181-019_"):-4]
+        out[key] = {"size": [ds.RasterXSize, ds.RasterYSize],
+                    "res": ds.GetGeoTransform()[1],
+                    "valid": round(finite.size / a.size, 3),
+                    "median": round(float(np.median(finite)), 3)
+                    if finite.size else None,
+                    "range": [round(float(finite.min()), 3),
+                              round(float(finite.max()), 3)]
+                    if finite.size else None}
+        ds = None
+    # Полосы - насыщенные строки зелёного: пиксели, отличные от среднего
+    # соседей сверху и снизу больше чем на 0.05 отражения.
+    bands_file = [n for n in files if n.endswith("_mss_bands.tif")]
+    if bands_file:
+        from planetx.core import sentinel as s2
+        ds = gdal.Open(os.path.join(folder, bands_file[0]))
+        a = ds.ReadAsArray().astype(float)
+        ds = None
+        g = a[0]
+        around = (g[:-2] + g[2:]) / 2.0
+        out["green_line_outliers"] = int(np.nansum(
+            np.abs(g[1:-1] - around) > 0.05))
+        # Пиксели, где зелёный к остальным каналам выбит от соседей на
+        # 3 строки выше и ниже, - полосы и их провалы.
+        bands = dict(zip(s2.MSS_BANDS, a))
+        out["green_ratio_off"] = int(s2._ratio_off(
+            bands, "green", list(s2.MSS_BANDS)).sum())
+    if dialog.preview.pixmap() is not None:
+        dialog.preview.pixmap().save(os.path.join(TEMP,
+                                                  "planetx_mss_preview.png"))
+    dialog.grab().save(os.path.join(TEMP, "planetx_mss_dialog.png"))
+    if layers:
+        state["window"].view.update()
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    # Уход с MSS возвращает прежние даты поиска.
+    dialog.mission.setCurrentIndex(dialog.mission.findData("sentinel2"))
+    out["dates_back"] = [dialog.start.date().toString("yyyy-MM-dd"),
+                         dialog.end.date().toString("yyyy-MM-dd")] == \
+        list(state["mss_dates"])
+    dialog.close()
+    return None
+
+
+@check(500)
+def mss_command():
+    """Ранние снимки Landsat выделены: подсказка строки «Поиск» по
+    слову «MSS», действие открывает окно сразу на MSS с летом 1975
+    года, пункт есть в меню на глобусе. Шаги идут в порядке записи
+    в этом файле, поэтому шаг стоит после mss_built - он закрывает
+    окно."""
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.ui import globemenu
+    window = state["window"]
+    window.set_body("earth")
+    out = {}
+    hints = window.search_suggestions("mss")
+    out["hint"] = [(h.kind, h.text) for h in hints[:3]]
+    out["hint_old"] = [h.text for h in
+                       window.search_suggestions("старые снимки")[:3]]
+    dialog = getattr(window, "sentinel_dialog", None)
+    if dialog is not None:
+        dialog.use_mission("sentinel2")
+    window._actions["here:mss"]()
+    dialog = window.sentinel_dialog
+    out["mission"] = dialog.current_mission()
+    out["dates"] = [dialog.start.date().toString("yyyy-MM-dd"),
+                    dialog.end.date().toString("yyyy-MM-dd")]
+    out["searching"] = dialog.reply is not None
+    view = window.view
+    before = set(window.findChildren(QMenu))
+    globemenu.show(window, view.width() * view.devicePixelRatioF() / 2.0,
+                   view.height() * view.devicePixelRatioF() / 2.0)
+    menus = [m for m in window.findChildren(QMenu) if m not in before]
+    out["menu"] = [a.text() for m in menus for a in m.actions()
+                   if "Landsat" in a.text()]
+    for menu in menus:
+        menu.close()
+    dialog.close()
+    result["mss_command"] = out
+
+
+@check(500)
 def landsat_build():
     from qgis.PyQt.QtCore import Qt
     window = state["window"]

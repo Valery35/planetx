@@ -47,16 +47,39 @@ EN = {
         "\"Landsat image courtesy of the U.S. Geological Survey\".",
     "Sentinel-2 - 10 м, с 2015 года": "Sentinel-2 - 10 m, since 2015",
     "Landsat 4-9 - 30 м, с 1982 года": "Landsat 4-9 - 30 m, since 1982",
+    "Landsat 1-5 MSS - 60 м, 1972-1993 годы":
+        "Landsat 1-5 MSS - 60 m, 1972-1993",
+    "Все четыре канала MSS": "All four MSS bands",
+    "Ранние снимки Landsat 1972-1993 здесь…":
+        "Early Landsat images 1972-1993 here…",
+    "Ранние снимки Landsat 1972-1993 здесь":
+        "Early Landsat images 1972-1993 here",
+    "Landsat 1-5 MSS Collection 2 Level-1 (USGS), файлы и каталог "
+    "Microsoft Planetary Computer. Значения - отражение на верху "
+    "атмосферы, без поправки на атмосферу. Слои несут подпись «Landsat "
+    "image courtesy of the U.S. Geological Survey».":
+        "Landsat 1-5 MSS Collection 2 Level-1 (USGS), files and catalogue "
+        "of Microsoft Planetary Computer. The values are top of atmosphere "
+        "reflectance without atmospheric correction. The layers carry the "
+        "credit \"Landsat image courtesy of the U.S. Geological Survey\".",
+    "Зелёный, красный и два ближних инфракрасных канала MSS одним файлом, "
+    "отражение на верху атмосферы. Слой показывает ложные цвета, "
+    "остальные сочетания задаются в свойствах слоя QGIS.":
+        "The green, red and two near infrared MSS bands in one file, top "
+        "of atmosphere reflectance. The layer shows false colours, other "
+        "combinations are set in the QGIS layer properties.",
     "Sentinel-2 - 10 м, снимки с 2015 года, каждые 5 суток. Landsat - 30 м, "
     "снимки с 1982 года и тепловой канал, у Landsat 7 после мая 2003 года на "
-    "снимках пустые полосы. MODIS - готовые продукты NASA с 2000 года, "
-    "сцена - день или период, пиксель 250-1000 м. Смена спутника "
-    "запускает новый поиск.":
+    "снимках пустые полосы. Landsat 1-5 MSS - 60 м, снимки 1972-1993 годов, "
+    "четыре канала без синего и теплового. MODIS - готовые продукты NASA "
+    "с 2000 года, сцена - день или период, пиксель 250-1000 м. Смена "
+    "спутника запускает новый поиск.":
         "Sentinel-2 - 10 m, images since 2015, every 5 days. Landsat - "
         "30 m, images since 1982 and a thermal band, Landsat 7 images after "
-        "May 2003 have empty stripes. MODIS - ready NASA products since "
-        "2000, a scene is a day or a period, a pixel is 250-1000 m. A "
-        "change of the satellite starts a new search.",
+        "May 2003 have empty stripes. Landsat 1-5 MSS - 60 m, images of "
+        "1972-1993, four bands without blue and thermal. MODIS - ready NASA "
+        "products since 2000, a scene is a day or a period, a pixel is "
+        "250-1000 m. A change of the satellite starts a new search.",
     "Наибольшая облачность всей сцены по оценке поставщика снимков, "
     "у Sentinel-2 сцена 110 × 110 км, у Landsat 185 × 180 км. Это отсев до "
     "расчёта облачности над участком. Сцена с облаками бывает чистой над "

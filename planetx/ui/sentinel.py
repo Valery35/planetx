@@ -67,7 +67,11 @@ LINK_RANGE = {"natural": (0.0, 0.25)}
 LINK_RANGE_OTHER = (0.0, 0.45)
 SCENE_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 GROUP = "Sentinel-2"
-GROUPS = {"sentinel2": GROUP, "landsat": "Landsat"}
+GROUPS = {"sentinel2": GROUP, "landsat": "Landsat", "mss": "Landsat"}
+# Даты поиска MSS, если прежние позже конца съёмки MSS: лето 1975
+# года, Landsat 2. Выбор помощника, утверждает автор.
+MSS_DATES = ("1975-05-01", "1975-09-30")
+MSS_LAST = "2013-01-07"  # последний день коллекции landsat-c2-l1
 GROUPS.update({key: "MODIS" for key in modis.MISSIONS})
 STRETCH = enum(QgsContrastEnhancement, "ContrastEnhancementAlgorithm",
                "StretchToMinimumMaximum")
@@ -94,18 +98,20 @@ def titles(mission="sentinel2"):
              "modis_evi": tr("EVI - растительность"),
              "snow_cover": tr("Снег, % пикселя"),
              "snow_extent": tr("Снег и лёд за 8 суток"),
-             "burn_date": tr("Гари, день года")}
-    if mission == "landsat":
+             "burn_date": tr("Гари, день года"),
+             "mss_bands": tr("Все четыре канала MSS")}
+    if mission in s2.LANDSATS:
         names = {k: v.split(" (")[0] for k, v in names.items()}
     return names
 
 
-MISSIONS = ("sentinel2", "landsat") + tuple(modis.MISSIONS)
+MISSIONS = ("sentinel2", "landsat", "mss") + tuple(modis.MISSIONS)
 
 
 def mission_title(mission):
     return {"sentinel2": tr("Sentinel-2 - 10 м, с 2015 года"),
             "landsat": tr("Landsat 4-9 - 30 м, с 1982 года"),
+            "mss": tr("Landsat 1-5 MSS - 60 м, 1972-1993 годы"),
             "modis_lst1": tr("MODIS - температура за сутки, 1 км"),
             "modis_lst8": tr("MODIS - температура за 8 суток, 1 км"),
             "modis_veg": tr("MODIS - NDVI и EVI за 16 суток, 250 м"),
@@ -119,6 +125,12 @@ def mission_credit(mission):
         return tr("MODIS Terra и Aqua версии 061 (NASA LP DAAC, снег - "
                   "NSIDC), файлы и каталог Microsoft Planetary Computer. "
                   "Слои несут подпись продукта и архива NASA.")
+    if mission == "mss":
+        return tr("Landsat 1-5 MSS Collection 2 Level-1 (USGS), файлы "
+                  "и каталог Microsoft Planetary Computer. Значения - "
+                  "отражение на верху атмосферы, без поправки на атмосферу. "
+                  "Слои несут подпись «Landsat image courtesy of the U.S. "
+                  "Geological Survey».")
     if mission == "landsat":
         return tr("Landsat 4-9 Collection 2 Level-2 (USGS), файлы и каталог "
                   "Microsoft Planetary Computer. Слои несут подпись "
@@ -168,6 +180,36 @@ def read_window(href, box, res=None, size=None, nearest=False, count=1,
     return out
 
 
+def read_json(href):
+    """Небольшой файл JSON в сети через GDAL, как каналы. Рабочий
+    поток. OSError, если не прочитан."""
+    gdal = _thread_gdal()
+    gdal.PushErrorHandler("CPLQuietErrorHandler")
+    try:
+        try:
+            handle = gdal.VSIFOpenL("/vsicurl/" + href, "rb")
+        except RuntimeError:  # режим исключений GDAL
+            handle = None
+        if handle is None:
+            raise OSError("mtl.json")
+        try:
+            chunks = []
+            while True:
+                chunk = gdal.VSIFReadL(1, 65536, handle)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+        finally:
+            gdal.VSIFCloseL(handle)
+    finally:
+        gdal.PopErrorHandler()
+        _close_connections(gdal)
+    try:
+        return json.loads(b"".join(chunks).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as error:
+        raise OSError("mtl.json: {}".format(error)) from error
+
+
 def _href(scene, key, sas):
     """Адрес канала сцены, у Landsat - с ключом SAS."""
     href = scene.assets[key].href
@@ -215,6 +257,28 @@ def preview(scene, ring, sas=""):
         if raw is None:
             return None
         return modis.colorize(modis.value(name, raw), scale)
+    if scene.mission == "mss":
+        # Синего канала у MSS нет: ложные цвета, растяжение по снимку,
+        # насыщенные строки заменены соседями.
+        radsat = read_window(_href(scene, "qa_radsat", sas), box, size=size,
+                             nearest=True)
+        bands = {}
+        for key in s2.MSS_BANDS:
+            dn = read_window(_href(scene, key, sas), box, size=size,
+                             nearest=True)
+            if dn is None:
+                return None
+            bands[key] = s2.reflectance(dn, scene.assets[key])
+        if radsat is not None:
+            _clean_mss(scene, bands, radsat)
+        out = []
+        for key in ("nir08", "red", "green"):
+            values = bands[key]
+            lo, hi = s2.stretch(values)
+            out.append(np.nan_to_num(np.clip(
+                (values - lo) / (hi - lo) * 255.0, 0.0, 255.0))
+                .astype(np.uint8))
+        return np.stack(out)
     if scene.mission != "landsat":
         asset = scene.assets.get("visual")
         if asset is None:
@@ -250,6 +314,16 @@ def free_path(folder, stem, ext):
         return path
 
 
+def _clean_mss(scene, bands, radsat):
+    """Полосы MSS: насыщенные пиксели по qa_radsat и всплески одного
+    канала заменяются соседями. bands меняется на месте. Всплески
+    ищутся, только когда прочитаны все четыре канала."""
+    bits = {k: s2.radsat_bit(scene.assets[k]) for k in bands}
+    clean, _ = s2.clean_mss(bands, radsat, {k: b for k, b in bits.items()
+                                            if b is not None})
+    bands.update(clean)
+
+
 def build(scene, ring, products, folder, clear_clouds, sas="",
           fill=False):
     """Продукты сцены по участку в GeoTIFF: список (продукт, путь,
@@ -258,15 +332,26 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
     (core.sentinel.thermal_fill). Рабочий поток."""
     fill = fill and scene.mission == "landsat" and "lst" in products
     gdal = _thread_gdal()
+    if scene.mission == "mss":
+        scene = s2.toa(scene, read_json(_href(scene, "mtl.json", sas)))
     xy = s2.ring_utm(ring, scene.epsg)
     res = s2.step_for(xy, scene.mission)
     box = s2.bounds(xy, res)
     keys = s2.needed(products, scene.mission, fill)
+    if scene.mission == "mss":
+        # Всплески одного канала видны только рядом с остальными.
+        keys = keys + [k for k in s2.MSS_BANDS if k not in keys]
     cloud_key = s2.CLOUD_ASSET[scene.mission][0]
     if clear_clouds:
         keys = keys + [cloud_key]
+    mss = scene.mission == "mss"
+    if mss:
+        # Маска насыщения: по ней сбойные строки заменяются соседями.
+        keys = keys + ["qa_radsat"]
     srs = _srs(scene)
-    near = modis.is_modis(scene.mission)
+    # У MSS каналы без сглаживания, иначе строка в один пиксель
+    # расплылась бы на два и маска насыщения не накрыла бы её.
+    near = modis.is_modis(scene.mission) or mss
     raw = dict(zip(keys, executor("bands", BAND_WORKERS).map(
         lambda k: read_window(_href(scene, k, sas), box, res,
                               nearest=near or k == cloud_key, srs=srs),
@@ -282,7 +367,10 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
     if modis.is_modis(scene.mission):
         return _build_modis(gdal, scene, raw, inside, products, folder,
                             box, res)
+    radsat = raw.pop("qa_radsat") if mss else None
     bands = {k: s2.reflectance(v, scene.assets[k]) for k, v in raw.items()}
+    if radsat is not None:
+        _clean_mss(scene, bands, radsat)
     for values in bands.values():
         values[~inside] = np.nan
     filled = None
@@ -294,7 +382,7 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
         values = s2.product(name, bands, scene.mission)
         path = free_path(folder, s2.file_name(scene, name), ".tif")
         _write(gdal, path, values, box, res, scene.epsg)
-        if name in s2.COMPOSITES:
+        if name in s2.COMPOSITES or name == "mss_bands":
             ranges = [s2.stretch(band) for band in values]
         elif name == "lst":
             ranges = [s2.TEMPERATURE[0]]
@@ -376,10 +464,11 @@ def build_links(scene, products, folder):
     return out
 
 
-def style_composite(layer, ranges):
-    """Сочетание трёх каналов с растяжением ranges."""
+def style_composite(layer, ranges, bands=(1, 2, 3)):
+    """Сочетание трёх каналов с растяжением ranges. bands - каналы
+    файла на красный, зелёный и синий, ranges - их пределы."""
     provider = layer.dataProvider()
-    renderer = QgsMultiBandColorRenderer(provider, 1, 2, 3)
+    renderer = QgsMultiBandColorRenderer(provider, *bands)
     kind = provider.dataType(1)
     setters = (renderer.setRedContrastEnhancement,
                renderer.setGreenContrastEnhancement,
@@ -442,6 +531,7 @@ class SentinelDialog(QDialog):
         self.sas_waiting = []
         self.sas_tries = 0
         self.searched = "sentinel2"
+        self.modern_dates = None  # даты поиска до перехода на MSS
         self.point = None  # (широта, долгота) или None
         self.ring = None  # кольцо участка (широта, долгота)
         self.area_name = ""
@@ -466,7 +556,9 @@ class SentinelDialog(QDialog):
         self.mission.setToolTip(tr(
             "Sentinel-2 - 10 м, снимки с 2015 года, каждые 5 суток. "
             "Landsat - 30 м, снимки с 1982 года и тепловой канал, у Landsat "
-            "7 после мая 2003 года на снимках пустые полосы. MODIS - "
+            "7 после мая 2003 года на снимках пустые полосы. Landsat 1-5 "
+            "MSS - 60 м, снимки 1972-1993 годов, четыре канала без "
+            "синего и теплового. MODIS - "
             "готовые продукты NASA с 2000 года, сцена - день или период, "
             "пиксель 250-1000 м. Смена спутника запускает новый поиск."))
         self.mission.currentIndexChanged.connect(
@@ -639,6 +731,12 @@ class SentinelDialog(QDialog):
                     "излучательную способность поверхности по ASTER GED "
                     "и атмосферу. Модуль только переводит кельвины "
                     "в градусы Цельсия."))
+            elif key == "mss_bands":
+                item.setToolTip(tr(
+                    "Зелёный, красный и два ближних инфракрасных канала "
+                    "MSS одним файлом, отражение на верху атмосферы. "
+                    "Слой показывает ложные цвета, остальные сочетания "
+                    "задаются в свойствах слоя QGIS."))
             item.setFlags(item.flags()
                           | enum(Qt, "ItemFlag", "ItemIsUserCheckable"))
             item.setCheckState(enum(Qt, "CheckState", "Checked")
@@ -646,7 +744,18 @@ class SentinelDialog(QDialog):
                                enum(Qt, "CheckState", "Unchecked"))
             self.products.addItem(item)
 
-    def _mission_changed(self):
+    def use_mission(self, mission):
+        """Спутник окна без поиска - поиск запустит новый участок.
+        Пункты «Ранние снимки Landsat здесь…» и поиск «MSS»."""
+        index = self.mission.findData(mission)
+        if index < 0 or index == self.mission.currentIndex():
+            return
+        self.mission.blockSignals(True)
+        self.mission.setCurrentIndex(index)
+        self.mission.blockSignals(False)
+        self._mission_changed(search=False)
+
+    def _mission_changed(self, search=True):
         """Другой спутник: продукты, подпись, режим выдачи, новый
         поиск. Ключ SAS Landsat живёт час, и слой ссылкой из
         сохранённого проекта потом не открылся бы, поэтому у Landsat
@@ -662,7 +771,23 @@ class SentinelDialog(QDialog):
         # У MODIS облачности сцены в каталоге нет.
         self.scene_cloud.setEnabled(not modis.is_modis(mission))
         self.fill.setVisible(mission == "landsat")
-        self.search()
+        self._fit_dates(mission)
+        if search:
+            self.search()
+
+    def _fit_dates(self, mission):
+        """Даты поиска под годы спутника: у MSS промежуток позже 2013
+        года пуст, он заменяется летом 1975 года, а прежние даты
+        возвращаются при уходе с MSS."""
+        last = QDate.fromString(MSS_LAST, "yyyy-MM-dd")
+        if mission == "mss" and self.start.date() > last:
+            self.modern_dates = (self.start.date(), self.end.date())
+            self.start.setDate(QDate.fromString(MSS_DATES[0], "yyyy-MM-dd"))
+            self.end.setDate(QDate.fromString(MSS_DATES[1], "yyyy-MM-dd"))
+        elif mission != "mss" and self.modern_dates is not None:
+            self.start.setDate(self.modern_dates[0])
+            self.end.setDate(self.modern_dates[1])
+            self.modern_dates = None
 
     # Ключ SAS Planetary Computer.
 
@@ -1040,6 +1165,11 @@ class SentinelDialog(QDialog):
                 continue
             if product in s2.COMPOSITES:
                 style_composite(layer, ranges)
+            elif product == "mss_bands":
+                # Четыре канала в файле, показ - ложные цвета: ближний
+                # ИК 0.8, красный, зелёный.
+                style_composite(layer, [ranges[2], ranges[1], ranges[0]],
+                                bands=(3, 2, 1))
             else:
                 style_index(layer, product)
             metadata = layer.metadata()

@@ -295,5 +295,170 @@ class TestLandsat(unittest.TestCase):
         self.assertEqual(s2.sign("https://a/b.TIF", ""), "https://a/b.TIF")
 
 
+MSS = ("https://landsateuwest.blob.core.windows.net/landsat-c2/level-1/"
+       "standard/mss/1973/181/019/LM01_L1TP_181019_19730606_20200909_02_T2/"
+       "LM01_L1TP_181019_19730606_20200909_02_T2_")
+
+
+def mss_item():
+    """Сцена Landsat 1 MSS у Перми 6 июня 1973 года, как в каталоге
+    Planetary Computer 12 октября 2026 года."""
+    bands = {"green": ("B4", 0.95591, -18.55591),
+             "red": ("B5", 0.64843, -0.74843),
+             "nir08": ("B6", 0.65236, -0.75236),
+             "nir09": ("B7", 0.60866, -0.60866)}
+    assets = {k: {"href": MSS + b + ".TIF", "raster:bands": [
+        {"scale": scale, "offset": offset, "nodata": 0}]}
+        for k, (b, scale, offset) in bands.items()}
+    assets["qa_pixel"] = {"href": MSS + "QA_PIXEL.TIF",
+                          "raster:bands": [{"nodata": 1}]}
+    assets["mtl.json"] = {"href": MSS + "MTL.json"}
+    return {"id": "LM01_L1TP_181019_19730606_02_T2",
+            "collection": "landsat-c2-l1",
+            "properties": {"datetime": "1973-06-06T07:00:36.5Z",
+                           "platform": "landsat-1", "proj:epsg": 32640,
+                           "eo:cloud_cover": 8.0,
+                           "view:sun_elevation": 51.38128591,
+                           "landsat:wrs_path": "181",
+                           "landsat:wrs_row": "019"},
+            "assets": assets}
+
+
+# Выдержка из mtl.json той же сцены.
+MSS_MTL = {"LANDSAT_METADATA_FILE": {
+    "LEVEL1_RADIOMETRIC_RESCALING": {
+        "REFLECTANCE_MULT_BAND_4": "1.7269E-03",
+        "REFLECTANCE_MULT_BAND_5": "1.3650E-03",
+        "REFLECTANCE_MULT_BAND_6": "1.6568E-03",
+        "REFLECTANCE_MULT_BAND_7": "2.3270E-03",
+        "REFLECTANCE_ADD_BAND_4": "-0.033522",
+        "REFLECTANCE_ADD_BAND_5": "-0.001575",
+        "REFLECTANCE_ADD_BAND_6": "-0.001911",
+        "REFLECTANCE_ADD_BAND_7": "-0.002327"},
+    "IMAGE_ATTRIBUTES": {"SUN_ELEVATION": "51.38128591"}}}
+
+
+class TestMss(unittest.TestCase):
+    def test_item_is_mss(self):
+        s = s2.parse_item(mss_item())
+        self.assertEqual(s.mission, "mss")
+        self.assertEqual(s.tile, "L1 181/019")
+        self.assertEqual(s2.file_name(s, "ndvi"),
+                         "LM1_19730606_181-019_ndvi")
+        self.assertEqual(s2.credit(s), "Landsat 1 image courtesy of the "
+                                       "U.S. Geological Survey")
+        self.assertTrue(s2.needs_key("mss"))
+
+    def test_search_and_steps(self):
+        body = s2.search_body({"type": "Point", "coordinates": [56, 58]},
+                              "1975-05-01", "1975-09-30", 50, mission="mss")
+        self.assertEqual(body["collections"], ["landsat-c2-l1"])
+        self.assertEqual(s2.step_for([(0, 0), (3000, 3000)], "mss"), 60.0)
+        self.assertEqual(s2.CLOUD_ASSET["mss"], ("qa_pixel", 60.0))
+
+    def test_toa_reflectance(self):
+        # Значение 100 красного канала: (1.365e-3 × 100 - 0.001575)
+        # / sin(51.38°) = 0.1727. Каталог давал бы яркость 64.1.
+        s = s2.toa(s2.parse_item(mss_item()), MSS_MTL)
+        value = s2.reflectance(np.array([[0, 100]], np.uint8),
+                               s.assets["red"])
+        self.assertTrue(np.isnan(value[0, 0]))
+        expected = (1.365e-3 * 100 - 0.001575) / math.sin(
+            math.radians(51.38128591))
+        self.assertAlmostEqual(float(value[0, 1]), expected, 5)
+        # mtl.json не масштабируется, у зелёного - свой канал B4.
+        self.assertEqual(s.assets["mtl.json"].scale, 1.0)
+        self.assertAlmostEqual(s.assets["green"].offset * math.sin(
+            math.radians(51.38128591)), -0.033522, 6)
+
+    def test_products(self):
+        self.assertEqual(s2.products_of("mss"),
+                         ("infrared", "mss_bands", "ndvi", "ndwi"))
+        self.assertEqual(s2.needed(["infrared", "mss_bands"], "mss"),
+                         ["nir08", "red", "green", "nir09"])
+        one = np.full((1, 1), 0.1, np.float32)
+        bands = {"green": one, "red": one * 2, "nir08": one * 3,
+                 "nir09": one * 4}
+        stack = s2.product("mss_bands", bands, "mss")
+        self.assertEqual(stack.shape, (4, 1, 1))
+        self.assertAlmostEqual(float(stack[3, 0, 0]), 0.4, 6)
+        self.assertAlmostEqual(float(s2.product("ndvi", bands,
+                                                "mss")[0, 0]), 0.2, 5)
+
+    def test_saturated_line_is_filled(self):
+        # Строка насыщенного зелёного (бит 3 у B4 Landsat 1-3) среди
+        # ровного поля 0.1 заменяется соседями, сплошная насыщенная
+        # область без целых соседей остаётся.
+        s = s2.parse_item(mss_item())
+        bit = s2.radsat_bit(s.assets["green"])
+        self.assertEqual(bit, 3)
+        self.assertEqual(s2.radsat_bit(s.assets["nir09"]), 6)
+        # Полоса - строки 3-4 насыщены, строки 2 и 5 провалены в тёмное,
+        # как на сцене 21 сентября 1975 года.
+        values = np.full((8, 5), 0.1, np.float32)
+        values[3:5, :] = 0.9
+        values[2, :] = values[5, :] = 0.03
+        radsat = np.zeros((8, 5), np.uint16)
+        radsat[3:5, :] = 1 << bit
+        filled, count = s2.fill_saturated(values, radsat, bit)
+        self.assertEqual(count, 20)
+        self.assertTrue(np.allclose(filled, 0.1))
+        # Насыщение другого канала зелёный не трогает.
+        same, none = s2.fill_saturated(values, radsat << 1, bit)
+        self.assertEqual(none, 0)
+        self.assertAlmostEqual(float(same[3, 2]), 0.9, 6)
+        # Облако выше STRIPE_ROWS строк остаётся целиком.
+        cloud = np.full((9, 5), 0.1, np.float32)
+        cloud[1:8, :] = 0.9
+        flags = np.zeros((9, 5), np.uint16)
+        flags[1:8, :] = 1 << bit
+        kept, none = s2.fill_saturated(cloud, flags, bit)
+        self.assertEqual(none, 0)
+        self.assertTrue(np.allclose(kept[1:8], 0.9))
+
+    def test_clean_mss_zone(self):
+        # Насыщенный пиксель зелёного, рядом в зоне полосы - провал
+        # зелёного без отметки, далеко от полосы - такой же провал,
+        # он настоящий и остаётся.
+        bands = {k: np.full((12, 20), 0.1, np.float32)
+                 for k in s2.MSS_BANDS}
+        bands["green"][5, 5] = 0.9
+        bands["green"][6, 8] = 0.03
+        bands["green"][10, 17] = 0.03
+        radsat = np.zeros((12, 20), np.uint16)
+        radsat[5, 5] = 1 << 3
+        bits = {"green": 3, "red": 4, "nir08": 5, "nir09": 6}
+        out, done = s2.clean_mss(bands, radsat, bits)
+        self.assertAlmostEqual(float(out["green"][5, 5]), 0.1, 6)
+        self.assertAlmostEqual(float(out["green"][6, 8]), 0.1, 6)
+        self.assertAlmostEqual(float(out["green"][10, 17]), 0.03, 6)
+        self.assertTrue(np.allclose(out["red"], 0.1))
+        self.assertGreaterEqual(done, 2)
+
+    def test_single_band_spike_is_found(self):
+        # Всплеск зелёного на ровном поле - полоса, яркая крыша во всех
+        # каналах - нет.
+        flat = np.full((5, 5), 0.1, np.float32)
+        bands = {k: flat.copy() for k in s2.MSS_BANDS}
+        bands["green"][2, 1] = 0.4
+        for key in s2.MSS_BANDS:
+            bands[key][2, 3] = 0.4
+        found = s2.spikes(bands)
+        self.assertEqual(np.argwhere(found["green"]).tolist(), [[2, 1]])
+        self.assertFalse(found["red"].any())
+        fixed, count = s2.fill_mask(bands["green"], found["green"])
+        self.assertEqual(count, 1)
+        self.assertAlmostEqual(float(fixed[2, 1]), 0.1, 6)
+        self.assertAlmostEqual(float(fixed[2, 3]), 0.4, 6)
+
+    def test_qa_cloud_bit(self):
+        # Бит 3 - облако, бит 0 - нет данных, как у qa_pixel MSS.
+        qa = np.array([[0, 8], [1, 0]], dtype=np.uint16)
+        cloud, valid = s2.clouds_of(s2.parse_item(mss_item()), qa,
+                                    np.ones((2, 2), dtype=bool))
+        self.assertAlmostEqual(cloud, 100.0 / 3.0)
+        self.assertAlmostEqual(valid, 75.0)
+
+
 if __name__ == "__main__":
     unittest.main()

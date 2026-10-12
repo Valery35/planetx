@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.71.0
+version=0.72.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -84,6 +84,9 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Astrogeology and NASA Photojournal from MESSENGER, Magellan,
       Galileo, Voyager, Cassini and Dawn data. Constellations and star names:
       d3-celestial, © Olaf Frohn. Planets: JPL orbital elements.
+      Landsat 1-5 MSS images were added after a discussion with Nadezhda
+      (https://github.com/nadiopt-cell), the author of QGIS plugins for
+      loading satellite images.
       Developed with the support of Inform++ LLC (www.informpp.ru).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
@@ -93,7 +96,18 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.71.0 Share View… in the Scene icon menu writes an HTML page
+changelog=0.72.0 Early Landsat images of 1972-1993. The Early Landsat images
+      1972-1993 here… item of the globe menu opens the images window on the
+      MSS scanner images of Landsat 1-5, 60 m per pixel. The Search line
+      finds the same action by the words MSS, early images, old images. Near
+      Perm there are 778 such scenes. Layers for the QGIS project - false
+      colours, all four MSS bands in one file, NDVI and NDWI from top of
+      atmosphere reflectance. Slanted stripes of failed lines on MSS images
+      are replaced with neighbouring pixels, clouds and snow stay as they
+      are. MSS images were added after a discussion with Nadezhda
+      (github.com/nadiopt-cell), the author of QGIS plugins for loading
+      satellite images.
+      0.71.0 Share View… in the Scene icon menu writes an HTML page
       with the globe. It opens in a browser without QGIS and shows the
       camera of the view, terrain, the OpenStreetMap base, the selected
       placemarks and a tour. The assistant turns on catalogue layers and

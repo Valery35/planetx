@@ -183,6 +183,11 @@ def _tools(window, add, earth):
         lambda: window.sentinel_here(*_here(window)),
         ("космоснимки", "спутниковые снимки", "ndvi", "landsat",
          "sentinel", "modis", "imagery"))
+    add("here:mss", tr("Ранние снимки Landsat 1972-1993 здесь"), open_,
+        lambda: window.sentinel_here(*_here(window), mission="mss"),
+        ("mss", "landsat mss", "ранние снимки", "старые снимки",
+         "архивные снимки", "1970-е", "1980-е", "landsat 1", "landsat 2",
+         "landsat 3", "old imagery", "early landsat"))
     add("here:rumsey", tr("Исторические карты Рамсея здесь"), open_,
         lambda: window.rumsey_here(*_here(window)),
         ("старые карты", "исторические карты", "рамсей", "rumsey",

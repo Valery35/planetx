@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.71.0.
+A 3D globe inside QGIS. PlanetX version 0.72.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -288,6 +288,10 @@ Constellations and star names come from [d3-celestial](https://github.com/ofrohn
 elements.
 
 Data sources and their terms of use are described in [doc/SOURCES.md](doc/SOURCES.md), in Russian.
+
+Landsat 1-5 MSS images in the images window were added after a
+discussion with Nadezhda ([github.com/nadiopt-cell](https://github.com/nadiopt-cell)),
+the author of QGIS plugins for loading satellite images.
 
 Developed with the support of Inform++ LLC (https://www.informpp.ru/).
 License GNU GPL version 3.

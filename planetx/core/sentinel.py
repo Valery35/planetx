@@ -31,12 +31,23 @@ Planetary Computer выдаёт без учётной записи, ключ ж�
 же берут продукты с nir (band). Тепловой канал - lwir11 у Landsat
 8-9 и lwir у 4-7, продукт lst - температура поверхности в °C.
 
+Landsat 1-5 MSS - просьба автора от 12 октября 2026 года после
+разговора с Надеждой (github.com/nadiopt-cell) в группе. Коллекция
+landsat-c2-l1 того же каталога (Collection 2 Level-1, 1972-2013 годы,
+у Перми 778 сцен 1973-1993 годов), ключ SAS - тот же. Каналы MSS -
+green, red, nir08, nir09, пиксель 60 м, синего и теплового нет. В
+каталоге масштаб каналов даёт яркость на верху атмосферы, отражение
+на верху атмосферы - по REFLECTANCE_MULT и ADD файла mtl.json сцены,
+делённым на синус высоты солнца (toa). Поправки на атмосферу нет.
+Облака - qa_pixel, бит 0 - нет данных, бит 3 - облако.
+
 MODIS - core/modis.py, тоже Planetary Computer: спутник окна - одна
 коллекция, у сцены нет своей системы UTM, её даёт середина участка.
 
 Модуль Qt не знает.
 """
 import math
+import re
 from collections import namedtuple
 
 import numpy as np
@@ -55,10 +66,15 @@ LANDSAT_COLLECTION = "landsat-c2-l2"
 LANDSAT_SAS_URL = ("https://planetarycomputer.microsoft.com/api/sas/v1/token/"
                  + LANDSAT_COLLECTION)
 SAS_URL = "https://planetarycomputer.microsoft.com/api/sas/v1/token/"
-SEARCHES = {"sentinel2": SEARCH, "landsat": LANDSAT_SEARCH}
-COLLECTIONS = {"sentinel2": COLLECTION, "landsat": LANDSAT_COLLECTION}
+MSS_COLLECTION = "landsat-c2-l1"
+SEARCHES = {"sentinel2": SEARCH, "landsat": LANDSAT_SEARCH,
+            "mss": LANDSAT_SEARCH}
+COLLECTIONS = {"sentinel2": COLLECTION, "landsat": LANDSAT_COLLECTION,
+               "mss": MSS_COLLECTION}
 # Маска облаков сцены: ключ ресурса и шаг чтения, м.
-CLOUD_ASSET = {"sentinel2": ("scl", 20.0), "landsat": ("qa_pixel", 30.0)}
+CLOUD_ASSET = {"sentinel2": ("scl", 20.0), "landsat": ("qa_pixel", 30.0),
+               "mss": ("qa_pixel", 60.0)}
+LANDSATS = ("landsat", "mss")
 for _key in modis.MISSIONS:
     SEARCHES[_key] = LANDSAT_SEARCH
     COLLECTIONS[_key] = modis.collection(_key)
@@ -67,6 +83,12 @@ for _key in modis.MISSIONS:
 QA_FILL = 1 << 0
 QA_CLOUDY = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)
 LANDSAT_STEPS = (30.0, 60.0, 120.0)
+MSS_STEPS = (60.0, 120.0)
+# Четыре канала MSS по порядку длин волн: B4-B7 у Landsat 1-3, B1-B4
+# у Landsat 4-5.
+MSS_BANDS = ("green", "red", "nir08", "nir09")
+MSS_PRODUCTS = ("infrared", "mss_bands", "ndvi", "ndwi")
+MTL_BAND = re.compile(r"_B(\d+)\.TIF$", re.IGNORECASE)
 LANDSAT_ATTRIBUTION = "Landsat {number} image courtesy of the U.S. " \
     "Geological Survey"
 # Температура поверхности, °C: пределы шкалы и цвета.
@@ -151,12 +173,14 @@ def products_of(mission):
     свои."""
     if modis.is_modis(mission):
         return modis.products_of(mission)
+    if mission == "mss":
+        return MSS_PRODUCTS
     return LANDSAT_PRODUCTS if mission == "landsat" else PRODUCTS
 
 
 def needs_key(mission):
     """Файлы спутника читаются по ключу SAS Planetary Computer."""
-    return mission == "landsat" or modis.is_modis(mission)
+    return mission in LANDSATS or modis.is_modis(mission)
 
 
 def sas_url(mission, href=None):
@@ -177,7 +201,7 @@ def sas_url(mission, href=None):
 
 def band(key, mission):
     """Ключ ресурса канала у спутника: ближний ИК Landsat - nir08."""
-    if mission == "landsat" and key == "nir":
+    if mission in LANDSATS and key == "nir":
         return "nir08"
     return key
 
@@ -222,7 +246,8 @@ def parse_item(feature):
     if mission is not None:
         return _modis_item(feature, props, mission)
     if str(props.get("platform") or "").startswith("landsat"):
-        return _landsat_item(feature, props)
+        return _landsat_item(feature, props, "mss" if feature.get(
+            "collection") == MSS_COLLECTION else "landsat")
     # Смещение -1000 уже вычтено из значений, а поле offset у каналов
     # осталось. Проверено 9 октября 2026 года - красный над лесом 224.
     applied = bool(props.get("earthsearch:boa_offset_applied"))
@@ -253,9 +278,10 @@ def parse_item(feature):
                  props.get("view:sun_elevation"), thumbnail, assets)
 
 
-def _landsat_item(feature, props):
+def _landsat_item(feature, props, mission="landsat"):
     """Сцена Landsat Planetary Computer: каналы с масштабом и сдвигом
-    из каталога, превью - картинка службы данных."""
+    из каталога, превью - картинка службы данных. mission - landsat
+    (Level-2) или mss (Level-1, Landsat 1-5 MSS)."""
     assets = {}
     preview = ""
     for key, value in (feature.get("assets") or {}).items():
@@ -285,7 +311,232 @@ def _landsat_item(feature, props):
                  float(cloud) if cloud is not None else 100.0, tile,
                  int(epsg) if epsg else None,
                  props.get("view:sun_elevation"), preview, assets,
-                 "landsat")
+                 mission)
+
+
+def radsat_bit(asset):
+    """Бит насыщения канала в qa_radsat: номер канала из имени файла
+    минус один (B4 у Landsat 1-3 - бит 3, B1 у Landsat 4-5 - бит 0)."""
+    found = MTL_BAND.search(asset.href)
+    return int(found.group(1)) - 1 if found else None
+
+
+def fill_saturated(values, radsat, bit):
+    """Насыщенные пиксели канала - среднее соседних целых пикселей
+    окна 3 × 3. Полосы на снимках MSS - строки сбойных насыщенных
+    пикселей шириной 1-2 пикселя, проверено на сцене Landsat 2
+    21 сентября 1975 года у Перми, 938 пикселей зелёного канала в окне
+    10 км. Пиксель без целых соседей остаётся, как был - так большие
+    насыщенные облака не меняются. Возвращает (массив, заменено)."""
+    flagged = ((np.asarray(radsat).astype(np.int64) >> bit) & 1) != 0
+    bad = stripe_rows(flagged)
+    return fill_mask(values, bad, passes=STRIPE_ROWS + 1)
+
+
+# Полоса насыщения MSS - до STRIPE_ROWS строк по столбцу, строки над
+# и под ней провалены в тёмное: на сцене 21 сентября 1975 года
+# зелёный 59, 204, 102 в полосе и 22, 17 рядом при обычных 26-30.
+# Насыщенные области выше по столбцу - облака и снег, они остаются.
+STRIPE_ROWS = 3
+
+
+def stripe_rows(flagged):
+    """Маска полос: отмеченные пиксели в отрезках столбца не длиннее
+    STRIPE_ROWS и по пикселю над и под таким отрезком."""
+    flagged = np.asarray(flagged, dtype=bool)
+    rows = flagged.shape[0]
+    up = np.zeros(flagged.shape, dtype=np.int32)
+    down = np.zeros(flagged.shape, dtype=np.int32)
+    for r in range(rows):
+        prev = up[r - 1] if r else 0
+        up[r] = (prev + 1) * flagged[r]
+    for r in range(rows - 1, -1, -1):
+        prev = down[r + 1] if r < rows - 1 else 0
+        down[r] = (prev + 1) * flagged[r]
+    thin = flagged & (up + down - 1 <= STRIPE_ROWS)
+    out = thin.copy()
+    out[1:] |= thin[:-1]
+    out[:-1] |= thin[1:]
+    return out
+
+
+# Всплеск одного канала MSS: отражение выше среднего соседей сверху
+# и снизу на SPIKE, а у остальных каналов отклонение меньше доли
+# SPIKE_OTHERS от него. Яркие крыши и дороги светлеют во всех каналах,
+# сбойная строка - в одном. На сцене 21 сентября 1975 года после
+# замены насыщенных пикселей у зелёного канала осталась линия таких
+# всплесков, зелёный 108 при красном 24 и зелёном соседа 36.
+SPIKE = 0.05
+SPIKE_OTHERS = 0.3
+
+
+def spikes(bands, keys=MSS_BANDS):
+    """Всплески каждого канала {ключ: массив bool} по соседям сверху
+    и снизу, см. SPIKE. Крайние строки не проверяются."""
+    dev = {}
+    for key in keys:
+        v = np.asarray(bands[key], dtype=np.float32)
+        d = np.zeros(v.shape, dtype=np.float32)
+        d[1:-1] = v[1:-1] - (v[:-2] + v[2:]) / 2.0
+        dev[key] = np.nan_to_num(d)
+    out = {}
+    for key in keys:
+        others = np.max(np.stack([np.abs(dev[k]) for k in keys
+                                  if k != key]), axis=0)
+        out[key] = (dev[key] > SPIKE) & (others < SPIKE_OTHERS
+                                         * dev[key])
+    return out
+
+
+# Зона вдоль полосы: строк и столбцов от отмеченного пикселя. Полоса
+# идёт косо, на столбец по строке через 3 столбца, рядом с ней
+# пиксели без отметки насыщения, но с провалом канала: на сцене
+# 21 сентября 1975 года зелёный к красному 0.26-0.6 при обычных 0.78.
+STRIPE_ZONE = (2, 4)
+# Отношение канала к среднему остальных каналов дальше этой доли от
+# его медианы по снимку - сбой.
+STRIPE_RATIO = 0.2
+
+
+def clean_mss(bands, radsat, bits):
+    """Полосы MSS: bands - отражения {ключ: массив}, radsat - qa_radsat,
+    bits - бит насыщения каждого канала. Насыщенные узкие полосы
+    с соседними строками, пиксели зоны полосы с отношением канала
+    к остальным не как у снимка, затем всплески одного канала
+    заменяются соседями. Возвращает новый словарь и количество
+    заменённых пикселей."""
+    out = dict(bands)
+    radsat = np.asarray(radsat).astype(np.int64)
+    flagged = {k: ((radsat >> b) & 1) != 0 for k, b in bits.items()
+               if k in out}
+    thin = {k: stripe_rows(v) for k, v in flagged.items()}
+    stripe = np.zeros(radsat.shape, dtype=bool)
+    for mask_ in thin.values():
+        stripe |= mask_
+    zone = _dilate(stripe, *STRIPE_ZONE)
+    keys = [k for k in MSS_BANDS if k in out]
+    done = 0
+    for key in keys:
+        bad = thin.get(key, np.zeros(radsat.shape, dtype=bool))
+        if len(keys) > 1 and zone.any():
+            bad = bad | (zone & _ratio_off(out, key, keys))
+        out[key], count = fill_mask(out[key], bad,
+                                    passes=STRIPE_ROWS + STRIPE_ZONE[0] + 1)
+        done += count
+    if len(keys) == len(MSS_BANDS):
+        for key, bad in spikes(out).items():
+            out[key], count = fill_mask(out[key], bad)
+            done += count
+    return out, done
+
+
+def _ratio_off(bands, key, keys):
+    """Пиксели, где отношение канала key к среднему остальных
+    отличается больше STRIPE_RATIO в одну сторону и от пикселя на
+    STRIPE_REF строк выше, и от пикселя на столько же ниже - вне
+    полосы. Сравнение с соседями, а не с медианой снимка: у воды
+    и у суши отношения разные."""
+    others = np.mean([bands[k] for k in keys if k != key], axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        ratio = np.asarray(bands[key], dtype=np.float64) / others
+    n = STRIPE_REF
+    off = np.zeros(ratio.shape, dtype=bool)
+    if ratio.shape[0] <= 2 * n:
+        return off
+    mid = ratio[n:-n]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        up = mid / ratio[:-2 * n] - 1.0
+        down = mid / ratio[2 * n:] - 1.0
+    same = np.nan_to_num(up * down) > 0
+    off[n:-n] = same & (np.abs(np.nan_to_num(up)) > STRIPE_RATIO) \
+        & (np.abs(np.nan_to_num(down)) > STRIPE_RATIO)
+    return off
+
+
+STRIPE_REF = 3  # строк до пикселя сравнения, за полосой
+
+
+def _dilate(mask_, rows, cols):
+    """Маска, расширенная на rows строк и cols столбцов."""
+    out = mask_.copy()
+    for dy in range(-rows, rows + 1):
+        for dx in range(-cols, cols + 1):
+            shifted = np.zeros_like(mask_)
+            ys = slice(max(dy, 0), mask_.shape[0] + min(dy, 0))
+            yd = slice(max(-dy, 0), mask_.shape[0] + min(-dy, 0))
+            xs = slice(max(dx, 0), mask_.shape[1] + min(dx, 0))
+            xd = slice(max(-dx, 0), mask_.shape[1] + min(-dx, 0))
+            shifted[yd, xd] = mask_[ys, xs]
+            out |= shifted
+    return out
+
+
+def fill_mask(values, bad, passes=1):
+    """Пиксели bad - среднее соседних целых пикселей окна 3 × 3, без
+    целых соседей пиксель остаётся до следующего прохода, заполнение
+    идёт от края маски внутрь не больше passes проходов. Возвращает
+    (массив, заменено)."""
+    out = np.asarray(values, dtype=np.float32)
+    bad = np.asarray(bad, dtype=bool) & np.isfinite(out)
+    done = 0
+    for _ in range(passes):
+        if not bad.any():
+            break
+        out, fixed = _fill_once(out, bad)
+        if not fixed.any():
+            break
+        bad = bad & ~fixed
+        done += int(fixed.sum())
+    return out, done
+
+
+def _fill_once(values, bad):
+    """Один проход fill_mask: (массив, заполненные пиксели)."""
+    good = ~bad & np.isfinite(values)
+    total = np.zeros(values.shape, dtype=np.float64)
+    count = np.zeros(values.shape, dtype=np.int32)
+    padded = np.pad(np.where(good, values, 0.0), 1)
+    weight = np.pad(good.astype(np.int32), 1)
+    rows, cols = values.shape
+    for dy in (-1, 0, 1):
+        for dx in (-1, 0, 1):
+            if dy == 0 and dx == 0:
+                continue
+            total += padded[1 + dy:1 + dy + rows, 1 + dx:1 + dx + cols]
+            count += weight[1 + dy:1 + dy + rows, 1 + dx:1 + dx + cols]
+    fix = bad & (count > 0)
+    out = values.copy()
+    out[fix] = (total[fix] / count[fix]).astype(np.float32)
+    return out, fix
+
+
+def toa(scene, mtl):
+    """Сцена MSS с масштабом каналов в отражение на верху атмосферы:
+    (REFLECTANCE_MULT × значение + REFLECTANCE_ADD) / sin(высоты
+    солнца), формула USGS. mtl - разобранный mtl.json сцены. Номер
+    канала берётся из имени файла (…_B5.TIF)."""
+    meta = (mtl or {}).get("LANDSAT_METADATA_FILE") or {}
+    rescale = meta.get("LEVEL1_RADIOMETRIC_RESCALING") or {}
+    sun = (meta.get("IMAGE_ATTRIBUTES") or {}).get("SUN_ELEVATION",
+                                                   scene.sun)
+    if sun is None:
+        raise ValueError("no sun elevation")
+    sine = math.sin(math.radians(float(sun)))
+    if sine <= 0.0:
+        raise ValueError("sun below horizon")
+    assets = dict(scene.assets)
+    for key, asset in scene.assets.items():
+        found = MTL_BAND.search(asset.href)
+        if not found:
+            continue
+        number = found.group(1)
+        mult = rescale.get("REFLECTANCE_MULT_BAND_" + number)
+        add = rescale.get("REFLECTANCE_ADD_BAND_" + number)
+        if mult is None or add is None:
+            continue
+        assets[key] = asset._replace(scale=float(mult) / sine,
+                                     offset=float(add) / sine)
+    return scene._replace(assets=assets)
 
 
 def _modis_item(feature, props, mission):
@@ -396,7 +647,8 @@ def step_for(xy, mission="sentinel2"):
     участка не больше MAX_PIXELS пикселей, иначе крупнее."""
     if modis.is_modis(mission):
         return modis.step(mission)
-    steps = LANDSAT_STEPS if mission == "landsat" else STEPS
+    steps = {"landsat": LANDSAT_STEPS, "mss": MSS_STEPS}.get(mission,
+                                                              STEPS)
     box = bounds(xy, 1.0)
     side = max(box[2] - box[0], box[3] - box[1])
     for res in steps:
@@ -470,7 +722,7 @@ def clouds_of(scene, raw, inside):
     """Облачность над участком по маске сцены любого спутника."""
     if modis.is_modis(scene.mission):
         return modis.quality(scene.mission, raw, inside)
-    if scene.mission == "landsat":
+    if scene.mission in LANDSATS:
         return cloud_share_qa(raw, inside)
     return cloud_share(raw, inside)
 
@@ -479,7 +731,7 @@ def clear_mask(scene, raw):
     """Пиксели без облаков, теней и пропусков по маске сцены."""
     if modis.is_modis(scene.mission):
         return modis.clear(scene.mission, raw)
-    if scene.mission == "landsat":
+    if scene.mission in LANDSATS:
         cloudy, empty = qa_cloudy(raw)
         return ~(cloudy | empty)
     return ~np.isin(raw, SCL_CLOUDY + SCL_EMPTY)
@@ -496,6 +748,8 @@ def needed(products, mission="sentinel2", fill=False):
     for product in products:
         if product == "lst":
             bands = ("lwir",) + (FILL_BANDS if fill else ())
+        elif product == "mss_bands":
+            bands = MSS_BANDS
         elif product in COMPOSITES:
             bands = COMPOSITES[product]
         else:
@@ -565,6 +819,8 @@ def product(name, bands, mission="sentinel2"):
     у теплового канала - кельвины."""
     if name == "lst":
         return (bands["lwir"] - np.float32(KELVIN)).astype(np.float32)
+    if name == "mss_bands":
+        return np.stack([bands[k] for k in MSS_BANDS])
     if name in COMPOSITES:
         return np.stack([bands[band(k, mission)]
                          for k in COMPOSITES[name]])
@@ -586,13 +842,15 @@ def stretch(values, low=2.0, high=98.0):
 
 def file_name(s, name):
     """Имя файла продукта: «S2_20260929_40VDK_ndvi»,
-    «L9_20250923_166-020_ndvi»."""
+    «L9_20250923_166-020_ndvi», у MSS «LM2_19750601_181-019_ndvi»."""
     day = s.when[:10].replace("-", "")
     if modis.is_modis(s.mission):
         return "MODIS_{}_{}_{}".format(s.tile.split(" ")[0].replace("+", ""),
                                        day, name)
-    if s.mission == "landsat":
+    if s.mission in LANDSATS:
         sat, _, place = s.tile.partition(" ")
+        if s.mission == "mss":
+            sat = "LM" + sat[1:]
         return "{}_{}_{}_{}".format(sat, day, place.replace("/", "-"),
                                     name)
     return "S2_{}_{}_{}".format(day, s.tile, name)
@@ -603,6 +861,6 @@ def credit(s):
     снимок Landsat от USGS, у MODIS - продукт и архив NASA."""
     if modis.is_modis(s.mission):
         return modis.credit(s.id)
-    if s.mission == "landsat":
+    if s.mission in LANDSATS:
         return LANDSAT_ATTRIBUTION.format(number=s.tile.split(" ")[0][1:])
     return ATTRIBUTION.format(year=s.when[:4])
