@@ -63,6 +63,7 @@ class ViewToolbar(QFrame):
     snapshot_clicked = pyqtSignal()
     scene_save_requested = pyqtSignal()
     scene_open_requested = pyqtSignal()
+    share_requested = pyqtSignal()
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
 
@@ -154,6 +155,13 @@ class ViewToolbar(QFrame):
             self.scene_save_requested)
         menu.addAction(tr("Открыть сцену…")).triggered.connect(
             self.scene_open_requested)
+        menu.addSeparator()
+        share = menu.addAction(tr("Поделиться видом…"))
+        share.setToolTip(tr(
+            "Страница HTML с глобусом, она открывается в браузере без "
+            "QGIS. На ней камера этого вида, рельеф, основа "
+            "OpenStreetMap и выделенные в «Моих метках» метки с облётом."))
+        share.triggered.connect(self.share_requested)
         scene.setMenu(menu)
         self.layout().addWidget(scene)
         self.scene = scene

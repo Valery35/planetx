@@ -40,6 +40,7 @@ from ..net.overlay import fetch_bytes
 from ..qt_compat import enum, enum_int
 from .satellites import group_names as satellite_group_names
 from .themes import group_names, theme_names
+from .weather import AURORA, field_of
 
 THUMB = 104  # пикселей стороны превью
 ICON = 40  # пикселей стороны значка строки каталога
@@ -338,7 +339,7 @@ def ramp_of(key):
     """Цвета шкалы карты без тайла: поле прогноза или пожары."""
     if key == themes.FIRES:
         return [color for _, color in fires.FRP_STOPS]
-    return weather.legend(weather.BY_KEY[key[len("weather_"):]])["colors"]
+    return weather.legend(field_of(key))["colors"]
 
 
 def _blank(color=(40, 48, 60)):
@@ -841,7 +842,8 @@ class NasaMaps(QWidget):
             return tr("NASA GIBS, {day}", day=day_text(day)) if day \
                 else tr("NASA GIBS")
         if kind == "weather":
-            return tr("прогноз NOAA GFS")
+            return tr("прогноз NOAA SWPC") if key == AURORA \
+                else tr("прогноз NOAA GFS")
         if kind == themes.FIRES:
             return tr("NASA FIRMS, 24 часа")
         if kind == themes.TEMPERATURE:

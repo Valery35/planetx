@@ -42,7 +42,7 @@ from .buildings import SHOT_UPLOADS as BUILDING_SHOT_UPLOADS, Buildings
 from .buildings import pick as pick_buildings
 from .features import Features
 from .labels import Labels, icon_style
-from .gibs import LAYERS as GIBS_LAYERS, GibsLayer
+from .gibs import LAYERS as GIBS_LAYERS, NEAR_ONLY, GibsLayer
 from .subsurface import ImageWalls, Subsurface
 from .flow import FlowLines
 from .quakes import DepositPoints, FirePoints, PlantPoints, Quakes
@@ -1858,6 +1858,11 @@ class GlobeView(QOpenGLWidget):
         if overlays is not None:
             layers.append((GL.GL_TEXTURE1, self.u_overlay_uv, overlays))
         clear = [(self.clear_texture, gpu.NO_OVERLAY)] * len(self.caps)
+        near = None
+        if any(self.gibs[name].shown for name in NEAR_ONLY):
+            near = lod.near_keys(
+                sel.draw, tuple(self.camera.eye),
+                lod.ANALYSIS_REACH * self.navigator.pose.distance)
         for name, layer in self.gibs.items():
             if layer.dropping:
                 # Контекст OpenGL здесь текущий, это вызов из paintGL.
@@ -1866,7 +1871,8 @@ class GlobeView(QOpenGLWidget):
                 layer.upload(self.pool, self.frame)
                 unit, _, u_uv = self.gibs_slots[name]
                 layers.append((unit, u_uv, clear + layer.items(
-                    sel.draw, self.clear_texture, self.frame), layer.fade))
+                    sel.draw, self.clear_texture, self.frame,
+                    near if name in NEAR_ONLY else None), layer.fade))
             else:
                 layer.missing = 0
         if alpha < 1.0:

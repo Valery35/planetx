@@ -432,5 +432,24 @@ class TestSpeed(unittest.TestCase):
         self.assertLess(spent, 0.008, "%.1f мс" % (spent * 1000))
 
 
+class TestNearKeys(unittest.TestCase):
+    """Уклон и горизонтали - только вблизи глаза."""
+
+    def test_far_tiles_dropped_near_kept(self):
+        eye = el.geodetic_to_ecef(PERM[0], PERM[1], 2000.0)
+        z = 12
+        n = 1 << z
+        x0 = int((PERM[1] + 180.0) / 360.0 * n)
+        lat = math.radians(PERM[0])
+        y0 = int((1.0 - math.asinh(math.tan(lat)) / math.pi) / 2.0 * n)
+        under = (z, x0, y0)
+        far = (z, x0 + 40, y0)  # около 400 км восточнее
+        near = lod.near_keys([under, far], tuple(eye), 30000.0)
+        self.assertEqual(near, {under})
+
+    def test_reach_is_relative(self):
+        self.assertGreater(lod.ANALYSIS_REACH, 1.0)
+
+
 if __name__ == "__main__":
     unittest.main()

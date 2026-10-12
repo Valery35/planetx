@@ -20,16 +20,18 @@ from collections import OrderedDict
 
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 
-from ..core import ellipsoid, weather
+from ..core import aurora, ellipsoid, weather
 from ..core.mirrors import Mirrors
 from ..i18n import tr
-from ..net.overlay import fetch_mirror
+from ..net.overlay import fetch_bytes, fetch_mirror
 from .viewshed import ResultTiles
 
 MAX_GRIDS = 12
 MIRRORS = Mirrors(weather.BUCKETS)  # зеркала GFS, одно состояние на QGIS
 LEVEL = 6  # уровень тайлов поля: пиксель около 2.4 км, сетка 28 км
 PAST_DAYS = 10  # шкала погоды уходит в прошлое на столько суток
+AURORA = "weather_aurora"  # тема полярного сияния (core/aurora.py)
+AURORA_WANTED = (0.0, 0, "aurora")  # ключ поля сияния в grids
 
 
 def field_names():
@@ -47,6 +49,11 @@ def field_names():
         "weather_clouds": (tr("Облачность"), tr(
             "Общая облачность по модели NOAA GFS, доля неба в процентах. "
             "Это расчёт модели, а не снимок облаков.")),
+        AURORA: (tr("Полярное сияние"), tr(
+            "Вероятность видимого полярного сияния по модели OVATION "
+            "службы NOAA SWPC на ближайшие 30-90 минут, сетка 1°. "
+            "Прогноз один - на сейчас, шкала времени его не меняет. "
+            "Огни городов на ночной стороне даёт строка «Солнце».")),
     }
 
 
@@ -63,16 +70,30 @@ def value_text(field, value):
         return "{:.0f}°".format(value).replace("-0°", "0°")
     if field.key == "precipitation":
         return "{:.1f}".format(value)
-    if field.key == "clouds":
+    if field.key in ("clouds", "aurora"):
         return "{:.0f}%".format(value)
     return "{:.0f}".format(value)
 
 
 def field_of(key):
     """Field поля темы key или None, если тема не погодная."""
+    if key == AURORA:
+        return aurora.FIELD
     if not key.startswith("weather_"):
         return None
     return weather.BY_KEY.get(key[len("weather_"):])
+
+
+def field_valid_text(field, grid):
+    """Срок поля для шкалы и имени слоя."""
+    if field.key == "aurora":
+        return aurora.valid_text(grid)
+    return weather.valid_text(grid.run, grid.hour)
+
+
+def field_attribution(key):
+    """Подпись источника поля темы key: (текст, адрес)."""
+    return aurora.ATTRIBUTION if key == AURORA else weather.ATTRIBUTION
 
 
 class WeatherManager(QObject):
@@ -96,6 +117,7 @@ class WeatherManager(QObject):
         self.shown = None
         self.error = ""
         self._tried = []
+        self._aurora_at = None  # time.monotonic() прихода прогноза сияния
 
     # Тема.
 
@@ -119,6 +141,9 @@ class WeatherManager(QObject):
         if not self.key:
             return
         self.moment = time.time() if moment is None else float(moment)
+        if self.key == AURORA:
+            self._aurora()
+            return
         if self.newest is None:
             self._find_run()
             return
@@ -142,7 +167,12 @@ class WeatherManager(QObject):
 
     def span(self):
         """Охват шкалы: PAST_DAYS суток до свежего выпуска и последний
-        час его прогноза. None - выпуск ещё не найден."""
+        час его прогноза. None - выпуск ещё не найден. У сияния - час
+        вокруг момента прогноза."""
+        if self.key == AURORA:
+            grid = self.grids.get(AURORA_WANTED)
+            return None if grid is None else (grid.run - 3600.0,
+                                              grid.run + 3600.0)
         if self.newest is None:
             return None
         return (self.newest - PAST_DAYS * 86400.0,
@@ -150,8 +180,9 @@ class WeatherManager(QObject):
 
     def step(self, moment, delta):
         """Момент соседнего часа: в прошлом и в первых сутках - по часу,
-        в дальнем прогнозе - по часам свежего выпуска."""
-        if self.newest is None:
+        в дальнем прогнозе - по часам свежего выпуска. У сияния шагов
+        нет."""
+        if self.newest is None or self.key == AURORA:
             return None
         hourly = self.newest + weather.HOURLY * 3600.0
         target = round(moment / 3600.0) * 3600.0 + delta * 3600.0
@@ -161,6 +192,39 @@ class WeatherManager(QObject):
         return weather.step_moment(self.newest, moment, delta)
 
     # Загрузка.
+
+    def _aurora(self):
+        """Прогноз сияния: из памяти, пока он моложе aurora.REFRESH,
+        иначе запрос файла мимо кэша."""
+        self.wanted = AURORA_WANTED
+        fresh = self._aurora_at is not None \
+            and time.monotonic() - self._aurora_at < aurora.REFRESH
+        if fresh and AURORA_WANTED in self.grids:
+            if self.shown != AURORA_WANTED:
+                self._display()
+            return
+        if "aurora" in self.replies:
+            return
+        self.replies["aurora"] = fetch_bytes(
+            aurora.URL, self._aurora_done, fresh=True)
+        self._count()
+
+    def _aurora_done(self, data, error):
+        if self.replies.pop("aurora", None) is None:
+            return
+        self._count()
+        grid = aurora.parse(data) if data else None
+        if grid is None:
+            self.error = tr("Прогноз сияния не получен: {error}",
+                            error=error or tr("файл не прочитан"))
+            self.changed.emit()
+            return
+        self.grids[AURORA_WANTED] = grid
+        self._aurora_at = time.monotonic()
+        if self.key == AURORA:
+            self.wanted = AURORA_WANTED
+            self.window._update_timebar()
+            self._display()
 
     def _find_run(self):
         """Свежий выложенный выпуск: индекс часа 0 по порядку
@@ -262,7 +326,8 @@ class WeatherManager(QObject):
 
     def _display(self):
         grid = self.grids[self.wanted]
-        field = weather.BY_KEY[self.wanted[2]]
+        key = self.wanted[2]
+        field = aurora.FIELD if key == "aurora" else weather.BY_KEY[key]
         tiles = ResultTiles(weather.job(field, grid), ellipsoid.A,
                             weather.tile_rgba, parent=self.window)
         tiles.loaded.connect(lambda key, rgba, levels:

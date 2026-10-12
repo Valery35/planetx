@@ -167,7 +167,8 @@ from .nasamaps import (ANY_BODY, LAYERS as GALLERY_LAYERS,
                        RELIEF_BODY, NasaMaps, layer_names, map_names)
 from . import export as layer_export
 from .weather import (LEVEL as WEATHER_LEVEL, value_text,
-                      WeatherManager, units_text as weather_units)
+                      WeatherManager, field_attribution,
+                      field_valid_text, units_text as weather_units)
 from .satellites import SatelliteManager
 from ..core import satellites as satellites_core
 from .track import (TrackDialog, TrackManager, date_range, layer_span,
@@ -1124,6 +1125,7 @@ class GlobeWindow(QWidget):
         self.panel.grid_ids = set(read_grids())
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
+        self.toolbar.share_requested.connect(self.share_view)
         self.toolbar.demo_requested.connect(self.open_demo)
         self.tour.message.connect(
             lambda text: setattr(self, "message", (text, time.monotonic())))
@@ -1666,10 +1668,11 @@ class GlobeWindow(QWidget):
                 bands += [grid.vectors.u, grid.vectors.v]
             count = layer_export.write_grid(path, bands, grid.west,
                                             grid.north, grid.step, box)
-            stamp = weather_core.valid_text(grid.run, grid.hour)
+            stamp = field_valid_text(field, grid)
             if count is None or layer_export.add_raster(
                     path, "{} {}".format(title, stamp),
-                    [(v, c) for v, c in field.ramp], "NOAA GFS") is None:
+                    [(v, c) for v, c in field.ramp],
+                    field_attribution(self.theme_key)[0]) is None:
                 return None
             return count
         if key == "map":
@@ -3516,7 +3519,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*clouds.ATTRIBUTION))
         if "theme" in self.gibs_loaders:
             parts.append(link_html(*(
-                weather_core.ATTRIBUTION if themes.is_weather(self.theme_key)
+                field_attribution(self.theme_key)
+                if themes.is_weather(self.theme_key)
                 else themes.ATTRIBUTION)))
         if "lights" in self.gibs_loaders:
             parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
@@ -4670,6 +4674,16 @@ class GlobeWindow(QWidget):
         self._show_state()
         return True
 
+    def share_view(self, path=None, show=True):
+        """Страница HTML вида, ui/share.py."""
+        from .share import share_view
+        path = share_view(self, path, show)
+        if path:
+            self.message = (tr("Страница записана: {path}", path=path),
+                            time.monotonic())
+            self._show_state()
+        return path
+
     def open_demo(self, name="perm"):
         """Демо из папки модуля, tools/make_demo.py: perm, bocachica,
         japan, subsurface, vegas, aral, mars, jezero, moon, sky. У
@@ -5000,7 +5014,7 @@ class GlobeWindow(QWidget):
         scale = dict(weather_core.legend(field), units=units)
         self.theme_legend.set_theme(tr(
             "{name}, {units} · {time} UTC", name=name, units=units,
-            time=weather_core.valid_text(grid.run, grid.hour)), scale)
+            time=field_valid_text(field, grid)), scale)
         self.theme_legend.show()
         self._place_attribution()
         self._show_attribution()
@@ -7321,6 +7335,37 @@ class GlobeWindow(QWidget):
             return tr("Неизвестная строка: {key}.", key=key)
         return tr("Строка {key}: {state}.", key=key,
                   state=tr("включена") if on else tr("выключена"))
+
+    def _tool_list_actions(self):
+        return assistant_core.actions_text(
+            assistant_core.assistant_actions(self._search_actions()))
+
+    def _tool_run_action(self, key):
+        """Действие строки «Поиск» по ключу. Список строится заново:
+        после прежнего действия состав и состояния могли смениться."""
+        allowed = assistant_core.assistant_actions(self._search_actions())
+        found = [a for a in allowed if a.key == str(key)]
+        if not found:
+            return tr("Нет такого действия: {key}. Ключ берётся из "
+                      "list_actions.", key=key)
+        item = found[0]
+        journal.note("assistant action {}".format(item.key))
+        self._actions[item.key]()
+        return tr("Выполнено: {title} - {note}.", title=item.text,
+                  note=item.note)
+
+    def _tool_set_opacity(self, key, value):
+        key = str(key)
+        value = min(1.0, max(0.0, float(value)))
+        rows = dict((row[0], row[2]) for row in self._active_rows())
+        if key not in rows:
+            return tr("Слоя {key} нет среди включённых.", key=key)
+        if rows[key] is None:
+            return tr("У слоя {key} непрозрачность не меняется.", key=key)
+        self._active_opacity(key, value)
+        self._update_active()
+        return tr("Непрозрачность {key}: {value:.2f}.", key=key,
+                  value=value)
 
     def _tool_set_time(self, start="", end=""):
         if not start and not end:

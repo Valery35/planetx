@@ -326,6 +326,11 @@ bodies have no heights. The accuracy is limited by the height pixel.
 It is about 5 m at the equator on the most detailed level on the Earth,
 2.6 km on Mars, 1.3 km on the Moon.
 
+Slope and contours are drawn no farther than three distances from the
+camera to the look-at point. In a view tilted to the horizon the far
+terrain stays without them. So the computation does not hold the view
+on hundreds of far tiles.
+
 The Contours layer of the Map category of the catalogue draws lines of equal height on the
 surface, as on
 a topographic map. The contour interval depends on the zoom. It is
@@ -482,6 +487,15 @@ temperature at 2 m, Precipitation in mm/h, Wind at 10 m in m/s
 and Clouds in percent. The fields come from the NOAA GFS forecast
 model with a 0.25° grid, about 28 km. A field is chosen in the
 catalogue, as a NASA theme.
+
+The Aurora map shows the probability of a visible aurora in percent by
+the OVATION forecast of the NOAA Space Weather Prediction Center for
+the next 30-90 minutes, 1° grid. Below 3 % the field is transparent,
+a weak aurora is green, a strong one yellow and red. There is one
+forecast, for now, the time slider does not change it. The map asks
+for a new forecast at most once in 10 minutes. City lights on the
+night side come with the Sun layer, they can be on together with the
+aurora.
 
 White streaks run over the Wind colouring - particles that float with
 the wind and drag a trail. A streak of a weak wind is paler. The streaks
@@ -2099,6 +2113,35 @@ globe. The places of the scene come in as a new folder, and the camera
 flies to the scene pose. The status line lists the layers that were not
 found and did not open.
 
+### Share view
+
+The Share View… item of the Scene icon menu writes an HTML page. It
+opens in a browser without QGIS and PlanetX, it can be sent as a file
+or published on a site. After writing the page opens in the system
+browser.
+
+The page holds:
+
+- the globe with the camera of this view - the look-at point,
+  distance, heading and tilt.
+- the OpenStreetMap base in the OpenFreeMap style and Terrarium
+  terrain with the terrain exaggeration of the view. Without terrain on
+  the globe the page has no terrain either.
+- the placemarks, paths and polygons selected in My Places, with
+  their colours and labels. A click on a placemark shows its name and
+  description.
+- the Initial view button and the ▶ Tour button. The tour is the
+  recorded tour from the selection. Without it the camera flies to the
+  views of the placemarks in turn, to a point without its own view -
+  from above at 3 km with a tilt of 45°.
+
+The Esri base map, QGIS project layers, overlay pictures, placemark
+times and rows of the Layers section do not go to the page. The camera
+tilt on the page is not more than 85°. The page is built for the Earth
+only. The globe of the page is drawn by the MapLibre GL JS library,
+the browser loads it from unpkg.com, the tiles from the OpenFreeMap and
+Amazon servers. Without internet access the page is empty.
+
 
 ### Demo
 
@@ -2265,7 +2308,11 @@ OpenRouter with a free model is chosen.
 - **What the assistant does.** Flight to a point and place search, body
   change, rows of the Layers section and the time slider, the Earth
   cutaway and a section down along points, point information and an
-  earthquake summary in a box.
+  earthquake summary in a box. All actions of the Search field are
+  available to the assistant as well - catalog layers and maps,
+  windows and tools, demos and bodies. It also changes the opacity of
+  a shown layer. The assistant does not open file choice windows and
+  does not start tour recording, the user opens them.
 - **Placemarks in KML.** The assistant proposes placemarks, paths,
   polygons, folders and tours as a KML document. Below the conversation
   a proposal appears with the Write to My Places and Cancel buttons.

@@ -54,6 +54,8 @@ WORDS = {
     "cables": ("подводные кабели", "кабели", "submarine cables"),
     "fires": ("пожары", "огонь", "fires", "firms"),
     "temperature": ("температура", "жара", "temperature"),
+    "weather_aurora": ("сияние", "северное сияние", "аврора",
+                       "aurora", "northern lights", "ovation"),
 }
 # Карты витрины - ещё слово «карта».
 MAP_WORDS = ("карта", "map", "nasa")
@@ -169,6 +171,9 @@ def _tools(window, add, earth):
         window.save_scene, ("сцена", "scene"))
     add("tool:scene_open", tr("Открыть сцену"), open_,
         window.open_scene, ("сцена", "scene"))
+    add("tool:share", tr("Поделиться видом"), open_, window.share_view,
+        ("html", "страница", "браузер", "отправить", "share", "web",
+         "page", "browser"))
     add("tool:subsurface", tr("Подземный режим"), open_,
         window.subsurface.open_dialog, ("скважины", "геология",
                                         "subsurface", "drillholes"))

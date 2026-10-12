@@ -2056,6 +2056,49 @@ def scene_password():
                                 == "a.gpkg"}
 
 
+@check(500)
+def share_page():
+    # «Поделиться видом»: страница HTML с камерой вида и выделенной
+    # папкой «Моих меток». Браузер не открывается.
+    import re
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(58.0, 56.25, 12000.0, 20.0, 50.0))
+    folder = window.myplaces.add_folder("Проба страницы")
+    window.myplaces.add(Shape("line", [(58.0, 56.2), (58.01, 56.25)],
+                              name="Путь страницы"), folder=folder)
+    window.myplaces.add(Shape("point", [(58.0105, 56.2386)],
+                              name="Эспланада"), folder=folder)
+    path = os.path.join(TEMP, "planetx_share.html")
+    keys = window.panel.list.selected_keys
+    window.panel.list.selected_keys = lambda: [folder]
+    try:
+        written = window.share_view(path, show=False)
+    finally:
+        window.panel.list.selected_keys = keys
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    found = re.search(r'<script id="planetx-data" type="application/json">'
+                      r'(.*?)</script>', text, re.S)
+    data = json.loads(found.group(1)) if found else {}
+    pose = window.view.navigator.pose
+    result["share_page"] = {
+        "written": written == path,
+        "camera": data.get("camera"),
+        "pose": [round(pose.lat, 3), round(pose.lon, 3),
+                 round(pose.distance), round(pose.heading, 1),
+                 round(pose.tilt, 1)],
+        "names": [f["properties"]["name"] for f in
+                  data.get("places", {}).get("features", [])],
+        "stops": len((data.get("tour") or {}).get("stops", [])),
+        "relief": data.get("relief"), "fov": data.get("fov"),
+        "esri": "arcgis" in text.lower(),
+        "message": window.status.text()}
+    window.myplaces.remove(folder)
+
+
 RECORD_DIRS = [os.path.join(TEMP, "planetx_record_a"),
                os.path.join(TEMP, "planetx_record_b")]
 RECORD_LIMIT = 600.0  # с на одну запись
@@ -3725,7 +3768,10 @@ def _fake_model():
                          or self.headers.get("Authorization")))
             if self.path.endswith("/messages"):
                 last = body["messages"][-1]["content"]
-                if isinstance(last, str):
+                first = body["messages"][0]["content"]
+                if isinstance(first, str) and "течения" in first:
+                    answer = self.actions(len(body["messages"]))
+                elif isinstance(last, str):
                     answer = {"content": [
                         {"type": "text", "text": "Лечу к Японии."},
                         {"type": "tool_use", "id": "t1", "name": "fly_to",
@@ -3776,6 +3822,25 @@ def _fake_model():
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+
+        def actions(self, count):
+            """Круги разговора о слоях: список действий, потом течения,
+            горизонтали, непрозрачность и окно снимков, потом текст."""
+            if count == 1:
+                return {"content": [{"type": "tool_use", "id": "a1",
+                                     "name": "list_actions", "input": {}}]}
+            if count == 3:
+                calls = (("run_action", {"key": "layer:currents"}),
+                         ("run_action", {"key": "layer:contours"}),
+                         ("set_opacity", {"key": "currents",
+                                          "value": 0.4}),
+                         ("run_action", {"key": "here:sentinel"}),
+                         ("run_action", {"key": "tool:record"}))
+                return {"content": [
+                    {"type": "tool_use", "id": "b%d" % n, "name": name,
+                     "input": args}
+                    for n, (name, args) in enumerate(calls)]}
+            return {"content": [{"type": "text", "text": "Включил."}]}
 
         def stream(self, made, slow):
             """Ответ потоком событий SSE формата Chat. Быстрый - документ
@@ -3938,6 +4003,59 @@ def assistant_tools_check():
     if window.section_dialog is not None:
         window.section_dialog.close()
     out["tools_gl"] = dict(window.view.gl_errors)
+
+
+@check(4000)
+def assistant_actions():
+    # Помощник включает слои и открывает окна действиями строки
+    # «Поиск» (list_actions, run_action) и меняет непрозрачность.
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    for key in ("currents", "contours"):
+        window.set_extra(key, False)
+    server, seen = _fake_model()
+    state["fake_actions"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    window.open_assistant()
+    dialog = window.assistant_dialog
+    _use_service(dialog, ai.ANTHROPIC,
+                 "http://127.0.0.1:%d" % server.server_port)
+    dialog.input.setText("Покажи течения и включи горизонтали")
+    dialog.send()
+
+
+@check(1000)
+def assistant_actions_check():
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    server, seen = state["fake_actions"]
+    out = result.setdefault("assistant_actions", {})
+    out["requests"] = len(seen)
+    listed = seen[1][1]["messages"][-1]["content"][0]["content"] \
+        if len(seen) > 1 else ""
+    out["list_has_currents"] = "layer:currents" in listed
+    out["list_has_record"] = "tool:record" in listed
+    out["results"] = [r["content"] for r in
+                      seen[2][1]["messages"][-1]["content"]] \
+        if len(seen) > 2 else None
+    out["currents_on"] = bool(window.extras.get("currents"))
+    out["contours_on"] = bool(window.extras.get("contours"))
+    out["currents_opacity"] = round(window._layer_opacity("currents"), 2)
+    sentinel = getattr(window, "sentinel_dialog", None)
+    out["sentinel_shown"] = sentinel is not None and sentinel.isVisible()
+    out["recording"] = window.toolbar.record.isChecked()
+    window._active_opacity("currents", 1.0)
+    for key in ("currents", "contours"):
+        window.set_extra(key, False)
+    if sentinel is not None:
+        sentinel.close()
+    window.assistant_dialog.close()
+    server.shutdown()
+    ui_ai.load_key = state["real_load_key"]
+    out["gl"] = dict(window.view.gl_errors)
 
 
 @check(3000)

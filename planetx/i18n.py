@@ -1457,12 +1457,29 @@ EN = {
     "Солнце и ночная сторона, звёзды, облака и искусственные спутники.":
         "The sun and the night side, stars, clouds and artificial "
         "satellites.",
-    "Температура, осадки, ветер и облачность по модели NOAA GFS и "
-    "температура поверхности по NASA. Прогноз - до 16 суток вперёд, момент "
-    "задаёт шкала времени.":
-        "Temperature, precipitation, wind and clouds of the NOAA GFS model "
-        "and surface temperature from NASA. The forecast goes up to 16 days "
-        "ahead, the time slider sets the moment.",
+    "Температура, осадки, ветер и облачность по модели NOAA GFS, "
+    "температура поверхности по NASA и полярное сияние по NOAA SWPC. "
+    "Прогноз GFS - до 16 суток вперёд, момент задаёт шкала времени.":
+        "Temperature, precipitation, wind and clouds of the NOAA GFS model, "
+        "surface temperature from NASA and the aurora from NOAA SWPC. The "
+        "GFS forecast goes up to 16 days ahead, the time slider sets the "
+        "moment.",
+    "прогноз NOAA SWPC":
+        "NOAA SWPC forecast",
+    "Полярное сияние":
+        "Aurora",
+    "Вероятность видимого полярного сияния по модели OVATION службы NOAA "
+    "SWPC на ближайшие 30-90 минут, сетка 1°. Прогноз один - на сейчас, "
+    "шкала времени его не меняет. Огни городов на ночной стороне даёт "
+    "строка «Солнце».":
+        "The probability of a visible aurora by the OVATION model of NOAA "
+        "SWPC for the next 30-90 minutes, 1° grid. There is one forecast, "
+        "for now, the time slider does not change it. City lights on the "
+        "night side come with the Sun row.",
+    "Прогноз сияния не получен: {error}":
+        "The aurora forecast was not received: {error}",
+    "файл не прочитан":
+        "the file was not read",
     "Очаги пожаров, дым, аэрозоль и угарный газ пожаров и промышленности по "
     "данным NASA.":
         "Fire spots, smoke, aerosol and carbon monoxide of fires and "
@@ -2892,6 +2909,16 @@ EN = {
         "Row {key}: {state}.",
     "Тело: {body}.":
         "Body: {body}.",
+    "Нет такого действия: {key}. Ключ берётся из list_actions.":
+        "No such action: {key}. Take the key from list_actions.",
+    "Выполнено: {title} - {note}.":
+        "Done: {title} - {note}.",
+    "Слоя {key} нет среди включённых.":
+        "Layer {key} is not among the shown layers.",
+    "У слоя {key} непрозрачность не меняется.":
+        "Layer {key} has no opacity setting.",
+    "Непрозрачность {key}: {value:.2f}.":
+        "Opacity of {key}: {value:.2f}.",
     "OpenRouter (есть бесплатные модели)":
         "OpenRouter (free models available)",
     "Свой сервис, например Ollama":
@@ -3338,6 +3365,24 @@ EN = {
         "and the selected My Places folder with its tour. It saves to a "
         "file and opens on another computer.",
     "Сохранить сцену…": "Save Scene…",
+    "Поделиться видом…": "Share View…",
+    "Поделиться видом": "Share view",
+    "Страница HTML с глобусом, она открывается в браузере без QGIS. "
+    "На ней камера этого вида, рельеф, основа OpenStreetMap "
+    "и выделенные в «Моих метках» метки с облётом.":
+        "An HTML page with the globe that opens in a browser without "
+        "QGIS. It holds the camera of this view, the terrain, the "
+        "OpenStreetMap base and the placemarks selected in My Places "
+        "with a tour.",
+    "Исходный вид": "Initial view",
+    "▶ Облёт": "▶ Tour",
+    "⏹ Остановить": "⏹ Stop",
+    "Страница строится только для Земли. Вернитесь на Землю "
+    "и повторите.":
+        "The page is built for the Earth only. Return to the Earth and "
+        "try again.",
+    "Страница HTML (*.html)": "HTML page (*.html)",
+    "Страница записана: {path}": "Page written: {path}",
     "Открыть сцену…": "Open Scene…",
     "Сохранить сцену": "Save Scene",
     "Открыть сцену": "Open Scene",
