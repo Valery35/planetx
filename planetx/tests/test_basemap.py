@@ -6,6 +6,8 @@ import os
 import sys
 import unittest
 
+import numpy as np
+
 CORE = os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "core")
 sys.path.insert(0, CORE)
@@ -148,6 +150,89 @@ class TestMirrors(unittest.TestCase):
         src = bm.Source("OSM", bm.OSM_URL)
         self.assertEqual(src.urls, (bm.OSM_URL,))
         self.assertFalse(src.next_mirror(1000.0))
+
+
+class TestReady(unittest.TestCase):
+    """Готовые источники меню «Основа»."""
+
+    def test_every_ready_source_has_valid_url_and_terms(self):
+        for row in bm.READY:
+            key, ru, en, url, top, credit, terms, warned, kind = row
+            self.assertTrue(bm.valid_url(url), key)
+            self.assertTrue(terms.startswith("https://"), key)
+            self.assertLessEqual(top, bm.MAX_LEVEL, key)
+            src = bm.ready_source(key, russian=False)
+            self.assertEqual((src.name, src.ready), (en, key))
+            self.assertEqual(src.attribution, (credit, terms))
+        warned = {r[0] for r in bm.READY if r[7]}
+        self.assertTrue({"google_satellite", "bing_aerial",
+                         "yandex_satellite", "dgis_map"} <= warned)
+        self.assertNotIn("opentopomap", warned)
+
+    def test_bing_uses_quadkey(self):
+        src = bm.ready_source("bing_aerial")
+        self.assertIn("/a030.jpeg", src.tile_url(3, 2, 2))
+
+    def test_unknown_key(self):
+        self.assertIsNone(bm.ready_entry("nope"))
+        with self.assertRaises(KeyError):
+            bm.ready_source("nope")
+
+
+class TestElliptic(unittest.TestCase):
+    """Снимки Яндекса в эллиптическом Меркаторе EPSG:3395."""
+
+    def test_rows_at_perm_shift_south(self):
+        # Тайл z=12 над Пермью: в EPSG:3395 он ниже на 3-4 тайла (у этой
+        # широты северное смещение около 36 км, тайл около 5.2 км).
+        first, last, at = bm.elliptic_rows(12, 1197)
+        self.assertIn(first, (1200, 1201))
+        self.assertIn(last - first, (0, 1))
+        self.assertTrue(np.all(np.diff(at) > 0))
+
+    def test_equator_tile_unchanged(self):
+        # У экватора проекции совпадают: тайл встаёт сам на себя.
+        first, last, at = bm.elliptic_rows(2, 2)
+        self.assertEqual(first, 2)
+        self.assertAlmostEqual(float(at[0]), 0.0, delta=1.0)
+
+    def test_tile_takes_rows_from_both_parts(self):
+        # Картинки частей - номер строки в столбце мира, тайл глобуса
+        # берёт значения точно по elliptic_rows.
+        z, y = 10, 299
+        first, last, at = bm.elliptic_rows(z, y)
+        images = []
+        for row in range(first, last + 1):
+            image = np.zeros((256, 256, 4), np.uint8)
+            image[..., 0] = (np.arange(256) // 2 + (row - first) * 128)[
+                :, None]
+            images.append(image)
+        tile = bm.elliptic_tile(z, y, images)
+        self.assertEqual(tile.shape, (256, 256, 4))
+        expected = np.clip(at, 0, len(images) * 256 - 1) / 2.0
+        self.assertLess(float(np.max(np.abs(tile[:, 0, 0] - expected))),
+                        1.01)
+
+    def test_source_asks_one_or_two_tiles_of_column(self):
+        src = bm.ready_source("yandex_satellite")
+        urls = src.parts(12, 2687, 1197)
+        self.assertIn(len(urls), (1, 2))
+        self.assertTrue(all("x=2687" in u for u in urls))
+
+
+class TestWms(unittest.TestCase):
+    def test_bbox_of_tile(self):
+        west, south, east, north = bm.tile_bbox(1, 0, 0)
+        self.assertAlmostEqual(west, -bm.MERCATOR_HALF)
+        self.assertAlmostEqual(north, bm.MERCATOR_HALF)
+        self.assertAlmostEqual(east, 0.0, places=3)
+        self.assertAlmostEqual(south, 0.0, places=3)
+
+    def test_wms_source_puts_bbox(self):
+        src = bm.WmsSource("w", "https://h/wms?BBOX={bbox}&W=256")
+        url = src.tile_url(1, 1, 1)
+        self.assertEqual(url, "https://h/wms?BBOX=0.00,-20037508.34,"
+                              "20037508.34,0.00&W=256")
 
 
 if __name__ == "__main__":

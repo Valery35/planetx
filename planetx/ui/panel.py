@@ -39,9 +39,9 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
 
-from ..core import icons, lookat
+from ..core import basemap, icons, lookat
 from ..core.placetree import is_folder
-from ..i18n import tr
+from ..i18n import is_russian, tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
                            WATER_NAMES)
@@ -476,6 +476,8 @@ class LayerPanel(QWidget):
     # Подложка выбрана в группе «Основа» - номер источника.
     basemap_chosen = pyqtSignal(int)
     add_source_requested = pyqtSignal()
+    # Готовый источник меню «Основа», ключ basemap.READY.
+    ready_requested = pyqtSignal(str)
     relief_toggled = pyqtSignal(bool)
     # Меню строки «Рельеф»: модель высот суши, глубины морей,
     # окно «Источники данных».
@@ -1306,6 +1308,11 @@ class LayerPanel(QWidget):
         источник тайлов."""
         if self._own_basemap is not None:
             return
+        self.basemap_menu().exec(pos)
+
+    def basemap_menu(self):
+        """Меню строки «Основа»: подложки, готовые источники, свой
+        источник тайлов. Отдельно от показа - его проверяет шаг."""
         menu = QMenu(self)
         for i, name in enumerate(self._basemap_names):
             action = menu.addAction(name)
@@ -1314,9 +1321,19 @@ class LayerPanel(QWidget):
             action.triggered.connect(
                 lambda _=False, i=i: self._basemap_activated(i))
         menu.addSeparator()
+        ready = menu.addMenu(tr("Готовые источники"))
+        ready.setToolTipsVisible(True)
+        for key, ru, en, _, _, _, _, warned, _ in basemap.READY:
+            action = ready.addAction(ru if is_russian() else en)
+            if warned:
+                action.setToolTip(tr(
+                    "Условия сервиса не разрешают брать тайлы по прямому "
+                    "адресу. Перед добавлением окно предупредит об этом."))
+            action.triggered.connect(
+                lambda _=False, key=key: self.ready_requested.emit(key))
         menu.addAction(tr("Добавить источник тайлов…")).triggered.connect(
             lambda _=False: self._basemap_activated(ADD_SOURCE))
-        menu.exec(pos)
+        return menu
 
     def basemap_names(self):
         """Названия подложек меню строки «Основа»."""

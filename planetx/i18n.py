@@ -1181,6 +1181,54 @@ EN = {
         "as they are, in the scene folder, and a layer set of all bands. "
         "A Sentinel-2 scene weighs about 1 GB.",
     "Вся сцена, исходные файлы": "Whole scene, source files",
+    "Кадастр Росреестра": "Rosreestr cadastre",
+    "Земельные участки из Национальной системы пространственных данных "
+    "Росреестра поверх снимка, только по России. Видны вблизи, с высоты "
+    "около 10 км и ниже. Служба отвечает медленно и отказывает на частые "
+    "запросы, поэтому участки приходят по одному тайлу.":
+        "Land parcels from the National spatial data system of Rosreestr "
+        "over the imagery, for Russia only. They are seen up close, from "
+        "about 10 km and lower. The service answers slowly and refuses "
+        "frequent requests, so the parcels come one tile at a time.",
+    "Условия источника": "Source terms",
+    "{name} - сервис, условия которого не разрешают брать его карты "
+    "и снимки в сторонних программах по прямому адресу тайлов. Источник "
+    "добавляется по вашему решению, ответственность за его использование "
+    "несёте вы.<br><br>Условия сервиса: {terms}":
+        "{name} is a service whose terms do not allow taking its maps and "
+        "imagery into third-party programs by the direct tile address. "
+        "The source is added by your decision, you bear the responsibility "
+        "for its use.<br><br>Terms of the service: {terms}",
+    "Готовые источники": "Ready sources",
+    "Условия сервиса не разрешают брать тайлы по прямому адресу. Перед "
+    "добавлением окно предупредит об этом.":
+        "The service terms do not allow taking tiles by the direct address. "
+        "The window warns about it before adding.",
+    "Готовый источник меню «Основа»": "Ready source of the Base map menu",
+    "Убрать «{name}» из списка подложек? Вернуть его можно меню «Основа» "
+    "- «Готовые источники».":
+        "Remove «{name}» from the base map list? It can be brought back "
+        "by the Base map menu - Ready sources.",
+    "Росреестр": "Rosreestr",
+    "НСПД Росреестра": "Rosreestr NSPD",
+    "Кадастр - земельные участки": "Cadastre - land parcels",
+    "подложкой": "as base map",
+    "подложка": "base map",
+    "Нет готового источника {key}.": "There is no ready source {key}.",
+    "Подложка поставлена: {name}.": "Base map set: {name}.",
+    "Пользователь отказался от подложки.":
+        "The user declined the base map.",
+    "Подложка помощника": "Assistant base map",
+    "Адрес не годится: нужен шаблон http или https с {z}, {x} и {y} "
+    "или {q}.":
+        "The address does not fit: an http or https template with {z}, "
+        "{x} and {y} or {q} is needed.",
+    "Подложка от помощника": "Base map from the assistant",
+    "Помощник предлагает подложку «{name}»:\n{url}\n\nУсловия "
+    "использования сервиса проверяете вы. Добавить?":
+        "The assistant proposes the base map «{name}»:\n{url}\n\nYou check "
+        "the terms of use of the service. Add it?",
+    "{name} (PlanetX)": "{name} (PlanetX)",
     "Скачивание файлов сцены {when}: {done} из {total}…":
         "Downloading scene files {when}: {done} of {total}…",
     "у этого спутника сцена целиком не загружается":

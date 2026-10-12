@@ -59,7 +59,7 @@ SAT_GROUP = "satellites"
 # в группе «Карта» раздела «Слои».
 MAP = "map"
 VECTOR = "vector:"
-MAP_ROWS = ("grid", "buildings", "contours")
+MAP_ROWS = ("grid", "buildings", "contours", "cadastre")
 # ЛЭП, трубопроводы и кабели - категория «Энергетика», просьба автора
 # от 12 октября 2026 года.
 ENERGY_ROWS = ("infra_osm", "cables")
@@ -70,6 +70,7 @@ VECTOR_COLORS = (((250, 220, 60), (240, 240, 240)),
 MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "buildings": ((200, 190, 175), (150, 140, 130)),
               "contours": ((150, 100, 60), (250, 220, 60)),
+              "cadastre": ((230, 90, 80), (250, 225, 220)),
               "infra_osm": ((220, 60, 60), (240, 150, 40), (90, 90, 200)),
               "cables": ((60, 200, 200), (170, 110, 220))}
 # Вторая строка слоя в каталоге - источник.
@@ -82,7 +83,7 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
            "contours": "Terrarium", "infra_osm": "OpenStreetMap",
-           "cables": "OpenStreetMap"}
+           "cables": "OpenStreetMap", "cadastre": "Rosreestr NSPD"}
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
@@ -245,6 +246,12 @@ def layer_names():
             "утолщённая и подписана отметкой. Ниже "
             "уровня моря - синие изобаты. Строятся по высотам глобуса "
             "и по своему рельефу растром проекта.")),
+        "cadastre": (tr("Кадастр Росреестра"), tr(
+            "Земельные участки из Национальной системы пространственных "
+            "данных Росреестра поверх снимка, только по России. Видны "
+            "вблизи, с высоты около 10 км и ниже. Служба отвечает "
+            "медленно и отказывает на частые запросы, поэтому участки "
+            "приходят по одному тайлу.")),
     }
 
 

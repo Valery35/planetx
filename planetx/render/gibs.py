@@ -12,7 +12,7 @@
 """
 import time
 
-from ..core import clouds, flow, sun, temperature, terrain
+from ..core import cadastre, clouds, flow, sun, temperature, terrain
 from ..core.clouds import source_key
 from ..core.overlay import window
 from . import gpu
@@ -55,16 +55,23 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # Заливка скорости течений под струйками (core/flow.py) - блок
           # 13, над темой и под горизонталями.
           ("currents", flow.FILL_LEVEL, 13, "u_currents", "u_currents_uv"),
+          # Кадастр Росреестра (core/cadastre.py) - блок 14, участки
+          # поверх горизонталей и под слоями проекта.
+          ("cadastre", cadastre.MAX_LEVEL, 14, "u_cadastre",
+           "u_cadastre_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
 # Слои, которые считаются только вблизи глаза (core/lod.near_keys).
-NEAR_ONLY = ("slope", "contours")
+NEAR_ONLY = ("slope", "contours", "cadastre")
+# Нижний уровень слоя: мельче тайлы остаются без слоя и не просятся.
+MIN_LEVELS = {"cadastre": cadastre.MIN_LEVEL}
 
 
 class GibsLayer:
     """Картинки одного слоя по тайлам источника."""
 
-    def __init__(self, max_level):
+    def __init__(self, max_level, min_level=0):
         self.max_level = max_level
+        self.min_level = min_level
         self.shown = False
         self.dropping = False  # освободить картинки в следующем кадре
         self.loader = None
@@ -106,7 +113,8 @@ class GibsLayer:
         wanted = {}
         ready = self.textures.__contains__
         for key in draw:
-            if near is not None and key not in near:
+            if (near is not None and key not in near) \
+                    or key[0] < self.min_level:
                 out.append((clear, gpu.NO_OVERLAY))
                 continue
             own = source_key(key, self.max_level)

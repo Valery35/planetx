@@ -32,6 +32,11 @@ import json
 import re
 from collections import namedtuple
 
+try:  # внутри плагина QGIS
+    from .basemap import READY_KEYS
+except ImportError:  # headless-тесты
+    from basemap import READY_KEYS
+
 # Форматы запросов. ANTHROPIC и RESPONSES - ещё и имена подключений
 # Claude и Grok, они хранятся в настройках с 0.25.1.
 ANTHROPIC = "anthropic"
@@ -177,6 +182,12 @@ TOOLS = (
     ("set_opacity", "Непрозрачность включённого слоя от 0 до 1 по ключу "
      "строки (как в layers_on) или map для карты каталога.",
      _obj({"key": STRING, "value": NUMBER}, ("key", "value"))),
+    ("add_basemap", "Поставить подложку глобуса: ready - ключ готового "
+     "источника (" + ", ".join(READY_KEYS) + "), или url - шаблон XYZ "
+     "с {z}, {x}, {y} ({-y} - TMS, {q} - квадрант Bing) и name - его "
+     "название. Подложку подтверждает пользователь, у сервисов, чьи "
+     "условия не разрешают такой доступ, окно его предупреждает.",
+     _obj({"ready": STRING, "url": STRING, "name": STRING}, ())),
     ("get_kml", "Получить KML: вид камеры (LookAt) и метки, пути, "
      "многоугольники и папки, которые пользователь выделил в «Моих "
      "метках». Невыделенные метки недоступны. Так помощник читает "

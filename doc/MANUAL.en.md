@@ -710,6 +710,35 @@ and the XYZ Tiles connections of the QGIS browser, the chosen base map
 is checked. A choice changes the base map on the globe at once. On other
 bodies the row shows the imagery of the body, there is no choice.
 
+The Ready sources submenu adds a base map with one click:
+
+| Source | What it shows | Warning |
+|---|---|---|
+| Google Satellite, Hybrid, Map, Terrain | imagery, imagery with labels, map, map with hill shading | yes |
+| Bing Aerial, Map | Microsoft imagery and map | yes |
+| Yandex Satellite, Map | Yandex imagery and map | yes |
+| 2GIS Map | city map | yes |
+| OpenTopoMap | topographic map from OpenStreetMap and SRTM, up to level 17 | no |
+| Esri World Topo Map | Esri topographic map | no |
+
+The terms of Google, Bing, Yandex and 2GIS do not allow taking their
+tiles into third-party programs by the direct address. Before the first
+addition of such a source the window says so and gives a link to the
+service terms. The source is added only by the Add button, the decision
+and the responsibility for its use stay with the user. The window keeps
+the answer and does not ask a second time. Yandex imagery is made in
+another projection, the elliptical Mercator. The plugin builds a globe
+tile from two Yandex tiles and recomputes it by latitude, otherwise near
+Perm the imagery would lie 36 km south of its place. An added ready
+source stands in the base map list and in the Data sources window, where
+the Remove button takes it out of the list. The Search line finds ready
+sources too - by name, for example yandex or bing.
+
+The assistant sets a base map as well - a ready source or a template
+address of your own, if asked, for example, "set Bing imagery". A ready
+source goes through the same warning, an address of your own is first
+shown to the user and added only after the Yes answer.
+
 The Add tile source… item of the menu opens the new source window. The Address
 field takes an address in any of these forms:
 
@@ -731,6 +760,23 @@ snapshots, for known servers it is filled in by itself.
 The source is saved as a QGIS XYZ Tiles connection and becomes the
 base map at once. It is also visible in the QGIS browser, where it can
 be edited or removed. The owner of the tiles sets their terms of use.
+
+### Rosreestr cadastre
+
+The Rosreestr cadastre row of the Map category of the Add data catalogue
+puts over the imagery the land parcels from the National spatial data
+system of Rosreestr (NSPD, nspd.gov.ru) - borders in red, parcels with a
+pale fill. Data exist only for Russia. Parcels are seen up close, from
+about 10 km and lower. Coarser tiles are not requested, they hold
+thousands of parcels. The service refuses frequent requests in a row, so
+the plugin asks for tiles one at a time with a 0.5 s pause, the view
+fills with parcels in 30-60 s. The NSPD server certificate is issued by
+the certification centre of the Russian Ministry of Digital Development,
+which Windows does not trust by default. The Ministry root certificate
+lies in the plugin and acts only on the plugin requests to nspd.gov.ru,
+it is not installed into the system or the rest of QGIS. The layer
+opacity is set by the slider of its row in the Layers list. The credit
+Rosreestr NSPD is in the corner of the view.
 
 ### 3D buildings
 

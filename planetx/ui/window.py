@@ -30,8 +30,8 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import (basemap, clouds, ellipsoid, lookat, stars, sun,
-                    temperature, when)
+from ..core import (basemap, cadastre, clouds, ellipsoid, lookat, stars,
+                    sun, temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
@@ -83,7 +83,7 @@ from ..core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ..core.places import (AS_QGIS, LABEL_LANGUAGES, LOCAL, DecodeError,
                            decode_places, name_languages)
 from ..core.places import Place as MarkPlace  # метка найденного места
-from ..i18n import tr, ui_language
+from ..i18n import is_russian, tr, ui_language
 from ..net.loader import TileLoader, set_moving
 from ..core import sources as datasources
 from ..net.gdalnet import executor
@@ -150,7 +150,7 @@ from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
 from .folderprops import FolderDialog
-from .tilesource import TileSourceDialog
+from .tilesource import TileSourceDialog, save_connection
 from .viewshed import ResultTiles, ViewshedDialog, display_level
 from .insolation import InsolationDialog
 from .subsurface import SubsurfaceManager, add_to_project, subsurface_ids
@@ -196,7 +196,7 @@ FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
-              "currents": ("currents",)}
+              "currents": ("currents",), "cadastre": ("cadastre",)}
 QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -204,8 +204,8 @@ OPACITY_KEY = "PlanetX/opacity/"
 OPACITY_PAUSE = 300  # мс, наложение пересобирается после ползунка
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
-    "grid", "buildings", "contours", "infra_osm", "cables", "fires",
-    "temperature")
+    "grid", "buildings", "contours", "cadastre", "infra_osm", "cables",
+    "fires", "temperature")
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
 CATALOG_WIDTH = 460
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
@@ -250,6 +250,10 @@ SKY_ATTRIBUTION = (
     ("Planets: JPL approximate elements", ""))
 XYZ_PREFIX = "connections/xyz/items/"
 BASEMAP_KEY = "PlanetX/basemap"  # имя выбранной подложки в настройках
+# Готовые подложки меню «Основа» (basemap.READY), добавленные
+# пользователем, и источники, чьё предупреждение он принял.
+READY_KEY = "PlanetX/ready_sources"
+ACCEPTED_KEY = "PlanetX/ready_accepted"
 SIDEBAR_KEY = "PlanetX/sidebar"  # видна ли левая панель окна
 CONSTELLATIONS_KEY = "PlanetX/constellations"  # линии созвездий на небе
 # Прежние запросы строки «Поиск», список строк от новых к старым.
@@ -272,14 +276,14 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "plates": False, "fires": False, "satellites": False,
                   "deposits": False, "mining": False, "osm_mines": False,
                   "plants": False, "infra_osm": False,
-                  "cables": False, "currents": False}
+                  "cables": False, "currents": False, "cadastre": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "plates", "fires", "satellites",
                 "deposits", "mining", "osm_mines", "plants", "infra_osm",
-                "cables", "currents")
+                "cables", "currents", "cadastre")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -428,8 +432,44 @@ def prepare_lights(key, rgba):
     return mip_chain(themes.overlay_rgba(rgba, 1.0))
 
 
+def cadastre_source():
+    """Кадастр Росреестра: WMS НСПД с заголовком Referer, по одному
+    запросу с паузой, core/cadastre.py."""
+    source = basemap.WmsSource(
+        tr("Кадастр Росреестра"), cadastre.URL, cadastre.MAX_LEVEL,
+        cadastre.ATTRIBUTION, headers={"Referer": cadastre.REFERER},
+        builtin=True)
+    source.parallel = 1
+    source.gap = cadastre.GAP
+    return source
+
+
+def ready_sources():
+    """Готовые подложки меню «Основа», которые пользователь добавил,
+    в порядке basemap.READY."""
+    chosen = settings_list(READY_KEY)
+    return [basemap.ready_source(key, is_russian())
+            for key in basemap.READY_KEYS if key in chosen]
+
+
+def all_sources():
+    """Подложки Земли: встроенные, добавленные готовые, подключения XYZ
+    QGIS."""
+    return basemap.builtins() + ready_sources() + xyz_sources()
+
+
+def settings_list(key):
+    """Список строк из настройки QGIS, пустой, если её нет."""
+    value = QgsSettings().value(key, [])
+    if isinstance(value, str):
+        return [value] if value else []
+    return [str(v) for v in (value or [])]
+
+
 def gibs_source(name):
     """Источник и подготовка тайла слоя GIBS по имени слоя вида."""
+    if name == "cadastre":
+        return cadastre_source(), prepare_lights
     if name == "lights":
         return (basemap.Source("NASA Black Marble", sun.LIGHTS_URL,
                                sun.LIGHTS_LEVEL, sun.LIGHTS_ATTRIBUTION,
@@ -857,7 +897,7 @@ class GlobeWindow(QWidget):
         layout.addWidget(splitter)
 
         # Первая встроенная подложка, Esri World Imagery, - по умолчанию.
-        self.sources = basemap.builtins() + xyz_sources()
+        self.sources = all_sources()
         names = [source.name for source in self.sources]
         saved = QgsSettings().value(BASEMAP_KEY, "")
         self.source = self.sources[names.index(saved)
@@ -1193,6 +1233,7 @@ class GlobeWindow(QWidget):
         self._update_relief_menu()
         self.panel.basemap_chosen.connect(self._panel_basemap)
         self.panel.add_source_requested.connect(self.add_tile_source)
+        self.panel.ready_requested.connect(self.add_ready_source)
         settings = QgsSettings()
         self.extras = {key: settings.value(EXTRA_KEY + key, default,
                                            type=bool)
@@ -1339,7 +1380,7 @@ class GlobeWindow(QWidget):
         dialog = TileSourceDialog(self, (pose.lat, pose.lon))
         if not dialog.exec():
             return
-        self.sources = basemap.builtins() + xyz_sources()
+        self.sources = all_sources()
         names = [s.name for s in self.sources]
         index = names.index(dialog.saved_name) \
             if dialog.saved_name in names else self._basemap
@@ -1350,6 +1391,57 @@ class GlobeWindow(QWidget):
         if iface is not None and hasattr(iface, "reloadConnections"):
             iface.reloadConnections()
         self._panel_basemap(index)
+
+    def add_ready_source(self, key, ask=True):
+        """Готовый источник меню «Основа» (basemap.READY) - подложкой.
+        У источника с предупреждением окно сначала спрашивает согласие,
+        принятое запоминается. ask=False - согласие уже получено
+        (предложение помощника). Истина - подложка поставлена."""
+        row = basemap.ready_entry(key)
+        if row is None:
+            return False
+        source = basemap.ready_source(key, is_russian())
+        accepted = settings_list(ACCEPTED_KEY)
+        if row[7] and key not in accepted:
+            if ask and not self._accept_terms(source.name, row[6]):
+                return False
+            QgsSettings().setValue(ACCEPTED_KEY, accepted + [key])
+        chosen = settings_list(READY_KEY)
+        if key not in chosen:
+            QgsSettings().setValue(READY_KEY, chosen + [key])
+        self.sources = all_sources()
+        names = [s.name for s in self.sources]
+        if self.properties is not None:
+            self.properties.close()
+            self.properties = None
+        self._panel_basemap(names.index(source.name))
+        return True
+
+    def remove_ready_source(self, key):
+        """Убрать готовый источник из списка подложек."""
+        QgsSettings().setValue(READY_KEY, [
+            k for k in settings_list(READY_KEY) if k != key])
+
+    def _accept_terms(self, name, terms):
+        """Окно предупреждения перед источником без разрешения на такой
+        доступ. Истина - пользователь согласился."""
+        box = QMessageBox(self)
+        box.setIcon(enum(QMessageBox, "Icon", "Warning"))
+        box.setWindowTitle(tr("Условия источника"))
+        box.setTextFormat(enum(Qt, "TextFormat", "RichText"))
+        box.setText(tr(
+            "{name} - сервис, условия которого не разрешают брать его "
+            "карты и снимки в сторонних программах по прямому адресу "
+            "тайлов. Источник добавляется по вашему решению, "
+            "ответственность за его использование несёте вы.<br><br>"
+            "Условия сервиса: {terms}",
+            name=html.escape(name),
+            terms='<a href="{0}">{0}</a>'.format(html.escape(terms))))
+        add = box.addButton(tr("Добавить"),
+                            enum(QMessageBox, "ButtonRole", "AcceptRole"))
+        box.addButton(enum(QMessageBox, "StandardButton", "Cancel"))
+        box.exec()
+        return box.clickedButton() is add
 
     def set_line_groups(self, groups):
         """Включить группы векторной основы, остальные выключить.
@@ -1437,6 +1529,8 @@ class GlobeWindow(QWidget):
             self._set_cables(on)
         elif key == "currents":
             self._set_currents(on)
+        elif key == "cadastre":
+            self._set_gibs("cadastre", on and self.planet.earth, cache=True)
         elif key == "cutaway":
             self._set_cutaway(on)
         elif key == "paleo":
@@ -2533,7 +2627,7 @@ class GlobeWindow(QWidget):
                                         self._tilejson_done)
         elif what == "basemaps":
             name = self.sources[self._basemap].name
-            self.sources = basemap.builtins() + xyz_sources()
+            self.sources = all_sources()
             names = [s.name for s in self.sources]
             if self.properties is not None:
                 self.properties.close()
@@ -3506,6 +3600,8 @@ class GlobeWindow(QWidget):
             self._place_attribution()
             return
         parts = [attribution_html(self.source)]
+        if "cadastre" in self.gibs_loaders:
+            parts.append(link_html(*cadastre.ATTRIBUTION))
         if self.planet.earth and (
                 self._applied_groups and self.ofm_layer is not None
                 or self.buildings_loader is not None):
@@ -7439,6 +7535,44 @@ class GlobeWindow(QWidget):
         return assistant_core.quakes_text(
             self.quake_events, (float(south), float(north), float(west),
                                 float(east)))
+
+    def _tool_add_basemap(self, ready="", url="", name=""):
+        """Подложка от помощника. Готовый источник - через окно
+        предупреждения, как из меню. Свой адрес пользователь
+        подтверждает окном вопроса, потом он ложится подключением XYZ
+        QGIS, как из окна «Новый источник тайлов»."""
+        ready = str(ready or "").strip()
+        if ready:
+            if basemap.ready_entry(ready) is None:
+                return tr("Нет готового источника {key}.", key=ready)
+            if self.add_ready_source(ready):
+                return tr("Подложка поставлена: {name}.",
+                          name=self.source.name)
+            return tr("Пользователь отказался от подложки.")
+        url = str(url or "").strip()
+        name = str(name or "").strip() or tr("Подложка помощника")
+        if not basemap.valid_url(url) or not url.startswith(
+                ("https://", "http://")):
+            return tr("Адрес не годится: нужен шаблон http или https "
+                      "с {z}, {x} и {y} или {q}.")
+        answer = QMessageBox.question(
+            self, tr("Подложка от помощника"),
+            tr("Помощник предлагает подложку «{name}»:\n{url}\n\nУсловия "
+               "использования сервиса проверяете вы. Добавить?",
+               name=name, url=url))
+        if answer != enum(QMessageBox, "StandardButton", "Yes"):
+            return tr("Пользователь отказался от подложки.")
+        taken = {s.name for s in self.sources}
+        if name in taken:
+            name = tr("{name} (PlanetX)", name=name)
+        save_connection(name, url, basemap.DEFAULT_MAX, "")
+        self.sources = all_sources()
+        names = [s.name for s in self.sources]
+        if iface is not None and hasattr(iface, "reloadConnections"):
+            iface.reloadConnections()
+        if name in names:
+            self._panel_basemap(names.index(name))
+        return tr("Подложка поставлена: {name}.", name=name)
 
     def _tool_add_kml(self, kml):
         # Модель оборачивает документ текстом, оградой Markdown, прологом

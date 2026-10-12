@@ -299,6 +299,9 @@ uniform vec4 u_currents_uv;
 // Горизонтали рельефа, core/contours.py.
 uniform sampler2D u_contours;
 uniform vec4 u_contours_uv;
+// Кадастр Росреестра, core/cadastre.py.
+uniform sampler2D u_cadastre;
+uniform vec4 u_cadastre_uv;
 uniform float u_swipe;
 // Шторка исторических карт (core/oldmaps.py): левее шторки u_compare - то же
 // наложение слоёв проекта с картой другого года, вместо u_overlay.
@@ -383,6 +386,7 @@ void main() {
         }
         base = lay(base, u_currents, u_currents_uv);
         base = lay(base, u_contours, u_contours_uv);
+        base = lay(base, u_cadastre, u_cadastre_uv);
         if (left && maps) {
             base = lay(base, u_compare, u_compare_uv);
         } else {

@@ -43,6 +43,7 @@ from .buildings import pick as pick_buildings
 from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, NEAR_ONLY, GibsLayer
+from .gibs import MIN_LEVELS as GIBS_MIN
 from .subsurface import ImageWalls, Subsurface
 from .flow import FlowLines
 from .quakes import DepositPoints, FirePoints, PlantPoints, Quakes
@@ -485,7 +486,7 @@ class GlobeView(QOpenGLWidget):
         self._bodies_time = None
         self._sky_press = None
         # Слои NASA GIBS: облака, температура моря и суши.
-        self.gibs = {name: GibsLayer(level)
+        self.gibs = {name: GibsLayer(level, GIBS_MIN.get(name, 0))
                      for name, level, _, _, _ in GIBS_LAYERS}
         # Шторка сравнения: доля ширины кадра от левого края или None.
         # Левее неё - слой «compare», ставит окно (ui/swipe.py).

@@ -16,7 +16,10 @@
 в список не попадают. Не попадают и подключения, адрес которых нельзя
 разобрать, и те, что не дают уровней 0-2: на них держится подстилка.
 """
+import math
 import re
+
+import numpy as np
 
 OSM_URL = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
 ESRI_URL = ("https://server.arcgisonline.com/ArcGIS/rest/services/"
@@ -77,7 +80,8 @@ class Source:
 
     __slots__ = ("name", "url", "max_level", "attribution", "headers",
                  "authcfg", "username", "password", "parallel", "builtin",
-                 "example", "missing", "urls", "mirror", "switched")
+                 "example", "missing", "urls", "mirror", "switched",
+                 "ready", "gap")
 
     def __init__(self, name, url, max_level=MAX_LEVEL, attribution=None,
                  headers=None, authcfg="", login=None, builtin=False,
@@ -97,9 +101,22 @@ class Source:
         self.urls = mirror_urls(url)
         self.mirror = 0
         self.switched = -1e9
+        # Ключ готового источника (READY) или пустая строка.
+        self.ready = ""
+        # Секунд между запросами к источнику, 0 - общий отсчёт загрузчика.
+        self.gap = 0.0
 
     def tile_url(self, z, x, y):
         return tile_url(self.urls[self.mirror], z, x, y)
+
+    def parts(self, z, x, y):
+        """Адреса частей тайла, если тайл собирается из нескольких
+        картинок источника, иначе None - один адрес tile_url."""
+        return None
+
+    def assemble(self, z, x, y, images):
+        """Тайл из картинок частей (массивы RGBA по порядку parts)."""
+        raise NotImplementedError
 
     def next_mirror(self, now):
         """Перейти на следующее зеркало после отказа сервера, не чаще
@@ -216,3 +233,152 @@ def from_settings(items):
             (credit, "") if credit else attribution_for(name, url),
             headers, str(fields.get("authcfg") or ""), login))
     return out
+
+
+# Готовые источники меню «Основа». Решение автора от 13 октября 2026
+# года - любые карты и снимки, у сервисов без разрешения на такой доступ -
+# с предупреждением. Поля: ключ, название по-русски и по-английски,
+# адрес, предельный уровень, подпись, ссылка на условия, предупреждать
+# ли, вид адреса («xyz» или «ellipsoidal» - эллиптический Меркатор
+# EPSG:3395, его тайлы пересчитываются, EllipticSource). Адреса
+# проверены тайлом у Перми 13 октября 2026 года, схема Яндекса
+# с projection=web_mercator совпала с OpenStreetMap, снимки Яндекса
+# этот параметр не принимают.
+GOOGLE_TERMS = "https://cloud.google.com/maps-platform/terms"
+BING_TERMS = "https://www.microsoft.com/en-us/maps/product/terms"
+YANDEX_TERMS = "https://yandex.ru/legal/maps_termsofuse/"
+DGIS_TERMS = "https://law.2gis.ru/"
+READY = (
+    ("google_satellite", "Google Спутник", "Google Satellite",
+     "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}", 19,
+     "© Google", GOOGLE_TERMS, True, "xyz"),
+    ("google_hybrid", "Google Гибрид", "Google Hybrid",
+     "https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}", 19,
+     "© Google", GOOGLE_TERMS, True, "xyz"),
+    ("google_map", "Google Схема", "Google Map",
+     "https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", 19,
+     "© Google", GOOGLE_TERMS, True, "xyz"),
+    ("google_terrain", "Google Рельеф", "Google Terrain",
+     "https://mt1.google.com/vt/lyrs=p&x={x}&y={y}&z={z}", 19,
+     "© Google", GOOGLE_TERMS, True, "xyz"),
+    ("bing_aerial", "Bing Спутник", "Bing Aerial",
+     "https://ecn.t1.tiles.virtualearth.net/tiles/a{q}.jpeg?g=14000", 19,
+     "© Microsoft", BING_TERMS, True, "xyz"),
+    ("bing_map", "Bing Схема", "Bing Map",
+     "https://ecn.t1.tiles.virtualearth.net/tiles/r{q}.png?g=14000"
+     "&mkt=ru-RU&shading=hill", 19, "© Microsoft", BING_TERMS, True, "xyz"),
+    ("yandex_satellite", "Яндекс Спутник", "Yandex Satellite",
+     "https://core-sat.maps.yandex.net/tiles?l=sat&x={x}&y={y}&z={z}"
+     "&lang=ru_RU", 19, "© Яндекс", YANDEX_TERMS, True, "ellipsoidal"),
+    ("yandex_map", "Яндекс Схема", "Yandex Map",
+     "https://core-renderer-tiles.maps.yandex.net/tiles?l=map&x={x}&y={y}"
+     "&z={z}&lang=ru_RU&projection=web_mercator", 19, "© Яндекс",
+     YANDEX_TERMS, True, "xyz"),
+    ("dgis_map", "2ГИС Схема", "2GIS Map",
+     "https://tile2.maps.2gis.com/tiles?x={x}&y={y}&z={z}&v=1", 18,
+     "© 2ГИС", DGIS_TERMS, True, "xyz"),
+    ("opentopomap", "OpenTopoMap", "OpenTopoMap",
+     "https://a.tile.opentopomap.org/{z}/{x}/{y}.png", 17,
+     "© OpenStreetMap contributors, SRTM, © OpenTopoMap (CC-BY-SA)",
+     "https://opentopomap.org/about", False, "xyz"),
+    ("esri_topo", "Esri World Topo Map", "Esri World Topo Map",
+     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/"
+     "MapServer/tile/{z}/{y}/{x}", 19, "Esri and the GIS User Community",
+     "https://www.esri.com/en-us/legal/terms/full-master-agreement", False,
+     "xyz"),
+)
+READY_KEYS = tuple(r[0] for r in READY)
+
+
+def ready_entry(key):
+    """Строка READY по ключу или None."""
+    for row in READY:
+        if row[0] == key:
+            return row
+    return None
+
+
+def ready_source(key, russian=True):
+    """Готовый источник по ключу. Название - на языке интерфейса."""
+    row = ready_entry(key)
+    if row is None:
+        raise KeyError(key)
+    key, ru, en, url, top, credit, terms, _, kind = row
+    cls = EllipticSource if kind == "ellipsoidal" else Source
+    source = cls(ru if russian else en, url, top, (credit, terms))
+    source.ready = key
+    return source
+
+
+# Эксцентриситет эллипсоида WGS84 - эллиптический Меркатор EPSG:3395.
+ECCENTRICITY = 0.0818191908426215
+
+
+def elliptic_rows(z, y, size=256):
+    """Строки тайла Web Mercator (z, y) в тайлах эллиптического
+    Меркатора того же уровня: (первый тайл, последний тайл, положения
+    середин строк в картинке, сложенной из тайлов первый-последний,
+    в пикселях от её верха). Столбцы у обеих проекций одни."""
+    count = 1 << z
+    v = (y + (np.arange(size) + 0.5) / size) / count
+    lat = np.arctan(np.sinh(np.pi * (1.0 - 2.0 * v)))
+    s = np.sin(lat)
+    north = np.arctanh(s) - ECCENTRICITY * np.arctanh(ECCENTRICITY * s)
+    rows = (0.5 - north / (2.0 * np.pi)) * count
+    first = int(min(max(math.floor(rows.min()), 0), count - 1))
+    last = int(min(max(math.floor(rows.max()), 0), count - 1))
+    return first, last, (rows - first) * size - 0.5
+
+
+def elliptic_tile(z, y, images, size=256):
+    """Тайл Web Mercator из картинок тайлов EPSG:3395 одного столбца,
+    сверху вниз (elliptic_rows). Строки берутся линейным смешением
+    соседних строк сложенной картинки."""
+    first, last, at = elliptic_rows(z, y, size)
+    stack = np.concatenate([np.asarray(i, dtype=np.float32)
+                            for i in images], axis=0)
+    at = np.clip(at, 0.0, stack.shape[0] - 1.0)
+    low = np.floor(at).astype(int)
+    high = np.minimum(low + 1, stack.shape[0] - 1)
+    share = (at - low)[:, None, None]
+    out = stack[low] * (1.0 - share) + stack[high] * share
+    return np.clip(out + 0.5, 0, 255).astype(np.uint8)
+
+
+class EllipticSource(Source):
+    """Источник в эллиптическом Меркаторе EPSG:3395 (снимки Яндекса):
+    тайл глобуса собирается из одного-двух тайлов источника того же
+    столбца и пересчитывается по широте. У Перми сдвиг между проекциями -
+    около 36 км, без пересчёта снимок лёг бы мимо места."""
+
+    __slots__ = ()
+
+    def parts(self, z, x, y):
+        first, last, _ = elliptic_rows(z, y)
+        return [tile_url(self.urls[self.mirror], z, x, row)
+                for row in range(first, last + 1)]
+
+    def assemble(self, z, x, y, images):
+        return elliptic_tile(z, y, images, images[0].shape[1])
+
+
+# Земной шар в метрах Web Mercator, половина ширины.
+MERCATOR_HALF = 20037508.342789244
+
+
+def tile_bbox(z, x, y):
+    """Рамка тайла в метрах EPSG:3857: запад, юг, восток, север."""
+    side = 2.0 * MERCATOR_HALF / (1 << z)
+    west = -MERCATOR_HALF + x * side
+    north = MERCATOR_HALF - y * side
+    return west, north - side, west + side, north
+
+
+class WmsSource(Source):
+    """Источник WMS: место {bbox} адреса - рамка тайла в EPSG:3857."""
+
+    __slots__ = ()
+
+    def tile_url(self, z, x, y):
+        box = ",".join("{:.2f}".format(v) for v in tile_bbox(z, x, y))
+        return self.urls[self.mirror].replace("{bbox}", box)

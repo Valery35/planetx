@@ -13834,6 +13834,145 @@ def close_without_heights():
         planets.MOON_PLANET.terrain = saved
 
 
+def _watch_loader(loader, name):
+    """Счёт пришедших и неудачных тайлов загрузчика в state[name]."""
+    seen = state[name] = {"loaded": 0, "failed": 0, "errors": []}
+    loader.loaded.connect(
+        lambda *a: seen.__setitem__("loaded", seen["loaded"] + 1))
+
+    def failed(key, text):
+        seen["failed"] += 1
+        if len(seen["errors"]) < 3:
+            seen["errors"].append("{} {}".format(key, text))
+    loader.failed.connect(failed)
+    return seen
+
+
+@check(500)
+def ready_menu():
+    """Готовые источники меню «Основа»: состав подменю, отказ
+    от предупреждения не добавляет источник, согласие добавляет
+    и запоминается, источник без предупреждения ставится сразу."""
+    from qgis.core import QgsSettings
+    from planetx.core.navigation import Pose
+    from planetx.ui import window as wmod
+    window = state["window"]
+    window.set_body("earth")
+    settings = QgsSettings()
+    state["ready_before"] = (settings.value(wmod.READY_KEY, []),
+                             settings.value(wmod.ACCEPTED_KEY, []),
+                             window.source.name)
+    settings.remove(wmod.READY_KEY)
+    settings.remove(wmod.ACCEPTED_KEY)
+    menu = window.panel.basemap_menu()
+    ready = [a.menu() for a in menu.actions() if a.menu() is not None]
+    out = result["ready"] = {
+        "submenu": [a.text() for a in ready[0].actions()] if ready else None,
+        "warned_tips": sum(1 for a in ready[0].actions() if a.toolTip()
+                           and a.toolTip() != a.text()) if ready else 0}
+    menu.deleteLater()
+    asked = []
+    window._accept_terms = lambda name, terms: asked.append(name) or False
+    out["declined"] = window.add_ready_source("yandex_satellite")
+    out["after_decline"] = [s.name for s in window.sources if s.ready]
+    window._accept_terms = lambda name, terms: asked.append(name) or True
+    out["accepted"] = window.add_ready_source("yandex_satellite")
+    out["asked"] = list(asked)
+    out["accepted_saved"] = settings.value(wmod.ACCEPTED_KEY, [])
+    # Второй раз предупреждение не спрашивается.
+    window._accept_terms = lambda name, terms: asked.append("again") or True
+    window.add_ready_source("yandex_satellite")
+    out["asked_again"] = "again" in asked
+    del window._accept_terms
+    out["source"] = window.source.name
+    nav = window.view.navigator
+    nav.stop()
+    nav.show(Pose(58.0105, 56.2294, 6000.0, 0.0, 0.0))
+    state["ready_seen"] = _watch_loader(window.loader, "ready_seen")
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def ready_wait():
+    """Снимок Яндекса пересчитан и пришёл, кадр в файл. Потом
+    OpenTopoMap - без предупреждения."""
+    window = state["window"]
+    seen = state["ready_seen"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 25.0 and (window.view.load_missing or seen["loaded"] < 20):
+        return 1000
+    out = result["ready"]
+    out["yandex"] = dict(seen, seconds=round(spent, 1),
+                         parts=len(window.loader.started))
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_ready_yandex.png"))
+    out["opentopo"] = window.add_ready_source("opentopomap")
+    out["opentopo_source"] = window.source.name
+    out["attribution"] = window.attribution.text()
+    return None
+
+
+@check(500)
+def ready_cleanup():
+    from qgis.core import QgsSettings
+    from planetx.ui import window as wmod
+    window = state["window"]
+    ready, accepted, name = state["ready_before"]
+    settings = QgsSettings()
+    for key, value in ((wmod.READY_KEY, ready),
+                       (wmod.ACCEPTED_KEY, accepted)):
+        if value:
+            settings.setValue(key, value)
+        else:
+            settings.remove(key)
+    window.sources = wmod.all_sources()
+    names = [s.name for s in window.sources]
+    window._panel_basemap(names.index(name) if name in names else 0)
+    result["ready"]["restored"] = window.source.name
+
+
+@check(500)
+def cadastre_on():
+    """Кадастр Росреестра у Перми: тайлы НСПД с Referer и сертификатом
+    Минцифры из модуля, по одному с паузой."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.show(Pose(58.0105, 56.2294, 2500.0, 0.0, 0.0))
+    window.set_extra("cadastre", True)
+    loader = window.gibs_loaders.get("cadastre")
+    result["cadastre"] = {"loader": loader is not None,
+                          "gap": loader.source.gap if loader else None}
+    if loader is not None:
+        _watch_loader(loader, "cadastre_seen")
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def cadastre_check():
+    window = state["window"]
+    seen = state.get("cadastre_seen", {"loaded": 0})
+    layer = window.view.gibs["cadastre"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 60.0 and (seen["loaded"] < 6 or layer.missing):
+        return 1000
+    loader = window.gibs_loaders.get("cadastre")
+    out = result["cadastre"]
+    out.update(dict(seen, seconds=round(spent, 1),
+                    textures=len(layer.textures),
+                    levels=sorted({k[0] for k in layer.textures}),
+                    asked=len(loader.started) if loader else 0,
+                    attribution="NSPD" in window.attribution.text(),
+                    gl_errors=dict(window.view.gl_errors)))
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_cadastre.png"))
+    window.set_extra("cadastre", False)
+    out["off"] = "cadastre" not in window.gibs_loaders
+    return None
+
+
 @check(500)
 def modis_whole_open():
     """Поиск MODIS для шага scene_whole: первый случай MODIS_CASES."""

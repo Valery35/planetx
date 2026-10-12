@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.77.0
+version=0.78.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.77.0 The images window gives a whole scene - the Whole scene,
+changelog=0.78.0 The Base map menu - Ready sources sets a base map with one
+      click: Google, Bing, Yandex, 2GIS imagery and maps, OpenTopoMap and
+      Esri World Topo Map. The terms of Google, Bing, Yandex and 2GIS do not
+      allow such access, so before the first addition the window warns about
+      it and gives a link to the terms. Yandex imagery is recomputed from
+      the elliptical Mercator and lies in its place. The Rosreestr cadastre
+      row of the Add data catalogue shows NSPD land parcels over the imagery
+      up close, for Russia only. The assistant sets a base map on request -
+      a ready one or by an address of your own, with the user's
+      confirmation.
+      0.77.0 The images window gives a whole scene - the Whole scene,
       source files item of the method list at the bottom of the window. All
       bands, the cloud mask and the metadata are downloaded as they are to a
       scene folder, a layer set of all bands goes to the project. The method

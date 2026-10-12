@@ -15,12 +15,14 @@ build(window) собирает список заново на каждый вв�
 не показываются, их не переводят - в них русские и английские названия
 и близкие слова. Состав слов - выбор помощника, утверждает автор.
 """
+from ..core import basemap
 from ..core.searchbar import Suggestion
-from ..i18n import tr
+from ..i18n import is_russian, tr
 from .nasamaps import ANY_BODY, LAYERS, RELIEF_BODY, layer_names, map_names
 
 # Строки группы «Карта» раздела «Слои»: ключ - название.
-MAP_ROWS = ("grid", "buildings", "contours", "infra_osm", "cables")
+MAP_ROWS = ("grid", "buildings", "contours", "cadastre", "infra_osm",
+            "cables")
 # Слои, которые есть вне Земли.
 ANY_PLANET = ANY_BODY + RELIEF_BODY + ("grid", "contours")
 # Другие слова слоёв и карт: ключ - слова.
@@ -52,6 +54,8 @@ WORDS = {
     "infra_osm": ("лэп", "электросети", "подстанции", "трубопроводы",
                   "газопровод", "нефтепровод", "power lines", "pipelines"),
     "cables": ("подводные кабели", "кабели", "submarine cables"),
+    "cadastre": ("кадастр", "росреестр", "нспд", "участки",
+                 "земельные участки", "пкк", "cadastre", "parcels"),
     "fires": ("пожары", "огонь", "fires", "firms"),
     "temperature": ("температура", "жара", "temperature"),
     "weather_aurora": ("сияние", "северное сияние", "аврора",
@@ -104,6 +108,13 @@ def build(window):
             window.open_gallery, ("витрина", "каталог", "gallery",
                                   "карты и слои", "nasa", "погода",
                                   "weather", "add data"))
+        # Готовые подложки меню «Основа»: у сервисов без разрешения
+        # окно сначала предупреждает (GlobeWindow.add_ready_source).
+        for key, ru, en, *_ in basemap.READY:
+            add("basemap:" + key, ru if is_russian() else en,
+                tr("подложкой"),
+                lambda key=key: window.add_ready_source(key),
+                (ru.lower(), en.lower(), tr("подложка"), "basemap"))
     _tools(window, add, earth)
     _menus(window, add)
     return items, run

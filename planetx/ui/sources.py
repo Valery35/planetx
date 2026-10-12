@@ -20,8 +20,8 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QPushButton, QTreeWidget, QTreeWidgetItem,
                                  QVBoxLayout)
 
-from ..core import (basemap, crust, dem, fires, paleo, planets, quakes,
-                    routing, slabs, sources, sun)
+from ..core import (basemap, cadastre, crust, dem, fires, paleo, planets,
+                    quakes, routing, slabs, sources, sun)
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
@@ -100,6 +100,11 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
              "https://github.com/fraxen/tectonicplates", None),
             ("PALEOMAP PaleoDEM", tr("Палеогеография"), paleo.ATTRIBUTION[1],
              sources.tile_probe(paleo.TILE_URL.replace("{age}", "0")))]),
+        # НСПД без проверки: ей нужны заголовок Referer и сертификат
+        # Минцифры, а на частые запросы она отвечает отказом.
+        (tr("Росреестр"), [
+            (tr("НСПД Росреестра"), tr("Кадастр - земельные участки"),
+             cadastre.ATTRIBUTION[1], None)]),
     )
 
 
@@ -287,10 +292,15 @@ class SourcesDialog(QDialog):
                          "full-master-agreement")
             elif source.url == basemap.OSM_URL:
                 terms = "https://operations.osmfoundation.org/policies/tiles/"
+            elif source.ready:
+                what = tr("Готовый источник меню «Основа»")
             elif not source.builtin:
                 what = tr("Подключение XYZ Tiles QGIS")
-            item = self._row(base, source.name, what, terms,
-                             sources.tile_probe(source.url))
+            # У готовых источников бывают {q} и пересчёт тайлов, проба -
+            # адрес тайла самого источника.
+            probe = source.tile_url(1, 1, 0) if source.ready \
+                else sources.tile_probe(source.url)
+            item = self._row(base, source.name, what, terms, probe)
             item.setData(NAME, SOURCE_ROLE, index)
         terrain, encoding = self.window._terrain_choice()
         router = sources.router(QgsSettings().value(sources.ROUTER_KEY, ""))
@@ -328,7 +338,7 @@ class SourcesDialog(QDialog):
     def _current(self, item, previous):
         source = self._selected_source()
         user = source is not None and not source.builtin
-        self.edit.setEnabled(user)
+        self.edit.setEnabled(user and not source.ready)
         self.remove.setEnabled(user)
 
     # Проверка.
@@ -447,11 +457,19 @@ class SourcesDialog(QDialog):
         source = self._selected_source()
         if source is None or source.builtin:
             return
-        answer = QMessageBox.question(
-            self, tr("Удалить подложку"),
-            tr("Удалить подключение «{name}» из QGIS?", name=source.name))
+        if source.ready:
+            question = tr("Убрать «{name}» из списка подложек? Вернуть его "
+                          "можно меню «Основа» - «Готовые источники».",
+                          name=source.name)
+        else:
+            question = tr("Удалить подключение «{name}» из QGIS?",
+                          name=source.name)
+        answer = QMessageBox.question(self, tr("Удалить подложку"), question)
         if answer != enum(QMessageBox, "StandardButton", "Yes"):
             return
-        remove_connection(source.name)
+        if source.ready:
+            self.window.remove_ready_source(source.ready)
+        else:
+            remove_connection(source.name)
         self.changed.emit("basemaps")
         self.rebuild()

@@ -22,19 +22,20 @@
 из core/tile_queue.py.
 """
 import base64
+import os
 import time
 from collections import OrderedDict
 
 import numpy as np
 from qgis.core import (QgsApplication, QgsAuthCertUtils,
                        QgsNetworkAccessManager)
-from qgis.PyQt.QtCore import (QObject, QRunnable, Qt, QThreadPool, QTimer,
-                              QUrl, pyqtSignal)
+from qgis.PyQt.QtCore import (QByteArray, QObject, QRunnable, Qt,
+                              QThreadPool, QTimer, QUrl, pyqtSignal)
 from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtNetwork import (QNetworkAccessManager, QNetworkReply,
-                                 QNetworkRequest)
+                                 QNetworkRequest, QSsl, QSslCertificate)
 
-from ..core import basemap, sources
+from ..core import basemap, cadastre, sources
 from ..core.placeholder import (MAX_FILL_DEPTH, ancestor, crop_window,
                                 is_placeholder)
 from ..core.tile_queue import TileQueue
@@ -107,16 +108,45 @@ class _Manager(QgsNetworkAccessManager):
 
 def _trusted_cas(request):
     """Сертификаты центров, которым доверяет QGIS, - как в
-    QgsNetworkAccessManager::createRequest."""
+    QgsNetworkAccessManager::createRequest. К запросам на свои узлы
+    (HOST_CAS) добавляются вложенные в модуль сертификаты, только
+    к ним и только в запросах PlanetX."""
     if request.url().scheme().lower() != "https":
         return
-    auth = QgsApplication.authManager()
-    if auth is None or auth.isDisabled():
-        return
     config = request.sslConfiguration()
-    config.setCaCertificates(QgsAuthCertUtils.casMerge(
-        auth.trustedCaCertsCache(), config.caCertificates()))
+    cas = list(config.caCertificates())
+    auth = QgsApplication.authManager()
+    if auth is not None and not auth.isDisabled():
+        cas = QgsAuthCertUtils.casMerge(auth.trustedCaCertsCache(), cas)
+    host = request.url().host().lower()
+    for suffix, name in HOST_CAS.items():
+        if host == suffix or host.endswith("." + suffix):
+            cas = list(cas) + _bundled_ca(name)
+    config.setCaCertificates(cas)
     request.setSslConfiguration(config)
+
+
+# Узел - файл сертификата в planetx/data. Корневой сертификат
+# Минцифры для НСПД Росреестра, core/cadastre.py. Решение автора от
+# 13 октября 2026 года - сертификат в модуле, в систему и в QGIS он
+# не ставится.
+HOST_CAS = {cadastre.HOST: cadastre.CA_FILE}
+_bundled = {}
+
+
+def _bundled_ca(name):
+    """Сертификаты из файла PEM модуля, читаются один раз."""
+    if name not in _bundled:
+        path = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "data", name)
+        try:
+            with open(path, "rb") as fh:
+                data = fh.read()
+        except OSError:
+            data = b""
+        _bundled[name] = list(QSslCertificate.fromData(
+            QByteArray(data), enum(QSsl, "EncodingFormat", "Pem")))
+    return _bundled[name]
 
 
 def _ssl_errors(reply, errors):
@@ -202,7 +232,7 @@ class _DecodeTask(QRunnable):
     """
 
     def __init__(self, key, data, sink, prepare, size, decode=None,
-                 fill=False, crop=None):
+                 fill=False, crop=None, assemble=None):
         super().__init__()
         self.key = key
         self.data = data
@@ -212,11 +242,20 @@ class _DecodeTask(QRunnable):
         self.decode = decode
         self.fill = fill  # узнавать заглушку вместо снимка
         self.crop = crop  # окно в картинке предка
+        # Тайл из частей (Source.parts): data - список байтов частей,
+        # assemble(картинки) собирает из них тайл.
+        self.assemble = assemble
 
     def run(self):
         with np.errstate(all="ignore"):
             extra = None
-            if self.decode is not None:
+            if self.assemble is not None:
+                images = [decode_png(d) for d in self.data]
+                rgba = None if any(i is None for i in images) \
+                    else self.assemble(images)
+                if rgba is not None and self.prepare is not None:
+                    extra = self.prepare(self.key, rgba)
+            elif self.decode is not None:
                 # Не картинка: ответ разбирает decode(key, байты).
                 rgba = self.decode(self.key, self.data)
             else:
@@ -226,6 +265,22 @@ class _DecodeTask(QRunnable):
                 elif rgba is not None and self.prepare is not None:
                     extra = self.prepare(self.key, rgba)
         self.sink.done.emit(self.key, rgba, extra)
+
+
+class _Parts:
+    """Запросы частей одного тайла (Source.parts) и пришедшие байты."""
+
+    def __init__(self, count):
+        self.replies = []  # ждущие ответа, пришедшие отсюда убираются
+        self.data = [None] * count
+
+    def cancel(self):
+        """Снять ждущие запросы частей, сигналы по ним не приходят."""
+        for reply in self.replies:
+            reply.finished.disconnect()
+            reply.abort()
+            reply.deleteLater()
+        self.replies = []
 
 
 class Throttle:
@@ -344,7 +399,9 @@ class TileLoader(QObject):
                 del self.orphans[parent]
         for key in self.queue.retain(keys):
             reply = self.replies.pop(key, None)
-            if reply is not None:
+            if isinstance(reply, _Parts):
+                reply.cancel()
+            elif reply is not None:
                 reply.finished.disconnect()
                 reply.abort()
                 reply.deleteLater()
@@ -389,6 +446,11 @@ class TileLoader(QObject):
         пачкой и не съедают кадр.
         """
         wait = Throttle.wait(self.last_start)
+        if self.source.gap:
+            # Своя пауза источника: служба кадастра отвечает отказом
+            # на частые запросы подряд, core/cadastre.py.
+            wait = max(wait, self.last_start + self.source.gap
+                       - time.monotonic())
         if wait > 0.0:
             if self.queue.waiting and not self.pump_timer.isActive():
                 self.pump_timer.start(int(wait * 1000) + 1)
@@ -397,21 +459,34 @@ class TileLoader(QObject):
         if key is None:
             return
         z, x, y = key
-        request = self._request(z, x, y)
-        reply = network().get(request)
+        parts = self.source.parts(z, x, y)
+        if parts:
+            group = _Parts(len(parts))
+            for n, url in enumerate(parts):
+                reply = network().get(self._request_url(url))
+                group.replies.append(reply)
+                reply.finished.connect(
+                    lambda key=key, group=group, n=n, reply=reply:
+                    self._part(key, group, n, reply))
+            self.replies[key] = group
+        else:
+            reply = network().get(self._request(z, x, y))
+            self.replies[key] = reply
+            reply.finished.connect(
+                lambda key=key, reply=reply: self._finished(key, reply))
         self.last_start = time.monotonic()
         Throttle.started()
-        self.replies[key] = reply
-        reply.finished.connect(
-            lambda key=key, reply=reply: self._finished(key, reply))
         self.started.append(key)
         self.max_seen = max(self.max_seen, len(self.replies))
         if self.queue.waiting and not self.pump_timer.isActive():
             self.pump_timer.start(int(Throttle.gap() * 1000) + 1)
 
     def _request(self, z, x, y):
+        return self._request_url(self.source.tile_url(z, x, y))
+
+    def _request_url(self, url):
         source = self.source
-        request = QNetworkRequest(QUrl(source.tile_url(z, x, y)))
+        request = QNetworkRequest(QUrl(url))
         request.setAttribute(MARK, True)
         request.setAttribute(REDIRECT, SAFE_REDIRECT)
         if self.cache:
@@ -470,6 +545,36 @@ class TileLoader(QObject):
         reply.deleteLater()
         # Ответ сам запускает следующий запрос, общий отсчёт в _pump
         # держит паузу. Одному таймеру загрузку не доверить, см. _later.
+        self._pump()
+        self._check_idle()
+
+    def _part(self, key, group, n, reply):
+        """Пришла часть тайла из нескольких картинок (Source.parts).
+        Тайл раскодируется, когда пришли все части. Отказ любой части -
+        отказ тайла, вырезки из предка у таких источников нет."""
+        if reply in group.replies:
+            group.replies.remove(reply)
+        if self.replies.get(key) is not group:
+            reply.deleteLater()
+            return
+        if reply.error() != NO_ERROR:
+            self.replies.pop(key, None)
+            group.cancel()
+            self.queue.done(key, ok=False, now=time.monotonic())
+            self.failed.emit(key, reply.errorString())
+            reply.deleteLater()
+        else:
+            group.data[n] = bytes(reply.readAll())
+            reply.deleteLater()
+            if all(d is not None for d in group.data):
+                self.replies.pop(key, None)
+                self.queue.done(key, ok=True)
+                self.decoding[key] = True
+                z, x, y = key
+                self.pool.start(_DecodeTask(
+                    key, list(group.data), self.sink, self.prepare,
+                    self.size, assemble=lambda images, s=self.source,
+                    z=z, x=x, y=y: s.assemble(z, x, y, images)))
         self._pump()
         self._check_idle()
 
