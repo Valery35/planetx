@@ -78,6 +78,9 @@ THEMES = (
     Theme("weather_precipitation", "weather", WEATHER, "", 6, None),
     Theme("weather_wind", "weather", WEATHER, "", 6, None),
     Theme("weather_clouds", "weather", WEATHER, "", 6, None),
+    # Полярное сияние NOAA SWPC (core/aurora.py) - тем же путём, что
+    # поля GFS.
+    Theme("weather_aurora", "weather", WEATHER, "", 6, None),
     Theme("smoke", "fire", "OMPS_Aerosol_Index", "png", 6,
           "OMPS_Aerosol_Index"),
     Theme("aerosol", "fire", "MODIS_Combined_Value_Added_AOD", "png", 6,

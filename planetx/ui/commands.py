@@ -54,6 +54,8 @@ WORDS = {
     "cables": ("подводные кабели", "кабели", "submarine cables"),
     "fires": ("пожары", "огонь", "fires", "firms"),
     "temperature": ("температура", "жара", "temperature"),
+    "weather_aurora": ("сияние", "северное сияние", "аврора",
+                       "aurora", "northern lights", "ovation"),
 }
 # Карты витрины - ещё слово «карта».
 MAP_WORDS = ("карта", "map", "nasa")

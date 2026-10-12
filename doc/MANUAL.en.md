@@ -326,6 +326,11 @@ bodies have no heights. The accuracy is limited by the height pixel.
 It is about 5 m at the equator on the most detailed level on the Earth,
 2.6 km on Mars, 1.3 km on the Moon.
 
+Slope and contours are drawn no farther than three distances from the
+camera to the look-at point. In a view tilted to the horizon the far
+terrain stays without them. So the computation does not hold the view
+on hundreds of far tiles.
+
 The Contours layer of the Map category of the catalogue draws lines of equal height on the
 surface, as on
 a topographic map. The contour interval depends on the zoom. It is
@@ -482,6 +487,15 @@ temperature at 2 m, Precipitation in mm/h, Wind at 10 m in m/s
 and Clouds in percent. The fields come from the NOAA GFS forecast
 model with a 0.25° grid, about 28 km. A field is chosen in the
 catalogue, as a NASA theme.
+
+The Aurora map shows the probability of a visible aurora in percent by
+the OVATION forecast of the NOAA Space Weather Prediction Center for
+the next 30-90 minutes, 1° grid. Below 3 % the field is transparent,
+a weak aurora is green, a strong one yellow and red. There is one
+forecast, for now, the time slider does not change it. The map asks
+for a new forecast at most once in 10 minutes. City lights on the
+night side come with the Sun layer, they can be on together with the
+aurora.
 
 White streaks run over the Wind colouring - particles that float with
 the wind and drag a trail. A streak of a weak wind is paler. The streaks

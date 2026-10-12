@@ -167,7 +167,8 @@ from .nasamaps import (ANY_BODY, LAYERS as GALLERY_LAYERS,
                        RELIEF_BODY, NasaMaps, layer_names, map_names)
 from . import export as layer_export
 from .weather import (LEVEL as WEATHER_LEVEL, value_text,
-                      WeatherManager, units_text as weather_units)
+                      WeatherManager, field_attribution,
+                      field_valid_text, units_text as weather_units)
 from .satellites import SatelliteManager
 from ..core import satellites as satellites_core
 from .track import (TrackDialog, TrackManager, date_range, layer_span,
@@ -1666,10 +1667,11 @@ class GlobeWindow(QWidget):
                 bands += [grid.vectors.u, grid.vectors.v]
             count = layer_export.write_grid(path, bands, grid.west,
                                             grid.north, grid.step, box)
-            stamp = weather_core.valid_text(grid.run, grid.hour)
+            stamp = field_valid_text(field, grid)
             if count is None or layer_export.add_raster(
                     path, "{} {}".format(title, stamp),
-                    [(v, c) for v, c in field.ramp], "NOAA GFS") is None:
+                    [(v, c) for v, c in field.ramp],
+                    field_attribution(self.theme_key)[0]) is None:
                 return None
             return count
         if key == "map":
@@ -3516,7 +3518,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*clouds.ATTRIBUTION))
         if "theme" in self.gibs_loaders:
             parts.append(link_html(*(
-                weather_core.ATTRIBUTION if themes.is_weather(self.theme_key)
+                field_attribution(self.theme_key)
+                if themes.is_weather(self.theme_key)
                 else themes.ATTRIBUTION)))
         if "lights" in self.gibs_loaders:
             parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
@@ -5000,7 +5003,7 @@ class GlobeWindow(QWidget):
         scale = dict(weather_core.legend(field), units=units)
         self.theme_legend.set_theme(tr(
             "{name}, {units} · {time} UTC", name=name, units=units,
-            time=weather_core.valid_text(grid.run, grid.hour)), scale)
+            time=field_valid_text(field, grid)), scale)
         self.theme_legend.show()
         self._place_attribution()
         self._show_attribution()

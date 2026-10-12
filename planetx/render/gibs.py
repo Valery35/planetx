@@ -56,6 +56,8 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # 13, над темой и под горизонталями.
           ("currents", flow.FILL_LEVEL, 13, "u_currents", "u_currents_uv"),
           ("clouds", clouds.MAX_LEVEL, 2, "u_clouds", "u_clouds_uv"))
+# Слои, которые считаются только вблизи глаза (core/lod.near_keys).
+NEAR_ONLY = ("slope", "contours")
 
 
 class GibsLayer:
@@ -96,13 +98,17 @@ class GibsLayer:
             self.textures[key] = pool.acquire(levels)
             self.used[key] = frame
 
-    def items(self, draw, clear, frame):
+    def items(self, draw, clear, frame, near=None):
         """Пары (текстура, окно) для тайлов draw. Заодно просит
-        недостающие картинки у загрузчика."""
+        недостающие картинки у загрузчика. Тайлы вне набора near
+        остаются без слоя и не просятся."""
         out = []
         wanted = {}
         ready = self.textures.__contains__
         for key in draw:
+            if near is not None and key not in near:
+                out.append((clear, gpu.NO_OVERLAY))
+                continue
             own = source_key(key, self.max_level)
             found = window(key, ready, max_depth=key[0])
             if found is None:

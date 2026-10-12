@@ -1457,12 +1457,29 @@ EN = {
     "Солнце и ночная сторона, звёзды, облака и искусственные спутники.":
         "The sun and the night side, stars, clouds and artificial "
         "satellites.",
-    "Температура, осадки, ветер и облачность по модели NOAA GFS и "
-    "температура поверхности по NASA. Прогноз - до 16 суток вперёд, момент "
-    "задаёт шкала времени.":
-        "Temperature, precipitation, wind and clouds of the NOAA GFS model "
-        "and surface temperature from NASA. The forecast goes up to 16 days "
-        "ahead, the time slider sets the moment.",
+    "Температура, осадки, ветер и облачность по модели NOAA GFS, "
+    "температура поверхности по NASA и полярное сияние по NOAA SWPC. "
+    "Прогноз GFS - до 16 суток вперёд, момент задаёт шкала времени.":
+        "Temperature, precipitation, wind and clouds of the NOAA GFS model, "
+        "surface temperature from NASA and the aurora from NOAA SWPC. The "
+        "GFS forecast goes up to 16 days ahead, the time slider sets the "
+        "moment.",
+    "прогноз NOAA SWPC":
+        "NOAA SWPC forecast",
+    "Полярное сияние":
+        "Aurora",
+    "Вероятность видимого полярного сияния по модели OVATION службы NOAA "
+    "SWPC на ближайшие 30-90 минут, сетка 1°. Прогноз один - на сейчас, "
+    "шкала времени его не меняет. Огни городов на ночной стороне даёт "
+    "строка «Солнце».":
+        "The probability of a visible aurora by the OVATION model of NOAA "
+        "SWPC for the next 30-90 minutes, 1° grid. There is one forecast, "
+        "for now, the time slider does not change it. City lights on the "
+        "night side come with the Sun row.",
+    "Прогноз сияния не получен: {error}":
+        "The aurora forecast was not received: {error}",
+    "файл не прочитан":
+        "the file was not read",
     "Очаги пожаров, дым, аэрозоль и угарный газ пожаров и промышленности по "
     "данным NASA.":
         "Fire spots, smoke, aerosol and carbon monoxide of fires and "
