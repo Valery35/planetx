@@ -9183,7 +9183,7 @@ def landsat_build():
     from qgis.PyQt.QtCore import Qt
     window = state["window"]
     dialog = window.sentinel_dialog
-    want = ("natural", "ndvi", "lst")
+    want = ("natural", "ndvi", "lst", "all_bands")
     for n in range(dialog.products.count()):
         item = dialog.products.item(n)
         item.setCheckState(Qt.CheckState.Checked
@@ -9235,6 +9235,12 @@ def landsat_built():
                               round(float(finite.max()), 2)]
                     if finite.size else None}
         ds = None
+        if name.endswith("_all_bands.tif"):
+            out["all_bands"] = _all_bands_info(os.path.join(folder, name))
+    out["all_bands_style"] = [
+        (l.renderer().redBand(), l.renderer().greenBand(),
+         l.renderer().blueBand()) for l in layers
+        if l.renderer().type() == "multibandcolor" and l.bandCount() > 4]
     dialog.grab().save(os.path.join(TEMP, "planetx_landsat_dialog.png"))
     if group is not None:
         QgsProject.instance().removeMapLayers(group.findLayerIds())
@@ -9476,12 +9482,31 @@ def landsat_rebuilt():
     return None
 
 
+def _all_bands_info(path):
+    """Файл «Все каналы»: каналы с подписями и медианами, размер."""
+    from osgeo import gdal
+    import numpy as np
+    ds = gdal.Open(path)
+    out = {"size": [ds.RasterXSize, ds.RasterYSize],
+           "res": ds.GetGeoTransform()[1], "bands": []}
+    for n in range(1, ds.RasterCount + 1):
+        band = ds.GetRasterBand(n)
+        a = band.ReadAsArray()
+        finite = a[np.isfinite(a)]
+        out["bands"].append([band.GetDescription(),
+                             round(float(np.median(finite)), 3)
+                             if finite.size else None])
+    ds = None
+    out["mb"] = round(os.path.getsize(path) / 1e6, 1)
+    return out
+
+
 @check(500)
 def sentinel_build():
     from qgis.PyQt.QtCore import Qt
     window = state["window"]
     dialog = window.sentinel_dialog
-    want = ("natural", "infrared", "ndvi", "ndmi")
+    want = ("natural", "infrared", "ndvi", "ndmi", "all_bands")
     for n in range(dialog.products.count()):
         item = dialog.products.item(n)
         item.setCheckState(Qt.CheckState.Checked
@@ -9531,6 +9556,13 @@ def sentinel_built():
             out["natural_median"] = [round(float(np.nanmedian(b)), 3)
                                      for b in a]
             ds = None
+        if name.endswith("_all_bands.tif"):
+            out["all_bands"] = _all_bands_info(
+                os.path.join(state["s2_folder"], name))
+    out["all_bands_style"] = [
+        (l.renderer().redBand(), l.renderer().greenBand(),
+         l.renderer().blueBand()) for l in layers
+        if l.renderer().type() == "multibandcolor" and l.bandCount() > 4]
     dialog.grab().save(os.path.join(TEMP, "planetx_sentinel_dialog.png"))
     return None
 

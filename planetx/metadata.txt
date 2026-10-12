@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.72.0
+version=0.73.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.72.0 Early Landsat images of 1972-1993. The Early Landsat images
+changelog=0.73.0 The All scene bands line of the images window puts into the
+      QGIS project one file with all bands of the image in the order of
+      their numbers. Sentinel-2 gives 12 bands at 10 m, Landsat 8-9 gives 8,
+      Landsat 4-7 gives 7, the thermal band is in kelvins. The bands are
+      named, the layer shows natural colours, another combination is chosen
+      in the layer properties.
+      0.72.0 Early Landsat images of 1972-1993. The Early Landsat images
       1972-1993 here… item of the globe menu opens the images window on the
       MSS scanner images of Landsat 1-5, 60 m per pixel. The Search line
       finds the same action by the words MSS, early images, old images. Near

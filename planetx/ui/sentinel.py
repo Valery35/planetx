@@ -62,6 +62,8 @@ SIDE_DEFAULT = 3.0  # км, сторона участка точки
 SCENE_CLOUD_DEFAULT = 80  # %, облачность сцены в поиске
 AREA_CLOUD_DEFAULT = 10  # %, облачность над участком в списке
 DEFAULT_PRODUCTS = ("natural", "infrared", "ndvi")
+# Продукты из всех каналов одним файлом.
+MULTI = ("all_bands", "mss_bands")
 # Растяжение сочетания ссылкой без скачивания - отражение по каналам.
 LINK_RANGE = {"natural": (0.0, 0.25)}
 LINK_RANGE_OTHER = (0.0, 0.45)
@@ -99,7 +101,8 @@ def titles(mission="sentinel2"):
              "snow_cover": tr("Снег, % пикселя"),
              "snow_extent": tr("Снег и лёд за 8 суток"),
              "burn_date": tr("Гари, день года"),
-             "mss_bands": tr("Все четыре канала MSS")}
+             "mss_bands": tr("Все четыре канала MSS"),
+             "all_bands": tr("Все каналы сцены")}
     if mission in s2.LANDSATS:
         names = {k: v.split(" (")[0] for k, v in names.items()}
     return names
@@ -335,9 +338,11 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
     if scene.mission == "mss":
         scene = s2.toa(scene, read_json(_href(scene, "mtl.json", sas)))
     xy = s2.ring_utm(ring, scene.epsg)
-    res = s2.step_for(xy, scene.mission)
+    res = s2.step_for(xy, scene.mission, products)
     box = s2.bounds(xy, res)
-    keys = s2.needed(products, scene.mission, fill)
+    # Береговой канал есть у Landsat 8-9, у 4-7 его нет.
+    keys = [k for k in s2.needed(products, scene.mission, fill)
+            if k in scene.assets or k not in s2.OPTIONAL_BANDS]
     if scene.mission == "mss":
         # Всплески одного канала видны только рядом с остальными.
         keys = keys + [k for k in s2.MSS_BANDS if k not in keys]
@@ -381,8 +386,10 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
     for name in products:
         values = s2.product(name, bands, scene.mission)
         path = free_path(folder, s2.file_name(scene, name), ".tif")
-        _write(gdal, path, values, box, res, scene.epsg)
-        if name in s2.COMPOSITES or name == "mss_bands":
+        labels = [s2.band_label(scene, k) for k in s2.all_keys(scene)] \
+            if name in MULTI else None
+        _write(gdal, path, values, box, res, scene.epsg, labels)
+        if name in s2.COMPOSITES or name in MULTI:
             ranges = [s2.stretch(band) for band in values]
         elif name == "lst":
             ranges = [s2.TEMPERATURE[0]]
@@ -407,9 +414,10 @@ def _build_modis(gdal, scene, raw, inside, products, folder, box, res):
     return out
 
 
-def _write(gdal, path, values, box, res, epsg):
+def _write(gdal, path, values, box, res, epsg, labels=None):
     """Массив (каналы, строки, столбцы) или (строки, столбцы) float32
-    в GeoTIFF с рамкой box и шагом res, нет данных - NaN."""
+    в GeoTIFF с рамкой box и шагом res, нет данных - NaN. labels -
+    подписи каналов, их показывают свойства слоя QGIS."""
     from osgeo import osr
     values = values if values.ndim == 3 else values[None]
     driver = gdal.GetDriverByName("GTiff")
@@ -424,6 +432,8 @@ def _write(gdal, path, values, box, res, epsg):
     for n, band in enumerate(values, start=1):
         target = ds.GetRasterBand(n)
         target.SetNoDataValue(float("nan"))
+        if labels and n <= len(labels):
+            target.SetDescription(labels[n - 1])
         target.WriteArray(band)
     ds.FlushCache()
     ds = None
@@ -731,6 +741,14 @@ class SentinelDialog(QDialog):
                     "излучательную способность поверхности по ASTER GED "
                     "и атмосферу. Модуль только переводит кельвины "
                     "в градусы Цельсия."))
+            elif key == "all_bands":
+                item.setToolTip(tr(
+                    "Все каналы сцены одним файлом по порядку номеров, "
+                    "отражение, тепловой канал Landsat - в кельвинах. "
+                    "У Sentinel-2 12 каналов на шаге 10 м, участок со "
+                    "стороной больше 20 км - на шаге 20 м. Слой показывает "
+                    "естественные цвета, подписи каналов видны в свойствах "
+                    "слоя QGIS."))
             elif key == "mss_bands":
                 item.setToolTip(tr(
                     "Зелёный, красный и два ближних инфракрасных канала "
@@ -1165,11 +1183,13 @@ class SentinelDialog(QDialog):
                 continue
             if product in s2.COMPOSITES:
                 style_composite(layer, ranges)
-            elif product == "mss_bands":
-                # Четыре канала в файле, показ - ложные цвета: ближний
-                # ИК 0.8, красный, зелёный.
-                style_composite(layer, [ranges[2], ranges[1], ranges[0]],
-                                bands=(3, 2, 1))
+            elif product in MULTI:
+                # Все каналы в файле, показ - естественные цвета, у MSS -
+                # ложные (ближний ИК 0.8, красный, зелёный).
+                order = s2.all_keys(s)
+                shown = [order.index(k) for k in s2.ALL_SHOWN[s.mission]]
+                style_composite(layer, [ranges[i] for i in shown],
+                                bands=tuple(i + 1 for i in shown))
             else:
                 style_index(layer, product)
             metadata = layer.metadata()

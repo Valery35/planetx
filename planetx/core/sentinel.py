@@ -166,6 +166,29 @@ INDICES = {
 }
 PRODUCTS = tuple(COMPOSITES) + tuple(INDICES)
 LANDSAT_PRODUCTS = PRODUCTS + ("lst",)
+# «Все каналы» - просьба автора от 12 октября 2026 года: один файл со
+# всеми каналами сцены по порядку номеров. У Sentinel-2 L2A 12 каналов
+# (B10 в продукте нет), у Landsat 8-9 - 8 с береговым coastal, у 4-7 -
+# 7, тепловой канал в кельвинах. Береговой берётся, если он есть
+# у сцены (all_keys).
+ALL_BANDS = {
+    "sentinel2": ("coastal", "blue", "green", "red", "rededge1",
+                  "rededge2", "rededge3", "nir", "nir08", "nir09",
+                  "swir16", "swir22"),
+    "landsat": ("coastal", "blue", "green", "red", "nir08", "swir16",
+                "swir22", "lwir"),
+    "mss": MSS_BANDS,
+}
+OPTIONAL_BANDS = ("coastal",)
+# Каналы естественных или ложных (MSS) цветов слоя «Все каналы».
+ALL_SHOWN = {"sentinel2": ("red", "green", "blue"),
+             "landsat": ("red", "green", "blue"),
+             "mss": ("nir08", "red", "green")}
+# У Sentinel-2 «Все каналы» - 12 каналов на 10 м, сторона участка до
+# ALL_PIXELS пикселей, это 20 км, дальше шаг 20 м: 2000 × 2000 × 12
+# каналов float32 - 190 МБ. Выбор помощника, утверждает автор.
+ALL_PIXELS = 2000
+BAND_FILE = re.compile(r"_?(B\d+A?)\.TIF$", re.IGNORECASE)
 
 
 def products_of(mission):
@@ -175,7 +198,28 @@ def products_of(mission):
         return modis.products_of(mission)
     if mission == "mss":
         return MSS_PRODUCTS
-    return LANDSAT_PRODUCTS if mission == "landsat" else PRODUCTS
+    if mission == "landsat":
+        return LANDSAT_PRODUCTS + ("all_bands",)
+    return PRODUCTS + ("all_bands",)
+
+
+def all_keys(scene):
+    """Каналы файла «Все каналы» сцены по порядку номеров."""
+    keys = ALL_BANDS.get(scene.mission, ())
+    return [k for k in keys
+            if k in scene.assets or k not in OPTIONAL_BANDS]
+
+
+def band_label(scene, key):
+    """Подпись канала в файле: номер из имени файла и ключ каталога,
+    «B8A nir08», у теплового - с единицей «B10 lwir, K»."""
+    asset = scene.assets.get(key)
+    found = BAND_FILE.search(asset.href) if asset is not None else None
+    number = found.group(1).upper() if found else ""
+    if number.startswith("B0"):
+        number = "B" + number[2:]
+    label = (number + " " + key).strip()
+    return label + ", K" if key == "lwir" else label
 
 
 def needs_key(mission):
@@ -642,17 +686,20 @@ def bounds(xy, res):
             math.ceil(max(xs) / res) * res, math.ceil(max(ys) / res) * res)
 
 
-def step_for(xy, mission="sentinel2"):
+def step_for(xy, mission="sentinel2", products=()):
     """Шаг выдачи: 10 м у Sentinel-2 и 30 м у Landsat, если сторона
-    участка не больше MAX_PIXELS пикселей, иначе крупнее."""
+    участка не больше MAX_PIXELS пикселей, иначе крупнее. С «Всеми
+    каналами» Sentinel-2 предел - ALL_PIXELS."""
     if modis.is_modis(mission):
         return modis.step(mission)
     steps = {"landsat": LANDSAT_STEPS, "mss": MSS_STEPS}.get(mission,
                                                               STEPS)
+    limit = ALL_PIXELS if mission == "sentinel2" \
+        and "all_bands" in products else MAX_PIXELS
     box = bounds(xy, 1.0)
     side = max(box[2] - box[0], box[3] - box[1])
     for res in steps:
-        if side / res <= MAX_PIXELS:
+        if side / res <= limit:
             return res
     return steps[-1]
 
@@ -750,6 +797,8 @@ def needed(products, mission="sentinel2", fill=False):
             bands = ("lwir",) + (FILL_BANDS if fill else ())
         elif product == "mss_bands":
             bands = MSS_BANDS
+        elif product == "all_bands":
+            bands = ALL_BANDS[mission]
         elif product in COMPOSITES:
             bands = COMPOSITES[product]
         else:
@@ -821,6 +870,9 @@ def product(name, bands, mission="sentinel2"):
         return (bands["lwir"] - np.float32(KELVIN)).astype(np.float32)
     if name == "mss_bands":
         return np.stack([bands[k] for k in MSS_BANDS])
+    if name == "all_bands":
+        return np.stack([bands[k] for k in ALL_BANDS[mission]
+                         if k in bands])
     if name in COMPOSITES:
         return np.stack([bands[band(k, mission)]
                          for k in COMPOSITES[name]])

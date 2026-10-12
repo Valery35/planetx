@@ -295,6 +295,47 @@ class TestLandsat(unittest.TestCase):
         self.assertEqual(s2.sign("https://a/b.TIF", ""), "https://a/b.TIF")
 
 
+class TestAllBands(unittest.TestCase):
+    def test_sentinel_all_bands(self):
+        keys = s2.ALL_BANDS["sentinel2"]
+        data = item()
+        files = ("B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08",
+                 "B8A", "B09", "B11", "B12")
+        for key, name in zip(keys, files):
+            data["assets"][key] = {"href": BASE + name + ".tif",
+                                   "raster:bands": [{"scale": 0.0001}]}
+        s = s2.parse_item(data)
+        self.assertIn("all_bands", s2.products_of("sentinel2"))
+        self.assertEqual(s2.all_keys(s), list(keys))
+        self.assertEqual(s2.band_label(s, "nir08"), "B8A nir08")
+        self.assertEqual(s2.band_label(s, "red"), "B4 red")
+        self.assertEqual(s2.needed(["all_bands"]), list(keys))
+        bands = {k: np.full((1, 1), n, np.float32)
+                 for n, k in enumerate(keys)}
+        stack = s2.product("all_bands", bands)
+        self.assertEqual(stack.shape, (12, 1, 1))
+        self.assertEqual(float(stack[8, 0, 0]), 8.0)
+        # 30 км на 10 м - 3000 пикселей: с «Всеми каналами» шаг 20 м.
+        side = [(0, 0), (30000, 30000)]
+        self.assertEqual(s2.step_for(side), 10.0)
+        self.assertEqual(s2.step_for(side, products=("all_bands",)), 20.0)
+
+    def test_landsat_without_coastal(self):
+        data = landsat_item("landsat-5", "lwir")
+        for key, value in data["assets"].items():
+            if key in ("blue", "red"):
+                value["href"] = LANDSAT + "SR_B{}.TIF".format(
+                    1 if key == "blue" else 3)
+        data["assets"]["lwir"]["href"] = LANDSAT + "ST_B6.TIF"
+        s = s2.parse_item(data)
+        self.assertEqual(s2.all_keys(s), ["blue", "green", "red", "nir08",
+                                          "swir16", "swir22", "lwir"])
+        self.assertEqual(s2.band_label(s, "lwir"), "B6 lwir, K")
+        self.assertEqual(s2.band_label(s, "red"), "B3 red")
+        self.assertIn("all_bands", s2.products_of("landsat"))
+        self.assertNotIn("all_bands", s2.products_of("mss"))
+
+
 MSS = ("https://landsateuwest.blob.core.windows.net/landsat-c2/level-1/"
        "standard/mss/1973/181/019/LM01_L1TP_181019_19730606_20200909_02_T2/"
        "LM01_L1TP_181019_19730606_20200909_02_T2_")

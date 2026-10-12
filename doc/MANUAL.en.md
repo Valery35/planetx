@@ -1195,6 +1195,19 @@ The checkboxes of the product list choose what goes to the project:
 | NDMI - vegetation moisture | (B8A - B11) / (B8A + B11) | moisture in foliage |
 | NBR - burned areas | (B8 - B12) / (B8 + B12) | burns lower, the difference of two dates gives burn severity |
 | NDSI - snow | (B3 - B11) / (B3 + B11) | snow and ice above 0.4 |
+| All scene bands | B1-B12 and B8A | 12 bands in one file for own computations |
+
+All scene bands is one GeoTIFF with all bands in the order of their
+numbers, each band in the file carries a name like "B8A nir08", it is
+seen in the QGIS layer properties. For Sentinel-2 these are the 12
+bands of the L2A product (band B10 is not in it), the 20 and 60 m
+bands are resampled to a 10 m step. Landsat 8-9 has 8 bands, Landsat
+4-7 has 7, the thermal band in the file is the surface temperature in
+kelvins. The layer shows natural colours, another combination is chosen
+in the layer properties without a new download. The file is large -
+for Sentinel-2 an area of 3 km takes about 1.5 MB, 20 km about 190 MB,
+so an area with a side over 20 km goes at a 20 m step with All scene
+bands.
 
 The list at the bottom of the window chooses the method:
 

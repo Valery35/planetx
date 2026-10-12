@@ -50,6 +50,16 @@ EN = {
     "Landsat 1-5 MSS - 60 м, 1972-1993 годы":
         "Landsat 1-5 MSS - 60 m, 1972-1993",
     "Все четыре канала MSS": "All four MSS bands",
+    "Все каналы сцены": "All scene bands",
+    "Все каналы сцены одним файлом по порядку номеров, отражение, тепловой "
+    "канал Landsat - в кельвинах. У Sentinel-2 12 каналов на шаге 10 м, "
+    "участок со стороной больше 20 км - на шаге 20 м. Слой показывает "
+    "естественные цвета, подписи каналов видны в свойствах слоя QGIS.":
+        "All bands of the scene in one file in the order of their numbers, "
+        "reflectance, the Landsat thermal band in kelvins. Sentinel-2 has "
+        "12 bands at a 10 m step, an area with a side over 20 km gets a "
+        "20 m step. The layer shows natural colours, the band names are "
+        "seen in the QGIS layer properties.",
     "Ранние снимки Landsat 1972-1993 здесь…":
         "Early Landsat images 1972-1993 here…",
     "Ранние снимки Landsat 1972-1993 здесь":
