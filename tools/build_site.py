@@ -86,10 +86,12 @@ RU = {
                 "через сетевые настройки и кэш QGIS.",
     "idea.c1.h": "Космоснимки и рельеф",
     "idea.c1.p": "По умолчанию подложка - Esri World Imagery как пример. "
-                 "Её можно сменить на OpenStreetMap или на любое "
-                 "подключение XYZ Tiles из обозревателя QGIS. Рельеф "
-                 "Mapzen Terrain Tiles с отмывкой склонов, вертикальный "
-                 "масштаб настраивается.",
+                 "Её можно сменить на OpenStreetMap, OpenTopoMap, готовые "
+                 "снимки и карты Google, Bing, Яндекса и 2ГИС или любое "
+                 "подключение XYZ Tiles. Условия Google, Bing, Яндекса "
+                 "и 2ГИС такой доступ не разрешают, перед добавлением "
+                 "окно предупреждает об этом. Рельеф Mapzen Terrain Tiles "
+                 "с отмывкой склонов, вертикальный масштаб настраивается.",
     "idea.c2.h": "Точность от космоса до метров",
     "idea.c2.p": "В видеокарту попадают только смещения от центра тайла "
                  "и от глаза. На уровне улиц ошибка положения точки "
@@ -101,7 +103,8 @@ RU = {
                   "свет», «Недра» и «Анализ рельефа». Векторная основа "
                   "OpenFreeMap - границы, дороги, реки и названия - ложится "
                   "по рельефу. Там же координатная сетка, звёзды, облака "
-                  "NASA, солнце и спутники. Флажки срабатывают сразу.",
+                  "NASA, солнце, спутники и земельные участки кадастра "
+                  "Росреестра. Флажки срабатывают сразу.",
     "layers.fig": "Евразия с высоты 9000 км. Названия стран и городов, "
                   "границы стран жёлтые, границы областей тонкие белые.",
     "layers.c1.h": "Ровные подписи",
@@ -300,7 +303,9 @@ RU = {
                    "участка вокруг точки. Окно ищет сцены за выбранные даты, "
                    "считает облачность над самим участком и показывает "
                    "превью. Сочетания каналов и индексы ложатся в проект QGIS "
-                   "слоями GeoTIFF со шкалой.",
+                   "слоями GeoTIFF со шкалой. Сцена целиком скачивается "
+                   "исходными файлами всех каналов и ложится одним "
+                   "слоем-набором.",
     "imagery.c1.h": "Sentinel-2 и Landsat",
     "imagery.c1.p": "Sentinel-2 с 2015 года, 10 м. Landsat 4-9 с 1982 года, "
                     "30 м, с температурой поверхности. Естественные и ложные "
@@ -377,10 +382,13 @@ EN = {
                 "through the QGIS network settings and cache.",
     "idea.c1.h": "Satellite imagery and terrain",
     "idea.c1.p": "The default base map is Esri World Imagery as an "
-                 "example. It can be switched to OpenStreetMap or to any "
-                 "XYZ Tiles connection from the QGIS browser. Mapzen "
-                 "Terrain Tiles with hill shading, vertical exaggeration "
-                 "is adjustable.",
+                 "example. It can be switched to OpenStreetMap, "
+                 "OpenTopoMap, ready Google, Bing, Yandex and 2GIS imagery "
+                 "and maps or any XYZ Tiles connection. The terms of "
+                 "Google, Bing, Yandex and 2GIS do not allow such access, "
+                 "the window warns about it before adding. Mapzen Terrain "
+                 "Tiles with hill shading, vertical exaggeration is "
+                 "adjustable.",
     "idea.c2.h": "Precision from space to metres",
     "idea.c2.p": "Only offsets from the tile centre and from the eye "
                  "reach the graphics card. At street level the on-screen "
@@ -392,8 +400,9 @@ EN = {
                   "light, Inside the Earth and Terrain analysis. The "
                   "OpenFreeMap vector base - borders, roads, rivers and names "
                   "- follows the terrain. The same section holds the "
-                  "coordinate grid, stars, NASA clouds, the sun and "
-                  "satellites. Check boxes take effect at once.",
+                  "coordinate grid, stars, NASA clouds, the sun, satellites "
+                  "and the Rosreestr cadastre land parcels. Check boxes take "
+                  "effect at once.",
     "layers.fig": "Eurasia from 9000 km. Names of countries and cities, "
                   "country borders in yellow, region borders thin and "
                   "white.",
@@ -595,7 +604,9 @@ EN = {
                    "an area around the point. The window finds scenes for the "
                    "chosen dates, computes the cloud cover over the area "
                    "itself and shows a preview. Band combinations and indices "
-                   "go to the QGIS project as GeoTIFF layers with a scale.",
+                   "go to the QGIS project as GeoTIFF layers with a scale. "
+                   "A whole scene is downloaded as the source files of all "
+                   "bands and goes in as one layer set.",
     "imagery.c1.h": "Sentinel-2 and Landsat",
     "imagery.c1.p": "Sentinel-2 since 2015, 10 m. Landsat 4-9 since 1982, 30 "
                     "m, with surface temperature. Natural and false colours, "
