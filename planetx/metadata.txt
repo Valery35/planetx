@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.70.0
+version=0.71.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -93,7 +93,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.70.0 The Aurora map in the Weather group of the catalogue
+changelog=0.71.0 Share View… in the Scene icon menu writes an HTML page
+      with the globe. It opens in a browser without QGIS and shows the
+      camera of the view, terrain, the OpenStreetMap base, the selected
+      placemarks and a tour. The assistant turns on catalogue layers and
+      maps, opens windows and tools, demos and bodies and changes the
+      opacity of a shown layer.
+      0.70.0 The Aurora map in the Weather group of the catalogue
       shows the probability of a visible aurora by the NOAA forecast for
       the next half hour to an hour and a half. Slope and contours are
       drawn only on the near terrain, no farther than three distances from
