@@ -1125,6 +1125,7 @@ class GlobeWindow(QWidget):
         self.panel.grid_ids = set(read_grids())
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
+        self.toolbar.share_requested.connect(self.share_view)
         self.toolbar.demo_requested.connect(self.open_demo)
         self.tour.message.connect(
             lambda text: setattr(self, "message", (text, time.monotonic())))
@@ -4672,6 +4673,16 @@ class GlobeWindow(QWidget):
                         time.monotonic())
         self._show_state()
         return True
+
+    def share_view(self, path=None, show=True):
+        """Страница HTML вида, ui/share.py."""
+        from .share import share_view
+        path = share_view(self, path, show)
+        if path:
+            self.message = (tr("Страница записана: {path}", path=path),
+                            time.monotonic())
+            self._show_state()
+        return path
 
     def open_demo(self, name="perm"):
         """Демо из папки модуля, tools/make_demo.py: perm, bocachica,

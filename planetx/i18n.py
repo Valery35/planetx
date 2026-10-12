@@ -3365,6 +3365,24 @@ EN = {
         "and the selected My Places folder with its tour. It saves to a "
         "file and opens on another computer.",
     "Сохранить сцену…": "Save Scene…",
+    "Поделиться видом…": "Share View…",
+    "Поделиться видом": "Share view",
+    "Страница HTML с глобусом, она открывается в браузере без QGIS. "
+    "На ней камера этого вида, рельеф, основа OpenStreetMap "
+    "и выделенные в «Моих метках» метки с облётом.":
+        "An HTML page with the globe that opens in a browser without "
+        "QGIS. It holds the camera of this view, the terrain, the "
+        "OpenStreetMap base and the placemarks selected in My Places "
+        "with a tour.",
+    "Исходный вид": "Initial view",
+    "▶ Облёт": "▶ Tour",
+    "⏹ Остановить": "⏹ Stop",
+    "Страница строится только для Земли. Вернитесь на Землю "
+    "и повторите.":
+        "The page is built for the Earth only. Return to the Earth and "
+        "try again.",
+    "Страница HTML (*.html)": "HTML page (*.html)",
+    "Страница записана: {path}": "Page written: {path}",
     "Открыть сцену…": "Open Scene…",
     "Сохранить сцену": "Save Scene",
     "Открыть сцену": "Open Scene",

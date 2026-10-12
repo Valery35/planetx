@@ -2113,6 +2113,35 @@ globe. The places of the scene come in as a new folder, and the camera
 flies to the scene pose. The status line lists the layers that were not
 found and did not open.
 
+### Share view
+
+The Share View… item of the Scene icon menu writes an HTML page. It
+opens in a browser without QGIS and PlanetX, it can be sent as a file
+or published on a site. After writing the page opens in the system
+browser.
+
+The page holds:
+
+- the globe with the camera of this view - the look-at point,
+  distance, heading and tilt.
+- the OpenStreetMap base in the OpenFreeMap style and Terrarium
+  terrain with the terrain exaggeration of the view. Without terrain on
+  the globe the page has no terrain either.
+- the placemarks, paths and polygons selected in My Places, with
+  their colours and labels. A click on a placemark shows its name and
+  description.
+- the Initial view button and the ▶ Tour button. The tour is the
+  recorded tour from the selection. Without it the camera flies to the
+  views of the placemarks in turn, to a point without its own view -
+  from above at 3 km with a tilt of 45°.
+
+The Esri base map, QGIS project layers, overlay pictures, placemark
+times and rows of the Layers section do not go to the page. The camera
+tilt on the page is not more than 85°. The page is built for the Earth
+only. The globe of the page is drawn by the MapLibre GL JS library,
+the browser loads it from unpkg.com, the tiles from the OpenFreeMap and
+Amazon servers. Without internet access the page is empty.
+
 
 ### Demo
 

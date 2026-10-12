@@ -2056,6 +2056,49 @@ def scene_password():
                                 == "a.gpkg"}
 
 
+@check(500)
+def share_page():
+    # «Поделиться видом»: страница HTML с камерой вида и выделенной
+    # папкой «Моих меток». Браузер не открывается.
+    import re
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(58.0, 56.25, 12000.0, 20.0, 50.0))
+    folder = window.myplaces.add_folder("Проба страницы")
+    window.myplaces.add(Shape("line", [(58.0, 56.2), (58.01, 56.25)],
+                              name="Путь страницы"), folder=folder)
+    window.myplaces.add(Shape("point", [(58.0105, 56.2386)],
+                              name="Эспланада"), folder=folder)
+    path = os.path.join(TEMP, "planetx_share.html")
+    keys = window.panel.list.selected_keys
+    window.panel.list.selected_keys = lambda: [folder]
+    try:
+        written = window.share_view(path, show=False)
+    finally:
+        window.panel.list.selected_keys = keys
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    found = re.search(r'<script id="planetx-data" type="application/json">'
+                      r'(.*?)</script>', text, re.S)
+    data = json.loads(found.group(1)) if found else {}
+    pose = window.view.navigator.pose
+    result["share_page"] = {
+        "written": written == path,
+        "camera": data.get("camera"),
+        "pose": [round(pose.lat, 3), round(pose.lon, 3),
+                 round(pose.distance), round(pose.heading, 1),
+                 round(pose.tilt, 1)],
+        "names": [f["properties"]["name"] for f in
+                  data.get("places", {}).get("features", [])],
+        "stops": len((data.get("tour") or {}).get("stops", [])),
+        "relief": data.get("relief"), "fov": data.get("fov"),
+        "esri": "arcgis" in text.lower(),
+        "message": window.status.text()}
+    window.myplaces.remove(folder)
+
+
 RECORD_DIRS = [os.path.join(TEMP, "planetx_record_a"),
                os.path.join(TEMP, "planetx_record_b")]
 RECORD_LIMIT = 600.0  # с на одну запись
