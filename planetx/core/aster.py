@@ -42,11 +42,26 @@ Ninomiya 2003): каолинит и алунит (4 + 6) / 5 - поглощен�
 Модуль Qt не знает.
 """
 import math
+from urllib.parse import urlencode
 
 import numpy as np
 
 COLLECTION = "aster-l1t"
 MISSION = "aster"
+# ASTER после 2006 года - просьба автора того же дня («добавь давай
+# тоже»), вопрос Надежды «после 6 он не весь поломался». Каналы VNIR
+# и TIR снимают и сейчас, SWIR отказали в 2008 году. Открытой копии
+# нет: каталог NASA CMR (AST_L1T версии 004) отвечает без входа, файлы
+# в хранилище LP DAAC lp-prod-protected - по ключу Earthdata каждого
+# пользователя. Файл канала - отдельный COG «…_VNIR_B01.tif». Без
+# ключа хранилище отвечает переадресацией 303 на страницу входа,
+# проверено 12 октября 2026 года.
+NASA_MISSION = "aster_nasa"
+NASA_SEARCH = "https://cmr.earthdata.nasa.gov/search/granules.umm_json"
+NASA_COLLECTION = "C3306888411-LPCLOUD"
+NASA_FIRST = "2007-01-01"
+NASA_PAGE = 200  # сцен в ответе каталога
+LOGIN_HOST = "urs.earthdata.nasa.gov"
 FIRST_DAY = "2000-03-04"
 LAST_DAY = "2006-12-31"
 STEPS = (15.0, 30.0, 90.0)
@@ -97,11 +112,97 @@ RAMP = ((0.0, (43, 131, 186)), (0.25, (171, 221, 164)),
 
 
 def is_aster(mission):
-    return mission == MISSION
+    """ASTER открытой копии 2000-2006 или NASA после 2006 года."""
+    return mission in (MISSION, NASA_MISSION)
 
 
-def needed(products):
-    """Каналы для продуктов по порядку номеров."""
+def has(key, assets):
+    """Канал есть у сцены: файл канала (NASA) или файл группы каналов
+    (Planetary Computer)."""
+    return key in assets or BANDS[key][0] in assets
+
+
+def file_suffix(key):
+    """Окончание имени файла канала NASA: «VNIR_B03N», «TIR_B10»."""
+    name = key[1:].upper()
+    number = name.rstrip("N")
+    return "{}_B{:02d}{}".format(BANDS[key][0], int(number),
+                                 name[len(number):])
+
+
+def cmr_url(ring, start, end, max_cloud, page_size=NASA_PAGE):
+    """Адрес поиска сцен NASA CMR: рамка кольца (широта, долгота), дни
+    «ГГГГ-ММ-ДД», облачность сцены, новые первыми."""
+    lats = [p[0] for p in ring]
+    lons = [p[1] for p in ring]
+    query = [("collection_concept_id", NASA_COLLECTION),
+             ("bounding_box", "{:.6f},{:.6f},{:.6f},{:.6f}".format(
+                 min(lons), min(lats), max(lons), max(lats))),
+             ("temporal", "{}T00:00:00Z,{}T23:59:59Z".format(start, end)),
+             ("cloud_cover", "0,{:g}".format(float(max_cloud))),
+             ("sort_key", "-start_date"),
+             ("page_size", str(int(page_size)))]
+    return NASA_SEARCH + "?" + urlencode(query)
+
+
+def _number(text):
+    """Число из поля каталога или None."""
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def parse_cmr(data):
+    """Сцены ответа CMR: словари id, when, cloud, epsg, sun, preview,
+    files {канал: адрес}. Ночные сцены (солнце ниже горизонта, только
+    тепловые каналы) отброшены."""
+    out = []
+    for item in (data or {}).get("items") or []:
+        umm = item.get("umm") or {}
+        attrs = {a.get("Name"): (a.get("Values") or [None])[0]
+                 for a in umm.get("AdditionalAttributes") or []}
+        sun = _number(attrs.get("SolarElevationAngle"))
+        zone = _number(attrs.get("UTMZone"))
+        if sun is None or zone is None or sun <= 0.0:
+            continue
+        zone = int(zone)
+        files = {}
+        preview = ""
+        for link in umm.get("RelatedUrls") or []:
+            url = str(link.get("URL") or "")
+            if not url.startswith("https://"):
+                continue
+            if link.get("Type") == "GET RELATED VISUALIZATION":
+                preview = url
+                continue
+            if link.get("Type") != "GET DATA":
+                continue
+            for key in BANDS:
+                if url.endswith("_" + file_suffix(key) + ".tif"):
+                    files[key] = url
+        if "b1" not in files:
+            continue
+        lats = []
+        geometry = ((umm.get("SpatialExtent") or {})
+                    .get("HorizontalSpatialDomain") or {}).get("Geometry")
+        for polygon in (geometry or {}).get("GPolygons") or []:
+            for point in (polygon.get("Boundary") or {}).get("Points") or []:
+                lats.append(float(point.get("Latitude", 0.0)))
+        north = (sum(lats) / len(lats)) >= 0.0 if lats else True
+        when = (umm.get("TemporalExtent") or {}).get("SingleDateTime") or ""
+        cloud = umm.get("CloudCover")
+        out.append({"id": str(umm.get("GranuleUR") or ""),
+                    "when": str(when).replace("T", " ")[:16],
+                    "cloud": float(cloud) if cloud is not None else 100.0,
+                    "epsg": (32600 if north else 32700) + zone,
+                    "sun": sun, "preview": preview, "files": files})
+    return out
+
+
+def needed(products, assets=None):
+    """Каналы для продуктов по порядку номеров. С assets - только
+    каналы сцены: «Все каналы» у сцены без SWIR - 8 каналов."""
     keys = set()
     for name in products:
         if name in COMPOSITES:
@@ -118,7 +219,8 @@ def needed(products):
             keys.update(("b10", "b11", "b12"))
         elif name == "all_bands":
             keys.update(ORDER)
-    return [k for k in ORDER if k in keys]
+    return [k for k in ORDER if k in keys
+            and (assets is None or has(k, assets))]
 
 
 def files_of(keys):
@@ -132,7 +234,8 @@ def files_of(keys):
 def available(products, assets):
     """Продукты, файлы которых есть у сцены, - у части сцен нет SWIR."""
     return [p for p in products
-            if all(BANDS[k][0] in assets for k in needed([p]))]
+            if (p == "all_bands" and has("b1", assets))
+            or all(has(k, assets) for k in needed([p]))]
 
 
 def sun_distance(day_of_year):

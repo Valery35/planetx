@@ -78,6 +78,8 @@ CLOUD_ASSET = {"sentinel2": ("scl", 20.0), "landsat": ("qa_pixel", 30.0),
 LANDSATS = ("landsat", "mss")
 SEARCHES[aster.MISSION] = LANDSAT_SEARCH
 COLLECTIONS[aster.MISSION] = aster.COLLECTION
+SEARCHES[aster.NASA_MISSION] = aster.NASA_SEARCH
+COLLECTIONS[aster.NASA_MISSION] = aster.NASA_COLLECTION
 # У ASTER L1T маски облаков нет: доля данных - по каналу 1 (core/aster).
 CLOUD_ASSET[aster.MISSION] = ("VNIR", 90.0)
 for _key in modis.MISSIONS:
@@ -189,7 +191,8 @@ OPTIONAL_BANDS = ("coastal",)
 ALL_SHOWN = {"sentinel2": ("red", "green", "blue"),
              "landsat": ("red", "green", "blue"),
              "mss": ("nir08", "red", "green"),
-             "aster": ("b3n", "b2", "b1")}
+             "aster": ("b3n", "b2", "b1"),
+             "aster_nasa": ("b3n", "b2", "b1")}
 # У Sentinel-2 «Все каналы» - 12 каналов на 10 м, сторона участка до
 # ALL_PIXELS пикселей, это 20 км, дальше шаг 20 м: 2000 × 2000 × 12
 # каналов float32 - 190 МБ. Выбор помощника, утверждает автор.
@@ -214,8 +217,7 @@ def products_of(mission):
 def all_keys(scene):
     """Каналы файла «Все каналы» сцены по порядку номеров."""
     if aster.is_aster(scene.mission):
-        return [k for k in aster.ORDER
-                if aster.BANDS[k][0] in scene.assets]
+        return [k for k in aster.ORDER if aster.has(k, scene.assets)]
     keys = ALL_BANDS.get(scene.mission, ())
     return [k for k in keys
             if k in scene.assets or k not in OPTIONAL_BANDS]
@@ -238,7 +240,7 @@ def band_label(scene, key):
 def needs_key(mission):
     """Файлы спутника читаются по ключу SAS Planetary Computer."""
     return mission in LANDSATS or modis.is_modis(mission) \
-        or aster.is_aster(mission)
+        or mission == aster.MISSION
 
 
 def sas_url(mission, href=None):
@@ -623,6 +625,21 @@ def _aster_item(feature, props):
                  aster.MISSION)
 
 
+def cmr_scenes(data):
+    """Сцены ASTER NASA из ответа CMR (core.aster.parse_cmr): каналы -
+    отдельные файлы под ключами каналов, тайл - «ASTER» или «ASTER
+    VNIR TIR» без коротковолновых."""
+    out = []
+    for item in aster.parse_cmr(data):
+        assets = {k: Asset(h, 1.0, 0.0, 0, None)
+                  for k, h in item["files"].items()}
+        tile = "ASTER" if "b4" in assets else "ASTER VNIR TIR"
+        out.append(Scene(item["id"], item["when"], item["cloud"], tile,
+                         item["epsg"], item["sun"], item["preview"], assets,
+                         aster.NASA_MISSION))
+    return out
+
+
 def _modis_item(feature, props, mission):
     """Сцена MODIS: день или начало периода, спутник и тайл, каналы -
     кортежи адресов (merge_tiles сводит тайлы одного дня)."""
@@ -733,9 +750,10 @@ def step_for(xy, mission="sentinel2", products=()):
     if modis.is_modis(mission):
         return modis.step(mission)
     steps = {"landsat": LANDSAT_STEPS, "mss": MSS_STEPS,
-             aster.MISSION: aster.STEPS}.get(mission, STEPS)
-    limit = ALL_PIXELS if mission in ("sentinel2", aster.MISSION) \
-        and "all_bands" in products else MAX_PIXELS
+             aster.MISSION: aster.STEPS,
+             aster.NASA_MISSION: aster.STEPS}.get(mission, STEPS)
+    limit = ALL_PIXELS if (mission == "sentinel2" or aster.is_aster(
+        mission)) and "all_bands" in products else MAX_PIXELS
     box = bounds(xy, 1.0)
     side = max(box[2] - box[0], box[3] - box[1])
     for res in steps:

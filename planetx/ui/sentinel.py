@@ -30,13 +30,15 @@ import time
 import numpy as np
 from qgis.core import (Qgis, QgsColorRampShader, QgsContrastEnhancement,
                        QgsMultiBandColorRenderer, QgsProject, QgsRasterLayer,
-                       QgsRasterShader, QgsSingleBandPseudoColorRenderer)
+                       QgsRasterShader, QgsSettings,
+                       QgsSingleBandPseudoColorRenderer)
 from qgis.PyQt.QtCore import QDate, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QImage, QPixmap
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog,
                                  QDialogButtonBox, QDoubleSpinBox,
                                  QFileDialog, QGridLayout, QHBoxLayout,
-                                 QLabel, QListWidget, QListWidgetItem,
+                                 QInputDialog, QLabel, QLineEdit,
+                                 QListWidget, QListWidgetItem,
                                  QPushButton, QSpinBox, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout)
 
@@ -46,7 +48,7 @@ from ..i18n import tr
 from ..net.gdalnet import close_connections as _close_connections
 from ..net.gdalnet import executor
 from ..net.gdalnet import thread_gdal as _thread_gdal
-from ..net.overlay import fetch_bytes, post_json
+from ..net.overlay import fetch_bytes, post_json, resolve_redirect
 from ..qt_compat import enum
 from .inset import warm as warm_gdal
 
@@ -70,7 +72,11 @@ LINK_RANGE_OTHER = (0.0, 0.45)
 SCENE_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 GROUP = "Sentinel-2"
 GROUPS = {"sentinel2": GROUP, "landsat": "Landsat", "mss": "Landsat",
-          "aster": "ASTER"}
+          "aster": "ASTER", "aster_nasa": "ASTER"}
+# Ключ Earthdata пользователя для файлов ASTER NASA после 2006 года.
+# Хранится в настройках QGIS открытым текстом, как ключ помощника
+# с флажком «без мастер-пароля»; ключ NASA живёт 60 дней.
+EARTHDATA_KEY = "PlanetX/earthdata/token"
 # Даты поиска MSS, если прежние позже конца съёмки MSS: лето 1975
 # года, Landsat 2. Выбор помощника, утверждает автор.
 MSS_DATES = ("1975-05-01", "1975-09-30")
@@ -116,7 +122,8 @@ def titles(mission="sentinel2"):
     return names
 
 
-MISSIONS = ("sentinel2", "landsat", "mss", "aster") + tuple(modis.MISSIONS)
+MISSIONS = ("sentinel2", "landsat", "mss", "aster", "aster_nasa") \
+    + tuple(modis.MISSIONS)
 # Годы спутников, у которых съёмка кончилась: последний день и даты
 # поиска, если прежние позже. Выбор помощника, утверждает автор.
 ERA = {"mss": (MSS_LAST, MSS_DATES),
@@ -128,6 +135,8 @@ def mission_title(mission):
             "landsat": tr("Landsat 4-9 - 30 м, с 1982 года"),
             "mss": tr("Landsat 1-5 MSS - 60 м, 1972-1993 годы"),
             "aster": tr("ASTER - 15-90 м, 14 каналов, 2000-2006 годы"),
+            "aster_nasa": tr("ASTER с 2007 года - NASA, нужен ключ "
+                             "Earthdata"),
             "modis_lst1": tr("MODIS - температура за сутки, 1 км"),
             "modis_lst8": tr("MODIS - температура за 8 суток, 1 км"),
             "modis_veg": tr("MODIS - NDVI и EVI за 16 суток, 250 м"),
@@ -141,6 +150,12 @@ def mission_credit(mission):
         return tr("MODIS Terra и Aqua версии 061 (NASA LP DAAC, снег - "
                   "NSIDC), файлы и каталог Microsoft Planetary Computer. "
                   "Слои несут подпись продукта и архива NASA.")
+    if mission == "aster_nasa":
+        return tr("ASTER L1T версии 004 (NASA LP DAAC, METI), каталог NASA "
+                  "CMR, файлы - по ключу Earthdata, его можно получить "
+                  "бесплатно на urs.earthdata.nasa.gov. После 2008 года - "
+                  "только каналы VNIR и TIR. Значения - для нормального "
+                  "усиления каналов.")
     if mission == "aster":
         return tr("ASTER L1T (NASA, METI), файлы и каталог Microsoft "
                   "Planetary Computer, съёмка 2000-2006 годов. Значения - "
@@ -280,6 +295,9 @@ def preview(scene, ring, sas=""):
         if raw is None:
             return None
         return modis.colorize(modis.value(name, raw), scale)
+    if scene.mission == aster.NASA_MISSION:
+        # Файлы NASA - по ключу, превью - открытая картинка всей сцены.
+        return _whole_picture(scene.thumbnail)
     if aster.is_aster(scene.mission):
         # Ложные цвета 3N, 2, 1 одним файлом VNIR, растяжение по снимку.
         dn = read_window(_href(scene, "VNIR", sas), box, size=size,
@@ -332,6 +350,32 @@ def preview(scene, ring, sas=""):
         out.append(np.nan_to_num(np.clip(
             values / PREVIEW_WHITE * 255.0, 0.0, 255.0)).astype(np.uint8))
     return np.stack(out)
+
+
+def _whole_picture(href):
+    """Картинка всей сцены по адресу в сети, не больше PREVIEW по
+    стороне: (3, строки, столбцы) uint8 или None. Рабочий поток."""
+    if not href:
+        return None
+    gdal = _thread_gdal()
+    gdal.PushErrorHandler("CPLQuietErrorHandler")
+    try:
+        try:
+            ds = gdal.Open("/vsicurl/" + href)
+        except RuntimeError:
+            ds = None
+        if ds is None or ds.RasterCount < 3:
+            return None
+        scale = PREVIEW / float(max(ds.RasterXSize, ds.RasterYSize))
+        width = max(int(ds.RasterXSize * scale), 1)
+        height = max(int(ds.RasterYSize * scale), 1)
+        out = np.stack([ds.GetRasterBand(n).ReadAsArray(
+            buf_xsize=width, buf_ysize=height) for n in (1, 2, 3)])
+        ds = None
+    finally:
+        gdal.PopErrorHandler()
+        _close_connections(gdal)
+    return out.astype(np.uint8)
 
 
 def free_path(folder, stem, ext):
@@ -449,12 +493,23 @@ def _build_aster(gdal, scene, ring, products, folder, sas):
     xy = s2.ring_utm(ring, scene.epsg)
     res = s2.step_for(xy, scene.mission, products)
     box = s2.bounds(xy, res)
-    groups = aster.files_of(aster.needed(products))
-    counts = {"VNIR": 3, "SWIR": 6, "TIR": 5}
-    files = list(groups)
-    raw = dict(zip(files, executor("bands", BAND_WORKERS).map(
-        lambda f: read_window(_href(scene, f, sas), box, res, nearest=True,
-                              count=counts[f]), files)))
+    keys = aster.needed(products, scene.assets)
+    if scene.mission == aster.NASA_MISSION:
+        # Файл на канал, адреса уже подписаны (SentinelDialog.
+        # _start_nasa_build), ключ не нужен.
+        groups = {k: [k] for k in keys}
+        files = keys
+        raw = dict(zip(files, executor("bands", BAND_WORKERS).map(
+            lambda k: read_window(scene.assets[k].href, box, res,
+                                  nearest=True), files)))
+        raw = {k: (None if v is None else v[None]) for k, v in raw.items()}
+    else:
+        groups = aster.files_of(keys)
+        counts = {"VNIR": 3, "SWIR": 6, "TIR": 5}
+        files = list(groups)
+        raw = dict(zip(files, executor("bands", BAND_WORKERS).map(
+            lambda f: read_window(_href(scene, f, sas), box, res,
+                                  nearest=True, count=counts[f]), files)))
     missing = [f for f, v in raw.items() if v is None]
     if missing:
         raise OSError(", ".join(missing))
@@ -464,7 +519,9 @@ def _build_aster(gdal, scene, ring, products, folder, sas):
     bands = {}
     for name, keys in groups.items():
         for key in keys:
-            dn = raw[name][aster.BANDS[key][1] - 1]
+            index = 0 if scene.mission == aster.NASA_MISSION \
+                else aster.BANDS[key][1] - 1
+            dn = raw[name][index]
             values = aster.value(dn, key, sun, day)
             values[~inside] = np.nan
             bands[key] = values
@@ -650,6 +707,7 @@ class SentinelDialog(QDialog):
         self.sas_tries = 0
         self.searched = "sentinel2"
         self.modern_dates = None  # даты поиска до перехода на MSS
+        self.signing = None  # подпись адресов файлов ASTER NASA
         self.point = None  # (широта, долгота) или None
         self.ring = None  # кольцо участка (широта, долгота)
         self.area_name = ""
@@ -927,6 +985,18 @@ class SentinelDialog(QDialog):
                 self.modern_dates = (self.start.date(), self.end.date())
             self.start.setDate(QDate.fromString(era[1][0], "yyyy-MM-dd"))
             self.end.setDate(QDate.fromString(era[1][1], "yyyy-MM-dd"))
+        elif mission == aster.NASA_MISSION and self.end.date() \
+                < QDate.fromString(aster.NASA_FIRST, "yyyy-MM-dd"):
+            # После ASTER 2000-2006 годов - прежние даты или год до
+            # сегодня: у NASA сцены с 2007 года.
+            if self.modern_dates is not None:
+                self.start.setDate(self.modern_dates[0])
+                self.end.setDate(self.modern_dates[1])
+                self.modern_dates = None
+            else:
+                today = QDate.currentDate()
+                self.start.setDate(today.addYears(-1))
+                self.end.setDate(today)
         elif not era and self.modern_dates is not None:
             self.start.setDate(self.modern_dates[0])
             self.end.setDate(self.modern_dates[1])
@@ -1071,7 +1141,39 @@ class SentinelDialog(QDialog):
             self.end.date().toString("yyyy-MM-dd"),
             self.scene_cloud.value(), mission=self.searched)
         self.status.setText(tr("Поиск сцен…"))
+        if self.searched == aster.NASA_MISSION:
+            generation = self.generation
+            self.reply = fetch_bytes(
+                aster.cmr_url(ring, self.start.date().toString("yyyy-MM-dd"),
+                              self.end.date().toString("yyyy-MM-dd"),
+                              self.scene_cloud.value()),
+                lambda data, error: self._cmr_page(data, error, generation),
+                fresh=True)
+            return
         self._ask(body, self.generation)
+
+    def _cmr_page(self, data, error, generation):
+        """Ответ каталога NASA CMR. Маски облаков у ASTER нет, файлы
+        по ключу - облачность над участком равна облачности сцены
+        и считается сразу, без чтения файлов."""
+        self.reply = None
+        if generation != self.generation:
+            return
+        try:
+            parsed = json.loads(bytes(data).decode("utf-8")) \
+                if data is not None and not error else None
+        except (ValueError, UnicodeDecodeError):
+            parsed = None
+        if parsed is None:
+            self.status.setText(tr("Каталог не ответил: {error}",
+                                   error=error or "-"))
+            return
+        self.scenes = s2.cmr_scenes(parsed)
+        for s in self.scenes:
+            self._row(s)
+            self.clouds[s.id] = (s.cloud, 100.0)
+            self._mark(s.id)
+        self._summary()
 
     def _ask(self, body, generation):
         self.reply = post_json(
@@ -1258,7 +1360,90 @@ class SentinelDialog(QDialog):
         self.add_button.setEnabled(False)
         self._with_token(lambda: self._start_build(s, products, folder))
 
+    # ASTER NASA после 2006 года: ключ Earthdata и подписанные адреса.
+
+    def earthdata_token(self, ask=True):
+        """Ключ Earthdata из настроек, при ask и пустом - окно ввода.
+        Пустая строка - ключа нет."""
+        token = str(QgsSettings().value(EARTHDATA_KEY, "") or "").strip()
+        if token or not ask:
+            return token
+        text, ok = QInputDialog.getText(
+            self, tr("Ключ NASA Earthdata"),
+            tr("Снимки ASTER после 2006 года NASA отдаёт только по ключу "
+               "Earthdata. Учётная запись бесплатная - "
+               "urs.earthdata.nasa.gov, ключ создаёт раздел «Generate "
+               "Token» профиля, он живёт 60 дней. Ключ хранится "
+               "в настройках QGIS этого компьютера.\n\nКлюч:"),
+            enum(QLineEdit, "EchoMode", "Password"))
+        token = str(text or "").strip() if ok else ""
+        if token:
+            QgsSettings().setValue(EARTHDATA_KEY, token)
+        return token
+
+    def _start_nasa_build(self, s, products, folder):
+        products = aster.available(products, s.assets)
+        if not products:
+            self.status.setText(tr(
+                "У сцены нет каналов для отмеченных продуктов - после 2008 "
+                "года у ASTER только каналы VNIR и TIR."))
+            self.add_button.setEnabled(True)
+            return
+        token = self.earthdata_token()
+        if not token:
+            self.status.setText(tr("Без ключа Earthdata файлы NASA "
+                                   "не загружаются."))
+            self.add_button.setEnabled(True)
+            return
+        keys = aster.needed(products, s.assets)
+        self.signing = {"scene": s, "keys": keys, "urls": {},
+                        "products": products, "folder": folder,
+                        "replies": []}
+        self.status.setText(tr("Адреса файлов NASA…"))
+        for key in keys:
+            self.signing["replies"].append(resolve_redirect(
+                s.assets[key].href, {"Authorization": "Bearer " + token},
+                lambda url, error, k=key, job=self.signing:
+                self._signed(job, k, url, error)))
+
+    def _signed(self, job, key, url, error):
+        """Подписанный адрес файла канала пришёл. Переадресация на
+        страницу входа - ключ не принят, он стирается из настроек."""
+        if job is not self.signing:
+            return
+        if url is None or aster.LOGIN_HOST in url:
+            self.signing = None
+            self.add_button.setEnabled(True)
+            if url is not None:
+                QgsSettings().remove(EARTHDATA_KEY)
+                self.status.setText(tr(
+                    "Ключ Earthdata не принят - устарел или неверен. "
+                    "При следующей загрузке окно спросит новый."))
+            else:
+                self.status.setText(tr("Файл NASA не получен: {error}",
+                                       error=error or "-"))
+            return
+        job["urls"][key] = url
+        if len(job["urls"]) < len(job["keys"]):
+            return
+        self.signing = None
+        s = job["scene"]
+        assets = dict(s.assets)
+        for k, href in job["urls"].items():
+            assets[k] = assets[k]._replace(href=href)
+        warm()
+        build_job = self.pool().submit(build, s._replace(assets=assets),
+                                       self.ring_used, job["products"],
+                                       job["folder"], False, "", False)
+        self.build_job = (s, build_job)
+        self.status.setText(tr("Загрузка каналов сцены {when}…",
+                               when=s.when))
+        self.timer.start()
+
     def _start_build(self, s, products, folder):
+        if s.mission == aster.NASA_MISSION:
+            self._start_nasa_build(s, products, folder)
+            return
         warm()
         if self.mode.currentData() == "link" and s.mission == "sentinel2":
             job = self.pool().submit(build_links, s, products, folder)
@@ -1346,6 +1531,10 @@ class SentinelDialog(QDialog):
     def closeEvent(self, event):
         self.timer.stop()
         self.generation += 1
+        if self.signing is not None:
+            replies, self.signing = self.signing["replies"], None
+            for reply in replies:
+                reply.abort()
         self._stop_jobs()
         self.sas_waiting = []
         if self.sas_reply is not None:

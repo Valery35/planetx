@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.74.0
+version=0.75.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.74.0 ASTER images of 2000-2006 in the images window - 14 bands,
+changelog=0.75.0 ASTER images after 2006 from the NASA archive - the ASTER
+      since 2007 line of the images window. Search and preview go without
+      sign-in, the files by a free NASA Earthdata key, the window asks for
+      it once. After 2008 ASTER has only the visible, near infrared and
+      thermal bands.
+      0.74.0 ASTER images of 2000-2006 in the images window - 14 bands,
       visible and near infrared at 15 m, shortwave infrared at 30 m, thermal
       at 90 m, without sign-in or key. ASTER mineral indices for ore
       exploration - kaolinite and alunite, sericite and muscovite,

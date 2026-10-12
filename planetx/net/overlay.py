@@ -45,8 +45,13 @@ from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
 from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, HTTP_STATUS, MARK,
-                     NO_ERROR, PREFER_CACHE, STALL,
+                     NO_ERROR, PREFER_CACHE, REDIRECT, STALL,
                      Throttle, network)
+
+MANUAL_REDIRECT = enum(QNetworkRequest, "RedirectPolicy",
+                       "ManualRedirectPolicy")
+REDIRECT_TARGET = enum(QNetworkRequest, "Attribute",
+                       "RedirectionTargetAttribute")
 
 TILE_SIZE = 256
 MAX_JOBS = 6  # отрисовок одновременно, считает QGIS в своих потоках
@@ -318,6 +323,47 @@ def fetch_bytes(url, done, prefer_cache=True, fresh=False, headers=None):
             done(bytes(reply.readAll()), "")
         reply.deleteLater()
 
+    reply.finished.connect(finished)
+    return reply
+
+
+def resolve_redirect(url, headers, done):
+    """Адрес, на который сервер переадресует запрос, без перехода по
+    нему: done(адрес или None, ошибка). Так берётся подписанный адрес
+    файла хранилища NASA LP DAAC по ключу Earthdata - GDAL читает
+    подписанный адрес уже без ключа, и ключ не уходит на S3, который
+    отвергает второй способ входа. Возвращает ответ, его нужно держать
+    до конца."""
+    request = QNetworkRequest(QUrl(url))
+    request.setAttribute(MARK, True)
+    request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
+    request.setAttribute(REDIRECT, MANUAL_REDIRECT)
+    for name, value in (headers or {}).items():
+        request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
+    # GET, а не HEAD: подпись адреса S3 годится только для метода
+    # запроса, которым её получили. Тело переадресации короткое.
+    reply = network().get(request)
+    state = {"direct": False}
+
+    def headers_arrived():
+        # Файл без переадресации не скачивается целиком: ответ 200 -
+        # адрес годен как есть, запрос снимается.
+        if reply.attribute(HTTP_STATUS) == 200 and not state["direct"]:
+            state["direct"] = True
+            reply.abort()
+
+    def finished():
+        target = reply.attribute(REDIRECT_TARGET)
+        status = reply.attribute(HTTP_STATUS)
+        if target is not None and not target.isEmpty():
+            done(reply.url().resolved(target).toString(), "")
+        elif state["direct"]:
+            done(url, "")
+        else:
+            done(None, reply.errorString() or "HTTP {}".format(status))
+        reply.deleteLater()
+
+    reply.metaDataChanged.connect(headers_arrived)
     reply.finished.connect(finished)
     return reply
 

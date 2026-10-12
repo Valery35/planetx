@@ -9179,6 +9179,230 @@ def mss_command():
 
 
 CUPRITE = (37.535, -117.205)  # Куприт, Невада - изменённые породы
+FAKE_KEY = "planetx-test-key"  # ключ поддельного хранилища NASA
+
+
+@check(500)
+def nasa_open():
+    """ASTER NASA после 2006 года у Куприта: поиск по настоящему каталогу
+    CMR без ключа, 2018-2024 годы."""
+    from qgis.PyQt.QtCore import QDate
+    window = state["window"]
+    window.set_body("earth")
+    dialog = window.sentinel_here(*CUPRITE)
+    dialog.side.setValue(10.0)
+    dialog.mission.setCurrentIndex(dialog.mission.findData("aster_nasa"))
+    dialog.start.setDate(QDate(2018, 1, 1))
+    dialog.end.setDate(QDate(2024, 12, 31))
+    dialog.search()
+    state["ls_started"] = time.monotonic()
+    result["nasa"] = {"products": [dialog.products.item(n).text()
+                                   for n in range(dialog.products.count())],
+                      "clear_enabled": dialog.clear.isEnabled()}
+
+
+@check(500)
+def nasa_wait():
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["ls_started"]
+    if (dialog.reply is not None or dialog.preview_job is not None) \
+            and spent < 120.0:
+        return 500
+    if dialog.preview.pixmap() is None and spent < 30.0 and dialog.scenes:
+        return 500
+    out = result["nasa"]
+    out["seconds"] = round(spent, 1)
+    out["scenes"] = len(dialog.scenes)
+    out["tiles"] = sorted({s.tile for s in dialog.scenes})
+    out["years"] = sorted({s.when[:4] for s in dialog.scenes})
+    shown = [dialog.list.topLevelItem(n)
+             for n in range(dialog.list.topLevelItemCount())
+             if not dialog.list.topLevelItem(n).isHidden()]
+    out["shown"] = len(shown)
+    out["first"] = [shown[0].text(c) for c in range(5)] if shown else None
+    out["status"] = dialog.status.text()
+    pixmap = dialog.preview.pixmap()
+    out["preview"] = pixmap is not None and not pixmap.isNull()
+    return None
+
+
+def _fake_nasa(folder):
+    """Поддельное хранилище NASA LP DAAC на 127.0.0.1: файлы каналов
+    у Куприта, с ключом FAKE_KEY - переадресация 307 на файл, иначе -
+    303 на страницу входа Earthdata, как у настоящего."""
+    import http.server
+    import threading
+    import numpy as np
+    from osgeo import gdal, osr
+    os.makedirs(folder, exist_ok=True)
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(32611)
+    x0, y0 = 476000.0, 4160000.0  # около Куприта, UTM 11
+    names = {}
+    for key, (group, _, _, _) in __import__(
+            "planetx.core.aster", fromlist=["BANDS"]).BANDS.items():
+        if group == "SWIR":
+            continue
+        res = 15.0 if group == "VNIR" else 90.0
+        size = int(16000 / res)
+        name = "FAKE_{}.tif".format(
+            __import__("planetx.core.aster",
+                       fromlist=["file_suffix"]).file_suffix(key))
+        ds = gdal.GetDriverByName("GTiff").Create(
+            os.path.join(folder, name), size, size, 1,
+            gdal.GDT_Byte if group == "VNIR" else gdal.GDT_UInt16)
+        ds.SetGeoTransform((x0, res, 0.0, y0, 0.0, -res))
+        ds.SetProjection(srs.ExportToWkt())
+        ramp = np.add.outer(np.arange(size), np.arange(size)) % 200 + 20
+        if group == "TIR":
+            ramp = ramp * 0 + 1300 + (ramp % 7)
+        ds.GetRasterBand(1).WriteArray(ramp)
+        ds = None
+        names[key] = name
+    requests = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return None
+
+        def do_GET(self):
+            requests.append((self.path, self.headers.get("Authorization")))
+            if self.path.startswith("/protected/"):
+                if self.headers.get("Authorization") == "Bearer " + FAKE_KEY:
+                    self.send_response(307)
+                    self.send_header("Location", "/files/" + self.path[11:]
+                                     + "?X-Amz-Signature=fake")
+                else:
+                    self.send_response(303)
+                    self.send_header(
+                        "Location", "https://urs.earthdata.nasa.gov/oauth/"
+                        "authorize?client_id=fake")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            path = os.path.join(folder, self.path.split("?")[0][7:])
+            if not os.path.isfile(path):
+                self.send_response(404)
+                self.end_headers()
+                return
+            data = open(path, "rb").read()
+            span = self.headers.get("Range")
+            if span:
+                lo, hi = span.split("=")[1].split("-")
+                lo = int(lo)
+                hi = min(int(hi) if hi else len(data) - 1, len(data) - 1)
+                self.send_response(206)
+                self.send_header("Content-Range", "bytes {}-{}/{}".format(
+                    lo, hi, len(data)))
+                part = data[lo:hi + 1]
+            else:
+                self.send_response(200)
+                part = data
+            self.send_header("Content-Length", str(len(part)))
+            self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+            self.wfile.write(part)
+
+        def do_HEAD(self):
+            path = os.path.join(folder, self.path.split("?")[0][7:])
+            self.send_response(200 if os.path.isfile(path) else 404)
+            if os.path.isfile(path):
+                self.send_header("Content-Length",
+                                 str(os.path.getsize(path)))
+                self.send_header("Accept-Ranges", "bytes")
+            self.end_headers()
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base = "http://127.0.0.1:{}/protected/".format(server.server_port)
+    return server, {k: base + n for k, n in names.items()}, requests
+
+
+@check(500)
+def nasa_wrong_key():
+    """Неверный ключ: хранилище ведёт на страницу входа, окно стирает
+    ключ и говорит об этом."""
+    from qgis.core import QgsSettings
+    from planetx.core import sentinel as s2
+    from planetx.ui import sentinel as ui
+    dialog = state["window"].sentinel_dialog
+    server, hrefs, requests = _fake_nasa(os.path.join(TEMP,
+                                                      "planetx_fake_nasa"))
+    state["fake_nasa"] = (server, hrefs, requests)
+    assets = {k: s2.Asset(h, 1.0, 0.0, 0, None) for k, h in hrefs.items()}
+    scene = s2.Scene("FAKE_NASA", "2024-10-23 17:53", 0.0, "ASTER VNIR TIR",
+                     32611, 36.0, "", assets, "aster_nasa")
+    state["fake_scene"] = scene
+    QgsSettings().setValue(ui.EARTHDATA_KEY, "wrong-key")
+    dialog._start_nasa_build(scene, ["aster_false"],
+                             os.path.join(TEMP, "planetx_nasa"))
+    state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def nasa_wrong_key_check():
+    from qgis.core import QgsSettings
+    from planetx.ui import sentinel as ui
+    dialog = state["window"].sentinel_dialog
+    if dialog.signing is not None and time.monotonic() \
+            - state["ls_build"] < 20.0:
+        return 500
+    result["nasa"]["wrong_key"] = {
+        "status": dialog.status.text(),
+        "key_removed": not QgsSettings().value(ui.EARTHDATA_KEY, ""),
+        "requests": len(state["fake_nasa"][2])}
+    return None
+
+
+@check(500)
+def nasa_build():
+    """Верный ключ: адреса подписаны, каналы прочитаны, слои в проекте."""
+    from qgis.core import QgsSettings
+    from planetx.ui import sentinel as ui
+    dialog = state["window"].sentinel_dialog
+    QgsSettings().setValue(ui.EARTHDATA_KEY, FAKE_KEY)
+    folder = os.path.join(TEMP, "planetx_nasa")
+    state["nasa_folder"] = folder
+    dialog._start_nasa_build(state["fake_scene"],
+                             ["aster_false", "aster_swir", "quartz",
+                              "all_bands"], folder)
+    state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def nasa_built():
+    from qgis.core import QgsProject, QgsSettings
+    from planetx.ui import sentinel as ui
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["ls_build"]
+    if (dialog.signing is not None or dialog.build_job is not None) \
+            and spent < 120.0:
+        return 500
+    out = result["nasa"]
+    out["build_status"] = dialog.status.text()
+    server, hrefs, requests = state["fake_nasa"]
+    auth = [r for r in requests if r[0].startswith("/protected/")]
+    files = [r for r in requests if r[0].startswith("/files/")]
+    out["signed_requests"] = len(auth)
+    out["file_requests"] = len(files)
+    out["key_sent_to_files"] = any(r[1] for r in files)
+    group = QgsProject.instance().layerTreeRoot().findGroup("ASTER")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["layers"] = [(l.name(), l.isValid(), l.bandCount()) for l in layers]
+    folder = state["nasa_folder"]
+    tifs = [n for n in sorted(os.listdir(folder)) if n.endswith(".tif")] \
+        if os.path.isdir(folder) else []
+    out["files"] = tifs
+    for name in tifs:
+        if name.endswith("_all_bands.tif"):
+            out["all_bands"] = _all_bands_info(os.path.join(folder, name))
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    QgsSettings().remove(ui.EARTHDATA_KEY)
+    server.shutdown()
+    dialog.close()
+    return None
 
 
 @check(500)

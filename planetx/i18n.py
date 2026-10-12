@@ -94,6 +94,37 @@ EN = {
         "250-1000 m. A change of the satellite starts a new search.",
     "ASTER - 15-90 м, 14 каналов, 2000-2006 годы":
         "ASTER - 15-90 m, 14 bands, 2000-2006",
+    "ASTER с 2007 года - NASA, нужен ключ Earthdata":
+        "ASTER since 2007 - NASA, an Earthdata key is needed",
+    "ASTER L1T версии 004 (NASA LP DAAC, METI), каталог NASA CMR, файлы - по "
+    "ключу Earthdata, его можно получить бесплатно на urs.earthdata.nasa.gov. "
+    "После 2008 года - только каналы VNIR и TIR. Значения - для нормального "
+    "усиления каналов.":
+        "ASTER L1T version 004 (NASA LP DAAC, METI), the NASA CMR "
+        "catalogue, the files by an Earthdata key, it is free at "
+        "urs.earthdata.nasa.gov. After 2008 only the VNIR and TIR bands. "
+        "The values are for the normal band gain.",
+    "Ключ NASA Earthdata": "NASA Earthdata key",
+    "Снимки ASTER после 2006 года NASA отдаёт только по ключу Earthdata. "
+    "Учётная запись бесплатная - urs.earthdata.nasa.gov, ключ создаёт раздел "
+    "«Generate Token» профиля, он живёт 60 дней. Ключ хранится в настройках "
+    "QGIS этого компьютера.\n\nКлюч:":
+        "NASA gives ASTER images after 2006 only by an Earthdata key. The "
+        "account is free - urs.earthdata.nasa.gov, the key is made by the "
+        "Generate Token section of the profile, it lives 60 days. The key "
+        "is kept in the QGIS settings of this computer.\n\nKey:",
+    "У сцены нет каналов для отмеченных продуктов - после 2008 года у ASTER "
+    "только каналы VNIR и TIR.":
+        "The scene has no bands for the checked products - after 2008 ASTER "
+        "has only the VNIR and TIR bands.",
+    "Без ключа Earthdata файлы NASA не загружаются.":
+        "NASA files are not loaded without an Earthdata key.",
+    "Адреса файлов NASA…": "NASA file addresses…",
+    "Ключ Earthdata не принят - устарел или неверен. При следующей загрузке "
+    "окно спросит новый.":
+        "The Earthdata key was not accepted - it expired or is wrong. The "
+        "window asks for a new one at the next load.",
+    "Файл NASA не получен: {error}": "The NASA file was not received: {error}",
     "ASTER L1T (NASA, METI), файлы и каталог Microsoft Planetary Computer, "
     "съёмка 2000-2006 годов. Значения - отражение на верху атмосферы "
     "и яркостная температура для нормального усиления каналов. Слои несут "

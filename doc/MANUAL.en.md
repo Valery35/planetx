@@ -1303,6 +1303,23 @@ shortwave bands, products from them are not built then. The layers go
 to the ASTER group with the credit "ASTER data courtesy of
 NASA/METI/AIST/Japan Spacesystems and U.S./Japan ASTER Science Team".
 
+The ASTER since 2007 - NASA, an Earthdata key is needed line gives
+ASTER images after 2006 from the NASA LP DAAC archive. The search in
+the NASA CMR catalogue goes without sign-in, the preview is the open
+picture of the whole scene. NASA gives the files only by an Earthdata
+key. The account is free - urs.earthdata.nasa.gov, the key is made by
+the Generate Token section of the profile, it lives 60 days. At the
+first load the window asks for the key and keeps it in the QGIS
+settings of this computer. If NASA does not accept the key, the window
+erases it and asks for a new one at the next load. The key goes only
+to the NASA server, the files are read by temporary addresses it
+gives. The ASTER shortwave bands failed in 2008, so these scenes have
+only the VNIR and TIR bands - false colours, iron oxides, quartz and 8
+bands in All scene bands, the tile column says ASTER VNIR TIR. The
+2026 scenes at Cuprite have no thermal bands either, then All scene
+bands holds the three VNIR bands, and quartz is not built. Night
+scenes with only thermal bands are not listed.
+
 The Early Landsat images 1972-1993 here… item of the globe menu and
 the same action of the Search line - by the words MSS, early images,
 old images - open the window right on these images.

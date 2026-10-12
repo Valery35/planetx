@@ -129,5 +129,73 @@ class TestScene(unittest.TestCase):
         self.assertEqual(body["collections"], ["aster-l1t"])
 
 
+NASA = ("https://data.lpdaac.earthdatacloud.nasa.gov/lp-prod-protected/"
+        "AST_L1T.004/AST_L1T_00410232024175356_20251007153104/"
+        "AST_L1T_00410232024175356_20251007153104_")
+
+
+def cmr_item(sun=35.99, swir=False):
+    """Сцена NASA CMR у Куприта 23 октября 2024 года, как в каталоге
+    12 октября 2026 года: только VNIR и TIR."""
+    names = ["VNIR_B01", "VNIR_B02", "VNIR_B03N", "TIR_B10", "TIR_B11",
+             "TIR_B12", "TIR_B13", "TIR_B14", "VNIR", "TIR"]
+    if swir:
+        names += ["SWIR_B0{}".format(n) for n in range(4, 10)]
+    urls = [{"Type": "GET DATA", "URL": NASA + n + ".tif"} for n in names]
+    urls.append({"Type": "GET DATA VIA DIRECT ACCESS",
+                 "URL": "s3://lp-prod-protected/x_VNIR_B01.tif"})
+    urls.append({"Type": "GET RELATED VISUALIZATION",
+                 "URL": NASA.replace("protected", "public")[:-1] + ".jpg"})
+    return {"umm": {
+        "GranuleUR": "AST_L1T_00410232024175356_20251007153104",
+        "TemporalExtent": {"SingleDateTime": "2024-10-23T17:53:56.0Z"},
+        "CloudCover": 0,
+        "SpatialExtent": {"HorizontalSpatialDomain": {"Geometry": {
+            "GPolygons": [{"Boundary": {"Points": [
+                {"Longitude": -117.29, "Latitude": 37.58},
+                {"Longitude": -116.33, "Latitude": 36.89}]}}]}}},
+        "AdditionalAttributes": [
+            {"Name": "SolarElevationAngle", "Values": [str(sun)]},
+            {"Name": "UTMZone", "Values": ["11"]}],
+        "RelatedUrls": urls}}
+
+
+class TestNasa(unittest.TestCase):
+    def test_file_suffix(self):
+        self.assertEqual(aster.file_suffix("b3n"), "VNIR_B03N")
+        self.assertEqual(aster.file_suffix("b4"), "SWIR_B04")
+        self.assertEqual(aster.file_suffix("b14"), "TIR_B14")
+
+    def test_cmr_url(self):
+        url = aster.cmr_url([(37.5, -117.3), (37.6, -117.1)], "2018-01-01",
+                            "2024-12-31", 20)
+        self.assertIn("collection_concept_id=C3306888411-LPCLOUD", url)
+        self.assertIn("bounding_box=-117.300000%2C37.500000%2C-117.100000"
+                      "%2C37.600000", url)
+        self.assertIn("cloud_cover=0%2C20", url)
+
+    def test_parse_day_scene_only(self):
+        data = {"items": [cmr_item(), cmr_item(sun=-46.6)]}
+        scenes = s2.cmr_scenes(data)
+        self.assertEqual(len(scenes), 1)
+        s = scenes[0]
+        self.assertEqual(s.mission, "aster_nasa")
+        self.assertEqual(s.epsg, 32611)
+        self.assertEqual(s.when, "2024-10-23 17:53")
+        self.assertEqual(s.tile, "ASTER VNIR TIR")
+        self.assertEqual(sorted(s.assets), sorted(
+            ["b1", "b2", "b3n", "b10", "b11", "b12", "b13", "b14"]))
+        self.assertTrue(s.assets["b3n"].href.endswith("_VNIR_B03N.tif"))
+        self.assertTrue(s.thumbnail.endswith(".jpg"))
+        self.assertFalse(s2.needs_key("aster_nasa"))
+        # Без SWIR остаются ложные цвета, железо, кварц, все каналы.
+        self.assertEqual(aster.available(aster.PRODUCTS, s.assets),
+                         ["aster_false", "ferric", "quartz", "all_bands"])
+        self.assertEqual(len(s2.all_keys(s)), 8)
+        full = s2.cmr_scenes({"items": [cmr_item(swir=True)]})[0]
+        self.assertEqual(full.tile, "ASTER")
+        self.assertEqual(len(s2.all_keys(full)), 14)
+
+
 if __name__ == "__main__":
     unittest.main()
