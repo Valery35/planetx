@@ -1221,7 +1221,20 @@ The list at the bottom of the window chooses the method:
   within 4000 pixels.
 - Whole scene by link, no download writes a VRT file, links to the
   scene bands on the network. Only band combinations go by link,
-  indices go by clipping to the area.
+  indices go by clipping to the area. The method exists only for
+  Sentinel-2.
+- Whole scene, source files writes the scene files as they are, in
+  the source values and resolution, to a scene folder inside the
+  Folder… folder. These are all bands, the cloud mask and for Landsat
+  the MTL metadata file. One VRT layer set of all bands goes to the
+  project, it shows natural colours, for MSS and ASTER false colours,
+  for MODIS the first layer of the product in grey. The checked
+  products are not built then. A Sentinel-2 scene weighs about 1 GB,
+  Landsat about 0.8 GB, ASTER 50-200 MB, MSS about 30 MB. For MODIS the
+  files of all tiles of the day are downloaded. The status line shows
+  how many files are downloaded. A file already downloaded is not
+  downloaded again on a repeat. The method exists for all satellites
+  of the list.
 
 The To QGIS project button puts the layers into a group of the day
 inside the Sentinel-2 group. Band combinations are stretched by 2-98 %
@@ -1320,7 +1333,10 @@ only the VNIR and TIR bands - false colours, iron oxides, quartz and 8
 bands in All scene bands, the tile column says ASTER VNIR TIR. The
 2026 scenes at Cuprite have no thermal bands either, then All scene
 bands holds the three VNIR bands, and quartz is not built. Night
-scenes with only thermal bands are not listed.
+scenes with only thermal bands are not listed. The NASA catalogue knows
+only the scene frame, and the ASTER imaged strip is turned inside it.
+An area near the frame edge may lie beyond the edge of the image. Then
+the window adds no layers and says that the bands hold no data.
 
 The Early Landsat images 1972-1993 here… item of the globe menu and
 the same action of the Search line - by the words MSS, early images,

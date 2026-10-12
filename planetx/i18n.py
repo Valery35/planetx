@@ -1170,11 +1170,26 @@ EN = {
     "Облачность сцены до":
         "Scene cloud cover up to",
     "Обрезка загружает только участок, значения - отражение, файлы годятся "
-    "для расчётов. Ссылка показывает всю сцену 110 × 110 км из сети, данные "
-    "загружаются при показе, индексы так не строятся.":
+    "для расчётов. Ссылка показывает всю сцену Sentinel-2 из сети, данные "
+    "загружаются при показе, индексы так не строятся. Исходные файлы - все "
+    "каналы сцены, маска облаков и метаданные как есть, в папку сцены, "
+    "и слой-набор всех каналов. Сцена Sentinel-2 весит около 1 ГБ.":
         "Clipping loads only the area, values are reflectance, the files "
-        "suit calculations. A link shows the whole 110 × 110 km scene from "
-        "the web, data load when shown, indices are not built this way.",
+        "suit calculations. A link shows the whole Sentinel-2 scene from "
+        "the web, data load when shown, indices are not built this way. "
+        "Source files are all scene bands, the cloud mask and the metadata "
+        "as they are, in the scene folder, and a layer set of all bands. "
+        "A Sentinel-2 scene weighs about 1 GB.",
+    "Вся сцена, исходные файлы": "Whole scene, source files",
+    "Скачивание файлов сцены {when}: {done} из {total}…":
+        "Downloading scene files {when}: {done} of {total}…",
+    "у этого спутника сцена целиком не загружается":
+        "this satellite gives no whole scene",
+    "участок за краем снимка сцены, в каналах нет данных. Каталог знает "
+    "только рамку сцены, а полоса съёмки может не доходить до её углов.":
+        "the area lies beyond the edge of the scene image, the bands hold "
+        "no data. The catalogue knows only the scene frame, and the imaged "
+        "strip may not reach its corners.",
     "Обрезка по участку, GeoTIFF":
         "Clip to the area, GeoTIFF",
     "Отмеченные продукты выбранной сцены - слоями проекта в группу дня "

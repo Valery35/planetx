@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.76.0
+version=0.77.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,16 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.76.0 The ASTER images here… item of the globe menu opens the
+changelog=0.77.0 The images window gives a whole scene - the Whole scene,
+      source files item of the method list at the bottom of the window. All
+      bands, the cloud mask and the metadata are downloaded as they are to a
+      scene folder, a layer set of all bands goes to the project. The method
+      exists for Sentinel-2, Landsat, MSS, ASTER and MODIS, clipping to the
+      area stays the default. If the area lies beyond the edge of the scene
+      image, the window no longer adds empty layers and says that the bands
+      hold no data. This happened with ASTER from NASA, whose catalogue
+      knows only the scene frame.
+      0.76.0 The ASTER images here… item of the globe menu opens the
       images window right on ASTER. The Search line finds the same action by
       the words ASTER, minerals, kaolinite. The manual tells step by step
       how to get a free NASA Earthdata key and enter it in the images

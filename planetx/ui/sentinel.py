@@ -26,11 +26,13 @@ AGENTS.md.
 import json
 import os
 import time
+from urllib.parse import urlsplit
 
 import numpy as np
 from qgis.core import (Qgis, QgsColorRampShader, QgsContrastEnhancement,
                        QgsMultiBandColorRenderer, QgsProject, QgsRasterLayer,
                        QgsRasterShader, QgsSettings,
+                       QgsSingleBandGrayRenderer,
                        QgsSingleBandPseudoColorRenderer)
 from qgis.PyQt.QtCore import QDate, Qt, QTimer
 from qgis.PyQt.QtGui import QColor, QImage, QPixmap
@@ -69,6 +71,8 @@ MULTI = ("all_bands", "mss_bands")
 # Растяжение сочетания ссылкой без скачивания - отражение по каналам.
 LINK_RANGE = {"natural": (0.0, 0.25)}
 LINK_RANGE_OTHER = (0.0, 0.45)
+WHOLE_CHUNK = 1 << 20  # байт за одно чтение файла сцены целиком
+WHOLE_SAMPLE = 1024  # пикселей стороны копии для растяжения всей сцены
 SCENE_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 GROUP = "Sentinel-2"
 GROUPS = {"sentinel2": GROUP, "landsat": "Landsat", "mss": "Landsat",
@@ -459,6 +463,8 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
         _clean_mss(scene, bands, radsat)
     for values in bands.values():
         values[~inside] = np.nan
+    if not has_data(bands):
+        raise OSError(no_data_text())
     filled = None
     if fill:
         bands["lwir"], filled = s2.thermal_fill(bands, scene.tile[1:2])
@@ -529,6 +535,8 @@ def _build_aster(gdal, scene, ring, products, folder, sas):
                 lum = aster.radiance(dn, key)
                 lum[~inside] = np.nan
                 bands["L" + key[1:]] = lum
+    if not has_data(bands):
+        raise OSError(no_data_text())
     os.makedirs(folder, exist_ok=True)
     out = []
     for name in products:
@@ -618,6 +626,151 @@ def build_links(scene, products, folder):
                            (hi - asset.offset) / asset.scale))
         out.append((name, path, ranges))
     return out
+
+
+def _copy(href, path):
+    """Файл в сети в файл на диске через GDAL, как каналы - прокси
+    и сертификаты те же. Пишется во временный файл .part, готовый
+    переименовывается. Рабочий поток. OSError, если не скачан."""
+    gdal = _thread_gdal()
+    part = path + ".part"
+    gdal.PushErrorHandler("CPLQuietErrorHandler")
+    try:
+        try:
+            handle = gdal.VSIFOpenL("/vsicurl/" + href, "rb")
+        except RuntimeError:  # режим исключений GDAL
+            handle = None
+        if handle is None:
+            raise OSError(os.path.basename(path))
+        try:
+            with open(part, "wb") as out:
+                while True:
+                    chunk = gdal.VSIFReadL(1, WHOLE_CHUNK, handle)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+        finally:
+            gdal.VSIFCloseL(handle)
+    finally:
+        gdal.PopErrorHandler()
+        _close_connections(gdal)
+    if os.path.getsize(part) == 0:
+        os.remove(part)
+        raise OSError(os.path.basename(path))
+    os.replace(part, path)
+
+
+def _file_name(href):
+    """Имя файла по адресу без параметров запроса (ключ SAS, подпись)."""
+    return os.path.basename(urlsplit(href).path)
+
+
+def download_scene(scene, folder, sas="", progress=None):
+    """Сцена целиком: исходные файлы каналов, маски облаков и метаданных
+    (core.sentinel.whole_files) как есть в папку сцены и слой-набор VRT
+    всех каналов. Уже скачанный файл не скачивается снова. progress -
+    список [скачано, всего], его читает окно. Рабочий поток. Список
+    [(«whole», путь VRT, пределы растяжения, показанные каналы)]."""
+    keys = s2.whole_files(scene)
+    if not keys:
+        raise OSError(tr("у этого спутника сцена целиком не загружается"))
+    place = os.path.join(folder, s2.file_name(scene, "scene"))
+    os.makedirs(place, exist_ok=True)
+
+    def fetch(key):
+        # У MODIS у ключа кортеж адресов - файлы тайлов дня.
+        hrefs = _href(scene, key, sas)
+        plain = scene.assets[key].href
+        if not isinstance(hrefs, tuple):
+            hrefs, plain = (hrefs,), (plain,)
+        paths = []
+        for href, name in zip(hrefs, plain):
+            path = os.path.join(place, _file_name(name))
+            if not os.path.exists(path):
+                _copy(href, path)
+            paths.append(path)
+        if progress is not None:
+            progress[0] += 1
+        return key, paths
+
+    paths = dict(executor("bands", BAND_WORKERS).map(fetch, keys))
+    gdal = _thread_gdal()
+    bands = s2.whole_bands(scene)
+    vrt = os.path.join(place, s2.file_name(scene, "scene") + ".vrt")
+    gdal.PushErrorHandler("CPLQuietErrorHandler")
+    try:
+        sources = []
+        for _, file, index, _ in bands:
+            path = paths[file][0]
+            if len(paths[file]) > 1:
+                # Тайлы MODIS одного слоя - одна мозаика.
+                path = os.path.join(place, file + ".vrt")
+                gdal.BuildVRT(path, paths[file])
+            elif scene.mission == aster.MISSION:
+                # В файле группы ASTER несколько каналов, а набор берёт
+                # из каждого источника первый - канал выносится в свой VRT.
+                one = os.path.join(place, "{}_{}.vrt".format(
+                    os.path.splitext(os.path.basename(path))[0], index))
+                gdal.Translate(one, path, format="VRT", bandList=[index])
+                path = one
+            sources.append(path)
+        ds = gdal.BuildVRT(vrt, sources, separate=True,
+                           resolution="highest")
+    except RuntimeError as error:  # режим исключений GDAL
+        raise OSError(str(error)) from error
+    finally:
+        gdal.PopErrorHandler()
+    if ds is None:
+        raise OSError(os.path.basename(vrt))
+    for n, (_, _, _, label) in enumerate(bands, start=1):
+        ds.GetRasterBand(n).SetDescription(label)
+    order = [b[0] for b in bands]
+    # У MODIS сочетания цветов нет, слой показывает первый канал.
+    shown = [order.index(k) + 1
+             for k in s2.ALL_SHOWN.get(scene.mission, ()) if k in order] \
+        or [1]
+    ranges = [_whole_range(ds.GetRasterBand(n)) for n in shown]
+    ds = None
+    return [("whole", vrt, ranges, tuple(shown))]
+
+
+def _whole_range(band):
+    """Пределы растяжения канала всей сцены по уменьшенной копии:
+    2-98 % значений без пустых и нулей."""
+    scale = max(1, max(band.XSize, band.YSize) // WHOLE_SAMPLE)
+    values = band.ReadAsArray(buf_xsize=max(1, band.XSize // scale),
+                              buf_ysize=max(1, band.YSize // scale))
+    values = values.astype(np.float32)
+    nodata = band.GetNoDataValue()
+    if nodata is not None:
+        values[values == nodata] = np.nan
+    values[values == 0] = np.nan
+    return s2.stretch(values)
+
+
+def no_data_text():
+    return tr("участок за краем снимка сцены, в каналах нет данных. "
+              "Каталог знает только рамку сцены, а полоса съёмки может "
+              "не доходить до её углов.")
+
+
+def has_data(bands):
+    """В прочитанных каналах участка есть хоть одно значение. Участок
+    за краем снимка сцены даёт одни пустые: каталог NASA знает только
+    рамку сцены, а полоса съёмки ASTER повёрнута внутри неё."""
+    return any(np.isfinite(v).any() for v in bands.values())
+
+
+def style_gray(layer, limits, band=1):
+    """Один канал в серой шкале, растяжение по limits (нижний, верхний)."""
+    renderer = QgsSingleBandGrayRenderer(layer.dataProvider(), band)
+    enhancement = QgsContrastEnhancement(
+        layer.dataProvider().dataType(band))
+    enhancement.setContrastEnhancementAlgorithm(STRETCH)
+    enhancement.setMinimumValue(limits[0])
+    enhancement.setMaximumValue(limits[1])
+    renderer.setContrastEnhancement(enhancement)
+    layer.setRenderer(renderer)
 
 
 def style_composite(layer, ranges, bands=(1, 2, 3)):
@@ -717,6 +870,7 @@ class SentinelDialog(QDialog):
         self.reply = None
         self.preview_job = None
         self.build_job = None
+        self.progress = None  # [скачано, всего] у сцены целиком
         self.cloud_jobs = []
         self.timer = QTimer(self)
         self.timer.setInterval(POLL)
@@ -831,11 +985,14 @@ class SentinelDialog(QDialog):
         self.mode = QComboBox(self)
         self.mode.addItem(tr("Обрезка по участку, GeoTIFF"), "clip")
         self.mode.addItem(tr("Вся сцена по ссылке, без скачивания"), "link")
+        self.mode.addItem(tr("Вся сцена, исходные файлы"), "whole")
         self.mode.setToolTip(tr(
             "Обрезка загружает только участок, значения - отражение, "
             "файлы годятся для расчётов. Ссылка показывает всю сцену "
-            "110 × 110 км из сети, данные загружаются при показе, "
-            "индексы так не строятся."))
+            "Sentinel-2 из сети, данные загружаются при показе, индексы "
+            "так не строятся. Исходные файлы - все каналы сцены, маска "
+            "облаков и метаданные как есть, в папку сцены, и слой-набор "
+            "всех каналов. Сцена Sentinel-2 весит около 1 ГБ."))
         self.folder = os.path.join(QgsProject.instance().homePath()
                                    or os.path.expanduser("~"), "sentinel")
         self.folder_label = QLabel(self)
@@ -962,7 +1119,7 @@ class SentinelDialog(QDialog):
         link = self.mode.model().item(1)
         if link is not None:
             link.setEnabled(mission == "sentinel2")
-        if mission != "sentinel2":
+        if self.mode.currentData() == "link" and mission != "sentinel2":
             self.mode.setCurrentIndex(0)
         # У MODIS облачности сцены в каталоге нет.
         self.scene_cloud.setEnabled(not modis.is_modis(mission))
@@ -1254,6 +1411,11 @@ class SentinelDialog(QDialog):
             self._preview_done()
         if self.build_job is not None and self.build_job[1].done():
             self._built()
+        elif self.build_job is not None and self.progress:
+            self.status.setText(tr(
+                "Скачивание файлов сцены {when}: {done} из {total}…",
+                when=self.build_job[0].when, done=self.progress[0],
+                total=self.progress[1]))
         if not self.cloud_jobs and self.preview_job is None \
                 and self.build_job is None:
             self.timer.stop()
@@ -1353,7 +1515,7 @@ class SentinelDialog(QDialog):
         products = self.chosen_products()
         if s is None or self.build_job is not None:
             return
-        if not products:
+        if not products and self.mode.currentData() != "whole":
             self.status.setText(tr("Не отмечено ни одного продукта."))
             return
         folder = folder or self.folder
@@ -1381,9 +1543,9 @@ class SentinelDialog(QDialog):
             QgsSettings().setValue(EARTHDATA_KEY, token)
         return token
 
-    def _start_nasa_build(self, s, products, folder):
+    def _start_nasa_build(self, s, products, folder, whole=False):
         products = aster.available(products, s.assets)
-        if not products:
+        if not products and not whole:
             self.status.setText(tr(
                 "У сцены нет каналов для отмеченных продуктов - после 2008 "
                 "года у ASTER только каналы VNIR и TIR."))
@@ -1395,10 +1557,11 @@ class SentinelDialog(QDialog):
                                    "не загружаются."))
             self.add_button.setEnabled(True)
             return
-        keys = aster.needed(products, s.assets)
+        keys = s2.whole_files(s) if whole \
+            else aster.needed(products, s.assets)
         self.signing = {"scene": s, "keys": keys, "urls": {},
                         "products": products, "folder": folder,
-                        "replies": []}
+                        "replies": [], "whole": whole}
         self.status.setText(tr("Адреса файлов NASA…"))
         for key in keys:
             self.signing["replies"].append(resolve_redirect(
@@ -1432,20 +1595,32 @@ class SentinelDialog(QDialog):
         for k, href in job["urls"].items():
             assets[k] = assets[k]._replace(href=href)
         warm()
-        build_job = self.pool().submit(build, s._replace(assets=assets),
-                                       self.ring_used, job["products"],
-                                       job["folder"], False, "", False)
+        signed = s._replace(assets=assets)
+        if job["whole"]:
+            self.progress = [0, len(job["keys"])]
+            build_job = self.pool().submit(download_scene, signed,
+                                           job["folder"], "", self.progress)
+        else:
+            build_job = self.pool().submit(build, signed, self.ring_used,
+                                           job["products"], job["folder"],
+                                           False, "", False)
         self.build_job = (s, build_job)
         self.status.setText(tr("Загрузка каналов сцены {when}…",
                                when=s.when))
         self.timer.start()
 
     def _start_build(self, s, products, folder):
+        whole = self.mode.currentData() == "whole"
+        self.progress = None
         if s.mission == aster.NASA_MISSION:
-            self._start_nasa_build(s, products, folder)
+            self._start_nasa_build(s, products, folder, whole)
             return
         warm()
-        if self.mode.currentData() == "link" and s.mission == "sentinel2":
+        if whole:
+            self.progress = [0, len(s2.whole_files(s))]
+            job = self.pool().submit(download_scene, s, folder, self.sas,
+                                     self.progress)
+        elif self.mode.currentData() == "link" and s.mission == "sentinel2":
             job = self.pool().submit(build_links, s, products, folder)
         else:
             job = self.pool().submit(build, s, self.ring_used, products,
@@ -1487,11 +1662,21 @@ class SentinelDialog(QDialog):
         names = titles(s.mission)
         layers = []
         for product, path, ranges, *extra in made:
+            title = tr("Вся сцена, исходные файлы") if product == "whole" \
+                else names[product]
             layer = QgsRasterLayer(path, "{} - {}".format(
-                names[product], s.when[:10]), "gdal")
+                title, s.when[:10]), "gdal")
             if not layer.isValid():
                 continue
-            if product in s2.COMPOSITES or product in aster.COMPOSITES:
+            if product == "whole":
+                # Показ - естественные цвета, у MSS и ASTER - ложные,
+                # у MODIS - первый канал в серой шкале.
+                if len(extra[0]) == 3:
+                    style_composite(layer, ranges, bands=extra[0])
+                else:
+                    style_gray(layer, ranges[0], extra[0][0])
+                extra = []
+            elif product in s2.COMPOSITES or product in aster.COMPOSITES:
                 style_composite(layer, ranges)
             elif product in aster.RATIOS:
                 style_ratio(layer, *ranges[0])

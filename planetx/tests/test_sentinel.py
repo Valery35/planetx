@@ -336,6 +336,58 @@ class TestAllBands(unittest.TestCase):
         self.assertNotIn("all_bands", s2.products_of("mss"))
 
 
+def scene(mission, assets):
+    return s2.Scene("x", "2026-04-05 17:08", 0.0, "T", 32611, 60.0, None,
+                    {k: s2.Asset(h, 1.0, 0.0, 0, 30) for k, h in
+                     assets.items()}, mission)
+
+
+class TestWhole(unittest.TestCase):
+    """Режим «Вся сцена, исходные файлы»: какие файлы скачиваются и какие
+    каналы идут в слой-набор."""
+
+    def test_sentinel_bands_then_cloud_mask(self):
+        keys = s2.ALL_BANDS["sentinel2"]
+        data = item()
+        for key in keys:
+            data["assets"][key] = {"href": BASE + key + ".tif",
+                                   "raster:bands": [{"scale": 0.0001}]}
+        s = s2.parse_item(data)
+        files = s2.whole_files(s)
+        self.assertEqual(files[:12], list(keys))
+        self.assertEqual(files[12:], ["scl"])
+        bands = s2.whole_bands(s)
+        self.assertEqual([b[0] for b in bands], list(keys))
+        self.assertTrue(all(b[1] == b[0] and b[2] == 1 for b in bands))
+
+    def test_aster_group_files_split_into_bands(self):
+        s = scene("aster", {"VNIR": "v.tif", "TIR": "t.tif"})
+        self.assertEqual(s2.whole_files(s), ["VNIR", "TIR"])
+        bands = s2.whole_bands(s)
+        self.assertEqual([b[0] for b in bands],
+                         ["b1", "b2", "b3n", "b10", "b11", "b12", "b13",
+                          "b14"])
+        self.assertEqual(bands[2][1:3], ("VNIR", 3))
+        self.assertEqual(bands[7][1:3], ("TIR", 5))
+
+    def test_aster_nasa_file_per_band(self):
+        s = scene("aster_nasa", {"b1": "1.tif", "b2": "2.tif",
+                                 "b3n": "3.tif"})
+        self.assertEqual(s2.whole_files(s), ["b1", "b2", "b3n"])
+        self.assertEqual([b[1:3] for b in s2.whole_bands(s)],
+                         [("b1", 1), ("b2", 1), ("b3n", 1)])
+
+    def test_modis_tiles_without_hdf(self):
+        s = scene("modis_lst1", {
+            "LST_Day_1km": ("a/day.tif", "b/day.tif"),
+            "LST_Night_1km": ("a/night.tif?sig", "b/night.tif"),
+            "hdf": "a/file.hdf"})
+        self.assertEqual(s2.whole_files(s),
+                         ["LST_Day_1km", "LST_Night_1km"])
+        self.assertEqual([b[0] for b in s2.whole_bands(s)],
+                         ["LST_Day_1km", "LST_Night_1km"])
+
+
 MSS = ("https://landsateuwest.blob.core.windows.net/landsat-c2/level-1/"
        "standard/mss/1973/181/019/LM01_L1TP_181019_19730606_20200909_02_T2/"
        "LM01_L1TP_181019_19730606_20200909_02_T2_")

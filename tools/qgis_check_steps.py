@@ -9364,6 +9364,82 @@ def nasa_wrong_key_check():
 
 
 @check(500)
+def nasa_edge():
+    """Участок за краем снимка сцены (в 40 км от поддельных файлов):
+    слоёв нет, окно говорит, что в каналах нет данных. До 0.77.0 окно
+    добавляло слои из одних NaN."""
+    from qgis.core import QgsSettings
+    from planetx.core import sentinel as s2
+    from planetx.ui import sentinel as ui
+    dialog = state["window"].sentinel_dialog
+    QgsSettings().setValue(ui.EARTHDATA_KEY, FAKE_KEY)
+    state["ring_kept"] = dialog.ring_used
+    dialog.ring_used = s2.square(37.2, -117.7, 2000.0)
+    dialog._start_nasa_build(state["fake_scene"], ["aster_false"],
+                             os.path.join(TEMP, "planetx_nasa_edge"))
+    state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def nasa_edge_check():
+    from qgis.core import QgsProject
+    dialog = state["window"].sentinel_dialog
+    if (dialog.signing is not None or dialog.build_job is not None) \
+            and time.monotonic() - state["ls_build"] < 60.0:
+        return 500
+    group = QgsProject.instance().layerTreeRoot().findGroup("ASTER")
+    result["nasa"]["edge"] = {
+        "status": dialog.status.text(),
+        "layers": len(group.findLayers()) if group else 0}
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    dialog.ring_used = state["ring_kept"]
+    return None
+
+
+@check(500)
+def nasa_whole():
+    """Вся сцена, исходные файлы: все файлы каналов скачаны, слой-набор
+    из 8 каналов VNIR и TIR."""
+    import shutil
+    dialog = state["window"].sentinel_dialog
+    folder = os.path.join(TEMP, "planetx_nasa_whole")
+    shutil.rmtree(folder, ignore_errors=True)
+    state["whole_folder"] = folder
+    state["fake_nasa"][2].clear()
+    dialog._start_nasa_build(state["fake_scene"], [], folder, whole=True)
+    state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def nasa_whole_check():
+    from qgis.core import QgsProject
+    dialog = state["window"].sentinel_dialog
+    if (dialog.signing is not None or dialog.build_job is not None) \
+            and time.monotonic() - state["ls_build"] < 120.0:
+        return 500
+    group = QgsProject.instance().layerTreeRoot().findGroup("ASTER")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    folder = state["whole_folder"]
+    files = []
+    for top, _, names in os.walk(folder):
+        files += [n for n in names]
+    files_requests = [r for r in state["fake_nasa"][2]
+                      if r[0].startswith("/files/")]
+    result["nasa"]["whole"] = {
+        "status": dialog.status.text(),
+        "layers": [(l.name(), l.isValid(), l.bandCount(),
+                    l.renderer().type()) for l in layers],
+        "files": sorted(files),
+        "key_sent_to_files": any(r[1] for r in files_requests)}
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    return None
+
+
+@check(500)
 def nasa_build():
     """Верный ключ: адреса подписаны, каналы прочитаны, слои в проекте."""
     from qgis.core import QgsSettings
@@ -9475,6 +9551,51 @@ def aster_build():
     state["aster_folder"] = folder
     dialog.add(folder=folder)
     state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def aster_frame():
+    """Кадр для объявления: на глобусе только индекс каолинита у Куприта.
+    Запускается вместо aster_built, тот убирает слои."""
+    from planetx.core.navigation import Pose
+    from qgis.core import QgsProject
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["ls_build"]
+    if (dialog.build_job is not None or dialog.sas_waiting) \
+            and spent < 300.0:
+        return 500
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("ASTER")
+    shown = []
+    for node in group.findLayers() if group else []:
+        on = "kaolinite" in node.layer().source()
+        node.setItemVisibilityChecked(on)
+        window.set_layer_shown(node.layer().id(), on)
+        if on:
+            shown.append(node.layer().name())
+    dialog.close()
+    nav = window.view.navigator
+    nav.stop()
+    nav.show(Pose(CUPRITE[0] - 0.06, CUPRITE[1], 17000.0, 0.0, 45.0))
+    state["frame_started"] = time.monotonic()
+    result["aster_frame"] = {"shown": shown}
+    return None
+
+
+@check(1000)
+def aster_frame_shot():
+    view = state["window"].view
+    spent = time.monotonic() - state["frame_started"]
+    if spent < 20.0 or (view.load_missing and spent < 90.0):
+        return 1000
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_aster_globe.png"))
+    state["window"].grab().save(os.path.join(TEMP,
+                                             "planetx_aster_window.png"))
+    result["aster_frame"].update({"seconds": round(spent, 1),
+                                  "missing": view.load_missing})
+    return None
 
 
 @check(500)
@@ -13711,6 +13832,89 @@ def close_without_heights():
             window.close()
     finally:
         planets.MOON_PLANET.terrain = saved
+
+
+@check(500)
+def modis_whole_open():
+    """Поиск MODIS для шага scene_whole: первый случай MODIS_CASES."""
+    from qgis.PyQt.QtCore import QDate
+    mission, point, start, end, side = MODIS_CASES[0]
+    dialog = state["window"].sentinel_here(*point)
+    dialog.side.setValue(side)
+    dialog.start.setDate(QDate(*start))
+    dialog.end.setDate(QDate(*end))
+    dialog.mission.setCurrentIndex(dialog.mission.findData(mission))
+    if dialog.searched != mission:
+        dialog.search()
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def modis_whole_wait():
+    dialog = state["window"].sentinel_dialog
+    busy = dialog.reply is not None or dialog.cloud_jobs \
+        or dialog.sas_reply is not None or dialog.sas_waiting
+    if busy and time.monotonic() - state["ls_started"] < 240.0:
+        return 1000
+    shown = [dialog.list.topLevelItem(n)
+             for n in range(dialog.list.topLevelItemCount())
+             if not dialog.list.topLevelItem(n).isHidden()]
+    if shown:
+        dialog.list.setCurrentItem(shown[0])
+    result["modis_whole"] = {"scenes": len(dialog.scenes),
+                             "first": shown[0].text(4) if shown else None}
+    return None
+
+
+@check(500)
+def scene_whole():
+    """Вся сцена, исходные файлы, у выбранной сцены окна после шагов
+    *_wait любого спутника. Стоит в конце файла - шаги идут в порядке
+    записи. У MSS - четыре канала, маски qa_pixel и qa_radsat,
+    mtl.json и слой-набор в ложных цветах."""
+    from planetx.ui import sentinel as ui
+    import shutil
+    dialog = state["window"].sentinel_dialog
+    folder = os.path.join(TEMP, "planetx_scene_whole")
+    shutil.rmtree(folder, ignore_errors=True)
+    state["whole_folder"] = folder
+    dialog.mode.setCurrentIndex(dialog.mode.findData("whole"))
+    state["whole_group"] = ui.GROUPS[dialog.current_mission()]
+    dialog.add(folder=folder)
+    state["ls_build"] = time.monotonic()
+    result["scene_whole"] = {"started": dialog.build_job is not None
+                             or bool(dialog.sas_waiting)}
+
+
+@check(1000)
+def scene_whole_check():
+    from qgis.core import QgsProject
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["ls_build"]
+    if (dialog.build_job is not None or dialog.sas_waiting) \
+            and spent < 300.0:
+        return 1000
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup(state["whole_group"])
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    files = []
+    for top, _, names in os.walk(state["whole_folder"]):
+        files += [(n, os.path.getsize(os.path.join(top, n))) for n in names]
+    r = layers[0].renderer() if layers else None
+    result["scene_whole"].update({
+        "seconds": round(spent, 1),
+        "status": dialog.status.text(),
+        "layers": [(l.name(), l.isValid(), l.bandCount(), l.width(),
+                    l.height()) for l in layers],
+        "renderer": r.type() if r is not None else None,
+        "bands_shown": [r.redBand(), r.greenBand(), r.blueBand()]
+        if r is not None and r.type() == "multibandcolor" else None,
+        "files": sorted(files)})
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    dialog.mode.setCurrentIndex(0)
+    return None
 
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается

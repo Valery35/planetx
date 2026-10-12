@@ -223,6 +223,54 @@ def all_keys(scene):
             if k in scene.assets or k not in OPTIONAL_BANDS]
 
 
+def _is_tif(href):
+    """Адрес (или первый из кортежа тайлов) ведёт на GeoTIFF."""
+    first = href[0] if isinstance(href, tuple) and href else href
+    return str(first).split("?")[0].lower().endswith((".tif", ".tiff"))
+
+
+def whole_files(scene):
+    """Файлы режима «Вся сцена, исходные файлы» - ключи ресурсов сцены:
+    каналы по порядку номеров, маска облаков, у Landsat ещё маска
+    насыщения и метаданные mtl.json, если они есть у сцены. У ASTER
+    Planetary Computer - файлы групп VNIR, SWIR, TIR. У MODIS - все
+    файлы GeoTIFF сцены, у каждого ключа файлы всех тайлов дня."""
+    if modis.is_modis(scene.mission):
+        return sorted(k for k, a in scene.assets.items()
+                      if _is_tif(a.href))
+    if scene.mission == aster.MISSION:
+        return [f for f in ("VNIR", "SWIR", "TIR") if f in scene.assets]
+    keys = [k for k in all_keys(scene) if k in scene.assets]
+    if aster.is_aster(scene.mission):
+        return keys
+    extra = (CLOUD_ASSET[scene.mission][0], "qa_radsat", "mtl.json")
+    return keys + [k for k in extra if k in scene.assets and k not in keys]
+
+
+def whole_bands(scene):
+    """Каналы слоя-набора всей сцены по порядку номеров: (канал, ключ
+    файла, номер канала в файле, подпись). У ASTER Planetary Computer
+    в файле группы несколько каналов. У MODIS - слои продуктов спутника
+    и канал качества, каждый - мозаика тайлов дня."""
+    out = []
+    if modis.is_modis(scene.mission):
+        keys = [modis.PRODUCTS[p][0]
+                for p in modis.products_of(scene.mission)]
+        for key in keys + [modis.quality_asset(scene.mission)]:
+            if key in scene.assets and all(b[0] != key for b in out):
+                out.append((key, key, 1, key))
+        return out
+    for key in all_keys(scene):
+        if scene.mission == aster.MISSION:
+            if aster.BANDS[key][0] not in scene.assets:
+                continue
+            out.append((key, aster.BANDS[key][0], aster.BANDS[key][1],
+                        band_label(scene, key)))
+        elif key in scene.assets:
+            out.append((key, key, 1, band_label(scene, key)))
+    return out
+
+
 def band_label(scene, key):
     """Подпись канала в файле: номер из имени файла и ключ каталога,
     «B8A nir08», у теплового - с единицей «B10 lwir, K»."""
