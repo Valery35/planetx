@@ -1268,6 +1268,41 @@ images after May 2003 have empty stripes from an instrument failure.
 Over water, the near infrared reflectance of Landsat 4-5 can be above
 red, and the NDVI of water comes out about +0.1.
 
+The ASTER line of the same list gives ASTER images of the Terra
+satellite of 2000-2006 - 14 bands, visible and near infrared at 15 m,
+six shortwave infrared at 30 m, five thermal at 90 m. The catalogue and
+files are Microsoft Planetary Computer, no sign-in is needed. ASTER
+imaged on request, there are few scenes - 5 near Perm, 24 at Cuprite
+in Nevada. The VNIR and TIR bands work after 2006 too, but in the open
+copy imaging ends in 2006, later scenes exist only at NASA and in Earth
+Engine with a sign-in. If the search dates are later than 2006, the
+window sets 2000-2006 when this line is chosen. Products:
+
+| Product | Bands | What is seen |
+|---|---|---|
+| False colours (3N 2 1) | 3N 2 1 | vegetation is red, 15 m |
+| Shortwave infrared (4 6 8) | 4 6 8 | rocks and minerals |
+| Kaolinite, alunite | (4 + 6) / 5 | argillic alteration |
+| Sericite, muscovite | (5 + 7) / 6 | sericitic alteration |
+| Mg-OH and carbonates | (7 + 9) / 8 | carbonates, chlorite, epidote |
+| Iron oxides | 2 / 1 | hematite, goethite |
+| Quartz | 11² / (10 × 12) | quartz from the thermal bands |
+| All scene bands | 1-14 | 14 bands in one file |
+
+The band ratios are those used in ore exploration (Rowan, Mars 2003,
+Ninomiya 2003), the scale is stretched over the area, warm colours mean
+more of the mineral. At Cuprite the kaolinite and alunite index shows
+both known zones of altered rocks. The values are top of atmosphere
+reflectance and brightness temperature in K, computed for the normal
+band gain. The gain mode of a scene is not recorded in the open copy,
+with another gain the reflectance of a band differs by a constant
+factor, so ASTER gives no NDVI. ASTER L1T has no cloud mask, the cloud
+cover over the area is the cloud cover of the scene, the Clouds and
+shadows empty check box is not available. Some scenes have no
+shortwave bands, products from them are not built then. The layers go
+to the ASTER group with the credit "ASTER data courtesy of
+NASA/METI/AIST/Japan Spacesystems and U.S./Japan ASTER Science Team".
+
 The Early Landsat images 1972-1993 here… item of the globe menu and
 the same action of the Search line - by the words MSS, early images,
 old images - open the window right on these images.

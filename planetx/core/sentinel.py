@@ -53,9 +53,10 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from . import modis
+    from . import aster, modis
     from .coords import to_utm
 except ImportError:  # headless-тесты
+    import aster
     import modis
     from coords import to_utm
 
@@ -75,6 +76,10 @@ COLLECTIONS = {"sentinel2": COLLECTION, "landsat": LANDSAT_COLLECTION,
 CLOUD_ASSET = {"sentinel2": ("scl", 20.0), "landsat": ("qa_pixel", 30.0),
                "mss": ("qa_pixel", 60.0)}
 LANDSATS = ("landsat", "mss")
+SEARCHES[aster.MISSION] = LANDSAT_SEARCH
+COLLECTIONS[aster.MISSION] = aster.COLLECTION
+# У ASTER L1T маски облаков нет: доля данных - по каналу 1 (core/aster).
+CLOUD_ASSET[aster.MISSION] = ("VNIR", 90.0)
 for _key in modis.MISSIONS:
     SEARCHES[_key] = LANDSAT_SEARCH
     COLLECTIONS[_key] = modis.collection(_key)
@@ -183,7 +188,8 @@ OPTIONAL_BANDS = ("coastal",)
 # Каналы естественных или ложных (MSS) цветов слоя «Все каналы».
 ALL_SHOWN = {"sentinel2": ("red", "green", "blue"),
              "landsat": ("red", "green", "blue"),
-             "mss": ("nir08", "red", "green")}
+             "mss": ("nir08", "red", "green"),
+             "aster": ("b3n", "b2", "b1")}
 # У Sentinel-2 «Все каналы» - 12 каналов на 10 м, сторона участка до
 # ALL_PIXELS пикселей, это 20 км, дальше шаг 20 м: 2000 × 2000 × 12
 # каналов float32 - 190 МБ. Выбор помощника, утверждает автор.
@@ -196,6 +202,8 @@ def products_of(mission):
     свои."""
     if modis.is_modis(mission):
         return modis.products_of(mission)
+    if aster.is_aster(mission):
+        return aster.PRODUCTS
     if mission == "mss":
         return MSS_PRODUCTS
     if mission == "landsat":
@@ -205,6 +213,9 @@ def products_of(mission):
 
 def all_keys(scene):
     """Каналы файла «Все каналы» сцены по порядку номеров."""
+    if aster.is_aster(scene.mission):
+        return [k for k in aster.ORDER
+                if aster.BANDS[k][0] in scene.assets]
     keys = ALL_BANDS.get(scene.mission, ())
     return [k for k in keys
             if k in scene.assets or k not in OPTIONAL_BANDS]
@@ -213,6 +224,8 @@ def all_keys(scene):
 def band_label(scene, key):
     """Подпись канала в файле: номер из имени файла и ключ каталога,
     «B8A nir08», у теплового - с единицей «B10 lwir, K»."""
+    if aster.is_aster(scene.mission):
+        return aster.label(key)
     asset = scene.assets.get(key)
     found = BAND_FILE.search(asset.href) if asset is not None else None
     number = found.group(1).upper() if found else ""
@@ -224,7 +237,8 @@ def band_label(scene, key):
 
 def needs_key(mission):
     """Файлы спутника читаются по ключу SAS Planetary Computer."""
-    return mission in LANDSATS or modis.is_modis(mission)
+    return mission in LANDSATS or modis.is_modis(mission) \
+        or aster.is_aster(mission)
 
 
 def sas_url(mission, href=None):
@@ -289,6 +303,8 @@ def parse_item(feature):
     mission = modis.mission_of(feature.get("collection"))
     if mission is not None:
         return _modis_item(feature, props, mission)
+    if feature.get("collection") == aster.COLLECTION:
+        return _aster_item(feature, props)
     if str(props.get("platform") or "").startswith("landsat"):
         return _landsat_item(feature, props, "mss" if feature.get(
             "collection") == MSS_COLLECTION else "landsat")
@@ -583,6 +599,30 @@ def toa(scene, mtl):
     return scene._replace(assets=assets)
 
 
+def _aster_item(feature, props):
+    """Сцена ASTER L1T: файлы VNIR, SWIR и TIR, превью - картинка
+    службы данных, тайл - «ASTER»."""
+    assets = {}
+    preview = ""
+    for key, value in (feature.get("assets") or {}).items():
+        href = value.get("href") or ""
+        if key == "rendered_preview" and href.startswith("https://"):
+            preview = href
+        elif key in ("VNIR", "SWIR", "TIR") and href.startswith("https://"):
+            assets[key] = Asset(href, 1.0, 0.0, 0, None)
+    if "VNIR" not in assets:
+        return None
+    epsg = props.get("proj:epsg")
+    cloud = props.get("eo:cloud_cover")
+    return Scene(str(feature.get("id") or ""),
+                 str(props.get("datetime") or "").replace("T", " ")[:16],
+                 float(cloud) if cloud is not None else 100.0,
+                 "ASTER" + ("" if "SWIR" in assets else " VNIR"),
+                 int(epsg) if epsg else None,
+                 props.get("view:sun_elevation"), preview, assets,
+                 aster.MISSION)
+
+
 def _modis_item(feature, props, mission):
     """Сцена MODIS: день или начало периода, спутник и тайл, каналы -
     кортежи адресов (merge_tiles сводит тайлы одного дня)."""
@@ -692,9 +732,9 @@ def step_for(xy, mission="sentinel2", products=()):
     каналами» Sentinel-2 предел - ALL_PIXELS."""
     if modis.is_modis(mission):
         return modis.step(mission)
-    steps = {"landsat": LANDSAT_STEPS, "mss": MSS_STEPS}.get(mission,
-                                                              STEPS)
-    limit = ALL_PIXELS if mission == "sentinel2" \
+    steps = {"landsat": LANDSAT_STEPS, "mss": MSS_STEPS,
+             aster.MISSION: aster.STEPS}.get(mission, STEPS)
+    limit = ALL_PIXELS if mission in ("sentinel2", aster.MISSION) \
         and "all_bands" in products else MAX_PIXELS
     box = bounds(xy, 1.0)
     side = max(box[2] - box[0], box[3] - box[1])
@@ -769,6 +809,13 @@ def clouds_of(scene, raw, inside):
     """Облачность над участком по маске сцены любого спутника."""
     if modis.is_modis(scene.mission):
         return modis.quality(scene.mission, raw, inside)
+    if aster.is_aster(scene.mission):
+        # Маски облаков нет - облачность сцены, доля данных по каналу 1.
+        area = inside.sum()
+        valid = (inside & (np.asarray(raw) != 0)).sum()
+        if area == 0 or valid == 0:
+            return 100.0, 0.0
+        return float(scene.cloud), float(100.0 * valid / area)
     if scene.mission in LANDSATS:
         return cloud_share_qa(raw, inside)
     return cloud_share(raw, inside)
@@ -778,6 +825,8 @@ def clear_mask(scene, raw):
     """Пиксели без облаков, теней и пропусков по маске сцены."""
     if modis.is_modis(scene.mission):
         return modis.clear(scene.mission, raw)
+    if aster.is_aster(scene.mission):
+        return np.asarray(raw) != 0
     if scene.mission in LANDSATS:
         cloudy, empty = qa_cloudy(raw)
         return ~(cloudy | empty)
@@ -791,6 +840,8 @@ def needed(products, mission="sentinel2", fill=False):
     температуры Landsat закрываются формулой (thermal_fill)."""
     if modis.is_modis(mission):
         return modis.needed(products)
+    if aster.is_aster(mission):
+        return aster.needed(products)
     keys = []
     for product in products:
         if product == "lst":
@@ -899,6 +950,8 @@ def file_name(s, name):
     if modis.is_modis(s.mission):
         return "MODIS_{}_{}_{}".format(s.tile.split(" ")[0].replace("+", ""),
                                        day, name)
+    if aster.is_aster(s.mission):
+        return aster.file_name(s.when[:10], name)
     if s.mission in LANDSATS:
         sat, _, place = s.tile.partition(" ")
         if s.mission == "mss":
@@ -913,6 +966,8 @@ def credit(s):
     снимок Landsat от USGS, у MODIS - продукт и архив NASA."""
     if modis.is_modis(s.mission):
         return modis.credit(s.id)
+    if aster.is_aster(s.mission):
+        return aster.CREDIT
     if s.mission in LANDSATS:
         return LANDSAT_ATTRIBUTION.format(number=s.tile.split(" ")[0][1:])
     return ATTRIBUTION.format(year=s.when[:4])

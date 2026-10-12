@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.73.0
+version=0.74.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.73.0 The All scene bands line of the images window puts into the
+changelog=0.74.0 ASTER images of 2000-2006 in the images window - 14 bands,
+      visible and near infrared at 15 m, shortwave infrared at 30 m, thermal
+      at 90 m, without sign-in or key. ASTER mineral indices for ore
+      exploration - kaolinite and alunite, sericite and muscovite,
+      carbonates, iron oxides, quartz. The layers are coloured over the
+      area, warm colours mean more of the mineral.
+      0.73.0 The All scene bands line of the images window puts into the
       QGIS project one file with all bands of the image in the order of
       their numbers. Sentinel-2 gives 12 bands at 10 m, Landsat 8-9 gives 8,
       Landsat 4-7 gives 7, the thermal band is in kelvins. The bands are

@@ -40,7 +40,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog,
                                  QPushButton, QSpinBox, QTreeWidget,
                                  QTreeWidgetItem, QVBoxLayout)
 
-from ..core import modis
+from ..core import aster, modis
 from ..core import sentinel as s2
 from ..i18n import tr
 from ..net.gdalnet import close_connections as _close_connections
@@ -69,7 +69,8 @@ LINK_RANGE = {"natural": (0.0, 0.25)}
 LINK_RANGE_OTHER = (0.0, 0.45)
 SCENE_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 GROUP = "Sentinel-2"
-GROUPS = {"sentinel2": GROUP, "landsat": "Landsat", "mss": "Landsat"}
+GROUPS = {"sentinel2": GROUP, "landsat": "Landsat", "mss": "Landsat",
+          "aster": "ASTER"}
 # Даты поиска MSS, если прежние позже конца съёмки MSS: лето 1975
 # года, Landsat 2. Выбор помощника, утверждает автор.
 MSS_DATES = ("1975-05-01", "1975-09-30")
@@ -102,19 +103,31 @@ def titles(mission="sentinel2"):
              "snow_extent": tr("Снег и лёд за 8 суток"),
              "burn_date": tr("Гари, день года"),
              "mss_bands": tr("Все четыре канала MSS"),
-             "all_bands": tr("Все каналы сцены")}
+             "all_bands": tr("Все каналы сцены"),
+             "aster_false": tr("Ложные цвета (3N 2 1)"),
+             "aster_swir": tr("Коротковолновый ИК (4 6 8)"),
+             "kaolinite": tr("Каолинит, алунит, (4 + 6) / 5"),
+             "aloh": tr("Серицит, мусковит, (5 + 7) / 6"),
+             "mgoh": tr("Mg-OH и карбонаты, (7 + 9) / 8"),
+             "ferric": tr("Оксиды железа, 2 / 1"),
+             "quartz": tr("Кварц, 11² / (10 × 12)")}
     if mission in s2.LANDSATS:
         names = {k: v.split(" (")[0] for k, v in names.items()}
     return names
 
 
-MISSIONS = ("sentinel2", "landsat", "mss") + tuple(modis.MISSIONS)
+MISSIONS = ("sentinel2", "landsat", "mss", "aster") + tuple(modis.MISSIONS)
+# Годы спутников, у которых съёмка кончилась: последний день и даты
+# поиска, если прежние позже. Выбор помощника, утверждает автор.
+ERA = {"mss": (MSS_LAST, MSS_DATES),
+       "aster": (aster.LAST_DAY, (aster.FIRST_DAY, aster.LAST_DAY))}
 
 
 def mission_title(mission):
     return {"sentinel2": tr("Sentinel-2 - 10 м, с 2015 года"),
             "landsat": tr("Landsat 4-9 - 30 м, с 1982 года"),
             "mss": tr("Landsat 1-5 MSS - 60 м, 1972-1993 годы"),
+            "aster": tr("ASTER - 15-90 м, 14 каналов, 2000-2006 годы"),
             "modis_lst1": tr("MODIS - температура за сутки, 1 км"),
             "modis_lst8": tr("MODIS - температура за 8 суток, 1 км"),
             "modis_veg": tr("MODIS - NDVI и EVI за 16 суток, 250 м"),
@@ -128,6 +141,13 @@ def mission_credit(mission):
         return tr("MODIS Terra и Aqua версии 061 (NASA LP DAAC, снег - "
                   "NSIDC), файлы и каталог Microsoft Planetary Computer. "
                   "Слои несут подпись продукта и архива NASA.")
+    if mission == "aster":
+        return tr("ASTER L1T (NASA, METI), файлы и каталог Microsoft "
+                  "Planetary Computer, съёмка 2000-2006 годов. Значения - "
+                  "отражение на верху атмосферы и яркостная температура "
+                  "для нормального усиления каналов. Слои несут подпись "
+                  "«ASTER data courtesy of NASA/METI/AIST/Japan "
+                  "Spacesystems».")
     if mission == "mss":
         return tr("Landsat 1-5 MSS Collection 2 Level-1 (USGS), файлы "
                   "и каталог Microsoft Planetary Computer. Значения - "
@@ -260,6 +280,21 @@ def preview(scene, ring, sas=""):
         if raw is None:
             return None
         return modis.colorize(modis.value(name, raw), scale)
+    if aster.is_aster(scene.mission):
+        # Ложные цвета 3N, 2, 1 одним файлом VNIR, растяжение по снимку.
+        dn = read_window(_href(scene, "VNIR", sas), box, size=size,
+                         nearest=True, count=3)
+        if dn is None:
+            return None
+        out = []
+        for index in (2, 1, 0):
+            values = dn[index].astype(np.float32)
+            values[dn[index] == 0] = np.nan
+            lo, hi = s2.stretch(values)
+            out.append(np.nan_to_num(np.clip(
+                (values - lo) / (hi - lo) * 255.0, 0.0, 255.0))
+                .astype(np.uint8))
+        return np.stack(out)
     if scene.mission == "mss":
         # Синего канала у MSS нет: ложные цвета, растяжение по снимку,
         # насыщенные строки заменены соседями.
@@ -335,6 +370,8 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
     (core.sentinel.thermal_fill). Рабочий поток."""
     fill = fill and scene.mission == "landsat" and "lst" in products
     gdal = _thread_gdal()
+    if aster.is_aster(scene.mission):
+        return _build_aster(gdal, scene, ring, products, folder, sas)
     if scene.mission == "mss":
         scene = s2.toa(scene, read_json(_href(scene, "mtl.json", sas)))
     xy = s2.ring_utm(ring, scene.epsg)
@@ -396,6 +433,58 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
         else:
             ranges = [s2.INDICES[name][1]]
         out.append((name, path, ranges, filled if name == "lst" else None))
+    return out
+
+
+def _build_aster(gdal, scene, ring, products, folder, sas):
+    """Продукты ASTER: файлы VNIR, SWIR, TIR читаются целиком по окну
+    участка без сглаживания (нет данных - 0), значения - core.aster.
+    Продукты без файла сцены - у части сцен нет SWIR - пропускаются,
+    если не осталось ни одного - OSError."""
+    wanted = list(products)
+    products = aster.available(products, scene.assets)
+    if not products:
+        raise OSError(tr("у сцены нет каналов SWIR для {names}",
+                         names=", ".join(wanted)))
+    xy = s2.ring_utm(ring, scene.epsg)
+    res = s2.step_for(xy, scene.mission, products)
+    box = s2.bounds(xy, res)
+    groups = aster.files_of(aster.needed(products))
+    counts = {"VNIR": 3, "SWIR": 6, "TIR": 5}
+    files = list(groups)
+    raw = dict(zip(files, executor("bands", BAND_WORKERS).map(
+        lambda f: read_window(_href(scene, f, sas), box, res, nearest=True,
+                              count=counts[f]), files)))
+    missing = [f for f, v in raw.items() if v is None]
+    if missing:
+        raise OSError(", ".join(missing))
+    inside = s2.mask(xy, box, res)
+    day = time.strptime(scene.when[:10], "%Y-%m-%d").tm_yday
+    sun = scene.sun if scene.sun is not None else 45.0
+    bands = {}
+    for name, keys in groups.items():
+        for key in keys:
+            dn = raw[name][aster.BANDS[key][1] - 1]
+            values = aster.value(dn, key, sun, day)
+            values[~inside] = np.nan
+            bands[key] = values
+            if key in aster.THERMAL:
+                lum = aster.radiance(dn, key)
+                lum[~inside] = np.nan
+                bands["L" + key[1:]] = lum
+    os.makedirs(folder, exist_ok=True)
+    out = []
+    for name in products:
+        values = aster.product(name, bands)
+        path = free_path(folder, s2.file_name(scene, name), ".tif")
+        labels = [aster.label(k) for k in aster.ORDER if k in bands] \
+            if name == "all_bands" else None
+        _write(gdal, path, values, box, res, scene.epsg, labels)
+        if name in aster.COMPOSITES or name == "all_bands":
+            ranges = [s2.stretch(band) for band in values]
+        else:
+            ranges = [s2.stretch(values)]
+        out.append((name, path, ranges, None))
     return out
 
 
@@ -492,6 +581,25 @@ def style_composite(layer, ranges, bands=(1, 2, 3)):
     layer.setRenderer(renderer)
 
 
+def style_ratio(layer, lo, hi):
+    """Отношение каналов ASTER шкалой core.aster.RAMP на пределах
+    растяжения по участку."""
+    ramp = QgsColorRampShader(lo, hi)
+    ramp.setColorRampItemList([
+        QgsColorRampShader.ColorRampItem(lo + share * (hi - lo),
+                                         QColor(*rgb),
+                                         "{:.3g}".format(lo + share
+                                                         * (hi - lo)))
+        for share, rgb in aster.RAMP])
+    shader = QgsRasterShader()
+    shader.setRasterShaderFunction(ramp)
+    renderer = QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1,
+                                                shader)
+    renderer.setClassificationMin(lo)
+    renderer.setClassificationMax(hi)
+    layer.setRenderer(renderer)
+
+
 def style_index(layer, name):
     """Индекс шкалой цветов core.sentinel.INDICES, температура -
     шкалой core.sentinel.TEMPERATURE, продукты MODIS - своими шкалами
@@ -568,7 +676,8 @@ class SentinelDialog(QDialog):
             "Landsat - 30 м, снимки с 1982 года и тепловой канал, у Landsat "
             "7 после мая 2003 года на снимках пустые полосы. Landsat 1-5 "
             "MSS - 60 м, снимки 1972-1993 годов, четыре канала без "
-            "синего и теплового. MODIS - "
+            "синего и теплового. ASTER - 15-90 м, 14 каналов, снимки "
+            "2000-2006 годов, минеральные индексы. MODIS - "
             "готовые продукты NASA с 2000 года, сцена - день или период, "
             "пиксель 250-1000 м. Смена спутника запускает новый поиск."))
         self.mission.currentIndexChanged.connect(
@@ -729,6 +838,8 @@ class SentinelDialog(QDialog):
         if not checked & set(s2.products_of(mission)):
             checked = set(s2.products_of(mission)) if modis.is_modis(
                 mission) else set(DEFAULT_PRODUCTS)
+        if aster.is_aster(mission) and not checked & set(aster.DEFAULT):
+            checked = set(aster.DEFAULT)
         names = titles(mission)
         self.products.clear()
         for key in s2.products_of(mission):
@@ -749,6 +860,15 @@ class SentinelDialog(QDialog):
                     "стороной больше 20 км - на шаге 20 м. Слой показывает "
                     "естественные цвета, подписи каналов видны в свойствах "
                     "слоя QGIS."))
+            elif key in aster.RATIOS:
+                item.setToolTip(tr(
+                    "Отношение каналов ASTER, принятое в поисках руд "
+                    "(Rowan, Mars 2003, Ninomiya 2003) - (4 + 6) / 5 "
+                    "выделяет каолинит и алунит, (5 + 7) / 6 - серицит "
+                    "и мусковит, (7 + 9) / 8 - карбонаты, хлорит и эпидот, "
+                    "2 / 1 - оксиды железа, кварцевый индекс - кварц по "
+                    "тепловым каналам. Шкала растянута по участку, тёплые "
+                    "цвета - больше минерала."))
             elif key == "mss_bands":
                 item.setToolTip(tr(
                     "Зелёный, красный и два ближних инфракрасных канала "
@@ -789,20 +909,25 @@ class SentinelDialog(QDialog):
         # У MODIS облачности сцены в каталоге нет.
         self.scene_cloud.setEnabled(not modis.is_modis(mission))
         self.fill.setVisible(mission == "landsat")
+        # У ASTER L1T маски облаков нет.
+        self.clear.setEnabled(not aster.is_aster(mission))
         self._fit_dates(mission)
         if search:
             self.search()
 
     def _fit_dates(self, mission):
-        """Даты поиска под годы спутника: у MSS промежуток позже 2013
-        года пуст, он заменяется летом 1975 года, а прежние даты
-        возвращаются при уходе с MSS."""
-        last = QDate.fromString(MSS_LAST, "yyyy-MM-dd")
-        if mission == "mss" and self.start.date() > last:
-            self.modern_dates = (self.start.date(), self.end.date())
-            self.start.setDate(QDate.fromString(MSS_DATES[0], "yyyy-MM-dd"))
-            self.end.setDate(QDate.fromString(MSS_DATES[1], "yyyy-MM-dd"))
-        elif mission != "mss" and self.modern_dates is not None:
+        """Даты поиска под годы спутника (ERA): у MSS промежуток позже
+        2013 года пуст, он заменяется летом 1975 года, у ASTER - всеми
+        2000-2006 годами. Прежние даты возвращаются при уходе на
+        спутник, который снимает и сейчас."""
+        era = ERA.get(mission)
+        last = QDate.fromString(era[0], "yyyy-MM-dd") if era else None
+        if era and self.start.date() > last:
+            if self.modern_dates is None:
+                self.modern_dates = (self.start.date(), self.end.date())
+            self.start.setDate(QDate.fromString(era[1][0], "yyyy-MM-dd"))
+            self.end.setDate(QDate.fromString(era[1][1], "yyyy-MM-dd"))
+        elif not era and self.modern_dates is not None:
             self.start.setDate(self.modern_dates[0])
             self.end.setDate(self.modern_dates[1])
             self.modern_dates = None
@@ -1181,8 +1306,10 @@ class SentinelDialog(QDialog):
                 names[product], s.when[:10]), "gdal")
             if not layer.isValid():
                 continue
-            if product in s2.COMPOSITES:
+            if product in s2.COMPOSITES or product in aster.COMPOSITES:
                 style_composite(layer, ranges)
+            elif product in aster.RATIOS:
+                style_ratio(layer, *ranges[0])
             elif product in MULTI:
                 # Все каналы в файле, показ - естественные цвета, у MSS -
                 # ложные (ближний ИК 0.8, красный, зелёный).

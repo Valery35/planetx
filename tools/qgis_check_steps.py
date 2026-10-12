@@ -9178,6 +9178,132 @@ def mss_command():
     result["mss_command"] = out
 
 
+CUPRITE = (37.535, -117.205)  # Куприт, Невада - изменённые породы
+
+
+@check(500)
+def aster_open():
+    """Снимки ASTER у Куприта: участок 10 км, даты сегодняшние - окно
+    ставит 2000-2006 годы."""
+    window = state["window"]
+    window.set_body("earth")
+    dialog = window.sentinel_here(*CUPRITE)
+    dialog.side.setValue(10.0)
+    dialog.mission.setCurrentIndex(dialog.mission.findData("aster"))
+    state["ls_started"] = time.monotonic()
+    result["aster"] = {
+        "dates": [dialog.start.date().toString("yyyy-MM-dd"),
+                  dialog.end.date().toString("yyyy-MM-dd")],
+        "clear_enabled": dialog.clear.isEnabled(),
+        "products": [(dialog.products.item(n).text(),
+                      dialog.products.item(n).checkState() ==
+                      _qt_checked())
+                     for n in range(dialog.products.count())]}
+
+
+def _qt_checked():
+    from qgis.PyQt.QtCore import Qt
+    return Qt.CheckState.Checked
+
+
+@check(500)
+def aster_wait():
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["ls_started"]
+    busy = dialog.reply is not None or dialog.cloud_jobs \
+        or dialog.sas_reply is not None or dialog.sas_waiting
+    if busy and spent < 240.0:
+        return 500
+    out = result["aster"]
+    out["seconds"] = round(spent, 1)
+    out["scenes"] = len(dialog.scenes)
+    out["tiles"] = sorted({s.tile for s in dialog.scenes})
+    out["unread"] = sum(1 for c, _ in dialog.clouds.values() if c is None)
+    shown = [dialog.list.topLevelItem(n)
+             for n in range(dialog.list.topLevelItemCount())
+             if not dialog.list.topLevelItem(n).isHidden()]
+    out["shown"] = len(shown)
+    # Сцена с SWIR - первая из показанных с тайлом «ASTER».
+    pick = [it for it in shown if it.text(4) == "ASTER"]
+    out["first"] = [pick[0].text(c) for c in range(5)] if pick else None
+    out["status"] = dialog.status.text()
+    if pick:
+        dialog.list.setCurrentItem(pick[0])
+    return None
+
+
+@check(500)
+def aster_build():
+    from qgis.PyQt.QtCore import Qt
+    dialog = state["window"].sentinel_dialog
+    for n in range(dialog.products.count()):
+        dialog.products.item(n).setCheckState(Qt.CheckState.Checked)
+    folder = os.path.join(TEMP, "planetx_aster")
+    state["aster_folder"] = folder
+    dialog.add(folder=folder)
+    state["ls_build"] = time.monotonic()
+
+
+@check(500)
+def aster_built():
+    from osgeo import gdal
+    import numpy as np
+    from qgis.core import QgsProject
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state["ls_build"]
+    if (dialog.build_job is not None or dialog.sas_waiting) \
+            and spent < 300.0:
+        return 500
+    out = result["aster"]
+    out["build_seconds"] = round(spent, 1)
+    out["build_status"] = dialog.status.text()
+    out["preview"] = dialog.preview.pixmap() is not None \
+        and not dialog.preview.pixmap().isNull()
+    group = QgsProject.instance().layerTreeRoot().findGroup("ASTER")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    out["layers"] = [(l.name(), l.isValid(), l.renderer().type(),
+                      l.bandCount(), l.metadata().rights()) for l in layers]
+    folder = state["aster_folder"]
+    files = sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+    out["files"] = files
+    for name in files:
+        if not name.endswith(".tif"):
+            continue
+        key = name[len("AST_20060815_"):-4]
+        if key == "all_bands":
+            out["all_bands"] = _all_bands_info(os.path.join(folder, name))
+            continue
+        ds = gdal.Open(os.path.join(folder, name))
+        a = ds.ReadAsArray()
+        finite = a[np.isfinite(a)]
+        if key == "kaolinite":
+            # Изменённые холмы Куприта (середина-правее, верх кадра)
+            # против конуса выноса на юго-западе.
+            h, w = a.shape
+            out["kaolinite_hills_vs_southwest"] = [
+                round(float(np.nanmedian(
+                    a[int(h * .15):int(h * .45), int(w * .6):int(w * .85)])),
+                    3),
+                round(float(np.nanmedian(
+                    a[int(h * .4):int(h * .8), int(w * .05):int(w * .3)])),
+                    3)]
+        out[key] = {"size": [ds.RasterXSize, ds.RasterYSize],
+                    "res": round(ds.GetGeoTransform()[1], 1),
+                    "valid": round(finite.size / a.size, 3),
+                    "p2_p50_p98": [round(float(np.percentile(finite, q)), 3)
+                                   for q in (2, 50, 98)]
+                    if finite.size else None}
+        ds = None
+    dialog.grab().save(os.path.join(TEMP, "planetx_aster_dialog.png"))
+    if group is not None:
+        QgsProject.instance().removeMapLayers(group.findLayerIds())
+        QgsProject.instance().layerTreeRoot().removeChildNode(group)
+    dialog.mission.setCurrentIndex(dialog.mission.findData("sentinel2"))
+    out["dates_back"] = dialog.start.date().toString("yyyy-MM-dd")
+    dialog.close()
+    return None
+
+
 @check(500)
 def landsat_build():
     from qgis.PyQt.QtCore import Qt

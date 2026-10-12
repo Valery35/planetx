@@ -81,15 +81,48 @@ EN = {
     "Sentinel-2 - 10 м, снимки с 2015 года, каждые 5 суток. Landsat - 30 м, "
     "снимки с 1982 года и тепловой канал, у Landsat 7 после мая 2003 года на "
     "снимках пустые полосы. Landsat 1-5 MSS - 60 м, снимки 1972-1993 годов, "
-    "четыре канала без синего и теплового. MODIS - готовые продукты NASA "
-    "с 2000 года, сцена - день или период, пиксель 250-1000 м. Смена "
+    "четыре канала без синего и теплового. ASTER - 15-90 м, 14 каналов, "
+    "снимки 2000-2006 годов, минеральные индексы. MODIS - готовые продукты "
+    "NASA с 2000 года, сцена - день или период, пиксель 250-1000 м. Смена "
     "спутника запускает новый поиск.":
         "Sentinel-2 - 10 m, images since 2015, every 5 days. Landsat - "
         "30 m, images since 1982 and a thermal band, Landsat 7 images after "
         "May 2003 have empty stripes. Landsat 1-5 MSS - 60 m, images of "
-        "1972-1993, four bands without blue and thermal. MODIS - ready NASA "
+        "1972-1993, four bands without blue and thermal. ASTER - 15-90 m, "
+        "14 bands, images of 2000-2006, mineral indices. MODIS - ready NASA "
         "products since 2000, a scene is a day or a period, a pixel is "
         "250-1000 m. A change of the satellite starts a new search.",
+    "ASTER - 15-90 м, 14 каналов, 2000-2006 годы":
+        "ASTER - 15-90 m, 14 bands, 2000-2006",
+    "ASTER L1T (NASA, METI), файлы и каталог Microsoft Planetary Computer, "
+    "съёмка 2000-2006 годов. Значения - отражение на верху атмосферы "
+    "и яркостная температура для нормального усиления каналов. Слои несут "
+    "подпись «ASTER data courtesy of NASA/METI/AIST/Japan Spacesystems».":
+        "ASTER L1T (NASA, METI), files and catalogue of Microsoft Planetary "
+        "Computer, images of 2000-2006. The values are top of atmosphere "
+        "reflectance and brightness temperature for the normal band gain. "
+        "The layers carry the credit \"ASTER data courtesy of "
+        "NASA/METI/AIST/Japan Spacesystems\".",
+    "Ложные цвета (3N 2 1)": "False colours (3N 2 1)",
+    "Коротковолновый ИК (4 6 8)": "Shortwave infrared (4 6 8)",
+    "Каолинит, алунит, (4 + 6) / 5": "Kaolinite, alunite, (4 + 6) / 5",
+    "Серицит, мусковит, (5 + 7) / 6": "Sericite, muscovite, (5 + 7) / 6",
+    "Mg-OH и карбонаты, (7 + 9) / 8": "Mg-OH and carbonates, (7 + 9) / 8",
+    "Оксиды железа, 2 / 1": "Iron oxides, 2 / 1",
+    "Кварц, 11² / (10 × 12)": "Quartz, 11² / (10 × 12)",
+    "у сцены нет каналов SWIR для {names}":
+        "the scene has no SWIR bands for {names}",
+    "Отношение каналов ASTER, принятое в поисках руд (Rowan, Mars 2003, "
+    "Ninomiya 2003) - (4 + 6) / 5 выделяет каолинит и алунит, (5 + 7) / 6 - "
+    "серицит и мусковит, (7 + 9) / 8 - карбонаты, хлорит и эпидот, 2 / 1 - "
+    "оксиды железа, кварцевый индекс - кварц по тепловым каналам. Шкала "
+    "растянута по участку, тёплые цвета - больше минерала.":
+        "An ASTER band ratio used in ore exploration (Rowan, Mars 2003, "
+        "Ninomiya 2003) - (4 + 6) / 5 shows kaolinite and alunite, "
+        "(5 + 7) / 6 shows sericite and muscovite, (7 + 9) / 8 shows "
+        "carbonates, chlorite and epidote, 2 / 1 shows iron oxides, the "
+        "quartz index shows quartz from the thermal bands. The scale is "
+        "stretched over the area, warm colours mean more of the mineral.",
     "Наибольшая облачность всей сцены по оценке поставщика снимков, "
     "у Sentinel-2 сцена 110 × 110 км, у Landsat 185 × 180 км. Это отсев до "
     "расчёта облачности над участком. Сцена с облаками бывает чистой над "
