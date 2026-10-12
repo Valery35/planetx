@@ -7325,6 +7325,37 @@ class GlobeWindow(QWidget):
         return tr("Строка {key}: {state}.", key=key,
                   state=tr("включена") if on else tr("выключена"))
 
+    def _tool_list_actions(self):
+        return assistant_core.actions_text(
+            assistant_core.assistant_actions(self._search_actions()))
+
+    def _tool_run_action(self, key):
+        """Действие строки «Поиск» по ключу. Список строится заново:
+        после прежнего действия состав и состояния могли смениться."""
+        allowed = assistant_core.assistant_actions(self._search_actions())
+        found = [a for a in allowed if a.key == str(key)]
+        if not found:
+            return tr("Нет такого действия: {key}. Ключ берётся из "
+                      "list_actions.", key=key)
+        item = found[0]
+        journal.note("assistant action {}".format(item.key))
+        self._actions[item.key]()
+        return tr("Выполнено: {title} - {note}.", title=item.text,
+                  note=item.note)
+
+    def _tool_set_opacity(self, key, value):
+        key = str(key)
+        value = min(1.0, max(0.0, float(value)))
+        rows = dict((row[0], row[2]) for row in self._active_rows())
+        if key not in rows:
+            return tr("Слоя {key} нет среди включённых.", key=key)
+        if rows[key] is None:
+            return tr("У слоя {key} непрозрачность не меняется.", key=key)
+        self._active_opacity(key, value)
+        self._update_active()
+        return tr("Непрозрачность {key}: {value:.2f}.", key=key,
+                  value=value)
+
     def _tool_set_time(self, start="", end=""):
         if not start and not end:
             self.toolbar.set_time_shown(False)

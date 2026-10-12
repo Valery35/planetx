@@ -2279,7 +2279,11 @@ OpenRouter with a free model is chosen.
 - **What the assistant does.** Flight to a point and place search, body
   change, rows of the Layers section and the time slider, the Earth
   cutaway and a section down along points, point information and an
-  earthquake summary in a box.
+  earthquake summary in a box. All actions of the Search field are
+  available to the assistant as well - catalog layers and maps,
+  windows and tools, demos and bodies. It also changes the opacity of
+  a shown layer. The assistant does not open file choice windows and
+  does not start tour recording, the user opens them.
 - **Placemarks in KML.** The assistant proposes placemarks, paths,
   polygons, folders and tours as a KML document. Below the conversation
   a proposal appears with the Write to My Places and Cancel buttons.

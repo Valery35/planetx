@@ -427,6 +427,28 @@ class TestHelpers(unittest.TestCase):
         self.assertTrue(text.index("M6.1") < text.index("Самые глубокие"))
         self.assertIn("нет", ai.quakes_text(events, (-10, -5, 0, 1)))
 
+    def test_actions_for_assistant(self):
+        from searchbar import Suggestion
+
+        def item(key, text, note):
+            return Suggestion("action", text, key, None, None, None,
+                              note, ())
+        actions = [item("layer:grid", "Координатная сетка", "включить"),
+                   item("tool:record", "Записать облёт", "начать"),
+                   item("tool:scene_open", "Открыть сцену", "открыть окно"),
+                   item("map:weather_aurora", "Полярное сияние", "")]
+        allowed = ai.assistant_actions(actions)
+        self.assertEqual([a.key for a in allowed],
+                         ["layer:grid", "map:weather_aurora"])
+        text = ai.actions_text(allowed)
+        self.assertEqual(text.splitlines(), [
+            "layer:grid - Координатная сетка: включить",
+            "map:weather_aurora - Полярное сияние"])
+        self.assertEqual(ai.actions_text([]), "Действий нет.")
+        for name in ("list_actions", "run_action", "set_opacity"):
+            self.assertIn(name, ai.TOOL_NAMES)
+        self.assertIn("run_action", ai.system_text({}))
+
     def test_tools_have_schemas(self):
         self.assertIn("add_kml", ai.TOOL_NAMES)
         self.assertIn("get_kml", ai.TOOL_NAMES)

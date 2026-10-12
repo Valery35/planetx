@@ -2909,6 +2909,16 @@ EN = {
         "Row {key}: {state}.",
     "Тело: {body}.":
         "Body: {body}.",
+    "Нет такого действия: {key}. Ключ берётся из list_actions.":
+        "No such action: {key}. Take the key from list_actions.",
+    "Выполнено: {title} - {note}.":
+        "Done: {title} - {note}.",
+    "Слоя {key} нет среди включённых.":
+        "Layer {key} is not among the shown layers.",
+    "У слоя {key} непрозрачность не меняется.":
+        "Layer {key} has no opacity setting.",
+    "Непрозрачность {key}: {value:.2f}.":
+        "Opacity of {key}: {value:.2f}.",
     "OpenRouter (есть бесплатные модели)":
         "OpenRouter (free models available)",
     "Свой сервис, например Ollama":

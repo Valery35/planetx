@@ -3725,7 +3725,10 @@ def _fake_model():
                          or self.headers.get("Authorization")))
             if self.path.endswith("/messages"):
                 last = body["messages"][-1]["content"]
-                if isinstance(last, str):
+                first = body["messages"][0]["content"]
+                if isinstance(first, str) and "течения" in first:
+                    answer = self.actions(len(body["messages"]))
+                elif isinstance(last, str):
                     answer = {"content": [
                         {"type": "text", "text": "Лечу к Японии."},
                         {"type": "tool_use", "id": "t1", "name": "fly_to",
@@ -3776,6 +3779,25 @@ def _fake_model():
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+
+        def actions(self, count):
+            """Круги разговора о слоях: список действий, потом течения,
+            горизонтали, непрозрачность и окно снимков, потом текст."""
+            if count == 1:
+                return {"content": [{"type": "tool_use", "id": "a1",
+                                     "name": "list_actions", "input": {}}]}
+            if count == 3:
+                calls = (("run_action", {"key": "layer:currents"}),
+                         ("run_action", {"key": "layer:contours"}),
+                         ("set_opacity", {"key": "currents",
+                                          "value": 0.4}),
+                         ("run_action", {"key": "here:sentinel"}),
+                         ("run_action", {"key": "tool:record"}))
+                return {"content": [
+                    {"type": "tool_use", "id": "b%d" % n, "name": name,
+                     "input": args}
+                    for n, (name, args) in enumerate(calls)]}
+            return {"content": [{"type": "text", "text": "Включил."}]}
 
         def stream(self, made, slow):
             """Ответ потоком событий SSE формата Chat. Быстрый - документ
@@ -3938,6 +3960,59 @@ def assistant_tools_check():
     if window.section_dialog is not None:
         window.section_dialog.close()
     out["tools_gl"] = dict(window.view.gl_errors)
+
+
+@check(4000)
+def assistant_actions():
+    # Помощник включает слои и открывает окна действиями строки
+    # «Поиск» (list_actions, run_action) и меняет непрозрачность.
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    for key in ("currents", "contours"):
+        window.set_extra(key, False)
+    server, seen = _fake_model()
+    state["fake_actions"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    window.open_assistant()
+    dialog = window.assistant_dialog
+    _use_service(dialog, ai.ANTHROPIC,
+                 "http://127.0.0.1:%d" % server.server_port)
+    dialog.input.setText("Покажи течения и включи горизонтали")
+    dialog.send()
+
+
+@check(1000)
+def assistant_actions_check():
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    server, seen = state["fake_actions"]
+    out = result.setdefault("assistant_actions", {})
+    out["requests"] = len(seen)
+    listed = seen[1][1]["messages"][-1]["content"][0]["content"] \
+        if len(seen) > 1 else ""
+    out["list_has_currents"] = "layer:currents" in listed
+    out["list_has_record"] = "tool:record" in listed
+    out["results"] = [r["content"] for r in
+                      seen[2][1]["messages"][-1]["content"]] \
+        if len(seen) > 2 else None
+    out["currents_on"] = bool(window.extras.get("currents"))
+    out["contours_on"] = bool(window.extras.get("contours"))
+    out["currents_opacity"] = round(window._layer_opacity("currents"), 2)
+    sentinel = getattr(window, "sentinel_dialog", None)
+    out["sentinel_shown"] = sentinel is not None and sentinel.isVisible()
+    out["recording"] = window.toolbar.record.isChecked()
+    window._active_opacity("currents", 1.0)
+    for key in ("currents", "contours"):
+        window.set_extra(key, False)
+    if sentinel is not None:
+        sentinel.close()
+    window.assistant_dialog.close()
+    server.shutdown()
+    ui_ai.load_key = state["real_load_key"]
+    out["gl"] = dict(window.view.gl_errors)
 
 
 @check(3000)
