@@ -164,7 +164,8 @@ RU = {
                 "глубину до центра Земли. Магнитные полюса идут по "
                 "шкале времени с 1590 года, щелчок даёт склонение "
                 "компаса в точке. Магнитные аномалии EMAG2v3 выдают "
-                "строение коры.",
+                "строение коры, геоид EGM2008 «мнёт» глобус по силе "
+                "тяжести.",
     "deep.cut": "Разрез Земли у Японского жёлоба. Оболочки PREM, кора "
                 "и очаги землетрясений за 30 суток.",
     "deep.paleo": "Земля 100 млн лет назад по картам PaleoDEM, Scotese "
@@ -470,7 +471,8 @@ EN = {
                 "Section window down to the centre of the Earth. The "
                 "magnetic poles move along the time slider since 1590, "
                 "a click gives the compass declination at the point. "
-                "EMAG2v3 magnetic anomalies reveal the crust.",
+                "EMAG2v3 magnetic anomalies reveal the crust, the EGM2008 "
+                "geoid crumples the globe by gravity.",
     "deep.cut": "Earth cutaway at the Japan Trench. PREM shells, the "
                 "crust and earthquake foci over 30 days.",
     "deep.paleo": "The Earth 100 million years ago from the PaleoDEM "

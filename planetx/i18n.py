@@ -1250,6 +1250,26 @@ EN = {
     "Сайт не ответил: {error}": "The site did not answer: {error}",
     "У этой точки карт на сайте нет.":
         "The site has no maps at this point.",
+    "Геоид": "Geoid",
+    "Геоид EGM2008": "EGM2008 geoid",
+    "Высота геоида": "Geoid height",
+    "Над": "Above",
+    "эллипсоидом WGS84": "the WGS84 ellipsoid",
+    "Форма уровенной поверхности Земли - геоида - по модели EGM2008 NGA. "
+    "Пока строка включена, высоты глобуса - высоты геоида над "
+    "эллипсоидом, от -107 до +86 м, растянутые в 10 000 раз, и Земля "
+    "выглядит «измятой». Горбы - там, где сила тяжести больше, например "
+    "у Новой Гвинеи, впадины - где меньше, самая глубокая - в Индийском "
+    "океане. Рельеф и вода на это время убраны, выключение строки их "
+    "возвращает.":
+        "The shape of the Earth level surface - the geoid - after the NGA "
+        "EGM2008 model. While the row is on, the globe heights are the "
+        "geoid heights above the ellipsoid, from -107 to +86 m, stretched "
+        "10 000 times, and the Earth looks crumpled. Bulges are where "
+        "gravity is stronger, for example near New Guinea, hollows where "
+        "it is weaker, the deepest one in the Indian Ocean. Terrain and "
+        "water are removed for this time, switching the row off brings "
+        "them back.",
     "Магнитная аномалия, нТл": "Magnetic anomaly, nT",
     "Аномалии магнитного поля Земли по сетке EMAG2v3 NOAA NCEI - "
     "отклонение поля от нормального на высоте 4 км над эллипсоидом, шаг "

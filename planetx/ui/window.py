@@ -31,7 +31,7 @@ from qgis.utils import iface
 
 from .. import journal
 from ..core import (basemap, cadastre, clouds, demofiles, ellipsoid, emag,
-                    geomag, lookat, stars, sun, temperature, when)
+                    geoid, geomag, lookat, stars, sun, temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
@@ -282,14 +282,15 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "deposits": False, "mining": False, "osm_mines": False,
                   "plants": False, "infra_osm": False,
                   "cables": False, "currents": False, "cadastre": False,
-                  "magpoles": False, "emag": False}
+                  "magpoles": False, "emag": False, "geoid": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "plates", "fires", "satellites",
                 "deposits", "mining", "osm_mines", "plants", "infra_osm",
-                "cables", "currents", "cadastre", "magpoles", "emag")
+                "cables", "currents", "cadastre", "magpoles", "emag",
+                "geoid")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
@@ -924,6 +925,7 @@ class GlobeWindow(QWidget):
         # Адрес тайлов магнитных аномалий, шаги проверки ставят локальную
         # копию planetx-terrain.
         self.emag_url = emag.TILE_URL
+        self.geoid_url = geoid.TILE_URL
         self._emag_value = None  # (точка, значение нТл или None, ошибка)
         self._emag_reply = None
         self.cable_layer = None
@@ -1606,6 +1608,8 @@ class GlobeWindow(QWidget):
             self._set_poles(on)
         elif key == "emag":
             self._set_emag(on)
+        elif key == "geoid":
+            self._set_geoid(on)
         elif key == "satellites":
             self.satellite_manager.set_on(on)
             self._update_timebar()
@@ -2597,6 +2601,8 @@ class GlobeWindow(QWidget):
             return 0.0
         if getattr(self, "extras", {}).get("paleo") and self._paleo_on():
             return 0.0
+        if self._geoid_on():
+            return geoid.SCALE
         return self._scale if self._relief else 0.0
 
     def _start_terrain(self, source, floor):
@@ -2622,7 +2628,7 @@ class GlobeWindow(QWidget):
             self.terrain_loader.loaded.connect(self._heights)
             self.terrain_loader.failed.connect(
                 self.terrain_errors.__setitem__)
-            if self._relief:
+            if self._relief or self._geoid_on():
                 self.terrain_loader.want((0, 0, 0), 1.0)
         self.view.terrain_loader = self.terrain_loader
 
@@ -2750,7 +2756,8 @@ class GlobeWindow(QWidget):
     def _set_sea_floor(self, on):
         """Глубины морей и океанов: высоты Земли заново, с впадинами
         ниже нуля или без них, и вода над ними."""
-        self.view.sea_floor = on
+        # В режиме геоида воды нет, высоты - геоид, а не дно.
+        self.view.sea_floor = on and not self._geoid_on()
         if not self.planet.earth:
             return
         self._body_terrain(self.planet)
@@ -3170,6 +3177,14 @@ class GlobeWindow(QWidget):
     def _body_terrain(self, planet):
         """Высоты тела: Terrarium у Земли, архив у Марса и Луны.
         Архив тела скачивается, когда рельеф включён."""
+        if planet.earth and self._geoid_on():
+            # Режим геоида: высоты - тайлы геоида, без врезок и пола.
+            self.view.store.max_level = geoid.MAX_LEVEL
+            self.view.store.deep = []
+            self._start_terrain(basemap.Source(
+                "EGM2008", self.geoid_url, geoid.MAX_LEVEL, builtin=True),
+                None)
+            return
         if planet.earth:
             self.view.store.max_level = TERRAIN_MAX
             self._start_terrain(DeepSource(
@@ -3716,6 +3731,30 @@ class GlobeWindow(QWidget):
                                         year=int(year_in))))
         return shapes
 
+    # Геоид EGM2008 (core/geoid.py).
+
+    def _geoid_on(self):
+        return bool(getattr(self, "extras", {}).get("geoid")) \
+            and getattr(self, "planet", None) is not None \
+            and self.planet.earth
+
+    def _set_geoid(self, on):
+        """Строка «Геоид»: высоты Земли - тайлы геоида с масштабом
+        geoid.SCALE, вода не рисуется - половина геоида ниже нуля.
+        Выключение возвращает рельеф, масштаб и глубины морей."""
+        self.view.sea_floor = self.sea_depths and self.planet.earth \
+            and not self._geoid_on()
+        self._body_terrain(self.planet)
+        self.view.reset_heights()
+        self.view.set_relief(self._relief_target())
+        self._update_water()
+        self._place_quakes()
+        self._place_fires()
+        self._place_deposits()
+        self._mark_gallery()
+        self._show_attribution()
+        self.view.update()
+
     # Магнитные аномалии EMAG2v3 (core/emag.py).
 
     def _set_emag(self, on):
@@ -3841,6 +3880,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*MAGNETIC_ATTRIBUTION))
         if "emag" in self.gibs_loaders:
             parts.append(link_html(*emag.ATTRIBUTION))
+        if self._geoid_on():
+            parts.append(link_html(*geoid.ATTRIBUTION))
         if self.planet.earth and (
                 self._applied_groups and self.ofm_layer is not None
                 or self.buildings_loader is not None):
@@ -7814,8 +7855,10 @@ class GlobeWindow(QWidget):
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)
+        # Высота геоида не высота места - строка точки её не пишет.
         self.identified.show_result(
-            point_text(lat, lon, height, fmt=self.coords), groups)
+            point_text(lat, lon, None if self._geoid_on() else height,
+                       fmt=self.coords), groups)
 
     # ИИ-помощник: контекст вида и инструменты (core/assistant.py).
 
@@ -8792,6 +8835,15 @@ class GlobeWindow(QWidget):
         по их приходу."""
         if not self.planet.earth:
             return []
+        if self._geoid_on():
+            # В режиме геоида высота под щелчком - высота геоида, не
+            # рельеф и не дно, кора к ней не относится.
+            if height is None:
+                return []
+            return [(Group(tr("Геоид")), [(tr("Геоид EGM2008"), [
+                (tr("Высота геоида"), tr("{value} м", value="{:+.1f}"
+                                         .format(height))),
+                (tr("Над"), tr("эллипсоидом WGS84"))], None)])]
         values = []
         address = self._address_value(lat, lon)
         if address is not None:

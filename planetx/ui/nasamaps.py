@@ -74,7 +74,8 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "infra_osm": ((220, 60, 60), (240, 150, 40), (90, 90, 200)),
               "cables": ((60, 200, 200), (170, 110, 220)),
               "magpoles": ((235, 70, 60), (70, 130, 235)),
-              "emag": ((40, 60, 150), (245, 245, 235), (160, 30, 35))}
+              "emag": ((40, 60, 150), (245, 245, 235), (160, 30, 35)),
+              "geoid": ((60, 90, 170), (120, 170, 120), (200, 150, 80))}
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
@@ -86,11 +87,12 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "grid": "", "buildings": "OpenFreeMap",
            "contours": "Terrarium", "infra_osm": "OpenStreetMap",
            "cables": "OpenStreetMap", "cadastre": "Rosreestr NSPD",
-           "magpoles": "NOAA NCEI, IGRF-14", "emag": "EMAG2v3, NOAA NCEI"}
+           "magpoles": "NOAA NCEI, IGRF-14", "emag": "EMAG2v3, NOAA NCEI",
+           "geoid": "EGM2008, NGA"}
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
-          ("magpoles", "depths"), ("emag", "depths"),
+          ("magpoles", "depths"), ("emag", "depths"), ("geoid", "depths"),
           ("deposits", "depths"), ("mining", "depths"),
           ("osm_mines", "depths"), ("plants", "infra"),
           ("currents", "water"),
@@ -230,6 +232,15 @@ def layer_names():
             "и полосы океанского дна, древние щиты, рудные районы. "
             "Пустые места - там съёмки нет. Щелчок в режиме «Определить "
             "объекты» показывает значение в нТл.")),
+        "geoid": (tr("Геоид"), tr(
+            "Форма уровенной поверхности Земли - геоида - по модели "
+            "EGM2008 NGA. Пока строка включена, высоты глобуса - высоты "
+            "геоида над эллипсоидом, от -107 до +86 м, растянутые "
+            "в 10 000 раз, и Земля выглядит «измятой». Горбы - там, где "
+            "сила тяжести больше, например у Новой Гвинеи, впадины - "
+            "где меньше, самая глубокая - в Индийском океане. Рельеф "
+            "и вода на это время убраны, выключение строки их "
+            "возвращает.")),
         "cutaway": (tr("Разрез Земли"), tr(
             "Вынимает из Земли сектор под точкой взгляда - "
             "четверть полушария шириной 90° по долготе. На его "

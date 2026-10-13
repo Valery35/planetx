@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.82.0
+version=0.83.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.82.0 The Magnetic anomalies row of the Inside the Earth
+changelog=0.83.0 The Geoid row of the Inside the Earth catalogue shows the
+      shape of the EGM2008 geoid - geoid heights above the ellipsoid
+      stretched 10 000 times, the Earth looks crumpled. A click in the
+      Identify mode shows the geoid height at the point. Switching the row
+      off brings terrain and water back.
+      0.82.0 The Magnetic anomalies row of the Inside the Earth
       catalogue shows the anomalies of the Earth magnetic field after the
       NOAA EMAG2v3 grid at 4 km - red places are stronger than the normal
       field, blue ones weaker. The Kursk magnetic anomaly, the stripes of

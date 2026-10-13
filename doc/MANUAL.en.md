@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.82.0
+Version 0.83.0
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -414,7 +414,7 @@ visible. The ← arrow brings the list back. The categories stand on the
 left: Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Clouds, Sun,
 Satellites), Inside the Earth (Earthquakes, Plate boundaries, Magnetic
-poles, Magnetic anomalies, Mineral
+poles, Magnetic anomalies, Geoid, Mineral
 deposits, Mining areas, OSM mines and quarries, Earth cutaway,
 Paleogeography), Energy (Power plants, Power lines and pipelines,
 Submarine cables), Terrain analysis (Slope, Aspect) and Satellites -
@@ -590,6 +590,18 @@ survey the layer is empty. A click in the Identify mode shows the value
 at the point, near Kursk about +270 nT. The tiles lie in the
 planetx-terrain repository, about 50 MB for the whole world, and load as
 they are shown.
+
+The Geoid layer shows the shape of the geoid - the Earth level surface
+from which heights above sea level are counted - after the NGA EGM2008
+model. While the row is on, the globe heights are the geoid heights
+above the ellipsoid, from -107 to +86 m, stretched 10 000 times, and the
+Earth looks crumpled. Bulges stand where gravity is stronger, for
+example near New Guinea and in the North Atlantic, hollows where it is
+weaker, the deepest one south of India. Terrain and water are removed
+for this time, a layer of atmosphere shows over deep hollows. Switching
+the row off brings back terrain, scale and sea depths. A click in the
+Identify mode shows the geoid height above the ellipsoid at the point in
+the Geoid group.
 
 The Mineral deposits layer shows mineral deposits, mines and
 occurrences of the U.S. Geological Survey (USGS) from three datasets. The

@@ -14186,6 +14186,69 @@ def cadastre_check():
 
 
 @check(500)
+def geoid_on():
+    """Геоид над Индийским океаном: высоты - тайлы геоида локальной копии
+    planetx-terrain, масштаб geoid.SCALE, воды нет."""
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
+    window.geoid_url = QUrl.fromLocalFile(os.path.join(
+        folder, "geoid")).toString() + "/{z}/{x}/{y}.png"
+    result["geoid"] = {"before": {"scale": window.view.store.scale,
+                                  "sea_floor": window.view.sea_floor}}
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(-5.0, 95.0, 18000000.0, 0.0, 20.0))
+    window.set_extra("geoid", True)
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def geoid_check():
+    window = state["window"]
+    store = window.view.store
+    spent = time.monotonic() - state["ls_started"]
+    low = store.height_at(4.7, 78.8)
+    if spent < 30.0 and (spent < 8.0 or not low):
+        return 1000
+    out = result["geoid"]
+    out.update(seconds=round(spent, 1), scale=store.scale,
+               sea_floor=window.view.sea_floor,
+               max_level=store.max_level,
+               low_m=round(low / store.scale, 2) if store.scale else None,
+               high_m=round(store.height_at(-4.5, 147.3) / store.scale, 2)
+               if store.scale else None,
+               attribution="EGM2008" in window.attribution.text(),
+               errors=dict(window.terrain_errors),
+               gl_errors=dict(window.view.gl_errors))
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_geoid.png"))
+    # Щелчок в середине вида - группа «Место» окна «Объекты».
+    view = window.view
+    ratio = view.devicePixelRatioF()
+    window.identify_here(view.width() * ratio / 2.0,
+                         view.height() * ratio / 2.0)
+    tree = window.identified.tree
+    rows = []
+    for n in range(tree.topLevelItemCount()):
+        top = tree.topLevelItem(n)
+        for m in range(top.childCount()):
+            item = top.child(m)
+            rows += [(top.text(0), item.child(k).text(0),
+                      item.child(k).text(1))
+                     for k in range(item.childCount())]
+    out["identify"] = rows[:8]
+    out["point"] = window.identified.point.text()
+    window.identified.close()
+    window.set_extra("geoid", False)
+    out["after"] = {"scale": window.view.store.scale,
+                    "sea_floor": window.view.sea_floor,
+                    "max_level": store.max_level}
+    return None
+
+
+@check(500)
 def emag_on():
     """Магнитные аномалии над Курской магнитной аномалией: тайлы из
     локальной копии planetx-terrain (PLANETX_TERRAIN_DIR, иначе
