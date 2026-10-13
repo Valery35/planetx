@@ -137,9 +137,12 @@ def main():
     heights = np.round(heights, 2).astype(np.float32)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     drv = gdal.GetDriverByName("GTiff")
+    # LERC с ошибкой меньше половины сантиметра - высоты уже округлены
+    # до сантиметра, файл на 0.7 МБ меньше DEFLATE. Архив модуля для
+    # каталога QGIS не больше 10 МБ, 13 октября 2026 года.
     out = drv.Create(OUT, size, size, 1, gdal.GDT_Float32,
-                     ["TILED=YES", "COMPRESS=DEFLATE", "PREDICTOR=3",
-                      "ZLEVEL=9"])
+                     ["TILED=YES", "COMPRESS=LERC_DEFLATE",
+                      "MAX_Z_ERROR=0.004", "ZLEVEL=9"])
     out.SetGeoTransform((west, PIXEL, 0.0, north, 0.0, -PIXEL))
     out.SetProjection(utm.ExportToWkt())
     band = out.GetRasterBand(1)

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.79.1
+version=0.80.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,18 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.79.1 The QGIS plugin catalogue no longer marks the plugin
+changelog=0.80.0 3D models of buildings and other objects on the globe. Add
+      - 3D model… in My Places puts a model from a Collada, glTF or OBJ file
+      with materials, Google Earth models open from KMZ in their place. A
+      model is placed with the handles of its box, as a ground overlay -
+      move, rotate, scale and stretch along an axis. The properties window
+      sets the point, height, rotation, scale and opacity. A new model is
+      kept as a link to its source file, an edit in SketchUp or Blender
+      shows on the globe. A copy of the files can go into the places file.
+      KMZ and a scene take the model files along. The 3D models, Suzdal and
+      Perm demo shows the Zachatievskaya church in Suzdal and the
+      Intercession church in Perm.
+      0.79.1 The QGIS plugin catalogue no longer marks the plugin
       with a warning about a string that looks like a secret key. The
       Rosreestr certificate fingerprint is written byte by byte with colons.
       0.79.0 Rosreestr land parcel information with a click. With the

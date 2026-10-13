@@ -17,13 +17,25 @@ Pandoc превращает Markdown в самодостаточную стра�
 """
 import glob
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOC_SRC = os.path.join(ROOT, "doc")
 DOC_OUT = os.path.join(ROOT, "planetx", "doc")
+
+# Архив модуля для каталога QGIS не больше 10 МБ, PDF двух языков -
+# его заметная часть. Картинки руководства идут в PDF в JPEG шириной
+# не больше FIGURE_WIDTH пикселей - это 140 точек на дюйм на ширине
+# страницы A4 без полей. Исходные снимки в doc/figures не меняются.
+# Просьба автора от 13 октября 2026 года, величины - выбор помощника.
+FIGURE_WIDTH = 1000
+FIGURE_QUALITY = 60
+FIGURE_LINK = re.compile(r"figures/[^\s)\"']+\.(?:png|jpe?g)",
+                         re.IGNORECASE)
 
 BOOKS = [
     ("MANUAL.md", "PlanetX.pdf", "ru", "Содержание"),
@@ -97,9 +109,43 @@ def find_browser():
     return None
 
 
-def to_html(pandoc, source, target, language, toc_title):
+def small_figure(source, target):
+    """Картинка руководства в JPEG не шире FIGURE_WIDTH."""
+    from PIL import Image
+    with Image.open(source) as image:
+        image = image.convert("RGBA")
+        flat = Image.new("RGB", image.size, (255, 255, 255))
+        flat.paste(image, mask=image.getchannel("A"))
+        if flat.width > FIGURE_WIDTH:
+            flat = flat.resize(
+                (FIGURE_WIDTH,
+                 max(round(flat.height * FIGURE_WIDTH / flat.width), 1)),
+                Image.LANCZOS)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        flat.save(target, "JPEG", quality=FIGURE_QUALITY, optimize=True)
+
+
+def small_source(source, folder):
+    """Копия Markdown в folder со ссылками на ужатые картинки."""
+    with open(os.path.join(DOC_SRC, source), encoding="utf-8") as fh:
+        text = fh.read()
+
+    def swap(match):
+        link = match.group(0)
+        small = os.path.splitext(link)[0] + ".jpg"
+        target = os.path.join(folder, small)
+        if not os.path.exists(target):
+            small_figure(os.path.join(DOC_SRC, link), target)
+        return small
+
+    text = FIGURE_LINK.sub(swap, text)
+    with open(os.path.join(folder, source), "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def to_html(pandoc, source, target, language, toc_title, folder=DOC_SRC):
     """Markdown в страницу со встроенными картинками и оглавлением."""
-    css_path = os.path.join(DOC_SRC, "_print.css")
+    css_path = os.path.join(folder, "_print.css")
     with open(css_path, "w", encoding="utf-8") as fh:
         fh.write(CSS)
     command = [pandoc, source, "-f", "gfm", "-t", "html5", "-o", target,
@@ -107,8 +153,8 @@ def to_html(pandoc, source, target, language, toc_title):
                "--toc-depth=2", "--metadata", "lang=" + language,
                "--metadata", "pagetitle=PlanetX",
                "--variable", "toc-title=" + toc_title,
-               "--css", "_print.css", "--resource-path=" + DOC_SRC]
-    result = subprocess.run(command, cwd=DOC_SRC, capture_output=True,
+               "--css", "_print.css", "--resource-path=" + folder]
+    result = subprocess.run(command, cwd=folder, capture_output=True,
                             text=True)
     os.remove(css_path)
     if result.returncode != 0:
@@ -141,17 +187,19 @@ def main():
         print("Нет браузера для печати, руководство не собрано.")
         return 1
     os.makedirs(DOC_OUT, exist_ok=True)
-    for source, target, language, toc_title in BOOKS:
-        html_path = os.path.join(DOC_SRC,
-                                 "_" + target.replace(".pdf", ".html"))
-        pdf_path = os.path.join(DOC_OUT, target)
-        to_html(pandoc, source, html_path, language, toc_title)
-        try:
+    folder = tempfile.mkdtemp(prefix="planetx_manual_")
+    try:
+        for source, target, language, toc_title in BOOKS:
+            small_source(source, folder)
+            html_path = os.path.join(folder,
+                                     "_" + target.replace(".pdf", ".html"))
+            pdf_path = os.path.join(DOC_OUT, target)
+            to_html(pandoc, source, html_path, language, toc_title, folder)
             to_pdf(browser, html_path, pdf_path)
-        finally:
-            if os.path.exists(html_path):
-                os.remove(html_path)
-        print("%-16s %8.1f КБ" % (target, os.path.getsize(pdf_path) / 1024))
+            print("%-16s %8.1f КБ" % (target,
+                                      os.path.getsize(pdf_path) / 1024))
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
     return 0
 
 
