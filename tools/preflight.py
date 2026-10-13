@@ -114,6 +114,13 @@ def main():
     cp = configparser.ConfigParser()
     cp.read(meta_path, encoding="utf-8")
     general = cp["general"]
+    # Каталог и QGIS читают каждое поле с подстановкой, одиночный «%»
+    # в журнале 0.78.1 сорвал загрузку в каталог 13 октября 2026 года.
+    for field in general:
+        try:
+            general.get(field)
+        except configparser.InterpolationError as error:
+            errors.append("metadata.txt: поле %s - %s" % (field, error))
 
     for field in REQUIRED:
         if not general.get(field, "").strip():

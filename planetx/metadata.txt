@@ -103,7 +103,7 @@ changelog=0.78.1 One Satellite images here… item of the globe menu instead
       area. An ASTER scene is about 60 km, the area by the view width is up
       to 100 km, and the window used to hide scenes covering less than half
       of the area. Now ASTER hides only scenes that hardly touch the area,
-      the others carry the data N % mark.
+      the others carry the share of data over the area.
       0.78.0 The Base map menu - Ready sources sets a base map with one
       click: Google, Bing, Yandex, 2GIS imagery and maps, OpenTopoMap and
       Esri World Topo Map. The terms of Google, Bing, Yandex and 2GIS do not
