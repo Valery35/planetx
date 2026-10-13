@@ -33,7 +33,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QComboBox, QDialog,
                                  QLineEdit, QPlainTextEdit, QPushButton,
                                  QSlider, QSpinBox)
 
-from ..core import editing, overlays, when
+from ..core import editing, models, overlays, when
 from ..i18n import tr
 from ..qt_compat import enum
 from .handles import DrawVertices, PropVertices
@@ -369,6 +369,54 @@ class BoxVertices(DrawVertices):
         return tr("Растянуть от угла, с Shift - от середины")
 
 
+class ModelVertices(BoxVertices):
+    """Ручки рамки 3D-модели - следа её коробки на земле: крест
+    сдвигает модель, ромб поворачивает, угол меняет масштаб всех осей
+    от противоположного угла, с Shift - от середины, середина стороны
+    растягивает модель по одной оси."""
+
+    def active(self):
+        return self.dialog.isVisible() \
+            and self.window.view.sky_view is None \
+            and self.dialog.extent is not None
+
+    def box(self):
+        overlay = self.dialog.overlay
+        return overlays.model_box(overlay.camera, overlay.scale,
+                                  self.dialog.extent)
+
+    def _handles(self):
+        corners, sides, centre, rotate = overlays.box_handles(self.box())
+        return corners + [centre, rotate], sides
+
+    def move(self, px, py):
+        if self.handle is None:
+            return
+        found = self.window._ground(px, py)
+        if found is None:
+            return
+        self._moved = True
+        shift = QApplication.keyboardModifiers() & enum(
+            Qt, "KeyboardModifier", "ShiftModifier")
+        overlay = self.dialog.overlay
+        self.dialog.set_place(*overlays.model_drag(
+            overlay.camera, overlay.scale, self.dialog.extent,
+            self.handle[0], self.handle[1], found[0], found[1],
+            centred=bool(shift)))
+
+    def hint(self):
+        if self.hot is None:
+            return ""
+        kind, index = self.hot
+        if kind == editing.MIDDLE:
+            return tr("Растянуть модель по стороне")
+        if index == 4:
+            return tr("Сдвинуть модель")
+        if index == 5:
+            return tr("Повернуть модель")
+        return tr("Изменить масштаб от угла, с Shift - от середины")
+
+
 class OverlayDialog(QDialog):
     """Окно свойств наложения. Сигнал changed - правки для показа на
     глобусе сразу, в файл они идут по «OK». mode_changed - рамка
@@ -388,10 +436,13 @@ class OverlayDialog(QDialog):
                                             item.overlay.corners)
         self.image = None
         self._image = image
+        # Коробка модели (xmin, xmax, ymin, ymax) в её единицах для
+        # рамки на глобусе, её ставит окно глобуса.
+        self.extent = None
         self.link = item.href if item.image is None and item.href else None
         titles = {"ground": tr("Картинка на поверхности"),
                   "screen": tr("Картинка на экране"),
-                  "photo": tr("Фото")}
+                  "photo": tr("Фото"), "model": tr("3D-модель")}
         self.setWindowTitle(titles[item.kind])
         form = QFormLayout(self)
         self.name = QLineEdit(item.name, self)
@@ -422,6 +473,15 @@ class OverlayDialog(QDialog):
             "файлу или адрес в сети, картинка читается при показе, правка "
             "файла видна на глобусе."))
         self.store.currentIndexChanged.connect(self._store_changed)
+        model = item.kind == "model"
+        if model:
+            self.store.setItemText(1, tr("Ссылка на файл"))
+            self.store.setToolTip(tr(
+                "Где лежат файлы модели. Ссылка - путь к файлу .dae, "
+                ".gltf, .glb или .obj, модель читается из него и файлов "
+                "рядом, правка в SketchUp или Blender видна на глобусе. "
+                "В файле меток - копия всех файлов модели, она видна "
+                "и без исходного файла."))
         form.addRow(tr("Хранение"), self.store)
         row = QHBoxLayout()
         self.path = QLineEdit(self.link or "", self)
@@ -437,8 +497,19 @@ class OverlayDialog(QDialog):
             "копией, у ссылки меняется путь. Углы и положение остаются."))
         browse.clicked.connect(self._browse)
         row.addWidget(browse)
-        form.addRow(tr("Картинка"), row)
         self.file = QLabel(self)
+        if model:
+            self.path.setPlaceholderText(tr("Путь к файлу модели"))
+            self.path.setToolTip(tr(
+                "Путь к файлу модели .dae, .gltf, .glb или .obj. Картинки "
+                "модели читаются из файлов рядом с ним."))
+            browse.setToolTip(tr(
+                "Выбрать файл модели. В файле меток модель заменяется "
+                "копией, у ссылки меняется путь. Место и масштаб "
+                "остаются."))
+            form.addRow(tr("Файл модели"), row)
+        else:
+            form.addRow(tr("Картинка"), row)
         form.addRow("", self.file)
         self.refresh = QSpinBox(self)
         self.refresh.setRange(0, 86400)
@@ -454,6 +525,13 @@ class OverlayDialog(QDialog):
             "поднимается до {low} с.", low=int(overlays.MIN_REFRESH)))
         self.refresh.setKeyboardTracking(False)
         self.refresh.valueChanged.connect(self._refresh_edited)
+        if model:
+            self.refresh.setToolTip(tr(
+                "Файл модели по ссылке проверяется через этот промежуток, "
+                "пока модель видна. Изменённый файл читается заново. "
+                "Ноль - файл читается при показе. Промежуток короче "
+                "{low} с поднимается до {low} с.",
+                low=int(overlays.MIN_REFRESH)))
         form.addRow(tr("Обновлять"), self.refresh)
         self.opacity = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
         self.opacity.setRange(0, 100)
@@ -466,6 +544,8 @@ class OverlayDialog(QDialog):
             self._ground_rows(form)
         if item.kind == "screen":
             self._screen_rows(form)
+        if model:
+            self._model_rows(form)
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Ok")
             | enum(QDialogButtonBox, "StandardButton", "Cancel"), self)
@@ -590,6 +670,14 @@ class OverlayDialog(QDialog):
             self._show_file()
 
     def _show_file(self):
+        if self.item.kind == "model":
+            self.file.setText(
+                (tr("по ссылке {link}", link=self.link) if self.link
+                 else tr("ссылки нет"))
+                if self.store.currentData() == "link"
+                else tr("в файле меток") if self.image or self._image
+                else tr("файлов модели нет"))
+            return
         if self.store.currentData() == "link":
             self.file.setText(tr("по ссылке {link}", link=self.link)
                               if self.link else tr("ссылки нет"))
@@ -600,14 +688,30 @@ class OverlayDialog(QDialog):
                           else tr("картинки нет"))
 
     def _browse(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Картинка наложения"), "",
-            tr("Картинки (*.png *.jpg *.jpeg *.gif)"))
+        model = self.item.kind == "model"
+        if model:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("3D-модель"), "",
+                tr("Файлы моделей (*.dae *.gltf *.glb *.obj)"))
+        else:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("Картинка наложения"), "",
+                tr("Картинки (*.png *.jpg *.jpeg *.gif)"))
         if not path:
             return
         if self.store.currentData() == "link":
             self.path.setText(path)
             self._path_edited()
+            return
+        if model:
+            package = models.package_file(path)
+            if package is None:
+                self.file.setText(tr("Модель не читается: {name}",
+                                     name=os.path.basename(path)))
+                return
+            self.image = package
+            self._show_file()
+            self.changed.emit()
             return
         with open(path, "rb") as stream:
             data = stream.read()
@@ -622,6 +726,100 @@ class OverlayDialog(QDialog):
         color[3] = int(round(value * 2.55))
         self.overlay.color = tuple(color)
         self.changed.emit()
+
+    # 3D-модель: место, как Location, Orientation и Scale KML.
+
+    def _model_rows(self, form):
+        lat, lon, alt, heading, tilt, roll = self.overlay.camera
+        self.place = {}
+        rows = (("lat", tr("Широта"), -90.0, 90.0, 7, "°", lat, tr(
+                    "Широта точки модели. Точка - начало координат "
+                    "файла модели.")),
+                ("lon", tr("Долгота"), -180.0, 180.0, 7, "°", lon, tr(
+                    "Долгота точки модели.")),
+                ("alt", tr("Высота"), -11000.0, 100000.0, 2, tr(" м"),
+                 alt, tr(
+                     "Высота точки модели. Над рельефом - подъём над "
+                     "землёй, над уровнем моря - высота от уровня моря. "
+                     "На рельефе высота не действует.")),
+                ("heading", tr("Азимут"), -360.0, 360.0, 2, "°", heading,
+                 tr("Поворот модели по часовой стрелке, если смотреть "
+                    "сверху. Ноль - ось Y модели смотрит на север.")),
+                ("tilt", tr("Наклон"), -180.0, 180.0, 2, "°", tilt, tr(
+                    "Наклон модели вокруг её оси X.")),
+                ("roll", tr("Крен"), -180.0, 180.0, 2, "°", roll, tr(
+                    "Крен модели вокруг её оси Y.")))
+        for key, text, low, high, decimals, suffix, value, hint in rows:
+            spin = QDoubleSpinBox(self)
+            spin.setRange(low, high)
+            spin.setDecimals(decimals)
+            spin.setSuffix(suffix)
+            spin.setValue(value)
+            spin.setToolTip(hint)
+            spin.setKeyboardTracking(False)
+            spin.valueChanged.connect(self._model_edited)
+            form.addRow(text, spin)
+            self.place[key] = spin
+            if key == "lon":
+                self.mode = QComboBox(self)
+                for mode, name in (
+                        ("clampToGround", tr("На рельефе")),
+                        ("relativeToGround", tr("Над рельефом")),
+                        ("absolute", tr("Над уровнем моря"))):
+                    self.mode.addItem(name, mode)
+                index = self.mode.findData(self.overlay.mode)
+                self.mode.setCurrentIndex(max(index, 0))
+                self.mode.setToolTip(tr(
+                    "От чего отсчитывается высота модели, как "
+                    "altitudeMode в KML."))
+                self.mode.currentIndexChanged.connect(self._model_edited)
+                form.addRow(tr("Отсчёт высоты"), self.mode)
+        self.scale = QDoubleSpinBox(self)
+        self.scale.setRange(0.001, 10000.0)
+        self.scale.setDecimals(3)
+        self.scale.setValue(self.overlay.scale[0])
+        self.scale.setToolTip(tr(
+            "Масштаб модели. Единица - размеры из файла модели. Поле "
+            "меняет масштаб по всем осям сразу, разный масштаб осей "
+            "из KML сохраняется в их отношении."))
+        self.scale.setKeyboardTracking(False)
+        self.scale.valueChanged.connect(self._model_edited)
+        form.addRow(tr("Масштаб"), self.scale)
+        self.model_info = QLabel(self)
+        self.model_info.setWordWrap(True)
+        form.addRow(self.model_info)
+
+    def _model_edited(self, *args):
+        values = {key: spin.value() for key, spin in self.place.items()}
+        self.overlay.camera = (values["lat"], values["lon"], values["alt"],
+                               values["heading"], values["tilt"],
+                               values["roll"])
+        self.overlay.mode = self.mode.currentData()
+        old = self.overlay.scale
+        base = old[0] if old[0] else 1.0
+        share = self.scale.value() / base
+        self.overlay.scale = tuple(v * share for v in old)
+        self.changed.emit()
+
+    def set_place(self, camera, scale):
+        """Новое место и масштаб модели с ручек рамки на глобусе."""
+        self.overlay.camera = tuple(float(v) for v in camera)
+        self.overlay.scale = tuple(float(v) for v in scale)
+        values = dict(zip(("lat", "lon", "alt", "heading", "tilt",
+                           "roll"), self.overlay.camera))
+        for key, spin in self.place.items():
+            spin.blockSignals(True)
+            spin.setValue(values[key])
+            spin.blockSignals(False)
+        self.scale.blockSignals(True)
+        self.scale.setValue(self.overlay.scale[0])
+        self.scale.blockSignals(False)
+        self.changed.emit()
+
+    def set_model_info(self, text):
+        """Сведения о модели под полями: части, вершины, размеры."""
+        if hasattr(self, "model_info"):
+            self.model_info.setText(text)
 
     # Картинка на экране.
 

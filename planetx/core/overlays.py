@@ -32,8 +32,10 @@ except ImportError:  # headless-тесты
     from camera import enu
     from measure import destination
 
-KINDS = ("ground", "screen", "photo")
+KINDS = ("ground", "screen", "photo", "model")
 WHITE = (255, 255, 255, 255)
+# altitudeMode модели, как в core/models.py.
+MODEL_MODES = ("clampToGround", "relativeToGround", "absolute")
 # Новая картинка на поверхности - доля ширины видимой полосы.
 NEW_SHARE = 0.5
 # Плоскость нового фото - доля расстояния до точки взгляда.
@@ -70,6 +72,9 @@ class Overlay:
     свободных угла gx:LatLonQuad. С рамкой углы считаются по ней.
     refresh - промежуток обновления картинки по ссылке в секундах,
     0 - не обновляется, как refreshMode onInterval в Icon KML.
+    У 3D-модели (core/models.py) camera - место (широта, долгота,
+    высота, азимут, наклон, крен), как Location и Orientation KML,
+    scale - масштаб по осям X, Y, Z, mode - altitudeMode.
     """
 
     def __init__(self, kind, corners=None, color=WHITE, order=0,
@@ -77,8 +82,11 @@ class Overlay:
                  screen_xy=(0.0, 0.0, "fraction", "fraction"),
                  size=(-1.0, -1.0, "fraction", "fraction"), rotation=0.0,
                  camera=None, fov=(-30.0, 30.0, -20.0, 20.0), near=100.0,
-                 box=None, refresh=0.0):
+                 box=None, refresh=0.0, scale=(1.0, 1.0, 1.0),
+                 mode="clampToGround"):
         self.kind = kind
+        self.scale = tuple(float(v) for v in scale)
+        self.mode = mode
         self.refresh = refresh_interval(refresh)
         self.box = tuple(float(v) for v in box) if box else None
         if self.box is not None:
@@ -117,6 +125,9 @@ class Overlay:
             data.update(overlay_xy=list(self.overlay_xy),
                         screen_xy=list(self.screen_xy),
                         size=list(self.size), rotation=self.rotation)
+        elif self.kind == "model":
+            data.update(camera=list(self.camera or ()),
+                        scale=list(self.scale), mode=self.mode)
         else:
             data.update(camera=list(self.camera or ()), fov=list(self.fov),
                         near=self.near)
@@ -142,6 +153,8 @@ def from_params(kind, text, corners=None):
 
     base = Overlay(kind)
     color = data.get("color")
+    scale = data.get("scale")
+    mode = data.get("mode")
     box = data.get("box")
     return Overlay(
         kind, corners or data.get("corners"),
@@ -156,7 +169,10 @@ def from_params(kind, text, corners=None):
         camera=data.get("camera") or None,
         fov=tuple(data.get("fov") or base.fov),
         near=float(data.get("near", base.near) or base.near),
-        refresh=data.get("refresh", 0.0))
+        refresh=data.get("refresh", 0.0),
+        scale=tuple(float(v) for v in scale) if isinstance(scale, list)
+        and len(scale) == 3 else base.scale,
+        mode=mode if mode in MODEL_MODES else base.mode)
 
 
 def _metres_per_degree(lat):
@@ -288,6 +304,85 @@ def box_drag(box, handle, index, lat, lon, centred=False):
     cx, cy = _turn(cu, cv, angle)
     my, mx = _metres_per_degree(lat0)
     return frame_box(lat0 + cy / my, lon0 + cx / mx, nhx, nhy, angle, lat0)
+
+
+# Рамка 3D-модели: след её коробки на земле по азимуту, ручки - как
+# у рамки картинки. Наклон и крен рамка не учитывает. Просьба автора
+# от 13 октября 2026 года - модель ставится на место мышью, как растр.
+
+def model_box(camera, scale, extent):
+    """Рамка (север, юг, восток, запад, поворот) следа модели. camera -
+    место Overlay.camera, scale - масштаб по осям, extent - (xmin, xmax,
+    ymin, ymax) модели в её единицах."""
+    lat, lon, heading = camera[0], camera[1], camera[3]
+    xmin, xmax, ymin, ymax = extent
+    sx, sy = scale[0], scale[1]
+    angle = -math.radians(heading)
+    east, north = _turn((xmin + xmax) / 2.0 * sx,
+                        (ymin + ymax) / 2.0 * sy, angle)
+    my, mx = _metres_per_degree(lat)
+    return frame_box(lat + north / my, lon + east / mx,
+                     (xmax - xmin) / 2.0 * abs(sx),
+                     (ymax - ymin) / 2.0 * abs(sy), angle, lat)
+
+
+def _model_place(camera, scale, extent, box):
+    """Место модели, у которой след - рамка box."""
+    lat0, lon0, _, _, angle = box_frame(box)
+    xmin, xmax, ymin, ymax = extent
+    east, north = _turn((xmin + xmax) / 2.0 * scale[0],
+                        (ymin + ymax) / 2.0 * scale[1], angle)
+    my, mx = _metres_per_degree(lat0)
+    lon = (lon0 - east / mx + 180.0) % 360.0 - 180.0
+    heading = (-math.degrees(angle) + 180.0) % 360.0 - 180.0
+    return (lat0 - north / my, lon, camera[2], heading) \
+        + tuple(camera[4:6])
+
+
+def model_drag(camera, scale, extent, handle, index, lat, lon,
+               centred=False):
+    """Новое место и масштаб модели (camera, scale), когда ручку её
+    рамки handle номер index тянут в точку (lat, lon). Середина
+    сдвигает, ромб поворачивает, середина стороны растягивает модель
+    по одной оси от противоположной стороны. Угол меняет масштаб всех
+    трёх осей одинаково, противоположный угол стоит на месте, centred -
+    середина стоит на месте."""
+    box = model_box(camera, scale, extent)
+    lat0, lon0, hx, hy, angle = box_frame(box)
+    if handle == "corner":
+        x, y = _local(lat0, lon0, lat, lon)
+        u, v = _turn(x, y, -angle)
+        sx, sy = SIGNS[index]
+        if centred:
+            share = (abs(u) / hx + abs(v) / hy) / 2.0
+            cu = cv = 0.0
+        else:
+            ox, oy = -sx * hx, -sy * hy
+            share = (abs(u - ox) / hx + abs(v - oy) / hy) / 4.0
+            share = max(share, MIN_SHARE)
+            cu, cv = ox + sx * share * hx, oy + sy * share * hy
+        share = max(share, MIN_SHARE)
+        cx, cy = _turn(cu, cv, angle)
+        my, mx = _metres_per_degree(lat0)
+        new = frame_box(lat0 + cy / my, lon0 + cx / mx, share * hx,
+                        share * hy, angle, lat0)
+        ratios = (share, share, share)
+    elif handle == "side":
+        new = box_drag(box, handle, index, lat, lon, centred)
+        _, _, nhx, nhy, _ = box_frame(new)
+        ratios = (max(nhx / hx, MIN_SHARE), max(nhy / hy, MIN_SHARE), 1.0)
+    else:
+        # Сдвиг и поворот масштаба не меняют, хотя метры в градусе
+        # долготы на новой широте другие.
+        new = box_drag(box, handle, index, lat, lon, centred)
+        ratios = (1.0, 1.0, 1.0)
+    scale = tuple(float(v) * r for v, r in zip(scale, ratios))
+    return _model_place(camera, scale, extent, new), scale
+
+
+# Масштаб модели за одно движение ручки не меньше этой доли прежнего:
+# иначе рамка схлопнулась бы в точку и обратно не растянулась.
+MIN_SHARE = 0.01
 
 
 def corners_box(corners):

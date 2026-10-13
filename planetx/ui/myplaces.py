@@ -493,7 +493,7 @@ class MyPlaces(QObject):
                                                corners)
                 if kind == "ground" and len(overlay.corners) != 4:
                     continue
-                if kind == "photo" and not overlay.camera:
+                if kind in ("photo", "model") and not overlay.camera:
                     continue
                 visible = _int(feature["visible"])
                 self.overlays.append(OverlayItem(

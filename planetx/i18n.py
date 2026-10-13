@@ -782,6 +782,56 @@ EN = {
         "image always.",
     "Москва, исторические карты":
         "Moscow, historical maps",
+    "3D-модели, Суздаль и Пермь":
+        "3D models, Suzdal and Perm",
+    "Ссылка на файл":
+        "Link to a file",
+    "Где лежат файлы модели. Ссылка - путь к файлу .dae, "
+    ".gltf, .glb или .obj, модель читается из него и файлов "
+    "рядом, правка в SketchUp или Blender видна на глобусе. "
+    "В файле меток - копия всех файлов модели, она видна "
+    "и без исходного файла.":
+        "Where the model files are. A link is a path to a .dae, .gltf, "
+        ".glb or .obj file, the model is read from it and the files "
+        "next to it, an edit in SketchUp or Blender shows on the globe. "
+        "In the places file is a copy of all model files, it shows "
+        "without the source file too.",
+    "Путь к файлу модели":
+        "Path to the model file",
+    "Путь к файлу модели .dae, .gltf, .glb или .obj. Картинки "
+    "модели читаются из файлов рядом с ним.":
+        "Path to a .dae, .gltf, .glb or .obj model file. The model "
+        "images are read from the files next to it.",
+    "Выбрать файл модели. В файле меток модель заменяется "
+    "копией, у ссылки меняется путь. Место и масштаб "
+    "остаются.":
+        "Choose a model file. In the places file the model is replaced "
+        "by a copy, a link gets a new path. The place and the scale "
+        "stay.",
+    "Файл модели":
+        "Model file",
+    "Файл модели по ссылке проверяется через этот промежуток, "
+    "пока модель видна. Изменённый файл читается заново. "
+    "Ноль - файл читается при показе. Промежуток короче "
+    "{low} с поднимается до {low} с.":
+        "A linked model file is checked at this interval while the "
+        "model is visible. A changed file is read again. Zero means "
+        "the file is read when shown. An interval shorter than {low} s "
+        "is raised to {low} s.",
+    "в файле меток":
+        "in the places file",
+    "файлов модели нет":
+        "no model files",
+    "Файлы моделей (*.dae *.gltf *.glb *.obj)":
+        "Model files (*.dae *.gltf *.glb *.obj)",
+    "Растянуть модель по стороне":
+        "Stretch the model along the side",
+    "Сдвинуть модель":
+        "Move the model",
+    "Повернуть модель":
+        "Rotate the model",
+    "Изменить масштаб от угла, с Shift - от середины":
+        "Scale from the corner, with Shift from the centre",
     "План Москвы":
         "Plan of Moscow",
     "Москва, карта Шуберта":
@@ -3932,6 +3982,47 @@ EN = {
         "Energy",
     "свой источник":
         "own source",
+    # 3D-модели.
+    "3D-модель": "3D model",
+    "3D-модель…": "3D model…",
+    "3D-модели (*.dae *.gltf *.glb *.obj *.kmz)":
+        "3D models (*.dae *.gltf *.glb *.obj *.kmz)",
+    "Модель не читается: {name}": "The model cannot be read: {name}",
+    "Модель не читается: {error}": "The model cannot be read: {error}",
+    "Модель не читается.": "The model cannot be read.",
+    "Треугольников {count}, материалов {parts}, картинок {images}. "
+    "Размер {x:.1f} × {y:.1f} × {z:.1f} м.":
+        "Triangles {count}, materials {parts}, images {images}. "
+        "Size {x:.1f} × {y:.1f} × {z:.1f} m.",
+    "Широта точки модели. Точка - начало координат файла модели.":
+        "Latitude of the model point. The point is the origin of the "
+        "model file coordinates.",
+    "Долгота точки модели.": "Longitude of the model point.",
+    "Высота точки модели. Над рельефом - подъём над землёй, над уровнем "
+    "моря - высота от уровня моря. На рельефе высота не действует.":
+        "Height of the model point. Above terrain is the rise above the "
+        "ground, above sea level is the height from sea level. On terrain "
+        "the height has no effect.",
+    "Поворот модели по часовой стрелке, если смотреть сверху. Ноль - ось "
+    "Y модели смотрит на север.":
+        "Clockwise turn of the model as seen from above. At zero the Y "
+        "axis of the model points north.",
+    "Наклон модели вокруг её оси X.":
+        "Tilt of the model around its X axis.",
+    "Крен": "Roll",
+    "Крен модели вокруг её оси Y.": "Roll of the model around its Y axis.",
+    "Отсчёт высоты": "Altitude mode",
+    "От чего отсчитывается высота модели, как altitudeMode в KML.":
+        "What the model height is measured from, as altitudeMode in KML.",
+    "На рельефе": "On terrain",
+    "Над рельефом": "Above terrain",
+    "Над уровнем моря": "Above sea level",
+    "Масштаб модели. Единица - размеры из файла модели. Поле меняет "
+    "масштаб по всем осям сразу, разный масштаб осей из KML сохраняется "
+    "в их отношении.":
+        "Scale of the model. One means the sizes from the model file. The "
+        "field changes the scale of all axes at once, different axis "
+        "scales from KML keep their ratio.",
 }
 
 _language = None

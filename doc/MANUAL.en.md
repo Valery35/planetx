@@ -1730,6 +1730,65 @@ Clear My Places… removes all placemarks and folders after a
 confirmation. The removal cannot be undone, so the places needed are
 better saved to KML first.
 
+### 3D models
+
+Add → 3D model… places a model of a building or another object at the
+view point. The model is read from a Collada file (.dae) with images
+next to it, from glTF (.gltf, .glb) or from OBJ (.obj) with MTL files
+and images next to it. A KMZ file with a Google Earth model opens as a
+places file, and the model stands at its place.
+
+An OBJ file has no units and no up axis. The plugin takes the unit as a
+metre and the Y axis as up, as Blender and glTF write it. A model with
+the Z axis up lies on its side, a tilt of 90° in the properties window
+stands it up.
+
+A model is a row of My Places. The checkbox hides it, Fly to puts the
+camera to the side and above, and the model goes into tours and into
+saved KML and KMZ.
+
+The properties window of a model sets its place, as Model in KML:
+- latitude and longitude of the model point, the origin of the model
+  file coordinates
+- altitude mode - on terrain, above terrain or above sea level
+- heading, a clockwise turn as seen from above, at zero the Y axis of
+  the model points north
+- tilt and roll, turns around the X and Y axes of the model
+- scale, where one means the sizes from the model file
+- opacity.
+
+Below the fields stand the count of triangles, materials and images
+and the size of the model in metres.
+
+While the properties window is open, a frame stands on the ground
+around the model, the footprint of its box, like the frame of a
+ground image. The frame handles put the model in place with the
+mouse:
+- the cross in the middle moves the model
+- the diamond above the north side of the frame turns its heading
+- a corner scales the model along all axes, the opposite corner stays
+  in place, with Shift the centre stays
+- the middle of a side stretches the model along one axis.
+
+The window fields follow the handles. The frame is built by the
+heading, the tilt and roll of the model are not taken into account.
+
+A new model is kept as a link to the source file, like a Google Earth
+model. The model is read from it and the images next to it, an edit of
+the file in SketchUp or Blender shows on the globe. The Refresh field
+sets how often the file is checked while the model is visible. The
+Storage field of the properties window puts a copy of all model files
+into the places file, then the source file is not needed. Browse…
+chooses another model file, the place and the scale stay.
+
+Save as KML… to KMZ puts the model files into the archive, for linked
+models too. To KML a model in the places file goes into a folder next
+to it, a linked model keeps the path to its file. A scene carries the
+files of all models of its folder. Model images larger than
+2048 pixels are reduced. A glTF model with Draco or meshopt compressed
+meshes is not read, such a file is saved again without compression,
+for example in Blender.
+
 ---
 
 ## Ruler
@@ -2294,7 +2353,9 @@ A scene holds:
   section and the label language.
 - the rows of the Layers section, the grid, stars, clouds,
   temperature and 3D buildings.
-- the selected folder of My Places with its tour.
+- the selected folder of My Places with its tour. The overlay images
+  and 3D model files of the folder are stored in the scene file with
+  it.
 
 A database password does not go into the file, a link to a QGIS
 connection setting stays. When the whole My Places folder or nothing is
@@ -2351,6 +2412,7 @@ under the list plays a tour over them. The folder can be deleted.
 | Earth | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
 | Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
 | Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
+| Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |

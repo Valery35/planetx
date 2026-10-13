@@ -62,6 +62,9 @@ from ..core.slope import aspect_rgba, slope_aspect, slope_rgba
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX, ancestor, decode
 from ..core.kml import KOverlay, KmlError, image_ext as kml_image_ext, \
     read_file as read_kml_file, read_kml, write_kml, write_kmz
+from ..core.kml import drop_empty_models, model_files
+from ..core import models
+from ..core.models import package_file as model_package
 from ..core.placetree import is_folder, numbered_name
 from ..core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ..core.tour import PathStop, RecordedStop, Stop, clock, thin
@@ -97,6 +100,7 @@ from ..net.overlay import (BORDERS, LINE_GROUPS, OPENFREEMAP_ATTRIBUTION,
                            set_line_groups)
 from ..qt_compat import QAction, enum
 from ..render.view import OBJECT_BUDGET, GlobeView, start_keys
+from ..render.models import Model as ModelItem
 from .about import show_about
 from . import commands as commands_ui
 from . import guide as guide_ui
@@ -110,8 +114,8 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      TemperatureLegend, ThemeLegend)
 from .themes import theme_names
 from .overlays import (OUTLINE, BoxVertices, CornerVertices,
-                       GroundLayers, OverlayDialog, ScreenOverlays,
-                       ground_geotiff, image_rgba)
+                       GroundLayers, ModelVertices, OverlayDialog,
+                       ScreenOverlays, ground_geotiff, image_rgba)
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
@@ -308,6 +312,11 @@ GROUND_DELAY = 400
 LINK_TICK = 1000
 # Новая картинка на экране - под панелью значков, пикселей от верха.
 SCREEN_TOP = 60.0
+# Картинка 3D-модели больше - уменьшается, пикселей по большей стороне.
+MODEL_SIDE = 2048
+# Перелёт к модели без своего вида: расстояние, метры, и наклон.
+MODEL_DISTANCE = 300.0
+MODEL_TILT = 60.0
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
 CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
@@ -812,6 +821,9 @@ class GlobeWindow(QWidget):
         self._ground_rasters = []
         self._ground_ids = []
         self._photo_key = None
+        # 3D-модели: разобранные пакеты по метке и место на глобусе.
+        self._model_cache = {}
+        self._model_key = None
         self._screen_key = None
         self._photo_images = {}
         self.screen_overlays = ScreenOverlays(self.view)
@@ -4854,7 +4866,7 @@ class GlobeWindow(QWidget):
                 os.path.join(demo, "quarry", "quarry_dem.tif"))
             if layer_id is not None:
                 self.set_insets(read_insets() + [layer_id])
-        if name in ("quarry", "brienz") and self.theme_key:
+        if name in ("quarry", "brienz", "models") and self.theme_key:
             # Демо своего рельефа - без карты витрины поверх снимка.
             self.set_theme("")
         if name == "brienz":
@@ -6151,6 +6163,9 @@ class GlobeWindow(QWidget):
         if action in ("add_ground", "add_photo", "add_screen"):
             self.add_overlay(action[4:], key or None)
             return
+        if action == "add_model":
+            self.add_model(key or None)
+            return
         if action == "add_link":
             self.add_link(key or None)
             return
@@ -6384,8 +6399,19 @@ class GlobeWindow(QWidget):
             return item.image, overlay, \
                 lambda item=item: self.myplaces.image(item.image)
         link = link if link is not None else item.href
+        if item.kind == "model":
+            # Модель по ссылке - пакет из файла и файлов рядом с ним.
+            return self._link_token(link), overlay, \
+                lambda link=link: self._model_link_data(link)
         return self._link_token(link), overlay, \
             lambda link=link: self._link_data(link)
+
+    def _model_link_data(self, link):
+        """Пакет модели по ссылке на файл .dae, .gltf, .glb или .obj или
+        None. Адрес в сети у модели не читается - у неё файлы рядом."""
+        if not link or link.startswith(("http://", "https://")):
+            return None
+        return models.package_file(link)
 
     def _link_token(self, link):
         """Метка картинки по ссылке: путь и время правки файла или адрес
@@ -6475,9 +6501,12 @@ class GlobeWindow(QWidget):
         self._ground_export_ready()
 
     def _overlay_bytes(self, item):
-        """Байты картинки наложения: из файла меток или по ссылке."""
+        """Байты картинки наложения: из файла меток или по ссылке.
+        У модели - пакет её файлов."""
         if item.image is not None:
             return self.myplaces.image(item.image)
+        if item.kind == "model":
+            return self._model_link_data(item.href)
         return self._link_data(item.href)
 
     def _refresh_overlays(self):
@@ -6494,10 +6523,13 @@ class GlobeWindow(QWidget):
         entries = []
         photos = []
         screens = []
+        shown_models = []
         for item in items:
             token, overlay, data = self._overlay_edit(item)
             if item.kind == "ground":
                 entries.append((token, item.fid, item.name, overlay, data))
+            elif item.kind == "model":
+                shown_models.append((token, overlay, data))
             elif item.kind == "photo":
                 photos.append((token, overlay, data))
             else:
@@ -6535,11 +6567,125 @@ class GlobeWindow(QWidget):
             self._photo_images = {token: rgba for token, rgba
                                   in self._photo_images.items()
                                   if token in tokens}
+        self._show_models(shown_models)
         key = [(token, overlay.params()) for token, overlay, _ in screens]
         if key != self._screen_key:
             self._screen_key = key
             self.screen_overlays.set_items(
                 [(overlay, data()) for _, overlay, data in screens])
+
+    def _model_data(self, token, data):
+        """Разобранная модель по метке пакета: (части core.models, {путь
+        картинки: RGBA}) или None, если файл не читается. Разбор - раз
+        на пакет, итог хранится, пока модель видна."""
+        if token in self._model_cache:
+            return self._model_cache[token]
+        found = None
+        package = data()
+        if package:
+            try:
+                parts, pictures = models.read(package)
+                found = (parts, {path: image_rgba(raw, MODEL_SIDE)
+                                 for path, raw in pictures.items()})
+            except models.ModelError as error:
+                journal.note("model unreadable: {}".format(error))
+                self.message = (tr("Модель не читается: {error}",
+                                   error=str(error)), time.monotonic())
+                self._show_state()
+        self._model_cache[token] = found
+        return found
+
+    def _show_models(self, shown):
+        """3D-модели на глобус: части в вершины по месту окна свойств
+        или файла. shown - [(метка пакета, Overlay, байты())]."""
+        key = [(token, overlay.params()) for token, overlay, _ in shown]
+        if key == self._model_key:
+            return
+        self._model_key = key
+        out = []
+        for token, overlay, data in shown:
+            found = self._model_data(token, data)
+            if found is None:
+                continue
+            parts, pictures = found
+            lat, lon, alt, heading, tilt, roll = overlay.camera
+            arrays = models.vertices(parts, lat, lon, heading, tilt, roll,
+                                     overlay.scale)
+            out.append(ModelItem(
+                (token, overlay.params()),
+                [(array, pictures.get(part.image), part.rgba)
+                 for array, part in zip(arrays, parts)],
+                (lat, lon, overlay.mode, alt),
+                models.radius(parts, overlay.scale),
+                overlay.color[3] / 255.0))
+        tokens = {token for token, _, _ in shown}
+        self._model_cache = {token: value for token, value
+                             in self._model_cache.items()
+                             if token in tokens}
+        self.view.models.set_models(out)
+        self.view.update()
+
+    def model_summary(self, item):
+        """Сведения о модели для окна свойств: части, вершины, размеры
+        в метрах по осям X, Y, Z или пустая строка."""
+        token, overlay, data = self._overlay_edit(item)
+        found = self._model_data(token, data)
+        if found is None:
+            return tr("Модель не читается.")
+        parts, pictures = found
+        box = models.bounds(parts)
+        size = (box[1] - box[0]) * abs(np.asarray(overlay.scale))
+        count = sum(len(part.positions) for part in parts)
+        return tr("Треугольников {count}, материалов {parts}, картинок "
+                  "{images}. Размер {x:.1f} × {y:.1f} × {z:.1f} м.",
+                  count=count // 3, parts=len(parts),
+                  images=len([p for p in pictures.values()
+                              if p is not None]),
+                  x=size[0], y=size[1], z=size[2])
+
+    def model_extent(self, item):
+        """Коробка модели (xmin, xmax, ymin, ymax) в её единицах или
+        None, если файл не читается."""
+        token, _, data = self._overlay_edit(item)
+        found = self._model_data(token, data)
+        if found is None:
+            return None
+        box = models.bounds(found[0])
+        return (float(box[0][0]), float(box[1][0]), float(box[0][1]),
+                float(box[1][1]))
+
+    def add_model(self, folder=None, path=None):
+        """«Добавить → 3D-модель…»: файл Collada, glTF или OBJ встаёт
+        в точку взгляда, потом открывается окно свойств. KMZ открывается как
+        файл меток - модель в нём уже стоит на своём месте. Возвращает
+        ключ или None."""
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("3D-модель"), "",
+                tr("3D-модели (*.dae *.gltf *.glb *.obj *.kmz)"))
+        if not path:
+            return None
+        if path.lower().endswith(".kmz"):
+            return self.import_kml(folder, path)
+        package = model_package(path)
+        if package is None:
+            self.message = (tr("Модель не читается: {name}",
+                               name=os.path.basename(path)),
+                            time.monotonic())
+            self._show_state()
+            return None
+        pose = self.view.navigator.pose
+        overlay = overlays.Overlay(
+            "model", camera=(pose.lat, pose.lon, 0.0, 0.0, 0.0, 0.0))
+        name = os.path.splitext(os.path.basename(path))[0]
+        # Модель - ссылкой на файл, как Link у Google Earth: правка файла
+        # видна на глобусе. В файл меток её копирует поле «Хранение».
+        key = self.myplaces.add_overlay(KOverlay(
+            name, overlay, href=path, view=self.current_view()), folder)
+        if key is not None:
+            self.panel.select_place(key)
+            self._open_overlay_properties(self.myplaces.find(key))
+        return key
 
     def add_overlay(self, kind, folder=None, path=None):
         """«Добавить → Картинку на поверхности, Фото, Картинку на
@@ -6712,11 +6858,13 @@ class GlobeWindow(QWidget):
     def _overlay_tool(self, dialog):
         """Ручки картинки на поверхности по способу привязки: рамка -
         сдвиг, поворот и растяжение, четыре угла - каждый угол сам."""
-        if dialog.item.kind != "ground" or self._place_open() \
-                or self._ruler_open():
+        if dialog.item.kind not in ("ground", "model") \
+                or self._place_open() or self._ruler_open():
             return
         self._end_prop_vertices(dialog)
-        if dialog.overlay.box is not None:
+        if dialog.item.kind == "model":
+            tool = ModelVertices(self, dialog)
+        elif dialog.overlay.box is not None:
             tool = BoxVertices(self, dialog)
         else:
             tool = CornerVertices(self, dialog, ShapeEdit(
@@ -6742,8 +6890,27 @@ class GlobeWindow(QWidget):
             self._overlay_edits[key] = (
                 overlays.from_params(overlay.kind, overlay.params()),
                 dialog.image if dialog.link is None else None, dialog.link)
+            if overlay.kind == "model":
+                self._model_frame(key, dialog)
         self._refresh_shapes()
         self.handles.sync()
+
+    def _model_frame(self, key, dialog):
+        """Рамка модели на земле - след её коробки, по ней ходят ручки.
+        Другой файл модели - другая коробка и сведения под полями."""
+        token = self._overlay_edit(dialog.item)[0]
+        if token != getattr(dialog, "model_token", None):
+            dialog.model_token = token
+            dialog.extent = self.model_extent(dialog.item)
+            dialog.set_model_info(self.model_summary(dialog.item))
+        overlay = dialog.overlay
+        if dialog.extent is None:
+            self.previews.pop(key, None)
+            return
+        box = overlays.model_box(overlay.camera, overlay.scale,
+                                 dialog.extent)
+        self.previews[key] = Shape("polygon", overlays.box_corners(*box),
+                                   color=OUTLINE, width=2.0)
 
     def _ground_settled(self):
         """Пауза в движении углов: картинки на поверхности по окнам."""
@@ -6895,6 +7062,13 @@ class GlobeWindow(QWidget):
                     and not os.path.isabs(item.href):
                 item.href = os.path.normpath(os.path.join(
                     os.path.dirname(path), item.href.replace("/", os.sep)))
+            if item.kind == "model" and item.image is None:
+                # Модель простого KML - файлы рядом, в файл меток они
+                # ложатся пакетом.
+                item.image = model_package(item.href, item.aliases)
+        # Модель без файлов не встаёт.
+        drop_empty_models(tree)
+        found = tree.overlays()
         if not places and not found:
             QMessageBox.information(self, tr("Открыть KML или KMZ"), tr(
                 "В файле нет точек, линий, многоугольников и наложений."))
@@ -6902,7 +7076,9 @@ class GlobeWindow(QWidget):
         if key is not None:
             self.panel.select_place(key)
         points = [p for place in places for p in place.points] + [
-            p for item in found for p in item.overlay.corners]
+            p for item in found for p in item.overlay.corners] + [
+            tuple(item.overlay.camera[:2]) for item in found
+            if item.kind == "model"]
         if points:
             lats = [p[0] for p in points]
             lons = [p[1] for p in points]
@@ -6926,6 +7102,24 @@ class GlobeWindow(QWidget):
         hrefs = {}
         try:
             for n, item in enumerate(tree.overlays()):
+                if item.kind == "model":
+                    if item.image is None and kmz:
+                        # Модель по ссылке на файл ложится в архив.
+                        item.image = self._model_link_data(item.href)
+                    if item.image and not kmz:
+                        # Файлы модели - в папку рядом с KML.
+                        stem = os.path.splitext(os.path.basename(path))[0]
+                        prefix = "{}_files/model{}/".format(stem, n + 1)
+                        href, aliases, files = model_files(item, prefix)
+                        for name, data in files:
+                            target = os.path.join(os.path.dirname(path),
+                                                  *name.split("/"))
+                            os.makedirs(os.path.dirname(target),
+                                        exist_ok=True)
+                            with open(target, "wb") as fh:
+                                fh.write(data)
+                        hrefs[id(item)] = (href, aliases)
+                    continue
                 if item.image is None and item.href \
                         and os.path.isfile(item.href) and kmz:
                     # Картинка по ссылке на файл ложится в архив.
@@ -6946,7 +7140,7 @@ class GlobeWindow(QWidget):
                 else write_kml(tree, hrefs).encode("utf-8")
             with open(path, "wb") as fh:
                 fh.write(data)
-        except OSError as error:
+        except (OSError, models.ModelError) as error:
             QMessageBox.warning(self, tr("Сохранить как KML"), tr(
                 "Файл не записан: {error}", error=str(error)))
             return False
@@ -6975,6 +7169,10 @@ class GlobeWindow(QWidget):
                                                    place.overlay.near))
         if place.view is not None:
             return Stop(name, *place.view)
+        if place.kind == "model" and getattr(place, "overlay", None):
+            # Модель без вида - сбоку и сверху, как здание.
+            lat, lon = place.overlay.camera[:2]
+            return Stop(name, lat, lon, MODEL_DISTANCE, 0.0, MODEL_TILT)
         if len(points) == 1:
             lat, lon = points[0]
             return Stop(name, lat, lon, SEARCH_MIN_DISTANCE)

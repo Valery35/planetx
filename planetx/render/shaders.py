@@ -591,3 +591,44 @@ void main() {
     frag = v_color;
 }
 """
+# 3D-модели (render/models.py): вершина - положение от точки модели,
+# нормаль и текстурная координата. Свет как у подземных сеток, с двух
+# сторон: у моделей SketchUp часть граней смотрит изнанкой наружу.
+MODEL_VERTEX = """
+#version 330 core
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec3 a_normal;
+layout(location = 2) in vec2 a_uv;
+uniform mat4 u_mvp;
+uniform vec3 u_light;
+uniform float u_ambient;
+out vec2 v_uv;
+out float v_shade;
+void main() {
+    gl_Position = u_mvp * vec4(a_position, 1.0);
+    float len = length(a_normal);
+    float lambert = len > 0.0 ? abs(dot(a_normal / len, u_light)) : 1.0;
+    v_shade = u_ambient + (1.0 - u_ambient) * lambert;
+    v_uv = a_uv;
+}
+"""
+
+MODEL_FRAGMENT = """
+#version 330 core
+in vec2 v_uv;
+in float v_shade;
+uniform sampler2D u_image;
+uniform float u_textured;
+uniform vec4 u_color;
+out vec4 frag;
+void main() {
+    vec4 c = u_color;
+    if (u_textured > 0.5) {
+        c *= texture(u_image, v_uv);
+    }
+    if (c.a < 0.01) {
+        discard;
+    }
+    frag = vec4(c.rgb * v_shade, c.a);
+}
+"""

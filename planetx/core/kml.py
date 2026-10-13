@@ -13,8 +13,12 @@ LineString и внешнее кольцо Polygon переносятся, MultiG
 и latitude, расстояние range, азимут heading, наклон tilt. Без точки
 взгляда ею считается сама метка. GroundOverlay, ScreenOverlay
 и PhotoOverlay становятся наложениями KOverlay (core/overlays.py),
-картинка из KMZ берётся по href внутри архива. Модели и сетевые
-ссылки не переносятся.
+картинка из KMZ берётся по href внутри архива. Placemark с Model -
+3D-модель, наложение вида "model" (core/models.py): место Location,
+Orientation, Scale и altitudeMode, файл модели по Link и картинки
+по его ссылкам с заменами ResourceMap. Из KMZ файлы модели ложатся
+пакетом в image наложения, у простого KML href остаётся ссылкой
+на файл рядом, пакет собирает окно глобуса.
 
 Значок точки - Icon в IconStyle, адрес узнаётся по имени картинки
 (core/icons.py). Время метки - TimeStamp или TimeSpan, время вида -
@@ -45,16 +49,18 @@ Bandit каталога QGIS считает опасными для чужих �
 """
 import html
 import io
+import posixpath
 import re
 import zipfile
 from urllib.parse import unquote
 from xml.parsers import expat
 
 try:  # внутри плагина QGIS
-    from . import icons, lookat, overlays, region
+    from . import icons, lookat, models, overlays, region
 except ImportError:  # headless-тесты
     import icons
     import lookat
+    import models
     import overlays
     import region
 
@@ -255,7 +261,9 @@ class KOverlay:
     None, href - адрес картинки из файла. view, time - как у метки."""
 
     def __init__(self, name, overlay, image=None, href="", visible=True,
-                 description="", view=None, time=None):
+                 description="", view=None, time=None, aliases=None):
+        # Замены путей ResourceMap модели: {путь в модели: путь файла}.
+        self.aliases = aliases or {}
         self.name = name
         self.overlay = overlay
         self.image = image
@@ -574,6 +582,10 @@ def _placemark(node, styles, inherited=None):
     if inline is not None:
         style.update(_style_of(inline))
     name = _text(node, "name")
+    model = _child(node, "Model")
+    if model is not None:
+        item = _model(node, model, inherited)
+        return [item] if item is not None else []
     out = []
     found = _geometries(node)
     look = _child(node, "LookAt")
@@ -759,6 +771,45 @@ def _overlay(node, styles, inherited):
                     view=_view(node, anchor),
                     time=_time_of(node) or inherited)
 
+def _model(node, model, inherited):
+    """KOverlay вида "model" из Placemark с Model или None без места
+    и файла."""
+    location = _child(model, "Location")
+    link = _child(model, "Link")
+    href = _text(link, "href").strip() if link is not None else ""
+    if location is None or not href:
+        return None
+    orientation = _child(model, "Orientation")
+    scale = _child(model, "Scale")
+    mode = _text(model, "altitudeMode", "clampToGround")
+    if mode == "relativeToSeaFloor":
+        mode = "relativeToGround"
+    if mode not in models.MODES:
+        mode = "clampToGround"
+    lat = _float(location, "latitude", 0.0)
+    lon = _float(location, "longitude", 0.0)
+    overlay = overlays.Overlay(
+        "model", camera=(lat, lon, _float(location, "altitude", 0.0),
+                         _float(orientation, "heading", 0.0),
+                         _float(orientation, "tilt", 0.0),
+                         _float(orientation, "roll", 0.0)),
+        scale=tuple(_float(scale, axis, 1.0) or 1.0
+                    for axis in ("x", "y", "z")), mode=mode)
+    aliases = {}
+    resources = _child(model, "ResourceMap")
+    for alias in _children(resources, "Alias") \
+            if resources is not None else ():
+        source = unquote(_text(alias, "sourceHref"))
+        target = unquote(_text(alias, "targetHref"))
+        if source and target:
+            aliases[source] = target
+    return KOverlay(_text(node, "name"), overlay, href=href,
+                    visible=_visible(node),
+                    description=_text(node, "description"),
+                    view=_view(node, (lat, lon)),
+                    time=_time_of(node) or inherited, aliases=aliases)
+
+
 def _walk(node, styles, folder, inherited=None):
     for child in node:
         name = _local(child.tag)
@@ -851,16 +902,49 @@ def read_kmz(data, name=""):
             base = names[0].rsplit("/", 1)[0] + "/" \
                 if "/" in names[0] else ""
             for item in tree.overlays():
-                ref = unquote(item.href.replace("\\", "/"))
-                while ref.startswith("./"):
-                    ref = ref[2:]
-                found = files.get((base + ref).lower()) \
-                    or files.get(ref.lower())
-                if found is not None:
+                found = _in_archive(files, base, item.href)
+                if found is None:
+                    continue
+                if item.kind != "model":
                     item.image = archive.read(found)
+                    continue
+                folder = posixpath.dirname(found)
+
+                def fetch(ref, folder=folder):
+                    path = _in_archive(files, folder + "/" if folder
+                                       else "", ref)
+                    return archive.read(path) if path else None
+                try:
+                    item.image = models.collect(found, archive.read(found),
+                                                fetch, item.aliases)
+                except models.ModelError:
+                    item.image = None
             return tree
     except zipfile.BadZipFile as error:
         raise KmlError(str(error)) from error
+
+
+def _in_archive(files, base, href):
+    """Имя файла архива по href от папки base или None."""
+    ref = unquote(href.replace("\\", "/"))
+    while ref.startswith("./"):
+        ref = ref[2:]
+    if not ref:
+        return None
+    joined = posixpath.normpath(base + ref) if base else ref
+    return files.get(joined.lower()) or files.get(ref.lower())
+
+
+def drop_empty_models(folder):
+    """Убрать из дерева модели без файлов: в простом KML файл по ссылке
+    не нашёлся."""
+    folder.children = [
+        child for child in folder.children
+        if not (isinstance(child, KOverlay) and child.kind == "model"
+                and not child.image)]
+    for child in folder.children:
+        if isinstance(child, KFolder):
+            drop_empty_models(child)
 
 
 def read_file(data, name=""):
@@ -1069,6 +1153,53 @@ def _overlay_kml(item, indent, href):
     parts.append("</{}>".format(tag))
     return pad + "".join(p for p in parts if p)
 
+def _model_kml(item, indent, href, aliases=None):
+    """Placemark с Model, href - адрес главного файла модели, aliases -
+    ResourceMap {путь в модели: путь файла}."""
+    pad = "  " * indent
+    overlay = item.overlay
+    lat, lon, alt, heading, tilt, roll = overlay.camera
+    parts = ["<Placemark>",
+             "<name>{}</name>".format(escape(item.name))]
+    if item.description:
+        parts.append("<description>{}</description>".format(
+            escape(item.description)))
+    parts += ["<visibility>{}</visibility>".format(int(item.visible)),
+              _time_kml(item.time)]
+    if item.view is not None:
+        parts.append(_look_kml(item.view))
+    parts += ["<Model><altitudeMode>{}</altitudeMode>".format(
+                  escape(overlay.mode)),
+              "<Location><longitude>{!r}</longitude><latitude>{!r}"
+              "</latitude><altitude>{!r}</altitude></Location>".format(
+                  float(lon), float(lat), float(alt)),
+              "<Orientation><heading>{!r}</heading><tilt>{!r}</tilt>"
+              "<roll>{!r}</roll></Orientation>".format(
+                  float(heading), float(tilt), float(roll)),
+              "<Scale><x>{!r}</x><y>{!r}</y><z>{!r}</z></Scale>".format(
+                  *(float(v) for v in overlay.scale)),
+              "<Link><href>{}</href></Link>".format(escape(href or ""))]
+    if aliases:
+        parts.append("<ResourceMap>")
+        for source, target in sorted(aliases.items()):
+            parts.append("<Alias><targetHref>{}</targetHref><sourceHref>"
+                         "{}</sourceHref></Alias>".format(
+                             escape(target), escape(source)))
+        parts.append("</ResourceMap>")
+    parts += ["</Model>", "</Placemark>"]
+    return pad + "".join(p for p in parts if p)
+
+
+def model_files(item, prefix):
+    """Файлы модели наложения item для записи рядом с KML: (адрес
+    главного файла, ResourceMap, [(путь, байты)]). prefix - папка
+    модели в архиве или рядом с файлом, с косой чертой в конце."""
+    main, files, aliases = models.unpack(item.image)
+    return (prefix + main,
+            {ref: prefix + path for ref, path in aliases.items()},
+            [(prefix + path, data) for path, data in files.items()])
+
+
 def _link_kml(folder, indent):
     """NetworkLink папки сетевой ссылки, без содержимого."""
     pad = "  " * indent
@@ -1118,6 +1249,11 @@ def _folder_kml(folder, indent, tag="Folder", hrefs=None):
     for child in folder.children:
         if isinstance(child, KFolder):
             lines.extend(_folder_kml(child, indent + 1, hrefs=hrefs))
+        elif isinstance(child, KOverlay) and child.kind == "model":
+            href = (hrefs or {}).get(id(child), (child.href, child.aliases))
+            if isinstance(href, str):
+                href = (href, None)
+            lines.append(_model_kml(child, indent + 1, *href))
         elif isinstance(child, KOverlay):
             href = (hrefs or {}).get(id(child), child.href)
             lines.append(_overlay_kml(child, indent + 1, href))
@@ -1132,7 +1268,8 @@ def _folder_kml(folder, indent, tag="Folder", hrefs=None):
 def write_kml(folder, hrefs=None):
     """Текст KML папки: Document с вложенными Folder и Placemark.
     hrefs - адреса картинок наложений {id(KOverlay): href}, без них -
-    href из исходного файла."""
+    href из исходного файла. У модели - пара (адрес главного файла,
+    ResourceMap)."""
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
              '<kml xmlns="{}" xmlns:gx="{}">'.format(NS, GX)]
     lines.extend(_folder_kml(folder, 1, "Document", hrefs))
@@ -1141,11 +1278,17 @@ def write_kml(folder, hrefs=None):
 
 
 def write_kmz(folder):
-    """Байты KMZ: архив с doc.kml и картинками наложений в files/."""
+    """Байты KMZ: архив с doc.kml, картинками наложений в files/
+    и файлами моделей в models/."""
     hrefs = {}
     files = []
     for n, item in enumerate(folder.overlays()):
-        if item.image:
+        if item.image and item.kind == "model":
+            href, aliases, found = model_files(
+                item, "models/model{}/".format(n + 1))
+            hrefs[id(item)] = (href, aliases)
+            files.extend(found)
+        elif item.image:
             name = "files/overlay{}.{}".format(n + 1, image_ext(item.image))
             hrefs[id(item)] = name
             files.append((name, item.image))
