@@ -21,6 +21,7 @@ import collada  # noqa: E402
 import ellipsoid  # noqa: E402
 import gltf  # noqa: E402
 import kml  # noqa: E402
+import obj  # noqa: E402
 import models  # noqa: E402
 from camera import enu  # noqa: E402
 
@@ -399,6 +400,71 @@ class TestKml(unittest.TestCase):
         self.assertEqual(back.camera, item.overlay.camera)
         self.assertEqual(back.scale, item.overlay.scale)
         self.assertEqual(back.mode, item.overlay.mode)
+
+
+OBJ = b"""# square with a picture and a coloured triangle
+mtllib walls.mtl
+v 0 0 0
+v 2 0 0
+v 2 3 0
+v 0 3 0
+vt 0 0
+vt 1 0
+vt 1 1
+vt 0 1
+vn 0 0 1
+usemtl brick
+f 1/1/1 2/2/1 3/3/1 4/4/1
+usemtl red
+f -4//1 -3//1 -2//1
+l 1 2
+"""
+MTL = b"""newmtl brick
+Kd 1 1 1
+map_Kd -s 1 1 1 tex/brick.png
+newmtl red
+Kd 1 0 0
+d 0.5
+"""
+
+
+class TestObj(unittest.TestCase):
+
+    def files(self):
+        return {"walls.mtl": MTL, "tex/brick.png": PNG}
+
+    def test_faces_materials_and_y_up(self):
+        files = self.files()
+        parts = obj.read(OBJ, files.get)
+        brick, red = parts
+        self.assertEqual(brick.positions.shape, (6, 3))
+        self.assertEqual(brick.image, "tex/brick.png")
+        # Ось Y файла - вверх: вершина (2, 3, 0) встаёт на 3 м.
+        np.testing.assert_allclose(brick.positions[2], (2, 0, 3))
+        # v перевёрнута, нормаль +Z файла смотрит на юг.
+        self.assertAlmostEqual(brick.uv[0, 1], 1.0)
+        np.testing.assert_allclose(brick.normals[0], (0, -1, 0))
+        self.assertEqual(red.image, None)
+        self.assertEqual(red.rgba, (1.0, 0.0, 0.0, 0.5))
+
+    def test_package_from_files(self):
+        files = self.files()
+        data = models.collect("walls.obj", OBJ, files.get)
+        _, packed, _ = models.unpack(data)
+        self.assertEqual(sorted(packed),
+                         ["tex/brick.png", "walls.mtl", "walls.obj"])
+        parts, pictures = models.read(data)
+        self.assertEqual(list(pictures.values()), [PNG])
+        self.assertEqual(sum(len(p.positions) for p in parts), 9)
+
+    def test_missing_mtl_gives_gray(self):
+        parts = obj.read(OBJ, lambda ref: None)
+        self.assertTrue(all(p.image is None and p.rgba == models.GRAY
+                            for p in parts))
+
+    def test_bad_index_is_model_error(self):
+        with self.assertRaises(models.ModelError):
+            obj.read(b"v 0 0 0\nf 1 2 3\n", lambda ref: None)
 
 
 if __name__ == "__main__":

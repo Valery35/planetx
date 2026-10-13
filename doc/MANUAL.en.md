@@ -1734,8 +1734,14 @@ better saved to KML first.
 
 Add → 3D model… places a model of a building or another object at the
 view point. The model is read from a Collada file (.dae) with images
-next to it or from glTF (.gltf, .glb). A KMZ file with a Google Earth
-model opens as a places file, and the model stands at its place.
+next to it, from glTF (.gltf, .glb) or from OBJ (.obj) with MTL files
+and images next to it. A KMZ file with a Google Earth model opens as a
+places file, and the model stands at its place.
+
+An OBJ file has no units and no up axis. The plugin takes the unit as a
+metre and the Y axis as up, as Blender and glTF write it. A model with
+the Z axis up lies on its side, a tilt of 90° in the properties window
+stands it up.
 
 A model is a row of My Places. The checkbox hides it, Fly to puts the
 camera to the side and above, and the model goes into tours and into

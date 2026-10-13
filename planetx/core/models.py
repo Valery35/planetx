@@ -4,10 +4,11 @@
 """3D-модели на глобусе, как Model в KML Google Earth. Просьба автора
 от 13 октября 2026 года.
 
-Расчёт без Qt. Модель - файл Collada (.dae, core/collada.py) или
-glTF (.gltf, .glb, core/gltf.py) с картинками. Файлы модели хранятся
-одним пакетом - архивом ZIP с главным файлом, картинками и записью
-planetx.json (главный файл и замены путей ResourceMap KML).
+Расчёт без Qt. Модель - файл Collada (.dae, core/collada.py), glTF
+(.gltf, .glb, core/gltf.py) или OBJ (.obj, core/obj.py) с картинками.
+Файлы модели хранятся одним пакетом - архивом ZIP с главным файлом,
+картинками и записью planetx.json (главный файл и замены путей
+ResourceMap KML).
 
 Место - как Location, Orientation и Scale KML. Точка (широта,
 долгота, высота), азимут heading по часовой стрелке от севера вокруг
@@ -38,7 +39,7 @@ except ImportError:  # headless-тесты
     from camera import enu
 
 MODES = ("clampToGround", "relativeToGround", "absolute")
-EXTENSIONS = (".dae", ".gltf", ".glb")
+EXTENSIONS = (".dae", ".gltf", ".glb", ".obj")
 PACKAGE_NOTE = "planetx.json"
 # Вершин в одной модели не больше - иначе модель не грузится. Модель
 # здания SketchUp - десятки тысяч, сетка съёмки с дрона - миллионы.
@@ -264,16 +265,20 @@ def resolve(files, main, ref, aliases=None):
     return found[0] if len(found) == 1 else None
 
 
-def refs(main, data):
+def refs(main, data, fetch=None):
     """Ссылки главного файла модели на другие файлы: картинки Collada,
-    буферы и картинки glTF, кроме data:."""
+    буферы и картинки glTF, кроме data:, файлы MTL и их картинки у OBJ.
+    fetch(путь) - байты файла рядом, нужен OBJ для чтения MTL."""
     try:
-        from . import collada, gltf
+        from . import collada, gltf, obj
     except ImportError:  # headless-тесты
         import collada
         import gltf
+        import obj
     if main.lower().endswith(".dae"):
         return collada.images(data)
+    if main.lower().endswith(".obj"):
+        return obj.refs(data, fetch or (lambda ref: None))
     if data[:4] == gltf.GLB_MAGIC:
         text, _ = gltf.split_glb(data)
     else:
@@ -303,7 +308,9 @@ def collect(main, data, fetch, aliases=None):
     name = posixpath.basename(main.replace("\\", "/")) or "model.dae"
     files = {name: data}
     new_aliases = {}
-    for n, ref in enumerate(refs(name, data)):
+    def near(ref):
+        return fetch((aliases or {}).get(ref, ref))
+    for n, ref in enumerate(refs(name, data, near)):
         target = (aliases or {}).get(ref, ref)
         found = fetch(target)
         if found is None:
@@ -318,8 +325,8 @@ def collect(main, data, fetch, aliases=None):
 
 
 def package_file(path, aliases=None):
-    """Пакет модели из файла .dae, .gltf или .glb на диске с файлами
-    рядом по его ссылкам, или None, если файл не читается."""
+    """Пакет модели из файла .dae, .gltf, .glb или .obj на диске
+    с файлами рядом по его ссылкам, или None, если файл не читается."""
     folder = os.path.dirname(path)
 
     def fetch(ref):
@@ -344,13 +351,19 @@ def read(data):
     байты}). Пути картинок частей - пути в пакете, ненайденная
     картинка - часть без картинки, белым цветом материала."""
     try:
-        from . import collada, gltf
+        from . import collada, gltf, obj
     except ImportError:  # headless-тесты
         import collada
         import gltf
+        import obj
     main, files, aliases = unpack(data)
-    if main.lower().endswith(".dae"):
-        parts = collada.read_dae(files[main])
+
+    def near(ref):
+        return files.get(resolve(files, main, ref, aliases))
+    kind = main.lower().rsplit(".", 1)[-1]
+    if kind in ("dae", "obj"):
+        parts = collada.read_dae(files[main]) if kind == "dae" \
+            else obj.read(files[main], near)
         pictures = {}
         for part in parts:
             if part.image is None:
@@ -362,6 +375,5 @@ def read(data):
             else:
                 pictures[found] = files[found]
     else:
-        parts, pictures = gltf.read(files[main], lambda ref: files.get(
-            resolve(files, main, ref, aliases)))
+        parts, pictures = gltf.read(files[main], near)
     return merge(parts), pictures

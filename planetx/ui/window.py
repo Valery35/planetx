@@ -6630,14 +6630,14 @@ class GlobeWindow(QWidget):
                   x=size[0], y=size[1], z=size[2])
 
     def add_model(self, folder=None, path=None):
-        """«Добавить → 3D-модель…»: файл Collada или glTF встаёт в точку
-        взгляда, потом открывается окно свойств. KMZ открывается как
+        """«Добавить → 3D-модель…»: файл Collada, glTF или OBJ встаёт
+        в точку взгляда, потом открывается окно свойств. KMZ открывается как
         файл меток - модель в нём уже стоит на своём месте. Возвращает
         ключ или None."""
         if path is None:
             path, _ = QFileDialog.getOpenFileName(
                 self, tr("3D-модель"), "",
-                tr("3D-модели (*.dae *.gltf *.glb *.kmz)"))
+                tr("3D-модели (*.dae *.gltf *.glb *.obj *.kmz)"))
         if not path:
             return None
         if path.lower().endswith(".kmz"):

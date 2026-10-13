@@ -3935,8 +3935,8 @@ EN = {
     # 3D-модели.
     "3D-модель": "3D model",
     "3D-модель…": "3D model…",
-    "3D-модели (*.dae *.gltf *.glb *.kmz)":
-        "3D models (*.dae *.gltf *.glb *.kmz)",
+    "3D-модели (*.dae *.gltf *.glb *.obj *.kmz)":
+        "3D models (*.dae *.gltf *.glb *.obj *.kmz)",
     "Модель не читается: {name}": "The model cannot be read: {name}",
     "Модель не читается: {error}": "The model cannot be read: {error}",
     "Модель не читается.": "The model cannot be read.",
