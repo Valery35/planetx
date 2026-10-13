@@ -17,7 +17,7 @@ from qgis.PyQt.QtGui import (QColor, QFontMetrics, QLinearGradient, QPainter,
                              QPen)
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
-from ..core import (contours, cutaway, deposits, fires, flow, infra,
+from ..core import (contours, cutaway, deposits, emag, fires, flow, infra,
                     insolation, plants, quakes, slope, temperature)
 from ..i18n import tr
 from ..qt_compat import enum
@@ -105,6 +105,49 @@ class TemperatureLegend(Closable, QWidget):
                 painter.drawText(int(x - width / 2),
                                  int(bar.bottom()) + 2 + metrics.ascent(),
                                  text)
+        self._paint_close(painter)
+        painter.end()
+
+
+class EmagLegend(Closable, QWidget):
+    """Шкала магнитных аномалий EMAG2v3, нТл (core/emag.py)."""
+
+    TICKS = (-250, -120, 0, 120, 250)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.title = tr("Магнитная аномалия, нТл")
+        line = QFontMetrics(self.font()).height()
+        self.setFixedSize(BAR_WIDTH + 2 * PAD + 8,
+                          line * 2 + BAR_HEIGHT + 2 + PAD)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        _background(self, painter)
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        top = PAD // 2
+        painter.setPen(TEXT)
+        painter.drawText(PAD, top + metrics.ascent(), self.title)
+        bar = QRectF(PAD + 4, top + line + 1, BAR_WIDTH, BAR_HEIGHT)
+        stops = emag.STOPS
+        gradient = QLinearGradient(bar.left(), 0, bar.right(), 0)
+        for value, rgb in stops:
+            gradient.setColorAt(temperature.share(stops, value),
+                                QColor(*rgb))
+        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+        painter.setBrush(gradient)
+        painter.drawRect(bar)
+        painter.setPen(TEXT)
+        for tick in self.TICKS:
+            x = bar.left() + temperature.share(stops, tick) * BAR_WIDTH
+            painter.drawLine(int(x), int(bar.bottom()), int(x),
+                             int(bar.bottom()) + 2)
+            text = "{:+d}".format(tick) if tick else "0"
+            width = metrics.horizontalAdvance(text)
+            painter.drawText(int(x - width / 2),
+                             int(bar.bottom()) + 2 + metrics.ascent(), text)
         self._paint_close(painter)
         painter.end()
 

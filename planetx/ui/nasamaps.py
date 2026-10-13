@@ -73,7 +73,8 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "cadastre": ((230, 90, 80), (250, 225, 220)),
               "infra_osm": ((220, 60, 60), (240, 150, 40), (90, 90, 200)),
               "cables": ((60, 200, 200), (170, 110, 220)),
-              "magpoles": ((235, 70, 60), (70, 130, 235))}
+              "magpoles": ((235, 70, 60), (70, 130, 235)),
+              "emag": ((40, 60, 150), (245, 245, 235), (160, 30, 35))}
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
@@ -85,11 +86,11 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "grid": "", "buildings": "OpenFreeMap",
            "contours": "Terrarium", "infra_osm": "OpenStreetMap",
            "cables": "OpenStreetMap", "cadastre": "Rosreestr NSPD",
-           "magpoles": "NOAA NCEI, IGRF-14"}
+           "magpoles": "NOAA NCEI, IGRF-14", "emag": "EMAG2v3, NOAA NCEI"}
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
-          ("magpoles", "depths"),
+          ("magpoles", "depths"), ("emag", "depths"),
           ("deposits", "depths"), ("mining", "depths"),
           ("osm_mines", "depths"), ("plants", "infra"),
           ("currents", "water"),
@@ -221,6 +222,14 @@ def layer_names():
             "«Определить объекты» показывает склонение, наклонение "
             "и напряжённость поля в точке на тот же год по модели "
             "IGRF-14, с 1900 по 2030 год.")),
+        "emag": (tr("Магнитные аномалии"), tr(
+            "Аномалии магнитного поля Земли по сетке EMAG2v3 NOAA NCEI - "
+            "отклонение поля от нормального на высоте 4 км над "
+            "эллипсоидом, шаг около 4 км. Красные - поле сильнее, "
+            "синие - слабее. Аномалии выдают строение коры - хребты "
+            "и полосы океанского дна, древние щиты, рудные районы. "
+            "Пустые места - там съёмки нет. Щелчок в режиме «Определить "
+            "объекты» показывает значение в нТл.")),
         "cutaway": (tr("Разрез Земли"), tr(
             "Вынимает из Земли сектор под точкой взгляда - "
             "четверть полушария шириной 90° по долготе. На его "

@@ -1250,6 +1250,28 @@ EN = {
     "Сайт не ответил: {error}": "The site did not answer: {error}",
     "У этой точки карт на сайте нет.":
         "The site has no maps at this point.",
+    "Магнитная аномалия, нТл": "Magnetic anomaly, nT",
+    "Аномалии магнитного поля Земли по сетке EMAG2v3 NOAA NCEI - "
+    "отклонение поля от нормального на высоте 4 км над эллипсоидом, шаг "
+    "около 4 км. Красные - поле сильнее, синие - слабее. Аномалии выдают "
+    "строение коры - хребты и полосы океанского дна, древние щиты, рудные "
+    "районы. Пустые места - там съёмки нет. Щелчок в режиме «Определить "
+    "объекты» показывает значение в нТл.":
+        "Anomalies of the Earth magnetic field after the NOAA NCEI EMAG2v3 "
+        "grid - the departure of the field from the normal one at 4 km "
+        "above the ellipsoid, a step of about 4 km. Red means a stronger "
+        "field, blue a weaker one. The anomalies reveal the crust - "
+        "ridges and stripes of the ocean floor, ancient shields, ore "
+        "districts. Empty places have no survey. A click in the Identify "
+        "features mode shows the value in nT.",
+    "Магнитные аномалии": "Magnetic anomalies",
+    "4 км над эллипсоидом": "4 km above the ellipsoid",
+    "Аномалия поля": "Field anomaly",
+    "Высота сетки": "Grid height",
+    "Магнитная аномалия": "Magnetic anomaly",
+    "загрузка…": "loading…",
+    "нет данных": "no data",
+    "тайл не прочитан": "the tile was not read",
     "Магнитные полюса": "Magnetic poles",
     "Северный и южный магнитные полюса - точки, где стрелка компаса стоит "
     "отвесно, - на год шкалы времени и их путь с 1590 года по данным NOAA "

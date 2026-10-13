@@ -14186,6 +14186,66 @@ def cadastre_check():
 
 
 @check(500)
+def emag_on():
+    """Магнитные аномалии над Курской магнитной аномалией: тайлы из
+    локальной копии planetx-terrain (PLANETX_TERRAIN_DIR, иначе
+    C:/Dev/planetx-terrain), шкала, значение под щелчком."""
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
+    window.emag_url = QUrl.fromLocalFile(os.path.join(
+        folder, "emag")).toString() + "/{z}/{x}/{y}.png"
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(51.3, 37.0, 1500000.0, 0.0, 0.0))
+    window.set_extra("emag", True)
+    loader = window.gibs_loaders.get("emag")
+    result["emag"] = {"loader": loader is not None,
+                      # Панель шкал показывает себя следующим проходом
+                      # цикла событий, шкала уже не скрыта.
+                      "legend": not window.emag_legend.isHidden()}
+    if loader is not None:
+        _watch_loader(loader, "emag_seen")
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def emag_check():
+    window = state["window"]
+    seen = state.get("emag_seen", {"loaded": 0})
+    layer = window.view.gibs["emag"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 40.0 and (seen["loaded"] < 6 or layer.missing
+                         or spent < 10.0) and "seconds" not in \
+            result["emag"]:
+        return 1000
+    out = result["emag"]
+    if "seconds" not in out:
+        out.update(dict(seen, seconds=round(spent, 1),
+                        textures=len(layer.textures),
+                        attribution="EMAG2" in window.attribution.text(),
+                        gl_errors=dict(window.view.gl_errors)))
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_emag.png"))
+        # Щелчок у Курска - значение из тайла уровня MAX_LEVEL.
+        window._ask_emag(51.75, 36.2)
+        state["ls_started"] = time.monotonic()
+        return 500
+    value = window._emag_value
+    if value is not None and value[1] is None and not value[2] \
+            and spent < 15.0:
+        return 500
+    out["kursk"] = value[1:] if value else None
+    out["group"] = window._identify_emag()[0][1][0][1] \
+        if window._identify_emag() else None
+    window.set_extra("emag", False)
+    out["off"] = "emag" not in window.gibs_loaders \
+        and not window.emag_legend.isVisible()
+    return None
+
+
+@check(500)
 def etomesto_open():
     """Каталог «Это Место» у Перми: один запрос к сайту, список карт,
     поиск по слову, адрес страницы карты. Пункт есть в меню на глобусе."""

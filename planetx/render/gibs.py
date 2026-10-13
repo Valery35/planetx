@@ -12,7 +12,7 @@
 """
 import time
 
-from ..core import cadastre, clouds, flow, sun, temperature, terrain
+from ..core import cadastre, clouds, emag, flow, sun, temperature, terrain
 from ..core.clouds import source_key
 from ..core.overlay import window
 from . import gpu
@@ -55,6 +55,10 @@ LAYERS = (("sea", temperature.MAX_LEVEL, 3, "u_sea", "u_sea_uv"),
           # Заливка скорости течений под струйками (core/flow.py) - блок
           # 13, над темой и под горизонталями.
           ("currents", flow.FILL_LEVEL, 13, "u_currents", "u_currents_uv"),
+          # Магнитные аномалии EMAG2v3 (core/emag.py) - блок 15, последний
+          # блок, который OpenGL 3.3 обещает шейдеру. Над темой и под
+          # течениями.
+          ("emag", emag.MAX_LEVEL, 15, "u_emag", "u_emag_uv"),
           # Кадастр Росреестра (core/cadastre.py) - блок 14, участки
           # поверх горизонталей и под слоями проекта.
           ("cadastre", cadastre.MAX_LEVEL, 14, "u_cadastre",

@@ -30,7 +30,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import (basemap, cadastre, clouds, demofiles, ellipsoid,
+from ..core import (basemap, cadastre, clouds, demofiles, ellipsoid, emag,
                     geomag, lookat, stars, sun, temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
@@ -149,7 +149,7 @@ from .inset import water_mesh
 from .bathymetry import REMOVE as BATHY_REMOVE, BathymetryDialog
 from .deposits import deposits_path, parse_deposits, parse_plants
 from .legend import (deposit_group_names, fuel_names, mine_kind_names,
-                     CurrentLegend, InfraLegend, PlantLegend)
+                     CurrentLegend, EmagLegend, InfraLegend, PlantLegend)
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE, PropertiesDialog
@@ -200,7 +200,8 @@ FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
-              "currents": ("currents",), "cadastre": ("cadastre",)}
+              "currents": ("currents",), "cadastre": ("cadastre",),
+              "emag": ("emag",)}
 QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -281,14 +282,14 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "deposits": False, "mining": False, "osm_mines": False,
                   "plants": False, "infra_osm": False,
                   "cables": False, "currents": False, "cadastre": False,
-                  "magpoles": False}
+                  "magpoles": False, "emag": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "plates", "fires", "satellites",
                 "deposits", "mining", "osm_mines", "plants", "infra_osm",
-                "cables", "currents", "cadastre", "magpoles")
+                "cables", "currents", "cadastre", "magpoles", "emag")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
@@ -467,6 +468,12 @@ def prepare_theme(theme_key):
     clear = themes.CLEAR.get(theme_key, ())
     return lambda key, rgba: mip_chain(themes.overlay_rgba(rgba,
                                                            clear=clear))
+
+
+def prepare_emag(key, rgba):
+    """Работа рабочего потока для тайла магнитных аномалий: значения нТл
+    в раскраску и уровни мипмапов."""
+    return mip_chain(emag.rgba(rgba))
 
 
 def prepare_lights(key, rgba):
@@ -914,6 +921,11 @@ class GlobeWindow(QWidget):
         # Подводные кабели OSM (core/cables.py), файл data/cables.json.
         self.cables_data = None
         self.geomag = None  # (модель IGRF, таблицы полюсов), core/geomag
+        # Адрес тайлов магнитных аномалий, шаги проверки ставят локальную
+        # копию planetx-terrain.
+        self.emag_url = emag.TILE_URL
+        self._emag_value = None  # (точка, значение нТл или None, ошибка)
+        self._emag_reply = None
         self.cable_layer = None
         self._slab_replies = {}
         self.slab_errors = {}
@@ -1327,6 +1339,10 @@ class GlobeWindow(QWidget):
         self.legend_panel.add(self.current_legend)
         self.current_legend.closer = lambda: self.set_extra("currents",
                                                             False)
+        self.emag_legend = EmagLegend(self.view)
+        self.emag_legend.hide()
+        self.legend_panel.add(self.emag_legend)
+        self.emag_legend.closer = lambda: self.set_extra("emag", False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
@@ -1588,6 +1604,8 @@ class GlobeWindow(QWidget):
             self._set_plates(on)
         elif key == "magpoles":
             self._set_poles(on)
+        elif key == "emag":
+            self._set_emag(on)
         elif key == "satellites":
             self.satellite_manager.set_on(on)
             self._update_timebar()
@@ -3698,6 +3716,75 @@ class GlobeWindow(QWidget):
                                         year=int(year_in))))
         return shapes
 
+    # Магнитные аномалии EMAG2v3 (core/emag.py).
+
+    def _set_emag(self, on):
+        """Строка «Магнитные аномалии»: тайлы значений planetx-terrain,
+        раскраска в рабочем потоке, шкала."""
+        on = on and self.planet.earth
+        source = basemap.Source("EMAG2v3", self.emag_url, emag.MAX_LEVEL,
+                                emag.ATTRIBUTION, builtin=True)
+        self._set_gibs("emag", on, made=(source, prepare_emag), cache=True)
+        self.emag_legend.setVisible(on)
+        if not on:
+            self._drop_emag()
+        self._mark_gallery()
+
+    def _ask_emag(self, lat, lon):
+        """Значение аномалии под щелчком: тайл уровня MAX_LEVEL из кэша
+        или сети, пиксель точки."""
+        self._drop_emag()
+        if not (self.extras.get("emag") and self.planet.earth):
+            return
+        (x, y), (column, row) = emag.pixel_of(lat, lon)
+        url = self.emag_url.format(z=emag.MAX_LEVEL, x=x, y=y)
+        point = (lat, lon)
+        self._emag_value = (point, None, "")
+        self._emag_reply = fetch_bytes(
+            url, lambda data, error: self._emag_arrived(
+                point, column, row, data, error))
+
+    def _drop_emag(self):
+        reply, self._emag_reply = self._emag_reply, None
+        self._emag_value = None
+        if reply is not None:
+            reply.abort()
+
+    def _emag_arrived(self, point, column, row, data, error):
+        state = self._emag_value
+        if state is None or state[0] != point:
+            return
+        self._emag_reply = None
+        value = None
+        if data is not None:
+            image = QImage.fromData(data)
+            if not image.isNull():
+                color = image.pixelColor(column, row)
+                value = emag.value_at([[(color.red(), color.green(),
+                                         color.blue())]], 0, 0)
+            error = "" if not image.isNull() else tr("тайл не прочитан")
+        self._emag_value = (point, value, "" if value is not None
+                            else error or tr("нет данных"))
+        self._refresh_identified()
+
+    def _identify_emag(self):
+        """Группа «Магнитная аномалия» окна «Объекты»."""
+        state = self._emag_value
+        if state is None:
+            return []
+        _, value, error = state
+        if value is None and not error:
+            values = [(tr("Значение"), tr("загрузка…"))]
+        elif value is None:
+            values = [(tr("Значение"), error)]
+        else:
+            values = [(tr("Значение"), tr("{value} нТл",
+                                          value="{:+.0f}".format(value))),
+                      (tr("Высота сетки"), tr("4 км над эллипсоидом")),
+                      (tr("Набор"), "EMAG2v3, NOAA NCEI")]
+        return [(Group(tr("Магнитная аномалия")),
+                 [(tr("Аномалия поля"), values, None)])]
+
     def _identify_magnetic(self, lat, lon):
         """Группа «Магнитное поле» окна «Объекты»: поле IGRF-14 в точке
         на год шкалы."""
@@ -3752,6 +3839,8 @@ class GlobeWindow(QWidget):
             parts.append(link_html(*cadastre.ATTRIBUTION))
         if self._poles_on():
             parts.append(link_html(*MAGNETIC_ATTRIBUTION))
+        if "emag" in self.gibs_loaders:
+            parts.append(link_html(*emag.ATTRIBUTION))
         if self.planet.earth and (
                 self._applied_groups and self.ofm_layer is not None
                 or self.buildings_loader is not None):
@@ -7623,6 +7712,7 @@ class GlobeWindow(QWidget):
         self._mark("{:.5f}, {:.5f}".format(lat, lon), lat, lon)
         self._identify_at = (lat, lon, height, tolerance, px, py, found)
         self._ask_parcels(lat, lon)
+        self._ask_emag(lat, lon)
         self._show_identified()
 
     # Сведения об участках кадастра Росреестра (core/cadastre.py).
@@ -7720,6 +7810,7 @@ class GlobeWindow(QWidget):
         groups += self._identify_plates(lat, lon, tolerance)
         groups += self._identify_cables(lat, lon, tolerance)
         groups += self._identify_magnetic(lat, lon)
+        groups += self._identify_emag()
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)
@@ -8930,6 +9021,7 @@ class GlobeWindow(QWidget):
             self._parcels = None
             if reply is not None:
                 reply.abort()
+            self._drop_emag()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

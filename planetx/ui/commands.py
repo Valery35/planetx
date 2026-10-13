@@ -35,6 +35,8 @@ WORDS = {
                    "satellites"),
     "quakes": ("землетрясения", "сейсмика", "очаги", "earthquakes"),
     "plates": ("тектоника", "плиты", "разломы", "plates", "tectonics"),
+    "emag": ("магнитные аномалии", "магнитка", "аэромагнитка",
+             "магниторазведка", "emag", "magnetic anomaly"),
     "magpoles": ("магнитный полюс", "магнитные полюса", "склонение",
                  "компас", "геомагнетизм", "igrf", "magnetic pole",
                  "declination", "compass"),

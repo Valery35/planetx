@@ -413,7 +413,8 @@ of the list, the panel grows wider for that time, the globe stays
 visible. The ← arrow brings the list back. The categories stand on the
 left: Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Clouds, Sun,
-Satellites), Inside the Earth (Earthquakes, Plate boundaries, Magnetic poles, Mineral
+Satellites), Inside the Earth (Earthquakes, Plate boundaries, Magnetic
+poles, Magnetic anomalies, Mineral
 deposits, Mining areas, OSM mines and quarries, Earth cutaway,
 Paleogeography), Energy (Power plants, Power lines and pipelines,
 Submarine cables), Terrain analysis (Slope, Aspect) and Satellites -
@@ -577,6 +578,18 @@ intensity at the point for the slider year. The field is computed with
 the IGRF-14 model for 1900-2030, for earlier years the window shows
 only the year. From 1900 to 2025 the north pole shifted 2475 km in a
 straight line, from the Canadian Arctic towards Siberia.
+
+The Magnetic anomalies layer shows the departure of the Earth magnetic
+field from the normal one after the NOAA NCEI EMAG2v3 grid at 4 km above
+the ellipsoid, a grid step of about 4 km. Red places mean a stronger
+field than normal, blue a weaker one, the legend in the corner of the
+view runs from -250 to +250 nT. The anomalies reveal the crust, for
+example the Kursk magnetic anomaly, the stripes of the ocean floor on
+both sides of the mid-ocean ridges, ancient shields. Where there is no
+survey the layer is empty. A click in the Identify mode shows the value
+at the point, near Kursk about +270 nT. The tiles lie in the
+planetx-terrain repository, about 50 MB for the whole world, and load as
+they are shown.
 
 The Mineral deposits layer shows mineral deposits, mines and
 occurrences of the U.S. Geological Survey (USGS) from three datasets. The

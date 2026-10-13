@@ -296,6 +296,9 @@ uniform vec4 u_compare_uv;
 // Заливка скорости течений под струйками, core/flow.py.
 uniform sampler2D u_currents;
 uniform vec4 u_currents_uv;
+// Магнитные аномалии EMAG2v3, core/emag.py.
+uniform sampler2D u_emag;
+uniform vec4 u_emag_uv;
 // Горизонтали рельефа, core/contours.py.
 uniform sampler2D u_contours;
 uniform vec4 u_contours_uv;
@@ -384,6 +387,7 @@ void main() {
         } else {
             base = lay(base, u_theme, u_theme_uv);
         }
+        base = lay(base, u_emag, u_emag_uv);
         base = lay(base, u_currents, u_currents_uv);
         base = lay(base, u_contours, u_contours_uv);
         base = lay(base, u_cadastre, u_cadastre_uv);
