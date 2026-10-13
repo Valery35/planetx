@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.81.0
+version=0.82.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.81.0 The Magnetic poles row of the Inside the Earth catalogue
+changelog=0.82.0 The Magnetic anomalies row of the Inside the Earth
+      catalogue shows the anomalies of the Earth magnetic field after the
+      NOAA EMAG2v3 grid at 4 km - red places are stronger than the normal
+      field, blue ones weaker. The Kursk magnetic anomaly, the stripes of
+      the ocean floor and ancient shields show up. A click in the Identify
+      mode shows the value in nT.
+      0.81.0 The Magnetic poles row of the Inside the Earth catalogue
       shows the north and south magnetic poles for the time slider year and
       their path since 1590. A click in the Identify mode gives the
       declination, inclination and magnetic field intensity at the point
