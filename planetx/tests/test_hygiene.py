@@ -188,6 +188,9 @@ def secret_literals(source):
 # у правила Base64HighEntropyString сканера detect-secrets.
 BASE64_QUOTED = re.compile(r"([\'\"])([A-Za-z0-9+/\-_=]+)(\1)")
 BASE64_LIMIT = 4.5
+# То же для шестнадцатеричной строки - правило HexHighEntropyString.
+HEX_QUOTED = re.compile(r"([\'\"])([0-9A-Fa-f]+)(\1)")
+HEX_LIMIT = 3.0
 
 
 def _entropy(text):
@@ -197,6 +200,15 @@ def _entropy(text):
                 for n in collections.Counter(text).values())
 
 
+def _hex_entropy(text):
+    """Энтропия шестнадцатеричной строки по detect-secrets: у строки
+    из одних цифр она уменьшается на поправку по длине."""
+    value = _entropy(text)
+    if text.isdigit() and len(text) > 1:
+        value -= 1.2 / math.log2(len(text))
+    return value
+
+
 def entropy_literals(source):
     """Строка, похожая на ключ, по правилу detect-secrets.
 
@@ -204,13 +216,17 @@ def entropy_literals(source):
     Base64 High Entropy String» на имени слоя NASA GIBS в
     core/themes.py. Строка проверяется по одной строке файла, поэтому
     длинное имя, разбитое на две части, находкой не считается.
+    Каталог отметил 0.79.0 находкой «Potential Hex High Entropy
+    String» на отпечатке сертификата в core/cadastre.py.
     """
     found = []
     for number, line in enumerate(source.splitlines(), 1):
-        for match in BASE64_QUOTED.finditer(line):
-            if _entropy(match.group(2)) > BASE64_LIMIT:
-                found.append(number)
-                break
+        base64 = any(_entropy(m.group(2)) > BASE64_LIMIT
+                     for m in BASE64_QUOTED.finditer(line))
+        hexed = any(_hex_entropy(m.group(2)) > HEX_LIMIT
+                    for m in HEX_QUOTED.finditer(line))
+        if base64 or hexed:
+            found.append(number)
     return found
 
 
@@ -596,6 +612,11 @@ class TestGuardsCatch(unittest.TestCase):
         bad = 'x = ("TROPOMI_L2_Nitrogen_Dioxide_Tropospheric_Column")\n'
         good = ('x = ("TROPOMI_L2_Nitrogen_Dioxide_"\n'
                 '     "Tropospheric_Column")\n')
+        self.assertCatches(entropy_literals, bad, good)
+        # Прежняя запись отпечатка в core/cadastre.py и она же байтами
+        # через двоеточие.
+        bad = 'A = "8FF915CCAB7BC16F8C5C8099D53E0E115B3AEC2F"\n'
+        good = 'A = "8F:F9:15:CC:AB:7B:BC:16:F8:C5:C8:09:9D"\n'
         self.assertCatches(entropy_literals, bad, good)
 
     def test_symbol_guard(self):
