@@ -135,7 +135,8 @@ RU = {
                   "по глобусу и хранятся в «Моих метках». "
                   "У метки бывают значок, своё время и свой вид. "
                   "Файлы KML и KMZ открываются и сохраняются. "
-                  "Сцена «Пермь» из набора «Демо» показывает эти "
+                  "3D-модели Collada, glTF и OBJ встают на место "
+                  "ручками рамки. Сцена «Пермь» из набора «Демо» показывает эти "
                   "возможности вместе.",
     "places.fig": "Демо «Пермь». Шкала времени на 11:30-13:00, видна "
                   "Эспланада, маршрут прогулки и 3D-здания.",
@@ -436,7 +437,8 @@ EN = {
                   "on the globe and kept in My Places. "
                   "A placemark can have an icon, a time and a view "
                   "of its own. KML and KMZ files open and save. "
-                  "The Perm scene in Demo shows these features "
+                  "Collada, glTF and OBJ 3D models are placed with "
+                  "the handles of their box. The Perm scene in Demo shows these features "
                   "together.",
     "places.fig": "Perm demo. The time slider at 11:30-13:00 shows the "
                   "Esplanade, the walk route and 3D buildings.",
