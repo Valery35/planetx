@@ -104,7 +104,9 @@ RU = {
                   "OpenFreeMap - границы, дороги, реки и названия - ложится "
                   "по рельефу. Там же координатная сетка, звёзды, облака "
                   "NASA, солнце, спутники и земельные участки кадастра "
-                  "Росреестра. Флажки срабатывают сразу.",
+                  "Росреестра. Щелчок по участку показывает кадастровый "
+                  "номер, площадь, категорию земель, вид использования "
+                  "и кадастровую стоимость. Флажки срабатывают сразу.",
     "layers.fig": "Евразия с высоты 9000 км. Названия стран и городов, "
                   "границы стран жёлтые, границы областей тонкие белые.",
     "layers.c1.h": "Ровные подписи",
@@ -401,7 +403,9 @@ EN = {
                   "OpenFreeMap vector base - borders, roads, rivers and names "
                   "- follows the terrain. The same section holds the "
                   "coordinate grid, stars, NASA clouds, the sun, satellites "
-                  "and the Rosreestr cadastre land parcels. Check boxes take "
+                  "and the Rosreestr cadastre land parcels. A click on a "
+                  "parcel shows its cadastral number, area, land category, "
+                  "permitted use and cadastral value. Check boxes take "
                   "effect at once.",
     "layers.fig": "Eurasia from 9000 km. Names of countries and cities, "
                   "country borders in yellow, region borders thin and "
