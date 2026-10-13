@@ -7938,8 +7938,28 @@ def models_add():
     dialog = window.overlay_dialogs.get(key)
     out["dialog"] = dialog is not None
     out["info"] = dialog.model_info.text() if dialog is not None else None
+    item = window.myplaces.find(key)
+    # Модель добавляется ссылкой на файл, как Link у Google Earth.
+    out["linked"] = bool(item and item.href == path and item.image is None)
     if dialog is not None:
+        out["handles"] = type(window.handles.tool).__name__
+        out["extent"] = dialog.extent
         dialog.place["heading"].setValue(45.0)
+        if dialog.extent is not None:
+            # Крест рамки - на 0.001° к северу: модель сдвигается.
+            from planetx.core import overlays as core_overlays
+            box = core_overlays.model_box(dialog.overlay.camera,
+                                          dialog.overlay.scale,
+                                          dialog.extent)
+            lat0, lon0 = core_overlays.box_frame(box)[:2]
+            before = dialog.overlay.camera[0]
+            dialog.set_place(*core_overlays.model_drag(
+                dialog.overlay.camera, dialog.overlay.scale, dialog.extent,
+                "center", 0, lat0 + 0.001, lon0))
+            out["moved_north"] = round(dialog.overlay.camera[0] - before,
+                                       6)
+        # Копия в файл меток.
+        dialog.store.setCurrentIndex(0)
         dialog.accept()
 
 
@@ -7951,6 +7971,7 @@ def models_check():
     view = window.view
     item = window.myplaces.find(state["model_key"])
     out["saved_heading"] = item.overlay.camera[3] if item else None
+    out["stored"] = bool(item and item.image is not None)
     out["drawn"] = view.models.drawn
     out["loaded_parts"] = sum(len(v) for v in view.models.loaded.values())
     out["centre_after"] = _centre_pixel(view)

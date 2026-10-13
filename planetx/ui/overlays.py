@@ -33,7 +33,7 @@ from qgis.PyQt.QtWidgets import (QApplication, QComboBox, QDialog,
                                  QLineEdit, QPlainTextEdit, QPushButton,
                                  QSlider, QSpinBox)
 
-from ..core import editing, overlays, when
+from ..core import editing, models, overlays, when
 from ..i18n import tr
 from ..qt_compat import enum
 from .handles import DrawVertices, PropVertices
@@ -474,8 +474,15 @@ class OverlayDialog(QDialog):
             "файла видна на глобусе."))
         self.store.currentIndexChanged.connect(self._store_changed)
         model = item.kind == "model"
-        if not model:
-            form.addRow(tr("Хранение"), self.store)
+        if model:
+            self.store.setItemText(1, tr("Ссылка на файл"))
+            self.store.setToolTip(tr(
+                "Где лежат файлы модели. Ссылка - путь к файлу .dae, "
+                ".gltf, .glb или .obj, модель читается из него и файлов "
+                "рядом, правка в SketchUp или Blender видна на глобусе. "
+                "В файле меток - копия всех файлов модели, она видна "
+                "и без исходного файла."))
+        form.addRow(tr("Хранение"), self.store)
         row = QHBoxLayout()
         self.path = QLineEdit(self.link or "", self)
         self.path.setPlaceholderText(tr("Путь к файлу или адрес http(s)"))
@@ -492,12 +499,18 @@ class OverlayDialog(QDialog):
         row.addWidget(browse)
         self.file = QLabel(self)
         if model:
-            # Файлы модели всегда в файле меток.
-            for widget in (self.store, self.path, browse, self.file):
-                widget.hide()
+            self.path.setPlaceholderText(tr("Путь к файлу модели"))
+            self.path.setToolTip(tr(
+                "Путь к файлу модели .dae, .gltf, .glb или .obj. Картинки "
+                "модели читаются из файлов рядом с ним."))
+            browse.setToolTip(tr(
+                "Выбрать файл модели. В файле меток модель заменяется "
+                "копией, у ссылки меняется путь. Место и масштаб "
+                "остаются."))
+            form.addRow(tr("Файл модели"), row)
         else:
             form.addRow(tr("Картинка"), row)
-            form.addRow("", self.file)
+        form.addRow("", self.file)
         self.refresh = QSpinBox(self)
         self.refresh.setRange(0, 86400)
         self.refresh.setSingleStep(10)
@@ -513,9 +526,13 @@ class OverlayDialog(QDialog):
         self.refresh.setKeyboardTracking(False)
         self.refresh.valueChanged.connect(self._refresh_edited)
         if model:
-            self.refresh.hide()
-        else:
-            form.addRow(tr("Обновлять"), self.refresh)
+            self.refresh.setToolTip(tr(
+                "Файл модели по ссылке проверяется через этот промежуток, "
+                "пока модель видна. Изменённый файл читается заново. "
+                "Ноль - файл читается при показе. Промежуток короче "
+                "{low} с поднимается до {low} с.",
+                low=int(overlays.MIN_REFRESH)))
+        form.addRow(tr("Обновлять"), self.refresh)
         self.opacity = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
         self.opacity.setRange(0, 100)
         self.opacity.setValue(int(round(self.overlay.color[3] / 2.55)))
@@ -654,6 +671,12 @@ class OverlayDialog(QDialog):
 
     def _show_file(self):
         if self.item.kind == "model":
+            self.file.setText(
+                (tr("по ссылке {link}", link=self.link) if self.link
+                 else tr("ссылки нет"))
+                if self.store.currentData() == "link"
+                else tr("в файле меток") if self.image or self._image
+                else tr("файлов модели нет"))
             return
         if self.store.currentData() == "link":
             self.file.setText(tr("по ссылке {link}", link=self.link)
@@ -665,14 +688,30 @@ class OverlayDialog(QDialog):
                           else tr("картинки нет"))
 
     def _browse(self):
-        path, _ = QFileDialog.getOpenFileName(
-            self, tr("Картинка наложения"), "",
-            tr("Картинки (*.png *.jpg *.jpeg *.gif)"))
+        model = self.item.kind == "model"
+        if model:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("3D-модель"), "",
+                tr("Файлы моделей (*.dae *.gltf *.glb *.obj)"))
+        else:
+            path, _ = QFileDialog.getOpenFileName(
+                self, tr("Картинка наложения"), "",
+                tr("Картинки (*.png *.jpg *.jpeg *.gif)"))
         if not path:
             return
         if self.store.currentData() == "link":
             self.path.setText(path)
             self._path_edited()
+            return
+        if model:
+            package = models.package_file(path)
+            if package is None:
+                self.file.setText(tr("Модель не читается: {name}",
+                                     name=os.path.basename(path)))
+                return
+            self.image = package
+            self._show_file()
+            self.changed.emit()
             return
         with open(path, "rb") as stream:
             data = stream.read()

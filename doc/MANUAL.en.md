@@ -1773,9 +1773,18 @@ mouse:
 The window fields follow the handles. The frame is built by the
 heading, the tilt and roll of the model are not taken into account.
 
-The model files are kept in the places file, the source file is not
-needed after adding. Save as KML… to KMZ puts the model files into the
-archive, to KML into a folder next to it. Model images larger than
+A new model is kept as a link to the source file, like a Google Earth
+model. The model is read from it and the images next to it, an edit of
+the file in SketchUp or Blender shows on the globe. The Refresh field
+sets how often the file is checked while the model is visible. The
+Storage field of the properties window puts a copy of all model files
+into the places file, then the source file is not needed. Browse…
+chooses another model file, the place and the scale stay.
+
+Save as KML… to KMZ puts the model files into the archive, for linked
+models too. To KML a model in the places file goes into a folder next
+to it, a linked model keeps the path to its file. A scene carries the
+files of all models of its folder. Model images larger than
 2048 pixels are reduced. A glTF model with Draco or meshopt compressed
 meshes is not read, such a file is saved again without compression,
 for example in Blender.

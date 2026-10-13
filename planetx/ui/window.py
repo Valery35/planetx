@@ -6399,8 +6399,19 @@ class GlobeWindow(QWidget):
             return item.image, overlay, \
                 lambda item=item: self.myplaces.image(item.image)
         link = link if link is not None else item.href
+        if item.kind == "model":
+            # Модель по ссылке - пакет из файла и файлов рядом с ним.
+            return self._link_token(link), overlay, \
+                lambda link=link: self._model_link_data(link)
         return self._link_token(link), overlay, \
             lambda link=link: self._link_data(link)
+
+    def _model_link_data(self, link):
+        """Пакет модели по ссылке на файл .dae, .gltf, .glb или .obj или
+        None. Адрес в сети у модели не читается - у неё файлы рядом."""
+        if not link or link.startswith(("http://", "https://")):
+            return None
+        return models.package_file(link)
 
     def _link_token(self, link):
         """Метка картинки по ссылке: путь и время правки файла или адрес
@@ -6490,9 +6501,12 @@ class GlobeWindow(QWidget):
         self._ground_export_ready()
 
     def _overlay_bytes(self, item):
-        """Байты картинки наложения: из файла меток или по ссылке."""
+        """Байты картинки наложения: из файла меток или по ссылке.
+        У модели - пакет её файлов."""
         if item.image is not None:
             return self.myplaces.image(item.image)
+        if item.kind == "model":
+            return self._model_link_data(item.href)
         return self._link_data(item.href)
 
     def _refresh_overlays(self):
@@ -6664,9 +6678,10 @@ class GlobeWindow(QWidget):
         overlay = overlays.Overlay(
             "model", camera=(pose.lat, pose.lon, 0.0, 0.0, 0.0, 0.0))
         name = os.path.splitext(os.path.basename(path))[0]
+        # Модель - ссылкой на файл, как Link у Google Earth: правка файла
+        # видна на глобусе. В файл меток её копирует поле «Хранение».
         key = self.myplaces.add_overlay(KOverlay(
-            name, overlay, image=package, view=self.current_view()),
-            folder)
+            name, overlay, href=path, view=self.current_view()), folder)
         if key is not None:
             self.panel.select_place(key)
             self._open_overlay_properties(self.myplaces.find(key))
@@ -6836,9 +6851,6 @@ class GlobeWindow(QWidget):
                 else:
                     self._refresh_shapes()
             dialog.finished.connect(done)
-        if item.kind == "model":
-            dialog.set_model_info(self.model_summary(item))
-            dialog.extent = self.model_extent(item)
         self.side.host(dialog)
         self._overlay_tool(dialog)
         self._overlay_preview(key)
@@ -6875,18 +6887,30 @@ class GlobeWindow(QWidget):
             self._ground_pending[key] = dialog
             self._ground_timer.start()
         else:
-            if overlay.kind == "model" and dialog.extent is not None:
-                # След модели на земле - рамка ручек.
-                box = overlays.model_box(overlay.camera, overlay.scale,
-                                         dialog.extent)
-                self.previews[key] = Shape(
-                    "polygon", overlays.box_corners(*box), color=OUTLINE,
-                    width=2.0)
             self._overlay_edits[key] = (
                 overlays.from_params(overlay.kind, overlay.params()),
                 dialog.image if dialog.link is None else None, dialog.link)
+            if overlay.kind == "model":
+                self._model_frame(key, dialog)
         self._refresh_shapes()
         self.handles.sync()
+
+    def _model_frame(self, key, dialog):
+        """Рамка модели на земле - след её коробки, по ней ходят ручки.
+        Другой файл модели - другая коробка и сведения под полями."""
+        token = self._overlay_edit(dialog.item)[0]
+        if token != getattr(dialog, "model_token", None):
+            dialog.model_token = token
+            dialog.extent = self.model_extent(dialog.item)
+            dialog.set_model_info(self.model_summary(dialog.item))
+        overlay = dialog.overlay
+        if dialog.extent is None:
+            self.previews.pop(key, None)
+            return
+        box = overlays.model_box(overlay.camera, overlay.scale,
+                                 dialog.extent)
+        self.previews[key] = Shape("polygon", overlays.box_corners(*box),
+                                   color=OUTLINE, width=2.0)
 
     def _ground_settled(self):
         """Пауза в движении углов: картинки на поверхности по окнам."""
@@ -7079,6 +7103,9 @@ class GlobeWindow(QWidget):
         try:
             for n, item in enumerate(tree.overlays()):
                 if item.kind == "model":
+                    if item.image is None and kmz:
+                        # Модель по ссылке на файл ложится в архив.
+                        item.image = self._model_link_data(item.href)
                     if item.image and not kmz:
                         # Файлы модели - в папку рядом с KML.
                         stem = os.path.splitext(os.path.basename(path))[0]

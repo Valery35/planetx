@@ -784,6 +784,46 @@ EN = {
         "Moscow, historical maps",
     "3D-модели, Суздаль и Пермь":
         "3D models, Suzdal and Perm",
+    "Ссылка на файл":
+        "Link to a file",
+    "Где лежат файлы модели. Ссылка - путь к файлу .dae, "
+    ".gltf, .glb или .obj, модель читается из него и файлов "
+    "рядом, правка в SketchUp или Blender видна на глобусе. "
+    "В файле меток - копия всех файлов модели, она видна "
+    "и без исходного файла.":
+        "Where the model files are. A link is a path to a .dae, .gltf, "
+        ".glb or .obj file, the model is read from it and the files "
+        "next to it, an edit in SketchUp or Blender shows on the globe. "
+        "In the places file is a copy of all model files, it shows "
+        "without the source file too.",
+    "Путь к файлу модели":
+        "Path to the model file",
+    "Путь к файлу модели .dae, .gltf, .glb или .obj. Картинки "
+    "модели читаются из файлов рядом с ним.":
+        "Path to a .dae, .gltf, .glb or .obj model file. The model "
+        "images are read from the files next to it.",
+    "Выбрать файл модели. В файле меток модель заменяется "
+    "копией, у ссылки меняется путь. Место и масштаб "
+    "остаются.":
+        "Choose a model file. In the places file the model is replaced "
+        "by a copy, a link gets a new path. The place and the scale "
+        "stay.",
+    "Файл модели":
+        "Model file",
+    "Файл модели по ссылке проверяется через этот промежуток, "
+    "пока модель видна. Изменённый файл читается заново. "
+    "Ноль - файл читается при показе. Промежуток короче "
+    "{low} с поднимается до {low} с.":
+        "A linked model file is checked at this interval while the "
+        "model is visible. A changed file is read again. Zero means "
+        "the file is read when shown. An interval shorter than {low} s "
+        "is raised to {low} s.",
+    "в файле меток":
+        "in the places file",
+    "файлов модели нет":
+        "no model files",
+    "Файлы моделей (*.dae *.gltf *.glb *.obj)":
+        "Model files (*.dae *.gltf *.glb *.obj)",
     "Растянуть модель по стороне":
         "Stretch the model along the side",
     "Сдвинуть модель":
