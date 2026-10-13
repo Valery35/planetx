@@ -122,6 +122,14 @@ class TestScene(unittest.TestCase):
         self.assertEqual(s2.clear_mask(s, raw).tolist(),
                          [[False, True], [True, True]])
 
+    def test_scene_smaller_than_area_stays_in_list(self):
+        # Сцена 60 км на участке 100 км покрывает его на треть, при
+        # общем пороге 50 % весь список ASTER был пуст.
+        self.assertLess(s2.min_valid("aster"), 30.0)
+        self.assertLess(s2.min_valid("aster_nasa"), 30.0)
+        self.assertGreater(s2.min_valid("aster"), 0.04)
+        self.assertEqual(s2.min_valid("landsat"), 50.0)
+
     def test_search_body(self):
         body = s2.search_body({"type": "Point", "coordinates": [-117, 37]},
                               "2000-03-04", "2006-12-31", 50,

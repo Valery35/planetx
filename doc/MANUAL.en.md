@@ -1192,9 +1192,7 @@ A right click on the globe opens a menu.
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
-| Sentinel-2 and Landsat images here… | The Sentinel-2 and Landsat images window for an area around the point under the cursor, see Sentinel-2 and Landsat images |
-| Early Landsat images 1972-1993 here… | The same window right on the Landsat 1-5 MSS images |
-| ASTER images here… | The same window right on the ASTER images of 2000-2006. Images after 2006 are the ASTER since 2007 line of the Satellite list, see NASA Earthdata key |
+| Satellite images here… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Measure distance | Opens the Ruler with its first point here |
 | Copy link to place | A link to the point on the OpenStreetMap map to the clipboard, the scale follows the view. Any browser opens the link |
 | Open in browser | A submenu of custom items. An item opens in the browser an address with the point under the cursor, for example the weather forecast at the point on windy.com. The Custom items… item opens the list window. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
@@ -1204,17 +1202,17 @@ The shape of a 3D path, a 3D polygon and a tour is not edited this way.
 A placemark with a saved measurement loses the measurement text after
 its shape is edited.
 
-### Sentinel-2 and Landsat images
+### Satellite images
 
-The Sentinel-2 and Landsat images window looks for scenes of the
+The Satellite images window looks for scenes of the
 Sentinel-2 or Landsat satellites over an area and adds the chosen bands and indices to the
 QGIS project. The scenes are L2A, that is surface reflectance, 10-20 m
 per pixel. Two items open the window:
 
-- Sentinel-2 and Landsat images here… of the globe menu takes a square around the
+- Satellite images here… of the globe menu takes a square around the
   point. The square side equals the width of the visible strip of the
   globe, from 1 to 100 km. The Area side field changes it.
-- Sentinel-2 and Landsat images… of the My Places menu takes the area from the
+- Satellite images… of the My Places menu takes the area from the
   placemark. A polygon gives its outline, a path gives its bounding
   box, a point gives a square around it.
 
@@ -1329,9 +1327,8 @@ images after May 2003 have empty stripes from an instrument failure.
 Over water, the near infrared reflectance of Landsat 4-5 can be above
 red, and the NDVI of water comes out about +0.1.
 
-The ASTER images here… item of the globe menu and the same action of
-the Search line - by the words ASTER, minerals, kaolinite - open the
-window right on these images.
+The action of the Search line by the words ASTER, minerals, kaolinite
+opens the window right on these images.
 The ASTER line of the same list gives ASTER images of the Terra
 satellite of 2000-2006 - 14 bands, visible and near infrared at 15 m,
 six shortwave infrared at 30 m, five thermal at 90 m. The catalogue and
@@ -1384,9 +1381,8 @@ only the scene frame, and the ASTER imaged strip is turned inside it.
 An area near the frame edge may lie beyond the edge of the image. Then
 the window adds no layers and says that the bands hold no data.
 
-The Early Landsat images 1972-1993 here… item of the globe menu and
-the same action of the Search line - by the words MSS, early images,
-old images - open the window right on these images.
+The action of the Search line by the words MSS, early images, old
+images opens the window right on these images.
 The Landsat 1-5 MSS line of the same list gives the oldest Landsat
 images - the MSS scanner, 1972-1993, 60 m per pixel, USGS Collection 2
 Level-1 processing from the same Planetary Computer catalogue. Near Perm
@@ -1447,7 +1443,7 @@ is free, each user has a key of their own.
    press the Generate Token button. A long string of Latin letters,
    digits and dots appears - this is the key. Copy it whole.
 3. Key in PlanetX. Right-click the globe at the place you need and
-   choose ASTER images here…. In the Satellite list choose ASTER since
+   choose Satellite images here…. In the Satellite list choose ASTER since
    2007 - NASA, an Earthdata key is needed. Press Find, choose a scene
    and press To QGIS project. The window asks for the key. Paste the
    copied string and press OK. The window keeps the key and does not

@@ -9171,11 +9171,12 @@ def mss_command():
                    view.height() * view.devicePixelRatioF() / 2.0)
     menus = [m for m in window.findChildren(QMenu) if m not in before]
     out["menu"] = [a.text() for m in menus for a in m.actions()
-                   if "Landsat" in a.text() or "ASTER" in a.text()]
+                   if "Космоснимки" in a.text() or "Landsat" in a.text()
+                   or "ASTER" in a.text()]
     for menu in menus:
         menu.close()
     dialog.close()
-    # Пункт «Снимки ASTER здесь…»: окно на ASTER с датами 2000-2006.
+    # Действие «Снимки ASTER здесь»: окно на ASTER с датами 2000-2006.
     out["aster_hint"] = [(h.kind, h.text) for h in
                          window.search_suggestions("астер")[:3]]
     dialog.use_mission("sentinel2")

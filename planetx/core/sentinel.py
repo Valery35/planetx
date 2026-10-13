@@ -871,6 +871,19 @@ def cloud_share_qa(qa, inside):
             float(100.0 * count / area))
 
 
+# Сцена в списке видна, если данные покрывают участок не меньше этой
+# доли, %. Сцена ASTER - около 60 км, участок по ширине вида - до
+# 100 км, поэтому у ASTER сцена прячется, только если почти не задевает
+# участок. Выбор помощника, утверждает автор.
+MIN_VALID = 50.0
+MIN_VALID_ASTER = 1.0
+
+
+def min_valid(mission):
+    """Наименьшая доля данных над участком, при которой сцена видна."""
+    return MIN_VALID_ASTER if aster.is_aster(mission) else MIN_VALID
+
+
 def clouds_of(scene, raw, inside):
     """Облачность над участком по маске сцены любого спутника."""
     if modis.is_modis(scene.mission):

@@ -5181,7 +5181,7 @@ class GlobeWindow(QWidget):
         return dialog
 
     def sentinel_here(self, lat, lon, mission=None):
-        """«Снимки Sentinel-2 и Landsat здесь…» меню на глобусе: сцены участка
+        """«Космоснимки здесь…» меню на глобусе: сцены участка
         вокруг точки. Окно одно, новый участок заменяет прежний. mission -
         спутник окна, у пункта «Ранние снимки Landsat здесь…» - mss,
         у «Снимков ASTER здесь…» - aster."""
@@ -5293,7 +5293,7 @@ class GlobeWindow(QWidget):
         return layer.id()
 
     def sentinel_place(self, place):
-        """«Снимки Sentinel-2 и Landsat…» меню метки: участок - метка."""
+        """«Космоснимки…» меню метки: участок - метка."""
         dialog = self._sentinel_dialog()
         dialog.show_place(place, self._view_width())
         return dialog

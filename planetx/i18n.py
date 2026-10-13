@@ -26,10 +26,9 @@ EN = {
     "Ошибки SSL запроса {number}:": "SSL errors of request {number}:",
     "Модуль выгружен.": "The plugin is unloaded.",
     "QGIS закрыт.": "QGIS is closed.",
-    "Снимки Sentinel-2 и Landsat здесь…":
-        "Sentinel-2 and Landsat images here…",
-    "Снимки Sentinel-2 и Landsat…": "Sentinel-2 and Landsat images…",
-    "Снимки Sentinel-2 и Landsat": "Sentinel-2 and Landsat images",
+    "Космоснимки здесь…": "Satellite images here…",
+    "Космоснимки…": "Satellite images…",
+    "Космоснимки": "Satellite images",
     "Температура поверхности, °C": "Surface temperature, °C",
     "Температура поверхности из продукта USGS Collection 2 Level-2 - не "
     "радиационная температура. USGS уже учёл излучательную способность "
@@ -60,11 +59,8 @@ EN = {
         "12 bands at a 10 m step, an area with a side over 20 km gets a "
         "20 m step. The layer shows natural colours, the band names are "
         "seen in the QGIS layer properties.",
-    "Ранние снимки Landsat 1972-1993 здесь…":
-        "Early Landsat images 1972-1993 here…",
     "Ранние снимки Landsat 1972-1993 здесь":
         "Early Landsat images 1972-1993 here",
-    "Снимки ASTER здесь…": "ASTER images here…",
     "Снимки ASTER здесь": "ASTER images here",
     "Landsat 1-5 MSS Collection 2 Level-1 (USGS), файлы и каталог "
     "Microsoft Planetary Computer. Значения - отражение на верху "
@@ -385,11 +381,11 @@ EN = {
         "of the plugin are found here too - type “currents”, “ruler” or "
         "“images” and choose a suggestion. Ctrl+K from anywhere in the "
         "window puts the cursor into this field.",
-    "Правая кнопка на глобусе открывает меню точки - что здесь, снимки "
-    "Sentinel-2 и Landsat, исторические карты, маршрут, номенклатура "
-    "листа, линейка и метка.":
+    "Правая кнопка на глобусе открывает меню точки - что здесь, "
+    "космоснимки, исторические карты, маршрут, номенклатура листа, "
+    "линейка и метка.":
         "The right button on the globe opens the menu of the point - "
-        "what is here, Sentinel-2 and Landsat images, historical maps, a "
+        "what is here, satellite images, historical maps, a "
         "route, map sheet numbers, the ruler and a placemark.",
     "Значок открывает шкалу времени, когда у данных есть время - метки с "
     "датами, землетрясения, карты NASA, течения, исторические карты. "
@@ -414,8 +410,7 @@ EN = {
         "Talk to the assistant",
     "Синхронизация с картой QGIS":
         "Sync with the QGIS map",
-    "Снимки Sentinel-2 и Landsat здесь":
-        "Sentinel-2 and Landsat images here",
+    "Космоснимки здесь": "Satellite images here",
     "Шкала времени":
         "Time slider",
     "включить":

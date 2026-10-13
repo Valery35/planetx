@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Окно «Снимки Sentinel-2 и Landsat»: сцены участка, каналы и индексы
+"""Окно «Космоснимки»: сцены участка, каналы и индексы
 в проект.
 
 Участок - точка с квадратом стороной side или метка «Моих меток»
@@ -847,7 +847,7 @@ class SentinelDialog(QDialog):
     def __init__(self, window, parent=None):
         super().__init__(parent)
         self.window = window
-        self.setWindowTitle(tr("Снимки Sentinel-2 и Landsat"))
+        self.setWindowTitle(tr("Космоснимки"))
         self.setModal(False)
         # Ключ SAS коллекции нынешнего спутника и момент, после которого
         # он просится заново. Ключи коллекций - в sas_keys.
@@ -1099,7 +1099,7 @@ class SentinelDialog(QDialog):
 
     def use_mission(self, mission):
         """Спутник окна без поиска - поиск запустит новый участок.
-        Пункты «Ранние снимки Landsat здесь…» и поиск «MSS»."""
+        Действия строки «Поиск» по словам «MSS», «ASTER»."""
         index = self.mission.findData(mission)
         if index < 0 or index == self.mission.currentIndex():
             return
@@ -1443,8 +1443,9 @@ class SentinelDialog(QDialog):
     def _filter_item(self, item):
         cloud, valid = self.clouds.get(item.data(0, SCENE_ROLE),
                                        (None, None))
-        hidden = cloud is not None and (cloud > self.area_cloud.value()
-                                        or valid < 50.0)
+        hidden = cloud is not None and (
+            cloud > self.area_cloud.value()
+            or valid < s2.min_valid(self.searched))
         item.setHidden(bool(hidden))
 
     def _filter(self, *args):

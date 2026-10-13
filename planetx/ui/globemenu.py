@@ -129,14 +129,10 @@ def show(window, px, py):
             menu.addAction(tr("Что здесь?")).triggered.connect(
                 lambda *a: window.what_here(px, py))
             sheet_items(window, menu, lat, lon)
-            menu.addAction(tr("Снимки Sentinel-2 и Landsat здесь…")) \
+            # Один пункт на все спутники, окно открывается на прежнем
+            # спутнике.
+            menu.addAction(tr("Космоснимки здесь…")) \
                 .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
-            menu.addAction(tr("Ранние снимки Landsat 1972-1993 здесь…")) \
-                .triggered.connect(lambda *a: window.sentinel_here(
-                    lat, lon, "mss"))
-            menu.addAction(tr("Снимки ASTER здесь…")) \
-                .triggered.connect(lambda *a: window.sentinel_here(
-                    lat, lon, "aster"))
             menu.addAction(tr("Исторические карты Рамсея здесь…")) \
                 .triggered.connect(lambda *a: window.rumsey_here(lat, lon))
             if window.extras.get("contours"):

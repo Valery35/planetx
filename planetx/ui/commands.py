@@ -190,7 +190,7 @@ def _tools(window, add, earth):
                                         "subsurface", "drillholes"))
     if not earth:
         return
-    add("here:sentinel", tr("Снимки Sentinel-2 и Landsat здесь"), open_,
+    add("here:sentinel", tr("Космоснимки здесь"), open_,
         lambda: window.sentinel_here(*_here(window)),
         ("космоснимки", "спутниковые снимки", "ndvi", "landsat",
          "sentinel", "modis", "imagery"))

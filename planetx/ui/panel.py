@@ -1760,7 +1760,7 @@ class LayerPanel(QWidget):
                                 tr("Картинку в проект QGIS…")))
             if key.split(":")[0] in ("point", "line", "polygon"):
                 actions.append(("sentinel",
-                                tr("Снимки Sentinel-2 и Landsat…")))
+                                tr("Космоснимки…")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),
