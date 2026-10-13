@@ -7855,6 +7855,128 @@ def overlays_clean():
     out["gl"] = dict(window.view.gl_errors)
 
 
+# 3D-модели, как Model KML Google Earth. Просьба автора от 13 октября
+# 2026 года. Куб 20 м с картинкой в шахматку - файл Collada рядом
+# с картинкой, как пишет SketchUp.
+def _cube_dae(folder):
+    from qgis.PyQt.QtGui import QColor, QImage
+    os.makedirs(os.path.join(folder, "cube"), exist_ok=True)
+    image = QImage(64, 64, QImage.Format.Format_ARGB32
+                   if hasattr(QImage, "Format") else QImage.Format_ARGB32)
+    for x in range(64):
+        for y in range(64):
+            image.setPixelColor(x, y, QColor(230, 30, 30) if (x // 16
+                                + y // 16) % 2 else QColor(240, 240, 240))
+    image.save(os.path.join(folder, "cube", "checker.png"), "PNG")
+    faces = (((0, 0, 1), [(0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)]),
+             ((0, 0, -1), [(0, 0, 0), (0, 1, 0), (1, 1, 0), (1, 0, 0)]),
+             ((1, 0, 0), [(1, 0, 0), (1, 1, 0), (1, 1, 1), (1, 0, 1)]),
+             ((-1, 0, 0), [(0, 0, 0), (0, 0, 1), (0, 1, 1), (0, 1, 0)]),
+             ((0, 1, 0), [(0, 1, 0), (0, 1, 1), (1, 1, 1), (1, 1, 0)]),
+             ((0, -1, 0), [(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)]))
+    pos, nrm, p = [], [], []
+    for f, (normal, corners) in enumerate(faces):
+        for c in corners:
+            pos += [20 * c[0] - 10, 20 * c[1] - 10, 20 * c[2]]
+        nrm += list(normal)
+        for k in (0, 1, 2, 0, 2, 3):
+            p += [4 * f + k, f, k]
+    text = """<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema"
+ version="1.4.1"><asset><unit meter="1"/><up_axis>Z_UP</up_axis></asset>
+<library_images><image id="i"><init_from>cube/checker.png</init_from>
+</image></library_images><library_effects><effect id="e">
+<profile_COMMON><newparam sid="s"><surface type="2D"><init_from>i
+</init_from></surface></newparam><newparam sid="t"><sampler2D><source>s
+</source></sampler2D></newparam><technique sid="c"><lambert><diffuse>
+<texture texture="t" texcoord="u"/></diffuse></lambert></technique>
+</profile_COMMON></effect></library_effects><library_materials>
+<material id="m"><instance_effect url="#e"/></material>
+</library_materials><library_geometries><geometry id="g"><mesh>
+<source id="p"><float_array id="pa" count="72">{pos}</float_array>
+<technique_common><accessor source="#pa" count="24" stride="3"/>
+</technique_common></source><source id="n"><float_array id="na"
+ count="18">{nrm}</float_array><technique_common><accessor source="#na"
+ count="6" stride="3"/></technique_common></source><source id="t">
+<float_array id="ta" count="8">0 0 1 0 1 1 0 1</float_array>
+<technique_common><accessor source="#ta" count="4" stride="2"/>
+</technique_common></source><vertices id="v"><input semantic="POSITION"
+ source="#p"/></vertices><triangles count="12" material="M">
+<input semantic="VERTEX" source="#v" offset="0"/><input semantic="NORMAL"
+ source="#n" offset="1"/><input semantic="TEXCOORD" source="#t"
+ offset="2"/><p>{p}</p></triangles></mesh></geometry>
+</library_geometries><library_visual_scenes><visual_scene id="s"><node>
+<instance_geometry url="#g"><bind_material><technique_common>
+<instance_material symbol="M" target="#m"/></technique_common>
+</bind_material></instance_geometry></node></visual_scene>
+</library_visual_scenes><scene><instance_visual_scene url="#s"/></scene>
+</COLLADA>""".format(pos=" ".join(str(v) for v in pos),
+                     nrm=" ".join(str(v) for v in nrm),
+                     p=" ".join(str(v) for v in p))
+    path = os.path.join(folder, "cube.dae")
+    with open(path, "w", encoding="utf-8") as stream:
+        stream.write(text)
+    return path
+
+
+@check(4000)
+def models_add():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    # Эспланада в Перми, вид сбоку на 150 м.
+    window.view.navigator.set_pose(Pose(58.0104, 56.2294, 150.0, 30.0,
+                                        60.0))
+    out = result.setdefault("models", {})
+    out["before"] = len(window.myplaces.overlays)
+    out["centre_before"] = _centre_pixel(window.view)
+    path = _cube_dae(os.path.join(TEMP, "planetx_model"))
+    key = window.add_model(path=path)
+    state["model_key"] = key
+    out["key"] = key
+    dialog = window.overlay_dialogs.get(key)
+    out["dialog"] = dialog is not None
+    out["info"] = dialog.model_info.text() if dialog is not None else None
+    if dialog is not None:
+        dialog.place["heading"].setValue(45.0)
+        dialog.accept()
+
+
+@check(3000)
+def models_check():
+    from planetx.core.kml import read_file
+    window = state["window"]
+    out = result["models"]
+    view = window.view
+    item = window.myplaces.find(state["model_key"])
+    out["saved_heading"] = item.overlay.camera[3] if item else None
+    out["drawn"] = view.models.drawn
+    out["loaded_parts"] = sum(len(v) for v in view.models.loaded.values())
+    out["centre_after"] = _centre_pixel(view)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_model.png"))
+    # KMZ туда и обратно: место, поворот и картинка модели.
+    path = os.path.join(TEMP, "planetx_model.kmz")
+    window.export_kml(None, path=path)
+    with open(path, "rb") as stream:
+        back = [o for o in read_file(stream.read()).overlays()
+                if o.kind == "model"]
+    out["kmz_models"] = len(back)
+    out["kmz_place"] = list(back[-1].overlay.camera) if back else None
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(1500)
+def models_clean():
+    window = state["window"]
+    out = result["models"]
+    if state.get("model_key"):
+        window.myplaces.remove_many([state["model_key"]])
+    out["left"] = len(window.myplaces.overlays) - out["before"]
+    out["models_after"] = len(window.view.models.source)
+    out["gl"] = dict(window.view.gl_errors)
+
+
 def _image_server():
     """Сервер картинки на 127.0.0.1 в потоке: отдаёт байты из словаря
     и считает запросы."""

@@ -1730,6 +1730,37 @@ Clear My Places… removes all placemarks and folders after a
 confirmation. The removal cannot be undone, so the places needed are
 better saved to KML first.
 
+### 3D models
+
+Add → 3D model… places a model of a building or another object at the
+view point. The model is read from a Collada file (.dae) with images
+next to it or from glTF (.gltf, .glb). A KMZ file with a Google Earth
+model opens as a places file, and the model stands at its place.
+
+A model is a row of My Places. The checkbox hides it, Fly to puts the
+camera to the side and above, and the model goes into tours and into
+saved KML and KMZ.
+
+The properties window of a model sets its place, as Model in KML:
+- latitude and longitude of the model point, the origin of the model
+  file coordinates
+- altitude mode - on terrain, above terrain or above sea level
+- heading, a clockwise turn as seen from above, at zero the Y axis of
+  the model points north
+- tilt and roll, turns around the X and Y axes of the model
+- scale, where one means the sizes from the model file
+- opacity.
+
+Below the fields stand the count of triangles, materials and images
+and the size of the model in metres.
+
+The model files are kept in the places file, the source file is not
+needed after adding. Save as KML… to KMZ puts the model files into the
+archive, to KML into a folder next to it. Model images larger than
+2048 pixels are reduced. A glTF model with Draco or meshopt compressed
+meshes is not read, such a file is saved again without compression,
+for example in Blender.
+
 ---
 
 ## Ruler

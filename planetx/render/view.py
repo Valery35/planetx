@@ -26,6 +26,7 @@ from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
 from ..core.camera import Camera
 from ..core import ellipsoid
 from ..core.ellipsoid import ecef_to_geodetic
+from ..core.models import anchor as model_anchor
 from ..core.flight import Flight
 from ..core.navigation import (Navigator, Pose, altitude, ground_under,
                                nearest_terrain)
@@ -45,6 +46,7 @@ from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, NEAR_ONLY, GibsLayer
 from .gibs import MIN_LEVELS as GIBS_MIN
 from .subsurface import ImageWalls, Subsurface
+from .models import Models
 from .flow import FlowLines
 from .quakes import DepositPoints, FirePoints, PlantPoints, Quakes
 from .satellites import SatellitePoints
@@ -326,6 +328,10 @@ class GlobeView(QOpenGLWidget):
         self.image_walls = ImageWalls()
         # Фото с камерой (core/overlays.py): плоскости с картинкой в 3D.
         self.photos = ImageWalls()
+        # 3D-модели «Моих меток» (render/models.py), точка - по рельефу.
+        self.models = Models()
+        self.models.anchor = self._model_anchor
+        self._models_version = None
         self._terrain_nearest = None
         # Разрез Земли: вынутый сектор (core.cutaway.Wedge или None)
         # и грани с оболочками - отдельный набор подземных сеток.
@@ -646,6 +652,16 @@ class GlobeView(QOpenGLWidget):
             GL.glDepthMask(GL.GL_TRUE)
             gl.glDisable(GL.GL_BLEND)
             gl.glUniform1f(self.u_water, 0.0)
+
+    def _model_anchor(self, item):
+        """Точка 3D-модели render.models.Model в ECEF по рельефу на
+        экране."""
+        lat, lon, mode, alt = item.place
+        ground = self.store.height_at(lat, lon) \
+            if self.store.scale else 0.0
+        # Без рельефа масштаб 0: высота над уровнем моря тоже лежит
+        # на эллипсоиде, как рельеф.
+        return model_anchor(lat, lon, mode, alt, ground, self.store.scale)
 
     def label_height(self, lat, lon):
         """Высота надписи: с дном океана - не ниже уровня моря, иначе
@@ -1321,6 +1337,7 @@ class GlobeView(QOpenGLWidget):
         self.subsurface.init_gl()
         self.image_walls.init_gl()
         self.photos.init_gl()
+        self.models.init_gl()
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
         self.section_wall.init_gl()
@@ -1353,6 +1370,7 @@ class GlobeView(QOpenGLWidget):
         self.subsurface.release_gl()
         self.image_walls.release_gl()
         self.photos.release_gl()
+        self.models.release_gl()
         self.cutaway.release_gl()
         self.cutaway_slabs.release_gl()
         self.section_wall.release_gl()
@@ -1742,6 +1760,16 @@ class GlobeView(QOpenGLWidget):
         if photo is not None:
             self.camera.nearest = photo if self.camera.nearest is None \
                 else min(self.camera.nearest, photo)
+        if self.models.active and self.store.version \
+                != self._models_version:
+            # Пришли высоты - модели встают на рельеф заново.
+            self._models_version = self.store.version
+            self.models.place()
+        model = self.models.nearest(self.camera.eye) \
+            if self.models.active else None
+        if model is not None:
+            self.camera.nearest = model if self.camera.nearest is None \
+                else min(self.camera.nearest, model)
         marks.append(time.perf_counter())
         sel = lod.select(self.camera, self.textures.__contains__,
                          max_level=self.max_level,
@@ -1923,6 +1951,11 @@ class GlobeView(QOpenGLWidget):
             self.buildings.upload(BUILDING_SHOT_UPLOADS if shot
                                   else 1 if motion else 2)
             self.buildings.draw(self.camera, self.sun)
+        if self.models.active and not self.show_holes:
+            # До неба, как здания.
+            self.models.draw(self.camera)
+        else:
+            self.models.drawn = 0
         if air:
             self._draw_sky()
         if self.show_stars and not self.show_holes:

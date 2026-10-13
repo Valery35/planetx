@@ -32,8 +32,10 @@ except ImportError:  # headless-тесты
     from camera import enu
     from measure import destination
 
-KINDS = ("ground", "screen", "photo")
+KINDS = ("ground", "screen", "photo", "model")
 WHITE = (255, 255, 255, 255)
+# altitudeMode модели, как в core/models.py.
+MODEL_MODES = ("clampToGround", "relativeToGround", "absolute")
 # Новая картинка на поверхности - доля ширины видимой полосы.
 NEW_SHARE = 0.5
 # Плоскость нового фото - доля расстояния до точки взгляда.
@@ -70,6 +72,9 @@ class Overlay:
     свободных угла gx:LatLonQuad. С рамкой углы считаются по ней.
     refresh - промежуток обновления картинки по ссылке в секундах,
     0 - не обновляется, как refreshMode onInterval в Icon KML.
+    У 3D-модели (core/models.py) camera - место (широта, долгота,
+    высота, азимут, наклон, крен), как Location и Orientation KML,
+    scale - масштаб по осям X, Y, Z, mode - altitudeMode.
     """
 
     def __init__(self, kind, corners=None, color=WHITE, order=0,
@@ -77,8 +82,11 @@ class Overlay:
                  screen_xy=(0.0, 0.0, "fraction", "fraction"),
                  size=(-1.0, -1.0, "fraction", "fraction"), rotation=0.0,
                  camera=None, fov=(-30.0, 30.0, -20.0, 20.0), near=100.0,
-                 box=None, refresh=0.0):
+                 box=None, refresh=0.0, scale=(1.0, 1.0, 1.0),
+                 mode="clampToGround"):
         self.kind = kind
+        self.scale = tuple(float(v) for v in scale)
+        self.mode = mode
         self.refresh = refresh_interval(refresh)
         self.box = tuple(float(v) for v in box) if box else None
         if self.box is not None:
@@ -117,6 +125,9 @@ class Overlay:
             data.update(overlay_xy=list(self.overlay_xy),
                         screen_xy=list(self.screen_xy),
                         size=list(self.size), rotation=self.rotation)
+        elif self.kind == "model":
+            data.update(camera=list(self.camera or ()),
+                        scale=list(self.scale), mode=self.mode)
         else:
             data.update(camera=list(self.camera or ()), fov=list(self.fov),
                         near=self.near)
@@ -142,6 +153,8 @@ def from_params(kind, text, corners=None):
 
     base = Overlay(kind)
     color = data.get("color")
+    scale = data.get("scale")
+    mode = data.get("mode")
     box = data.get("box")
     return Overlay(
         kind, corners or data.get("corners"),
@@ -156,7 +169,10 @@ def from_params(kind, text, corners=None):
         camera=data.get("camera") or None,
         fov=tuple(data.get("fov") or base.fov),
         near=float(data.get("near", base.near) or base.near),
-        refresh=data.get("refresh", 0.0))
+        refresh=data.get("refresh", 0.0),
+        scale=tuple(float(v) for v in scale) if isinstance(scale, list)
+        and len(scale) == 3 else base.scale,
+        mode=mode if mode in MODEL_MODES else base.mode)
 
 
 def _metres_per_degree(lat):

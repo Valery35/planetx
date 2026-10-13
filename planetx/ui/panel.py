@@ -167,7 +167,9 @@ PLACE_ICONS = {"point": "/mIconPointLayer.svg", "line": "/mIconLineLayer.svg",
                # Наложения: на поверхности, фото, на экране.
                "ground": "/mIconRaster.svg",
                "photo": "/mLayoutItemPicture.svg",
-               "screen": "/mActionAddImage.svg"}
+               "screen": "/mActionAddImage.svg",
+               # 3D-модель.
+               "model": "/mLayoutItem3DMap.svg"}
 VIEW_ICON = "/mIconCamera.svg"  # метка «Сохранить вид» с ракурсом
 
 
@@ -1811,6 +1813,7 @@ class LayerPanel(QWidget):
                              ("add_ground", tr("Картинку на поверхности")),
                              ("add_photo", tr("Фото")),
                              ("add_screen", tr("Картинку на экране")),
+                             ("add_model", tr("3D-модель…")),
                              ("add_link", tr("Сетевую ссылку…"))):
             sub.addAction(text).triggered.connect(
                 lambda _=False, a=action: self.place_action.emit(a, key))
