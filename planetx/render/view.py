@@ -436,6 +436,10 @@ class GlobeView(QOpenGLWidget):
         self.hole_check = False
         # Небо, гало и дымка. Выключается для сравнения в замерах.
         self.atmosphere = True
+        # Дымка воздуха на поверхности. Окно снимает её в режиме геоида -
+        # поверхность там опущена на сотни километров, и впадины
+        # заливал белый слой воздуха. Небо и гало остаются.
+        self.surface_air = True
         # Направление на солнце в ECEF или None - свет отмывки без
         # солнца. Ставит окно по строке «Солнце» раздела «Слои».
         self.sun = None
@@ -1853,8 +1857,9 @@ class GlobeView(QOpenGLWidget):
         self._clear_gibs()
         # Под землёй воздуха нет: глаз ниже рельефа - атмосфера
         # и небо не рисуются.
-        air = self.atmosphere and not self.show_holes \
+        sky = self.atmosphere and not self.show_holes \
             and not self.eye_underground()
+        air = sky and self.surface_air
         air_uniforms(self.tile_air, self.camera, air, self.sun,
                      self.air_tint)
         alpha = self.surface_alpha if underground else 1.0
@@ -1956,7 +1961,7 @@ class GlobeView(QOpenGLWidget):
             self.models.draw(self.camera)
         else:
             self.models.drawn = 0
-        if air:
+        if sky:
             self._draw_sky()
         if self.show_stars and not self.show_holes:
             self.sky.draw(self.camera)

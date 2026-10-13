@@ -242,8 +242,10 @@ def open_globe():
     # 10 октября 2026 года). Нужное шаг включает сам.
     window = plugin.window
     for key, on in list(window.extras.items()):
-        if on and key != "stars":
+        if on and key not in ("stars", "air"):
             window.set_extra(key, False)
+    if not window.extras.get("air", True):
+        window.set_extra("air", True)
     if window.theme_key:
         window.set_theme("")
 
@@ -14222,10 +14224,34 @@ def geoid_check():
                attribution="EGM2008" in window.attribution.text(),
                errors=dict(window.terrain_errors),
                gl_errors=dict(window.view.gl_errors))
-    window.view.grabFramebuffer().save(os.path.join(TEMP,
-                                                    "planetx_geoid.png"))
-    # Щелчок в середине вида - группа «Место» окна «Объекты».
     view = window.view
+
+    def middle(image):
+        # Средний цвет квадрата в середине кадра - впадина у Индии.
+        w, h = image.width(), image.height()
+        side = min(w, h) // 10
+        sums = [0, 0, 0]
+        for y in range(h // 2 - side, h // 2 + side, 4):
+            for x in range(w // 2 - side, w // 2 + side, 4):
+                c = image.pixelColor(x, y)
+                sums[0] += c.red()
+                sums[1] += c.green()
+                sums[2] += c.blue()
+        n = (2 * side // 4) ** 2
+        return [round(s / n) for s in sums]
+
+    # Сторож дымки: тот же кадр с воздухом над поверхностью, как было
+    # до правки, - впадина белеет.
+    out["surface_air"] = view.surface_air
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_geoid.png"))
+    out["middle_rgb"] = middle(image)
+    view.surface_air = True
+    hazy = view.grabFramebuffer()
+    hazy.save(os.path.join(TEMP, "planetx_geoid_hazy.png"))
+    out["middle_rgb_hazy"] = middle(hazy)
+    view.surface_air = False
+    # Щелчок в середине вида - группа «Место» окна «Объекты».
     ratio = view.devicePixelRatioF()
     window.identify_here(view.width() * ratio / 2.0,
                          view.height() * ratio / 2.0)
@@ -14244,7 +14270,45 @@ def geoid_check():
     window.set_extra("geoid", False)
     out["after"] = {"scale": window.view.store.scale,
                     "sea_floor": window.view.sea_floor,
+                    "surface_air": window.view.surface_air,
                     "max_level": store.max_level}
+    return None
+
+
+@check(500)
+def air_toggle():
+    """Строка «Атмосфера»: без неё нет ни гало, ни дымки. Средний цвет
+    кадра Земли с 18 000 км с воздухом и без него, флаг вида после
+    выключения и включения."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.set_body("earth")
+    view.navigator.stop()
+    view.navigator.show(Pose(30.0, 60.0, 18000000.0, 0.0, 0.0))
+
+    def mean(image):
+        w, h = image.width(), image.height()
+        sums = [0, 0, 0]
+        n = 0
+        for y in range(0, h, 8):
+            for x in range(0, w, 8):
+                c = image.pixelColor(x, y)
+                sums[0] += c.red()
+                sums[1] += c.green()
+                sums[2] += c.blue()
+                n += 1
+        return [round(s / n, 1) for s in sums]
+
+    out = result["air"] = {}
+    out["on"] = mean(view.grabFramebuffer())
+    window.set_extra("air", False)
+    out["flag_off"] = view.atmosphere
+    out["off"] = mean(view.grabFramebuffer())
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_air_off.png"))
+    window.set_extra("air", True)
+    out["flag_on"] = view.atmosphere
+    out["gl_errors"] = dict(view.gl_errors)
     return None
 
 

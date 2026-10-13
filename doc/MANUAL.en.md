@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.83.0
+Version 0.83.1
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -289,7 +289,10 @@ The grid step follows the camera height, from 30° from space to
 seconds near the ground. The stars stand where they stand over the
 Earth at this minute and fade when the camera goes below 150 km. The
 Milky Way image, about 10 MB, is downloaded when the stars are first
-shown and comes from the QGIS cache afterwards.
+shown and comes from the QGIS cache afterwards. The Atmosphere row is
+on by default. Without it there is no air glow at the edge of the
+globe, no sky above the horizon and no haze over the distant surface,
+the view background is black space.
 Clouds lie as a veil over the imagery. Snow and ice get into the
 clouds too, they have the same colour.
 
@@ -412,8 +415,8 @@ The Add data button of the Layers section puts the catalogue in place
 of the list, the panel grows wider for that time, the globe stays
 visible. The ← arrow brings the list back. The categories stand on the
 left: Map (the vector base, coordinate grid, 3D buildings, contours),
-Weather, NASA themes by groups, Sky and light (Stars, Clouds, Sun,
-Satellites), Inside the Earth (Earthquakes, Plate boundaries, Magnetic
+Weather, NASA themes by groups, Sky and light (Stars, Atmosphere,
+Clouds, Sun, Satellites), Inside the Earth (Earthquakes, Plate boundaries, Magnetic
 poles, Magnetic anomalies, Geoid, Mineral
 deposits, Mining areas, OSM mines and quarries, Earth cutaway,
 Paleogeography), Energy (Power plants, Power lines and pipelines,
@@ -597,8 +600,9 @@ model. While the row is on, the globe heights are the geoid heights
 above the ellipsoid, from -107 to +86 m, stretched 10 000 times, and the
 Earth looks crumpled. Bulges stand where gravity is stronger, for
 example near New Guinea and in the North Atlantic, hollows where it is
-weaker, the deepest one south of India. Terrain and water are removed
-for this time, a layer of atmosphere shows over deep hollows. Switching
+weaker, the deepest one south of India. Terrain, water and the haze
+over the surface are removed for this time, the atmosphere glow at the
+edge of the globe stays. Switching
 the row off brings back terrain, scale and sea depths. A click in the
 Identify mode shows the geoid height above the ellipsoid at the point in
 the Geoid group.

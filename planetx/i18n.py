@@ -2236,6 +2236,15 @@ EN = {
         "NASA sky map. The sky image is downloaded when first shown. The "
         "stars show from space and fade when the camera descends into the "
         "atmosphere.",
+    "Атмосфера": "Atmosphere",
+    "Голубое свечение воздуха вокруг планеты, небо над "
+    "горизонтом и дымка над далёкой поверхностью. Без флажка "
+    "фон вида - чёрный космос, поверхность видна без дымки. "
+    "У тел без воздуха строка ничего не меняет.":
+        "The blue glow of air around the planet, the sky above the horizon "
+        "and the haze over the distant surface. Without the check box the "
+        "view background is black space and the surface shows without "
+        "haze. On bodies without air the row changes nothing.",
     "Млечный путь: NASA/Goddard Space Flight Center Scientific "
     "Visualization Studio, Gaia DR2: ESA/Gaia/DPAC.":
         "Milky Way: NASA/Goddard Space Flight Center Scientific "

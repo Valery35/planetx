@@ -75,7 +75,8 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "cables": ((60, 200, 200), (170, 110, 220)),
               "magpoles": ((235, 70, 60), (70, 130, 235)),
               "emag": ((40, 60, 150), (245, 245, 235), (160, 30, 35)),
-              "geoid": ((60, 90, 170), (120, 170, 120), (200, 150, 80))}
+              "geoid": ((60, 90, 170), (120, 170, 120), (200, 150, 80)),
+              "air": ((10, 15, 40), (90, 150, 230), (200, 225, 250))}
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
@@ -88,9 +89,9 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "contours": "Terrarium", "infra_osm": "OpenStreetMap",
            "cables": "OpenStreetMap", "cadastre": "Rosreestr NSPD",
            "magpoles": "NOAA NCEI, IGRF-14", "emag": "EMAG2v3, NOAA NCEI",
-           "geoid": "EGM2008, NGA"}
+           "geoid": "EGM2008, NGA", "air": ""}
 # Слои витрины: ключ строки окна глобуса и группа.
-LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
+LAYERS = (("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
           ("magpoles", "depths"), ("emag", "depths"), ("geoid", "depths"),
           ("deposits", "depths"), ("mining", "depths"),
@@ -101,7 +102,7 @@ LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
 # ЛЭП и кабели OSM и горизонтали - строки группы «Карта» раздела «Слои»,
 # решение автора от 11 октября 2026 года. Названия берутся отсюда.
 # Слои, которые есть и вне Земли: звёзды везде, уклон - где есть высоты.
-ANY_BODY = ("stars",)
+ANY_BODY = ("stars", "air")
 RELIEF_BODY = ("slope", "aspect")
 # Заливка и обвод контуров горных разработок, выбор помощника.
 MINING_FILL = (235, 125, 35, 90)
@@ -141,6 +142,11 @@ def layer_names():
             "скачивается при первом показе. Звёзды видны "
             "из космоса и гаснут, когда камера опускается "
             "в атмосферу.")),
+        "air": (tr("Атмосфера"), tr(
+            "Голубое свечение воздуха вокруг планеты, небо над "
+            "горизонтом и дымка над далёкой поверхностью. Без флажка "
+            "фон вида - чёрный космос, поверхность видна без дымки. "
+            "У тел без воздуха строка ничего не меняет.")),
         "clouds": (tr("Облака"), tr(
             "Облака по снимкам VIIRS из NASA GIBS за последние "
             "полные сутки. Они лежат полупрозрачной пеленой "

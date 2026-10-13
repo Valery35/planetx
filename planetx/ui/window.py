@@ -282,7 +282,8 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "deposits": False, "mining": False, "osm_mines": False,
                   "plants": False, "infra_osm": False,
                   "cables": False, "currents": False, "cadastre": False,
-                  "magpoles": False, "emag": False, "geoid": False}
+                  "magpoles": False, "emag": False, "geoid": False,
+                  "air": True}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
@@ -1559,6 +1560,11 @@ class GlobeWindow(QWidget):
             self.view.set_stars(on)
             if on:
                 self._load_sky()
+        elif key == "air":
+            # Небо, гало и дымка над поверхностью, просьба автора от
+            # 14 октября 2026 года. Без воздуха фон - чёрный космос.
+            self.view.atmosphere = on
+            self.view.update()
         elif key == "clouds":
             self._set_gibs("clouds", on)
         elif key == "temperature":
@@ -3244,7 +3250,7 @@ class GlobeWindow(QWidget):
         self.view.change_body(source.max_level, planet.air)
         self.loader.want_many((key, -key[0]) for key in start_keys())
         # Вода над впадинами - только у Земли.
-        self.view.sea_floor = self.sea_depths and planet.earth
+        self._geoid_look()
         self._body_terrain(planet)
         self.view.set_relief(self._relief_target())
         self._update_water()
@@ -3742,8 +3748,7 @@ class GlobeWindow(QWidget):
         """Строка «Геоид»: высоты Земли - тайлы геоида с масштабом
         geoid.SCALE, вода не рисуется - половина геоида ниже нуля.
         Выключение возвращает рельеф, масштаб и глубины морей."""
-        self.view.sea_floor = self.sea_depths and self.planet.earth \
-            and not self._geoid_on()
+        self._geoid_look()
         self._body_terrain(self.planet)
         self.view.reset_heights()
         self.view.set_relief(self._relief_target())
@@ -3754,6 +3759,15 @@ class GlobeWindow(QWidget):
         self._mark_gallery()
         self._show_attribution()
         self.view.update()
+
+    def _geoid_look(self):
+        """Вода и дымка поверхности - их нет в режиме геоида. Половина
+        геоида ниже нуля, а поверхность опущена на сотни километров,
+        воздух над ней заливал впадины белым."""
+        geoid = self._geoid_on()
+        self.view.sea_floor = self.sea_depths and self.planet.earth \
+            and not geoid
+        self.view.surface_air = not geoid
 
     # Магнитные аномалии EMAG2v3 (core/emag.py).
 
