@@ -2403,6 +2403,13 @@ The Demo icon with an academic cap on the icon bar opens prepared scenes.
 Each scene puts its places into My Places as a new folder, the ▶ button
 under the list plays a tour over them. The folder can be deleted.
 
+The files of the Quarry, own terrain, Lake Brienz, own bathymetry and
+3D models, Suzdal and Perm demos are not part of the plugin. On the
+first opening the demo downloads them from GitHub into the PlanetX
+folder of the QGIS profile, from 0.8 to 3.5 MB. The status line tells
+about the download, then the scene opens by itself. Later the files are
+taken from the profile without the network.
+
 | Section | Scene | What it holds |
 |---|---|---|
 | Earth | Perm | Places with icons and the moments of a walk, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |

@@ -37,9 +37,11 @@ ESRI_TERMS ="https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
 PAGE = "https://www.informpp.ru/главная-страница/qgis-planetx"
-# Руководство на языке интерфейса: PDF внутри модуля, его собирает
-# tools/build_manual.py. Без PDF - страница руководства в хранилище.
-MANUAL = REPOSITORY + "/blob/main/doc/"
+# Руководство на языке интерфейса: PDF собирает tools/build_manual.py.
+# С 13 октября 2026 года PDF не входят в архив модуля - его предел в
+# каталоге QGIS 10 МБ - и лежат в выпуске своей версии на GitHub.
+# В рабочей копии PDF есть в папке doc модуля.
+MANUAL = REPOSITORY + "/releases/download/v{version}/{name}"
 
 
 def manual_url():
@@ -48,7 +50,7 @@ def manual_url():
     path = os.path.join(ROOT, "doc", name)
     if os.path.exists(path):
         return QUrl.fromLocalFile(path).toString()
-    return MANUAL + ("MANUAL.md" if is_russian() else "MANUAL.en.md")
+    return MANUAL.format(version=plugin_version(), name=name)
 
 
 def _link(url, text):

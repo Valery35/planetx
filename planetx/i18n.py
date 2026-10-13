@@ -1227,6 +1227,10 @@ EN = {
         "A Sentinel-2 scene weighs about 1 GB.",
     "Вся сцена, исходные файлы": "Whole scene, source files",
     "Кадастр Росреестра": "Rosreestr cadastre",
+    "Загрузка файлов демо с GitHub, {size} МБ…":
+        "Downloading demo files from GitHub, {size} MB…",
+    "Демо не загружено: {error}": "The demo was not downloaded: {error}",
+    "размер файла {name} не совпал": "the size of {name} does not match",
     "Кадастровый номер": "Cadastral number",
     "Площадь уточнённая": "Surveyed area",
     "Площадь декларированная": "Declared area",

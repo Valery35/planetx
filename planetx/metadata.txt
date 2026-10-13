@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.80.0
+version=0.80.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.80.0 3D models of buildings and other objects on the globe. Add
+changelog=0.80.1 The plugin downloads faster, the archive is 1.5 MB instead
+      of 10 MB. The files of the Quarry, own terrain, Lake Brienz, own
+      bathymetry and 3D models, Suzdal and Perm demos are downloaded from
+      GitHub when the demo opens for the first time, then they are taken
+      from the QGIS profile. The PDF manual opens from the release of its
+      version on GitHub. In QGIS 3.36 the plugin downloads follow server
+      redirects, as in QGIS 4.
+      0.80.0 3D models of buildings and other objects on the globe. Add
       - 3D model… in My Places puts a model from a Collada, glTF or OBJ file
       with materials, Google Earth models open from KMZ in their place. A
       model is placed with the handles of its box, as a ground overlay -

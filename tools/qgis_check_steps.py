@@ -14186,6 +14186,47 @@ def cadastre_check():
 
 
 @check(500)
+def demo_fetch():
+    """Демо без файла в модуле: дно Бриенцского озера скачивается
+    из выпуска demo-data GitHub в профиль, потом демо открывается."""
+    from qgis.core import QgsApplication
+    window = state["window"]
+    window.set_body("earth")
+    window.demo_local = False
+    cache = os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
+                         "demo", "brienz", "brienzersee_bed.tif")
+    if os.path.exists(cache):
+        os.remove(cache)
+    key = window.open_demo("brienz")
+    result["demo_fetch"] = {"key_at_once": key,
+                            "loading": bool(window._demo_replies),
+                            "message": window.message[0]}
+    state["demo_cache"] = cache
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def demo_fetch_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    spent = time.monotonic() - state["ls_started"]
+    if window._demo_replies and spent < 90.0:
+        return 1000
+    out = result["demo_fetch"]
+    cache = state["demo_cache"]
+    out["seconds"] = round(spent, 1)
+    out["size"] = os.path.getsize(cache) if os.path.exists(cache) else None
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("Бриенцское озеро, своя батиметрия")
+    layers = group.findLayers() if group is not None else []
+    out["layer_source"] = layers[0].layer().source() if layers else None
+    out["layer_valid"] = bool(layers) and layers[0].layer().isValid()
+    out["message_after"] = window.message[0]
+    window.demo_local = True
+    return None
+
+
+@check(500)
 def cadastre_info():
     """Сведения об участке щелчком: «Получить сведения» в точке
     ул. Луначарского, 34 в Перми, окно «Объекты» с группой кадастра

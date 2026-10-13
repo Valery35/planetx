@@ -30,8 +30,8 @@ from qgis.PyQt.QtWidgets import (QApplication, QFileDialog, QInputDialog,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import (basemap, cadastre, clouds, ellipsoid, lookat, stars,
-                    sun, temperature, when)
+from ..core import (basemap, cadastre, clouds, demofiles, ellipsoid,
+                    lookat, stars, sun, temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
@@ -4829,7 +4829,16 @@ class GlobeWindow(QWidget):
         journal.note("open_demo {}".format(name))
         demo = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                             "demo")
-        key = self.open_scene(os.path.join(demo, name + EXTENSION))
+        # Крупные файлы демо - в выпуске GitHub, core/demofiles.py.
+        folders = self._demo_folders()
+        need = demofiles.missing(name, folders)
+        if need:
+            self._fetch_demo(name, need)
+            return None
+        scene = demofiles.locate(name + EXTENSION, folders) \
+            if name + EXTENSION in demofiles.FILES \
+            else os.path.join(demo, name + EXTENSION)
+        key = self.open_scene(scene)
         if name == "japan" and key is not None:
             lines = [p for p in self.myplaces.places_in(key)
                      if p.shape.kind == "line" and not p.tour]
@@ -4863,7 +4872,7 @@ class GlobeWindow(QWidget):
             # слоя. Растр на глобусе картинкой не показывается.
             layer_id = self._demo_raster(
                 tr("Карьер, свой рельеф"), tr("Карьер, съёмка 1 м"),
-                os.path.join(demo, "quarry", "quarry_dem.tif"))
+                demofiles.locate("quarry/quarry_dem.tif", folders))
             if layer_id is not None:
                 self.set_insets(read_insets() + [layer_id])
         if name in ("quarry", "brienz", "models") and self.theme_key:
@@ -4874,7 +4883,7 @@ class GlobeWindow(QWidget):
             layer_id = self._demo_raster(
                 tr("Бриенцское озеро, своя батиметрия"),
                 tr("Бриенцское озеро, дно"),
-                os.path.join(demo, "brienz", "brienzersee_bed.tif"))
+                demofiles.locate("brienz/brienzersee_bed.tif", folders))
             if layer_id is not None:
                 lakes = read_bathymetry()
                 lakes[layer_id] = ("bed", BRIENZ_LEVEL)
@@ -4883,6 +4892,64 @@ class GlobeWindow(QWidget):
         if name == "moscow":
             self._demo_maps(tr("Москва, исторические карты"), moscow_maps())
         return key
+
+    def _demo_folders(self):
+        """Где искать крупные файлы демо: папка модуля (рабочая копия),
+        потом профиль QGIS. demo_local False - только профиль, так шаг
+        проверки заставляет демо скачивать файлы."""
+        module = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                              "demo")
+        cache = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                             "PlanetX", "demo")
+        return ([module] if getattr(self, "demo_local", True) else []) \
+            + [cache]
+
+    def _fetch_demo(self, name, paths):
+        """Скачать файлы демо name в профиль и открыть демо по приходу
+        всех. Одна загрузка за раз, повторный щелчок её не дублирует."""
+        if getattr(self, "_demo_replies", None):
+            return
+        self._demo_replies = {}
+        self._demo_errors = []
+        size = demofiles.total_size(paths) / 1e6
+        self.message = (tr("Загрузка файлов демо с GitHub, {size} МБ…",
+                           size="{:.1f}".format(size)), time.monotonic())
+        self._show_state()
+        for path in paths:
+            self._demo_replies[path] = fetch_bytes(
+                demofiles.url(path),
+                lambda data, error, p=path: self._demo_arrived(
+                    name, p, data, error))
+
+    def _demo_arrived(self, name, path, data, error):
+        replies = getattr(self, "_demo_replies", None)
+        if not replies or path not in replies:
+            return
+        del replies[path]
+        if data is not None and len(data) == demofiles.FILES[path]:
+            target = os.path.join(self._demo_folders()[-1],
+                                  *path.split("/"))
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target + ".part", "wb") as fh:
+                fh.write(data)
+            os.replace(target + ".part", target)
+        else:
+            self._demo_errors.append(error or tr(
+                "размер файла {name} не совпал",
+                name=path.rsplit("/", 1)[-1]))
+        if replies:
+            return
+        self._demo_replies = None
+        if self._demo_errors:
+            self.message = (tr("Демо не загружено: {error}",
+                               error=self._demo_errors[0]),
+                            time.monotonic())
+            self._show_state()
+            journal.note("demo download failed {}: {}".format(
+                name, self._demo_errors[0]))
+            return
+        self.message = ("", 0.0)
+        self.open_demo(name)
 
     def _demo_maps(self, title, maps):
         """Исторические карты демо - тайлы XYZ в группе title вверху проекта,
@@ -8723,6 +8790,10 @@ class GlobeWindow(QWidget):
             reply, self._address_reply = self._address_reply, None
             if reply is not None:
                 reply.abort()
+            for reply in (getattr(self, "_demo_replies", None)
+                          or {}).values():
+                reply.abort()
+            self._demo_replies = None
             reply, self._parcel_reply = \
                 getattr(self, "_parcel_reply", None), None
             self._parcels = None

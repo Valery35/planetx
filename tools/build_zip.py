@@ -21,6 +21,16 @@ PLUGIN = "planetx"
 SKIP_DIRS = {"tests", "__pycache__"}
 # .aux.xml - статистика растров, её пишут GDAL и QGIS при открытии.
 SKIP_SUFFIXES = (".pyc", ".pyo", ".aux.xml")
+sys.path.insert(0, os.path.join(ROOT, PLUGIN, "core"))
+import demofiles  # noqa: E402
+# Крупные файлы демо - в выпуске demo-data, PDF руководства - в выпуске
+# своей версии на GitHub. Архив для каталога QGIS не больше 10 МБ,
+# решение автора от 13 октября 2026 года.
+MANUALS = ("PlanetX.pdf", "PlanetX_en.pdf")
+SKIP_FILES = {PLUGIN + "/demo/" + p for p in demofiles.FILES} \
+    | {PLUGIN + "/doc/" + m for m in MANUALS}
+# Предел архива в каталоге QGIS, байты.
+CATALOG_LIMIT = 10485760
 
 
 def version():
@@ -37,7 +47,10 @@ def files():
             if name.endswith(SKIP_SUFFIXES):
                 continue
             path = os.path.join(folder, name)
-            yield path, os.path.relpath(path, ROOT).replace(os.sep, "/")
+            inner = os.path.relpath(path, ROOT).replace(os.sep, "/")
+            if inner in SKIP_FILES:
+                continue
+            yield path, inner
 
 
 def main():
@@ -72,6 +85,9 @@ def main():
     print("\nархив %s, файлов %d, %.0f КБ"
           % (os.path.relpath(target, ROOT), count,
              os.path.getsize(target) / 1024))
+    if os.path.getsize(target) > CATALOG_LIMIT:
+        print("архив больше предела каталога QGIS, %d байт" % CATALOG_LIMIT)
+        return 1
     return 0
 
 

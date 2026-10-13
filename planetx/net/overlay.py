@@ -45,8 +45,8 @@ from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
 from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, HTTP_STATUS, MARK,
-                     NO_ERROR, PREFER_CACHE, REDIRECT, STALL,
-                     Throttle, network)
+                     NO_ERROR, PREFER_CACHE, REDIRECT, SAFE_REDIRECT,
+                     STALL, Throttle, network)
 
 MANUAL_REDIRECT = enum(QNetworkRequest, "RedirectPolicy",
                        "ManualRedirectPolicy")
@@ -371,6 +371,9 @@ def resolve_redirect(url, headers, done):
 def _get(url, prefer_cache=True, fresh=False, headers=None):
     request = QNetworkRequest(QUrl(url))
     request.setAttribute(MARK, True)
+    # Qt 5 по переадресации сам не идёт, а файлы выпусков GitHub
+    # отдаются ею. Qt 6 так делает по умолчанию.
+    request.setAttribute(REDIRECT, SAFE_REDIRECT)
     for name, value in (headers or {}).items():
         request.setRawHeader(name.encode("ascii"), value.encode("ascii"))
     if fresh:
