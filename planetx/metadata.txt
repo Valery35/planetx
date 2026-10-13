@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.79.0
+version=0.79.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.79.0 Rosreestr land parcel information with a click. With the
+changelog=0.79.1 The QGIS plugin catalogue no longer marks the plugin
+      with a warning about a string that looks like a secret key. The
+      Rosreestr certificate fingerprint is written byte by byte with colons.
+      0.79.0 Rosreestr land parcel information with a click. With the
       cadastre on, a click in the Identify features mode or the What's here?
       item shows in the Features window the cadastral number, the address,
       the area, the land category, the permitted use, the form of ownership,
