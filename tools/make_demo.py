@@ -29,6 +29,9 @@
   по ссылкам.
 - quarry - карьер у Березников: синтетическая съёмка 1 м рельефом
   глобуса, профиль через уступы, отвал.
+- models - 3D-модели автора: церкви в Суздале и в Перми, KMZ
+  из Google Earth Pro, лицензия CC BY 4.0. Файлы моделей едут
+  в сцене архивом places.kmz.
 - mars - места посадок марсоходов и крупные формы рельефа Марса.
 - moon - места посадок «Аполлонов» и «Луноходов».
 - sky - созвездия и яркие объекты неба.
@@ -43,7 +46,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "planetx", "core"))
 
-from kml import KFolder, KPlace, write_kml  # noqa: E402
+from kml import (KFolder, KPlace, read_file, write_kml,  # noqa: E402
+                 write_kmz)
 from scene import Scene, write_scene  # noqa: E402
 from skyview import distance_for  # noqa: E402
 
@@ -664,6 +668,59 @@ def moscow():
     save("moscow", scene, root)
 
 
+# 3D-модели автора, KMZ из Google Earth Pro, 13 октября 2026 года.
+# Лицензия CC BY 4.0 - решение автора того же дня. Исходные KMZ лежат
+# у автора в Dropbox, путь меняет PLANETX_MODELS. Без них прежняя
+# сцена models.planetx остаётся. Названия и описания, вид и состав
+# одной сценой - выбор помощника.
+MODELS_DIR = os.environ.get(
+    "PLANETX_MODELS",
+    os.path.join("C:\\", "Users", "Val", "Dropbox", "ИИ", "PlanetX",
+                 "Прочее"))
+MODEL_CREDIT = ("Модель - Valery35, 3D Warehouse, лицензия CC BY 4.0 "
+                "(creativecommons.org/licenses/by/4.0).")
+MODELS = (
+    ("suzd.kmz", "Покровский монастырь, Суздаль",
+     "Покровский собор и Зачатьевская надвратная церковь, модель "
+     "SketchUp с картинками фасадов."),
+    ("bah.kmz", "Церковь Покрова Пресвятой Богородицы, Пермь",
+     "Модель SketchUp цветом граней, без картинок, около 18 тысяч "
+     "треугольников."),
+)
+MODEL_VIEW = (300.0, 30.0, 60.0)
+
+
+def models_demo():
+    title = "PlanetX: демо, 3D-модели"
+    items = []
+    for file_name, name, text in MODELS:
+        path = os.path.join(MODELS_DIR, file_name)
+        if not os.path.isfile(path):
+            print("нет", path, "- сцена models не пересобрана")
+            return
+        with open(path, "rb") as fh:
+            item = read_file(fh.read(), name).overlays()[0]
+        lat, lon = item.overlay.camera[:2]
+        distance, heading, tilt = MODEL_VIEW
+        item.name = name
+        item.description = text + " " + MODEL_CREDIT + (
+            " В меню модели - «Свойства…»: место, азимут, наклон "
+            "и масштаб.")
+        item.view = (lat, lon, distance, heading, tilt)
+        items.append(item)
+    root = KFolder(title, children=items)
+    lat, lon = items[0].overlay.camera[:2]
+    distance, heading, tilt = MODEL_VIEW
+    # 3D-здания OpenFreeMap стоят на месте моделей, в демо они выключены.
+    view = dict(EARTH_VIEW, scale=1.0, extras=QUIET_EXTRAS)
+    scene = Scene((lat, lon, distance, heading, tilt), None, [], view,
+                  title, "3D-модели")
+    path = os.path.join(DEMO, "models.planetx")
+    with open(path, "wb") as fh:
+        fh.write(write_scene(scene, write_kmz(root)))
+    print(path, os.path.getsize(path))
+
+
 def main():
     perm()
     bocachica()
@@ -675,6 +732,7 @@ def main():
     quarry()
     brienz()
     moscow()
+    models_demo()
     body_demo("mars", "PlanetX: демо, Марс", MARS, RED,
               (10.0, -80.0, 1.2e7), "mars")
     body_demo("moon", "PlanetX: демо, Луна", MOON, YELLOW,

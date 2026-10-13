@@ -8,7 +8,10 @@
 папки меток сцены. Сами метки лежат рядом в KML (core/kml.py).
 
 Файл сцены - архив ZIP с scene.json и places.kml. Решение автора
-от 28 сентября 2026 года (шаг 12). Номер формата FORMAT растёт при
+от 28 сентября 2026 года (шаг 12). Папка с картинками наложений или
+3D-моделями ложится вместо places.kml архивом places.kmz с файлами
+внутри, с 13 октября 2026 года. Прежний модуль такие метки сцены
+не прочитает, сама сцена откроется. Номер формата FORMAT растёт при
 несовместимых изменениях, более новый формат не читается.
 """
 import io
@@ -18,6 +21,7 @@ import zipfile
 FORMAT = 1
 SCENE_FILE = "scene.json"
 PLACES_FILE = "places.kml"
+KMZ_FILE = "places.kmz"
 EXTENSION = ".planetx"
 
 
@@ -105,18 +109,22 @@ class Scene:
 
 
 def write_scene(scene, kml_text=""):
-    """Байты файла сцены: scene.json и, если есть, places.kml."""
+    """Байты файла сцены: scene.json и, если есть, метки. Текст -
+    places.kml, байты KMZ (core.kml.write_kmz) - places.kmz."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(SCENE_FILE, json.dumps(
             scene.to_dict(), ensure_ascii=False, indent=1).encode("utf-8"))
-        if kml_text:
+        if isinstance(kml_text, bytes) and kml_text:
+            archive.writestr(KMZ_FILE, kml_text)
+        elif kml_text:
             archive.writestr(PLACES_FILE, kml_text.encode("utf-8"))
     return buffer.getvalue()
 
 
 def read_scene(data):
-    """Сцена и байты places.kml (или b"") из байтов файла сцены."""
+    """Сцена и байты меток (или b"") из байтов файла сцены: KML
+    или KMZ, их различает core.kml.read_file."""
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as archive:
             names = archive.namelist()
@@ -126,8 +134,11 @@ def read_scene(data):
                 raw = json.loads(archive.read(SCENE_FILE).decode("utf-8"))
             except (UnicodeDecodeError, ValueError) as error:
                 raise SceneError(str(error)) from error
-            kml = archive.read(PLACES_FILE) if PLACES_FILE in names \
-                else b""
+            kml = b""
+            if KMZ_FILE in names:
+                kml = archive.read(KMZ_FILE)
+            elif PLACES_FILE in names:
+                kml = archive.read(PLACES_FILE)
     except zipfile.BadZipFile as error:
         raise SceneError(str(error)) from error
     return Scene.from_dict(raw), kml

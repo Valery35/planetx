@@ -384,6 +384,22 @@ class TestKml(unittest.TestCase):
         self.assertEqual(list(pictures.values()), [PNG])
         self.assertEqual(sum(len(p.positions) for p in parts), 9)
 
+    def test_scene_carries_model_files(self):
+        # Сцена с моделью - places.kmz с файлами модели. Прежде метки
+        # сцены шли простым KML, и модель теряла файлы.
+        import scene
+        tree = self.read()
+        data = scene.write_scene(scene.Scene((56.42, 40.44, 300.0)),
+                                 kml.write_kmz(tree))
+        with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            self.assertIn(scene.KMZ_FILE, archive.namelist())
+            self.assertNotIn(scene.PLACES_FILE, archive.namelist())
+        _, places = scene.read_scene(data)
+        item = kml.read_file(places, "z").overlays()[0]
+        parts, pictures = models.read(item.image)
+        self.assertEqual(list(pictures.values()), [PNG])
+        self.assertEqual(sum(len(p.positions) for p in parts), 9)
+
     def test_plain_kml_keeps_href(self):
         item = kml.read_kml(MODEL_KML).overlays()[0]
         self.assertIsNone(item.image)

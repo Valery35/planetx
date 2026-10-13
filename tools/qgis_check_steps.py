@@ -7977,6 +7977,42 @@ def models_clean():
     out["gl"] = dict(window.view.gl_errors)
 
 
+@check(4000)
+def models_demo():
+    """Демо «3D-модели, Суздаль и Пермь»: модели из файла сцены
+    places.kmz ложатся в «Мои метки» с файлами."""
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("3D-модели, Суздаль и Пермь",
+                                  "3D models, Suzdal and Perm"))
+    places = window.myplaces
+    before = {o.key for o in places.overlays}
+    folders = {f.key for f in places.folders}
+    action.trigger()
+    state["models_demo"] = [f.key for f in places.folders
+                            if f.key not in folders]
+    result["models_demo"] = {
+        "added": [o.name for o in places.overlays
+                  if o.key not in before and o.kind == "model"]}
+
+
+@check(3000)
+def models_demo_check():
+    window = state["window"]
+    view = window.view
+    out = result["models_demo"]
+    out["drawn"] = view.models.drawn
+    out["loaded_parts"] = sum(len(v) for v in view.models.loaded.values())
+    out["camera"] = [round(v, 4) for v in (
+        view.navigator.pose.lat, view.navigator.pose.lon)]
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_models_demo.png"))
+    if state["models_demo"]:
+        window.myplaces.remove_many(state["models_demo"])
+    out["models_after"] = len(view.models.source)
+    out["gl"] = dict(view.gl_errors)
+
+
 def _image_server():
     """Сервер картинки на 127.0.0.1 в потоке: отдаёт байты из словаря
     и считает запросы."""

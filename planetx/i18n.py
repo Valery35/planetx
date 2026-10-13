@@ -782,6 +782,8 @@ EN = {
         "image always.",
     "Москва, исторические карты":
         "Moscow, historical maps",
+    "3D-модели, Суздаль и Пермь":
+        "3D models, Suzdal and Perm",
     "План Москвы":
         "Plan of Moscow",
     "Москва, карта Шуберта":

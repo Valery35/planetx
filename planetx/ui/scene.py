@@ -22,7 +22,7 @@ from qgis.core import (QgsDataSourceUri, QgsProject, QgsRasterLayer,
 from qgis.PyQt.QtCore import QDateTime, Qt
 
 from ..core import when
-from ..core.kml import read_kml, write_kml
+from ..core.kml import read_file, write_kml, write_kmz
 from ..core.places import LABEL_LANGUAGES, LOCAL, AS_QGIS
 from ..core.scene import Scene
 from .project import read_insets
@@ -136,7 +136,9 @@ def capture(window, folder=None, name=""):
     if folder:
         tree = window.myplaces.export_tree(folder)
         places = tree.name
-        kml = write_kml(tree)
+        # Картинки наложений и файлы моделей едут в сцене архивом KMZ.
+        files = any(item.image for item in tree.overlays())
+        kml = write_kmz(tree) if files else write_kml(tree)
     scene = Scene((pose.lat, pose.lon, pose.distance, pose.heading,
                    pose.tilt), time, layers, view, places, name,
                   body=window.planet.key)
@@ -210,7 +212,7 @@ def apply(window, scene, kml=b""):
     key = None
     if kml:
         # Метки ложатся на тело сцены, в том числе на небо.
-        key = window.myplaces.import_tree(read_kml(kml, scene.places),
+        key = window.myplaces.import_tree(read_file(kml, scene.places),
                                           body=window.body_key())
     window.refresh()
     # Шкала - после слоёв и меток: их время входит в охват шкалы.

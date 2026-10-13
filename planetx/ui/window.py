@@ -4866,7 +4866,7 @@ class GlobeWindow(QWidget):
                 os.path.join(demo, "quarry", "quarry_dem.tif"))
             if layer_id is not None:
                 self.set_insets(read_insets() + [layer_id])
-        if name in ("quarry", "brienz") and self.theme_key:
+        if name in ("quarry", "brienz", "models") and self.theme_key:
             # Демо своего рельефа - без карты витрины поверх снимка.
             self.set_theme("")
         if name == "brienz":
