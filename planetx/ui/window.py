@@ -311,6 +311,31 @@ SCREEN_TOP = 60.0
 GRID_COLOR = (220, 220, 220, 255)
 GRID_WIDTH = 1.0
 CIRCLE_COLOR = (255, 230, 0, 255)  # экватор, тропики, полярные круги
+# Подсветка участка кадастра под щелчком, как выделение на карте НСПД.
+# Цвета - выбор помощника, утверждает автор.
+PARCEL_COLOR = (200, 0, 200, 255)
+PARCEL_FILL = (230, 120, 230, 90)
+
+
+def parcel_labels():
+    """Подписи полей сведений об участке, ключи - core.cadastre.FIELDS."""
+    return {
+        "cad_num": tr("Кадастровый номер"),
+        "readable_address": tr("Адрес"),
+        "specified_area": tr("Площадь уточнённая"),
+        "declared_area": tr("Площадь декларированная"),
+        "land_record_category_type": tr("Категория земель"),
+        "permitted_use_established_by_document":
+            tr("Вид разрешённого использования"),
+        "ownership_type": tr("Форма собственности"),
+        "right_type": tr("Вид права"),
+        "cost_value": tr("Кадастровая стоимость"),
+        "cost_index": tr("Удельная кадастровая стоимость"),
+        "cost_determination_date": tr("Дата определения стоимости"),
+        "cost_application_date": tr("Дата применения стоимости"),
+        "land_record_reg_date": tr("Дата постановки на учёт"),
+        "status": tr("Статус"),
+        "quarter_cad_number": tr("Кадастровый квартал")}
 SCALE_KEY = "PlanetX/relief_scale"  # вертикальный масштаб рельефа
 LANGUAGE_KEY = "PlanetX/label_language"  # язык подписей
 COORDS_KEY = "PlanetX/coords"  # формат координат
@@ -1531,6 +1556,8 @@ class GlobeWindow(QWidget):
             self._set_currents(on)
         elif key == "cadastre":
             self._set_gibs("cadastre", on and self.planet.earth, cache=True)
+            if not on:
+                self._drop_parcels()
         elif key == "cutaway":
             self._set_cutaway(on)
         elif key == "paleo":
@@ -4686,6 +4713,7 @@ class GlobeWindow(QWidget):
                 and self.planet.earth:
             shapes += self.satellite_manager.shapes()
         shapes += getattr(self, "grid_shapes", [])
+        shapes += getattr(self, "parcel_shapes", [])
         if self._ruler_open():
             shape = self.ruler.shape()
             if shape is not None:
@@ -7199,7 +7227,77 @@ class GlobeWindow(QWidget):
         height = h / scale if scale else None
         self._mark("{:.5f}, {:.5f}".format(lat, lon), lat, lon)
         self._identify_at = (lat, lon, height, tolerance, px, py, found)
+        self._ask_parcels(lat, lon)
         self._show_identified()
+
+    # Сведения об участках кадастра Росреестра (core/cadastre.py).
+
+    def _ask_parcels(self, lat, lon):
+        """Запрос сведений об участках под щелчком, когда показан
+        кадастр. Один запрос на щелчок, прежний снимается."""
+        self._drop_parcels()
+        if not (self.extras.get("cadastre") and self.planet.earth):
+            return
+        point = (lat, lon)
+        self._parcels = (point, None, "")
+        self._parcel_reply = fetch_bytes(
+            cadastre.info_url(lat, lon),
+            lambda data, error: self._parcels_arrived(point, data, error),
+            fresh=True, headers={"Referer": cadastre.REFERER})
+
+    def _drop_parcels(self):
+        """Снять запрос, сведения и подсветку участков."""
+        reply = getattr(self, "_parcel_reply", None)
+        self._parcel_reply = None
+        self._parcels = None
+        if reply is not None:
+            reply.abort()
+        if getattr(self, "parcel_shapes", None):
+            self.parcel_shapes = []
+            self._refresh_shapes()
+
+    def _parcels_arrived(self, point, data, error):
+        state = getattr(self, "_parcels", None)
+        if state is None or state[0] != point:
+            return  # ответ снятого или прежнего запроса
+        self._parcel_reply = None
+        parcels = None
+        if data is not None:
+            try:
+                parcels = cadastre.parse_info(data)
+            except (ValueError, UnicodeDecodeError) as problem:
+                error = str(problem)
+        self._parcels = (point, parcels, error or "")
+        self.parcel_shapes = [
+            Shape("polygon", ring, color=PARCEL_COLOR, width=3.0,
+                  fill=PARCEL_FILL)
+            for parcel in parcels or () for ring in parcel["rings"]]
+        self._refresh_shapes()
+        self._refresh_identified()
+
+    def _identify_parcels(self):
+        """Группа «Кадастр Росреестра» окна «Объекты»."""
+        state = getattr(self, "_parcels", None)
+        if state is None:
+            return []
+        (lat, lon), parcels, error = state
+        if parcels is None and not error:
+            features = [(tr("Запрос к НСПД…"), [], None)]
+        elif parcels is None:
+            features = [(tr("НСПД не ответила"), [(tr("Ошибка"), error)],
+                         None)]
+        elif not parcels:
+            features = [(tr("Участков под точкой нет"), [], None)]
+        else:
+            link = cadastre.map_link(lat, lon)
+            labels = parcel_labels()
+            features = [(tr("Земельный участок {number}",
+                            number=p["number"]),
+                         [(labels.get(key, key), value)
+                          for key, value in p["values"]]
+                         + [(tr("Карта НСПД"), link)], None)
+                        for p in parcels]
+        return [(Group(tr("Кадастр Росреестра")), features)]
 
     def _show_identified(self):
         """Окно «Объекты» по последнему щелчку: слои проекта, «Мои
@@ -7210,6 +7308,7 @@ class GlobeWindow(QWidget):
             return
         lat, lon, height, tolerance, px, py, found = args
         groups = list(found)
+        groups += self._identify_parcels()
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
         groups += self._identify_fires(px, py)
@@ -8424,6 +8523,11 @@ class GlobeWindow(QWidget):
                 self.gallery.stop()
             self._address_timer.stop()
             reply, self._address_reply = self._address_reply, None
+            if reply is not None:
+                reply.abort()
+            reply, self._parcel_reply = \
+                getattr(self, "_parcel_reply", None), None
+            self._parcels = None
             if reply is not None:
                 reply.abort()
             self.layer_labels.close()

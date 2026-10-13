@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.78.1
+version=0.79.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,16 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.78.1 One Satellite images here… item of the globe menu instead
+changelog=0.79.0 Rosreestr land parcel information with a click. With the
+      cadastre on, a click in the Identify features mode or the What's here?
+      item shows in the Features window the cadastral number, the address,
+      the area, the land category, the permitted use, the form of ownership,
+      the type of right and the cadastral value. The parcel outline is
+      highlighted on the globe, the NSPD map row leads to the parcel on the
+      Rosreestr map. A double click on a row of the Features window copies
+      the value to the clipboard, for example the cadastral number, and
+      opens a link in the browser.
+      0.78.1 One Satellite images here… item of the globe menu instead
       of three. The window opens on the previous satellite, another one is
       chosen in the Satellite list. The window is named Satellite images.
       ASTER images of 2000-2006 no longer disappear from the list on a wide

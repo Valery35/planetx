@@ -778,6 +778,18 @@ it is not installed into the system or the rest of QGIS. The layer
 opacity is set by the slider of its row in the Layers list. The credit
 Rosreestr NSPD is in the corner of the view.
 
+With the cadastre on, a click in the Identify features mode or the What's
+here? item of the globe menu asks NSPD about the parcel under the
+point. The Features window shows the Rosreestr cadastre group. It holds
+the cadastral number, the address, the area, the land category and the
+permitted use. It also holds the form of ownership, the type of right,
+the cadastral value with its dates, the status and the cadastral block.
+The parcel outline is highlighted on the globe. The NSPD map row leads
+to this parcel on the Rosreestr map. A double click on a row of the
+Features window copies the value, for example the cadastral number, to
+the clipboard and opens a link in the browser. One request goes per
+click, the information arrives in 1-3 s.
+
 ### 3D buildings
 
 The 3D buildings row of the Layers section puts OpenStreetMap buildings

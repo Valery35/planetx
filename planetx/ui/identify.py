@@ -17,9 +17,10 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsExpressionContextUtils, QgsFeatureRequest,
                        QgsGeometry, QgsPointXY, QgsProject, QgsRasterLayer,
                        QgsRectangle, QgsVectorLayer)
-from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import (QDialog, QLabel, QPushButton, QTreeWidget,
-                                 QTreeWidgetItem, QVBoxLayout)
+from qgis.PyQt.QtCore import Qt, QUrl
+from qgis.PyQt.QtGui import QDesktopServices
+from qgis.PyQt.QtWidgets import (QApplication, QDialog, QLabel, QPushButton,
+                                 QTreeWidget, QTreeWidgetItem, QVBoxLayout)
 
 from ..core.coords import format_point
 from ..core.measure import surface_level
@@ -171,6 +172,10 @@ class IdentifyDialog(QDialog):
         self.tree = QTreeWidget(self)
         self.tree.setColumnCount(2)
         self.tree.setHeaderLabels([tr("Объект"), tr("Значение")])
+        self.tree.setToolTip(tr(
+            "Двойной щелчок по строке копирует значение в буфер обмена, "
+            "ссылку открывает в браузере."))
+        self.tree.itemDoubleClicked.connect(self._take_value)
         self.select = QPushButton(tr("Выделить на карте"), self)
         self.select.setToolTip(tr(
             "Выделить найденные объекты в слоях QGIS. Выделение видно "
@@ -182,6 +187,15 @@ class IdentifyDialog(QDialog):
         layout.addWidget(self.tree, 1)
         layout.addWidget(self.select)
         self.resize(420, 360)
+
+    def _take_value(self, item, column):
+        """Значение строки - в буфер обмена, ссылку открывает браузер
+        системы. Так берётся кадастровый номер участка."""
+        value = item.text(1)
+        if value.startswith(("https://", "http://")):
+            QDesktopServices.openUrl(QUrl(value))
+        elif value:
+            QApplication.clipboard().setText(value)
 
     def _select_on_map(self):
         """Выделение найденных объектов в их слоях, прежнее снимается."""

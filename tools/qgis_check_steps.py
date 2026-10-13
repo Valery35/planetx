@@ -13975,6 +13975,69 @@ def cadastre_check():
 
 
 @check(500)
+def cadastre_info():
+    """Сведения об участке щелчком: «Получить сведения» в точке
+    ул. Луначарского, 34 в Перми, окно «Объекты» с группой кадастра
+    и подсветка контура."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("cadastre", True)
+    nav = window.view.navigator
+    nav.stop()
+    nav.show(Pose(58.0105, 56.2502, 600.0, 0.0, 0.0))
+    view = window.view
+    ratio = view.devicePixelRatioF()
+    window.identify_here(view.width() * ratio / 2.0,
+                         view.height() * ratio / 2.0)
+    result["cadastre_info"] = {
+        "waiting": window._parcels is not None
+        and window._parcels[1] is None}
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def cadastre_info_check():
+    from qgis.PyQt.QtWidgets import QApplication
+    window = state["window"]
+    parcels = window._parcels
+    spent = time.monotonic() - state["ls_started"]
+    if parcels is not None and parcels[1] is None and not parcels[2] \
+            and spent < 30.0:
+        return 1000
+    out = result["cadastre_info"]
+    out["seconds"] = round(spent, 1)
+    out["error"] = parcels[2] if parcels else "no state"
+    out["numbers"] = [p["number"] for p in parcels[1] or ()] \
+        if parcels else []
+    out["outline_shapes"] = len(window.parcel_shapes)
+    tree = window.identified.tree
+    rows = {}
+    take = None
+    for n in range(tree.topLevelItemCount()):
+        top = tree.topLevelItem(n)
+        if top.text(0) != "Кадастр Росреестра":
+            continue
+        for m in range(top.childCount()):
+            parcel = top.child(m)
+            rows[parcel.text(0)] = [(parcel.child(k).text(0),
+                                     parcel.child(k).text(1))
+                                    for k in range(parcel.childCount())]
+            if take is None and parcel.childCount():
+                take = parcel.child(0)
+    out["rows"] = rows
+    if take is not None:
+        window.identified._take_value(take, 1)
+        out["clipboard"] = QApplication.clipboard().text()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_parcel.png"))
+    window.set_extra("cadastre", False)
+    out["outline_after_off"] = len(window.parcel_shapes)
+    out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
+@check(500)
 def modis_whole_open():
     """Поиск MODIS для шага scene_whole: первый случай MODIS_CASES."""
     from qgis.PyQt.QtCore import QDate

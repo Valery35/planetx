@@ -1177,6 +1177,30 @@ EN = {
         "A Sentinel-2 scene weighs about 1 GB.",
     "Вся сцена, исходные файлы": "Whole scene, source files",
     "Кадастр Росреестра": "Rosreestr cadastre",
+    "Кадастровый номер": "Cadastral number",
+    "Площадь уточнённая": "Surveyed area",
+    "Площадь декларированная": "Declared area",
+    "Категория земель": "Land category",
+    "Вид разрешённого использования": "Permitted use",
+    "Форма собственности": "Form of ownership",
+    "Вид права": "Type of right",
+    "Кадастровая стоимость": "Cadastral value",
+    "Удельная кадастровая стоимость": "Cadastral value per m²",
+    "Дата определения стоимости": "Value determined on",
+    "Дата применения стоимости": "Value applies from",
+    "Дата постановки на учёт": "Registered on",
+    "Статус": "Status",
+    "Кадастровый квартал": "Cadastral block",
+    "Запрос к НСПД…": "Asking NSPD…",
+    "НСПД не ответила": "NSPD did not answer",
+    "Ошибка": "Error",
+    "Участков под точкой нет": "No parcels under the point",
+    "Земельный участок {number}": "Land parcel {number}",
+    "Карта НСПД": "NSPD map",
+    "Двойной щелчок по строке копирует значение в буфер обмена, "
+    "ссылку открывает в браузере.":
+        "A double click on a row copies the value to the clipboard and "
+        "opens a link in the browser.",
     "Земельные участки из Национальной системы пространственных данных "
     "Росреестра поверх снимка, только по России. Видны вблизи, с высоты "
     "около 10 км и ниже. Служба отвечает медленно и отказывает на частые "
