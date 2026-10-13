@@ -125,10 +125,28 @@ def small_figure(source, target):
         flat.save(target, "JPEG", quality=FIGURE_QUALITY, optimize=True)
 
 
+def plugin_version():
+    import configparser
+    meta = configparser.ConfigParser(interpolation=None)
+    meta.read(os.path.join(ROOT, "planetx", "metadata.txt"),
+              encoding="utf-8")
+    return meta.get("general", "version")
+
+
 def small_source(source, folder):
-    """Копия Markdown в folder со ссылками на ужатые картинки."""
+    """Копия Markdown в folder со ссылками на ужатые картинки, номером
+    версии модуля и без первого заголовка. Возвращает этот заголовок -
+    он идёт титулом над оглавлением, иначе PDF начинался с оглавления
+    без названия, замечание автора от 13 октября 2026 года."""
     with open(os.path.join(DOC_SRC, source), encoding="utf-8") as fh:
         text = fh.read()
+    head = re.match(r"\s*# (.+)\n", text)
+    title = head.group(1).strip() if head else "PlanetX"
+    if head:
+        text = text[head.end():]
+    text = re.sub(r"(?m)^(Версия|Version) \d+\.\d+\.\d+$",
+                  lambda m: "{} {}".format(m.group(1), plugin_version()),
+                  text, count=1)
 
     def swap(match):
         link = match.group(0)
@@ -141,9 +159,11 @@ def small_source(source, folder):
     text = FIGURE_LINK.sub(swap, text)
     with open(os.path.join(folder, source), "w", encoding="utf-8") as fh:
         fh.write(text)
+    return title
 
 
-def to_html(pandoc, source, target, language, toc_title, folder=DOC_SRC):
+def to_html(pandoc, source, target, language, toc_title, folder=DOC_SRC,
+            title="PlanetX"):
     """Markdown в страницу со встроенными картинками и оглавлением."""
     css_path = os.path.join(folder, "_print.css")
     with open(css_path, "w", encoding="utf-8") as fh:
@@ -152,6 +172,7 @@ def to_html(pandoc, source, target, language, toc_title, folder=DOC_SRC):
                "--standalone", "--embed-resources", "--toc",
                "--toc-depth=2", "--metadata", "lang=" + language,
                "--metadata", "pagetitle=PlanetX",
+               "--metadata", "title=" + title,
                "--variable", "toc-title=" + toc_title,
                "--css", "_print.css", "--resource-path=" + folder]
     result = subprocess.run(command, cwd=folder, capture_output=True,
@@ -190,11 +211,12 @@ def main():
     folder = tempfile.mkdtemp(prefix="planetx_manual_")
     try:
         for source, target, language, toc_title in BOOKS:
-            small_source(source, folder)
+            title = small_source(source, folder)
             html_path = os.path.join(folder,
                                      "_" + target.replace(".pdf", ".html"))
             pdf_path = os.path.join(DOC_OUT, target)
-            to_html(pandoc, source, html_path, language, toc_title, folder)
+            to_html(pandoc, source, html_path, language, toc_title, folder,
+                    title)
             to_pdf(browser, html_path, pdf_path)
             print("%-16s %8.1f КБ" % (target,
                                       os.path.getsize(pdf_path) / 1024))

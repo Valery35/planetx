@@ -87,7 +87,7 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Landsat 1-5 MSS images were added after a discussion with Nadezhda
       (https://github.com/nadiopt-cell), the author of QGIS plugins for
       loading satellite images.
-      Developed with the support of Inform++ LLC (www.informpp.ru).
+      Developed with the support of Inform++ LLC (https://www.informpp.ru/).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
 homepage=https://www.informpp.ru/главная-страница/qgis-planetx
