@@ -1170,13 +1170,14 @@ def _model_kml(item, indent, href, aliases=None):
         parts.append(_look_kml(item.view))
     parts += ["<Model><altitudeMode>{}</altitudeMode>".format(
                   escape(overlay.mode)),
-              "<Location><longitude>{:.8f}</longitude><latitude>{:.8f}"
-              "</latitude><altitude>{:.3f}</altitude></Location>".format(
-                  lon, lat, alt),
-              "<Orientation><heading>{:g}</heading><tilt>{:g}</tilt>"
-              "<roll>{:g}</roll></Orientation>".format(heading, tilt, roll),
-              "<Scale><x>{:g}</x><y>{:g}</y><z>{:g}</z></Scale>".format(
-                  *overlay.scale),
+              "<Location><longitude>{!r}</longitude><latitude>{!r}"
+              "</latitude><altitude>{!r}</altitude></Location>".format(
+                  float(lon), float(lat), float(alt)),
+              "<Orientation><heading>{!r}</heading><tilt>{!r}</tilt>"
+              "<roll>{!r}</roll></Orientation>".format(
+                  float(heading), float(tilt), float(roll)),
+              "<Scale><x>{!r}</x><y>{!r}</y><z>{!r}</z></Scale>".format(
+                  *(float(v) for v in overlay.scale)),
               "<Link><href>{}</href></Link>".format(escape(href or ""))]
     if aliases:
         parts.append("<ResourceMap>")

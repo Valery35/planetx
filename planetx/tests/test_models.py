@@ -333,8 +333,8 @@ class TestPlacement(unittest.TestCase):
 MODEL_KML = b"""<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
 <Placemark><name>Church</name><Model><altitudeMode>relativeToGround
 </altitudeMode><Location><longitude>40.44</longitude><latitude>56.42
-</latitude><altitude>2</altitude></Location><Orientation><heading>30
-</heading><tilt>0</tilt><roll>0</roll></Orientation><Scale><x>1</x>
+</latitude><altitude>2</altitude></Location><Orientation><heading>88.41885380513968
+</heading><tilt>0</tilt><roll>0</roll></Orientation><Scale><x>0.6721278848236247</x>
 <y>1</y><z>1.5</z></Scale><Link><href>models/church.dae</href></Link>
 <ResourceMap><Alias><targetHref>../images/t.png</targetHref>
 <sourceHref>suzd1/texture0.jpg</sourceHref></Alias></ResourceMap>
@@ -361,8 +361,9 @@ class TestKml(unittest.TestCase):
         item = tree.overlays()[0]
         self.assertEqual(item.kind, "model")
         self.assertEqual(item.name, "Church")
-        self.assertEqual(item.overlay.camera[:4], (56.42, 40.44, 2.0, 30.0))
-        self.assertEqual(item.overlay.scale, (1.0, 1.0, 1.5))
+        self.assertEqual(item.overlay.camera[:4],
+                         (56.42, 40.44, 2.0, 88.41885380513968))
+        self.assertEqual(item.overlay.scale, (0.6721278848236247, 1.0, 1.5))
         self.assertEqual(item.overlay.mode, "relativeToGround")
         parts, pictures = models.read(item.image)
         self.assertEqual(list(pictures.values()), [PNG])
@@ -374,6 +375,8 @@ class TestKml(unittest.TestCase):
         tree = self.read()
         again = kml.read_file(kml.write_kmz(tree), "y").overlays()[0]
         item = tree.overlays()[0]
+        # Место без потери знаков: азимут и масштаб из KMZ Google Earth
+        # с 16 знаками, запись {:g} оставляла 6.
         self.assertEqual(again.overlay.params(), item.overlay.params())
         parts, pictures = models.read(again.image)
         self.assertEqual(list(pictures.values()), [PNG])
