@@ -14186,6 +14186,87 @@ def cadastre_check():
 
 
 @check(500)
+def etomesto_open():
+    """Каталог «Это Место» у Перми: один запрос к сайту, список карт,
+    поиск по слову, адрес страницы карты. Пункт есть в меню на глобусе."""
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.ui import globemenu
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    before = set(window.findChildren(QMenu))
+    globemenu.show(window, view.width() * view.devicePixelRatioF() / 2.0,
+                   view.height() * view.devicePixelRatioF() / 2.0)
+    menus = [m for m in window.findChildren(QMenu) if m not in before]
+    result["etomesto"] = {"menu": [a.text() for m in menus
+                                   for a in m.actions()
+                                   if "Это Место" in a.text()]}
+    for menu in menus:
+        menu.close()
+    window.etomesto_here(58.0105, 56.2502)
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def etomesto_check():
+    window = state["window"]
+    dialog = window.etomesto_dialog
+    spent = time.monotonic() - state["ls_started"]
+    if dialog.reply is not None and spent < 30.0:
+        return 1000
+    out = result["etomesto"]
+    out["seconds"] = round(spent, 1)
+    out["maps"] = len(dialog.items)
+    out["first"] = dialog.items[:3]
+    dialog.search.setText("перми план")
+    out["found"] = dialog.list.topLevelItemCount()
+    dialog.list.setCurrentItem(dialog.list.topLevelItem(0))
+    out["page"] = dialog.page()
+    out["status"] = dialog.status.text()
+    dialog.close()
+    return None
+
+
+@check(1000)
+def poles_on():
+    """Магнитные полюса: строка включает полюса и след, шкала времени
+    открывается, бегунок на 1900 год ставит полюс таблицы NOAA, окно
+    «Объекты» в Москве даёт склонение IGRF-14."""
+    from planetx.core import geomag, when
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(80.0, 100.0, 9000000.0, 0.0, 0.0))
+    window.set_extra("magpoles", True)
+    out = {"time_shown": window.timebar.shown(),
+           "shapes_now": [(s.kind, s.name, len(s.points))
+                          for s in window._pole_shapes()]}
+    lo = when.parse("1590-01-01")
+    window.timebar.set_range(lo, when.parse("1900-07-02"))
+    out["year"] = round(window.magnetic_year(), 2)
+    points = [s.points[0] for s in window._pole_shapes()
+              if s.kind == "point"]
+    model, poles = window.geomag
+    table = geomag.pole_at(poles["north"], window.magnetic_year())
+    out["north_1900"] = [round(v, 3) for v in points[0]]
+    out["table_1900"] = [round(v, 3) for v in table]
+    out["trail_1900"] = [len(s.points) for s in window._pole_shapes()
+                         if s.kind == "line"]
+    window.timebar.set_range(lo, when.parse("2020-01-01"))
+    window._identify_at = None
+    groups = window._identify_magnetic(55.75, 37.62)
+    out["moscow_2020"] = groups[0][1][0][1] if groups else None
+    out["attribution"] = "NOAA" in window.attribution.text()
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_poles.png"))
+    window.set_extra("magpoles", False)
+    out["shapes_off"] = len(window._pole_shapes())
+    out["gl_errors"] = dict(window.view.gl_errors)
+    result["poles"] = out
+
+
+@check(500)
 def demo_fetch():
     """Демо без файла в модуле: дно Бриенцского озера скачивается
     из выпуска demo-data GitHub в профиль, потом демо открывается."""

@@ -35,6 +35,9 @@ WORDS = {
                    "satellites"),
     "quakes": ("землетрясения", "сейсмика", "очаги", "earthquakes"),
     "plates": ("тектоника", "плиты", "разломы", "plates", "tectonics"),
+    "magpoles": ("магнитный полюс", "магнитные полюса", "склонение",
+                 "компас", "геомагнетизм", "igrf", "magnetic pole",
+                 "declination", "compass"),
     "deposits": ("полезные ископаемые", "руды", "рудники", "usgs", "mrds",
                  "minerals", "deposits"),
     "mining": ("карьеры", "отвалы", "горные работы", "mining", "pits"),
@@ -203,6 +206,10 @@ def _tools(window, add, earth):
         lambda: window.sentinel_here(*_here(window), mission="aster"),
         ("aster", "астер", "минералы", "изменённые породы", "каолинит",
          "геологические индексы", "swir", "terra aster"))
+    add("here:etomesto", tr("Старые карты «Это Место» здесь"), open_,
+        lambda: window.etomesto_here(*_here(window)),
+        ("это место", "etomesto", "старые карты", "межевые", "пгм",
+         "менде", "шуберт", "стрельбицкий", "ркка", "трёхвёрстка"))
     add("here:rumsey", tr("Исторические карты Рамсея здесь"), open_,
         lambda: window.rumsey_here(*_here(window)),
         ("старые карты", "исторические карты", "рамсей", "rumsey",

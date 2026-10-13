@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.80.1
+Version 0.81.0
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -413,7 +413,7 @@ of the list, the panel grows wider for that time, the globe stays
 visible. The ← arrow brings the list back. The categories stand on the
 left: Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Clouds, Sun,
-Satellites), Inside the Earth (Earthquakes, Plate boundaries, Mineral
+Satellites), Inside the Earth (Earthquakes, Plate boundaries, Magnetic poles, Mineral
 deposits, Mining areas, OSM mines and quarries, Earth cutaway,
 Paleogeography), Energy (Power plants, Power lines and pipelines,
 Submarine cables), Terrain analysis (Slope, Aspect) and Satellites -
@@ -563,6 +563,20 @@ Identify mode shows the boundary type, the plate pair and the speed of
 their relative motion in mm/yr. In the plate pair a slash in Bird's
 notation shows which plate goes under which: "PA\OK" is the Pacific
 plate under the Okhotsk plate.
+
+The Magnetic poles layer shows the north and south magnetic poles - the
+points where a compass needle stands vertical. The red point is the
+north pole, the blue one is the south pole, each trails its path since
+1590. The time slider opens by itself, its handle moves the poles over
+the years. The positions of 1590-2025 come from the NOAA NCEI tables
+(the gufm1 and IGRF models), after 2025 the pole is computed with the
+IGRF-14 model up to 2030. A click on the globe in the Identify mode
+shows in the Magnetic field group the declination - the angle between
+compass north and geographic north, the inclination and the field
+intensity at the point for the slider year. The field is computed with
+the IGRF-14 model for 1900-2030, for earlier years the window shows
+only the year. From 1900 to 2025 the north pole shifted 2475 km in a
+straight line, from the Canadian Arctic towards Siberia.
 
 The Mineral deposits layer shows mineral deposits, mines and
 occurrences of the U.S. Geological Survey (USGS) from three datasets. The
@@ -2288,6 +2302,19 @@ the page of the map on the collection site.
 The collection images are published under CC BY-NC-SA 3.0, it allows
 only non-commercial use with credit to the source. The georeferencing was done by members of
 the collection, for some maps it is rough or wrong.
+
+The Eto Mesto old maps here… item of the globe menu opens the catalogue
+of the Eto Mesto site (etomesto.com) - georeferenced old maps of Russia
+and the former USSR: city plans, survey atlases, the Schubert and
+Strelbitsky maps, Red Army maps, wartime aerial photos. The window shows
+the year and title of the maps that cover the point, near Perm there
+are more than two hundred. The search line picks maps by words of the
+title or by year. A double click or the Open on the site button opens
+the map page in the browser at this point. There the map is overlaid on
+a modern one and downloaded under the site rules, the site gives the
+files for personal non-commercial use. The plugin does not show the
+maps themselves on the globe. The catalogue has no map frames, so the
+globe shows none either.
 
 ---
 

@@ -161,7 +161,9 @@ RU = {
                 "гранях видны кора CRUST1.0, мантия и ядро, погружающиеся "
                 "плиты Slab2 и очаги землетрясений USGS на своих "
                 "глубинах. Путь меток режется вниз окном «Разрез» на "
-                "глубину до центра Земли.",
+                "глубину до центра Земли. Магнитные полюса идут по "
+                "шкале времени с 1590 года, щелчок даёт склонение "
+                "компаса в точке.",
     "deep.cut": "Разрез Земли у Японского жёлоба. Оболочки PREM, кора "
                 "и очаги землетрясений за 30 суток.",
     "deep.paleo": "Земля 100 млн лет назад по картам PaleoDEM, Scotese "
@@ -464,7 +466,9 @@ EN = {
                 "faces show the CRUST1.0 crust, the mantle and the core, "
                 "Slab2 subducting slabs and USGS earthquake foci at their "
                 "depths. A placemark path is cut downwards by the "
-                "Section window down to the centre of the Earth.",
+                "Section window down to the centre of the Earth. The "
+                "magnetic poles move along the time slider since 1590, "
+                "a click gives the compass declination at the point.",
     "deep.cut": "Earth cutaway at the Japan Trench. PREM shells, the "
                 "crust and earthquake foci over 30 days.",
     "deep.paleo": "The Earth 100 million years ago from the PaleoDEM "

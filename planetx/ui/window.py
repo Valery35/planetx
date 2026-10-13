@@ -31,7 +31,7 @@ from qgis.utils import iface
 
 from .. import journal
 from ..core import (basemap, cadastre, clouds, demofiles, ellipsoid,
-                    lookat, stars, sun, temperature, when)
+                    geomag, lookat, stars, sun, temperature, when)
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
@@ -280,14 +280,23 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "plates": False, "fires": False, "satellites": False,
                   "deposits": False, "mining": False, "osm_mines": False,
                   "plants": False, "infra_osm": False,
-                  "cables": False, "currents": False, "cadastre": False}
+                  "cables": False, "currents": False, "cadastre": False,
+                  "magpoles": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "plates", "fires", "satellites",
                 "deposits", "mining", "osm_mines", "plants", "infra_osm",
-                "cables", "currents", "cadastre")
+                "cables", "currents", "cadastre", "magpoles")
+# Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
+# выбор помощника, утверждает автор.
+POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
+POLE_WIDTH = 2.0
+POLE_FIRST = "1590-01-01"  # первый год таблицы NOAA
+MAGNETIC_ATTRIBUTION = ("NOAA NCEI, IGRF-14 IAGA",
+                        "https://www.ncei.noaa.gov/products/"
+                        "wandering-geomagnetic-poles")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
 # вида. Решение автора от 2 октября 2026 года, по умолчанию включены.
 SEA_KEY = "PlanetX/sea_depths"
@@ -904,6 +913,7 @@ class GlobeWindow(QWidget):
         self.plate_layer = None
         # Подводные кабели OSM (core/cables.py), файл data/cables.json.
         self.cables_data = None
+        self.geomag = None  # (модель IGRF, таблицы полюсов), core/geomag
         self.cable_layer = None
         self._slab_replies = {}
         self.slab_errors = {}
@@ -1576,6 +1586,8 @@ class GlobeWindow(QWidget):
             self._set_paleo(on)
         elif key == "plates":
             self._set_plates(on)
+        elif key == "magpoles":
+            self._set_poles(on)
         elif key == "satellites":
             self.satellite_manager.set_on(on)
             self._update_timebar()
@@ -3613,6 +3625,103 @@ class GlobeWindow(QWidget):
             self._layer_time_timer.start()
         if hasattr(self, "satellite_manager"):
             self.satellite_manager.time_changed()
+        if self._poles_on():
+            self._refresh_shapes()
+
+    # Магнитные полюса и поле IGRF (core/geomag.py).
+
+    def _poles_on(self):
+        return bool(getattr(self, "extras", {}).get("magpoles")) \
+            and getattr(self, "planet", None) is not None \
+            and self.planet.earth and self.geomag is not None
+
+    def _set_poles(self, on):
+        """Строка «Магнитные полюса»: полюса на момент шкалы времени и их
+        след с 1590 года. Файлы модуля читаются при первом включении,
+        шкала открывается сама."""
+        if on and self.geomag is None:
+            try:
+                with open(os.path.join(DATA_DIR, "igrf14coeffs.txt"),
+                          encoding="ascii") as fh:
+                    model = geomag.parse_igrf(fh.read())
+                with open(os.path.join(DATA_DIR, "magnetic_poles.json"),
+                          encoding="utf-8") as fh:
+                    poles = geomag.parse_poles(fh.read())
+                self.geomag = (model, poles)
+            except (OSError, ValueError, KeyError) as error:
+                journal.note("magnetic poles: {}".format(error))
+                self.message = (tr("Магнитные полюса не прочитаны."),
+                                time.monotonic())
+                self._show_state()
+                return
+        self._mark_gallery()
+        self._update_timebar()
+        if on and self.planet.earth and self.timebar.known \
+                and not self.timebar.shown():
+            self.timebar.open_bar()
+            self.toolbar.set_time_shown(True)
+            self._time_range = self.timebar.range()
+        self._refresh_shapes()
+        self._show_attribution()
+
+    def magnetic_year(self):
+        """Год с дробью для полюсов и поля: правый бегунок открытой
+        шкалы времени, без неё - часы компьютера."""
+        span = getattr(self, "_time_range", None)
+        if span is not None and math.isfinite(span[1]):
+            return geomag.year_of(span[1])
+        return geomag.year_of(time.time())
+
+    def _pole_shapes(self):
+        """След и точка каждого полюса на год шкалы."""
+        if not self._poles_on():
+            return []
+        model, poles = self.geomag
+        year = self.magnetic_year()
+        shapes = []
+        names = {"north": tr("Северный магнитный полюс, {year}"),
+                 "south": tr("Южный магнитный полюс, {year}")}
+        for key in ("north", "south"):
+            track = poles[key]
+            year_in = min(max(year, track[0][0]), model.last)
+            point = geomag.pole(model, track, year_in)
+            path = geomag.trail(track, year_in)
+            if point is not None:
+                path.append(point)
+            color = POLE_COLORS[key]
+            if len(path) > 1:
+                shapes.append(Shape("line", path, color=color,
+                                    width=POLE_WIDTH))
+            if point is not None:
+                shapes.append(Shape("point", [point], color=color,
+                                    name=names[key].format(
+                                        year=int(year_in))))
+        return shapes
+
+    def _identify_magnetic(self, lat, lon):
+        """Группа «Магнитное поле» окна «Объекты»: поле IGRF-14 в точке
+        на год шкалы."""
+        if not self._poles_on():
+            return []
+        model, _ = self.geomag
+        year = self.magnetic_year()
+        found = geomag.field(model, lat, lon, year)
+        if found is None:
+            values = [(tr("Год"), str(int(year))),
+                      (tr("Модель IGRF"), tr("с 1900 по 2030 год"))]
+        else:
+            values = [
+                (tr("Год"), str(int(year))),
+                (tr("Склонение"), "{:+.1f}°".format(found["declination"])),
+                (tr("Наклонение"), "{:+.1f}°".format(found["inclination"])),
+                (tr("Полная напряжённость"),
+                 tr("{value} нТл", value="{:.0f}".format(found["total"]))),
+                (tr("Горизонтальная составляющая"),
+                 tr("{value} нТл", value="{:.0f}".format(
+                     found["horizontal"]))),
+                (tr("Модель"), "IGRF-14")]
+        return [(Group(tr("Магнитное поле")),
+                 [(tr("Поле в точке"), values, None)])]
 
     def time_span(self):
         """Промежуток времени треков для записи тура: открытая шкала,
@@ -3641,6 +3750,8 @@ class GlobeWindow(QWidget):
         parts = [attribution_html(self.source)]
         if "cadastre" in self.gibs_loaders:
             parts.append(link_html(*cadastre.ATTRIBUTION))
+        if self._poles_on():
+            parts.append(link_html(*MAGNETIC_ATTRIBUTION))
         if self.planet.earth and (
                 self._applied_groups and self.ofm_layer is not None
                 or self.buildings_loader is not None):
@@ -4552,6 +4663,10 @@ class GlobeWindow(QWidget):
                 and flow.currents_span() is not None:
             times += [when.stamp(when.text(t))
                       for t in flow.currents_span()]
+        # Магнитные полюса - с 1590 года по сегодня.
+        if self._poles_on():
+            times += [when.stamp(POLE_FIRST),
+                      when.stamp(when.text(time.time()))]
         # Треки и слои проекта со временем - их охват.
         times += getattr(self, "_data_marks", [])
         # Исторические карты с годом - от первой до последней.
@@ -4726,6 +4841,7 @@ class GlobeWindow(QWidget):
             shapes += self.satellite_manager.shapes()
         shapes += getattr(self, "grid_shapes", [])
         shapes += getattr(self, "parcel_shapes", [])
+        shapes += self._pole_shapes()
         if self._ruler_open():
             shape = self.ruler.shape()
             if shape is not None:
@@ -5296,6 +5412,20 @@ class GlobeWindow(QWidget):
         if mission:
             dialog.use_mission(mission)
         dialog.show_point(lat, lon, self._view_width())
+        return dialog
+
+    def etomesto_here(self, lat, lon):
+        """«Старые карты «Это Место» здесь…» меню на глобусе: каталог
+        карт сайта etomesto.com у точки. Окно одно, новая точка
+        заменяет прежнюю."""
+        from .etomesto import EtomestoDialog
+        dialog = getattr(self, "etomesto_dialog", None)
+        if dialog is None:
+            dialog = EtomestoDialog(self)
+            self.etomesto_dialog = dialog
+        dialog.show_point(lat, lon)
+        dialog.show()
+        dialog.raise_()
         return dialog
 
     def rumsey_here(self, lat, lon):
@@ -7589,6 +7719,7 @@ class GlobeWindow(QWidget):
             groups.append((Group(tr("Подземное")), under))
         groups += self._identify_plates(lat, lon, tolerance)
         groups += self._identify_cables(lat, lon, tolerance)
+        groups += self._identify_magnetic(lat, lon)
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)

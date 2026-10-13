@@ -135,6 +135,8 @@ def show(window, px, py):
                 .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
             menu.addAction(tr("Исторические карты Рамсея здесь…")) \
                 .triggered.connect(lambda *a: window.rumsey_here(lat, lon))
+            menu.addAction(tr("Старые карты «Это Место» здесь…")) \
+                .triggered.connect(lambda *a: window.etomesto_here(lat, lon))
             if window.extras.get("contours"):
                 menu.addAction(tr("Горизонтали вида в проект QGIS…")) \
                     .triggered.connect(

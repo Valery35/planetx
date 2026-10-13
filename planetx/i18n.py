@@ -1227,6 +1227,55 @@ EN = {
         "A Sentinel-2 scene weighs about 1 GB.",
     "Вся сцена, исходные файлы": "Whole scene, source files",
     "Кадастр Росреестра": "Rosreestr cadastre",
+    "Старые карты «Это Место» здесь": "Eto Mesto old maps here",
+    "Старые карты «Это Место» здесь…": "Eto Mesto old maps here…",
+    "Старые карты «Это Место»": "Eto Mesto old maps",
+    "Запрос к «Это Место»…": "Asking Eto Mesto…",
+    "Карт у точки {total}, показано {shown}. Двойной щелчок открывает "
+    "карту на сайте.":
+        "Maps at the point {total}, shown {shown}. A double click opens "
+        "the map on the site.",
+    "Карты сайта «Это Место» (etomesto.com), которые накрывают точку. "
+    "Карта открывается на сайте, там её можно наложить на современную "
+    "и скачать по правилам сайта.":
+        "Maps of the Eto Mesto site (etomesto.com) that cover the point. "
+        "A map opens on the site, where it can be overlaid on a modern "
+        "map and downloaded under the site rules.",
+    "Оставляет карты, в названии или годе которых есть все слова.":
+        "Keeps the maps whose title or year holds all the words.",
+    "Открывает страницу выбранной карты на etomesto.com в браузере.":
+        "Opens the page of the chosen map on etomesto.com in the browser.",
+    "Открыть на сайте": "Open on the site",
+    "Поиск по названию или году": "Search by title or year",
+    "Сайт не ответил: {error}": "The site did not answer: {error}",
+    "У этой точки карт на сайте нет.":
+        "The site has no maps at this point.",
+    "Магнитные полюса": "Magnetic poles",
+    "Северный и южный магнитные полюса - точки, где стрелка компаса стоит "
+    "отвесно, - на год шкалы времени и их путь с 1590 года по данным NOAA "
+    "NCEI. Шкала открывается сама, бегунок ведёт полюса по годам. Щелчок "
+    "по глобусу в режиме «Определить объекты» показывает склонение, "
+    "наклонение и напряжённость поля в точке на тот же год по модели "
+    "IGRF-14, с 1900 по 2030 год.":
+        "The north and south magnetic poles - the points where a compass "
+        "needle stands vertical - for the year of the time slider and "
+        "their path since 1590 after NOAA NCEI. The slider opens by "
+        "itself, its handle moves the poles over the years. A click on "
+        "the globe in the Identify features mode shows the declination, "
+        "inclination and field intensity at the point for the same year "
+        "after the IGRF-14 model, from 1900 to 2030.",
+    "{value} нТл": "{value} nT",
+    "Горизонтальная составляющая": "Horizontal component",
+    "Магнитное поле": "Magnetic field",
+    "Магнитные полюса не прочитаны.": "The magnetic poles were not read.",
+    "Модель IGRF": "IGRF model",
+    "Наклонение": "Inclination",
+    "Поле в точке": "Field at the point",
+    "Полная напряжённость": "Total intensity",
+    "Северный магнитный полюс, {year}": "North magnetic pole, {year}",
+    "Склонение": "Declination",
+    "Южный магнитный полюс, {year}": "South magnetic pole, {year}",
+    "с 1900 по 2030 год": "from 1900 to 2030",
     "Загрузка файлов демо с GitHub, {size} МБ…":
         "Downloading demo files from GitHub, {size} MB…",
     "Демо не загружено: {error}": "The demo was not downloaded: {error}",

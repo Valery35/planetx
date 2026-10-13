@@ -72,7 +72,8 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "contours": ((150, 100, 60), (250, 220, 60)),
               "cadastre": ((230, 90, 80), (250, 225, 220)),
               "infra_osm": ((220, 60, 60), (240, 150, 40), (90, 90, 200)),
-              "cables": ((60, 200, 200), (170, 110, 220))}
+              "cables": ((60, 200, 200), (170, 110, 220)),
+              "magpoles": ((235, 70, 60), (70, 130, 235))}
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
@@ -83,10 +84,12 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
            "contours": "Terrarium", "infra_osm": "OpenStreetMap",
-           "cables": "OpenStreetMap", "cadastre": "Rosreestr NSPD"}
+           "cables": "OpenStreetMap", "cadastre": "Rosreestr NSPD",
+           "magpoles": "NOAA NCEI, IGRF-14"}
 # Слои витрины: ключ строки окна глобуса и группа.
 LAYERS = (("stars", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"), ("quakes", "depths"), ("plates", "depths"),
+          ("magpoles", "depths"),
           ("deposits", "depths"), ("mining", "depths"),
           ("osm_mines", "depths"), ("plants", "infra"),
           ("currents", "water"),
@@ -210,6 +213,14 @@ def layer_names():
             "в зонах субдукции и коллизии. Названия плит стоят "
             "надписями. Тип границы и скорость плит показывает "
             "окно «Объекты».")),
+        "magpoles": (tr("Магнитные полюса"), tr(
+            "Северный и южный магнитные полюса - точки, где стрелка "
+            "компаса стоит отвесно, - на год шкалы времени и их путь "
+            "с 1590 года по данным NOAA NCEI. Шкала открывается сама, "
+            "бегунок ведёт полюса по годам. Щелчок по глобусу в режиме "
+            "«Определить объекты» показывает склонение, наклонение "
+            "и напряжённость поля в точке на тот же год по модели "
+            "IGRF-14, с 1900 по 2030 год.")),
         "cutaway": (tr("Разрез Земли"), tr(
             "Вынимает из Земли сектор под точкой взгляда - "
             "четверть полушария шириной 90° по долготе. На его "
