@@ -369,6 +369,54 @@ class BoxVertices(DrawVertices):
         return tr("Растянуть от угла, с Shift - от середины")
 
 
+class ModelVertices(BoxVertices):
+    """Ручки рамки 3D-модели - следа её коробки на земле: крест
+    сдвигает модель, ромб поворачивает, угол меняет масштаб всех осей
+    от противоположного угла, с Shift - от середины, середина стороны
+    растягивает модель по одной оси."""
+
+    def active(self):
+        return self.dialog.isVisible() \
+            and self.window.view.sky_view is None \
+            and self.dialog.extent is not None
+
+    def box(self):
+        overlay = self.dialog.overlay
+        return overlays.model_box(overlay.camera, overlay.scale,
+                                  self.dialog.extent)
+
+    def _handles(self):
+        corners, sides, centre, rotate = overlays.box_handles(self.box())
+        return corners + [centre, rotate], sides
+
+    def move(self, px, py):
+        if self.handle is None:
+            return
+        found = self.window._ground(px, py)
+        if found is None:
+            return
+        self._moved = True
+        shift = QApplication.keyboardModifiers() & enum(
+            Qt, "KeyboardModifier", "ShiftModifier")
+        overlay = self.dialog.overlay
+        self.dialog.set_place(*overlays.model_drag(
+            overlay.camera, overlay.scale, self.dialog.extent,
+            self.handle[0], self.handle[1], found[0], found[1],
+            centred=bool(shift)))
+
+    def hint(self):
+        if self.hot is None:
+            return ""
+        kind, index = self.hot
+        if kind == editing.MIDDLE:
+            return tr("Растянуть модель по стороне")
+        if index == 4:
+            return tr("Сдвинуть модель")
+        if index == 5:
+            return tr("Повернуть модель")
+        return tr("Изменить масштаб от угла, с Shift - от середины")
+
+
 class OverlayDialog(QDialog):
     """Окно свойств наложения. Сигнал changed - правки для показа на
     глобусе сразу, в файл они идут по «OK». mode_changed - рамка
@@ -388,6 +436,9 @@ class OverlayDialog(QDialog):
                                             item.overlay.corners)
         self.image = None
         self._image = image
+        # Коробка модели (xmin, xmax, ymin, ymax) в её единицах для
+        # рамки на глобусе, её ставит окно глобуса.
+        self.extent = None
         self.link = item.href if item.image is None and item.href else None
         titles = {"ground": tr("Картинка на поверхности"),
                   "screen": tr("Картинка на экране"),
@@ -709,6 +760,21 @@ class OverlayDialog(QDialog):
         base = old[0] if old[0] else 1.0
         share = self.scale.value() / base
         self.overlay.scale = tuple(v * share for v in old)
+        self.changed.emit()
+
+    def set_place(self, camera, scale):
+        """Новое место и масштаб модели с ручек рамки на глобусе."""
+        self.overlay.camera = tuple(float(v) for v in camera)
+        self.overlay.scale = tuple(float(v) for v in scale)
+        values = dict(zip(("lat", "lon", "alt", "heading", "tilt",
+                           "roll"), self.overlay.camera))
+        for key, spin in self.place.items():
+            spin.blockSignals(True)
+            spin.setValue(values[key])
+            spin.blockSignals(False)
+        self.scale.blockSignals(True)
+        self.scale.setValue(self.overlay.scale[0])
+        self.scale.blockSignals(False)
         self.changed.emit()
 
     def set_model_info(self, text):

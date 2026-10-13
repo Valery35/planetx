@@ -268,5 +268,83 @@ class TestRefresh(unittest.TestCase):
                          overlays.MIN_REFRESH)
 
 
+
+class TestModelBox(unittest.TestCase):
+    """Рамка 3D-модели на земле: сдвиг, поворот, масштаб мышью."""
+
+    CAMERA = (56.0, 40.0, 0.0, 0.0, 0.0, 0.0)
+    EXTENT = (0.0, 10.0, 0.0, 20.0)
+
+    def frame(self, camera, scale=(1.0, 1.0, 1.0)):
+        return overlays.box_frame(overlays.model_box(camera, scale,
+                                                     self.EXTENT))
+
+    def corner(self, box, index):
+        return overlays.box_handles(box)[0][index]
+
+    def test_box_follows_model_extent(self):
+        lat0, lon0, hx, hy, angle = self.frame(self.CAMERA)
+        x, y = overlays._local(56.0, 40.0, lat0, lon0)
+        self.assertAlmostEqual(x, 5.0, places=3)
+        self.assertAlmostEqual(y, 10.0, places=3)
+        self.assertAlmostEqual(hx, 5.0, places=3)
+        self.assertAlmostEqual(hy, 10.0, places=3)
+        # Азимут 90° - модель смотрит осью Y на восток.
+        turned = list(self.CAMERA)
+        turned[3] = 90.0
+        lat0, lon0, hx, hy, _ = self.frame(turned)
+        x, y = overlays._local(56.0, 40.0, lat0, lon0)
+        self.assertAlmostEqual(x, 10.0, places=3)
+        self.assertAlmostEqual(y, -5.0, places=3)
+
+    def test_centre_moves_model(self):
+        box = overlays.model_box(self.CAMERA, (1.0, 1.0, 1.0), self.EXTENT)
+        lat0, lon0 = overlays.box_frame(box)[:2]
+        camera, scale = overlays.model_drag(
+            self.CAMERA, (1.0, 1.0, 1.0), self.EXTENT, "center", 0,
+            lat0 + 0.001, lon0 + 0.002)
+        self.assertAlmostEqual(camera[0], 56.001, places=6)
+        self.assertAlmostEqual(camera[1], 40.002, places=6)
+        self.assertEqual(scale, (1.0, 1.0, 1.0))
+
+    def test_rotate_keeps_centre(self):
+        before = self.frame(self.CAMERA)
+        my, mx = overlays._metres_per_degree(before[0])
+        camera, _ = overlays.model_drag(
+            self.CAMERA, (1.0, 1.0, 1.0), self.EXTENT, "rotate", 0,
+            before[0], before[1] + 30.0 / mx)
+        self.assertAlmostEqual(camera[3], 90.0, places=6)
+        after = self.frame(camera)
+        self.assertAlmostEqual(after[0], before[0], places=7)
+        self.assertAlmostEqual(after[1], before[1], places=7)
+
+    def test_corner_scales_all_axes_from_opposite_corner(self):
+        box = overlays.model_box(self.CAMERA, (1.0, 1.0, 1.0), self.EXTENT)
+        lat0, lon0 = overlays.box_frame(box)[:2]
+        fixed = self.corner(box, 0)
+        far = self.corner(box, 2)
+        # Северо-восточный угол вдвое дальше от юго-западного.
+        target = (2.0 * far[0] - fixed[0], 2.0 * far[1] - fixed[1])
+        camera, scale = overlays.model_drag(
+            self.CAMERA, (1.0, 1.0, 1.0), self.EXTENT, "corner", 2,
+            *target)
+        for value in scale:
+            self.assertAlmostEqual(value, 2.0, places=4)
+        again = self.corner(overlays.model_box(camera, scale, self.EXTENT),
+                            0)
+        self.assertAlmostEqual(again[0], fixed[0], places=7)
+        self.assertAlmostEqual(again[1], fixed[1], places=7)
+
+    def test_side_stretches_one_axis(self):
+        box = overlays.model_box(self.CAMERA, (1.0, 1.0, 1.0), self.EXTENT)
+        east = overlays.box_handles(box)[1][1]
+        my, mx = overlays._metres_per_degree(east[0])
+        _, scale = overlays.model_drag(
+            self.CAMERA, (1.0, 1.0, 1.0), self.EXTENT, "side", 1,
+            east[0], east[1] + 10.0 / mx)
+        self.assertAlmostEqual(scale[0], 2.0, places=3)
+        self.assertEqual(scale[1:], (1.0, 1.0))
+
+
 if __name__ == "__main__":
     unittest.main()

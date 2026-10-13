@@ -784,6 +784,14 @@ EN = {
         "Moscow, historical maps",
     "3D-модели, Суздаль и Пермь":
         "3D models, Suzdal and Perm",
+    "Растянуть модель по стороне":
+        "Stretch the model along the side",
+    "Сдвинуть модель":
+        "Move the model",
+    "Повернуть модель":
+        "Rotate the model",
+    "Изменить масштаб от угла, с Shift - от середины":
+        "Scale from the corner, with Shift from the centre",
     "План Москвы":
         "Plan of Moscow",
     "Москва, карта Шуберта":

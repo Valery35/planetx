@@ -1760,6 +1760,19 @@ The properties window of a model sets its place, as Model in KML:
 Below the fields stand the count of triangles, materials and images
 and the size of the model in metres.
 
+While the properties window is open, a frame stands on the ground
+around the model, the footprint of its box, like the frame of a
+ground image. The frame handles put the model in place with the
+mouse:
+- the cross in the middle moves the model
+- the diamond above the north side of the frame turns its heading
+- a corner scales the model along all axes, the opposite corner stays
+  in place, with Shift the centre stays
+- the middle of a side stretches the model along one axis.
+
+The window fields follow the handles. The frame is built by the
+heading, the tilt and roll of the model are not taken into account.
+
 The model files are kept in the places file, the source file is not
 needed after adding. Save as KML… to KMZ puts the model files into the
 archive, to KML into a folder next to it. Model images larger than
@@ -2390,7 +2403,7 @@ under the list plays a tour over them. The folder can be deleted.
 | Earth | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
 | Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
 | Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
-| Earth | 3D models, Suzdal and Perm | Models of the Intercession Monastery in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
+| Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |

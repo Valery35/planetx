@@ -306,6 +306,85 @@ def box_drag(box, handle, index, lat, lon, centred=False):
     return frame_box(lat0 + cy / my, lon0 + cx / mx, nhx, nhy, angle, lat0)
 
 
+# Рамка 3D-модели: след её коробки на земле по азимуту, ручки - как
+# у рамки картинки. Наклон и крен рамка не учитывает. Просьба автора
+# от 13 октября 2026 года - модель ставится на место мышью, как растр.
+
+def model_box(camera, scale, extent):
+    """Рамка (север, юг, восток, запад, поворот) следа модели. camera -
+    место Overlay.camera, scale - масштаб по осям, extent - (xmin, xmax,
+    ymin, ymax) модели в её единицах."""
+    lat, lon, heading = camera[0], camera[1], camera[3]
+    xmin, xmax, ymin, ymax = extent
+    sx, sy = scale[0], scale[1]
+    angle = -math.radians(heading)
+    east, north = _turn((xmin + xmax) / 2.0 * sx,
+                        (ymin + ymax) / 2.0 * sy, angle)
+    my, mx = _metres_per_degree(lat)
+    return frame_box(lat + north / my, lon + east / mx,
+                     (xmax - xmin) / 2.0 * abs(sx),
+                     (ymax - ymin) / 2.0 * abs(sy), angle, lat)
+
+
+def _model_place(camera, scale, extent, box):
+    """Место модели, у которой след - рамка box."""
+    lat0, lon0, _, _, angle = box_frame(box)
+    xmin, xmax, ymin, ymax = extent
+    east, north = _turn((xmin + xmax) / 2.0 * scale[0],
+                        (ymin + ymax) / 2.0 * scale[1], angle)
+    my, mx = _metres_per_degree(lat0)
+    lon = (lon0 - east / mx + 180.0) % 360.0 - 180.0
+    heading = (-math.degrees(angle) + 180.0) % 360.0 - 180.0
+    return (lat0 - north / my, lon, camera[2], heading) \
+        + tuple(camera[4:6])
+
+
+def model_drag(camera, scale, extent, handle, index, lat, lon,
+               centred=False):
+    """Новое место и масштаб модели (camera, scale), когда ручку её
+    рамки handle номер index тянут в точку (lat, lon). Середина
+    сдвигает, ромб поворачивает, середина стороны растягивает модель
+    по одной оси от противоположной стороны. Угол меняет масштаб всех
+    трёх осей одинаково, противоположный угол стоит на месте, centred -
+    середина стоит на месте."""
+    box = model_box(camera, scale, extent)
+    lat0, lon0, hx, hy, angle = box_frame(box)
+    if handle == "corner":
+        x, y = _local(lat0, lon0, lat, lon)
+        u, v = _turn(x, y, -angle)
+        sx, sy = SIGNS[index]
+        if centred:
+            share = (abs(u) / hx + abs(v) / hy) / 2.0
+            cu = cv = 0.0
+        else:
+            ox, oy = -sx * hx, -sy * hy
+            share = (abs(u - ox) / hx + abs(v - oy) / hy) / 4.0
+            share = max(share, MIN_SHARE)
+            cu, cv = ox + sx * share * hx, oy + sy * share * hy
+        share = max(share, MIN_SHARE)
+        cx, cy = _turn(cu, cv, angle)
+        my, mx = _metres_per_degree(lat0)
+        new = frame_box(lat0 + cy / my, lon0 + cx / mx, share * hx,
+                        share * hy, angle, lat0)
+        ratios = (share, share, share)
+    elif handle == "side":
+        new = box_drag(box, handle, index, lat, lon, centred)
+        _, _, nhx, nhy, _ = box_frame(new)
+        ratios = (max(nhx / hx, MIN_SHARE), max(nhy / hy, MIN_SHARE), 1.0)
+    else:
+        # Сдвиг и поворот масштаба не меняют, хотя метры в градусе
+        # долготы на новой широте другие.
+        new = box_drag(box, handle, index, lat, lon, centred)
+        ratios = (1.0, 1.0, 1.0)
+    scale = tuple(float(v) * r for v, r in zip(scale, ratios))
+    return _model_place(camera, scale, extent, new), scale
+
+
+# Масштаб модели за одно движение ручки не меньше этой доли прежнего:
+# иначе рамка схлопнулась бы в точку и обратно не растянулась.
+MIN_SHARE = 0.01
+
+
 def corners_box(corners):
     """Рамка LatLonBox без поворота, если углы - такая рамка: (север,
     юг, восток, запад), иначе None."""

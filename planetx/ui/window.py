@@ -114,8 +114,8 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      TemperatureLegend, ThemeLegend)
 from .themes import theme_names
 from .overlays import (OUTLINE, BoxVertices, CornerVertices,
-                       GroundLayers, OverlayDialog, ScreenOverlays,
-                       ground_geotiff, image_rgba)
+                       GroundLayers, ModelVertices, OverlayDialog,
+                       ScreenOverlays, ground_geotiff, image_rgba)
 from .spinner import LoadSpinner
 from .draw import PlaceDialog
 from . import globemenu
@@ -6629,6 +6629,17 @@ class GlobeWindow(QWidget):
                               if p is not None]),
                   x=size[0], y=size[1], z=size[2])
 
+    def model_extent(self, item):
+        """Коробка модели (xmin, xmax, ymin, ymax) в её единицах или
+        None, если файл не читается."""
+        token, _, data = self._overlay_edit(item)
+        found = self._model_data(token, data)
+        if found is None:
+            return None
+        box = models.bounds(found[0])
+        return (float(box[0][0]), float(box[1][0]), float(box[0][1]),
+                float(box[1][1]))
+
     def add_model(self, folder=None, path=None):
         """«Добавить → 3D-модель…»: файл Collada, glTF или OBJ встаёт
         в точку взгляда, потом открывается окно свойств. KMZ открывается как
@@ -6827,6 +6838,7 @@ class GlobeWindow(QWidget):
             dialog.finished.connect(done)
         if item.kind == "model":
             dialog.set_model_info(self.model_summary(item))
+            dialog.extent = self.model_extent(item)
         self.side.host(dialog)
         self._overlay_tool(dialog)
         self._overlay_preview(key)
@@ -6834,11 +6846,13 @@ class GlobeWindow(QWidget):
     def _overlay_tool(self, dialog):
         """Ручки картинки на поверхности по способу привязки: рамка -
         сдвиг, поворот и растяжение, четыре угла - каждый угол сам."""
-        if dialog.item.kind != "ground" or self._place_open() \
-                or self._ruler_open():
+        if dialog.item.kind not in ("ground", "model") \
+                or self._place_open() or self._ruler_open():
             return
         self._end_prop_vertices(dialog)
-        if dialog.overlay.box is not None:
+        if dialog.item.kind == "model":
+            tool = ModelVertices(self, dialog)
+        elif dialog.overlay.box is not None:
             tool = BoxVertices(self, dialog)
         else:
             tool = CornerVertices(self, dialog, ShapeEdit(
@@ -6861,6 +6875,13 @@ class GlobeWindow(QWidget):
             self._ground_pending[key] = dialog
             self._ground_timer.start()
         else:
+            if overlay.kind == "model" and dialog.extent is not None:
+                # След модели на земле - рамка ручек.
+                box = overlays.model_box(overlay.camera, overlay.scale,
+                                         dialog.extent)
+                self.previews[key] = Shape(
+                    "polygon", overlays.box_corners(*box), color=OUTLINE,
+                    width=2.0)
             self._overlay_edits[key] = (
                 overlays.from_params(overlay.kind, overlay.params()),
                 dialog.image if dialog.link is None else None, dialog.link)
