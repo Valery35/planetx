@@ -333,8 +333,9 @@ class TestPlacement(unittest.TestCase):
 MODEL_KML = b"""<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
 <Placemark><name>Church</name><Model><altitudeMode>relativeToGround
 </altitudeMode><Location><longitude>40.44</longitude><latitude>56.42
-</latitude><altitude>2</altitude></Location><Orientation><heading>88.41885380513968
-</heading><tilt>0</tilt><roll>0</roll></Orientation><Scale><x>0.6721278848236247</x>
+</latitude><altitude>2</altitude></Location><Orientation>
+<heading>88.41885380513968</heading><tilt>0</tilt><roll>0</roll>
+</Orientation><Scale><x>0.6721278848236247</x>
 <y>1</y><z>1.5</z></Scale><Link><href>models/church.dae</href></Link>
 <ResourceMap><Alias><targetHref>../images/t.png</targetHref>
 <sourceHref>suzd1/texture0.jpg</sourceHref></Alias></ResourceMap>
