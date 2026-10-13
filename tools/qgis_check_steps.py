@@ -8017,6 +8017,38 @@ def models_demo():
                   if o.key not in before and o.kind == "model"]}
 
 
+@check(1000)
+def models_look():
+    """Кадр каждой модели демо вблизи после загрузки подложки: модель
+    глазами, а не по счётчику. Ручной шаг, в общий прогон не входит."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    models = [o for o in window.myplaces.overlays if o.kind == "model"
+              and o.name in result["models_demo"]["added"]]
+    look = state.setdefault("models_look", {"index": 0, "since": None})
+    if look["index"] >= len(models):
+        return None
+    model = models[look["index"]].overlay.camera
+    if look["since"] is None:
+        view.navigator.stop()
+        view.navigator.show(Pose(model[0], model[1], 120.0, 30.0, 60.0))
+        look["since"] = time.monotonic()
+        return 2000
+    waited = time.monotonic() - look["since"]
+    # Сразу после перелёта загрузчик ещё не знает о новых тайлах.
+    if (view.load_missing or waited < 8.0) and waited < 40.0:
+        return 1000
+    view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_model_look_{}.png".format(look["index"])))
+    result.setdefault("models_look", []).append(
+        {"name": models[look["index"]].name, "drawn": view.models.drawn,
+         "waited": round(waited, 1)})
+    look["index"] += 1
+    look["since"] = None
+    return 500
+
+
 @check(3000)
 def models_demo_check():
     window = state["window"]
