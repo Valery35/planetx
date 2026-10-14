@@ -35,7 +35,7 @@ from ..core import (basemap, cadastre, clouds, demofiles, ellipsoid, emag,
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.measure import (LENGTH_UNITS, convert, nearest_vertex,
                             number, segment_midpoints, surface_level)
-from ..core import graticule, oldmaps, paleo, placetree, region
+from ..core import graticule, oldmaps, paleo, pathflow, placetree, region
 from ..core import dem as dem_model
 from ..core.features import Shape, grown, has_alts
 from ..core.coords import FORMATS as COORD_FORMATS, parse_point
@@ -270,6 +270,14 @@ LINES_KEY = "PlanetX/lines/{}"
 DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 GEOID_SCALE_KEY = "PlanetX/geoid_scale"  # масштаб режима «Геоид»
+# Поток по путям (core/pathflow.py): шаг таймера штрихов, мс, подъём
+# штриха над рельефом, м, на сколько пикселей штрих толще линии, на
+# сколько ширин вида от точки взгляда считаются штрихи. Выбор
+# помощника, утверждает автор.
+FLOW_TICK = 40
+FLOW_LIFT = 20.0
+FLOW_WIDER = 1.5
+FLOW_REACH = 2.0
 # Сетка, звёзды, облака: ключ настройки и умолчание. Звёзды включены,
 # как в Google Earth, сетка и облака выключены. Решение помощника от
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
@@ -1083,6 +1091,14 @@ class GlobeWindow(QWidget):
         self.toolbar.sidebar_clicked.connect(
             lambda: self.set_sidebar(self.panel.isHidden()))
         self.set_sidebar(QgsSettings().value(SIDEBAR_KEY, True, type=bool))
+        # Во весь экран для показа, просьба автора от 15 октября 2026
+        # года. F11 включает и выключает, Esc - только выключает, пока
+        # режим включён, иначе Esc остаётся у вида и инструментов.
+        self._windowed = None
+        self.toolbar.fullscreen_clicked.connect(self.toggle_fullscreen)
+        self._full_key = self._window_key("F11", self.toggle_fullscreen)
+        self._full_escape = self._window_key("Esc", self.toggle_fullscreen)
+        self._full_escape.setEnabled(False)
         self.toolbar.about_clicked.connect(lambda: show_about(self))
         self.toolbar.properties_clicked.connect(self._show_properties)
         self.toolbar.save_view_requested.connect(self.save_view)
@@ -5030,7 +5046,78 @@ class GlobeWindow(QWidget):
                    getattr(self, "overlay_dialogs", {})
                    if key in self.previews]
         self.view.set_shapes([self._drawn_shape(s) for s in shapes])
+        self._set_flow_paths([s for s in shapes if s.kind == "line"
+                              and getattr(s, "flow", False)
+                              and len(s.points) > 1 and s.alts is None])
         self._refresh_overlays()
+
+    # Поток по путям (core/pathflow.py).
+
+    def _set_flow_paths(self, shapes):
+        """Пути с потоком на глобусе. Сгущённый путь помнится по точкам,
+        таймер штрихов идёт, пока такие пути есть."""
+        cache = getattr(self, "_flow_cache", {})
+        kept = {}
+        paths = []
+        for shape in shapes:
+            key = tuple(tuple(p) for p in shape.points)
+            path = cache.get(key) or kept.get(key)
+            if path is None:
+                # Пути из одной точки отсеяны в _refresh_shapes.
+                path = pathflow.Path(shape.points)
+            kept[key] = path
+            paths.append((path, shape.color, shape.width,
+                          float(shape.height or 0.0)))
+        self._flow_cache = kept
+        self._flow_paths = paths
+        timer = getattr(self, "_flow_timer", None)
+        if timer is None:
+            timer = self._flow_timer = QTimer(self)
+            timer.setInterval(FLOW_TICK)
+            timer.timeout.connect(self._tick_flow)
+        if paths and not timer.isActive():
+            timer.start()
+        elif not paths:
+            timer.stop()
+        self._tick_flow()
+
+    def _tick_flow(self):
+        """Штрихи потока на этот момент: шаг - доля ширины вида, только
+        у точки взгляда, по рельефу."""
+        paths = getattr(self, "_flow_paths", [])
+        if not paths:
+            self.view.path_flow.clear()
+            self.view.update()
+            return
+        width = self._view_width()
+        spacing = pathflow.spacing_for(width)
+        phase = pathflow.phase_at(time.monotonic())
+        pose = self.view.navigator.pose
+        reach = math.degrees(FLOW_REACH * width / ellipsoid.A)
+        near = (pose.lat, pose.lon, reach)
+        store = self.view.store
+        groups = []
+        count = 0
+        for path, color, line_width, height in paths:
+            lats, lons = pathflow.dashes(path, spacing, phase, near=near)
+            if not len(lats):
+                continue
+            lats, lons = lats[:pathflow.DASH_LIMIT - count], \
+                lons[:pathflow.DASH_LIMIT - count]
+            count += len(lats)
+            ground = np.asarray(store.heights_at(lats.ravel(),
+                                                 lons.ravel()))
+            if self.view.sea_floor:
+                ground = np.maximum(ground, 0.0)
+            xyz = geodetic_to_ecef(lats.ravel(), lons.ravel(),
+                                   ground + height + FLOW_LIFT)
+            groups.append((np.asarray(xyz).reshape(lats.shape + (3,)),
+                           pathflow.dash_color(color),
+                           float(line_width) + FLOW_WIDER))
+            if count >= pathflow.DASH_LIMIT:
+                break
+        self.view.path_flow.set_groups(groups)
+        self.view.update()
 
     def _drawn_shape(self, shape):
         """3D-объект так, как он стоит на поднятом рельефе: к настоящей
@@ -5733,6 +5820,56 @@ class GlobeWindow(QWidget):
     def _globe_menu(self, px, py):
         """Щелчок правой кнопкой по глобусу без сдвига."""
         globemenu.show(self, px, py)
+
+    def _window_key(self, keys, slot):
+        """Клавиша окна - действие без пункта меню, как Ctrl+K."""
+        action = QAction(self)
+        action.setShortcut(QKeySequence(keys))
+        action.setShortcutContext(
+            enum(Qt, "ShortcutContext", "WindowShortcut"))
+        action.triggered.connect(slot)
+        self.addAction(action)
+        return action
+
+    def is_fullscreen(self):
+        return self._windowed is not None
+
+    def toggle_fullscreen(self):
+        """Вид глобуса во весь экран для показа и обратно. Панели,
+        панель значков и значок загрузки прячутся, органы навигации,
+        шкала времени, тур, шкалы слоёв и подписи источников остаются.
+        Выход возвращает прежнее окно и панели."""
+        if self._windowed is None:
+            self._windowed = {
+                "maximized": self.isMaximized(),
+                "geometry": self.saveGeometry(),
+                "panel": self.panel.isVisible(),
+                "sizes": self.splitter.sizes()}
+            self.panel.hide()
+            self.side.hide()
+            self.toolbar.hide()
+            self.spinner.hide()
+            self._full_escape.setEnabled(True)
+            self.showFullScreen()
+            self.message = (tr("Во весь экран. Выход - Esc или F11."),
+                            time.monotonic())
+            self._show_state()
+            journal.note("fullscreen on")
+        else:
+            state, self._windowed = self._windowed, None
+            self._full_escape.setEnabled(False)
+            self.showNormal()
+            self.restoreGeometry(state["geometry"])
+            if state["maximized"]:
+                self.showMaximized()
+            self.panel.setVisible(state["panel"])
+            self.side.show()
+            self.splitter.setSizes(state["sizes"])
+            self.toolbar.show()
+            self.spinner.set_state(self.view.load_missing,
+                                   self.view.load_stalled)
+            journal.note("fullscreen off")
+        self.view.setFocus()
 
     def set_sidebar(self, shown):
         """Показать или скрыть левую панель, вид занимает её место."""

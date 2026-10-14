@@ -66,6 +66,7 @@ class ViewToolbar(QFrame):
     share_requested = pyqtSignal()
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
+    fullscreen_clicked = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -188,7 +189,8 @@ class ViewToolbar(QFrame):
                                ("brienz",
                                 tr("Бриенцское озеро, своя батиметрия")),
                                ("moscow", tr("Москва, исторические карты")),
-                               ("models", tr("3D-модели, Суздаль и Пермь")))),
+                               ("models", tr("3D-модели, Суздаль и Пермь")),
+                               ("flows", tr("Поток грузов, схема")))),
                 (tr("Марс"), (("mars", tr("Места посадок марсоходов")),
                               ("jezero", tr("Кратер Езеро")))),
                 (tr("Луна"), (("moon",
@@ -259,6 +261,12 @@ class ViewToolbar(QFrame):
                "рельефа и глубины морей, язык подписей, связь с картой, "
                "обновление, формат координат, помощник."),
             self.properties_clicked)
+        self.fullscreen = self._button(
+            QIcon(os.path.join(ROOT, "fullscreen.svg")),
+            tr("Во весь экран (F11) - вид глобуса для показа. Панели "
+               "прячутся, органы навигации, шкала времени и тур "
+               "остаются. Esc или F11 возвращает окно."),
+            self.fullscreen_clicked)
         # Значка помощника на панели нет. Разговор и настройки
         # помощника - группа «Помощник» окна свойств вида, решение
         # автора от 5 октября 2026 года.

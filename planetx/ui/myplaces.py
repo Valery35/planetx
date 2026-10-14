@@ -58,7 +58,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Тело метки: earth, mars или moon. Пустое - Земля.
           ("body", "string"),
           # Region KML - видна только вблизи, core/region.py, JSON.
-          ("region", "string"))
+          ("region", "string"),
+          # Поток по пути - бегущие штрихи, core/pathflow.py.
+          ("flow", "integer"))
 FOLDER_TABLE = "folders"
 # Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
 # на поверхности, у картинки на экране и фото пусто. params - свойства
@@ -243,7 +245,7 @@ def _kplace(place):
                   height=shape.height, extrude=shape.extrude,
                   icon=shape.icon, time=place.time,
                   view_time=place.view_time, tour=place.tour,
-                  alts=shape.alts, region=place.region)
+                  alts=shape.alts, region=place.region, flow=shape.flow)
 
 
 class Place:
@@ -464,7 +466,9 @@ class MyPlaces(QObject):
                     icon=icons.normal(str(_value(feature, layer, "icon")
                                           or icons.DEFAULT)),
                     alts=alts_from_text(_value(feature, layer, "alts"),
-                                        len(points)))
+                                        len(points)),
+                    flow=kind == "line"
+                    and bool(_int(_value(feature, layer, "flow"))))
                 visible = _int(feature["visible"])
                 self.places.append(Place(
                     kind, feature.id(), shape,
@@ -1001,7 +1005,8 @@ class MyPlaces(QObject):
                     "tour": tour_text(place.tour),
                     "alts": alts_text(getattr(place, "alts", None)),
                     "body": body or ellipsoid.BODY.key,
-                    "region": region.text(getattr(place, "region", None))}
+                    "region": region.text(getattr(place, "region", None)),
+                    "flow": int(bool(getattr(place, "flow", False)))}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

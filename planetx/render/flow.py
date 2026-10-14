@@ -88,6 +88,99 @@ void main() {
 """
 
 
+class PathFlowLines:
+    """Штрихи потока по путям «Моих меток» (core/pathflow.py): ломаные
+    точек в ECEF, у каждой группы свой цвет и толщина. Рисуются, как
+    струйки, программой линий без проверки глубины, сторона шара за
+    горизонтом отбрасывается."""
+
+    def __init__(self):
+        self.program = None
+        self.locations = {}
+        self.vao = None
+        self.vbo = None
+        self.groups = []  # (точки (n, k, 3) ECEF, RGBA 0-1, толщина)
+        self.drawn = 0
+
+    def init_gl(self):
+        self.program = gpu.build_program(LINE_VERTEX, LINE_FRAGMENT,
+                                         LINE_GEOMETRY)
+        self.locations = {name: GL.glGetUniformLocation(self.program, name)
+                          for name in ("u_mvp", "u_viewport", "u_width")}
+        self.vao = GL.glGenVertexArrays(1)
+        self.vbo = GL.glGenBuffers(1)
+        GL.glBindVertexArray(self.vao)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        stride = 8 * 4
+        for index, size, offset in ((0, 3, 0), (1, 1, 3), (2, 4, 4)):
+            GL.glEnableVertexAttribArray(index)
+            GL.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
+                                     stride, ctypes.c_void_p(offset * 4))
+        GL.glBindVertexArray(0)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+
+    def release_gl(self):
+        if self.program is None:
+            return
+        GL.glDeleteProgram(self.program)
+        GL.glDeleteVertexArrays(1, [self.vao])
+        GL.glDeleteBuffers(1, [self.vbo])
+        self.program = None
+
+    def set_groups(self, groups):
+        self.groups = list(groups)
+
+    def clear(self):
+        self.groups = []
+        self.drawn = 0
+
+    def draw(self, camera, ratio):
+        self.drawn = 0
+        if self.program is None or not self.groups:
+            return
+        eye = np.asarray(camera.eye, dtype=np.float64)
+        mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
+                                   dtype=np.float32)
+        loc = self.locations
+        GL.glUseProgram(self.program)
+        GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
+        GL.glUniform2f(loc["u_viewport"], float(camera.width),
+                       float(camera.height))
+        GL.glBindVertexArray(self.vao)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        GL.glDisable(GL.GL_DEPTH_TEST)
+        GL.glEnable(GL.GL_BLEND)
+        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                               GL.GL_ZERO, GL.GL_ONE)
+        try:
+            for xyz, color, width in self.groups:
+                if not len(xyz):
+                    continue
+                first = xyz[:, 0]
+                facing = np.einsum("ij,ij->i", first, eye - first) > 0.0
+                if not np.any(facing):
+                    continue
+                pts = xyz[facing]
+                a = (pts[:, :-1] - eye).reshape(-1, 3)
+                b = (pts[:, 1:] - eye).reshape(-1, 3)
+                m = len(a)
+                data = np.empty((2 * m, 8), dtype=np.float32)
+                data[0::2, 0:3] = a
+                data[1::2, 0:3] = b
+                data[:, 3] = 1.0
+                data[:, 4:8] = color
+                GL.glUniform1f(loc["u_width"], float(width) * float(ratio))
+                GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
+                                GL.GL_STREAM_DRAW)
+                GL.glDrawArrays(GL.GL_LINES, 0, 2 * m)
+                self.drawn += len(pts)
+        finally:
+            GL.glBindVertexArray(0)
+            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            GL.glDisable(GL.GL_BLEND)
+            GL.glEnable(GL.GL_DEPTH_TEST)
+
+
 class FlowLines:
     """Следы частиц одного поля: kind «wind» или «currents»."""
 

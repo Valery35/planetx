@@ -234,8 +234,11 @@ class KPlace:
                  width=LINE_WIDTH, fill=None, visible=True, view=None,
                  description="", height=0.0, extrude=False,
                  icon=icons.DEFAULT, time=None, view_time=None,
-                 tour=None, alts=None, region=None):
+                 tour=None, alts=None, region=None, flow=False):
         self.region = region  # core.region.Region или None
+        # Поток по пути - бегущие штрихи, core/pathflow.py. В KML -
+        # ExtendedData с именем FLOW_DATA, другие программы его не видят.
+        self.flow = bool(flow)
         self.alts = alts
         self.tour = tour
         self.icon = icon
@@ -615,8 +618,24 @@ def _placemark(node, styles, inherited=None):
                           if kind == "point" else icons.DEFAULT,
                           time=time,
                           view_time=_view_time(node), alts=alts,
-                          region=_region(node)))
+                          region=_region(node),
+                          flow=kind == "line" and _flow(node)))
     return out
+
+
+FLOW_DATA = "planetx:flow"
+
+
+def _flow(node):
+    """Поток по пути из ExtendedData метки: Data FLOW_DATA со значением
+    1."""
+    data = _child(node, "ExtendedData")
+    if data is None:
+        return False
+    for item in _children(data, "Data"):
+        if item.get("name") == FLOW_DATA:
+            return _text(item, "value") in ("1", "true")
+    return False
 
 
 # Геометрии KML. По стандарту они лежат внутри Placemark.
@@ -1044,10 +1063,15 @@ def _placemark_kml(place, indent):
     if place.description:
         parts.append("<description>{}</description>".format(
             escape(place.description)))
+    flow = ""
+    if place.kind == "line" and getattr(place, "flow", False):
+        flow = '<ExtendedData><Data name="{}"><value>1</value></Data>' \
+            "</ExtendedData>".format(FLOW_DATA)
     parts += ["<visibility>{}</visibility>".format(int(place.visible)),
               region.kml(getattr(place, "region", None)),
               _time_kml(place.time), look,
-              "<Style>{}</Style>".format(style), geometry, "</Placemark>"]
+              "<Style>{}</Style>".format(style), flow, geometry,
+              "</Placemark>"]
     return pad + "".join(p for p in parts if p)
 
 

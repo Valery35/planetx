@@ -47,7 +47,7 @@ from .gibs import LAYERS as GIBS_LAYERS, NEAR_ONLY, GibsLayer
 from .gibs import MIN_LEVELS as GIBS_MIN
 from .subsurface import FACE_OFFSET, ImageWalls, Subsurface
 from .models import Models
-from .flow import FlowLines
+from .flow import FlowLines, PathFlowLines
 from .quakes import DepositPoints, FirePoints, PlantPoints, Quakes
 from .satellites import SatellitePoints
 from .constellations import Constellations
@@ -378,6 +378,8 @@ class GlobeView(QOpenGLWidget):
         # Струйки ветра и течений (core/flow.py).
         self.flows = {"wind": FlowLines("wind"),
                       "currents": FlowLines("currents")}
+        # Штрихи потока по путям «Моих меток» (core/pathflow.py).
+        self.path_flow = PathFlowLines()
         # Спутники - своей проекцией, геостационарные дальше дальней
         # плоскости вида (render/satellites.py).
         self.satellites = SatellitePoints()
@@ -1382,6 +1384,7 @@ class GlobeView(QOpenGLWidget):
         self.plants.init_gl()
         for lines in self.flows.values():
             lines.init_gl()
+        self.path_flow.init_gl()
         self.satellites.init_gl()
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
@@ -1415,6 +1418,7 @@ class GlobeView(QOpenGLWidget):
         self.plants.release_gl()
         for lines in self.flows.values():
             lines.release_gl()
+        self.path_flow.release_gl()
         self.satellites.release_gl()
         self.stars.release_gl()
         self.sky.release_gl()
@@ -2028,6 +2032,8 @@ class GlobeView(QOpenGLWidget):
         for lines in self.flows.values():
             if not self.show_holes:
                 lines.draw(self.camera, ratio)
+        if not self.show_holes:
+            self.path_flow.draw(self.camera, ratio)
         if self.fires.fires is not None and not self.show_holes:
             self.fires.draw(self.camera, ratio)
         else:

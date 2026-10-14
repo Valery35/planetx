@@ -2237,6 +2237,23 @@ EN = {
         "stars show from space and fade when the camera descends into the "
         "atmosphere.",
     "Атмосфера": "Atmosphere",
+    "Во весь экран": "Full screen",
+    "Во весь экран (F11) - вид глобуса для показа. Панели "
+    "прячутся, органы навигации, шкала времени и тур "
+    "остаются. Esc или F11 возвращает окно.":
+        "Full screen (F11) - the globe view for a presentation. The "
+        "panels hide, the navigation controls, the time slider and the "
+        "tour stay. Esc or F11 brings the window back.",
+    "Во весь экран. Выход - Esc или F11.":
+        "Full screen. Esc or F11 to leave.",
+    "Поток по пути": "Flow along the path",
+    "По пути от первой точки к последней бегут короткие "
+    "штрихи цвета линии, как поток грузов. Путь лежит на "
+    "земле. Признак сохраняется в KML.":
+        "Short dashes of the line colour run along the path from the "
+        "first point to the last one, like a flow of goods. The path "
+        "lies on the ground. The setting is kept in KML.",
+    "Поток грузов, схема": "Flow of goods, a scheme",
     "Во сколько раз растянуты высоты геоида над эллипсоидом. "
     "Вправо горбы и впадины глубже, влево Земля круглее. Разрез "
     "Земли следует за поверхностью.":

@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.84.0
+Version 0.85.0
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -82,7 +82,18 @@ plugin.
 | Demo | Ready scenes by body, see [Demo](#demo) |
 | Body | The menu of planets, moons, asteroids and Sky, see [Other bodies](#other-bodies) and [Starry sky](#starry-sky) |
 | View properties | Base map and data sources, terrain, labels, link with the map, update, coordinate format, subsurface mode, assistant |
+| Full screen | The globe view over the whole screen for a presentation, the F11 key, see [Full screen](#full-screen) |
 | About | Controls, data sources, buttons for the manual, the log and web pages |
+
+### Full screen
+
+The Full screen icon or the F11 key spreads the globe window over the
+whole screen of the monitor it stands on. The left panel, the icon bar
+and the loading icon hide. The navigation controls, the time slider,
+the tour bar, the layer legends and the source credits stay, a tour can
+be played and stopped. The Esc key or F11 again brings back the window
+and the panels. The Search line finds the same action by the words
+full screen and presentation.
 
 ### Status line
 
@@ -1587,12 +1598,20 @@ previous look and shape back.
 | Fill | Fill color of the polygon and of the wall |
 | Height above ground | Lift of the object above the terrain in metres. The Ground - Space slider under the field sets it from the ground to 100 km |
 | Extend to ground | A wall from the object to the ground, a post for a placemark |
+| Flow along the path | Paths only. Short dashes of the line colour run along the path from the first point to the last one, like a flow of goods |
 | Time | Moment or interval of the placemark for the time slider |
 | Hide beyond | The placemark is visible only while the eye is closer than this distance. 0 - always visible. In KML the field is written as Region |
 | Place view | Look point, range, heading, tilt of the camera at the place and the view date |
 
 Extending works with a height above zero. A path becomes a wall, a
 polygon becomes a block.
+
+A path with flow lies on the ground, light dashes of the line colour
+run evenly along it from the start to the end. The dash step is a share
+of the width of the visible part of the globe, so the flow looks the
+same from afar and up close. The order of the path points sets the
+direction of the flow. The flow is kept in the places file, a scene and
+KML, in KML it is ExtendedData, other programs do not show it.
 
 ### Place view
 
@@ -2480,6 +2499,7 @@ taken from the profile without the network.
 | Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
 | Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
 | Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
+| Earth | Flow of goods, a scheme | Paths with flow from Berezniki to the ports of Ust-Luga and Vostochny by rail and from Ust-Luga to Rotterdam by sea. The paths are schemes through large cities and straits, not real routes |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |

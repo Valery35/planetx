@@ -191,6 +191,10 @@ def _tools(window, add, earth):
         window.save_scene, ("сцена", "scene"))
     add("tool:scene_open", tr("Открыть сцену"), open_,
         window.open_scene, ("сцена", "scene"))
+    add("tool:fullscreen", tr("Во весь экран"), tr("выполнить"),
+        window.toggle_fullscreen,
+        ("полный экран", "весь экран", "показ", "презентация", "f11",
+         "fullscreen", "full screen", "presentation"))
     add("tool:share", tr("Поделиться видом"), open_, window.share_view,
         ("html", "страница", "браузер", "отправить", "share", "web",
          "page", "browser"))

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.84.0
+version=0.85.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.84.0 The Scale slider in the ⋯ menu of the Geoid row stretches
+changelog=0.85.0 The Full screen icon and the F11 key spread the globe over
+      the whole screen for a presentation. The panels hide, the navigation
+      controls, the time slider and the tour stay. Esc or F11 brings the
+      window back. The Flow along the path check box in the path properties
+      runs light dashes of the line colour along the path from the first
+      point to the last one, like a flow of goods. The flow is kept in KML.
+      The Flow of goods, a scheme demo - paths with flow from Berezniki to
+      the ports of Ust-Luga and Vostochny and by sea to Rotterdam.
+      0.84.0 The Scale slider in the ⋯ menu of the Geoid row stretches
       the geoid heights from 1000 to 20 000 times, the globe changes at
       once. The Earth cutaway in the Geoid mode reaches the crumpled
       surface, the shells are stretched in the same proportion. Imagery

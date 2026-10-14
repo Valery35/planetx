@@ -249,6 +249,18 @@ class PlaceProperties(QDialog):
                 "не зависит."))
             self.width.valueChanged.connect(self._changed)
             form.addRow(tr("Толщина"), self.width)
+        self.flow = None
+        if place.kind == "line":
+            # Поток грузов по пути, просьба автора от 15 октября 2026
+            # года - для показа логистики, без дуг над землёй.
+            self.flow = QCheckBox(tr("Поток по пути"), self)
+            self.flow.setChecked(bool(getattr(shape, "flow", False)))
+            self.flow.setToolTip(tr(
+                "По пути от первой точки к последней бегут короткие "
+                "штрихи цвета линии, как поток грузов. Путь лежит на "
+                "земле. Признак сохраняется в KML."))
+            self.flow.toggled.connect(self._changed)
+            form.addRow("", self.flow)
         if place.kind == "polygon":
             self.fill = QgsColorButton(self)
             self.fill.setAllowOpacity(True)
@@ -499,6 +511,8 @@ class PlaceProperties(QDialog):
             values["fill"] = _rgba(self.fill.color())
         if self.icon is not None:
             values["icon"] = self.icon.currentData()
+        if self.flow is not None:
+            values["flow"] = self.flow.isChecked()
         return self.place.shape._replace(**values)
 
     def values(self):
@@ -522,4 +536,6 @@ class PlaceProperties(QDialog):
             out["icon"] = self.icon.currentData()
         if self.fill is not None:
             out["fill"] = _color_text(_rgba(self.fill.color()))
+        if self.flow is not None:
+            out["flow"] = int(self.flow.isChecked())
         return out

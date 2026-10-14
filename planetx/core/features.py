@@ -36,9 +36,9 @@ SHAPE_POINTS = 800
 
 Shape = namedtuple("Shape",
                    "kind points color width fill name height extrude "
-                   "icon alts",
+                   "icon alts flow",
                    defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
-                             False, "dot", None))
+                             False, "dot", None, False))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
@@ -50,7 +50,8 @@ extrude - стена от объекта до земли, у точки - сто
 точки из core/icons.py, окрашенный цветом color. alts - высоты точек
 над эллипсоидом в метрах или None. С ними объект 3D-линейки стоит
 в пространстве, как «абсолютная высота» KML: отрезки прямые, на рельеф
-не садятся, height не действует.
+не садятся, height не действует. flow - по пути бегут штрихи потока,
+core/pathflow.py.
 """
 
 

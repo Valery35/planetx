@@ -14381,6 +14381,103 @@ def geoid_cutaway_check():
 
 
 @check(500)
+def fullscreen_on():
+    """Во весь экран: окно размером с экран, панели и панель значков
+    скрыты, органы навигации на месте."""
+    window = state["window"]
+    QApplication = __import__("qgis.PyQt.QtWidgets",
+                              fromlist=["QApplication"]).QApplication
+    state["full_before"] = (window.size().width(), window.size().height(),
+                            window.panel.isVisible())
+    window.toggle_fullscreen()
+    QApplication.processEvents()
+    screen = window.screen().geometry() if hasattr(window, "screen") \
+        else QApplication.desktop().screenGeometry(window)
+    result["fullscreen"] = {
+        "before": list(state["full_before"]),
+        "screen": [screen.width(), screen.height()]}
+
+
+@check(1500)
+def fullscreen_check():
+    window = state["window"]
+    out = result["fullscreen"]
+    out.update(full=window.isFullScreen(), flag=window.is_fullscreen(),
+               size=[window.width(), window.height()],
+               panel=window.panel.isVisible(),
+               toolbar=window.toolbar.isVisible(),
+               navpad=window.navpad.isVisible(),
+               attribution=window.attribution.isVisible())
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_fullscreen.png"))
+    window.toggle_fullscreen()
+    return None
+
+
+@check(1500)
+def fullscreen_off():
+    window = state["window"]
+    out = result["fullscreen"]
+    out["after"] = [window.size().width(), window.size().height(),
+                    window.panel.isVisible()]
+    out["after_full"] = window.isFullScreen()
+    out["toolbar_after"] = window.toolbar.isVisible()
+    out["escape_enabled"] = window._full_escape.isEnabled()
+    return None
+
+
+@check(500)
+def flows_open():
+    """Демо «Поток грузов, схема»: три пути с потоком, штрихи бегут."""
+    window = state["window"]
+    window.set_body("earth")
+    key = window.open_demo("flows")
+    state["flows_key"] = key
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def flows_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 6.0:
+        return 1000
+    places = window.myplaces.places_in(state["flows_key"])
+    flows = [p for p in places if getattr(p.shape, "flow", False)]
+    groups = view.path_flow.groups
+    first = groups[0][0][0, 0].copy() if groups else None
+    time.sleep(0.3)
+    window._tick_flow()
+    moved = None
+    if groups and view.path_flow.groups:
+        second = view.path_flow.groups[0][0][0, 0]
+        moved = round(float(np.linalg.norm(second - first)) / 1000.0, 1)
+    view.repaint()
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_flows.png"))
+    out = result["flows"] = {
+        "places": len(places), "flow_paths": len(flows),
+        "groups": len(view.path_flow.groups),
+        "dashes": sum(len(g[0]) for g in view.path_flow.groups),
+        "drawn": view.path_flow.drawn,
+        "timer": window._flow_timer.isActive(),
+        "first_dash_moved_km": moved,
+        "gl_errors": dict(view.gl_errors)}
+    # Все пути с потоком скрыты (в профиле могли остаться прежние
+    # демо) - штрихов нет, таймер стоит.
+    every = [p for p in window.myplaces.places
+             if getattr(p.shape, "flow", False) and p.visible]
+    window.myplaces.set_visible_many({p.key: False for p in every})
+    out["groups_hidden"] = len(view.path_flow.groups)
+    out["paths_hidden"] = len(window._flow_paths)
+    out["timer_hidden"] = window._flow_timer.isActive()
+    window.myplaces.set_visible_many({p.key: True for p in flows})
+    return None
+
+
+@check(500)
 def air_toggle():
     """Строка «Атмосфера»: без неё нет ни гало, ни дымки. Средний цвет
     кадра Земли с 18 000 км с воздухом и без него, флаг вида после
