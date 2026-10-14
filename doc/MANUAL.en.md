@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.86.0
+Version 0.86.1
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -2057,7 +2057,8 @@ elevation under the cursor. The elevations are stretched by the terrain
 scale, as the grids, the Ground above grids slider makes the ground
 above them transparent. Where nothing lies under the transparent ground,
 a light background shows, from pale blue at the top of the frame to
-almost white at the bottom.
+almost white at the bottom. The background lies only under the frame of
+the model, the sky and space around it do not change.
 
 The Contours to the QGIS project… item of the raster menu exports
 contours of the raster values as a GeoPackage layer to the PlanetX -

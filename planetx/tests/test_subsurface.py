@@ -75,6 +75,21 @@ class TestSurface(unittest.TestCase):
         self.assertEqual(len(part.indices), 2 * (8 + 4))
 
 
+class TestBackdropBox(unittest.TestCase):
+    def test_box_stays_under_frame(self):
+        # Фон - коробка под рамкой модели, а не весь кадр: все вершины
+        # в рамке, между рельефом и низом модели.
+        box = (59.5, 59.6, 56.7, 56.9)
+        tris = ss.backdrop_box(box, lambda la, lo: np.full(len(la), 150.0),
+                               -200.0, steps=4)
+        self.assertEqual(tris.shape, ((4 * 4 * 2 * 2 + 4 * 4 * 2) * 3, 3))
+        lat, lon, alt = el.ecef_to_geodetic(tris)
+        self.assertTrue(np.all((lat > 59.5 - 1e-6) & (lat < 59.6 + 1e-6)))
+        self.assertTrue(np.all((lon > 56.7 - 1e-6) & (lon < 56.9 + 1e-6)))
+        self.assertAlmostEqual(float(alt.max()), 150.0, delta=0.01)
+        self.assertAlmostEqual(float(alt.min()), -200.0, delta=0.01)
+
+
 class TestPolygon3d(unittest.TestCase):
     """Многоугольник слоя с Z: вертикальный забор разреза Isoliner3D."""
 

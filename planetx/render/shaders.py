@@ -188,6 +188,15 @@ void main() {
 }
 """
 
+BACKDROP_VERTEX = """#version 330 core
+// Вершины коробки фона уже в координатах отсечения, их считает
+// процессор в double (core.subsurface.backdrop_box).
+layout(location = 0) in vec4 a_clip;
+void main() {
+    gl_Position = a_clip;
+}
+"""
+
 BACKDROP_FRAGMENT = """#version 330 core
 // Фон под прозрачной землёй подземного режима: мягкий переход сверху
 // вниз, как в сцене Isoliner3D, вместо чёрной пустоты. Просьба автора

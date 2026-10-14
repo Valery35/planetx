@@ -465,6 +465,7 @@ ZShape.__doc__ = """Объект слоя с Z (пункт «Объёмом по
 название слоя, поля [(имя, значение)], kind - "polygon" или "line",
 parts - массивы (n, 3) широта, долгота, отметка, color - RGBA."""
 ZLAYER_MAX = 20000  # объектов слоя с Z, не больше
+BACKDROP_MARGIN = 0.05  # запас коробки фона за рамкой модели, доля
 
 
 def _hex_color(text):
@@ -1679,11 +1680,32 @@ class SubsurfaceManager(QObject):
             return
         self.view.surface_alpha = float(self.settings["opacity"])
         self.view.floor = self._floor() if self.settings["under"] else None
+        self.view.backdrop = self._backdrop()
         self.window.panel.set_ground(True, self.settings["opacity"])
         if rebuild and cut_changed:
             self.apply()
             return
         self.view.update()
+
+    def _backdrop(self):
+        """Рамка фона под прозрачной землёй для вида (GlobeView.backdrop):
+        рамка модели с запасом BACKDROP_MARGIN и низ модели на экране."""
+        box = self.model.box()
+        if box is None:
+            return None
+        south, north, west, east = box
+        dlat = (north - south) * BACKDROP_MARGIN
+        dlon = (east - west) * BACKDROP_MARGIN
+        bottom = self.model.bottom()
+        scale = self.view.store.scale
+        if scale:
+            low = bottom * scale
+        else:
+            # Рельеф выключен: низ модели - глубина под поверхностью.
+            low = bottom - float(self._ground(
+                [(south + north) / 2], [(west + east) / 2])[0])
+        return (south - dlat, north + dlat, west - dlon, east + dlon,
+                low - abs(low) * BACKDROP_MARGIN)
 
     def _floor(self):
         """Пол навигации: низ модели в её рамке с запасом 20 %."""
@@ -1783,6 +1805,7 @@ class SubsurfaceManager(QObject):
         self._set_cut(False)
         self.view.surface_alpha = 1.0
         self.view.floor = None
+        self.view.backdrop = None
         self.window.panel.set_ground(False)
         self._status("")
         self.view.update()

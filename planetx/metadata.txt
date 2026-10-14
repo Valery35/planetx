@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.86.0
+version=0.86.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.86.0 Tour stop captions. At a stop the name and the description
+changelog=0.86.1 The light background under the transparent ground of the
+      subsurface mode lies only under the frame of the model. In 0.86.0 it
+      filled the whole frame, and the sky seen from space turned light.
+      0.86.0 Tour stop captions. At a stop the name and the description
       of the placemark stand large at the bottom of the frame, they also go
       into the tour recording. The 🔤 button of the tour bar turns them off.
       The Solid by Z elevations item of the menu of a vector layer with Z

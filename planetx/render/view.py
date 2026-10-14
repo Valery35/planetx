@@ -21,6 +21,7 @@ from qgis.PyQt.QtWidgets import QApplication
 
 from .. import journal
 from ..core import cutaway, lod, skydata
+from ..core.subsurface import backdrop_box
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
 from ..core.camera import Camera
@@ -53,8 +54,9 @@ from .satellites import SatellitePoints
 from .constellations import Constellations
 from .sky import Sky
 from .stars import Stars
-from .shaders import (BACKDROP_FRAGMENT, HOLE_FRAGMENT, HOLE_VERTEX,
-                      SKY_FRAGMENT, TILE_FRAGMENT, TILE_VERTEX, shell)
+from .shaders import (BACKDROP_FRAGMENT, BACKDROP_VERTEX, HOLE_FRAGMENT,
+                      HOLE_VERTEX, SKY_FRAGMENT, TILE_FRAGMENT,
+                      TILE_VERTEX, shell)
 
 START_LEVELS = (0, 1, 2)
 START_VIEW = (58.0105, 56.2294, 2.0e7)  # над Пермью, 20 000 км
@@ -389,6 +391,10 @@ class GlobeView(QOpenGLWidget):
         self.satellites = SatellitePoints()
         self.surface_alpha = 1.0
         self.floor = None
+        # Рамка фона под прозрачной землёй (юг, север, запад, восток,
+        # низ на экране) или None, её ставит подземный режим.
+        self.backdrop = None
+        self._backdrop_mesh = (None, None)
         # Дно океана: высоты Земли ниже нуля не обнуляются, над ними
         # рисуется вода (_draw_water). Включает строка «Дно океана».
         self.sea_floor = False
@@ -1336,7 +1342,7 @@ class GlobeView(QOpenGLWidget):
         self.tile_air = uniforms(self.program, AIR_UNIFORMS)
         self.sky_program = gpu.build_program(HOLE_VERTEX, SKY_FRAGMENT)
         self.sky_air = uniforms(self.sky_program, AIR_UNIFORMS + ("u_qc",))
-        self.backdrop_program = gpu.build_program(HOLE_VERTEX,
+        self.backdrop_program = gpu.build_program(BACKDROP_VERTEX,
                                                   BACKDROP_FRAGMENT)
         self.backdrop_uniforms = uniforms(self.backdrop_program, (
             "u_viewport", "u_top", "u_bottom"))
@@ -1371,6 +1377,14 @@ class GlobeView(QOpenGLWidget):
         # Профиль Core требует привязанный массив вершин и там, где
         # вершины берутся из gl_VertexID.
         self.empty_vao = GL.glGenVertexArrays(1)
+        self.backdrop_vao = GL.glGenVertexArrays(1)
+        self.backdrop_vbo = GL.glGenBuffers(1)
+        GL.glBindVertexArray(self.backdrop_vao)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.backdrop_vbo)
+        GL.glEnableVertexAttribArray(0)
+        GL.glVertexAttribPointer(0, 4, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+        GL.glBindVertexArray(0)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
         # glGenQueries(1) в PyOpenGL отдаёт массив, а не число.
         self.hole_query = int(np.ravel(GL.glGenQueries(1))[0])
         self.labels.init_gl()
@@ -1459,6 +1473,8 @@ class GlobeView(QOpenGLWidget):
             GL.glDeleteProgram(self.sky_program)
             GL.glDeleteProgram(self.backdrop_program)
             GL.glDeleteVertexArrays(1, [self.empty_vao])
+            GL.glDeleteVertexArrays(1, [self.backdrop_vao])
+            GL.glDeleteBuffers(1, [self.backdrop_vbo])
             GL.glDeleteQueries(1, [self.hole_query])
         self.meshes, self.textures, self.caps = {}, {}, []
         self.program = self.ocean = None
@@ -1860,7 +1876,7 @@ class GlobeView(QOpenGLWidget):
         underground = (self.subsurface.active
                        or self.image_walls.active) and not self.show_holes
         if underground:
-            if self.surface_alpha < 1.0:
+            if self.surface_alpha < 1.0 and self.backdrop is not None:
                 self._draw_backdrop()
             self.subsurface.draw(self.camera)
             self.image_walls.draw(self.camera)
@@ -2405,10 +2421,25 @@ class GlobeView(QOpenGLWidget):
         self.update()
 
     def _draw_backdrop(self):
-        """Светлый фон кадра под прозрачной землёй подземного режима.
-        Рисуется первым, без проверки и записи глубины: модель, земля
-        и небо ложатся поверх, сквозь прозрачную землю без данных под
-        ней виден он, а не чёрная пустота."""
+        """Светлый фон под прозрачной землёй подземного режима - коробка
+        под рамкой модели от рельефа до низа (core.subsurface.
+        backdrop_box). Рисуется первой, без проверки и записи глубины:
+        модель и земля ложатся поверх, сквозь прозрачную землю без
+        данных под ней виден фон, а не чёрная пустота. Вне силуэта
+        коробки кадр не меняется, небо и космос остаются своими."""
+        key = (self.backdrop, self.store.version, self.store.scale)
+        if self._backdrop_mesh[0] != key:
+            south, north, west, east, low = self.backdrop
+            self._backdrop_mesh = (key, backdrop_box(
+                (south, north, west, east), self.store.heights_at, low))
+        points = self._backdrop_mesh[1]
+        center = points.mean(axis=0)
+        mvp = self.camera.tiles_mvp([center])[0].astype(np.float64)
+        rel = points - center
+        clip = rel @ mvp[:3, :3].T + mvp[:3, 3]
+        w = rel @ mvp[3, :3] + mvp[3, 3]
+        data = np.ascontiguousarray(
+            np.column_stack([clip, w]), dtype=np.float32)
         gl = gpu.gl
         u = self.backdrop_uniforms
         gl.glUseProgram(self.backdrop_program)
@@ -2418,8 +2449,12 @@ class GlobeView(QOpenGLWidget):
         gl.glUniform3f(u["u_bottom"], *BACKDROP_BOTTOM)
         gl.glDisable(GL.GL_DEPTH_TEST)
         gl.glDepthMask(GL.GL_FALSE)
-        gl.glBindVertexArray(self.empty_vao)
-        gl.glDrawArrays(GL.GL_TRIANGLES, 0, 3)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.backdrop_vbo)
+        GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
+                        GL.GL_STREAM_DRAW)
+        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(self.backdrop_vao)
+        gl.glDrawArrays(GL.GL_TRIANGLES, 0, len(data))
         gl.glDepthMask(GL.GL_TRUE)
         gl.glEnable(GL.GL_DEPTH_TEST)
 
