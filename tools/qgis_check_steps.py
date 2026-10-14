@@ -14276,6 +14276,111 @@ def geoid_check():
 
 
 @check(500)
+def geoid_cutaway():
+    """Геоид и разрез Земли вместе: край граней - на «измятой»
+    поверхности (замечание пользователя от 14 октября 2026 года),
+    ползунок масштаба двигает поверхность и грани вместе."""
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.set_body("earth")
+    folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
+    window.geoid_url = QUrl.fromLocalFile(os.path.join(
+        folder, "geoid")).toString() + "/{z}/{x}/{y}.png"
+    meshes = state["cut_meshes"] = {}
+    original = view.cutaway.set_mesh
+
+    def keep(name, mesh):
+        meshes[name] = mesh
+        original(name, mesh)
+    view.cutaway.set_mesh = keep
+    window.set_geoid_scale(10000.0)
+    view.navigator.stop()
+    view.navigator.show(Pose(-5.0, 95.0, 18000000.0, 30.0, 30.0))
+    window.set_extra("geoid", True)
+    window.set_extra("cutaway", True)
+    state["ls_started"] = time.monotonic()
+
+
+def _cut_mismatch(view):
+    """Наибольшее расхождение края граней разреза с поверхностью, км:
+    по каждому направлению дуги - самая дальняя вершина грани против
+    эллипсоида плюс высота хранилища высот."""
+    import numpy as np
+    from planetx.core import cutaway
+    mesh = state["cut_meshes"].get("faces")
+    if mesh is None:
+        return None
+    p = mesh.vertices["position"].astype(np.float64) + mesh.center
+    r = np.linalg.norm(p, axis=1)
+    # Вершины у центра Земли (низ внутреннего ядра) направления не
+    # имеют.
+    p, r = p[r > 0.3 * 6378137.0], r[r > 0.3 * 6378137.0]
+    d = p / r[:, None]
+    key = np.round(d, 5)
+    top = {}
+    for k, rr, dd in zip(map(tuple, key), r, d):
+        if k not in top or rr > top[k][0]:
+            top[k] = (rr, dd)
+    rs = np.array([v[0] for v in top.values()])
+    ds = np.array([v[1] for v in top.values()])
+    base = cutaway.boundary(ds)
+    lats, lons = cutaway._latlon(ds)
+    a, b = 6378137.0, 6356752.314245
+    geodetic = np.degrees(np.arctan2(np.tan(np.radians(lats)),
+                                     (b / a) ** 2))
+    # Выше 85.05° тайлов нет, там полярная шапка, у полюса долгота
+    # не определена.
+    near = np.abs(geodetic) < 85.0
+    rs, base, geodetic, lons = rs[near], base[near], geodetic[near], \
+        lons[near]
+    surface = view.store.heights_at(geodetic, lons)
+    miss = np.abs(rs - base - surface)
+    worst = int(np.argmax(miss))
+    state.setdefault("cut_worst", []).append(
+        [round(float(geodetic[worst]), 2), round(float(lons[worst]), 2),
+         round(float((rs - base)[worst]) / 1000.0, 1),
+         round(float(surface[worst]) / 1000.0, 1),
+         int(np.sum(miss > 20000.0)), len(miss)])
+    result["cut_worst"] = state["cut_worst"]
+    return round(float(np.max(miss)) / 1000.0, 1)
+
+
+@check(1000)
+def geoid_cutaway_check():
+    window = state["window"]
+    view = window.view
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 10.0:
+        return 1000
+    view.repaint()
+    out = result["geoid_cutaway"] = {
+        "seconds": round(spent, 1), "lift": view.wedge_lift,
+        "scale": view.store.scale, "tiles": len(view.store.tiles),
+        "mismatch_km": _cut_mismatch(view)}
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_geoid_cut.png"))
+    # Сторож: грани по эллипсоиду, как до правки, - ступень в сотни км.
+    view.wedge_lift = False
+    view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_geoid_cut_flat.png"))
+    out["mismatch_without_lift_km"] = _cut_mismatch(view)
+    view.wedge_lift = True
+    # Ползунок на ×20 000: поверхность и грани вместе.
+    window.set_geoid_scale(20000.0)
+    view.grabFramebuffer()
+    out["scale_20000"] = view.store.scale
+    out["mismatch_20000_km"] = _cut_mismatch(view)
+    window.set_geoid_scale(10000.0)
+    window.set_extra("cutaway", False)
+    window.set_extra("geoid", False)
+    out["lift_after"] = view.wedge_lift
+    out["gl_errors"] = dict(view.gl_errors)
+    return None
+
+
+@check(500)
 def air_toggle():
     """Строка «Атмосфера»: без неё нет ни гало, ни дымки. Средний цвет
     кадра Земли с 18 000 км с воздухом и без него, флаг вида после
@@ -14440,6 +14545,15 @@ def poles_on():
     out["table_1900"] = [round(v, 3) for v in table]
     out["trail_1900"] = [len(s.points) for s in window._pole_shapes()
                          if s.kind == "line"]
+    # Левый бегунок обрезает начало следа - замечание пользователя от
+    # 14 октября 2026 года. До правки след шёл с 1590 года.
+    window.timebar.set_range(when.parse("1900-07-02"),
+                             when.parse("2000-07-02"))
+    lines = [s for s in window._pole_shapes() if s.kind == "line"]
+    out["trail_1900_2000"] = [len(s.points) for s in lines]
+    out["trail_start"] = [round(v, 3) for v in lines[0].points[0]]
+    out["table_1900_start"] = [round(v, 3) for v in geomag.pole_at(
+        poles["north"], geomag.year_of(when.parse("1900-07-02")))]
     window.timebar.set_range(lo, when.parse("2020-01-01"))
     window._identify_at = None
     groups = window._identify_magnetic(55.75, 37.62)

@@ -2237,6 +2237,13 @@ EN = {
         "stars show from space and fade when the camera descends into the "
         "atmosphere.",
     "Атмосфера": "Atmosphere",
+    "Во сколько раз растянуты высоты геоида над эллипсоидом. "
+    "Вправо горбы и впадины глубже, влево Земля круглее. Разрез "
+    "Земли следует за поверхностью.":
+        "How many times the geoid heights above the ellipsoid are "
+        "stretched. To the right the bulges and hollows are deeper, to "
+        "the left the Earth is rounder. The Earth cutaway follows the "
+        "surface.",
     "Голубое свечение воздуха вокруг планеты, небо над "
     "горизонтом и дымка над далёкой поверхностью. Без флажка "
     "фон вида - чёрный космос, поверхность видна без дымки. "

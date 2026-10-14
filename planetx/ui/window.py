@@ -269,6 +269,7 @@ LINES_KEY = "PlanetX/lines/{}"
 # от 27 сентября 2026 года, рельеф включён отдельно.
 DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
+GEOID_SCALE_KEY = "PlanetX/geoid_scale"  # масштаб режима «Геоид»
 # Сетка, звёзды, облака: ключ настройки и умолчание. Звёзды включены,
 # как в Google Earth, сетка и облака выключены. Решение помощника от
 # 29 сентября 2026 года, его утверждает автор. 3D-здания выключены,
@@ -1316,6 +1317,8 @@ class GlobeWindow(QWidget):
         self._parked = {}
         self.panel.active_opacity.connect(self._active_opacity)
         self.panel.active_export.connect(self.active_export)
+        self.panel.geoid_scale = self.geoid_scale()
+        self.panel.geoid_scale_changed.connect(self.set_geoid_scale)
         self._opacity_overlay = QTimer(self)
         self._opacity_overlay.setSingleShot(True)
         self._opacity_overlay.setInterval(OPACITY_PAUSE)
@@ -2608,7 +2611,7 @@ class GlobeWindow(QWidget):
         if getattr(self, "extras", {}).get("paleo") and self._paleo_on():
             return 0.0
         if self._geoid_on():
-            return geoid.SCALE
+            return self.geoid_scale()
         return self._scale if self._relief else 0.0
 
     def _start_terrain(self, source, floor):
@@ -3711,12 +3714,23 @@ class GlobeWindow(QWidget):
             return geomag.year_of(span[1])
         return geomag.year_of(time.time())
 
+    def _magnetic_start(self):
+        """Год левого бегунка - начало следа полюсов. None - шкала
+        закрыта или с одним бегунком, след идёт с 1590 года."""
+        span = getattr(self, "_time_range", None)
+        if span is None or not math.isfinite(span[0]) \
+                or self.timebar.track.point:
+            return None
+        return geomag.year_of(span[0])
+
     def _pole_shapes(self):
-        """След и точка каждого полюса на год шкалы."""
+        """След и точка каждого полюса на год шкалы, след - от левого
+        бегунка до правого."""
         if not self._poles_on():
             return []
         model, poles = self.geomag
         year = self.magnetic_year()
+        start = self._magnetic_start()
         shapes = []
         names = {"north": tr("Северный магнитный полюс, {year}"),
                  "south": tr("Южный магнитный полюс, {year}")}
@@ -3724,7 +3738,7 @@ class GlobeWindow(QWidget):
             track = poles[key]
             year_in = min(max(year, track[0][0]), model.last)
             point = geomag.pole(model, track, year_in)
-            path = geomag.trail(track, year_in)
+            path = geomag.trail(track, year_in, start)
             if point is not None:
                 path.append(point)
             color = POLE_COLORS[key]
@@ -3760,6 +3774,22 @@ class GlobeWindow(QWidget):
         self._show_attribution()
         self.view.update()
 
+    def geoid_scale(self):
+        """Масштаб режима «Геоид» - настройка ползунка меню «⋯» его
+        строки, по умолчанию geoid.SCALE."""
+        value = QgsSettings().value(GEOID_SCALE_KEY, geoid.SCALE,
+                                    type=float)
+        return min(geoid.SCALES[-1], max(geoid.SCALES[0], float(value)))
+
+    def set_geoid_scale(self, scale):
+        """Ползунок масштаба геоида: высоты растягиваются заново сразу,
+        разрез Земли следует за поверхностью."""
+        QgsSettings().setValue(GEOID_SCALE_KEY, float(scale))
+        self.panel.geoid_scale = self.geoid_scale()
+        if self._geoid_on():
+            self.view.set_relief(self._relief_target())
+            self.view.update()
+
     def _geoid_look(self):
         """Вода и дымка поверхности - их нет в режиме геоида. Половина
         геоида ниже нуля, а поверхность опущена на сотни километров,
@@ -3768,6 +3798,8 @@ class GlobeWindow(QWidget):
         self.view.sea_floor = self.sea_depths and self.planet.earth \
             and not geoid
         self.view.surface_air = not geoid
+        # Разрез Земли тянется к «измятой» поверхности.
+        self.view.wedge_lift = geoid
 
     # Магнитные аномалии EMAG2v3 (core/emag.py).
 

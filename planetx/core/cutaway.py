@@ -175,12 +175,28 @@ def move_corner(wedge, index, lat, lon):
     return make_wedge(west, east, min(south, north), max(south, north))
 
 
-def boundary(directions):
-    """Радиус эллипсоида по единичным направлениям из центра (n, 3)."""
+def boundary(directions, lift=None):
+    """Радиус края грани по единичным направлениям из центра (n, 3):
+    эллипсоид или, с lift, поверхность над ним.
+
+    lift(lats, lons) - высота поверхности на экране в метрах по
+    геодезическим широтам и долготам точек, например геоид в его
+    масштабе. Замечание пользователя от 14 октября 2026 года - разрез
+    не стыковался с «измятым» геоидом. Все оболочки растягиваются
+    в ту же долю, край грани ложится на поверхность."""
     d = np.asarray(directions, dtype=np.float64)
     a, b = ellipsoid.A, ellipsoid.B
-    return 1.0 / np.sqrt((d[:, 0] ** 2 + d[:, 1] ** 2) / a ** 2
-                         + d[:, 2] ** 2 / b ** 2)
+    radius = 1.0 / np.sqrt((d[:, 0] ** 2 + d[:, 1] ** 2) / a ** 2
+                           + d[:, 2] ** 2 / b ** 2)
+    if lift is None:
+        return radius
+    lats, lons = _latlon(d)
+    # Широта направления из центра - геоцентрическая, высоты лежат по
+    # геодезической.
+    geodetic = np.degrees(np.arctan2(np.tan(np.radians(lats)),
+                                     (b / a) ** 2))
+    heights = np.asarray(lift(geodetic, lons), dtype=np.float64)
+    return np.maximum(radius + heights, radius * 0.5)
 
 
 def gain_for(distance):
@@ -233,11 +249,11 @@ def _band(edge, normal, low, high, color, whole=False):
                 tris.astype(np.uint32))
 
 
-def _face(directions, normal, shells, crust=None, gain=1.0):
+def _face(directions, normal, shells, crust=None, gain=1.0, lift=None):
     """Грань - полосы оболочек по дуге единичных направлений (n, 3).
     С моделью коры кора - слои CRUST1.0, мантия - до Мохо точки.
-    gain - растяжение коры, см. stretch."""
-    edge = boundary(directions)[:, None] * directions
+    gain - растяжение коры, см. stretch. lift - см. boundary."""
+    edge = boundary(directions, lift)[:, None] * directions
 
     def radius(r):
         return _share(r - PREM_RADIUS, gain)
@@ -266,18 +282,20 @@ def crust_layers():
     return tuple(CRUST_COLORS)
 
 
-def faces(wedge, shells=SHELLS, step=None, crust=None, gain=1.0):
+def faces(wedge, shells=SHELLS, step=None, crust=None, gain=1.0,
+          lift=None):
     """Сетка трёх граней сектора для видеокарты, core.subsurface.Mesh.
 
     Экваториальная грань - дуга по долготе на экваторе, меридиональные
     - дуги от экватора до полюса на крайних долготах. crust - модель
     core.crust.Crust или None, тогда кора - оболочка PREM. gain -
-    растяжение коры, см. stretch."""
+    растяжение коры, см. stretch. lift - высота поверхности, к которой
+    тянется край граней, см. boundary."""
     if step is None:
-        step = ARC_STEP if crust is None else CRUST_STEP
+        step = ARC_STEP if crust is None and lift is None else CRUST_STEP
     parts = []
     for directions, normal in arcs(wedge, step):
-        parts += _face(directions, normal, shells, crust, gain)
+        parts += _face(directions, normal, shells, crust, gain, lift)
     return merge(parts, key="cutaway")
 
 
@@ -329,10 +347,10 @@ def arc_points(wedge, step=CRUST_STEP):
             np.concatenate([p[1] for p in pairs]))
 
 
-def slab_bands(wedge, zones, gain=1.0, step=SLAB_STEP):
+def slab_bands(wedge, zones, gain=1.0, step=SLAB_STEP, lift=None):
     """Полосы плит Slab2 на гранях, core.subsurface.Mesh или None.
     zones - зоны core.slabs.Slab, которых касается разрез. Глубины - с тем
-    же растяжением, что у коры."""
+    же растяжением, что у коры, край - как у граней (lift)."""
     parts = []
     for directions, normal in arcs(wedge, step):
         lats, lons = _latlon(directions)
@@ -340,7 +358,7 @@ def slab_bands(wedge, zones, gain=1.0, step=SLAB_STEP):
         none = ~np.isfinite(top)
         high = np.where(none, 1.0, _share(-np.nan_to_num(top), gain))
         low = np.where(none, 1.0, _share(-np.nan_to_num(bottom), gain))
-        edge = boundary(directions)[:, None] * directions
+        edge = boundary(directions, lift)[:, None] * directions
         parts.append(_band(edge, normal, low, high, SLAB_COLOR, whole=True))
     return merge(parts, key="slabs")
 

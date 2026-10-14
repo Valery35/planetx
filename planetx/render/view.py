@@ -45,7 +45,7 @@ from .features import Features
 from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, NEAR_ONLY, GibsLayer
 from .gibs import MIN_LEVELS as GIBS_MIN
-from .subsurface import ImageWalls, Subsurface
+from .subsurface import FACE_OFFSET, ImageWalls, Subsurface
 from .models import Models
 from .flow import FlowLines
 from .quakes import DepositPoints, FirePoints, PlantPoints, Quakes
@@ -340,9 +340,13 @@ class GlobeView(QOpenGLWidget):
         # отмывкой. Без отмывки вида, воды, наложений, солнца и подписей
         # нынешних мест.
         self.plain_base = False
-        self.cutaway = Subsurface()
+        self.cutaway = Subsurface(offset=FACE_OFFSET)
         self.wedge_crust = None
         self.wedge_gain = 1.0
+        # Край граней по поверхности, а не по эллипсоиду - ставит окно
+        # в режиме «Геоид». Состояние, по которому грани собраны.
+        self.wedge_lift = False
+        self._wedge_key = None
         # Плиты Slab2 на гранях: зоны, которых касается разрез, и их
         # полосы - поверх граней со смещением глубины.
         self.wedge_slabs = []
@@ -691,13 +695,32 @@ class GlobeView(QOpenGLWidget):
         self.wedge_crust = crust
         self.camera.deep = wedge is not None
         self.wedge_gain = self._wedge_gain()
+        self._wedge_key = self._wedge_state()
         self.cutaway.set_mesh("faces", None if wedge is None
-                              else cutaway.faces(wedge, crust=crust,
-                                                 gain=self.wedge_gain))
+                              else self._wedge_faces())
         if wedge is None:
             self.wedge_slabs = []
         self._build_wedge_slabs()
         self.update()
+
+    def _wedge_lift(self):
+        """Высота поверхности для края граней разреза или None - край на
+        эллипсоиде. С wedge_lift (режим «Геоид») поверхность опущена
+        и поднята на сотни километров, грани тянутся за ней."""
+        if not self.wedge_lift or not self.store.scale:
+            return None
+        return self.store.heights_at
+
+    def _wedge_state(self):
+        """Что меняет грани: ступень растяжения коры, а у граней по
+        поверхности ещё масштаб и количество тайлов высот."""
+        if self._wedge_lift() is None:
+            return (self.wedge_gain,)
+        return (self.wedge_gain, self.store.scale, len(self.store.tiles))
+
+    def _wedge_faces(self):
+        return cutaway.faces(self.wedge, crust=self.wedge_crust,
+                             gain=self.wedge_gain, lift=self._wedge_lift())
 
     def _wedge_gain(self):
         """Растяжение коры для нынешнего расстояния до точки взгляда,
@@ -707,16 +730,20 @@ class GlobeView(QOpenGLWidget):
         return cutaway.gain_for(self.navigator.pose.distance)
 
     def _follow_wedge_gain(self):
-        """Грани заново, если сменилась ступень растяжения коры. Зовётся
+        """Грани заново, если сменилась ступень растяжения коры, а у
+        граней по поверхности - масштаб или пришли тайлы высот. Зовётся
         из кадра, сборка граней - около 6 мс."""
         gain = self._wedge_gain()
-        if gain == self.wedge_gain:
-            return
+        changed = gain != self.wedge_gain
         self.wedge_gain = gain
-        self.cutaway.set_mesh("faces", cutaway.faces(
-            self.wedge, crust=self.wedge_crust, gain=gain))
+        state = self._wedge_state()
+        if state == self._wedge_key:
+            return
+        self._wedge_key = state
+        self.cutaway.set_mesh("faces", self._wedge_faces())
         self._build_wedge_slabs()
-        self.wedge_gain_changed.emit()
+        if changed:
+            self.wedge_gain_changed.emit()
 
     def set_wedge_slabs(self, zones):
         """Зоны плит Slab2 на гранях разреза, core.slabs.Slab."""
@@ -728,7 +755,8 @@ class GlobeView(QOpenGLWidget):
         mesh = None
         if self.wedge is not None and self.wedge_slabs:
             mesh = cutaway.slab_bands(self.wedge, self.wedge_slabs,
-                                      self.wedge_gain)
+                                      self.wedge_gain,
+                                      lift=self._wedge_lift())
         self.cutaway_slabs.set_mesh("bands", mesh)
 
     def eye_underground(self):

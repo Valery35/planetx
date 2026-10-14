@@ -39,7 +39,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
 
-from ..core import basemap, icons, lookat
+from ..core import basemap, geoid, icons, lookat
 from ..core.placetree import is_folder
 from ..i18n import is_russian, tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
@@ -495,6 +495,8 @@ class LayerPanel(QWidget):
     active_off = pyqtSignal(str)
     active_opacity = pyqtSignal(str, float)
     active_export = pyqtSignal(str)
+    # Вертикальный масштаб режима «Геоид» из меню «⋯» его строки.
+    geoid_scale_changed = pyqtSignal(float)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -688,6 +690,8 @@ class LayerPanel(QWidget):
         self.active_rows = {}
         self._active_shape = None
         self._active_values = {}  # ключ - (непрозрачность, в проект)
+        # Масштаб геоида для ползунка меню «⋯», ставит окно глобуса.
+        self.geoid_scale = geoid.SCALE
         # Группы векторной основы. Группа видна, пока в ней что-то
         # включено, и после снятия флажков - до «Убрать с глобуса».
         self.vector_groups = []
@@ -1139,6 +1143,8 @@ class LayerPanel(QWidget):
                 menu, tr("Непрозрачность"), opacity, moved, tr(
                     "Непрозрачность слоя. Вправо слой непрозрачен, влево "
                     "прозрачнее.")))
+        if key == "geoid":
+            menu.addAction(self._geoid_scale_action(menu))
         if export:
             menu.addAction(tr("В проект QGIS…")).triggered.connect(
                 lambda _=False: self.active_export.emit(key))
@@ -1165,6 +1171,35 @@ class LayerPanel(QWidget):
             moved(percent / 100.0)
         slider.valueChanged.connect(changed)
         box.addWidget(QLabel(title, row))
+        box.addWidget(slider, 1)
+        box.addWidget(label)
+        action = QWidgetAction(menu)
+        action.setDefaultWidget(row)
+        return action
+
+    def _geoid_scale_action(self, menu):
+        """Строка меню с ползунком масштаба геоида по ступеням
+        geoid.SCALES. Глобус меняет масштаб сразу при движении."""
+        row = QWidget(menu)
+        box = QHBoxLayout(row)
+        box.setContentsMargins(8, 2, 8, 2)
+        slider = QSlider(enum(Qt, "Orientation", "Horizontal"), row)
+        slider.setRange(0, len(geoid.SCALES) - 1)
+        slider.setPageStep(1)
+        slider.setValue(geoid.scale_step(self.geoid_scale))
+        slider.setMinimumWidth(120)
+        label = QLabel(geoid.scale_text(self.geoid_scale), row)
+        row.setToolTip(tr(
+            "Во сколько раз растянуты высоты геоида над эллипсоидом. "
+            "Вправо горбы и впадины глубже, влево Земля круглее. Разрез "
+            "Земли следует за поверхностью."))
+
+        def changed(step):
+            self.geoid_scale = geoid.SCALES[step]
+            label.setText(geoid.scale_text(self.geoid_scale))
+            self.geoid_scale_changed.emit(self.geoid_scale)
+        slider.valueChanged.connect(changed)
+        box.addWidget(QLabel(tr("Масштаб"), row))
         box.addWidget(slider, 1)
         box.addWidget(label)
         action = QWidgetAction(menu)

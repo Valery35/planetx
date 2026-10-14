@@ -23,6 +23,13 @@ from .shaders import (IMAGE_WALL_FRAGMENT, IMAGE_WALL_VERTEX,
                       SUBSURFACE_FRAGMENT, SUBSURFACE_VERTEX)
 
 UNIFORMS = ("u_mvp", "u_light", "u_ambient")
+# Смещение глубины полос плит поверх граней разреза.
+OFFSET = (-1.0, -4.0)
+# Грани разреза - поверх юбок тайлов: экватор - граница тайлов, юбки
+# тайлов у него лежат в плоскости экваториальной грани. В режиме
+# «Геоид» юбки длиной в сотни километров мерцали сквозь грань полосами
+# снимка, 14 октября 2026 года. Меньше OFFSET - плиты остаются сверху.
+FACE_OFFSET = (-1.0, -2.0)
 
 
 class Subsurface:
@@ -30,7 +37,8 @@ class Subsurface:
 
     offset - сетки поверх других в той же плоскости: полосы плит Slab2
     на гранях разреза Земли (core.cutaway.slab_bands). Смещение
-    глубины к глазу убирает мерцание совпадающих плоскостей.
+    глубины к глазу убирает мерцание совпадающих плоскостей. True -
+    OFFSET, или своя пара (factor, units) glPolygonOffset.
     xray - сетки видны сквозь поверхность, без проверки и записи
     глубины, как стенка разреза вдоль линии (core.section.wall_mesh).
     Рисуются после поверхности, порядок полос - порядок в сетке.
@@ -125,8 +133,9 @@ class Subsurface:
         GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         if self.offset:
+            factor, units = OFFSET if self.offset is True else self.offset
             GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
-            GL.glPolygonOffset(-1.0, -4.0)
+            GL.glPolygonOffset(factor, units)
         if self.xray:
             GL.glDisable(GL.GL_DEPTH_TEST)
             GL.glDepthMask(GL.GL_FALSE)

@@ -309,6 +309,15 @@ def pole(model, track, year):
     return dip_pole(model, year, track[-1][1:])
 
 
-def trail(track, year):
-    """След полюса - точки таблицы не позже года."""
-    return [(lat, lon) for y, lat, lon in track if y <= year]
+def trail(track, year, start=None):
+    """След полюса - точки таблицы не позже года. start - год левого
+    бегунка шкалы: след начинается с полюса на этот год, а не с первой
+    точки таблицы. Замечание пользователя от 14 октября 2026 года -
+    левый бегунок след не обрезал."""
+    if start is None or start <= track[0][0]:
+        return [(lat, lon) for y, lat, lon in track if y <= year]
+    path = [(lat, lon) for y, lat, lon in track if start < y <= year]
+    first = pole_at(track, start)
+    if first is not None and start <= year:
+        path.insert(0, first)
+    return path

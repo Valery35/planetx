@@ -104,6 +104,33 @@ class TestCutaway(unittest.TestCase):
         self.assertAlmostEqual(float(r.max()) / el.A, 3480.0 / 6371.0,
                                delta=1e-4)
 
+    def test_edge_follows_lifted_surface(self):
+        # Режим «Геоид»: край граней - на поверхности, поднятой на lift,
+        # оболочки растянуты в ту же долю. Замечание пользователя от
+        # 14 октября 2026 года - разрез не стыковался с геоидом.
+        wedge = cw.wedge_at(10.0, 0.0)
+        flat = cw.faces(wedge, step=cw.CRUST_STEP)
+        lifted = cw.faces(wedge, lift=lambda lats, lons: np.full(
+            np.shape(lats), 500000.0))
+        r0 = np.linalg.norm(flat.vertices["position"].astype(np.float64)
+                            + flat.center, axis=1)
+        r1 = np.linalg.norm(lifted.vertices["position"].astype(np.float64)
+                            + lifted.center, axis=1)
+        self.assertAlmostEqual(float(r1.max() - r0.max()), 500000.0,
+                               delta=50.0)
+        core = cw.faces(wedge, shells=cw.SHELLS[1:2], lift=lambda la, lo:
+                        np.full(np.shape(la), 500000.0))
+        rc = np.linalg.norm(core.vertices["position"].astype(np.float64)
+                            + core.center, axis=1)
+        self.assertGreater(float(rc.max()) / el.A, 3480.0 / 6371.0 + 0.04)
+        # Высоты просятся по геодезической широте: у экватора и полюса
+        # она совпадает с геоцентрической.
+        seen = []
+        cw.faces(wedge, lift=lambda la, lo: seen.append(la) or
+                 np.zeros(np.shape(la)))
+        lats = np.concatenate(seen)
+        self.assertAlmostEqual(float(lats.max()), 90.0, delta=1e-6)
+
 
 class TestStretch(unittest.TestCase):
     """Выделение коры издалека."""

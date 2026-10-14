@@ -21,6 +21,20 @@ ATTRIBUTION = ("EGM2008, NGA", "https://earth-info.nga.mil/")
 # Вертикальный масштаб режима: 100 м геоида - 1000 км на экране. Выбор
 # помощника, утверждает автор.
 SCALE = 10000.0
+# Ступени ползунка масштаба меню «⋯» строки «Геоид», просьба
+# пользователя от 14 октября 2026 года. Ступени - выбор помощника.
+SCALES = (1000.0, 2000.0, 3000.0, 5000.0, 7000.0, 10000.0, 15000.0,
+          20000.0)
+
+
+def scale_step(scale):
+    """Номер ступени SCALES, ближайшей к масштабу scale."""
+    return min(range(len(SCALES)), key=lambda i: abs(SCALES[i] - scale))
+
+
+def scale_text(scale):
+    """Масштаб для подписи - «×10 000»."""
+    return "×{:,}".format(int(round(scale))).replace(",", " ")
 
 
 def encode(heights):

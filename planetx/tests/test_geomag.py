@@ -105,6 +105,18 @@ class TestPoles(unittest.TestCase):
         trail = geomag.trail(self.poles["south"], 1600.0)
         self.assertEqual(len(trail), 11)
 
+    def test_trail_starts_at_left_handle(self):
+        # Левый бегунок обрезает начало следа - замечание пользователя
+        # от 14 октября 2026 года.
+        track = self.poles["north"]
+        whole = geomag.trail(track, 2000.0)
+        cut = geomag.trail(track, 2000.0, start=1900.0)
+        self.assertLess(len(cut), len(whole))
+        self.assertEqual(cut[0], geomag.pole_at(track, 1900.0))
+        self.assertEqual(cut[-1], whole[-1])
+        # Левый бегунок раньше таблицы - след целиком.
+        self.assertEqual(geomag.trail(track, 2000.0, start=1500.0), whole)
+
     def test_year_of_seconds(self):
         # 1 января - целый год, средним годом выходило 2019.997.
         self.assertAlmostEqual(geomag.year_of(0.0), 1970.0)

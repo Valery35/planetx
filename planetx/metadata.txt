@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.83.2
+version=0.84.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.83.2 The About PlanetX window shows buttons under the text -
+changelog=0.84.0 The Scale slider in the ⋯ menu of the Geoid row stretches
+      the geoid heights from 1000 to 20 000 times, the globe changes at
+      once. The Earth cutaway in the Geoid mode reaches the crumpled
+      surface, the shells are stretched in the same proportion. Imagery
+      stripes on the equatorial face of the cutaway are gone. The left
+      handle of the time slider cuts the start of the magnetic pole paths, a
+      path runs from its year to the year of the right handle.
+      0.83.2 The About PlanetX window shows buttons under the text -
       Manual, Log, Report a bug, Plugin page, Source code and QGIS plugin
       catalogue page. Without the PDF in the plugin folder the Manual
       button opens the manual of this version on GitHub in the browser.

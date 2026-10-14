@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.83.2
+Version 0.84.0
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -571,8 +571,9 @@ plate under the Okhotsk plate.
 The Magnetic poles layer shows the north and south magnetic poles - the
 points where a compass needle stands vertical. The red point is the
 north pole, the blue one is the south pole, each trails its path since
-1590. The time slider opens by itself, its handle moves the poles over
-the years. The positions of 1590-2025 come from the NOAA NCEI tables
+1590. The time slider opens by itself. The right handle moves the poles
+over the years, the left one cuts the start of the path - the path
+starts at the year of the left handle. The positions of 1590-2025 come from the NOAA NCEI tables
 (the gufm1 and IGRF models), after 2025 the pole is computed with the
 IGRF-14 model up to 2030. A click on the globe in the Identify mode
 shows in the Magnetic field group the declination - the angle between
@@ -602,8 +603,11 @@ Earth looks crumpled. Bulges stand where gravity is stronger, for
 example near New Guinea and in the North Atlantic, hollows where it is
 weaker, the deepest one south of India. Terrain, water and the haze
 over the surface are removed for this time, the atmosphere glow at the
-edge of the globe stays. Switching
-the row off brings back terrain, scale and sea depths. A click in the
+edge of the globe stays. The Scale slider in the ⋯ menu of the Geoid
+row stretches the heights from 1000 to 20 000 times. The Earth cutaway
+in this mode reaches the crumpled surface, all shells are stretched in
+the same proportion. Switching the row off brings back terrain, scale
+and sea depths. A click in the
 Identify mode shows the geoid height above the ellipsoid at the point in
 the Geoid group.
 
