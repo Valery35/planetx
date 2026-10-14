@@ -31,6 +31,25 @@ class TestTour(unittest.TestCase):
         self.start = Pose(55.75, 37.62, 2.0e6)
         self.tour = tr.Tour(self.start, STOPS, pause=2.0)
 
+    def test_caption_only_on_stop(self):
+        # Подпись остановки видна на остановке, в перелёте её нет,
+        # проявляется и гаснет за CAPTION_FADE.
+        t = self.tour
+        mid = t.arrivals[1] + t.pause / 2.0
+        self.assertEqual(t.caption_at(mid), (1, 1.0))
+        flying = (t.starts[1] + t.glides[1]) / 2.0
+        self.assertIsNone(t.caption_at(flying))
+        just = t.caption_at(t.glides[0] + tr.CAPTION_FADE / 2.0)
+        self.assertEqual(just[0], 0)
+        self.assertAlmostEqual(just[1], 0.5)
+        leaving = t.caption_at(t.arrivals[2] + t.pause
+                               - tr.CAPTION_FADE / 4.0)
+        self.assertAlmostEqual(leaving[1], 0.25)
+
+    def test_no_caption_without_pause(self):
+        tour = tr.Tour(self.start, STOPS, pause=0.0)
+        self.assertIsNone(tour.caption_at(tour.arrivals[1]))
+
     def test_duration_is_flights_and_pauses(self):
         flights = sum(f.duration for f in self.tour.flights)
         self.assertAlmostEqual(self.tour.duration, flights + 3 * 2.0)

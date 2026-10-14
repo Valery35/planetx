@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.85.1
+version=0.86.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.85.1 The corner handles of the Earth cutaway in the Geoid mode
+changelog=0.86.0 Tour stop captions. At a stop the name and the description
+      of the placemark stand large at the bottom of the frame, they also go
+      into the tour recording. The 🔤 button of the tour bar turns them off.
+      The Solid by Z elevations item of the menu of a vector layer with Z
+      puts polygons and lines at their elevations, for example the vertical
+      3D fence of an Isoliner3D section. The colour is the color field or
+      the layer style. Under the transparent ground of the subsurface mode a
+      light gradient from blue to white shows instead of black.
+      0.85.1 The corner handles of the Earth cutaway in the Geoid mode
       are grabbed by a click on the corner circle. Before, the grab point
       lay tens of pixels away from the circle.
       0.85.0 The Full screen icon and the F11 key spread the globe over

@@ -26,10 +26,12 @@ try:  # внутри плагина QGIS
     from . import ellipsoid
     from .buildings import VERTEX
     from .ellipsoid import geodetic_to_ecef, surface_normal
+    from .features import triangulate
 except ImportError:  # headless-тесты
     import ellipsoid
     from buildings import VERTEX
     from ellipsoid import geodetic_to_ecef, surface_normal
+    from features import triangulate
 
 SIDES = 8  # граней трубки ствола
 BLOCK_FADE = 0.45  # насколько темнее стенка блока у низа, выбор помощника
@@ -291,6 +293,37 @@ def wall(lats, lons, tops, bottoms, color):
     positions[n:] = ecef(lats, lons, clipped)
     return Part(positions, normals, _rgba(color, 2 * n),
                 tris.astype(np.uint32))
+
+
+def polygon3d(points, color):
+    """Плоский многоугольник по вершинам points (n, 3) ECEF без повтора
+    первой - кусок сетки, или None.
+
+    Слои проекта с отметками Z, пункт «Объёмом по отметкам Z», просьба
+    автора от 15 октября 2026 года: «3D-забор» разреза Isoliner3D -
+    вертикальные многоугольники пластов. Плоскость - по нормали Ньюэлла,
+    многоугольник режется отсечением ушей в проекции на ту плоскость
+    осей, к которой нормаль ближе всего."""
+    p = np.asarray(points, dtype=np.float64)
+    if len(p) > 1 and np.allclose(p[0], p[-1]):
+        p = p[:-1]
+    if len(p) < 3:
+        return None
+    nxt = np.roll(p, -1, axis=0)
+    normal = np.array([
+        np.sum((p[:, 1] - nxt[:, 1]) * (p[:, 2] + nxt[:, 2])),
+        np.sum((p[:, 2] - nxt[:, 2]) * (p[:, 0] + nxt[:, 0])),
+        np.sum((p[:, 0] - nxt[:, 0]) * (p[:, 1] + nxt[:, 1]))])
+    size = np.linalg.norm(normal)
+    if size == 0.0:
+        return None
+    normal /= size
+    keep = [a for a in range(3) if a != int(np.argmax(np.abs(normal)))]
+    flat = (p - p.mean(axis=0))[:, keep]
+    tri = np.asarray(triangulate(flat), dtype=np.uint32).reshape(-1, 3)
+    if not len(tri):
+        return None
+    return Part(p, np.tile(normal, (len(p), 1)), _rgba(color, len(p)), tri)
 
 
 def merge(parts, key=None):

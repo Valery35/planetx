@@ -75,6 +75,36 @@ class TestSurface(unittest.TestCase):
         self.assertEqual(len(part.indices), 2 * (8 + 4))
 
 
+class TestPolygon3d(unittest.TestCase):
+    """Многоугольник слоя с Z: вертикальный забор разреза Isoliner3D."""
+
+    def setUp(self):
+        el.set_body(el.EARTH)
+
+    def test_vertical_fence_quad(self):
+        lats = np.array([LAT, LAT + 0.001, LAT + 0.001, LAT])
+        lons = np.array([LON, LON + 0.001, LON + 0.001, LON])
+        alts = np.array([-60.0, -62.0, -72.0, -70.0])
+        xyz = ss.ecef(lats, lons, alts)
+        part = ss.polygon3d(np.vstack([xyz, xyz[:1]]), (154, 105, 227, 255))
+        self.assertEqual(len(part.positions), 4)
+        self.assertEqual(part.indices.shape, (2, 3))
+        # Нормаль - горизонтальная: перпендикулярна направлению вверх.
+        up = xyz.mean(axis=0) / np.linalg.norm(xyz.mean(axis=0))
+        self.assertLess(abs(float(part.normals[0] @ up)), 0.05)
+        # Площадь двух треугольников - площадь четырёхугольника.
+        p = part.positions
+        area = sum(np.linalg.norm(np.cross(p[b] - p[a], p[c] - p[a])) / 2
+                   for a, b, c in part.indices)
+        side = np.linalg.norm(p[1] - p[0])
+        self.assertAlmostEqual(area, side * 10.0, delta=side * 0.5)
+
+    def test_degenerate_is_none(self):
+        xyz = ss.ecef(np.full(3, LAT), np.full(3, LON), np.zeros(3))
+        self.assertIsNone(ss.polygon3d(xyz, (0, 0, 0)))
+        self.assertIsNone(ss.polygon3d(xyz[:2], (0, 0, 0)))
+
+
 class TestWall(unittest.TestCase):
 
     def test_wall_between_planes(self):

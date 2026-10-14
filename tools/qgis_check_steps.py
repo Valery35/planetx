@@ -14506,6 +14506,177 @@ def flows_check():
 
 
 @check(500)
+def tour_captions_on():
+    """Подписи остановок тура на кадре: тур из двух остановок, на
+    первой - подпись с названием и описанием без разметки."""
+    from planetx.core.tour import Stop
+    window = state["window"]
+    window.set_body("earth")
+    stops = [Stop("Пермь", 58.01, 56.23, 20000.0, 0.0, 45.0),
+             Stop("Кунгур", 57.43, 56.94, 8000.0)]
+    stops[0].description = "Столица Пермского края на <b>Каме</b>."
+    state["caption_stops"] = stops
+    window.tour.bar.captions.setChecked(True)
+    window.tour.bar.pause.setValue(4.0)
+    window.tour.start(stops)
+    state["ls_started"] = time.monotonic()
+
+
+@check(500)
+def tour_captions_check():
+    from qgis.PyQt.QtGui import QImage, QColor
+    from planetx.core.timeline import Timeline
+    window = state["window"]
+    player = window.tour
+    layer = player.stop_caption
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 40.0 and not (layer.isVisible() and layer.alpha >= 1.0):
+        return 500
+    out = result["tour_captions"] = {
+        "seconds": round(spent, 1), "visible": layer.isVisible(),
+        "title": layer.title, "text": layer.text,
+        "alpha": round(layer.alpha, 2),
+        "bar_caption": player.bar.caption.isVisible()}
+    window.grab().save(os.path.join(TEMP, "planetx_tour_caption.png"))
+    # Кнопка снимает подписи, описание - снова строкой под кнопками.
+    player.bar.captions.setChecked(False)
+    out["off_visible"] = layer.isVisible()
+    out["off_bar_caption"] = player.bar.caption.isVisible()
+    player.bar.captions.setChecked(True)
+    # Кадр записи на остановке получает ту же подпись.
+    stops = state["caption_stops"]
+    recorder = window.recorder
+    line = Timeline(stops, 4.0)
+    image = QImage(800, 600, QImage.Format.Format_RGB32)
+    image.fill(QColor(0, 0, 0))
+    recorder.line = line
+    recorder.n = int((line.tour.arrivals[0] + 2.0) * line.fps)
+    recorder.ratio = 1.0
+    try:
+        recorder._draw_caption(image)
+    finally:
+        recorder.line = None
+    lit = sum(1 for y in range(300, 600, 4) for x in range(0, 800, 4)
+              if image.pixelColor(x, y).red() > 100)
+    out["record_lit"] = lit
+    image.save(os.path.join(TEMP, "planetx_tour_caption_frame.png"))
+    player.stop()
+    out["after_stop"] = layer.isVisible()
+    return None
+
+
+@check(500)
+def zlayer_on():
+    """Слой с Z объёмом по отметкам: синтетический «3D-забор» разреза
+    у Березников - вертикальные четырёхугольники двух пластов через
+    20 м вдоль линии, как у Isoliner3D, и линия с Z."""
+    import math as _m
+    from qgis.core import QgsFeature, QgsGeometry, QgsProject, \
+        QgsVectorLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    lat0, lon0 = 59.45, 56.88
+    fence = QgsVectorLayer(
+        "MultiPolygonZ?crs=EPSG:4326&field=bed:string&field=top:string"
+        "&field=color:string", "Разрез (3D-забор) проба", "memory")
+    beds = (("В", "#9a69e3", 0.0, -12.0), ("А'Б", "#6ddb3b", -12.0, -40.0))
+    feats = []
+    step_lat = 20.0 / 111000.0
+    for name, color, top, bottom in beds:
+        quads = []
+        for i in range(40):
+            a = lat0 + i * step_lat
+            b = a + step_lat
+            ta = 150.0 + top - 10.0 * _m.sin(i / 6.0)
+            tb = 150.0 + top - 10.0 * _m.sin((i + 1) / 6.0)
+            ba = 150.0 + bottom - 10.0 * _m.sin(i / 6.0)
+            bb = 150.0 + bottom - 10.0 * _m.sin((i + 1) / 6.0)
+            quads.append("(({lo} {a} {ta}, {lo} {b} {tb}, {lo} {b} {bb}, "
+                         "{lo} {a} {ba}, {lo} {a} {ta}))".format(
+                             lo=lon0, a=a, b=b, ta=ta, tb=tb, ba=ba, bb=bb))
+        feature = QgsFeature(fence.fields())
+        feature.setGeometry(QgsGeometry.fromWkt(
+            "MultiPolygon Z (" + ",".join(quads) + ")"))
+        feature.setAttributes([name, name + "_top", color])
+        feats.append(feature)
+    fence.dataProvider().addFeatures(feats)
+    line = QgsVectorLayer("LineStringZ?crs=EPSG:4326&field=name:string",
+                          "Ось выработки проба", "memory")
+    feature = QgsFeature(line.fields())
+    feature.setGeometry(QgsGeometry.fromWkt(
+        "LineString Z ({lo} {a} 120, {lo2} {b} 100)".format(
+            lo=lon0 - 0.004, a=lat0, lo2=lon0 + 0.004,
+            b=lat0 + 0.006)))
+    feature.setAttributes(["Штрек 1"])
+    line.dataProvider().addFeatures([feature])
+    QgsProject.instance().addMapLayers([fence, line])
+    state["zlayers"] = [fence.id(), line.id()]
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(lat0 + 0.0036, lon0, 900.0,
+                                    90.0, 60.0))
+    for layer in (fence, line):
+        window.set_layer_shown(layer.id(), True)
+    window.set_zlayer(fence.id(), True)
+    window.set_zlayer(line.id(), True)
+    state["zlayer_shown"] = [i in window._shown for i in state["zlayers"]]
+    window.subsurface.set_opacity(0.35)
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def zlayer_check():
+    import numpy as np
+    from qgis.core import QgsProject
+    from planetx.ui.subsurface import subsurface_ids
+    window = state["window"]
+    view = window.view
+    manager = window.subsurface
+    spent = time.monotonic() - state["ls_started"]
+    model = manager.model
+    if spent < 30.0 and (model is None or manager.job is not None):
+        return 1000
+    # Маска прозрачной земли над моделью приходит тайлами после сборки.
+    if spent < 8.0:
+        return 1000
+    shapes = model.zshapes if model is not None else []
+    buf = view.subsurface.buffers.get("zlayers") \
+        if hasattr(view.subsurface, "buffers") else None
+    out = result["zlayer"] = {
+        "shown": state.get("zlayer_shown"),
+        "shown_now": [i in window._shown for i in state["zlayers"]],
+        "seconds": round(spent, 1), "shapes": len(shapes),
+        "kinds": sorted({s.kind for s in shapes}),
+        "colors": sorted({s.color[:3] for s in shapes}),
+        "pending_mesh": manager.view.subsurface.pending.get("zlayers")
+        is not None, "vertices": getattr(buf, "vertices", 0),
+        # Слои с Z не рисуются плоской картинкой наложения.
+        "overlay_skips": len(set(state["zlayers"]) & subsurface_ids(
+            state["zlayers"]))}
+    view.repaint()
+    out["vertices"] = getattr(view.subsurface.buffers.get("zlayers"),
+                              "vertices", 0)
+    # Щелчок по контуру первого пласта - окно «Объекты» даёт поля.
+    pick = [p for p in manager.picks if p.kind == "zshape"]
+    out["picks"] = len(pick)
+    if pick:
+        pixels, front = view.camera.project(pick[0].xyz)
+        ok = np.where(front)[0]
+        if len(ok):
+            px, py = pixels[ok[len(ok) // 2]]
+            found = manager.identify(float(px), float(py), 6.0)
+            out["identify"] = [(t, v[:3]) for t, v, _ in found[:2]]
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_zlayer.png"))
+    for layer_id in state["zlayers"]:
+        window.set_zlayer(layer_id, False)
+    model = manager.model
+    out["after_off"] = len(model.zshapes) if model is not None else 0
+    QgsProject.instance().removeMapLayers(state["zlayers"])
+    out["gl_errors"] = dict(view.gl_errors)
+    return None
+
+
+@check(500)
 def air_toggle():
     """Строка «Атмосфера»: без неё нет ни гало, ни дымки. Средний цвет
     кадра Земли с 18 000 км с воздухом и без него, флаг вида после

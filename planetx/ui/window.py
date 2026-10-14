@@ -134,9 +134,10 @@ from .panel import LayerPanel
 from .project import (AUTO_REFRESH, FOLLOW, ProjectWatch, map_layers,
                       layer_group, read_bathymetry, read_flag, read_grids,
                       read_insets, read_map_years, read_shown,
-                      set_visible_on_map, visible_on_map, write_bathymetry,
-                      write_flag, write_grids, write_insets,
-                      write_map_years, write_shown)
+                      read_zlayers, set_visible_on_map, visible_on_map,
+                      write_bathymetry, write_flag, write_grids,
+                      write_insets, write_map_years, write_shown,
+                      write_zlayers)
 from .inset import DeepSource, DemSource, terrain_prepare
 from .contours import ContourExport, ContourSource, digit_glyphs
 from .netlink import LinkDialog, NetLinks
@@ -1247,6 +1248,8 @@ class GlobeWindow(QWidget):
         self.panel.ground_alpha.connect(
             lambda value: self.subsurface.set_opacity(value))
         self.panel.grid_ids = set(read_grids())
+        self.panel.zlayer_toggled.connect(self.set_zlayer)
+        self.panel.zlayer_ids = set(read_zlayers())
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
         self.toolbar.share_requested.connect(self.share_view)
@@ -4340,6 +4343,7 @@ class GlobeWindow(QWidget):
         self._load_insets()
         self._read_map_years()
         self.panel.grid_ids = set(read_grids())
+        self.panel.zlayer_ids = set(read_zlayers())
         self._refresh_relief()
 
     def _mark_dirty(self, dirty):
@@ -6149,6 +6153,17 @@ class GlobeWindow(QWidget):
             ids.append(layer_id)
         write_grids(ids)
         self.panel.grid_ids = set(ids)
+        self._apply_vector(force=True)
+        self._show_state()
+
+    def set_zlayer(self, layer_id, on):
+        """Векторный слой проекта layer_id с Z - объёмом по отметкам
+        или плоской картинкой. Подземная модель собирается заново."""
+        ids = [i for i in read_zlayers() if i != layer_id]
+        if on:
+            ids.append(layer_id)
+        write_zlayers(ids)
+        self.panel.zlayer_ids = set(ids)
         self._apply_vector(force=True)
         self._show_state()
 

@@ -188,6 +188,20 @@ void main() {
 }
 """
 
+BACKDROP_FRAGMENT = """#version 330 core
+// Фон под прозрачной землёй подземного режима: мягкий переход сверху
+// вниз, как в сцене Isoliner3D, вместо чёрной пустоты. Просьба автора
+// от 15 октября 2026 года.
+uniform vec2 u_viewport;
+uniform vec3 u_top;
+uniform vec3 u_bottom;
+out vec4 frag;
+void main() {
+    float t = clamp(gl_FragCoord.y / u_viewport.y, 0.0, 1.0);
+    frag = vec4(mix(u_bottom, u_top, t), 1.0);
+}
+"""
+
 HOLE_FRAGMENT = """#version 330 core
 // Пиксель, где не нарисован ни один тайл, а луч попадает в эллипсоид.
 // Эллипсоид сжат на u_margin, это отрезает полосу у края диска, где

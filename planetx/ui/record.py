@@ -24,7 +24,7 @@ import os
 
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QImage
+from qgis.PyQt.QtGui import QImage, QPainter
 from qgis.PyQt.QtWidgets import (QButtonGroup, QComboBox, QDialog,
                                  QDialogButtonBox, QLabel, QRadioButton,
                                  QVBoxLayout)
@@ -33,6 +33,7 @@ from ..core import video
 from ..core.snapshot import file_ratio
 from ..core.timeline import FPS, Timeline
 from ..i18n import tr
+from . import stopcaption
 from .snapshot import draw_attribution, plain_text
 
 FRAME_NAME = "frame_{:05d}.png"
@@ -205,6 +206,7 @@ class TourRecorder(QObject):
             return
         draw_attribution(image, plain_text(
             self.window.attribution.text()), self.ratio)
+        self._draw_caption(image)
         if self.writer is not None:
             if not self._write_video(image):
                 return
@@ -235,6 +237,26 @@ class TourRecorder(QObject):
         self._finish(True, tr(
             "Тур записан в {folder}. Кадров {count}, {fps} в секунду.",
             count=self.line.count, fps=FPS, folder=self.folder))
+
+    def _draw_caption(self, image):
+        """Подпись остановки на кадре, как на виде (ui/stopcaption.py):
+        слой поверх вида в снимок не попадает."""
+        if not QgsSettings().value(stopcaption.KEY, True, type=bool):
+            return
+        frame = self.line.frame(self.n)
+        found = self.line.tour.caption_at(frame.t)
+        if found is None:
+            return
+        i, alpha = found
+        stop = self.line.tour.stops[i]
+        painter = QPainter(image)
+        try:
+            stopcaption.draw_caption(
+                painter, image.width(), image.height(), self.ratio,
+                stop.name or "", stopcaption.plain(
+                    getattr(stop, "description", "")), alpha)
+        finally:
+            painter.end()
 
     def _write_video(self, image):
         """Кадр в MP4. Снимок приводится к RGB32 и размеру видео."""

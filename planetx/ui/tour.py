@@ -22,6 +22,8 @@ from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QFrame, QHBoxLayout,
 from ..core.tour import PAUSE, Tour, clock
 from ..i18n import tr
 from ..qt_compat import enum
+from . import stopcaption
+from .stopcaption import StopCaption, plain
 
 PAUSE_KEY = "PlanetX/tour_pause"
 LOOP_KEY = "PlanetX/tour_loop"
@@ -101,6 +103,16 @@ class TourBar(QFrame):
             "Тур по кругу. После последней остановки тур начинается "
             "с первой. Остановить его - пауза или крестик."))
         layout.addWidget(self.loop)
+        # Подписи остановок крупно на кадре (ui/stopcaption.py).
+        self.captions = QToolButton(self)
+        self.captions.setText("🔤")
+        self.captions.setCheckable(True)
+        self.captions.setAutoRaise(True)
+        self.captions.setToolTip(tr(
+            "Подписи остановок на кадре. На остановке внизу кадра "
+            "крупно стоят название и описание метки, в перелёте подписи "
+            "нет. Подписи попадают и в запись тура."))
+        layout.addWidget(self.captions)
         self.info = QLabel(self)
         layout.addWidget(self.info)
         # Под шкалой времени панель растягивается на её ширину, лишнее
@@ -159,6 +171,9 @@ class TourBar(QFrame):
         self.info.setText(tr("Остановка {n} из {count}: {name}",
                              n=index + 1, count=count,
                              name=name or tr("Без названия")))
+        # С подписями на кадре строка описания под кнопками не нужна.
+        if self.captions.isChecked():
+            description = ""
         self.caption.setText(description)
         self.caption.setVisible(bool(description))
         if description:
@@ -229,6 +244,10 @@ class TourPlayer(QObject):
                                                      type=bool))
         self.bar.loop.toggled.connect(
             lambda on: QgsSettings().setValue(LOOP_KEY, bool(on)))
+        self.stop_caption = StopCaption(view)
+        self.bar.captions.setChecked(QgsSettings().value(
+            stopcaption.KEY, True, type=bool))
+        self.bar.captions.toggled.connect(self._captions_toggled)
         # Сколько раз тур начался заново по кругу, для проверок.
         self.laps = 0
         self.bar.back.connect(lambda: self.play_from(self.index - 1))
@@ -342,6 +361,31 @@ class TourPlayer(QObject):
         self.playing = False
         self.tour = None
         self.bar.hide()
+        self.stop_caption.set_caption("", "", 0.0)
+
+    def _captions_toggled(self, on):
+        QgsSettings().setValue(stopcaption.KEY, bool(on))
+        self._show()
+
+    def caption_at(self, t):
+        """Подпись на кадре на время нынешнего тура t: (название,
+        описание, непрозрачность) или None."""
+        if self.tour is None or not self.bar.captions.isChecked():
+            return None
+        found = self.tour.caption_at(t)
+        if found is None:
+            return None
+        i, alpha = found
+        stop = self.tour.stops[i]
+        return (stop.name or "", plain(getattr(stop, "description", "")),
+                alpha)
+
+    def _show_caption(self):
+        found = self.caption_at(self.t)
+        if found is None:
+            self.stop_caption.set_caption("", "", 0.0)
+        else:
+            self.stop_caption.set_caption(*found)
 
     def tick(self):
         """Кадр вида: время тура, конец тура или перехват мышью."""
@@ -386,3 +430,4 @@ class TourPlayer(QObject):
         if self.tour is not None:
             self.bar.set_time(min(self.t, self.tour.duration),
                               self.tour.duration)
+        self._show_caption()

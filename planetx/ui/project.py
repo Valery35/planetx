@@ -23,6 +23,8 @@ INSETS = "insets"  # растры проекта - рельеф глобуса
 # Растры проекта - поверхности по абсолютным отметкам под землёй,
 # пункт «Поверхность по отметкам» меню слоя.
 GRIDS = "grids"
+# Векторные слои с Z объёмом по отметкам - пункт «Объёмом по отметкам Z».
+ZLAYERS = "zlayers"
 # Векторные слои, выдавленные по полю, - строка JSON.
 EXTRUDE = "extrude"
 # Батиметрия врезок своего рельефа - строка JSON, core/bathymetry.py.
@@ -149,6 +151,18 @@ def read_grids(project=None):
 def write_grids(ids, project=None):
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, GRIDS, list(ids))
+
+
+def read_zlayers(project=None):
+    """Номера векторных слоёв проекта с Z - объёмом по отметкам."""
+    project = project or QgsProject.instance()
+    value, ok = project.readListEntry(ENTRY, ZLAYERS, [])
+    return list(value) if ok else []
+
+
+def write_zlayers(ids, project=None):
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, ZLAYERS, list(ids))
 
 
 def read_extrude(project=None):

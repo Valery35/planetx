@@ -38,7 +38,7 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsExpressionContext, QgsExpressionContextUtils,
                        QgsPalLayerSettings, QgsPointXY, QgsProject,
                        QgsRasterLayer, QgsRenderContext, QgsVectorLayer,
-                       QgsVectorLayerSimpleLabeling)
+                       QgsVectorLayerSimpleLabeling, QgsWkbTypes)
 from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
@@ -50,7 +50,8 @@ from ..core import subsurface as core
 from ..core.places import Place
 from ..i18n import tr
 from ..qt_compat import enum
-from .project import ENTRY, read_grids
+from .extrude import in_wgs
+from .project import ENTRY, read_grids, read_zlayers
 from .layer_labels import label_settings
 from .viewshed import ResultTiles, fit_status
 
@@ -99,7 +100,7 @@ TUNNEL_STEP = 10.0  # м между точками оси
 # к картинке PNG или JPG (от папки файла GeoPackage), top и bottom -
 # отметки верха и низа картинки, м. Картинка ложится по длине линии.
 IMAGE_SIDE = 4096  # пикселей по большей стороне, больше - уменьшение
-DEFAULTS = {"layers": {}, "horizons": [],
+DEFAULTS = {"layers": {}, "horizons": [], "zlayers": [],
             "opacity": 0.6, "cut": True, "under": False}
 
 
@@ -459,6 +460,87 @@ def shapes_of(layer, kind, step):
     return out
 
 
+ZShape = namedtuple("ZShape", "layer fields kind parts color")
+ZShape.__doc__ = """Объект слоя с Z (пункт «Объёмом по отметкам Z»):
+название слоя, поля [(имя, значение)], kind - "polygon" или "line",
+parts - массивы (n, 3) широта, долгота, отметка, color - RGBA."""
+ZLAYER_MAX = 20000  # объектов слоя с Z, не больше
+
+
+def _hex_color(text):
+    """Цвет «#rrggbb» поля color или None."""
+    text = str(text or "").strip()
+    if len(text) == 7 and text.startswith("#"):
+        try:
+            return tuple(int(text[i:i + 2], 16) for i in (1, 3, 5))
+        except ValueError:
+            return None
+    return None
+
+
+def zlayer_ids(layers):
+    """Векторные слои с Z среди layers с пунктом «Объёмом по отметкам Z»
+    (read_zlayers): номера по порядку карты."""
+    chosen = set(read_zlayers())
+    return [layer.id() for layer in layers
+            if isinstance(layer, QgsVectorLayer) and layer.id() in chosen]
+
+
+def read_zlayer(layer):
+    """Объекты слоя с Z в широтах и долготах, ZShape. Цвет - поле color
+    или символ стиля QGIS, прозрачность - прозрачность слоя."""
+    if not QgsWkbTypes.hasZ(layer.wkbType()):
+        return []
+    kind = {1: "line", 2: "polygon"}.get(
+        int(QgsWkbTypes.geometryType(layer.wkbType())))
+    if kind is None:
+        return []
+    to_wgs = QgsCoordinateTransform(
+        layer.crs(), QgsCoordinateReferenceSystem("EPSG:4326"),
+        QgsProject.instance())
+    renderer = layer.renderer().clone() if layer.renderer() else None
+    context = QgsRenderContext()
+    if renderer is not None:
+        renderer.startRender(context, layer.fields())
+    names = [f.name() for f in layer.fields()]
+    has_color = "color" in names
+    alpha = int(round(255 * layer.opacity()))
+    out = []
+    try:
+        for n, feature in enumerate(layer.getFeatures()):
+            if n >= ZLAYER_MAX:
+                break
+            geometry = in_wgs(feature.geometry(), to_wgs)
+            if geometry is None:
+                continue
+            parts = []
+            for part in geometry.constParts():
+                rings = [part.exteriorRing()] if kind == "polygon" \
+                    else [part]
+                for ring in rings:
+                    if ring is None:
+                        continue
+                    pts = [(p.y(), p.x(), p.z()) for p in ring.points()]
+                    if len(pts) >= (3 if kind == "polygon" else 2):
+                        parts.append(np.array(pts, dtype=np.float64))
+            if not parts:
+                continue
+            color = _hex_color(feature["color"]) if has_color else None
+            if color is None and renderer is not None:
+                symbol = renderer.symbolForFeature(feature, context)
+                if symbol is not None:
+                    c = symbol.color()
+                    color = (c.red(), c.green(), c.blue())
+            fields = [(name, _value(feature[name])) for name in names
+                      if name != "color"]
+            out.append(ZShape(layer.name(), fields, kind, parts,
+                              tuple(color or EMPTY_COLOR) + (alpha,)))
+    finally:
+        if renderer is not None:
+            renderer.stopRender(context)
+    return out
+
+
 class Horizon:
     """Кровля пласта: растр отметок и пересчёт широт в его систему.
     proj - система координат слоя QGIS строкой PROJ. Она главнее
@@ -523,6 +605,7 @@ class Model:
         self.mask_rings = []  # те же кольца по вершинам, для маски
         self.tunnels = []  # (название, точки (n, 2), глубины, диаметр, цвет)
         self.images = []  # (название, точки (n, 2), верх, низ, rgba)
+        self.zshapes = []  # объекты слоёв с Z, ZShape
         # Прозрачность слоёв QGIS по ролям, от 0 до 1.
         self.alpha = {}
         self.hole_colors = {}  # номер скважины - цвет символа устья
@@ -547,7 +630,8 @@ class Model:
             lats += [np.nanmin(h.lats), np.nanmax(h.lats)]
             lons += [np.nanmin(h.lons), np.nanmax(h.lons)]
         for shape in self.sections + self.rings + [
-                t[1] for t in self.tunnels + self.images]:
+                t[1] for t in self.tunnels + self.images] + [
+                    p for z in self.zshapes for p in z.parts]:
             lats += [shape[:, 0].min(), shape[:, 0].max()]
             lons += [shape[:, 1].min(), shape[:, 1].max()]
         if not lats:
@@ -607,6 +691,11 @@ class Model:
                  if np.any(np.isfinite(h.grid.z))]
         if roofs:
             lows.append(min(roofs) - BOTTOM_MARGIN)
+        # Объекты слоёв с Z - тоже часть модели.
+        zs = [float(np.nanmin(p[:, 2])) for z in self.zshapes
+              for p in z.parts]
+        if zs:
+            lows.append(min(zs) - BOTTOM_MARGIN)
         return min(lows) if lows else 0.0
 
 
@@ -740,8 +829,9 @@ def subsurface_ids(layer_ids):
     в наложение на поверхность."""
     project = QgsProject.instance()
     layers = [project.mapLayer(i) for i in layer_ids]
-    roles, roofs = project_roles([la for la in layers if la is not None])
-    return set(roles.values()) | set(roofs)
+    layers = [la for la in layers if la is not None]
+    roles, roofs = project_roles(layers)
+    return set(roles.values()) | set(roofs) | set(zlayer_ids(layers))
 
 
 def project_roles(layers):
@@ -900,6 +990,10 @@ def load(settings):
                 continue
             model.images.append((name, pts, _number(row, "top", 0.0),
                                  _number(row, "bottom", -100.0), rgba))
+    for layer_id in settings.get("zlayers", []):
+        layer = project.mapLayer(layer_id)
+        if isinstance(layer, QgsVectorLayer):
+            model.zshapes += read_zlayer(layer)
     return model
 
 
@@ -1126,7 +1220,33 @@ def build(model, scale, ground, cut):
             alt = float(core.display(bottom, scale, g))
             walls.append(core.floor_part(ring, alt, colors[-1]))
     meshes["sections"] = core.merge(walls, "sections")
+    meshes["zlayers"] = _zshape_mesh(model, scale, ground, radius, picks)
     return meshes, marks, picks
+
+
+def _zshape_mesh(model, scale, ground, radius, picks):
+    """Объекты слоёв с Z на своих отметках: многоугольники плоскостями,
+    линии трубками радиуса стволов. Для окна «Объекты» - Pick по контуру
+    объекта."""
+    parts = []
+    for shape in model.zshapes:
+        outline = []
+        values = []
+        for pts in shape.parts:
+            lats, lons, z = pts[:, 0], pts[:, 1], pts[:, 2]
+            g = ground(lats, lons) if not scale else 0.0
+            xyz = core.ecef(lats, lons, core.display(z, scale, g))
+            if shape.kind == "polygon":
+                parts.append(core.polygon3d(xyz, shape.color))
+                xyz = np.vstack([xyz, xyz[:1]])
+                z = np.append(z, z[0])
+            else:
+                parts.append(core.tube(xyz, radius, shape.color))
+            outline.append(xyz)
+            values.append(z[:, None])
+        picks.append(Pick("zshape", shape, np.vstack(outline),
+                          np.vstack(values)))
+    return core.merge(parts, "zlayers")
 
 
 class CutMask:
@@ -1387,6 +1507,7 @@ class SubsurfaceManager(QObject):
         layers = [project.mapLayer(i) for i in layer_ids]
         layers = [layer for layer in layers if layer is not None]
         roles, roofs = project_roles(layers)
+        zlayers = zlayer_ids(layers)
         used = set(roles.values()) | set(roofs)
         if used:
             # Таблицы без геометрии - интервалы, инклинометрия, пласты -
@@ -1394,16 +1515,18 @@ class SubsurfaceManager(QObject):
             # из той же группы, что отмеченные геологические слои.
             for role, layer_id in table_roles(used).items():
                 roles.setdefault(role, layer_id)
-        key = (tuple(sorted(roles.items())), tuple(roofs))
+        used |= set(zlayers)
+        key = (tuple(sorted(roles.items())), tuple(roofs), tuple(zlayers))
         if key == self._project_key and not restyle:
             return used
         self._project_key = key
         solid = {"collar", "tunnels", "images", "sections", "cut"}
-        if not (set(roles) & solid or roofs):
+        if not (set(roles) & solid or roofs or zlayers):
             if self.model is not None:
                 self.clear()
             return used
-        self.start(dict(self.settings, layers=roles, horizons=roofs))
+        self.start(dict(self.settings, layers=roles, horizons=roofs,
+                        zlayers=zlayers))
         return used
 
     def make_template(self, path):
@@ -1480,7 +1603,7 @@ class SubsurfaceManager(QObject):
         self.view.image_walls.set_walls(build_images(model, scale,
                                                      self._ground))
         self._show_legend(model)
-        for name in ("wells", "horizons", "sections", "block"):
+        for name in ("wells", "horizons", "sections", "block", "zlayers"):
             self.view.subsurface.set_mesh(name, meshes.get(name))
         self.view.subsurface_marks = marks
         self._set_cut(cut, model)
@@ -1609,6 +1732,12 @@ class SubsurfaceManager(QObject):
     def _pick_feature(self, pick, at):
         def metres(value):
             return tr("{value} м", value="{:.1f}".format(float(value)))
+        if pick.kind == "zshape":
+            shape = pick.name
+            values = [(name, "" if value is None else str(value))
+                      for name, value in shape.fields]
+            values.append((tr("Отметка"), metres(at[0])))
+            return (shape.layer, values, None)
         if pick.kind == "tunnel":
             name, diameter = pick.name
             return (name or tr("Тоннель"), [

@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.85.1
+Version 0.86.0
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -2046,6 +2046,19 @@ Contour lines lie on a grid surface, about 12 lines over the range of
 elevations, with an interval from the same series as the terrain
 contours. Every fifth line is thicker and darker.
 
+A vector layer with Z elevations - polygons or lines - stands as a solid
+with the Solid by Z elevations item of its menu in the QGIS project
+group. Polygons lie as planes at the elevations of their vertices, lines
+as tubes. This way, for example, the 3D fence of an Isoliner3D section
+stands - vertical bed polygons along the section line. The colour is the
+color field of the form #rrggbb, without it the QGIS layer style. A
+click in the Identify mode shows the fields of the object and the
+elevation under the cursor. The elevations are stretched by the terrain
+scale, as the grids, the Ground above grids slider makes the ground
+above them transparent. Where nothing lies under the transparent ground,
+a light background shows, from pale blue at the top of the frame to
+almost white at the bottom.
+
 The Contours to the QGIS project… item of the raster menu exports
 contours of the raster values as a GeoPackage layer to the PlanetX -
 contours group. The interval is the same as on the globe grid, every
@@ -2144,8 +2157,12 @@ this depth.
 ## Tours
 
 A tour flies over the checked places of a folder in the list order,
-including nested folders. The description of the stop place shows
-below the buttons of the tour bar.
+including nested folders. At a stop the name and the description of
+the place stand large at the bottom of the frame - the stop caption. It
+appears when the camera stands at the stop and fades before the next
+flight, during a flight there is none. The caption also goes into the
+tour recording. The 🔤 button of the tour bar turns the captions off,
+then the description stands as a line under the buttons of the bar.
 
 - A place with a view of its own brings back its look point, range,
   heading and tilt.
@@ -2169,6 +2186,7 @@ time slider, and without the slider in its place:
 | ⏸, ▶ | Pause and continue |
 | Pause | How many seconds the camera stays at a stop |
 | 🔁 | Loops the tour. After the last stop the tour starts again from the first. The button state is kept between sessions |
+| 🔤 | Stop captions on the frame, on by default |
 | ⏺ | Records the tour to an MP4 video or PNG frames |
 | ⏹ | Ends the tour |
 

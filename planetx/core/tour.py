@@ -34,6 +34,9 @@ except ImportError:  # headless-тесты
     from navigation import Pose
 
 PAUSE = 3.0  # секунд на остановке по умолчанию
+# Подпись остановки на кадре проявляется и гаснет за столько секунд,
+# выбор помощника, утверждает автор.
+CAPTION_FADE = 0.6
 # Путь. Расстояние камеры - доля длины пути в пределах, скорость -
 # доля расстояния камеры в секунду. Так земля бежит по экрану с одной
 # скоростью на пути любой длины, проезд пути длиннее 2.4 км идёт 32 с.
@@ -277,6 +280,24 @@ class Tour:
             pose = stop.end_pose()
         self.duration = t
         self.start = start.copy()
+
+    def caption_at(self, t):
+        """Подпись остановки на кадре на время t: (номер остановки,
+        непрозрачность 0..1) или None. Подпись видна от прилёта до
+        начала следующего перелёта, проявляется и гаснет за
+        CAPTION_FADE секунд, в полёте её нет. Просьба автора от
+        15 октября 2026 года - показ туром."""
+        i = self.index_at(t)
+        if i < 0:
+            return None
+        begin = self.glides[i]
+        end = self.arrivals[i] + self.pause
+        if not begin <= t <= end or end <= begin:
+            return None
+        fade = min(CAPTION_FADE, (end - begin) / 3.0)
+        alpha = min(1.0, (t - begin) / fade, (end - t) / fade) \
+            if fade > 0.0 else 1.0
+        return i, max(0.0, alpha)
 
     def index_at(self, t):
         """Номер остановки, к которой летит или на которой стоит камера."""

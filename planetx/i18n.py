@@ -2247,6 +2247,24 @@ EN = {
     "Во весь экран. Выход - Esc или F11.":
         "Full screen. Esc or F11 to leave.",
     "Поток по пути": "Flow along the path",
+    "Объёмом по отметкам Z": "Solid by Z elevations",
+    "Вершины слоя стоят на своих отметках Z - многоугольники "
+    "плоскостями, линии трубками, под землёй или над ней, "
+    "например вертикальный забор разреза. Цвет - поле color "
+    "или стиль слоя QGIS. Ползунок «Земля над гридами» "
+    "делает землю над ними прозрачной.":
+        "The vertices of the layer stand at their Z elevations - "
+        "polygons as planes, lines as tubes, under the ground or above "
+        "it, for example a vertical section fence. The colour is the "
+        "color field or the QGIS layer style. The Ground above grids "
+        "slider makes the ground above them transparent.",
+    "Подписи остановок на кадре. На остановке внизу кадра "
+    "крупно стоят название и описание метки, в перелёте подписи "
+    "нет. Подписи попадают и в запись тура.":
+        "Stop captions on the frame. At a stop the name and the "
+        "description of the placemark stand large at the bottom of the "
+        "frame, during a flight there is no caption. The captions also "
+        "go into the tour recording.",
     "По пути от первой точки к последней бегут короткие "
     "штрихи цвета линии, как поток грузов. Путь лежит на "
     "земле. Признак сохраняется в KML.":

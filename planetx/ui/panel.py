@@ -23,7 +23,7 @@ import html
 import os
 
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
-                       QgsSettings, QgsVectorLayer)
+                       QgsSettings, QgsVectorLayer, QgsWkbTypes)
 from qgis.PyQt.QtCore import (QEvent, QItemSelectionModel, QRect, Qt,
                               QTimer, pyqtSignal)
 from qgis.PyQt.QtGui import QCursor, QFont, QIcon, QKeySequence, QPalette
@@ -463,6 +463,8 @@ class LayerPanel(QWidget):
     volume_requested = pyqtSignal(str)
     # Растр - поверхность по отметкам, пункт меню слоя.
     grid_toggled = pyqtSignal(str, bool)
+    # Векторный слой с Z - объёмом по отметкам, пункт меню слоя.
+    zlayer_toggled = pyqtSignal(str, bool)
     # Растр - изолинии в проект QGIS, пункт меню слоя.
     contours_requested = pyqtSignal(object)
     # Векторный слой - выдавливание по полю, пункт меню слоя.
@@ -807,6 +809,7 @@ class LayerPanel(QWidget):
         self.inset_ids = set()
         # Растры проекта - поверхности по отметкам под землёй.
         self.grid_ids = set()
+        self.zlayer_ids = set()  # векторные слои объёмом по отметкам Z
         # Папка - сетевая ссылка KML: её меню получает «Загрузить заново».
         self.is_link = lambda key: False
         # Кнопка каталога над списком, каталог встаёт на место списка.
@@ -1898,6 +1901,20 @@ class LayerPanel(QWidget):
                 "столбиком, линия - стенкой. Цвет - стиль слоя."))
             raise_.triggered.connect(
                 lambda: self.extrude_requested.emit(layer))
+        if isinstance(layer, QgsVectorLayer) \
+                and enum_int(layer.geometryType()) in (1, 2) \
+                and QgsWkbTypes.hasZ(layer.wkbType()):
+            solid = menu.addAction(tr("Объёмом по отметкам Z"))
+            solid.setCheckable(True)
+            solid.setChecked(layer.id() in self.zlayer_ids)
+            solid.setToolTip(tr(
+                "Вершины слоя стоят на своих отметках Z - многоугольники "
+                "плоскостями, линии трубками, под землёй или над ней, "
+                "например вертикальный забор разреза. Цвет - поле color "
+                "или стиль слоя QGIS. Ползунок «Земля над гридами» "
+                "делает землю над ними прозрачной."))
+            solid.toggled.connect(
+                lambda on: self.zlayer_toggled.emit(layer.id(), on))
         if isinstance(layer, QgsRasterLayer):
             year = menu.addAction(tr("Год карты…"))
             year.setToolTip(tr(

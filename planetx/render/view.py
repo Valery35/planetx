@@ -53,13 +53,17 @@ from .satellites import SatellitePoints
 from .constellations import Constellations
 from .sky import Sky
 from .stars import Stars
-from .shaders import (HOLE_FRAGMENT, HOLE_VERTEX, SKY_FRAGMENT,
-                      TILE_FRAGMENT, TILE_VERTEX, shell)
+from .shaders import (BACKDROP_FRAGMENT, HOLE_FRAGMENT, HOLE_VERTEX,
+                      SKY_FRAGMENT, TILE_FRAGMENT, TILE_VERTEX, shell)
 
 START_LEVELS = (0, 1, 2)
 START_VIEW = (58.0105, 56.2294, 2.0e7)  # над Пермью, 20 000 км
 
 SPACE = (0.0, 0.0, 0.0)
+# Фон под прозрачной землёй подземного режима - верх и низ кадра, как
+# в сцене Isoliner3D, снимок автора от 15 октября 2026 года.
+BACKDROP_TOP = (0.78, 0.84, 0.92)
+BACKDROP_BOTTOM = (0.97, 0.97, 0.94)
 HOLE = (1.0, 0.0, 1.0)  # пурпурный фон проверочного режима
 OCEAN = (0xAA, 0xD3, 0xDF, 0xFF)  # цвет воды на подложке OSM
 UNDERLAY_COLOR = (0x00, 0xFF, 0x00, 0xFF)  # подстилка в проверочном режиме
@@ -1332,6 +1336,10 @@ class GlobeView(QOpenGLWidget):
         self.tile_air = uniforms(self.program, AIR_UNIFORMS)
         self.sky_program = gpu.build_program(HOLE_VERTEX, SKY_FRAGMENT)
         self.sky_air = uniforms(self.sky_program, AIR_UNIFORMS + ("u_qc",))
+        self.backdrop_program = gpu.build_program(HOLE_VERTEX,
+                                                  BACKDROP_FRAGMENT)
+        self.backdrop_uniforms = uniforms(self.backdrop_program, (
+            "u_viewport", "u_top", "u_bottom"))
         self.anisotropy = min(gpu.max_anisotropy(), 8.0)
         self.pool = gpu.TexturePool(self.anisotropy)
         self.pool.allocate(POOL_START)
@@ -1449,6 +1457,7 @@ class GlobeView(QOpenGLWidget):
             GL.glDeleteProgram(self.program)
             GL.glDeleteProgram(self.hole_program)
             GL.glDeleteProgram(self.sky_program)
+            GL.glDeleteProgram(self.backdrop_program)
             GL.glDeleteVertexArrays(1, [self.empty_vao])
             GL.glDeleteQueries(1, [self.hole_query])
         self.meshes, self.textures, self.caps = {}, {}, []
@@ -1851,6 +1860,8 @@ class GlobeView(QOpenGLWidget):
         underground = (self.subsurface.active
                        or self.image_walls.active) and not self.show_holes
         if underground:
+            if self.surface_alpha < 1.0:
+                self._draw_backdrop()
             self.subsurface.draw(self.camera)
             self.image_walls.draw(self.camera)
         if self.photos.active and not self.show_holes:
@@ -2392,6 +2403,25 @@ class GlobeView(QOpenGLWidget):
         """Пришла картинка неба с Млечным путём."""
         self.sky.set_image(rgba)
         self.update()
+
+    def _draw_backdrop(self):
+        """Светлый фон кадра под прозрачной землёй подземного режима.
+        Рисуется первым, без проверки и записи глубины: модель, земля
+        и небо ложатся поверх, сквозь прозрачную землю без данных под
+        ней виден он, а не чёрная пустота."""
+        gl = gpu.gl
+        u = self.backdrop_uniforms
+        gl.glUseProgram(self.backdrop_program)
+        gl.glUniform2f(u["u_viewport"], self.camera.width,
+                       self.camera.height)
+        gl.glUniform3f(u["u_top"], *BACKDROP_TOP)
+        gl.glUniform3f(u["u_bottom"], *BACKDROP_BOTTOM)
+        gl.glDisable(GL.GL_DEPTH_TEST)
+        gl.glDepthMask(GL.GL_FALSE)
+        gl.glBindVertexArray(self.empty_vao)
+        gl.glDrawArrays(GL.GL_TRIANGLES, 0, 3)
+        gl.glDepthMask(GL.GL_TRUE)
+        gl.glEnable(GL.GL_DEPTH_TEST)
 
     def _draw_sky(self):
         """Небо и гало там, где нет тайлов.
