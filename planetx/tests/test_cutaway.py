@@ -131,6 +131,19 @@ class TestCutaway(unittest.TestCase):
         lats = np.concatenate(seen)
         self.assertAlmostEqual(float(lats.max()), 90.0, delta=1e-6)
 
+    def test_missing_lift_heights_stay_finite(self):
+        # Высота NaN у точки дуги - край на эллипсоиде, а не вершина
+        # с NaN.
+        wedge = cw.wedge_at(10.0, 0.0)
+
+        def lift(lats, lons):
+            out = np.full(np.shape(lats), 300000.0)
+            out[::7] = np.nan
+            return out
+        mesh = cw.faces(wedge, lift=lift)
+        points = mesh.vertices["position"].astype(np.float64)
+        self.assertTrue(np.all(np.isfinite(points)))
+
 
 class TestStretch(unittest.TestCase):
     """Выделение коры издалека."""

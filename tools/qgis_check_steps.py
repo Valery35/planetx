@@ -14320,9 +14320,16 @@ def _cut_mismatch(view):
     d = p / r[:, None]
     key = np.round(d, 5)
     top = {}
+    every = {}
     for k, rr, dd in zip(map(tuple, key), r, d):
+        every.setdefault(k, []).append(rr)
         if k not in top or rr > top[k][0]:
             top[k] = (rr, dd)
+    state["cut_every"] = every
+    # Шум float32 вершин изредка делит точку дуги округлением на две
+    # группы, в меньшей - только граница ядра. В настоящей точке дуги
+    # вершин много, от ядра до коры.
+    top = {k: v for k, v in top.items() if len(every[k]) > 2}
     rs = np.array([v[0] for v in top.values()])
     ds = np.array([v[1] for v in top.values()])
     base = cutaway.boundary(ds)
@@ -14338,6 +14345,12 @@ def _cut_mismatch(view):
     surface = view.store.heights_at(geodetic, lons)
     miss = np.abs(rs - base - surface)
     worst = int(np.argmax(miss))
+    keys = [k for k in top]
+    near_keys = [k for k, ok in zip(keys, near) if ok]
+    radii = sorted(state["cut_every"][near_keys[worst]])
+    state.setdefault("cut_radii", []).append(
+        [round((v - float(base[worst])) / 1000.0, 1) for v in radii])
+    result["cut_radii"] = state["cut_radii"]
     state.setdefault("cut_worst", []).append(
         [round(float(geodetic[worst]), 2), round(float(lons[worst]), 2),
          round(float((rs - base)[worst]) / 1000.0, 1),
@@ -14361,6 +14374,21 @@ def geoid_cutaway_check():
         "mismatch_km": _cut_mismatch(view)}
     view.grabFramebuffer().save(os.path.join(TEMP,
                                              "planetx_geoid_cut.png"))
+    # Ручка угла захватывается щелчком по нарисованному кружку
+    # (замечание автора от 15 октября 2026 года - плохо захватывались).
+    # До правки точка захвата была на эллипсоиде, в пикселях - shift.
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    corners = window.wedge_corners
+    _, lat, lon = corners.points()[0]
+    mark = geodetic_to_ecef(np.array([lat]), np.array([lon]),
+                            np.array([view.label_height(lat, lon)]))
+    flat = geodetic_to_ecef(np.array([lat]), np.array([lon]), np.zeros(1))
+    (mx, my), _ = view.camera.project(mark)[0][0], True
+    (fx, fy), _ = view.camera.project(flat)[0][0], True
+    out["corner_grabbed"] = corners.grab(float(mx), float(my))
+    corners.drop()
+    out["corner_shift_px"] = round(float(np.hypot(mx - fx, my - fy)), 1)
     # Сторож: грани по эллипсоиду, как до правки, - ступень в сотни км.
     view.wedge_lift = False
     view.grabFramebuffer().save(os.path.join(

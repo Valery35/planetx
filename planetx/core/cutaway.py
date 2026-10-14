@@ -196,6 +196,9 @@ def boundary(directions, lift=None):
     geodetic = np.degrees(np.arctan2(np.tan(np.radians(lats)),
                                      (b / a) ** 2))
     heights = np.asarray(lift(geodetic, lons), dtype=np.float64)
+    # Точка без высоты (NaN) ставится на эллипсоид: вершина с NaN
+    # выпала бы из грани.
+    heights = np.nan_to_num(heights, nan=0.0, posinf=0.0, neginf=0.0)
     return np.maximum(radius + heights, radius * 0.5)
 
 

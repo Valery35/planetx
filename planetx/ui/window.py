@@ -672,9 +672,14 @@ class _WedgeCorners:
         points = self.points()
         if not points:
             return False
+        # Ручка - там, где нарисован кружок угла: на поверхности, как
+        # подпись (GlobeView.label_height). С эллипсоида в режиме
+        # «Геоид» точка захвата уходила от кружка на сотни километров,
+        # замечание автора от 15 октября 2026 года.
         xyz = geodetic_to_ecef(np.array([p[1] for p in points]),
                                np.array([p[2] for p in points]),
-                               np.zeros(len(points)))
+                               np.array([view.label_height(p[1], p[2])
+                                         for p in points]))
         pixels, front = view.camera.project(xyz)
         found = nearest_vertex(pixels, front, px, py,
                                GRAB_PIXELS * view.devicePixelRatioF())
