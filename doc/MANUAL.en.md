@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.83.1
+Version 0.83.2
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain

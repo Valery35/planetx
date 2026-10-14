@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.83.1
+version=0.83.2
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.83.1 The Atmosphere row of the Sky and light catalogue group
+changelog=0.83.2 The About PlanetX window shows buttons under the text -
+      Manual, Log, Report a bug, Plugin page, Source code and QGIS plugin
+      catalogue page. Without the PDF in the plugin folder the Manual
+      button opens the manual of this version on GitHub in the browser.
+      If the system does not open a file or an address, the window names
+      it.
+      0.83.1 The Atmosphere row of the Sky and light catalogue group
       switches off the air glow at the edge of the globe, the sky above the
       horizon and the haze over the surface. It is on by default. In the
       Geoid mode the hollows show without the white air haze, the glow at
