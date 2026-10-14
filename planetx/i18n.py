@@ -4127,6 +4127,34 @@ EN = {
         "Scale of the model. One means the sizes from the model file. The "
         "field changes the scale of all axes at once, different axis "
         "scales from KML keep their ratio.",
+    "Открывает руководство PDF программой системы. Без файла "
+    "в папке модуля руководство открывает браузер из выпуска "
+    "этой версии на GitHub.":
+        "Opens the PDF manual with the system program. Without the file "
+        "in the plugin folder the browser opens the manual from the "
+        "GitHub release of this version.",
+    "Открывает в браузере список сообщений об ошибках "
+    "в хранилище модуля на GitHub.":
+        "Opens the list of bug reports of the plugin repository "
+        "on GitHub in the browser.",
+    "Открывает в браузере страницу модуля на сайте "
+    "ООО «Информ++».":
+        "Opens the plugin page on the Inform++ LLC website "
+        "in the browser.",
+    "Открывает в браузере хранилище модуля на GitHub.":
+        "Opens the plugin repository on GitHub in the browser.",
+    "Открывает в браузере страницу модуля в каталоге "
+    "модулей QGIS.":
+        "Opens the plugin page in the QGIS plugin catalog "
+        "in the browser.",
+    "Система не открыла {target}.":
+        "The system did not open {target}.",
+    "Система не открыла файл руководства {path}. "
+    "Открыть руководство в браузере?":
+        "The system did not open the manual file {path}. "
+        "Open the manual in the browser?",
+    "Система не открыла журнал {path}.":
+        "The system did not open the log {path}.",
 }
 
 _language = None

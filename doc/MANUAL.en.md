@@ -82,7 +82,7 @@ plugin.
 | Demo | Ready scenes by body, see [Demo](#demo) |
 | Body | The menu of planets, moons, asteroids and Sky, see [Other bodies](#other-bodies) and [Starry sky](#starry-sky) |
 | View properties | Base map and data sources, terrain, labels, link with the map, update, coordinate format, subsurface mode, assistant |
-| About | Controls, data sources, links |
+| About | Controls, data sources, buttons for the manual, the log and web pages |
 
 ### Status line
 

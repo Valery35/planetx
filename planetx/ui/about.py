@@ -12,8 +12,9 @@ import os
 
 from qgis.PyQt.QtCore import Qt, QUrl
 from qgis.PyQt.QtGui import QDesktopServices, QIcon, QPixmap
-from qgis.PyQt.QtWidgets import (QDialog, QDialogButtonBox, QHBoxLayout,
-                                 QLabel, QTextBrowser, QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QLabel,
+                                 QMessageBox, QPushButton, QTextBrowser,
+                                 QVBoxLayout)
 
 from ..i18n import is_russian, tr
 from ..meta import plugin_version
@@ -44,13 +45,16 @@ PAGE = "https://www.informpp.ru/главная-страница/qgis-planetx"
 MANUAL = REPOSITORY + "/releases/download/v{version}/{name}"
 
 
-def manual_url():
-    """Адрес руководства на языке интерфейса."""
+def manual_path():
+    """Файл PDF руководства на языке интерфейса."""
     name = "PlanetX.pdf" if is_russian() else "PlanetX_en.pdf"
-    path = os.path.join(ROOT, "doc", name)
-    if os.path.exists(path):
-        return QUrl.fromLocalFile(path).toString()
-    return MANUAL.format(version=plugin_version(), name=name)
+    return os.path.join(ROOT, "doc", name)
+
+
+def manual_web():
+    """PDF руководства в выпуске этой версии на GitHub."""
+    return MANUAL.format(version=plugin_version(),
+                         name=os.path.basename(manual_path()))
 
 
 def _link(url, text):
@@ -137,13 +141,6 @@ def about_html():
                        "в QGIS, их условия задаёт владелец.")),
         _link(SOURCES, tr("Источники данных и условия их использования")),
     ))
-    links = " · ".join((
-        _link(PAGE, tr("Страница модуля")),
-        _link(manual_url(), tr("Руководство")),
-        _link(REPOSITORY, tr("Исходный код")),
-        _link(ISSUES, tr("Сообщить об ошибке")),
-        _link(CATALOG, tr("Страница в каталоге QGIS")),
-    ))
     return "".join((
         "<h2>PlanetX {}</h2>".format(html.escape(plugin_version())),
         "<p>{}</p>".format(html.escape(tr(
@@ -153,7 +150,6 @@ def about_html():
         "<h3>{}</h3>".format(html.escape(tr("Управление"))), controls,
         "<h3>{}</h3>".format(html.escape(tr("Требования"))), needs,
         "<h3>{}</h3>".format(html.escape(tr("Источники данных"))), sources,
-        "<p>{}</p>".format(links),
         "<p>{} {}</p>".format(
             html.escape(tr("Разработка при поддержке")),
             _link(INFORM, tr("ООО «Информ++»"))),
@@ -162,6 +158,9 @@ def about_html():
 
 
 class AboutDialog(QDialog):
+    """Окно «О модуле». Руководство, журнал и страницы в сети -
+    кнопками под текстом, просьба автора от 14 октября 2026 года.
+    Кнопки видны всегда, ссылки терялись в конце длинного текста."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -178,31 +177,99 @@ class AboutDialog(QDialog):
         # себя ссылки file://, и руководство PDF выходило в окне текстом.
         # Нашёл автор 4 октября 2026 года.
         text.setOpenLinks(False)
-        text.anchorClicked.connect(QDesktopServices.openUrl)
+        text.anchorClicked.connect(self._open_url)
         text.setFrameShape(enum(QTextBrowser, "Shape", "NoFrame"))
         text.setMinimumSize(560, 520)
-        buttons = QDialogButtonBox(
-            enum(QDialogButtonBox, "StandardButton", "Close"), self)
-        buttons.rejected.connect(self.reject)
-        log = buttons.addButton(
-            tr("Журнал работы"),
-            enum(QDialogButtonBox, "ButtonRole", "ActionRole"))
-        log.setToolTip(tr(
-            "Открывает журнал модуля программой системы. В журнале - "
-            "события модуля, ошибки Python и стеки потоков, если QGIS "
-            "не отвечал дольше 10 с. Файл пригодится при сообщении "
-            "об ошибке."))
-        log.clicked.connect(self._open_journal)
         body = QHBoxLayout()
         body.addWidget(logo, 0)
         body.addWidget(text, 1)
         layout = QVBoxLayout(self)
         layout.addLayout(body)
-        layout.addWidget(buttons)
+        self.buttons = {}
+        first = QHBoxLayout()
+        self._button(first, "manual", tr("Руководство"), tr(
+            "Открывает руководство PDF программой системы. Без файла "
+            "в папке модуля руководство открывает браузер из выпуска "
+            "этой версии на GitHub."), self.open_manual)
+        self._button(first, "journal", tr("Журнал работы"), tr(
+            "Открывает журнал модуля программой системы. В журнале - "
+            "события модуля, ошибки Python и стеки потоков, если QGIS "
+            "не отвечал дольше 10 с. Файл пригодится при сообщении "
+            "об ошибке."), self.open_journal)
+        self._button(first, "issues", tr("Сообщить об ошибке"), tr(
+            "Открывает в браузере список сообщений об ошибках "
+            "в хранилище модуля на GitHub."),
+            lambda: self._open_url(QUrl(ISSUES)))
+        first.addStretch(1)
+        close = self._button(first, "close", tr("Закрыть"), "",
+                             self.reject)
+        close.setDefault(True)
+        second = QHBoxLayout()
+        self._button(second, "page", tr("Страница модуля"), tr(
+            "Открывает в браузере страницу модуля на сайте "
+            "ООО «Информ++»."), lambda: self._open_url(QUrl(PAGE)))
+        self._button(second, "code", tr("Исходный код"), tr(
+            "Открывает в браузере хранилище модуля на GitHub."),
+            lambda: self._open_url(QUrl(REPOSITORY)))
+        self._button(second, "catalog", tr("Страница в каталоге QGIS"),
+                     tr("Открывает в браузере страницу модуля в каталоге "
+                        "модулей QGIS."),
+                     lambda: self._open_url(QUrl(CATALOG)))
+        second.addStretch(1)
+        layout.addLayout(first)
+        layout.addLayout(second)
 
-    def _open_journal(self):
+    def _button(self, row, key, text, tip, slot):
+        button = QPushButton(text, self)
+        button.setAutoDefault(False)
+        if tip:
+            button.setToolTip(tip)
+        button.clicked.connect(slot)
+        row.addWidget(button)
+        self.buttons[key] = button
+        return button
+
+    def _open_url(self, url):
+        """Открыть адрес программой системы. Отказ системы виден
+        окном с адресом, а не теряется молча."""
+        if QDesktopServices.openUrl(url):
+            return True
+        target = url.toLocalFile() if url.isLocalFile() \
+            else url.toString()
+        QMessageBox.warning(self, tr("О модуле PlanetX"), tr(
+            "Система не открыла {target}.", target=target))
+        return False
+
+    def open_manual(self):
+        """Руководство PDF из папки модуля, без него - из выпуска
+        на GitHub. При отказе системы - вопрос о выпуске на GitHub.
+
+        14 октября 2026 года автор написал, что руководство перестало
+        открываться. С 0.80.1 PDF нет в архиве модуля, ссылка вела
+        на выпуск GitHub, и браузер скачивал файл, а не открывал его.
+        Отказ системы теперь виден окном."""
+        path = manual_path()
+        if not os.path.exists(path):
+            return self._open_url(QUrl(manual_web()))
+        if QDesktopServices.openUrl(QUrl.fromLocalFile(path)):
+            return True
+        text = tr("Система не открыла файл руководства {path}. "
+                  "Открыть руководство в браузере?", path=path)
+        yes = enum(QMessageBox, "StandardButton", "Yes")
+        no = enum(QMessageBox, "StandardButton", "No")
+        answer = QMessageBox.question(self, tr("Руководство"), text,
+                                      yes | no, yes)
+        if answer == yes:
+            return self._open_url(QUrl(manual_web()))
+        return False
+
+    def open_journal(self):
         from .. import journal
-        journal.open_journal()
+        if journal.open_journal():
+            return True
+        QMessageBox.warning(self, tr("Журнал работы"), tr(
+            "Система не открыла журнал {path}.", path=journal.path()))
+        return False
 
 
 def show_about(parent=None):
