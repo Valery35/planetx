@@ -218,6 +218,15 @@ class _FrameGL:
             return int(name[0])
         return int(np.ravel(GL.glGenTextures(1))[0])
 
+    def tex_image(self, level, internal, w, h, fmt, data):
+        """glTexImage2D уровня текстуры из непрерывного массива uint8."""
+        if self.fast:
+            self.glTexImage2D(GL.GL_TEXTURE_2D, level, internal, w, h, 0,
+                              fmt, GL.GL_UNSIGNED_BYTE, data.ctypes.data)
+        else:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, level, internal, w, h, 0,
+                            fmt, GL.GL_UNSIGNED_BYTE, data)
+
     def tex_sub(self, level, size, rgba):
         """glTexSubImage2D уровня квадратной текстуры RGBA из массива."""
         if self.fast:
@@ -386,30 +395,31 @@ def create_texture(image, anisotropy=1.0):
     Первая строка массива - верх картинки, у тайла это северный край.
     Она ложится на v = 0.
     """
+    # Вызовы кадра (gl), а не обёртки PyOpenGL: картинки слоёв GIBS,
+    # наложения и надписей создаются в кадре, обёртки с проверкой ошибок
+    # стоили заметную долю кадра при облёте, профиль 15 октября 2026 года.
     levels = image if isinstance(image, list) else [image]
-    texture = GL.glGenTextures(1)
-    GL.glBindTexture(GL.GL_TEXTURE_2D, texture)
+    texture = gl.gen_texture()
+    gl.glBindTexture(GL.GL_TEXTURE_2D, texture)
     for level, rgba in enumerate(levels):
         rgba = np.ascontiguousarray(rgba, dtype=np.uint8)
         h, w = rgba.shape[:2]
         if rgba.ndim == 2:
             # Одна яркость, например маска суши палеогеографии. Шейдер
             # читает красный канал.
-            GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
-            GL.glTexImage2D(GL.GL_TEXTURE_2D, level, GL.GL_R8, w, h, 0,
-                            GL.GL_RED, GL.GL_UNSIGNED_BYTE, rgba)
+            gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+            gl.tex_image(level, GL.GL_R8, w, h, GL.GL_RED, rgba)
         else:
-            GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
-            GL.glTexImage2D(GL.GL_TEXTURE_2D, level, GL.GL_RGBA8, w, h, 0,
-                            GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, rgba)
-    GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+            gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+            gl.tex_image(level, GL.GL_RGBA8, w, h, GL.GL_RGBA, rgba)
+    gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
     if len(levels) > 1:
         count = len(levels)
     else:
         GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
         count = max(levels[0].shape[:2]).bit_length()
     _texture_parameters(count, anisotropy)
-    GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+    gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
     return texture
 
 

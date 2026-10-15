@@ -1,0 +1,604 @@
+# -*- coding: utf-8 -*-
+# PlanetX - трёхмерный глобус для QGIS.
+# Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
+"""Источники данных Земли: рельеф и основа, глубины, разрез Земли, плиты,
+палеогеография, пожары, месторождения, землетрясения.
+
+Часть окна глобуса GlobeWindow (ui/window.py)."""
+import html
+import os
+import zipfile
+import time
+
+import numpy as np
+from qgis.core import QgsSettings
+from qgis.PyQt.QtCore import QTimer
+from qgis.utils import iface
+
+from ... import journal
+from ...core import (basemap, geoid, paleo, dem as dem_model, models,
+                     deposits as deposits_core, fires as fires_core, crust,
+                     cutaway, quakes, slabs, sources as datasources)
+from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
+from ...i18n import tr
+from ...net.gdalnet import executor
+from ...net.overlay import (OPENFREEMAP_ATTRIBUTION, fetch_bytes, fetch_mirror,
+                            fetch_json)
+from ...render.view import start_keys
+from ..inset import DeepSource, DemSource, warm as warm_gdal
+from ..deposits import deposits_path, parse_deposits
+from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, TERRAIN_ATTRIBUTION,
+                   TERRAIN_MIRRORS, all_sources, link_html)
+
+
+class EarthDataMixin:
+    """Часть окна глобуса GlobeWindow."""
+
+    # Источники данных.
+
+    def _terrain_choice(self):
+        """Адрес и запись высот рельефа Земли: свой из окна «Источники
+        данных» или Terrarium."""
+        settings = QgsSettings()
+        return datasources.terrain(
+            settings.value(datasources.TERRAIN_KEY, "") or "",
+            settings.value(datasources.ENCODING_KEY, "") or "")
+
+    def _make_dem(self):
+        """Модель рельефа 30 м по выбору окна «Источники данных» или
+        None - только тайлы высот."""
+        kind = dem_model.choice(QgsSettings().value(datasources.DEM_KEY, ""))
+        if kind == dem_model.TERRARIUM:
+            return None
+        # Первый вызов GDAL - в главном потоке, см. ui/inset.py.
+        warm_gdal()
+        return DemSource(kind)
+
+    def _height_entries(self):
+        """Что ложится на тайлы высот Земли: модель рельефа, потом
+        врезки своего рельефа."""
+        model = getattr(self, "dem", None)
+        return ((model,) if model is not None else ()) + tuple(self.insets)
+
+    def _terrain_credit(self):
+        url = self._terrain_choice()[0]
+        if url == datasources.TERRAIN_URL:
+            credit = TERRAIN_ATTRIBUTION
+        else:
+            text = QgsSettings().value(datasources.TERRAIN_CREDIT_KEY,
+                                       "") or ""
+            credit = html.escape(text or tr("Рельеф: свой источник"))
+        model = getattr(self, "dem", None)
+        if model is not None:
+            credit += " · " + link_html(*dem_model.ATTRIBUTION[model.kind])
+        return credit
+
+    def _vector_choice(self):
+        """Адрес TileJSON векторной основы: свой или OpenFreeMap."""
+        return datasources.vector(
+            QgsSettings().value(datasources.VECTOR_KEY, "") or "")
+
+    def _vector_credit(self):
+        if self._vector_choice() == datasources.VECTOR_TILEJSON:
+            return link_html(*OPENFREEMAP_ATTRIBUTION)
+        text = QgsSettings().value(datasources.VECTOR_CREDIT_KEY, "") or ""
+        return html.escape(text or tr("Основа: свой источник"))
+
+    def sources_changed(self, what):
+        """Окно «Источники данных» сменило адрес: "terrain" - рельеф
+        заново, "vector" - векторная основа, надписи и здания заново,
+        "basemaps" - список подложек."""
+        if what == "terrain":
+            self.dem = self._make_dem()
+            self._refresh_relief()
+            self._update_relief_menu()
+        elif what == "vector":
+            if self.buildings_loader is not None:
+                self.buildings_loader.abort()
+                self.buildings_loader.deleteLater()
+                self.buildings_loader = None
+            self.ofm_layer = None
+            self.rail_layer = None
+            self._ofm_source = None
+            self._tilejson = fetch_json(self._vector_choice(),
+                                        self._tilejson_done)
+        elif what == "basemaps":
+            name = self.sources[self._basemap].name
+            self.sources = all_sources()
+            names = [s.name for s in self.sources]
+            if self.properties is not None:
+                self.properties.close()
+                self.properties = None
+            if iface is not None and hasattr(iface, "reloadConnections"):
+                iface.reloadConnections()
+            self._panel_basemap(names.index(name) if name in names else 0)
+        self._show_attribution()
+        self.view.update()
+
+    def _earth_floor(self):
+        """Пол высот Земли: 0 - отрицательные высоты обнуляются, как
+        прежде, None - с дном океана они остаются."""
+        return None if self.sea_depths else 0.0
+
+    def set_sea_depths(self, on):
+        """Глубины морей и океанов флажком окна свойств вида."""
+        self.sea_depths = bool(on)
+        QgsSettings().setValue(SEA_KEY, self.sea_depths)
+        self._set_sea_floor(self.sea_depths and self.planet.earth)
+        self._sync_properties()
+        self._update_relief_menu()
+
+    def set_relief_model(self, kind):
+        """Высоты суши из меню строки «Рельеф»: только тайлы высот или
+        модель 30 м, как в окне «Источники данных»."""
+        QgsSettings().setValue(datasources.DEM_KEY, dem_model.choice(kind))
+        self.sources_changed("terrain")
+
+    def _update_relief_menu(self):
+        """Меню строки «Рельеф»: выбор высот суши и глубины морей есть
+        только у Земли."""
+        panel = getattr(self, "panel", None)
+        planet = getattr(self, "planet", None)
+        if panel is None or planet is None:
+            return
+        if not planet.earth:
+            panel.set_relief_menu([], "", False)
+            return
+        from ..sources import dem_titles
+        titles = dem_titles()
+        own = self._terrain_choice()[0] != datasources.TERRAIN_URL
+        short = {dem_model.TERRARIUM: tr("свой источник") if own
+                 else "Terrarium",
+                 dem_model.COPERNICUS: tr("Copernicus 30 м"),
+                 dem_model.GEDTM: "GEDTM30"}
+        models = [(key, titles[key], short[key]) for key in dem_model.CHOICES]
+        kind = dem_model.choice(QgsSettings().value(datasources.DEM_KEY, ""))
+        panel.set_relief_menu(models, kind, getattr(self, "sea_depths", True))
+
+    def _set_sea_floor(self, on):
+        """Глубины морей и океанов: высоты Земли заново, с впадинами
+        ниже нуля или без них, и вода над ними."""
+        # В режиме геоида воды нет, высоты - геоид, а не дно.
+        self.view.sea_floor = on and not self._geoid_on()
+        if not self.planet.earth:
+            return
+        self._body_terrain(self.planet)
+        self.view.reset_heights()
+        # Уклон и экспозиция тоже считают дно.
+        self._set_surface()
+
+    def _set_cutaway(self, on):
+        """Разрез Земли строкой раздела «Слои»: сектор под точкой
+        взгляда в момент включения."""
+        self.cutaway_legend.setVisible(on)
+        self._place_attribution()
+        if not on:
+            self.view.set_wedge(None)
+            if self.view.vertex_tool is self.wedge_corners:
+                self.view.vertex_tool = None
+            self._update_tool_marks()
+            self._wedge_gain_changed()
+            self._show_slabs()
+            return
+        if self.view.wedge is None:
+            pose = self.view.navigator.pose
+            self.view.set_wedge(cutaway.wedge_at(pose.lat, pose.lon),
+                                self.crust)
+            self._wedge_gain_changed()
+            self._want_slabs()
+        if self.view.vertex_tool is None:
+            self.view.vertex_tool = self.wedge_corners
+        self._update_tool_marks()
+        self._want_crust()
+        self._show_attribution()
+
+    def set_wedge_box(self, west, east, south, north):
+        """Сектор разреза Земли по границам в градусах, при включённой
+        строке «Разрез Земли». Так его ставят помощник и сцена."""
+        if not self.planet.earth or not self.extras.get("cutaway"):
+            return False
+        self.view.set_wedge(cutaway.make_wedge(west, east, south, north),
+                            self.crust)
+        self._wedge_gain_changed()
+        self._want_slabs()
+        self._update_tool_marks()
+        return True
+
+    def _wedge_gain_changed(self):
+        """Растяжение коры сменилось: очаги и шкала оболочек следом."""
+        self.cutaway_legend.set_gain(self.view.wedge_gain)
+        self._place_attribution()
+        if self.view.quakes.events:
+            self._place_quakes()
+
+    def _crust_done(self, data, error):
+        self._crust_reply = None
+        self.crust_error = error
+        if data is not None:
+            try:
+                self.crust = crust.from_archive(data)
+            except crust.CrustError as problem:
+                self.crust_error = str(problem)
+        self._refresh_identified()
+        self.cutaway_legend.set_crust(self.crust is not None)
+        self._place_attribution()
+        if self.crust is not None and self.view.wedge is not None:
+            self.view.set_wedge(self.view.wedge, self.crust)
+        self._show_attribution()
+        self._refresh_section()
+
+    def _want_crust(self):
+        """Модель коры CRUST1.0: не распространяется с модулем, она
+        скачивается с сайта UCSD и дальше берётся из кэша QGIS."""
+        if self.crust is None and self._crust_reply is None \
+                and not self.crust_error:
+            self._crust_reply = fetch_bytes(crust.URL, self._crust_done)
+
+    def _read_slab_index(self):
+        if self.slab_index is None:
+            with open(os.path.join(DATA_DIR, "slab2_index.json"),
+                      encoding="utf-8") as fh:
+                self.slab_index = slabs.read_index(fh.read())
+        return self.slab_index
+
+    def _want_slabs(self):
+        """Зоны плит Slab2, которых касается разрез: пришедшие - на
+        грани, недостающие - в запрос. Указатель зон лежит в модуле."""
+        wedge = self.view.wedge
+        if wedge is None:
+            return
+        codes = slabs.touched(self._read_slab_index(),
+                              *cutaway.arc_points(wedge))
+        self._slab_codes = codes
+        self._request_slabs(codes)
+        self._show_slabs()
+
+    def _request_slabs(self, codes):
+        """Файлы зон плит, которых ещё нет, - в запрос. Ждущие запросы
+        входят в счётчик загрузки вида, его показывает значок."""
+        for code in codes:
+            if code in self.slab_zones or code in self._slab_replies \
+                    or code in self.slab_errors:
+                continue
+            if self.slab_base:
+                self._slab_replies[code] = fetch_bytes(
+                    slabs.url_of(code, self.slab_base),
+                    lambda data, error, code=code: self._slab_done(
+                        code, data, error))
+            else:
+                self._slab_replies[code] = fetch_mirror(
+                    TERRAIN_MIRRORS, slabs.PATH.format(code=code),
+                    lambda data, error, base, code=code: self._slab_done(
+                        code, data, error))
+        self._count_pending()
+        self.view.update()
+
+    def _slab_done(self, code, data, error):
+        self._slab_replies.pop(code, None)
+        self._count_pending()
+        if data is None:
+            self.slab_errors[code] = error
+        else:
+            try:
+                self.slab_zones[code] = slabs.load(data, code)
+            except slabs.SlabError as problem:
+                self.slab_errors[code] = str(problem)
+        self._show_slabs()
+        self._refresh_section()
+        self._refresh_identified()
+
+    def _refresh_identified(self):
+        """Окно «Объекты» открыто - место в нём уточняется."""
+        if self.identified is not None and self.identified.isVisible():
+            self._show_identified()
+
+    def _show_slabs(self):
+        """Пришедшие зоны разреза - на грани, подпись источника и строка
+        шкалы оболочек следом."""
+        codes = self._slab_codes
+        zones = [self.slab_zones[c] for c in codes if c in self.slab_zones] \
+            if self.view.wedge is not None else []
+        self.view.set_wedge_slabs(zones)
+        self.cutaway_legend.set_slabs(bool(zones))
+        self._place_attribution()
+        self._show_attribution()
+
+    def _depth_map(self):
+        """Глубины на экране очагов: при разрезе Земли - с растяжением
+        коры, иначе None."""
+        gain = self.view.wedge_gain
+        if self.view.wedge is None or gain == 1.0:
+            return None
+        return lambda depth: cutaway.stretch(depth, gain)
+
+    def _paleo_on(self):
+        return bool(self.extras.get("paleo")) and self.planet.earth \
+            and self.view.sky_view is None
+
+    def _set_paleo(self, on):
+        """Палеогеография строкой раздела «Слои»: ползунок возраста,
+        гладкая основа и берега материков на этот возраст."""
+        shown = self._paleo_on()
+        self.paleo_bar.setVisible(shown)
+        self.view.plain_base = shown
+        if self._relief_target() != self.view.store.scale:
+            self.view.set_relief(self._relief_target())
+            self._update_water()
+            self._place_quakes()
+            self._place_fires()
+            self._place_deposits()
+        self._place_attribution()
+        if not shown:
+            self.paleo_bar.stop()
+            if self.planet.earth:
+                self._switch_basemap(self._earth_source())
+            self._show_attribution()
+            return
+        self._paleo_age(self.paleo_bar.age())
+
+    def _paleo_age(self, age):
+        """Карта возраста age млн лет - подложка. Уровни 0-2 прежнего
+        возраста стоят на экране, пока не придут новые, глубокие тайлы
+        снимаются сразу (change_source, coarse): кадр не смешивает два
+        возраста, новый встаёт грубым и уточняется."""
+        self.paleo_age = age
+        if self._paleo_on():
+            self._switch_basemap(self._earth_source(), coarse=True)
+
+    def _paleo_source(self, age):
+        """Источник тайлов карты возраста age, один на возраст: смена
+        источника сравнивается по тождеству."""
+        url = self.paleo_url.format(age=age, z="{z}", x="{x}", y="{y}")
+        found = self._paleo_sources.get(url)
+        if found is None:
+            found = basemap.Source(tr("{age} млн лет назад", age=age), url,
+                                   paleo.MAX_LEVEL, paleo.ATTRIBUTION,
+                                   builtin=True, missing=(404,))
+            self._paleo_sources[url] = found
+        return found
+
+    def _earth_source(self):
+        """Подложка Земли: карта возраста в палеогеографии, иначе
+        выбранная в группе «Основа»."""
+        if self._paleo_on():
+            return self._paleo_source(self.paleo_age)
+        return self.sources[self._basemap]
+
+    def _paleo_ready(self):
+        """Показан ли нынешний возраст: уровни 0-2 его карты на экране
+        и ни одного тайла прежней карты в кадре. Показ ждёт этого, иначе
+        шаги обгоняют загрузку."""
+        view = self.view
+        keep = view.selection.keep if view.selection else ()
+        return all(key in view.textures and key not in view.stale
+                   for key in start_keys()) \
+            and not any(key in view.stale for key in keep)
+
+    def _count_pending(self):
+        """Ждущие ответы зон плит - в счётчик загрузки вида, его
+        показывает значок загрузки."""
+        self.view.data_pending = len(self._slab_replies)
+
+    def _quake_legend_state(self):
+        """Шкала глубины очагов - при очагах на Земле."""
+        on = self.extras.get("quakes", False) and self.planet.earth \
+            and self.view.sky_view is None
+        self.quake_legend.setVisible(on)
+        self._place_attribution()
+
+    def _set_fires(self, on):
+        """Пожары - строка группы «Планета огня» в общем выборе тем.
+        Сводка NASA FIRMS за 24 часа загружается при каждом включении.
+        Включённые пожары снимают тему."""
+        if on and (self.theme_key or self.extras.get("temperature")):
+            self.set_theme("fires")
+        self._mark_gallery()
+        self.fire_legend.setVisible(on and self.planet.earth
+                                    and self.view.sky_view is None)
+        self._place_attribution()
+        if not on:
+            if self._fire_reply is not None:
+                self._fire_reply.abort()
+            self._fire_reply = None
+            self._place_fires()
+            self._place_deposits()
+            return
+        if self._fire_reply is None:
+            self._fire_reply = fetch_bytes(fires_core.FEED, self._fires_done,
+                                           prefer_cache=False)
+            self.view.data_pending += 1
+
+    def _fires_done(self, data, error):
+        if self._fire_reply is not None:
+            self.view.data_pending = max(0, self.view.data_pending - 1)
+        self._fire_reply = None
+        if data is not None:
+            self.fire_data = fires_core.parse(data.decode("utf-8",
+                                                          "replace"))
+        else:
+            self.message = (tr("Сводка пожаров не загрузилась: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+        self._place_fires()
+        self._place_deposits()
+
+    def _set_deposits(self, on):
+        """Месторождения USGS - строка витрины. Первое включение
+        скачивает архивы MRDS и крупных месторождений мира, разбор идёт
+        в рабочем потоке, итог ложится файлом в профиль
+        (core/deposits.py). Дальше файл читается без сети."""
+        self._mark_gallery()
+        self.deposit_legend.setVisible(self._deposit_legend_on())
+        if not on:
+            for reply in list(self._deposit_replies.values()):
+                reply.abort()
+            self._deposit_replies.clear()
+            self._place_deposits()
+            return
+        if self.deposit_data is None:
+            path = deposits_path()
+            if os.path.exists(path):
+                try:
+                    self.deposit_data = deposits_core.load(path)
+                except (OSError, ValueError, KeyError) as error:
+                    journal.note("deposits file: {}".format(error))
+        if self.deposit_data is not None:
+            self._place_deposits()
+            return
+        if self._deposit_replies or self._deposit_job is not None:
+            return
+        self._deposit_bytes = {}
+        for key, url in (("mrds", deposits_core.MRDS_URL),
+                         ("major", deposits_core.MAJOR_URL),
+                         ("minfac", deposits_core.MINFAC_URL)):
+            self._deposit_replies[key] = fetch_bytes(
+                url, lambda data, error, key=key:
+                self._deposit_arrived(key, data, error))
+            self.view.data_pending += 1
+        self.message = (tr("Загрузка месторождений USGS, около 25 МБ…"),
+                        time.monotonic())
+        self._show_state()
+
+    def _deposit_arrived(self, key, data, error):
+        if self._deposit_replies.pop(key, None) is not None:
+            self.view.data_pending = max(0, self.view.data_pending - 1)
+        if data is None:
+            for reply in list(self._deposit_replies.values()):
+                reply.abort()
+            self._deposit_replies.clear()
+            self.message = (tr("Месторождения не загрузились: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+            return
+        self._deposit_bytes[key] = bytes(data)
+        if self._deposit_replies:
+            return
+        mrds = self._deposit_bytes.pop("mrds", None)
+        major = self._deposit_bytes.pop("major", None)
+        minfac = self._deposit_bytes.pop("minfac", None)
+        self._deposit_job = executor("deposits", 1).submit(
+            parse_deposits, mrds, major, minfac, deposits_path())
+        self.view.data_pending += 1
+        QTimer.singleShot(DEPOSIT_POLL, self._deposit_poll)
+
+    def _deposit_poll(self):
+        job = self._deposit_job
+        if job is None:
+            return
+        if not job.done():
+            QTimer.singleShot(DEPOSIT_POLL, self._deposit_poll)
+            return
+        self._deposit_job = None
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        try:
+            self.deposit_data = job.result()
+        except (OSError, ValueError, KeyError, StopIteration,
+                zipfile.BadZipFile) as error:
+            self.message = (tr("Месторождения не разобраны: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+            return
+        self._place_deposits()
+
+    def _place_deposits(self):
+        """Месторождения на глобус по нынешнему масштабу рельефа."""
+        on = self.extras.get("deposits", False) and self.planet.earth
+        self.view.deposits.set_deposits(
+            self.deposit_data if on else None, self.view.store.scale,
+            self._surface_ground)
+        self._show_attribution()
+        self.view.update()
+
+    def _place_fires(self):
+        """Очаги на глобус по нынешнему масштабу рельефа."""
+        on = self.extras.get("fires", False) and self.planet.earth
+        self.view.fires.set_fires(self.fire_data if on else None,
+                                  self.view.store.scale,
+                                  self._surface_ground)
+        self._update_timebar()
+        self._time_quakes()
+        self._show_attribution()
+        self.view.update()
+
+    def _set_quakes(self, on):
+        """Землетрясения строкой раздела «Слои». Сводка USGS
+        загружается при каждом включении, кэш QGIS отдаёт её только
+        по заголовкам сервера."""
+        if not on:
+            if self._quake_reply is not None:
+                self._quake_reply.abort()
+            self._quake_reply = None
+            self.view.quakes.set_events([], 0.0, None)
+            self._update_timebar()
+            self._quake_legend_state()
+            self._show_attribution()
+            self.view.update()
+            return
+        self._quake_legend_state()
+        self._want_quakes()
+
+    def _want_quakes(self):
+        """Сводка землетрясений USGS, если её запроса ещё нет."""
+        if self._quake_reply is None:
+            self._quake_reply = fetch_json(quakes.FEED, self._quakes_done,
+                                           prefer_cache=False)
+
+    def _quakes_done(self, data, error):
+        self._quake_reply = None
+        self.quake_error = error
+        if data is not None:
+            self.quake_events = quakes.parse(data)
+        self._place_quakes()
+        self._refresh_section()
+
+    def _place_quakes(self):
+        """События на глобус по нынешнему масштабу рельефа. Эпицентр
+        стоит на рельефе из хранилища высот, грубом вдали от вида."""
+        on = self.extras.get("quakes", False) and self.planet.earth
+        events = self.quake_events if on else []
+        # При разрезе Земли очаги растягиваются по глубине, как кора.
+        self.view.quakes.set_events(events, self.view.store.scale,
+                                    self._surface_ground, self._depth_map())
+        self._update_timebar()
+        self._time_quakes()
+        self._show_attribution()
+        self.view.update()
+
+    def _surface_ground(self, lats, lons):
+        """Высоты нарисованной поверхности: с дном океана - дно."""
+        return self._true_heights(lats, lons)
+
+    def _surface_heights(self, lats, lons):
+        """Высоты поверхности для видимости и инсоляции: с дном океана
+        над водой - уровень моря, а не дно."""
+        heights = self._true_heights(lats, lons)
+        if self.view.sea_floor:
+            heights = np.maximum(heights, 0.0)
+        return heights
+
+    def _body_terrain(self, planet):
+        """Высоты тела: Terrarium у Земли, архив у Марса и Луны.
+        Архив тела скачивается, когда рельеф включён."""
+        if planet.earth and self._geoid_on():
+            # Режим геоида: высоты - тайлы геоида, без врезок и пола.
+            self.view.store.max_level = geoid.MAX_LEVEL
+            self.view.store.deep = []
+            self._start_terrain(basemap.Source(
+                "EGM2008", self.geoid_url, geoid.MAX_LEVEL, builtin=True),
+                None)
+            return
+        if planet.earth:
+            self.view.store.max_level = TERRAIN_MAX
+            self._start_terrain(DeepSource(
+                "Terrarium", self._terrain_choice()[0], TERRAIN_MAX),
+                self._earth_floor())
+            return
+        self.view.store.deep = []
+        self._start_terrain(None, None)
+        if planet.terrain is None:
+            return
+        name, url, level, _ = planet.terrain
+        self.view.store.max_level = level
+        # Впадины тел ниже нуля остаются, пол не ставится.
+        self._start_terrain(basemap.Source(name, url, level,
+                                           builtin=True), None)

@@ -689,6 +689,11 @@ class GlobeView(QOpenGLWidget):
         h = self.store.height_at(lat, lon)
         return max(h, 0.0) if self.sea_floor else h
 
+    def label_heights(self, lats, lons):
+        """То же, что label_height, для массивов широт и долгот."""
+        h = self.store.heights_at(lats, lons)
+        return np.maximum(h, 0.0) if self.sea_floor else h
+
     def terrain_at(self, lat, lon):
         """Высота на экране, по которой ходит камера: рельеф или, если
         задан пол подземного режима, наименьшее из рельефа и пола."""
@@ -2515,7 +2520,7 @@ class GlobeView(QOpenGLWidget):
                                 [p for p, gone in zip(places, out)
                                  if not gone])
             places = self._wedged[2]
-        height_at = self.label_height if self.store.scale else None
+        height_at = self.label_heights if self.store.scale else None
         self.labels.draw(self.camera, self.camera.projection(), places,
                          height_at, self.store.version, ratio)
 

@@ -78,6 +78,10 @@ class Path:
         radius = (2.0 * ellipsoid.A + ellipsoid.B) / 3.0
         self.cum = np.concatenate([[0.0], np.cumsum(steps)]) * radius
         self.length = float(self.cum[-1])
+        # Наибольший отрезок пути в градусах дуги - запас отбора
+        # штрихов у точки взгляда (dashes).
+        self.max_step = float(np.degrees(steps.max())) if len(steps) \
+            else 0.0
 
     def at(self, distances):
         """Широты и долготы точек на расстояниях distances от начала."""
@@ -121,14 +125,40 @@ def dashes(path, spacing, phase, parts=PARTS, near=None):
     ranges = dash_ranges(path.length, spacing, phase)
     if near is not None and len(ranges):
         lat, lon, angle = near
-        middle = path.at(ranges.mean(axis=1))
-        cos = _unit(middle[0], middle[1]) @ _unit(lat, lon)
-        ranges = ranges[cos >= math.cos(math.radians(min(angle, 180.0)))]
+        ranges = _near_ranges(path, ranges, lat, lon, angle)
     if not len(ranges):
         return np.zeros((0, parts + 1)), np.zeros((0, parts + 1))
     t = np.linspace(0.0, 1.0, parts + 1)
     d = ranges[:, :1] + (ranges[:, 1:] - ranges[:, :1]) * t[None, :]
     return path.at(d)
+
+
+def _near_ranges(path, ranges, lat, lon, angle):
+    """Штрихи, середина которых ближе angle градусов к точке.
+
+    Середина штриха лежит на отрезке пути, поэтому хоть один конец
+    этого отрезка ближе angle плюс длина отрезка. Сначала отбираются
+    такие отрезки по вершинам пути, точная проверка идёт только по
+    штрихам на них. По всем штрихам пути в 2600 км вблизи это были
+    тысячи точек на каждом шаге таймера, профиль 15 октября 2026 года."""
+    target = _unit(lat, lon)
+    wide = math.cos(math.radians(min(angle + path.max_step, 180.0)))
+    close = path.units @ target >= wide
+    if not close.any():
+        return ranges[:0]
+    # Отрезок i - между вершинами i и i + 1, годен при близком конце.
+    seg = close[:-1] | close[1:]
+    starts = path.cum[:-1][seg]
+    ends = path.cum[1:][seg]
+    middle = ranges.mean(axis=1)
+    k = np.searchsorted(starts, middle, side="right") - 1
+    inside = (k >= 0) & (middle <= ends[np.clip(k, 0, len(ends) - 1)])
+    ranges = ranges[inside]
+    if not len(ranges):
+        return ranges
+    m = path.at(ranges.mean(axis=1))
+    cos = _unit(m[0], m[1]) @ target
+    return ranges[cos >= math.cos(math.radians(min(angle, 180.0)))]
 
 
 def phase_at(seconds):

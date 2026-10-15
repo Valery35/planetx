@@ -88,6 +88,29 @@ class TestDashes(unittest.TestCase):
         self.assertGreater(len(near_lats), 5)
         self.assertEqual(lats.shape[1], pf.PARTS + 1)
 
+    def test_near_matches_full_check(self):
+        # Отбор по вершинам пути даёт те же штрихи, что проверка середины
+        # каждого штриха пути. Путь с поворотом, точки у пути, в стороне
+        # и у изгиба, углы от малого до половины шара.
+        path = pf.Path([BEREZNIKI, (55.75, 37.62), UST_LUGA, (69.0, 33.0)])
+        spacing = 3000.0
+        ranges = pf.dash_ranges(path.length, spacing, 0.37)
+        middle = path.at(ranges.mean(axis=1))
+        units = pf._unit(middle[0], middle[1])
+        # Точка посреди отрезка пути: вершины дальше малого угла, штрихи
+        # у неё находит только запас на длину отрезка.
+        k = int(np.argmax(np.diff(path.cum)))
+        mid = path.at([(path.cum[k] + path.cum[k + 1]) / 2.0])
+        for lat, lon in (BEREZNIKI, (57.0, 45.0), (55.75, 37.62),
+                         (62.0, 30.0), (40.0, 100.0),
+                         (float(mid[0][0]), float(mid[1][0]))):
+            for angle in (0.02, 0.05, 0.5, 3.0, 40.0, 179.0):
+                cos = units @ pf._unit(lat, lon)
+                full = ranges[cos >= math.cos(math.radians(angle))]
+                fast = pf._near_ranges(path, ranges, lat, lon, angle)
+                self.assertTrue(np.array_equal(full, fast),
+                                (lat, lon, angle, len(full), len(fast)))
+
     def test_dash_color_is_lighter(self):
         r, g, b, a = pf.dash_color((200, 60, 20, 255))
         self.assertGreater(r, 200 / 255.0)

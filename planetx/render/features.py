@@ -261,9 +261,9 @@ class Features:
         if self.dirty or version != self.version:
             self._update(heights_at, version, still)
         projection = camera.projection().astype(np.float32)
-        GL.glEnable(GL.GL_DEPTH_TEST)
-        GL.glDepthMask(GL.GL_FALSE)
-        GL.glEnable(GL.GL_BLEND)
+        gpu.gl.glEnable(GL.GL_DEPTH_TEST)
+        gpu.gl.glDepthMask(GL.GL_FALSE)
+        gpu.gl.glEnable(GL.GL_BLEND)
         # Альфа кадра остаётся 1. С общим смешиванием полупрозрачная
         # линия уменьшала её, окно Qt просвечивало чёрным, и белая
         # сетка выходила тёмной, 29 сентября 2026 года.
@@ -275,10 +275,10 @@ class Features:
             # Ошибка посреди отрисовки оставляла запись глубины
             # выключенной, и следующие кадры рисовали тайлы без неё:
             # юбки полосами, шахматка вдали, 28 сентября 2026 года.
-            GL.glBindVertexArray(0)
-            GL.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, 0)
-            GL.glDisable(GL.GL_BLEND)
-            GL.glDepthMask(GL.GL_TRUE)
+            gpu.gl.glBindVertexArray(0)
+            gpu.gl.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, 0)
+            gpu.gl.glDisable(GL.GL_BLEND)
+            gpu.gl.glDepthMask(GL.GL_TRUE)
         return self.dirty
 
     def _draw_kinds(self, camera, projection, ratio):

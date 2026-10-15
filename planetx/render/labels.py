@@ -411,7 +411,8 @@ class Labels:
                                  ctypes.c_void_p(12))
         GL.glBindVertexArray(0)
         GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-        self.texture = GL.glGenTextures(1)
+        # Число, а не массив: атлас привязывает gpu.gl.glBindTexture.
+        self.texture = int(np.ravel(GL.glGenTextures(1))[0])
         self._clear_atlas()
         self.point_program = gpu.build_program(POINT_VERTEX, POINT_FRAGMENT)
         self.point_vao = GL.glGenVertexArrays(1)
@@ -559,12 +560,19 @@ class Labels:
         if len(stale):
             new = stale[self._ver[stale] == NO_HEIGHT]
             old = stale[self._ver[stale] != NO_HEIGHT][:HEIGHTS_PER_FRAME]
-            for row in np.concatenate([new, old]):
-                place = self._places[row]
-                h = height_at(place.lat, place.lon) if height_at else 0.0
-                h += place.lift or 0.0
-                self._p[row] = geodetic_to_ecef(place.lat, place.lon, h)
-                self._ver[row] = version
+            todo = np.concatenate([new, old])
+            # Высоты всех пунктов разом: height_at берёт массивы широт
+            # и долгот (GlobeView.label_heights). По одному пункту опрос
+            # высот был заметной долей кадра при облёте новых мест,
+            # профиль 15 октября 2026 года.
+            places = [self._places[row] for row in todo]
+            lats = np.array([p.lat for p in places], dtype=np.float64)
+            lons = np.array([p.lon for p in places], dtype=np.float64)
+            h = np.asarray(height_at(lats, lons), dtype=np.float64) \
+                if height_at else np.zeros(len(todo))
+            h = h + np.array([p.lift or 0.0 for p in places])
+            self._p[todo] = geodetic_to_ecef(lats, lons, h)
+            self._ver[todo] = version
         return self._p[rows], self._n[rows]
 
     # Отбор и отрисовка.
@@ -745,22 +753,22 @@ class Labels:
             self.free_queries.extend(
                 int(q) for q in np.ravel(GL.glGenQueries(16)))
         queries = [self.free_queries.pop() for _ in order]
-        GL.glUseProgram(self.point_program)
-        GL.glBindVertexArray(self.point_vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.point_vbo)
+        gpu.gl.glUseProgram(self.point_program)
+        gpu.gl.glBindVertexArray(self.point_vao)
+        gpu.gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.point_vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                         GL.GL_STREAM_DRAW)
         GL.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE)
-        GL.glDepthMask(GL.GL_FALSE)
-        GL.glEnable(GL.GL_DEPTH_TEST)
+        gpu.gl.glDepthMask(GL.GL_FALSE)
+        gpu.gl.glEnable(GL.GL_DEPTH_TEST)
         for n, query in enumerate(queries):
             glBeginQuery(GL.GL_ANY_SAMPLES_PASSED, query)
             raw_draw_arrays(GL.GL_POINTS, n, 1)
             glEndQuery(GL.GL_ANY_SAMPLES_PASSED)
         GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
-        GL.glDepthMask(GL.GL_TRUE)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-        GL.glBindVertexArray(0)
+        gpu.gl.glDepthMask(GL.GL_TRUE)
+        gpu.gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gpu.gl.glBindVertexArray(0)
         self.batches.append((queries, [keys[n] for n in order], stamp))
 
     def _collect(self):
@@ -805,19 +813,19 @@ class Labels:
             data[:, k, 2] = alpha
             data[:, k, 3] = u
             data[:, k, 4] = vv
-        GL.glUseProgram(self.program)
-        GL.glUniform1i(self.u_atlas, 0)
-        GL.glActiveTexture(GL.GL_TEXTURE0)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gpu.gl.glUseProgram(self.program)
+        gpu.gl.glUniform1i(self.u_atlas, 0)
+        gpu.gl.glActiveTexture(GL.GL_TEXTURE0)
+        gpu.gl.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
+        gpu.gl.glBindVertexArray(self.vao)
+        gpu.gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                         GL.GL_STREAM_DRAW)
-        GL.glEnable(GL.GL_BLEND)
+        gpu.gl.glEnable(GL.GL_BLEND)
         GL.glBlendFunc(GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA)
-        GL.glDisable(GL.GL_DEPTH_TEST)
-        GL.glDrawArrays(GL.GL_TRIANGLES, 0, 6 * len(q))
-        GL.glEnable(GL.GL_DEPTH_TEST)
-        GL.glDisable(GL.GL_BLEND)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-        GL.glBindVertexArray(0)
+        gpu.gl.glDisable(GL.GL_DEPTH_TEST)
+        gpu.gl.glDrawArrays(GL.GL_TRIANGLES, 0, 6 * len(q))
+        gpu.gl.glEnable(GL.GL_DEPTH_TEST)
+        gpu.gl.glDisable(GL.GL_BLEND)
+        gpu.gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gpu.gl.glBindVertexArray(0)

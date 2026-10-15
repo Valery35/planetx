@@ -299,6 +299,43 @@ def shadowed_methods(source):
     return found
 
 
+def shadowed_across(sources):
+    """То же, что shadowed_methods, для класса из нескольких файлов:
+    окно глобуса GlobeWindow и его примеси ui/globe/*.py. Атрибут,
+    присвоенный в одной части, закрывает метод из другой. Номера -
+    пары (номер текста, строка)."""
+    trees = [ast.parse(s) for s in sources]
+
+    def parts(tree):
+        return [c for c in ast.walk(tree) if isinstance(c, ast.ClassDef)
+                and (c.name == "GlobeWindow" or c.name.endswith("Mixin"))]
+    methods = set()
+    for tree in trees:
+        for cls in parts(tree):
+            for item in cls.body:
+                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) \
+                        and not any(isinstance(d, (ast.Name, ast.Attribute))
+                                    for d in item.decorator_list):
+                    methods.add(item.name)
+    found = []
+    for i, tree in enumerate(trees):
+        for cls in parts(tree):
+            for node in ast.walk(cls):
+                targets = []
+                if isinstance(node, ast.Assign):
+                    targets = node.targets
+                elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+                    targets = [node.target]
+                for target in targets:
+                    for part in ast.walk(target):
+                        if isinstance(part, ast.Attribute) \
+                                and isinstance(part.value, ast.Name) \
+                                and part.value.id == "self" \
+                                and part.attr in methods:
+                            found.append((i, part.lineno))
+    return found
+
+
 UNSAFE_XML = ("xml.etree", "xml.sax", "xml.dom", "lxml")
 
 
@@ -490,6 +527,16 @@ class TestCodeRules(unittest.TestCase):
     def test_no_attribute_shadows_a_method(self):
         self.assertEqual(scan(shadowed_methods, self.paths), [])
 
+    def test_globe_window_parts_do_not_shadow_each_other(self):
+        # Окно глобуса разделено на примеси 15 октября 2026 года, прежний
+        # сторож видит класс только в пределах одного файла.
+        folder = os.path.join(PLUGIN, "ui", "globe")
+        paths = [os.path.join(PLUGIN, "ui", "window.py")] + sorted(
+            os.path.join(folder, n) for n in os.listdir(folder)
+            if n.endswith(".py"))
+        found = shadowed_across([read(p) for p in paths])
+        self.assertEqual(["%s:%d" % (paths[i], n) for i, n in found], [])
+
     def test_no_secret_like_literals(self):
         # В архив идут модули плагина без тестов, их и проверяет каталог.
         plugin = [p for p in self.paths if p.startswith(PLUGIN)
@@ -632,6 +679,15 @@ class TestGuardsCatch(unittest.TestCase):
             "class W:\n    def __init__(self):\n"
             "        self._ground_rasters = []\n"
             "    def _ground(self, px, py):\n        return px\n")
+
+    def test_shadowed_across_guard(self):
+        window = ("class GlobeWindow(AMixin):\n    def __init__(self):\n"
+                  "        self._ground = []\n")
+        part = "class AMixin:\n    def _ground(self, px, py):\n" \
+            "        return px\n"
+        self.assertEqual(shadowed_across([window, part]), [(0, 3)])
+        self.assertEqual(shadowed_across(
+            [window.replace("_ground", "_ground_rasters"), part]), [])
 
     def test_flat_property_guard(self):
         self.assertCatches(

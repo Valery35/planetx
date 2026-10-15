@@ -639,7 +639,11 @@ class NasaMaps(QWidget):
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         back = QToolButton(self)
-        back.setText("←")
+        # Синий значок, как кнопки шкалы времени: чёрная стрелка шрифтом
+        # терялась, замечание автора от 15 октября 2026 года.
+        from .timebar import ICON_SIDE, blue_icon
+        back.setIcon(blue_icon("←"))
+        back.setIconSize(QSize(ICON_SIDE, ICON_SIDE))
         back.setAutoRaise(True)
         back.setToolTip(tr("Назад к списку слоёв"))
         back.clicked.connect(self.close)

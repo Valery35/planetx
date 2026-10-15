@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.86.1
+version=0.87.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.86.1 The light background under the transparent ground of the
+changelog=0.87.0 The globe is faster when flying over new places - about 15
+      percent more frames per second and half as many pauses longer than 50 ms.
+      Label heights are computed at once, layer and label pictures
+      reach the graphics card faster, the flow along a path picks the dashes
+      near the look point faster. The Back arrow of the Add data catalogue
+      is a blue button, as the buttons of the time scale.
+      0.86.1 The light background under the transparent ground of the
       subsurface mode lies only under the frame of the model. In 0.86.0 it
       filled the whole frame, and the sky seen from space turned light.
       0.86.0 Tour stop captions. At a stop the name and the description

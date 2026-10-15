@@ -633,7 +633,7 @@ def save_view_check():
     from planetx.core.features import Shape
     from planetx.core.navigation import Pose
     from planetx.ui import myplaces
-    import planetx.ui.window as wmod
+    import qgis.PyQt.QtWidgets as wmod  # QInputDialog окна и его частей
     window = state["window"]
     nav = window.view.navigator
     nav.stop()
@@ -2346,7 +2346,7 @@ def multi_select():
     from qgis.PyQt.QtGui import QKeyEvent
     from qgis.PyQt.QtWidgets import QMessageBox
     from planetx.core.features import Shape
-    from planetx.ui import window as window_module
+    import qgis.PyQt.QtWidgets as window_module  # QMessageBox окна
     window = state["window"]
     store = window.myplaces
     panel = window.panel
@@ -3283,7 +3283,7 @@ def sky_tour():
     folder = store.add_folder("Небо")
     state["sky_folder"] = folder
     window.panel.select_place(folder)
-    import planetx.ui.window as wmod
+    import qgis.PyQt.QtWidgets as wmod  # QInputDialog окна и его частей
     for name, (ra, dec, fov) in (("Орион", (84.0, 0.0, 40.0)),
                                  ("Плеяды", (56.9, 24.1, 8.0)),
                                  ("Вега", (279.2, 38.8, 20.0))):
@@ -3355,7 +3355,7 @@ def sky_tour_check():
 @check(4000)
 def sky_record():
     # Новая метка щелчком по небу и запись тура с экрана на небе.
-    import planetx.ui.window as wmod
+    import qgis.PyQt.QtWidgets as wmod  # QInputDialog окна и его частей
     window = state["window"]
     window.set_body("sky")
     window.show_sky(84.0, 0.0, 60.0)
@@ -12300,7 +12300,8 @@ def tile_source_wait():
 
 @check(3000)
 def tile_source_save():
-    import planetx.ui.window as wmod
+    # add_tile_source живёт в части окна ui/globe/state.py.
+    import planetx.ui.globe.state as wmod
     from qgis.core import QgsSettings
     window = state["window"]
     dialog = state["tile_dialog"]
@@ -13856,7 +13857,7 @@ def record_screen_move():
 
 @check(500)
 def record_screen_stop():
-    import planetx.ui.window as wmod
+    import qgis.PyQt.QtWidgets as wmod  # QInputDialog окна и его частей
     window = state["window"]
     wmod.QInputDialog.getText = staticmethod(
         lambda *args, **kwargs: ("Тур теста", True))
@@ -14004,48 +14005,6 @@ def demo_check():
     if state.get("demo_key"):
         window.myplaces.remove(state["demo_key"])
     window.set_extra("buildings", False)
-
-
-@check(1000)
-def close_without_heights():
-    # Закрытие окна на теле без загрузчика высот. Окно закрывается,
-    # шаг ставится последним. На прежнем коде AttributeError в журнале.
-    from planetx.core import planets
-    window = state["window"]
-    saved = planets.MOON_PLANET.terrain
-    planets.MOON_PLANET.terrain = None
-    from qgis.PyQt.QtGui import QCloseEvent
-    try:
-        window.set_body("moon")
-        out = result["close_without_heights"] = {
-            "loader": window.terrain_loader is not None, "error": ""}
-        # Ошибка в начале закрытия: сигнал closed всё равно уходит,
-        # иначе плагин держит ссылку на уничтоженное окно.
-        got = []
-        window.closed.connect(lambda: got.append(True))
-        sync, window.sync = window.sync, None
-        try:
-            window.closeEvent(QCloseEvent())
-        except AttributeError:
-            got.append(False)
-        window.sync = sync
-        out["closed_after_error"] = got
-        # closeEvent напрямую: исключение из обработчика события Qt
-        # уходит в окно QGIS мимо сборщика ошибок.
-        try:
-            window.closeEvent(QCloseEvent())
-        except AttributeError as exc:
-            out["error"] = str(exc)
-        # Повторное закрытие: загрузчики уже сняты, abort не падает.
-        out["second_error"] = ""
-        try:
-            window.closeEvent(QCloseEvent())
-        except TypeError as exc:
-            out["second_error"] = str(exc)
-        if not out["error"] and not out["second_error"]:
-            window.close()
-    finally:
-        planets.MOON_PLANET.terrain = saved
 
 
 def _watch_loader(loader, name):
@@ -14676,6 +14635,296 @@ def zlayer_check():
     return None
 
 
+def _post_shot(name):
+    """Кадр для объявления: окно во весь экран целиком, с органами
+    навигации и подписями поверх вида."""
+    window = state["window"]
+    window.grab().save(os.path.join(TEMP, "planetx_post_%s.png" % name))
+
+
+def _post_full(on):
+    window = state["window"]
+    if window.isFullScreen() != on:
+        window.toggle_fullscreen()
+
+
+SPEED_PLACES = ((58.0105, 56.2294), (55.7522, 37.6156), (43.3499, 42.4453),
+                (46.5600, 8.0000), (59.4500, 56.8800), (35.3606, 138.7274))
+SPEED_STAY = 8.0  # с на место, камера кружит
+
+
+@check(500, manual=True)
+def speed_profile():
+    """Ручной шаг: профиль Python главного потока при облёте шести мест.
+    Камера кружит над местом с наклоном 60° и уходит к следующему, вид
+    обычный - подложка, рельеф, подписи, звёзды. Пишутся интервалы
+    кадров, паузы цикла событий и самые затратные функции модуля."""
+    import cProfile
+    import math as _m
+    from qgis.PyQt.QtCore import QTimer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    frames = state["speed_frames"] = []
+    gaps = state["speed_gaps"] = []
+    view.frameSwapped.connect(lambda: frames.append(time.perf_counter()))
+    t0 = time.perf_counter()
+    state["speed_t0"] = t0
+    tick = {"last": t0}
+
+    def move():
+        now = time.perf_counter()
+        gaps.append(now - tick["last"])
+        tick["last"] = now
+        t = now - t0
+        k = min(int(t // SPEED_STAY), len(SPEED_PLACES) - 1)
+        lat, lon = SPEED_PLACES[k]
+        a = (t % SPEED_STAY) / SPEED_STAY * 2 * _m.pi
+        view.navigator.show(Pose(lat + 0.01 * _m.sin(a),
+                                 lon + 0.02 * _m.cos(a), 15000.0,
+                                 (t * 25.0) % 360.0, 60.0))
+        view.update()
+    timer = state["speed_timer"] = QTimer()
+    timer.timeout.connect(move)
+    timer.start(16)
+    # PLANETX_SPEED_NOPROF - замер без профилировщика, он замедляет
+    # Python в разы.
+    prof = state["speed_prof"] = None if os.environ.get(
+        "PLANETX_SPEED_NOPROF") else cProfile.Profile()
+    if prof is not None:
+        prof.enable()
+
+
+@check(1000, manual=True)
+def speed_profile_done():
+    import pstats
+    import statistics
+    spent = time.perf_counter() - state["speed_t0"]
+    if spent < SPEED_STAY * len(SPEED_PLACES):
+        return 1000
+    prof = state["speed_prof"]
+    if prof is not None:
+        prof.disable()
+    state["speed_timer"].stop()
+    frames = state["speed_frames"]
+    gaps = [g * 1000.0 for g in state["speed_gaps"][1:]]
+    iv = [(b - a) * 1000.0 for a, b in zip(frames, frames[1:])]
+    worst = None
+    j = 0
+    for i, start in enumerate(frames):
+        while j < len(frames) and frames[j] < start + 1.0:
+            j += 1
+        if frames[-1] - start >= 1.0:
+            worst = j - i if worst is None else min(worst, j - i)
+    stats = pstats.Stats(prof) if prof is not None else None
+    rows = []
+    calls = {}
+    for (path, line, name), (cc, nc, tt, ct, by) in (
+            stats.stats.items() if stats else ()):
+        calls.setdefault(name, []).extend(
+            (round(v[2], 3), "%s:%d %s" % (
+                k[0].replace("\\", "/").split("planetx/planetx/")[-1],
+                k[1], k[2])) for k, v in by.items())
+        rows.append((tt, ct, nc, "%s:%d %s" % (
+            path.replace("\\", "/").split("planetx/planetx/")[-1],
+            line, name)))
+    total = sum(r[0] for r in rows)
+    own = [r for r in rows if "planetx" in r[3] or "/" not in r[3]]
+    result["speed"] = {
+        "seconds": round(spent, 1), "frames": len(frames),
+        "fps": round(len(frames) / spent, 1), "worst_second": worst,
+        "interval_median": round(statistics.median(iv), 1) if iv else None,
+        "interval_p95": round(sorted(iv)[int(len(iv) * 0.95)], 1)
+        if iv else None,
+        "loop_gaps_over_50": sum(1 for g in gaps if g > 50.0),
+        "loop_gap_max": round(max(gaps), 1) if gaps else None,
+        "profiled_s": round(total, 2),
+        "tottime": [(round(r[0], 3), r[2], r[3]) for r in sorted(
+            rows, key=lambda r: -r[0])[:40]],
+        "cumtime": [(round(r[1], 3), r[2], r[3]) for r in sorted(
+            own, key=lambda r: -r[1])[:40]],
+        # Кто зовёт тяжёлые функции: время вызова от каждого вызывающего.
+        "callers": {n: sorted(calls.get(n, []), reverse=True)[:6] for n in (
+            "glCheckError", "_packed", "_fields", "height_at", "probe",
+            "drawEllipse", "at", "createRequest", "sample", "best")}}
+    return None
+
+
+@check(500, manual=True)
+def post_flows():
+    """Ручной шаг: кадр демо «Поток грузов, схема» для объявления."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("air", True)
+    _post_full(True)
+    # Метки прежних шагов проверочного профиля в кадр не идут.
+    window.clear_places(confirm=False)
+    window.open_demo("flows")
+    state["ls_started"] = time.monotonic()
+    state["post_pose"] = Pose(54.0, 75.0, 8500000.0, 0.0, 0.0)
+
+
+@check(1000, manual=True)
+def post_flows_shot():
+    window = state["window"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 4.0:
+        return 1000
+    if "post_posed" not in state:
+        state["post_posed"] = True
+        window.view.navigator.stop()
+        window.view.navigator.show(state["post_pose"])
+        return 1000
+    if spent < 25.0:
+        return 1000
+    _post_shot("flows")
+    state.pop("post_posed", None)
+    return None
+
+
+@check(500, manual=True)
+def post_caption():
+    """Ручной шаг: подпись остановки тура на кадре."""
+    from planetx.core.tour import Stop
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("air", True)
+    _post_full(True)
+    stops = [Stop("Березники", 59.408, 56.805, 6000.0, 20.0, 60.0),
+             Stop("Соликамск", 59.648, 56.771, 6000.0, 0.0, 60.0)]
+    stops[0].description = ("Верхнекамское месторождение калийных солей. "
+                            "Здесь добывают сильвинит с 1934 года.")
+    window.tour.bar.captions.setChecked(True)
+    window.tour.bar.pause.setValue(60.0)
+    window.tour.start(stops)
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000, manual=True)
+def post_caption_shot():
+    window = state["window"]
+    layer = window.tour.stop_caption
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 60.0 and not (layer.isVisible() and layer.alpha >= 1.0
+                             and spent > 35.0):
+        return 1000
+    _post_shot("caption")
+    window.tour.stop()
+    return None
+
+
+@check(500, manual=True)
+def post_fence():
+    """Ручной шаг: «3D-забор» разреза из пяти пластов по дуге у
+    Березников под прозрачной землёй."""
+    import math as _m
+    from qgis.core import QgsFeature, QgsGeometry, QgsProject, \
+        QgsVectorLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("air", True)
+    _post_full(True)
+    window.clear_places(confirm=False)
+    lat0, lon0 = 59.45, 56.86
+    fence = QgsVectorLayer(
+        "MultiPolygonZ?crs=EPSG:4326&field=bed:string&field=color:string",
+        "Разрез (3D-забор) объявление", "memory")
+    beds = (("Q", "#e8d27a", 0.0, 60.0),
+            ("P2sl", "#c98a52", 60.0, 220.0),
+            ("ПКС", "#e45f5f", 220.0, 330.0),
+            ("КрII", "#9a69e3", 330.0, 450.0),
+            ("В", "#4f8fd8", 450.0, 650.0))
+    n = 120
+    points = []
+    for i in range(n + 1):
+        t = i / n
+        lat = lat0 + 0.03 * t
+        lon = lon0 + 0.03 * _m.sin(t * _m.pi * 1.2)
+        ground = 150.0 + 12.0 * _m.sin(t * 7.0)
+        points.append((lat, lon, ground, t))
+    feats = []
+    for k, (name, color, top, bottom) in enumerate(beds):
+        quads = []
+        for (la, lo, g, t), (lb, lob, gb, tb) in zip(points, points[1:]):
+            wave_a = 40.0 * _m.sin(t * 5.0 + k) * (k > 0)
+            wave_b = 40.0 * _m.sin(tb * 5.0 + k) * (k > 0)
+            ta = g - top - wave_a if k else g
+            tb_ = gb - top - wave_b if k else gb
+            ba = g - bottom - 40.0 * _m.sin(t * 5.0 + k + 1)
+            bb = gb - bottom - 40.0 * _m.sin(tb * 5.0 + k + 1)
+            quads.append("(({0} {1} {2}, {3} {4} {5}, {3} {4} {6}, "
+                         "{0} {1} {7}, {0} {1} {2}))".format(
+                             lo, la, ta, lob, lb, tb_, bb, ba))
+        feature = QgsFeature(fence.fields())
+        feature.setGeometry(QgsGeometry.fromWkt(
+            "MultiPolygon Z (" + ",".join(quads) + ")"))
+        feature.setAttributes([name, color])
+        feats.append(feature)
+    fence.dataProvider().addFeatures(feats)
+    QgsProject.instance().addMapLayers([fence])
+    state["zlayers"] = [fence.id()]
+    window.view.navigator.stop()
+    window.set_relief_scale(3.0)
+    window.view.navigator.show(Pose(lat0 + 0.015, lon0 + 0.012, 5200.0,
+                                    100.0, 48.0))
+    window.set_layer_shown(fence.id(), True)
+    window.set_zlayer(fence.id(), True)
+    window.subsurface.set_opacity(0.15)
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000, manual=True)
+def post_fence_shot():
+    from qgis.core import QgsProject
+    window = state["window"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 30.0:
+        return 1000
+    _post_shot("fence")
+    window.set_relief_scale(1.0)
+    window.set_zlayer(state["zlayers"][0], False)
+    QgsProject.instance().removeMapLayers(state["zlayers"])
+    return None
+
+
+@check(500, manual=True)
+def post_geoid():
+    """Ручной шаг: геоид с разрезом Земли, грани по «измятой»
+    поверхности."""
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("air", True)
+    _post_full(True)
+    folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
+    window.geoid_url = QUrl.fromLocalFile(os.path.join(
+        folder, "geoid")).toString() + "/{z}/{x}/{y}.png"
+    window.set_geoid_scale(10000.0)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(5.0, 90.0, 17000000.0, 20.0, 25.0))
+    window.set_extra("geoid", True)
+    window.set_extra("cutaway", True)
+    window.set_wedge_box(60.0, 120.0, 0.0, 60.0)
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000, manual=True)
+def post_geoid_shot():
+    window = state["window"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 25.0:
+        return 1000
+    _post_shot("geoid")
+    window.set_extra("cutaway", False)
+    window.set_extra("geoid", False)
+    _post_full(False)
+    return None
+
+
 @check(500)
 def air_toggle():
     """Строка «Атмосфера»: без неё нет ни гало, ни дымки. Средний цвет
@@ -15048,6 +15297,48 @@ def scene_whole_check():
         QgsProject.instance().layerTreeRoot().removeChildNode(group)
     dialog.mode.setCurrentIndex(0)
     return None
+
+
+@check(1000)
+def close_without_heights():
+    # Закрытие окна на теле без загрузчика высот. Окно закрывается,
+    # шаг ставится последним. На прежнем коде AttributeError в журнале.
+    from planetx.core import planets
+    window = state["window"]
+    saved = planets.MOON_PLANET.terrain
+    planets.MOON_PLANET.terrain = None
+    from qgis.PyQt.QtGui import QCloseEvent
+    try:
+        window.set_body("moon")
+        out = result["close_without_heights"] = {
+            "loader": window.terrain_loader is not None, "error": ""}
+        # Ошибка в начале закрытия: сигнал closed всё равно уходит,
+        # иначе плагин держит ссылку на уничтоженное окно.
+        got = []
+        window.closed.connect(lambda: got.append(True))
+        sync, window.sync = window.sync, None
+        try:
+            window.closeEvent(QCloseEvent())
+        except AttributeError:
+            got.append(False)
+        window.sync = sync
+        out["closed_after_error"] = got
+        # closeEvent напрямую: исключение из обработчика события Qt
+        # уходит в окно QGIS мимо сборщика ошибок.
+        try:
+            window.closeEvent(QCloseEvent())
+        except AttributeError as exc:
+            out["error"] = str(exc)
+        # Повторное закрытие: загрузчики уже сняты, abort не падает.
+        out["second_error"] = ""
+        try:
+            window.closeEvent(QCloseEvent())
+        except TypeError as exc:
+            out["second_error"] = str(exc)
+        if not out["error"] and not out["second_error"]:
+            window.close()
+    finally:
+        planets.MOON_PLANET.terrain = saved
 
 
 # Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
