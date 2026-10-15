@@ -26,13 +26,13 @@ import numpy as np
 try:  # внутри плагина QGIS
     from . import ellipsoid
     from .cutaway import (CRUST_COLORS, PREM_RADIUS, SHELLS, SLAB_COLOR,
-                          crust_layers)
+                          crust_layers, layer_colors)
     from .slabs import band
     from .subsurface import merge, wall
 except ImportError:  # headless-тесты
     import ellipsoid
     from cutaway import (CRUST_COLORS, PREM_RADIUS, SHELLS, SLAB_COLOR,
-                         crust_layers)
+                         crust_layers, layer_colors)
     from slabs import band
     from subsurface import merge, wall
 
@@ -43,12 +43,14 @@ DEPTH = 700.0  # км, глубина по умолчанию - низ пере�
 WIDTH = 100.0  # км, полоса очагов по обе стороны линии вместе
 
 Section = namedtuple(
-    "Section", "distance lats lons bounds slab_top slab_bottom quakes depth")
+    "Section",
+    "distance lats lons bounds slab_top slab_bottom quakes depth oceanic",
+    defaults=(None,))
 Section.__doc__ = """Разрез: distance - км от начала линии, lats, lons -
 точки линии, bounds - отметки границ коры CRUST1.0 (n, 9) в км или None,
 slab_top, slab_bottom - плита в км глубины или NaN, quakes - список
 (км вдоль линии, глубина км, магнитуда, событие), depth - глубина низа
-разреза, км."""
+разреза, км, oceanic - океаническая ли кора по точкам или None."""
 
 
 def _unit(lats, lons):
@@ -134,6 +136,7 @@ def build(points, crust=None, zones=(), quakes=(), depth=DEPTH,
     distance, lats, lons = found
     bounds = crust.at(lats, lons).astype(np.float64) \
         if crust is not None else None
+    oceanic = crust.oceanic(lats, lons) if crust is not None else None
     if zones:
         top, bottom = band(list(zones), lats, lons)
     else:
@@ -141,7 +144,7 @@ def build(points, crust=None, zones=(), quakes=(), depth=DEPTH,
         bottom = np.full(len(lats), np.nan)
     return Section(distance, lats, lons, bounds, top, bottom,
                    near(list(quakes), lats, lons, distance, width),
-                   float(depth))
+                   float(depth), oceanic)
 
 
 def moho(section):
@@ -195,8 +198,14 @@ def wall_mesh(section, alpha=WALL_ALPHA):
     if section.bounds is not None:
         depths = -section.bounds
         for k, key in enumerate(crust_layers()):
-            parts.append(part(depths[:, k], depths[:, k + 1],
-                              CRUST_COLORS[key]))
+            piece = part(depths[:, k], depths[:, k + 1], CRUST_COLORS[key])
+            colors = layer_colors(key, section.oceanic)
+            if piece is not None and np.ndim(colors) == 2:
+                # Цвет по точкам: континентальная и океаническая кора.
+                rgba = piece.colors.copy()
+                rgba[:, :3] = np.vstack([colors, colors])
+                piece = piece._replace(colors=rgba)
+            parts.append(piece)
     else:
         crust = [c for c in SHELLS if c[0] == "crust"][0]
         parts.append(part(np.zeros(n), base, crust[3]))

@@ -116,8 +116,15 @@ class SectionChart(QWidget):
         if s.bounds is not None:
             depths = -s.bounds
             for k, key in enumerate(cutaway.crust_layers()):
-                self._fill(painter, to_screen, depths[:, k],
-                           depths[:, k + 1], cutaway.CRUST_COLORS[key])
+                if key not in cutaway.OCEAN_COLORS:
+                    self._fill(painter, to_screen, depths[:, k],
+                               depths[:, k + 1], cutaway.CRUST_COLORS[key])
+                    continue
+                for ocean, top, bottom in cutaway.split_types(
+                        depths[:, k], depths[:, k + 1], s.oceanic):
+                    colors = cutaway.OCEAN_COLORS if ocean \
+                        else cutaway.CRUST_COLORS
+                    self._fill(painter, to_screen, top, bottom, colors[key])
         else:
             crust = [c for c in cutaway.SHELLS if c[0] == "crust"][0]
             self._fill(painter, to_screen, np.zeros(n), moho, crust[3])
@@ -278,7 +285,8 @@ class SectionDialog(QDialog):
         if found is None:
             self.stats.setText(tr("Нужен путь хотя бы из двух точек."))
             return
-        self.legend.set_crust(found.bounds is not None)
+        self.legend.set_crust(found.bounds is not None,
+                              found.oceanic is not None)
         self.legend.set_slabs(bool(np.any(np.isfinite(found.slab_top))))
         text = tr("Длина {length}, глубина {depth}. Очагов землетрясений "
                   "в полосе {count}.",

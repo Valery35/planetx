@@ -27,8 +27,10 @@ from ...net.overlay import (OPENFREEMAP_ATTRIBUTION, fetch_bytes, fetch_mirror,
 from ...render.view import start_keys
 from ..inset import DeepSource, DemSource, warm as warm_gdal
 from ..deposits import deposits_path, parse_deposits
-from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, TERRAIN_ATTRIBUTION,
-                   TERRAIN_MIRRORS, all_sources, link_html)
+from ..overpass import brief_error
+from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, STRETCH_KEY,
+                   TERRAIN_ATTRIBUTION, TERRAIN_MIRRORS, all_sources,
+                   link_html)
 
 
 class EarthDataMixin:
@@ -189,6 +191,9 @@ class EarthDataMixin:
         if self.view.vertex_tool is None:
             self.view.vertex_tool = self.wedge_corners
         self._update_tool_marks()
+        # Модель, не пришедшая раньше, просится снова при включении.
+        if self.crust is None and self._crust_reply is None:
+            self.crust_error = None
         self._want_crust()
         self._show_attribution()
 
@@ -211,6 +216,18 @@ class EarthDataMixin:
         if self.view.quakes.events:
             self._place_quakes()
 
+    def cutaway_stretch(self):
+        """Растягивать ли кору разреза издалека - настройка пункта меню
+        строки «Разрез Земли», по умолчанию да."""
+        return QgsSettings().value(STRETCH_KEY, True, type=bool)
+
+    def set_cutaway_stretch(self, on):
+        """Пункт «Растягивать кору»: грани, плиты и очаги заново."""
+        QgsSettings().setValue(STRETCH_KEY, bool(on))
+        self.panel.cutaway_stretch = bool(on)
+        self.view.set_wedge_stretch(on)
+        self._wedge_gain_changed()
+
     def _crust_done(self, data, error):
         self._crust_reply = None
         self.crust_error = error
@@ -219,8 +236,20 @@ class EarthDataMixin:
                 self.crust = crust.from_archive(data)
             except crust.CrustError as problem:
                 self.crust_error = str(problem)
+        if self.crust is None:
+            # Без модели кора - слой PREM постоянной толщины, причина -
+            # в шкале и журнале. Замечание пользователя от 15 октября
+            # 2026 года - «мощность коры в модели постоянная?».
+            reason = brief_error(self.crust_error or "")
+            self.cutaway_legend.set_missing(reason or tr("нет ответа"))
+            journal.note("CRUST1.0 не загружена: {}".format(
+                self.crust_error))
+        else:
+            self.cutaway_legend.set_missing("")
         self._refresh_identified()
-        self.cutaway_legend.set_crust(self.crust is not None)
+        self.cutaway_legend.set_crust(
+            self.crust is not None,
+            self.crust is not None and self.crust.vp is not None)
         self._place_attribution()
         if self.crust is not None and self.view.wedge is not None:
             self.view.set_wedge(self.view.wedge, self.crust)

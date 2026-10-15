@@ -15299,6 +15299,93 @@ def scene_whole_check():
     return None
 
 
+@check(3000)
+def crust_types_on():
+    # Кора двух типов и растяжение - просьбы пользователя Ивана от
+    # 15 октября 2026 года. Сектор над Атлантикой у Европы, северная
+    # грань режет и океан, и материк, вид с 12 000 км.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    window.set_cutaway_stretch(True)
+    window.set_extra("cutaway", True)
+    window.set_wedge_box(-40.0, 20.0, 0.0, 50.0)
+    window.set_extra("quakes", True)
+    nav.set_pose(Pose(30.0, -5.0, 12000000.0, 330.0, 30.0))
+    result["crust_types"] = {"started": time.monotonic()}
+
+
+@check(1000)
+def crust_types_check():
+    import numpy as np
+    from planetx.core import cutaway
+    window = state["window"]
+    view = window.view
+    out = result["crust_types"]
+    if window.crust is None and not window.crust_error \
+            and time.monotonic() - out["started"] < 60.0:
+        return 1000
+    out["crust"] = window.crust is not None
+    out["vp"] = window.crust is not None and window.crust.vp is not None
+    legend = window.cutaway_legend
+    out["legend_oceanic"] = legend.oceanic
+    out["legend_rows"] = [text for text, _ in legend.rows]
+    mesh = cutaway.faces(view.wedge, crust=window.crust,
+                         gain=view.wedge_gain)
+    rgb = mesh.vertices["color"][:, :3]
+
+    def has(color):
+        return bool(np.any(np.all(rgb == np.array(color, np.uint8),
+                                  axis=1)))
+    out["faces_oceanic"] = has(cutaway.OCEAN_COLORS["crust_upper"])
+    out["faces_continental"] = has(cutaway.CRUST_COLORS["crust_upper"])
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_crust_types.png"))
+    # Растяжение: издалека ступень больше 1, без флажка - 1, очаги и
+    # шкала следом, флажок обратно - прежняя ступень.
+    out["gain_stretched"] = view.wedge_gain
+    window.panel.cutaway_stretch_changed.emit(False)
+    out["gain_true_scale"] = view.wedge_gain
+    out["legend_gain_true_scale"] = legend.gain
+    out["setting_off"] = window.cutaway_stretch()
+    out["panel_off"] = window.panel.cutaway_stretch
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_crust_true_scale.png"))
+    window.panel.cutaway_stretch_changed.emit(True)
+    out["gain_back"] = view.wedge_gain
+    out["setting_on"] = window.cutaway_stretch()
+    # Модель не пришла: строка с причиной в шкале, потом снова модель.
+    model = window.crust
+    window.crust = None
+    window._crust_done(None, "Host igppweb.ucsd.edu not found")
+    out["missing_row"] = legend.rows[0][0] if legend.rows else ""
+    out["missing_title_crust"] = legend.crust
+    window.crust = model
+    window.crust_error = ""
+    legend.set_missing("")
+    legend.set_crust(model is not None, model is not None
+                     and model.vp is not None)
+    out["missing_cleared"] = not legend.missing
+    out["gl"] = dict(view.gl_errors)
+    # Вблизи: экваториальная грань у берега Габона, океан переходит
+    # в материк, вид из вынутого сектора на юг.
+    from planetx.core.navigation import Pose
+    view.navigator.set_pose(Pose(1.0, 9.0, 900000.0, 200.0, 70.0))
+    return None
+
+
+@check(3000)
+def crust_types_close():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_crust_close.png"))
+    result["crust_types"]["close_gain"] = view.wedge_gain
+    window.set_extra("quakes", False)
+    window.set_extra("cutaway", False)
+
+
 @check(1000)
 def close_without_heights():
     # Закрытие окна на теле без загрузчика высот. Окно закрывается,

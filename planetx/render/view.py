@@ -349,6 +349,7 @@ class GlobeView(QOpenGLWidget):
         self.cutaway = Subsurface(offset=FACE_OFFSET)
         self.wedge_crust = None
         self.wedge_gain = 1.0
+        self.wedge_stretch = True
         # Край граней по поверхности, а не по эллипсоиду - ставит окно
         # в режиме «Геоид». Состояние, по которому грани собраны.
         self.wedge_lift = False
@@ -742,9 +743,17 @@ class GlobeView(QOpenGLWidget):
     def _wedge_gain(self):
         """Растяжение коры для нынешнего расстояния до точки взгляда,
         без сектора - 1."""
-        if self.wedge is None:
+        if self.wedge is None or not self.wedge_stretch:
             return 1.0
         return cutaway.gain_for(self.navigator.pose.distance)
+
+    def set_wedge_stretch(self, on):
+        """Растягивать кору разреза издалека или держать настоящий
+        масштаб глубин, пункт меню строки «Разрез Земли»."""
+        self.wedge_stretch = bool(on)
+        if self.wedge is not None:
+            self._follow_wedge_gain()
+            self.update()
 
     def _follow_wedge_gain(self):
         """Грани заново, если сменилась ступень растяжения коры, а у

@@ -219,6 +219,50 @@ class TestCrustFaces(unittest.TestCase):
         self.assertFalse(np.any(np.all(
             mesh.vertices["color"][:, :3] == ice, axis=1)))
 
+    def _has(self, mesh, rgb):
+        color = np.array(rgb, dtype=np.uint8)
+        return bool(np.any(np.all(mesh.vertices["color"][:, :3] == color,
+                                  axis=1)))
+
+    def test_oceanic_crust_has_own_color(self):
+        # Западнее 0° - базальты, восточнее - континентальная кора.
+        # Сектор у 0° в. д. задевает обе.
+        vp = np.full(self.model.bounds.shape, 6.5, dtype=np.float32)
+        vp[:, :180, self.cr.UPPER_CRUST] = 5.0
+        vp[:, 180:, self.cr.UPPER_CRUST] = 6.1
+        model = self.cr.Crust(self.model.bounds, vp)
+        mesh = cw.faces(cw.wedge_at(10.0, 0.0), shells=(), crust=model)
+        for key in cw.OCEAN_COLORS:
+            self.assertTrue(self._has(mesh, cw.OCEAN_COLORS[key]), key)
+            self.assertTrue(self._has(mesh, cw.CRUST_COLORS[key]), key)
+        # Без скоростей - одна континентальная раскраска.
+        plain = cw.faces(cw.wedge_at(10.0, 0.0), shells=(),
+                         crust=self.model)
+        self.assertFalse(self._has(plain, cw.OCEAN_COLORS["crust_upper"]))
+
+
+class TestSplitTypes(unittest.TestCase):
+
+    def test_parts_meet_without_gap_or_overlap(self):
+        top = np.arange(8, dtype=np.float64)
+        bottom = top + 10.0
+        ocean = np.array([0, 0, 0, 1, 1, 0, 0, 0], dtype=bool)
+        parts = {kind: (t, b) for kind, t, b in
+                 cw.split_types(top, bottom, ocean)}
+
+        def segments(t):
+            good = np.isfinite(t)
+            return set(np.nonzero(good[:-1] & good[1:])[0].tolist())
+        land, sea = segments(parts[False][0]), segments(parts[True][0])
+        self.assertFalse(land & sea)
+        self.assertEqual(land | sea, set(range(7)))
+        self.assertEqual(sea, {2, 3, 4})
+
+    def test_without_types_one_part(self):
+        parts = cw.split_types([0.0, 1.0], [5.0, 6.0], None)
+        self.assertEqual(len(parts), 1)
+        self.assertFalse(parts[0][0])
+
 
 if __name__ == "__main__":
     unittest.main()

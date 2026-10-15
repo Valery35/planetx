@@ -2,7 +2,7 @@
 
 [Русская версия](MANUAL.md)
 
-Version 0.87.0
+Version 0.88.0
 
 PlanetX is a 3D globe inside QGIS. The
 globe opens in its own window and shows the whole Earth with terrain
@@ -722,18 +722,28 @@ the depths are not stretched by the vertical exaggeration. The crust
 on the faces comes from the CRUST1.0 model in 1° cells. These are
 water, ice, upper, middle and lower sediments, upper, middle and lower
 crust, below the Moho the mantle begins. The crust is 6-7 km thick
-under the ocean and about 70 km under Tibet. Where a face crosses a subduction zone, the subducting
+under the ocean and about 70 km under Tibet. Continental and oceanic
+crust have different colours, the oceanic crust is grey-green. The
+crust type comes from the P-wave speed in the upper crust of the same
+model. In the oceanic crust it is below 5.5 km/s, these are basalts.
+Where a face crosses a subduction zone, the subducting
 slab from the Slab2 model of the U.S. Geological Survey shows on it as
 a band from the upper surface of the slab down by its thickness. Slabs
 exist in 27 zones. The file of a zone is requested when a face touches
 it, the loading icon shows this. The model is downloaded
 from the site of its authors when the row is first switched on, until
-then the crust is the 24.4 km PREM layer. The crust layers can be told
+then the crust is the 24.4 km PREM layer. If the model has not
+arrived, the first row of the scale names the reason, and the crust
+stays a layer of constant thickness. The next time the row is switched
+on, the model is requested again. The crust layers can be told
 apart up close, where the depths on the faces are true. As the camera
 moves away, depths to 400 km are stretched so that the crust stays
 visible. At the surface the stretch reaches 8 times, towards 400 km
 it fades out, below the scale is true. The shell scale shows the
-factor, earthquake foci are stretched the same way.
+factor, earthquake foci are stretched the same way. The Stretch the
+crust item of the «⋯» menu of the Earth cutaway row in the Layers
+section turns the stretch off, then all depths are true at any
+distance.
 Labels of
 places in the removed sector are not shown. The sector is placed anew
 each time the row is switched on. The corners of the sector are
@@ -1141,7 +1151,8 @@ the Features window.
   screen. Each shows its magnitude, depth, UTC time, place and the USGS
   event page.
 - The Site group shows the elevation or sea depth, the Moho depth, the
-  crust and sediment thickness after CRUST1.0 and the Slab2 slab under
+  crust and sediment thickness, the crust type after CRUST1.0 and the
+  Slab2 slab under
   the point. The crust model and the slab zone file load on the first
   click, the window updates when they arrive.
 

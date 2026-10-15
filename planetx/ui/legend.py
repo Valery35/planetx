@@ -643,6 +643,14 @@ def crust_names():
             "crust_lower": tr("Нижняя кора")}
 
 
+def part_names():
+    """Части коры по ключам core.cutaway.OCEAN_COLORS для строк
+    «Континентальная кора, верхняя» и подобных."""
+    return {"crust_upper": tr("верхняя"),
+            "crust_middle": tr("средняя"),
+            "crust_lower": tr("нижняя")}
+
+
 class CutawayLegend(QWidget):
     """Оболочки разреза Земли: цвет, название, глубины границ в км."""
 
@@ -652,6 +660,8 @@ class CutawayLegend(QWidget):
                                "WA_TransparentForMouseEvents"))
         self.line = QFontMetrics(self.font()).height()
         self.crust = False
+        self.oceanic = False
+        self.missing = ""
         self.gain = 1.0
         self.slabs = False
         self.set_crust(False)
@@ -659,24 +669,45 @@ class CutawayLegend(QWidget):
     def set_slabs(self, on):
         """Строка плиты Slab2, когда на гранях есть плиты."""
         self.slabs = bool(on)
-        self.set_crust(self.crust)
+        self._rows()
 
     def set_gain(self, gain):
         """Растяжение коры разреза, строка под заголовком при gain > 1."""
         self.gain = float(gain)
-        self.set_crust(self.crust)
+        self._rows()
 
-    def set_crust(self, on):
+    def set_missing(self, reason):
+        """Модель коры не пришла: строка с причиной, кора - слой PREM.
+        Пустая строка снимает её."""
+        self.missing = str(reason or "")
+        self._rows()
+
+    def set_crust(self, on, oceanic=False):
         """Строки шкалы: оболочки PREM или, с моделью коры, слои
-        CRUST1.0 сверху и мантия от Мохо."""
+        CRUST1.0 сверху и мантия от Мохо. oceanic - кора делится на
+        континентальную и океаническую."""
         self.crust = bool(on)
+        self.oceanic = bool(on and oceanic)
+        self._rows()
+
+    def _rows(self):
         names = shell_names()
         top = cutaway.PREM_RADIUS
         rows = []
         if self.crust:
             layers = crust_names()
-            rows = [(layers[key], cutaway.CRUST_COLORS[key])
-                    for key in cutaway.crust_layers()]
+            for key in cutaway.crust_layers():
+                if self.oceanic and key in cutaway.OCEAN_COLORS:
+                    continue
+                rows.append((layers[key], cutaway.CRUST_COLORS[key]))
+            if self.oceanic:
+                parts = part_names()
+                for title, colors in ((tr("Континентальная кора, {}"),
+                                       cutaway.CRUST_COLORS),
+                                      (tr("Океаническая кора, {}"),
+                                       cutaway.OCEAN_COLORS)):
+                    for key in cutaway.OCEAN_COLORS:
+                        rows.append((title.format(parts[key]), colors[key]))
         if self.slabs:
             rows.append((tr("Плита Slab2"), cutaway.SLAB_COLOR))
         for key, low, high, color in reversed(cutaway.SHELLS):
@@ -692,6 +723,10 @@ class CutawayLegend(QWidget):
             rows.insert(0, (tr("Глубины до {:g} км растянуты, у поверхности "
                                "×{:g}").format(cutaway.STRETCH_DEPTH,
                                                self.gain), None))
+        if self.missing and not self.crust:
+            rows.insert(0, (tr("Модель коры CRUST1.0 не загружена ({}), "
+                               "кора - слой PREM").format(self.missing),
+                            None))
         self.rows = rows
         metrics = QFontMetrics(self.font())
         width = max(metrics.horizontalAdvance(text) for text, _ in rows)

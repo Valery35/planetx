@@ -483,6 +483,10 @@ class ResourcesMixin:
                 -bounds[-1]))))
             values.append((tr("Толщина коры"), tr("{value} км", value=(
                 "{:.1f}".format(bounds[1] - bounds[-1])))))
+            oceanic = self.crust.oceanic([lat], [lon])
+            if oceanic is not None:
+                values.append((tr("Тип коры"), tr("океаническая")
+                               if oceanic[0] else tr("континентальная")))
             if sediments > 0.0:
                 # Не «Осадки»: эта строка перевода - осадки погоды,
                 # английский каталог показывал их как Sediments.

@@ -3343,6 +3343,24 @@ EN = {
     "Верхняя кора": "Upper crust",
     "Средняя кора": "Middle crust",
     "Нижняя кора": "Lower crust",
+    "нет ответа": "no reply",
+    "верхняя": "upper",
+    "средняя": "middle",
+    "нижняя": "lower",
+    "Континентальная кора, {}": "Continental crust, {}",
+    "Океаническая кора, {}": "Oceanic crust, {}",
+    "Модель коры CRUST1.0 не загружена ({}), кора - слой "
+    "PREM": "Crust model CRUST1.0 not loaded ({}), the crust is the "
+    "PREM layer",
+    "Тип коры": "Crust type",
+    "континентальная": "continental",
+    "океаническая": "oceanic",
+    "Растягивать кору": "Stretch the crust",
+    "Растягивает глубины до 400 км тем сильнее, чем дальше камера, "
+    "и издалека видны кора и верхняя мантия. Без флажка все глубины "
+    "в настоящем масштабе.": "Stretches depths to 400 km, the more the "
+    "farther the camera is, so the crust and the upper mantle are seen "
+    "from afar. Without the check box all depths are true to scale.",
     "Вынимает из Земли сектор под точкой взгляда - "
     "четверть полушария шириной 90° по долготе. На его "
     "гранях видны кора, мантия и ядро по радиусам "

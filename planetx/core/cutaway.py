@@ -68,6 +68,14 @@ CRUST_COLORS = {
     "crust_middle": (145, 125, 115),
     "crust_lower": (120, 100, 95),
 }
+# Слои океанической коры (core.crust.Crust.oceanic) - свой цвет,
+# у CRUST_COLORS остаётся континентальная. Выбор помощника, утверждает
+# автор.
+OCEAN_COLORS = {
+    "crust_upper": (95, 115, 110),
+    "crust_middle": (75, 95, 92),
+    "crust_lower": (60, 78, 78),
+}
 # Выделение коры издалека, решение автора от 2 октября 2026 года.
 # Глубины до STRETCH_DEPTH растягиваются функцией stretch: у поверхности
 # в gain раз, на STRETCH_DEPTH - без растяжения, ниже всё настоящее.
@@ -233,7 +241,8 @@ def _band(edge, normal, low, high, color, whole=False):
     одно число). Ячейка нулевой толщины на обоих концах пропускается.
     whole - ячейка нужна с толщиной на обоих концах. Так у плиты: точка
     без плиты стоит на поверхности, и ячейка от конца плиты к ней шла
-    клином от глубины до поверхности."""
+    клином от глубины до поверхности. color - один цвет или цвет
+    на точку дуги (n, 3)."""
     n = len(edge)
     low = np.broadcast_to(np.asarray(low, dtype=np.float64), (n,))
     high = np.broadcast_to(np.asarray(high, dtype=np.float64), (n,))
@@ -246,8 +255,10 @@ def _band(edge, normal, low, high, color, whole=False):
     positions = np.vstack([edge * low[:, None], edge * high[:, None]])
     tris = np.concatenate([np.stack([i, i + 1, n + i], -1),
                            np.stack([i + 1, n + i + 1, n + i], -1)])
-    rgba = np.tile(np.array(tuple(color) + (255,), dtype=np.uint8),
-                   (2 * n, 1))
+    rgb = np.broadcast_to(np.asarray(color, dtype=np.uint8), (n, 3))
+    rgba = np.empty((2 * n, 4), dtype=np.uint8)
+    rgba[:, :3] = np.vstack([rgb, rgb])
+    rgba[:, 3] = 255
     return Part(positions, np.tile(normal, (2 * n, 1)), rgba,
                 tris.astype(np.uint32))
 
@@ -274,15 +285,47 @@ def _face(directions, normal, shells, crust=None, gain=1.0, lift=None):
             continue
         top = moho if key == "upper_mantle" else radius(high)
         parts.append(_band(edge, normal, radius(low), top, color))
+    oceanic = crust.oceanic(lats, lons)
     for k, key in enumerate(crust_layers()):
         parts.append(_band(edge, normal, share[:, k + 1], share[:, k],
-                           CRUST_COLORS[key]))
+                           layer_colors(key, oceanic)))
     return parts
 
 
 def crust_layers():
     """Ключи слоёв коры сверху вниз, как в core.crust.LAYERS."""
     return tuple(CRUST_COLORS)
+
+
+def layer_colors(key, oceanic):
+    """Цвет слоя коры key: один цвет или цвет на точку (n, 3), если
+    слой бывает океаническим и oceanic - массив bool по точкам."""
+    if oceanic is None or key not in OCEAN_COLORS:
+        return CRUST_COLORS[key]
+    oceanic = np.asarray(oceanic, dtype=bool)
+    return np.where(oceanic[:, None], np.array(OCEAN_COLORS[key]),
+                    np.array(CRUST_COLORS[key])).astype(np.uint8)
+
+
+def split_types(top, bottom, oceanic):
+    """Слой коры по точкам линии на континентальную и океаническую
+    части: (океаническая ли, верх, низ) с NaN вне своей части. Края
+    океанической части расширены на точку, так между частями нет ни
+    щели, ни перекрытия: отрезок на стыке берёт океаническая."""
+    top = np.asarray(top, dtype=np.float64)
+    bottom = np.asarray(bottom, dtype=np.float64)
+    if oceanic is None:
+        return [(False, top, bottom)]
+    ocean = np.asarray(oceanic, dtype=bool)
+    wide = ocean.copy()
+    wide[1:] |= ocean[:-1]
+    wide[:-1] |= ocean[1:]
+    out = []
+    for kind, mask in ((False, ~ocean), (True, wide)):
+        if mask.any():
+            out.append((kind, np.where(mask, top, np.nan),
+                        np.where(mask, bottom, np.nan)))
+    return out
 
 
 def faces(wedge, shells=SHELLS, step=None, crust=None, gain=1.0,

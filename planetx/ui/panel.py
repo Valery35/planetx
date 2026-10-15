@@ -499,6 +499,8 @@ class LayerPanel(QWidget):
     active_export = pyqtSignal(str)
     # Вертикальный масштаб режима «Геоид» из меню «⋯» его строки.
     geoid_scale_changed = pyqtSignal(float)
+    # Пункт «Растягивать кору» меню строки «Разрез Земли».
+    cutaway_stretch_changed = pyqtSignal(bool)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -694,6 +696,8 @@ class LayerPanel(QWidget):
         self._active_values = {}  # ключ - (непрозрачность, в проект)
         # Масштаб геоида для ползунка меню «⋯», ставит окно глобуса.
         self.geoid_scale = geoid.SCALE
+        # Пункт «Растягивать кору», ставит окно глобуса.
+        self.cutaway_stretch = True
         # Группы векторной основы. Группа видна, пока в ней что-то
         # включено, и после снятия флажков - до «Убрать с глобуса».
         self.vector_groups = []
@@ -1148,6 +1152,20 @@ class LayerPanel(QWidget):
                     "прозрачнее.")))
         if key == "geoid":
             menu.addAction(self._geoid_scale_action(menu))
+        if key == "cutaway":
+            stretch = menu.addAction(tr("Растягивать кору"))
+            stretch.setCheckable(True)
+            stretch.setChecked(self.cutaway_stretch)
+            stretch.setToolTip(tr(
+                "Растягивает глубины до 400 км тем сильнее, чем дальше "
+                "камера, и издалека видны кора и верхняя мантия. Без "
+                "флажка все глубины в настоящем масштабе."))
+            menu.setToolTipsVisible(True)
+
+            def toggled(on):
+                self.cutaway_stretch = bool(on)
+                self.cutaway_stretch_changed.emit(self.cutaway_stretch)
+            stretch.toggled.connect(toggled)
         if export:
             menu.addAction(tr("В проект QGIS…")).triggered.connect(
                 lambda _=False: self.active_export.emit(key))

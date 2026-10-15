@@ -22,6 +22,16 @@ Masters, Ma, Pasyanos, 2013) - сетка ячеек 1°×1°, в каждой 9
 Строки файла идут с широты 89.5° на юг, внутри строки широты - долготы
 от -179.5° на восток (readme модели). Ячейка - середина клетки, точка
 относится к ячейке, в которую попадает.
+
+Континентальная или океаническая кора - по скорости продольных волн
+в верхней коре, файл crust1.vp того же архива. Отметки типа коры
+в CRUST1.0 нет. У океанической коры верхний слой - базальты, 4.7-5.1
+км/с, у континентальной - 5.5-6.4 км/с. Порог OCEANIC_VP 5.5 км/с,
+просьба пользователя Ивана от 15 октября 2026 года, проверка помощника
+по архиву того же дня - доля океанической коры 0.55, с правилом
+«кристаллическая кора тоньше 15 км» совпадает в 96.5 % ячеек.
+Исландия и плато Кергелен по скорости - океаническая кора, хотя
+кора там толще 17 км.
 """
 import io
 import tarfile
@@ -37,6 +47,9 @@ ROWS, COLS, BOUNDS = 180, 360, 9
 LAYERS = ("water", "ice", "sediments_upper", "sediments_middle",
           "sediments_lower", "crust_upper", "crust_middle", "crust_lower")
 MOHO = 8
+VP_MEMBER = "crust1.vp"
+UPPER_CRUST = LAYERS.index("crust_upper")
+OCEANIC_VP = 5.5  # км/с, верхняя кора медленнее - океаническая
 
 
 class CrustError(ValueError):
@@ -58,14 +71,18 @@ def parse_bounds(text):
 
 
 def from_archive(data):
-    """Модель из байтов архива crust1.0.tar.gz."""
+    """Модель из байтов архива crust1.0.tar.gz. Скорости crust1.vp
+    читаются, если файл есть в архиве."""
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
-            member = tar.getmember(MEMBER)
-            text = tar.extractfile(member).read()
+            text = tar.extractfile(tar.getmember(MEMBER)).read()
+            names = tar.getnames()
+            speeds = tar.extractfile(tar.getmember(VP_MEMBER)).read() \
+                if VP_MEMBER in names else None
     except (tarfile.TarError, KeyError, OSError, EOFError) as error:
         raise CrustError(str(error)) from error
-    return Crust(parse_bounds(text))
+    vp = parse_bounds(speeds) if speeds is not None else None
+    return Crust(parse_bounds(text), vp)
 
 
 def cells(lats, lons):
@@ -78,10 +95,20 @@ def cells(lats, lons):
 
 
 class Crust:
-    """Отметки границ CRUST1.0."""
+    """Отметки границ CRUST1.0 и скорости продольных волн vp (та же
+    разметка, км/с) или None."""
 
-    def __init__(self, bounds):
+    def __init__(self, bounds, vp=None):
         self.bounds = bounds
+        self.vp = vp
+
+    def oceanic(self, lats, lons):
+        """Океаническая ли кора в точках, массив bool, или None без
+        скоростей."""
+        if self.vp is None:
+            return None
+        row, col = cells(lats, lons)
+        return self.vp[row, col, UPPER_CRUST] < OCEANIC_VP
 
     def at(self, lats, lons):
         """Отметки границ (..., BOUNDS) в км для точек."""

@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.87.0
+version=0.88.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.87.0 The globe is faster when flying over new places - about 15
+changelog=0.88.0 The Earth cutaway splits the crust into continental and
+      oceanic crust with their own colours on the faces, in the Section
+      window and in the scale. The crust type comes from the wave speed in
+      the upper crust of the CRUST1.0 model. The Features window shows the
+      crust type under the point. The «⋯» menu of the Earth cutaway row
+      has a new Stretch the crust item. Without it all cutaway depths are
+      true to scale at any distance. If the CRUST1.0 crust model has not downloaded,
+      the cutaway scale names the reason, and switching the row on again
+      requests the model again. Without the model the crust is a layer of
+      constant 24.4 km thickness.
+      0.87.0 The globe is faster when flying over new places - about 15
       percent more frames per second and half as many pauses longer than 50 ms.
       Label heights are computed at once, layer and label pictures
       reach the graphics card faster, the flow along a path picks the dashes

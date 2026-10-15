@@ -745,6 +745,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.active_export.connect(self.active_export)
         self.panel.geoid_scale = self.geoid_scale()
         self.panel.geoid_scale_changed.connect(self.set_geoid_scale)
+        self.panel.cutaway_stretch = self.cutaway_stretch()
+        self.view.wedge_stretch = self.panel.cutaway_stretch
+        self.panel.cutaway_stretch_changed.connect(self.set_cutaway_stretch)
         self._opacity_overlay = QTimer(self)
         self._opacity_overlay.setSingleShot(True)
         self._opacity_overlay.setInterval(OPACITY_PAUSE)

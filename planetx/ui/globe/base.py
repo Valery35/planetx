@@ -120,6 +120,8 @@ LINES_KEY = "PlanetX/lines/{}"
 DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 GEOID_SCALE_KEY = "PlanetX/geoid_scale"  # масштаб режима «Геоид»
+# Растягивать ли кору разреза Земли издалека, по умолчанию да.
+STRETCH_KEY = "PlanetX/cutaway_stretch"
 # Поток по путям (core/pathflow.py): шаг таймера штрихов, мс, подъём
 # штриха над рельефом, м, на сколько пикселей штрих толще линии, на
 # сколько ширин вида от точки взгляда считаются штрихи. Выбор

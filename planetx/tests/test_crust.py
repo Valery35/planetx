@@ -39,13 +39,39 @@ def as_text(bounds):
     return "\n".join(lines).encode("ascii")
 
 
-def as_archive(text):
+def as_archive(text, speeds=None):
     buffer = io.BytesIO()
     with tarfile.open(fileobj=buffer, mode="w:gz") as tar:
-        info = tarfile.TarInfo(cr.MEMBER)
-        info.size = len(text)
-        tar.addfile(info, io.BytesIO(text))
+        for name, data in ((cr.MEMBER, text), (cr.VP_MEMBER, speeds)):
+            if data is None:
+                continue
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            tar.addfile(info, io.BytesIO(data))
     return buffer.getvalue()
+
+
+def sample_speeds():
+    """Скорости: западное полушарие - базальты 5.0 км/с в верхней коре,
+    восточное - 6.1 км/с."""
+    vp = np.full((cr.ROWS, cr.COLS, cr.BOUNDS), 6.5, dtype=np.float32)
+    vp[:, :180, cr.UPPER_CRUST] = 5.0
+    vp[:, 180:, cr.UPPER_CRUST] = 6.1
+    return vp
+
+
+class TestOceanic(unittest.TestCase):
+
+    def test_type_by_upper_crust_speed(self):
+        model = cr.from_archive(as_archive(as_text(sample_bounds()),
+                                           as_text(sample_speeds())))
+        self.assertEqual(model.oceanic([0.5, 0.5], [-30.0, 30.0]).tolist(),
+                         [True, False])
+
+    def test_archive_without_speeds_has_no_type(self):
+        model = cr.from_archive(as_archive(as_text(sample_bounds())))
+        self.assertIsNone(model.vp)
+        self.assertIsNone(model.oceanic([0.5], [0.5]))
 
 
 class TestCrust(unittest.TestCase):
@@ -107,6 +133,14 @@ class TestRealModel(unittest.TestCase):
         water = self.model.layers(lats[:1], lons[:1])[0][0]
         self.assertEqual(water[0], "water")
         self.assertGreater(-water[2], 3.0)
+
+    def test_crust_types(self):
+        # Тихий и Атлантический океаны, Исландия - океаническая кора,
+        # Пермский край, Тибет, шельф Северного моря - континентальная.
+        lats = [0.5, 30.5, 65.0, 58.5, 32.5, 56.5]
+        lons = [-140.5, -40.5, -18.0, 56.5, 88.5, 3.5]
+        self.assertEqual(self.model.oceanic(lats, lons).tolist(),
+                         [True, True, True, False, False, False])
 
 
 if __name__ == "__main__":
