@@ -14822,6 +14822,51 @@ def credit_shot():
     window.set_extra("quakes", False)
 
 
+@check(1000, manual=True)
+def slab_grazing():
+    """Плита Slab2 у Суматры на экваториальной грани разреза под
+    косым взглядом - вид снимка автора от 16 октября 2026 года."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("cutaway", True)
+    window.set_wedge_box(95.0, 185.0, 0.0, 60.0)
+    window.view.navigator.show(Pose(4.0, 100.0, 2500000.0, 0.0, 50.0))
+    state["slab_started"] = time.monotonic()
+
+
+@check(1000, manual=True)
+def slab_grazing_check():
+    from planetx.net.loader import image_to_rgba
+    window = state["window"]
+    view = window.view
+    if time.monotonic() - state["slab_started"] < 25.0:
+        return 1000
+    out = result.setdefault("slab_grazing", {})
+    out["slabs"] = len(view.wedge_slabs or [])
+    out["codes"] = list(getattr(window, "_slab_codes", []) or [])
+    for tilt in (40.0, 55.0, 70.0):
+        from planetx.core.navigation import Pose
+        view.navigator.show(Pose(4.0, 100.0, 2500000.0, 0.0, tilt))
+        deadline = time.monotonic() + 3.0
+        while time.monotonic() < deadline:
+            QgsApplication.processEvents()
+            time.sleep(0.05)
+        view.repaint()
+        image = view.grabFramebuffer()
+        image.save(os.path.join(TEMP, "planetx_slab_%d.png" % tilt))
+        # Пиксели цвета плиты на западной грани и переходы плита - грань
+        # по строкам. Спор глубины давал гребёнку - переходов на прежнем
+        # коде в 3-4 раза больше, 16 октября 2026 года.
+        rgba = image_to_rgba(image)[380:1030, 650:1350, :3].astype(int)
+        r, g, b = rgba[..., 0], rgba[..., 1], rgba[..., 2]
+        slab = (b > r + 15) & (b < 110) & (g < 80)
+        out["slab_%d" % tilt] = [
+            int(slab.sum()), int((slab[:, 1:] != slab[:, :-1]).sum())]
+    out["gl"] = dict(view.gl_errors)
+    return None
+
+
 @check(300)
 def zlayer_polyhedral():
     """Слои многогранников PolyhedralSurfaceZ и TIN Z читаются гранями,
