@@ -8,7 +8,10 @@
 на её поверхности - ω × r, в системе без суммарного вращения плит
 (NNR). Полюса - Table 1 статьи Argus, Gordon, DeMets 2011, плита
 точки - растр кодов PB2002 (Bird 2003), файл data/plate_motion.json
-собирает tools/build_plate_motion.py.
+собирает tools/build_plate_motion.py. Растр в файле - серии одинаковых
+кодов по строкам с севера, парами чисел (код, длина), runs и grid_of.
+Строкой base64 сжатых байтов его хранить нельзя - сканер каталога QGIS
+отметил 0.89.0 находкой «Potential Base64 High Entropy String».
 
 Стрелки на глобусе - сетка узлов около ARROWS_ACROSS поперёк вида,
 длина стрелки пропорциональна скорости, LENGTH_SHARE шага узлов на
@@ -16,10 +19,8 @@ REFERENCE мм/год. Величины - выбор помощника, утв�
 
 Модуль Qt не знает.
 """
-import base64
 import json
 import math
-import zlib
 
 import numpy as np
 
@@ -63,13 +64,29 @@ class Motion:
         return code, east, north
 
 
+def runs(grid):
+    """Растр кодов в серии одинаковых значений - плоский список чисел
+    код, длина, код, длина... по строкам с севера."""
+    flat = np.asarray(grid, dtype=np.uint8).ravel()
+    starts = np.concatenate([[0], np.flatnonzero(np.diff(flat)) + 1])
+    counts = np.diff(np.concatenate([starts, [flat.size]]))
+    return np.stack([flat[starts], counts], axis=1).ravel().tolist()
+
+
+def grid_of(series, rows, cols):
+    """Растр кодов (rows, cols) из серий runs."""
+    pairs = np.asarray(series, dtype=np.int64).reshape(-1, 2)
+    if int(pairs[:, 1].sum()) != rows * cols:
+        raise ValueError("plate_motion: runs do not fill the grid")
+    return np.repeat(pairs[:, 0].astype(np.uint8),
+                     pairs[:, 1]).reshape(rows, cols)
+
+
 def read(text):
     data = json.loads(text)
     step = float(data["step"])
     rows, cols = int(round(180 / step)), int(round(360 / step))
-    grid = np.frombuffer(zlib.decompress(base64.b64decode(data["grid"])),
-                         dtype=np.uint8).reshape(rows, cols)
-    return Motion(data["plates"], grid, step)
+    return Motion(data["plates"], grid_of(data["runs"], rows, cols), step)
 
 
 def _unit(lat, lon):

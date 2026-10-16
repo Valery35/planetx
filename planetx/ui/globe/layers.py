@@ -25,7 +25,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      mining, cables as cables_core, rumsey as rumsey_core,
                      plants as plants_core, fires as fires_core, crust, plates,
                      volcanoes as volcanoes_core,
-                     quakes, slabs, themes, opacity,
+                     quakes, slabs, themes,
                      satellites as satellites_core)
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS

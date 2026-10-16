@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.89.0
+version=0.89.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.89.0 New rows of the Inside the Earth category: gravity
+changelog=0.89.1 The plate motion data file and the code of the globe
+      window are written without the remarks of the catalogue security
+      scan. The globe works as in 0.89.0.
+      0.89.0 New rows of the Inside the Earth category: gravity
       anomalies after the XGM2019e model, ocean floor age, heat flow from
       the IHFC 2024 database, plate motion arrows after NNR-MORVEL56,
       Holocene volcanoes of the Smithsonian Global Volcanism Program and

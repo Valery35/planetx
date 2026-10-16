@@ -14,7 +14,6 @@ from qgis.PyQt.QtGui import QKeySequence
 from qgis.PyQt.QtWidgets import QApplication
 
 from ... import journal
-from ...core.measure import number
 from ...core import oldmaps, weather as weather_core
 from ...core.flight import Spin
 from ...core.geocode import (SEARCH_INTERVAL, link_zoom, osm_link,

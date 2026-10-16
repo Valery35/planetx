@@ -17,14 +17,16 @@ STEP градусов, GDAL Rasterize. Плиты MORVEL Capricorn, Lwandle,
 Macquarie и Sur в PB2002 - части соседних плит, точке достаётся полюс
 плиты PB2002.
 """
-import base64
 import json
 import os
 import sys
-import zlib
 
 import numpy as np
 from osgeo import gdal, ogr
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__))), "planetx", "core"))
+import platemotion  # noqa: E402
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
     __file__))), "planetx", "data", "plate_motion.json")
@@ -97,8 +99,7 @@ def main(folder):
                   "Bird 2003, PB2002, Hugo Ahlenius, Nordpil",
         "step": STEP,
         "plates": [[c, names[c]] + list(POLES[c]) for c in codes],
-        "grid": base64.b64encode(zlib.compress(grid.tobytes(), 9))
-        .decode("ascii"),
+        "runs": platemotion.runs(grid),
     }
     with open(OUT, "w", encoding="utf-8", newline="\n") as fh:
         json.dump(data, fh, ensure_ascii=False, separators=(",", ":"))

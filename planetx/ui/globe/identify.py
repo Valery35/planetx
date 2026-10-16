@@ -15,7 +15,6 @@ from ... import journal
 from ...core import (basemap, cadastre, when, assistant as assistant_core,
                      deposits as deposits_core, mining, pick, quakes)
 from ...core.ellipsoid import ecef_to_geodetic
-from ...core.measure import number
 from ...core.features import Shape
 from ...core.navigation import focal, ground_under
 from ...core.planets import PLANETS

@@ -16,7 +16,7 @@ from qgis.PyQt.QtCore import QTimer
 from qgis.utils import iface
 
 from ... import journal
-from ...core import (basemap, geoid, paleo, dem as dem_model, models,
+from ...core import (basemap, geoid, paleo, dem as dem_model,
                      deposits as deposits_core, fires as fires_core, crust,
                      cutaway, quakes, slabs, sources as datasources,
                      tomography)

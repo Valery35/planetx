@@ -286,8 +286,6 @@ class ToolsMixin:
 
     def _layer_center(self, layer):
         """Середина охвата слоя в широте и долготе или (None, None)."""
-        from qgis.core import (QgsCoordinateReferenceSystem,
-                               QgsCoordinateTransform)
         wgs = QgsCoordinateReferenceSystem("EPSG:4326")
         try:
             transform = QgsCoordinateTransform(layer.crs(), wgs,

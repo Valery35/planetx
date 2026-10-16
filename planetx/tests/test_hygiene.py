@@ -141,6 +141,96 @@ def unused_imports(source):
                   if name not in used)
 
 
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+
+
+def _local_names(func):
+    """Имена, которые функция связывает сама: параметры, присваивания,
+    импорты, вложенные функции и классы. Тела вложенных функций
+    не входят."""
+    args = func.args
+    names = {a.arg for a in args.posonlyargs + args.args + args.kwonlyargs}
+    names.update(a.arg for a in (args.vararg, args.kwarg) if a)
+    body = func.body if isinstance(func.body, list) else [func.body]
+    stack = list(body)
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef)):
+            names.add(node.name)
+            stack.extend(node.decorator_list)
+            continue
+        if isinstance(node, ast.Lambda):
+            continue
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store,
+                                                               ast.Del)):
+            names.add(node.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names.update(a.asname or a.name.split(".")[0]
+                         for a in node.names)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            names.add(node.name)
+        stack.extend(ast.iter_child_nodes(node))
+    return names
+
+
+def shadowed_imports(source):
+    """Импорт верхнего уровня, который читается только там, где имя
+    закрыто своей привязкой функции, - pyflakes F401 и F811 с учётом
+    областей видимости.
+
+    Каталог QGIS отметил 0.89.0 находками F811 «redefinition of unused»
+    в частях окна ui/globe: верхний импорт number, models, opacity
+    остался после разделения окна, а в методах это имя - параметр или
+    своя переменная. Прежний сторож unused_imports видел имя где угодно
+    в файле и такие импорты пропускал.
+    """
+    tree = ast.parse(source)
+    imported = {}
+    for node in tree.body:
+        nodes = [node]
+        if isinstance(node, ast.Try):
+            nodes = node.body + [n for h in node.handlers for n in h.body]
+        for item in nodes:
+            if isinstance(item, (ast.Import, ast.ImportFrom)):
+                for alias in item.names:
+                    if alias.name == "*":
+                        continue
+                    name = alias.asname or alias.name.split(".")[0]
+                    imported.setdefault(name, item.lineno)
+    used = set()
+
+    def visit(node, hidden):
+        if isinstance(node, _SCOPES):
+            for child in node.args.defaults + node.args.kw_defaults:
+                if child is not None:
+                    visit(child, hidden)
+            if not isinstance(node, ast.Lambda):
+                for child in node.decorator_list:
+                    visit(child, hidden)
+            inner = hidden | _local_names(node)
+            for child in (node.body if isinstance(node.body, list)
+                          else [node.body]):
+                visit(child, inner)
+            return
+        if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) \
+                and node.id not in hidden:
+            used.add(node.id)
+        for child in ast.iter_child_nodes(node):
+            visit(child, hidden)
+
+    visit(tree, frozenset())
+    # Имена из __all__ - только из него, а не из любой строки файла.
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "__all__"
+                for t in node.targets):
+            used.update(n.value for n in ast.walk(node.value)
+                        if isinstance(n, ast.Constant))
+    return sorted(line for name, line in imported.items()
+                  if name not in used)
+
+
 SECRET_WORDS = ("pass", "pwd", "secret", "token")
 
 
@@ -524,6 +614,11 @@ class TestCodeRules(unittest.TestCase):
                   if os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(unused_imports, plugin), [])
 
+    def test_no_shadowed_imports(self):
+        plugin = [p for p in self.paths
+                  if os.sep + "tests" + os.sep not in p]
+        self.assertEqual(scan(shadowed_imports, plugin), [])
+
     def test_no_attribute_shadows_a_method(self):
         self.assertEqual(scan(shadowed_methods, self.paths), [])
 
@@ -547,6 +642,15 @@ class TestCodeRules(unittest.TestCase):
         plugin = [p for p in self.paths if p.startswith(PLUGIN)
                   and os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(entropy_literals, plugin), [])
+
+    def test_no_high_entropy_in_data_files(self):
+        # Каталог сканирует и файлы данных: 0.89.0 получила находку
+        # на растре плит base64 в data/plate_motion.json.
+        folder = os.path.join(PLUGIN, "data")
+        texts = [os.path.join(folder, n) for n in sorted(os.listdir(folder))
+                 if n.endswith((".json", ".txt", ".csv", ".svg"))]
+        self.assertTrue(texts)
+        self.assertEqual(scan(entropy_literals, texts), [])
 
     def test_no_bom(self):
         texts = [os.path.join(ROOT, n) for n in os.listdir(ROOT)
@@ -664,6 +768,31 @@ class TestGuardsCatch(unittest.TestCase):
         # через двоеточие.
         bad = 'A = "8FF915CCAB7BC16F8C5C8099D53E0E115B3AEC2F"\n'
         good = 'A = "8F:F9:15:CC:AB:7B:BC:16:F8:C5:C8:09:9D"\n'
+        self.assertCatches(entropy_literals, bad, good)
+
+    def test_shadowed_import_guard(self):
+        # Запись 0.89.0 в ui/globe/actions.py - верхний импорт number,
+        # в методе number - параметр.
+        bad = ("from x import number\n\n\n"
+               "def copy_sheet(number):\n    return number\n")
+        good = ("from x import number\n\n\n"
+                "def copy_sheet(sheet):\n    return number(sheet)\n")
+        self.assertCatches(shadowed_imports, bad, good)
+        # Своя переменная функции закрывает импорт так же.
+        bad = ("from x import models\n\n\n"
+               "def f():\n    models = []\n    return models\n")
+        good = ("from x import models\n\n\n"
+                "def f():\n    return models.pack()\n")
+        self.assertCatches(shadowed_imports, bad, good)
+        # Строка с тем же словом - не использование, запись 0.89.0
+        # ui/globe/identify.py.
+        bad = ("from x import number\n\n\n"
+               "def f(row):\n    return row['number']\n")
+        good = ("from x import number\n__all__ = ['number']\n")
+        self.assertCatches(shadowed_imports, bad, good)
+        # Прежняя запись data/plate_motion.json - длинная строка base64.
+        bad = '{"grid":"eNrtnQ1wVeWZx%s"}\n' % "Zk9aQ3xT7pLmW2uR4vB8sY1cD6"
+        good = '{"runs":[0,312,3,17,0,1110]}\n'
         self.assertCatches(entropy_literals, bad, good)
 
     def test_symbol_guard(self):
