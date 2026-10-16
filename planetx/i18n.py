@@ -3351,6 +3351,32 @@ EN = {
     "Скорости плит": "Plate motion",
     "Вулканы": "Volcanoes",
     "Томография мантии": "Mantle tomography",
+    "Кора CRUST1.0 в проект QGIS…": "CRUST1.0 crust to the QGIS project…",
+    "Кора CRUST1.0 в проект QGIS": "CRUST1.0 crust to the QGIS project",
+    "Отметки кровель трёх слоёв осадков, трёх слоёв коры и Мохо "
+    "по модели CRUST1.0 в рамке вида - растры GeoTIFF в метрах "
+    "с шагом 1°, группой в проект QGIS.": "Elevations of the tops of the "
+    "three sediment layers, the three crust layers and the Moho after the "
+    "CRUST1.0 model within the view frame - GeoTIFF rasters in metres with "
+    "a 1° step, as a group in the QGIS project.",
+    "PlanetX - кора CRUST1.0": "PlanetX - CRUST1.0 crust",
+    "Источники того, что на глобусе. Щелчок открывает окно "
+    "«Источники данных» с полными подписями и условиями.": "Sources of "
+    "what the globe shows. A click opens the Data sources window with the "
+    "full credits and terms.",
+    "кровля верхних осадков": "top of upper sediments",
+    "кровля средних осадков": "top of middle sediments",
+    "кровля нижних осадков": "top of lower sediments",
+    "кровля верхней коры": "top of upper crust",
+    "кровля средней коры": "top of middle crust",
+    "кровля нижней коры": "top of lower crust",
+    "Модель коры загружается, поверхности будут записаны по её приходу.":
+    "The crust model is loading, the surfaces will be written when it "
+    "arrives.",
+    "В проект добавлено поверхностей коры {count}.":
+    "Crust surfaces added to the project: {count}.",
+    "Поверхности коры не записаны в «{path}».":
+    "The crust surfaces were not written to {path}.",
     "Раскрашивает мантию на гранях по отклонению скорости "
     "сейсмических волн от модели PREM - модель SEISGLOB2. "
     "Красная мантия медленнее и горячее, синяя быстрее "
@@ -3437,6 +3463,25 @@ EN = {
     "Сила тяжести": "Gravity",
     "Аномалия в свободном воздухе": "Free-air anomaly",
     "мГал": "mGal",
+    "Аномалии Буге": "Bouguer anomalies",
+    "Аномалия Буге": "Bouguer anomaly",
+    "Аномалия Буге, мГал": "Bouguer anomaly, mGal",
+    "Плотность породы": "Rock density",
+    "Аномалия силы тяжести за вычетом притяжения рельефа - "
+    "простая поправка Буге по рельефу ETOPO 2022 с плотностью "
+    "породы 2670 кг/м³, вода и лёд своей плотностью. Аномалия "
+    "показывает плотность недр без влияния гор и глубин океана. "
+    "Под горами она отрицательная, это толстая лёгкая кора, над "
+    "океаном положительная. Поправки на соседний рельеф нет. "
+    "Щелчок в режиме «Определить объекты» показывает аномалию "
+    "в мГал.": "Gravity anomaly minus the attraction of the relief - the "
+    "simple Bouguer correction after the ETOPO 2022 relief with a rock "
+    "density of 2670 kg/m³, water and ice with their own densities. The "
+    "anomaly shows the density of the interior without the effect of "
+    "mountains and ocean depths. Under mountains it is negative, which is "
+    "thick light crust, over the ocean it is positive. There is no "
+    "correction for the surrounding relief. A click in the Identify "
+    "features mode shows the anomaly in mGal.",
     "Аномалия силы тяжести в свободном воздухе по модели XGM2019e "
     "до степени 719, шаг около 28 км. Красные - сила тяжести "
     "больше нормальной, синие - меньше. Над глубоководными "

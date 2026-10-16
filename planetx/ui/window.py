@@ -75,6 +75,7 @@ from .sync import MapSync
 from .timebar import TimeBar
 from .toolbar import ViewToolbar
 from .globe.base import (ACCEPTED_KEY, ATTRIBUTION_STYLE, AUTO_DEFAULT,
+                         CREDIT_LINK,
                          BASEMAP_KEY, CONSTELLATIONS_KEY, COORDS_KEY,
                          DEFAULT_GROUPS, EXTRA_DEFAULTS, EXTRA_KEY,
                          FLOW_LAYERS, GIBS_FADES, GROUND_DELAY, GUIDE_DELAY,
@@ -173,8 +174,18 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             lambda: self.spinner.set_state(self.view.load_missing,
                                            self.view.load_stalled))
         self.attribution = QLabel(self.view)
-        self.attribution.setOpenExternalLinks(True)
         self.attribution.setStyleSheet(ATTRIBUTION_STYLE)
+        self.attribution.setToolTip(tr(
+            "Источники того, что на глобусе. Щелчок открывает окно "
+            "«Источники данных» с полными подписями и условиями."))
+        self.attribution.linkActivated.connect(
+            lambda _link: QTimer.singleShot(0, self.open_sources))
+        # Название модуля в правом нижнем углу, щелчок - «О модуле».
+        self.brand = QLabel(CREDIT_LINK.format("PlanetX"), self.view)
+        self.brand.setStyleSheet(ATTRIBUTION_STYLE)
+        self.brand.setToolTip(tr("О модуле"))
+        self.brand.linkActivated.connect(
+            lambda _link: QTimer.singleShot(0, lambda: show_about(self)))
         # Шкала температуры, видна вместе со строкой «Температура».
         self.legend = TemperatureLegend(self.view)
         self.legend.hide()
@@ -773,6 +784,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._tomo_job = None
         self.panel.cutaway_tomo = self.cutaway_tomo()
         self.panel.cutaway_tomo_changed.connect(self.set_cutaway_tomo)
+        self._crust_export = None
+        self.panel.crust_export.connect(self.crust_to_project)
         self._opacity_overlay = QTimer(self)
         self._opacity_overlay.setSingleShot(True)
         self._opacity_overlay.setInterval(OPACITY_PAUSE)

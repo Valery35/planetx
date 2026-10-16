@@ -83,9 +83,22 @@ FIELDS = {
         (-200, -100, 0, 100, 200), "mGal", 0,
         ("Gravity: XGM2019e, Zingerle et al. 2020, ICGEM, CC BY 4.0",
          "https://doi.org/10.5880/ICGEM.2019.007"), 0.75),
+    # Аномалия Буге - та же аномалия минус простая поправка Буге по
+    # рельефу ETOPO 2022 (tools/build_bouguer.py), сетка 0.25°, мГал.
+    # Под горами до -500, над океаном до +450, пределы шкалы шире.
+    "bouguer": Field(
+        "bouguer", "bouguer", 5, 10.0,
+        ((-400.0, (30, 40, 130)), (-200.0, (60, 120, 210)),
+         (-60.0, (170, 210, 235)), (0.0, (245, 245, 240)),
+         (60.0, (245, 210, 150)), (200.0, (230, 120, 60)),
+         (400.0, (150, 30, 30))),
+        (-400, -200, 0, 200, 400), "mGal", 0,
+        ("Bouguer anomaly: XGM2019e, Zingerle et al. 2020, ICGEM, "
+         "CC BY 4.0; relief: ETOPO 2022, NOAA NCEI",
+         "https://doi.org/10.5880/ICGEM.2019.007"), 0.75),
 }
 # Порядок строк каталога.
-KEYS = ("emag", "gravity", "seafloor_age", "heatflow")
+KEYS = ("emag", "gravity", "bouguer", "seafloor_age", "heatflow")
 
 
 def url(field, base=TERRAIN):

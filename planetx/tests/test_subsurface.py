@@ -89,6 +89,24 @@ class TestBackdropBox(unittest.TestCase):
         self.assertAlmostEqual(float(alt.max()), 150.0, delta=0.01)
         self.assertAlmostEqual(float(alt.min()), -200.0, delta=0.01)
 
+    def test_top_covers_hill_between_nodes(self):
+        # Узкий холм между узлами сетки коробки: верх коробки над ним
+        # не ниже холма. По рельефу только в узлах верх был 100 м.
+        box = (59.5, 59.6, 56.7, 56.9)
+
+        def hill(lats, lons):
+            peak = (np.abs(lats - 59.5625) < 0.004) \
+                & (np.abs(lons - 56.7625) < 0.004)
+            return np.where(peak, 400.0, 100.0)
+
+        tris = ss.backdrop_box(box, hill, -200.0, steps=4)
+        lat, lon, alt = el.ecef_to_geodetic(tris)
+        near = (np.abs(lat - 59.5625) < 0.03) & (np.abs(lon - 56.7625) < 0.06)
+        self.assertGreater(float(alt[near].max()), 399.0)
+        # Вдали от холма верх прежний.
+        far = (lat > 59.59) & (lon > 56.88)
+        self.assertAlmostEqual(float(alt[far].max()), 100.0, delta=0.01)
+
 
 class TestPolygon3d(unittest.TestCase):
     """Многоугольник слоя с Z: вертикальный забор разреза Isoliner3D."""

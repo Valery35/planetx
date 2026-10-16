@@ -40,9 +40,12 @@ properties.
 ## The globe window
 
 The panel is on the left, the globe view on the right. The icon bar
-sits in the top left corner of the view, the data source credits in the
-bottom right corner. The border between the panel and the view is
-dragged with the mouse.
+sits in the top left corner of the view. The bottom right corner holds
+the PlanetX name, to its left a short credit line of the sources of what
+the globe shows now. A click on the credits opens the Data sources window
+with the full credits, links and terms, a click on PlanetX opens the
+About window. The border between the panel and the view is dragged with
+the mouse.
 
 The properties of a placemark, folder, image, water body bathymetry
 and layer extrusion open in the panel to the right of the view. The
@@ -436,8 +439,8 @@ left: Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Atmosphere,
 Clouds, Sun, Satellites), Inside the Earth (Earthquakes, Plate
 boundaries, Plate motion, Volcanoes, Magnetic poles, Declination lines,
-Magnetic anomalies, Gravity anomalies, Geoid, Ocean floor age, Heat flow,
-Mineral deposits, Mining areas, OSM mines and quarries, Earth cutaway,
+Magnetic anomalies, Gravity anomalies, Bouguer anomalies, Geoid, Ocean
+floor age, Heat flow, Mineral deposits, Mining areas, OSM mines and quarries, Earth cutaway,
 Paleogeography), Energy (Power plants, Power lines and pipelines,
 Submarine cables), Terrain analysis (Slope, Aspect) and Satellites -
 the satellite groups. The search field looks for a name and a
@@ -648,8 +651,8 @@ at the point, near Kursk about +270 nT. The tiles lie in the
 planetx-terrain repository, about 50 MB for the whole world, and load as
 they are shown.
 
-The Gravity anomalies, Ocean floor age and Heat flow layers are value
-maps, like the magnetic anomalies. The globe shows one value map at a
+The Gravity anomalies, Bouguer anomalies, Ocean floor age and Heat flow
+layers are value maps, like the magnetic anomalies. The globe shows one value map at a
 time, switching on another one removes the previous one. Each has its
 own legend in the corner of the view, a click in the Identify mode
 shows the value at the point. The tiles lie in the planetx-terrain
@@ -661,8 +664,18 @@ departure of gravity from the normal one after the XGM2019e model
 Red places mean gravity above normal, blue below normal, the legend runs
 from -200 to +200 mGal. Over deep-sea trenches the anomaly drops to
 -300 mGal, near the Mariana Trench to about -305 mGal, over Hawaii it
-rises to +370 mGal. Seamounts show as red spots. The Bouguer anomaly,
-corrected for the relief, is not shown.
+rises to +370 mGal. Seamounts show as red spots.
+
+The Bouguer anomalies layer shows the same anomaly minus the attraction
+of the relief - the simple Bouguer correction 2πGρh after the NOAA ETOPO
+2022 relief. Rock above sea level is removed with a density of
+2670 kg/m³, ice with 917 kg/m³, water and ice below sea level are
+replaced by rock. The correction is computed on 1' cells and averaged to
+0.25° cells, there is no correction for the surrounding relief. Under
+mountains the anomaly is negative, about -510 mGal at Tibet and about
+-170 mGal at the Alps - this is the thick light crust beneath them. Over
+the ocean it is positive, about +330 mGal in the middle of the Pacific.
+The legend runs from -400 to +400 mGal.
 
 The Ocean floor age layer shows the age of the oceanic crust after the
 grid of Seton et al. 2020, a 0.1° step. Young floor at mid-ocean ridges
@@ -834,6 +847,18 @@ at the core boundary under Africa and the Pacific. The model is
 downloaded from the EarthScope site on the first switch-on, about 28 MB,
 and kept as a file in the QGIS profile. The crust and the core on the
 faces keep their colours.
+
+The CRUST1.0 crust to the QGIS project item of the same menu writes the
+crust surfaces within the view frame into a chosen folder - GeoTIFF
+rasters of elevations in metres above sea level with a 1° step. There
+are seven surfaces - the tops of the upper, middle and lower sediments,
+the tops of the upper, middle and lower crust and the Moho. The rasters
+go into the project as the PlanetX - CRUST1.0 crust group. The sediment
+and crust layers of CRUST1.0 are set apart by seismic wave speed, they
+are not stratigraphy. Where a layer is absent, its top matches the top
+of the next one. Near Perm, for example, the top of the upper crust lies
+at -3850 m and the Moho at -40 870 m. The rasters can be shown on the
+globe with the Surface by elevations item of the raster menu.
 Labels of
 places in the removed sector are not shown. The sector is placed anew
 each time the row is switched on. The corners of the sector are

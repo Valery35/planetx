@@ -54,6 +54,7 @@ WORDS = {
     "gravity": ("сила тяжести", "гравитация", "гравиметрия",
                 "аномалии силы тяжести", "xgm2019e", "gravity",
                 "free-air"),
+    "bouguer": ("буге", "аномалия буге", "аномалии буге", "bouguer"),
     "heatflow": ("тепловой поток", "геотермия", "теплопоток",
                  "heat flow", "geothermal"),
     "magdecl": ("склонение", "изогоны", "линии склонения", "агона",
@@ -209,6 +210,10 @@ def _tools(window, add, earth):
         window.toggle_fullscreen,
         ("полный экран", "весь экран", "показ", "презентация", "f11",
          "fullscreen", "full screen", "presentation"))
+    add("tool:crust", tr("Кора CRUST1.0 в проект QGIS"), tr("выполнить"),
+        window.crust_to_project,
+        ("кора", "crust1.0", "crust", "осадочный чехол", "фундамент",
+         "мохо", "поверхности коры", "moho", "sediments"))
     add("tool:share", tr("Поделиться видом"), open_, window.share_view,
         ("html", "страница", "браузер", "отправить", "share", "web",
          "page", "browser"))

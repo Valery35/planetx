@@ -5189,6 +5189,51 @@ def search_bar_check():
     out["gl"] = dict(window.view.gl_errors)
 
 
+@check(300)
+def search_focus():
+    # Подсказки строки «Поиск» прячутся, когда фокус уходит на глобус,
+    # и остаются при переходе в свой список.
+    from planetx.core.features import Shape
+    window = state["window"]
+    panel = window.panel
+    window.set_body("earth")
+    window.set_sidebar(True)
+    window.activateWindow()
+    window.raise_()
+    state["focus_key"] = window.myplaces.add(
+        Shape("point", [(58.0, 56.2)], name="Проба фокуса Вокзал"))
+    out = result["search_focus"] = {}
+    window.place.setFocus()
+    window.place.setText("проба фокуса")
+    window.place.textEdited.emit("проба фокуса")
+    out["rows"] = panel.hints.count()
+    out["place_focus"] = window.place.hasFocus()
+    panel.hints.setFocus()
+
+
+@check(300)
+def search_focus_list():
+    window = state["window"]
+    panel = window.panel
+    out = result.setdefault("search_focus", {})
+    # В списке подсказок - список виден.
+    out["after_list"] = [panel.hints.hasFocus(), not panel.hints.isHidden()]
+    window.view.setFocus()
+
+
+@check(300)
+def search_focus_check():
+    window = state["window"]
+    panel = window.panel
+    out = result.setdefault("search_focus", {})
+    out["after_globe"] = [window.view.hasFocus(), not panel.hints.isHidden()]
+    key = state.pop("focus_key", None)
+    if key:
+        window.myplaces.remove(key)
+    window.place.setText("")
+    panel.hide_hints()
+
+
 @check(2000)
 def japan_open():
     # Демо «Японский жёлоб»: сектор из сцены, землетрясения, окно «Разрез».
@@ -6313,8 +6358,9 @@ def mining_check():
     window.message = saved
     window._show_state()
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_mining.png"))
+    # Подпись на карте короткая, без меток вида «Mines:».
     out["credit"] = "Maus" in window.attribution.text() \
-        and "Mines" in window.attribution.text()
+        and "OpenStreetMap" in window.attribution.text()
     window.set_extra("mining", False)
     window.set_extra("osm_mines", False)
     out["after_off"] = view.osm_mines.data is None and (
@@ -11074,6 +11120,13 @@ def grids_contours():
         or layer.crs().description()
 
 
+def _black_pixels(image):
+    """Пиксели кадра без цвета, все каналы ниже 8."""
+    from planetx.net.loader import image_to_rgba
+    rgba = image_to_rgba(image)
+    return int((rgba[..., :3].max(axis=2) < 8).sum())
+
+
 @check(500)
 def grids_scaled():
     from planetx.core.navigation import Pose
@@ -11093,8 +11146,13 @@ def grids_scaled():
         for alpha in (0.35, 0.0):
             window.panel.ground_slider.setValue(int(alpha * 100))
             view.repaint()
-            view.grabFramebuffer().save(os.path.join(
+            image = view.grabFramebuffer()
+            image.save(os.path.join(
                 TEMP, "planetx_grids_%s_%d.png" % (name, int(alpha * 100))))
+            # Чёрные пиксели - пустой кадр. Над дальней стенкой блока
+            # их не должно быть, сторож прохода прозрачной земли.
+            out.setdefault("black", {})["%s_%d" % (name, alpha * 100)] = \
+                _black_pixels(image)
     window.set_relief_scale(1.0)
     out["gl_scaled"] = dict(view.gl_errors)
     return None
@@ -13313,7 +13371,7 @@ def clouds_wait():
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_clouds.png"))
     result["clouds"] = _gibs_report(window, "clouds")
     result["clouds"]["attribution"] = \
-        "NASA GIBS, VIIRS" in window.attribution.text()
+        "NASA GIBS" in window.attribution.text()
     window.set_extra("clouds", False)
     view.update()
 
@@ -13325,7 +13383,7 @@ def clouds_off():
     result["clouds"]["off_textures"] = len(view.gibs["clouds"].textures)
     result["clouds"]["off_loader"] = "clouds" not in window.gibs_loaders
     result["clouds"]["off_attribution"] = \
-        "NASA GIBS, VIIRS" in window.attribution.text()
+        "NASA GIBS" in window.attribution.text()
     result["clouds"]["gl_errors"] = dict(view.gl_errors)
     window.set_extra("stars", True)
 
@@ -13352,7 +13410,7 @@ def temperature_wait():
         "sea": _gibs_report(window, "sea"),
         "land": _gibs_report(window, "land"),
         "legend": window.legend.isVisible(),
-        "attribution": "GHRSST" in window.attribution.text()}
+        "attribution": "NASA GIBS" in window.attribution.text()}
     window.set_extra("temperature", False)
     view.update()
 
@@ -14693,6 +14751,105 @@ def zlayer_check():
     return None
 
 
+@check(500)
+def crust_export():
+    """Кора CRUST1.0 в проект над Восточно-Европейской платформой:
+    семь поверхностей группой, отметки у Перми."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(55.0, 45.0, 2500000.0, 0.0, 0.0))
+    folder = os.path.join(TEMP, "planetx_crust_export")
+    os.makedirs(folder, exist_ok=True)
+    state["crust_folder"] = folder
+    state["crust_started"] = time.monotonic()
+    result["crust_export"] = {"first": window.crust_to_project(folder)}
+
+
+@check(1000)
+def crust_export_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result.setdefault("crust_export", {})
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - кора CRUST1.0") \
+        or root.findGroup("PlanetX - CRUST1.0 crust")
+    if group is None and time.monotonic() - state["crust_started"] < 60.0:
+        return 1000
+    layers = [node.layer() for node in group.findLayers()] if group else []
+    out["layers"] = [layer.name() for layer in layers]
+    out["message"] = window.message[0] if window.message else None
+    if layers:
+        first = layers[0]
+        extent = first.extent()
+        out["size"] = [first.width(), first.height()]
+        out["extent"] = [round(extent.xMinimum(), 1),
+                         round(extent.yMinimum(), 1),
+                         round(extent.xMaximum(), 1),
+                         round(extent.yMaximum(), 1)]
+        perm = {}
+        from qgis.core import QgsPointXY
+        for layer in layers:
+            value, ok = layer.dataProvider().sample(
+                QgsPointXY(56.5, 59.5), 1)
+            perm[layer.name()] = round(value) if ok else None
+        out["perm"] = perm
+        QgsProject.instance().removeMapLayers([l.id() for l in layers])
+    if group is not None:
+        root.removeChildNode(group)
+    out["gl"] = dict(window.view.gl_errors)
+    return None
+
+
+@check(15000, manual=True)
+def credit_shot():
+    """Кадр правого нижнего угла: короткая подпись источников и PlanetX
+    при силе тяжести и разрезе Земли."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(40.0, 140.0, 9000000.0, 0.0, 0.0))
+    window.set_extra("gravity", True)
+    window.set_extra("quakes", True)
+    QgsApplication.processEvents()
+    window.view.grab().save(os.path.join(TEMP, "planetx_credit.png"))
+    result["credit_shot"] = {
+        "text": window.attribution.text(),
+        "brand": [window.brand.x(), window.brand.y(),
+                  window.view.width(), window.view.height()]}
+    window.set_extra("gravity", False)
+    window.set_extra("quakes", False)
+
+
+@check(300)
+def zlayer_polyhedral():
+    """Слои многогранников PolyhedralSurfaceZ и TIN Z читаются гранями,
+    прежде чтение падало на exteriorRing. В QGIS без этих типов (3.36)
+    поле types пустое."""
+    from qgis.core import QgsFeature, QgsGeometry, QgsVectorLayer
+    from planetx.ui.subsurface import read_zlayer
+    out = result["zlayer_polyhedral"] = {"types": []}
+    for name, wkt in (
+            ("PolyhedralSurfaceZ", "POLYHEDRALSURFACE Z (((56.2 58 100, "
+             "56.201 58 100, 56.201 58.001 100, 56.2 58 100)), ((56.2 58 "
+             "100, 56.201 58 100, 56.201 58 130, 56.2 58 100)))"),
+            ("TINZ", "TIN Z (((56.2 58 100, 56.201 58 100, 56.201 58.001 "
+             "100, 56.2 58 100)))")):
+        geometry = QgsGeometry.fromWkt(wkt)
+        if geometry.isNull():
+            continue
+        layer = QgsVectorLayer(name + "?crs=EPSG:4326", "probe", "memory")
+        if not layer.isValid():
+            continue
+        feature = QgsFeature()
+        feature.setGeometry(geometry)
+        layer.dataProvider().addFeatures([feature])
+        out["types"].append(name)
+        shapes = read_zlayer(layer)
+        out[name] = [len(s.parts) for s in shapes]
+
+
 def _post_shot(name):
     """Кадр для объявления: окно во весь экран целиком, с органами
     навигации и подписями поверх вида."""
@@ -15161,7 +15318,7 @@ def poles_on():
     window._identify_at = None
     groups = window._identify_magnetic(55.75, 37.62)
     out["moscow_2020"] = groups[0][1][0][1] if groups else None
-    out["attribution"] = "NOAA" in window.attribution.text()
+    out["attribution"] = "IGRF" in window.attribution.text()
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_poles.png"))
     window.set_extra("magpoles", False)
@@ -15555,6 +15712,61 @@ def gravity_check():
     out["group"] = rows[0][0] if rows else None
     window.set_extra("gravity", False)
     out["off"] = not layer.shown
+    out["off"] = "emag" not in window.gibs_loaders \
+        and not window.field_legend.isVisible()
+    out["gl"] = dict(window.view.gl_errors)
+    return None
+
+
+@check(1000)
+def bouguer_check():
+    # Аномалия Буге с локальной копии: шкала, подпись, отрицательная
+    # под Тибетом и положительная в Тихом океане, снимает силу тяжести.
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result.setdefault("bouguer", {})
+    layer = window.view.gibs["emag"]
+    points = (("tibet", 32.0, 88.0), ("pacific", 20.0, -160.0))
+    if "textures" not in out:
+        if not window.extras.get("bouguer"):
+            folder = os.environ.get("PLANETX_TERRAIN_DIR") \
+                or "C:/Dev/planetx-terrain"
+            window.field_urls["bouguer"] = QUrl.fromLocalFile(
+                os.path.join(folder, "bouguer")).toString() \
+                + "/{z}/{x}/{y}.png"
+            window.set_extra("gravity", True)
+            window.view.navigator.show(Pose(32.0, 88.0, 8000000.0, 0.0, 0.0))
+            window.set_extra("bouguer", True)
+            out["gravity_after"] = bool(window.extras.get("gravity"))
+            state["bouguer_started"] = time.monotonic()
+            state["bouguer_points"] = list(points)
+            return 1000
+        spent = time.monotonic() - state["bouguer_started"]
+        if len(layer.textures) < 6 and spent < 30.0:
+            return 1000
+        out["textures"] = len(layer.textures)
+        out["title"] = window.field_legend.title
+        out["credit"] = "ETOPO" in window.attribution.text()
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_bouguer.png"))
+    pending = state["bouguer_points"]
+    if "asked" in state:
+        value = window._field_value
+        spent = time.monotonic() - state["bouguer_started"]
+        if value is not None and value[2] is None and not value[3] \
+                and spent < 15.0:
+            return 500
+        out[state.pop("asked")] = value[2:] if value else None
+    if pending:
+        name, lat, lon = pending.pop(0)
+        window._ask_field(lat, lon)
+        state["asked"] = name
+        state["bouguer_started"] = time.monotonic()
+        return 500
+    rows = window._identify_field()
+    out["row"] = rows[0][1][0][0] if rows and rows[0][1] else None
+    window.set_extra("bouguer", False)
     out["off"] = "emag" not in window.gibs_loaders \
         and not window.field_legend.isVisible()
     out["gl"] = dict(window.view.gl_errors)

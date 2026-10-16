@@ -535,20 +535,39 @@ def floor_part(ring, alt, color):
 
 
 BACKDROP_STEPS = 8  # клеток на сторону коробки фона
+BACKDROP_DENSE = 8  # проб рельефа на клетку коробки по стороне
 
 
-def backdrop_box(box, top_of, low, steps=BACKDROP_STEPS):
+def backdrop_box(box, top_of, low, steps=BACKDROP_STEPS,
+                 dense=BACKDROP_DENSE):
     """Коробка фона под прозрачной землёй: треугольники (k, 3) в ECEF.
     box - рамка (юг, север, запад, восток), верх - рельеф top_of(lats,
     lons) в узлах сетки steps × steps, низ - высота low. Фон рисуется
     только внутри её силуэта, поэтому небо и космос вокруг модели
     остаются своими. Первый вариант заливал весь кадр, и из космоса
-    небо стало светлым, замечание автора от 15 октября 2026 года."""
+    небо стало светлым, замечание автора от 15 октября 2026 года.
+
+    Верх в узле - наибольший рельеф соседних клеток по dense пробам
+    на клетку. С рельефом только в узлах холм между ними поднимался
+    над коробкой, и сквозь прозрачную землю холма над дальней стенкой
+    блока была видна чёрная полоса."""
     south, north, west, east = box
     lats, lons = np.meshgrid(np.linspace(south, north, steps + 1),
                              np.linspace(west, east, steps + 1),
                              indexing="ij")
-    tops = np.asarray(top_of(lats.ravel(), lons.ravel()), dtype=np.float64)
+    side = steps * dense + 1
+    fine_lats, fine_lons = np.meshgrid(np.linspace(south, north, side),
+                                       np.linspace(west, east, side),
+                                       indexing="ij")
+    fine = np.asarray(top_of(fine_lats.ravel(), fine_lons.ravel()),
+                      dtype=np.float64).reshape(side, side)
+    fine = np.where(np.isfinite(fine), fine, -np.inf)
+    tops = np.empty((steps + 1, steps + 1))
+    for i in range(steps + 1):
+        for j in range(steps + 1):
+            tops[i, j] = fine[max(i - 1, 0) * dense:(i + 1) * dense + 1,
+                              max(j - 1, 0) * dense:(j + 1) * dense + 1].max()
+    tops = np.where(np.isfinite(tops), tops, 0.0).ravel()
     top = ecef(lats.ravel(), lons.ravel(), tops).reshape(
         steps + 1, steps + 1, 3)
     bottom = ecef(lats.ravel(), lons.ravel(),

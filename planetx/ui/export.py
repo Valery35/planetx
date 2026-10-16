@@ -195,9 +195,10 @@ def write_picture(path, data, box):
         gdal.Unlink(source)
 
 
-def add_raster(path, title, stops=None, rights=""):
+def add_raster(path, title, stops=None, rights="", group=None):
     """Растр файла в проект: stops - [(значение, (R, G, B[, A]))] -
-    раскраска первой полосы, иначе как есть. rights - строка прав."""
+    раскраска первой полосы, иначе как есть. rights - строка прав,
+    group - название группы, без него «PlanetX - слои глобуса»."""
     layer = QgsRasterLayer(path, title, "gdal")
     if not layer.isValid():
         return None
@@ -216,7 +217,7 @@ def add_raster(path, title, stops=None, rights=""):
         meta = layer.metadata()
         meta.setRights([rights])
         layer.setMetadata(meta)
-    return _to_group(layer)
+    return _to_group(layer, group)
 
 
 def _ramp_type():
@@ -226,9 +227,9 @@ def _ramp_type():
     return QgsColorRampShader.Interpolated
 
 
-def _to_group(layer):
+def _to_group(layer, title=None):
     project = QgsProject.instance()
-    title = tr("PlanetX - слои глобуса")
+    title = title or tr("PlanetX - слои глобуса")
     root = project.layerTreeRoot()
     group = root.findGroup(title)
     if group is None:

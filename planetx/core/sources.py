@@ -73,3 +73,36 @@ def tile_probe(template, z=0, x=0, y=0):
     """Адрес одного тайла шаблона - для проверки доступности."""
     return template.replace("{z}", str(z)).replace("{x}", str(x)) \
         .replace("{y}", str(y))
+
+def short_credits(credits, keep=1):
+    """Короткая подпись источников на карте: названия без ссылок, лицензий
+    и списков авторов, повтор один раз. credits - подписи текстом по
+    порядку, первые keep (подложка и рельеф) остаются целиком, у прочих
+    снимается метка вида «Gravity: » и остаётся первое название до
+    запятой. Части через «;» - отдельные источники. Подпись с «©»
+    остаётся целой, условия OpenStreetMap и d3-celestial требуют её как
+    есть. Полные подписи - в окнах «О модуле» и «Источники данных»,
+    решение автора от 16 октября 2026 года."""
+    out = []
+    for n, credit in enumerate(credits):
+        for chunk in credit.split(" · "):
+            chunk = chunk.strip()
+            if not chunk:
+                continue
+            if n < keep:
+                found = [chunk]
+            else:
+                found = []
+                for piece in chunk.split(";"):
+                    head, sep, rest = piece.strip().partition(": ")
+                    if sep and "," not in head:
+                        piece = rest
+                    piece = piece.strip()
+                    if "©" not in piece:
+                        piece = piece.split(",")[0].strip()
+                    if piece:
+                        found.append(piece)
+            for piece in found:
+                if piece not in out:
+                    out.append(piece)
+    return out

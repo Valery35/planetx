@@ -57,5 +57,31 @@ class TestEncoding(unittest.TestCase):
         self.assertEqual(float(tr.decode(rgba, None)[0, 0]), 0.0)
 
 
+class TestShortCredits(unittest.TestCase):
+
+    def test_names_without_labels_licenses_and_repeats(self):
+        found = sources.short_credits([
+            "Esri, Vantor, Earthstar Geographics, and the GIS User Community",
+            "Gravity: XGM2019e, Zingerle et al. 2020, ICGEM, CC BY 4.0",
+            "Bouguer anomaly: XGM2019e, Zingerle et al. 2020, ICGEM, "
+            "CC BY 4.0; relief: ETOPO 2022, NOAA NCEI",
+            "© OpenStreetMap contributors",
+            "Submarine cables: © OpenStreetMap contributors",
+            "Earthquakes: USGS · Slabs: USGS Slab2",
+            "CRUST1.0, Laske, Masters, Ma, Pasyanos, 2013"])
+        self.assertEqual(found, [
+            "Esri, Vantor, Earthstar Geographics, and the GIS User Community",
+            "XGM2019e", "ETOPO 2022", "© OpenStreetMap contributors",
+            "USGS", "USGS Slab2", "CRUST1.0"])
+
+    def test_kept_credits_stay_whole(self):
+        found = sources.short_credits(
+            ["Esri, Vantor", "Terrain: Mapzen, SRTM, GMTED, ETOPO1 and others",
+             "NASA GIBS, VIIRS"], keep=2)
+        self.assertEqual(found, ["Esri, Vantor",
+                                 "Terrain: Mapzen, SRTM, GMTED, ETOPO1 and "
+                                 "others", "NASA GIBS"])
+
+
 if __name__ == "__main__":
     unittest.main()

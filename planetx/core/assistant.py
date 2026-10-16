@@ -200,7 +200,7 @@ TOOL_NAMES = tuple(t[0] for t in TOOLS)
 # пользователя (выбор файла, запись облёта) остановили бы круг вызовов,
 # разговор с помощником уже открыт.
 ACTION_SKIP = ("tool:assistant", "tool:record", "tool:scene_save",
-               "tool:scene_open", "tool:share")
+               "tool:scene_open", "tool:share", "tool:crust")
 
 
 def assistant_actions(actions):

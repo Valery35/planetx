@@ -105,6 +105,24 @@ class TestCrust(unittest.TestCase):
             self.assertGreater(top, bottom)
             self.assertEqual(bottom, below)
 
+    def test_surfaces_in_metres_by_cell(self):
+        # Семь кровель сверху вниз, метры, ячейка точки - та же строка
+        # и столбец сетки, что у cells.
+        found = self.model.surfaces()
+        self.assertEqual([k for k, _ in found],
+                         ["sediments_upper", "sediments_middle",
+                          "sediments_lower", "crust_upper", "crust_middle",
+                          "crust_lower", "moho"])
+        row, col = cr.cells([0.5], [0.5])
+        moho = dict(found)["moho"][row[0], col[0]]
+        self.assertAlmostEqual(moho, -1000.0 * float(
+            self.model.moho([0.5], [0.5])[0]), places=1)
+        self.assertEqual(dict(found)["sediments_upper"][0, 0], 1000.0)
+        # Середина ячейки [row, col] - GRID_NORTH - row, GRID_WEST + col.
+        lat = cr.GRID_NORTH - row[0] * cr.GRID_STEP
+        lon = cr.GRID_WEST + col[0] * cr.GRID_STEP
+        self.assertEqual((lat, lon), (0.5, 0.5))
+
     def test_bad_files_raise(self):
         with self.assertRaises(cr.CrustError):
             cr.parse_bounds(b"1 2 3")

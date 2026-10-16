@@ -9,6 +9,7 @@
 import html
 import math
 import os
+import re
 import time
 from functools import partial
 
@@ -27,6 +28,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      volcanoes as volcanoes_core,
                      quakes, slabs, themes,
                      satellites as satellites_core)
+from ...core import sources as datasources
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
 from ...core.mipmap import mip_chain
@@ -51,7 +53,7 @@ from ..subsurface import subsurface_ids
 from ..weather import field_attribution
 from ..track import date_range, layer_span, timed_layer
 from ...core.places import Place as MarkPlace
-from .base import (AUTO_DEFAULT, COORDS_KEY, DATA_DIR, DECL_EAST,
+from .base import (AUTO_DEFAULT, COORDS_KEY, CREDIT_LINK, DATA_DIR, DECL_EAST,
                    DECL_LABEL_POINTS, DECL_WEST, DECL_WIDTH, DECL_ZERO,
                    DECL_ZERO_WIDTH, GEOID_SCALE_KEY,
                    MAGNETIC_ATTRIBUTION, MARGIN, NEW_SHOWN_KEY, POLE_COLORS,
@@ -73,6 +75,9 @@ def field_texts():
         "gravity": (tr("Сила тяжести"), tr("Аномалия в свободном воздухе"),
                     tr("мГал"),
                     [(tr("Набор"), "XGM2019e, Zingerle et al. 2020")]),
+        "bouguer": (tr("Сила тяжести"), tr("Аномалия Буге"), tr("мГал"),
+                    [(tr("Набор"), "XGM2019e, ETOPO 2022"),
+                     (tr("Плотность породы"), "2670 кг/м³")]),
         "heatflow": (tr("Тепловой поток"), tr("Поток тепла"),
                      tr("мВт/м²"),
                      [(tr("Набор"), "IHFC 2024, Petrunin et al. 2026")]),
@@ -748,11 +753,12 @@ class LayersMixin:
 
     def _show_attribution(self):
         if self.view.sky_view is not None:
-            self.attribution.setText(" · ".join(
-                link_html(*credit) for credit in SKY_ATTRIBUTION))
-            self._place_attribution()
+            credits = [link_html(*credit) for credit in SKY_ATTRIBUTION]
+            self._set_credits(credits, len(credits))
             return
         parts = [attribution_html(self.source)]
+        # Подложка и рельеф - целиком, их условия просят полную подпись.
+        kept = 1
         if "cadastre" in self.gibs_loaders:
             parts.append(link_html(*cadastre.ATTRIBUTION))
         if self._magnetic_on():
@@ -771,10 +777,11 @@ class LayersMixin:
                 or self.buildings_loader is not None):
             parts.append(self._vector_credit())
         if self.view.store.scale or "slope" in self.gibs_loaders:
-            parts.append(self._terrain_credit() if self.planet.earth
+            parts.insert(1, self._terrain_credit() if self.planet.earth
                          else html.escape(self.planet.terrain[3])
                          if self.planet.terrain
                          and self.terrain_loader is not None else "")
+            kept = 2
         if "clouds" in self.gibs_loaders:
             parts.append(link_html(*clouds.ATTRIBUTION))
         if "theme" in self.gibs_loaders:
@@ -826,14 +833,30 @@ class LayersMixin:
             parts.append(link_html(*crust.CITATION))
         if self.view.wedge is not None and self.view.wedge_tomo is not None:
             parts.append(link_html(*tomography.ATTRIBUTION))
-        self.attribution.setText(" · ".join(parts))
+        self._set_credits(parts, kept)
+
+    def _set_credits(self, parts, kept):
+        """Подпись источников на карте - короткие названия одной строкой
+        без ссылок (core.sources.short_credits), щелчок открывает окно
+        «Источники данных». Решение автора от 16 октября 2026 года.
+        parts - подписи разметкой, первые kept остаются целиком."""
+        texts = [html.unescape(re.sub("<[^>]+>", "", part))
+                 for part in parts]
+        text = " · ".join(datasources.short_credits(texts, kept))
+        self.attribution.setText(CREDIT_LINK.format(html.escape(text))
+                                 if text else "")
         self._place_attribution()
 
     def _place_attribution(self):
+        # Справа внизу - PlanetX, левее - подпись источников.
+        self.brand.adjustSize()
+        self.brand.move(self.view.width() - self.brand.width() - MARGIN,
+                        self.view.height() - self.brand.height() - MARGIN)
         self.attribution.adjustSize()
+        self.attribution.setVisible(bool(self.attribution.text()))
         self.attribution.move(
-            max(MARGIN, self.view.width() - self.attribution.width()
-                - MARGIN),
+            max(MARGIN, self.brand.x() - self.attribution.width()
+                - MARGIN // 2),
             self.view.height() - self.attribution.height() - MARGIN)
         bar = self.toolbar.geometry()
         self.spinner.move(bar.right() + MARGIN,

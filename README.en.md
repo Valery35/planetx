@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.89.1.
+A 3D globe inside QGIS. PlanetX version 0.90.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -63,9 +63,9 @@ and atmosphere, from space down to single streets.
   own window and as a wall on the globe. The SEISGLOB2 tomography colours
   the mantle on the faces by the seismic wave speed.
 - **Geophysics.** Magnetic poles and declination lines since 1590, EMAG2v3
-  magnetic anomalies, XGM2019e gravity anomalies, the EGM2008 geoid,
-  ocean floor age, heat flow, lithospheric plate motion and Holocene
-  volcanoes. A click on the globe shows the value at the point.
+  magnetic anomalies, XGM2019e gravity and Bouguer anomalies, the EGM2008
+  geoid, ocean floor age, heat flow, lithospheric plate motion and
+  Holocene volcanoes. A click on the globe shows the value at the point.
 - **Subsurface mode.** Drill holes along their survey, bed roofs,
   sections with images and tunnels from project layers go under the
   globe surface with the QGIS style and labels. The surface becomes

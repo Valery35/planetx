@@ -11,8 +11,9 @@ import zipfile
 import time
 
 import numpy as np
-from qgis.core import QgsApplication, QgsSettings
+from qgis.core import QgsApplication, QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QTimer
+from qgis.PyQt.QtWidgets import QFileDialog
 from qgis.utils import iface
 
 from ... import journal
@@ -20,6 +21,7 @@ from ...core import (basemap, geoid, paleo, dem as dem_model,
                      deposits as deposits_core, fires as fires_core, crust,
                      cutaway, quakes, slabs, sources as datasources,
                      tomography)
+from ...core.sync import ground_size, view_box
 from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
 from ...i18n import tr
 from ...net.gdalnet import executor
@@ -27,12 +29,46 @@ from ...net.overlay import (OPENFREEMAP_ATTRIBUTION, fetch_bytes, fetch_mirror,
                             fetch_json)
 from ...render.view import start_keys
 from ..inset import DeepSource, DemSource, warm as warm_gdal
+from .. import export as layer_export
 from ..deposits import deposits_path, parse_deposits
 from ..overpass import brief_error
 from ..tomo import parse_tomo
 from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, STRETCH_KEY, TOMO_KEY,
                    TERRAIN_ATTRIBUTION, TERRAIN_MIRRORS, all_sources,
                    link_html)
+
+
+def crust_surface_names():
+    """Названия поверхностей crust.SURFACES по ключам."""
+    return {"sediments_upper": tr("кровля верхних осадков"),
+            "sediments_middle": tr("кровля средних осадков"),
+            "sediments_lower": tr("кровля нижних осадков"),
+            "crust_upper": tr("кровля верхней коры"),
+            "crust_middle": tr("кровля средней коры"),
+            "crust_lower": tr("кровля нижней коры"),
+            "moho": tr("Мохо")}
+
+
+# Раскраска отметок поверхности коры от глубокой к высокой, выбор
+# помощника.
+DEPTH_COLORS = ((40, 50, 120), (60, 130, 190), (150, 205, 200),
+                (235, 225, 160), (190, 120, 60))
+
+
+def _depth_stops(path):
+    """Раскраска растра отметок по его наименьшему и наибольшему
+    значению, у плоской поверхности - пустая."""
+    from osgeo import gdal
+    data = gdal.Open(path)
+    values = data.GetRasterBand(1).ReadAsArray().astype(np.float64)
+    data = None
+    values = values[values != layer_export.NODATA]
+    if not values.size or values.max() - values.min() < 1.0:
+        return None
+    low, high = float(values.min()), float(values.max())
+    steps = len(DEPTH_COLORS) - 1
+    return [(low + (high - low) * n / steps, color)
+            for n, color in enumerate(DEPTH_COLORS)]
 
 
 class EarthDataMixin:
@@ -349,6 +385,11 @@ class EarthDataMixin:
             self.view.set_wedge(self.view.wedge, self.crust)
         self._show_attribution()
         self._refresh_section()
+        folder = getattr(self, "_crust_export", None)
+        if folder:
+            self._crust_export = None
+            if self.crust is not None:
+                self.crust_to_project(folder)
 
     @staticmethod
     def _crust_path():
@@ -390,6 +431,61 @@ class EarthDataMixin:
                     return
                 self.crust_error = ""
         self._crust_reply = fetch_bytes(crust.URL, self._crust_done)
+
+    def crust_to_project(self, folder=None):
+        """Пункт «Кора CRUST1.0 в проект QGIS…»: кровли трёх слоёв
+        осадков, трёх слоёв коры и Мохо в рамке вида - GeoTIFF отметок
+        в метрах в папке folder, слои - группой в проект. Без модели она
+        просится, выгрузка идёт по её приходу. Возвращает количество
+        записанных поверхностей или None."""
+        if folder is None:
+            folder = QFileDialog.getExistingDirectory(
+                self, tr("Кора CRUST1.0 в проект QGIS"),
+                QgsProject.instance().homePath() or os.path.expanduser("~"))
+        if not folder:
+            return None
+        if self.crust is None:
+            # Выгрузку делает _crust_done по приходу модели, в том числе
+            # сразу, когда архив лежит в профиле.
+            self._crust_export = folder
+            self.crust_error = ""
+            self._want_crust()
+            if self.crust is None:
+                self.message = (tr("Модель коры загружается, поверхности "
+                                   "будут записаны по её приходу."),
+                                time.monotonic())
+                self._show_state()
+            return None
+        self._crust_export = None
+        pose = self.view.navigator.pose
+        camera = self.view.camera
+        width, height = ground_size(pose.distance, camera.fov_y,
+                                    camera.aspect)
+        box = view_box(pose.lat, pose.lon, width, height)
+        names = crust_surface_names()
+        group = tr("PlanetX - кора CRUST1.0")
+        written = 0
+        for key, values in self.crust.surfaces():
+            path = os.path.join(folder, "crust1_{}.tif".format(key))
+            count = layer_export.write_grid(
+                path, [values], crust.GRID_WEST, crust.GRID_NORTH,
+                crust.GRID_STEP, box)
+            if count is None:
+                break
+            if layer_export.add_raster(
+                    path, "CRUST1.0 - " + names[key],
+                    _depth_stops(path), crust.CITATION[0], group) is None:
+                break
+            written += 1
+        if written == len(crust.SURFACES):
+            text = tr("В проект добавлено поверхностей коры {count}.",
+                      count=written)
+        else:
+            text = tr("Поверхности коры не записаны в «{path}».",
+                      path=folder)
+        self.message = (text, time.monotonic())
+        self._show_state()
+        return written
 
     def _read_slab_index(self):
         if self.slab_index is None:

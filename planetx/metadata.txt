@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.89.1
+version=0.90.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,16 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.89.1 The plate motion data file and the code of the globe
+changelog=0.90.0 The Bouguer anomalies row of the Inside the Earth category
+      shows gravity anomalies without the attraction of the relief. The
+      CRUST1.0 crust to the QGIS project item of the Earth cutaway menu
+      writes the tops of the sediment and crust layers and the Moho as
+      GeoTIFF rasters. The source credits on the map are a short line, a
+      click opens the Data sources window, the PlanetX name stands in the
+      bottom right corner. Layers with PolyhedralSurfaceZ and TIN Z
+      geometry show in volume, search hints hide on a click on the globe,
+      the dark strip above the far wall of the grid block is gone.
+      0.89.1 The plate motion data file and the code of the globe
       window are written without the remarks of the catalogue security
       scan. The globe works as in 0.89.0.
       0.89.0 New rows of the Inside the Earth category: gravity

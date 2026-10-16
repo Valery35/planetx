@@ -53,7 +53,8 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
               "currents": ("currents",), "cadastre": ("cadastre",),
               "emag": ("emag",), "seafloor_age": ("emag",),
-              "heatflow": ("emag",), "gravity": ("emag",)}
+              "heatflow": ("emag",), "gravity": ("emag",),
+              "bouguer": ("emag",)}
 QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -149,7 +150,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "cables": False, "currents": False, "cadastre": False,
                   "magpoles": False, "emag": False, "geoid": False,
                   "magdecl": False, "seafloor_age": False,
-                  "heatflow": False, "gravity": False,
+                  "heatflow": False, "gravity": False, "bouguer": False,
                   "platemotion": False,
                   "volcanoes": False, "air": True}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
@@ -160,7 +161,7 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "deposits", "mining", "osm_mines", "plants", "infra_osm",
                 "cables", "currents", "cadastre", "magpoles", "emag",
                 "geoid", "magdecl", "seafloor_age", "heatflow",
-                "gravity", "platemotion", "volcanoes")
+                "gravity", "bouguer", "platemotion", "volcanoes")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
@@ -179,7 +180,7 @@ DECL_LABEL_POINTS = 8
 MOTION_COLOR = (255, 225, 60, 235)
 MOTION_WIDTH = 1.8
 POLE_FIRST = "1590-01-01"  # первый год таблицы NOAA
-MAGNETIC_ATTRIBUTION = ("NOAA NCEI, IGRF-14 IAGA",
+MAGNETIC_ATTRIBUTION = ("IGRF-14 IAGA, NOAA NCEI",
                         "https://www.ncei.noaa.gov/products/"
                         "wandering-geomagnetic-poles")
 # Глубины морей и океанов - часть данных рельефа, флажок в свойствах
@@ -274,6 +275,9 @@ REFRESH_DELAY = 300
 OPACITY_DELAY = 120
 PANEL_WIDTH = 300  # ширина левой панели при открытии, пикселей
 MARGIN = 8  # отступ панели значков и подписи от края вида
+# Подпись источников - одна ссылка на окно «Источники данных», без синего.
+CREDIT_LINK = ('<a href="sources" style="color: #202020; '
+               'text-decoration: none;">{}</a>')
 ATTRIBUTION_STYLE = ("QLabel { background: rgba(255, 255, 255, 190); "
                      "padding: 1px 4px; border-radius: 3px; }")
 

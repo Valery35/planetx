@@ -100,6 +100,11 @@ KEY_DOWN = enum(Qt, "Key", "Key_Down")
 KEY_UP = enum(Qt, "Key", "Key_Up")
 KEY_ESCAPE = enum(Qt, "Key", "Key_Escape")
 KEY_CHOOSE = (enum(Qt, "Key", "Key_Return"), enum(Qt, "Key", "Key_Enter"))
+FOCUS_OUT = enum(QEvent, "Type", "FocusOut")
+# Уход фокуса, после которого подсказки остаются - меню строки и смена
+# окна системы.
+FOCUS_KEEP = (enum(Qt, "FocusReason", "PopupFocusReason"),
+              enum(Qt, "FocusReason", "ActiveWindowFocusReason"))
 DRAG = enum(Qt, "ItemFlag", "ItemIsDragEnabled")
 DROP = enum(Qt, "ItemFlag", "ItemIsDropEnabled")
 OPEN_KEY = "PlanetX/panel_open/"  # + имя раздела: раскрыт ли он
@@ -503,6 +508,8 @@ class LayerPanel(QWidget):
     cutaway_stretch_changed = pyqtSignal(bool)
     # Пункт «Томография мантии» того же меню.
     cutaway_tomo_changed = pyqtSignal(bool)
+    # Пункт «Кора CRUST1.0 в проект QGIS…» того же меню.
+    crust_export = pyqtSignal()
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -962,7 +969,19 @@ class LayerPanel(QWidget):
                 watched is self.place or watched is self.hints) \
                 and self._hint_key(watched, event.key()):
             return True
+        if event.type() == FOCUS_OUT and (
+                watched is self.place or watched is self.hints) \
+                and event.reason() not in FOCUS_KEEP:
+            # Фокус ещё не на новом виджете, проверка - после события.
+            QTimer.singleShot(0, self._focus_left)
         return super().eventFilter(watched, event)
+
+    def _focus_left(self):
+        """Фокус ушёл из строки поиска и списка подсказок, например
+        щелчком по глобусу, - подсказки прячутся."""
+        if self._hints and not (self.place.hasFocus()
+                                or self.hints.hasFocus()):
+            self.hide_hints()
 
     def _hint_key(self, watched, key):
         """Клавиша строки поиска или списка подсказок. Истина - клавиша
@@ -1183,6 +1202,14 @@ class LayerPanel(QWidget):
                 self.cutaway_tomo = bool(on)
                 self.cutaway_tomo_changed.emit(self.cutaway_tomo)
             tomo.toggled.connect(tomo_toggled)
+            crust_item = menu.addAction(tr("Кора CRUST1.0 в проект QGIS…"))
+            crust_item.setToolTip(tr(
+                "Отметки кровель трёх слоёв осадков, трёх слоёв коры и Мохо "
+                "по модели CRUST1.0 в рамке вида - растры GeoTIFF в метрах "
+                "с шагом 1°, группой в проект QGIS."))
+            crust_item.triggered.connect(
+                lambda _=False: QTimer.singleShot(
+                    0, self.crust_export.emit))
         if export:
             menu.addAction(tr("В проект QGIS…")).triggered.connect(
                 lambda _=False: self.active_export.emit(key))

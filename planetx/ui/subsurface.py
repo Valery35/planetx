@@ -487,6 +487,16 @@ def zlayer_ids(layers):
             if isinstance(layer, QgsVectorLayer) and layer.id() in chosen]
 
 
+def _patches(part):
+    """Многоугольники части площадного объекта. PolyhedralSurface и TIN
+    (QGIS 3.40 и новее) - грани patchN, у них нет exteriorRing, чтение
+    такого слоя падало. Нашлось 16 октября 2026 года по вопросу
+    Василия Швалева о зданиях многогранниками."""
+    if hasattr(part, "numPatches"):
+        return [part.patchN(i) for i in range(part.numPatches())]
+    return [part]
+
+
 def read_zlayer(layer):
     """Объекты слоя с Z в широтах и долготах, ZShape. Цвет - поле color
     или символ стиля QGIS, прозрачность - прозрачность слоя."""
@@ -516,8 +526,9 @@ def read_zlayer(layer):
                 continue
             parts = []
             for part in geometry.constParts():
-                rings = [part.exteriorRing()] if kind == "polygon" \
-                    else [part]
+                rings = [polygon.exteriorRing()
+                         for polygon in _patches(part)] \
+                    if kind == "polygon" else [part]
                 for ring in rings:
                     if ring is None:
                         continue

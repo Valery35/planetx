@@ -53,6 +53,17 @@ UPPER_CRUST = LAYERS.index("crust_upper")
 OCEANIC_VP = 5.5  # км/с, верхняя кора медленнее - океаническая
 
 
+# Поверхности для проекта QGIS: ключ и номер отметки - кровли трёх слоёв
+# осадков, трёх слоёв кристаллической коры и Мохо. Просьба автора от
+# 16 октября 2026 года - цифровые поверхности осадочного чехла
+# и фундамента, например на Восточно-Европейской платформе.
+SURFACES = (("sediments_upper", 2), ("sediments_middle", 3),
+            ("sediments_lower", 4), ("crust_upper", 5),
+            ("crust_middle", 6), ("crust_lower", 7), ("moho", MOHO))
+# Середина левой верхней ячейки сетки и шаг, градусы.
+GRID_WEST, GRID_NORTH, GRID_STEP = -179.5, 89.5, 1.0
+
+
 class CrustError(ValueError):
     """Файл модели не того вида."""
 
@@ -124,6 +135,14 @@ class Crust:
         """Толщина коры без воды, км: от низа воды до Мохо."""
         b = self.at(lats, lons).astype(np.float64)
         return b[..., 1] - b[..., MOHO]
+
+    def surfaces(self):
+        """Поверхности SURFACES на всю сетку: [(ключ, отметки (ROWS,
+        COLS) в метрах над уровнем моря, вниз отрицательно)]. Строки
+        с севера, середина первой ячейки GRID_WEST, GRID_NORTH. Где слоя
+        нет, кровля совпадает с кровлей следующего."""
+        return [(key, self.bounds[..., k].astype(np.float64) * 1000.0)
+                for key, k in SURFACES]
 
     def layers(self, lats, lons):
         """Слои в точках: ключ, верх и низ в км, только ненулевые.
