@@ -694,25 +694,39 @@ class ToolsMixin:
         return built, notes
 
     def _open_model_section(self, title, points):
-        """Окно «Разрез модели» вдоль пути points: пласты, скважины
-        и тоннели подземной модели в метрах."""
+        """Окно «Разрез модели» вдоль пути points: кровли, скважины,
+        тоннели и объекты с Z в метрах. Слои - отметки окна из слоёв
+        проекта (ui.subsurface.section_layers), по умолчанию - слои
+        подземной модели глобуса. Модель читается заново только при
+        смене отметок."""
+        from ..subsurface import (section_defaults, section_layers,
+                                  section_model)
         points = list(points)
         manager = self.subsurface
+        rasters, roles, zlayers = section_layers()
+        settings = manager.settings if manager.from_project() else None
+        defaults = section_defaults(rasters, roles, zlayers, settings)
+        cache = {}
 
-        def provider(band):
-            if manager.model is None:
+        def provider(band, choice):
+            horizons, holes, chosen_z = choice
+            if not (horizons or holes or chosen_z or roles.get("tunnels")):
                 return None
-            return model_section(manager.model, manager._ground, points,
-                                 band)
+            key = (horizons, holes, chosen_z)
+            if key not in cache:
+                cache.clear()
+                cache[key] = section_model(horizons, roles, holes, chosen_z)
+            return model_section(cache[key], manager._ground, points, band)
+        layers = (rasters, "collar" in roles, zlayers, defaults)
         if self.model_section_dialog is None:
             self.model_section_dialog = ModelSectionDialog(title, provider,
-                                                           self)
+                                                           self, layers)
             self.model_section_dialog.point_hovered.connect(
                 self._model_section_hover)
             self.model_section_dialog.finished.connect(
                 lambda *args: self._model_section_hover(None))
         else:
-            self.model_section_dialog.set_source(title, provider)
+            self.model_section_dialog.set_source(title, provider, layers)
         self.model_section_dialog.show()
         self.model_section_dialog.raise_()
 

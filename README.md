@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-Трёхмерный глобус внутри QGIS. Версия PlanetX 0.93.0.
+Трёхмерный глобус внутри QGIS. Версия PlanetX 0.94.0.
 
 Глобус открывается в отдельном окне и показывает всю Землю с рельефом
 и атмосферой, от вида из космоса до отдельных улиц.
@@ -268,7 +268,7 @@ Earthstar Geographics, and the GIS User Community. Условия
 снимки VIIRS. Температура - NASA GIBS, MODIS и GHRSST MUR. Звёзды -
 каталог ярких звёзд Йельского университета.
 Млечный путь - [NASA/Goddard Space Flight Center Scientific Visualization Studio](https://svs.gsfc.nasa.gov/4851),
-Gaia DR2: ESA/Gaia/DPAC.
+Gaia DR2 - ESA/Gaia/DPAC.
 
 Марс - NASA, USGS, Viking MDIM2.1. Луна - USGS, LRO LOLA. Тайлы обоих
 тел - [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).

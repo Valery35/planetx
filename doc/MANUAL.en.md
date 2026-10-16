@@ -434,7 +434,7 @@ it loads. When the window opens, the row is off.
 The Add data button of the Layers section puts the catalogue in place
 of the list, the panel grows wider for that time, the globe stays
 visible. The ← arrow brings the list back. The categories stand on the
-left: Map (the vector base, coordinate grid, 3D buildings, contours),
+left - Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Atmosphere,
 Clouds, Sun, Satellites), Inside the Earth (Earthquakes, Plate
 boundaries, Plate motion, Volcanoes, Magnetic poles, Declination lines,
@@ -586,7 +586,7 @@ transform faults, blue - plates converging in subduction and collision
 zones. Plate names show as labels. A click near a boundary in the
 Identify mode shows the boundary type, the plate pair and the speed of
 their relative motion in mm/yr. In the plate pair a slash in Bird's
-notation shows which plate goes under which: "PA\OK" is the Pacific
+notation shows which plate goes under which. "PA\OK" is the Pacific
 plate under the Okhotsk plate.
 
 The Magnetic poles layer shows the north and south magnetic poles - the
@@ -2311,8 +2311,34 @@ of the same name. The horizontal axis is the distance along the path,
 the vertical axis is the elevation in metres. The section shows the
 terrain, the beds between the roofs, the drill holes in the colours of
 their intervals and the tunnels at their diameter from a band along the
-path. The Band of holes and tunnels field sets the band width. The
-cursor over the chart marks the point on the globe.
+path. The Band of holes and objects field sets the band width. The
+cursor over the chart marks the point on the globe, the caption at the
+top of the chart gives the distance, the terrain and the roof elevations
+under the cursor.
+
+This is also a geological section by the project layers. The list on
+the left of the window gives the project layers with checkboxes:
+
+- Roofs - rasters - any single-band elevation rasters of the project,
+  for example grids of bed roofs and bottoms. The Surface by elevations
+  item and a subsurface model on the globe are not needed for the
+  section. The order of the beds follows the beds table, without it the
+  mean elevation of the roof from top to bottom.
+- Drill holes - the project collars with intervals and surveys.
+- Layers with Z - lines and polygons with Z elevations, for example the
+  3D fence of a section from Isoliner3D. Their parts in the band along
+  the path go onto the section in their colour - fence walls filled,
+  lines as lines.
+
+By default the layers of the subsurface model of the globe are checked,
+without it the surfaces by elevations and the layers with the Solid by
+Z elevations item, and if there are none, all rasters and layers with Z
+of the project. A raster without its own coordinate system takes the
+system of the QGIS layer. The bed colours are named in the top right
+corner of the chart. The Picture… button writes the section to a PNG
+file, CSV table… writes the elevations of the terrain and the roofs at
+400 points of the path with latitude and longitude, an empty field where
+there is no roof.
 
 The subsurface demos put their data into the QGIS project as a group of
 ordinary layers and check them on the globe. The Permian deposits demo
@@ -2423,7 +2449,7 @@ the corner of each frame.
   exists only on Windows. A tour of two stops, 71 frames of 2592 ×
   1860, is written in about 45 s and takes 10 MB.
 - PNG frames to a folder is the professional mode. The window asks
-  for a folder and a size: as the window, 1920 × 1080, 2560 × 1440 or
+  for a folder and a size - as the window, 1920 × 1080, 2560 × 1440 or
   3840 × 2160. A frame larger than the window is drawn anew at this
   size, labels and lines grow in the same proportion. The files are
   named `frame_00000.png`, `frame_00001.png` and on, frames with the
@@ -2554,7 +2580,7 @@ the collection, for some maps it is rough or wrong.
 
 The Eto Mesto old maps here… item of the globe menu opens the catalogue
 of the Eto Mesto site (etomesto.com) - georeferenced old maps of Russia
-and the former USSR: city plans, survey atlases, the Schubert and
+and the former USSR - city plans, survey atlases, the Schubert and
 Strelbitsky maps, Red Army maps, wartime aerial photos. The window shows
 the year and title of the maps that cover the point, near Perm there
 are more than two hundred. The search line picks maps by words of the
@@ -3031,7 +3057,7 @@ OpenStreetMap contributors. Vector tiles and 3D buildings - OpenFreeMap. Terrain
 Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Clouds - NASA GIBS,
 VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale Bright Star Catalogue. Milky Way -
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
-DR2: ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
+DR2 - ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
 Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
 OpenPlanetaryMap. Mars heights - NASA MGS MOLA MEGDR, Moon heights -
 NASA LRO LOLA GDR. Imagery of other bodies - global mosaics of USGS

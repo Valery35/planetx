@@ -3775,17 +3775,47 @@ EN = {
     "Шаблон не записан: {error}": "Template not written: {error}",
     "Разрез модели: {name}": "Model section: {name}",
     "Разрез модели": "Model section",
-    "Полоса скважин и тоннелей": "Band of holes and tunnels",
-    "Ширина полосы вдоль линии, из которой скважины и тоннели "
-    "переносятся на разрез. Шире полоса - больше скважин, но "
-    "дальние лежат не там, где линия.":
-        "Width of the band along the line from which drill holes and "
-        "tunnels are moved onto the section. A wider band gives more holes, "
-        "but the far ones do not lie where the line is.",
-    "Нужны подземная модель и путь хотя бы из двух точек.":
-        "A subsurface model and a path of at least two points are needed.",
-    "Длина {length}. Скважин в полосе {holes}, тоннелей {tunnels}.":
-        "Length {length}. Holes in the band: {holes}, tunnels: {tunnels}.",
+    "Полоса скважин и объектов": "Band of holes and objects",
+    "Ширина полосы вдоль линии, из которой скважины, тоннели "
+    "и объекты с Z переносятся на разрез. Шире полоса - больше "
+    "скважин, но дальние лежат не там, где линия.":
+        "Width of the band along the line from which drill holes, tunnels "
+        "and objects with Z are moved onto the section. A wider band gives "
+        "more holes, but the far ones do not lie where the line is.",
+    "Слои проекта на разрезе. Растры - кровли пластов, сверху "
+    "вниз по порядку таблицы пластов или по средней отметке. "
+    "Скважины - устья с интервалами и инклинометрией. Слои с Z - "
+    "стенки «3D-забора» и линии с отметками в полосе вдоль "
+    "линии.":
+        "Project layers on the section. Rasters are bed roofs, from top "
+        "to bottom by the order of the beds table or by the mean "
+        "elevation. Drill holes are collars with intervals and surveys. "
+        "Layers with Z are walls of a 3D fence and lines with elevations "
+        "in the band along the line.",
+    "Картинка…": "Picture…",
+    "Разрез картинкой PNG в размере окна.":
+        "The section as a PNG picture of the window size.",
+    "Отметки по точкам линии - расстояние, широта, долгота, рельеф "
+    "и кровли пластов, нет кровли - пустое поле.":
+        "Elevations at the points of the line - distance, latitude, "
+        "longitude, terrain and bed roofs, an empty field where there is "
+        "no roof.",
+    "Кровли - растры": "Roofs - rasters",
+    "Скважины": "Drill holes",
+    "Скважины проекта": "Project drill holes",
+    "Слои с Z": "Layers with Z",
+    "В проекте нет растров, скважин и слоёв с Z":
+        "The project has no rasters, drill holes or layers with Z",
+    "Разрез картинкой": "Section as a picture",
+    "Разрез таблицей": "Section as a table",
+    "Нужны путь хотя бы из двух точек и слой разреза - растр "
+    "кровли, скважины или слой с Z.":
+        "A path of at least two points and a section layer - a roof "
+        "raster, drill holes or a layer with Z - are needed.",
+    "Длина {length}. Кровель {beds}, скважин в полосе {holes}, "
+    "тоннелей {tunnels}, частей объектов с Z {fences}.":
+        "Length {length}. Roofs {beds}, holes in the band {holes}, "
+        "tunnels {tunnels}, parts of objects with Z {fences}.",
     "рельеф {value}": "terrain {value}",
     "Скважин {holes}, кровель {horizons}, разрезов "
     "{sections}. Вершин {vertices}.":

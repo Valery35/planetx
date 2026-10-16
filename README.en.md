@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.93.0.
+A 3D globe inside QGIS. PlanetX version 0.94.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -280,9 +280,9 @@ Clouds come from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-ser
 VIIRS imagery. Temperature comes from NASA GIBS, MODIS and GHRSST MUR.
 Stars come from the Yale Bright Star Catalogue. The
 Milky Way comes from [NASA/Goddard Space Flight Center Scientific Visualization Studio](https://svs.gsfc.nasa.gov/4851),
-Gaia DR2: ESA/Gaia/DPAC.
+Gaia DR2 - ESA/Gaia/DPAC.
 
-Mars imagery: NASA, USGS, Viking MDIM2.1. Moon imagery: USGS,
+Mars imagery - NASA, USGS, Viking MDIM2.1. Moon imagery - USGS,
 LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
 Mars heights come from NASA MGS MOLA MEGDR, Moon heights from NASA
 LRO LOLA GDR. Imagery of other bodies comes from global mosaics of

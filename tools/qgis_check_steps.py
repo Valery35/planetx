@@ -16263,6 +16263,112 @@ def magdecl_1800():
     out["gl"] = dict(view.gl_errors)
 
 
+@check(1000)
+def geo_section():
+    """Геологический разрез по слоям проекта: два растра кровель
+    в EPSG:4326 без пункта «Поверхность по отметкам» и «3D-забор» с Z
+    у Березников, подземной модели на глобусе нет. Слои отмечаются
+    флажками окна разреза, второй растр снимается, разрез пишется
+    картинкой и таблицей."""
+    import numpy as _np
+    from osgeo import gdal as _gdal
+    from qgis.core import QgsFeature, QgsGeometry, QgsProject, \
+        QgsRasterLayer, QgsVectorLayer
+    from qgis.PyQt.QtCore import Qt
+    from planetx.qt_compat import enum
+    window = state["window"]
+    window.set_body("earth")
+    window.subsurface.clear()
+    lat0, lon0 = 59.45, 56.88
+    layers = []
+    for name, level in (("кровля_проба_1", 140.0), ("кровля_проба_2", 110.0)):
+        path = os.path.join(TEMP, "planetx_{}.tif".format(
+            "top1" if level > 120 else "top2"))
+        ds = _gdal.GetDriverByName("GTiff").Create(path, 60, 60, 1,
+                                                   _gdal.GDT_Float32)
+        ds.SetGeoTransform((lon0 - 0.006, 0.0002, 0.0, lat0 + 0.010, 0.0,
+                            -0.0002))
+        ds.SetProjection('GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID['
+                         '"WGS 84",6378137,298.257223563]],PRIMEM["Greenwich"'
+                         ',0],UNIT["degree",0.0174532925199433],AUTHORITY['
+                         '"EPSG","4326"]]')
+        rows = _np.arange(60, dtype=_np.float32)[:, None]
+        ds.GetRasterBand(1).WriteArray(_np.repeat(level + rows * 0.2, 60,
+                                                  axis=1))
+        ds = None
+        layers.append(QgsRasterLayer(path, name, "gdal"))
+    fence = QgsVectorLayer("MultiPolygonZ?crs=EPSG:4326&field=color:string",
+                           "Забор проба", "memory")
+    step = 20.0 / 111000.0
+    quads = ",".join(
+        "(({lo} {a} 100, {lo} {b} 100, {lo} {b} 80, {lo} {a} 80, "
+        "{lo} {a} 100))".format(lo=lon0, a=lat0 + i * step,
+                                b=lat0 + (i + 1) * step) for i in range(20))
+    feature = QgsFeature(fence.fields())
+    feature.setGeometry(QgsGeometry.fromWkt("MultiPolygon Z (" + quads
+                                            + ")"))
+    feature.setAttributes(["#c06030"])
+    fence.dataProvider().addFeatures([feature])
+    layers.append(fence)
+    QgsProject.instance().addMapLayers(layers)
+    state["geo_layers"] = [la.id() for la in layers]
+    out = result.setdefault("geo_section", {})
+    out["valid"] = [la.isValid() for la in layers]
+    window._open_model_section("Проба", [(lat0, lon0), (lat0 + 0.008,
+                                                       lon0)])
+    dialog = window.model_section_dialog
+    out["default_choice"] = [list(c) if isinstance(c, tuple) else c
+                             for c in dialog.choice()]
+    out["rows"] = [dialog.layers.item(n).text()
+                   for n in range(dialog.layers.count())]
+    checked = enum(Qt, "CheckState", "Checked")
+    unchecked = enum(Qt, "CheckState", "Unchecked")
+    ours = {la.id() for la in layers}
+    for n in range(dialog.layers.count()):
+        item = dialog.layers.item(n)
+        data = item.data(enum(Qt, "ItemDataRole", "UserRole"))
+        if data and data[1] in ours:
+            item.setCheckState(checked)
+    found = dialog.chart.section
+    out["beds"] = len(found.beds) - 1 if found else None
+    out["fences"] = len(found.fences) if found else None
+    if found is not None:
+        i = len(found.distance) // 2
+        out["tops_middle"] = [round(float(top[i]), 1)
+                              for _, _, top, _ in found.beds[1:]]
+        out["fence_span"] = [round(float(min(f[1].min()
+                                             for f in found.fences))),
+                             round(float(max(f[1].max()
+                                             for f in found.fences)))] \
+            if found.fences else None
+    out["stats"] = dialog.stats.text()
+    picture = dialog.save_picture(os.path.join(TEMP,
+                                               "planetx_geo_section.png"))
+    table = dialog.save_table(os.path.join(TEMP, "planetx_geo_section.csv"))
+    out["picture"] = bool(picture) and os.path.getsize(picture) > 1000
+    if table:
+        with open(table, encoding="utf-8") as fh:
+            lines = fh.read().splitlines()
+        out["table_rows"] = len(lines)
+        out["table_head"] = lines[0]
+    # Второй растр снимается флажком - кровель на одну меньше.
+    for n in range(dialog.layers.count()):
+        item = dialog.layers.item(n)
+        data = item.data(enum(Qt, "ItemDataRole", "UserRole"))
+        if data and data[1] == layers[1].id():
+            item.setCheckState(unchecked)
+    found = dialog.chart.section
+    out["beds_after_off"] = len(found.beds) - 1 if found else None
+
+
+@check(500)
+def geo_section_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    if window.model_section_dialog is not None:
+        window.model_section_dialog.close()
+    QgsProject.instance().removeMapLayers(state.get("geo_layers", []))
+
 def _series_scenes(started, name, limit=240.0):
     """Ждать конца поиска и облачности окна снимков, потом открыть ряд.
     None - готово, число - пауза повтора."""

@@ -486,6 +486,23 @@ def to_line(line_lats, line_lons, distance, lats, lons):
     return np.asarray(distance, dtype=np.float64)[nearest], gap * radius
 
 
+def fence_part(part, line_lats, line_lons, distance, band):
+    """Часть объекта с Z на разрезе вдоль линии: точки part (n, 3) -
+    широта, долгота, отметка - переносятся на линию (to_line). Это
+    стенка «3D-забора» вдоль линии или линия с отметками. Возвращает
+    (расстояния, отметки) или None, если точка части дальше band / 2
+    от линии. Стенка поперёк линии ложится на разрез тонкой полосой.
+    Расстояние - до ближайшей точки линии, точность - шаг её точек."""
+    part = np.asarray(part, dtype=np.float64)
+    if len(part) < 2:
+        return None
+    along, gap = to_line(line_lats, line_lons, distance, part[:, 0],
+                         part[:, 1])
+    if gap.max() > band / 2.0:
+        return None
+    return along, part[:, 2].copy()
+
+
 def nearest_on_screen(pixels, front, px, py):
     """Ближайшая к пикселю (px, py) точка ломаной на экране: (расстояние
     в пикселях, номер отрезка, доля t вдоль него) или None. Отрезок

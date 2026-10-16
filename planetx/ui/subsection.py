@@ -8,14 +8,26 @@
 на сотни метров: рельеф, пласты между кровлями, стволы скважин
 и тоннели из полосы вдоль линии. Расстояния и отметки - в метрах.
 Курсор над графиком отмечает точку на глобусе.
+
+Геологический разрез по слоям проекта - выбор автора от 17 октября
+2026 года. Слои разреза выбираются флажками в самом окне - любые
+одноканальные растры проекта как кровли, скважины, слои с Z (стенки
+«3D-забора» Isoliner3D и линии с отметками в полосе вдоль линии) -
+без пункта «Поверхность по отметкам» и без подземной модели на глобусе
+(ui.subsurface.section_layers, section_model). Разрез пишется картинкой
+PNG и таблицей CSV отметок по точкам линии.
 """
+import csv
+import os
 from collections import namedtuple
 
 import numpy as np
 from qgis.PyQt.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QColor, QPainter, QPainterPath, QPen
-from qgis.PyQt.QtWidgets import (QDialog, QDoubleSpinBox, QFormLayout,
-                                 QLabel, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QDialog, QDoubleSpinBox, QFileDialog,
+                                 QFormLayout, QHBoxLayout, QLabel,
+                                 QListWidget, QListWidgetItem, QPushButton,
+                                 QSplitter, QVBoxLayout, QWidget)
 
 from ..core import drillholes, ellipsoid, section
 from ..core import subsurface as core
@@ -34,16 +46,24 @@ SAMPLES = 400  # точек вдоль линии
 BAND = 200.0  # м, полоса скважин и тоннелей вдоль линии, выбор помощника
 HEAD = 0.08  # доля высоты графика над наивысшей точкой рельефа
 TUNNEL_MARGIN = 20.0  # м ниже самого глубокого тоннеля, если нет пластов
+LAYER_ROLE = enum(Qt, "ItemDataRole", "UserRole")
+CHECKED = enum(Qt, "CheckState", "Checked")
+UNCHECKED = enum(Qt, "CheckState", "Unchecked")
+HOLES = "holes"  # данные строки «Скважины» списка слоёв
+HOVER_BEDS = 4  # кровель в подписи под курсором
+LEGEND_ROWS = 12  # строк подписи цветов, не больше
 
 ModelSection = namedtuple(
     "ModelSection",
-    "distance lats lons ground beds bottom holes tunnels diameters")
+    "distance lats lons ground beds bottom holes tunnels diameters fences",
+    defaults=((),))
 ModelSection.__doc__ = """Разрез модели. distance - м от начала линии,
 lats, lons - точки линии, ground - отметки рельефа, beds - [(код, цвет,
 верх, низ)] отметки пластов по точкам, bottom - отметка низа модели,
 holes - [(название, [(расстояния, отметки, цвет)])] куски стволов по
 интервалам, tunnels - [(название, расстояния, отметки, цвет)],
-diameters - диаметр тоннеля по названию, м."""
+diameters - диаметр тоннеля по названию, м, fences - [(слой,
+расстояния, отметки, RGBA, вид)] частей объектов с Z в полосе."""
 
 
 def _runs(mask):
@@ -110,8 +130,15 @@ def build(model, ground, points, band=BAND, count=SAMPLES):
         for a, b in _runs(gap <= band / 2.0):
             if b - a >= 2:
                 tunnels.append((name, d[a:b], z[a:b], color))
+    fences = []
+    for shape in model.zshapes:
+        for part in shape.parts:
+            found = core.fence_part(part, lats, lons, distance, band)
+            if found is not None:
+                fences.append((shape.layer, found[0], found[1], shape.color,
+                               shape.kind))
     return ModelSection(distance, lats, lons, g, beds, bottom, holes,
-                        tunnels, diameters)
+                        tunnels, diameters, fences)
 
 
 def _to_latlon(lat0, lon0, east, north):
@@ -153,6 +180,10 @@ class ModelChart(QWidget):
         s = self.section
         high = float(np.nanmax(s.ground))
         low = float(s.bottom)
+        for _, _, z, _, _ in s.fences:
+            # Стенки забора тоже входят в график.
+            high = max(high, float(np.nanmax(z)))
+            low = min(low, float(np.nanmin(z)))
         return high + (high - low) * HEAD, low
 
     def _mapper(self):
@@ -189,6 +220,20 @@ class ModelChart(QWidget):
                                           float(bottom[k])))
                 path.closeSubpath()
                 painter.fillPath(path, QColor(*color))
+        # Стенки забора и линии с отметками - цветом объекта.
+        for _, d, z, color, kind in s.fences:
+            path = QPainterPath(to_screen(float(d[0]), float(z[0])))
+            for a, b in zip(d[1:], z[1:]):
+                path.lineTo(to_screen(float(a), float(b)))
+            # Цвет объекта - RGBA 0-255, альфа - непрозрачность слоя.
+            rgba = QColor(*[int(c) for c in color[:4]])
+            if kind == "polygon":
+                path.closeSubpath()
+                painter.fillPath(path, rgba)
+                painter.setPen(QPen(rgba.darker(150), 0.8))
+            else:
+                painter.setPen(QPen(rgba, 2.0))
+            painter.drawPath(path)
         # Рельеф линией поверх пластов.
         painter.setPen(QPen(QColor(60, 40, 20), 1.5))
         line = QPainterPath(to_screen(float(s.distance[0]),
@@ -249,6 +294,7 @@ class ModelChart(QWidget):
             painter.drawText(QRectF(point.x() - 40, rect.bottom() + 4, 80,
                                     16), CENTER, axis_text(d, step))
             d += step
+        self._legend(painter, rect, text)
         if self.hover is not None:
             i = self.hover
             top = to_screen(float(s.distance[i]), high)
@@ -260,15 +306,48 @@ class ModelChart(QWidget):
                                     rect.width() - 12, 16), LEFT,
                              self._hover_text(i))
 
+    def _legend(self, painter, rect, text):
+        """Подписи цветов в правом верхнем углу графика: пласты по
+        коду, у растров без таблицы пластов - по названию кровли,
+        слои с Z по названию слоя."""
+        s = self.section
+        rows = [(code, color) for code, color, _, _ in s.beds if code]
+        seen = set()
+        for name, _, _, color, _ in s.fences:
+            if name not in seen:
+                seen.add(name)
+                rows.append((name, color[:3]))
+        if not rows:
+            return
+        rows = rows[:LEGEND_ROWS]
+        metrics = painter.fontMetrics()
+        line = metrics.height() + 2
+        width = max(metrics.horizontalAdvance(name)
+                    if hasattr(metrics, "horizontalAdvance")
+                    else metrics.width(name) for name, _ in rows) + 30
+        box = QRectF(rect.right() - width - 6, rect.top() + 22, width,
+                     line * len(rows) + 6)
+        painter.fillRect(box, QColor(255, 255, 255, 200))
+        for k, (name, color) in enumerate(rows):
+            y = box.top() + 3 + k * line
+            painter.fillRect(QRectF(box.left() + 5, y + 2, 16, line - 5),
+                             QColor(*[int(c) for c in color[:3]]))
+            painter.setPen(QPen(QColor(30, 30, 30)))
+            painter.drawText(QRectF(box.left() + 26, y, width - 28, line),
+                             LEFT, name)
+        painter.setPen(text)
+
     def _hover_text(self, i):
         s = self.section
         parts = [distance_text(float(s.distance[i])),
                  tr("рельеф {value}", value=metres_text(float(s.ground[i])))]
+        shown = 0
         for code, _, top, bottom in s.beds[1:]:
-            if np.isfinite(top[i]) and top[i] > bottom[i] and code:
+            if np.isfinite(top[i]) and top[i] > bottom[i] and code \
+                    and shown < HOVER_BEDS:
                 parts.append("{} {}".format(code, metres_text(
                     float(top[i]))))
-                break
+                shown += 1
         return ", ".join(parts)
 
     def mouseMoveEvent(self, event):
@@ -297,15 +376,19 @@ class ModelChart(QWidget):
 
 
 class ModelSectionDialog(QDialog):
-    """Окно «Разрез модели». provider(band) даёт ModelSection или None.
+    """Окно «Разрез модели». provider(band, choice) даёт ModelSection
+    или None, choice - отметки списка слоёв (растры, скважины, слои
+    с Z). layers - (растры, есть ли скважины, слои с Z, отметки по
+    умолчанию) из ui.subsurface.section_layers и section_defaults.
     Сигнал point_hovered - (широта, долгота, м вдоль линии) или None."""
 
     point_hovered = pyqtSignal(object)
 
-    def __init__(self, title, provider, parent=None):
+    def __init__(self, title, provider, parent=None, layers=None):
         super().__init__(parent)
         self.setModal(False)
         self.provider = provider
+        self.title = title
         self.band = QDoubleSpinBox(self)
         self.band.setRange(10.0, 5000.0)
         self.band.setDecimals(0)
@@ -314,40 +397,184 @@ class ModelSectionDialog(QDialog):
         self.band.setValue(BAND)
         self.band.setKeyboardTracking(False)
         self.band.setToolTip(tr(
-            "Ширина полосы вдоль линии, из которой скважины и тоннели "
-            "переносятся на разрез. Шире полоса - больше скважин, но "
-            "дальние лежат не там, где линия."))
+            "Ширина полосы вдоль линии, из которой скважины, тоннели "
+            "и объекты с Z переносятся на разрез. Шире полоса - больше "
+            "скважин, но дальние лежат не там, где линия."))
         self.band.valueChanged.connect(self.refresh)
         form = QFormLayout()
-        form.addRow(tr("Полоса скважин и тоннелей"), self.band)
+        form.addRow(tr("Полоса скважин и объектов"), self.band)
+        self.layers = QListWidget(self)
+        self.layers.setToolTip(tr(
+            "Слои проекта на разрезе. Растры - кровли пластов, сверху "
+            "вниз по порядку таблицы пластов или по средней отметке. "
+            "Скважины - устья с интервалами и инклинометрией. Слои с Z - "
+            "стенки «3D-забора» и линии с отметками в полосе вдоль "
+            "линии."))
+        self.layers.itemChanged.connect(lambda *_: self.refresh())
         self.chart = ModelChart(self)
         self.chart.hovered.connect(self._hovered)
         self.stats = QLabel(self)
         self.stats.setWordWrap(True)
+        picture = QPushButton(tr("Картинка…"), self)
+        picture.setToolTip(tr("Разрез картинкой PNG в размере окна."))
+        picture.clicked.connect(lambda _=False: self.save_picture())
+        table = QPushButton(tr("Таблица CSV…"), self)
+        table.setToolTip(tr(
+            "Отметки по точкам линии - расстояние, широта, долгота, рельеф "
+            "и кровли пластов, нет кровли - пустое поле."))
+        table.clicked.connect(lambda _=False: self.save_table())
+        buttons = QHBoxLayout()
+        buttons.addWidget(self.stats, 1)
+        buttons.addWidget(picture)
+        buttons.addWidget(table)
+        right = QWidget(self)
+        column = QVBoxLayout(right)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.addLayout(form)
+        column.addWidget(self.chart, 1)
+        split = QSplitter(self)
+        split.addWidget(self.layers)
+        split.addWidget(right)
+        split.setStretchFactor(1, 1)
+        split.setSizes([220, 760])
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
-        layout.addWidget(self.chart, 1)
-        layout.addWidget(self.stats)
-        self.set_source(title, provider)
-        self.resize(900, 460)
+        layout.addWidget(split, 1)
+        layout.addLayout(buttons)
+        self.set_source(title, provider, layers)
+        self.resize(1000, 480)
 
-    def set_source(self, title, provider):
+    def set_source(self, title, provider, layers=None):
+        self.title = title
         self.setWindowTitle(tr("Разрез модели: {name}", name=title)
                             if title else tr("Разрез модели"))
         self.provider = provider
+        if layers is not None:
+            self._fill_layers(*layers)
         self.refresh()
 
+    def _fill_layers(self, rasters, holes, zlayers, defaults):
+        """Строки списка слоёв с флажками по defaults - (растры,
+        скважины ли, слои с Z)."""
+        on_rasters, on_holes, on_z = defaults
+        self.layers.blockSignals(True)
+        self.layers.clear()
+
+        def heading(text):
+            item = QListWidgetItem(text)
+            font = item.font()
+            font.setBold(True)
+            item.setFont(font)
+            item.setFlags(enum(Qt, "ItemFlag", "NoItemFlags"))
+            self.layers.addItem(item)
+
+        def row(text, data, on):
+            item = QListWidgetItem(text)
+            item.setData(LAYER_ROLE, data)
+            item.setFlags(item.flags()
+                          | enum(Qt, "ItemFlag", "ItemIsUserCheckable"))
+            item.setCheckState(CHECKED if on else UNCHECKED)
+            self.layers.addItem(item)
+        if rasters:
+            heading(tr("Кровли - растры"))
+            for layer_id, name in rasters:
+                row(name, ("raster", layer_id), layer_id in on_rasters)
+        if holes:
+            heading(tr("Скважины"))
+            row(tr("Скважины проекта"), (HOLES, ""), on_holes)
+        if zlayers:
+            heading(tr("Слои с Z"))
+            for layer_id, name in zlayers:
+                row(name, ("z", layer_id), layer_id in on_z)
+        if not (rasters or holes or zlayers):
+            heading(tr("В проекте нет растров, скважин и слоёв с Z"))
+        self.layers.blockSignals(False)
+
+    def choice(self):
+        """Отмеченные слои: (номера растров по порядку списка, скважины
+        ли, номера слоёв с Z)."""
+        rasters, zlayers, holes = [], [], False
+        for n in range(self.layers.count()):
+            item = self.layers.item(n)
+            data = item.data(LAYER_ROLE)
+            if not data or item.checkState() != CHECKED:
+                continue
+            kind, layer_id = data
+            if kind == "raster":
+                rasters.append(layer_id)
+            elif kind == "z":
+                zlayers.append(layer_id)
+            elif kind == HOLES:
+                holes = True
+        return tuple(rasters), holes, tuple(zlayers)
+
     def refresh(self, *args):
-        found = self.provider(float(self.band.value()))
+        found = self.provider(float(self.band.value()), self.choice())
         self.chart.set_section(found)
         if found is None:
-            self.stats.setText(tr("Нужны подземная модель и путь хотя бы "
-                                  "из двух точек."))
+            self.stats.setText(tr(
+                "Нужны путь хотя бы из двух точек и слой разреза - растр "
+                "кровли, скважины или слой с Z."))
             return
         self.stats.setText(tr(
-            "Длина {length}. Скважин в полосе {holes}, тоннелей "
-            "{tunnels}.", length=distance_text(float(found.distance[-1])),
-            holes=len(found.holes), tunnels=len(found.tunnels)))
+            "Длина {length}. Кровель {beds}, скважин в полосе {holes}, "
+            "тоннелей {tunnels}, частей объектов с Z {fences}.",
+            length=distance_text(float(found.distance[-1])),
+            beds=max(len(found.beds) - 1, 0), holes=len(found.holes),
+            tunnels=len(found.tunnels), fences=len(found.fences)))
+
+    def _file_name(self, ext):
+        name = "".join(c if c.isalnum() or c in "-_" else "_"
+                       for c in (self.title or "section"))
+        return "{}{}".format(name or "section", ext)
+
+    def save_picture(self, path=None):
+        """Разрез картинкой PNG: путь или None, если не записан."""
+        if self.chart.section is None:
+            return None
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self, tr("Разрез картинкой"), self._file_name(".png"),
+                "PNG (*.png)")
+        if not path:
+            return None
+        if not self.chart.grab().save(path, "PNG"):
+            self.stats.setText(tr("Файл не записан: {error}", error=path))
+            return None
+        return path
+
+    def save_table(self, path=None):
+        """Отметки разреза таблицей CSV: путь или None."""
+        s = self.chart.section
+        if s is None:
+            return None
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self, tr("Разрез таблицей"), self._file_name(".csv"),
+                "CSV (*.csv)")
+        if not path:
+            return None
+        names = [code or "top" for code, _, _, _ in s.beds[1:]]
+        try:
+            with open(path, "w", encoding="utf-8", newline="") as fh:
+                out = csv.writer(fh)
+                out.writerow(["distance_m", "lat", "lon", "ground_m"]
+                             + names)
+                for i in range(len(s.distance)):
+                    tops = []
+                    for _, _, top, bottom in s.beds[1:]:
+                        ok = np.isfinite(top[i]) and top[i] > bottom[i]
+                        tops.append("{:.2f}".format(float(top[i]))
+                                    if ok else "")
+                    out.writerow(["{:.1f}".format(float(s.distance[i])),
+                                  "{:.7f}".format(float(s.lats[i])),
+                                  "{:.7f}".format(float(s.lons[i])),
+                                  "{:.2f}".format(float(s.ground[i]))]
+                                 + tops)
+        except OSError as error:
+            self.stats.setText(tr("Файл не записан: {error}",
+                                  error=str(error)))
+            return None
+        return os.path.abspath(path)
 
     def _hovered(self, index):
         s = self.chart.section

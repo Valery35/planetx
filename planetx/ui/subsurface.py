@@ -932,8 +932,21 @@ def load(settings):
         model.horizons.sort(key=lambda h: -np.nanmean(h.grid.z))
         model.beds = [""] + [h.code for h in model.horizons]
     else:
+        # Кровля не из таблицы пластов встаёт по средней отметке между
+        # кровлями таблицы, а не в самый низ - иначе разрез по растрам
+        # проекта рядом с моделью таблицы сплющивал её под нижним
+        # пластом. Нашлось 17 октября 2026 года шагом geo_section.
         order = {code: i for i, code in enumerate(model.beds)}
-        model.horizons.sort(key=lambda h: order.get(h.code, len(order)))
+        means = {id(h): float(np.nanmean(h.grid.z)) if np.any(
+            np.isfinite(h.grid.z)) else -np.inf for h in model.horizons}
+
+        def rank(h):
+            if h.code in order:
+                return order[h.code]
+            above = [order[k.code] for k in model.horizons
+                     if k.code in order and means[id(k)] > means[id(h)]]
+            return max(above) + 0.5 if above else -0.5
+        model.horizons.sort(key=rank)
     # Гриды без цвета в таблице пластов - цвет пласта по порядку сверху,
     # кровля и подошва одного пласта - одним цветом.
     keys = []
@@ -1007,6 +1020,67 @@ def load(settings):
         if isinstance(layer, QgsVectorLayer):
             model.zshapes += read_zlayer(layer)
     return model
+
+
+def section_layers():
+    """Слои проекта для геологического разреза по порядку дерева:
+    (растры отметок [(номер, название)], роли скважин и тоннелей
+    {роль: номер}, слои с Z линий и многоугольников [(номер,
+    название)]). Растр отметок - одноканальный растр GDAL."""
+    project = QgsProject.instance()
+    layers = [node.layer() for node in project.layerTreeRoot().findLayers()
+              if node.layer() is not None]
+    rasters = [(la.id(), la.name()) for la in layers
+               if isinstance(la, QgsRasterLayer) and la.bandCount() == 1
+               and la.providerType() == "gdal"]
+    roles, _ = project_roles(layers)
+    roles = {role: layer_id for role, layer_id in roles.items()
+             if role in ("collar", "tunnels")}
+    # Интервалы и инклинометрия - к устьям, таблица пластов - порядок
+    # и цвета кровель.
+    for role, layer_id in table_roles(list(roles.values())).items():
+        roles.setdefault(role, layer_id)
+    kinds = (Qgis.GeometryType.Line, Qgis.GeometryType.Polygon)
+    zlayers = [(la.id(), la.name()) for la in layers
+               if isinstance(la, QgsVectorLayer)
+               and QgsWkbTypes.hasZ(la.wkbType())
+               and la.geometryType() in kinds]
+    return rasters, roles, zlayers
+
+
+def section_defaults(rasters, roles, zlayers, settings=None):
+    """Отметки окна разреза по умолчанию: растры и слои с Z подземной
+    модели глобуса (settings), без неё - поверхности по отметкам
+    и кровли таблицы пластов, слои с пунктом «Объёмом по отметкам Z».
+    Если и так отметить нечего, отмечены все растры и слои с Z
+    проекта. Скважины - если есть устья. ({номера растров}, скважины
+    ли, {номера слоёв с Z})."""
+    project = QgsProject.instance()
+    if settings and (settings.get("horizons") or settings.get("zlayers")):
+        horizons = set(settings.get("horizons", []))
+        chosen_z = set(settings.get("zlayers", []))
+    else:
+        layers = [project.mapLayer(i) for i, _ in rasters]
+        _, roofs = project_roles([la for la in layers if la is not None])
+        horizons = set(roofs)
+        chosen_z = set(read_zlayers())
+        if not horizons and not chosen_z:
+            horizons = {i for i, _ in rasters}
+            chosen_z = {i for i, _ in zlayers}
+    return ({i for i, _ in rasters if i in horizons}, "collar" in roles,
+            {i for i, _ in zlayers if i in chosen_z})
+
+
+def section_model(horizons, roles, holes, zlayers):
+    """Модель геологического разреза по выбору окна: растры horizons -
+    кровли, сверху вниз по средней отметке, если нет таблицы пластов,
+    скважины и тоннели по roles при holes, объекты слоёв с Z zlayers.
+    Растры проекта ложатся и без пункта «Поверхность по отметкам»."""
+    layers = {role: layer_id for role, layer_id in roles.items()
+              if holes or role in ("tunnels", "beds")}
+    settings = dict(DEFAULTS, layers=layers, horizons=list(horizons),
+                    zlayers=list(zlayers))
+    return load(settings)
 
 
 def _to_latlon(lat0, lon0, east, north):

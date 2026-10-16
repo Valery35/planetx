@@ -260,6 +260,33 @@ class TestToLine(unittest.TestCase):
         self.assertAlmostEqual(float(gap[0]), 111.2, delta=0.5)
 
 
+class TestFencePart(unittest.TestCase):
+    """Стенка «3D-забора» и линия с отметками на разрезе."""
+
+    def setUp(self):
+        self.lons = np.linspace(56.0, 56.1, 101)
+        self.lats = np.full(101, 58.0)
+        self.distance = np.linspace(0.0, 5000.0, 101)
+
+    def test_wall_along_line(self):
+        # Четырёхугольник пласта между 1000 и 1500 м линии, отметки
+        # кровли 100 и 90 м, подошвы 60 и 50 м.
+        part = [(58.0, 56.02, 100.0), (58.0, 56.03, 90.0),
+                (58.0, 56.03, 50.0), (58.0, 56.02, 60.0)]
+        d, z = ss.fence_part(part, self.lats, self.lons, self.distance,
+                             200.0)
+        self.assertEqual(list(d), [1000.0, 1500.0, 1500.0, 1000.0])
+        self.assertEqual(list(z), [100.0, 90.0, 50.0, 60.0])
+
+    def test_far_part_is_skipped(self):
+        # Вершина в 0.002° к северу - около 220 м от линии.
+        part = [(58.0, 56.02, 100.0), (58.002, 56.03, 90.0)]
+        self.assertIsNone(ss.fence_part(part, self.lats, self.lons,
+                                        self.distance, 200.0))
+        self.assertIsNotNone(ss.fence_part(part, self.lats, self.lons,
+                                           self.distance, 500.0))
+
+
 class TestNearest(unittest.TestCase):
     """Ось ствола или тоннеля под курсором для окна «Объекты»."""
 
