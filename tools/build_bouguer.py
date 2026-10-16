@@ -13,12 +13,19 @@ gravity.tif - аномалия в свободном воздухе tools/build_
 
 Простая поправка Буге - притяжение бесконечного плоского слоя
 2πGρh. Масса выше уровня моря снимается - порода плотности RHO_CRUST
-и лёд RHO_ICE, ниже уровня моря вода и лёд заменяются породой. Поправка
-считается в каждой клетке 60" и осредняется на клетку 0.25° - так
-крутой берег не смешивает воду и сушу до вычисления. Поправки на
-рельеф вокруг (terrain correction) нет. Аномалия Буге - аномалия
-в свободном воздухе минус поправка, мГал. Над океаном она
-положительная, под горами отрицательная.
+и лёд RHO_ICE, ниже уровня моря вода и лёд заменяются породой.
+
+Поправка на рельеф вокруг (terrain correction) - с 16 октября 2026 года,
+просьба автора. Вода и лёд пересчитываются в высоту породы той же массы
+(rock-equivalent topography, ret), тогда простая поправка - 2πGρh_ret,
+а поправка на рельеф в линейном приближении Moritz (1968)
+TC(P) = Gρ / 2 · Σ (h_Q - h_P)² / r³ · ΔS по клеткам 60" в круге REACH
+вокруг точки. Сумма - три свёртки БПФ полосами широт по 1° (ширина
+клетки по долготе - на середине полосы), долгота замкнута. Поправка всегда
+положительна, она прибавляется к простой аномалии Буге. Выше |MAX_LAT|
+её нет - сетка градусов у полюса не плоская. Всё считается в клетке 60"
+и осредняется на клетку 0.25°. Аномалия Буге - аномалия в свободном
+воздухе минус простая поправка плюс поправка на рельеф, мГал.
 """
 import math
 import sys
@@ -32,6 +39,10 @@ RHO_ICE = 917.0
 MGAL = 1.0e5  # м/с² в мГал
 SLAB = 2.0 * math.pi * G * MGAL  # мГал на кг/м³ и метр
 CELL = 15  # клеток 60" в клетке 0.25° по стороне
+RADIUS = 6371000.0  # м, средний радиус Земли для размеров клеток
+REACH = 166700.0  # м, внешний радиус зон Хейфорда (зона O)
+BAND = 60  # строк 60" в полосе широт
+MAX_LAT = 85.0
 
 
 def correction(bed, surface):
@@ -49,6 +60,47 @@ def correction(bed, surface):
     return SLAB * (RHO_CRUST * rock_above + RHO_ICE * ice_above
                    - (RHO_CRUST - RHO_ICE) * ice_below
                    - (RHO_CRUST - RHO_WATER) * water_below)
+
+
+def rock_equivalent(bed, surface):
+    """Высота породы той же массы, метры: простая поправка, делённая на
+    2πGρ породы."""
+    return correction(bed, surface) / (SLAB * RHO_CRUST)
+
+
+def kernel(dx, dy, reach, rows, cols):
+    """Ядро ΔS / r³ на сетке свёртки (rows, cols) с началом в [0, 0]
+    и отрицательными сдвигами в конце осей. Клетка точки - 0."""
+    kr = int(reach // dy)
+    kc = min(int(reach // dx), cols // 2 - 1)
+    i = np.arange(-kr, kr + 1)[:, None]
+    j = np.arange(-kc, kc + 1)[None, :]
+    r = np.hypot(i * dy, j * dx)
+    with np.errstate(divide="ignore"):
+        k = np.where((r > 0.0) & (r <= reach), dx * dy / r ** 3, 0.0)
+    out = np.zeros((rows, cols))
+    out[np.ix_(i[:, 0] % rows, j[0] % cols)] = k
+    return out
+
+
+def terrain_correction(h, dx, dy, reach=REACH, density=RHO_CRUST):
+    """Поправка на рельеф, мГал, в каждой клетке плоской сетки высот h
+    (строки, столбцы), шаг dx по столбцам и dy по строкам, метры.
+    Столбцы замкнуты (долгота), строки - нет, у края полосы сумма
+    неполная. Линейное приближение Gρ/2 Σ (h_Q - h_P)² / r³ ΔS."""
+    h = np.asarray(h, dtype=np.float64)
+    rows, cols = h.shape
+    pad = rows + int(reach // dy) + 1
+    k = np.fft.rfft2(kernel(dx, dy, reach, pad, cols))
+
+    def conv(values):
+        return np.fft.irfft2(np.fft.rfft2(values, s=(pad, cols)) * k,
+                             s=(pad, cols))[:rows]
+    s0 = conv(np.ones_like(h))
+    s1 = conv(h)
+    s2 = conv(h * h)
+    value = s2 - 2.0 * h * s1 + h * h * s0
+    return np.maximum(value, 0.0) * 0.5 * G * density * MGAL
 
 
 def block_mean(values, cell=CELL):
@@ -69,26 +121,47 @@ def main(gravity, bed_path, surface_path, out):
     cols, rows = bed_ds.RasterXSize, bed_ds.RasterYSize
     assert (rows // CELL, cols // CELL) == free_air.shape, (
         rows, cols, free_air.shape)
-    x0, dx, _, y0, _, dy = bed_ds.GetGeoTransform()
+    x0, step, _, y0, _, _ = bed_ds.GetGeoTransform()
     assert abs(x0 + 180.0) < 1e-9 and abs(y0 - 90.0) < 1e-9, (x0, y0)
+    dy = RADIUS * math.radians(step)
+    over = int(REACH // dy) + 1
     slab = np.zeros_like(free_air)
-    band = CELL * 60  # строк 60" за раз
-    for top in range(0, rows, band):
-        count = min(band, rows - top)
+    terrain = np.zeros_like(free_air)
+
+    def read(top, count):
         bed = bed_ds.GetRasterBand(1).ReadAsArray(0, top, cols, count)
         surface = surface_ds.GetRasterBand(1).ReadAsArray(0, top, cols,
                                                           count)
-        slab[top // CELL:(top + count) // CELL] = block_mean(
+        return bed, surface
+
+    for top in range(0, rows, BAND):
+        bed, surface = read(top, BAND)
+        slab[top // CELL:(top + BAND) // CELL] = block_mean(
             correction(bed, surface))
-    grid = free_air - slab
-    ds = gdal.GetDriverByName("GTiff").Create(
-        out, grid.shape[1], grid.shape[0], 1, gdal.GDT_Float32,
-        options=["COMPRESS=DEFLATE"])
-    ds.SetGeoTransform((-180.0, 0.25, 0.0, 90.0, 0.0, -0.25))
-    ds.GetRasterBand(1).WriteArray(grid.astype(np.float32))
-    ds = None
+        lat = 90.0 - (top + BAND / 2.0) * step
+        if abs(lat) > MAX_LAT:
+            continue
+        start, stop = max(0, top - over), min(rows, top + BAND + over)
+        bed, surface = read(start, stop - start)
+        ret = rock_equivalent(bed, surface)
+        dx = RADIUS * math.radians(step) * math.cos(math.radians(lat))
+        tc = terrain_correction(ret, dx, dy)[top - start:top - start + BAND]
+        terrain[top // CELL:(top + BAND) // CELL] = block_mean(tc)
+        if top % (BAND * 10) == 0:
+            print("широта", round(lat, 1), "поправка до",
+                  round(float(tc.max()), 1), flush=True)
+    grid = free_air - slab + terrain
+    for path, values in ((out, grid),
+                         (out.replace(".tif", "_tc.tif"), terrain)):
+        ds = gdal.GetDriverByName("GTiff").Create(
+            path, values.shape[1], values.shape[0], 1, gdal.GDT_Float32,
+            options=["COMPRESS=DEFLATE"])
+        ds.SetGeoTransform((-180.0, 0.25, 0.0, 90.0, 0.0, -0.25))
+        ds.GetRasterBand(1).WriteArray(values.astype(np.float32))
+        ds = None
     print(out, "mGal", float(np.percentile(grid, 1)),
-          float(np.percentile(grid, 99)), float(grid.min()), float(grid.max()))
+          float(np.percentile(grid, 99)), float(grid.min()), float(grid.max()),
+          "поправка на рельеф до", float(terrain.max()))
 
 
 if __name__ == "__main__":

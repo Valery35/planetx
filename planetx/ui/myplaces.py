@@ -60,7 +60,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Region KML - видна только вблизи, core/region.py, JSON.
           ("region", "string"),
           # Поток по пути - бегущие штрихи, core/pathflow.py.
-          ("flow", "integer"))
+          ("flow", "integer"),
+          # Слои вида - строки «Слоёв» остановки тура, core/lookat.py.
+          ("layers", "string(0)"))
 FOLDER_TABLE = "folders"
 # Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
 # на поверхности, у картинки на экране и фото пусто. params - свойства
@@ -245,7 +247,8 @@ def _kplace(place):
                   height=shape.height, extrude=shape.extrude,
                   icon=shape.icon, time=place.time,
                   view_time=place.view_time, tour=place.tour,
-                  alts=shape.alts, region=place.region, flow=shape.flow)
+                  alts=shape.alts, region=place.region, flow=shape.flow,
+                  layers=getattr(place, "layers", None))
 
 
 class Place:
@@ -254,8 +257,10 @@ class Place:
     def __init__(self, kind, fid, shape, visible, measure="", view=None,
                  position=None, folder=None, description="",
                  time=None, view_time=None, tour=None, body="earth",
-                 region=None):
+                 region=None, layers=None):
         self.kind = kind
+        # Слои вида: {ключ строки «Слоёв»: включена} или None.
+        self.layers = layers
         # Region KML: метка видна только вблизи, core.region или None.
         self.region = region
         # Тело, на котором стоит метка: earth, mars или moon.
@@ -483,7 +488,8 @@ class MyPlaces(QObject):
                     when.unpack(_value(feature, layer, "view_time")),
                     tour_from_text(_value(feature, layer, "tour")),
                     str(_value(feature, layer, "body") or "earth"),
-                    region.parse(_value(feature, layer, "region"))))
+                    region.parse(_value(feature, layer, "region")),
+                    lookat.layers_parse(_value(feature, layer, "layers"))))
         self.overlays = []
         layer = self.overlay_layer
         if layer is not None:
@@ -1006,7 +1012,9 @@ class MyPlaces(QObject):
                     "alts": alts_text(getattr(place, "alts", None)),
                     "body": body or ellipsoid.BODY.key,
                     "region": region.text(getattr(place, "region", None)),
-                    "flow": int(bool(getattr(place, "flow", False)))}
+                    "flow": int(bool(getattr(place, "flow", False))),
+                    "layers": lookat.layers_text(
+                        getattr(place, "layers", None))}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

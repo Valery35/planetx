@@ -593,7 +593,8 @@ class PicturesMixin:
         dialog = self.prop_dialogs.get(key)
         if dialog is None:
             dialog = PlaceProperties(place, self,
-                                     current_view=self.current_view)
+                                     current_view=self.current_view,
+                                     current_layers=lambda: dict(self.extras))
             dialog.setAttribute(enum(Qt, "WidgetAttribute",
                                      "WA_DeleteOnClose"))
             self.prop_dialogs[key] = dialog
@@ -880,6 +881,7 @@ class PicturesMixin:
         self._fly_to(stop.lat, stop.lon, stop.distance, stop.heading,
                      stop.tilt)
         self._show_time(place.view_time or place.time)
+        self._apply_view_layers(getattr(place, "layers", None))
 
     def _tour_stops(self, folder=None):
         """Остановки тура: отмеченные метки папки folder и вложенных
@@ -892,6 +894,7 @@ class PicturesMixin:
                 stop = self.place_stop(place, along=True)
                 stop.time = place.view_time or place.time
                 stop.description = place.description or ""
+                stop.layers = getattr(place, "layers", None)
                 stops.append(stop)
         return stops
 

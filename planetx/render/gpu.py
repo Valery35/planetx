@@ -295,7 +295,7 @@ def hold_gil(context):
     return done
 
 
-def draw_batch(items, mvps, u_mvp, layers=()):
+def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
     """Нарисовать набор сеток, у каждой своя текстура и матрица.
 
     items - пары (GpuMesh, текстура), mvps - массив (N, 4, 4) float32
@@ -304,7 +304,9 @@ def draw_batch(items, mvps, u_mvp, layers=()):
     пары (текстура, окно (сдвиг u, сдвиг v, масштаб)) по одной на сетку
     и необязательная доля прозрачности слоя, 0 - слой как есть).
     Это наложение слоёв проекта, облака и температура. Блоки слоёв,
-    которых в списке нет, не трогаются.
+    которых в списке нет, не трогаются. fades - сдвиг уровня мипмапа
+    подложки по одному на сетку (проявление нового тайла), u_fade -
+    место в шейдере, без fades сдвиг не меняется.
 
     Горячий путь кадра идёт через функции OpenGL.raw без проверки ошибок
     после каждого вызова. Замер 26 сентября 2026 года: glUniformMatrix4fv
@@ -317,8 +319,12 @@ def draw_batch(items, mvps, u_mvp, layers=()):
     last_texture = None
     last = [[None, None] for _ in layers]
     null = ctypes.c_void_p(0)
-    fades = [layer[3] if len(layer) > 3 else 0.0 for layer in layers]
+    shares = [layer[3] if len(layer) > 3 else 0.0 for layer in layers]
+    last_fade = None
     for i, (mesh, texture) in enumerate(items):
+        if fades is not None and fades[i] != last_fade:
+            last_fade = fades[i]
+            _uniform4f(u_fade, last_fade, 0.0, 0.0, 0.0)
         for n, layer in enumerate(layers):
             unit, u_uv, pairs = layer[:3]
             image, window = pairs[i]
@@ -330,7 +336,7 @@ def draw_batch(items, mvps, u_mvp, layers=()):
                 seen[0] = image
             if window != seen[1]:
                 _uniform4f(u_uv, window[0], window[1], window[2],
-                           fades[n])
+                           shares[n])
                 seen[1] = window
         if texture != last_texture:
             _bind_texture(GL.GL_TEXTURE_2D, texture)

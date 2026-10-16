@@ -184,6 +184,26 @@ TIMED = """<?xml version="1.0" encoding="UTF-8"?>
 </kml>""".encode("utf-8")
 
 
+class TestLayers(unittest.TestCase):
+    """Слои вида остановки тура - ExtendedData planetx:layers."""
+
+    def test_round_trip_with_flow(self):
+        place = kml.KPlace("Остановка", "line", [(58.0, 56.0), (58.1, 56.1)],
+                           view=(58.0, 56.0, 3000.0, 10.0, 40.0), flow=True,
+                           layers={"gravity": True, "quakes": False})
+        text = kml.write_kml(kml.KFolder("x", True, [place]))
+        self.assertEqual(text.count("<ExtendedData>"), 1)
+        again = kml.read_kml(text).children[0]
+        self.assertEqual(again.layers, {"gravity": True, "quakes": False})
+        self.assertTrue(again.flow)
+
+    def test_no_layers_no_data(self):
+        place = kml.KPlace("Точка", "point", [(58.0, 56.0)])
+        text = kml.write_kml(kml.KFolder("x", True, [place]))
+        self.assertNotIn("ExtendedData", text)
+        self.assertIsNone(kml.read_kml(text).children[0].layers)
+
+
 class TestIconsAndTime(unittest.TestCase):
 
     def setUp(self):

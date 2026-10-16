@@ -671,9 +671,10 @@ of the relief - the simple Bouguer correction 2πGρh after the NOAA ETOPO
 2022 relief. Rock above sea level is removed with a density of
 2670 kg/m³, ice with 917 kg/m³, water and ice below sea level are
 replaced by rock. The correction is computed on 1' cells and averaged to
-0.25° cells, there is no correction for the surrounding relief. Under
-mountains the anomaly is negative, about -510 mGal at Tibet and about
--170 mGal at the Alps - this is the thick light crust beneath them. Over
+0.25° cells. The terrain correction for the surrounding relief within
+167 km is added to it - mountains and valleys near the point, 10 to
+25 mGal per cell in mountains and almost 0 on plains. Under mountains the anomaly is negative, about -510 mGal at Tibet and about
+-155 mGal at the Alps - this is the thick light crust beneath them. Over
 the ocean it is positive, about +330 mGal in the middle of the Pacific.
 The legend runs from -400 to +400 mGal.
 
@@ -1752,6 +1753,16 @@ section. The Snapshot current view button takes the globe view, Reset
 brings back the view the place had when the window opened. Clearing the
 section check box removes the view, then the camera frames the whole
 place. The view goes into KML as a LookAt element and is read from it.
+
+The Snapshot current view button also remembers the rows switched on
+in the Layers section - the Globe layers from the snapshot check box
+under the view time. With this check box a flight to the place and a
+tour switch these rows on and the others off, and each tour stop shows
+its own layers - for example gravity anomalies first, then the Earth
+cutaway with earthquake foci. The view time sets the timeline. The
+layers switch on at the start of the flight to the stop, so the data
+arrive by the time the camera does. In KML the view layers go into the
+ExtendedData of the placemark, other programs skip them.
 
 ### Copy and paste
 

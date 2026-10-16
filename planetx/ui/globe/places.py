@@ -253,6 +253,19 @@ class PlacesMixin:
             return shape
         return grown(shape, when.share(place.time, span[1]))
 
+    def _stop_reached(self, stop):
+        """Тур полетел к остановке: её время и её слои. Слои включаются
+        в начале перелёта, чтобы данные успели прийти к прилёту."""
+        self._show_time(stop.time)
+        self._apply_view_layers(getattr(stop, "layers", None))
+
+    def _apply_view_layers(self, layers):
+        """Строки «Слоёв» вида метки: включить и выключить, как при
+        снимке вида. Строки, которых нет у окна, пропускаются."""
+        for key, on in (layers or {}).items():
+            if key in self.extras and bool(self.extras[key]) != on:
+                self.set_extra(key, on)
+
     def _show_time(self, time):
         """Шкала на время вида или метки, как у Google Earth. Закрытая
         шкала при этом открывается - у вида есть дата."""

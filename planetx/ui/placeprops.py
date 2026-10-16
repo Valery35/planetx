@@ -179,11 +179,15 @@ class PlaceProperties(QDialog):
 
     changed = pyqtSignal(object)
 
-    def __init__(self, place, parent=None, current_view=None):
+    def __init__(self, place, parent=None, current_view=None,
+                 current_layers=None):
         super().__init__(parent)
         self.place = place
         # Вид глобуса сейчас, для кнопки «Снимок текущего вида».
         self.current_view = current_view
+        # Строки «Слоёв» сейчас {ключ: включена}, для того же снимка.
+        self.current_layers = current_layers
+        self.layers = getattr(place, "layers", None)
         shape = place.shape
         # Вершины формы. Пока окно открыто, их тянут мышью на глобусе
         # (ui/handles.py, PropVertices), set_points ставит новые.
@@ -405,13 +409,22 @@ class PlaceProperties(QDialog):
             "Дата и время вида. Перелёт к метке "
             "и тур ставят шкалу времени на это время."))
         form.addRow(tr("Дата/время"), self.view_time)
+        self.keep_layers = QCheckBox(self._layers_label(), group)
+        self.keep_layers.setChecked(bool(self.layers))
+        self.keep_layers.setEnabled(bool(self.layers))
+        self.keep_layers.setToolTip(tr(
+            "Строки раздела «Слои», которые были включены при снимке вида. "
+            "Перелёт к метке и тур включают их и выключают остальные - "
+            "так остановка тура показывает свои слои. Снимок текущего "
+            "вида запоминает их заново."))
+        form.addRow("", self.keep_layers)
         row = QWidget(group)
         buttons = QHBoxLayout(row)
         buttons.setContentsMargins(0, 0, 0, 0)
         snap = QPushButton(tr("Снимок текущего вида"), row)
         snap.setToolTip(tr(
-            "Взять вид глобуса сейчас: точку взгляда, расстояние, азимут "
-            "и наклон."))
+            "Взять вид глобуса сейчас: точку взгляда, расстояние, азимут, "
+            "наклон и включённые строки раздела «Слои»."))
         snap.clicked.connect(self._snapshot)
         snap.setEnabled(self.current_view is not None)
         reset = QPushButton(tr("Сброс"), row)
@@ -442,6 +455,18 @@ class PlaceProperties(QDialog):
         if view is not None:
             self._set_view(view)
             self.look.setChecked(True)
+        layers = self.current_layers() if self.current_layers else None
+        if layers:
+            self.layers = dict(layers)
+            self.keep_layers.setEnabled(True)
+            self.keep_layers.setChecked(True)
+            self.keep_layers.setText(self._layers_label())
+
+    def _layers_label(self):
+        """Подпись флажка слоёв вида: сколько строк включено."""
+        count = sum(1 for on in (self.layers or {}).values() if on)
+        return tr("Слои глобуса со снимка, включено строк {count}",
+                  count=count)
 
     def _reset_view(self):
         view = self.place.view
@@ -527,7 +552,10 @@ class PlaceProperties(QDialog):
                    getattr(self.place, "region", None))),
                "time": when.pack(self.time.value()),
                "view_time": when.pack(self.view_time.value()
-                                     if self.look.isChecked() else None)}
+                                     if self.look.isChecked() else None),
+               "layers": lookat.layers_text(
+                   self.layers if self.look.isChecked()
+                   and self.keep_layers.isChecked() else None)}
         if self.color is not None:
             out["color"] = _color_text(_rgba(self.color.color()))
         if self.width is not None:

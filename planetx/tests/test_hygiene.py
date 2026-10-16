@@ -400,14 +400,24 @@ def shadowed_across(sources):
         return [c for c in ast.walk(tree) if isinstance(c, ast.ClassDef)
                 and (c.name == "GlobeWindow" or c.name.endswith("Mixin"))]
     methods = set()
-    for tree in trees:
+    # Метод с тем же именем во второй части закрывает первый по порядку
+    # примесей, вызов идёт не туда. Так _show_layers слоёв вида метки
+    # 16 октября 2026 года не вызывался - его закрыл _show_layers слоёв
+    # проекта из LayersMixin.
+    defined = {}
+    found = []
+    for i, tree in enumerate(trees):
         for cls in parts(tree):
             for item in cls.body:
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) \
-                        and not any(isinstance(d, (ast.Name, ast.Attribute))
-                                    for d in item.decorator_list):
+                if not isinstance(item, (ast.FunctionDef,
+                                         ast.AsyncFunctionDef)):
+                    continue
+                if item.name in defined and not item.name.startswith("__"):
+                    found.append((i, item.lineno))
+                defined.setdefault(item.name, (i, item.lineno))
+                if not any(isinstance(d, (ast.Name, ast.Attribute))
+                           for d in item.decorator_list):
                     methods.add(item.name)
-    found = []
     for i, tree in enumerate(trees):
         for cls in parts(tree):
             for node in ast.walk(cls):
@@ -817,6 +827,11 @@ class TestGuardsCatch(unittest.TestCase):
         self.assertEqual(shadowed_across([window, part]), [(0, 3)])
         self.assertEqual(shadowed_across(
             [window.replace("_ground", "_ground_rasters"), part]), [])
+        # Метод с тем же именем в двух примесях.
+        other = "class BMixin:\n    def _ground(self):\n        return 0\n"
+        self.assertEqual(shadowed_across([part, other]), [(1, 2)])
+        self.assertEqual(shadowed_across(
+            [part, other.replace("_ground", "_other")]), [])
 
     def test_flat_property_guard(self):
         self.assertCatches(

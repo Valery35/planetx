@@ -660,8 +660,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.set_constellations)
         self.toolbar.body_chosen.connect(self.set_body)
         self._update_timebar()
-        self.tour.stop_reached.connect(
-            lambda stop: self._show_time(stop.time))
+        self.tour.stop_reached.connect(self._stop_reached)
         # Растущие треки точечных слоёв по шкале времени глобуса.
         self.tracks = TrackManager(self.view, self)
         self.tracks.changed.connect(self._refresh_shapes)

@@ -91,6 +91,36 @@ class TestBouguer(unittest.TestCase):
             float(bb.correction(-300.0, 1700.0)),
             bb.SLAB * (917 * 1700 - (2670 - 917) * 300), places=6)
 
+    def test_rock_equivalent(self):
+        # Океан: столб воды 4000 м - порода той же недостачи массы.
+        self.assertAlmostEqual(float(bb.rock_equivalent(-4000.0, -4000.0)),
+                               -4000.0 * (1 - 1030.0 / 2670.0), places=6)
+        self.assertAlmostEqual(float(bb.rock_equivalent(800.0, 800.0)),
+                               800.0, places=6)
+
+    def test_terrain_correction_matches_direct_sum(self):
+        # Свёртка БПФ совпадает с прямой суммой Gρ/2 Σ Δh² / r³ ΔS.
+        rng = np.random.default_rng(3)
+        h = rng.uniform(0.0, 2000.0, (14, 40))
+        dx, dy, reach = 900.0, 1100.0, 5000.0
+        tc = bb.terrain_correction(h, dx, dy, reach)
+        rows, cols = h.shape
+        for p, q in ((7, 3), (6, 38), (2, 20)):
+            total = 0.0
+            for i in range(rows):
+                for j in range(cols):
+                    dj = (j - q + cols // 2) % cols - cols // 2
+                    r = math.hypot((i - p) * dy, dj * dx)
+                    if 0.0 < r <= reach and abs(dj) <= int(reach // dx):
+                        total += (h[i, j] - h[p, q]) ** 2 * dx * dy / r ** 3
+            want = total * 0.5 * bb.G * bb.RHO_CRUST * bb.MGAL
+            self.assertAlmostEqual(tc[p, q], want, delta=want * 1e-9 + 1e-9)
+
+    def test_flat_terrain_has_no_correction(self):
+        tc = bb.terrain_correction(np.full((10, 30), 1500.0), 1000.0,
+                                   1000.0, 4000.0)
+        self.assertLess(float(np.abs(tc).max()), 1e-9)
+
     def test_block_mean(self):
         values = np.arange(30 * 60, dtype=np.float64).reshape(30, 60)
         out = bb.block_mean(values)

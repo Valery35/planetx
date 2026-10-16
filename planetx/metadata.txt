@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.90.1
+version=0.91.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.90.1 Slab2 slabs on the faces of the Earth cutaway are drawn
+changelog=0.91.0 New tiles appear smoothly - a tile that replaces its parent
+      sharpens from the parent resolution, new labels fade in. The view
+      snapshot of a placemark also remembers the rows of the Layers
+      section, a flight to the placemark and a tour stop switch them on.
+      The Bouguer anomalies include the terrain correction within 167 km.
+      Snapshots of the view and tour recordings carry the PlanetX name in
+      the corner.
+      0.90.1 Slab2 slabs on the faces of the Earth cutaway are drawn
       as solid bands, at a slanting look they broke into stripes.
       0.90.0 The Bouguer anomalies row of the Inside the Earth category
       shows gravity anomalies without the attraction of the relief. The

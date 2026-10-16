@@ -285,6 +285,9 @@ in float v_shade;
 in vec3 v_normal;
 in float v_depth;
 uniform sampler2D u_texture;
+// Проявление нового тайла: x - сдвиг уровня мипмапа подложки, тайл
+// сначала рисуется с разрешением предка и становится резким.
+uniform vec4 u_fade;
 // Наложение: картинка слоя QGIS с премноженной альфой. Координаты
 // в ней - u_overlay_uv.xy + u_overlay_uv.z * v_uv, это часть картинки
 // предка, пока своя не готова. Без наложения - прозрачная текстура.
@@ -393,10 +396,10 @@ void main() {
         alpha = u_water_color.a * clamp(-v_height / u_shallow, 0.25, 1.0);
         shade = 1.0;
     } else if (u_plain > 0.5) {
-        base = texture(u_texture, v_uv).rgb;
+        base = texture(u_texture, v_uv, u_fade.x).rgb;
         shade = 1.0;
     } else {
-        base = texture(u_texture, v_uv).rgb;
+        base = texture(u_texture, v_uv, u_fade.x).rgb;
         base = lay(base, u_sea, u_sea_uv);
         base = lay(base, u_land, u_land_uv);
         base = lay(base, u_slope, u_slope_uv);

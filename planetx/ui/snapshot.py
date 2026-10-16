@@ -35,6 +35,9 @@ PICTURE_ID = "PlanetX"
 # Подпись источников в углу снимка, в логических пикселях.
 ATTRIBUTION_FONT = 11
 ATTRIBUTION_PAD = 4
+# Название модуля в самом углу снимка и кадра записи, как в окне
+# глобуса. Просьба автора от 16 октября 2026 года.
+BRAND = "PlanetX"
 # Формат картинки макета: в QGIS 4 областное имя, в QGIS 3 плоское.
 if hasattr(Qgis, "PictureFormat"):
     RASTER = Qgis.PictureFormat.Raster
@@ -49,9 +52,11 @@ def plain_text(html):
     return doc.toPlainText().strip()
 
 
-def draw_attribution(image, text, ratio):
-    """Подпись источников в правом нижнем углу снимка, на месте."""
-    if not text:
+def draw_attribution(image, text, ratio, brand=BRAND):
+    """Подпись источников в правом нижнем углу снимка, на месте, как
+    в окне глобуса: в самом углу - название модуля brand, левее -
+    подпись. Пустой brand - только подпись."""
+    if not text and not brand:
         return
     painter = QPainter(image)
     try:
@@ -67,19 +72,24 @@ def draw_attribution(image, text, ratio):
         flags = enum_int(enum(Qt, "AlignmentFlag", "AlignRight")) \
             | enum_int(enum(Qt, "AlignmentFlag", "AlignBottom")) \
             | enum_int(enum(Qt, "TextFlag", "TextWordWrap"))
-        room = QRectF(0.0, 0.0, image.width() - 4.0 * pad,
-                      image.height() - 4.0 * pad)
-        text_box = painter.boundingRect(room, flags, text)
-        width = text_box.width() + 2.0 * pad
-        height = text_box.height() + pad
-        box = QRectF(image.width() - width - pad,
-                     image.height() - height - pad, width, height)
-        painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(QColor(255, 255, 255, 190))
-        painter.drawRoundedRect(box, 3.0 * ratio, 3.0 * ratio)
-        painter.setPen(QColor(0, 0, 0))
-        painter.drawText(box.adjusted(pad, 0.5 * pad, -pad, -0.5 * pad),
-                         flags, text)
+        right = image.width() - pad
+        for line in (brand, text):
+            if not line:
+                continue
+            room = QRectF(0.0, 0.0, right - 3.0 * pad,
+                          image.height() - 4.0 * pad)
+            text_box = painter.boundingRect(room, flags, line)
+            width = text_box.width() + 2.0 * pad
+            height = text_box.height() + pad
+            box = QRectF(right - width, image.height() - height - pad,
+                         width, height)
+            painter.setPen(enum(Qt, "PenStyle", "NoPen"))
+            painter.setBrush(QColor(255, 255, 255, 190))
+            painter.drawRoundedRect(box, 3.0 * ratio, 3.0 * ratio)
+            painter.setPen(QColor(0, 0, 0))
+            painter.drawText(box.adjusted(pad, 0.5 * pad, -pad, -0.5 * pad),
+                             flags, line)
+            right = box.left() - 0.5 * pad
     finally:
         painter.end()
 

@@ -3468,20 +3468,20 @@ EN = {
     "Аномалия Буге, мГал": "Bouguer anomaly, mGal",
     "Плотность породы": "Rock density",
     "Аномалия силы тяжести за вычетом притяжения рельефа - "
-    "простая поправка Буге по рельефу ETOPO 2022 с плотностью "
-    "породы 2670 кг/м³, вода и лёд своей плотностью. Аномалия "
-    "показывает плотность недр без влияния гор и глубин океана. "
-    "Под горами она отрицательная, это толстая лёгкая кора, над "
-    "океаном положительная. Поправки на соседний рельеф нет. "
-    "Щелчок в режиме «Определить объекты» показывает аномалию "
-    "в мГал.": "Gravity anomaly minus the attraction of the relief - the "
-    "simple Bouguer correction after the ETOPO 2022 relief with a rock "
-    "density of 2670 kg/m³, water and ice with their own densities. The "
-    "anomaly shows the density of the interior without the effect of "
-    "mountains and ocean depths. Under mountains it is negative, which is "
-    "thick light crust, over the ocean it is positive. There is no "
-    "correction for the surrounding relief. A click in the Identify "
-    "features mode shows the anomaly in mGal.",
+    "поправка Буге по рельефу ETOPO 2022 с плотностью породы "
+    "2670 кг/м³, вода и лёд своей плотностью, и поправка на "
+    "рельеф вокруг в круге 167 км. Аномалия показывает плотность "
+    "недр без влияния гор и глубин океана. Под горами она "
+    "отрицательная, это толстая лёгкая кора, над океаном "
+    "положительная. Щелчок в режиме «Определить объекты» "
+    "показывает аномалию в мГал.": "Gravity anomaly minus the attraction "
+    "of the relief - the Bouguer correction after the ETOPO 2022 relief "
+    "with a rock density of 2670 kg/m³, water and ice with their own "
+    "densities, and the terrain correction for the surrounding relief "
+    "within 167 km. The anomaly shows the density of the interior without "
+    "the effect of mountains and ocean depths. Under mountains it is "
+    "negative, which is thick light crust, over the ocean it is positive. "
+    "A click in the Identify features mode shows the anomaly in mGal.",
     "Аномалия силы тяжести в свободном воздухе по модели XGM2019e "
     "до степени 719, шаг около 28 км. Красные - сила тяжести "
     "больше нормальной, синие - меньше. Над глубоководными "
@@ -3879,6 +3879,20 @@ EN = {
     "Взять вид глобуса сейчас: точку взгляда, расстояние, азимут "
     "и наклон.":
         "Take the current globe view: look point, range, heading and tilt.",
+    "Взять вид глобуса сейчас: точку взгляда, расстояние, азимут, "
+    "наклон и включённые строки раздела «Слои».":
+        "Take the current globe view: look point, range, heading, tilt "
+        "and the rows switched on in the Layers section.",
+    "Слои глобуса со снимка, включено строк {count}":
+        "Globe layers from the snapshot, rows switched on: {count}",
+    "Строки раздела «Слои», которые были включены при снимке вида. "
+    "Перелёт к метке и тур включают их и выключают остальные - "
+    "так остановка тура показывает свои слои. Снимок текущего "
+    "вида запоминает их заново.":
+        "Rows of the Layers section that were switched on at the view "
+        "snapshot. A flight to the placemark and a tour switch them on and "
+        "the others off - so a tour stop shows its own layers. A new "
+        "snapshot of the current view takes them again.",
     "Сброс": "Reset",
     "Вернуть вид, который был у метки при открытии окна.":
         "Return the view the place had when the window opened.",

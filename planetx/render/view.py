@@ -68,6 +68,10 @@ SPACE = (0.0, 0.0, 0.0)
 BACKDROP_TOP = (0.78, 0.84, 0.92)
 BACKDROP_BOTTOM = (0.97, 0.97, 0.94)
 HOLE = (1.0, 0.0, 1.0)  # пурпурный фон проверочного режима
+# Проявление тайла, сменившего предка: с, и сколько уровней мипмапа
+# сдвиг берёт не больше. Выбор помощника, утверждает автор.
+TILE_FADE = 0.35
+FADE_LEVELS = 3
 OCEAN = (0xAA, 0xD3, 0xDF, 0xFF)  # цвет воды на подложке OSM
 UNDERLAY_COLOR = (0x00, 0xFF, 0x00, 0xFF)  # подстилка в проверочном режиме
 UNDERLAY_LEVEL = 2
@@ -401,6 +405,11 @@ class GlobeView(QOpenGLWidget):
         # плоскости вида (render/satellites.py).
         self.satellites = SatellitePoints()
         self.surface_alpha = 1.0
+        # Проявление новых тайлов (_tile_fades): нарисованные в прошлом
+        # кадре и начало проявления по ключу.
+        self.tile_fade = True
+        self._drawn = frozenset()
+        self._fading = {}
         self.floor = None
         # Рамка фона под прозрачной землёй (юг, север, запад, восток,
         # низ на экране) или None, её ставит подземный режим.
@@ -663,6 +672,48 @@ class GlobeView(QOpenGLWidget):
         self.places.add(key, places)
         self.last_arrival = time.monotonic()
         self.update()
+
+    def _tile_fades(self, draw):
+        """Сдвиг уровня мипмапа подложки для тайлов draw - проявление
+        тайла, сменившего предка. Тайл, у которого в прошлом кадре был
+        нарисован предок на k уровней выше, начинает с разрешения предка
+        (сдвиг k) и за TILE_FADE с становится резким. Правило покрытия не
+        меняется: тайл рисуется целиком, мягче только его снимок. Резкая
+        смена разрешения целыми кусками экрана выглядела «хлопком»,
+        просьба автора от 16 октября 2026 года. Снимок вида и запись тура
+        ждут полной загрузки, им проявление не нужно."""
+        now = time.monotonic()
+        prev = self._drawn
+        self._drawn = frozenset(draw)
+        if not self.tile_fade or self.shot is not None or self.show_holes:
+            self._fading = {}
+            return [0.0] * len(draw)
+        fading = {}
+        out = []
+        for key in draw:
+            state = self._fading.get(key)
+            if state is None and key not in prev and key[0] > 2:
+                z, x, y = key
+                for up in range(1, FADE_LEVELS + 1):
+                    if z - up < 0:
+                        break
+                    if (z - up, x >> up, y >> up) in prev:
+                        state = (now, float(up))
+                        break
+            if state is None:
+                out.append(0.0)
+                continue
+            share = (now - state[0]) / TILE_FADE
+            if share >= 1.0:
+                out.append(0.0)
+                continue
+            # Плавный выход: быстро вначале, мягко у резкого конца.
+            out.append(state[1] * (1.0 - share) ** 2)
+            fading[key] = state
+        self._fading = fading
+        if fading:
+            self.update()
+        return out
 
     def _draw_water(self, items, mvps):
         """Вода над дном океана: те же сетки тайлов, опущенные на уровень
@@ -1370,6 +1421,7 @@ class GlobeView(QOpenGLWidget):
         # Непрозрачность поверхности. Значение по умолчанию в GLSL - 0,
         # а альфа кадра видна окну Qt, поэтому 1 ставится сразу.
         self.u_alpha = GL.glGetUniformLocation(self.program, "u_alpha")
+        self.u_fade = GL.glGetUniformLocation(self.program, "u_fade")
         self.u_water = GL.glGetUniformLocation(self.program, "u_water")
         self.u_water_color = GL.glGetUniformLocation(self.program,
                                                      "u_water_color")
@@ -1977,6 +2029,7 @@ class GlobeView(QOpenGLWidget):
         items = list(zip(self.caps, self.cap_textures or [self.ocean] * 2))
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
         surface = len(items)
+        fades = [0.0] * len(self.caps) + self._tile_fades(sel.draw)
         scales = [1.0] * surface
         # Подстилка закрыла бы подземное сквозь прозрачную поверхность
         # и вырез блока.
@@ -2026,7 +2079,7 @@ class GlobeView(QOpenGLWidget):
             GL.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE,
                            GL.GL_FALSE)
             gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp,
-                           layers)
+                           layers, fades, self.u_fade)
             GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
             GL.glDepthFunc(GL.GL_LEQUAL)
             GL.glDepthMask(GL.GL_FALSE)
@@ -2034,7 +2087,9 @@ class GlobeView(QOpenGLWidget):
             GL.glBlendFuncSeparate(
                 GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA, GL.GL_ZERO,
                 GL.GL_ONE)
-        gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp, layers)
+        gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp, layers,
+                       fades, self.u_fade)
+        gpu.gl.glUniform4f(self.u_fade, 0.0, 0.0, 0.0, 0.0)
         if alpha < 1.0:
             gpu.gl.glDisable(GL.GL_BLEND)
             GL.glDepthMask(GL.GL_TRUE)
@@ -2571,7 +2626,8 @@ class GlobeView(QOpenGLWidget):
             places = self._wedged[2]
         height_at = self.label_heights if self.store.scale else None
         self.labels.draw(self.camera, self.camera.projection(), places,
-                         height_at, self.store.version, ratio)
+                         height_at, self.store.version, ratio,
+                         fade=self.shot is None)
 
     def _underlay_items(self, keep):
         """Подстилка: тайлы уровня 2 на 3 км ниже поверхности.

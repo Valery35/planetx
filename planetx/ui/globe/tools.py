@@ -920,6 +920,7 @@ class ToolsMixin:
             stop = self.place_stop(item, along=True)
             stop.time = item.view_time or item.time
             stop.description = item.description or ""
+            stop.layers = getattr(item, "layers", None)
             self.tour.start([stop])
         elif action == "properties":
             self._open_place_properties(item)

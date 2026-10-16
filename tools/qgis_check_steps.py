@@ -14867,6 +14867,171 @@ def slab_grazing_check():
     return None
 
 
+@check(8000)
+def tile_fade():
+    """Проявление тайлов: камера над Пермью, загрузка, потом
+    приближение - тайлы, сменившие предка, проявляются и через TILE_FADE
+    рисуются резко."""
+    from planetx.core.navigation import Pose
+    from planetx.net.overlay import PLACES
+    window = state["window"]
+    window.set_body("earth")
+    state["fade_groups"] = set(window._groups)
+    window.set_line_group(PLACES, True)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.01, 56.23, 400000.0, 0.0, 0.0))
+
+
+@check(500)
+def tile_fade_check():
+    from planetx.core.navigation import Pose
+    from planetx.render.view import TILE_FADE
+    view = state["window"].view
+    out = result["tile_fade"] = {"before": len(view._fading)}
+    view.navigator.show(Pose(58.01, 56.23, 60000.0, 0.0, 0.0))
+    seen, frames, labels, shown_labels = 0, [], 0, 0
+    started = time.monotonic()
+    while time.monotonic() - started < 6.0:
+        QgsApplication.processEvents()
+        view.repaint()
+        frames.append(time.monotonic())
+        seen = max(seen, len(view._fading))
+        labels = max(labels, len(view.labels.born))
+        shown_labels = max(shown_labels, view.labels.count)
+        time.sleep(0.01)
+    # Без новых тайлов проявление кончается за TILE_FADE.
+    quiet = time.monotonic()
+    while (view._fading or view.labels.born) \
+            and time.monotonic() - quiet < 3.0:
+        QgsApplication.processEvents()
+        view.repaint()
+        time.sleep(0.02)
+    gaps = [b - a for a, b in zip(frames, frames[1:])]
+    out.update({"most_fading": seen, "fade_s": TILE_FADE,
+                "most_labels_fading": labels,
+                "most_labels": shown_labels,
+                "labels_left": len(view.labels.born),
+                "ended_s": round(time.monotonic() - quiet, 2),
+                "left": len(view._fading),
+                "frame_ms_median": round(sorted(gaps)[len(gaps) // 2]
+                                         * 1000, 1) if gaps else None,
+                "gl": dict(view.gl_errors)})
+    view.tile_fade = False
+    view.navigator.show(Pose(58.01, 56.23, 3000.0, 0.0, 0.0))
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        QgsApplication.processEvents()
+        view.repaint()
+        time.sleep(0.02)
+    out["off_fading"] = len(view._fading)
+    view.tile_fade = True
+    state["window"].set_line_groups(state.pop("fade_groups", set()))
+    return None
+
+
+@check(500)
+def tour_layers():
+    """Слои у остановок тура: снимок вида в окне свойств запоминает
+    строки «Слоёв», файл меток их хранит, тур включает их у каждой
+    остановки."""
+    from planetx.core import lookat
+    from planetx.core.features import Shape
+    window = state["window"]
+    window.set_body("earth")
+    store = window.myplaces
+    for place in list(store.places):
+        if place.visible:
+            store.set_visible(place.key, False)
+    out = result["tour_layers"] = {}
+    a = store.add(Shape("point", [(58.0, 56.25)], name="Слои 1"),
+                  view=(58.0, 56.25, 400000.0, 0.0, 0.0))
+    b = store.add(Shape("point", [(55.75, 37.62)], name="Слои 2"),
+                  view=(55.75, 37.62, 400000.0, 0.0, 0.0))
+    state["layers_keys"] = (a, b)
+    # Окно свойств: снимок вида при включённой сетке и снятых плитах.
+    window.set_extra("grid", True)
+    window.set_extra("plates", False)
+    place = store.find(a)
+    window._open_place_properties(place)
+    dialog = window.prop_dialogs[a]
+    dialog._snapshot()
+    values = dialog.values()
+    out["dialog_layers"] = lookat.layers_parse(values["layers"])
+    out["label"] = dialog.keep_layers.text()
+    dialog.reject()
+    store.update(a, {"layers": values["layers"]})
+    store.update(b, {"layers": lookat.layers_text(
+        {"grid": False, "plates": True})})
+    out["read_back"] = [store.find(k).layers.get("grid")
+                        for k in (a, b)]
+    # Тур: перед ним всё наоборот, у остановок - своё.
+    window.set_extra("grid", False)
+    window.set_extra("plates", True)
+    window.tour.bar.pause.setValue(1.0)
+    stops = []
+    for key in (a, b):
+        place = store.find(key)
+        stop = window.place_stop(place, along=True)
+        stop.layers = place.layers
+        stops.append(stop)
+    window.tour.start(stops)
+    out["after_start"] = [bool(window.extras.get("grid")),
+                          bool(window.extras.get("plates")),
+                          [getattr(s, "layers", None) is not None
+                           for s in window.tour.stops],
+                          window.tour._reached]
+    state["layers_seen"] = []
+    state["layers_began"] = time.monotonic()
+
+
+@check(300)
+def tour_layers_wait():
+    window = state["window"]
+    player = window.tour
+    seen = state["layers_seen"]
+    if player.tour is not None and player.playing:
+        mark = (player.index, bool(window.extras.get("grid")),
+                bool(window.extras.get("plates")))
+        if not seen or seen[-1] != mark:
+            seen.append(mark)
+        if time.monotonic() - state["layers_began"] < 60.0:
+            return 300
+    out = result.setdefault("tour_layers", {})
+    out["seen"] = seen
+    player.stop()
+    for key in state.pop("layers_keys", ()):
+        window.myplaces.remove(key)
+    window.set_extra("grid", False)
+    window.set_extra("plates", False)
+    out["gl"] = dict(window.view.gl_errors)
+    return None
+
+
+@check(300)
+def snapshot_brand():
+    """PlanetX в углу снимка вида и кадра записи: в самом углу плашка
+    названия, левее - подпись источников."""
+    from qgis.PyQt.QtGui import QColor, QImage
+    from planetx.ui.snapshot import draw_attribution
+    out = result["snapshot_brand"] = {}
+    for name, brand in (("with", "PlanetX"), ("without", "")):
+        image = QImage(600, 200, QImage.Format.Format_RGB32
+                       if hasattr(QImage, "Format") else QImage.Format_RGB32)
+        image.fill(QColor(0, 0, 160))
+        draw_attribution(image, "Esri", 1.0, brand=brand)
+        # Плашки светлые: где они кончаются по нижней строке.
+        row = image.height() - 10
+        light = [x for x in range(image.width())
+                 if QColor(image.pixel(x, row)).blue() < 255
+                 and QColor(image.pixel(x, row)).red() > 150]
+        out[name] = [min(light), max(light)] if light else None
+    # С названием подпись сдвинута влево на ширину плашки PlanetX.
+    out["shifted"] = bool(out["with"] and out["without"]
+                          and out["with"][0] < out["without"][0] - 30)
+    window = state["window"]
+    out["view_brand"] = window.brand.text()
+
+
 @check(300)
 def zlayer_polyhedral():
     """Слои многогранников PolyhedralSurfaceZ и TIN Z читаются гранями,

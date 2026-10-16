@@ -234,8 +234,12 @@ class KPlace:
                  width=LINE_WIDTH, fill=None, visible=True, view=None,
                  description="", height=0.0, extrude=False,
                  icon=icons.DEFAULT, time=None, view_time=None,
-                 tour=None, alts=None, region=None, flow=False):
+                 tour=None, alts=None, region=None, flow=False,
+                 layers=None):
         self.region = region  # core.region.Region или None
+        # Слои вида core.lookat - {ключ строки «Слоёв»: включена} или
+        # None. В KML - ExtendedData с именем LAYERS_DATA.
+        self.layers = layers
         # Поток по пути - бегущие штрихи, core/pathflow.py. В KML -
         # ExtendedData с именем FLOW_DATA, другие программы его не видят.
         self.flow = bool(flow)
@@ -619,11 +623,29 @@ def _placemark(node, styles, inherited=None):
                           time=time,
                           view_time=_view_time(node), alts=alts,
                           region=_region(node),
-                          flow=kind == "line" and _flow(node)))
+                          flow=kind == "line" and _flow(node),
+                          layers=_layers(node)))
     return out
 
 
 FLOW_DATA = "planetx:flow"
+LAYERS_DATA = "planetx:layers"
+
+
+def _data(node, name):
+    """Значение Data name из ExtendedData метки или None."""
+    data = _child(node, "ExtendedData")
+    if data is None:
+        return None
+    for item in _children(data, "Data"):
+        if item.get("name") == name:
+            return _text(item, "value")
+    return None
+
+
+def _layers(node):
+    """Слои вида из ExtendedData метки, core.lookat.layers_parse."""
+    return lookat.layers_parse(_data(node, LAYERS_DATA))
 
 
 def _flow(node):
@@ -1063,10 +1085,15 @@ def _placemark_kml(place, indent):
     if place.description:
         parts.append("<description>{}</description>".format(
             escape(place.description)))
-    flow = ""
+    data = []
     if place.kind == "line" and getattr(place, "flow", False):
-        flow = '<ExtendedData><Data name="{}"><value>1</value></Data>' \
-            "</ExtendedData>".format(FLOW_DATA)
+        data.append((FLOW_DATA, "1"))
+    layers = lookat.layers_text(getattr(place, "layers", None))
+    if layers:
+        data.append((LAYERS_DATA, layers))
+    flow = "<ExtendedData>{}</ExtendedData>".format("".join(
+        '<Data name="{}"><value>{}</value></Data>'.format(name, escape(value))
+        for name, value in data)) if data else ""
     parts += ["<visibility>{}</visibility>".format(int(place.visible)),
               region.kml(getattr(place, "region", None)),
               _time_kml(place.time), look,

@@ -64,6 +64,8 @@ class Stop:
     time = None
     # Описание метки, его показывает панель тура под кнопками.
     description = ""
+    # Слои вида метки core.lookat - строки «Слоёв» остановки или None.
+    layers = None
 
     def __init__(self, name, lat, lon, distance, heading=0.0, tilt=0.0):
         self.name = name

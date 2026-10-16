@@ -90,6 +90,10 @@ HALO_WIDTH = 1.4
 # надписи нет, выше FADE_HIGH она целиком.
 FADE_LOW = 0.12
 FADE_HIGH = 0.35
+# Новая надпись проявляется за столько секунд, просьба автора от
+# 16 октября 2026 года. Своя метка - точка профиля, длина отрезка -
+# видна сразу: её текст меняется с каждым шагом курсора.
+LABEL_FADE = 0.3
 
 # Вид надписи по классу: кегль в логических пикселях, жирный, курсив,
 # цвет с прозрачностью, размер значка и значок. Значок - точка «dot»,
@@ -362,6 +366,8 @@ class Labels:
         self.entries = {}  # (класс, текст) -> (u0, v0, u1, v1, w, h, ax, ay)
         self.atlas = _Atlas()
         self.shown = set()  # пункты, видные в прошлом кадре
+        # Пункт -> начало проявления, пока надпись проявляется.
+        self.born = {}
         # Не все выбранные надписи растрированы или проверены, нужен
         # ещё кадр.
         self.pending = False
@@ -605,12 +611,14 @@ class Labels:
         self.entries[key] = entry
         return entry
 
-    def draw(self, camera, projection, places, height_at, version, ratio):
+    def draw(self, camera, projection, places, height_at, version, ratio,
+             fade=True):
         """Выбрать и нарисовать надписи кадра.
 
         Вызывается после тайлов, буфер глубины кадра заполнен.
         projection - матрица проекции кадра 4×4. ratio - пикселей кадра
-        на логический пиксель. Возвращает количество надписей.
+        на логический пиксель. fade - проявлять новые надписи, у снимка
+        вида нет. Возвращает количество надписей.
         """
         self.count = 0
         self.pending = False
@@ -694,6 +702,8 @@ class Labels:
         shown = set()
         new = 0
         raster_start = time.perf_counter()
+        now = time.monotonic()
+        born = {}
         for n in chosen:
             place = self._places[chosen_rows[n]]
             if (place.kind, label_text(place)) not in self.entries:
@@ -709,10 +719,22 @@ class Labels:
             # Углы по целым пикселям, иначе текст размывается.
             left = round(x[n] - ax)
             top = round(y[n] - ay)
+            share = 1.0
+            if fade and (place.id or 0) >= 0:
+                # Надпись прошлого кадра без отметки уже проявилась.
+                start = self.born.get(keys[n]) if keys[n] in self.shown \
+                    else now
+                if start is not None:
+                    share = min(1.0, (now - start) / LABEL_FADE)
+                    if share < 1.0:
+                        born[keys[n]] = start
             quads.append((left, top, left + w, top + h, u0, v0, u1, v1,
-                          alpha[n]))
+                          alpha[n] * share))
             shown.add(keys[n])
         self.shown = shown
+        self.born = born
+        if born:
+            self.pending = True
         self.pending = self.pending or unknown or self._more
         if quads:
             self._draw_quads(quads, camera.width, camera.height)

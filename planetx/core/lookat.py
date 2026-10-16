@@ -13,7 +13,15 @@
 До того вид был только у меток «Сохранить вид» и хранился тремя
 числами - расстояние, азимут, наклон, точкой взгляда была сама метка.
 Такие виды читаются по-прежнему.
+
+Слои вида - строки раздела «Слои» (ключ строки - включена ли), которые
+перелёт к метке и остановка тура включают и выключают. Их запоминает
+«Снимок текущего вида» окна свойств вместе с камерой. Просьба автора
+от 16 октября 2026 года - остановка тура со своими слоями и временем
+для показа.
 """
+import json
+
 MAX_TILT = 85.0
 # Метка «Сохранить вид» стоит в точке своего вида. Доля градуса, до
 # которой точки считаются одной.
@@ -56,3 +64,26 @@ def is_view_mark(kind, points, view):
         return False
     lat, lon = points[0]
     return abs(lat - view[0]) < SAME_POINT and abs(lon - view[1]) < SAME_POINT
+
+
+def layers_text(layers):
+    """Слои вида в поле файла меток - JSON {ключ: 0 или 1}, пустая
+    строка без слоёв."""
+    if not layers:
+        return ""
+    return json.dumps({str(k): int(bool(v)) for k, v in sorted(
+        layers.items())}, separators=(",", ":"))
+
+
+def layers_parse(text):
+    """Слои вида из поля файла меток или KML, None при пустом или
+    неверном поле."""
+    try:
+        data = json.loads(text) if text else None
+    except ValueError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    out = {str(k): bool(v) for k, v in data.items()
+           if isinstance(v, (bool, int))}
+    return out or None
