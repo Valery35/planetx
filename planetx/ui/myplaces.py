@@ -34,6 +34,7 @@ from qgis.PyQt.QtCore import QObject, pyqtSignal
 
 from ..core import (ellipsoid, icons, lookat, overlays, placetree,
                     region, when)
+from ..core import tour as tour_core
 from ..core.features import Shape
 from ..core.kml import KFolder, KOverlay, KPlace
 from ..i18n import tr
@@ -62,7 +63,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Поток по пути - бегущие штрихи, core/pathflow.py.
           ("flow", "integer"),
           # Слои вида - строки «Слоёв» остановки тура, core/lookat.py.
-          ("layers", "string(0)"))
+          ("layers", "string(0)"),
+          # Темп остановки тура - своя пауза и скорость, core/tour.py.
+          ("pace", "string"))
 FOLDER_TABLE = "folders"
 # Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
 # на поверхности, у картинки на экране и фото пусто. params - свойства
@@ -248,7 +251,8 @@ def _kplace(place):
                   icon=shape.icon, time=place.time,
                   view_time=place.view_time, tour=place.tour,
                   alts=shape.alts, region=place.region, flow=shape.flow,
-                  layers=getattr(place, "layers", None))
+                  layers=getattr(place, "layers", None),
+                  pace=getattr(place, "pace", None))
 
 
 class Place:
@@ -257,8 +261,10 @@ class Place:
     def __init__(self, kind, fid, shape, visible, measure="", view=None,
                  position=None, folder=None, description="",
                  time=None, view_time=None, tour=None, body="earth",
-                 region=None, layers=None):
+                 region=None, layers=None, pace=None):
         self.kind = kind
+        # Темп остановки тура: (пауза или None, скорость) или None.
+        self.pace = pace
         # Слои вида: {ключ строки «Слоёв»: включена} или None.
         self.layers = layers
         # Region KML: метка видна только вблизи, core.region или None.
@@ -489,7 +495,8 @@ class MyPlaces(QObject):
                     tour_from_text(_value(feature, layer, "tour")),
                     str(_value(feature, layer, "body") or "earth"),
                     region.parse(_value(feature, layer, "region")),
-                    lookat.layers_parse(_value(feature, layer, "layers"))))
+                    lookat.layers_parse(_value(feature, layer, "layers")),
+                    tour_core.pace_parse(_value(feature, layer, "pace"))))
         self.overlays = []
         layer = self.overlay_layer
         if layer is not None:
@@ -1014,7 +1021,9 @@ class MyPlaces(QObject):
                     "region": region.text(getattr(place, "region", None)),
                     "flow": int(bool(getattr(place, "flow", False))),
                     "layers": lookat.layers_text(
-                        getattr(place, "layers", None))}
+                        getattr(place, "layers", None)),
+                    "pace": tour_core.pace_text(
+                        getattr(place, "pace", None))}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

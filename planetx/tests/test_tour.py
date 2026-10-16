@@ -46,6 +46,26 @@ class TestTour(unittest.TestCase):
                                - tr.CAPTION_FADE / 4.0)
         self.assertAlmostEqual(leaving[1], 0.25)
 
+    def test_own_pause_and_speed(self):
+        # Вторая остановка - своя пауза 7 с и перелёт вдвое быстрее,
+        # прочие - пауза тура. Перелёт кончается в той же позе.
+        stops = [tr.Stop(s.name, s.lat, s.lon, s.distance, s.heading,
+                         s.tilt) for s in STOPS]
+        stops[1].pause = 7.0
+        stops[1].speed = 2.0
+        tour = tr.Tour(self.start, stops, pause=2.0)
+        plain = tr.Tour(self.start, STOPS, pause=2.0)
+        self.assertEqual(tour.pauses, [2.0, 7.0, 2.0])
+        flight = plain.glides[1] - plain.starts[1]
+        self.assertAlmostEqual(tour.glides[1] - tour.starts[1],
+                               flight / 2.0, places=6)
+        self.assertAlmostEqual(tour.starts[2] - tour.arrivals[1], 7.0,
+                               places=6)
+        end = tour.pose_at(tour.glides[1])
+        self.assertTrue(close(end, stops[1]))
+        self.assertEqual(tour.caption_at(tour.arrivals[1] + 3.5),
+                         (1, 1.0))
+
     def test_no_caption_without_pause(self):
         tour = tr.Tour(self.start, STOPS, pause=0.0)
         self.assertIsNone(tour.caption_at(tour.arrivals[1]))

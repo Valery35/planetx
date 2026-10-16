@@ -55,8 +55,8 @@ from .satellites import SatellitePoints
 from .constellations import Constellations
 from .sky import Sky
 from .stars import Stars
-from .shaders import (BACKDROP_FRAGMENT, BACKDROP_VERTEX, HOLE_FRAGMENT,
-                      HOLE_VERTEX, SKY_FRAGMENT, TILE_FRAGMENT,
+from .shaders import (BACKDROP_FRAGMENT, BACKDROP_VERTEX, CROSS_FRAGMENT,
+                      HOLE_FRAGMENT, HOLE_VERTEX, SKY_FRAGMENT, TILE_FRAGMENT,
                       TILE_VERTEX, shell)
 
 START_LEVELS = (0, 1, 2)
@@ -72,6 +72,12 @@ HOLE = (1.0, 0.0, 1.0)  # пурпурный фон проверочного р�
 # сдвиг берёт не больше. Выбор помощника, утверждает автор.
 TILE_FADE = 0.35
 FADE_LEVELS = 3
+# Смена подложки и дня темы: прежний кадр растворяется за CROSSFADE с,
+# ждёт новых тайлов не дольше CROSSFADE_HOLD с, при сдвиге камеры гаснет
+# за CROSSFADE_QUICK с. Выбор помощника, утверждает автор.
+CROSSFADE = 0.4
+CROSSFADE_HOLD = 4.0
+CROSSFADE_QUICK = 0.15
 OCEAN = (0xAA, 0xD3, 0xDF, 0xFF)  # цвет воды на подложке OSM
 UNDERLAY_COLOR = (0x00, 0xFF, 0x00, 0xFF)  # подстилка в проверочном режиме
 UNDERLAY_LEVEL = 2
@@ -410,6 +416,11 @@ class GlobeView(QOpenGLWidget):
         self.tile_fade = True
         self._drawn = frozenset()
         self._fading = {}
+        # Плавная смена подложки и дня темы (crossfade).
+        self._cross = None
+        self._cross_texture = None
+        self._cross_size = None
+        self.cross_program = None
         self.floor = None
         # Рамка фона под прозрачной землёй (юг, север, запад, восток,
         # низ на экране) или None, её ставит подземный режим.
@@ -1474,6 +1485,11 @@ class GlobeView(QOpenGLWidget):
         self.hole_program = gpu.build_program(HOLE_VERTEX, HOLE_FRAGMENT)
         self.hole_uniforms = uniforms(self.hole_program, (
             "u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes", "u_qc"))
+        self.cross_program = gpu.build_program(HOLE_VERTEX, CROSS_FRAGMENT)
+        self.cross_uniforms = uniforms(self.cross_program, (
+            "u_image", "u_viewport", "u_alpha"))
+        self._cross_texture = None
+        self._cross = None
         # Профиль Core требует привязанный массив вершин и там, где
         # вершины берутся из gl_VertexID.
         self.empty_vao = GL.glGenVertexArrays(1)
@@ -1522,6 +1538,10 @@ class GlobeView(QOpenGLWidget):
             return
         self.makeCurrent()
         self._end_shot()
+        if self._cross_texture is not None:
+            GL.glDeleteTextures([self._cross_texture])
+            self._cross_texture = None
+        self._cross = None
         self.labels.release_gl()
         self.features.release_gl()
         self.buildings.release_gl()
@@ -1839,7 +1859,104 @@ class GlobeView(QOpenGLWidget):
             self._paint_preview()
             return
         self._fit_camera()
+        self._cross_capture()
         self._render(self.devicePixelRatioF())
+        self._cross_draw()
+
+    # Плавная смена подложки и дня темы: прежний кадр держится поверх
+    # нового, пока не придут новые тайлы, и растворяется.
+
+    def crossfade(self, ready):
+        """Начать переход от кадра на экране к следующим кадрам. ready()
+        - готов ли новый вид, тогда прежний кадр растворяется за
+        CROSSFADE с. Дольше CROSSFADE_HOLD или при сдвиге камеры он
+        гаснет без ожидания. Снимок вида и запись тура перехода не
+        получают. Просьба автора от 16 октября 2026 года - смена подложки
+        и тем NASA без резкой подмены картинки."""
+        if not self.tile_fade or self.shot is not None or self.show_holes \
+                or not self.isVisible() or self.program is None:
+            return
+        self._cross = {"ready": ready, "capture": True}
+        self.update()
+
+    def _cross_capture(self):
+        """Копия кадра, который ещё лежит в буфере окна, в текстуру."""
+        state = self._cross
+        if state is None or not state.get("capture"):
+            return
+        w, h = int(self.camera.width), int(self.camera.height)
+        if w <= 0 or h <= 0:
+            self._cross = None
+            return
+        if self._cross_texture is None or self._cross_size != (w, h):
+            if self._cross_texture is not None:
+                GL.glDeleteTextures([self._cross_texture])
+            self._cross_texture = int(GL.glGenTextures(1))
+            GL.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER,
+                               GL.GL_LINEAR)
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER,
+                               GL.GL_LINEAR)
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0,
+                            GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
+            self._cross_size = (w, h)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
+        GL.glCopyTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, 0, 0, w, h)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+        state.update(capture=False, start=time.monotonic(), fading=None,
+                     eye=tuple(np.round(self.camera.eye, 1)),
+                     axes=tuple(np.round(self.camera.rotation.ravel(), 6)))
+
+    def _cross_alpha(self):
+        """Непрозрачность прежнего кадра или None - переход кончился."""
+        state = self._cross
+        now = time.monotonic()
+        if state.get("fading") is None:
+            moved = state["eye"] != tuple(np.round(self.camera.eye, 1)) \
+                or state["axes"] != tuple(np.round(
+                    self.camera.rotation.ravel(), 6))
+            if moved:
+                state["fading"], state["span"] = now, CROSSFADE_QUICK
+            elif now - state["start"] > CROSSFADE_HOLD or state["ready"]():
+                state["fading"], state["span"] = now, CROSSFADE
+            else:
+                return 1.0
+        share = (now - state["fading"]) / state["span"]
+        return None if share >= 1.0 else 1.0 - share
+
+    def _cross_draw(self):
+        state = self._cross
+        if state is None or state.get("capture") \
+                or self._cross_texture is None:
+            return
+        alpha = self._cross_alpha()
+        if alpha is None:
+            self._cross = None
+            return
+        gl = gpu.gl
+        gl.glUseProgram(self.cross_program)
+        gl.glUniform1i(self.cross_uniforms["u_image"], 0)
+        gl.glUniform2f(self.cross_uniforms["u_viewport"],
+                       float(self._cross_size[0]),
+                       float(self._cross_size[1]))
+        gl.glUniform1f(self.cross_uniforms["u_alpha"], float(alpha))
+        gl.glActiveTexture(GL.GL_TEXTURE0)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
+        gl.glDisable(GL.GL_DEPTH_TEST)
+        gl.glEnable(GL.GL_BLEND)
+        # Альфа кадра не трогается: её видит окно Qt.
+        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+                               GL.GL_ZERO, GL.GL_ONE)
+        try:
+            gl.glBindVertexArray(self.empty_vao)
+            gl.glDrawArrays(GL.GL_TRIANGLES, 0, 3)
+        finally:
+            gl.glBindVertexArray(0)
+            gl.glDisable(GL.GL_BLEND)
+            gl.glEnable(GL.GL_DEPTH_TEST)
+            gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
+            gl.glUseProgram(0)
+        self.update()
 
     def _take_outside_errors(self):
         """Забрать ошибки OpenGL, оставленные до кадра чужим кодом.

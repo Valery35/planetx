@@ -197,6 +197,20 @@ class TestLayers(unittest.TestCase):
         self.assertEqual(again.layers, {"gravity": True, "quakes": False})
         self.assertTrue(again.flow)
 
+    def test_pace_round_trip(self):
+        place = kml.KPlace("Остановка", "point", [(58.0, 56.0)],
+                           layers={"grid": True}, pace=(7.5, 0.5))
+        text = kml.write_kml(kml.KFolder("x", True, [place]))
+        self.assertEqual(text.count("<ExtendedData>"), 1)
+        again = kml.read_kml(text).children[0]
+        self.assertEqual(again.pace, (7.5, 0.5))
+        self.assertEqual(again.layers, {"grid": True})
+        # Только скорость, пауза тура.
+        place = kml.KPlace("Б", "point", [(58.0, 56.0)], pace=(None, 2.0))
+        again = kml.read_kml(kml.write_kml(
+            kml.KFolder("x", True, [place]))).children[0]
+        self.assertEqual(again.pace, (None, 2.0))
+
     def test_no_layers_no_data(self):
         place = kml.KPlace("Точка", "point", [(58.0, 56.0)])
         text = kml.write_kml(kml.KFolder("x", True, [place]))

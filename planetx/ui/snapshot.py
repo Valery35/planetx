@@ -13,10 +13,12 @@
 проекта, размер снимка - по размеру картинки в макете и разрешению
 вывода макета.
 """
+import os
+
 from qgis.core import (Qgis, QgsLayoutItemPicture, QgsLayoutPoint,
                        QgsLayoutSize, QgsPrintLayout, QgsProject)
 from qgis.PyQt.QtCore import QBuffer, QIODevice, QRectF, Qt
-from qgis.PyQt.QtGui import QColor, QFont, QPainter, QTextDocument
+from qgis.PyQt.QtGui import QColor, QFont, QImage, QPainter, QTextDocument
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QDoubleSpinBox,
                                  QFileDialog, QFormLayout, QLabel,
@@ -38,6 +40,12 @@ ATTRIBUTION_PAD = 4
 # Название модуля в самом углу снимка и кадра записи, как в окне
 # глобуса. Просьба автора от 16 октября 2026 года.
 BRAND = "PlanetX"
+# Высота знака PlanetX и доля высоты под название, логические пиксели.
+BRAND_HEIGHT = 26
+BRAND_TEXT = 0.62
+# Непрозрачность подписи источников, 0-255: неяркий текст.
+CREDIT_ALPHA = 215
+ICON = os.path.join(os.path.dirname(os.path.dirname(__file__)), "icon.png")
 # Формат картинки макета: в QGIS 4 областное имя, в QGIS 3 плоское.
 if hasattr(Qgis, "PictureFormat"):
     RASTER = Qgis.PictureFormat.Raster
@@ -52,10 +60,59 @@ def plain_text(html):
     return doc.toPlainText().strip()
 
 
+def _shadow_text(painter, rect, flags, text, ratio, color):
+    """Текст светлым цветом с тёмной тенью, без плашки: на светлом
+    снимке его держит тень, на тёмном - сам цвет."""
+    shift = max(1.0, ratio)
+    painter.setPen(QColor(0, 0, 0, 170))
+    for dx, dy in ((shift, shift), (-0.5 * shift, 0.5 * shift)):
+        painter.drawText(rect.translated(dx, dy), flags, text)
+    painter.setPen(color)
+    painter.drawText(rect, flags, text)
+
+
+def brand_image(height):
+    """Знак PlanetX высотой height пикселей: значок шара с орбитами
+    и название светлым текстом с тенью, фон прозрачный. Просьба автора
+    от 17 октября 2026 года - знак картинкой, как у Google Earth."""
+    height = max(8, int(round(height)))
+    icon = QImage(ICON).scaled(
+        height, height, enum(Qt, "AspectRatioMode", "KeepAspectRatio"),
+        enum(Qt, "TransformationMode", "SmoothTransformation"))
+    font = QFont()
+    font.setPixelSize(max(6, int(round(height * BRAND_TEXT))))
+    font.setBold(True)
+    gap = height * 0.18
+    probe = QImage(1, 1, enum(QImage, "Format",
+                              "Format_ARGB32_Premultiplied"))
+    painter = QPainter(probe)
+    painter.setFont(font)
+    width = painter.boundingRect(QRectF(0, 0, 1000, height), 0,
+                                 BRAND).width()
+    painter.end()
+    out = QImage(int(height + gap + width + 2 * max(1, height / 20)),
+                 height, probe.format())
+    out.fill(QColor(0, 0, 0, 0))
+    painter = QPainter(out)
+    try:
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        painter.setRenderHint(enum(QPainter, "RenderHint",
+                                   "TextAntialiasing"))
+        painter.drawImage(0, 0, icon)
+        painter.setFont(font)
+        flags = enum_int(enum(Qt, "AlignmentFlag", "AlignLeft")) \
+            | enum_int(enum(Qt, "AlignmentFlag", "AlignVCenter"))
+        _shadow_text(painter, QRectF(height + gap, 0, width + 4, height),
+                     flags, BRAND, height / 28.0, QColor(255, 255, 255))
+    finally:
+        painter.end()
+    return out
+
+
 def draw_attribution(image, text, ratio, brand=BRAND):
-    """Подпись источников в правом нижнем углу снимка, на месте, как
-    в окне глобуса: в самом углу - название модуля brand, левее -
-    подпись. Пустой brand - только подпись."""
+    """Правый нижний угол снимка, как в окне глобуса: в самом углу -
+    знак PlanetX (brand_image), левее - подпись источников неярким
+    текстом с тенью, без плашки. Пустой brand - только подпись."""
     if not text and not brand:
         return
     painter = QPainter(image)
@@ -63,36 +120,28 @@ def draw_attribution(image, text, ratio, brand=BRAND):
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
         painter.setRenderHint(enum(QPainter, "RenderHint",
                                    "TextAntialiasing"))
-        font = QFont(painter.font())
-        font.setPixelSize(max(6, int(round(ATTRIBUTION_FONT * ratio))))
-        painter.setFont(font)
         pad = ATTRIBUTION_PAD * ratio
-        # Длинная подпись переносится на следующие строки. Обрезка
-        # многоточием теряла часть подписи Esri в узкой картинке макета.
-        flags = enum_int(enum(Qt, "AlignmentFlag", "AlignRight")) \
-            | enum_int(enum(Qt, "AlignmentFlag", "AlignBottom")) \
-            | enum_int(enum(Qt, "TextFlag", "TextWordWrap"))
         right = image.width() - pad
-        for line in (brand, text):
-            if not line:
-                continue
-            room = QRectF(0.0, 0.0, right - 3.0 * pad,
-                          image.height() - 4.0 * pad)
-            text_box = painter.boundingRect(room, flags, line)
-            width = text_box.width() + 2.0 * pad
-            height = text_box.height() + pad
-            box = QRectF(right - width, image.height() - height - pad,
-                         width, height)
-            painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-            painter.setBrush(QColor(255, 255, 255, 190))
-            painter.drawRoundedRect(box, 3.0 * ratio, 3.0 * ratio)
-            painter.setPen(QColor(0, 0, 0))
-            painter.drawText(box.adjusted(pad, 0.5 * pad, -pad, -0.5 * pad),
-                             flags, line)
-            right = box.left() - 0.5 * pad
+        if brand:
+            mark = brand_image(BRAND_HEIGHT * ratio)
+            painter.drawImage(int(right - mark.width()),
+                              int(image.height() - mark.height() - pad),
+                              mark)
+            right -= mark.width() + 2.0 * pad
+        if text:
+            font = QFont(painter.font())
+            font.setPixelSize(max(6, int(round(ATTRIBUTION_FONT * ratio))))
+            painter.setFont(font)
+            # Длинная подпись переносится на следующие строки. Обрезка
+            # многоточием теряла часть подписи Esri в узкой картинке.
+            flags = enum_int(enum(Qt, "AlignmentFlag", "AlignRight")) \
+                | enum_int(enum(Qt, "AlignmentFlag", "AlignBottom")) \
+                | enum_int(enum(Qt, "TextFlag", "TextWordWrap"))
+            room = QRectF(pad, pad, right - pad, image.height() - 2 * pad)
+            _shadow_text(painter, room, flags, text, ratio,
+                         QColor(255, 255, 255, CREDIT_ALPHA))
     finally:
         painter.end()
-
 
 def embedded(image):
     """Путь картинки макета со встроенным PNG, как у встроенных

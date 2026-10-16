@@ -41,7 +41,7 @@ properties.
 
 The panel is on the left, the globe view on the right. The icon bar
 sits in the top left corner of the view. The bottom right corner holds
-the PlanetX name, to its left a short credit line of the sources of what
+the PlanetX mark, to its left a short faint credit line of the sources of what
 the globe shows now. A click on the credits opens the Data sources window
 with the full credits, links and terms, a click on PlanetX opens the
 About window. The border between the panel and the view is dragged with
@@ -260,8 +260,8 @@ Over a long distance the camera rises and lands smoothly. The mouse interrupts a
 
 ## Left panel
 
-The panel has two sections - Places and Layers. A click on a header
-collapses the section, and the open section takes its place. The globe
+The panel has three sections - Places, QGIS project and Layers. A click
+on a header collapses the section, and the open sections take its place. The globe
 remembers which sections are collapsed.
 
 ### Layers section
@@ -275,7 +275,6 @@ take effect at once, without the Refresh button. The rows go like this:
 | Relief | The check box turns heights and hill shading on. A click on the name opens a menu - land heights Terrarium, Copernicus DEM 30 m or GEDTM30, Sea and ocean depths and Data sources… |
 | Layers that are on | Layers and the map of the catalogue, the coordinate grid, 3D buildings, contours - everything that is switched on |
 | Vector base groups | Borders and names, Transport, Nature, while something in them is on |
-| QGIS project | Layers of the current project, see QGIS project group |
 
 A row takes one line. The ⋯ on the right of a row opens its menu, the
 right button opens the same menu. Clearing the check box switches the
@@ -1071,9 +1070,10 @@ Without automatic update a change of base map, terrain exaggeration or
 project layers shows after the Refresh button on the icon bar. The status line reminds about it.
 The label language changes at once.
 
-### QGIS project group
+### QGIS project section
 
-The group of the Layers section lists the layers of the current project in the order of the
+The QGIS project section stands between Places and Layers. It lists the
+layers of the current project in the order of the
 QGIS map, each with its type - raster, points, lines, polygons or
 table. The check box of a layer shows it on the globe and does not
 change its visibility on the map. In a new project the boxes are clear.
@@ -1125,7 +1125,7 @@ read.
 
 A height raster of the QGIS project becomes the globe terrain within
 its extent. An example is a quarry with a mine survey. The Globe
-terrain item of the raster menu in the QGIS project group turns the
+terrain item of the raster menu in the QGIS project section turns the
 inset on and off. The raster can be in any coordinate system, it needs
 a file that GDAL reads. The checkbox that shows the layer on the globe
 is not needed for the inset.
@@ -1151,7 +1151,7 @@ profile. For a survey of 2400 × 2400 pixels this takes about 2 s.
 
 Two surveys of one site, for example a quarry with dumps, give the cut
 and fill volumes. The Cut and fill… item of the menu of the new survey
-raster in the QGIS project group opens a window:
+raster in the QGIS project section opens a window:
 
 - Earlier survey - a raster of the same site at an earlier date.
 - Site - polygons outside which the difference is not computed, or the
@@ -1172,7 +1172,7 @@ the globe, the cut in red, the fill in blue.
 A raster of depths or bed elevations of a lake, sea or reservoir goes
 into the globe terrain like own terrain, and semi-transparent water at
 the water body level is drawn above it. The Water body bathymetry… item
-of the raster menu in the QGIS project group opens a window with
+of the raster menu in the QGIS project section opens a window with
 three fields:
 
 - Values are depths - the depth below the water surface, with a plus or
@@ -1764,6 +1764,12 @@ layers switch on at the start of the flight to the stop, so the data
 arrive by the time the camera does. In KML the view layers go into the
 ExtendedData of the placemark, other programs skip them.
 
+The Tour pause and Flight speed fields of the same section set the pace
+of the stop. The pause is how many seconds the camera stays at the place,
+as in the tour means the pause from the tour panel. The speed is how many
+times faster than usual the flight to the place goes, from ×0.25 to ×4,
+below one is slower and smoother.
+
 ### Copy and paste
 
 Copy or Ctrl+C puts the selected places and folders into the
@@ -2168,7 +2174,7 @@ data.
 
 A project raster whose values are absolute elevations in metres lies
 under the ground as a surface. For this the Surface by elevations item
-is checked in the raster menu of the QGIS project group. The layer
+is checked in the raster menu of the QGIS project section. The layer
 box shows and hides the surface. The raster coordinate system comes
 from the QGIS layer, so an ASCII Grid without a .prj file also fits.
 
@@ -2469,7 +2475,7 @@ later than the slider moment is shown, before the year of the first
 map of the group none is shown. The ◂ ▸ steps of the slider go by the
 map years. With the slider closed, all maps are shown.
 
-The Map year… item of the layer menu in the QGIS project group
+The Map year… item of the layer menu in the QGIS project section
 sets the year of a project raster or tiles. Maps of one QGIS layer
 group replace each other. The years are kept in the project.
 

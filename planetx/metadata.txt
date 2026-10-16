@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.91.0
+version=0.92.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.91.0 New tiles appear smoothly - a tile that replaces its parent
+changelog=0.92.0 The layers of the QGIS project are again a section of their
+      own between Places and Layers. The source credits are faint text
+      without a background, PlanetX stands in the corner as a mark, the
+      links to the sources are in the About window. A placemark sets the
+      pause and the flight speed of its tour stop. A change of the base
+      map or of the day of a NASA theme dissolves smoothly.
+      0.91.0 New tiles appear smoothly - a tile that replaces its parent
       sharpens from the parent resolution, new labels fade in. The view
       snapshot of a placemark also remembers the rows of the Layers
       section, a flight to the placemark and a tour stop switch them on.

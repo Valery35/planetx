@@ -334,6 +334,7 @@ class ThemesMixin:
                                 themes.ATTRIBUTION, builtin=True,
                                 missing=(404,))
         self.view.gibs["theme"].max_level = theme.level
+        self.view.crossfade(self._theme_ready)
         self._set_gibs("theme", True, (source, prepare_theme(theme.key)),
                        keep=keep)
 

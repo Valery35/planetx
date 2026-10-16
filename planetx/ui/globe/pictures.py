@@ -895,6 +895,9 @@ class PicturesMixin:
                 stop.time = place.view_time or place.time
                 stop.description = place.description or ""
                 stop.layers = getattr(place, "layers", None)
+                pace = getattr(place, "pace", None)
+                if pace:
+                    stop.pause, stop.speed = pace
                 stops.append(stop)
         return stops
 

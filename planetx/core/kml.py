@@ -57,12 +57,14 @@ from xml.parsers import expat
 
 try:  # внутри плагина QGIS
     from . import icons, lookat, models, overlays, region
+    from .tour import pace_parse as tour_pace, pace_text as tour_pace_text
 except ImportError:  # headless-тесты
     import icons
     import lookat
     import models
     import overlays
     import region
+    from tour import pace_parse as tour_pace, pace_text as tour_pace_text
 
 NS = "http://www.opengis.net/kml/2.2"
 GX = "http://www.google.com/kml/ext/2.2"
@@ -235,8 +237,11 @@ class KPlace:
                  description="", height=0.0, extrude=False,
                  icon=icons.DEFAULT, time=None, view_time=None,
                  tour=None, alts=None, region=None, flow=False,
-                 layers=None):
+                 layers=None, pace=None):
         self.region = region  # core.region.Region или None
+        # Темп остановки тура (пауза или None, скорость) или None,
+        # ExtendedData PACE_DATA.
+        self.pace = pace
         # Слои вида core.lookat - {ключ строки «Слоёв»: включена} или
         # None. В KML - ExtendedData с именем LAYERS_DATA.
         self.layers = layers
@@ -624,12 +629,14 @@ def _placemark(node, styles, inherited=None):
                           view_time=_view_time(node), alts=alts,
                           region=_region(node),
                           flow=kind == "line" and _flow(node),
-                          layers=_layers(node)))
+                          layers=_layers(node),
+                          pace=tour_pace(_data(node, PACE_DATA))))
     return out
 
 
 FLOW_DATA = "planetx:flow"
 LAYERS_DATA = "planetx:layers"
+PACE_DATA = "planetx:pace"
 
 
 def _data(node, name):
@@ -1091,6 +1098,9 @@ def _placemark_kml(place, indent):
     layers = lookat.layers_text(getattr(place, "layers", None))
     if layers:
         data.append((LAYERS_DATA, layers))
+    pace = tour_pace_text(getattr(place, "pace", None))
+    if pace:
+        data.append((PACE_DATA, pace))
     flow = "<ExtendedData>{}</ExtendedData>".format("".join(
         '<Data name="{}"><value>{}</value></Data>'.format(name, escape(value))
         for name, value in data)) if data else ""

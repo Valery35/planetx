@@ -921,6 +921,9 @@ class ToolsMixin:
             stop.time = item.view_time or item.time
             stop.description = item.description or ""
             stop.layers = getattr(item, "layers", None)
+            pace = getattr(item, "pace", None)
+            if pace:
+                stop.pause, stop.speed = pace
             self.tour.start([stop])
         elif action == "properties":
             self._open_place_properties(item)

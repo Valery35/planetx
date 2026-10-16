@@ -172,6 +172,9 @@ class LayersMixin:
         if source is self.source:
             return
         journal.note("basemap {}".format(source.name))
+        # Прежняя подложка держится на экране, пока не придут новые
+        # тайлы, и растворяется.
+        self.view.crossfade(lambda: self.view.load_missing == 0)
         old = self.loader
         old.abort()
         old.deleteLater()

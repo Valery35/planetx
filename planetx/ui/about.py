@@ -10,7 +10,7 @@
 import html
 import os
 
-from qgis.PyQt.QtCore import Qt, QUrl
+from qgis.PyQt.QtCore import Qt, QTimer, QUrl
 from qgis.PyQt.QtGui import QDesktopServices, QIcon, QPixmap
 from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QLabel,
                                  QMessageBox, QPushButton, QTextBrowser,
@@ -215,6 +215,15 @@ class AboutDialog(QDialog):
                      tr("Открывает в браузере страницу модуля в каталоге "
                         "модулей QGIS."),
                      lambda: self._open_url(QUrl(CATALOG)))
+        # Подписи и ссылки источников - здесь и в окне «Источники
+        # данных», на карте только неяркие названия. Просьба автора от
+        # 17 октября 2026 года.
+        sources = getattr(parent, "open_sources", None)
+        if sources is not None:
+            self._button(second, "sources", tr("Источники данных"), tr(
+                "Окно с полными подписями, ссылками и условиями всех "
+                "источников, которые показывает глобус."),
+                lambda: (self.accept(), QTimer.singleShot(0, sources)))
         second.addStretch(1)
         layout.addLayout(first)
         layout.addLayout(second)

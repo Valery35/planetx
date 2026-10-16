@@ -2408,15 +2408,15 @@ def multi_select():
 @check(300)
 def accordion():
     # Разделы панели сворачиваются, место отходит открытым разделам.
-    # Слои проекта - группа «Проект QGIS» списка «Слоёв», не дерево
-    # меток. Решение автора от 12 октября 2026 года.
+    # Слои проекта - свой раздел «Проект QGIS» между «Метками»
+    # и «Слоями», решение автора от 17 октября 2026 года.
     from qgis.core import QgsVectorLayer
     window = state["window"]
     panel = window.panel
     layer = QgsVectorLayer("Point?crs=EPSG:4326", "Слой раздела", "memory")
     QgsProject.instance().addMapLayer(layer)
     QgsApplication.processEvents()
-    places, base = panel.sections
+    places, project, base = panel.sections
     out = {"titles": [s.header.text() for s in panel.sections],
            "layer_in_own_list": any(
                row.text(0).startswith("Слой раздела")
@@ -2429,7 +2429,10 @@ def accordion():
     out["heights_open"] = before
     out["heights_places_closed"] = after
     out["closed_is_header"] = after[0] <= places.header.sizeHint().height()
-    out["others_grew"] = after[1] > before[1]
+    out["others_grew"] = sum(after[1:]) > sum(before[1:])
+    out["project_rows_in_base"] = sum(
+        1 for i in range(panel.geo.topLevelItemCount())
+        if panel.geo.topLevelItem(i).text(0) == "Проект QGIS")
     places.set_open(True)
     QgsApplication.processEvents()
     out["reopened"] = places.height() > places.header.sizeHint().height()
@@ -2451,7 +2454,7 @@ def accordion():
     row = next(row for row in panel.project_rows()
                if row.text(0).startswith("Слой раздела"))
     window.view.navigator.flight = None
-    panel.geo.itemDoubleClicked.emit(row, 0)
+    panel.project_tree.itemDoubleClicked.emit(row, 0)
     out["double_click_flies"] = flown
     # Слой пустой: перелёта нет. На прежнем коде охват без объектов
     # давал перелёт в NaN, QGIS 3.36 показывал ошибку paintGL каждый
@@ -11012,7 +11015,7 @@ def toolbar_buttons():
             and manager.dialog.isVisible()
         manager.dialog.close()
     window.properties.close()
-    row = window.panel.geo.itemWidget(window.panel.ground_item, 0)
+    row = window.panel.ground_row
     under = [b for b in row.findChildren(QToolButton) if b.text() == "…"]
     out["panel_button"] = len(under)
     if under:
@@ -11072,7 +11075,7 @@ def grids_wait():
     model = manager.model
     out["seconds"] = round(spent, 1)
     out["horizons"] = len(model.horizons) if model else 0
-    out["panel_row"] = not window.panel.ground_item.isHidden()
+    out["panel_row"] = not window.panel.ground_row.isHidden()
     view = window.view
     view.navigator.stop()
     view.navigator.set_pose(Pose(59.545, 56.80, 9000.0, 25.0, 62.0))
@@ -14958,8 +14961,14 @@ def tour_layers():
     values = dialog.values()
     out["dialog_layers"] = lookat.layers_parse(values["layers"])
     out["label"] = dialog.keep_layers.text()
+    # Темп остановки: пауза 4 с и перелёт вдвое быстрее.
+    dialog.stop_pause.setValue(4.0)
+    dialog.stop_speed.setValue(2.0)
+    out["pace_field"] = dialog.values()["pace"]
+    values["pace"] = out["pace_field"]
     dialog.reject()
-    store.update(a, {"layers": values["layers"]})
+    store.update(a, {"layers": values["layers"],
+                     "pace": values["pace"]})
     store.update(b, {"layers": lookat.layers_text(
         {"grid": False, "plates": True})})
     out["read_back"] = [store.find(k).layers.get("grid")
@@ -14973,8 +14982,12 @@ def tour_layers():
         place = store.find(key)
         stop = window.place_stop(place, along=True)
         stop.layers = place.layers
+        if place.pace:
+            stop.pause, stop.speed = place.pace
         stops.append(stop)
     window.tour.start(stops)
+    out["pauses"] = list(window.tour.tour.pauses)
+    out["speeds"] = list(window.tour.tour.speeds)
     out["after_start"] = [bool(window.extras.get("grid")),
                           bool(window.extras.get("plates")),
                           [getattr(s, "layers", None) is not None
@@ -15007,6 +15020,65 @@ def tour_layers_wait():
     return None
 
 
+@check(8000)
+def crossfade_on():
+    """Плавная смена подложки: камера над Пермью, загрузка."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.01, 56.23, 30000.0, 0.0, 0.0))
+
+
+@check(500)
+def crossfade_check():
+    import numpy as np
+    from planetx.net.loader import image_to_rgba
+    window = state["window"]
+    view = window.view
+    out = result["crossfade"] = {}
+
+    def frame():
+        view.repaint()
+        QgsApplication.processEvents()
+        return image_to_rgba(view.grabFramebuffer())[..., :3].astype(int)
+
+    def diff(a, b):
+        return round(float(np.abs(a - b).mean()), 2)
+
+    before = frame()
+    old = window.source
+    other = [s for s in window.sources if s is not old]
+    window._switch_basemap(other[0])
+    out["switched"] = [old.name, other[0].name]
+    out["started"] = view._cross is not None
+    first = frame()
+    out["hold_diff"] = diff(before, first)
+    alphas = []
+    started = time.monotonic()
+    while view._cross is not None and time.monotonic() - started < 8.0:
+        QgsApplication.processEvents()
+        view.repaint()
+        state_ = view._cross
+        if state_ is not None and state_.get("fading") is not None:
+            alphas.append(round(1.0 - (time.monotonic() - state_["fading"])
+                                / state_["span"], 2))
+        time.sleep(0.03)
+    out["seconds"] = round(time.monotonic() - started, 2)
+    out["fade_steps"] = len(alphas)
+    out["ended"] = view._cross is None
+    after = frame()
+    out["after_diff"] = diff(before, after)
+    window._switch_basemap(old)
+    deadline = time.monotonic() + 6.0
+    while view._cross is not None and time.monotonic() < deadline:
+        QgsApplication.processEvents()
+        view.repaint()
+        time.sleep(0.03)
+    out["gl"] = dict(view.gl_errors)
+    return None
+
+
 @check(300)
 def snapshot_brand():
     """PlanetX в углу снимка вида и кадра записи: в самом углу плашка
@@ -15019,15 +15091,20 @@ def snapshot_brand():
                        if hasattr(QImage, "Format") else QImage.Format_RGB32)
         image.fill(QColor(0, 0, 160))
         draw_attribution(image, "Esri", 1.0, brand=brand)
-        # Плашки светлые: где они кончаются по нижней строке.
-        row = image.height() - 10
-        light = [x for x in range(image.width())
-                 if QColor(image.pixel(x, row)).blue() < 255
-                 and QColor(image.pixel(x, row)).red() > 150]
-        out[name] = [min(light), max(light)] if light else None
-    # С названием подпись сдвинута влево на ширину плашки PlanetX.
+        image.save(os.path.join(TEMP, "planetx_brand_%s.png" % name))
+        # Изменённые пиксели нижней полосы: знак и подпись, фона-плашки
+        # нет - далеко над ними картинка не меняется.
+        changed = [x for x in range(image.width())
+                   for y in range(image.height() - 34, image.height())
+                   if QColor(image.pixel(x, y)) != QColor(0, 0, 160)]
+        above = sum(1 for x in range(0, image.width(), 3)
+                    for y in range(0, image.height() - 40, 3)
+                    if QColor(image.pixel(x, y)) != QColor(0, 0, 160))
+        out[name] = [min(changed), max(changed), above] \
+            if changed else None
+    # Со знаком подпись сдвинута влево на его ширину.
     out["shifted"] = bool(out["with"] and out["without"]
-                          and out["with"][0] < out["without"][0] - 30)
+                          and out["with"][0] < out["without"][0] - 40)
     window = state["window"]
     out["view_brand"] = window.brand.text()
 

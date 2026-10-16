@@ -17,9 +17,11 @@ import sys
 import time
 
 from qgis.core import QgsSettings
-from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import QIcon, QKeySequence
-from qgis.PyQt.QtWidgets import QLabel, QSplitter, QVBoxLayout, QWidget
+from qgis.PyQt.QtCore import QSize, Qt, QTimer, pyqtSignal
+from qgis.PyQt.QtGui import QColor, QFont, QIcon, QKeySequence, QPixmap
+from qgis.PyQt.QtWidgets import (QGraphicsDropShadowEffect, QLabel,
+                                 QSplitter, QToolButton, QVBoxLayout,
+                                 QWidget)
 from qgis.utils import iface
 
 from .. import journal
@@ -39,6 +41,7 @@ from ..net.overlay import VECTOR_GROUPS
 from ..qt_compat import QAction, enum
 from ..render.view import GlobeView, start_keys
 from .about import show_about
+from .snapshot import BRAND_HEIGHT, brand_image
 from . import guide as guide_ui
 from .sidepanel import SidePanel
 from .layer_labels import LayerLabels
@@ -75,7 +78,7 @@ from .sync import MapSync
 from .timebar import TimeBar
 from .toolbar import ViewToolbar
 from .globe.base import (ACCEPTED_KEY, ATTRIBUTION_STYLE, AUTO_DEFAULT,
-                         CREDIT_LINK,
+                         BRAND_STYLE,
                          BASEMAP_KEY, CONSTELLATIONS_KEY, COORDS_KEY,
                          DEFAULT_GROUPS, EXTRA_DEFAULTS, EXTRA_KEY,
                          FLOW_LAYERS, GIBS_FADES, GROUND_DELAY, GUIDE_DELAY,
@@ -102,6 +105,16 @@ from .globe.resources import ResourcesMixin
 # Имена, которые берут из модуля окна снаружи.
 __all__ = ("GlobeWindow", "ACCEPTED_KEY", "READY_KEY", "TERRAIN_MIRRORS",
            "all_sources")
+
+
+def _shadow(widget):
+    """Тёмная тень светлого текста подписи: на светлом снимке её
+    держит тень, на тёмном - сам цвет."""
+    effect = QGraphicsDropShadowEffect(widget)
+    effect.setBlurRadius(4.0)
+    effect.setOffset(1.0, 1.0)
+    effect.setColor(QColor(0, 0, 0, 220))
+    return effect
 
 
 class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
@@ -175,17 +188,28 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                                            self.view.load_stalled))
         self.attribution = QLabel(self.view)
         self.attribution.setStyleSheet(ATTRIBUTION_STYLE)
+        font = QFont(self.attribution.font())
+        font.setPointSizeF(font.pointSizeF() * 0.85)
+        self.attribution.setFont(font)
+        self.attribution.setGraphicsEffect(_shadow(self.attribution))
         self.attribution.setToolTip(tr(
             "Источники того, что на глобусе. Щелчок открывает окно "
             "«Источники данных» с полными подписями и условиями."))
         self.attribution.linkActivated.connect(
             lambda _link: QTimer.singleShot(0, self.open_sources))
-        # Название модуля в правом нижнем углу, щелчок - «О модуле».
-        self.brand = QLabel(CREDIT_LINK.format("PlanetX"), self.view)
-        self.brand.setStyleSheet(ATTRIBUTION_STYLE)
+        # Знак PlanetX в правом нижнем углу, щелчок - «О модуле».
+        self.brand = QToolButton(self.view)
+        self.brand.setStyleSheet(BRAND_STYLE)
+        ratio = self.devicePixelRatioF()
+        mark = QPixmap.fromImage(brand_image(BRAND_HEIGHT * ratio))
+        mark.setDevicePixelRatio(ratio)
+        self.brand.setIcon(QIcon(mark))
+        self.brand.setIconSize(QSize(int(mark.width() / ratio),
+                                     int(mark.height() / ratio)))
+        self.brand.setCursor(enum(Qt, "CursorShape", "PointingHandCursor"))
         self.brand.setToolTip(tr("О модуле"))
-        self.brand.linkActivated.connect(
-            lambda _link: QTimer.singleShot(0, lambda: show_about(self)))
+        self.brand.clicked.connect(
+            lambda _=False: QTimer.singleShot(0, lambda: show_about(self)))
         # Шкала температуры, видна вместе со строкой «Температура».
         self.legend = TemperatureLegend(self.view)
         self.legend.hide()

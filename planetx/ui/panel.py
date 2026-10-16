@@ -10,12 +10,15 @@
 - «Метки» - папка «Мои метки», как в Google Earth. Она есть и пустая,
   двойной щелчок по метке переносит к ней. Строки выделяются по
   несколько, с Ctrl и Shift.
-- «Слои» - одним списком всё, что на глобусе: включённые слои каталога,
-  группы векторной основы, группа «Проект QGIS», основа и рельеф.
-  Кнопка «Добавить данные» ставит на место списка каталог. Решение
-  автора от 12 октября 2026 года. Отметка слоя проекта включает его на
-  глобусе и не меняет видимость на карте. Прозрачность слоя проекта -
-  свойство самого слоя QGIS, решение автора от 28 сентября 2026 года.
+- «Проект QGIS» - слои текущего проекта со своим меню и строкой «Земля
+  над гридами». Отметка слоя проекта включает его на глобусе и не
+  меняет видимость на карте. Прозрачность слоя проекта - свойство
+  самого слоя QGIS, решение автора от 28 сентября 2026 года. Отдельный
+  раздел - решение автора от 17 октября 2026 года.
+- «Слои» - одним списком данные глобуса: включённые слои каталога,
+  группы векторной основы, основа и рельеф. Кнопка «Добавить данные»
+  ставит на место списка каталог. Решение автора от 12 октября
+  2026 года.
 
 Панель только показывает и сообщает сигналами, решает окно.
 """
@@ -738,25 +741,30 @@ class LayerPanel(QWidget):
             item.setCheckState(0, UNCHECKED)
             item.setHidden(True)
             self.extra_items[key] = item
-        # Слои проекта - группа списка, отметка включает слой на глобусе
-        # и не меняет видимость на карте QGIS.
-        self.project_group = QTreeWidgetItem(self.geo, [tr("Проект QGIS")])
-        self.project_group.setIcon(0, QgsApplication.getThemeIcon(
-            "/mActionFileOpen.svg"))
-        self.project_group.setToolTip(0, tr(
-            "Слои текущего проекта QGIS в порядке карты. Отметка "
-            "показывает слой на глобусе, видимость на карте QGIS не "
-            "меняется. Меню слоя - «⋯» справа или правая кнопка."))
-        self.project_group.setFlags(
-            (self.project_group.flags() | CHECKABLE | TRISTATE)
-            & ~DRAG & ~DROP)
-        self.project_group.setExpanded(True)
+        # Слои проекта - свой раздел «Проект QGIS» со своим списком, отметка
+        # включает слой на глобусе и не меняет видимость на карте QGIS. С
+        # 12 октября 2026 года они были группой списка «Слоёв», решение
+        # автора от 17 октября 2026 года - вернуть разделом: у слоёв
+        # проекта свои свойства и своё меню, раздел «богаче».
+        self.project_tree = QTreeWidget(self)
+        self.project_tree.setHeaderHidden(True)
+        self.project_tree.setRootIsDecorated(False)
+        self.project_tree.setItemDelegate(LayerDelegate(self.project_tree))
+        self.project_tree.setContextMenuPolicy(
+            enum(Qt, "ContextMenuPolicy", "CustomContextMenu"))
+        self.project_tree.customContextMenuRequested.connect(
+            lambda point: self._geo_menu(point, self.project_tree))
+        self.project_tree.itemDoubleClicked.connect(self._geo_double_clicked)
+        self.project_tree.itemClicked.connect(
+            lambda item, column: self._geo_clicked(item, column,
+                                                   self.project_tree))
+        self.project_tree.itemChanged.connect(self._geo_changed)
+        self.project_group = self.project_tree.invisibleRootItem()
         # Земля над подземной моделью: ползунок непрозрачности, виден,
         # пока модель есть. Просьба автора от 8 октября 2026 года -
         # прозрачность и невидимость поверхности над гридами.
-        self.ground_item = QTreeWidgetItem(self.geo)
-        self.ground_item.setFlags(enum(Qt, "ItemFlag", "ItemIsEnabled"))
-        ground = QWidget(self.geo)
+        ground = QWidget(self)
+        self.ground_row = ground
         row = QHBoxLayout(ground)
         row.setContentsMargins(0, 0, 4, 0)
         row.addWidget(QLabel(tr("Земля над гридами"), ground))
@@ -780,8 +788,7 @@ class LayerPanel(QWidget):
         under.clicked.connect(
             lambda _=False: self.subsurface_requested.emit())
         row.addWidget(under)
-        self.geo.setItemWidget(self.ground_item, 0, ground)
-        self.ground_item.setHidden(True)
+        ground.setVisible(False)
         # Основа и рельеф - строки наверху списка, как прочие, у обеих
         # меню выбора «▾». Просьба автора от 12 октября 2026 года - «два
         # нижних слоя вверх», «выбор Esri не кнопкой, как все пункты, но
@@ -857,16 +864,27 @@ class LayerPanel(QWidget):
         tour_row.addWidget(self.opacity, 1)
         tour_row.addWidget(self.tour_button)
         upper_layout.addLayout(tour_row)
+        project = QWidget(self)
+        project_layout = QVBoxLayout(project)
+        project_layout.setContentsMargins(0, 0, 0, 0)
+        project_layout.setSpacing(2)
+        project_layout.addWidget(self.project_tree, 1)
+        project_layout.addWidget(ground)
         self.sections = [
             Section("places", tr("Метки"), upper, tr(
                 "Свернуть или развернуть «Мои метки»."), self),
+            Section("project", tr("Проект QGIS"), project, tr(
+                "Слои текущего проекта QGIS в порядке карты. Отметка "
+                "показывает слой на глобусе, видимость на карте QGIS не "
+                "меняется. Меню слоя - «⋯» справа или правая кнопка."),
+                self),
             Section("base", tr("Слои"), self.layers_stack, tr(
                 "Свернуть или развернуть слои на глобусе."), self)]
         split = QSplitter(enum(Qt, "Orientation", "Vertical"), self)
         split.setChildrenCollapsible(False)
         for n, section in enumerate(self.sections):
             split.addWidget(section)
-            split.setStretchFactor(n, (3, 4)[n])
+            split.setStretchFactor(n, (3, 2, 4)[n])
         self.split = split
 
         self.status = QLabel(self)
@@ -1028,7 +1046,7 @@ class LayerPanel(QWidget):
 
     def set_ground(self, shown, alpha=1.0):
         """Строка «Земля над гридами»: видна ли и непрозрачность."""
-        self.ground_item.setHidden(not shown)
+        self.ground_row.setVisible(bool(shown))
         if shown:
             self.ground_slider.blockSignals(True)
             self.ground_slider.setValue(int(round(float(alpha) * 100)))
@@ -1114,7 +1132,7 @@ class LayerPanel(QWidget):
         self.extra_items[BUILDINGS].setDisabled(not earth)
         self.extra_items[INFRA].setDisabled(not earth)
         self.extra_items[CABLES].setDisabled(not earth)
-        self.project_group.setDisabled(not earth)
+        self.project_tree.setDisabled(not earth)
 
     def set_active(self, rows):
         """Включённые слои каталога - строки в начале списка «Слоёв»:
@@ -1354,13 +1372,14 @@ class LayerPanel(QWidget):
         for layer_id, on in states.items():
             self.layer_toggled.emit(layer_id, on)
 
-    def _geo_clicked(self, item, column):
+    def _geo_clicked(self, item, column, tree=None):
         # Строка могла исчезнуть между нажатием и отпусканием кнопки,
         # тогда Qt присылает щелчок без строки.
         if item is None or not item.data(0, MORE_ROLE):
             return
-        rect = self.geo.visualItemRect(item)
-        pos = self.geo.viewport().mapFromGlobal(QCursor.pos())
+        tree = tree or self.geo
+        rect = tree.visualItemRect(item)
+        pos = tree.viewport().mapFromGlobal(QCursor.pos())
         if item.data(0, MORE_ROLE) == MENU_ROW:
             # Строка-выбор: меню по щелчку на названии, флажок рельефа
             # остаётся флажком.
@@ -1374,10 +1393,11 @@ class LayerPanel(QWidget):
         if pos.x() >= rect.right() - MORE_WIDTH:
             self._row_menu(item, QCursor.pos())
 
-    def _geo_menu(self, point):
-        item = self.geo.itemAt(point)
+    def _geo_menu(self, point, tree=None):
+        tree = tree or self.geo
+        item = tree.itemAt(point)
         if item is not None:
-            self._row_menu(item, self.geo.viewport().mapToGlobal(point))
+            self._row_menu(item, tree.viewport().mapToGlobal(point))
 
     def _row_menu(self, item, pos):
         """Меню строки списка «Слоёв» - своё у каждого вида строки."""
@@ -1707,12 +1727,12 @@ class LayerPanel(QWidget):
                   kind=layer_kind(layer))
 
     def project_rows(self):
-        """Строки слоёв проекта в группе «Проект QGIS»."""
+        """Строки слоёв проекта раздела «Проект QGIS»."""
         group = self.project_group
         return [group.child(i) for i in range(group.childCount())]
 
     def set_layers(self, layers, shown):
-        """Слои проекта - группа «Проект QGIS» списка «Слоёв». shown -
+        """Слои проекта - список раздела «Проект QGIS». shown -
         номера отмеченных.
 
         Сигналы при этом не идут. При тех же слоях меняются только
@@ -1721,7 +1741,7 @@ class LayerPanel(QWidget):
         """
         rows = self.project_rows()
         texts = [self._layer_text(layer) for layer in layers]
-        self.geo.blockSignals(True)
+        self.project_tree.blockSignals(True)
         if [r.data(0, LAYER_ID_ROLE) for r in rows] == \
                 [layer.id() for layer in layers] and \
                 [r.text(0) for r in rows] == texts:
@@ -1730,7 +1750,7 @@ class LayerPanel(QWidget):
                     else UNCHECKED
                 if row.checkState(0) != state:
                     row.setCheckState(0, state)
-            self.geo.blockSignals(False)
+            self.project_tree.blockSignals(False)
             return
         self.project_group.takeChildren()
         for layer, text in zip(layers, texts):
@@ -1745,9 +1765,7 @@ class LayerPanel(QWidget):
             item.setFlags((item.flags() | CHECKABLE) & ~DRAG & ~DROP)
             item.setCheckState(0, CHECKED if layer.id() in shown
                                else UNCHECKED)
-        self.project_group.setHidden(not layers)
-        self.project_group.setExpanded(True)
-        self.geo.blockSignals(False)
+        self.project_tree.blockSignals(False)
 
     # События списка.
 
@@ -1932,8 +1950,8 @@ class LayerPanel(QWidget):
             self.place_action.emit("copy", item.data(0, PLACE_ROLE))
 
     def _layer_menu(self, point):
-        """Меню строки слоя проекта под точкой списка «Слоёв»."""
-        self._geo_menu(point)
+        """Меню строки слоя проекта под точкой списка раздела."""
+        self._geo_menu(point, self.project_tree)
 
     def _layer_menu_at(self, layer, pos):
         """Меню слоя проекта: перелёт, прозрачность, трек, рельеф

@@ -34,6 +34,8 @@ except ImportError:  # headless-тесты
     from navigation import Pose
 
 PAUSE = 3.0  # секунд на остановке по умолчанию
+# Пределы множителя скорости перелёта к остановке.
+SPEED_RANGE = (0.25, 4.0)
 # Подпись остановки на кадре проявляется и гаснет за столько секунд,
 # выбор помощника, утверждает автор.
 CAPTION_FADE = 0.6
@@ -66,6 +68,11 @@ class Stop:
     description = ""
     # Слои вида метки core.lookat - строки «Слоёв» остановки или None.
     layers = None
+    # Своя пауза на остановке, секунд, None - пауза тура. Скорость
+    # перелёта к остановке - множитель, больше - быстрее. Просьба автора
+    # от 16 октября 2026 года, остановка тура со своим темпом.
+    pause = None
+    speed = 1.0
 
     def __init__(self, name, lat, lon, distance, heading=0.0, tilt=0.0):
         self.name = name
@@ -247,6 +254,37 @@ def thin(samples):
     return out
 
 
+def pace_text(pace):
+    """Темп остановки (пауза или None, скорость) в поле файла меток
+    и KML: «пауза;скорость», пауза пустая - пауза тура. Пустая строка -
+    темп тура."""
+    if not pace:
+        return ""
+    pause, speed = pace
+    if pause is None and abs(float(speed) - 1.0) < 1e-9:
+        return ""
+    return "{};{}".format("" if pause is None else repr(float(pause)),
+                          repr(float(speed)))
+
+
+def pace_parse(text):
+    """Темп остановки из поля: (пауза или None, скорость) или None."""
+    head, sep, tail = str(text or "").partition(";")
+    if not sep:
+        return None
+    try:
+        pause = float(head) if head.strip() else None
+        speed = float(tail) if tail.strip() else 1.0
+    except ValueError:
+        return None
+    if pause is not None and pause < 0.0:
+        pause = None
+    speed = min(max(speed, SPEED_RANGE[0]), SPEED_RANGE[1])
+    if pause is None and speed == 1.0:
+        return None
+    return pause, speed
+
+
 def clock(seconds):
     """Время тура для панели: «м:сс», с часами - «ч:мм:сс»."""
     total = int(max(0.0, seconds) + 0.5)
@@ -267,18 +305,26 @@ class Tour:
         self.glides = []  # время прилёта и начала проезда
         self.arrivals = []  # время, когда камера встала на остановке
         self.flights = []
+        self.pauses = []  # пауза на каждой остановке
+        self.speeds = []  # множитель времени перелёта к остановке
         t = 0.0
         pose = start
         for stop in self.stops:
             flight = Flight(pose, stop.lat, stop.lon, stop.distance,
                             stop.heading, stop.tilt, fov_y=fov_y)
+            speed = min(max(float(getattr(stop, "speed", 1.0) or 1.0),
+                            SPEED_RANGE[0]), SPEED_RANGE[1])
+            own = getattr(stop, "pause", None)
+            pause = self.pause if own is None else max(0.0, float(own))
             self.starts.append(t)
             self.flights.append(flight)
-            t += flight.duration
+            self.speeds.append(speed)
+            self.pauses.append(pause)
+            t += flight.duration / speed
             self.glides.append(t)
             t += stop.glide
             self.arrivals.append(t)
-            t += self.pause
+            t += pause
             pose = stop.end_pose()
         self.duration = t
         self.start = start.copy()
@@ -293,7 +339,7 @@ class Tour:
         if i < 0:
             return None
         begin = self.glides[i]
-        end = self.arrivals[i] + self.pause
+        end = self.arrivals[i] + self.pauses[i]
         if not begin <= t <= end or end <= begin:
             return None
         fade = min(CAPTION_FADE, (end - begin) / 3.0)
@@ -318,5 +364,6 @@ class Tour:
         i = self.index_at(t)
         stop = self.stops[i]
         if t < self.glides[i]:
-            return self.flights[i].pose_at(t - self.starts[i])
+            return self.flights[i].pose_at((t - self.starts[i])
+                                           * self.speeds[i])
         return stop.pose_at(t - self.glides[i])

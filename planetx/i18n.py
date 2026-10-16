@@ -3883,6 +3883,21 @@ EN = {
     "наклон и включённые строки раздела «Слои».":
         "Take the current globe view: look point, range, heading, tilt "
         "and the rows switched on in the Layers section.",
+    "как у тура": "as in the tour",
+    "Окно с полными подписями, ссылками и условиями всех "
+    "источников, которые показывает глобус.":
+        "The window with the full credits, links and terms of all sources "
+        "the globe shows.",
+    "Пауза в туре": "Tour pause",
+    "Скорость перелёта": "Flight speed",
+    "Сколько секунд камера стоит на этой остановке тура. "
+    "«Как у тура» - пауза с панели тура.":
+        "How many seconds the camera stays at this tour stop. As in the "
+        "tour - the pause from the tour panel.",
+    "Во сколько раз перелёт тура к этой метке быстрее обычного. "
+    "Меньше единицы - медленнее, плавнее для показа.":
+        "How many times faster than usual the tour flies to this "
+        "placemark. Below one - slower, smoother for a show.",
     "Слои глобуса со снимка, включено строк {count}":
         "Globe layers from the snapshot, rows switched on: {count}",
     "Строки раздела «Слои», которые были включены при снимке вида. "

@@ -418,6 +418,29 @@ class PlaceProperties(QDialog):
             "так остановка тура показывает свои слои. Снимок текущего "
             "вида запоминает их заново."))
         form.addRow("", self.keep_layers)
+        pause, speed = getattr(self.place, "pace", None) or (None, 1.0)
+        self.stop_pause = QDoubleSpinBox(group)
+        # Наименьшее значение - «как у тура», пауза с панели тура.
+        self.stop_pause.setRange(-1.0, 120.0)
+        self.stop_pause.setDecimals(1)
+        self.stop_pause.setSingleStep(1.0)
+        self.stop_pause.setSuffix(tr(" с"))
+        self.stop_pause.setSpecialValueText(tr("как у тура"))
+        self.stop_pause.setValue(-1.0 if pause is None else pause)
+        self.stop_pause.setToolTip(tr(
+            "Сколько секунд камера стоит на этой остановке тура. "
+            "«Как у тура» - пауза с панели тура."))
+        form.addRow(tr("Пауза в туре"), self.stop_pause)
+        self.stop_speed = QDoubleSpinBox(group)
+        self.stop_speed.setRange(*tour.SPEED_RANGE)
+        self.stop_speed.setDecimals(2)
+        self.stop_speed.setSingleStep(0.25)
+        self.stop_speed.setPrefix("×")
+        self.stop_speed.setValue(speed)
+        self.stop_speed.setToolTip(tr(
+            "Во сколько раз перелёт тура к этой метке быстрее обычного. "
+            "Меньше единицы - медленнее, плавнее для показа."))
+        form.addRow(tr("Скорость перелёта"), self.stop_speed)
         row = QWidget(group)
         buttons = QHBoxLayout(row)
         buttons.setContentsMargins(0, 0, 0, 0)
@@ -555,7 +578,10 @@ class PlaceProperties(QDialog):
                                      if self.look.isChecked() else None),
                "layers": lookat.layers_text(
                    self.layers if self.look.isChecked()
-                   and self.keep_layers.isChecked() else None)}
+                   and self.keep_layers.isChecked() else None),
+               "pace": tour.pace_text((
+                   None if self.stop_pause.value() < 0.0
+                   else self.stop_pause.value(), self.stop_speed.value()))}
         if self.color is not None:
             out["color"] = _color_text(_rgba(self.color.color()))
         if self.width is not None:

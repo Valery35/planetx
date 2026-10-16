@@ -188,6 +188,18 @@ void main() {
 }
 """
 
+CROSS_FRAGMENT = """#version 330 core
+// Прежний кадр поверх нового при смене подложки и дня темы.
+uniform sampler2D u_image;
+uniform vec2 u_viewport;
+uniform float u_alpha;
+out vec4 frag_color;
+void main() {
+    vec3 old = texture(u_image, gl_FragCoord.xy / u_viewport).rgb;
+    frag_color = vec4(old, u_alpha);
+}
+"""
+
 BACKDROP_VERTEX = """#version 330 core
 // Вершины коробки фона уже в координатах отсечения, их считает
 // процессор в double (core.subsurface.backdrop_box).

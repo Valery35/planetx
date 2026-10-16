@@ -275,11 +275,13 @@ REFRESH_DELAY = 300
 OPACITY_DELAY = 120
 PANEL_WIDTH = 300  # ширина левой панели при открытии, пикселей
 MARGIN = 8  # отступ панели значков и подписи от края вида
-# Подпись источников - одна ссылка на окно «Источники данных», без синего.
-CREDIT_LINK = ('<a href="sources" style="color: #202020; '
+# Подпись источников - неяркий светлый текст с тенью без плашки, как
+# у Google Earth, просьба автора от 17 октября 2026 года. Вся строка -
+# одна ссылка на окно «Источники данных» без вида ссылки.
+CREDIT_LINK = ('<a href="sources" style="color: #e4e4e4; '
                'text-decoration: none;">{}</a>')
-ATTRIBUTION_STYLE = ("QLabel { background: rgba(255, 255, 255, 190); "
-                     "padding: 1px 4px; border-radius: 3px; }")
+ATTRIBUTION_STYLE = "QLabel { background: transparent; padding: 1px; }"
+BRAND_STYLE = "QToolButton { background: transparent; border: none; }"
 
 
 def imagery_preparer(store):
