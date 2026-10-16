@@ -18,8 +18,8 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 from qgis.utils import iface
 
 from ... import journal
-from ...core import (basemap, clouds, temperature, flow as flow_core, quakes,
-                     themes)
+from ...core import (basemap, clouds, fields, temperature,
+                     flow as flow_core, quakes, themes)
 from ...core.sync import ground_size, view_box, inside as in_box
 from ..flow import CURRENTS_ATTRIBUTION
 from ...i18n import is_russian, tr
@@ -262,6 +262,8 @@ class StateMixin:
             self._set_osm_mines(on)
         elif key == "plants":
             self._set_plants(on)
+        elif key == "volcanoes":
+            self._set_volcanoes(on)
         elif key == "infra_osm":
             self._set_infra(on)
         elif key == "cables":
@@ -280,8 +282,12 @@ class StateMixin:
             self._set_plates(on)
         elif key == "magpoles":
             self._set_poles(on)
-        elif key == "emag":
-            self._set_emag(on)
+        elif key == "magdecl":
+            self._set_magdecl(on)
+        elif key == "platemotion":
+            self._set_platemotion(on)
+        elif key in fields.FIELDS:
+            self._set_field(key, on)
         elif key == "geoid":
             self._set_geoid(on)
         elif key == "satellites":
@@ -466,6 +472,15 @@ class StateMixin:
                 "source")] + [("capacity_mw", "real")]
             rows = [(layer.data.text(int(layer.order[n])) + [""] * 6)[:6]
                     + [float(layer.data.capacity[layer.order[n]])]
+                    for n in index]
+        elif key == "volcanoes":
+            fields = [(name, "str") for name in (
+                "number", "name", "type", "country", "setting",
+                "evidence")] + [("elevation_m", "real"),
+                                ("last_eruption", "real")]
+            rows = [(layer.data.text(int(layer.order[n])) + [""] * 6)[:6]
+                    + [float(layer.data.elevation[layer.order[n]]),
+                       float(layer.data.last[layer.order[n]])]
                     for n in index]
         elif key == "quakes":
             fields = [("place", "str"), ("mag", "real"),

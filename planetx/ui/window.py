@@ -23,7 +23,7 @@ from qgis.PyQt.QtWidgets import QLabel, QSplitter, QVBoxLayout, QWidget
 from qgis.utils import iface
 
 from .. import journal
-from ..core import ellipsoid, emag, geoid, paleo, infra, mining, themes
+from ..core import ellipsoid, fields, geoid, paleo, infra, mining, themes
 from ..core.coords import FORMATS as COORD_FORMATS
 from ..core.geocode import SEARCH_INTERVAL
 from ..core.planets import EARTH_PLANET
@@ -45,7 +45,8 @@ from .layer_labels import LayerLabels
 from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
-                     CurrentLegend, EmagLegend, InfraLegend, PlantLegend)
+                     CurrentLegend, FieldLegend, InfraLegend, PlantLegend,
+                     VolcanoLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
 from .handles import DrawVertices, Handles
@@ -193,6 +194,10 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.plant_legend = PlantLegend(self.view)
         self.plant_legend.hide()
         self.plant_legend.closer = lambda: self.set_extra("plants", False)
+        self.volcano_legend = VolcanoLegend(self.view)
+        self.volcano_legend.hide()
+        self.volcano_legend.closer = \
+            lambda: self.set_extra("volcanoes", False)
         self.infra_legend = InfraLegend(self.view)
         self.infra_legend.hide()
         self.infra_legend.closer = lambda: self.set_extra("infra_osm", False)
@@ -222,7 +227,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.deposit_legend,
-                       self.plant_legend, self.infra_legend,
+                       self.plant_legend, self.volcano_legend,
+                       self.infra_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -318,6 +324,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Электростанции WRI (core/plants.py): файл профиля, загрузка
         # архива и разбор в рабочем потоке.
         self.plant_data = None
+        # Вулканы GVP (core/volcanoes.py): файл профиля, загрузка.
+        self.volcano_data = None
+        self._volcano_reply = None
         self._plant_reply = None
         self._plant_job = None
         self._osm_timer = QTimer(self)
@@ -340,12 +349,23 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Подводные кабели OSM (core/cables.py), файл data/cables.json.
         self.cables_data = None
         self.geomag = None  # (модель IGRF, таблицы полюсов), core/geomag
-        # Адрес тайлов магнитных аномалий, шаги проверки ставят локальную
-        # копию planetx-terrain.
-        self.emag_url = emag.TILE_URL
+        # Линии склонения: (год, линии) и подписи.
+        self._decl_cache = None
+        self._decl_marks = []
+        # Скорости плит (core/platemotion.py): модель, стрелки, подписи.
+        self.plate_motion = None
+        self.motion_shapes = []
+        self._motion_marks = []
+        self._motion_key = None
+        # Адреса тайлов карт значений (core/fields.py), шаги проверки
+        # ставят локальную копию planetx-terrain.
+        self.field_urls = {key: fields.url(f)
+                           for key, f in fields.FIELDS.items()}
         self.geoid_url = geoid.TILE_URL
-        self._emag_value = None  # (точка, значение нТл или None, ошибка)
-        self._emag_reply = None
+        self._field_shown = None  # ключ карты на глобусе
+        # (ключ, точка, значение или None, ошибка) - значение под щелчком.
+        self._field_value = None
+        self._field_reply = None
         self.cable_layer = None
         self._slab_replies = {}
         self.slab_errors = {}
@@ -748,6 +768,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.cutaway_stretch = self.cutaway_stretch()
         self.view.wedge_stretch = self.panel.cutaway_stretch
         self.panel.cutaway_stretch_changed.connect(self.set_cutaway_stretch)
+        self.tomo = None
+        self._tomo_reply = None
+        self._tomo_job = None
+        self.panel.cutaway_tomo = self.cutaway_tomo()
+        self.panel.cutaway_tomo_changed.connect(self.set_cutaway_tomo)
         self._opacity_overlay = QTimer(self)
         self._opacity_overlay.setSingleShot(True)
         self._opacity_overlay.setInterval(OPACITY_PAUSE)
@@ -774,10 +799,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.legend_panel.add(self.current_legend)
         self.current_legend.closer = lambda: self.set_extra("currents",
                                                             False)
-        self.emag_legend = EmagLegend(self.view)
-        self.emag_legend.hide()
-        self.legend_panel.add(self.emag_legend)
-        self.emag_legend.closer = lambda: self.set_extra("emag", False)
+        self.field_legend = FieldLegend(self.view)
+        self.field_legend.hide()
+        self.legend_panel.add(self.field_legend)
+        self.field_legend.closer = lambda: self._field_shown and \
+            self.set_extra(self._field_shown, False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
@@ -791,6 +817,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._value_field = None
         self._value_key = None
         self.view.changed.connect(self._update_values)
+        self.view.changed.connect(self._update_plate_arrows)
         self.view.changed.connect(self._update_contour_legend)
         self.view.changed.connect(self._overpass_view_changed)
         for key, on in self.extras.items():
@@ -836,7 +863,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self._parcels = None
             if reply is not None:
                 reply.abort()
-            self._drop_emag()
+            self._drop_field()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

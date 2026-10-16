@@ -573,3 +573,46 @@ def segments(z, level):
         second = np.where(high[:, None, None], p[:, [2, 3]], p[:, [1, 2]])
         out += [first, second]
     return np.concatenate(out) if out else np.zeros((0, 2, 2))
+
+
+def chain(pieces, digits=6):
+    """Отрезки segments (n, 2, 2) в ломаные: список массивов (k, 2).
+    Концы соседних ячеек на общем ребре совпадают, они узнаются по
+    округлению до digits знаков."""
+    pieces = np.asarray(pieces, dtype=np.float64)
+    if len(pieces):
+        # Узел ровно на уровне даёт отрезки нулевой длины.
+        rounded = np.round(pieces, digits)
+        pieces = pieces[np.any(rounded[:, 0] != rounded[:, 1], axis=1)]
+    if not len(pieces):
+        return []
+    keys = [tuple(np.round(p, digits)) for p in pieces.reshape(-1, 2)]
+    ends = {}
+    for i, key in enumerate(keys):
+        ends.setdefault(key, []).append(i)
+    used = np.zeros(len(pieces), dtype=bool)
+
+    def walk(end):
+        """Точки от конца end (номер конца 2·отрезок + 0 или 1) дальше
+        по соседям."""
+        out = []
+        while True:
+            other = end ^ 1
+            out.append(pieces[other // 2, other % 2])
+            nxt = [e for e in ends[keys[other]] if e != other
+                   and not used[e // 2]]
+            if not nxt:
+                return out
+            end = nxt[0]
+            used[end // 2] = True
+
+    lines = []
+    for start in range(len(pieces)):
+        if used[start]:
+            continue
+        used[start] = True
+        forward = walk(2 * start)
+        backward = walk(2 * start + 1)
+        points = backward[::-1] + forward
+        lines.append(np.array(points))
+    return lines

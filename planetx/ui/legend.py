@@ -17,8 +17,9 @@ from qgis.PyQt.QtGui import (QColor, QFontMetrics, QLinearGradient, QPainter,
                              QPen)
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
-from ..core import (contours, cutaway, deposits, emag, fires, flow, infra,
-                    insolation, plants, quakes, slope, temperature)
+from ..core import (contours, cutaway, deposits, fields, fires, flow, infra,
+                    insolation, plants, quakes, slope, temperature,
+                    tomography, volcanoes)
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -109,17 +110,30 @@ class TemperatureLegend(Closable, QWidget):
         painter.end()
 
 
-class EmagLegend(Closable, QWidget):
-    """Шкала магнитных аномалий EMAG2v3, нТл (core/emag.py)."""
+def field_titles():
+    """Заголовки шкал карт значений (core/fields.py) по ключам."""
+    return {"emag": tr("Магнитная аномалия, нТл"),
+            "seafloor_age": tr("Возраст океанического дна, млн лет"),
+            "gravity": tr("Аномалия силы тяжести, мГал"),
+            "heatflow": tr("Тепловой поток, мВт/м²")}
 
-    TICKS = (-250, -120, 0, 120, 250)
+
+class FieldLegend(Closable, QWidget):
+    """Шкала карты значений геофизики (core/fields.py) - магнитных
+    аномалий, возраста дна, силы тяжести, теплового потока."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.title = tr("Магнитная аномалия, нТл")
+        self.field = fields.FIELDS["emag"]
+        self.title = ""
         line = QFontMetrics(self.font()).height()
         self.setFixedSize(BAR_WIDTH + 2 * PAD + 8,
                           line * 2 + BAR_HEIGHT + 2 + PAD)
+
+    def set_field(self, field):
+        self.field = field
+        self.title = field_titles().get(field.key, field.key)
+        self.update()
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -131,7 +145,7 @@ class EmagLegend(Closable, QWidget):
         painter.setPen(TEXT)
         painter.drawText(PAD, top + metrics.ascent(), self.title)
         bar = QRectF(PAD + 4, top + line + 1, BAR_WIDTH, BAR_HEIGHT)
-        stops = emag.STOPS
+        stops = self.field.stops
         gradient = QLinearGradient(bar.left(), 0, bar.right(), 0)
         for value, rgb in stops:
             gradient.setColorAt(temperature.share(stops, value),
@@ -140,11 +154,13 @@ class EmagLegend(Closable, QWidget):
         painter.setBrush(gradient)
         painter.drawRect(bar)
         painter.setPen(TEXT)
-        for tick in self.TICKS:
+        signed = stops[0][0] < 0
+        for tick in self.field.ticks:
             x = bar.left() + temperature.share(stops, tick) * BAR_WIDTH
             painter.drawLine(int(x), int(bar.bottom()), int(x),
                              int(bar.bottom()) + 2)
-            text = "{:+d}".format(tick) if tick else "0"
+            text = "{:+g}".format(tick) if tick and signed \
+                else "{:g}".format(tick)
             width = metrics.horizontalAdvance(text)
             painter.drawText(int(x - width / 2),
                              int(bar.bottom()) + 2 + metrics.ascent(), text)
@@ -516,6 +532,27 @@ class PlantLegend(_RowsLegend):
         return [(f[2], names[f[0]], "dot", 0.0) for f in plants.FUELS]
 
 
+def period_names():
+    """Время последнего извержения вулкана по core.volcanoes.PERIODS."""
+    return {"recent": tr("Извергался с 1900 года"),
+            "historic": tr("Извергался в 1500-1899 годах"),
+            "holocene": tr("Извергался до 1500 года"),
+            "unknown": tr("Дата извержения неизвестна")}
+
+
+class VolcanoLegend(_RowsLegend):
+    """Шкала вулканов: цвет - время последнего извержения."""
+
+    def __init__(self, parent=None):
+        self.title = tr("Вулканы голоцена GVP")
+        self.footer = tr("Размер точки - высота вулкана")
+        super().__init__(parent)
+
+    def rows(self):
+        names = period_names()
+        return [(p[2], names[p[0]], "dot", 0.0) for p in volcanoes.PERIODS]
+
+
 class CurrentLegend(_RowsLegend):
     """Шкала струек течений: цвет - скорость, м/с."""
 
@@ -661,6 +698,7 @@ class CutawayLegend(QWidget):
         self.line = QFontMetrics(self.font()).height()
         self.crust = False
         self.oceanic = False
+        self.tomo = False
         self.missing = ""
         self.gain = 1.0
         self.slabs = False
@@ -674,6 +712,11 @@ class CutawayLegend(QWidget):
     def set_gain(self, gain):
         """Растяжение коры разреза, строка под заголовком при gain > 1."""
         self.gain = float(gain)
+        self._rows()
+
+    def set_tomo(self, on):
+        """Мантия по томографии: строки dVs вместо оболочек мантии."""
+        self.tomo = bool(on)
         self._rows()
 
     def set_missing(self, reason):
@@ -710,8 +753,16 @@ class CutawayLegend(QWidget):
                         rows.append((title.format(parts[key]), colors[key]))
         if self.slabs:
             rows.append((tr("Плита Slab2"), cutaway.SLAB_COLOR))
+        if self.tomo:
+            rows += [(tr("Мантия медленнее PREM на 2 % и больше"),
+                      tomography.STOPS[0][1]),
+                     (tr("Мантия как PREM"), tomography.STOPS[2][1]),
+                     (tr("Мантия быстрее PREM на 2 % и больше"),
+                      tomography.STOPS[-1][1])]
         for key, low, high, color in reversed(cutaway.SHELLS):
             if key == "crust" and self.crust:
+                continue
+            if self.tomo and key in cutaway.MANTLE:
                 continue
             if key == "upper_mantle" and self.crust:
                 text = tr("{}, Мохо-{:g}").format(names[key], top - low)

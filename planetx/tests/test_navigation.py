@@ -332,6 +332,41 @@ class TestLookAndPan(unittest.TestCase):
         right = nav.pan(nav.Pose(*PERM, 1000.0, 0.0, 0.0), 0.0, 1000.0)
         self.assertGreater(right.lon, PERM[1])
 
+    def test_shift_moves_view_along_screen(self):
+        # Ctrl с левой кнопкой: точка взгляда идёт за курсором,
+        # направление взгляда прежнее, глаз на том же расстоянии.
+        for distance, heading, tilt, dx, dy in (
+                (1.5e7, 330.0, 25.0, 300.0, -250.0),
+                (2.0e5, 20.0, 50.0, -120.0, 80.0),
+                (3000.0, 0.0, 0.0, 40.0, 40.0)):
+            n = navigator(distance, heading, tilt)
+            before = n.pose.copy()
+            target, _ = nav.Pose(before.lat, before.lon, 0.0).eye_rotation()
+            rotation = n.camera.rotation.copy()
+            eye = n.camera.eye.copy()
+            self.assertTrue(n.shift_by(dx, dy))
+            n.pose.apply(n.camera)
+            # Кадр не поворачивается: оси камеры прежние, глаз ушёл
+            # в плоскости экрана.
+            self.assertLess(float(np.abs(n.camera.rotation
+                                         - rotation).max()), 1e-9)
+            self.assertLess(abs(float((n.camera.eye - eye)
+                                      @ rotation[:, 2])), 1e-3)
+            p = pixel(n.camera, target)
+            self.assertLess(float(np.linalg.norm(
+                p - [W / 2.0 + dx, H / 2.0 + dy])), 1e-3)
+            # Следующий сдвиг от позы с креном тоже не поворачивает кадр.
+            self.assertTrue(n.shift_by(-dx, -dy))
+            n.pose.apply(n.camera)
+            self.assertLess(float(np.abs(n.camera.rotation
+                                         - rotation).max()), 1e-9)
+
+    def test_shift_off_the_globe_is_refused(self):
+        n = navigator(2.0e7)
+        before = (n.pose.lat, n.pose.lon)
+        self.assertFalse(n.shift_by(20.0 * W, 0.0))
+        self.assertEqual((n.pose.lat, n.pose.lon), before)
+
     def test_zoom_now_keeps_point(self):
         n = navigator(2.0e5, 20.0, 30.0)
         n.pose.apply(n.camera)

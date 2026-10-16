@@ -257,6 +257,26 @@ class TestPalette(unittest.TestCase):
         self.assertGreater(far, near)
 
 
+class TestChain(unittest.TestCase):
+
+    def test_circle_and_open_line_join(self):
+        # Конус: изолиния - одно кольцо. Наклонная плоскость - одна
+        # ломаная через всю сетку.
+        r, c = np.mgrid[0:21, 0:21].astype(np.float64)
+        cone = np.hypot(r - 10.0, c - 10.0)
+        lines = ct.chain(ct.segments(cone, 5.0))
+        self.assertEqual(len(lines), 1)
+        radius = np.hypot(lines[0][:, 0] - 10.0, lines[0][:, 1] - 10.0)
+        self.assertLess(float(np.abs(radius - 5.0).max()), 0.3)
+        ramp = r + 0.5 * c
+        lines = ct.chain(ct.segments(ramp, 7.3))
+        self.assertEqual(len(lines), 1)
+        self.assertGreater(len(lines[0]), 10)
+
+    def test_empty(self):
+        self.assertEqual(ct.chain(np.zeros((0, 2, 2))), [])
+
+
 class TestSegments(unittest.TestCase):
 
     def test_cone_levels(self):

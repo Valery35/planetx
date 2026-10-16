@@ -83,6 +83,7 @@ class IdentifyMixin:
         return bool(self._identify_deposits(px, py)
                     or self._identify_deposits(px, py, osm=True)
                     or self._identify_plants(px, py)
+                    or self._identify_volcanoes(px, py)
                     or self._infra_under(px, py)
                     or self._identify_quakes(px, py)
                     or self._identify_fires(px, py)
@@ -135,7 +136,7 @@ class IdentifyMixin:
         self._mark("{:.5f}, {:.5f}".format(lat, lon), lat, lon)
         self._identify_at = (lat, lon, height, tolerance, px, py, found)
         self._ask_parcels(lat, lon)
-        self._ask_emag(lat, lon)
+        self._ask_field(lat, lon)
         self._show_identified()
 
     # Сведения об участках кадастра Росреестра (core/cadastre.py).
@@ -224,6 +225,7 @@ class IdentifyMixin:
         groups += self._identify_deposits(px, py, osm=True)
         groups += self._identify_mining(lat, lon)
         groups += self._identify_plants(px, py)
+        groups += self._identify_volcanoes(px, py)
         groups += self._identify_infra(lat, lon, tolerance)
         groups = self._identify_satellites(px, py) + groups
         under = self.subsurface.identify(
@@ -233,7 +235,7 @@ class IdentifyMixin:
         groups += self._identify_plates(lat, lon, tolerance)
         groups += self._identify_cables(lat, lon, tolerance)
         groups += self._identify_magnetic(lat, lon)
-        groups += self._identify_emag()
+        groups += self._identify_field()
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)

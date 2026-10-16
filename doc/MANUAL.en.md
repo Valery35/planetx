@@ -137,7 +137,14 @@ Navigation uses the mouse, the keys and the navigation controls.
 | Right button drag | Up - closer, down - farther, toward the press point |
 | Right click | The menu of the point under the cursor |
 | Middle button or left with Shift | Turn and tilt around the look-at point |
-| Left button with Ctrl | Looks around, the eye stays in place |
+| Left button with Ctrl | Moves the view along the screen, the view direction stays |
+| Left button with Ctrl and Shift | Looks around, the eye stays in place |
+
+Moving the view with Ctrl drags the picture under the cursor like a
+sheet of paper and does not turn the Earth around its centre. This way
+a part of the Earth cutaway at the window edge comes to the middle under
+the same view angle. After a sideways move the frame can be turned
+relative to north, the N and R keys put north up again.
 
 The camera does not go lower than 50 m above the terrain. The tilt is
 limited to 85°. While the ruler, drawing or identify is on, a double
@@ -427,9 +434,10 @@ of the list, the panel grows wider for that time, the globe stays
 visible. The ← arrow brings the list back. The categories stand on the
 left: Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Atmosphere,
-Clouds, Sun, Satellites), Inside the Earth (Earthquakes, Plate boundaries, Magnetic
-poles, Magnetic anomalies, Geoid, Mineral
-deposits, Mining areas, OSM mines and quarries, Earth cutaway,
+Clouds, Sun, Satellites), Inside the Earth (Earthquakes, Plate
+boundaries, Plate motion, Volcanoes, Magnetic poles, Declination lines,
+Magnetic anomalies, Gravity anomalies, Geoid, Ocean floor age, Heat flow,
+Mineral deposits, Mining areas, OSM mines and quarries, Earth cutaway,
 Paleogeography), Energy (Power plants, Power lines and pipelines,
 Submarine cables), Terrain analysis (Slope, Aspect) and Satellites -
 the satellite groups. The search field looks for a name and a
@@ -590,9 +598,43 @@ IGRF-14 model up to 2030. A click on the globe in the Identify mode
 shows in the Magnetic field group the declination - the angle between
 compass north and geographic north, the inclination and the field
 intensity at the point for the slider year. The field is computed with
-the IGRF-14 model for 1900-2030, for earlier years the window shows
-only the year. From 1900 to 2025 the north pole shifted 2475 km in a
-straight line, from the Canadian Arctic towards Siberia.
+the IGRF-14 model for 1900-2030 and with the gufm1 model (Jackson et
+al., 2000) for 1590-1899. The gufm1 file, about 1 MB, is downloaded from
+the authors' site on the first request for a year before 1900, until it
+arrives the window shows only the year. From 1900 to 2025 the north
+pole shifted 2475 km in a straight line, from the Canadian Arctic
+towards Siberia.
+
+The Declination lines layer shows lines of equal magnetic declination
+every 10° for the year of the right handle of the time slider. The
+slider opens by itself, as for the poles. Red lines mean east
+declination, blue lines west declination, the green line zero
+declination, where the compass points to geographic north. Labels on the
+lines give the declination in degrees. The lines converge at the
+magnetic poles. They are computed with the same gufm1 and IGRF-14
+models on a 2° grid, from 1590 to 2030. In 1800 the declination near
+London was about 24° west, by 2020 it came close to zero.
+
+The Plate motion layer shows arrows of the motion of lithospheric plates
+after the NNR-MORVEL56 model (Argus, Gordon and DeMets, 2011) - the velocity
+relative to the mean motion of all plates. The arrows stand at grid
+nodes, about seven across the view, the grid step changes with the eye
+height. The arrow length grows with the speed, the number at the arrow
+start is the speed in mm/yr. The plate at a point is found from the
+PB2002 outlines. The Pacific plate near Hawaii moves northwest at about
+70 mm/yr, the Eurasian plate at about 25 mm/yr. A click in the Identify
+mode shows the plate, speed and direction of motion in the Place group.
+
+The Volcanoes layer shows about 1200 volcanoes that erupted during the
+last 12 thousand years, after the list of the Global Volcanism Program
+of the Smithsonian Institution. The point colour shows the time of the
+last eruption. A red point means an eruption after 1900, orange - from
+1500 to 1899, yellow - earlier, grey - the time is unknown. The point
+size grows with the volcano height. The legend stands in the lower left
+corner of the view. A click on a point shows the name, volcano type,
+height, year of the last eruption, tectonic setting and a link to the
+volcano page on the GVP site. The list is downloaded on the first
+switch-on, about 2 MB, and kept as a file in the QGIS profile.
 
 The Magnetic anomalies layer shows the departure of the Earth magnetic
 field from the normal one after the NOAA NCEI EMAG2v3 grid at 4 km above
@@ -605,6 +647,35 @@ survey the layer is empty. A click in the Identify mode shows the value
 at the point, near Kursk about +270 nT. The tiles lie in the
 planetx-terrain repository, about 50 MB for the whole world, and load as
 they are shown.
+
+The Gravity anomalies, Ocean floor age and Heat flow layers are value
+maps, like the magnetic anomalies. The globe shows one value map at a
+time, switching on another one removes the previous one. Each has its
+own legend in the corner of the view, a click in the Identify mode
+shows the value at the point. The tiles lie in the planetx-terrain
+repository and load as they are shown.
+
+The Gravity anomalies layer shows the free-air gravity anomaly - the
+departure of gravity from the normal one after the XGM2019e model
+(Zingerle et al., 2020), computed to degree 719, a step of about 28 km.
+Red places mean gravity above normal, blue below normal, the legend runs
+from -200 to +200 mGal. Over deep-sea trenches the anomaly drops to
+-300 mGal, near the Mariana Trench to about -305 mGal, over Hawaii it
+rises to +370 mGal. Seamounts show as red spots. The Bouguer anomaly,
+corrected for the relief, is not shown.
+
+The Ocean floor age layer shows the age of the oceanic crust after the
+grid of Seton et al. 2020, a 0.1° step. Young floor at mid-ocean ridges
+is red, old floor at ocean margins is blue and purple, the oldest
+floor, about 180 Ma, lies in the western Pacific. Land and continental
+crust are not coloured.
+
+The Heat flow layer shows the heat flow from the interior through the
+Earth's surface in mW/m² on a 0.5° grid built by kriging from 91
+thousand measurements of the IHFC 2024 database. Blue places are cold
+old shields, red ones are rifts, mid-ocean ridges and volcanic areas,
+near Yellowstone about 180 mW/m². Far from measurements the grid is
+smoothed.
 
 The Geoid layer shows the shape of the geoid - the Earth level surface
 from which heights above sea level are counted - after the NGA EGM2008
@@ -735,7 +806,16 @@ from the site of its authors when the row is first switched on, until
 then the crust is the 24.4 km PREM layer. If the model has not
 arrived, the first row of the scale names the reason, and the crust
 stays a layer of constant thickness. The next time the row is switched
-on, the model is requested again. The crust layers can be told
+on, the model is requested again. The received archive is saved to the
+PlanetX folder of the QGIS profile, later sessions take it from there
+without the network. If the authors' site does not answer, the archive
+crust1.0.tar.gz can be downloaded with a browser from
+https://igppweb.ucsd.edu/~gabi/crust1/crust1.0.tar.gz and put into this
+folder under the same name, then the Earth cutaway row is switched off
+and on. QGIS opens the profile folder with the menu item Settings -
+User Profiles - Open Active Profile Folder, the PlanetX folder lies in
+it.
+The crust layers can be told
 apart up close, where the depths on the faces are true. As the camera
 moves away, depths to 400 km are stretched so that the crust stays
 visible. At the surface the stretch reaches 8 times, towards 400 km
@@ -744,6 +824,16 @@ factor, earthquake foci are stretched the same way. The Stretch the
 crust item of the «⋯» menu of the Earth cutaway row in the Layers
 section turns the stretch off, then all depths are true at any
 distance.
+The Mantle tomography item of the same menu colours the mantle on the
+faces after seismic tomography - the deviation of the shear wave speed
+from the PREM model after the SEISGLOB2 model (Durand et al., 2017).
+Red mantle is slower and usually hotter, blue mantle is faster and
+colder, the legend runs from -2 to +2 %. Slow columns show under Iceland
+and Hawaii, a fast sinking slab under Japan, and two large slow regions
+at the core boundary under Africa and the Pacific. The model is
+downloaded from the EarthScope site on the first switch-on, about 28 MB,
+and kept as a file in the QGIS profile. The crust and the core on the
+faces keep their colours.
 Labels of
 places in the removed sector are not shown. The sector is placed anew
 each time the row is switched on. The corners of the sector are

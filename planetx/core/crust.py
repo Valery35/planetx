@@ -39,6 +39,7 @@ import tarfile
 import numpy as np
 
 URL = "https://igppweb.ucsd.edu/~gabi/crust1/crust1.0.tar.gz"
+FILE = "crust1.0.tar.gz"  # имя архива в папке PlanetX профиля QGIS
 MEMBER = "crust1.bnds"
 CITATION = ("CRUST1.0, Laske, Masters, Ma, Pasyanos, 2013",
             "https://igppweb.ucsd.edu/~gabi/crust1.html")

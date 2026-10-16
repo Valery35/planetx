@@ -2486,6 +2486,33 @@ def _send_key(view, name, mods=None):
         _qt(QEvent, "Type", "KeyPress"), _qt(Qt, "Key", name), mods))
 
 
+@check(1000)
+def crust_file():
+    # Модель коры из архива в профиле QGIS: после первой загрузки она
+    # записана туда, следующий запрос в сеть не идёт. Архив можно
+    # положить вручную - вопрос пользователя Ивана от 16 октября 2026
+    # года. Без архива шаг сначала ждёт загрузки из сети, до 60 с.
+    window = state["window"]
+    path = window._crust_path()
+    if not os.path.isfile(path):
+        if "crust_wait" not in state:
+            state["crust_wait"] = time.monotonic()
+            window.crust = None
+            window.crust_error = None
+            window._want_crust()
+        if time.monotonic() - state["crust_wait"] < 60.0:
+            return 1000
+    out = {"file": os.path.isfile(path),
+           "size": os.path.getsize(path) if os.path.isfile(path) else 0}
+    window.crust = None
+    window.crust_error = None
+    window._want_crust()
+    out["loaded"] = window.crust is not None
+    out["network"] = window._crust_reply is not None
+    out["vp"] = window.crust is not None and window.crust.vp is not None
+    result["crust_file"] = out
+
+
 @check(3000)
 def ge_nav():
     # Навигация Google Earth: двойные щелчки, правая кнопка, Ctrl,
@@ -2534,15 +2561,46 @@ def ge_nav():
     out["right_drag_up"] = round(nav.pose.distance, 1)
     reset()
     eye0, _ = nav.pose.eye_rotation()
-    _send_mouse(view, "MouseButtonPress", cx, cy, left, left, ctrl)
-    _send_mouse(view, "MouseMove", cx + 50, cy - 20, none, left, ctrl)
+    both = ctrl | shift
+    _send_mouse(view, "MouseButtonPress", cx, cy, left, left, both)
+    _send_mouse(view, "MouseMove", cx + 50, cy - 20, none, left, both)
     _send_mouse(view, "MouseButtonRelease", cx + 50, cy - 20, left, none,
-                ctrl)
+                both)
     eye1, _ = nav.pose.eye_rotation()
     out["ctrl_look"] = {"heading": round(nav.pose.heading, 3),
                         "tilt": round(nav.pose.tilt, 3),
                         "eye_moved_m": round(float(
                             ((eye1 - eye0) ** 2).sum() ** 0.5), 3)}
+    # Ctrl с левой кнопкой - сдвиг вида параллельно экрану: оси камеры
+    # прежние, точка взгляда идёт за курсором. Вид разреза издалека.
+    nav.stop()
+    nav.set_pose(Pose(20.0, 175.0, 1.5e7, 330.0, 25.0))
+    view._fit_camera()
+    nav.pose.apply(view.camera)
+    eye0, rot0 = nav.pose.eye_rotation()
+    target, _ = Pose(20.0, 175.0, 0.0).eye_rotation()
+    _send_mouse(view, "MouseButtonPress", cx, cy, left, left, ctrl)
+    _send_mouse(view, "MouseMove", cx + 60, cy - 40, none, left, ctrl)
+    _send_mouse(view, "MouseMove", cx + 120, cy - 80, none, left, ctrl)
+    _send_mouse(view, "MouseButtonRelease", cx + 120, cy - 80, left, none,
+                ctrl)
+    view._fit_camera()
+    nav.pose.apply(view.camera)
+    eye1, rot1 = nav.pose.eye_rotation()
+    from planetx.core.navigation import pixel_at
+    seen = pixel_at(view.camera, eye1, rot1, target)
+    out["ctrl_shift"] = {
+        "axes_change": float(abs(rot1 - rot0).max()),
+        "along_view_m": round(float((eye1 - eye0) @ rot0[:, 2]), 3),
+        "target_px": None if seen is None else
+        [round(float(seen[0]) / ratio - cx, 2),
+         round(float(seen[1]) / ratio - cy, 2)],
+        "roll": round(nav.pose.roll, 3)}
+    view.setFocus()
+    _send_key(view, "Key_R")
+    flight = nav.flight[1] if nav.flight else None
+    out["key_r_after_shift_roll"] = None if flight is None else \
+        flight.end.roll
     reset()
     view.setFocus()
     _send_key(view, "Key_Up")
@@ -14972,7 +15030,7 @@ def emag_on():
     window = state["window"]
     window.set_body("earth")
     folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
-    window.emag_url = QUrl.fromLocalFile(os.path.join(
+    window.field_urls["emag"] = QUrl.fromLocalFile(os.path.join(
         folder, "emag")).toString() + "/{z}/{x}/{y}.png"
     window.view.navigator.stop()
     window.view.navigator.show(Pose(51.3, 37.0, 1500000.0, 0.0, 0.0))
@@ -14981,7 +15039,7 @@ def emag_on():
     result["emag"] = {"loader": loader is not None,
                       # Панель шкал показывает себя следующим проходом
                       # цикла событий, шкала уже не скрыта.
-                      "legend": not window.emag_legend.isHidden()}
+                      "legend": not window.field_legend.isHidden()}
     if loader is not None:
         _watch_loader(loader, "emag_seen")
     state["ls_started"] = time.monotonic()
@@ -15006,19 +15064,19 @@ def emag_check():
         window.view.grabFramebuffer().save(os.path.join(
             TEMP, "planetx_emag.png"))
         # Щелчок у Курска - значение из тайла уровня MAX_LEVEL.
-        window._ask_emag(51.75, 36.2)
+        window._ask_field(51.75, 36.2)
         state["ls_started"] = time.monotonic()
         return 500
-    value = window._emag_value
-    if value is not None and value[1] is None and not value[2] \
+    value = window._field_value
+    if value is not None and value[2] is None and not value[3] \
             and spent < 15.0:
         return 500
-    out["kursk"] = value[1:] if value else None
-    out["group"] = window._identify_emag()[0][1][0][1] \
-        if window._identify_emag() else None
+    out["kursk"] = value[2:] if value else None
+    out["group"] = window._identify_field()[0][1][0][1] \
+        if window._identify_field() else None
     window.set_extra("emag", False)
     out["off"] = "emag" not in window.gibs_loaders \
-        and not window.emag_legend.isVisible()
+        and not window.field_legend.isVisible()
     return None
 
 
@@ -15384,6 +15442,307 @@ def crust_types_close():
     result["crust_types"]["close_gain"] = view.wedge_gain
     window.set_extra("quakes", False)
     window.set_extra("cutaway", False)
+
+
+@check(2000)
+def fields_on():
+    # Возраст дна над Северной Атлантикой с локальной копии
+    # planetx-terrain, потом тепловой поток снимает его.
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
+    for key in ("seafloor_age", "heatflow"):
+        window.field_urls[key] = QUrl.fromLocalFile(os.path.join(
+            folder, key)).toString() + "/{z}/{x}/{y}.png"
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(35.0, -40.0, 6000000.0, 0.0, 0.0))
+    window.set_extra("seafloor_age", True)
+    result["fields"] = {"age_loader": "emag" in window.gibs_loaders,
+                        "age_level": window.view.gibs["emag"].max_level}
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def fields_check():
+    window = state["window"]
+    out = result["fields"]
+    spent = time.monotonic() - state["ls_started"]
+    layer = window.view.gibs["emag"]
+    if "age_textures" not in out:
+        if len(layer.textures) < 6 and spent < 30.0:
+            return 1000
+        out["age_textures"] = len(layer.textures)
+        out["age_title"] = window.field_legend.title
+        out["age_credit"] = "Seton" in window.attribution.text()
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_seafloor_age.png"))
+        # Щелчок у Японского жёлоба - около 133 млн лет.
+        window._ask_field(38.0, 146.0)
+        state["ls_started"] = time.monotonic()
+        return 500
+    if "age_value" not in out:
+        value = window._field_value
+        if value is not None and value[2] is None and not value[3] \
+                and spent < 15.0:
+            return 500
+        out["age_value"] = value[2:] if value else None
+        out["age_group"] = window._identify_field()[0][1][0][1] \
+            if window._identify_field() else None
+        window.set_extra("heatflow", True)
+        out["age_off_by_heat"] = not window.extras.get("seafloor_age")
+        out["heat_level"] = layer.max_level
+        out["heat_title"] = window.field_legend.title
+        state["ls_started"] = time.monotonic()
+        return 1000
+    if "heat_textures" not in out:
+        if len(layer.textures) < 6 and spent < 30.0:
+            return 1000
+        out["heat_textures"] = len(layer.textures)
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_heatflow.png"))
+        window._ask_field(44.6, -110.5)
+        state["ls_started"] = time.monotonic()
+        return 500
+    value = window._field_value
+    if value is not None and value[2] is None and not value[3] \
+            and spent < 15.0:
+        return 500
+    out["yellowstone"] = value[2:] if value else None
+    window.set_extra("heatflow", False)
+    state["gravity_started"] = time.monotonic()
+
+
+@check(1000)
+def gravity_check():
+    # Сила тяжести с локальной копии: шкала, тайлы, провал над
+    # Марианским жёлобом.
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result.setdefault("gravity", {})
+    layer = window.view.gibs["emag"]
+    if "textures" not in out:
+        if not window.extras.get("gravity"):
+            folder = os.environ.get("PLANETX_TERRAIN_DIR") \
+                or "C:/Dev/planetx-terrain"
+            window.field_urls["gravity"] = QUrl.fromLocalFile(
+                os.path.join(folder, "gravity")).toString() \
+                + "/{z}/{x}/{y}.png"
+            window.view.navigator.show(Pose(15.0, 145.0, 6000000.0, 0.0, 0.0))
+            window.set_extra("gravity", True)
+            state["gravity_started"] = time.monotonic()
+            return 1000
+        spent = time.monotonic() - state["gravity_started"]
+        if len(layer.textures) < 6 and spent < 30.0:
+            return 1000
+        out["textures"] = len(layer.textures)
+        out["level"] = layer.max_level
+        out["title"] = window.field_legend.title
+        out["credit"] = "XGM2019e" in window.attribution.text()
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_gravity.png"))
+        window._ask_field(11.35, 142.2)
+        state["gravity_started"] = time.monotonic()
+        return 500
+    value = window._field_value
+    spent = time.monotonic() - state["gravity_started"]
+    if value is not None and value[2] is None and not value[3] \
+            and spent < 15.0:
+        return 500
+    out["mariana"] = value[2:] if value else None
+    rows = window._identify_field()
+    out["group"] = rows[0][0] if rows else None
+    window.set_extra("gravity", False)
+    out["off"] = not layer.shown
+    out["off"] = "emag" not in window.gibs_loaders \
+        and not window.field_legend.isVisible()
+    out["gl"] = dict(window.view.gl_errors)
+    return None
+
+
+@check(3000)
+def tomo_on():
+    # Томография мантии на гранях: сектор у Японии, плита уходит в
+    # мантию. Модель SEISGLOB2 скачивается с EarthScope.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    window.set_extra("cutaway", True)
+    window.set_wedge_box(140.0, 230.0, 0.0, 60.0)
+    window.panel.cutaway_tomo_changed.emit(True)
+    nav.set_pose(Pose(20.0, 175.0, 15000000.0, 330.0, 25.0))
+    result["tomo"] = {"started": time.monotonic(),
+                      "from_file": window.tomo is not None}
+
+
+@check(2000)
+def tomo_check():
+    import numpy as np
+    from planetx.core import cutaway, tomography
+    window = state["window"]
+    view = window.view
+    out = result["tomo"]
+    if window.tomo is None and (window._tomo_reply is not None
+                                or window._tomo_job is not None) \
+            and time.monotonic() - out["started"] < 180.0:
+        return 2000
+    out["seconds"] = round(time.monotonic() - out["started"], 1)
+    out["loaded"] = window.tomo is not None
+    out["view_tomo"] = view.wedge_tomo is not None
+    out["legend_tomo"] = window.cutaway_legend.tomo
+    out["legend_rows"] = [t for t, _ in window.cutaway_legend.rows][:6]
+    out["credit"] = "SEISGLOB2" in window.attribution.text()
+    if window.tomo is not None:
+        mesh = cutaway.faces(view.wedge, crust=window.crust,
+                             gain=view.wedge_gain, tomo=window.tomo)
+        rgb = mesh.vertices["color"][:, :3].astype(int)
+        red = np.all(rgb == np.array(tomography.STOPS[0][1]), axis=1)
+        out["vertices"] = int(len(rgb))
+        out["slowest"] = int(red.sum())
+        out["japan_slab_500"] = round(float(tomography.sample(
+            window.tomo, [37.0], [133.0], 500.0)[0]), 2)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_tomo.png"))
+    window.panel.cutaway_tomo_changed.emit(False)
+    out["off"] = view.wedge_tomo is None and not window.cutaway_legend.tomo
+    window.set_extra("cutaway", False)
+    out["gl"] = dict(view.gl_errors)
+    return None
+
+
+@check(2000)
+def volcanoes_on():
+    # Вулканы над Камчаткой: список GVP скачивается в профиль.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(55.0, 159.0, 2500000.0, 0.0, 0.0))
+    window.set_extra("volcanoes", True)
+    result["volcanoes"] = {"legend": not window.volcano_legend.isHidden()}
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def volcanoes_check():
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    window = state["window"]
+    view = window.view
+    out = result["volcanoes"]
+    if window.volcano_data is None and window._volcano_reply is not None \
+            and time.monotonic() - state["ls_started"] < 60.0:
+        return 1000
+    data = window.volcano_data
+    out["count"] = len(data) if data is not None else 0
+    out["drawn_layer"] = view.volcanoes.data is not None
+    out["credit"] = "Volcanism" in window.attribution.text()
+    out["message"] = window.message[0] if window.message else ""
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_volcanoes.png"))
+    # Щелчок по Ключевской сопке.
+    if data is not None:
+        names = [data.text(n)[1] for n in range(len(data))]
+        k = names.index("Klyuchevskoy") if "Klyuchevskoy" in names else 0
+        h = float(data.elevation[k])
+        xyz = geodetic_to_ecef(np.array([data.lat[k]]),
+                               np.array([data.lon[k]]), np.array([h]))
+        pixels, _ = view.camera.project(xyz)
+        found = window._identify_volcanoes(*pixels[0])
+        out["click"] = [(name, values[:3]) for name, values, _ in
+                        found[0][1]][:2] if found else None
+        out["point_under"] = window._point_under(*pixels[0])
+    window.set_extra("volcanoes", False)
+    out["off"] = view.volcanoes.data is None \
+        and window.volcano_legend.isHidden()
+    out["gl"] = dict(view.gl_errors)
+    return None
+
+
+@check(2000)
+def platemotion_on():
+    # Стрелки скоростей над Тихим океаном с 8000 км, щелчок у Гавайев.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(20.0, -160.0, 8000000.0, 0.0, 0.0))
+    window.set_extra("platemotion", True)
+
+
+@check(1000)
+def platemotion_check():
+    window = state["window"]
+    view = window.view
+    out = result["platemotion"] = {}
+    out["shapes"] = len(window.motion_shapes)
+    out["marks"] = len(window._motion_marks)
+    out["credit"] = "MORVEL" in window.attribution.text()
+    out["hawaii"] = window._motion_rows(19.7, -155.5)
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_platemotion.png"))
+    # Сдвиг вида на шаг - стрелки заново.
+    from planetx.core.navigation import Pose
+    view.navigator.show(Pose(40.0, 20.0, 8000000.0, 0.0, 0.0))
+    window._update_plate_arrows()
+    out["moved_marks"] = len(window._motion_marks)
+    window.set_extra("platemotion", False)
+    out["off"] = not window.motion_shapes and not view.geo_marks
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(2000)
+def magdecl_on():
+    # Линии склонения на 2020 год над Европой с 9000 км.
+    from planetx.core.navigation import Pose
+    from planetx.core import when
+    window = state["window"]
+    window.view.navigator.set_pose(Pose(50.0, 30.0, 9000000.0, 0.0, 0.0))
+    window.set_extra("magdecl", True)
+    window.timebar.set_range(when.parse("1590-01-01"),
+                             when.parse("2020-06-01"))
+    window._refresh_shapes()
+
+
+@check(1000)
+def magdecl_check():
+    window = state["window"]
+    view = window.view
+    out = result["magdecl"] = {}
+    out["timebar"] = window.timebar.shown()
+    out["year"] = round(window.magnetic_year(), 2)
+    cache = getattr(window, "_decl_cache", None)
+    out["lines"] = len(cache[1]) if cache else 0
+    out["levels"] = sorted({lvl for lvl, _ in cache[1]})[:5] if cache \
+        else []
+    out["marks"] = len(view.geo_marks)
+    out["zero_label"] = any(m.name == "0°" for m in view.geo_marks)
+    out["credit"] = "IGRF" in window.attribution.text()
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_magdecl.png"))
+    # До 1900 года - gufm1, файл скачивается в профиль.
+    from planetx.core import when
+    window.timebar.set_range(when.parse("1590-01-01"),
+                             when.parse("1800-06-01"))
+    window._refresh_shapes()
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def magdecl_1800():
+    window = state["window"]
+    view = window.view
+    out = result["magdecl"]
+    model = window.geomag[0]
+    if model.gufm is None and getattr(window, "_gufm_reply", None) \
+            is not None and time.monotonic() - state["ls_started"] < 60.0:
+        return 1000
+    out["gufm"] = model.gufm is not None
+    out["marks_1800"] = len(view.geo_marks)
+    found = window._identify_magnetic(51.5, -0.12)
+    out["london_1800"] = found[0][1][0][1] if found else None
+    out["credit_gufm"] = "gufm1" in window.attribution.text()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_magdecl_1800.png"))
+    window.set_extra("magdecl", False)
+    out["marks_off"] = len(view.geo_marks)
+    out["gl"] = dict(view.gl_errors)
 
 
 @check(1000)

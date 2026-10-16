@@ -501,6 +501,8 @@ class LayerPanel(QWidget):
     geoid_scale_changed = pyqtSignal(float)
     # Пункт «Растягивать кору» меню строки «Разрез Земли».
     cutaway_stretch_changed = pyqtSignal(bool)
+    # Пункт «Томография мантии» того же меню.
+    cutaway_tomo_changed = pyqtSignal(bool)
     # «Мои метки»: флажки меток и папок {ключ: включена}, действие над
     # меткой или папкой и ключ.
     places_toggled = pyqtSignal(object)
@@ -696,8 +698,10 @@ class LayerPanel(QWidget):
         self._active_values = {}  # ключ - (непрозрачность, в проект)
         # Масштаб геоида для ползунка меню «⋯», ставит окно глобуса.
         self.geoid_scale = geoid.SCALE
-        # Пункт «Растягивать кору», ставит окно глобуса.
+        # Пункты «Растягивать кору» и «Томография мантии», ставит окно
+        # глобуса.
         self.cutaway_stretch = True
+        self.cutaway_tomo = False
         # Группы векторной основы. Группа видна, пока в ней что-то
         # включено, и после снятия флажков - до «Убрать с глобуса».
         self.vector_groups = []
@@ -1166,6 +1170,19 @@ class LayerPanel(QWidget):
                 self.cutaway_stretch = bool(on)
                 self.cutaway_stretch_changed.emit(self.cutaway_stretch)
             stretch.toggled.connect(toggled)
+            tomo = menu.addAction(tr("Томография мантии"))
+            tomo.setCheckable(True)
+            tomo.setChecked(self.cutaway_tomo)
+            tomo.setToolTip(tr(
+                "Раскрашивает мантию на гранях по отклонению скорости "
+                "сейсмических волн от модели PREM - модель SEISGLOB2. "
+                "Красная мантия медленнее и горячее, синяя быстрее "
+                "и холоднее. Первое включение скачивает около 28 МБ."))
+
+            def tomo_toggled(on):
+                self.cutaway_tomo = bool(on)
+                self.cutaway_tomo_changed.emit(self.cutaway_tomo)
+            tomo.toggled.connect(tomo_toggled)
         if export:
             menu.addAction(tr("В проект QGIS…")).triggered.connect(
                 lambda _=False: self.active_export.emit(key))

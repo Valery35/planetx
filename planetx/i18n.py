@@ -1297,27 +1297,25 @@ EN = {
     "отвесно, - на год шкалы времени и их путь с 1590 года по данным NOAA "
     "NCEI. Шкала открывается сама, бегунок ведёт полюса по годам. Щелчок "
     "по глобусу в режиме «Определить объекты» показывает склонение, "
-    "наклонение и напряжённость поля в точке на тот же год по модели "
-    "IGRF-14, с 1900 по 2030 год.":
+    "наклонение и напряжённость поля в точке на тот же год по моделям "
+    "gufm1 и IGRF-14, с 1590 по 2030 год.":
         "The north and south magnetic poles - the points where a compass "
         "needle stands vertical - for the year of the time slider and "
         "their path since 1590 after NOAA NCEI. The slider opens by "
         "itself, its handle moves the poles over the years. A click on "
         "the globe in the Identify features mode shows the declination, "
         "inclination and field intensity at the point for the same year "
-        "after the IGRF-14 model, from 1900 to 2030.",
+        "after the gufm1 and IGRF-14 models, from 1590 to 2030.",
     "{value} нТл": "{value} nT",
     "Горизонтальная составляющая": "Horizontal component",
     "Магнитное поле": "Magnetic field",
     "Магнитные полюса не прочитаны.": "The magnetic poles were not read.",
-    "Модель IGRF": "IGRF model",
     "Наклонение": "Inclination",
     "Поле в точке": "Field at the point",
     "Полная напряжённость": "Total intensity",
     "Северный магнитный полюс, {year}": "North magnetic pole, {year}",
     "Склонение": "Declination",
     "Южный магнитный полюс, {year}": "South magnetic pole, {year}",
-    "с 1900 по 2030 год": "from 1900 to 2030",
     "Загрузка файлов демо с GitHub, {size} МБ…":
         "Downloading demo files from GitHub, {size} MB…",
     "Демо не загружено: {error}": "The demo was not downloaded: {error}",
@@ -2154,10 +2152,10 @@ EN = {
         "coordinates and starts a flight.",
     "Двойной щелчок левой кнопкой приближает к точке, правой - "
     "отдаляет. Правая кнопка с перетаскиванием приближает "
-    "и отдаляет, левая с Ctrl поворачивает взгляд.":
+    "и отдаляет, левая с Ctrl сдвигает вид вдоль экрана.":
         "A left double click zooms in to the point, a right double click "
         "zooms out. Dragging with the right button zooms in and out, the "
-        "left button with Ctrl looks around.",
+        "left button with Ctrl moves the view along the screen.",
     "Стрелки сдвигают вид, PageUp и PageDown приближают "
     "и отдаляют, N ставит север вверху, U даёт взгляд отвесно.":
         "Arrows move the view, PageUp and PageDown zoom in and out, N puts "
@@ -3344,6 +3342,133 @@ EN = {
     "Средняя кора": "Middle crust",
     "Нижняя кора": "Lower crust",
     "нет ответа": "no reply",
+    "нТл": "nT",
+    "млн лет": "Ma",
+    "мВт/м²": "mW/m²",
+    "Океаническое дно": "Ocean floor",
+    "Возраст коры": "Crust age",
+    "Поток тепла": "Heat flow",
+    "Скорости плит": "Plate motion",
+    "Вулканы": "Volcanoes",
+    "Томография мантии": "Mantle tomography",
+    "Раскрашивает мантию на гранях по отклонению скорости "
+    "сейсмических волн от модели PREM - модель SEISGLOB2. "
+    "Красная мантия медленнее и горячее, синяя быстрее "
+    "и холоднее. Первое включение скачивает около 28 МБ.": "Colours the "
+    "mantle on the faces by the deviation of seismic wave speed from the "
+    "PREM model, the SEISGLOB2 model. Red mantle is slower and hotter, "
+    "blue mantle is faster and colder. The first switch-on downloads "
+    "about 28 MB.",
+    "Загрузка томографии SEISGLOB2, около 28 МБ…": "Loading the SEISGLOB2 "
+    "tomography, about 28 MB…",
+    "Томография не загрузилась: {error}": "Tomography did not load: "
+    "{error}",
+    "Томография не разобрана.": "Tomography could not be read.",
+    "Мантия медленнее PREM на 2 % и больше": "Mantle 2 % and more slower "
+    "than PREM",
+    "Мантия как PREM": "Mantle as PREM",
+    "Мантия быстрее PREM на 2 % и больше": "Mantle 2 % and more faster "
+    "than PREM",
+    "Вулканы голоцена GVP": "Holocene volcanoes, GVP",
+    "Размер точки - высота вулкана": "Dot size - volcano height",
+    "Извергался с 1900 года": "Erupted since 1900",
+    "Извергался в 1500-1899 годах": "Erupted in 1500-1899",
+    "Извергался до 1500 года": "Erupted before 1500",
+    "Дата извержения неизвестна": "Eruption date unknown",
+    "Загрузка списка вулканов GVP, около 2 МБ…": "Loading the GVP volcano "
+    "list, about 2 MB…",
+    "Список вулканов не загрузился, проверьте сеть и включите строку "
+    "снова.": "The volcano list did not load, check the network and turn "
+    "the row on again.",
+    "Вулканов {count}.": "{count} volcanoes.",
+    "Последнее извержение": "Last eruption",
+    "{year} до н. э.": "{year} BCE",
+    "дата неизвестна": "date unknown",
+    "Обстановка": "Setting",
+    "Около 1200 вулканов, извергавшихся за последние 12 тысяч лет, "
+    "по списку Global Volcanism Program Смитсоновского института. "
+    "Цвет - время последнего извержения, размер - высота вулкана. "
+    "Щелчок по точке показывает тип вулкана, год последнего "
+    "извержения, тектоническую обстановку и страницу вулкана на "
+    "сайте GVP. Первое включение скачивает около 2 МБ.": "About 1200 "
+    "volcanoes that erupted in the last 12 thousand years after the "
+    "Global Volcanism Program list of the Smithsonian Institution. The "
+    "colour is the time of the last eruption, the size is the volcano "
+    "height. A click on a dot shows the volcano type, the year of the "
+    "last eruption, the tectonic setting and the volcano page on the GVP "
+    "site. The first switch-on downloads about 2 MB.",
+    "Поле до 1900 года не загружено: {error}": "The field before 1900 is "
+    "not loaded: {error}",
+    "gufm1 с 1590 года, IGRF-14 с 1900 по 2030 год": "gufm1 from 1590, "
+    "IGRF-14 from 1900 to 2030",
+    "Скорость плиты": "Plate speed",
+    "Плита": "Plate",
+    "Направление": "Direction",
+    "Скорости плит не прочитаны: {error}": "Plate motion not read: {error}",
+    "Стрелки движения литосферных плит по модели NNR-MORVEL56 - "
+    "скорость относительно среднего движения всех плит. Длина "
+    "стрелки растёт со скоростью, число у её начала - мм/год. "
+    "Тихоокеанская плита идёт на северо-запад около 70 мм/год, "
+    "Евразийская - около 25. Окно «Объекты» показывает плиту, "
+    "скорость и направление в точке.": "Arrows of lithospheric plate "
+    "motion after the NNR-MORVEL56 model, the speed relative to the mean "
+    "motion of all plates. The arrow grows with the speed, the number at "
+    "its start is mm/yr. The Pacific plate moves north-west at about "
+    "70 mm/yr, the Eurasian plate at about 25. The Features window shows "
+    "the plate, speed and direction at the point.",
+    "Тепловой поток": "Heat flow",
+    "Возраст океанического дна, млн лет": "Ocean floor age, Ma",
+    "Тепловой поток, мВт/м²": "Heat flow, mW/m²",
+    "Возраст океанического дна": "Ocean floor age",
+    "Возраст океанической коры по сетке Seton и соавторов 2020 "
+    "года, шаг 0.1°. Молодое дно у срединных хребтов красное, "
+    "древнее у окраин океанов - синее и фиолетовое. Суша и "
+    "континентальная кора не закрашены. На глобусе одна карта "
+    "значений - возраст дна, магнитные аномалии, сила тяжести "
+    "или тепловой поток. Щелчок в режиме «Определить объекты» "
+    "показывает возраст в млн лет.": "Age of the oceanic crust after the "
+    "grid of Seton et al. 2020, 0.1° spacing. Young floor at mid-ocean "
+    "ridges is red, old floor at ocean margins is blue and purple. Land "
+    "and continental crust are not coloured. The globe shows one value "
+    "map at a time - ocean floor age, magnetic anomalies, gravity or heat "
+    "flow. A click in the Identify features mode shows the age in Ma.",
+    "Аномалии силы тяжести": "Gravity anomalies",
+    "Аномалия силы тяжести, мГал": "Gravity anomaly, mGal",
+    "Сила тяжести": "Gravity",
+    "Аномалия в свободном воздухе": "Free-air anomaly",
+    "мГал": "mGal",
+    "Аномалия силы тяжести в свободном воздухе по модели XGM2019e "
+    "до степени 719, шаг около 28 км. Красные - сила тяжести "
+    "больше нормальной, синие - меньше. Над глубоководными "
+    "желобами провалы до -300 мГал, над вулканическими островами "
+    "и горами - подъём. Щелчок в режиме «Определить объекты» "
+    "показывает аномалию в мГал.": "Free-air gravity anomaly after the "
+    "XGM2019e model to degree 719, about 28 km spacing. Red marks gravity "
+    "above normal, blue marks gravity below normal. Deep-sea trenches show "
+    "lows down to -300 mGal, volcanic islands and mountains show highs. A "
+    "click in the Identify features mode shows the anomaly in mGal.",
+    "Поток тепла из недр через поверхность Земли по сетке 0.5°, "
+    "построенной по 91 тысяче измерений базы IHFC 2024. Синие - "
+    "холодные древние щиты, красные - рифты, хребты и вулканические "
+    "области. Вдали от измерений сетка сглажена. Щелчок в режиме "
+    "«Определить объекты» показывает поток в мВт/м².": "Heat flow from "
+    "the interior through the Earth's surface on a 0.5° grid built from "
+    "91 thousand measurements of the IHFC 2024 database. Blue marks cold "
+    "old shields, red marks rifts, ridges and volcanic areas. Far from "
+    "measurements the grid is smoothed. A click in the Identify features "
+    "mode shows the flow in mW/m².",
+    "Линии склонения": "Declination lines",
+    "Линии равного магнитного склонения - угла между стрелкой "
+    "компаса и направлением на север - через 10° на год шкалы "
+    "времени по моделям IGRF-14 с 1900 года и gufm1 с 1590 "
+    "года, gufm1 скачивается при первом показе. Красные - "
+    "склонение восточное, синие - западное, зелёная - нулевое. "
+    "У магнитных полюсов линии сходятся.": "Lines of equal magnetic "
+    "declination, the angle between the compass needle and the north, "
+    "every 10° for the year of the time scale after the IGRF-14 model "
+    "from 1900 and the gufm1 model from 1590, gufm1 is downloaded on "
+    "first display. Red lines are east declination, blue lines west, the "
+    "green line zero. The lines meet at the magnetic poles.",
     "верхняя": "upper",
     "средняя": "middle",
     "нижняя": "lower",

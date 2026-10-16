@@ -20,7 +20,9 @@ from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
 from ...core import (infra, mining, cables as cables_core,
-                     plants as plants_core, plates, slabs)
+                     plants as plants_core, platemotion, plates, slabs,
+                     volcanoes as volcanoes_core)
+from ...core.features import Shape
 from ..overpass import brief_error
 from ...core.places import Place as MarkPlace
 from ...i18n import tr
@@ -31,7 +33,7 @@ from ..identify import Group, point_text
 from ..deposits import parse_plants
 from ..legend import fuel_names
 from .base import (CURSOR_PERIOD, DATA_DIR, DEPOSIT_POLL, IDENTIFY_PIXELS,
-                   MESSAGE_TIME, distance_text)
+                   MESSAGE_TIME, MOTION_COLOR, MOTION_WIDTH, distance_text)
 
 
 class ResourcesMixin:
@@ -208,6 +210,129 @@ class ResourcesMixin:
         return [(Group(tr("ЛЭП, кабели и трубопроводы OSM")),
                  [(title or tr("Без названия"), values, None)])]
 
+    # Вулканы GVP (core/volcanoes.py).
+
+    def _volcanoes_path(self):
+        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                              "PlanetX")
+        os.makedirs(folder, exist_ok=True)
+        return os.path.join(folder, "volcanoes.npz")
+
+    def _set_volcanoes(self, on):
+        """Вулканы голоцена строкой каталога. Первое включение скачивает
+        список GVP около 2 МБ, итог - файл профиля."""
+        self._mark_gallery()
+        self.volcano_legend.setVisible(on and self.planet.earth)
+        if not on:
+            if self._volcano_reply is not None:
+                reply, self._volcano_reply = self._volcano_reply, None
+                reply.abort()
+            self._place_volcanoes()
+            return
+        if self.volcano_data is None:
+            path = self._volcanoes_path()
+            if os.path.exists(path):
+                try:
+                    self.volcano_data = volcanoes_core.load(path)
+                except (OSError, ValueError, KeyError) as error:
+                    journal.note("volcanoes file: {}".format(error))
+        if self.volcano_data is not None:
+            self._place_volcanoes()
+            return
+        if self._volcano_reply is not None:
+            return
+        self._volcano_reply = fetch_bytes(volcanoes_core.URL,
+                                          self._volcanoes_arrived)
+        self.view.data_pending += 1
+        self.message = (tr("Загрузка списка вулканов GVP, около 2 МБ…"),
+                        time.monotonic())
+        self._show_state()
+
+    def _volcanoes_arrived(self, data, error):
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        if self._volcano_reply is None:
+            return  # снят выключением строки
+        self._volcano_reply = None
+        found = None
+        if data is not None:
+            try:
+                # Около 1200 строк - разбор в главном потоке, десятки мс.
+                found = volcanoes_core.parse(bytes(data))
+                volcanoes_core.save(found, self._volcanoes_path())
+            except (OSError, ValueError, KeyError) as problem:
+                error = str(problem)
+                found = None
+        if found is None:
+            journal.note("volcanoes: {}".format(brief_error(error or "")))
+            self.message = (tr("Список вулканов не загрузился, проверьте "
+                               "сеть и включите строку снова."),
+                            time.monotonic())
+            self._show_state()
+            return
+        self.volcano_data = found
+        self.message = (tr("Вулканов {count}.", count=len(found)),
+                        time.monotonic())
+        self._show_state()
+        self._place_volcanoes()
+
+    def _place_volcanoes(self):
+        on = self.extras.get("volcanoes", False) and self.planet.earth
+        self.view.volcanoes.set_volcanoes(
+            self.volcano_data if on else None, self.view.store.scale,
+            self._surface_ground)
+        self._show_attribution()
+        self.view.update()
+
+    def _identify_volcanoes(self, px, py):
+        """Вулканы у точки щелчка на экране, не больше 10."""
+        layer = self.view.volcanoes
+        data = layer.data
+        if data is None:
+            return []
+        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
+        seen = layer.visible(eye)
+        if not len(seen):
+            return []
+        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
+        pixels, front = self.view.camera.project(layer.focus[seen])
+        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
+        near = np.nonzero(front & (gap <= radius))[0]
+        near = near[np.argsort(gap[near])][:10]
+        features = []
+        for n in near:
+            record = int(layer.order[seen[n]])
+            number, name, kind, country, setting, evidence = \
+                (data.text(record) + [""] * 6)[:6]
+            values = []
+            if kind:
+                values.append((tr("Тип"), kind))
+            year = float(data.last[record])
+            if np.isfinite(year):
+                year = int(year)
+                values.append((tr("Последнее извержение"), str(year)
+                               if year > 0 else tr("{year} до н. э.",
+                                                   year=-year)))
+            else:
+                values.append((tr("Последнее извержение"),
+                               tr("дата неизвестна")))
+            height = float(data.elevation[record])
+            if np.isfinite(height):
+                values.append((tr("Высота"), tr("{value} м",
+                                                value="{:.0f}".format(
+                                                    height))))
+            if country:
+                values.append((tr("Страна"), country))
+            if setting:
+                values.append((tr("Обстановка"), setting))
+            if evidence:
+                values.append((tr("Достоверность"), evidence))
+            values.append((tr("Набор"), "Global Volcanism Program"))
+            if number:
+                values.append((tr("Источник"),
+                               volcanoes_core.PAGE.format(number)))
+            features.append((name, values, None))
+        return [(Group(tr("Вулканы")), features)] if features else []
+
     # Электростанции WRI.
 
     def _plants_path(self):
@@ -370,6 +495,79 @@ class ResourcesMixin:
         self._show_attribution()
         self.view.update()
 
+    # Скорости плит NNR-MORVEL56 (core/platemotion.py).
+
+    def _motion_on(self):
+        # Зовётся и при создании окна, до чтения строк «Слоёв».
+        return bool(getattr(self, "extras", {}).get("platemotion")) \
+            and self.planet.earth and self.view.sky_view is None
+
+    def _set_platemotion(self, on):
+        """Строка «Скорости плит»: стрелки у вида и подписи мм/год.
+        Файл data/plate_motion.json читается при первом включении."""
+        if on and self.plate_motion is None:
+            try:
+                with open(os.path.join(DATA_DIR, "plate_motion.json"),
+                          encoding="utf-8") as fh:
+                    self.plate_motion = platemotion.read(fh.read())
+            except (OSError, ValueError, KeyError) as error:
+                self.message = (tr("Скорости плит не прочитаны: {error}",
+                                   error=str(error)), time.monotonic())
+                self._show_state()
+                return
+        self._motion_key = None
+        self._update_plate_arrows()
+        self._show_attribution()
+        self._mark_gallery()
+
+    def _update_plate_arrows(self):
+        """Стрелки строятся заново, когда меняется шаг узлов или вид
+        уходит на шаг, как сетка координат."""
+        if not self._motion_on() or self.plate_motion is None:
+            if self.motion_shapes or self._motion_marks:
+                self.motion_shapes = []
+                self._motion_marks = []
+                self._motion_key = None
+                self._set_geo_marks()
+                self._refresh_shapes()
+            return
+        pose = self.view.navigator.pose
+        width = self._view_width()
+        step = platemotion.step_for(width)
+        key = (step, round(pose.lat / step), round(pose.lon / step))
+        if key == self._motion_key:
+            return
+        self._motion_key = key
+        shapes = []
+        marks = []
+        for n, (lat, lon, speed, _, lines) in enumerate(
+                platemotion.arrows(self.plate_motion, pose.lat, pose.lon,
+                                   width)):
+            for line in lines:
+                shapes.append(Shape("line", line, color=MOTION_COLOR,
+                                    width=MOTION_WIDTH))
+            marks.append(MarkPlace(-700000 - n, "{:.0f}".format(speed),
+                                   "grid", 1, lat, lon))
+        self.motion_shapes = shapes
+        self._motion_marks = marks
+        self._set_geo_marks()
+        self._refresh_shapes()
+
+    def _motion_rows(self, lat, lon):
+        """Строки скорости плиты для окна «Объекты» или []."""
+        if not self._motion_on() or self.plate_motion is None:
+            return []
+        found = self.plate_motion.velocity(lat, lon)
+        if found is None:
+            return []
+        code, east, north = found
+        speed, azimuth = platemotion.speed_azimuth(east, north)
+        return [(tr("Плита"), "{} ({})".format(
+                    self.plate_motion.names[code], code)),
+                (tr("Скорость плиты"), tr("{value} мм/год",
+                                          value="{:.1f}".format(speed))),
+                (tr("Направление"), "{:.0f}°".format(azimuth))]
+
     def _set_currents(self, on):
         """Строка «Течения» витрины: струйки течений и шкала."""
         self._mark_gallery()
@@ -504,6 +702,7 @@ class ResourcesMixin:
                 bottom="{:.0f}".format(bottom[0]))))
         elif any(c in self._slab_replies for c in codes):
             values.append((tr("Плита Slab2"), tr("загружается")))
+        values += self._motion_rows(lat, lon)
         return [(Group(tr("Место")), [(tr("Под точкой"), values, None)])] \
             if values else []
 

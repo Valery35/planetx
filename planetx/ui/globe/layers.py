@@ -10,24 +10,28 @@ import html
 import math
 import os
 import time
+from functools import partial
 
 import numpy as np
-from qgis.core import QgsProject, QgsSettings
+from qgis.core import QgsApplication, QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QEvent
 from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 
 from ... import journal
-from ...core import (basemap, cadastre, clouds, emag, geoid, geomag, sun,
+from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
+                     platemotion, sun, tomography,
                      temperature, when, oldmaps, deposits as deposits_core,
                      mining, cables as cables_core, rumsey as rumsey_core,
                      plants as plants_core, fires as fires_core, crust, plates,
+                     volcanoes as volcanoes_core,
                      quakes, slabs, themes, opacity,
                      satellites as satellites_core)
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
 from ...core.mipmap import mip_chain
 from ..flow import CURRENTS_ATTRIBUTION
+from ..overpass import brief_error
 from ...i18n import tr
 from ...net.loader import TileLoader
 from ...net.overlay import (LINE_GROUPS, RAIL_FROM, RAILWAYS, label_kinds,
@@ -46,11 +50,33 @@ from ..properties import PropertiesDialog
 from ..subsurface import subsurface_ids
 from ..weather import field_attribution
 from ..track import date_range, layer_span, timed_layer
-from .base import (AUTO_DEFAULT, COORDS_KEY, DATA_DIR, GEOID_SCALE_KEY,
+from ...core.places import Place as MarkPlace
+from .base import (AUTO_DEFAULT, COORDS_KEY, DATA_DIR, DECL_EAST,
+                   DECL_LABEL_POINTS, DECL_WEST, DECL_WIDTH, DECL_ZERO,
+                   DECL_ZERO_WIDTH, GEOID_SCALE_KEY,
                    MAGNETIC_ATTRIBUTION, MARGIN, NEW_SHOWN_KEY, POLE_COLORS,
                    POLE_WIDTH, REFRESH_DELAY, SELECTION_DELAY, SKY_ATTRIBUTION,
                    TILE_SIZE, attribution_html, imagery_preparer,
-                   label_languages, link_html, places_decoder, prepare_emag)
+                   label_languages, link_html, places_decoder, prepare_field)
+
+
+def field_texts():
+    """Карта значений: ключ - (группа окна «Объекты», строка, единица,
+    строки пояснений)."""
+    return {
+        "emag": (tr("Магнитная аномалия"), tr("Аномалия поля"), tr("нТл"),
+                 [(tr("Высота сетки"), tr("4 км над эллипсоидом")),
+                  (tr("Набор"), "EMAG2v3, NOAA NCEI")]),
+        "seafloor_age": (tr("Океаническое дно"), tr("Возраст коры"),
+                         tr("млн лет"),
+                         [(tr("Набор"), "Seton et al. 2020, EarthByte")]),
+        "gravity": (tr("Сила тяжести"), tr("Аномалия в свободном воздухе"),
+                    tr("мГал"),
+                    [(tr("Набор"), "XGM2019e, Zingerle et al. 2020")]),
+        "heatflow": (tr("Тепловой поток"), tr("Поток тепла"),
+                     tr("мВт/м²"),
+                     [(tr("Набор"), "IHFC 2024, Petrunin et al. 2026")]),
+    }
 
 
 class LayersMixin:
@@ -324,7 +350,7 @@ class LayersMixin:
             self._layer_time_timer.start()
         if hasattr(self, "satellite_manager"):
             self.satellite_manager.time_changed()
-        if self._poles_on():
+        if self._magnetic_on():
             self._refresh_shapes()
 
     # Магнитные полюса и поле IGRF (core/geomag.py).
@@ -334,25 +360,104 @@ class LayersMixin:
             and getattr(self, "planet", None) is not None \
             and self.planet.earth and self.geomag is not None
 
+    def _decl_on(self):
+        return bool(getattr(self, "extras", {}).get("magdecl")) \
+            and getattr(self, "planet", None) is not None \
+            and self.planet.earth and self.geomag is not None
+
+    def _magnetic_on(self):
+        """Полюса или линии склонения: шкала времени, подпись, пересчёт
+        по году."""
+        return self._poles_on() or self._decl_on()
+
+    def _load_geomag(self):
+        """Модель поля и таблицы полюсов из файлов модуля, один раз."""
+        if self.geomag is not None:
+            return True
+        try:
+            with open(os.path.join(DATA_DIR, "igrf14coeffs.txt"),
+                      encoding="ascii") as fh:
+                model = geomag.parse_igrf(fh.read())
+            with open(os.path.join(DATA_DIR, "magnetic_poles.json"),
+                      encoding="utf-8") as fh:
+                poles = geomag.parse_poles(fh.read())
+            self.geomag = (geomag.Combined(model, self._read_gufm()), poles)
+        except (OSError, ValueError, KeyError) as error:
+            journal.note("magnetic poles: {}".format(error))
+            self.message = (tr("Магнитные полюса не прочитаны."),
+                            time.monotonic())
+            self._show_state()
+            return False
+        return True
+
+    @staticmethod
+    def _gufm_path():
+        return os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
+                            "gufm1.txt")
+
+    def _read_gufm(self):
+        """gufm1 из файла профиля или None - его ещё не скачивали."""
+        try:
+            with open(self._gufm_path(), encoding="ascii") as fh:
+                return geomag.parse_gufm(fh.read())
+        except (OSError, ValueError) as error:
+            if os.path.exists(self._gufm_path()):
+                journal.note("gufm1: {}".format(error))
+            return None
+
+    def _want_gufm(self, year):
+        """Поле до 1900 года - модель gufm1: файл скачивается один раз
+        с сайта авторов в профиль QGIS, как группы спутников."""
+        if self.geomag is None or year >= self.geomag[0].igrf.first \
+                or self.geomag[0].gufm is not None \
+                or getattr(self, "_gufm_reply", None) is not None \
+                or getattr(self, "_gufm_failed", False):
+            return
+        self._gufm_reply = fetch_bytes(geomag.GUFM_URL, self._gufm_done)
+
+    def _gufm_done(self, data, error):
+        self._gufm_reply = None
+        model = None
+        if data is not None:
+            try:
+                model = geomag.parse_gufm(bytes(data).decode("ascii"))
+                os.makedirs(os.path.dirname(self._gufm_path()),
+                            exist_ok=True)
+                with open(self._gufm_path(), "wb") as fh:
+                    fh.write(bytes(data))
+            except (ValueError, UnicodeDecodeError, OSError) as problem:
+                error = str(problem)
+        if model is None:
+            self._gufm_failed = True
+            journal.note("gufm1: {}".format(error))
+            self.message = (tr("Поле до 1900 года не загружено: {error}",
+                               error=brief_error(error or "")),
+                            time.monotonic())
+            self._show_state()
+            return
+        self.geomag[0].gufm = model
+        self._decl_cache = None
+        self._refresh_shapes()
+        self._refresh_identified()
+        self._show_attribution()
+
+    def _set_magdecl(self, on):
+        """Строка «Линии склонения»: изогоны поля на год шкалы времени,
+        шкала открывается сама, как у полюсов."""
+        if on and not self._load_geomag():
+            return
+        self._decl_cache = None
+        self._open_magnetic_time(on)
+
     def _set_poles(self, on):
         """Строка «Магнитные полюса»: полюса на момент шкалы времени и их
         след с 1590 года. Файлы модуля читаются при первом включении,
         шкала открывается сама."""
-        if on and self.geomag is None:
-            try:
-                with open(os.path.join(DATA_DIR, "igrf14coeffs.txt"),
-                          encoding="ascii") as fh:
-                    model = geomag.parse_igrf(fh.read())
-                with open(os.path.join(DATA_DIR, "magnetic_poles.json"),
-                          encoding="utf-8") as fh:
-                    poles = geomag.parse_poles(fh.read())
-                self.geomag = (model, poles)
-            except (OSError, ValueError, KeyError) as error:
-                journal.note("magnetic poles: {}".format(error))
-                self.message = (tr("Магнитные полюса не прочитаны."),
-                                time.monotonic())
-                self._show_state()
-                return
+        if on and not self._load_geomag():
+            return
+        self._open_magnetic_time(on)
+
+    def _open_magnetic_time(self, on):
         self._mark_gallery()
         self._update_timebar()
         if on and self.planet.earth and self.timebar.known \
@@ -380,15 +485,64 @@ class LayersMixin:
             return None
         return geomag.year_of(span[0])
 
+    def _decl_shapes(self):
+        """Линии равного склонения на год шкалы и подписи значений
+        (view.geo_marks). Линии считаются заново при смене целого года
+        - поле за год меняется на доли градуса, расчёт около 0.2 с."""
+        if not self._decl_on():
+            if self._decl_marks:
+                self._decl_marks = []
+                self._set_geo_marks()
+            return []
+        model, _ = self.geomag
+        year = int(math.floor(self.magnetic_year()))
+        self._want_gufm(year)
+        cache = getattr(self, "_decl_cache", None)
+        if cache is None or cache[0] != year:
+            # До 1900 года - gufm1, пока его нет - линий нет. После конца
+            # IGRF - линии её последнего года.
+            year_in = min(year, model.last)
+            coeffs = model.at(year_in)
+            if coeffs is None:
+                self._decl_marks = []
+                self._set_geo_marks()
+                return []
+            lines = geomag.isogonic_lines(*geomag.declination_grid(
+                coeffs, model.nmax_at(year_in)))
+            cache = self._decl_cache = (year, lines)
+        shapes = []
+        marks = []
+        for n, (level, points) in enumerate(cache[1]):
+            if level == 0.0:
+                color, width = DECL_ZERO, DECL_ZERO_WIDTH
+            else:
+                color = DECL_EAST if level > 0 else DECL_WEST
+                width = DECL_WIDTH
+            shapes.append(Shape("line", points, color=color, width=width))
+            if len(points) >= DECL_LABEL_POINTS:
+                lat, lon = points[len(points) // 2]
+                text = "0°" if level == 0.0 else "{:+.0f}°".format(level)
+                marks.append(MarkPlace(-600000 - n, text, "grid", 1,
+                                       lat, lon))
+        self._decl_marks = marks
+        self._set_geo_marks()
+        return shapes
+
+    def _set_geo_marks(self):
+        """Подписи геофизики на виде: линии склонения и скорости плит."""
+        self.view.geo_marks = list(getattr(self, "_decl_marks", [])) \
+            + list(getattr(self, "_motion_marks", []))
+        self.view.update()
+
     def _pole_shapes(self):
         """След и точка каждого полюса на год шкалы, след - от левого
-        бегунка до правого."""
+        бегунка до правого. Линии склонения - тоже здесь."""
+        shapes = self._decl_shapes()
         if not self._poles_on():
-            return []
+            return shapes
         model, poles = self.geomag
         year = self.magnetic_year()
         start = self._magnetic_start()
-        shapes = []
         names = {"north": tr("Северный магнитный полюс, {year}"),
                  "south": tr("Южный магнитный полюс, {year}")}
         for key in ("north", "south"):
@@ -458,87 +612,109 @@ class LayersMixin:
         # Разрез Земли тянется к «измятой» поверхности.
         self.view.wedge_lift = geoid
 
-    # Магнитные аномалии EMAG2v3 (core/emag.py).
+    # Карты значений геофизики (core/fields.py): магнитные аномалии,
+    # возраст дна, сила тяжести, тепловой поток. Один слой вида «emag».
 
-    def _set_emag(self, on):
-        """Строка «Магнитные аномалии»: тайлы значений planetx-terrain,
-        раскраска в рабочем потоке, шкала."""
+    def _set_field(self, key, on):
+        """Строка карты значений: тайлы planetx-terrain, раскраска
+        в рабочем потоке, шкала. Включение снимает прежнюю карту."""
+        field = fields.FIELDS[key]
+        if on:
+            for other in fields.KEYS:
+                if other != key and self.extras.get(other):
+                    self.set_extra(other, False)
+        elif self._field_shown != key:
+            # Слой вида занят другой картой.
+            return
         on = on and self.planet.earth
-        source = basemap.Source("EMAG2v3", self.emag_url, emag.MAX_LEVEL,
-                                emag.ATTRIBUTION, builtin=True)
-        self._set_gibs("emag", on, made=(source, prepare_emag), cache=True)
-        self.emag_legend.setVisible(on)
-        if not on:
-            self._drop_emag()
+        self._drop_field()
+        if on:
+            self.view.gibs["emag"].max_level = field.max_level
+            source = basemap.Source(key, self.field_urls[key],
+                                    field.max_level, field.attribution,
+                                    builtin=True)
+            made = (source, partial(prepare_field, key))
+        else:
+            made = None
+        self._field_shown = key if on else None
+        self._set_gibs("emag", on, made=made, cache=True)
+        self.field_legend.set_field(field)
+        self.field_legend.setVisible(on)
         self._mark_gallery()
 
-    def _ask_emag(self, lat, lon):
-        """Значение аномалии под щелчком: тайл уровня MAX_LEVEL из кэша
-        или сети, пиксель точки."""
-        self._drop_emag()
-        if not (self.extras.get("emag") and self.planet.earth):
+    def _ask_field(self, lat, lon):
+        """Значение карты под щелчком: тайл глубшего уровня из кэша или
+        сети, пиксель точки."""
+        self._drop_field()
+        key = self._field_shown
+        if key is None or not self.planet.earth:
             return
-        (x, y), (column, row) = emag.pixel_of(lat, lon)
-        url = self.emag_url.format(z=emag.MAX_LEVEL, x=x, y=y)
+        field = fields.FIELDS[key]
+        (x, y), (column, row) = fields.pixel_of(lat, lon, field.max_level)
+        url = self.field_urls[key].format(z=field.max_level, x=x, y=y)
         point = (lat, lon)
-        self._emag_value = (point, None, "")
-        self._emag_reply = fetch_bytes(
-            url, lambda data, error: self._emag_arrived(
-                point, column, row, data, error))
+        self._field_value = (key, point, None, "")
+        self._field_reply = fetch_bytes(
+            url, lambda data, error: self._field_arrived(
+                key, point, column, row, data, error))
 
-    def _drop_emag(self):
-        reply, self._emag_reply = self._emag_reply, None
-        self._emag_value = None
+    def _drop_field(self):
+        reply, self._field_reply = self._field_reply, None
+        self._field_value = None
         if reply is not None:
             reply.abort()
 
-    def _emag_arrived(self, point, column, row, data, error):
-        state = self._emag_value
-        if state is None or state[0] != point:
+    def _field_arrived(self, key, point, column, row, data, error):
+        state = self._field_value
+        if state is None or state[:2] != (key, point):
             return
-        self._emag_reply = None
+        self._field_reply = None
         value = None
         if data is not None:
             image = QImage.fromData(data)
             if not image.isNull():
                 color = image.pixelColor(column, row)
-                value = emag.value_at([[(color.red(), color.green(),
-                                         color.blue())]], 0, 0)
+                value = fields.value_at(fields.FIELDS[key], [[(
+                    color.red(), color.green(), color.blue())]], 0, 0)
             error = "" if not image.isNull() else tr("тайл не прочитан")
-        self._emag_value = (point, value, "" if value is not None
-                            else error or tr("нет данных"))
+        self._field_value = (key, point, value, "" if value is not None
+                             else error or tr("нет данных"))
         self._refresh_identified()
 
-    def _identify_emag(self):
-        """Группа «Магнитная аномалия» окна «Объекты»."""
-        state = self._emag_value
+    def _identify_field(self):
+        """Группа карты значений окна «Объекты»."""
+        state = self._field_value
         if state is None:
             return []
-        _, value, error = state
+        key, _, value, error = state
+        group, title, unit, notes = field_texts()[key]
         if value is None and not error:
             values = [(tr("Значение"), tr("загрузка…"))]
         elif value is None:
             values = [(tr("Значение"), error)]
         else:
-            values = [(tr("Значение"), tr("{value} нТл",
-                                          value="{:+.0f}".format(value))),
-                      (tr("Высота сетки"), tr("4 км над эллипсоидом")),
-                      (tr("Набор"), "EMAG2v3, NOAA NCEI")]
-        return [(Group(tr("Магнитная аномалия")),
-                 [(tr("Аномалия поля"), values, None)])]
+            digits = fields.FIELDS[key].digits
+            sign = "+" if fields.FIELDS[key].stops[0][0] < 0 else ""
+            number = "{:" + sign + "." + str(digits) + "f}"
+            values = [(tr("Значение"), "{} {}".format(
+                number.format(value), unit))] + notes
+        return [(Group(group), [(title, values, None)])]
 
     def _identify_magnetic(self, lat, lon):
         """Группа «Магнитное поле» окна «Объекты»: поле IGRF-14 в точке
         на год шкалы."""
-        if not self._poles_on():
+        if not self._magnetic_on():
             return []
         model, _ = self.geomag
         year = self.magnetic_year()
+        self._want_gufm(year)
         found = geomag.field(model, lat, lon, year)
         if found is None:
             values = [(tr("Год"), str(int(year))),
-                      (tr("Модель IGRF"), tr("с 1900 по 2030 год"))]
+                      (tr("Модель"), tr("gufm1 с 1590 года, IGRF-14 с 1900 "
+                                        "по 2030 год"))]
         else:
+            name = "gufm1" if model.part(year) is model.gufm else "IGRF-14"
             values = [
                 (tr("Год"), str(int(year))),
                 (tr("Склонение"), "{:+.1f}°".format(found["declination"])),
@@ -548,7 +724,7 @@ class LayersMixin:
                 (tr("Горизонтальная составляющая"),
                  tr("{value} нТл", value="{:.0f}".format(
                      found["horizontal"]))),
-                (tr("Модель"), "IGRF-14")]
+                (tr("Модель"), name)]
         return [(Group(tr("Магнитное поле")),
                  [(tr("Поле в точке"), values, None)])]
 
@@ -579,10 +755,15 @@ class LayersMixin:
         parts = [attribution_html(self.source)]
         if "cadastre" in self.gibs_loaders:
             parts.append(link_html(*cadastre.ATTRIBUTION))
-        if self._poles_on():
+        if self._magnetic_on():
             parts.append(link_html(*MAGNETIC_ATTRIBUTION))
-        if "emag" in self.gibs_loaders:
-            parts.append(link_html(*emag.ATTRIBUTION))
+            if self.geomag[0].gufm is not None:
+                parts.append(link_html(*geomag.GUFM_ATTRIBUTION))
+        if self._motion_on():
+            parts.append(link_html(*platemotion.ATTRIBUTION))
+        if "emag" in self.gibs_loaders and self._field_shown:
+            parts.append(link_html(
+                *fields.FIELDS[self._field_shown].attribution))
         if self._geoid_on():
             parts.append(link_html(*geoid.ATTRIBUTION))
         if self.planet.earth and (
@@ -617,6 +798,8 @@ class LayersMixin:
             parts.append(link_html(*mining.OSM_ATTRIBUTION))
         if self.view.plants.data is not None:
             parts.append(link_html(*plants_core.ATTRIBUTION))
+        if self.view.volcanoes.data is not None:
+            parts.append(link_html(*volcanoes_core.ATTRIBUTION))
         if self.planet.earth and getattr(self, "extras", {}).get("mining") \
                 and self.mining_layer is not None:
             parts.append(link_html(*mining.POLYGONS_ATTRIBUTION))
@@ -641,6 +824,8 @@ class LayersMixin:
             parts.append(link_html(*slabs.ATTRIBUTION))
         if self.view.wedge is not None and self.crust is not None:
             parts.append(link_html(*crust.CITATION))
+        if self.view.wedge is not None and self.view.wedge_tomo is not None:
+            parts.append(link_html(*tomography.ATTRIBUTION))
         self.attribution.setText(" · ".join(parts))
         self._place_attribution()
 

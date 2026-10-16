@@ -34,11 +34,12 @@ from collections import namedtuple
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from . import ellipsoid
+    from . import ellipsoid, tomography
     from .slabs import band
     from .subsurface import Part, merge
 except ImportError:  # headless-тесты
     import ellipsoid
+    import tomography
     from slabs import band
     from subsurface import Part, merge
 
@@ -263,28 +264,71 @@ def _band(edge, normal, low, high, color, whole=False):
                 tris.astype(np.uint32))
 
 
-def _face(directions, normal, shells, crust=None, gain=1.0, lift=None):
+MANTLE = ("upper_mantle", "transition_zone", "lower_mantle")
+
+
+def _mantle(edge, directions, normal, top, tomo, gain):
+    """Мантия по томографии: сетка от top (доля радиуса по точкам -
+    Мохо) до ядра, ряды на глубинах модели, цвет вершины - dVs."""
+    lats, lons = _latlon(directions)
+    depths = tomography.rows(tomo)
+    n = len(edge)
+    shares = [np.asarray(top, dtype=np.float64)]
+    rgb = [tomography.colors(tomography.sample(tomo, lats, lons,
+                                               depths[0]))]
+    for depth in depths:
+        share = np.minimum(np.full(n, _share(-depth, gain)), shares[0])
+        shares.append(share)
+        rgb.append(tomography.colors(tomography.sample(tomo, lats, lons,
+                                                       depth)))
+    count = len(shares)
+    positions = np.vstack([edge * s[:, None] for s in shares])
+    colors = np.empty((count * n, 4), np.uint8)
+    colors[:, :3] = np.vstack(rgb)
+    colors[:, 3] = 255
+    i = np.arange(n - 1)
+    tris = []
+    for r in range(count - 1):
+        a, b = r * n + i, (r + 1) * n + i
+        tris += [np.stack([a, a + 1, b], -1), np.stack([a + 1, b + 1, b], -1)]
+    return Part(positions, np.tile(normal, (count * n, 1)), colors,
+                np.concatenate(tris).astype(np.uint32))
+
+
+def _face(directions, normal, shells, crust=None, gain=1.0, lift=None,
+          tomo=None):
     """Грань - полосы оболочек по дуге единичных направлений (n, 3).
     С моделью коры кора - слои CRUST1.0, мантия - до Мохо точки.
-    gain - растяжение коры, см. stretch. lift - см. boundary."""
+    gain - растяжение коры, см. stretch. lift - см. boundary. tomo -
+    модель core.tomography.Tomo: мантия раскрашена по ней."""
     edge = boundary(directions, lift)[:, None] * directions
 
     def radius(r):
         return _share(r - PREM_RADIUS, gain)
 
     if crust is None:
-        return [_band(edge, normal, radius(low), radius(high), color)
-                for _, low, high, color in shells]
+        parts = [_band(edge, normal, radius(low), radius(high), color)
+                 for key, low, high, color in shells
+                 if tomo is None or key not in MANTLE]
+        if tomo is not None:
+            crust_low = [low for key, low, _, _ in SHELLS
+                         if key == "crust"][0]
+            parts.append(_mantle(edge, directions, normal,
+                                 np.full(len(edge), radius(crust_low)),
+                                 tomo, gain))
+        return parts
     lats, lons = _latlon(directions)
     bounds = crust.at(lats, lons).astype(np.float64)
     share = _share(bounds, gain)
     moho = share[:, -1]
     parts = []
     for key, low, high, color in shells:
-        if key == "crust":
+        if key == "crust" or tomo is not None and key in MANTLE:
             continue
         top = moho if key == "upper_mantle" else radius(high)
         parts.append(_band(edge, normal, radius(low), top, color))
+    if tomo is not None:
+        parts.append(_mantle(edge, directions, normal, moho, tomo, gain))
     oceanic = crust.oceanic(lats, lons)
     for k, key in enumerate(crust_layers()):
         parts.append(_band(edge, normal, share[:, k + 1], share[:, k],
@@ -329,19 +373,21 @@ def split_types(top, bottom, oceanic):
 
 
 def faces(wedge, shells=SHELLS, step=None, crust=None, gain=1.0,
-          lift=None):
+          lift=None, tomo=None):
     """Сетка трёх граней сектора для видеокарты, core.subsurface.Mesh.
 
     Экваториальная грань - дуга по долготе на экваторе, меридиональные
     - дуги от экватора до полюса на крайних долготах. crust - модель
     core.crust.Crust или None, тогда кора - оболочка PREM. gain -
     растяжение коры, см. stretch. lift - высота поверхности, к которой
-    тянется край граней, см. boundary."""
+    тянется край граней, см. boundary. tomo - томография мантии,
+    core.tomography.Tomo, или None - мантия оболочками PREM."""
     if step is None:
-        step = ARC_STEP if crust is None and lift is None else CRUST_STEP
+        step = ARC_STEP if crust is None and lift is None \
+            and tomo is None else CRUST_STEP
     parts = []
     for directions, normal in arcs(wedge, step):
-        parts += _face(directions, normal, shells, crust, gain, lift)
+        parts += _face(directions, normal, shells, crust, gain, lift, tomo)
     return merge(parts, key="cutaway")
 
 

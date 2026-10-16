@@ -49,7 +49,8 @@ from .gibs import MIN_LEVELS as GIBS_MIN
 from .subsurface import FACE_OFFSET, ImageWalls, Subsurface
 from .models import Models
 from .flow import FlowLines, PathFlowLines
-from .quakes import DepositPoints, FirePoints, PlantPoints, Quakes
+from .quakes import (DepositPoints, FirePoints, PlantPoints, Quakes,
+                     VolcanoPoints)
 from .satellites import SatellitePoints
 from .constellations import Constellations
 from .sky import Sky
@@ -75,6 +76,10 @@ UNDERLAY_LEVEL = 2
 # автор.
 WATER_COLOR = (0.09, 0.30, 0.55, 0.5)
 SHALLOW = 200.0
+# Доля непрозрачности воды под картой значений геофизики (слой «emag»):
+# синяя вода превращала красное молодое дно у хребтов в фиолетовое.
+# Выбор помощника, утверждает автор.
+WATER_UNDER_FIELD = 0.15
 # Подстилка лежит на UNDERLAY_DEPTH ниже поверхности. Это больше шага
 # буфера глубины у дальней плоскости. Худший случай - глаз на высоте
 # 9 км в 50 м от склона: ближняя плоскость 25 м, дальняя 680 км,
@@ -127,7 +132,7 @@ CTRL = enum(Qt, "KeyboardModifier", "ControlModifier")
 # Величины - умолчания помощника, их назначает автор.
 DOUBLE_ZOOM = 0.4  # двойной щелчок приближает в 2.5 раза, правой - отдаляет
 RIGHT_ZOOM = 0.005  # правая кнопка: e^(0.005·200) = 2.7 раза на 200 пикселей
-LOOK_PER_PIXEL = 0.1  # градусов на логический пиксель, Ctrl с левой
+LOOK_PER_PIXEL = 0.1  # градусов на логический пиксель, Ctrl+Shift с левой
 KEY_PAN = 0.05  # доля ширины видимой полосы на нажатие стрелки
 KEY_TURN = 3.0  # градусов на нажатие Shift и Ctrl со стрелками
 ARROWS = {"Key_Left": (-1, 0), "Key_Right": (1, 0), "Key_Up": (0, 1),
@@ -276,9 +281,11 @@ class GlobeView(QOpenGLWidget):
         self.navigator = Navigator(self.camera, Pose(lat, lon, distance))
         self.turning = None
         self._press = None  # пиксель нажатия левой кнопки
-        # Взгляд по сторонам с Ctrl и приближение правой кнопкой:
-        # последний пиксель и точка, к которой идёт приближение.
+        # Взгляд по сторонам с Ctrl и Shift, сдвиг вида с Ctrl
+        # и приближение правой кнопкой: последний пиксель и точка,
+        # к которой идёт приближение.
         self.looking = None
+        self.shifting = None
         self.zoom_drag = None
         # Стрелки и буквы навигации приходят виду, когда он в фокусе.
         self.setFocusPolicy(enum(Qt, "FocusPolicy", "StrongFocus"))
@@ -350,6 +357,7 @@ class GlobeView(QOpenGLWidget):
         self.wedge_crust = None
         self.wedge_gain = 1.0
         self.wedge_stretch = True
+        self.wedge_tomo = None  # томография мантии, core.tomography.Tomo
         # Край граней по поверхности, а не по эллипсоиду - ставит окно
         # в режиме «Геоид». Состояние, по которому грани собраны.
         self.wedge_lift = False
@@ -382,6 +390,8 @@ class GlobeView(QOpenGLWidget):
         self.osm_mines = DepositPoints()
         # Электростанции WRI (core/plants.py) - так же.
         self.plants = PlantPoints()
+        # Вулканы GVP (core/volcanoes.py) - так же.
+        self.volcanoes = VolcanoPoints()
         # Струйки ветра и течений (core/flow.py).
         self.flows = {"wind": FlowLines("wind"),
                       "currents": FlowLines("currents")}
@@ -478,6 +488,8 @@ class GlobeView(QOpenGLWidget):
         self.plate_marks = []
         # Числа поля прогноза погоды, ставит окно (_update_values).
         self.value_marks = []
+        # Подписи геофизики - линий склонения, скоростей плит, ставит окно.
+        self.geo_marks = []
         # Подписи устьев скважин подземного режима.
         self.subsurface_marks = []
         # Длины отрезков линейки и точка профиля высот.
@@ -661,7 +673,10 @@ class GlobeView(QOpenGLWidget):
             return
         gl = gpu.gl
         gl.glUniform1f(self.u_water, 1.0)
-        gl.glUniform4f(self.u_water_color, *WATER_COLOR)
+        color = WATER_COLOR
+        if self.gibs["emag"].shown:
+            color = color[:3] + (color[3] * WATER_UNDER_FIELD,)
+        gl.glUniform4f(self.u_water_color, *color)
         gl.glUniform1f(self.u_shallow, SHALLOW * self.store.scale)
         gl.glEnable(GL.GL_BLEND)
         GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
@@ -738,7 +753,16 @@ class GlobeView(QOpenGLWidget):
 
     def _wedge_faces(self):
         return cutaway.faces(self.wedge, crust=self.wedge_crust,
-                             gain=self.wedge_gain, lift=self._wedge_lift())
+                             gain=self.wedge_gain, lift=self._wedge_lift(),
+                             tomo=self.wedge_tomo)
+
+    def set_wedge_tomo(self, tomo):
+        """Томография мантии на гранях разреза (core.tomography.Tomo) или
+        None - мантия оболочками PREM."""
+        self.wedge_tomo = tomo
+        if self.wedge is not None:
+            self.cutaway.set_mesh("faces", self._wedge_faces())
+            self.update()
 
     def _wedge_gain(self):
         """Растяжение коры для нынешнего расстояния до точки взгляда,
@@ -1039,13 +1063,17 @@ class GlobeView(QOpenGLWidget):
             return
         shift = bool(event.modifiers() & SHIFT)
         ctrl = bool(event.modifiers() & CTRL)
-        if button == MIDDLE or (button == LEFT and shift):
+        if button == LEFT and ctrl and shift:
+            self.navigator.stop()
+            self.looking = (px, py)
+        elif button == LEFT and ctrl:
+            # Сдвиг вида параллельно экрану, направление взгляда прежнее.
+            self.navigator.stop()
+            self.shifting = (px, py)
+        elif button == MIDDLE or (button == LEFT and shift):
             # Поворот не обрывает начатое приближение колесом.
             self.navigator.stop_inertia()
             self.turning = (px, py)
-        elif button == LEFT and ctrl:
-            self.navigator.stop()
-            self.looking = (px, py)
         elif button == RIGHT:
             self.navigator.stop()
             self.zoom_drag = (px, py, py)
@@ -1089,6 +1117,11 @@ class GlobeView(QOpenGLWidget):
             step = LOOK_PER_PIXEL / self.devicePixelRatioF()
             self.navigator.look_around((px - x0) * step, (y0 - py) * step)
             self.update()
+        elif self.shifting is not None:
+            x0, y0 = self.shifting
+            if self.navigator.shift_by(px - x0, py - y0):
+                self.shifting = (px, py)
+                self.update()
         elif self.zoom_drag is not None:
             # Вверх - ближе, вниз - дальше, к точке нажатия.
             x0, y0, last = self.zoom_drag
@@ -1139,6 +1172,7 @@ class GlobeView(QOpenGLWidget):
                 self._menu_timer.start(QApplication.doubleClickInterval())
         self.turning = None
         self.looking = None
+        self.shifting = None
         self.zoom_drag = None
         self.navigator.release(time.monotonic())
         self.setCursor(self.tool_cursor)
@@ -1418,6 +1452,7 @@ class GlobeView(QOpenGLWidget):
         self.deposits.init_gl()
         self.osm_mines.init_gl()
         self.plants.init_gl()
+        self.volcanoes.init_gl()
         for lines in self.flows.values():
             lines.init_gl()
         self.path_flow.init_gl()
@@ -1452,6 +1487,7 @@ class GlobeView(QOpenGLWidget):
         self.deposits.release_gl()
         self.osm_mines.release_gl()
         self.plants.release_gl()
+        self.volcanoes.release_gl()
         for lines in self.flows.values():
             lines.release_gl()
         self.path_flow.release_gl()
@@ -2070,6 +2106,10 @@ class GlobeView(QOpenGLWidget):
             self.plants.draw(self.camera, ratio)
         else:
             self.plants.drawn = 0
+        if self.volcanoes.data is not None and not self.show_holes:
+            self.volcanoes.draw(self.camera, ratio)
+        else:
+            self.volcanoes.drawn = 0
         for lines in self.flows.values():
             if not self.show_holes:
                 lines.draw(self.camera, ratio)
@@ -2510,7 +2550,7 @@ class GlobeView(QOpenGLWidget):
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
         own = self._own_marks() + self.layer_marks + self.grid_marks \
-            + self.plate_marks + self.value_marks \
+            + self.plate_marks + self.value_marks + self.geo_marks \
             + self.subsurface_marks \
             + self.tool_marks
         if mark is not None or own:

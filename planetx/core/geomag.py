@@ -24,6 +24,8 @@ import datetime
 import json
 import math
 
+import numpy as np
+
 # Эллипсоид WGS84 и радиус сферы модели IGRF, км.
 A = 6378.137
 B = 6356.752314245
@@ -95,6 +97,113 @@ def parse_igrf(text):
     coeffs = [[order[k][e] for k in keys] for e in range(count)]
     secular = [order[k][count] for k in keys]
     return Model(epochs, coeffs, secular, nmax)
+
+
+# Модель gufm1 (Jackson, Jonkers, Walker 2000, doi:10.1098/rsta.2000.
+# 0569) - поле 1590-1990 годов по судовым журналам и измерениям,
+# коэффициенты Шмидта до степени 14, кубические B-сплайны во времени
+# с узлами через 2.5 года. Файл gufm1.txt лицензии не несёт, сайт
+# geomag.colorado.edu выкладывает его с разрешения автора модели,
+# поэтому модуль его не распространяет, а скачивает (GUFM_URL).
+# Разметка: строка заголовка, затем числа потоком - nmax, количество
+# сплайнов nspl, nspl + 4 узла, nspl блоков коэффициентов в порядке
+# IGRF (g10, g11, h11, g20 ...).
+GUFM_URL = "https://geomag.colorado.edu/images/GUFM/gufm1.txt"
+GUFM_FIRST = 1590.0
+GUFM_LAST = 1990.0
+GUFM_ATTRIBUTION = ("gufm1, Jackson et al. 2000",
+                    "https://geomag.colorado.edu/node/669")
+
+
+class Gufm:
+    """gufm1: узлы, коэффициенты сплайнов (nspl, nmax(nmax + 2))."""
+
+    first = GUFM_FIRST
+    last = GUFM_LAST
+
+    def __init__(self, nmax, knots, splines):
+        self.nmax = nmax
+        self.knots = knots
+        self.splines = splines
+
+    def at(self, year):
+        """Коэффициенты на год, None вне 1590-1990."""
+        if not self.first <= year <= self.last:
+            return None
+        return (bspline(year, self.knots) @ self.splines).tolist()
+
+
+def parse_gufm(text):
+    lines = text.splitlines()
+    if len(lines) < 2:
+        raise ValueError("not a gufm1 file")
+    try:
+        data = np.array(" ".join(lines[1:]).split(), dtype=np.float64)
+    except ValueError as error:
+        raise ValueError("not a gufm1 file: {}".format(error)) from error
+    if data.size < 2:
+        raise ValueError("not a gufm1 file")
+    nmax, nspl = int(data[0]), int(data[1])
+    size = nmax * (nmax + 2)
+    if data.size != 2 + nspl + 4 + nspl * size:
+        raise ValueError("gufm1: {} numbers".format(data.size))
+    knots = data[2:2 + nspl + 4]
+    return Gufm(nmax, knots, data[2 + nspl + 4:].reshape(nspl, size))
+
+
+def bspline(t, knots, order=4):
+    """Значения всех B-сплайнов порядка order в точке t, Кокс - де Бур."""
+    knots = np.asarray(knots, dtype=np.float64)
+    b = ((knots[:-1] <= t) & (t < knots[1:])).astype(np.float64)
+    if t == knots[-1]:
+        b[np.nonzero(knots[:-1] < knots[-1])[0][-1]] = 1.0
+    for k in range(2, order + 1):
+        n = len(knots) - k
+        left = knots[k - 1:k - 1 + n] - knots[:n]
+        right = knots[k:k + n] - knots[1:1 + n]
+        a = np.where(left > 0, (t - knots[:n]) / np.where(left > 0, left,
+                                                          1.0), 0.0)
+        c = np.where(right > 0, (knots[k:k + n] - t)
+                     / np.where(right > 0, right, 1.0), 0.0)
+        b = a * b[:n] + c * b[1:n + 1]
+    return b[:len(knots) - order]
+
+
+class Combined:
+    """Поле по годам: gufm1 до первого года IGRF, дальше IGRF-14."""
+
+    def __init__(self, igrf, gufm=None):
+        self.igrf = igrf
+        self.gufm = gufm
+
+    @property
+    def first(self):
+        return self.gufm.first if self.gufm is not None else self.igrf.first
+
+    @property
+    def nmax(self):
+        """Степень IGRF - для поиска полюса после таблицы (dip_pole)."""
+        return self.igrf.nmax
+
+    @property
+    def last(self):
+        return self.igrf.last
+
+    def part(self, year):
+        """Модель на год: IGRF, gufm1 или None."""
+        if year >= self.igrf.first:
+            return self.igrf if year <= self.igrf.last else None
+        if self.gufm is not None and self.gufm.first <= year:
+            return self.gufm
+        return None
+
+    def at(self, year):
+        part = self.part(year)
+        return None if part is None else part.at(year)
+
+    def nmax_at(self, year):
+        part = self.part(year)
+        return part.nmax if part is not None else self.igrf.nmax
 
 
 def _legendre(nmax, theta):
@@ -184,7 +293,9 @@ def field(model, lat, lon, year, height=0.0):
     coeffs = model.at(year)
     if coeffs is None:
         return None
-    x, y, z = components(coeffs, model.nmax, lat, lon, height)
+    nmax = model.nmax_at(year) if hasattr(model, "nmax_at") \
+        else model.nmax
+    x, y, z = components(coeffs, nmax, lat, lon, height)
     h = math.hypot(x, y)
     return {"declination": math.degrees(math.atan2(y, x)),
             "inclination": math.degrees(math.atan2(z, h)),
@@ -307,6 +418,125 @@ def pole(model, track, year):
     if found is not None or not track or year < track[-1][0]:
         return found
     return dip_pole(model, year, track[-1][1:])
+
+
+# Линии равного склонения - просьба автора от 16 октября 2026 года после
+# списка геофизики. Поле считается сеткой GRID_STEP градусов массивами
+# NumPy, линии - через ISOGONIC_STEP градусов, нулевая - агона. Шаги -
+# выбор помощника, утверждает автор.
+GRID_STEP = 2.0
+ISOGONIC_STEP = 10.0
+GRID_LAT = 88.0  # широта края сетки, у полюса склонение без смысла
+
+
+def _legendre_rows(nmax, theta):
+    """_legendre для массива кошироты theta (k,): P[n][m] - массивы."""
+    theta = np.asarray(theta, dtype=np.float64)
+    cos_t = np.cos(theta)
+    sin_t = np.sqrt(np.maximum(1.0 - cos_t * cos_t, 0.0))
+    zero = np.zeros_like(theta)
+    p = [[zero for _ in range(nmax + 2)] for _ in range(nmax + 1)]
+    p[0][0] = np.ones_like(theta)
+    p[1][1] = sin_t
+    root = [math.sqrt(i) for i in range(2 * nmax * nmax + 1)]
+    for m in range(nmax):
+        tmp = root[m + m + 1] * p[m][m]
+        p[m + 1][m] = cos_t * tmp
+        if m > 0:
+            p[m + 1][m + 1] = sin_t * tmp / root[m + m + 2]
+        for n in range(m + 2, nmax + 1):
+            d = n * n - m * m
+            e = n + n - 1
+            p[n][m] = (e * cos_t * p[n - 1][m] - root[d - e] * p[n - 2][m]) \
+                / root[d]
+    p[0][2] = -p[1][1]
+    p[1][2] = p[1][0]
+    for n in range(2, nmax + 1):
+        p[0][n + 1] = -math.sqrt((n * n + n) / 2.0) * p[n][1]
+        p[1][n + 1] = (math.sqrt(2.0 * (n * n + n)) * p[n][0]
+                       - math.sqrt(n * n + n - 2.0) * p[n][2]) / 2.0
+        for m in range(2, n):
+            p[m][n + 1] = 0.5 * (
+                math.sqrt((n + m) * (n - m + 1.0)) * p[n][m - 1]
+                - math.sqrt((n + m + 1.0) * (n - m)) * p[n][m + 1])
+        p[n][n + 1] = math.sqrt(2.0 * n) * p[n][n - 1] / 2.0
+    return p
+
+
+def components_grid(coeffs, nmax, lats, lons, height=0.0):
+    """components сеткой: X, Y, Z (строки lats, столбцы lons), нТл."""
+    lats = np.asarray(lats, dtype=np.float64)
+    lons = np.asarray(lons, dtype=np.float64)
+    geo = [_geocentric(float(lat), height) for lat in lats]
+    radius = np.array([g[0] for g in geo])
+    theta = np.clip([g[1] for g in geo], 1e-9, math.pi - 1e-9)
+    cd = np.array([g[2] for g in geo])[:, None]
+    sd = np.array([g[3] for g in geo])[:, None]
+    p = _legendre_rows(nmax, theta)
+    sin_t = p[1][1][:, None]
+    phi = np.radians(lons)[None, :]
+    ratio = REFERENCE / radius
+    shape = (len(lats), len(lons))
+    br, bt, bp = np.zeros(shape), np.zeros(shape), np.zeros(shape)
+    k = 0
+    for n in range(1, nmax + 1):
+        rn = (ratio ** (n + 2))[:, None]
+        g = coeffs[k]
+        k += 1
+        br += (n + 1) * p[n][0][:, None] * rn * g
+        bt -= p[0][n + 1][:, None] * rn * g
+        for m in range(1, n + 1):
+            g, h = coeffs[k], coeffs[k + 1]
+            k += 2
+            cm, sm = np.cos(m * phi), np.sin(m * phi)
+            wave = g * cm + h * sm
+            br += (n + 1) * p[n][m][:, None] * rn * wave
+            bt -= p[m][n + 1][:, None] * rn * wave
+            bp += m * p[n][m][:, None] / sin_t * rn * (g * sm - h * cm)
+    x, y, z = -bt, bp, -br
+    return x * cd + z * sd, y, z * cd - x * sd
+
+
+def declination_grid(coeffs, nmax, step=GRID_STEP):
+    """Склонение, градусы, на сетке: широты, долготы, значения
+    (строки - широты с юга)."""
+    lats = np.arange(-GRID_LAT, GRID_LAT + step / 2.0, step)
+    lons = np.arange(-180.0, 180.0 + step / 2.0, step)
+    x, y, _ = components_grid(coeffs, nmax, lats, lons)
+    return lats, lons, np.degrees(np.arctan2(y, x))
+
+
+def isogonic_lines(lats, lons, values, step=ISOGONIC_STEP):
+    """Линии равного склонения: список (значение, [(широта, долгота)]).
+    Ячейка, где склонение переходит через ±180°, пропускается - там
+    угол не непрерывен."""
+    try:  # внутри плагина QGIS
+        from .contours import chain, segments
+    except ImportError:  # headless-тесты
+        from contours import chain, segments
+    values = np.asarray(values, dtype=np.float64)
+    corners = np.stack([values[:-1, :-1], values[:-1, 1:],
+                        values[1:, :-1], values[1:, 1:]])
+    wrap = corners.max(axis=0) - corners.min(axis=0) > 180.0
+    out = []
+    levels = np.arange(-180.0 + step, 180.0 - step / 2.0, step)
+    rows, cols = len(lats), len(lons)
+    # Ячейка с переходом через ±180° - NaN в её угле, segments её
+    # пропускает. Соседние ячейки того же угла пропадают тоже, это
+    # места у полюсов, где линии сходятся.
+    cut = values.copy()
+    cut[:-1, :-1][wrap] = np.nan
+    for level in levels:
+        found = segments(cut, level)
+        for line in chain(found):
+            r = np.clip(line[:, 0], 0, rows - 1)
+            c = np.clip(line[:, 1], 0, cols - 1)
+            lat = np.interp(r, np.arange(rows), lats)
+            lon = np.interp(c, np.arange(cols), lons)
+            if len(lat) >= 2:
+                out.append((float(level), list(zip(lat.tolist(),
+                                                   lon.tolist()))))
+    return out
 
 
 def trail(track, year, start=None):

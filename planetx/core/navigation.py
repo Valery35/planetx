@@ -28,12 +28,12 @@ import numpy as np
 
 try:  # внутри плагина QGIS
     from . import ellipsoid
-    from .camera import MAX_TERRAIN, orientation
+    from .camera import MAX_TERRAIN, enu, orientation
     from .ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                             ray_intersect, surface_normal)
 except ImportError:  # headless-тесты
     import ellipsoid
-    from camera import MAX_TERRAIN, orientation
+    from camera import MAX_TERRAIN, enu, orientation
     from ellipsoid import (ecef_to_geodetic, geodetic_to_ecef,
                            ray_intersect, surface_normal)
 
@@ -57,14 +57,17 @@ class Pose:
 
     h - высота точки взгляда над эллипсоидом. terrain(lat, lon) - высота
     рельефа или None. С рельефом точка взгляда при сдвиге садится
-    на рельеф.
+    на рельеф. roll - крен в градусах, поворот кадра вокруг оси взгляда
+    против часовой стрелки. Его даёт только сдвиг вида с Ctrl (shift),
+    прочие действия его сохраняют, новая поза перелёта и тура - без
+    крена.
     """
 
     __slots__ = ("lat", "lon", "distance", "heading", "tilt", "h",
-                 "terrain")
+                 "terrain", "roll")
 
     def __init__(self, lat, lon, distance, heading=0.0, tilt=0.0, h=0.0,
-                 terrain=None):
+                 terrain=None, roll=0.0):
         self.lat = lat
         self.lon = lon
         self.distance = distance
@@ -72,13 +75,19 @@ class Pose:
         self.tilt = tilt
         self.h = h
         self.terrain = terrain
+        self.roll = roll
 
     def copy(self):
         return Pose(self.lat, self.lon, self.distance, self.heading,
-                    self.tilt, self.h, self.terrain)
+                    self.tilt, self.h, self.terrain, self.roll)
 
     def eye_rotation(self):
         rot = orientation(self.lat, self.lon, self.heading, self.tilt)
+        if self.roll:
+            c = math.cos(math.radians(self.roll))
+            s = math.sin(math.radians(self.roll))
+            rot = rot @ np.array([[c, -s, 0.0], [s, c, 0.0],
+                                  [0.0, 0.0, 1.0]])
         eye = geodetic_to_ecef(self.lat, self.lon, self.h) + rot[:, 2] \
             * self.distance
         return eye, rot
@@ -434,6 +443,59 @@ def look(pose, d_heading, d_tilt):
     return out
 
 
+def shift(camera, pose, dx, dy):
+    """Сдвинуть вид параллельно экрану на dx, dy пикселей кадра.
+
+    Ctrl с левой кнопкой - просьба пользователя Ивана от 16 октября
+    2026 года: часть разреза Земли у края кадра встаёт в середину без
+    поворота вокруг центра Земли. Глаз уходит в плоскости экрана так,
+    что точка на расстоянии точки взгляда идёт за курсором, направление
+    взгляда прежнее. Новая точка взгляда - пересечение того же луча
+    с поверхностью, азимут и наклон считаются в ней заново. Ось вправо
+    при сдвиге вбок уже не лежит в плоскости горизонта новой точки,
+    поэтому прежний поворот кадра держит крен позы. Возвращает None,
+    если луч уходит мимо Земли, наклон больше MAX_TILT или глаз
+    выходит из допустимой высоты.
+    """
+    eye, rot = pose.eye_rotation()
+    metres = pose.distance / focal(camera)
+    eye = eye - rot[:, 0] * (dx * metres) + rot[:, 1] * (dy * metres)
+    back = rot[:, 2]
+    ground = pose.h
+    lat = lon = distance = None
+    for _ in range(LOOK_STEPS):
+        t = ray_intersect(eye, -back, ground)
+        if t is None:
+            return None
+        new_lat, new_lon, _ = ecef_to_geodetic(eye - back * t)
+        done = distance is not None \
+            and abs(t - distance) < LOOK_TOLERANCE * t
+        lat, lon, distance = float(new_lat), float(new_lon), float(t)
+        if pose.terrain is not None:
+            ground = pose.terrain(lat, lon)
+        if done:
+            break
+    east, north, up = enu(lat, lon)
+    tilt = math.degrees(math.acos(max(-1.0, min(1.0, float(back @ up)))))
+    if tilt > MAX_TILT:
+        return None
+    # Азимут - направление взгляда на касательной плоскости, при
+    # отвесном взгляде - верх экрана. Верх экрана при наклоне не годится,
+    # крен в новой точке нулевой, и прежний верх от направления отходит.
+    top = -back if tilt > 1e-3 else rot[:, 1]
+    top = top - float(top @ up) * up
+    heading = math.degrees(math.atan2(float(top @ east),
+                                      float(top @ north))) % 360.0
+    out = pose.moved_to(lat, lon)
+    out.distance = distance
+    out.heading = heading
+    out.tilt = tilt
+    plain = orientation(lat, lon, heading, tilt)
+    out.roll = math.degrees(math.atan2(float(rot[:, 0] @ plain[:, 1]),
+                                       float(rot[:, 0] @ plain[:, 0])))
+    return out if allowed(out) else None
+
+
 class Navigator:
     """Состояние навигации между событиями мыши."""
 
@@ -560,6 +622,15 @@ class Navigator:
         """Взгляд по сторонам, глаз на месте."""
         self.stop()
         pose = look(self.pose, d_heading, d_tilt)
+        if pose is None:
+            return False
+        self.set_pose(pose)
+        return True
+
+    def shift_by(self, dx, dy):
+        """Сдвиг вида параллельно экрану, Ctrl с левой кнопкой."""
+        self.stop()
+        pose = shift(self.camera, self.pose, dx, dy)
         if pose is None:
             return False
         self.set_pose(pose)

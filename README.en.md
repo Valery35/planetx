@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.88.0.
+A 3D globe inside QGIS. PlanetX version 0.89.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -60,7 +60,12 @@ and atmosphere, from space down to single streets.
   core of the PREM model and the Slab2 subducting slabs. The corners of
   the sector can be dragged with the mouse. The Section down… item in
   the menu of a path shows a section of the Earth along the path in its
-  own window and as a wall on the globe.
+  own window and as a wall on the globe. The SEISGLOB2 tomography colours
+  the mantle on the faces by the seismic wave speed.
+- **Geophysics.** Magnetic poles and declination lines since 1590, EMAG2v3
+  magnetic anomalies, XGM2019e gravity anomalies, the EGM2008 geoid,
+  ocean floor age, heat flow, lithospheric plate motion and Holocene
+  volcanoes. A click on the globe shows the value at the point.
 - **Subsurface mode.** Drill holes along their survey, bed roofs,
   sections with images and tunnels from project layers go under the
   globe surface with the QGIS style and labels. The surface becomes
@@ -124,7 +129,8 @@ and atmosphere, from space down to single streets.
 - **Mouse and keys.** A left double click flies to the
   point and zooms in, a right double click zooms out. Dragging with the
   right button up zooms in, down zooms out. Ctrl with the left button
-  looks around, the eye stays in place. Arrows move the view, with
+  moves the view along the screen without turning it, Ctrl and Shift
+  with the left button look around, the eye stays in place. Arrows move the view, with
   Shift they turn and tilt, with Ctrl they look around. PageUp and
   PageDown zoom, N puts north up, U looks straight down, R does both,
   Space stops.

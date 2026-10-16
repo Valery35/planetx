@@ -351,3 +351,31 @@ class PlantPoints(DepositPoints):
         self.lats = lat
         self.lons = lon
         self.times = np.full(len(lat), np.nan)
+
+
+class VolcanoPoints(DepositPoints):
+    """Вулканы GVP (core/volcanoes.py): цвет - время последнего
+    извержения, размер - высота. Недавно извергавшиеся рисуются поверх
+    прочих."""
+
+    def set_volcanoes(self, data, scale, ground):
+        from ..core import volcanoes as vo
+        self.data = data if data is not None and len(data) else None
+        if self.data is None:
+            self.focus = np.zeros((0, 3))
+            self.epicenter = self.focus
+            return
+        order = np.argsort(data.period, kind="stable")
+        self.order = order
+        lat, lon = data.lat[order], data.lon[order]
+        g = np.asarray(ground(lat, lon), dtype=np.float64)
+        self.focus = ecef(lat, lon, display(g, scale, g))
+        self.epicenter = self.focus
+        self.up = core.surface_normal(lat, lon)
+        rgb = vo.colors(data.period[order])
+        self.colors = np.hstack([rgb / 255.0, np.full((len(rgb), 1), 0.95)]) \
+            .astype(np.float32)
+        self.sizes = vo.sizes(data.elevation[order])
+        self.lats = lat
+        self.lons = lon
+        self.times = np.full(len(lat), np.nan)

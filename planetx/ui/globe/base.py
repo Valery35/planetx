@@ -10,7 +10,7 @@ import time
 import numpy as np
 from qgis.core import QgsSettings
 
-from ...core import (basemap, cadastre, clouds, emag, sun, temperature,
+from ...core import (basemap, cadastre, clouds, fields, sun, temperature,
                      cutaway, slabs, themes)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
@@ -44,14 +44,16 @@ TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 # Раздел «На глобусе»: непрозрачность и выгрузка слоёв. Точки - атрибут
 # вида, тайловые слои - слои вида GIBS, слои QGIS - в наложении.
 POINT_LAYERS = {"deposits": "deposits", "osm_mines": "osm_mines",
-                "plants": "plants", "quakes": "quakes", "fires": "fires"}
+                "plants": "plants", "quakes": "quakes", "fires": "fires",
+                "volcanoes": "volcanoes"}
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
               "currents": ("currents",), "cadastre": ("cadastre",),
-              "emag": ("emag",)}
+              "emag": ("emag",), "seafloor_age": ("emag",),
+              "heatflow": ("emag",), "gravity": ("emag",)}
 QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -122,6 +124,8 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 GEOID_SCALE_KEY = "PlanetX/geoid_scale"  # масштаб режима «Геоид»
 # Растягивать ли кору разреза Земли издалека, по умолчанию да.
 STRETCH_KEY = "PlanetX/cutaway_stretch"
+# Раскрашивать ли мантию разреза томографией, по умолчанию нет.
+TOMO_KEY = "PlanetX/cutaway_tomo"
 # Поток по путям (core/pathflow.py): шаг таймера штрихов, мс, подъём
 # штриха над рельефом, м, на сколько пикселей штрих толще линии, на
 # сколько ширин вида от точки взгляда считаются штрихи. Выбор
@@ -144,7 +148,10 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "plants": False, "infra_osm": False,
                   "cables": False, "currents": False, "cadastre": False,
                   "magpoles": False, "emag": False, "geoid": False,
-                  "air": True}
+                  "magdecl": False, "seafloor_age": False,
+                  "heatflow": False, "gravity": False,
+                  "platemotion": False,
+                  "volcanoes": False, "air": True}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
@@ -152,11 +159,25 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "plates", "fires", "satellites",
                 "deposits", "mining", "osm_mines", "plants", "infra_osm",
                 "cables", "currents", "cadastre", "magpoles", "emag",
-                "geoid")
+                "geoid", "magdecl", "seafloor_age", "heatflow",
+                "gravity", "platemotion", "volcanoes")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
 POLE_WIDTH = 2.0
+# Линии склонения: восточное - красные, западное - синие, агона -
+# зелёная толще. Подпись - у линии не короче DECL_LABEL_POINTS точек.
+# Выбор помощника, утверждает автор.
+DECL_EAST = (215, 70, 60, 220)
+DECL_WEST = (60, 110, 215, 220)
+DECL_ZERO = (40, 170, 70, 255)
+DECL_WIDTH = 1.4
+DECL_ZERO_WIDTH = 2.6
+DECL_LABEL_POINTS = 8
+# Стрелки скоростей плит (core/platemotion.py): цвет и толщина, выбор
+# помощника, утверждает автор.
+MOTION_COLOR = (255, 225, 60, 235)
+MOTION_WIDTH = 1.8
 POLE_FIRST = "1590-01-01"  # первый год таблицы NOAA
 MAGNETIC_ATTRIBUTION = ("NOAA NCEI, IGRF-14 IAGA",
                         "https://www.ncei.noaa.gov/products/"
@@ -333,10 +354,10 @@ def prepare_theme(theme_key):
                                                            clear=clear))
 
 
-def prepare_emag(key, rgba):
-    """Работа рабочего потока для тайла магнитных аномалий: значения нТл
-    в раскраску и уровни мипмапов."""
-    return mip_chain(emag.rgba(rgba))
+def prepare_field(name, key, rgba):
+    """Работа рабочего потока для тайла карты значений name
+    (core/fields.py): значения в раскраску и уровни мипмапов."""
+    return mip_chain(fields.rgba(fields.FIELDS[name], rgba))
 
 
 def prepare_lights(key, rgba):

@@ -24,6 +24,49 @@ def load():
     return model, poles
 
 
+class TestGrid(unittest.TestCase):
+    """Поле сеткой и линии равного склонения."""
+
+    def setUp(self):
+        self.model, _ = load()
+        self.coeffs = self.model.at(2020.0)
+
+    def test_grid_matches_point_field(self):
+        lats = [-60.0, 0.0, 55.75]
+        lons = [-150.0, 37.62, 100.0]
+        x, y, z = geomag.components_grid(self.coeffs, self.model.nmax,
+                                         lats, lons)
+        for i, lat in enumerate(lats):
+            for j, lon in enumerate(lons):
+                px, py, pz = geomag.components(self.coeffs, self.model.nmax,
+                                               lat, lon)
+                self.assertAlmostEqual(x[i, j], px, delta=1e-6)
+                self.assertAlmostEqual(y[i, j], py, delta=1e-6)
+                self.assertAlmostEqual(z[i, j], pz, delta=1e-6)
+
+    def test_isogonic_points_have_their_declination(self):
+        lats, lons, values = geomag.declination_grid(self.coeffs,
+                                                     self.model.nmax)
+        lines = geomag.isogonic_lines(lats, lons, values)
+        levels = {level for level, _ in lines}
+        self.assertIn(0.0, levels)
+        self.assertIn(10.0, levels)
+        self.assertIn(-10.0, levels)
+        worst = 0.0
+        for level, points in lines:
+            if abs(level) > 40.0:
+                continue
+            for lat, lon in points[::7]:
+                found = geomag.field(self.model, lat, lon, 2020.0)
+                if abs(lat) > 70.0 or found["horizontal"] < 10000.0:
+                    # У полюсов Земли и у магнитных полюсов, где линии
+                    # сходятся, склонение меняется быстрее шага сетки.
+                    continue
+                worst = max(worst, abs(found["declination"] - level))
+        # Сетка 2°: между узлами склонение линейно с точностью до градуса.
+        self.assertLess(worst, 1.0)
+
+
 class TestModel(unittest.TestCase):
     def setUp(self):
         self.model, self.poles = load()

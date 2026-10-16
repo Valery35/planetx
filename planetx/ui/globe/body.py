@@ -178,6 +178,8 @@ class BodyMixin:
         self.deposit_legend.setVisible(self._deposit_legend_on())
         self.plant_legend.setVisible(bool(self.extras.get("plants"))
                                      and self.planet.earth)
+        self.volcano_legend.setVisible(bool(self.extras.get("volcanoes"))
+                                       and self.planet.earth)
         self.infra_legend.setVisible(bool(self.extras.get("infra_osm"))
                                      and self.planet.earth)
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))

@@ -11,14 +11,15 @@ import zipfile
 import time
 
 import numpy as np
-from qgis.core import QgsSettings
+from qgis.core import QgsApplication, QgsSettings
 from qgis.PyQt.QtCore import QTimer
 from qgis.utils import iface
 
 from ... import journal
 from ...core import (basemap, geoid, paleo, dem as dem_model, models,
                      deposits as deposits_core, fires as fires_core, crust,
-                     cutaway, quakes, slabs, sources as datasources)
+                     cutaway, quakes, slabs, sources as datasources,
+                     tomography)
 from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
 from ...i18n import tr
 from ...net.gdalnet import executor
@@ -28,7 +29,8 @@ from ...render.view import start_keys
 from ..inset import DeepSource, DemSource, warm as warm_gdal
 from ..deposits import deposits_path, parse_deposits
 from ..overpass import brief_error
-from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, STRETCH_KEY,
+from ..tomo import parse_tomo
+from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, STRETCH_KEY, TOMO_KEY,
                    TERRAIN_ATTRIBUTION, TERRAIN_MIRRORS, all_sources,
                    link_html)
 
@@ -195,6 +197,8 @@ class EarthDataMixin:
         if self.crust is None and self._crust_reply is None:
             self.crust_error = None
         self._want_crust()
+        if self.panel.cutaway_tomo:
+            self.set_cutaway_tomo(True)
         self._show_attribution()
 
     def set_wedge_box(self, west, east, south, north):
@@ -228,7 +232,95 @@ class EarthDataMixin:
         self.view.set_wedge_stretch(on)
         self._wedge_gain_changed()
 
-    def _crust_done(self, data, error):
+    # Томография мантии на гранях разреза (core/tomography.py).
+
+    def cutaway_tomo(self):
+        """Раскрашивать ли мантию разреза томографией - настройка пункта
+        меню строки «Разрез Земли», по умолчанию нет."""
+        return QgsSettings().value(TOMO_KEY, False, type=bool)
+
+    @staticmethod
+    def _tomo_path():
+        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                              "PlanetX")
+        os.makedirs(folder, exist_ok=True)
+        return os.path.join(folder, "seisglob2.npz")
+
+    def set_cutaway_tomo(self, on):
+        """Пункт «Томография мантии»: модель из файла профиля, иначе
+        скачивается файл netCDF около 28 МБ, разбор - в рабочем потоке."""
+        QgsSettings().setValue(TOMO_KEY, bool(on))
+        self.panel.cutaway_tomo = bool(on)
+        if on and self.tomo is None and os.path.exists(self._tomo_path()):
+            try:
+                self.tomo = tomography.load(self._tomo_path())
+            except (OSError, ValueError, KeyError) as error:
+                journal.note("tomography file: {}".format(error))
+        if on and self.tomo is None:
+            self._want_tomo()
+        self._show_tomo()
+
+    def _show_tomo(self):
+        on = bool(self.panel.cutaway_tomo) and self.tomo is not None
+        self.view.set_wedge_tomo(self.tomo if on else None)
+        self.cutaway_legend.set_tomo(on)
+        self._place_attribution()
+        self._show_attribution()
+
+    def _want_tomo(self):
+        if self._tomo_reply is not None or self._tomo_job is not None:
+            return
+        self._tomo_reply = fetch_bytes(tomography.URL, self._tomo_arrived)
+        self.view.data_pending += 1
+        self.message = (tr("Загрузка томографии SEISGLOB2, около 28 МБ…"),
+                        time.monotonic())
+        self._show_state()
+
+    def _tomo_arrived(self, data, error):
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        self._tomo_reply = None
+        if data is None:
+            journal.note("tomography: {}".format(brief_error(error)))
+            self.message = (tr("Томография не загрузилась: {error}",
+                               error=brief_error(error or "")),
+                            time.monotonic())
+            self._show_state()
+            return
+        nc = self._tomo_path() + ".nc"
+        try:
+            with open(nc, "wb") as fh:
+                fh.write(bytes(data))
+        except OSError as problem:
+            journal.note("tomography write: {}".format(problem))
+            return
+        # Первый вызов GDAL - в главном потоке: предупреждение osgeo
+        # о режиме исключений в рабочем потоке роняло бы QGIS.
+        warm_gdal()
+        self._tomo_job = executor("deposits", 1).submit(
+            parse_tomo, nc, self._tomo_path())
+        self.view.data_pending += 1
+        QTimer.singleShot(DEPOSIT_POLL, self._tomo_poll)
+
+    def _tomo_poll(self):
+        job = self._tomo_job
+        if job is None:
+            return
+        if not job.done():
+            QTimer.singleShot(DEPOSIT_POLL, self._tomo_poll)
+            return
+        self._tomo_job = None
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        try:
+            self.tomo = job.result()
+        except (OSError, ValueError, KeyError, RuntimeError) as error:
+            journal.note("tomography parse: {}".format(error))
+            self.message = (tr("Томография не разобрана."),
+                            time.monotonic())
+            self._show_state()
+            return
+        self._show_tomo()
+
+    def _crust_done(self, data, error, saved=False):
         self._crust_reply = None
         self.crust_error = error
         if data is not None:
@@ -236,6 +328,8 @@ class EarthDataMixin:
                 self.crust = crust.from_archive(data)
             except crust.CrustError as problem:
                 self.crust_error = str(problem)
+            if self.crust is not None and not saved:
+                self._save_crust(data)
         if self.crust is None:
             # Без модели кора - слой PREM постоянной толщины, причина -
             # в шкале и журнале. Замечание пользователя от 15 октября
@@ -256,12 +350,46 @@ class EarthDataMixin:
         self._show_attribution()
         self._refresh_section()
 
+    @staticmethod
+    def _crust_path():
+        """Архив модели коры в профиле QGIS. Его можно положить туда
+        вручную, если сайт UCSD не отвечает, - вопрос пользователя Ивана
+        от 16 октября 2026 года."""
+        return os.path.join(QgsApplication.qgisSettingsDirPath(), "PlanetX",
+                            crust.FILE)
+
+    def _save_crust(self, data):
+        """Копия скачанного архива в профиль: следующий сеанс не ходит
+        в сеть, даже когда кэш QGIS очищен."""
+        path = self._crust_path()
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path + ".part", "wb") as fh:
+                fh.write(data)
+            os.replace(path + ".part", path)
+        except OSError as problem:
+            journal.note("CRUST1.0 не записана: {}".format(problem))
+
     def _want_crust(self):
-        """Модель коры CRUST1.0: не распространяется с модулем, она
-        скачивается с сайта UCSD и дальше берётся из кэша QGIS."""
-        if self.crust is None and self._crust_reply is None \
-                and not self.crust_error:
-            self._crust_reply = fetch_bytes(crust.URL, self._crust_done)
+        """Модель коры CRUST1.0: не распространяется с модулем. Сначала
+        архив в профиле QGIS (скачанный прежде или положенный вручную),
+        иначе запрос к сайту UCSD, ответ записывается в профиль."""
+        if self.crust is not None or self._crust_reply is not None \
+                or self.crust_error:
+            return
+        path = self._crust_path()
+        if os.path.isfile(path):
+            try:
+                with open(path, "rb") as fh:
+                    data = fh.read()
+            except OSError as problem:
+                journal.note("CRUST1.0 не прочитана: {}".format(problem))
+            else:
+                self._crust_done(data, None, saved=True)
+                if self.crust is not None:
+                    return
+                self.crust_error = ""
+        self._crust_reply = fetch_bytes(crust.URL, self._crust_done)
 
     def _read_slab_index(self):
         if self.slab_index is None:

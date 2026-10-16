@@ -118,7 +118,7 @@ class PlacesMixin:
             times += [when.stamp(when.text(t))
                       for t in flow.currents_span()]
         # Магнитные полюса - с 1590 года по сегодня.
-        if self._poles_on():
+        if self._magnetic_on():
             times += [when.stamp(POLE_FIRST),
                       when.stamp(when.text(time.time()))]
         # Треки и слои проекта со временем - их охват.
@@ -296,6 +296,7 @@ class PlacesMixin:
         shapes += getattr(self, "grid_shapes", [])
         shapes += getattr(self, "parcel_shapes", [])
         shapes += self._pole_shapes()
+        shapes += getattr(self, "motion_shapes", [])
         if self._ruler_open():
             shape = self.ruler.shape()
             if shape is not None:
