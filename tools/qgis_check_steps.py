@@ -100,6 +100,7 @@ def run(index=0):
         QTimer.singleShot(again, lambda: run(index))
         return
     result["last_step"] = function.__name__
+    result["steps_run"] = index + 1
     try:
         save()
     except (OSError, TypeError, ValueError):
@@ -10747,15 +10748,33 @@ def layer_click():
                     for n in range(3)]
     QgsProject.instance().addMapLayers(layers_added)
     window._show_layers()
-    # Слои проекта - группа «Проект QGIS» списка «Слоёв».
-    layers = window.panel.geo
+    # Слои проекта - свой список раздела «Проект QGIS» (с 0.92.0). Щелчок
+    # идёт в список строки: прямоугольник строки чужого списка попадал
+    # в строку «Основы» с меню, и модальное меню вешало прогон.
     out["panel_rows"] = len(window.panel.project_rows())
+
+    import planetx.ui.panel as panel_module
 
     def click(tree, item):
         rect = tree.visualItemRect(item)
-        QTest.mouseClick(tree.viewport(), left, enum(
-            Qt, "KeyboardModifier", "NoModifier"),
-            QPoint(rect.left() + 10, rect.center().y()))
+        point = QPoint(rect.left() + 10, rect.center().y())
+        # Панель узнаёт щелчок по «⋯» по положению курсора мыши, а QTest
+        # курсор не двигает: при мыши правее списка открывалось меню
+        # строки, его exec вешал прогон. Курсор панели на время щелчка -
+        # точка щелчка, мышь пользователя не трогается.
+        where = tree.viewport().mapToGlobal(point)
+
+        class Cursor:
+            @staticmethod
+            def pos():
+                return where
+        real = panel_module.QCursor
+        panel_module.QCursor = Cursor
+        try:
+            QTest.mouseClick(tree.viewport(), left, enum(
+                Qt, "KeyboardModifier", "NoModifier"), point)
+        finally:
+            panel_module.QCursor = real
 
     for follow in (False, True):
         window.follow = follow
@@ -10763,7 +10782,7 @@ def layer_click():
             if not item.text(0).startswith("click "):
                 continue
             before = str(item.checkState(0))
-            click(layers, item)
+            click(item.treeWidget(), item)
             # Флажки слоёв уходят окну через проход цикла событий.
             QgsApplication.processEvents()
             QgsApplication.processEvents()
@@ -16244,6 +16263,152 @@ def magdecl_1800():
     out["gl"] = dict(view.gl_errors)
 
 
+def _series_scenes(started, name, limit=240.0):
+    """Ждать конца поиска и облачности окна снимков, потом открыть ряд.
+    None - готово, число - пауза повтора."""
+    dialog = state["window"].sentinel_dialog
+    spent = time.monotonic() - state[started]
+    busy = dialog.reply is not None or dialog.cloud_jobs \
+        or dialog.sas_reply is not None or dialog.sas_waiting
+    if dialog.cloud_jobs and dialog.series_button.isEnabled():
+        # Кнопка ряда включается до конца подсчёта облачности.
+        result[name]["button_early"] = True
+    if busy and spent < limit:
+        return 500
+    out = result[name]
+    out["search_seconds"] = round(spent, 1)
+    out["scenes"] = len(dialog.scenes)
+    out["series_scenes"] = len(dialog.series_scenes())
+    out["button"] = dialog.series_button.isEnabled()
+    dialog.open_series()
+    state[started] = time.monotonic()
+    return None
+
+
+def _series_done(started, name, limit=300.0):
+    """Ждать расчёта ряда и записать итог. None - готово."""
+    series = state["window"].sentinel_dialog.series
+    spent = time.monotonic() - state[started]
+    if series is None:
+        result[name]["series"] = None
+        return None
+    if series.jobs and spent < limit:
+        return 500
+    rows = series.rows()
+    out = result[name]
+    out["series_seconds"] = round(spent, 1)
+    out["product"] = series.current_product()
+    out["computed"] = len(series.values)
+    out["points"] = len(rows)
+    out["status"] = series.status.text()
+    out["medians"] = [[when[:10], round(p.median, 3), round(p.share)]
+                      for _, when, _, p in rows]
+    return None
+
+
+@check(500)
+def series_open():
+    """Ряд по датам: Sentinel-2 у Перми, участок 2 км за год до
+    сегодня, NDVI. Сцены - видимые в списке окна снимков."""
+    window = state["window"]
+    window.set_body("earth")
+    dialog = window.sentinel_here(*ROUTE_A)
+    dialog.side.setValue(2.0)
+    dialog.mission.setCurrentIndex(dialog.mission.findData("sentinel2"))
+    dialog.search()
+    state["series_started"] = time.monotonic()
+    result["series"] = {}
+
+
+@check(500)
+def series_wait():
+    return _series_scenes("series_started", "series")
+
+
+@check(500)
+def series_check():
+    """NDVI ряда: точки есть, летняя медиана выше зимней, щелчок по
+    точке выбирает сцену списка, CSV записан, смена величины считает
+    заново."""
+    again = _series_done("series_started", "series")
+    if again:
+        return again
+    dialog = state["window"].sentinel_dialog
+    series = dialog.series
+    out = result["series"]
+    if series is None:
+        return None
+    rows = series.rows()
+    summer = [p.median for _, when, _, p in rows
+              if when[5:7] in ("06", "07", "08")]
+    winter = [p.median for _, when, _, p in rows
+              if when[5:7] in ("11", "12", "01", "02", "03")]
+    out["summer"] = round(sum(summer) / len(summer), 3) if summer else None
+    out["winter"] = round(sum(winter) / len(winter), 3) if winter else None
+    if rows:
+        # Щелчок по самой поздней точке графика - сцена в списке.
+        chart = series.chart
+        chart.resize(700, 300)
+        target = chart.rows[-1]
+        rect = chart._plot()
+        point = chart._screen(rect, chart._ranges())(target[0],
+                                                    target[3].median)
+        out["nearest"] = chart._nearest(point)
+        chart.picked.emit(str(target[2]))
+        current = dialog._scene(dialog.list.currentItem())
+        out["picked"] = current is not None and current.id == target[2]
+    path = os.path.join(TEMP, "planetx_series.csv")
+    from planetx.core import series as core_series
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(core_series.csv_text(
+            [(s.when, s.id, series.values.get(s.id))
+             for s in series.scenes], series.product.currentText()))
+    with open(path, encoding="utf-8") as fh:
+        out["csv_lines"] = len(fh.read().splitlines())
+    series.product.setCurrentIndex(series.product.findData("ndsi"))
+    out["restarted"] = bool(series.jobs) or series.generation > 1
+    return None
+
+
+@check(500)
+def series_landsat_open():
+    """Ряд по датам Landsat: температура поверхности у Перми летом
+    2024 года, ключ SAS Planetary Computer."""
+    from qgis.PyQt.QtCore import QDate
+    window = state["window"]
+    dialog = window.sentinel_here(*ROUTE_A)
+    if dialog.series is not None:
+        dialog.series.close()
+    dialog.side.setValue(2.0)
+    dialog.start.setDate(QDate(2024, 5, 1))
+    dialog.end.setDate(QDate(2024, 9, 30))
+    dialog.mission.setCurrentIndex(dialog.mission.findData("landsat"))
+    state["series_ls_started"] = time.monotonic()
+    result["series_landsat"] = {}
+
+
+@check(500)
+def series_landsat_wait():
+    again = _series_scenes("series_ls_started", "series_landsat")
+    if again:
+        return again
+    series = state["window"].sentinel_dialog.series
+    if series is not None:
+        series.product.setCurrentIndex(series.product.findData("lst"))
+    return None
+
+
+@check(500)
+def series_landsat_check():
+    again = _series_done("series_ls_started", "series_landsat")
+    if again:
+        return again
+    dialog = state["window"].sentinel_dialog
+    if dialog.series is not None:
+        dialog.series.close()
+    dialog.close()
+    return None
+
 @check(1000)
 def close_without_heights():
     # Закрытие окна на теле без загрузчика высот. Окно закрывается,
@@ -16286,9 +16451,52 @@ def close_without_heights():
         planets.MOON_PLANET.terrain = saved
 
 
-# Выбор шагов: PLANETX_STEPS=tour_start,tour_wait. Окно открывается
-# всегда. Без переменной идут все шаги.
+# Короткий набор перед выпуском, PLANETX_STEPS=smoke, его запускает
+# tools/release_check.py. Просьба автора от 17 октября 2026 года -
+# вместо полного прогона на 3 часа. Цепочки шагов берутся целиком
+# (включение, ожидание, проверка, выключение), шаги идут в порядке
+# файла. Состав - главные части модуля, выбор помощника, утверждает
+# автор. Полный прогон остаётся для больших правок движка.
+SMOKE = (
+    # метки, свои объекты, слои проекта, каталог
+    "places_folder", "shapes_set", "shapes_check", "link_setup",
+    "link_selection", "link_selection_check", "layer_opacity",
+    "layer_opacity_check", "gallery_open", "gallery_wait",
+    # снимок вида, тур, KML
+    "shot_file", "shot_file_wait", "tour_start", "tour_wait", "kml_io",
+    # панель, навигация, звёзды, тела, небо
+    "accordion", "ge_nav", "navpad_plus", "stars_on", "stars_off",
+    "body_mars", "body_mars_check", "body_moon_check", "body_earth_check",
+    "sky_on", "sky_check",
+    # глубины, землетрясения, поиск, опрос
+    "seafloor_on", "seafloor_check", "seafloor_off", "quakes_on",
+    "quakes_check", "search_bar", "search_bar_check", "identify_on",
+    "identify_wait", "identify_check",
+    # темы NASA, наложения картинок, строка действий, меню
+    "themes_open", "themes_bar", "themes_off", "overlays_open",
+    "overlays_add", "overlays_check", "command_bar", "side_panel",
+    "globe_menu", "overlays_clean",
+    # источники данных, горизонтали, разрез Земли, уклон, здания
+    "sources_open", "sources_wait", "sources_check", "contours_on",
+    "contours_check", "toolbar_buttons", "layer_click", "cutaway_on",
+    "cutaway_wait", "cutaway_check", "cutaway_close", "cutaway_off",
+    "quakes_off", "slope_on", "slope_check", "buildings_on",
+    "buildings_wait", "buildings_off",
+    # показ, проявление, подпись, геофизика, журнал
+    "fullscreen_on", "fullscreen_check", "fullscreen_off", "tile_fade",
+    "tile_fade_check", "crossfade_on", "crossfade_check", "snapshot_brand",
+    "fields_on", "fields_check", "journal_check", "close_without_heights",
+)
+
+# Выбор шагов: PLANETX_STEPS=tour_start,tour_wait или smoke. Окно
+# открывается всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")
+if ONLY == "smoke":
+    _names = {c[0].__name__ for c in CHECKS}
+    _missing = [name for name in SMOKE if name not in _names]
+    if _missing:
+        result["errors"].append("smoke: нет шагов " + ", ".join(_missing))
+    ONLY = ",".join(SMOKE)
 if ONLY:
     CHECKS[:] = [c for c in CHECKS if c[0].__name__ == "open_globe"
                  or c[0].__name__ in ONLY.split(",")]

@@ -45,6 +45,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateEdit, QDialog,
                                  QTreeWidgetItem, QVBoxLayout)
 
 from ..core import aster, modis
+from ..core import series as series_core
 from ..core import sentinel as s2
 from ..i18n import tr
 from ..net.gdalnet import close_connections as _close_connections
@@ -279,6 +280,39 @@ def scene_cloud(scene, ring, sas=""):
         return scene.id, None, None
     cloud, valid = s2.clouds_of(scene, raw, s2.mask(xy, box, res))
     return scene.id, cloud, valid
+
+
+def series_value(scene, ring, name, sas=""):
+    """Сводка продукта name по участку сцены для ряда по датам:
+    (номер сцены, core.series.Point или None). Сетка грубее выдачи
+    (core.series.step), пиксели облаков и теней по маске сцены не
+    считаются. Рабочий поток."""
+    if scene.mission == "mss":
+        scene = s2.toa(scene, read_json(_href(scene, "mtl.json", sas)))
+    xy = s2.ring_utm(ring, scene.epsg)
+    res = series_core.step(xy, scene.mission)
+    box = s2.bounds(xy, res)
+    cloud_key = s2.CLOUD_ASSET[scene.mission][0]
+    keys = s2.needed([name], scene.mission)
+    if cloud_key not in keys:
+        keys.append(cloud_key)
+    near = modis.is_modis(scene.mission) or scene.mission == "mss"
+    raw = {}
+    for key in keys:
+        raw[key] = read_window(_href(scene, key, sas), box, res,
+                               nearest=near or key == cloud_key,
+                               srs=_srs(scene))
+        if raw[key] is None:
+            raise OSError(key)
+    area = s2.mask(xy, box, res)
+    clear = s2.clear_mask(scene, raw[cloud_key])
+    if modis.is_modis(scene.mission):
+        values = modis.value(name, raw[modis.PRODUCTS[name][0]])
+    else:
+        bands = {k: s2.reflectance(v, scene.assets[k])
+                 for k, v in raw.items() if k != cloud_key}
+        values = s2.product(name, bands, scene.mission)
+    return scene.id, series_core.point(values, area, clear)
 
 
 def preview(scene, ring, sas=""):
@@ -872,6 +906,7 @@ class SentinelDialog(QDialog):
         self.build_job = None
         self.progress = None  # [скачано, всего] у сцены целиком
         self.cloud_jobs = []
+        self.series = None  # окно «Ряд по датам»
         self.timer = QTimer(self)
         self.timer.setInterval(POLL)
         self.timer.timeout.connect(self._poll)
@@ -1018,9 +1053,19 @@ class SentinelDialog(QDialog):
             "глобусе."))
         self.add_button.setEnabled(False)
         self.add_button.clicked.connect(lambda _=False: self.add())
+        self.series_button = QPushButton(tr("Ряд по датам…"), self)
+        self.series_button.setToolTip(tr(
+            "График индекса или температуры участка по всем сценам списка - "
+            "медиана участка без облаков на каждую дату. Щелчок по точке "
+            "графика выбирает сцену в списке. У сочетаний каналов и у "
+            "ASTER ряда нет."))
+        self.series_button.setEnabled(False)
+        self.series_button.clicked.connect(lambda _=False: self.open_series())
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Close"), self)
         buttons.rejected.connect(self.close)
+        buttons.addButton(self.series_button,
+                          enum(QDialogButtonBox, "ButtonRole", "ActionRole"))
         buttons.addButton(self.add_button,
                           enum(QDialogButtonBox, "ButtonRole", "ActionRole"))
         layout = QVBoxLayout(self)
@@ -1171,6 +1216,10 @@ class SentinelDialog(QDialog):
                 break
         return s2.sas_url(mission, href)
 
+    def with_token(self, action):
+        """action с действующим ключом SAS - для окна ряда."""
+        self._with_token(action)
+
     def _with_token(self, action):
         """Выполнить action, когда есть действующий ключ SAS хранилища
         файлов спутника. У Sentinel-2 ключ не нужен."""
@@ -1292,6 +1341,7 @@ class SentinelDialog(QDialog):
         self.list.clear()
         self.preview.clear()
         self.add_button.setEnabled(False)
+        self.series_button.setEnabled(False)
         self.searched = self.current_mission()
         body = s2.search_body(
             s2.geojson(ring), self.start.date().toString("yyyy-MM-dd"),
@@ -1437,6 +1487,11 @@ class SentinelDialog(QDialog):
             else:
                 item.setText(1, "{:.0f} %".format(cloud))
             self._filter_item(item)
+            if cloud is not None and not item.isHidden() \
+                    and series_core.products(self.searched):
+                # Ряд строится и по части списка, пока облачность
+                # остальных сцен считается.
+                self.series_button.setEnabled(True)
             if self.list.currentItem() is None and not item.isHidden():
                 self.list.setCurrentItem(item)
 
@@ -1451,6 +1506,9 @@ class SentinelDialog(QDialog):
     def _filter(self, *args):
         for n in range(self.list.topLevelItemCount()):
             self._filter_item(self.list.topLevelItem(n))
+        self.series_button.setEnabled(
+            bool(series_core.products(self.searched))
+            and bool(self.series_scenes()))
         if self.scenes and not self.cloud_jobs:
             self._summary()
 
@@ -1461,6 +1519,46 @@ class SentinelDialog(QDialog):
             "Сцен {total}, над участком не облачнее {cloud} % - {count}.",
             total=len(self.scenes), cloud=self.area_cloud.value(),
             count=shown))
+        self.series_button.setEnabled(
+            bool(series_core.products(self.searched))
+            and bool(self.series_scenes()))
+
+    def series_scenes(self):
+        """Сцены ряда: видимые в списке, облачность над участком
+        посчитана."""
+        out = []
+        for n in range(self.list.topLevelItemCount()):
+            item = self.list.topLevelItem(n)
+            s = self._scene(item)
+            if s is None or item.isHidden():
+                continue
+            if self.clouds.get(s.id, (None, None))[0] is None:
+                continue
+            out.append(s)
+        return out
+
+    def open_series(self):
+        """Окно «Ряд по датам» по сценам списка."""
+        products = series_core.products(self.searched)
+        scenes = self.series_scenes()
+        if not products or not scenes:
+            return
+        if self.series is None:
+            from .series import SeriesDialog
+            self.series = SeriesDialog(self)
+        self.series.show_series(self.searched, scenes, products,
+                                titles(self.searched), self.area_name)
+        self.series.show()
+        self.series.raise_()
+
+    def select_scene(self, number):
+        """Сцена number - текущей строкой списка, её превью."""
+        for n in range(self.list.topLevelItemCount()):
+            item = self.list.topLevelItem(n)
+            if item.data(0, SCENE_ROLE) == number:
+                self.list.setCurrentItem(item)
+                self.list.scrollToItem(item)
+                return
 
     def _scene(self, item):
         number = item.data(0, SCENE_ROLE) if item is not None else None
@@ -1717,6 +1815,8 @@ class SentinelDialog(QDialog):
     def closeEvent(self, event):
         self.timer.stop()
         self.generation += 1
+        if self.series is not None:
+            self.series.close()
         if self.signing is not None:
             replies, self.signing = self.signing["replies"], None
             for reply in replies:

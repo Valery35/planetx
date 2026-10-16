@@ -4414,6 +4414,53 @@ EN = {
         "Open the manual in the browser?",
     "Система не открыла журнал {path}.":
         "The system did not open the log {path}.",
+    # Ряд по датам, ui/series.py.
+    "Ряд по датам…": "Time series…",
+    "Ряд по датам": "Time series",
+    "График индекса или температуры участка по всем сценам списка - "
+    "медиана участка без облаков на каждую дату. Щелчок по точке "
+    "графика выбирает сцену в списке. У сочетаний каналов и у "
+    "ASTER ряда нет.":
+        "A chart of an index or the temperature of the area over all "
+        "scenes of the list - the median of the area without clouds on "
+        "each date. A click on a point of the chart selects the scene in "
+        "the list. Band composites and ASTER have no series.",
+    "Нет точек ряда": "No points in the series",
+    "{when}: медиана {median}, 10-90 % {low} - {high}, "
+    "без облаков {share} % участка":
+        "{when}: median {median}, 10-90 % {low} - {high}, "
+        "{share} % of the area without clouds",
+    "Величина ряда. Точка - медиана по участку без облаков и теней, "
+    "отрезок - от 10-го до 90-го процентиля. Смена величины "
+    "считает ряд заново.":
+        "The value of the series. A point is the median over the area "
+        "without clouds and shadows, a bar runs from the 10th to the 90th "
+        "percentile. A change of the value computes the series again.",
+    "Таблица CSV…": "CSV table…",
+    "Ряд в файл CSV - дата и номер сцены, медиана, 10-й и 90-й "
+    "процентили, доля участка без облаков. Сцены без значения "
+    "идут пустыми строками.":
+        "The series to a CSV file - the date and the scene, the median, "
+        "the 10th and 90th percentiles, the share of the area without "
+        "clouds. Scenes without a value are rows with empty fields.",
+    "Величина": "Value",
+    "Участок: {name}, сцен {count}": "Area: {name}, scenes {count}",
+    "Облачность остальных сцен ещё считается, "
+    "кнопка «Ряд по датам…» потом добавит их.":
+        "The cloud cover of the other scenes is still being computed, "
+        "the Time series… button adds them later.",
+    "Нет сцен для ряда.": "No scenes for the series.",
+    "Считается ряд: 0 из {total}…":
+        "Computing the series: 0 of {total}…",
+    "Считается ряд: {done} из {total}, точек {count}…":
+        "Computing the series: {done} of {total}, points {count}…",
+    "Точек {count} из {total}. Сцены без точки - участок закрыт "
+    "облаками больше чем на {share} % или файлы не прочитаны.":
+        "Points {count} of {total}. A scene without a point has clouds "
+        "over more than {share} % of the area, or its files were not "
+        "read.",
+    "Ряд в CSV": "Series to CSV",
+    "Ряд записан: {path}": "Series written: {path}",
 }
 
 _language = None

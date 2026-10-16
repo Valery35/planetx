@@ -1627,6 +1627,41 @@ latitude of Perm the daily products are often fully cloudy, the 8- and
 the credit of the product and the NASA archive, for example "MOD11A1
 v061, NASA EOSDIS LP DAAC".
 
+### Time series
+
+The "Time series…" button of the Satellite imagery window builds a chart
+of a value of the area over all scenes of the list, that is, over the
+found scenes that are not cloudier over the area than set. The value is
+chosen in the series window among the indices of the satellite - NDVI,
+NDWI, NDMI, NBR, NDSI, for Landsat also the surface temperature, for
+MODIS the temperature, NDVI, EVI and the snow share. A band composite
+is a picture rather than one value, and ASTER has no cloud mask, so they
+have no series.
+
+A point of the chart is the median of the value over the area without
+clouds and shadows by the scene mask. The vertical bar runs from the
+10th to the 90th percentile and shows the spread inside the area. The
+median moves less than the mean from remains of clouds and bad scan
+lines. A scene with clear pixels on less than 10 % of the area gets no
+point. The series is computed on a coarse grid - not more than 200
+pixels along a side of the area, and the points appear as they are
+computed. Near Perm 43 Sentinel-2 scenes of a 2 km area took 1.5
+minutes.
+
+The cursor over a point shows the date, the median, the spread and the
+share of the area without clouds. A click on a point selects that scene
+in the list of the Satellite imagery window - its preview shows, and it
+can be added to the project at once. The "CSV table…" button writes the
+series to a file - the date, the scene, the median, the 10th and 90th
+percentiles, the share of the area without clouds. Scenes without a
+value are rows with empty fields.
+
+An example - the centre of Perm, a 2 km area, Sentinel-2 over a year,
+NDVI. The winter points under snow are near zero, from May to October
+they are 0.15-0.22, a city has little vegetation. For a series over
+many years Landsat since 1982 or the 16-day MODIS NDVI are more
+convenient.
+
 ### NASA Earthdata key
 
 NASA gives ASTER images after 2006 only by an Earthdata key. The key
