@@ -4340,11 +4340,6 @@ EN = {
     "пожары, факелы и полярные сияния.":
         "VIIRS night image per day, since 2021. City lights, fires, gas "
         "flares and auroras are seen.",
-    "Типы покрова": "Land cover",
-    "Типы земного покрова IGBP по MODIS за год, с 2001 года. Классы - "
-    "в шкале в углу вида.":
-        "IGBP land cover types from MODIS per year, since 2001. The "
-        "classes are in the legend in the corner of the view.",
     "{name}, {units} · {day}": "{name}, {units} · {day}",
     "{name} · {day}": "{name} · {day}",
     "У темы нет дат в ряду.": "The theme has no dates in its series.",

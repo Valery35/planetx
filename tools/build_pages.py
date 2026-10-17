@@ -163,96 +163,59 @@ def page_main(img):
                         span("hero.h1", "h1"),
                         span("hero.lead", "p", "lead"), buttons(),
                         img("caucasus.jpg")))
-    tasks = section(
-        "tasks", ("Что можно делать", "What you can do"),
-        ("От обзора планеты до разреза под участком",
-         "From an overview of the planet to a section under a site"),
-        None, cards("tasks", (
-            ("Создавать", "Create",
-             "Метки, пути, многоугольники, картинки и 3D-модели на "
-             "рельефе. Свой рельеф до 1 м, батиметрия по промерам, выемка "
-             "и насыпь между съёмками.",
-             "Placemarks, paths, polygons, images and 3D models on the "
-             "terrain. Own terrain down to 1 m, bathymetry from soundings, "
-             "cut and fill between surveys."),
-            ("Показывать", "Present",
-             "Туры с подписями остановок, своими слоями и временем у каждой "
-             "остановки, режим во весь экран, запись видео MP4.",
-             "Tours with stop captions, their own layers and time at each "
-             "stop, full screen mode, MP4 video recording."),
-            ("Обмениваться", "Exchange",
-             "KML и KMZ - файлы и метки из Google Earth открываются "
-             "вместе с папками, видами, временем и турами. Сцена одним "
-             "файлом, страница HTML с глобусом без "
-             "QGIS. Карты, точки и снимки глобуса - слоями в проект QGIS.",
-             "KML and KMZ - files and places from Google Earth open with "
-             "their folders, views, time and tours. A scene in one file, "
-             "an HTML page with the globe "
-             "without QGIS. Globe maps, points and images go to the QGIS "
-             "project as layers."),
-            ("Исследовать", "Explore",
-             "Снимки Landsat с 1972 года, Sentinel-2, ASTER и MODIS. "
-             "Около 74 тысяч сильных землетрясений с 1904 года, 56 тысяч "
-             "исторических карт Рамсея, карты Земли на 109 возрастов до "
-             "540 млн лет назад.",
-             "Landsat images since 1972, Sentinel-2, ASTER and MODIS. About "
-             "74 thousand strong earthquakes since 1904, 56 thousand Rumsey "
-             "historical maps, Earth maps for 109 ages back to 540 million "
-             "years."),
-            ("Анализировать", "Analyse",
-             "Уклон, экспозиция и горизонтали рельефа, видимость из точки, "
-             "часы солнца, профиль высот с водой морей и озёр, длина "
-             "и площадь по рельефу, ряд индекса участка по датам.",
-             "Slope, aspect and contours, viewshed, hours of sun, an "
-             "elevation profile with the water of seas and lakes, length "
-             "and area along the terrain, a time series of an area index."),
-            ("Смотреть вглубь", "Look inside",
-             "Разрез Земли с корой двух типов, плитами и очагами на своих "
-             "глубинах. Скважины, кровли пластов и гриды проекта под "
-             "прозрачной землёй, геологический разрез вдоль пути.",
-             "An Earth cutaway with two crust types, slabs and foci at "
-             "their depths. Project boreholes, bed tops and grids under "
-             "transparent ground, a geological section along a path."))))
-    texts = {
-        "places": ("Метки, пути, многоугольники, картинки и 3D-модели, "
-                   "время меток, туры с подписями и запись видео, "
-                   "измерения, маршруты, KML и обмен видом.",
-                   "Placemarks, paths, polygons, images and 3D models, "
-                   "time of places, tours with captions and video, "
-                   "measuring, routes, KML and sharing the view."),
-        "project": ("Слои проекта QGIS на рельефе, время слоёв, свой рельеф "
-                    "и батиметрия, гриды и слои с Z под землёй, скважины "
-                    "и геологический разрез, выгрузка обратно в проект.",
-                    "QGIS project layers on the terrain, layer time, own "
-                    "terrain and bathymetry, grids and Z layers underground, "
-                    "boreholes and the geological section, export back to "
-                    "the project."),
-        "data": ("Около 90 слоёв и карт открытых данных - основа и рельеф, "
-                 "погода, вода, воздух, почвы, недра и геофизика, "
-                 "энергетика, небо. Что показывает каждый и откуда он.",
-                 "About 90 layers and maps of open data - base and terrain, "
-                 "weather, water, air, soils, the Earth's interior and "
-                 "geophysics, energy, the sky. What each shows and where it "
-                 "comes from."),
-        "imagery": ("Sentinel-2, Landsat с 1972 года, ASTER и MODIS "
-                    "участком в проект QGIS - сочетания каналов, индексы, "
-                    "температура, минералы, ряд по датам.",
-                    "Sentinel-2, Landsat since 1972, ASTER and MODIS of an "
-                    "area into the QGIS project - band composites, indices, "
-                    "temperature, minerals, time series."),
-        "news": ("Изменения по выпускам, сверху новый.",
-                 "Changes by release, the newest on top."),
-    }
+    # Плашки главной - ссылки на подстраницы, просьба автора от
+    # 17 октября 2026 года «с главной ссылки на остальные». Отдельного
+    # блока разделов нет, он повторял плашки.
+    tasks = (
+        ("create", "places", "Создавать", "Create",
+         "Метки, пути, многоугольники, круги, картинки на поверхности "
+         "и 3D-модели на рельефе. KML и KMZ из Google Earth открываются "
+         "с папками, видами, временем и турами.",
+         "Placemarks, paths, polygons, circles, surface images and 3D "
+         "models on the terrain. KML and KMZ from Google Earth open with "
+         "folders, views, time and tours."),
+        ("present", "places", "Показывать", "Present",
+         "Туры с подписями остановок, своими слоями и временем, запись "
+         "видео MP4, сцена одним файлом, страница HTML с глобусом.",
+         "Tours with stop captions, own layers and time, MP4 video "
+         "recording, a scene in one file, an HTML page with the globe."),
+        ("measure", "places", "Измерять", "Measure",
+         "Длина и площадь по рельефу, профиль высот с водой морей и озёр, "
+         "видимость из точки, часы солнца, маршрут, номер листа карты.",
+         "Length and area along the terrain, an elevation profile with "
+         "the water of seas and lakes, viewshed, hours of sun, a route, a "
+         "map sheet number."),
+        ("project", "project", "Работать с проектом QGIS", "Work with the "
+         "QGIS project",
+         "Слои проекта на рельефе, свой рельеф до 1 м и батиметрия, гриды "
+         "и скважины под землёй, геологический разрез вдоль пути.",
+         "Project layers on the terrain, own terrain down to 1 m and "
+         "bathymetry, grids and boreholes underground, a geological "
+         "section along a path."),
+        ("data", "data", "Изучать данные о Земле", "Study Earth data",
+         "Около 90 карт и слоёв - геология и геофизика, землетрясения "
+         "с 1904 года, воды, почвы, погода, темы NASA, энергетика.",
+         "About 90 maps and layers - geology and geophysics, earthquakes "
+         "since 1904, water, soils, weather, NASA themes, energy."),
+        ("imagery", "imagery", "Брать космоснимки", "Get satellite images",
+         "Sentinel-2, Landsat с 1972 года, ASTER и MODIS участком "
+         "в проект QGIS - каналы, индексы, температура, ряд по датам.",
+         "Sentinel-2, Landsat since 1972, ASTER and MODIS of an area into "
+         "the QGIS project - bands, indices, temperature, time series."),
+    )
+    paths = dict((k, path) for k, path, _, _ in PAGES)
     parts = []
-    for key, path, ru, en in PAGES[1:]:
-        h = t("go.%s.h" % key, ru, en)
-        p = t("go.%s.p" % key, *texts[key])
+    for key, page_key, h_ru, h_en, p_ru, p_en in tasks:
+        h = t("tasks.%s.h" % key, h_ru, h_en)
+        p = t("tasks.%s.p" % key, p_ru, p_en)
         parts.append('<a class="card link" target="_blank" href="%s">'
                      '<h3 data-i18n="%s"></h3><p data-i18n="%s"></p></a>'
-                     % (url(path), h, p))
-    go = section("go", ("Разделы", "Sections"),
-                 ("Что есть в PlanetX", "What PlanetX has"), None,
-                 '<div class="trio">%s</div>' % "\n".join(parts))
+                     % (url(paths[page_key]), h, p))
+    tasks = section(
+        "tasks", ("Что можно делать", "What you can do"),
+        ("От меток и туров до разреза под участком",
+         "From placemarks and tours to a section under a site"), None,
+        '<div class="trio">%s</div>' % "\n".join(parts))
     idea = section(
         "idea", ("Как устроен глобус", "How the globe works"),
         ("Своё окно, свой движок, данные из открытых источников",
@@ -384,7 +347,7 @@ def page_main(img):
          "Isoliner3D shows geology in three dimensions, PlanetX shows the "
          "whole Earth. All plugins work independently."),
         family() + buttons(main=False))
-    return "\n".join([hero, tasks, go, idea, controls, worlds, fam])
+    return "\n".join([hero, tasks, idea, controls, worlds, fam])
 
 
 def pair(left, right):
@@ -611,11 +574,7 @@ def page_places(img):
              "Движение камеры записывается меткой-туром, путь облёта "
              "правится мышью.",
              "The camera movement is recorded as a tour placemark, its path "
-             "is edited with the mouse."),
-            ("Во весь экран", "Full screen",
-             "F11 прячет панели, остаются глобус, навигация, шкала времени "
-             "и тур.", "F11 hides the panels, the globe, navigation, time "
-             "slider and tour stay.")))))
+             "is edited with the mouse.")))))
     share = section(
         "share", ("Обмен", "Exchange"),
         ("KML, сцены, страница HTML и помощник",
@@ -863,11 +822,6 @@ def page_project(img):
              "Earthquakes, power plants, deposits, power lines, cables and "
              "other view layers - a GeoPackage within the view box with "
              "colour and size."),
-            ("Карты", "Maps",
-             "Карты значений - сеткой GeoTIFF, темы NASA - картинкой WMS, "
-             "геологические и почвенные карты - слоем XYZ или WMS.",
-             "Value maps as a GeoTIFF grid, NASA themes as a WMS picture, "
-             "geological and soil maps as an XYZ or WMS layer."),
             ("Кора CRUST1.0", "CRUST1.0 crust",
              "Кровли трёх слоёв осадков, трёх слоёв коры и Мохо - растры "
              "отметок по рамке вида.",
@@ -877,12 +831,7 @@ def page_project(img):
              "Папка «Моих меток» - слоем GeoPackage, картинки на "
              "поверхности - GeoTIFF.",
              "A My Places folder as a GeoPackage layer, surface images as "
-             "GeoTIFF."),
-            ("Космоснимки", "Satellite images",
-             "Участок или сцена целиком - сочетания каналов и индексы "
-             "слоями проекта.",
-             "An area or a whole scene - band composites and indices as "
-             "project layers.")))))
+             "GeoTIFF.")))))
     return "\n".join([layers, relief, under, section_, back])
 
 
@@ -1089,10 +1038,10 @@ def page_data(img):
         "nasa", ("Погода и снимки NASA", "Weather and NASA imagery"),
         ("Карты на день шкалы времени", "Maps for the day of the time "
          "slider"),
-        ("21 тема NASA GIBS - снег, лёд, осадки, газы, растительность, "
+        ("27 тем NASA GIBS - снег, лёд, осадки, газы, растительность, "
          "температура - и прогноз NOAA GFS на 16 суток. День выбирает "
          "правый бегунок шкалы, шторка сравнивает два дня.",
-         "21 NASA GIBS themes - snow, ice, precipitation, gases, "
+         "27 NASA GIBS themes - snow, ice, precipitation, gases, "
          "vegetation, temperature - and the NOAA GFS 16 day forecast. The "
          "right handle of the slider picks the day, a swipe compares two "
          "days."),
@@ -1112,9 +1061,9 @@ def page_data(img):
                  "nasa.fires", "Пожары FIRMS за 24 часа, Южная Америка.",
                  "FIRMS fires over 24 hours, South America."))))
     energy = section(
-        "energy", ("Энергетика и небо", "Energy and the sky"),
-        ("Инфраструктура, спутники, звёзды",
-         "Infrastructure, satellites, stars"),
+        "energy", ("Энергетика и спутники", "Energy and satellites"),
+        ("Электростанции, линии, кадастр, спутники",
+         "Power plants, lines, cadastre, satellites"),
         None,
         '<div class="pair">%s%s</div>' % (
             shot("plants.jpg", "energy.plants", "34 936 электростанций WRI, "
@@ -1140,13 +1089,7 @@ def page_data(img):
             ("Спутники", "Satellites",
              "9 групп по элементам орбит, виток, след и камера следом.",
              "9 groups from orbital elements, orbit, ground track and "
-             "follow camera.", "CelesTrak"),
-            ("Небо", "Sky",
-             "5080 звёзд, Млечный путь, 88 созвездий, Солнце, Луна "
-             "и планеты на момент, огни городов ночью.",
-             "5080 stars, the Milky Way, 88 constellations, the Sun, the "
-             "Moon and the planets at a moment, city lights at night.",
-             "Yale BSC, NASA SVS, NASA Black Marble")))))
+             "follow camera.", "CelesTrak")))))
     return "\n".join([intro, depths, land, nasa, energy])
 
 

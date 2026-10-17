@@ -131,8 +131,6 @@ THEMES = (
           "AIRS_Dust_Score"),
     Theme("night", "life", "VIIRS_SNPP_DayNightBand_AtSensor_M15", "jpeg",
           8, None),
-    Theme("land_cover", "life", "MODIS_Combined_L3_IGBP_Land_Cover_Type_"
-          "Annual", "png", 8, "MODIS_IGBP_Land_Cover_Type"),
 )
 BY_KEY = {theme.key: theme for theme in THEMES}
 

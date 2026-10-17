@@ -474,7 +474,7 @@ its image is empty. The NASA theme groups of the catalogue hold:
   and floods.
 - Planet of Air - nitrogen dioxide, sulphur dioxide, methane, carbon
   dioxide and ozone.
-- Land and Life - vegetation, dust, night lights and land cover.
+- Land and Life - vegetation, dust and night lights.
 
 The theme lies as semi-transparent colouring over the
 imagery, where there is no data the imagery shows. A legend with the
