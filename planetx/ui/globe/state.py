@@ -18,7 +18,7 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 from qgis.utils import iface
 
 from ... import journal
-from ...core import (basemap, clouds, fields, temperature,
+from ...core import (basemap, clouds, fields, geology, temperature,
                      flow as flow_core, quakes, themes)
 from ...core.sync import ground_size, view_box, inside as in_box
 from ..flow import CURRENTS_ATTRIBUTION
@@ -280,6 +280,10 @@ class StateMixin:
             self._set_paleo(on)
         elif key == "plates":
             self._set_plates(on)
+        elif key == "faults":
+            self._set_faults(on)
+        elif key == "geology":
+            self._set_geology(on)
         elif key == "magpoles":
             self._set_poles(on)
         elif key == "magdecl":
@@ -316,7 +320,7 @@ class StateMixin:
             title = (names.get(key) or maps.get(key) or (key,))[0]
             rows.append((key, title, self._row_opacity(key),
                          key in POINT_LAYERS or key in QGIS_LAYERS
-                         or key in PICTURE_LAYERS, on))
+                         or key in PICTURE_LAYERS or key == "geology", on))
         theme = getattr(self, "theme_key", "") or parked.get("map", "")
         if theme and earth and theme in maps:
             rows.append(("map", maps[theme][0], self._row_opacity("map"),
@@ -392,6 +396,7 @@ class StateMixin:
     def _qgis_layers(self, key):
         """Слои QGIS строки key, которые уже собраны."""
         found = {"plates": [getattr(self, "plate_layer", None)],
+                 "faults": [getattr(self, "fault_layer", None)],
                  "mining": [getattr(self, "mining_layer", None)],
                  "infra_osm": [getattr(self, "infra_lines", None),
                                getattr(self, "infra_points", None)],
@@ -406,6 +411,15 @@ class StateMixin:
                  or (key,))[0]
         if key == "map":
             title = map_names().get(self.theme_key, (title,))[0]
+        if key == "geology":
+            # Карта Macrostrat - слоем тайлов, без файла.
+            count = self._export_geology(title)
+            self.message = (tr("В проект добавлен слой «{title}».",
+                               title=title) if count else
+                            tr("Слой «{title}» не добавлен.", title=title),
+                            time.monotonic())
+            self._show_state()
+            return count
         if path is None:
             path, _ = QFileDialog.getSaveFileName(
                 self, tr("В проект QGIS"),
@@ -567,9 +581,18 @@ class StateMixin:
         self.message = (text, time.monotonic())
         self._show_state()
 
+    def _export_geology(self, title):
+        """Геологическая карта Macrostrat в проект слоем тайлов XYZ, файл
+        не пишется."""
+        layer = layer_export.add_xyz(geology.TILES, title, geology.MAX_LEVEL,
+                                     geology.ATTRIBUTION[0])
+        return None if layer is None else 1
+
     def _export_qgis(self, key, title, path, box):
         if key == "plates":
             parts = [("plates", self.plate_layer, title)]
+        elif key == "faults":
+            parts = [("faults", self.fault_layer, title)]
         elif key == "mining":
             parts = [("mining", self.mining_layer, title)]
         elif key == "cables":

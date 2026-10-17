@@ -10,8 +10,8 @@ import time
 import numpy as np
 from qgis.core import QgsSettings
 
-from ...core import (basemap, cadastre, clouds, fields, sun, temperature,
-                     cutaway, slabs, themes)
+from ...core import (basemap, cadastre, clouds, fields, geology, sun,
+                     temperature, cutaway, slabs, themes)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
 from ...core.mipmap import mip_chain
@@ -54,8 +54,8 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "currents": ("currents",), "cadastre": ("cadastre",),
               "emag": ("emag",), "seafloor_age": ("emag",),
               "heatflow": ("emag",), "gravity": ("emag",),
-              "bouguer": ("emag",)}
-QGIS_LAYERS = ("plates", "mining", "infra_osm", "cables")
+              "bouguer": ("emag",), "geology": ("emag",)}
+QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
@@ -152,7 +152,8 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "magdecl": False, "seafloor_age": False,
                   "heatflow": False, "gravity": False, "bouguer": False,
                   "platemotion": False,
-                  "volcanoes": False, "air": True}
+                  "volcanoes": False, "faults": False,
+                  "geology": False, "air": True}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
@@ -161,7 +162,8 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "deposits", "mining", "osm_mines", "plants", "infra_osm",
                 "cables", "currents", "cadastre", "magpoles", "emag",
                 "geoid", "magdecl", "seafloor_age", "heatflow",
-                "gravity", "bouguer", "platemotion", "volcanoes")
+                "gravity", "bouguer", "platemotion", "volcanoes",
+                "faults", "geology")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
@@ -364,6 +366,14 @@ def prepare_field(name, key, rgba):
     """Работа рабочего потока для тайла карты значений name
     (core/fields.py): значения в раскраску и уровни мипмапов."""
     return mip_chain(fields.rgba(fields.FIELDS[name], rgba))
+
+
+def prepare_geology(key, rgba):
+    """Работа рабочего потока для тайла геологической карты Macrostrat
+    (core/geology.py): премноженная альфа и уровни мипмапов, пустой
+    тайл - None, на его месте остаётся предок."""
+    picture = geology.rgba(rgba)
+    return None if picture is None else mip_chain(picture)
 
 
 def prepare_lights(key, rgba):

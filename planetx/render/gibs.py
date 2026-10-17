@@ -91,12 +91,20 @@ class GibsLayer:
         # заказывает кадр, иначе без новых кадров она бы не ушла.
         self.unasked = False
         self.missing = 0  # тайлов кадра без своей картинки
+        # Тайлы, пришедшие пустыми (подготовка дала None, так у карты
+        # Macrostrat глубже её масштаба): они и их потомки не просятся,
+        # рисуется предок.
+        self.empty = set()
         # Доля прозрачности слоя в шейдере, 0 - как есть. Ставит
         # ползунок раздела «На глобусе».
         self.fade = 0.0
 
     def add(self, key, levels):
-        """Пришла картинка тайла, уровни мипмапов."""
+        """Пришла картинка тайла, уровни мипмапов. None - тайл пустой."""
+        if levels is None:
+            self.empty.add(key)
+            self.pending.pop(key, None)
+            return
         self.pending[key] = levels
 
     def upload(self, pool, frame, count=UPLOADS):
@@ -128,6 +136,10 @@ class GibsLayer:
             else:
                 out.append((self.textures[found[0]], found[1]))
                 self.used[found[0]] = frame
+            if self.empty:
+                own = self._past_empty(own, found)
+                if own is None:
+                    continue
             if found is None or found[0] != own or own in self.stale:
                 wanted[own] = -own[0]
         self.missing = len(wanted)
@@ -141,6 +153,24 @@ class GibsLayer:
             self.asked_at = now
             self.unasked = False
         return out
+
+    def _past_empty(self, own, found):
+        """Какой тайл просить вместо own, если на пути от own к найденной
+        картинке found есть пустые тайлы: родителя самого мелкого из них.
+        None - этот родитель уже нарисован, просить нечего. Так пустой
+        тайл места ведёт к предку с картой уровень за уровнем."""
+        top = found[0][0] if found is not None else -1
+        z, x, y = own
+        highest = None
+        while z > top:
+            if (z, x, y) in self.empty:
+                highest = (z, x, y)
+            z, x, y = z - 1, x >> 1, y >> 1
+        if highest is None:
+            return own
+        z, x, y = highest
+        parent = (z - 1, x >> 1, y >> 1)
+        return None if parent[0] <= top else parent
 
     def evict(self, pool, frame):
         """Лишние картинки обратно в запас, самые давние первыми."""
@@ -157,6 +187,7 @@ class GibsLayer:
         for texture in self.textures.values():
             pool.release(texture)
         self.textures.clear()
+        self.empty.clear()
         self.stale.clear()
         self.used.clear()
         self.pending.clear()

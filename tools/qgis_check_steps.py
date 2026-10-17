@@ -15543,6 +15543,304 @@ def emag_check():
     return None
 
 
+def _trench_depths(window):
+    """Высоты хранилища вида поперёк Японского жёлоба по 38° с. ш.,
+    143.6-144.4° в. д.: наименьшая и количество нулей."""
+    import numpy as np
+    lons = np.arange(143.6, 144.41, 0.05)
+    lats = np.full(lons.shape, 38.0)
+    h = window.view.store.heights_at(lats, lons, scaled=False)
+    keys = [k for k in window.view.store.tiles if k[0] >= 11]
+    return {"low": round(float(np.min(h))), "level": _store_level(
+                window, 38.0, 144.0),
+            "zeros": int(np.sum(np.abs(h) < 1.0)),
+            "points": int(len(h)), "deep_tiles": len(keys)}
+
+
+def _store_level(window, lat, lon):
+    """Уровень самого подробного тайла высот вида в точке или -1."""
+    from planetx.core.fields import pixel_of
+    tiles = window.view.store.tiles
+    for z in range(17, -1, -1):
+        (x, y), _ = pixel_of(lat, lon, z)
+        if (z, x, y) in tiles:
+            return z
+    return -1
+
+
+def _sea_loaded(window, started, limit, point, level):
+    """Дождались ли высот вида: в точке point тайл высот уровня level
+    или глубже, чтения GEBCO кончились, или вышел срок."""
+    sea = getattr(window, "sea_dem", None)
+    busy = sea is not None and any(not job.done()
+                                   for job in list(sea.jobs.values()))
+    spent = time.monotonic() - started
+    return spent > limit or (spent > 5.0 and not busy
+                             and _store_level(window, *point) >= level)
+
+
+@check(500)
+def gebco_terrarium():
+    """Глубины морей: сначала дно тайлов высот у Японского жёлоба с 60
+    км (тайлы уровней 11-12), потом GEBCO 2026."""
+    from qgis.core import QgsSettings
+    from planetx.core import dem, sources
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_sea_depths(True)
+    QgsSettings().setValue(sources.SEA_DEM_KEY, dem.TERRARIUM)
+    window.sources_changed("terrain")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(38.0, 144.0, 20000.0, 0.0, 0.0))
+    window.view.update()
+    result["gebco"] = {"sea_dem_off": window.sea_dem is None}
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def gebco_terrarium_wait():
+    window = state["window"]
+    if not _sea_loaded(window, state["ls_started"], 60.0, (38.0, 144.0),
+                       12):
+        return 1000
+    from qgis.core import QgsSettings
+    from planetx.core import dem, sources
+    out = result["gebco"]
+    out["terrarium"] = _trench_depths(window)
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_gebco_terrarium.png"))
+    QgsSettings().setValue(sources.SEA_DEM_KEY, dem.GEBCO)
+    window.sources_changed("terrain")
+    out["sea_dem_on"] = window.sea_dem is not None \
+        and window.sea_dem.kind == dem.GEBCO
+    state["ls_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def gebco_wait():
+    window = state["window"]
+    if not _sea_loaded(window, state["ls_started"], 60.0, (38.0, 144.0),
+                       12):
+        return 1000
+    out = result["gebco"]
+    out["gebco"] = _trench_depths(window)
+    out["seconds"] = round(time.monotonic() - state["ls_started"], 1)
+    out["errors"] = window.sea_dem.errors
+    out["last_error"] = window.sea_dem.last_error[:200]
+    out["credit"] = "GEBCO" in window.attribution.text()
+    out["gl_errors"] = dict(window.view.gl_errors)
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_gebco.png"))
+    # Марианский жёлоб с 600 км.
+    from planetx.core.navigation import Pose
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(11.35, 142.4, 600000.0, 0.0, 30.0))
+    window.view.update()
+    state["ls_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def gebco_check():
+    import numpy as np
+    window = state["window"]
+    if not _sea_loaded(window, state["ls_started"], 60.0, (11.35, 142.2),
+                       7):
+        return 1000
+    out = result["gebco"]
+    out["mariana_level"] = _store_level(window, 11.35, 142.2)
+    h = window.view.store.heights_at(np.array([11.33, 11.35, 11.37]),
+                                     np.array([142.2, 142.2, 142.2]),
+                                     scaled=False)
+    out["mariana_m"] = round(float(np.min(h)))
+    # Без глубин морей GEBCO не нужен, подпись уходит.
+    window.set_sea_depths(False)
+    out["off_entries"] = [type(e).__name__
+                          for e in window._height_entries()]
+    out["off_credit"] = "GEBCO" in window.attribution.text()
+    window.set_sea_depths(True)
+    from qgis.core import QgsSettings
+    from planetx.core import sources
+    QgsSettings().remove(sources.SEA_DEM_KEY)
+    window.sources_changed("terrain")
+    return None
+
+
+@check(500)
+def faults_on():
+    """Активные разломы GEM над Турцией с 2500 км: загрузка файла базы,
+    слой наложения, щелчок по Северо-Анатолийскому разлому, выгрузка
+    в проект."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(40.0, 33.0, 2500000.0, 0.0, 0.0))
+    window.view.update()
+    window.set_extra("faults", True)
+    result["faults"] = {"gallery": "faults" in [
+        k for k, _ in __import__("planetx.ui.nasamaps",
+                                 fromlist=["LAYERS"]).LAYERS],
+        "cached_file": os.path.exists(window._faults_path())}
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def faults_wait():
+    window = state["window"]
+    if window.fault_layer is None \
+            and time.monotonic() - state["ls_started"] < 120.0:
+        return 1000
+    result["faults"]["load_s"] = round(
+        time.monotonic() - state["ls_started"], 1)
+    return None
+
+
+@check(3000)
+def faults_check():
+    import os as _os
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["faults"]
+    layer = window.fault_layer
+    out["features"] = 0 if layer is None else layer.featureCount()
+    out["in_overlay"] = layer is not None and window.overlay is not None \
+        and any(la is layer for la in window.overlay.layers)
+    data = window.faults_data
+    # У разломов Турции (каталог EMME) названий нет.
+    named = [f for f in data.faults if 39.0 < f.lats[0] < 42.0
+             and 26.0 < f.lons[0] < 42.0] if data is not None else []
+    out["in_turkey"] = len(named)
+    if named:
+        fault = named[0]
+        n = len(fault.lats) // 2
+        lat = (fault.lats[n - 1] + fault.lats[n]) / 2.0
+        lon = (fault.lons[n - 1] + fault.lons[n]) / 2.0
+        found = window._identify_faults(lat, lon, 5000.0)
+        out["identify"] = [(f[0], f[1]) for _, fs in found for f in fs]
+    out["legend"] = not window.fault_legend.isHidden()
+    out["credit"] = "GEM" in window.attribution.text()
+    out["row"] = "faults" in window.panel.active_rows
+    window.view.grabFramebuffer().save(_os.path.join(TEMP,
+                                                     "planetx_faults.png"))
+    path = _os.path.join(TEMP, "planetx_active", "faults.gpkg")
+    _os.makedirs(_os.path.dirname(path), exist_ok=True)
+    if _os.path.exists(path):
+        _os.remove(path)
+    out["exported"] = window.active_export("faults", path)
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.set_extra("faults", False)
+    out["after_off"] = (window.overlay is None or not any(
+        la is layer for la in window.overlay.layers)) \
+        and window.fault_legend.isHidden()
+
+
+@check(500)
+def geology_on():
+    """Геологическая карта Macrostrat над Пермью: снимает карту значений,
+    тайлы с 1500 км, вблизи пустые тайлы глубже карты Европы, порода под
+    щелчком, слой тайлов в проект."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("gravity", True)
+    window.set_extra("geology", True)
+    out = result["geology"] = {
+        "gravity_off": not window.extras.get("gravity"),
+        "field_shown": window._field_shown}
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.0, 56.25, 1500000.0, 0.0, 0.0))
+    loader = window.gibs_loaders.get("emag")
+    out["loader"] = loader is not None
+    if loader is not None:
+        _watch_loader(loader, "geology_seen")
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def geology_wait():
+    window = state["window"]
+    seen = state.get("geology_seen", {"loaded": 0})
+    layer = window.view.gibs["emag"]
+    spent = time.monotonic() - state["ls_started"]
+    out = result["geology"]
+    if "far" not in out:
+        if spent < 40.0 and (seen["loaded"] < 6 or layer.missing
+                             or spent < 8.0):
+            return 1000
+        out["far"] = dict(seen, seconds=round(spent, 1),
+                          textures=len(layer.textures),
+                          credit="Macrostrat" in window.attribution.text())
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_geology_far.png"))
+        # Вблизи - тайлы глубже карты Европы 1:5 000 000 пустые.
+        from planetx.core.navigation import Pose
+        window.view.navigator.stop()
+        window.view.navigator.show(Pose(58.0, 56.25, 20000.0, 0.0, 0.0))
+        window.view.update()
+        state["ls_started"] = time.monotonic()
+        return 1000
+    # Слой рисуется по тайлам подложки, они догружаются первыми.
+    if spent < 60.0 and (layer.missing or layer.pending or spent < 12.0
+                         or window.view.load_missing):
+        return 1000
+    out["near"] = {"seconds": round(spent, 1), "empty": len(layer.empty),
+                   "missing": layer.missing,
+                   "textures": len(layer.textures),
+                   "deepest_texture": max((k[0] for k in layer.textures),
+                                          default=None),
+                   "empty_near": sorted(k for k in layer.empty
+                                        if k[0] >= 10)[:6],
+                   "levels": sorted({k[0] for k in layer.textures}),
+                   "base_level": max((k[0] for k in window.view.textures),
+                                     default=None),
+                   "distance_km": round(
+                       window.view.navigator.pose.distance / 1000.0, 1),
+                   "draw_level": max((k[0] for k in getattr(
+                       window.view, "drawn_keys", ()) or ()), default=None)}
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_geology_near.png"))
+    window._ask_geology(58.0, 56.25)
+    state["ls_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def geology_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["geology"]
+    value = window._geology_value
+    if value is not None and value[1] is None and not value[2] \
+            and time.monotonic() - state["ls_started"] < 30.0:
+        return 1000
+    groups = window._identify_geology()
+    out["identify"] = [(f[0], f[1]) for _, fs in groups for f in fs]
+    out["exported"] = window.active_export("geology")
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    out["project_layer"] = None
+    if group is not None:
+        nodes = group.findLayers()
+        out["project_layer"] = [n.layer().providerType() for n in nodes]
+        for node in nodes:
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.set_extra("geology", False)
+    out["off"] = "emag" not in window.gibs_loaders
+    out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
 @check(500)
 def etomesto_open():
     """Каталог «Это Место» у Перми: один запрос к сайту, список карт,

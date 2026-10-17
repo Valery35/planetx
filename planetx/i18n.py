@@ -296,13 +296,31 @@ EN = {
         "GEDTM30 30 m - bare ground without forest and buildings",
     "Рельеф - откуда берутся высоты":
         "Terrain - where the heights come from",
-    "Высоты складываются из трёх слоёв. Тайлы высот покрывают весь мир и дно "
-    "морей. Модель 30 м уточняет сушу вблизи. Свой растр проекта заменяет всё "
-    "в своём охвате.":
-        "The heights are built from three layers. The height tiles cover the "
+    "Высоты складываются из четырёх слоёв. Тайлы высот покрывают весь мир "
+    "и дно морей. Модель 30 м уточняет сушу вблизи, сетка GEBCO - дно морей. "
+    "Свой растр проекта заменяет всё в своём охвате.":
+        "The heights are built from four layers. The height tiles cover the "
         "whole world and the sea floor. The 30 m model refines the land up "
-        "close. An own raster of the project replaces everything within its "
-        "extent.",
+        "close, the GEBCO grid refines the sea floor. An own raster of the "
+        "project replaces everything within its extent.",
+    "Тайлы высот - дно до уровня 10":
+        "Height tiles - sea floor up to level 10",
+    "GEBCO 2026 - сетка около 450 м":
+        "GEBCO 2026 - a grid of about 450 m",
+    "Глубины морей 450 м с уровня 5":
+        "Sea depths of 450 m from level 5",
+    "Глубины морей":
+        "Sea depths",
+    "Откуда берётся дно морей и океанов. В тайлах высот подробное дно есть "
+    "до уровня 10, ближе в открытом море бывают пустые места на нуле. "
+    "GEBCO 2026 - сетка глубин мира около 450 м, она заменяет дно тайлов, "
+    "суша остаётся. Сетка читается из сети по участкам. Для навигации "
+    "глубины не годятся.":
+        "Where the floor of seas and oceans comes from. The height tiles hold "
+        "a detailed floor up to level 10, closer up the open sea has empty "
+        "spots at zero. GEBCO 2026 is a world depth grid of about 450 m, it "
+        "replaces the floor of the tiles and the land stays. The grid is read "
+        "from the network by areas. The depths are not fit for navigation.",
     "Тайлы высот по миру":
         "World height tiles",
     "Как записаны высоты":
@@ -667,10 +685,104 @@ EN = {
         "Mining areas",
     "Загрузка контуров горных разработок, около 25 МБ…":
         "Loading mining area outlines, about 25 MB…",
-    "Землетрясения, границы плит, месторождения и горные разработки, разрез "
-    "Земли и палеогеография.":
-        "Earthquakes, plate boundaries, mineral deposits and mining areas, "
-        "the Earth cutaway and palaeogeography.",
+    "Геологическая карта, землетрясения, границы плит и разломы, "
+    "месторождения и горные разработки, разрез Земли и палеогеография.":
+        "The geological map, earthquakes, plate boundaries and faults, "
+        "mineral deposits and mining areas, the Earth cutaway and "
+        "palaeogeography.",
+    "Активные разломы":
+        "Active faults",
+    "Около 13.7 тысячи активных разломов мира по базе GEM Global Active "
+    "Faults, сведённой из региональных каталогов. Цвет показывает вид "
+    "смещения. Это сброс, взброс или надвиг, сдвиг, срединный хребет и "
+    "складка. Щелчок по линии показывает название, вид смещения, скорость "
+    "в мм/год, падение и каталог-источник. Первое включение скачивает около "
+    "11 МБ.":
+        "About 13.7 thousand active faults of the world from the GEM Global "
+        "Active Faults database compiled from regional catalogues. The colour "
+        "shows the kind of slip. It is a normal fault, a reverse fault or "
+        "thrust, a strike-slip fault, a spreading ridge and a fold. A click "
+        "on a line shows the name, the kind of slip, the slip rate in mm/yr, "
+        "the dip and the source catalogue. The first switch-on downloads "
+        "about 11 MB.",
+    "Геологическая карта":
+        "Geological map",
+    "Геологическая карта мира Macrostrat, сведённая из карт разного "
+    "масштаба. Цвет показывает возраст пород. В России и Европе самая "
+    "подробная карта - 1:5 000 000, в США карты намного подробнее. Щелчок "
+    "в режиме «Определить объекты» показывает подразделение, литологию, "
+    "возраст в млн лет и карту-источник. На глобусе одна такая карта - "
+    "геологическая или карта значений геофизики.":
+        "The Macrostrat geological map of the world compiled from maps of "
+        "different scales. The colour shows the age of the rocks. In Russia "
+        "and Europe the most detailed map is 1:5 000 000, in the USA the maps "
+        "are much more detailed. A click in the Identify features mode shows "
+        "the unit, the lithology, the age in Ma and the source map. The "
+        "globe shows one such map - the geological map or a geophysical "
+        "value map.",
+    "Сбросы":
+        "Normal faults",
+    "Взбросы, надвиги, субдукция":
+        "Reverse faults, thrusts, subduction",
+    "Сдвиги":
+        "Strike-slip faults",
+    "Срединные хребты":
+        "Spreading ridges",
+    "Складки":
+        "Folds",
+    "Вид смещения не указан":
+        "Kind of slip not given",
+    "Активные разломы GEM":
+        "GEM active faults",
+    "Активные разломы, около 11 МБ":
+        "Active faults, about 11 MB",
+    "Щелчок по линии - сведения":
+        "A click on a line - details",
+    "Загрузка активных разломов GEM, около 11 МБ…":
+        "Loading the GEM active faults, about 11 MB…",
+    "Разломов {count}.":
+        "Faults: {count}.",
+    "Разломы не загрузились, проверьте сеть и включите строку снова.":
+        "The faults did not load, check the network and switch the row on "
+        "again.",
+    "Разломы не разобраны.":
+        "The faults could not be read.",
+    "Вид смещения":
+        "Kind of slip",
+    "Запись в базе":
+        "Database entry",
+    "Скорость смещения":
+        "Slip rate",
+    "Падение":
+        "Dip",
+    "Каталог":
+        "Catalogue",
+    "Запрос к Macrostrat…":
+        "Asking Macrostrat…",
+    "Геология":
+        "Geology",
+    "Macrostrat не ответил":
+        "Macrostrat did not answer",
+    "Карта в точке пуста":
+        "The map is empty at the point",
+    "Литология":
+        "Lithology",
+    "Свита":
+        "Formation",
+    "Примечание":
+        "Note",
+    "Страница Macrostrat":
+        "Macrostrat page",
+    "Возраст":
+        "Age",
+    "Возраст, млн лет":
+        "Age, Ma",
+    "Ссылка на карту":
+        "Map link",
+    "В проект добавлен слой «{title}».":
+        "Layer {title} added to the project.",
+    "Слой «{title}» не добавлен.":
+        "Layer {title} was not added.",
     "Контуры карьеров, отвалов, хвостохранилищ и промплощадок мира по "
     "снимкам Sentinel-2 2019 года - около 45 тысяч участков, Maus и "
     "соавторы, 2022. Щелчок по контуру показывает страну и площадь. Первое "

@@ -20,6 +20,7 @@ from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
 from ...core import (infra, mining, cables as cables_core,
+                     faults as faults_core,
                      plants as plants_core, platemotion, plates, slabs,
                      volcanoes as volcanoes_core)
 from ...core.features import Shape
@@ -27,13 +28,26 @@ from ..overpass import brief_error
 from ...core.places import Place as MarkPlace
 from ...i18n import tr
 from ...net.gdalnet import executor
-from ...net.overlay import fetch_bytes, plate_layer, cable_layer
+from ...net.overlay import (fetch_bytes, plate_layer, cable_layer,
+                            fault_layer)
 from ...render.view import OBJECT_BUDGET, start_keys
 from ..identify import Group, point_text
 from ..deposits import parse_plants
-from ..legend import fuel_names
+from ..legend import fault_names, fuel_names
 from .base import (CURSOR_PERIOD, DATA_DIR, DEPOSIT_POLL, IDENTIFY_PIXELS,
                    MESSAGE_TIME, MOTION_COLOR, MOTION_WIDTH, distance_text)
+
+
+def _read_faults(path, data):
+    """Рабочий поток: байты базы разломов в файл профиля, если они
+    пришли, затем разбор файла (core.faults.parse)."""
+    if data is not None:
+        part = path + ".part"
+        with open(part, "wb") as fh:
+            fh.write(data)
+        os.replace(part, path)
+    with open(path, "rb") as fh:
+        return faults_core.parse(fh.read())
 
 
 class ResourcesMixin:
@@ -631,6 +645,115 @@ class ResourcesMixin:
         values.append((tr("Объект OSM"), "https://www.openstreetmap.org/"
                        + found.osm))
         return [(Group(tr("Подводные кабели")), [
+            (found.name or tr("Без названия"), values, None)])]
+
+    # Активные разломы GEM (core/faults.py).
+
+    def _faults_path(self):
+        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
+                              "PlanetX")
+        os.makedirs(folder, exist_ok=True)
+        return os.path.join(folder, faults_core.FILE)
+
+    def _set_faults(self, on):
+        """Строка «Активные разломы» каталога: линии в наложении. Первое
+        включение скачивает файл базы около 11 МБ в профиль, разбор - в
+        рабочем потоке."""
+        self._mark_gallery()
+        self.fault_legend.setVisible(on and self.planet.earth)
+        self._place_attribution()
+        if not on:
+            if self._fault_reply is not None:
+                reply, self._fault_reply = self._fault_reply, None
+                reply.abort()
+            self._update_overlay(keep=True)
+            self._show_attribution()
+            return
+        if self.fault_layer is not None:
+            self._update_overlay(keep=True)
+            self._show_attribution()
+            return
+        if self._fault_reply is not None or self._fault_job is not None:
+            return
+        path = self._faults_path()
+        if os.path.exists(path):
+            self._parse_faults(path, None)
+            return
+        self._fault_reply = fetch_bytes(faults_core.URL, self._faults_arrived)
+        self.view.data_pending += 1
+        self.message = (tr("Загрузка активных разломов GEM, около 11 МБ…"),
+                        time.monotonic())
+        self._show_state()
+
+    def _faults_arrived(self, data, error):
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        if self._fault_reply is None:
+            return  # снят выключением строки
+        self._fault_reply = None
+        if data is None:
+            journal.note("faults: {}".format(brief_error(error)))
+            self.message = (tr("Разломы не загрузились, проверьте сеть "
+                               "и включите строку снова."), time.monotonic())
+            self._show_state()
+            return
+        self._parse_faults(self._faults_path(), bytes(data))
+
+    def _parse_faults(self, path, data):
+        """Разбор файла базы в рабочем потоке. data - пришедшие байты,
+        они записываются в path, None - файл path уже есть."""
+        self._fault_job = executor("deposits", 1).submit(
+            _read_faults, path, data)
+        self.view.data_pending += 1
+        QTimer.singleShot(DEPOSIT_POLL, self._faults_poll)
+
+    def _faults_poll(self):
+        job = self._fault_job
+        if job is None:
+            return
+        if not job.done():
+            QTimer.singleShot(DEPOSIT_POLL, self._faults_poll)
+            return
+        self._fault_job = None
+        self.view.data_pending = max(0, self.view.data_pending - 1)
+        try:
+            self.faults_data = job.result()
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            journal.note("faults parse: {}".format(error))
+            self.message = (tr("Разломы не разобраны."), time.monotonic())
+            self._show_state()
+            return
+        self.fault_layer = fault_layer(self.faults_data, fault_names())
+        self.message = (tr("Разломов {count}.", count=len(self.faults_data)),
+                        time.monotonic())
+        self._show_state()
+        if self.extras.get("faults"):
+            self._update_overlay(keep=True)
+        self._show_attribution()
+        self.view.update()
+
+    def _identify_faults(self, lat, lon, tolerance):
+        """Активный разлом у точки щелчка, когда строка включена."""
+        if not (self.planet.earth and self.extras.get("faults")
+                and self.faults_data is not None):
+            return []
+        found = faults_core.nearest(self.faults_data, lat, lon, tolerance)
+        if found is None:
+            return []
+        values = [(tr("Вид смещения"), fault_names()[found.kind])]
+        if found.slip_type:
+            values.append((tr("Запись в базе"), found.slip_type))
+        if found.rate is not None:
+            values.append((tr("Скорость смещения"), tr(
+                "{value} мм/год", value="{:g}".format(found.rate))))
+        if found.dip is not None:
+            dip = "{:g}°".format(found.dip)
+            if found.dip_dir:
+                dip += " ({})".format(found.dip_dir)
+            values.append((tr("Падение"), dip))
+        if found.catalog:
+            values.append((tr("Каталог"), found.catalog))
+        values.append((tr("Набор"), "GEM Global Active Faults"))
+        return [(Group(tr("Активные разломы")), [
             (found.name or tr("Без названия"), values, None)])]
 
     def _identify_plates(self, lat, lon, tolerance):

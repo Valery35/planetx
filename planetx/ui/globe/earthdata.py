@@ -94,11 +94,33 @@ class EarthDataMixin:
         warm_gdal()
         return DemSource(kind)
 
+    def _make_sea(self):
+        """Глубины GEBCO по выбору окна «Источники данных» или None -
+        дно из тайлов высот."""
+        kind = dem_model.sea_choice(
+            QgsSettings().value(datasources.SEA_DEM_KEY, ""))
+        if kind == dem_model.TERRARIUM:
+            return None
+        warm_gdal()
+        return DemSource(kind)
+
+    def _sea_model(self):
+        """Глубины GEBCO, когда они нужны: глубины морей включены, вне
+        режима геоида."""
+        sea = getattr(self, "sea_dem", None)
+        if sea is None or not getattr(self, "sea_depths", True):
+            return None
+        if self._geoid_on():
+            return None
+        return sea
+
     def _height_entries(self):
-        """Что ложится на тайлы высот Земли: модель рельефа, потом
-        врезки своего рельефа."""
+        """Что ложится на тайлы высот Земли: модель рельефа суши, глубины
+        GEBCO, потом врезки своего рельефа."""
         model = getattr(self, "dem", None)
-        return ((model,) if model is not None else ()) + tuple(self.insets)
+        sea = self._sea_model()
+        return tuple(m for m in (model, sea) if m is not None) \
+            + tuple(self.insets)
 
     def _terrain_credit(self):
         url = self._terrain_choice()[0]
@@ -111,6 +133,9 @@ class EarthDataMixin:
         model = getattr(self, "dem", None)
         if model is not None:
             credit += " · " + link_html(*dem_model.ATTRIBUTION[model.kind])
+        sea = self._sea_model()
+        if sea is not None:
+            credit += " · " + link_html(*dem_model.ATTRIBUTION[sea.kind])
         return credit
 
     def _vector_choice(self):
@@ -130,6 +155,7 @@ class EarthDataMixin:
         "basemaps" - список подложек."""
         if what == "terrain":
             self.dem = self._make_dem()
+            self.sea_dem = self._make_sea()
             self._refresh_relief()
             self._update_relief_menu()
         elif what == "vector":
@@ -174,6 +200,13 @@ class EarthDataMixin:
         QgsSettings().setValue(datasources.DEM_KEY, dem_model.choice(kind))
         self.sources_changed("terrain")
 
+    def set_sea_model(self, kind):
+        """Глубины морей из меню строки «Рельеф»: тайлы высот или GEBCO,
+        как в окне «Источники данных»."""
+        QgsSettings().setValue(datasources.SEA_DEM_KEY,
+                               dem_model.sea_choice(kind))
+        self.sources_changed("terrain")
+
     def _update_relief_menu(self):
         """Меню строки «Рельеф»: выбор высот суши и глубины морей есть
         только у Земли."""
@@ -184,7 +217,7 @@ class EarthDataMixin:
         if not planet.earth:
             panel.set_relief_menu([], "", False)
             return
-        from ..sources import dem_titles
+        from ..sources import dem_titles, sea_titles
         titles = dem_titles()
         own = self._terrain_choice()[0] != datasources.TERRAIN_URL
         short = {dem_model.TERRARIUM: tr("свой источник") if own
@@ -193,7 +226,12 @@ class EarthDataMixin:
                  dem_model.GEDTM: "GEDTM30"}
         models = [(key, titles[key], short[key]) for key in dem_model.CHOICES]
         kind = dem_model.choice(QgsSettings().value(datasources.DEM_KEY, ""))
-        panel.set_relief_menu(models, kind, getattr(self, "sea_depths", True))
+        seas = sea_titles()
+        sea = dem_model.sea_choice(
+            QgsSettings().value(datasources.SEA_DEM_KEY, ""))
+        panel.set_relief_menu(models, kind, getattr(self, "sea_depths", True),
+                              [(key, seas[key])
+                               for key in dem_model.SEA_CHOICES], sea)
 
     def _set_sea_floor(self, on):
         """Глубины морей и океанов: высоты Земли заново, с впадинами

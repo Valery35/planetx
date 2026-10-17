@@ -84,14 +84,20 @@ class IdentifyMixin:
                     or self._identify_plants(px, py)
                     or self._identify_volcanoes(px, py)
                     or self._infra_under(px, py)
+                    or self._infra_under(px, py, faults=True)
                     or self._identify_quakes(px, py)
                     or self._identify_fires(px, py)
                     or self._identify_satellites(px, py))
 
-    def _infra_under(self, px, py):
-        """Линия или подстанция OSM под пикселем кадра."""
-        if not (self.extras.get("infra_osm") and self.planet.earth
-                and self.infra_lines is not None):
+    def _infra_under(self, px, py, faults=False):
+        """Линия или подстанция OSM под пикселем кадра, с faults -
+        активный разлом."""
+        if faults:
+            if not (self.extras.get("faults") and self.planet.earth
+                    and self.faults_data is not None):
+                return []
+        elif not (self.extras.get("infra_osm") and self.planet.earth
+                  and self.infra_lines is not None):
             return []
         camera = self.view.camera
         point = ground_under(camera, px, py,
@@ -101,9 +107,10 @@ class IdentifyMixin:
         lat, lon, _ = (float(v) for v in ecef_to_geodetic(point))
         metres = float(((point - camera.eye) ** 2).sum()) ** 0.5 \
             / focal(camera)
-        return self._identify_infra(
-            lat, lon, IDENTIFY_PIXELS * self.view.devicePixelRatioF()
-            * metres)
+        tolerance = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * metres
+        if faults:
+            return self._identify_faults(lat, lon, tolerance)
+        return self._identify_infra(lat, lon, tolerance)
 
     def identify_here(self, px, py):
         """Опрос объектов под пикселем кадра: окно «Объекты». Его зовут
@@ -136,6 +143,7 @@ class IdentifyMixin:
         self._identify_at = (lat, lon, height, tolerance, px, py, found)
         self._ask_parcels(lat, lon)
         self._ask_field(lat, lon)
+        self._ask_geology(lat, lon)
         self._show_identified()
 
     # Сведения об участках кадастра Росреестра (core/cadastre.py).
@@ -232,9 +240,11 @@ class IdentifyMixin:
         if under:
             groups.append((Group(tr("Подземное")), under))
         groups += self._identify_plates(lat, lon, tolerance)
+        groups += self._identify_faults(lat, lon, tolerance)
         groups += self._identify_cables(lat, lon, tolerance)
         groups += self._identify_magnetic(lat, lon)
         groups += self._identify_field()
+        groups += self._identify_geology()
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)

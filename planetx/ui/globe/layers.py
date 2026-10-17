@@ -25,12 +25,14 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      temperature, when, oldmaps, deposits as deposits_core,
                      mining, cables as cables_core, rumsey as rumsey_core,
                      plants as plants_core, fires as fires_core, crust, plates,
-                     volcanoes as volcanoes_core,
-                     quakes, slabs, themes,
+                     volcanoes as volcanoes_core, faults as faults_core,
+                     geology, quakes, slabs, themes,
                      satellites as satellites_core)
 from ...core import sources as datasources
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
+from ...core.geocode import link_zoom
+from ...core.sync import ground_size
 from ...core.mipmap import mip_chain
 from ..flow import CURRENTS_ATTRIBUTION
 from ..overpass import brief_error
@@ -59,7 +61,8 @@ from .base import (AUTO_DEFAULT, COORDS_KEY, CREDIT_LINK, DATA_DIR, DECL_EAST,
                    MAGNETIC_ATTRIBUTION, MARGIN, NEW_SHOWN_KEY, POLE_COLORS,
                    POLE_WIDTH, REFRESH_DELAY, SELECTION_DELAY, SKY_ATTRIBUTION,
                    TILE_SIZE, attribution_html, imagery_preparer,
-                   label_languages, link_html, places_decoder, prepare_field)
+                   label_languages, link_html, places_decoder, prepare_field,
+                   prepare_geology)
 
 
 def field_texts():
@@ -628,7 +631,7 @@ class LayersMixin:
         в рабочем потоке, шкала. Включение снимает прежнюю карту."""
         field = fields.FIELDS[key]
         if on:
-            for other in fields.KEYS:
+            for other in fields.KEYS + ("geology",):
                 if other != key and self.extras.get(other):
                     self.set_extra(other, False)
         elif self._field_shown != key:
@@ -708,6 +711,122 @@ class LayersMixin:
                 number.format(value), unit))] + notes
         return [(Group(group), [(title, values, None)])]
 
+    # Геологическая карта Macrostrat (core/geology.py) - тот же слой вида
+    # «emag», что у карт значений, на глобусе одна такая карта.
+
+    def _geology_shown(self):
+        return bool(getattr(self, "extras", {}).get("geology")) \
+            and getattr(self, "planet", None) is not None \
+            and self.planet.earth
+
+    def _set_geology(self, on):
+        """Строка «Геологическая карта»: тайлы Macrostrat, щелчок даёт
+        породу. Включение снимает карту значений."""
+        if on:
+            for other in fields.KEYS:
+                if self.extras.get(other):
+                    self.set_extra(other, False)
+        elif self._field_shown is not None:
+            # Слой вида занят картой значений.
+            self._drop_geology()
+            return
+        on = on and self.planet.earth
+        self._drop_geology()
+        made = None
+        if on:
+            self.view.gibs["emag"].max_level = geology.MAX_LEVEL
+            source = basemap.Source("Macrostrat", geology.TILES,
+                                    geology.MAX_LEVEL, geology.ATTRIBUTION,
+                                    builtin=True)
+            made = (source, prepare_geology)
+        self._set_gibs("emag", on, made=made, cache=True)
+        self.field_legend.setVisible(False)
+        self._place_attribution()
+        self._mark_gallery()
+
+    def _ask_geology(self, lat, lon):
+        """Порода под щелчком: запрос map_query Macrostrat на уровне
+        карты вида."""
+        self._drop_geology()
+        if not self._geology_shown():
+            return
+        pose = self.view.navigator.pose
+        width, _ = ground_size(pose.distance, self.view.camera.fov_y,
+                               self.view.camera.aspect)
+        self._geology_value = ((lat, lon), None, "")
+        self._send_geology(lat, lon, link_zoom(lat, width))
+
+    def _send_geology(self, lat, lon, z):
+        point = (lat, lon)
+        self._geology_reply = fetch_bytes(
+            geology.query_url(lat, lon, z),
+            lambda data, error: self._geology_arrived(point, z, data,
+                                                      error))
+
+    def _drop_geology(self):
+        reply, self._geology_reply = self._geology_reply, None
+        self._geology_value = None
+        if reply is not None:
+            reply.abort()
+
+    def _geology_arrived(self, point, z, data, error):
+        state = self._geology_value
+        if state is None or state[0] != point:
+            return  # ответ снятого или прежнего запроса
+        self._geology_reply = None
+        units = None
+        if data is not None:
+            try:
+                units = geology.parse_query(bytes(data))
+            except (ValueError, UnicodeDecodeError) as problem:
+                error = str(problem)
+        if units == [] and geology.coarser(z) is not None:
+            # Глубже карты места ответ пуст - та же точка мельче.
+            self._send_geology(point[0], point[1], geology.coarser(z))
+            return
+        self._geology_value = (point, units, error or "")
+        self._refresh_identified()
+
+    def _identify_geology(self):
+        """Группа «Геология» окна «Объекты»."""
+        state = self._geology_value
+        if state is None:
+            return []
+        (lat, lon), units, error = state
+        if units is None and not error:
+            features = [(tr("Запрос к Macrostrat…"), [], None)]
+        elif units is None:
+            features = [(tr("Macrostrat не ответил"),
+                         [(tr("Ошибка"), error)], None)]
+        elif not units:
+            features = [(tr("Карта в точке пуста"), [], None)]
+        else:
+            features = []
+            for unit in units:
+                names, ages = geology.age_text(unit)
+                values = []
+                if names:
+                    values.append((tr("Возраст"), names))
+                if ages:
+                    values.append((tr("Возраст, млн лет"), ages))
+                for label, key in ((tr("Литология"), "lith"),
+                                   (tr("Свита"), "strat_name"),
+                                   (tr("Описание"), "descrip"),
+                                   (tr("Примечание"), "comments")):
+                    if unit[key]:
+                        values.append((label, unit[key]))
+                source = ", ".join(v for v in (
+                    unit["source"], unit["authors"], unit["year"]) if v)
+                if source:
+                    values.append((tr("Карта"), source))
+                if unit["url"]:
+                    values.append((tr("Ссылка на карту"), unit["url"]))
+                values.append((tr("Страница Macrostrat"),
+                               geology.page_url(lat, lon)))
+                features.append((unit["name"] or unit["lith"]
+                                 or tr("Без названия"), values, None))
+        return [(Group(tr("Геология")), features)]
+
     def _identify_magnetic(self, lat, lon):
         """Группа «Магнитное поле» окна «Объекты»: поле IGRF-14 в точке
         на год шкалы."""
@@ -773,6 +892,8 @@ class LayersMixin:
         if "emag" in self.gibs_loaders and self._field_shown:
             parts.append(link_html(
                 *fields.FIELDS[self._field_shown].attribution))
+        elif "emag" in self.gibs_loaders and self._geology_shown():
+            parts.append(link_html(*geology.ATTRIBUTION))
         if self._geoid_on():
             parts.append(link_html(*geoid.ATTRIBUTION))
         if self.planet.earth and (
@@ -819,6 +940,9 @@ class LayersMixin:
         if self.planet.earth and getattr(self, "extras", {}).get("plates") \
                 and self.plates_data is not None:
             parts.append(link_html(*plates.ATTRIBUTION))
+        if self.planet.earth and getattr(self, "extras", {}).get("faults") \
+                and getattr(self, "fault_layer", None) is not None:
+            parts.append(link_html(*faults_core.ATTRIBUTION))
         if self.planet.earth and self._rumsey_shown():
             parts.append(link_html(*rumsey_core.ATTRIBUTION))
         if self.planet.earth \
@@ -971,6 +1095,13 @@ class LayersMixin:
             # Границы плит - над векторной основой.
             self.plate_layer.setOpacity(self._layer_opacity("plates"))
             layers.append(self.plate_layer)
+        if self.planet.earth and getattr(self, "extras", {}).get("faults") \
+                and getattr(self, "fault_layer", None) is not None:
+            # Разломы - над границами плит.
+            self.fault_layer.setOpacity(self._layer_opacity("faults"))
+            layers.insert(len(layers) - 1 if layers and layers[-1]
+                          is getattr(self, "plate_layer", None)
+                          else len(layers), self.fault_layer)
         if self.planet.earth and getattr(self, "extras", {}).get("mining") \
                 and getattr(self, "mining_layer", None) is not None:
             self.mining_layer.setOpacity(self._layer_opacity("mining"))

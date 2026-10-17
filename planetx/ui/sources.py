@@ -20,8 +20,8 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QPushButton, QTreeWidget, QTreeWidgetItem,
                                  QVBoxLayout)
 
-from ..core import (basemap, cadastre, crust, dem, fires, paleo, planets,
-                    quakes, routing, slabs, sources, sun)
+from ..core import (basemap, cadastre, crust, dem, faults, fires, geology,
+                    paleo, planets, quakes, routing, slabs, sources, sun)
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
@@ -40,11 +40,17 @@ def dem_titles():
             dem.GEDTM: tr("GEDTM30 30 м - земля без леса и домов")}
 
 
+def sea_titles():
+    """Названия выбора глубин морей по core.dem.SEA_CHOICES."""
+    return {dem.TERRARIUM: tr("Тайлы высот - дно до уровня 10"),
+            dem.GEBCO: tr("GEBCO 2026 - сетка около 450 м")}
+
+
 def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
-              model=dem.TERRARIUM):
+              model=dem.TERRARIUM, sea=dem.TERRARIUM):
     """Источники по группам: (группа, [(название, что показывает,
     условия, адрес проверки или None)]). model - выбор рельефа 30 м,
-    файлы моделей велики и не проверяются."""
+    sea - выбор глубин морей, файлы моделей велики и не проверяются."""
     terrain_probe = sources.tile_probe(terrain_url)
     mars = planets.TERRAIN_TILES % "mars"
     models = []
@@ -55,6 +61,9 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
     elif model == dem.GEDTM:
         models.append(("GEDTM30", tr("Высоты суши 30 м с уровня 9"),
                        dem.ATTRIBUTION[model][1], None))
+    if sea == dem.GEBCO:
+        models.append(("GEBCO 2026", tr("Глубины морей 450 м с уровня 5"),
+                       dem.ATTRIBUTION[sea][1], None))
     return (
         (tr("Рельеф"), models + [
             (tr("Рельеф Земли") if terrain_url == sources.TERRAIN_URL
@@ -98,6 +107,10 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
              crust.URL),
             ("PB2002", tr("Границы плит, файл модуля"),
              "https://github.com/fraxen/tectonicplates", None),
+            ("GEM Global Active Faults", tr("Активные разломы, около 11 МБ"),
+             faults.ATTRIBUTION[1], None),
+            ("Macrostrat", tr("Геологическая карта"), geology.ATTRIBUTION[1],
+             sources.tile_probe(geology.TILES)),
             ("PALEOMAP PaleoDEM", tr("Палеогеография"), paleo.ATTRIBUTION[1],
              sources.tile_probe(paleo.TILE_URL.replace("{age}", "0")))]),
         # НСПД без проверки: ей нужны заголовок Referer и сертификат
@@ -191,18 +204,32 @@ class SourcesDialog(QDialog):
             "Copernicus DEM - поверхность вместе с лесом и домами, файлы "
             "на AWS. GEDTM30 - рельеф самой земли, один большой файл, "
             "загрузка медленнее. Модель читается из сети по участкам."))
+        self.sea = QComboBox(self)
+        titles = sea_titles()
+        for key in dem.SEA_CHOICES:
+            self.sea.addItem(titles[key], key)
+        self.sea.setCurrentIndex(dem.SEA_CHOICES.index(dem.sea_choice(
+            settings.value(sources.SEA_DEM_KEY, ""))))
+        self.sea.setToolTip(tr(
+            "Откуда берётся дно морей и океанов. В тайлах высот подробное "
+            "дно есть до уровня 10, ближе в открытом море бывают пустые "
+            "места на нуле. GEBCO 2026 - сетка глубин мира около 450 м, "
+            "она заменяет дно тайлов, суша остаётся. Сетка читается из "
+            "сети по участкам. Для навигации глубины не годятся."))
         terrain = QGroupBox(tr("Рельеф - откуда берутся высоты"), self)
         form = QFormLayout(terrain)
         about = QLabel(tr(
-            "Высоты складываются из трёх слоёв. Тайлы высот покрывают весь "
-            "мир и дно морей. Модель 30 м уточняет сушу вблизи. Свой растр "
-            "проекта заменяет всё в своём охвате."), self)
+            "Высоты складываются из четырёх слоёв. Тайлы высот покрывают "
+            "весь мир и дно морей. Модель 30 м уточняет сушу вблизи, сетка "
+            "GEBCO - дно морей. Свой растр проекта заменяет всё в своём "
+            "охвате."), self)
         about.setWordWrap(True)
         form.addRow(about)
         form.addRow(tr("Тайлы высот по миру"), self.terrain_url)
         form.addRow(tr("Как записаны высоты"), self.encoding)
         form.addRow(tr("Подпись тайлов"), self.terrain_credit)
         form.addRow(tr("Уточнение суши 30 м"), self.model)
+        form.addRow(tr("Глубины морей"), self.sea)
         hint = QLabel(tr(
             "Свой растр высот, например съёмку карьера, включает пункт "
             "«Рельеф глобуса» меню растра в разделе «Слои проекта». Растр "
@@ -305,8 +332,9 @@ class SourcesDialog(QDialog):
         terrain, encoding = self.window._terrain_choice()
         router = sources.router(QgsSettings().value(sources.ROUTER_KEY, ""))
         model = dem.choice(QgsSettings().value(sources.DEM_KEY, ""))
+        sea = dem.sea_choice(QgsSettings().value(sources.SEA_DEM_KEY, ""))
         for group, rows in catalogue(terrain, self.window._vector_choice(),
-                                     router, model):
+                                     router, model, sea):
             parent = QTreeWidgetItem(self.tree, [group])
             for name, what, terms, probe in rows:
                 self._row(parent, name, what, terms, probe)
@@ -397,6 +425,7 @@ class SourcesDialog(QDialog):
             settings.setValue(sources.TERRAIN_CREDIT_KEY,
                               self.terrain_credit.text().strip())
             settings.setValue(sources.DEM_KEY, self.model.currentData())
+            settings.setValue(sources.SEA_DEM_KEY, self.sea.currentData())
         elif what == "router":
             url = self.router_url.text().strip()
             if url and not routing.router_ok(url):
@@ -424,6 +453,7 @@ class SourcesDialog(QDialog):
         if what == "terrain":
             self.terrain_url.clear()
             self.model.setCurrentIndex(0)
+            self.sea.setCurrentIndex(dem.SEA_CHOICES.index(dem.SEA_DEFAULT))
             self.encoding.setCurrentIndex(0)
             self.terrain_credit.clear()
         elif what == "router":

@@ -55,5 +55,35 @@ class TestDem(unittest.TestCase):
         self.assertEqual(dem.choice(None), dem.TERRARIUM)
 
 
+class TestSea(unittest.TestCase):
+    def test_merge_sea_keeps_land(self):
+        base = np.array([[-3000.0, 0.0], [120.0, -5.0], [0.0, 2.0]],
+                        dtype=np.float32)
+        sea = np.array([[-3400.0, -7100.0], [-20.0, np.nan], [15.0, -1.0]],
+                       dtype=np.float32)
+        out = dem.merge_sea(base, sea)
+        self.assertEqual(out[0, 0], -3400.0)  # дно - GEBCO
+        self.assertEqual(out[0, 1], -7100.0)  # пустой ноль Terrarium
+        self.assertEqual(out[1, 0], 120.0)  # суша тайла остаётся
+        self.assertEqual(out[1, 1], -5.0)  # нет данных GEBCO
+        self.assertEqual(out[2, 0], 0.0)  # суша GEBCO берег не двигает
+        self.assertEqual(out[2, 1], 2.0)
+        self.assertIs(dem.merge_sea(base, None), base)
+
+    def test_sea_choice_and_levels(self):
+        self.assertEqual(dem.sea_choice(""), dem.SEA_DEFAULT)
+        self.assertEqual(dem.sea_choice(dem.TERRARIUM), dem.TERRARIUM)
+        self.assertEqual(dem.sea_choice("x"), dem.SEA_DEFAULT)
+        self.assertEqual(dem.levels(dem.GEBCO),
+                         (dem.SEA_MIN_LEVEL, dem.SEA_READ_LEVEL))
+        self.assertEqual(dem.levels(dem.COPERNICUS),
+                         (dem.MIN_LEVEL, dem.READ_LEVEL))
+        self.assertIn(dem.GEBCO, dem.ATTRIBUTION)
+
+    def test_has_sea(self):
+        self.assertFalse(dem.has_sea(np.full((4, 4), 12.0)))
+        self.assertTrue(dem.has_sea(np.array([[12.0, 0.0]])))
+
+
 if __name__ == "__main__":
     unittest.main()

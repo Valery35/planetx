@@ -18,6 +18,19 @@ GEDTM30 v1.2 (OpenGeoHub, Ho и др., PeerJ 2025) - модель рельефа
 метрах над EGM2008, CC BY 4.0. В файле стоит множитель 0.1, но
 значения - метры: Народная 1860 м, Эльбрус 5447 м, у Copernicus
 1877 и 5453 м, проверено 10 октября 2026 года.
+
+Глубины морей на выбор - решение автора от 17 октября 2026 года после
+списка открытых данных помощника. Terrarium даёт дно до уровня 10,
+у Японского жёлоба на уровнях 11-12 в нём нули, на глубоководных
+равнинах - пятна до -13 км. GEBCO 2026 Grid (сетка 15", около 450 м)
+заменяет высоты тайла там, где и у тайла, и у GEBCO ниже нуля
+(merge_sea), с уровня SEA_MIN_LEVEL. GEBCO - общественное достояние,
+условие - подпись источника и запрет выдавать данные за одобренные
+GEBCO, IHO и IOC, для навигации данные не годятся. Файл COG с уровнями
+обзора - копия Source Cooperative (giswqs/gebco-bathymetry), её
+выложил Qiusheng Wu, у самого GEBCO файлы только архивом. Проверено
+17 октября 2026 года - 86 400 × 43 200, Int16, DEFLATE, обзоры до
+1350 × 675.
 """
 import math
 
@@ -27,6 +40,11 @@ TERRARIUM = "terrarium"
 COPERNICUS = "copernicus30"
 GEDTM = "gedtm30"
 CHOICES = (TERRARIUM, COPERNICUS, GEDTM)
+GEBCO = "gebco2026"
+# Глубины морей: только тайлы высот или GEBCO поверх них. По умолчанию
+# GEBCO - выбор помощника, утверждает автор.
+SEA_CHOICES = (TERRARIUM, GEBCO)
+SEA_DEFAULT = GEBCO
 
 # С этого уровня тайла высот суша берётся из модели 30 м. Пиксель
 # тайла уровня 9 - около 300 м у экватора, мельче модель 30 м
@@ -36,11 +54,18 @@ MIN_LEVEL = 9
 # окна предка: пиксель тайла уровня 12 - 38 м у экватора и 20 м на
 # широте 58°, подробнее модели 30 м. Чтений сети на вид в разы меньше.
 READ_LEVEL = 12
+# GEBCO: с уровня 5 (пиксель тайла около 4.9 км у экватора, мельче
+# тайлы Terrarium не хуже) до уровня 9 (около 300 м, мельче сетки
+# 450 м), глубже - пересчёт окна предка. Выбор помощника.
+SEA_MIN_LEVEL = 5
+SEA_READ_LEVEL = 9
 
 COPERNICUS_URL = ("https://copernicus-dem-30m.s3.amazonaws.com/"
                   "{name}/{name}.tif")
 GEDTM_URL = ("https://s3.opengeohub.org/global/dtm/v1.2/"
              "gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif")
+GEBCO_URL = ("https://data.source.coop/giswqs/gebco-bathymetry/gebco_2026/"
+             "gebco_2026.tif")
 
 ATTRIBUTION = {
     COPERNICUS: ("Produced using Copernicus WorldDEM-30 © DLR e.V. "
@@ -52,6 +77,9 @@ ATTRIBUTION = {
                  "collections-description/COP-DEM"),
     GEDTM: ("GEDTM30 v1.2: OpenGeoHub, Ho et al. 2025, CC BY 4.0",
             "https://doi.org/10.7717/peerj.19673"),
+    GEBCO: ("Bathymetry: GEBCO Compilation Group (2026) GEBCO 2026 Grid",
+            "https://www.gebco.net/data-products/gridded-bathymetry/"
+            "terms-of-use"),
 }
 
 EARTH_RADIUS = 6378137.0
@@ -60,6 +88,26 @@ EARTH_RADIUS = 6378137.0
 def choice(value):
     """Выбор рельефа по настройке: неизвестное значение - Terrarium."""
     return value if value in CHOICES else TERRARIUM
+
+
+def sea_choice(value):
+    """Выбор глубин морей по настройке: пусто или неизвестное значение -
+    SEA_DEFAULT."""
+    return value if value in SEA_CHOICES else SEA_DEFAULT
+
+
+def levels(kind):
+    """Уровни модели kind: с какого тайла она берётся и глубже какого
+    окно пересчитывается из предка."""
+    if kind == GEBCO:
+        return SEA_MIN_LEVEL, SEA_READ_LEVEL
+    return MIN_LEVEL, READ_LEVEL
+
+
+def has_sea(base):
+    """Есть ли в тайле высот пиксели не выше нуля - без них окно GEBCO
+    не читается."""
+    return bool((np.asarray(base) <= 0.0).any())
 
 
 def tile_degrees(z, x, y):
@@ -113,4 +161,17 @@ def merge(base, dem):
     use = np.isfinite(dem) & ~((dem <= 0.0) & (base < 0.0))
     out = base.astype(np.float32, copy=True)
     out[use] = dem[use]
+    return out
+
+
+def merge_sea(base, sea):
+    """Высоты тайла base с глубинами sea того же размера: глубина GEBCO
+    берётся там, где и у тайла, и у GEBCO ниже нуля или ноль у тайла.
+    Ноль - пустое место дна Terrarium на уровнях 11-12. Суша тайла
+    остаётся, береговая линия - его."""
+    if sea is None:
+        return base
+    use = np.isfinite(sea) & (sea < 0.0) & (base <= 0.0)
+    out = base.astype(np.float32, copy=True)
+    out[use] = sea[use]
     return out

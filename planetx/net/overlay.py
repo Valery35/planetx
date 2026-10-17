@@ -269,6 +269,40 @@ def cable_layer(cables_data, names):
     return layer
 
 
+def fault_layer(faults_data, names):
+    """Слой в памяти с активными разломами core.faults.Faults, цвет по
+    виду смещения. names - подписи видов для легенды слоя. Слой не
+    входит в проект, его рисует наложение глобуса, как границы плит."""
+    from qgis.core import (QgsCategorizedSymbolRenderer, QgsFeature,
+                           QgsGeometry, QgsPointXY, QgsRendererCategory,
+                           QgsVectorLayer)
+    from ..core import faults as core_faults
+    layer = QgsVectorLayer(
+        "LineString?crs=EPSG:4326&field=kind:string(8)"
+        "&field=name:string(200)&field=slip_type:string(40)"
+        "&field=slip_rate:double&field=dip:double"
+        "&field=dip_dir:string(20)&field=catalog:string(80)",
+        "PlanetX faults", "memory")
+    features = []
+    for f in faults_data.faults:
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(QgsGeometry.fromPolylineXY(
+            [QgsPointXY(lo, la) for la, lo in zip(f.lats, f.lons)]))
+        feature.setAttributes([f.kind, f.name, f.slip_type, f.rate, f.dip,
+                               f.dip_dir, f.catalog])
+        features.append(feature)
+    layer.dataProvider().addFeatures(features)
+    categories = []
+    for key in core_faults.KINDS:
+        rgba = core_faults.COLORS[key]
+        symbol = QgsLineSymbol.createSimple(_line(
+            ",".join(str(v) for v in rgba), core_faults.WIDTH))
+        categories.append(QgsRendererCategory(key, symbol,
+                                              names.get(key, key)))
+    layer.setRenderer(QgsCategorizedSymbolRenderer("kind", categories))
+    return layer
+
+
 def openfreemap_layer(tiles_url, max_zoom=14, groups=LINE_GROUPS):
     """Слой векторных тайлов OpenFreeMap со стилем из линий."""
     uri = "type=xyz&url={}&zmin=0&zmax={}".format(tiles_url, max_zoom)

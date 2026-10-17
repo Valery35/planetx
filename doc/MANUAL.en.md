@@ -272,7 +272,7 @@ take effect at once, without the Refresh button. The rows go like this:
 | Rows | What they hold |
 |---|---|
 | Base map | The base map - imagery or a map. A click on the row opens a menu - Esri World Imagery, OpenStreetMap, the QGIS XYZ Tiles connections and Add tile source… |
-| Relief | The check box turns heights and hill shading on. A click on the name opens a menu - land heights Terrarium, Copernicus DEM 30 m or GEDTM30, Sea and ocean depths and Data sources… |
+| Relief | The check box turns heights and hill shading on. A click on the name opens a menu - land heights Terrarium, Copernicus DEM 30 m or GEDTM30, Sea and ocean depths with the depth source - the height tiles or GEBCO 2026 - and Data sources… |
 | Layers that are on | Layers and the map of the catalogue, the coordinate grid, 3D buildings, contours - everything that is switched on |
 | Vector base groups | Borders and names, Transport, Nature, while something in them is on |
 
@@ -405,8 +405,11 @@ Sea and ocean depths are part of the terrain. The floor lies at its
 depths, and semi-transparent water lies above it at sea level. Water
 shallower than 200 m is more transparent, the floor shows near the
 shore. Below sea level the status bar shows the depth under the
-cursor. The depths come from the same Terrarium tiles as the land
-heights, in the ocean these are ETOPO1 data. Sea names stay at sea
+cursor. The depths come from the GEBCO 2026 grid with a step of about
+450 m over the Terrarium tiles, coarser than level 5 - from the tiles
+themselves, in the ocean these are ETOPO1 data. The menu of the Relief
+row and the Data sources window choose the depth source. The depths are
+not fit for navigation. Sea names stay at sea
 level. The elevation profile, the ruler and the slope use the floor,
 the viewshed and insolation use the water surface. A profile below
 sea level shows the water and a dashed sea level line. Dry
@@ -436,8 +439,8 @@ of the list, the panel grows wider for that time, the globe stays
 visible. The ← arrow brings the list back. The categories stand on the
 left - Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Atmosphere,
-Clouds, Sun, Satellites), Inside the Earth (Earthquakes, Plate
-boundaries, Plate motion, Volcanoes, Magnetic poles, Declination lines,
+Clouds, Sun, Satellites), Inside the Earth (Geological map, Earthquakes,
+Plate boundaries, Active faults, Plate motion, Volcanoes, Magnetic poles, Declination lines,
 Magnetic anomalies, Gravity anomalies, Bouguer anomalies, Geoid, Ocean
 floor age, Heat flow, Mineral deposits, Mining areas, OSM mines and quarries, Earth cutaway,
 Paleogeography), Energy (Power plants, Power lines and pipelines,
@@ -589,6 +592,18 @@ their relative motion in mm/yr. In the plate pair a slash in Bird's
 notation shows which plate goes under which. "PA\OK" is the Pacific
 plate under the Okhotsk plate.
 
+The Active faults layer shows about 13.7 thousand faults of the world
+from the GEM Global Active Faults database (Styron and Pagani, 2020)
+compiled from regional catalogues. The line colour shows the kind of
+slip. Blue lines are normal faults, red ones reverse faults, thrusts and
+subduction zones, green ones strike-slip faults, orange ones spreading
+ridges, purple ones folds, grey ones have no kind given. The legend
+stands in the lower left corner of the view. A click on a line shows
+the name, the kind of slip, the database entry, the slip rate in mm/yr,
+the dip and the source catalogue. The database file, about 11 MB, is
+downloaded on the first switch-on and kept in the QGIS profile. The
+database licence is CC BY-SA 4.0.
+
 The Magnetic poles layer shows the north and south magnetic poles - the
 points where a compass needle stands vertical. The red point is the
 north pole, the blue one is the south pole, each trails its path since
@@ -656,6 +671,22 @@ time, switching on another one removes the previous one. Each has its
 own legend in the corner of the view, a click in the Identify mode
 shows the value at the point. The tiles lie in the planetx-terrain
 repository and load as they are shown.
+
+The Geological map layer shows the Macrostrat geological map of the
+world (University of Wisconsin-Madison) compiled from maps of different
+scales. The colour shows the age of the rocks on the stratigraphic
+scale. From afar the overview map of the world is visible, closer up -
+detailed maps where they exist. In Russia and Europe the most detailed
+map is the International Geological Map of Europe 1:5 000 000, in the
+USA the maps are much more detailed. Deeper than the most detailed map
+of a place the tiles are empty, and the enlarged coarser map stays on
+the screen. A click in the Identify mode shows in the Geology group the
+unit, the lithology, the age on the scale and in Ma, the source map and
+a link to the Macrostrat page at the point. Near Perm these are Permian
+clays, 274-252 Ma, after the map of Europe. The geological map shares
+its place with the geophysical value maps, the globe shows one of them.
+Add to QGIS project… of the On the globe row adds the map as an XYZ tile
+layer. The Macrostrat data are CC BY 4.0.
 
 The Gravity anomalies layer shows the free-air gravity anomaly - the
 departure of gravity from the normal one after the XGM2019e model
@@ -1038,8 +1069,9 @@ buttons work with the QGIS XYZ Tiles connections, a removed connection
 disappears from the QGIS browser too.
 
 The Terrain - where the heights come from group of the same window
-explains that the heights are built from three layers - the world height
-tiles, the 30 m land refinement and an own raster of the project. The
+explains that the heights are built from four layers - the world height
+tiles, the 30 m land refinement, the GEBCO sea depths and an own raster
+of the project. The
 30 m land refinement list puts a 30 m terrain model over the height
 tiles:
 
@@ -1059,6 +1091,17 @@ model credit stands in the view corner. The model is read from the
 network for every new area, without the network the height tiles
 remain. At Mount Narodnaya the height tiles give 1816 m, Copernicus and
 GEDTM30 give 1888 m, the summit is 1895 m.
+
+The Sea depths list chooses the floor of seas and oceans:
+
+- Height tiles - sea floor up to level 10 - the floor from the same
+  Mapzen tiles. Closer than level 10 they have empty spots at zero in the
+  open sea, for example at the Japan Trench.
+- GEBCO 2026 - a grid of about 450 m - the GEBCO 2026 Grid of world
+  depths, public domain with a credit of the source. From level 5 it
+  replaces the floor of the tiles where both the tile and the grid are
+  below zero, the land and the shore stay from the tiles. The grid is
+  read from the network by areas. This is the default.
 
 The label language is chosen from a list. As in QGIS takes the QGIS
 interface language, Local names keep the names in the language of the

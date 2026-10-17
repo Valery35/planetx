@@ -495,6 +495,7 @@ class LayerPanel(QWidget):
     # окно «Источники данных».
     relief_model_chosen = pyqtSignal(str)
     sea_toggled = pyqtSignal(bool)
+    sea_model_chosen = pyqtSignal(str)
     sources_requested = pyqtSignal()
     # Строка сетки, звёзд или облаков: ключ из EXTRAS и флажок.
     extra_toggled = pyqtSignal(str, bool)
@@ -1492,13 +1493,16 @@ class LayerPanel(QWidget):
                                MENU_ROW if own is None else None)
         self._mark_basemap(0 if own is not None else index)
 
-    def set_relief_menu(self, models, model, sea):
+    def set_relief_menu(self, models, model, sea, seas=(), sea_model=""):
         """Меню строки «Рельеф»: models - (ключ, название, коротко),
-        model - выбранный ключ, sea - глубины морей. Пустой models -
-        меню нет, это другое тело."""
+        model - выбранный ключ, sea - глубины морей, seas - (ключ,
+        название) источников глубин, sea_model - выбранный. Пустой
+        models - меню нет, это другое тело."""
         self._relief_models = list(models)
         self._relief_model = model
         self._sea = bool(sea)
+        self._sea_models = list(seas)
+        self._sea_model = sea_model
         item = self.geo_items[RELIEF]
         item.setData(0, MORE_ROLE, MENU_ROW if models else None)
         short = next((s for k, _, s in models if k == model), "")
@@ -1527,6 +1531,14 @@ class LayerPanel(QWidget):
             "Дно морей и океанов ниже нуля и вода над ним. Без флажка "
             "поверхность моря ровная, на уровне нуля."))
         sea.toggled.connect(self.sea_toggled.emit)
+        for key, title in getattr(self, "_sea_models", ()):
+            action = menu.addAction("    " + title)
+            action.setCheckable(True)
+            action.setChecked(key == self._sea_model)
+            action.setEnabled(self._sea)
+            action.triggered.connect(
+                lambda _=False, key=key: self.sea_model_chosen.emit(key))
+        menu.addSeparator()
         menu.addAction(tr("Источники данных…")).triggered.connect(
             lambda _=False: self.sources_requested.emit())
         menu.exec(pos)

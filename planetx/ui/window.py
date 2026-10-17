@@ -48,8 +48,8 @@ from .layer_labels import LayerLabels
 from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
-                     CurrentLegend, FieldLegend, InfraLegend, PlantLegend,
-                     VolcanoLegend)
+                     CurrentLegend, FaultLegend, FieldLegend, InfraLegend,
+                     PlantLegend, VolcanoLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
 from .handles import DrawVertices, Handles
@@ -236,6 +236,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.infra_legend = InfraLegend(self.view)
         self.infra_legend.hide()
         self.infra_legend.closer = lambda: self.set_extra("infra_osm", False)
+        self.fault_legend = FaultLegend(self.view)
+        self.fault_legend.hide()
+        self.fault_legend.closer = lambda: self.set_extra("faults", False)
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -263,7 +266,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.deposit_legend,
                        self.plant_legend, self.volcano_legend,
-                       self.infra_legend,
+                       self.infra_legend, self.fault_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -402,6 +405,16 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._field_value = None
         self._field_reply = None
         self.cable_layer = None
+        # Активные разломы GEM (core/faults.py): файл профиля, загрузка,
+        # разбор в рабочем потоке, слой наложения.
+        self.faults_data = None
+        self.fault_layer = None
+        self._fault_reply = None
+        self._fault_job = None
+        # Геологическая карта Macrostrat (core/geology.py): запрос
+        # и ответ о породе под щелчком.
+        self._geology_reply = None
+        self._geology_value = None
         self._slab_replies = {}
         self.slab_errors = {}
         self.slab_base = None
@@ -544,6 +557,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.relief_toggled.connect(self.set_relief)
         self.panel.relief_model_chosen.connect(self.set_relief_model)
         self.panel.sea_toggled.connect(self.set_sea_depths)
+        self.panel.sea_model_chosen.connect(self.set_sea_model)
         self.panel.sources_requested.connect(self.open_sources)
         self.panel.fly_to_layer.connect(self.fly_to_layer)
         self.panel.opacity_changed.connect(self.set_layer_opacity)
@@ -752,6 +766,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._load_insets()
         # Модель рельефа 30 м поверх Terrarium (core/dem.py) или None.
         self.dem = self._make_dem()
+        # Глубины GEBCO поверх дна тайлов высот или None.
+        self.sea_dem = self._make_sea()
         self._start_terrain(
             DeepSource("Terrarium", self._terrain_choice()[0], TERRAIN_MAX),
             self._earth_floor())

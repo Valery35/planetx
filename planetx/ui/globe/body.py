@@ -182,6 +182,8 @@ class BodyMixin:
                                        and self.planet.earth)
         self.infra_legend.setVisible(bool(self.extras.get("infra_osm"))
                                      and self.planet.earth)
+        self.fault_legend.setVisible(bool(self.extras.get("faults"))
+                                     and self.planet.earth)
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
                                        and self.planet.earth)
         self.paleo_bar.setVisible(self._paleo_on())

@@ -29,7 +29,8 @@ from ..core.sync import inside
 from ..i18n import tr
 
 __all__ = ("inside", "write_points", "write_layer", "add_points",
-           "add_styled", "write_grid", "write_picture", "add_raster")
+           "add_styled", "write_grid", "write_picture", "add_raster",
+           "add_xyz")
 NODATA = -9999.0
 
 PIXEL_MM = 0.26  # мм на логический пиксель точки глобуса
@@ -213,6 +214,21 @@ def add_raster(path, title, stops=None, rights="", group=None):
         raster.setRasterShaderFunction(shader)
         layer.setRenderer(QgsSingleBandPseudoColorRenderer(
             layer.dataProvider(), 1, raster))
+    if rights:
+        meta = layer.metadata()
+        meta.setRights([rights])
+        layer.setMetadata(meta)
+    return _to_group(layer, group)
+
+
+def add_xyz(url, title, max_level, rights="", group=None):
+    """Слой тайлов XYZ по шаблону url в проект, группа - как у
+    add_raster. Без файла, тайлы читает QGIS."""
+    uri = "type=xyz&url={}&zmin=0&zmax={}".format(
+        url.replace("&", "%26"), int(max_level))
+    layer = QgsRasterLayer(uri, title, "wms")
+    if not layer.isValid():
+        return None
     if rights:
         meta = layer.metadata()
         meta.setRights([rights])

@@ -17,8 +17,8 @@ from qgis.PyQt.QtGui import (QColor, QFontMetrics, QLinearGradient, QPainter,
                              QPen)
 from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
-from ..core import (contours, cutaway, deposits, fields, fires, flow, infra,
-                    insolation, plants, quakes, slope, temperature,
+from ..core import (contours, cutaway, deposits, faults, fields, fires, flow,
+                    infra, insolation, plants, quakes, slope, temperature,
                     tomography, volcanoes)
 from ..i18n import tr
 from ..qt_compat import enum
@@ -581,6 +581,30 @@ class InfraLegend(_RowsLegend):
             + [(c[1], names[c[0]], "line", c[2]) for c in infra.CABLES] \
             + [(s[2], names[s[0]], "line", infra.PIPE_WIDTH)
                for s in infra.SUBSTANCES]
+
+
+def fault_names():
+    """Виды смещения разломов по ключам core.faults.KINDS."""
+    return {"normal": tr("Сбросы"),
+            "reverse": tr("Взбросы, надвиги, субдукция"),
+            "strike": tr("Сдвиги"),
+            "ridge": tr("Срединные хребты"),
+            "fold": tr("Складки"),
+            "other": tr("Вид смещения не указан")}
+
+
+class FaultLegend(_RowsLegend):
+    """Шкала активных разломов: цвет - вид смещения."""
+
+    def __init__(self, parent=None):
+        self.title = tr("Активные разломы GEM")
+        self.footer = tr("Щелчок по линии - сведения")
+        super().__init__(parent)
+
+    def rows(self):
+        names = fault_names()
+        return [(faults.COLORS[key][:3], names[key], "line", 2.0)
+                for key in faults.KINDS]
 
 
 def mine_kind_names():

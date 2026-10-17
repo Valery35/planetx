@@ -266,6 +266,9 @@ class DemSource:
 
     def __init__(self, kind):
         self.kind = kind
+        # GEBCO (dem.GEBCO) - глубины морей, прочие модели - суша.
+        self.sea = kind == dem.GEBCO
+        self.min_level, self.read_level = dem.levels(kind)
         self.absent = set()
         self.local = threading.local()
         self.lock = threading.Lock()
@@ -276,11 +279,14 @@ class DemSource:
     def merge(self, key, heights):
         """Высоты тайла key с моделью. Рабочий поток загрузчика. Глубже
         dem.READ_LEVEL окно - пересчёт окна предка: пиксель тайла
-        уровня 12 уже около 30 м, новые чтения сети не нужны."""
-        if key[0] < dem.MIN_LEVEL:
+        уровня 12 уже около 30 м, новые чтения сети не нужны. У GEBCO
+        тайл без моря окна не читает."""
+        if key[0] < self.min_level:
             return heights
-        read = key if key[0] <= dem.READ_LEVEL \
-            else ancestor(key, dem.READ_LEVEL)
+        if self.sea and not dem.has_sea(heights):
+            return heights
+        read = key if key[0] <= self.read_level \
+            else ancestor(key, self.read_level)
         try:
             window = self._job(read).result(timeout=self.WAIT)
         except TimeoutError:
@@ -292,6 +298,8 @@ class DemSource:
             return heights
         if read != key:
             window = resample(HeightTile(*read, window, 0.0, 0.0), key)
+        if self.sea:
+            return dem.merge_sea(heights, window)
         return dem.merge(heights, window)
 
     def _job(self, key):
@@ -311,6 +319,8 @@ class DemSource:
     def _urls(self, key):
         if self.kind == dem.GEDTM:
             return [dem.GEDTM_URL]
+        if self.kind == dem.GEBCO:
+            return [dem.GEBCO_URL]
         west, south, east, north = dem.tile_degrees(*key)
         return [dem.copernicus_url(lat, lon) for lat, lon in
                 dem.copernicus_cells(west, south, east, north)]
