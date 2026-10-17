@@ -141,6 +141,10 @@ def nearest_terrain(eye, terrain=None):
     if terrain is None:
         return h
     c = h - terrain(lat, lon)
+    if not math.isfinite(c):
+        # NaN в высоте или рельефе ушёл бы в радиусы колец опроса
+        # и ронял кадр, 17 октября 2026 года у автора.
+        return h if math.isfinite(h) else 0.0
     if c <= 0.0:
         return 0.0
     if c > FAR_CLEARANCE:

@@ -36,7 +36,11 @@ ICON_SIZE = QSize(20, 20)
 SUBSURFACE = True
 # Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
 STYLE = plate_style("planetxToolbar")
-DIRTY_STYLE = "QToolButton { background: #ff9f1c; border-radius: 3px; }"
+# Пункты меню новой метки - вид объекта и подпись, порядок вкладок окна
+# «Новая метка» (ui/draw.py, MODES).
+PLACE_MODES = (("point", "Метка"), ("path", "Путь"),
+               ("polygon", "Многоугольник"), ("circle", "Круг"))
+DIRTY_STYLE ="QToolButton { background: #ff9f1c; border-radius: 3px; }"
 
 
 class ViewToolbar(QFrame):
@@ -54,7 +58,7 @@ class ViewToolbar(QFrame):
     constellations_toggled = pyqtSignal(bool)
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
-    place_clicked = pyqtSignal()
+    place_clicked = pyqtSignal(str)
     snapshot_clicked = pyqtSignal()
     scene_save_requested = pyqtSignal()
     scene_open_requested = pyqtSignal()
@@ -95,10 +99,24 @@ class ViewToolbar(QFrame):
             icon("ruler"),
             tr("Линейка. Длина, периметр и площадь на эллипсоиде, "
                "сохранение измерения в «Мои метки»."), self.ruler_clicked)
-        self.place_button = self._button(
-            icon("place"),
-            tr("Новая метка, путь или многоугольник в «Мои метки»."),
-            self.place_clicked)
+        # Новая метка - выпадающее меню вида объекта, как у «Сцены»,
+        # просьба автора от 17 октября 2026 года. Пункт открывает окно
+        # «Новая метка» на своей вкладке.
+        place = QToolButton(self)
+        place.setIcon(icon("place", menu=True))
+        place.setIconSize(ICON_SIZE)
+        place.setAutoRaise(True)
+        place.setToolTip(tr(
+            "Новая метка, путь, многоугольник или круг в «Мои метки»."))
+        place.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
+                                "InstantPopup"))
+        menu = QMenu(place)
+        for mode, title in PLACE_MODES:
+            menu.addAction(tr(title)).triggered.connect(
+                lambda checked=False, m=mode: self.place_clicked.emit(m))
+        place.setMenu(menu)
+        self.layout().addWidget(place)
+        self.place_button = place
         self.save_button = self._button(
             icon("bookmark"),
             tr("Сохранить вид. Точка взгляда становится меткой в «Моих "
@@ -191,7 +209,11 @@ class ViewToolbar(QFrame):
                 (tr("Луна"), (("moon",
                                tr("«Аполлоны» и «Луноходы»")),)),
                 (tr("Небо"), (("sky", tr("Созвездия и яркие объекты")),))):
-            menu.addSection(section)
+            # Заголовок раздела - неактивный пункт: в меню со своим
+            # стилем (ui/style.menu_rules) Qt не рисует текст addSection.
+            if menu.actions():
+                menu.addSeparator()
+            menu.addAction(section).setEnabled(False)
             for key, title in items:
                 if key in ("subsurface", "vegas") and not SUBSURFACE:
                     continue

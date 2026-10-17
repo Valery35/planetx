@@ -685,9 +685,11 @@ EN = {
         "Mining areas",
     "Загрузка контуров горных разработок, около 25 МБ…":
         "Loading mining area outlines, about 25 MB…",
-    "Геологическая карта, землетрясения, границы плит и разломы, "
-    "месторождения и горные разработки, разрез Земли и палеогеография.":
-        "The geological map, earthquakes, plate boundaries and faults, "
+    "Геологическая и литологическая карты, землетрясения, границы плит "
+    "и разломы, месторождения и горные разработки, разрез Земли "
+    "и палеогеография.":
+        "The geological and lithological maps, earthquakes, plate "
+        "boundaries and faults, "
         "mineral deposits and mining areas, the Earth cutaway and "
         "palaeogeography.",
     "Активные разломы":
@@ -2727,8 +2729,8 @@ EN = {
         "Save view. The look-at point becomes a placemark in My Places, "
         "flying to it restores the height, heading and tilt.",
     "Новая метка": "New placemark",
-    "Новая метка, путь или многоугольник в «Мои метки».":
-        "A new placemark, path or polygon in My Places.",
+    "Новая метка, путь, многоугольник или круг в «Мои метки».":
+        "A new placemark, path, polygon or circle in My Places.",
     "Метка": "Placemark",
     "Цвет": "Color",
     "Толщина": "Width",
@@ -4609,6 +4611,163 @@ EN = {
         "read.",
     "Ряд в CSV": "Series to CSV",
     "Ряд записан: {path}": "Series written: {path}",
+    # Литология, воды, почвы, исторические землетрясения.
+    "Повторяемость воды 1984-2021, %": "Water occurrence 1984-2021, %",
+    "Глина в почве 0-5 см, %": "Clay in soil 0-5 cm, %",
+    "Песок в почве 0-5 см, %": "Sand in soil 0-5 cm, %",
+    "Органический углерод почвы 0-5 см, г/кг":
+        "Soil organic carbon 0-5 cm, g/kg",
+    "Кислотность почвы 0-5 см, pH в воде": "Soil pH 0-5 cm, in water",
+    "Литология GLiM": "GLiM lithology",
+    "Изменения воды 1984-2021 JRC": "Water transitions 1984-2021, JRC",
+    "Рыхлые отложения": "Unconsolidated sediments",
+    "Обломочные осадочные породы": "Siliciclastic sedimentary rocks",
+    "Смешанные осадочные породы": "Mixed sedimentary rocks",
+    "Карбонатные осадочные породы": "Carbonate sedimentary rocks",
+    "Эвапориты": "Evaporites",
+    "Пирокластика": "Pyroclastics",
+    "Кислые вулканические породы": "Acid volcanic rocks",
+    "Средние вулканические породы": "Intermediate volcanic rocks",
+    "Основные вулканические породы": "Basic volcanic rocks",
+    "Кислые плутонические породы": "Acid plutonic rocks",
+    "Средние плутонические породы": "Intermediate plutonic rocks",
+    "Основные плутонические породы": "Basic plutonic rocks",
+    "Метаморфические породы": "Metamorphic rocks",
+    "Лёд и ледники": "Ice and glaciers",
+    "Постоянная вода": "Permanent water",
+    "Новая постоянная вода": "New permanent water",
+    "Исчезнувшая постоянная вода": "Lost permanent water",
+    "Сезонная вода": "Seasonal water",
+    "Новая сезонная вода": "New seasonal water",
+    "Исчезнувшая сезонная вода": "Lost seasonal water",
+    "Сезонная стала постоянной": "Seasonal to permanent",
+    "Постоянная стала сезонной": "Permanent to seasonal",
+    "Временная постоянная вода": "Ephemeral permanent water",
+    "Временная сезонная вода": "Ephemeral seasonal water",
+    "Щелчок - класс в точке": "Click - the class at the point",
+    "Почвы": "Soils",
+    "Свойства верхнего слоя почвы 0-5 см по SoilGrids - глина, песок, "
+    "органический углерод и кислотность, сетка 250 м.":
+        "Properties of the topsoil 0-5 cm from SoilGrids - clay, sand, "
+        "organic carbon and pH, a 250 m grid.",
+    "Исторические землетрясения": "Historical earthquakes",
+    "Сильные землетрясения мира с 1904 по 2024 год по каталогу ISC-GEM "
+    "- около 74 тысяч событий магнитудой от 5, места, глубины и магнитуды "
+    "пересчитаны одним способом. Кружок стоит в очаге на его глубине, "
+    "цвет показывает глубину, размер - магнитуду. Промежуток шкалы "
+    "времени отбирает события. Щелчок по кружку показывает место, дату, "
+    "магнитуду и страницу события USGS. Первое включение скачивает "
+    "каталог по частям, около 13 МБ.":
+        "Strong earthquakes of the world from 1904 to 2024 from the "
+        "ISC-GEM catalogue - about 74 thousand events of magnitude 5 and "
+        "above, with locations, depths and magnitudes recomputed in one "
+        "way. A circle sits at the focus at its depth, the colour shows "
+        "the depth and the size the magnitude. The time slider range "
+        "selects the events. A click on a circle shows the place, date, "
+        "magnitude and the USGS event page. The first use downloads the "
+        "catalogue in parts, about 13 MB.",
+    "Литологическая карта мира GLiM - породы на поверхности 16 классами: "
+    "рыхлые отложения, осадочные, вулканические, плутонические "
+    "и метаморфические породы, лёд. Карта сведена из 92 региональных "
+    "карт, масштаб около 1:3 750 000. Щелчок в режиме «Определить "
+    "объекты» показывает класс пород. На глобусе одна такая карта - "
+    "литологическая, геологическая, почвенная, водная или карта значений "
+    "геофизики.":
+        "The GLiM lithological map of the world - surface rocks in 16 "
+        "classes: unconsolidated sediments, sedimentary, volcanic, "
+        "plutonic and metamorphic rocks, ice. It is compiled from 92 "
+        "regional maps at a scale of about 1:3 750 000. A click in "
+        "Identify features mode shows the rock class. The globe shows "
+        "one such map - lithological, geological, soil, water or a "
+        "geophysical value map.",
+    "Повторяемость воды": "Water occurrence",
+    "Как часто место было покрыто водой с 1984 по 2021 год по снимкам "
+    "Landsat - доля наблюдений с водой, Global Surface Water JRC. Синие - "
+    "вода всегда, красные - вода бывает редко. Пиксель 30 м. Щелчок "
+    "в режиме «Определить объекты» показывает повторяемость в процентах.":
+        "How often a place was covered by water from 1984 to 2021 in "
+        "Landsat images - the share of observations with water, JRC "
+        "Global Surface Water. Blue is always water, red is rarely "
+        "water. The pixel is 30 m. A click in Identify features mode "
+        "shows the occurrence in percent.",
+    "Изменения воды": "Water transitions",
+    "Что стало с водой с 1984 по 2021 год по снимкам Landsat - постоянная "
+    "и сезонная вода, новая и исчезнувшая, переходы между ними, Global "
+    "Surface Water JRC. Видны новые водохранилища, обмелевшие озёра "
+    "и блуждающие русла. Щелчок в режиме «Определить объекты» "
+    "показывает класс.":
+        "What happened to water from 1984 to 2021 in Landsat images - "
+        "permanent and seasonal water, new and lost, transitions between "
+        "them, JRC Global Surface Water. New reservoirs, shrunken lakes "
+        "and migrating channels are visible. A click in Identify "
+        "features mode shows the class.",
+    "Глина в почве": "Clay in soil",
+    "Доля глинистых частиц в слое почвы 0-5 см по SoilGrids ISRIC - "
+    "модель по 240 тысячам почвенных разрезов, сетка 250 м. Щелчок "
+    "в режиме «Определить объекты» запрашивает значение у SoilGrids.":
+        "The share of clay particles in the soil layer 0-5 cm from ISRIC "
+        "SoilGrids - a model built on 240 thousand soil profiles, a "
+        "250 m grid. A click in Identify features mode asks SoilGrids "
+        "for the value.",
+    "Песок в почве": "Sand in soil",
+    "Доля песчаных частиц в слое почвы 0-5 см по SoilGrids ISRIC, сетка "
+    "250 м. Щелчок в режиме «Определить объекты» запрашивает значение "
+    "у SoilGrids.":
+        "The share of sand particles in the soil layer 0-5 cm from ISRIC "
+        "SoilGrids, a 250 m grid. A click in Identify features mode asks "
+        "SoilGrids for the value.",
+    "Органический углерод почвы": "Soil organic carbon",
+    "Содержание органического углерода в слое почвы 0-5 см по SoilGrids "
+    "ISRIC, г/кг, сетка 250 м. Больше всего его в торфяниках тундры "
+    "и тайги. Щелчок в режиме «Определить объекты» запрашивает значение "
+    "у SoilGrids.":
+        "Organic carbon content of the soil layer 0-5 cm from ISRIC "
+        "SoilGrids, g/kg, a 250 m grid. The highest values are in the "
+        "peatlands of the tundra and taiga. A click in Identify features "
+        "mode asks SoilGrids for the value.",
+    "Кислотность почвы": "Soil pH",
+    "Кислотность почвы pH в водной вытяжке, слой 0-5 см, по SoilGrids "
+    "ISRIC, сетка 250 м. Жёлтые - кислые почвы, зелёные - нейтральные, "
+    "бирюзовые - щелочные. Щелчок в режиме «Определить объекты» "
+    "запрашивает значение у SoilGrids.":
+        "Soil pH in water, layer 0-5 cm, from ISRIC SoilGrids, a 250 m "
+        "grid. Yellow soils are acid, green neutral, turquoise alkaline. "
+        "A click in Identify features mode asks SoilGrids for the value.",
+    "Загрузка землетрясений ISC-GEM, {year}…":
+        "Loading ISC-GEM earthquakes, {year}…",
+    "Исторических землетрясений {count}.":
+        "{count} historical earthquakes.",
+    "Каталог ISC-GEM не загрузился, проверьте сеть и включите строку "
+    "снова.":
+        "The ISC-GEM catalogue did not load, check the network and turn "
+        "the row on again.",
+    "Почва": "Soil",
+    "Исторические землетрясения, около 13 МБ":
+        "Historical earthquakes, about 13 MB",
+    "Литологическая карта": "Lithological map",
+    "Повторяемость и изменения воды": "Water occurrence and transitions",
+    "Свойства почв 0-5 см": "Soil properties 0-5 cm",
+    "Покрытие земель ESA WorldCover 2021": "ESA WorldCover 2021 land cover",
+    "Кустарник": "Shrubland",
+    "Луга": "Grassland",
+    "Пашня": "Cropland",
+    "Застройка": "Built-up",
+    "Голые и редкие земли": "Bare and sparse vegetation",
+    "Снег и лёд": "Snow and ice",
+    "Постоянные водоёмы": "Permanent water bodies",
+    "Травяные болота": "Herbaceous wetland",
+    "Мангры": "Mangroves",
+    "Мхи и лишайники": "Moss and lichen",
+    "Покрытие земель": "Land cover",
+    "Карта покрытия земель ESA WorldCover за 2021 год по снимкам "
+    "Sentinel-1 и Sentinel-2 с пикселем 10 м - лес, кустарник, луга, "
+    "пашня, застройка, голые земли, снег и лёд, вода, болота, мангры, мхи "
+    "и лишайники. Щелчок в режиме «Определить объекты» показывает класс.":
+        "The ESA WorldCover land cover map for 2021 from Sentinel-1 and "
+        "Sentinel-2 images with a 10 m pixel - forest, shrubland, "
+        "grassland, cropland, built-up, bare land, snow and ice, water, "
+        "wetland, mangroves, moss and lichen. A click in Identify features "
+        "mode shows the class.",
 }
 
 _language = None

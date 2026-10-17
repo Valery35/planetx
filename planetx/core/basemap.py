@@ -374,6 +374,24 @@ def tile_bbox(z, x, y):
     return west, north - side, west + side, north
 
 
+class SplitSource(Source):
+    """Источник из двух шаблонов: мельче уровня split - coarse, глубже -
+    url. Так у карты WorldCover мелкие уровни из planetx-terrain, а
+    подробные - из службы, которая мельче уровня 6 тайлов не отдаёт."""
+
+    __slots__ = ("coarse", "split")
+
+    def __init__(self, name, url, coarse, split, *args, **kwargs):
+        super().__init__(name, url, *args, **kwargs)
+        self.coarse = coarse
+        self.split = split
+
+    def tile_url(self, z, x, y):
+        if z < self.split:
+            return tile_url(self.coarse, z, x, y)
+        return super().tile_url(z, x, y)
+
+
 class WmsSource(Source):
     """Источник WMS: место {bbox} адреса - рамка тайла в EPSG:3857."""
 

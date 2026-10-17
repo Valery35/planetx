@@ -57,18 +57,18 @@ class PlaceDialog(QDialog):
             "Цвет линии и контура. Заливка многоугольника того же цвета, "
             "полупрозрачная."))
         self.color.colorChanged.connect(self.style_changed)
-        self.width = QDoubleSpinBox(self)
-        self.width.setRange(1.0, 10.0)
-        self.width.setSingleStep(0.5)
-        self.width.setValue(DEFAULT_WIDTH)
-        self.width.setToolTip(tr(
+        self.line_width = QDoubleSpinBox(self)
+        self.line_width.setRange(1.0, 10.0)
+        self.line_width.setSingleStep(0.5)
+        self.line_width.setValue(DEFAULT_WIDTH)
+        self.line_width.setToolTip(tr(
             "Толщина линии и контура в пикселях экрана. От масштаба "
             "не зависит."))
-        self.width.valueChanged.connect(self.style_changed)
+        self.line_width.valueChanged.connect(self.style_changed)
         form = QFormLayout()
         form.addRow(tr("Название"), self.name)
         form.addRow(tr("Цвет"), self.color)
-        form.addRow(tr("Толщина"), self.width)
+        form.addRow(tr("Толщина"), self.line_width)
         self.save = QPushButton(tr("Сохранить"), self)
         self.save.setToolTip(tr("Записать объект в «Мои метки»."))
         clear = QPushButton(tr("Очистить"), self)
@@ -86,6 +86,11 @@ class PlaceDialog(QDialog):
         layout.addWidget(buttons)
         self.ruler.changed.connect(self._update)
         self._mode(0)
+
+    def set_mode(self, mode):
+        """Вкладка вида объекта - пункт меню значка «Новая метка»."""
+        if mode in MODES:
+            self.tabs.setCurrentIndex(MODES.index(mode))
 
     def _mode(self, index):
         mode = MODES[index]
@@ -146,7 +151,7 @@ class PlaceDialog(QDialog):
         """Цвет, толщина и заливка для фигуры."""
         color = _rgba(self.color.color())
         fill = (color[0], color[1], color[2], DEFAULT_FILL[3])
-        return {"color": color, "width": self.width.value(), "fill": fill}
+        return {"color": color, "width": self.line_width.value(), "fill": fill}
 
     def shape(self, rubber=True):
         return self.ruler.shape(rubber=rubber, name=self.name.text().strip(),

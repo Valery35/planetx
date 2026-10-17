@@ -118,7 +118,61 @@ def field_titles():
             "seafloor_age": tr("Возраст океанического дна, млн лет"),
             "gravity": tr("Аномалия силы тяжести, мГал"),
             "bouguer": tr("Аномалия Буге, мГал"),
-            "heatflow": tr("Тепловой поток, мВт/м²")}
+            "heatflow": tr("Тепловой поток, мВт/м²"),
+            "water_occurrence": tr("Повторяемость воды 1984-2021, %"),
+            "soil_clay": tr("Глина в почве 0-5 см, %"),
+            "soil_sand": tr("Песок в почве 0-5 см, %"),
+            "soil_soc": tr("Органический углерод почвы 0-5 см, г/кг"),
+            "soil_ph": tr("Кислотность почвы 0-5 см, pH в воде")}
+
+
+def class_titles():
+    """Заголовки шкал карт классами (core/tilemaps.py)."""
+    return {"glim": tr("Литология GLiM"),
+            "water_transitions": tr("Изменения воды 1984-2021 JRC"),
+            "worldcover": tr("Покрытие земель ESA WorldCover 2021")}
+
+def class_names():
+    """Названия классов карт core/tilemaps.py по кодам."""
+    return {
+        # Литология GLiM, первый уровень классификации.
+        "su": tr("Рыхлые отложения"),
+        "ss": tr("Обломочные осадочные породы"),
+        "sm": tr("Смешанные осадочные породы"),
+        "sc": tr("Карбонатные осадочные породы"),
+        "ev": tr("Эвапориты"),
+        "py": tr("Пирокластика"),
+        "va": tr("Кислые вулканические породы"),
+        "vi": tr("Средние вулканические породы"),
+        "vb": tr("Основные вулканические породы"),
+        "pa": tr("Кислые плутонические породы"),
+        "pi": tr("Средние плутонические породы"),
+        "pb": tr("Основные плутонические породы"),
+        "mt": tr("Метаморфические породы"),
+        "ig": tr("Лёд и ледники"),
+        # Переходы воды JRC.
+        "permanent": tr("Постоянная вода"),
+        "new_permanent": tr("Новая постоянная вода"),
+        "lost_permanent": tr("Исчезнувшая постоянная вода"),
+        "seasonal": tr("Сезонная вода"),
+        "new_seasonal": tr("Новая сезонная вода"),
+        "lost_seasonal": tr("Исчезнувшая сезонная вода"),
+        "seasonal_to_permanent": tr("Сезонная стала постоянной"),
+        "permanent_to_seasonal": tr("Постоянная стала сезонной"),
+        "ephemeral_permanent": tr("Временная постоянная вода"),
+        "ephemeral_seasonal": tr("Временная сезонная вода"),
+        # Покрытие земель ESA WorldCover.
+        "tree": tr("Лес"),
+        "shrub": tr("Кустарник"),
+        "grass": tr("Луга"),
+        "crop": tr("Пашня"),
+        "built": tr("Застройка"),
+        "bare": tr("Голые и редкие земли"),
+        "snow": tr("Снег и лёд"),
+        "water": tr("Постоянные водоёмы"),
+        "wetland": tr("Травяные болота"),
+        "mangrove": tr("Мангры"),
+        "moss": tr("Мхи и лишайники")}
 
 
 class FieldLegend(Closable, QWidget):
@@ -607,6 +661,34 @@ class FaultLegend(_RowsLegend):
         names = fault_names()
         return [(faults.COLORS[key][:3], names[key], "line", 2.0)
                 for key in faults.KINDS]
+
+
+class ClassLegend(_RowsLegend):
+    """Шкала карты классами (core/tilemaps.py) - литологии GLiM или
+    изменений воды. Строки меняются вместе с картой."""
+
+    def __init__(self, parent=None):
+        self._rows = []
+        self.title = tr("Литология GLiM")
+        super().__init__(parent)
+
+    def rows(self):
+        return self._rows
+
+    def set_map(self, tmap):
+        names = class_names()
+        self.title = class_titles().get(tmap.key, tmap.key)
+        self.footer = tr("Щелчок - класс в точке")
+        self._rows = [(color, names.get(code, code), "dot", 0.0)
+                      for code, color in tmap.classes or ()]
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        texts = [self.title, self.footer] + [r[1] for r in self._rows]
+        width = max(_text_width(metrics, text) for text in texts if text)
+        self.setFixedSize(max(BAR_WIDTH + 2 * PAD + 8,
+                              width + PAD + 26 + PAD + 16),
+                          line * (len(self._rows) + 2) + PAD)
+        self.update()
 
 
 def mine_kind_names():

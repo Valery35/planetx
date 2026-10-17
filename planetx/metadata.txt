@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.96.0
+version=0.97.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,16 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.96.0 The icon bar, the time slider, the tour bar, the
+changelog=0.97.0 New data rows. The GLiM lithological map shows surface
+      rocks in 16 classes. Historical earthquakes show about 74 thousand
+      strong earthquakes since 1904 from the ISC-GEM catalogue. Land
+      cover shows the ESA WorldCover 2021 map with a 10 m pixel. Water
+      occurrence and Water transitions show JRC surface water 1984-2021.
+      The Soils group shows clay, sand, organic carbon and pH of the
+      topsoil from SoilGrids. A click shows the class or value at the
+      point. The New placemark icon opens a menu of placemark, path,
+      polygon or circle, the icon bar menus share its dark look.
+      0.96.0 The icon bar, the time slider, the tour bar, the
       paleogeography slider, the swipe, the layer scales and the
       loading icon share one look - a dark translucent plate with light
       icons of one set, the active one in blue, a white arrow on buttons

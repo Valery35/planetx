@@ -11,7 +11,7 @@ import numpy as np
 from qgis.core import QgsSettings
 
 from ...core import (basemap, cadastre, clouds, fields, geology, sun,
-                     temperature, cutaway, slabs, themes)
+                     temperature, cutaway, slabs, themes, tilemaps)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
 from ...core.mipmap import mip_chain
@@ -45,7 +45,7 @@ TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 # вида, тайловые слои - слои вида GIBS, слои QGIS - в наложении.
 POINT_LAYERS = {"deposits": "deposits", "osm_mines": "osm_mines",
                 "plants": "plants", "quakes": "quakes", "fires": "fires",
-                "volcanoes": "volcanoes"}
+                "volcanoes": "volcanoes", "iscgem": "history"}
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
@@ -54,7 +54,12 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "currents": ("currents",), "cadastre": ("cadastre",),
               "emag": ("emag",), "seafloor_age": ("emag",),
               "heatflow": ("emag",), "gravity": ("emag",),
-              "bouguer": ("emag",), "geology": ("emag",)}
+              "bouguer": ("emag",), "geology": ("emag",),
+              "glim": ("emag",), "worldcover": ("emag",),
+              "water_occurrence": ("emag",),
+              "water_transitions": ("emag",), "soil_clay": ("emag",),
+              "soil_sand": ("emag",), "soil_soc": ("emag",),
+              "soil_ph": ("emag",)}
 QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -153,7 +158,11 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "heatflow": False, "gravity": False, "bouguer": False,
                   "platemotion": False,
                   "volcanoes": False, "faults": False,
-                  "geology": False, "air": True}
+                  "geology": False, "air": True, "iscgem": False,
+                  "glim": False, "worldcover": False,
+                  "water_occurrence": False,
+                  "water_transitions": False, "soil_clay": False,
+                  "soil_sand": False, "soil_soc": False, "soil_ph": False}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
@@ -163,7 +172,10 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cables", "currents", "cadastre", "magpoles", "emag",
                 "geoid", "magdecl", "seafloor_age", "heatflow",
                 "gravity", "bouguer", "platemotion", "volcanoes",
-                "faults", "geology")
+                "faults", "geology", "iscgem", "glim", "worldcover",
+                "water_occurrence",
+                "water_transitions", "soil_clay", "soil_sand", "soil_soc",
+                "soil_ph")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}
@@ -373,6 +385,14 @@ def prepare_geology(key, rgba):
     (core/geology.py): премноженная альфа и уровни мипмапов, пустой
     тайл - None, на его месте остаётся предок."""
     picture = geology.rgba(rgba)
+    return None if picture is None else mip_chain(picture)
+
+
+def prepare_tilemap(name, key, rgba):
+    """Работа рабочего потока для тайла карты картинками name
+    (core/tilemaps.py): прозрачный цвет «нет данных», премноженная
+    альфа и уровни мипмапов, пустой тайл - None."""
+    picture = tilemaps.rgba(tilemaps.MAPS[name], rgba)
     return None if picture is None else mip_chain(picture)
 
 

@@ -690,6 +690,55 @@ its place with the geophysical value maps, the globe shows one of them.
 Add to QGIS project… of the On the globe row adds the map as an XYZ tile
 layer. The Macrostrat data are CC BY 4.0.
 
+The Lithology layer shows the GLiM lithological map of the world
+(Hartmann and Moosdorf, 2012) - surface rocks in 16 classes. These are
+unconsolidated sediments, siliciclastic, mixed and carbonate
+sedimentary rocks, evaporites, pyroclastics, acid, intermediate and
+basic volcanic and plutonic rocks, metamorphic rocks, ice and glaciers.
+The map is compiled from 92 regional maps at a scale of about
+1:3 750 000. The class legend sits in the lower left corner of the
+view. A click in the Identify mode shows the rock class at the
+point in the Lithology group. The tiles are kept in the planetx-terrain
+repository. Like the geological map, the lithology shares its place
+with the geophysical value maps.
+
+The Historical earthquakes layer shows the ISC-GEM catalogue - about
+74 thousand strong earthquakes of the world from 1904 to 2024 of
+magnitude 5 and above, with locations, depths and moment magnitudes
+recomputed in one way. A circle sits at the focus at its depth, the
+colour shows the depth and the size the magnitude, as in the
+Earthquakes layer. The catalogue enters the time slider range, and its
+handles select the events by year. A click on a circle shows the place,
+date, magnitude, depth and a link to the USGS event page. The first use
+downloads the catalogue in parts, about 13 MB, and keeps it as a file
+in the QGIS profile. The catalogue licence is CC BY-SA 3.0.
+
+The Land cover layer of the Earth and life group shows the ESA WorldCover map for 2021 from Sentinel-1 and Sentinel-2 images with a 10 m pixel. There are 11 classes - forest, shrubland, grassland, cropland, built-up, bare and sparse vegetation, snow and ice, permanent water bodies, herbaceous wetland, mangroves, moss and lichen. The class legend sits in the lower left corner of the view. From afar the map comes from the planetx-terrain repository, close up from the Microsoft Planetary Computer service. A click in the Identify mode shows the class at the point. The map licence is CC BY 4.0.
+
+The Water occurrence and Water transitions layers of the Planet of
+water group show the JRC Global Surface Water dataset (Pekel et al.,
+2016) from Landsat images of 1984-2021 with a 30 m pixel. Occurrence
+is the share of observations when the place was under water, from red
+(rarely) to blue (always). Transitions divide water into classes - permanent and
+seasonal water, new and lost, seasonal to permanent and back, and
+ephemeral water. They show new reservoirs, shrunken lakes such as the
+Aral Sea, and migrating channels. A click in the Identify mode
+shows the occurrence in percent or the class.
+
+The layers of the Soils group - Clay in soil, Sand in soil, Soil organic
+carbon and Soil pH - show properties of the soil layer 0-5 cm from
+ISRIC SoilGrids 2.0, a model built on soil profiles of the world with a
+250 m grid. Clay and sand are in percent, organic carbon in g/kg, pH is
+measured in water. The pictures come from the SoilGrids WMS service,
+and a click in the Identify mode asks it for the value at the
+point. Water and places without data are transparent. The SoilGrids
+licence is CC BY 4.0.
+
+The globe shows one map out of the lithological, geological, water,
+soil and geophysical value maps, turning on another one removes the
+previous one. Add to QGIS project… of the On the globe row adds such a
+map to the project as an XYZ tile layer or a WMS layer of the service.
+
 The Gravity anomalies layer shows the free-air gravity anomaly - the
 departure of gravity from the normal one after the XGM2019e model
 (Zingerle et al., 2020), computed to degree 719, a step of about 28 km.

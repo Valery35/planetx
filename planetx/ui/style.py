@@ -40,6 +40,35 @@ def _rgba(color):
                                        color.blue(), color.alpha())
 
 
+# Фон выпадающих меню непрозрачный: всплывающее окно без прозрачного
+# фона Windows заливает долю прозрачности чёрным.
+MENU = QColor(36, 40, 46)
+
+
+def menu_rules(selector):
+    """Правила стиля выпадающего меню selector в цветах плашки, просьба
+    автора от 17 октября 2026 года. Фигурные скобки удвоены - строка
+    идёт в format плашки."""
+    return (
+        "{sel} {{{{ color: {{text}}; background: {menu}; border: 1px solid "
+        "{{border}}; border-radius: 6px; padding: 4px 0; }}}}"
+        "{sel}::item {{{{ padding: 4px 22px 4px 22px; background: "
+        "transparent; }}}}"
+        "{sel}::item:selected {{{{ background: {{checked}}; }}}}"
+        "{sel}::item:disabled {{{{ color: {{muted}}; }}}}"
+        "{sel}::separator {{{{ height: 1px; background: {{border}}; "
+        "margin: 4px 8px; }}}}"
+        "{sel}::indicator {{{{ width: 12px; height: 12px; left: 6px; }}}}"
+    ).format(sel=selector, menu=_rgba(MENU))
+
+
+def menu_style():
+    """Стиль меню, которое живёт вне плашки (setStyleSheet самого меню)."""
+    return menu_rules("QMenu").format(
+        text=_rgba(TEXT), muted=_rgba(MUTED), border=_rgba(BORDER),
+        checked="rgba(74, 163, 255, 110)")
+
+
 def plate_style(name, kind="QFrame"):
     """Стиль плашки kind#name и её кнопок, подписей, списков и полей."""
     return (
@@ -67,6 +96,7 @@ def plate_style(name, kind="QFrame"):
         "{accent}; border-radius: 2px; }}"
         "{kind}#{name} QSlider::handle:horizontal {{ width: 12px; "
         "margin: -5px 0; border-radius: 6px; background: {text}; }}"
+        + menu_rules("{kind}#{name} QMenu")
     ).format(kind=kind, name=name, plate=_rgba(PLATE), border=_rgba(BORDER),
              text=_rgba(TEXT), muted=_rgba(MUTED), hover=_rgba(HOVER),
              checked="rgba(74, 163, 255, 110)", accent=_rgba(ACCENT))

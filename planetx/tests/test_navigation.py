@@ -290,6 +290,21 @@ class TestTerrain(unittest.TestCase):
         self.assertAlmostEqual(nav.nearest_terrain(high, slope),
                                97000.0 - nav.MAX_TERRAIN, delta=0.5)
 
+    def test_nearest_terrain_survives_nan_height(self):
+        # Рельеф ответил NaN: прежде NaN уходил в радиусы колец опроса,
+        # и кадр падал в height_at на int(NaN), 17 октября 2026 года.
+        import ellipsoid as el
+        import terrain as tr
+
+        def nan_terrain(lat, lon):
+            u, v = tr.mercator_share(lat, lon)
+            int(u * 2)  # как height_at: NaN в долях - ValueError
+            return float("nan")
+
+        eye = el.geodetic_to_ecef(58.0, 56.2, 3000.0)
+        found = nav.nearest_terrain(eye, nan_terrain)
+        self.assertTrue(math.isfinite(found))
+
     def test_rising_terrain_lifts_the_camera(self):
         heights = {"value": 0.0}
         n = self.terrain_navigator(200.0, 0.0,

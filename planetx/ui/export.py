@@ -236,6 +236,21 @@ def add_xyz(url, title, max_level, rights="", group=None):
     return _to_group(layer, group)
 
 
+def add_wms(service, name, title, rights="", group=None):
+    """Слой WMS service (слой name) в проект, EPSG:3857, PNG, группа -
+    как у add_raster. Без файла, картинки рисует QGIS."""
+    uri = "crs=EPSG:3857&format=image/png&layers={}&styles=&url={}".format(
+        name, service)
+    layer = QgsRasterLayer(uri, title, "wms")
+    if not layer.isValid():
+        return None
+    if rights:
+        meta = layer.metadata()
+        meta.setRights([rights])
+        layer.setMetadata(meta)
+    return _to_group(layer, group)
+
+
 def _ramp_type():
     scope = getattr(QgsColorRampShader, "Type", None)
     if scope is not None:

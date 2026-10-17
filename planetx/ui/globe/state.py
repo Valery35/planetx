@@ -19,7 +19,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import (basemap, clouds, fields, geology, temperature,
-                     flow as flow_core, quakes, themes)
+                     flow as flow_core, quakes, themes, tilemaps)
 from ...core.sync import ground_size, view_box, inside as in_box
 from ..flow import CURRENTS_ATTRIBUTION
 from ...i18n import is_russian, tr
@@ -284,6 +284,10 @@ class StateMixin:
             self._set_faults(on)
         elif key == "geology":
             self._set_geology(on)
+        elif key in tilemaps.MAPS:
+            self._set_tilemap(key, on)
+        elif key == "iscgem":
+            self._set_history(on)
         elif key == "magpoles":
             self._set_poles(on)
         elif key == "magdecl":
@@ -320,7 +324,8 @@ class StateMixin:
             title = (names.get(key) or maps.get(key) or (key,))[0]
             rows.append((key, title, self._row_opacity(key),
                          key in POINT_LAYERS or key in QGIS_LAYERS
-                         or key in PICTURE_LAYERS or key == "geology", on))
+                         or key in PICTURE_LAYERS or key == "geology"
+                         or key in tilemaps.MAPS, on))
         theme = getattr(self, "theme_key", "") or parked.get("map", "")
         if theme and earth and theme in maps:
             rows.append(("map", maps[theme][0], self._row_opacity("map"),
@@ -411,9 +416,10 @@ class StateMixin:
                  or (key,))[0]
         if key == "map":
             title = map_names().get(self.theme_key, (title,))[0]
-        if key == "geology":
-            # Карта Macrostrat - слоем тайлов, без файла.
-            count = self._export_geology(title)
+        if key == "geology" or key in tilemaps.MAPS:
+            # Карты картинками - слоем тайлов или WMS, без файла.
+            count = self._export_geology(title) if key == "geology" \
+                else self._export_tilemap(key, title)
             self.message = (tr("В проект добавлен слой «{title}».",
                                title=title) if count else
                             tr("Слой «{title}» не добавлен.", title=title),
@@ -456,7 +462,7 @@ class StateMixin:
         if not len(layer.focus):
             return 0
         keep = in_box(layer.lats, layer.lons, box)
-        if key in ("quakes", "fires"):
+        if key in ("quakes", "fires", "iscgem"):
             keep &= quakes.in_window(layer.times, layer.window)
         index = np.nonzero(keep)[0]
         fields, rows = self._point_rows(key, layer, index)
@@ -470,10 +476,13 @@ class StateMixin:
     def _point_rows(self, key, layer, index):
         """Поля и значения точек index слоя вида key."""
         def stamp(seconds):
-            if not math.isfinite(seconds):
+            if seconds is None or not math.isfinite(seconds):
                 return ""
-            return datetime.datetime.fromtimestamp(
-                seconds, datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")
+            # fromtimestamp на Windows не берёт время до 1970 года.
+            epoch = datetime.datetime(1970, 1, 1,
+                                      tzinfo=datetime.timezone.utc)
+            return (epoch + datetime.timedelta(seconds=seconds)).strftime(
+                "%Y-%m-%d %H:%M")
         if key in ("deposits", "osm_mines"):
             fields = [(name, "str") for name in (
                 "name", "country", "commodities", "type", "status",
@@ -496,7 +505,7 @@ class StateMixin:
                     + [float(layer.data.elevation[layer.order[n]]),
                        float(layer.data.last[layer.order[n]])]
                     for n in index]
-        elif key == "quakes":
+        elif key in ("quakes", "iscgem"):
             fields = [("place", "str"), ("mag", "real"),
                       ("depth_km", "real"), ("time", "str"), ("url", "str")]
             rows = [(q.place, q.mag, q.depth, stamp(q.time), q.url)
@@ -586,6 +595,18 @@ class StateMixin:
         не пишется."""
         layer = layer_export.add_xyz(geology.TILES, title, geology.MAX_LEVEL,
                                      geology.ATTRIBUTION[0])
+        return None if layer is None else 1
+
+    def _export_tilemap(self, key, title):
+        """Карта картинками (core/tilemaps.py) в проект слоем тайлов XYZ
+        или WMS службы, файл не пишется."""
+        tmap = tilemaps.MAPS[key]
+        if tmap.wms:
+            layer = layer_export.add_wms(tmap.wms[0], tmap.wms[1], title,
+                                         tmap.attribution[0])
+        else:
+            layer = layer_export.add_xyz(self.tilemap_urls[key], title,
+                                         tmap.max_level, tmap.attribution[0])
         return None if layer is None else 1
 
     def _export_qgis(self, key, title, path, box):

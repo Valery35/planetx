@@ -31,6 +31,10 @@ from ..tilesource import save_connection
 from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
                    all_sources, distance_text, parcel_labels)
 
+# Очагов у щелчка в окне «Объекты» не больше: каталог ISC-GEM даёт
+# десятки событий в одной точке. Выбор помощника.
+QUAKES_NEAR = 20
+
 
 class IdentifyMixin:
     """Часть окна глобуса GlobeWindow."""
@@ -144,6 +148,7 @@ class IdentifyMixin:
         self._ask_parcels(lat, lon)
         self._ask_field(lat, lon)
         self._ask_geology(lat, lon)
+        self._ask_tilemap(lat, lon)
         self._show_identified()
 
     # Сведения об участках кадастра Росреестра (core/cadastre.py).
@@ -245,6 +250,7 @@ class IdentifyMixin:
         groups += self._identify_magnetic(lat, lon)
         groups += self._identify_field()
         groups += self._identify_geology()
+        groups += self._identify_tilemap()
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:
             self.identified = IdentifyDialog(self)
@@ -664,21 +670,33 @@ class IdentifyMixin:
         return [(Group(tr("Мои метки")), features)] if features else []
 
     def _identify_quakes(self, px, py):
-        """Очаги землетрясений на глобусе у точки щелчка на экране."""
-        layer = self.view.quakes
+        """Очаги землетрясений у точки щелчка на экране - сводки USGS
+        и исторические (ISC-GEM), по группе на слой."""
+        out = []
+        for layer, title in ((self.view.quakes, tr("Землетрясения")),
+                             (self.view.history,
+                              tr("Исторические землетрясения"))):
+            out += self._quakes_near(layer, title, px, py)
+        return out
+
+    def _quakes_near(self, layer, title, px, py):
+        """Очаги слоя layer у точки щелчка, не больше QUAKES_NEAR
+        ближайших."""
         if not layer.events:
             return []
         eye = np.asarray(self.view.camera.eye, dtype=np.float64)
         shown = quakes.facing(eye, layer.epicenter, layer.lats, layer.lons) \
             & quakes.in_window(layer.times, layer.window)
         radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
-        near = np.zeros(len(layer.events), dtype=bool)
+        best = np.full(len(layer.events), np.inf)
         for points in (layer.focus, layer.epicenter):
             pixels, front = self.view.camera.project(points)
             gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
-            near |= front & (gap <= radius)
+            best = np.minimum(best, np.where(front, gap, np.inf))
+        found = np.nonzero((best <= radius) & shown)[0]
+        found = found[np.argsort(best[found])][:QUAKES_NEAR]
         features = []
-        for n in np.nonzero(near & shown)[0]:
+        for n in found:
             q = layer.events[int(n)]
             values = [(tr("Магнитуда"), "{:.1f}".format(q.mag)),
                       (tr("Глубина очага"), tr("{value} км", value=(
@@ -689,7 +707,7 @@ class IdentifyMixin:
                 values.append((tr("Страница USGS"), q.url))
             features.append((q.place or "M {:.1f}".format(q.mag), values,
                              None))
-        return [(Group(tr("Землетрясения")), features)] if features else []
+        return [(Group(title), features)] if features else []
 
     def _identify_satellites(self, px, py):
         """Спутник у точки щелчка на экране, группа окна «Объекты»."""

@@ -201,6 +201,11 @@ def decode_png(data, size=None, crop=None):
     Вызывается в рабочем потоке. QImage в рабочем потоке допустим,
     в отличие от QPixmap.
     """
+    if not data:
+        # Ответ 204 без тела - тайла нет, он прозрачный. Так отвечает
+        # мозаика Planetary Computer над морем (карта WorldCover).
+        side = size or 256
+        return np.zeros((side, side, 4), np.uint8)
     image = QImage.fromData(data)
     if image.isNull():
         return None

@@ -44,7 +44,9 @@ class ActionsMixin:
     def _place_open(self):
         return self.place_dialog is not None and self.place_dialog.isVisible()
 
-    def _open_place(self):
+    def _open_place(self, mode=None):
+        """Окно «Новая метка». mode - вид объекта из меню значка
+        (point, path, polygon, circle), без него - прежняя вкладка."""
         if self._ruler_open():
             self.ruler_dialog.close()
         if self.place_dialog is None:
@@ -53,6 +55,8 @@ class ActionsMixin:
             self.place_dialog.save_requested.connect(self._save_place)
             self.place_dialog.style_changed.connect(self._refresh_shapes)
             self.place_dialog.finished.connect(self._place_closed)
+        if mode:
+            self.place_dialog.set_mode(mode)
         self.place_dialog.show()
         self.place_dialog.raise_()
         self.view.vertex_tool = self.draw_vertices

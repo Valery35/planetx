@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.96.0.
+A 3D globe inside QGIS. PlanetX version 0.97.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -66,6 +66,11 @@ and atmosphere, from space down to single streets.
   magnetic anomalies, XGM2019e gravity and Bouguer anomalies, the EGM2008
   geoid, ocean floor age, heat flow, lithospheric plate motion and
   Holocene volcanoes. A click on the globe shows the value at the point.
+- **Geology, water and soils.** The Macrostrat geological map, the GLiM
+  lithological map, GEM active faults, earthquakes since 1904 from the
+  ISC-GEM catalogue, ESA WorldCover land cover, JRC surface water
+  occurrence and transitions 1984-2021 and SoilGrids soil properties.
+  A click shows the class or the value at the point.
 - **Subsurface mode.** Drill holes along their survey, bed roofs,
   sections with images and tunnels from project layers go under the
   globe surface with the QGIS style and labels. The surface becomes

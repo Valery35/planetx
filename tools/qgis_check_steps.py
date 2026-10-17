@@ -501,7 +501,7 @@ def draw():
     dialog.tabs.setCurrentIndex(1)
     dialog.name.setText("Путь теста")
     dialog.color.setColor(QColor(0, 120, 255, 255))
-    dialog.width.setValue(4.0)
+    dialog.line_width.setValue(4.0)
     for p in ((58.0, 56.1), (58.02, 56.2), (58.0, 56.3)):
         d.add(*p)
     window._save_place()
@@ -6953,6 +6953,62 @@ def side_panel():
     store.remove(place.key)
     store.remove(folder)
     result["side_panel"] = out
+
+
+@check(500)
+def draw_shot():
+    """Меню значка «Новая метка»: пункты видов объекта, пункт открывает
+    окно на своей вкладке. Снимки planetx_draw_window.png и
+    planetx_draw.png."""
+    window = state["window"]
+    actions = window.toolbar.place_button.menu().actions()
+    opened = {}
+    for action, mode in zip(actions, ("point", "path", "polygon",
+                                      "circle")):
+        action.trigger()
+        QgsApplication.processEvents()
+        opened[mode] = window.drawer.mode
+    dialog = window.place_dialog
+    result["draw_menu"] = {
+        "items": [a.text() for a in actions], "opened": opened,
+        "popup": int(getattr(window.toolbar.place_button.popupMode(),
+                             "value", window.toolbar.place_button
+                             .popupMode())),
+        "line_width": dialog.line_width.value(),
+        "width_method": callable(dialog.width)}
+    window.grab().save(os.path.join(TEMP, "planetx_draw_window.png"))
+    dialog.grab().save(os.path.join(TEMP, "planetx_draw.png"))
+    result["draw_shot"] = {
+        "visible": dialog.isVisible(), "window": dialog.isWindow(),
+        "parent": type(dialog.parent()).__name__,
+        "geometry": list(dialog.geometry().getRect()),
+        "tabs": [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())],
+        "tabs_visible": dialog.tabs.isVisible(),
+        "tabs_size": [dialog.tabs.width(), dialog.tabs.height()]}
+    dialog.reject()
+    QgsApplication.processEvents()
+
+
+@check(500)
+def menu_shot():
+    """Выпадающие меню панели значков в цветах плашки: снимки
+    planetx_menu_<кнопка>.png и цвет фона меню. Ручной шаг."""
+    from qgis.PyQt.QtCore import QPoint
+    window = state["window"]
+    bar = window.toolbar
+    out = {}
+    for name in ("demo", "body", "scene", "place_button"):
+        button = getattr(bar, name)
+        menu = button.menu()
+        menu.popup(button.mapToGlobal(QPoint(0, button.height())))
+        QgsApplication.processEvents()
+        image = menu.grab().toImage()
+        image.save(os.path.join(TEMP, "planetx_menu_{}.png".format(name)))
+        color = image.pixelColor(image.width() // 2, image.height() - 6)
+        out[name] = [color.red(), color.green(), color.blue()]
+        menu.hide()
+        QgsApplication.processEvents()
+    result["menu_shot"] = out
 
 
 @check(500)
@@ -15868,6 +15924,183 @@ def geology_check():
     out["off"] = "emag" not in window.gibs_loaders
     out["gl_errors"] = dict(window.view.gl_errors)
     return None
+
+
+def _tilemap_start(window, case):
+    from planetx.core.navigation import Pose
+    key, lat, lon, distance = case[:4]
+    window.set_extra(key, True)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(lat, lon, distance, 0.0, 0.0))
+    window.view.update()
+    loader = window.gibs_loaders.get("emag")
+    result["tilemaps"][case[6] if len(case) > 6 else key] = {
+        "loader": loader is not None,
+                               "shown": window._tilemap_shown}
+    if loader is not None:
+        _watch_loader(loader, "tilemap_seen")
+    state["tm_phase"] = "tiles"
+    state["ls_started"] = time.monotonic()
+
+
+@check(500)
+def tilemaps_on():
+    """Карты картинками (core/tilemaps.py) по очереди: изменения
+    и повторяемость воды JRC у Арала и Байкала, глина и pH SoilGrids у Перми,
+    литология GLiM с локальной копии planetx-terrain, если она собрана.
+    Тайлы, шкала, подпись, значение под щелчком, выгрузка в проект,
+    снятие карты значений при включении."""
+    from qgis.PyQt.QtCore import QUrl
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("gravity", True)
+    cases = [("water_transitions", 45.0, 59.5, 900000.0, 45.3, 59.9),
+             ("water_occurrence", 53.6, 108.1, 300000.0, 53.6, 108.1),
+             ("soil_clay", 58.0, 56.25, 400000.0, 58.0, 56.25),
+             ("soil_ph", 58.0, 56.25, 400000.0, 58.0, 56.25)]
+    folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
+    if os.path.isdir(os.path.join(folder, "glim", "7")):
+        window.tilemap_urls["glim"] = QUrl.fromLocalFile(os.path.join(
+            folder, "glim")).toString() + "/{z}/{x}/{y}.png"
+        cases.append(("glim", 58.0, 56.25, 2000000.0, 58.0, 56.25))
+    if os.path.isdir(os.path.join(folder, "worldcover", "5")):
+        window.tilemap_coarse["worldcover"] = QUrl.fromLocalFile(
+            os.path.join(folder, "worldcover")).toString() \
+            + "/{z}/{x}/{y}.png"
+    # Покрытие земель: сначала издалека (свои уровни 0-5), потом центр
+    # Перми вблизи (тайлы службы), щелчок по застройке у Эспланады.
+    cases.append(("worldcover", 50.0, 60.0, 6000000.0, 58.0, 56.25,
+                  "worldcover_far"))
+    cases.append(("worldcover", 58.0, 56.25, 30000.0, 58.0103, 56.2346))
+    state["tm_cases"] = cases
+    result["tilemaps"] = {"cases": [c[6] if len(c) > 6 else c[0]
+                                    for c in cases]}
+    _tilemap_start(window, cases[0])
+    result["tilemaps"]["gravity_off"] = not window.extras.get("gravity")
+
+
+@check(1000)
+def tilemaps_wait():
+    from qgis.core import QgsProject
+    window = state["window"]
+    case = state["tm_cases"][0]
+    key = case[0]
+    out = result["tilemaps"][case[6] if len(case) > 6 else key]
+    layer = window.view.gibs["emag"]
+    seen = state.get("tilemap_seen", {"loaded": 0, "failed": 0})
+    spent = time.monotonic() - state["ls_started"]
+    if state["tm_phase"] == "tiles":
+        if spent < 60.0 and (seen["loaded"] < 4 or layer.missing
+                             or layer.pending or spent < 6.0):
+            return 1000
+        out.update(seen=dict(seen), seconds=round(spent, 1),
+                   textures=len(layer.textures), empty=len(layer.empty),
+                   levels=sorted({k[0] for k in layer.textures}),
+                   field_legend=not window.field_legend.isHidden(),
+                   class_legend=not window.class_legend.isHidden(),
+                   class_rows=len(window.class_legend.rows()))
+        out["credit"] = window.attribution.text()[-160:]
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_tilemap_{}.png".format(key)))
+        window._ask_tilemap(case[4], case[5])
+        state["tm_phase"] = "value"
+        state["ls_started"] = time.monotonic()
+        return 1000
+    value = window._tilemap_value
+    if value is not None and value[2] is None and not value[3] \
+            and spent < 30.0:
+        return 1000
+    out["value"] = None if value is None else list(value[2:])
+    groups = window._identify_tilemap()
+    out["identify"] = [(f[0], f[1]) for _, fs in groups for f in fs]
+    if key in ("soil_clay", "water_transitions"):
+        out["exported"] = window.active_export(key)
+        root = QgsProject.instance().layerTreeRoot()
+        group = root.findGroup("PlanetX - слои глобуса") \
+            or root.findGroup("PlanetX - globe layers")
+        if group is not None:
+            nodes = group.findLayers()
+            out["project_layer"] = [n.layer().providerType() for n in nodes]
+            for node in nodes:
+                QgsProject.instance().removeMapLayer(node.layerId())
+            root.removeChildNode(group)
+    window.set_extra(key, False)
+    out["off"] = "emag" not in window.gibs_loaders \
+        and window.field_legend.isHidden() \
+        and window.class_legend.isHidden()
+    state["tm_cases"].pop(0)
+    if state["tm_cases"]:
+        _tilemap_start(window, state["tm_cases"][0])
+        return 1000
+    result["tilemaps"]["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
+@check(500)
+def iscgem_on():
+    """Исторические землетрясения ISC-GEM: каталог по частям из ComCat
+    или из файла профиля, точки на глобусе, шкала времени, подпись,
+    опрос у сильнейшего видимого события, выгрузка в проект."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(38.0, 142.0, 6000000.0, 0.0, 0.0))
+    window.view.update()
+    window.set_extra("iscgem", True)
+    result["iscgem"] = {"from_file": window.history_events is not None}
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def iscgem_wait():
+    import numpy as np
+    window = state["window"]
+    out = result["iscgem"]
+    spent = time.monotonic() - state["ls_started"]
+    if window.history_events is None and spent < 240.0:
+        return 1000
+    layer = window.view.history
+    out.update(seconds=round(spent, 1),
+               events=len(window.history_events or []),
+               shown=len(layer.events),
+               timebar=window.toolbar.time.isEnabled(),
+               credit="ISC-GEM" in window.attribution.text(),
+               message=str(getattr(window, "message", ("",))[0])[:80])
+    if layer.events:
+        eye = np.asarray(window.view.camera.eye, dtype=np.float64)
+        from planetx.core import quakes
+        facing = quakes.facing(eye, layer.epicenter, layer.lats, layer.lons)
+        mags = np.where(facing, [q.mag for q in layer.events], -1.0)
+        best = int(np.argmax(mags))
+        pixels, _ = window.view.camera.project(layer.focus[best:best + 1])
+        found = window._identify_quakes(pixels[0, 0], pixels[0, 1])
+        out["strongest"] = [layer.events[best].place,
+                            layer.events[best].mag]
+        out["identify"] = [[f[0] for f in fs][:3] for _, fs in found]
+        out["identify_values"] = [f[1] for _, fs in found for f in fs][:1]
+        path = os.path.join(TEMP, "planetx_iscgem.gpkg")
+        if os.path.exists(path):
+            os.remove(path)
+        out["exported"] = window.active_export("iscgem", path)
+        _drop_export_group()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_iscgem.png"))
+    window.set_extra("iscgem", False)
+    out["off"] = not window.view.history.events
+    out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
+def _drop_export_group():
+    from qgis.core import QgsProject
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
 
 
 @check(500)

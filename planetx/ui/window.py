@@ -25,7 +25,8 @@ from qgis.PyQt.QtWidgets import (QGraphicsDropShadowEffect, QLabel,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import ellipsoid, fields, geoid, paleo, infra, mining, themes
+from ..core import (ellipsoid, fields, geoid, paleo, infra, mining, themes,
+                    tilemaps)
 from ..core.coords import FORMATS as COORD_FORMATS
 from ..core.geocode import SEARCH_INTERVAL
 from ..core.planets import EARTH_PLANET
@@ -48,7 +49,8 @@ from .layer_labels import LayerLabels
 from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
-                     CurrentLegend, FaultLegend, FieldLegend, InfraLegend,
+                     ClassLegend, CurrentLegend, FaultLegend, FieldLegend,
+                     InfraLegend,
                      PlantLegend, VolcanoLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
@@ -337,6 +339,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Землетрясения: события сводки и ответ на её запрос.
         self.quake_events = []
         self._quake_reply = None
+        # Исторические землетрясения (ISC-GEM): каталог, ждущий ответ
+        # и собранные части каталога, пока идут запросы по промежуткам.
+        self.history_events = None
+        self._history_reply = None
+        self._history_parts = []
         # Пожары NASA FIRMS: очаги сводки и ждущий ответ.
         self.fire_data = None
         self._fire_reply = None
@@ -404,6 +411,15 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # (ключ, точка, значение или None, ошибка) - значение под щелчком.
         self._field_value = None
         self._field_reply = None
+        # Карты картинками (core/tilemaps.py): адреса тайлов (шаги
+        # проверки ставят локальную копию planetx-terrain), карта на
+        # глобусе, значение под щелчком и его запрос.
+        self.tilemap_urls = {key: m.url for key, m in tilemaps.MAPS.items()}
+        self.tilemap_coarse = {key: m.coarse
+                               for key, m in tilemaps.MAPS.items()}
+        self._tilemap_shown = None
+        self._tilemap_value = None
+        self._tilemap_reply = None
         self.cable_layer = None
         # Активные разломы GEM (core/faults.py): файл профиля, загрузка,
         # разбор в рабочем потоке, слой наложения.
@@ -856,8 +872,14 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.field_legend = FieldLegend(self.view)
         self.field_legend.hide()
         self.legend_panel.add(self.field_legend)
-        self.field_legend.closer = lambda: self._field_shown and \
-            self.set_extra(self._field_shown, False)
+        self.class_legend = ClassLegend(self.view)
+        self.class_legend.hide()
+        self.legend_panel.add(self.class_legend)
+        self.class_legend.closer = lambda: self._tilemap_shown and \
+            self.set_extra(self._tilemap_shown, False)
+        self.field_legend.closer = lambda: (
+            self._field_shown or self._tilemap_shown) and self.set_extra(
+                self._field_shown or self._tilemap_shown, False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []

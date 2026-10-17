@@ -126,6 +126,26 @@ def grid_shares(z, x, y, segments, border=0):
     return np.meshgrid(u, v)
 
 
+def finite_tile(tile):
+    """Тайл без NaN и бесконечностей: такие пиксели получают нулевую
+    высоту, тайл из одних таких пикселей - None, он не берётся.
+
+    17 октября 2026 года у автора кадр каждый раз падал в
+    navigation.nearest_terrain: высота рельефа под глазом пришла NaN,
+    и NaN ушёл в радиусы колец опроса. Откуда NaN в тайле, не найдено,
+    окно глобуса пишет такие тайлы в журнал (render/view.add_heights).
+    """
+    heights = np.asarray(tile.heights)
+    good = np.isfinite(heights)
+    if good.all():
+        return tile
+    if not good.any():
+        return None
+    heights = np.where(good, heights, 0.0).astype(np.float32)
+    return tile._replace(heights=heights, low=float(heights.min()),
+                         high=float(heights.max()))
+
+
 def mercator_share(lat, lon):
     """Доли мира u, v точки с широтой и долготой в градусах."""
     lat = max(-85.05112878, min(85.05112878, lat))
@@ -186,6 +206,9 @@ class HeightStore:
         # которому посчитан, и пересчитывается, когда лучший тайл другой.
         # Раньше каждый новый тайл высот сбрасывал весь кэш, и выбор
         # тайлов заново считал размахи всех тайлов кадра.
+        tile = finite_tile(tile)
+        if tile is None:
+            return
         self.tiles[(tile.z, tile.x, tile.y)] = tile
         self.low = min(self.low, float(tile.low))
         self.version += 1

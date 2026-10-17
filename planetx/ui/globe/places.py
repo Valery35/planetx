@@ -98,6 +98,14 @@ class PlacesMixin:
             if hasattr(self, "view") else None
         if quake_span is not None:
             times += [when.stamp(when.text(t)) for t in quake_span]
+        # Исторические землетрясения - по массиву времён слоя, событий
+        # десятки тысяч.
+        history = self.view.history.times if hasattr(self, "view") \
+            else np.zeros(0)
+        history = history[~np.isnan(history)]
+        if len(history):
+            times += [when.stamp(when.text(float(t)))
+                      for t in (history.min(), history.max())]
         # Пожары - так же, первый и последний снимок сводки.
         fire = self.view.fires.fires if hasattr(self, "view") else None
         fire_span = fires_core.span(fire) if fire is not None else None
@@ -169,6 +177,7 @@ class PlacesMixin:
     def _time_quakes(self):
         """Землетрясения и пожары в промежутке шкалы времени."""
         self.view.quakes.window = self._time_range
+        self.view.history.window = self._time_range
         self.view.fires.window = self._time_range
         self.view.update()
 

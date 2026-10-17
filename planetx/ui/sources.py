@@ -21,7 +21,8 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QVBoxLayout)
 
 from ..core import (basemap, cadastre, crust, dem, faults, fires, geology,
-                    paleo, planets, quakes, routing, slabs, sources, sun)
+                    iscgem, paleo, planets, quakes, routing, slabs, sources,
+                    sun, tilemaps)
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
@@ -101,6 +102,9 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
         (tr("Науки о Земле"), [
             ("USGS", tr("Землетрясения за 30 суток"), quakes.ATTRIBUTION[1],
              quakes.FEED),
+            ("ISC-GEM", tr("Исторические землетрясения, около 13 МБ"),
+             iscgem.ATTRIBUTION[1], iscgem.query_url("1906-04-18",
+                                                     "1906-04-19")),
             ("USGS Slab2", tr("Плиты на разрезах"), slabs.ATTRIBUTION[1],
              slabs.URL.format(code="kur")),
             ("CRUST1.0", tr("Кора на разрезах"), crust.CITATION[1],
@@ -111,6 +115,14 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
              faults.ATTRIBUTION[1], None),
             ("Macrostrat", tr("Геологическая карта"), geology.ATTRIBUTION[1],
              sources.tile_probe(geology.TILES)),
+            ("GLiM", tr("Литологическая карта"),
+             tilemaps.MAPS["glim"].attribution[1],
+             sources.tile_probe(tilemaps.MAPS["glim"].url)),
+            ("JRC Global Surface Water", tr("Повторяемость и изменения воды"),
+             tilemaps.GSW_ATTRIBUTION[1],
+             sources.tile_probe(tilemaps.MAPS["water_occurrence"].url)),
+            ("SoilGrids", tr("Свойства почв 0-5 см"),
+             tilemaps.SOIL_ATTRIBUTION[1], None),
             ("PALEOMAP PaleoDEM", tr("Палеогеография"), paleo.ATTRIBUTION[1],
              sources.tile_probe(paleo.TILE_URL.replace("{age}", "0")))]),
         # НСПД без проверки: ей нужны заголовок Referer и сертификат

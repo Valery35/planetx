@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-  <!-- Во весь экран: четыре угла рамки. -->
-  <path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6" fill="none"
-        stroke="#1d5fa8" stroke-width="2.4" stroke-linecap="round"
-        stroke-linejoin="round"/>
-</svg>

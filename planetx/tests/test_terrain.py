@@ -2,6 +2,7 @@
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Высоты Terrarium."""
+import math
 import os
 import sys
 import unittest
@@ -125,6 +126,26 @@ class TestSample(unittest.TestCase):
 
 
 class TestStore(unittest.TestCase):
+
+    def test_nan_heights_become_zero(self):
+        # NaN в тайле высот ронял кадр в nearest_terrain, 17 октября
+        # 2026 года. Хранилище берёт тайл с нулём вместо NaN.
+        heights = np.full((256, 256), 120.0, dtype=np.float32)
+        heights[100:110, 100:110] = np.nan
+        store = tr.HeightStore()
+        store.add(tr.HeightTile(0, 0, 0, heights, 0.0, 0.0))
+        kept = store.tiles[(0, 0, 0)].heights
+        self.assertTrue(np.isfinite(kept).all())
+        self.assertEqual(float(kept[105, 105]), 0.0)
+        self.assertEqual(float(kept[0, 0]), 120.0)
+        for lat in np.linspace(-80.0, 80.0, 33):
+            for lon in np.linspace(-179.0, 179.0, 33):
+                self.assertTrue(math.isfinite(store.height_at(lat, lon)))
+        empty = tr.HeightStore()
+        empty.add(tr.HeightTile(1, 0, 0, np.full((256, 256), np.nan,
+                                                 dtype=np.float32),
+                                0.0, 0.0))
+        self.assertEqual(empty.tiles, {})
 
     def test_levels(self):
         self.assertEqual([tr.height_level(z) for z in (0, 2, 3, 10, 17, 19)],

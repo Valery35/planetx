@@ -329,6 +329,7 @@ class GlobeView(QOpenGLWidget):
         # Рельеф: хранилище высот, загрузчик Terrarium, уровень высот,
         # с которым собрана сетка каждого тайла, и пересборка сеток.
         self.store = HeightStore()
+        self._nan_noted = False  # тайл высот с NaN уже записан в журнал
         self.terrain_loader = None
         self.mesh_levels = {}
         self.build_pool = QThreadPool(self)
@@ -396,6 +397,9 @@ class GlobeView(QOpenGLWidget):
         self._wedged = (None, None, [])
         # Землетрясения: очаги точками поверх поверхности.
         self.quakes = Quakes()
+        # Исторические землетрясения (ISC-GEM): точки без линий к эпицентрам.
+        self.history = Quakes()
+        self.history.stems = False
         # Пожары NASA FIRMS: очаги точками на рельефе.
         self.fires = FirePoints()
         # Месторождения USGS (core/deposits.py): точки на рельефе.
@@ -894,6 +898,14 @@ class GlobeView(QOpenGLWidget):
 
     def add_heights(self, tile):
         """Пришёл тайл высот. Тайлы, которым он точнее, пересобираются."""
+        if not np.isfinite(tile.heights).all() and not self._nan_noted:
+            # Хранилище заменяет NaN нулём (terrain.finite_tile). Запись
+            # один раз за окно - по ней ищется источник NaN.
+            self._nan_noted = True
+            journal.note("Тайл высот {} с NaN: {} пикселей, масштаб {}".format(
+                             (tile.z, tile.x, tile.y),
+                             int((~np.isfinite(tile.heights)).sum()),
+                             self.store.scale))
         self.store.add(tile)
         self.last_arrival = time.monotonic()
         for key, level in list(self.mesh_levels.items()):
@@ -1521,6 +1533,7 @@ class GlobeView(QOpenGLWidget):
         self.lake_water.init_gl()
         self.extruded.init_gl()
         self.quakes.init_gl()
+        self.history.init_gl()
         self.fires.init_gl()
         self.deposits.init_gl()
         self.osm_mines.init_gl()
@@ -1560,6 +1573,7 @@ class GlobeView(QOpenGLWidget):
         self.lake_water.release_gl()
         self.extruded.release_gl()
         self.quakes.release_gl()
+        self.history.release_gl()
         self.fires.release_gl()
         self.deposits.release_gl()
         self.osm_mines.release_gl()
@@ -2296,10 +2310,11 @@ class GlobeView(QOpenGLWidget):
             self.fires.draw(self.camera, ratio)
         else:
             self.fires.drawn = 0
-        if self.quakes.events and not self.show_holes:
-            self.quakes.draw(self.camera, ratio)
-        else:
-            self.quakes.drawn = 0
+        for layer in (self.history, self.quakes):
+            if layer.events and not self.show_holes:
+                layer.draw(self.camera, ratio)
+            else:
+                layer.drawn = 0
         if self.satellites.source is not None and not self.show_holes:
             self.satellites.draw(self.camera, ratio)
         else:
