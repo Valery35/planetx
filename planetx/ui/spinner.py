@@ -17,14 +17,16 @@ from qgis.PyQt.QtWidgets import QWidget
 
 from ..i18n import tr
 from ..qt_compat import enum
+from .style import ACCENT, PLATE
 
 SIZE = 26  # сторона значка, логических пикселей
 TICK = 40  # мс между кадрами вращения
 TURN = 360.0  # градусов дуги в секунду
 ARC = 270  # длина дуги, градусов
 SHOW_DELAY = 0.4  # с загрузки до появления значка
-BACKGROUND = QColor(255, 255, 255, 200)
-LOADING = QColor(40, 110, 200)
+# Плашка - общий вид элементов поверх глобуса, ui/style.py.
+BACKGROUND = PLATE
+LOADING = ACCENT
 STALLED = QColor(230, 130, 20)
 
 

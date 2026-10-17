@@ -22,14 +22,15 @@ from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QFrame, QHBoxLayout,
 from ..core.tour import PAUSE, Tour, clock
 from ..i18n import tr
 from ..qt_compat import enum
+from .style import plate_style, set_glyph
 from . import stopcaption
 from .stopcaption import StopCaption, plain
 
 PAUSE_KEY = "PlanetX/tour_pause"
 LOOP_KEY = "PlanetX/tour_loop"
 MARGIN = 12  # пикселей от нижнего края вида, если шкалы времени нет
-STYLE = ("QFrame#planetxTour { background: rgba(250, 250, 250, 230); "
-         "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
+# Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
+STYLE = plate_style("planetxTour")
 # Поза камеры сдвинута мышью, если ушла дальше этой доли расстояния.
 MOVED = 1e-3
 SLIDER_STEPS = 1000  # делений ползунка на весь тур
@@ -86,7 +87,7 @@ class TourBar(QFrame):
                 ("⏸", tr("Пауза"), self.toggle),
                 ("⏭", tr("Следующая остановка"), self.forward)):
             button = QToolButton(self)
-            button.setText(text)
+            set_glyph(button, text)
             button.setToolTip(tip)
             button.setAutoRaise(True)
             button.clicked.connect(signal)
@@ -95,8 +96,7 @@ class TourBar(QFrame):
         self.play = buttons[1]
         # Тур по кругу, для показа на экране без присмотра.
         self.loop = QToolButton(self)
-        # Значок из того же набора эмодзи, что ⏮ ⏸ ⏭, синий в Windows.
-        self.loop.setText("🔁")
+        set_glyph(self.loop, "🔁")
         self.loop.setCheckable(True)
         self.loop.setAutoRaise(True)
         self.loop.setToolTip(tr(
@@ -105,7 +105,7 @@ class TourBar(QFrame):
         layout.addWidget(self.loop)
         # Подписи остановок крупно на кадре (ui/stopcaption.py).
         self.captions = QToolButton(self)
-        self.captions.setText("🔤")
+        set_glyph(self.captions, "🔤")
         self.captions.setCheckable(True)
         self.captions.setAutoRaise(True)
         self.captions.setToolTip(tr(
@@ -128,7 +128,7 @@ class TourBar(QFrame):
         layout.addWidget(QLabel(tr("Пауза"), self))
         layout.addWidget(self.pause)
         self.rec = QToolButton(self)
-        self.rec.setText("⏺")
+        set_glyph(self.rec, "⏺")
         self.rec.setToolTip(tr(
             "Записать тур, 25 кадров в секунду тура: сразу видео MP4 "
             "в размере окна или кадры PNG в папку в выбранном размере. "
@@ -137,9 +137,9 @@ class TourBar(QFrame):
         self.rec.setAutoRaise(True)
         self.rec.clicked.connect(self.record)
         layout.addWidget(self.rec)
-        # Справа ⏹ закрывает тур, синим значком, как прочие кнопки.
+        # Справа ⏹ закрывает тур, значком набора, как прочие кнопки.
         close = QToolButton(self)
-        close.setText("⏹")
+        set_glyph(close, "⏹")
         close.setToolTip(tr("Закончить тур"))
         close.setAutoRaise(True)
         close.clicked.connect(self.close_clicked)
@@ -166,7 +166,7 @@ class TourBar(QFrame):
 
     def set_state(self, playing, index, count, name, description=""):
         # ▶ с селектором U+FE0F рисуется синим значком, как ⏮ ⏸ ⏭ 🔁.
-        self.play.setText("⏸" if playing else "▶️")
+        set_glyph(self.play, "⏸" if playing else "▶️")
         self.play.setToolTip(tr("Пауза") if playing else tr("Продолжить"))
         self.info.setText(tr("Остановка {n} из {count}: {name}",
                              n=index + 1, count=count,

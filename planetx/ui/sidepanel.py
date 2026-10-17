@@ -71,8 +71,17 @@ class SidePanel(QWidget):
             return
         self.close_dialog()
         self.dialog = dialog
-        dialog.setParent(self.scroll, enum(Qt, "WindowType", "Widget"))
-        self.scroll.setWidget(dialog)
+        # Окно стоит в своей высоте, лишнее место панели - под ним.
+        # Прежде прокрутка растягивала окно на всю высоту панели, и его
+        # строки расходились пустотами, замечание автора от 17 октября
+        # 2026 года.
+        holder = QWidget(self.scroll)
+        column = QVBoxLayout(holder)
+        column.setContentsMargins(0, 0, 0, 0)
+        dialog.setParent(holder, enum(Qt, "WindowType", "Widget"))
+        column.addWidget(dialog)
+        column.addStretch(1)
+        self.scroll.setWidget(holder)
         self.title.setText(dialog.windowTitle())
         dialog.windowTitleChanged.connect(self._retitle)
         dialog.finished.connect(lambda *a, d=dialog: self._released(d))

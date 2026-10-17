@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.95.0
+version=0.96.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,16 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.95.0 The sea floor comes from the GEBCO 2026 depth grid of about
+changelog=0.96.0 The icon bar, the time slider, the tour bar, the
+      paleogeography slider, the swipe, the layer scales and the
+      loading icon share one look - a dark translucent plate with light
+      icons of one set, the active one in blue, a white arrow on buttons
+      with a menu. The dot in the middle of the navigation ring returns
+      the straight down view without roll. The lower joystick moves the
+      view slower from far away. New tiles fade in more smoothly. The
+      placemark properties window is split into groups from top to
+      bottom, and the empty properties panel no longer shows.
+      0.95.0 The sea floor comes from the GEBCO 2026 depth grid of about
       450 m, the open sea has no more empty spots at zero up close. Inside
       the Earth has two new rows. Active faults of the GEM database are
       coloured by the kind of slip, a click shows the slip rate and dip.

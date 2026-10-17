@@ -1542,7 +1542,7 @@ def extrude():
             store.set_visible(key, False)
     # Окно свойств: высота стены 300 -> 400.
     dialog = PlaceProperties(store.find(keys[1]), window)
-    dialog.height.setValue(400.0)
+    dialog.lift.setValue(400.0)
     store.update(keys[1], dialog.values())
     dialog.deleteLater()
     nav = window.view.navigator
@@ -2767,7 +2767,7 @@ def place_props_live():
     out["modal"] = dialog.isModal()
     out["visible"] = dialog.isVisible()
     dialog.slider.setValue(500)
-    out["slider_height"] = dialog.height.value()
+    out["slider_height"] = dialog.lift.value()
     out["preview_height"] = on_globe()
     dialog.name.setText("Свойства теста 2")
     out["preview_names"] = sorted(s.name for s in window.view.features.shapes
@@ -2778,7 +2778,7 @@ def place_props_live():
     out["file_after_cancel"] = store.find(key).shape.height
     window._place_action("properties", key)
     dialog = window.prop_dialogs[key]
-    dialog.height.setValue(3600.0)
+    dialog.lift.setValue(3600.0)
     out["slider_for_3600"] = dialog.slider.value()
     dialog.accept()
     QgsApplication.processEvents()
@@ -6927,7 +6927,9 @@ def side_panel():
     store.add(Shape("point", [(58.0, 56.2)], name="Панель теста"))
     place = [p for p in store.places if p.name == "Панель теста"][0]
     folder = store.add_folder("Папка панели теста")
-    out = {"sizes_before": window.splitter.sizes()}
+    out = {"sizes_before": window.splitter.sizes(),
+           # Пустая панель скрыта, снимок автора от 17 октября 2026 года.
+           "hidden_empty": window.side.isHidden()}
     window._place_action("properties", place.key)
     dialog = window.prop_dialogs[place.key]
     QgsApplication.processEvents()
@@ -6951,6 +6953,31 @@ def side_panel():
     store.remove(place.key)
     store.remove(folder)
     result["side_panel"] = out
+
+
+@check(500)
+def props_shot():
+    """Окно свойств многоугольника в боковой панели: группы сверху вниз,
+    лишняя высота под окном. Снимок окна глобуса - planetx_props.png,
+    высоты окна и панели. Ручной шаг."""
+    from planetx.core.features import Shape
+    window = state["window"]
+    store = window.myplaces
+    key = store.add(Shape("polygon", [(58.0, 56.2), (58.1, 56.4),
+                                      (58.0, 56.5)], name="Окно свойств"))
+    window._place_action("properties", key)
+    QgsApplication.processEvents()
+    dialog = window.prop_dialogs[key]
+    window.grab().save(os.path.join(TEMP, "planetx_props.png"))
+    result["props_shot"] = {
+        "dialog_h": dialog.height(), "hint_h": dialog.sizeHint().height(),
+        "panel_h": window.side.height(),
+        "groups": [b.title() for b in dialog.findChildren(
+            __import__("qgis.PyQt.QtWidgets",
+                       fromlist=["QGroupBox"]).QGroupBox)]}
+    dialog.reject()
+    QgsApplication.processEvents()
+    store.remove(key)
 
 
 @check(500)
@@ -14548,6 +14575,8 @@ def fullscreen_off():
     out["after_full"] = window.isFullScreen()
     out["toolbar_after"] = window.toolbar.isVisible()
     out["escape_enabled"] = window._full_escape.isEnabled()
+    # Выход из режима не показывает пустую панель свойств.
+    out["side_hidden_after"] = window.side.isHidden()
     return None
 
 
@@ -15838,6 +15867,45 @@ def geology_check():
     window.set_extra("geology", False)
     out["off"] = "emag" not in window.gibs_loaders
     out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
+@check(500)
+def style_shot():
+    """Единый вид элементов поверх глобуса (ui/style.py): панель значков,
+    шкала времени часов Солнца, шкала разломов, органы навигации.
+    Снимок окна - planetx_style.png. Ручной шаг."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(40.0, 33.0, 6000000.0, 0.0, 0.0))
+    window.view.update()
+    window.set_extra("sun", True)
+    window.set_extra("faults", True)
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000)
+def style_shot_check():
+    window = state["window"]
+    if window.fault_layer is None \
+            and time.monotonic() - state["ls_started"] < 60.0:
+        return 1000
+    window.navpad.hot = True
+    window.navpad.update()
+    window.toolbar.time.setEnabled(True)
+    window.toolbar.time.setChecked(True)
+    window.timebar.show()
+    window.timebar._place()
+    from qgis.PyQt.QtWidgets import QApplication
+    QApplication.processEvents()
+    window.grab().save(os.path.join(TEMP, "planetx_style.png"))
+    result["style"] = {"timebar": window.timebar.shown(),
+                       "legend": not window.fault_legend.isHidden()}
+    window.navpad.hot = False
+    window.set_extra("faults", False)
+    window.set_extra("sun", False)
     return None
 
 

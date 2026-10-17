@@ -434,6 +434,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # метки, папки, картинки, батиметрии и выдавливания.
         self.side = SidePanel(self)
         splitter.addWidget(self.side)
+        # Разделитель показывает добавленную панель, пустая - скрыта.
+        self.side.hide()
         splitter.setCollapsible(2, False)
         splitter.setStretchFactor(1, 1)
         splitter.setSizes([PANEL_WIDTH, 1300, 0])

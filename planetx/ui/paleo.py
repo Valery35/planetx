@@ -10,9 +10,10 @@ from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QLabel, QSlider, \
 from ..core import paleo
 from ..i18n import tr
 from ..qt_compat import enum
+from .style import plate_style, set_glyph
 
-STYLE = ("QFrame#planetxPaleo { background: rgba(250, 250, 250, 230); "
-         "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
+# Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
+STYLE = plate_style("planetxPaleo")
 PLAY_PERIOD = 900  # мс на шаг возраста при показе
 SLIDER_WIDTH = 260
 
@@ -50,7 +51,7 @@ class PaleoBar(QFrame):
         self.slider.valueChanged.connect(self._moved)
         layout.addWidget(self.slider)
         self.play = QToolButton(self)
-        self.play.setText("▶\ufe0f")
+        set_glyph(self.play, "▶\ufe0f")
         self.play.setAutoRaise(True)
         self.play.setToolTip(tr(
             "Показ от выбранного возраста к настоящему по всем картам "
@@ -98,11 +99,11 @@ class PaleoBar(QFrame):
             self.stop()
         elif self.slider.value() > 0:
             self.timer.start()
-            self.play.setText("⏸")
+            set_glyph(self.play, "⏸")
 
     def stop(self):
         self.timer.stop()
-        self.play.setText("▶\ufe0f")
+        set_glyph(self.play, "▶\ufe0f")
 
     def _step(self):
         if self.ready is not None and not self.ready():

@@ -22,12 +22,14 @@ from ..core import (contours, cutaway, deposits, faults, fields, fires, flow,
                     tomography, volcanoes)
 from ..i18n import tr
 from ..qt_compat import enum
+from .style import ACCENT, HOVER, MUTED, PLATE, TEXT as STYLE_TEXT
 
 BAR_WIDTH = 180  # длина полосы шкалы, логических пикселей
 BAR_HEIGHT = 9
 PAD = 6
-BACKGROUND = QColor(255, 255, 255, 190)
-TEXT = QColor(30, 30, 30)
+# Плашка и текст - общий вид элементов поверх глобуса, ui/style.py.
+BACKGROUND = PLATE
+TEXT = STYLE_TEXT
 CLOSE = 14  # сторона крестика шкалы карты, логических пикселей
 
 
@@ -47,7 +49,7 @@ class Closable:
             return
         rect = self._close_rect()
         painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-        painter.setBrush(QColor(0, 0, 0, 40))
+        painter.setBrush(HOVER)
         painter.drawEllipse(rect)
         painter.setPen(TEXT)
         painter.drawText(rect, int(enum(Qt, "AlignmentFlag", "AlignCenter")),
@@ -230,7 +232,7 @@ class ContourLegend(Closable, QWidget):
             font = painter.font()
             font.setUnderline(True)
             painter.setFont(font)
-            painter.setPen(QColor(20, 90, 200))
+            painter.setPen(ACCENT)
             rect = self._link_rect()
             painter.drawText(int(rect.left()),
                              int(rect.top()) + metrics.ascent(),
@@ -672,7 +674,7 @@ class DepositLegend(Closable, QWidget):
                               tr("Крупное месторождение мира")),
                              (deposits.FACILITY_SIZE / 2.0 + 1.0,
                               tr("Рудник или завод мира"))):
-            painter.setPen(QColor(60, 60, 60))
+            painter.setPen(MUTED)
             painter.setBrush(QColor(255, 255, 255, 0))
             painter.drawEllipse(QPointF(PAD + 8, y + line / 2), radius,
                                 radius)
@@ -882,7 +884,7 @@ class BedsLegend(QWidget):
         for n, (rgb, label) in enumerate(self.items):
             x = PAD + (n // rows) * self.COLUMN
             y = top + line * (n % rows + 1)
-            painter.setPen(QColor(60, 60, 60))
+            painter.setPen(MUTED)
             painter.setBrush(QColor(*rgb))
             painter.drawRect(QRectF(x, y + (line - self.SWATCH) / 2.0,
                                     self.SWATCH, self.SWATCH))
@@ -967,7 +969,7 @@ class ThemeLegend(Closable, QWidget):
                                                 scale["names"])):
                 x = PAD + (n // self.ROWS) * self.COLUMN
                 y = top + line * (n % self.ROWS + 1)
-                painter.setPen(QColor(60, 60, 60))
+                painter.setPen(MUTED)
                 painter.setBrush(QColor(*rgb[:3]))
                 painter.drawRect(QRectF(x, y + (line - self.SWATCH) / 2.0,
                                         self.SWATCH, self.SWATCH))

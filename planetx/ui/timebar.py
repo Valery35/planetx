@@ -31,19 +31,19 @@ QGIS не опирается, решение автора от 30 сентябр
 import math
 import time
 
-from qgis.PyQt.QtCore import QEvent, QRectF, QSize, Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtGui import (QColor, QFont, QIcon, QImage, QLinearGradient,
-                             QPainter, QPen, QPixmap)
+from qgis.PyQt.QtCore import QEvent, QRectF, QSize, QTimer, pyqtSignal
+from qgis.PyQt.QtGui import QColor, QPainter, QPen
 from qgis.PyQt.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel,
                                  QToolButton, QWidget)
 
 from ..core import clock, when
 from ..i18n import tr
 from ..qt_compat import enum
+from .style import GLYPHS, MUTED, icon, plate_style, set_glyph
 
 MARGIN = 12  # пикселей от верхнего края вида
-STYLE = ("QFrame#planetxTime { background: rgba(250, 250, 250, 230); "
-         "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
+# Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
+STYLE = plate_style("planetxTime")
 TRACK_WIDTH = 320  # логических пикселей
 HANDLE = 6.0  # полуширина бегунка
 PLAY_PERIOD = 40  # мс между шагами проигрывания
@@ -58,39 +58,15 @@ LONG_SPAN = 3 * 366 * 86400
 ICON_SIDE = 20  # сторона значка кнопки, логических пикселей
 
 
-def blue_icon(symbol):
-    """Значок кнопки в виде синих значков ⏮ ▶ ⏭: белый знак на синем
-    квадрате. Простые знаки ‹ › ⇆ шрифтом выходили мелкими и чёрными,
-    замечание автора от 7 октября 2026 года."""
-    ratio = 2
-    image = QImage(ICON_SIDE * ratio, ICON_SIDE * ratio,
-                   enum(QImage, "Format", "Format_ARGB32_Premultiplied"))
-    image.fill(QColor(0, 0, 0, 0))
-    painter = QPainter(image)
-    painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-    side = float(ICON_SIDE * ratio)
-    gradient = QLinearGradient(0.0, 0.0, 0.0, side)
-    gradient.setColorAt(0.0, QColor(92, 170, 240))
-    gradient.setColorAt(1.0, QColor(30, 116, 206))
-    painter.setPen(enum(Qt, "PenStyle", "NoPen"))
-    painter.setBrush(gradient)
-    painter.drawRoundedRect(QRectF(1.0, 1.0, side - 2.0, side - 2.0),
-                            7.0, 7.0)
-    font = QFont(painter.font())
-    font.setPixelSize(int(side * 0.72))
-    font.setBold(True)
-    painter.setFont(font)
-    painter.setPen(QColor(255, 255, 255))
-    painter.drawText(QRectF(0.0, -side * 0.06, side, side),
-                     int(enum(Qt, "AlignmentFlag", "AlignCenter")), symbol)
-    painter.end()
-    pixmap = QPixmap.fromImage(image)
-    pixmap.setDevicePixelRatio(ratio)
-    return QIcon(pixmap)
+def blue_icon(symbol, color=None):
+    """Значок кнопки по прежнему символу ‹ › ⇆ ← ✕ из набора PlanetX
+    (ui/style.py). До 17 октября 2026 года - белый знак на синем
+    квадрате. color - цвет линий, для светлых окон тёмный."""
+    return icon(GLYPHS[symbol], color)
 
 
 def icon_button(parent, symbol, tip):
-    """Кнопка с синим значком blue_icon."""
+    """Кнопка со значком blue_icon."""
     button = QToolButton(parent)
     button.setIcon(blue_icon(symbol))
     button.setIconSize(QSize(ICON_SIDE, ICON_SIDE))
@@ -158,7 +134,7 @@ class RangeTrack(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
         mid = self.height() / 2.0
-        painter.setPen(QPen(QColor(120, 120, 120), 2.0))
+        painter.setPen(QPen(MUTED, 2.0))
         painter.drawLine(int(HANDLE), int(mid),
                          int(self.width() - HANDLE), int(mid))
         x0, x1 = self._x(self.lo), self._x(self.hi)
@@ -294,7 +270,7 @@ class TimeBar(QFrame):
                  self.toggle),
                 ("⏭", tr("К концу шкалы"), self.to_end)):
             button = QToolButton(self)
-            button.setText(text)
+            set_glyph(button, text)
             button.setToolTip(tip)
             button.setAutoRaise(True)
             button.clicked.connect(slot)
@@ -302,7 +278,7 @@ class TimeBar(QFrame):
             buttons.append(button)
         self.play = buttons[1]
         self.loop = QToolButton(self)
-        self.loop.setText("🔁")
+        set_glyph(self.loop, "🔁")
         self.loop.setCheckable(True)
         self.loop.setAutoRaise(True)
         self.loop.setToolTip(tr(
@@ -328,7 +304,7 @@ class TimeBar(QFrame):
         self.now.hide()
         layout.addWidget(self.now)
         close = QToolButton(self)
-        close.setText("⏹")
+        set_glyph(close, "⏹")
         close.setToolTip(tr("Закрыть шкалу времени. Закрытая шкала метки "
                             "не скрывает."))
         close.setAutoRaise(True)
@@ -534,11 +510,11 @@ class TimeBar(QFrame):
         self.timer.setInterval(STEP_PERIOD if self.stepper is not None
                                else PLAY_PERIOD)
         self.timer.start()
-        self.play.setText("⏸")
+        set_glyph(self.play, "⏸")
 
     def stop(self):
         self.timer.stop()
-        self.play.setText("▶\ufe0f")
+        set_glyph(self.play, "▶\ufe0f")
 
     def _step(self):
         if self.stepper is not None:

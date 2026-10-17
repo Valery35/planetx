@@ -9,18 +9,13 @@
 новая метка, сохранение вида в «Мои метки», снимок вида в файл
 и в макет, сцена, свойства вида и окно «О модуле».
 """
-import os
-
-from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QSize, pyqtSignal
-from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton
 
 from ..core.planets import MENU
 from ..i18n import tr
 from ..qt_compat import QActionGroup, enum
-
-ROOT = os.path.dirname(os.path.dirname(__file__))
+from .style import icon, plate_style
 
 
 def body_names():
@@ -39,8 +34,8 @@ ICON_SIZE = QSize(20, 20)
 # от 3 октября 2026 года, открыты его решением от 4 октября 2026 года
 # вместе с демо «Тоннели Vegas Loop».
 SUBSURFACE = True
-STYLE = ("QFrame#planetxToolbar { background: rgba(250, 250, 250, 225); "
-         "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
+# Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
+STYLE = plate_style("planetxToolbar")
 DIRTY_STYLE = "QToolButton { background: #ff9f1c; border-radius: 3px; }"
 
 
@@ -76,20 +71,20 @@ class ViewToolbar(QFrame):
         layout.setContentsMargins(3, 3, 3, 3)
         layout.setSpacing(2)
         self.sidebar = self._button(
-            QIcon(os.path.join(ROOT, "sidebar.svg")),
+            icon("sidebar"),
             tr("Скрыть боковую панель"), self.sidebar_clicked)
         # «Обновить» нужна только без автообновления, окно зовёт
         # set_auto. Решение автора от 8 октября 2026 года.
         self.refresh = self._button(
-            QgsApplication.getThemeIcon("/mActionRefresh.svg"),
+            icon("refresh"),
             tr("Обновить глобус"), self.refresh_clicked)
         self.refresh.setVisible(False)
         self.sync = self._button(
-            QIcon(os.path.join(ROOT, "sync.svg")),
+            icon("sync"),
             tr("Синхронизация с окном карты QGIS. Направление - "
                "в свойствах вида."), self.sync_toggled, checkable=True)
         self.identify = self._button(
-            QgsApplication.getThemeIcon("/mActionIdentify.svg"),
+            icon("identify"),
             tr("Определить объекты. Щелчок по глобусу показывает "
                "координаты, высоту или глубину точки, кору под ней, "
                "объекты отмеченных слоёв проекта, метки, очаги "
@@ -97,20 +92,20 @@ class ViewToolbar(QFrame):
             self.identify_toggled,
             checkable=True)
         self.ruler_button = self._button(
-            QgsApplication.getThemeIcon("/mActionMeasure.svg"),
+            icon("ruler"),
             tr("Линейка. Длина, периметр и площадь на эллипсоиде, "
                "сохранение измерения в «Мои метки»."), self.ruler_clicked)
         self.place_button = self._button(
-            QgsApplication.getThemeIcon("/mActionAddMarker.svg"),
+            icon("place"),
             tr("Новая метка, путь или многоугольник в «Мои метки»."),
             self.place_clicked)
         self.save_button = self._button(
-            QgsApplication.getThemeIcon("/mActionNewBookmark.svg"),
+            icon("bookmark"),
             tr("Сохранить вид. Точка взгляда становится меткой в «Моих "
                "метках», перелёт к ней возвращает высоту, азимут "
                "и наклон."), self.save_view_requested)
         self.record = self._button(
-            QgsApplication.getThemeIcon("/mActionRecord.svg"),
+            icon("record"),
             tr("Записать облёт. Движение камеры мышью, клавишами "
                "или перелётами становится туром в «Моих метках», "
                "повторный щелчок останавливает запись. Видео тура "
@@ -119,7 +114,7 @@ class ViewToolbar(QFrame):
         # Шкала времени вида. Кнопка доступна, когда у видимых данных
         # есть время, окно зовёт set_time_available.
         self.time = self._button(
-            QgsApplication.getThemeIcon("/propertyicons/temporal.svg"),
+            icon("time"),
             tr("Шкала времени. Она общая для меток, треков, слоёв проекта, "
                "землетрясений, пожаров, карт NASA, прогноза, Солнца "
                "и спутников. Пока шкала открыта, данные вне её промежутка "
@@ -130,11 +125,11 @@ class ViewToolbar(QFrame):
         # Значка «Карты и слои» нет: витрину открывает её строка
         # раздела «Слои», решение автора от 9 октября 2026 года.
         self._button(
-            QgsApplication.getThemeIcon("/mActionSaveMapAsImage.svg"),
+            icon("camera"),
             tr("Снимок вида в файл PNG или JPEG, в том числе больше окна."),
             self.snapshot_clicked)
         self._button(
-            QgsApplication.getThemeIcon("/mActionNewLayout.svg"),
+            icon("layout"),
             tr("Вид в макет QGIS неизменной картинкой, вставленной "
                "в проект."), self.layout_clicked)
         # Окно «Подземный режим» открывают свойства вида и строка
@@ -142,7 +137,7 @@ class ViewToolbar(QFrame):
         # от 8 октября 2026 года.
         # Сцена: вид целиком в файл и из файла.
         scene = QToolButton(self)
-        scene.setIcon(QgsApplication.getThemeIcon("/mActionFileSave.svg"))
+        scene.setIcon(icon("scene", menu=True))
         scene.setIconSize(ICON_SIZE)
         scene.setAutoRaise(True)
         scene.setToolTip(tr(
@@ -168,7 +163,7 @@ class ViewToolbar(QFrame):
         self.scene = scene
         # Демо: готовые сцены по телам, значок - академическая шапочка.
         demo = QToolButton(self)
-        demo.setIcon(QIcon(os.path.join(ROOT, "demo.svg")))
+        demo.setIcon(icon("demo", menu=True))
         demo.setIconSize(ICON_SIZE)
         demo.setAutoRaise(True)
         demo.setToolTip(tr(
@@ -207,7 +202,7 @@ class ViewToolbar(QFrame):
         self.demo = demo
         # Тело глобуса: Земля, Марс, Луна, и вид звёздного неба.
         body = QToolButton(self)
-        body.setIcon(QIcon(os.path.join(ROOT, "planet.svg")))
+        body.setIcon(icon("body", menu=True))
         body.setIconSize(ICON_SIZE)
         body.setAutoRaise(True)
         body.setToolTip(tr(
@@ -256,13 +251,13 @@ class ViewToolbar(QFrame):
         self.layout().addWidget(body)
         self.body = body
         self.properties = self._button(
-            QgsApplication.getThemeIcon("/mActionOptions.svg"),
+            icon("settings"),
             tr("Свойства вида: основа и источники данных, масштаб "
                "рельефа и глубины морей, язык подписей, связь с картой, "
                "обновление, формат координат, помощник."),
             self.properties_clicked)
         self.fullscreen = self._button(
-            QIcon(os.path.join(ROOT, "fullscreen.svg")),
+            icon("fullscreen"),
             tr("Во весь экран (F11) - вид глобуса для показа. Панели "
                "прячутся, органы навигации, шкала времени и тур "
                "остаются. Esc или F11 возвращает окно."),
@@ -270,7 +265,7 @@ class ViewToolbar(QFrame):
         # Значка помощника на панели нет. Разговор и настройки
         # помощника - группа «Помощник» окна свойств вида, решение
         # автора от 5 октября 2026 года.
-        self._button(QIcon(os.path.join(ROOT, "about.svg")),
+        self._button(icon("info"),
                      tr("О модуле"), self.about_clicked)
         self.adjustSize()
 

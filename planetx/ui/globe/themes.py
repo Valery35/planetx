@@ -95,6 +95,10 @@ class ThemesMixin:
     def _side_changed(self):
         """Окно в панели свойств появилось или ушло: место панели
         берётся у вида или отдаётся ему."""
+        # Пустая панель свойств скрыта: без этого разделитель оставлял
+        # ей ширину её заголовка с крестиком, снимок автора от 17 октября
+        # 2026 года.
+        self.side.setVisible(self.side.dialog is not None)
         sizes = self.splitter.sizes()
         if len(sizes) < 3:
             return

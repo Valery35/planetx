@@ -51,6 +51,12 @@ class TestSticks(unittest.TestCase):
         self.assertAlmostEqual(forward, 2.0 * np_.MOVE_RATE * 1000.0)
         self.assertEqual(right, 0.0)
 
+    def test_move_from_space_is_capped(self):
+        # С 20 000 км полоса около 23 000 км, скорость - от радиуса тела.
+        forward, _ = np_.move_step(0.0, -1.0, 1.0, 2.3e7)
+        self.assertAlmostEqual(forward, np_.MOVE_RATE * np_.MOVE_WIDTH_RADII
+                               * np_.ellipsoid.A)
+
 
 class TestZoom(unittest.TestCase):
 

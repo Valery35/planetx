@@ -173,6 +173,16 @@ class TimeField(QWidget):
         return (begin, self.end.dateTime().toUTC().toString(UTC))
 
 
+def _form(form):
+    """Форма окна свойств: в узкой панели подпись встаёт над полем,
+    иначе окно шире панели и обрезается справа."""
+    form.setRowWrapPolicy(enum(QFormLayout, "RowWrapPolicy",
+                               "WrapLongRows"))
+    form.setFieldGrowthPolicy(enum(QFormLayout, "FieldGrowthPolicy",
+                                   "AllNonFixedFieldsGrow"))
+    return form
+
+
 class PlaceProperties(QDialog):
     """Свойства метки place (myplaces.Place). changed несёт объект
     core.features.Shape с правками для предпросмотра на глобусе."""
@@ -204,7 +214,11 @@ class PlaceProperties(QDialog):
         self.setModal(False)
         self.setWindowTitle(tr("Свойства: {name}",
                                name=place.name or tr("Без названия")))
-        form = QFormLayout()
+        # Поля идут сверху вниз группами, лишняя высота окна уходит
+        # вниз, над кнопками. Прежде одна форма на всю высоту боковой
+        # панели раздвигала строки пустотами, замечание автора от
+        # 17 октября 2026 года.
+        form = self._top_form = _form(QFormLayout())
         self.name = QLineEdit(place.name, self)
         self.name.setToolTip(tr("Название в «Моих метках» и подпись точки "
                                 "на глобусе."))
@@ -216,7 +230,8 @@ class PlaceProperties(QDialog):
             "в KML."))
         self.description.setMaximumHeight(90)
         form.addRow(tr("Описание"), self.description)
-        self.color = self.width = self.fill = self.icon = None
+        self.color = self.line_width = self.fill = self.icon = None
+        look_box, form = self._group(tr("Оформление"))
         if place.kind == "point":
             self.color = QgsColorButton(self)
             self.color.setAllowOpacity(True)
@@ -244,15 +259,15 @@ class PlaceProperties(QDialog):
             self.color.setToolTip(tr("Цвет линии или контура."))
             self.color.colorChanged.connect(self._changed)
             form.addRow(tr("Цвет"), self.color)
-            self.width = QDoubleSpinBox(self)
-            self.width.setRange(1.0, 10.0)
-            self.width.setSingleStep(0.5)
-            self.width.setValue(float(shape.width))
-            self.width.setToolTip(tr(
+            self.line_width = QDoubleSpinBox(self)
+            self.line_width.setRange(1.0, 10.0)
+            self.line_width.setSingleStep(0.5)
+            self.line_width.setValue(float(shape.width))
+            self.line_width.setToolTip(tr(
                 "Толщина линии и контура в пикселях экрана. От масштаба "
                 "не зависит."))
-            self.width.valueChanged.connect(self._changed)
-            form.addRow(tr("Толщина"), self.width)
+            self.line_width.valueChanged.connect(self._changed)
+            form.addRow(tr("Толщина"), self.line_width)
         self.flow = None
         if place.kind == "line":
             # Поток грузов по пути, просьба автора от 15 октября 2026
@@ -274,20 +289,21 @@ class PlaceProperties(QDialog):
                 "здесь же. Заливкой красится и стена до земли."))
             self.fill.colorChanged.connect(self._changed)
             form.addRow(tr("Заливка"), self.fill)
-        self.height = QDoubleSpinBox(self)
-        self.height.setRange(0.0, MAX_HEIGHT)
-        self.height.setDecimals(1)
-        self.height.setSuffix(tr(" м"))
-        self.height.setValue(float(shape.height or 0.0))
-        self.height.setToolTip(tr(
+        height_box, form = self._group(tr("Высота"))
+        self.lift = QDoubleSpinBox(self)
+        self.lift.setRange(0.0, MAX_HEIGHT)
+        self.lift.setDecimals(1)
+        self.lift.setSuffix(tr(" м"))
+        self.lift.setValue(float(shape.height or 0.0))
+        self.lift.setToolTip(tr(
             "Подъём над рельефом. "
             "Ноль - объект лежит на земле."))
-        self.height.valueChanged.connect(self._height_typed)
-        form.addRow(tr("Высота над землёй"), self.height)
+        self.lift.valueChanged.connect(self._height_typed)
+        form.addRow(tr("Высота над землёй"), self.lift)
         self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
         self.slider.setRange(0, SLIDER_STEPS)
         self.slider.setValue(int(round(
-            height_share(self.height.value()) * SLIDER_STEPS)))
+            height_share(self.lift.value()) * SLIDER_STEPS)))
         self.slider.setToolTip(tr(
             "Высота ползунком. Шкала логарифмическая, "
             "у земли шаг - метры, выше - сотни метров и километры."))
@@ -295,7 +311,7 @@ class PlaceProperties(QDialog):
         slider_row = QWidget(self)
         row = QHBoxLayout(slider_row)
         row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(QLabel(tr("Поверхность земли"), slider_row))
+        row.addWidget(QLabel(tr("Земля"), slider_row))
         row.addWidget(self.slider, 1)
         row.addWidget(QLabel(tr("Космос"), slider_row))
         form.addRow("", slider_row)
@@ -308,6 +324,7 @@ class PlaceProperties(QDialog):
         form.addRow("", self.extrude)
         if self.tour_keys is not None:
             form.addRow(tr("Высота облёта"), self._factor_row())
+        time_box, form = self._group(tr("Время и видимость"))
         self.time = TimeField(place.time, self)
         self.time.setToolTip(tr(
             "Собственное время метки, как TimeStamp и TimeSpan "
@@ -324,9 +341,17 @@ class PlaceProperties(QDialog):
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
-        layout.addWidget(self.look)
+        layout.addLayout(self._top_form)
+        for box in (look_box, height_box, time_box, self.look):
+            layout.addWidget(box)
+        layout.addStretch(1)
         layout.addWidget(buttons)
+
+    def _group(self, title):
+        """Группа окна с формой: (группа, форма)."""
+        box = QGroupBox(title, self)
+        form = _form(QFormLayout(box))
+        return box, form
 
     def _factor_row(self):
         """Ползунок высоты облёта: множитель расстояния камеры по
@@ -378,7 +403,7 @@ class PlaceProperties(QDialog):
             "Откуда смотрит камера, когда летит к метке или стоит на ней "
             "в туре. Без своего вида камера "
             "берёт метку в кадр целиком."))
-        form = QFormLayout(group)
+        form = _form(QFormLayout(group))
         view = view or self._default_view()
         self.look_fields = []
         for text, low, high, decimals, suffix, value, tip in (
@@ -520,9 +545,9 @@ class PlaceProperties(QDialog):
         # Ниже 100 м - метры, выше - десятки метров, чтобы число было
         # круглым.
         height = round(height) if height < 100.0 else round(height, -1)
-        self.height.blockSignals(True)
-        self.height.setValue(height)
-        self.height.blockSignals(False)
+        self.lift.blockSignals(True)
+        self.lift.setValue(height)
+        self.lift.blockSignals(False)
         self._changed()
 
     def _changed(self, *args):
@@ -549,12 +574,12 @@ class PlaceProperties(QDialog):
             points = [(s[1], s[2]) for s in samples]
         values = {"points": points,
                   "name": self.name.text().strip(),
-                  "height": float(self.height.value()),
+                  "height": float(self.lift.value()),
                   "extrude": self.extrude.isChecked()}
         if self.color is not None:
             values["color"] = _rgba(self.color.color())
-        if self.width is not None:
-            values["width"] = float(self.width.value())
+        if self.line_width is not None:
+            values["width"] = float(self.line_width.value())
         if self.fill is not None:
             values["fill"] = _rgba(self.fill.color())
         if self.icon is not None:
@@ -567,7 +592,7 @@ class PlaceProperties(QDialog):
         """Поля файла меток для MyPlaces.update."""
         out = {"name": self.name.text().strip(),
                "description": self.description.toPlainText().strip(),
-               "height": float(self.height.value()),
+               "height": float(self.lift.value()),
                "extrude": int(self.extrude.isChecked()),
                "view": lookat.text(self.view()),
                "region": region.text(regionfield.value(
@@ -584,8 +609,8 @@ class PlaceProperties(QDialog):
                    else self.stop_pause.value(), self.stop_speed.value()))}
         if self.color is not None:
             out["color"] = _color_text(_rgba(self.color.color()))
-        if self.width is not None:
-            out["width"] = float(self.width.value())
+        if self.line_width is not None:
+            out["width"] = float(self.line_width.value())
         if self.icon is not None:
             out["icon"] = self.icon.currentData()
         if self.fill is not None:

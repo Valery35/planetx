@@ -39,6 +39,9 @@ RING = (CX, 42.0)
 R_OUT, R_IN = 38.0, 26.0
 R_NORTH = 32.0  # радиус буквы N на кольце
 LOOK_R = 18.0
+# Точка в середине кольца - «вернуть в центр»: отвесный взгляд без крена,
+# как клавиша U. Просьба пользователя и автора от 17 октября 2026 года.
+CENTER_R = 5.0
 MOVE = (CX, 120.0)
 MOVE_R = 24.0
 PLUS = (CX, 166.0)
@@ -62,7 +65,9 @@ class NavPad(QWidget):
         self.setMouseTracking(True)
         self.setToolTip(tr(
             "Кольцо поворачивает вид, буква N ставит север вверху. "
-            "Джойстик в кольце поворачивает взгляд, нижний сдвигает вид. "
+            "Джойстик в кольце поворачивает взгляд, точка в его середине "
+            "возвращает отвесный взгляд без наклона и крена. Нижний "
+            "джойстик сдвигает вид. "
             "Ползунок задаёт высоту, плюс и минус приближают и отдаляют."))
         self.part = None  # что нажато: ring, north, look, move, plus...
         self.stick = (0.0, 0.0)
@@ -144,6 +149,8 @@ class NavPad(QWidget):
             return "north"
         if R_IN <= d <= R_OUT:
             return "ring"
+        if d <= CENTER_R:
+            return "center"
         if d < R_IN:
             return "look"
         if _dist(x, y, MOVE) <= MOVE_R:
@@ -199,6 +206,12 @@ class NavPad(QWidget):
             pose = self.view.navigator.pose
             self.view.fly_pose(pose.lat, pose.lon, pose.distance, 0.0,
                                pose.tilt)
+        elif self.part == "center" and self._hit(*self._pos(event)) \
+                == "center":
+            # Перелёт строит позу без крена, сдвиг вида с Ctrl снимается.
+            pose = self.view.navigator.pose
+            self.view.fly_pose(pose.lat, pose.lon, pose.distance,
+                               pose.heading, 0.0)
         self.part = None
         self.stick = (0.0, 0.0)
         self.timer.stop()
@@ -268,6 +281,9 @@ class NavPad(QWidget):
             p.setBrush(fill)
             self._stick(p, RING, LOOK_R - 2, line, accent,
                         self.part == "look")
+            if self.part == "center":
+                p.setBrush(accent)
+                p.drawEllipse(QPointF(*RING), 4.0, 4.0)
             p.setPen(QPen(line, 1.2))
             p.setBrush(fill)
             self._circle(p, MOVE, MOVE_R - 0.5)

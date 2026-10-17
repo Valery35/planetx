@@ -17,6 +17,7 @@ from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
 
 from ..i18n import tr
 from ..qt_compat import enum
+from .style import plate_style
 from .timebar import icon_button
 
 GRIP = 28  # ширина полосы, за которую тянется шторка, логических пикселей
@@ -24,8 +25,8 @@ KNOB = 11.0  # радиус кружка посередине
 EDGE = 0.02  # шторка не подходит к краю вида ближе этой доли ширины
 GAP = 10  # от линии до бирки
 RAISE = 46  # бирки выше середины вида
-STYLE = ("QFrame#planetxSwipe { background: rgba(250, 250, 250, 230); "
-         "border: 1px solid rgba(0, 0, 0, 60); border-radius: 4px; }")
+# Плашка - общий вид элементов поверх глобуса, ui/style.py.
+STYLE = plate_style("planetxSwipe")
 
 
 class SwipeBar(QWidget):
@@ -64,8 +65,9 @@ class SwipeBar(QWidget):
         row.addWidget(close)
         self.right = QLabel(parent)
         self.right.setObjectName("planetxSwipe")
-        self.right.setStyleSheet(STYLE.replace("QFrame", "QLabel")
-                                 + " QLabel { padding: 3px 6px; }")
+        self.right.setStyleSheet(plate_style("planetxSwipe", "QLabel")
+                                 + " QLabel#planetxSwipe { color: "
+                                 "rgb(236, 239, 243); padding: 3px 6px; }")
         self._drag = False
         parent.installEventFilter(self)
         self.set_shown(False)

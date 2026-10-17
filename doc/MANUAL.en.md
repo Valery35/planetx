@@ -181,12 +181,14 @@ The navigation controls stand in the top right corner of the view.
 | Compass ring | Dragging turns the view. The letter N shows north |
 | Letter N | A click puts north up |
 | Stick inside the ring | While the button is held, the view looks toward the press |
+| Dot in the middle of the ring | A click returns the vertical view without tilt and roll, like the U key. The heading and height stay |
 | Lower stick | While the button is held, the view moves toward the press |
 | Plus and minus | While the button is held, the camera zooms in or out smoothly |
 | Slider | The thumb stands at the camera height, dragging sets a new one |
 
-The speed of the sticks grows with the distance from the middle. The
-controls are always shown. While the cursor is far away, they stand
+The speed of the sticks grows with the distance from the middle. From
+space the lower stick moves the view no faster than the Earth radius
+per second. The controls are always shown. While the cursor is far away, they stand
 as a faint outline and do not cover the view. When the cursor comes
 near the corner of the view, they are drawn in full.
 

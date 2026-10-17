@@ -475,7 +475,8 @@ class ActionsMixin:
             if state["maximized"]:
                 self.showMaximized()
             self.panel.setVisible(state["panel"])
-            self.side.show()
+            # Пустая панель свойств остаётся скрытой.
+            self.side.setVisible(self.side.dialog is not None)
             self.splitter.setSizes(state["sizes"])
             self.toolbar.show()
             self.spinner.set_state(self.view.load_missing,

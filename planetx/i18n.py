@@ -734,6 +734,10 @@ EN = {
         "Kind of slip not given",
     "Активные разломы GEM":
         "GEM active faults",
+    "Оформление":
+        "Appearance",
+    "Время и видимость":
+        "Time and visibility",
     "Активные разломы, около 11 МБ":
         "Active faults, about 11 MB",
     "Щелчок по линии - сведения":
@@ -2538,7 +2542,6 @@ EN = {
         "Height by slider. The scale is logarithmic, "
         "near the ground the step is metres, higher up hundreds of metres "
         "and kilometres.",
-    "Поверхность земли": "Ground",
     "Космос": "Space",
     "Требования": "Requirements",
     "Космоснимки, рельеф с отмывкой склонов и атмосфера, подложки "
@@ -2587,11 +2590,14 @@ EN = {
     "Модуль Python PyOpenGL. В сборках QGIS для Windows он есть.":
         "The Python module PyOpenGL. QGIS builds for Windows include it.",
     "Кольцо поворачивает вид, буква N ставит север вверху. "
-    "Джойстик в кольце поворачивает взгляд, нижний сдвигает вид. "
+    "Джойстик в кольце поворачивает взгляд, точка в его середине "
+    "возвращает отвесный взгляд без наклона и крена. Нижний "
+    "джойстик сдвигает вид. "
     "Ползунок задаёт высоту, плюс и минус приближают и отдаляют.":
         "The ring turns the view, the letter N puts north up. The stick "
-        "inside the ring looks around, the lower one moves the view. The "
-        "slider sets the height, plus and minus zoom in and out.",
+        "inside the ring looks around, the dot in its middle returns the "
+        "vertical view without tilt and roll. The lower stick moves the "
+        "view. The slider sets the height, plus and minus zoom in and out.",
     "с. ш.": "N",
     "ю. ш.": "S",
     "в. д.": "E",
