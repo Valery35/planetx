@@ -20,7 +20,7 @@ from qgis.PyQt.QtGui import QImage, QSurfaceFormat
 from qgis.PyQt.QtWidgets import QApplication
 
 from .. import journal
-from ..core import cutaway, lod, skydata
+from ..core import appear, cutaway, lod, skydata
 from ..core.subsurface import backdrop_box
 from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
@@ -447,6 +447,10 @@ class GlobeView(QOpenGLWidget):
         # ожидающие загрузки картинки и кадр последнего использования.
         self.overlay = None
         self.overlays = {}
+        # Проявление пришедших картинок наложения, core/appear.py, как
+        # у слоёв карт (render/gibs.py).
+        self.overlay_appear = appear.Appear()
+        self.overlay_levels = []
         self.overlay_pending = {}
         self.overlay_used = {}
         # Тайлы с пустой картинкой наложения: готовы, рисуются прозрачной
@@ -691,6 +695,12 @@ class GlobeView(QOpenGLWidget):
         self.places.add(key, places)
         self.last_arrival = time.monotonic()
         self.update()
+
+    def _appear_on(self):
+        """Проявлять ли пришедшие картинки слоёв карт и наложения -
+        по тем же условиям, что тайлы подложки (_tile_fades)."""
+        return (self.tile_fade and self.shot is None
+                and not self.show_holes)
 
     def _tile_fades(self, draw):
         """Сдвиг уровня мипмапа подложки для тайлов draw - проявление
@@ -1499,6 +1509,13 @@ class GlobeView(QOpenGLWidget):
                    GL.glGetUniformLocation(self.program, sampler),
                    GL.glGetUniformLocation(self.program, uv))
             for name, _, unit, sampler, uv in GIBS_LAYERS}
+        # Место проявления картинок слоя в шейдере (core/appear.py), -1 -
+        # у слоя его нет (огни, маска выреза).
+        self.gibs_fx = {
+            name: GL.glGetUniformLocation(self.program, sampler + "_fx")
+            for name, _, unit, sampler, uv in GIBS_LAYERS}
+        self.u_overlay_fx = GL.glGetUniformLocation(self.program,
+                                                    "u_overlay_fx")
         self.hole_program = gpu.build_program(HOLE_VERTEX, HOLE_FRAGMENT)
         self.hole_uniforms = uniforms(self.hole_program, (
             "u_rotation", "u_tan", "u_viewport", "u_eye", "u_axes", "u_qc"))
@@ -1698,6 +1715,8 @@ class GlobeView(QOpenGLWidget):
         """
         wanted = {}
         items = []
+        # Уровень картинки каждого тайла для проявления, core/appear.py.
+        levels = self.overlay_levels = []
         keep = sel.keep
         stale_set = self.overlay_stale
         for key in sel.draw:
@@ -1712,8 +1731,10 @@ class GlobeView(QOpenGLWidget):
                 found = overlay_window(key, self._overlay_ready)
             if found is None or found[0] in self.overlay_empty:
                 items.append((self.clear_texture, gpu.NO_OVERLAY))
+                levels.append(None)
             else:
                 items.append((self.overlays[found[0]], found[1]))
+                levels.append(found[0][0])
                 self.overlay_used[found[0]] = self.frame
             stale = found is not None and found[0] in self.overlay_stale
             if found is not None and found[0] == key and not stale:
@@ -2187,8 +2208,17 @@ class GlobeView(QOpenGLWidget):
         else:
             self._overlay_missing = 0
         layers = []
+        smooth = self._appear_on()
         if overlays is not None:
-            layers.append((GL.GL_TEXTURE1, self.u_overlay_uv, overlays))
+            fx = self.overlay_appear.step(sel.draw, self.overlay_levels,
+                                          time.monotonic(), smooth)
+            caps = len(self.caps)
+            overlays = overlays[:caps] + [
+                pair + (f,) for pair, f in zip(overlays[caps:], fx)]
+            layers.append((GL.GL_TEXTURE1, self.u_overlay_uv, overlays, 0.0,
+                           self.u_overlay_fx))
+            if self.overlay_appear.busy():
+                self.update()
         clear = [(self.clear_texture, gpu.NO_OVERLAY)] * len(self.caps)
         near = None
         if any(self.gibs[name].shown for name in NEAR_ONLY):
@@ -2204,7 +2234,10 @@ class GlobeView(QOpenGLWidget):
                 unit, _, u_uv = self.gibs_slots[name]
                 layers.append((unit, u_uv, clear + layer.items(
                     sel.draw, self.clear_texture, self.frame,
-                    near if name in NEAR_ONLY else None), layer.fade))
+                    near if name in NEAR_ONLY else None, smooth),
+                    layer.fade, self.gibs_fx[name]))
+                if layer.appear.busy():
+                    self.update()
             else:
                 layer.missing = 0
         if alpha < 1.0:
@@ -2579,10 +2612,12 @@ class GlobeView(QOpenGLWidget):
 
     def _clear_gibs(self):
         """Прозрачные слои GIBS на своих блоках, окна без сдвига."""
-        for unit, _, u_uv in self.gibs_slots.values():
+        for name, (unit, _, u_uv) in self.gibs_slots.items():
             gpu.gl.glActiveTexture(unit)
             gpu.gl.glBindTexture(GL.GL_TEXTURE_2D, self.clear_texture)
             gpu.gl.glUniform4f(u_uv, *gpu.NO_OVERLAY, 0.0)
+            if self.gibs_fx[name] != -1:
+                gpu.gl.glUniform4f(self.gibs_fx[name], 0.0, 0.0, 0.0, 0.0)
         gpu.gl.glActiveTexture(GL.GL_TEXTURE0)
 
     def _clear_overlay(self):
@@ -2591,6 +2626,8 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glBindTexture(GL.GL_TEXTURE_2D, self.clear_texture)
         gpu.gl.glActiveTexture(GL.GL_TEXTURE0)
         gpu.gl.glUniform4f(self.u_overlay_uv, *gpu.NO_OVERLAY, 0.0)
+        if self.u_overlay_fx != -1:
+            gpu.gl.glUniform4f(self.u_overlay_fx, 0.0, 0.0, 0.0, 0.0)
 
     def _count_holes(self):
         """Пиксели Земли, не закрытые ни одним тайлом, в этом кадре.

@@ -64,6 +64,10 @@ QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm", "cables")
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
+# Строки слоёв остановки тура и вида метки проявляются и гаснут за
+# столько секунд, шаг таймера - мс. Выбор помощника, утверждает автор.
+LAYER_FADE = 0.5
+LAYER_FADE_TICK = 30
 OPACITY_PAUSE = 300  # мс, наложение пересобирается после ползунка
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (

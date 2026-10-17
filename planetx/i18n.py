@@ -4768,6 +4768,41 @@ EN = {
         "grassland, cropland, built-up, bare land, snow and ice, water, "
         "wetland, mangroves, moss and lichen. A click in Identify features "
         "mode shows the class.",
+    # Карточка метки и «Объясни это», ui/placecard.py.
+    "У метки нет описания. Его пишут в окне «Свойства…» метки.":
+        "The placemark has no description. It is written in the "
+        "placemark Properties… window.",
+    "Объясни это": "Explain this",
+    "Спросить помощника, что это за объект и чем интересно место. "
+    "Помощнику уходят название, вид, координаты и описание этой метки. "
+    "Ответ появится здесь и под строкой «Поиск».":
+        "Ask the assistant what this object is and why the place is of "
+        "interest. The assistant receives the name, kind, coordinates and "
+        "description of this placemark. The answer appears here and under "
+        "the Search box.",
+    "Помощник не подключён. Ключ API вводят в окне «Настройки "
+    "помощника».":
+        "The assistant is not connected. The API key is entered in the "
+        "Assistant settings window.",
+    "Объясни, что это за объект и чем интересно это место. "
+    "{kind} «{name}», точка {lat:.5f}, {lon:.5f}.":
+        "Explain what this object is and why this place is of interest. "
+        "{kind} \"{name}\", point {lat:.5f}, {lon:.5f}.",
+    "Описание метки - {text}": "Placemark description - {text}",
+    # Цвета окна «Разрез модели», ui/subsection.py.
+    "Между пластами": "Between beds",
+    "Цвет породы между пластами…": "Colour of the rock between beds…",
+    "Цвет пласта «{name}»…": "Colour of the bed \"{name}\"…",
+    "Цвет линии «{name}»…": "Colour of the line \"{name}\"…",
+    "Цвета разреза по умолчанию": "Default section colours",
+    "Цвет на разрезе": "Colour on the section",
+    "Правая кнопка по пласту, породе между пластами или линии кровли "
+    "задаёт их цвет. Цвета запоминаются в проекте QGIS.":
+        "The right button on a bed, on the rock between beds or on a top "
+        "line sets its colour. The colours are kept in the QGIS project.",
+    "Помощник занят прежним вопросом или не подключён.":
+        "The assistant is busy with the previous question or is not "
+        "connected.",
 }
 
 _language = None

@@ -8,6 +8,7 @@ import time
 
 import numpy as np
 from qgis.core import QgsProject, QgsRectangle
+from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.utils import iface
 
@@ -27,6 +28,8 @@ from ..identify import Group, IdentifyDialog, identify, point_text
 from ..assistant import (AssistantDialog, current_provider, ready,
                          search_enabled)
 from ..legend import deposit_group_names, mine_kind_names
+from ..myplaces import Place
+from ..placecard import PlaceCard, explain_question
 from ..tilesource import save_connection
 from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
                    all_sources, distance_text, parcel_labels)
@@ -74,9 +77,82 @@ class IdentifyMixin:
             if found is not None:
                 tool.add(found[0], found[1])
             return
-        if not self.identifying and not self._point_under(px, py):
-            return
+        if not self.identifying:
+            place = self._place_under(px, py)
+            if place is not None:
+                self.open_place_card(place)
+                return
+            if not self._point_under(px, py):
+                return
         self.identify_here(px, py)
+
+    def _click_point(self, px, py):
+        """Точка поверхности под пикселем кадра и допуск опроса в метрах:
+        (широта, долгота, допуск) или None."""
+        camera = self.view.camera
+        point = ground_under(camera, px, py,
+                             self.view.navigator.pose.terrain)
+        if point is None:
+            return None
+        lat, lon, _ = (float(v) for v in ecef_to_geodetic(point))
+        metres = float(((point - camera.eye) ** 2).sum()) ** 0.5 \
+            / focal(camera)
+        return lat, lon, IDENTIFY_PIXELS * self.view.devicePixelRatioF() \
+            * metres
+
+    def _place_under(self, px, py):
+        """Видимая метка «Моих меток» под пикселем кадра или None."""
+        found = self._click_point(px, py)
+        if found is None:
+            return None
+        places = self._places_at(*found)
+        return places[0] if places else None
+
+    def open_place_card(self, place):
+        """Карточка метки в панели справа (ui/placecard.py). Окно
+        свойств в панели главнее - щелчок мимо его вершин не должен
+        отменять правку."""
+        held = self.side.dialog
+        if held is not None and not isinstance(held, PlaceCard):
+            return
+        card = PlaceCard(place, ready(current_provider()), self)
+        card.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        card.explain.connect(self.explain_place)
+        card.fly.connect(lambda key: self._card_place(key,
+                                                      self.fly_to_place))
+        card.properties.connect(lambda key: self._card_place(
+            key, self._open_place_properties))
+        self._place_card = card
+        card.finished.connect(lambda *a, c=card: self._card_closed(c))
+        self.side.host(card)
+
+    def _card_place(self, key, action):
+        place = self.myplaces.find(key)
+        if isinstance(place, Place):
+            action(place)
+
+    def _card_closed(self, card):
+        if getattr(self, "_place_card", None) is card:
+            self._place_card = None
+
+    def explain_place(self, key):
+        """«Объясни это» карточки: вопрос о метке помощнику. Ответ -
+        под строкой «Поиск» и в карточке."""
+        place = self.myplaces.find(key)
+        if not isinstance(place, Place):
+            return
+        kinds = {"point": tr("Метка"), "line": tr("Путь"),
+                 "polygon": tr("Многоугольник")}
+        question = explain_question(place, kinds.get(place.shape.kind,
+                                                     tr("Метка")))
+        card = getattr(self, "_place_card", None)
+        if self._assistant().ask(question):
+            self._explaining = card
+            if card is not None:
+                card.show_answer(tr("Помощник думает…"))
+        elif card is not None:
+            card.show_answer(tr("Помощник занят прежним вопросом или не "
+                                "подключён."))
 
     def _point_under(self, px, py):
         """Есть ли под курсором точка месторождения, очага землетрясения,
@@ -363,6 +439,13 @@ class IdentifyMixin:
         # только рассказ модели о документе, меток на глобусе не было.
         dialog = self.assistant_dialog
         waiting = dialog is not None and dialog.pending is not None
+        card = getattr(self, "_explaining", None)
+        if card is not None and who in ("assistant", "note"):
+            # Ответ на «Объясни это» - и в карточку метки, если она ещё
+            # открыта.
+            self._explaining = None
+            if card is getattr(self, "_place_card", None):
+                card.show_answer(text)
         if waiting:
             text = dialog.proposal_text.text() + "\n" + text
         if who == "assistant" or who == "note":
@@ -638,18 +721,23 @@ class IdentifyMixin:
             out.append(tr("Выделенных меток нет."))
         return "\n".join(out)
 
-    def _identify_places(self, lat, lon, tolerance):
-        """Видимые «Мои метки» под щелчком."""
+    def _places_at(self, lat, lon, tolerance):
+        """Видимые «Мои метки» под щелчком, ближние первыми."""
         places = [p for p in self.myplaces.places
                   if p.visible and self._time_ok(p) and not p.tour
-                  and p.body == self.planet.key and p.shape.points]
+                  and p.body == self.planet.key and p.shape.points
+                  and p.key not in self._region_hidden]
         hits = pick.picked([(p.shape.kind, p.shape.points) for p in places],
                            lat, lon, tolerance)
+        return [places[n] for n in hits]
+
+    def _identify_places(self, lat, lon, tolerance):
+        """Видимые «Мои метки» под щелчком."""
+        hits = self._places_at(lat, lon, tolerance)
         kinds = {"point": tr("Метка"), "line": tr("Путь"),
                  "polygon": tr("Многоугольник")}
         features = []
-        for n in hits:
-            p = places[n]
+        for p in hits:
             shape = p.shape
             values = [(tr("Тип"), kinds.get(shape.kind, shape.kind))]
             if shape.kind == "point":

@@ -24,16 +24,19 @@ from collections import namedtuple
 import numpy as np
 from qgis.PyQt.QtCore import QPointF, QRectF, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QColor, QPainter, QPainterPath, QPen
-from qgis.PyQt.QtWidgets import (QDialog, QDoubleSpinBox, QFileDialog,
-                                 QFormLayout, QHBoxLayout, QLabel,
-                                 QListWidget, QListWidgetItem, QPushButton,
-                                 QSplitter, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QColorDialog, QDialog, QDoubleSpinBox,
+                                 QFileDialog, QFormLayout, QHBoxLayout,
+                                 QLabel, QListWidget, QListWidgetItem,
+                                 QMenu, QPushButton, QSplitter, QVBoxLayout,
+                                 QWidget)
 
 from ..core import drillholes, ellipsoid, section
 from ..core import subsurface as core
 from ..i18n import tr
 from ..qt_compat import enum
 from .elevation import axis_text, distance_text, nice_step
+from .project import read_section_colors, write_section_colors
+from .subsurface import HOST_COLOR
 
 GRID = QColor(128, 128, 128, 90)
 MARGIN = (60, 12, 14, 30)  # слева, сверху, справа, снизу, пиксели
@@ -52,14 +55,18 @@ UNCHECKED = enum(Qt, "CheckState", "Unchecked")
 HOLES = "holes"  # данные строки «Скважины» списка слоёв
 HOVER_BEDS = 4  # кровель в подписи под курсором
 LEGEND_ROWS = 12  # строк подписи цветов, не больше
+LINE_WIDTH = 1.6  # пикселей, линии кровель и подошв
+LINE_PICK = 6.0  # пикселей, линия под курсором для меню цвета
 
 ModelSection = namedtuple(
     "ModelSection",
-    "distance lats lons ground beds bottom holes tunnels diameters fences",
-    defaults=((),))
+    "distance lats lons ground beds bottom holes tunnels diameters fences "
+    "owners lines", defaults=((), (), ()))
 ModelSection.__doc__ = """Разрез модели. distance - м от начала линии,
 lats, lons - точки линии, ground - отметки рельефа, beds - [(код, цвет,
-верх, низ)] отметки пластов по точкам, bottom - отметка низа модели,
+верх, низ)] отметки промежутков по точкам, owners - ключ своего цвета
+каждого промежутка (код пласта или core.HOST - порода между пластами),
+lines - [(код, цвет, отметки)] кровель и подошв, bottom - отметка низа модели,
 holes - [(название, [(расстояния, отметки, цвет)])] куски стволов по
 интервалам, tunnels - [(название, расстояния, отметки, цвет)],
 diameters - диаметр тоннеля по названию, м, fences - [(слой,
@@ -103,8 +110,13 @@ def build(model, ground, points, band=BAND, count=SAMPLES):
     stack = core.stack(surfaces)
     top_code = model.beds[0] if model.beds else ""
     codes = [top_code] + [h.code for h in model.horizons]
-    beds = [(code, model.color(code), stack[k], stack[k + 1])
-            for k, code in enumerate(codes)]
+    fills = core.section_fills(codes, model.color, HOST_COLOR)
+    beds = [(code, color, stack[k], stack[k + 1])
+            for k, (code, (_, color)) in enumerate(zip(codes, fills))]
+    owners = [key for key, _ in fills]
+    # Линии кровель и подошв - по поверхностям под рельефом.
+    lines = [(code, core.line_color(model.color(code)), stack[k])
+             for k, code in enumerate(codes) if k > 0]
     holes = []
     for hole, lat0, lon0 in model.holes:
         nodes = hole.axis
@@ -138,7 +150,7 @@ def build(model, ground, points, band=BAND, count=SAMPLES):
                 fences.append((shape.layer, found[0], found[1], shape.color,
                                shape.kind))
     return ModelSection(distance, lats, lons, g, beds, bottom, holes,
-                        tunnels, diameters, fences)
+                        tunnels, diameters, fences, owners, lines)
 
 
 def _to_latlon(lat0, lon0, east, north):
@@ -158,11 +170,15 @@ class ModelChart(QWidget):
     курсором или -1."""
 
     hovered = pyqtSignal(int)
+    # Свои цвета изменились: {ключ: {"fill" или "line": (r, g, b)}}.
+    colors_changed = pyqtSignal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.section = None
         self.hover = None
+        # Свои цвета пользователя: ключ - код пласта или core.HOST.
+        self.own = {}
         self.setMouseTracking(True)
         self.setMinimumSize(480, 260)
 
@@ -170,6 +186,96 @@ class ModelChart(QWidget):
         self.section = value
         self.hover = None
         self.update()
+
+    def owner(self, k):
+        """Ключ своего цвета промежутка k."""
+        owners = self.section.owners
+        return owners[k] if k < len(owners) else self.section.beds[k][0]
+
+    def fill_of(self, k):
+        """Заливка промежутка k - своя или по умолчанию."""
+        own = self.own.get(self.owner(k), {}).get("fill")
+        return own or self.section.beds[k][1]
+
+    def line_of(self, code):
+        """Цвет линии кровли или подошвы code - свой или по умолчанию."""
+        own = self.own.get(code, {}).get("line")
+        if own:
+            return own
+        for name, color, _ in self.section.lines:
+            if name == code:
+                return color
+        return (40, 40, 40)
+
+    def _at(self, pos):
+        """Промежуток и ближайшая поверхность под точкой графика:
+        (номер промежутка или None, код линии или None)."""
+        s = self.section
+        rect, x1, high, low, _ = self._mapper()
+        share = (pos.x() - rect.left()) / rect.width()
+        if not 0.0 <= share <= 1.0 or not len(s.beds):
+            return None, None
+        i = int(np.clip(np.searchsorted(s.distance, share * x1), 0,
+                        len(s.distance) - 1))
+        z = high - (pos.y() - rect.top()) / rect.height() * (high - low)
+        found = None
+        for k, (_, _, top, bottom) in enumerate(s.beds):
+            if np.isfinite(top[i]) and bottom[i] <= z <= top[i] \
+                    and top[i] > bottom[i]:
+                found = k
+        near = None
+        best = LINE_PICK / rect.height() * (high - low)
+        for code, _, zs in s.lines:
+            if np.isfinite(zs[i]) and abs(zs[i] - z) <= best:
+                near, best = code, abs(zs[i] - z)
+        return found, near
+
+    def contextMenuEvent(self, event):
+        """Правая кнопка: цвет пласта, породы между пластами или линии
+        под курсором, сброс своих цветов. Просьба автора от 17 октября
+        2026 года - цвета пластов и промежутков между ними задаются."""
+        if self.section is None:
+            return
+        k, line = self._at(event.pos())
+        menu = QMenu(self)
+        if k is not None:
+            key = self.owner(k)
+            if key == core.HOST:
+                text = tr("Цвет породы между пластами…")
+            else:
+                text = tr("Цвет пласта «{name}»…",
+                          name=core.bed_key(key)[0] or key)
+            menu.addAction(text).triggered.connect(
+                lambda _=False, key=key, k=k: self._pick(
+                    key, "fill", self.fill_of(k)))
+        if line is not None:
+            menu.addAction(tr("Цвет линии «{name}»…", name=line)) \
+                .triggered.connect(lambda _=False, line=line: self._pick(
+                    line, "line", self.line_of(line)))
+        if self.own:
+            menu.addSeparator()
+            menu.addAction(tr("Цвета разреза по умолчанию")) \
+                .triggered.connect(self.reset_colors)
+        if not menu.isEmpty():
+            menu.exec(event.globalPos())
+
+    def _pick(self, key, part, current):
+        color = QColorDialog.getColor(QColor(*current[:3]), self,
+                                      tr("Цвет на разрезе"))
+        if color.isValid():
+            self.set_color(key, part, (color.red(), color.green(),
+                                       color.blue()))
+
+    def set_color(self, key, part, rgb):
+        """Свой цвет part ("fill" или "line") для ключа key."""
+        self.own.setdefault(key, {})[part] = tuple(int(c) for c in rgb)
+        self.update()
+        self.colors_changed.emit(self.own)
+
+    def reset_colors(self):
+        self.own = {}
+        self.update()
+        self.colors_changed.emit(self.own)
 
     def _plot(self):
         left, top, right, bottom = MARGIN
@@ -207,7 +313,8 @@ class ModelChart(QWidget):
             painter.drawText(self._plot(), CENTER, tr("Нет данных"))
             return
         rect, x1, high, low, to_screen = self._mapper()
-        for code, color, top, bottom in s.beds:
+        for k, (code, color, top, bottom) in enumerate(s.beds):
+            color = self.fill_of(k)
             good = np.isfinite(top) & np.isfinite(bottom) & (top > bottom)
             for a, b in _runs(good):
                 path = QPainterPath(to_screen(float(s.distance[a]),
@@ -234,6 +341,19 @@ class ModelChart(QWidget):
             else:
                 painter.setPen(QPen(rgba, 2.0))
             painter.drawPath(path)
+        # Кровли и подошвы - линиями своего цвета, пласт отделён от
+        # породы между пластами.
+        for code, _, z in s.lines:
+            painter.setPen(QPen(QColor(*self.line_of(code)), LINE_WIDTH))
+            for a, b in _runs(np.isfinite(z)):
+                if b - a < 2:
+                    continue
+                path = QPainterPath(to_screen(float(s.distance[a]),
+                                              float(z[a])))
+                for k in range(a + 1, b):
+                    path.lineTo(to_screen(float(s.distance[k]),
+                                          float(z[k])))
+                painter.drawPath(path)
         # Рельеф линией поверх пластов.
         painter.setPen(QPen(QColor(60, 40, 20), 1.5))
         line = QPainterPath(to_screen(float(s.distance[0]),
@@ -311,8 +431,19 @@ class ModelChart(QWidget):
         коду, у растров без таблицы пластов - по названию кровли,
         слои с Z по названию слоя."""
         s = self.section
-        rows = [(code, color) for code, color, _, _ in s.beds if code]
+        rows = []
         seen = set()
+        for k, (code, _, top, bottom) in enumerate(s.beds):
+            key = self.owner(k)
+            if key == core.HOST:
+                name = tr("Между пластами")
+            elif code:
+                name = core.bed_key(code)[0] or code
+            else:
+                continue
+            if name not in seen and np.any(top > bottom):
+                seen.add(name)
+                rows.append((name, self.fill_of(k)))
         for name, _, _, color, _ in s.fences:
             if name not in seen:
                 seen.add(name)
@@ -413,6 +544,12 @@ class ModelSectionDialog(QDialog):
         self.layers.itemChanged.connect(lambda *_: self.refresh())
         self.chart = ModelChart(self)
         self.chart.hovered.connect(self._hovered)
+        # Свои цвета пластов, породы между ними и линий живут в проекте.
+        self.chart.own = read_section_colors()
+        self.chart.colors_changed.connect(write_section_colors)
+        self.chart.setToolTip(tr(
+            "Правая кнопка по пласту, породе между пластами или линии "
+            "кровли задаёт их цвет. Цвета запоминаются в проекте QGIS."))
         self.stats = QLabel(self)
         self.stats.setWordWrap(True)
         picture = QPushButton(tr("Картинка…"), self)
@@ -448,6 +585,7 @@ class ModelSectionDialog(QDialog):
         self.setWindowTitle(tr("Разрез модели: {name}", name=title)
                             if title else tr("Разрез модели"))
         self.provider = provider
+        self.chart.own = read_section_colors()
         if layers is not None:
             self._fill_layers(*layers)
         self.refresh()

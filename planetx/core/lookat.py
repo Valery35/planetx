@@ -66,13 +66,60 @@ def is_view_mark(kind, points, view):
     return abs(lat - view[0]) < SAME_POINT and abs(lon - view[1]) < SAME_POINT
 
 
+# Ключ состояния вида среди строк «Слоёв» начинается этим знаком:
+# сектор разреза Земли, земля над подземной моделью, непрозрачности
+# строк. Просьба автора от 17 октября 2026 года - остановка тура
+# хранит и эти настройки. Прежний модуль такие ключи пропускает.
+STATE = "@"
+WEDGE = "@wedge"  # [запад, восток, юг, север], градусы
+GROUND = "@ground"  # {"opacity": 0..1, "cut": bool, "under": bool}
+OPACITY = "@opacity"  # {ключ строки: непрозрачность 0..1}
+
+
+def _state_value(key, value):
+    """Значение ключа состояния, годное для записи, иначе None."""
+    if key == WEDGE:
+        if isinstance(value, (list, tuple)) and len(value) == 4 \
+                and all(isinstance(v, (int, float)) and
+                        not isinstance(v, bool) for v in value):
+            return [float(v) for v in value]
+        return None
+    if key == GROUND:
+        if not isinstance(value, dict):
+            return None
+        out = {}
+        if isinstance(value.get("opacity"), (int, float)) \
+                and not isinstance(value.get("opacity"), bool):
+            out["opacity"] = min(1.0, max(0.0, float(value["opacity"])))
+        for name in ("cut", "under"):
+            if isinstance(value.get(name), (bool, int)):
+                out[name] = bool(value[name])
+        return out or None
+    if key == OPACITY:
+        if not isinstance(value, dict):
+            return None
+        out = {str(k): min(1.0, max(0.0, float(v)))
+               for k, v in value.items()
+               if isinstance(v, (int, float)) and not isinstance(v, bool)}
+        return out or None
+    return None
+
+
 def layers_text(layers):
-    """Слои вида в поле файла меток - JSON {ключ: 0 или 1}, пустая
-    строка без слоёв."""
+    """Слои вида в поле файла меток - JSON {ключ: 0 или 1} и ключи
+    состояния вида STATE, пустая строка без слоёв."""
     if not layers:
         return ""
-    return json.dumps({str(k): int(bool(v)) for k, v in sorted(
-        layers.items())}, separators=(",", ":"))
+    out = {}
+    for key, value in sorted(layers.items()):
+        key = str(key)
+        if key.startswith(STATE):
+            value = _state_value(key, value)
+            if value is not None:
+                out[key] = value
+        else:
+            out[key] = int(bool(value))
+    return json.dumps(out, separators=(",", ":")) if out else ""
 
 
 def layers_parse(text):
@@ -84,6 +131,19 @@ def layers_parse(text):
         return None
     if not isinstance(data, dict):
         return None
-    out = {str(k): bool(v) for k, v in data.items()
-           if isinstance(v, (bool, int))}
+    out = {}
+    for key, value in data.items():
+        key = str(key)
+        if key.startswith(STATE):
+            value = _state_value(key, value)
+            if value is not None:
+                out[key] = value
+        elif isinstance(value, (bool, int)):
+            out[key] = bool(value)
     return out or None
+
+
+def switches(layers):
+    """Только строки «Слоёв» {ключ: включена}, без состояния вида."""
+    return {k: v for k, v in (layers or {}).items()
+            if not str(k).startswith(STATE)}

@@ -260,6 +260,35 @@ class TestToLine(unittest.TestCase):
         self.assertAlmostEqual(float(gap[0]), 111.2, delta=0.5)
 
 
+class TestSectionFills(unittest.TestCase):
+    """Разрез модели: пласт между кровлей и подошвой своим цветом,
+    промежуток под подошвой и над первой кровлей - порода между
+    пластами. На прежней раскраске промежуток под подошвой шёл цветом
+    пласта."""
+
+    def test_gap_under_bottom_is_host(self):
+        colors = {"В_top": (1, 1, 1), "В_bottom": (1, 1, 1),
+                  "Г_top": (2, 2, 2), "Г_bottom": (2, 2, 2)}
+        fills = ss.section_fills(["", "В_top", "В_bottom", "Г_top",
+                                  "Г_bottom"], colors.get, (9, 9, 9))
+        self.assertEqual(fills, [(ss.HOST, (9, 9, 9)), ("В_top", (1, 1, 1)),
+                                 (ss.HOST, (9, 9, 9)), ("Г_top", (2, 2, 2)),
+                                 (ss.HOST, (9, 9, 9))])
+
+    def test_table_beds_keep_their_colors(self):
+        # Кровли таблицы пластов без окончаний: каждый промежуток - свой
+        # пласт, верхний - пласт таблицы над первой кровлей.
+        fills = ss.section_fills(["Q", "П1", "П2"],
+                                 lambda c: (len(c),) * 3, (9, 9, 9))
+        self.assertEqual([k for k, _ in fills], ["Q", "П1", "П2"])
+        self.assertEqual(ss.line_color((200, 100, 20)), (110, 55, 11))
+
+    def test_bed_key_sides(self):
+        self.assertEqual(ss.bed_key("В_top"), ("В", "top"))
+        self.assertEqual(ss.bed_key("В подошва"), ("В", "bottom"))
+        self.assertEqual(ss.bed_key("ПКС"), ("ПКС", None))
+
+
 class TestFencePart(unittest.TestCase):
     """Стенка «3D-забора» и линия с отметками на разрезе."""
 

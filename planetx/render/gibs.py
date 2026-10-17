@@ -12,7 +12,8 @@
 """
 import time
 
-from ..core import cadastre, clouds, emag, flow, sun, temperature, terrain
+from ..core import (appear, cadastre, clouds, emag, flow, sun, temperature,
+                    terrain)
 from ..core.clouds import source_key
 from ..core.overlay import window
 from . import gpu
@@ -98,6 +99,8 @@ class GibsLayer:
         # Доля прозрачности слоя в шейдере, 0 - как есть. Ставит
         # ползунок раздела «На глобусе».
         self.fade = 0.0
+        # Проявление пришедших картинок тайлов, core/appear.py.
+        self.appear = appear.Appear()
 
     def add(self, key, levels):
         """Пришла картинка тайла, уровни мипмапов. None - тайл пустой."""
@@ -117,24 +120,29 @@ class GibsLayer:
             self.textures[key] = pool.acquire(levels)
             self.used[key] = frame
 
-    def items(self, draw, clear, frame, near=None):
-        """Пары (текстура, окно) для тайлов draw. Заодно просит
-        недостающие картинки у загрузчика. Тайлы вне набора near
-        остаются без слоя и не просятся."""
+    def items(self, draw, clear, frame, near=None, smooth=False):
+        """Тройки (текстура, окно, проявление) для тайлов draw. Заодно
+        просит недостающие картинки у загрузчика. Тайлы вне набора near
+        остаются без слоя и не просятся. smooth - пришедшие картинки
+        проявляются (core/appear.py)."""
         out = []
+        levels = []
         wanted = {}
         ready = self.textures.__contains__
         for key in draw:
             if (near is not None and key not in near) \
                     or key[0] < self.min_level:
                 out.append((clear, gpu.NO_OVERLAY))
+                levels.append(None)
                 continue
             own = source_key(key, self.max_level)
             found = window(key, ready, max_depth=key[0])
             if found is None:
                 out.append((clear, gpu.NO_OVERLAY))
+                levels.append(None)
             else:
                 out.append((self.textures[found[0]], found[1]))
+                levels.append(found[0][0])
                 self.used[found[0]] = frame
             if self.empty:
                 own = self._past_empty(own, found)
@@ -152,7 +160,8 @@ class GibsLayer:
             self.wanted = keys
             self.asked_at = now
             self.unasked = False
-        return out
+        fx = self.appear.step(draw, levels, now, smooth)
+        return [pair + (f,) for pair, f in zip(out, fx)]
 
     def _past_empty(self, own, found):
         """Какой тайл просить вместо own, если на пути от own к найденной
@@ -187,6 +196,7 @@ class GibsLayer:
         for texture in self.textures.values():
             pool.release(texture)
         self.textures.clear()
+        self.appear.clear()
         self.empty.clear()
         self.stale.clear()
         self.used.clear()

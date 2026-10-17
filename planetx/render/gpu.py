@@ -109,6 +109,7 @@ class GpuMesh:
 
 
 NO_OVERLAY = (0.0, 0.0, 1.0)
+STILL = (0.0, 0.0)  # проявления нет, core/appear.STILL
 
 # Горячие вызовы, которые не отпускают GIL. Имя, возвращаемый тип,
 # типы аргументов. Имена - как у функций OpenGL.raw выше.
@@ -302,7 +303,10 @@ def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
     по строкам, как его даёт Camera.tiles_mvp. Подложка идёт на блок 0.
     layers - слои поверх неё: (текстурный блок, место окна в шейдере,
     пары (текстура, окно (сдвиг u, сдвиг v, масштаб)) по одной на сетку
-    и необязательная доля прозрачности слоя, 0 - слой как есть).
+    и необязательная доля прозрачности слоя, 0 - слой как есть, и место
+    проявления в шейдере). У пары может быть третье значение - проявление
+    картинки тайла (сдвиг мипмапа, доля прозрачности), core/appear.py,
+    без него - (0, 0).
     Это наложение слоёв проекта, облака и температура. Блоки слоёв,
     которых в списке нет, не трогаются. fades - сдвиг уровня мипмапа
     подложки по одному на сетку (проявление нового тайла), u_fade -
@@ -317,9 +321,10 @@ def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
     base = mvps.ctypes.data
     stride = mvps.strides[0]
     last_texture = None
-    last = [[None, None] for _ in layers]
+    last = [[None, None, None] for _ in layers]
     null = ctypes.c_void_p(0)
     shares = [layer[3] if len(layer) > 3 else 0.0 for layer in layers]
+    u_fxs = [layer[4] if len(layer) > 4 else -1 for layer in layers]
     last_fade = None
     for i, (mesh, texture) in enumerate(items):
         if fades is not None and fades[i] != last_fade:
@@ -327,8 +332,14 @@ def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
             _uniform4f(u_fade, last_fade, 0.0, 0.0, 0.0)
         for n, layer in enumerate(layers):
             unit, u_uv, pairs = layer[:3]
-            image, window = pairs[i]
+            pair = pairs[i]
+            image, window = pair[0], pair[1]
             seen = last[n]
+            if u_fxs[n] != -1:
+                fx = pair[2] if len(pair) > 2 else STILL
+                if fx != seen[2]:
+                    _uniform4f(u_fxs[n], fx[0], fx[1], 0.0, 0.0)
+                    seen[2] = fx
             if image != seen[0]:
                 _active_texture(unit)
                 _bind_texture(GL.GL_TEXTURE_2D, image)

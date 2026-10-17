@@ -11,11 +11,19 @@
 летит, а не прыгает. Ползунок слева на панели показывает время тура
 и перематывает его: пока его тянут, камера стоит в позе тура на этом
 времени. Решение автора от 29 сентября 2026 года.
+
+С 17 октября 2026 года, просьба автора, во время показа клавиша
+«вправо» ведёт к следующей остановке, «влево» - к предыдущей, пробел
+ставит на паузу и продолжает, Esc заканчивает тур. Камеру, взятую
+мышью на паузе остановки, тур не останавливает. Пока идёт пауза
+остановки, вид вертят свободно, после неё тур летит от этой позы
+к следующей остановке. Взятая мышью в перелёте камера ставит тур на
+паузу, как прежде.
 """
 import time
 
 from qgis.core import QgsSettings
-from qgis.PyQt.QtCore import QEvent, QObject, Qt, pyqtSignal
+from qgis.PyQt.QtCore import QEvent, QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QFrame, QHBoxLayout,
                                  QLabel, QSlider, QToolButton, QVBoxLayout)
 
@@ -36,6 +44,14 @@ MOVED = 1e-3
 SLIDER_STEPS = 1000  # делений ползунка на весь тур
 SLIDER_WIDTH = 220  # логических пикселей
 CAPTION_WIDTH = 480  # строка описания остановки, не уже, пикселей
+# Свободная камера на паузе остановки: шаг проверки конца паузы, мс.
+FREE_TICK = 200
+KEY_PRESS = enum(QEvent, "Type", "KeyPress")
+# Клавиши с этими модификаторами остаются виду - его стрелки двигают
+# и поворачивают камеру.
+HELD = (enum(Qt, "KeyboardModifier", "ControlModifier"),
+        enum(Qt, "KeyboardModifier", "ShiftModifier"),
+        enum(Qt, "KeyboardModifier", "AltModifier"))
 
 
 class TourBar(QFrame):
@@ -264,7 +280,16 @@ class TourPlayer(QObject):
         self.t = 0.0  # время тура на последнем кадре
         self.playing = False
         self._reached = None  # номер остановки, о которой сказано
+        # Часы тура: время тура t - monotonic() - _start.
+        self._start = 0.0
+        # Свободная камера на паузе остановки: номер остановки в общем
+        # списке и время тура конца её паузы, иначе None.
+        self._free = None
+        self._free_timer = QTimer(self)
+        self._free_timer.setInterval(FREE_TICK)
+        self._free_timer.timeout.connect(self._free_tick)
         view.changed.connect(self.tick)
+        view.installEventFilter(self)
 
     @property
     def index(self):
@@ -290,12 +315,14 @@ class TourPlayer(QObject):
         if not self.stops:
             return
         k = min(max(k, 0), len(self.stops) - 1)
+        self._end_free()
         self.offset = k
         self._reached = None
         self.tour = Tour(self.nav.pose, self.stops[k:],
                          self.bar.pause.value(), self.view.camera.fov_y)
         self.t = 0.0
-        self.nav.start_flight(self.tour, time.monotonic())
+        self._start = time.monotonic()
+        self.nav.start_flight(self.tour, self._start)
         self.playing = True
         self._show()
         self.view.update()
@@ -304,6 +331,7 @@ class TourPlayer(QObject):
         if self.tour is None:
             return
         if self.playing:
+            self._end_free()
             self.nav.stop()
             self.playing = False
             self._show()
@@ -318,7 +346,8 @@ class TourPlayer(QObject):
             self.play_from(self.index)
 
     def _resume_at(self, t):
-        self.nav.start_flight(self.tour, time.monotonic() - t)
+        self._start = time.monotonic() - t
+        self.nav.start_flight(self.tour, self._start)
         self.playing = True
         self._show()
         self.view.update()
@@ -326,6 +355,7 @@ class TourPlayer(QObject):
     def _seek_started(self):
         if self.tour is None:
             return
+        self._end_free()
         self._resume = self.playing
         if self.playing:
             self.nav.stop()
@@ -356,6 +386,7 @@ class TourPlayer(QObject):
                 or abs(pose.lon - want.lon) > MOVED)
 
     def stop(self):
+        self._end_free()
         if self.playing:
             self.nav.stop()
         self.playing = False
@@ -391,9 +422,14 @@ class TourPlayer(QObject):
         """Кадр вида: время тура, конец тура или перехват мышью."""
         if self.tour is None or not self.playing:
             return
+        if self._free is not None:
+            self._free_tick()
+            return
         flight = self.nav.flight
         if flight is not None and flight[1] is self.tour:
             self.t = time.monotonic() - flight[0]
+        elif self._take_free():
+            return
         else:
             # Тур кончился или камеру взяли мышью: панель встаёт на паузу.
             self.playing = False
@@ -406,8 +442,73 @@ class TourPlayer(QObject):
                     return
         self._show()
 
+    def _take_free(self):
+        """Камеру взяли мышью, колесом или клавишами. На паузе остановки
+        тур не встаёт: время паузы идёт дальше, вид свободен. Истина,
+        если так и вышло."""
+        now = time.monotonic() - self._start
+        end = self.tour.pause_end(now)
+        if end is None:
+            return False
+        self._free = (self.offset + self.tour.index_at(now), end)
+        self.t = now
+        self._free_timer.start()
+        self._show()
+        return True
+
+    def _free_tick(self):
+        """Свободная камера на паузе: часы панели и конец паузы. Пока
+        камеру держат мышью, тур ждёт отпускания."""
+        if self._free is None or self.tour is None:
+            self._free_timer.stop()
+            return
+        index, end = self._free
+        now = time.monotonic() - self._start
+        # Время остаётся на остановке: на самом конце паузы index_at
+        # отдал бы следующую.
+        self.t = min(now, end - 1e-6)
+        if now >= end and self.nav.grab is None:
+            self._end_free()
+            if index + 1 < len(self.stops):
+                self.play_from(index + 1)
+                return
+            if self.bar.loop.isChecked():
+                self.laps += 1
+                self.play_from(0)
+                return
+            self.t = self.tour.duration
+            self.playing = False
+        self._show()
+
+    def _end_free(self):
+        self._free = None
+        self._free_timer.stop()
+
+    def eventFilter(self, watched, event):
+        """Клавиши показа тура на виде: вправо, влево, пробел, Esc."""
+        if watched is not self.view or event.type() != KEY_PRESS \
+                or self.tour is None \
+                or getattr(self.view, "shot", None) is not None:
+            return False
+        mods = event.modifiers()
+        if any(mods & held for held in HELD):
+            return False
+        key = event.key()
+        if key == enum(Qt, "Key", "Key_Right"):
+            self.play_from(self.index + 1)
+        elif key == enum(Qt, "Key", "Key_Left"):
+            self.play_from(self.index - 1)
+        elif key == enum(Qt, "Key", "Key_Space"):
+            self.toggle()
+        elif key == enum(Qt, "Key", "Key_Escape"):
+            self.stop()
+        else:
+            return False
+        return True
+
     def pause_for_record(self):
         """Остановить показ перед записью, панель остаётся."""
+        self._end_free()
         if self.playing:
             self.nav.stop()
         self.playing = False

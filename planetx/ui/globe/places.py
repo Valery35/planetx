@@ -10,13 +10,14 @@ import time
 
 import numpy as np
 from urllib.parse import quote
-from qgis.core import QgsApplication, QgsProject, QgsRasterLayer
+from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
+                       QgsSettings)
 from qgis.PyQt.QtCore import QTimer
 from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 
 from ... import journal
 from ...core import (demofiles, ellipsoid, when, oldmaps, pathflow, region,
-                     fires as fires_core, quakes, themes, opacity)
+                     fires as fires_core, lookat, quakes, themes, opacity)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.features import grown, has_alts
 from ...core.skydata import direction as sky_direction
@@ -31,9 +32,11 @@ from ..subsurface import add_to_project
 from ..record import RecordDialog
 from ..scene import apply as apply_scene, capture as capture_scene
 from ..track import TrackDialog
-from .base import (BRIENZ_LEVEL, DEMO_QUAKE_BAND, FLOW_LIFT, FLOW_REACH,
-                   FLOW_TICK, FLOW_WIDER, OPACITY_DELAY, PLUGIN_DIR,
-                   POLE_FIRST, REGION_MOVE, moscow_maps)
+from .base import (BRIENZ_LEVEL, DEMO_QUAKE_BAND, FLOW_LAYERS, FLOW_LIFT,
+                   FLOW_REACH, FLOW_TICK, FLOW_WIDER, GIBS_FADES, LAYER_FADE,
+                   LAYER_FADE_TICK, OPACITY_DELAY, OPACITY_KEY, PLUGIN_DIR,
+                   POINT_LAYERS, POLE_FIRST, QGIS_LAYERS, REGION_MOVE,
+                   moscow_maps)
 
 
 class PlacesMixin:
@@ -268,12 +271,133 @@ class PlacesMixin:
         self._show_time(stop.time)
         self._apply_view_layers(getattr(stop, "layers", None))
 
+    def view_state(self):
+        """Снимок вида для метки: строки «Слоёв», сектор разреза Земли,
+        земля над подземной моделью и непрозрачности включённых строк
+        (core.lookat). Его берёт «Снимок текущего вида» окна свойств."""
+        state = dict(self.extras)
+        wedge = self.view.wedge
+        if self.extras.get("cutaway") and wedge is not None:
+            state[lookat.WEDGE] = [wedge.west, wedge.east, wedge.south,
+                                   wedge.north]
+        sub = self.subsurface
+        if sub.model is not None:
+            state[lookat.GROUND] = {name: sub.settings[name]
+                                    for name in ("opacity", "cut", "under")}
+        shown = {key: self._layer_opacity(key)
+                 for key, on in self.extras.items()
+                 if on and self._row_opacity(key) is not None}
+        if shown:
+            state[lookat.OPACITY] = shown
+        return state
+
     def _apply_view_layers(self, layers):
-        """Строки «Слоёв» вида метки: включить и выключить, как при
-        снимке вида. Строки, которых нет у окна, пропускаются."""
-        for key, on in (layers or {}).items():
-            if key in self.extras and bool(self.extras[key]) != on:
-                self.set_extra(key, on)
+        """Строки «Слоёв» вида метки и состояние вида: включить
+        и выключить, как при снимке вида. Строки, которых нет у окна,
+        пропускаются. Сначала гаснут лишние строки, потом включаются
+        нужные - у карт, которые делят слой вида, выключение после
+        включения сняло бы новую карту. Точки, струйки и раскраски
+        тайлов проявляются и гаснут за LAYER_FADE, просьба автора от
+        17 октября 2026 года."""
+        self._finish_fades()
+        layers = layers or {}
+        switches = lookat.switches(layers)
+        offs = [k for k, on in switches.items()
+                if k in self.extras and self.extras[k] and not on]
+        ons = [k for k, on in switches.items()
+               if k in self.extras and not self.extras[k] and on]
+        targets = dict(layers.get(lookat.OPACITY) or {})
+        changed = offs + ons
+        for key in offs:
+            if self._fadeable(key, changed):
+                self._start_fade(key, self._layer_opacity(key), 0.0,
+                                 off=True)
+            else:
+                self.set_extra(key, False)
+        for key in ons:
+            self.set_extra(key, True)
+            if self._fadeable(key, changed):
+                if key in targets:
+                    QgsSettings().setValue(OPACITY_KEY + key,
+                                           float(targets.pop(key)))
+                self._runtime_opacity(key, 0.0)
+                self._start_fade(key, 0.0, self._layer_opacity(key))
+        for key, value in targets.items():
+            if self.extras.get(key) and self._row_opacity(key) is not None:
+                self._active_opacity(key, value)
+        wedge = layers.get(lookat.WEDGE)
+        if wedge and self.extras.get("cutaway"):
+            self.set_wedge_box(*wedge)
+        ground = layers.get(lookat.GROUND)
+        sub = self.subsurface
+        if ground and sub.model is not None:
+            if "opacity" in ground:
+                sub.set_opacity(ground["opacity"])
+            sub.set_options(dict(sub.settings, **ground))
+        self._update_active()
+
+    def _fade_names(self, key):
+        """Что меняет непрозрачность строки key в виде, для проверки
+        общих слоёв вида."""
+        names = {("gibs", name) for name in GIBS_FADES.get(key, ())}
+        if key in POINT_LAYERS:
+            names.add(("points", POINT_LAYERS[key]))
+        if key in FLOW_LAYERS:
+            names.add(("flow", FLOW_LAYERS[key]))
+        return names
+
+    def _fadeable(self, key, changed):
+        """Проявляется ли строка плавно. Слои QGIS пересобирают
+        наложение и не проявляются, строки с общим слоем вида среди
+        меняющихся тоже - их непрозрачность одна на двоих."""
+        names = self._fade_names(key)
+        if not names or key in QGIS_LAYERS:
+            return False
+        return not any(names & self._fade_names(other)
+                       for other in changed if other != key)
+
+    def _runtime_opacity(self, key, value):
+        """Непрозрачность строки на виде без записи в настройки."""
+        if key in POINT_LAYERS:
+            getattr(self.view, POINT_LAYERS[key]).opacity = value
+        if key in FLOW_LAYERS:
+            self.view.flows[FLOW_LAYERS[key]].opacity = value
+        for name in GIBS_FADES.get(key, ()):
+            self.view.gibs[name].fade = 1.0 - value
+        self.view.update()
+
+    def _start_fade(self, key, begin, end, off=False):
+        fades = getattr(self, "_fades", None)
+        if fades is None:
+            fades = self._fades = {}
+            self._fade_timer = QTimer(self)
+            self._fade_timer.setInterval(LAYER_FADE_TICK)
+            self._fade_timer.timeout.connect(self._fade_tick)
+        fades[key] = (time.monotonic(), begin, end, off)
+        self._fade_timer.start()
+
+    def _fade_tick(self, finish=False):
+        fades = getattr(self, "_fades", None) or {}
+        now = time.monotonic()
+        for key, (start, begin, end, off) in list(fades.items()):
+            share = 1.0 if finish else min(1.0, (now - start) / LAYER_FADE)
+            # Половина косинуса: начало и конец без рывка.
+            k = 0.5 - 0.5 * math.cos(math.pi * share)
+            self._runtime_opacity(key, begin + (end - begin) * k)
+            if share >= 1.0:
+                del fades[key]
+                if off:
+                    self.set_extra(key, False)
+                    # Следующее включение - с непрозрачностью строки.
+                    self._apply_layer_opacity(key)
+        if not fades and getattr(self, "_fade_timer", None) is not None:
+            self._fade_timer.stop()
+
+    def _finish_fades(self):
+        """Доделать идущие проявления сразу - новая остановка или
+        перелёт к метке."""
+        if getattr(self, "_fades", None):
+            self._fade_tick(finish=True)
 
     def _show_time(self, time):
         """Шкала на время вида или метки, как у Google Earth. Закрытая

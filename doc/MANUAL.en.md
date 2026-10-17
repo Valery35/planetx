@@ -1833,6 +1833,29 @@ offered with a number - View 1, View 2. The placemark keeps the camera
 distance, heading and tilt. A flight to such a placemark brings the
 whole view back.
 
+### Placemark card
+
+A click on a placemark on the globe, when the ruler, the new placemark
+and the Identify features mode are off, opens the placemark card to the
+right of the view - its name and description. The description is text
+or HTML, as in KML, links open in the system browser. The card buttons:
+
+| Button | What it does |
+|---|---|
+| Explain this | Asks the assistant what the object is and why the place is of interest. The answer appears in the card and under the Search box |
+| Fly to | Flight to the placemark, as a tour stop |
+| Properties… | The placemark properties window in place of the card |
+| Close | Closes the card, Esc does the same |
+
+Explain this gives the assistant the name, kind, coordinates and
+description of this one placemark. Pressing the button is consent to
+send them. Without it the names of placemarks do not go to the model.
+The button is available when the assistant is connected, see the
+Assistant section.
+
+While a properties window is open on the right, a click on a placemark
+does not open the card and the editing in the window goes on.
+
 ### Place properties
 
 <img src="figures/en/placeprops.png" width="340" alt="Place properties">
@@ -1892,6 +1915,13 @@ cutaway with earthquake foci. The view time sets the timeline. The
 layers switch on at the start of the flight to the stop, so the data
 arrive by the time the camera does. In KML the view layers go into the
 ExtendedData of the placemark, other programs skip them.
+
+Along with the rows the snapshot remembers the opacity of the rows that
+are on, the sector of the Earth cutaway and the ground above the
+subsurface model - its opacity, the cut and the camera below ground. A
+tour stop restores them too. Foci, fires, flow streaks and tile
+colourings fade in and out at the stop over half a second instead of
+switching at once.
 
 The Tour pause and Flight speed fields of the same section set the pace
 of the stop. The pause is how many seconds the camera stays at the place,
@@ -2434,6 +2464,15 @@ file, CSV table… writes the elevations of the terrain and the roofs at
 400 points of the path with latitude and longitude, an empty field where
 there is no roof.
 
+A bed between a roof and a bottom (grids ending in _top and _bottom,
+roof and bottom) is shown in the bed colour, the gap below a bottom and
+above the first roof in the colour of the rock between beds. Each roof
+and bottom is outlined with a line in a darker bed colour. The right
+button on the chart sets an own colour of the bed, of the rock between
+beds or of the line under the cursor, the Default section colours item
+removes the own colours. The own colours are kept in the QGIS project
+and apply the next time the window opens.
+
 The subsurface demos put their data into the QGIS project as a group of
 ordinary layers and check them on the globe. The Permian deposits demo
 in the Demo icon opens a synthetic site
@@ -2489,7 +2528,21 @@ time slider, and without the slider in its place:
 | ⏺ | Records the tour to an MP4 video or PNG frames |
 | ⏹ | Ends the tour |
 
-Moving the camera with the mouse pauses the tour.
+Moving the camera with the mouse during a flight pauses the tour. During
+the pause at a stop the view can be turned with the mouse, the wheel and
+the keys while the tour goes on. When the pause ends and the mouse
+button is released, the camera flies from the new view to the next stop.
+
+During the tour these keys work when the view has the focus:
+
+| Key | What it does |
+|---|---|
+| → | Next stop |
+| ← | Previous stop |
+| Space | Pause and resume |
+| Esc | Ends the tour. In Full screen mode the first Esc leaves the mode |
+
+The arrows with Ctrl, Shift or Alt still move the camera.
 
 ### Recording a tour from the screen
 

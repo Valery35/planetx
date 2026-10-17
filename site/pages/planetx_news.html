@@ -1,0 +1,215 @@
+<!-- PlanetX - страница «Что нового» для www.informpp.ru.        -->
+<!-- Собирается tools/build_pages.py, править лучше его.        -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="title"></title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700\
+&family=Golos+Text:wght@400;500;600&display=swap');
+
+:root{
+  --paper:#EEF2F6; --paper-2:#E2E8EF; --ink:#131C26; --ink-soft:#4A5866;
+  --teal:#1D5FA8; --teal-deep:#12457D; --amber:#C2622C;
+  --line:rgba(19,28,38,.14); --r:14px; --maxw:1080px;
+  --display:'Bitter',Georgia,serif;
+  --body:'Golos Text','Segoe UI',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+section[id],[id]{scroll-margin-top:74px}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--body);font-size:17px;line-height:1.6;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+a{color:inherit}
+h1,h2,h3{font-family:var(--display);font-weight:700;line-height:1.1;margin:0;
+  letter-spacing:-.01em}
+p{margin:0}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--teal-deep);margin-bottom:18px;
+  display:inline-flex;gap:10px;align-items:center}
+.eyebrow::before{content:"";width:26px;height:2px;background:var(--amber);
+  display:inline-block}
+.hdr{position:sticky;top:0;z-index:20;background:rgba(238,242,246,.86);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.hdr .wrap{display:flex;align-items:center;justify-content:space-between;
+  height:62px;gap:18px}
+.brand{display:flex;align-items:baseline;gap:10px;
+  font-family:var(--display);font-weight:700;text-decoration:none;
+  font-size:20px}
+.brand span{font-family:var(--body);font-weight:500;font-size:13px;
+  color:var(--ink-soft)}
+.right{display:flex;align-items:center;gap:22px}
+.nav{display:flex;gap:22px;font-size:15px}
+.nav a{text-decoration:none;color:var(--ink-soft)}
+.nav a:hover{color:var(--teal-deep)}
+@media(max-width:860px){.nav{display:none}}
+.lang{display:flex;border:1px solid var(--line);border-radius:10px;
+  overflow:hidden;font-size:13px;font-weight:600}
+.lang button{border:0;background:transparent;padding:6px 11px;cursor:pointer;
+  font:inherit;color:var(--ink-soft)}
+.lang button.on{background:var(--teal);color:#fff}
+.hero{padding:74px 0 48px}
+.hero h1{font-size:clamp(34px,5vw,56px);max-width:18ch}
+.hero .lead{margin-top:22px;font-size:20px;max-width:64ch;
+  color:var(--ink-soft)}
+.cta{margin-top:34px;display:flex;gap:14px;flex-wrap:wrap}
+.btn{display:inline-block;padding:13px 22px;border-radius:var(--r);
+  text-decoration:none;font-weight:600;font-size:16px}
+.btn-main{background:var(--teal);color:#fff}
+.btn-main:hover{background:var(--teal-deep)}
+.btn-ghost{border:1px solid var(--line);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--teal)}
+section{padding:56px 0;border-top:1px solid var(--line)}
+section h2{font-size:clamp(26px,3.3vw,38px);max-width:24ch}
+section .sub{margin-top:16px;max-width:70ch;color:var(--ink-soft)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:34px}
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;
+  margin-top:34px}
+@media(max-width:860px){.pair,.trio{grid-template-columns:1fr}}
+.card{background:var(--paper-2);border:1px solid var(--line);
+  border-radius:var(--r);padding:22px 24px}
+.card h3{font-size:19px;margin-bottom:10px}
+.card p{color:var(--ink-soft);font-size:16px}
+.card p + p{margin-top:10px}
+.card.key{margin-top:24px}
+.card ol{margin:10px 0;padding-left:22px;color:var(--ink-soft);font-size:16px}
+.card li + li{margin-top:6px}
+.card a{color:var(--teal-deep)}
+figure{margin:30px 0 0}
+figure img{width:100%;height:auto;display:block;border-radius:var(--r);
+  border:1px solid var(--line);background:#000}
+.shot{margin-top:38px}
+figcaption{margin-top:10px;font-size:14px;color:var(--ink-soft)}
+.tools{margin-top:34px;border:1px solid var(--line);border-radius:var(--r);
+  overflow:hidden;background:#fff}
+.group{background:var(--paper-2);padding:10px 20px;font-weight:600;
+  font-size:14px;letter-spacing:.04em;border-bottom:1px solid var(--line)}
+.tool{display:grid;grid-template-columns:88px 1fr;gap:10px;padding:14px 20px;
+  border-bottom:1px solid var(--line)}
+.tool:last-child{border-bottom:0}
+.num{font-family:var(--display);font-weight:700;color:var(--teal-deep)}
+.txt b{display:block;font-size:16px}
+.txt span{color:var(--ink-soft);font-size:15px}
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;
+  margin-top:40px}
+@media(max-width:860px){.facts{grid-template-columns:1fr}}
+.fact b{display:block;font-family:var(--display);font-size:30px;
+  line-height:1.1}
+.fact span{color:var(--ink-soft);font-size:15px}
+.ftr{padding:40px 0 60px;border-top:1px solid var(--line);
+  color:var(--ink-soft);font-size:15px}
+.ftr a{color:var(--teal-deep)}
+
+.nav a.on{color:var(--teal-deep);font-weight:600}
+.card.link{display:block;text-decoration:none;color:inherit}
+.card.link:hover{border-color:var(--teal)}
+.card.link h3{color:var(--teal-deep)}
+.row{display:grid;grid-template-columns:minmax(220px,1fr) 1.4fr;gap:14px;
+  padding:10px 20px;border-bottom:1px solid var(--line);font-size:15px}
+.row span{color:var(--ink-soft)}
+.row .src{display:block;font-style:normal;font-size:13px;margin-top:3px;
+  color:var(--teal-deep)}
+@media(max-width:860px){.row{grid-template-columns:1fr}}
+figure.narrow{max-width:620px}
+.side{display:grid;grid-template-columns:1fr 1fr;gap:28px;align-items:start;
+  margin-top:34px}
+.side figure{margin:0}
+.side .row{grid-template-columns:1fr;gap:4px}
+@media(max-width:860px){.side{grid-template-columns:1fr}}
+.release{margin-top:20px}
+.release .date{color:var(--ink-soft);font-size:14px;margin:2px 0 8px}
+.release ul{margin:0;padding-left:20px;color:var(--ink-soft);font-size:16px}
+.release li + li{margin-top:6px}
+.release div p{color:var(--ink-soft);font-size:16px}
+</style>
+<header class="hdr"><div class="wrap">
+<a class="brand" target="_blank" href="https://www.informpp.ru/главная-страница/qgis-planetx">PlanetX
+<span data-i18n="brand.sub"></span></a>
+<div class="right"><nav class="nav"><a target="_blank" href="https://www.informpp.ru/главная-страница/qgis-planetx" data-i18n="nav.main"></a>
+<a target="_blank" href="https://www.informpp.ru/главная-страница/qgis-planetx/places" data-i18n="nav.places"></a>
+<a target="_blank" href="https://www.informpp.ru/главная-страница/qgis-planetx/project" data-i18n="nav.project"></a>
+<a target="_blank" href="https://www.informpp.ru/главная-страница/qgis-planetx/data" data-i18n="nav.data"></a>
+<a target="_blank" href="https://www.informpp.ru/главная-страница/qgis-planetx/imagery" data-i18n="nav.imagery"></a>
+<a target="_blank" href="https://www.informpp.ru/главная-страница/qgis-planetx/news" data-i18n="nav.news" class="on"></a></nav>
+<div class="lang"><button type="button" data-lang="ru">RU</button>
+<button type="button" data-lang="en">EN</button></div></div>
+</div></header>
+<section id="news"><div class="wrap">
+<div class="eyebrow" data-i18n="news.eyebrow"></div>
+<h2 data-i18n="news.h2"></h2>
+<div class="card release"><h3>PlanetX 0.97.0</h3><p class="date" data-i18n="news.0_97_0.date"></p><div data-i18n="news.0_97_0"></div></div>
+<div class="card release"><h3>PlanetX 0.96.0</h3><p class="date" data-i18n="news.0_96_0.date"></p><div data-i18n="news.0_96_0"></div></div>
+<div class="card release"><h3>PlanetX 0.95.0</h3><p class="date" data-i18n="news.0_95_0.date"></p><div data-i18n="news.0_95_0"></div></div>
+<div class="card release"><h3>PlanetX 0.94.0</h3><p class="date" data-i18n="news.0_94_0.date"></p><div data-i18n="news.0_94_0"></div></div>
+<div class="card release"><h3>PlanetX 0.93.0</h3><p class="date" data-i18n="news.0_93_0.date"></p><div data-i18n="news.0_93_0"></div></div>
+<p class="sub"><a target="_blank" href="https://github.com/Valery35/planetx/blob/main/CHANGELOG.md" data-i18n="news.all"></a></p><div class="cta">
+<a class="btn btn-main" target="_blank" data-i18n="cta.release" href="https://github.com/Valery35/planetx/releases/latest"></a>
+<a class="btn btn-ghost" target="_blank" data-i18n="cta.install" href="https://plugins.qgis.org/plugins/planetx/"></a>
+</div>
+</div></section>
+<footer class="ftr"><div class="wrap">
+PlanetX 0.97.0 &middot; <span data-i18n="ftr.line1"></span><br>
+<span data-i18n="ftr.line2"></span>,
+<a target="_blank" href="https://www.informpp.ru/">www.informpp.ru</a><br>
+<span data-i18n="ftr.line3"></span>
+</div></footer>
+<script>
+var TEXTS = {"ru": {"news.0_97_0": "<ul><li>Литологическая карта мира GLiM показывает породы на поверхности 16 классами - строка «Литология» группы «Недра».</li><li>Строка «Исторические землетрясения» показывает около 74 тысяч сильных землетрясений мира с 1904 по 2024 год по каталогу ISC-GEM на их глубине. Бегунки шкалы времени отбирают события по годам.</li><li>Строка «Покрытие земель» показывает карту ESA WorldCover 2021 с пикселем 10 м - лес, луга, пашню, застройку, воду и другие классы.</li><li>Строки «Повторяемость воды» и «Изменения воды» показывают поверхностные воды JRC по снимкам Landsat 1984-2021 годов - новые водохранилища, обмелевшие озёра, блуждающие русла.</li><li>Новая группа «Почвы» показывает глину, песок, органический углерод и кислотность верхнего слоя почвы по SoilGrids.</li><li>Щелчок по этим картам показывает класс или значение в точке, «В проект QGIS…» добавляет карту в проект слоем.</li><li>Значок «Новая метка» открывает меню - метка, путь, многоугольник или круг. Выпадающие меню панели значков в тех же тёмных цветах, что и панель.</li><li>Тайл высот с пустыми значениями больше не прерывает отрисовку кадра.</li></ul>", "news.0_97_0.date": "17 октября 2026 года", "news.0_96_0": "<ul><li>Панель значков, шкала времени, панель тура, ползунок палеогеографии, шторка, шкалы слоёв и значок загрузки выглядят одинаково. Это тёмная полупрозрачная плашка и светлые значки одного набора, включённое - синим. У кнопок с меню есть белая стрелка.</li><li>Точка в середине кольца навигации возвращает отвесный взгляд без крена. Нижний джойстик издалека сдвигает вид медленнее, камера не уходит на полюс за полсекунды.</li><li>Новые тайлы проявляются плавнее, за 0.7 с из размытого вида предка.</li><li>Окно свойств метки разбито на группы «Оформление», «Высота», «Время и видимость» и «Вид метки» сверху вниз, без пустот между строками. В узкой панели подпись стоит над полем.</li><li>Пустая панель свойств справа больше не видна при открытии окна и после режима «Во весь экран».</li></ul>", "news.0_96_0.date": "17 октября 2026 года", "news.0_95_0": "<ul><li>Дно морей и океанов берётся из сетки глубин GEBCO 2026 с шагом около 450 м. Вблизи в открытом море больше нет пустых мест на нуле, например у Японского жёлоба. Источник глубин выбирают меню строки «Рельеф» и окно «Источники данных».</li><li>Строка «Активные разломы» раздела «Недра» показывает около 13.7 тысячи разломов мира по базе GEM. Цвет линии - вид смещения, щелчок показывает скорость смещения, падение и каталог-источник.</li><li>Строка «Геологическая карта» показывает карту мира Macrostrat - цвет означает возраст пород. Щелчок показывает подразделение, литологию, возраст в млн лет и карту-источник. Карту можно добавить в проект QGIS слоем тайлов.</li></ul>", "news.0_95_0.date": "17 октября 2026 года", "news.0_94_0": "<ul><li>Окно «Разрез модели» пути строит и геологический разрез по слоям проекта. Флажки слева выбирают кровлями любые одноканальные растры проекта, скважины и слои с отметками Z, например «3D-забор». Цвета пластов подписаны на графике, разрез записывается картинкой PNG и таблицей отметок CSV.</li><li>Растр, которого нет в таблице пластов, встаёт на разрезе и в объёме по своей средней отметке, а не под нижним пластом.</li></ul>", "news.0_94_0.date": "17 октября 2026 года", "news.0_93_0": "<ul><li>Кнопка «Ряд по датам…» окна «Космоснимки» строит график индекса или температуры поверхности участка по всем сценам списка. Точка - медиана участка без облаков на дату, отрезок - разброс внутри участка. Щелчок по точке выбирает сцену в списке, ряд записывается в таблицу CSV.</li></ul>", "news.0_93_0.date": "17 октября 2026 года", "news.all": "Все выпуски - в журнале изменений на GitHub.", "cta.release": "Скачать выпуск", "cta.install": "Каталог модулей QGIS", "cta.code": "Исходный код", "cta.manual": "Руководство PDF", "cta.manual.url": "https://github.com/Valery35/planetx/releases/latest/download/PlanetX.pdf", "news.eyebrow": "Что нового", "news.h2": "Изменения по выпускам", "title": "PlanetX - Что нового · Информ++", "brand.sub": "для QGIS", "nav.main": "Главная", "nav.places": "Метки", "nav.project": "Проект QGIS", "nav.data": "Данные", "nav.imagery": "Космоснимки", "nav.news": "Что нового", "ftr.line1": "лицензия GNU GPL v3 · QGIS 3.36 и новее, QGIS 4", "ftr.line2": "Разработано ООО «Информ++»", "ftr.line3": "Космоснимки Esri, Vantor, Earthstar Geographics, and the GIS User Community. Картографические данные © участники OpenStreetMap, векторные тайлы OpenFreeMap. Рельеф Mapzen Terrain Tiles. Марс - NASA, USGS, Viking MDIM2.1, Луна - USGS, LRO LOLA, тайлы OpenPlanetaryMap. Созвездия и имена звёзд - d3-celestial, © Olaf Frohn. Темы, огни и пожары - NASA GIBS, Black Marble, FIRMS. Землетрясения и плиты Slab2 - USGS, кора - CRUST1.0, палеогеография - PALEOMAP PaleoDEM."}, "en": {"news.0_97_0": "<p>New data rows. The GLiM lithological map shows surface rocks in 16 classes. Historical earthquakes show about 74 thousand strong earthquakes since 1904 from the ISC-GEM catalogue. Land cover shows the ESA WorldCover 2021 map with a 10 m pixel. Water occurrence and Water transitions show JRC surface water 1984-2021. The Soils group shows clay, sand, organic carbon and pH of the topsoil from SoilGrids. A click shows the class or value at the point. The New placemark icon opens a menu of placemark, path, polygon or circle, the icon bar menus share its dark look.</p>", "news.0_97_0.date": "17 October 2026", "news.0_96_0": "<p>The icon bar, the time slider, the tour bar, the paleogeography slider, the swipe, the layer scales and the loading icon share one look - a dark translucent plate with light icons of one set, the active one in blue, a white arrow on buttons with a menu. The dot in the middle of the navigation ring returns the straight down view without roll. The lower joystick moves the view slower from far away. New tiles fade in more smoothly. The placemark properties window is split into groups from top to bottom, and the empty properties panel no longer shows.</p>", "news.0_96_0.date": "17 October 2026", "news.0_95_0": "<p>The sea floor comes from the GEBCO 2026 depth grid of about 450 m, the open sea has no more empty spots at zero up close. Inside the Earth has two new rows. Active faults of the GEM database are coloured by the kind of slip, a click shows the slip rate and dip. The Macrostrat geological map shows the age of the rocks, a click shows the unit, the lithology and the age in Ma.</p>", "news.0_95_0.date": "17 October 2026", "news.0_94_0": "<p>The Model section window of a path is also a geological section by the project layers. Checkboxes on the left choose any single-band rasters of the project as bed roofs, the drill holes and layers with Z such as a 3D fence. The bed colours are named on the chart, the section is written to a PNG picture and a CSV table of elevations.</p>", "news.0_94_0.date": "17 October 2026", "news.0_93_0": "<p>The Time series button of the Satellite imagery window charts an index or the surface temperature of the area over all scenes of the list - the median without clouds on each date with the spread inside the area. A click on a point selects the scene, the series can be written to a CSV table.</p>", "news.0_93_0.date": "17 October 2026", "news.all": "All releases are in the changelog on GitHub.", "cta.release": "Download the release", "cta.install": "QGIS plugin catalogue", "cta.code": "Source code", "cta.manual": "Manual PDF", "cta.manual.url": "https://github.com/Valery35/planetx/releases/latest/download/PlanetX_en.pdf", "news.eyebrow": "What's new", "news.h2": "Changes by release", "title": "PlanetX - What's new · Inform++", "brand.sub": "for QGIS", "nav.main": "Overview", "nav.places": "Places", "nav.project": "QGIS project", "nav.data": "Data", "nav.imagery": "Satellite imagery", "nav.news": "What's new", "ftr.line1": "GNU GPL v3 · QGIS 3.36 and newer, QGIS 4", "ftr.line2": "Developed by Inform++ LLC", "ftr.line3": "Imagery Esri, Vantor, Earthstar Geographics, and the GIS User Community. Map data © OpenStreetMap contributors, vector tiles OpenFreeMap. Terrain Mapzen Terrain Tiles. Mars - NASA, USGS, Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles OpenPlanetaryMap. Constellations and star names - d3-celestial, © Olaf Frohn. Themes, lights and fires - NASA GIBS, Black Marble, FIRMS. Earthquakes and Slab2 slabs - USGS, crust - CRUST1.0, paleogeography - PALEOMAP PaleoDEM."}};
+function apply(lang){
+  var d = TEXTS[lang] || TEXTS.ru;
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(function(el){
+    var value = d[el.getAttribute('data-i18n')];
+    if (value !== undefined) el.innerHTML = value;
+  });
+  document.querySelectorAll('[data-i18n-attr]').forEach(function(el){
+    var value = d[el.getAttribute('data-i18n-attr')];
+    if (value !== undefined) el.setAttribute('content', value);
+  });
+  document.querySelectorAll('[data-i18n-href]').forEach(function(el){
+    var value = d[el.getAttribute('data-i18n-href')];
+    if (value !== undefined) el.setAttribute('href', value);
+  });
+  document.querySelectorAll('.lang button').forEach(function(b){
+    b.classList.toggle('on', b.getAttribute('data-lang') === lang);
+  });
+  try { localStorage.setItem('planetx-lang', lang); } catch (e) {}
+}
+
+// Меню прокручивает кодом, а не якорем. Внутри CMS ссылка вида
+// «#idea» может вести на другую страницу.
+document.querySelectorAll('.nav a[href^="#"]').forEach(function(a){
+  a.addEventListener('click', function(ev){
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (!el) return;
+    ev.preventDefault();
+    el.scrollIntoView({behavior: 'smooth', block: 'start'});
+  });
+});
+
+document.querySelectorAll('.lang button').forEach(function(b){
+  b.addEventListener('click', function(){
+    apply(b.getAttribute('data-lang'));
+  });
+});
+
+// По умолчанию русский: страница живёт на русском сайте.
+var saved = null;
+try { saved = localStorage.getItem('planetx-lang'); } catch (e) {}
+apply(saved || 'ru');
+
+// Тексты подставляются после разбора страницы, переход по адресу
+// с решёткой доводится до места вручную.
+(function () {
+  var id = (location.hash || '').slice(1);
+  if (!id) return;
+  var go = function () {
+    var el = document.getElementById(id);
+    if (el) el.scrollIntoView({block: 'start'});
+  };
+  go();
+  setTimeout(go, 0);
+  window.addEventListener('load', go);
+})();
+</script>

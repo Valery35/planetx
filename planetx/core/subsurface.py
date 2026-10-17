@@ -405,6 +405,50 @@ def stack(surfaces):
     return out
 
 
+# Окончания имён гридов: кровля и подошва одного пласта.
+TOPS = ("top", "roof", "кровля", "кр")
+BOTTOMS = ("bottom", "bot", "base", "подошва", "под")
+# Ключ своего цвета породы между пластами на разрезе модели.
+HOST = "@host"
+# Линия кровли по умолчанию - цвет пласта, темнее в эту долю.
+LINE_SHADE = 0.55
+
+
+def bed_key(code):
+    """Пласт и сторона по имени грида: («В», "top») у «В_top», («В»,
+    "bottom») у «В подошва», (code, None) без такого окончания."""
+    text = str(code).strip()
+    lower = text.lower()
+    for side, words in (("top", TOPS), ("bottom", BOTTOMS)):
+        for word in words:
+            for sep in ("_", " ", "-", "."):
+                if lower.endswith(sep + word):
+                    return text[:-len(word) - 1].strip(" _-."), side
+    return text, None
+
+
+def section_fills(codes, fill_of, host):
+    """Заливки промежутков разреза модели между поверхностями сверху
+    вниз: [(ключ, цвет)] на каждую поверхность codes - промежуток под
+    ней. Первая поверхность - рельеф, её код - верхний пласт таблицы или
+    «». Под рельефом без кода и под подошвой пласта (bed_key) - порода
+    между пластами host с ключом HOST, иначе - цвет пласта fill_of(код)
+    с ключом кода. Просьба автора от 17 октября 2026 года - пласт
+    и промежуток под его подошвой шли одним цветом."""
+    out = []
+    for code in codes:
+        if not code or bed_key(code)[1] == "bottom":
+            out.append((HOST, tuple(host)))
+        else:
+            out.append((code, tuple(fill_of(code))))
+    return out
+
+
+def line_color(color):
+    """Линия кровли по умолчанию - цвет пласта темнее."""
+    return tuple(int(c * LINE_SHADE) for c in color[:3])
+
+
 def fence(lats, lons, surfaces, colors):
     """Стенки разреза вдоль линии: между поверхностями surfaces (k, n)
     высот на экране сверху вниз - пласты цветов colors (k - 1)."""

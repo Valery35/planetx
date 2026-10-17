@@ -594,7 +594,7 @@ class PicturesMixin:
         if dialog is None:
             dialog = PlaceProperties(place, self,
                                      current_view=self.current_view,
-                                     current_layers=lambda: dict(self.extras))
+                                     current_layers=self.view_state)
             dialog.setAttribute(enum(Qt, "WidgetAttribute",
                                      "WA_DeleteOnClose"))
             self.prop_dialogs[key] = dialog

@@ -15036,6 +15036,66 @@ def tile_fade_check():
     return None
 
 
+@check(300)
+def layer_appear():
+    # Проявление картинок слоя карты (core/appear.py): сила тяжести над
+    # Гималаями, тайлы приходят и сменяют части предка.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(30.0, 85.0, 6.0e6, 0.0, 0.0))
+    window.set_extra("gravity", True)
+
+
+@check(300)
+def layer_appear_check():
+    from planetx.core import appear
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    layer = view.gibs["emag"]
+    out = result["layer_appear"] = {}
+    most, bias, hide = 0, 0.0, 0.0
+    started = time.monotonic()
+    # Приближение - тайлы делятся, приходят подробные картинки слоя.
+    for distance in (3.0e6, 1.5e6, 8.0e5):
+        view.navigator.show(Pose(30.0, 85.0, distance, 0.0, 0.0))
+        until = time.monotonic() + 4.0
+        while time.monotonic() < until:
+            QgsApplication.processEvents()
+            view.repaint()
+            states = layer.appear.states
+            most = max(most, len(states))
+            for _, _, b, h in states.values():
+                bias, hide = max(bias, b), max(hide, h)
+            time.sleep(0.01)
+    quiet = time.monotonic()
+    while layer.appear.busy() and time.monotonic() - quiet < 3.0:
+        QgsApplication.processEvents()
+        view.repaint()
+        time.sleep(0.02)
+    out.update({"most_appearing": most, "max_bias": round(bias, 2),
+                "max_hide": round(hide, 2),
+                "ended_s": round(time.monotonic() - quiet, 2),
+                "left": len(layer.appear.states),
+                "duration_s": appear.DURATION,
+                "seconds": round(time.monotonic() - started, 1),
+                "gl": dict(view.gl_errors)})
+    # Без проявления (снимок вида, запись тура) - сразу резко.
+    view.tile_fade = False
+    view.navigator.show(Pose(31.0, 86.0, 6.0e5, 0.0, 0.0))
+    until = time.monotonic() + 3.0
+    while time.monotonic() < until:
+        QgsApplication.processEvents()
+        view.repaint()
+        time.sleep(0.02)
+    out["off_appearing"] = len(layer.appear.states)
+    view.tile_fade = True
+    window.set_extra("gravity", False)
+    return None
+
+
 @check(500)
 def tour_layers():
     """Слои у остановок тура: снимок вида в окне свойств запоминает
@@ -15122,6 +15182,214 @@ def tour_layers_wait():
     window.set_extra("plates", False)
     out["gl"] = dict(window.view.gl_errors)
     return None
+
+
+@check(1500)
+def stop_state():
+    """Состояние вида у метки: сектор разреза и непрозрачность строки
+    переживают файл меток и возвращаются видом метки, очаги
+    проявляются плавно."""
+    from planetx.core import lookat
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(30.0, 140.0, 9000000.0, 0.0, 0.0))
+    window.view.update()
+    store = window.myplaces
+    out = result["stop_state"] = {}
+    window.set_extra("quakes", False)
+    window.set_extra("cutaway", True)
+    window.set_wedge_box(120.0, 160.0, 0.0, 38.5)
+    snap = window.view_state()
+    snap["quakes"] = True
+    snap[lookat.OPACITY] = dict(snap.get(lookat.OPACITY) or {},
+                                quakes=0.6)
+    key = store.add(Shape("point", [(30.0, 140.0)], name="Состояние"),
+                    view=(30.0, 140.0, 9000000.0, 0.0, 0.0))
+    store.update(key, {"layers": lookat.layers_text(snap)})
+    state["state_key"] = key
+    layers = store.find(key).layers
+    out["stored"] = {k: layers.get(k) for k in (lookat.WEDGE,
+                                                lookat.OPACITY)}
+    # Другой сектор, потом вид метки возвращает свой.
+    window.set_wedge_box(0.0, 90.0, 0.0, 45.0)
+    window._apply_view_layers(layers)
+    wedge = window.view.wedge
+    out["wedge_back"] = [round(v, 3) for v in wedge] if wedge else None
+    out["quakes_on"] = bool(window.extras.get("quakes"))
+    out["fading"] = sorted(getattr(window, "_fades", {}) or {})
+    out["opacity_start"] = round(window.view.quakes.opacity, 3)
+
+
+@check(1000)
+def stop_state_check():
+    from planetx.core import lookat
+    window = state["window"]
+    out = result.setdefault("stop_state", {})
+    out["opacity_end"] = round(window.view.quakes.opacity, 3)
+    out["fades_left"] = len(getattr(window, "_fades", {}) or {})
+    # Плавное выключение: строка гаснет и снимается в конце.
+    window._apply_view_layers({"quakes": False})
+    out["off_during"] = bool(window.extras.get("quakes"))
+    state["off_began"] = time.monotonic()
+    out["switch_quakes"] = lookat.switches(
+        window.myplaces.find(state["state_key"]).layers).get("quakes")
+
+
+@check(300)
+def stop_state_done():
+    window = state["window"]
+    out = result.setdefault("stop_state", {})
+    out["off_after"] = bool(window.extras.get("quakes"))
+    out["opacity_restored"] = round(window.view.quakes.opacity, 3)
+    window.myplaces.remove(state.pop("state_key"))
+    window.set_extra("cutaway", False)
+    from qgis.core import QgsSettings
+    QgsSettings().remove("PlanetX/opacity/quakes")
+    window._apply_layer_opacity("quakes")
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(500)
+def tour_free():
+    """Камера, взятая на паузе остановки, тур не останавливает: после
+    паузы тур летит к следующей остановке. Клавиши показа."""
+    from planetx.core.tour import Stop
+    window = state["window"]
+    window.set_body("earth")
+    player = window.tour
+    player.bar.pause.setValue(3.0)
+    stops = [Stop("А", 58.0, 56.25, 300000.0),
+             Stop("Б", 58.5, 57.0, 300000.0),
+             Stop("В", 59.0, 57.5, 300000.0)]
+    player.start(stops)
+    state["free_seen"] = []
+    state["free_grabbed"] = None
+    state["free_began"] = time.monotonic()
+    result["tour_free"] = {}
+
+
+@check(200)
+def tour_free_wait():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    player = window.tour
+    nav = window.view.navigator
+    out = result["tour_free"]
+    tour = player.tour
+    if state["free_grabbed"] is None:
+        # Ждём остановки А и берём камеру посреди паузы.
+        if tour is not None and player.index == 0 \
+                and tour.arrived(player.t) and player.playing:
+            nav.stop()
+            pose = nav.pose
+            nav.show(Pose(pose.lat + 0.2, pose.lon, pose.distance,
+                          30.0, 20.0))
+            window.view.update()
+            player.tick()
+            state["free_grabbed"] = time.monotonic()
+            out["free"] = player._free is not None
+            out["playing_in_free"] = player.playing
+            out["index_in_free"] = player.index
+        elif time.monotonic() - state["free_began"] > 60.0:
+            out["timeout"] = "no arrival"
+            return None
+        return 200
+    if player.index == 1 and player._free is None and player.playing:
+        out["moved_on"] = round(time.monotonic() - state["free_grabbed"], 2)
+        return None
+    if time.monotonic() - state["free_grabbed"] > 20.0:
+        out["moved_on"] = None
+        out["state"] = [player.index, player._free is not None,
+                        player.playing]
+        return None
+    return 200
+
+
+@check(500)
+def tour_keys():
+    from qgis.PyQt.QtCore import QEvent, Qt
+    from qgis.PyQt.QtGui import QKeyEvent
+    from qgis.PyQt.QtWidgets import QApplication
+    from planetx.qt_compat import enum
+    window = state["window"]
+    player = window.tour
+    out = result.setdefault("tour_free", {})
+
+    def press(name):
+        event = QKeyEvent(enum(QEvent, "Type", "KeyPress"),
+                          enum(Qt, "Key", name),
+                          enum(Qt, "KeyboardModifier", "NoModifier"))
+        QApplication.sendEvent(window.view, event)
+
+    press("Key_Right")
+    out["right"] = player.index
+    press("Key_Left")
+    press("Key_Left")
+    out["left"] = player.index
+    press("Key_Space")
+    out["space_pause"] = player.playing
+    press("Key_Space")
+    out["space_play"] = player.playing
+    press("Key_Escape")
+    out["escape"] = player.tour is None
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(1500)
+def place_card():
+    """Щелчок по метке на глобусе - карточка в панели справа, ответ
+    помощника на «Объясни это» - в карточке. Окно свойств карточка
+    не вытесняет."""
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    store = window.myplaces
+    result["place_card"] = {}
+    key = store.add(Shape("point", [(58.01, 56.23)], name="Эспланада"))
+    store.update(key, {"description": "<b>Площадь</b> в центре Перми."})
+    state["card_key"] = key
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.01, 56.23, 3000.0, 0.0, 0.0))
+    window.view.update()
+
+
+@check(500)
+def place_card_check():
+    from planetx.ui.placecard import PlaceCard, explain_question
+    window = state["window"]
+    out = result.setdefault("place_card", {})
+    view = window.view
+    view.repaint()
+    QgsApplication.processEvents()
+    cam = view.camera
+    window._clicked(cam.width / 2.0, cam.height / 2.0)
+    card = window.side.dialog
+    out["card"] = isinstance(card, PlaceCard)
+    out["visible"] = window.side.isVisible()
+    if isinstance(card, PlaceCard):
+        out["title"] = card.windowTitle()
+        out["text"] = card.text.toPlainText()
+        out["explain_enabled"] = card.explain_button.isEnabled()
+        place = window.myplaces.find(state["card_key"])
+        out["question"] = explain_question(place, "Метка")
+        window._explaining = card
+        window._assistant_said("assistant", "Это площадь.")
+        out["answer"] = card.answer.text()
+        # Окно свойств в панели, щелчок по метке его не вытесняет.
+        window._open_place_properties(place)
+        window._clicked(cam.width / 2.0, cam.height / 2.0)
+        out["props_kept"] = not isinstance(window.side.dialog, PlaceCard)
+        window.side.close_dialog()
+    # Щелчок мимо меток карточку не открывает.
+    window.side.close_dialog()
+    window._clicked(5.0, 5.0)
+    out["empty_click"] = window.side.dialog is None
+    window.myplaces.remove(state.pop("card_key"))
+    window.panel.set_answer("")
+    out["gl"] = dict(view.gl_errors)
 
 
 @check(8000)
@@ -17189,19 +17457,46 @@ SMOKE = (
     "buildings_wait", "buildings_off",
     # показ, проявление, подпись, геофизика, журнал
     "fullscreen_on", "fullscreen_check", "fullscreen_off", "tile_fade",
-    "tile_fade_check", "crossfade_on", "crossfade_check", "snapshot_brand",
-    "fields_on", "fields_check", "journal_check", "close_without_heights",
+    "tile_fade_check", "layer_appear", "layer_appear_check",
+    "crossfade_on", "crossfade_check", "snapshot_brand",
+    "fields_on", "fields_check", "journal_check",
+    # состояние вида метки, свободная камера и клавиши тура, карточка
+    "stop_state", "stop_state_check", "stop_state_done", "tour_free",
+    "tour_free_wait", "tour_keys", "place_card", "place_card_check",
+    "close_without_heights",
 )
 
-# Выбор шагов: PLANETX_STEPS=tour_start,tour_wait или smoke. Окно
+# Главное - раскладка на глобусе: подложка без дыр, рельеф и дно, слои
+# проекта и свои объекты, слои карт, картинки на поверхности, разрез
+# Земли, здания, тела, проявление тайлов и слоёв. Предложение автора
+# от 17 октября 2026 года - при проверке выделить главное, остальное
+# (окна, туры, поиск, помощник, снимки спутников) проверять по
+# отдельному заданию. PLANETX_STEPS=globe.
+GLOBE = (
+    "shapes_set", "shapes_check", "link_setup", "layer_opacity",
+    "layer_opacity_check", "shot_file", "shot_file_wait", "ge_nav",
+    "stars_on", "stars_off", "body_mars", "body_mars_check",
+    "body_moon_check", "body_earth_check", "seafloor_on", "seafloor_check",
+    "seafloor_off", "themes_open", "themes_bar", "themes_off",
+    "overlays_open", "overlays_add", "overlays_check", "overlays_clean",
+    "contours_on", "contours_check", "cutaway_on", "cutaway_wait",
+    "cutaway_check", "cutaway_close", "cutaway_off", "slope_on",
+    "slope_check", "buildings_on", "buildings_wait", "buildings_off",
+    "tile_fade", "tile_fade_check", "layer_appear", "layer_appear_check",
+    "crossfade_on", "crossfade_check", "fields_on", "fields_check",
+    "close_without_heights",
+)
+
+# Выбор шагов: PLANETX_STEPS=tour_start,tour_wait, smoke или globe. Окно
 # открывается всегда. Без переменной идут все шаги.
 ONLY = os.environ.get("PLANETX_STEPS")
-if ONLY == "smoke":
+if ONLY in ("smoke", "globe"):
+    _set = SMOKE if ONLY == "smoke" else GLOBE
     _names = {c[0].__name__ for c in CHECKS}
-    _missing = [name for name in SMOKE if name not in _names]
+    _missing = [name for name in _set if name not in _names]
     if _missing:
-        result["errors"].append("smoke: нет шагов " + ", ".join(_missing))
-    ONLY = ",".join(SMOKE)
+        result["errors"].append(ONLY + ": нет шагов " + ", ".join(_missing))
+    ONLY = ",".join(_set)
 if ONLY:
     CHECKS[:] = [c for c in CHECKS if c[0].__name__ == "open_globe"
                  or c[0].__name__ in ONLY.split(",")]

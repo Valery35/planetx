@@ -66,6 +66,17 @@ class TestTour(unittest.TestCase):
         self.assertEqual(tour.caption_at(tour.arrivals[1] + 3.5),
                          (1, 1.0))
 
+    def test_pause_end_only_on_stop(self):
+        # Камера стоит на остановке - конец её паузы, в перелёте и после
+        # конца тура - None. Камеру, взятую на паузе, тур не теряет.
+        tour = tr.Tour(self.start, STOPS, pause=4.0)
+        self.assertIsNone(tour.pause_end(tour.starts[1] + 0.01))
+        self.assertAlmostEqual(tour.pause_end(tour.arrivals[1] + 1.0),
+                               tour.arrivals[1] + 4.0, places=9)
+        self.assertIsNone(tour.pause_end(tour.duration))
+        self.assertIsNone(tr.Tour(self.start, STOPS, pause=0.0)
+                          .pause_end(tour.arrivals[0]))
+
     def test_no_caption_without_pause(self):
         tour = tr.Tour(self.start, STOPS, pause=0.0)
         self.assertIsNone(tour.caption_at(tour.arrivals[1]))

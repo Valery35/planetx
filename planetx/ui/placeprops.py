@@ -512,7 +512,7 @@ class PlaceProperties(QDialog):
 
     def _layers_label(self):
         """Подпись флажка слоёв вида: сколько строк включено."""
-        count = sum(1 for on in (self.layers or {}).values() if on)
+        count = sum(1 for on in lookat.switches(self.layers).values() if on)
         return tr("Слои глобуса со снимка, включено строк {count}",
                   count=count)
 

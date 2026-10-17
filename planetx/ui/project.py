@@ -10,6 +10,7 @@
 Перерисовку слой просит при правке данных и стиля.
 """
 import json
+import string
 from functools import partial
 
 from qgis.core import QgsProject
@@ -32,6 +33,7 @@ BATHYMETRY = "bathymetry"
 # Годы исторических карт - растров и тайлов проекта, строка JSON
 # {номер слоя: год}, core/oldmaps.py.
 MAP_YEARS = "map_years"
+SECTION_COLORS = "section_colors"  # свои цвета окна «Разрез модели»
 
 
 def map_layers(project=None):
@@ -126,6 +128,37 @@ def write_map_years(years, project=None):
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, MAP_YEARS, json.dumps(
         {k: int(v) for k, v in years.items()}, sort_keys=True))
+
+
+def read_section_colors(project=None):
+    """Свои цвета окна «Разрез модели»: {ключ: {"fill" или "line":
+    (r, g, b)}}, ключ - код пласта или core.subsurface.HOST."""
+    project = project or QgsProject.instance()
+    value, ok = project.readEntry(ENTRY, SECTION_COLORS, "")
+    try:
+        data = json.loads(value) if ok and value else {}
+    except ValueError:
+        return {}
+    out = {}
+    for key, parts in (data.items() if isinstance(data, dict) else ()):
+        if not isinstance(parts, dict):
+            continue
+        for part in ("fill", "line"):
+            text = str(parts.get(part) or "").lstrip("#").lower()
+            if len(text) == 6 and all(c in string.hexdigits for c in text):
+                out.setdefault(str(key), {})[part] = tuple(
+                    int(text[i:i + 2], 16) for i in (0, 2, 4))
+    return out
+
+
+def write_section_colors(colors, project=None):
+    """Свои цвета разреза модели в запись проекта, «#rrggbb»."""
+    project = project or QgsProject.instance()
+    data = {str(key): {part: "#%02x%02x%02x" % tuple(rgb[:3])
+                       for part, rgb in parts.items()}
+            for key, parts in colors.items() if parts}
+    project.writeEntry(ENTRY, SECTION_COLORS,
+                       json.dumps(data, sort_keys=True))
 
 
 def layer_group(layer_id, project=None):

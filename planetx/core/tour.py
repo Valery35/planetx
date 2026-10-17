@@ -353,6 +353,16 @@ class Tour:
             return -1
         return max(0, bisect.bisect_right(self.starts, t) - 1)
 
+    def pause_end(self, t):
+        """Время тура конца паузы остановки, на которой камера стоит
+        в момент t, или None - камера летит, едет или тур кончился. На
+        паузе камеру можно вертеть мышью, тур идёт дальше после неё."""
+        i = self.index_at(t)
+        if i < 0 or t < self.arrivals[i]:
+            return None
+        end = self.arrivals[i] + self.pauses[i]
+        return end if t < end else None
+
     def arrived(self, t):
         """Стоит ли камера на остановке, а не летит и не едет."""
         i = self.index_at(t)

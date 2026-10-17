@@ -305,44 +305,57 @@ uniform vec4 u_fade;
 // предка, пока своя не готова. Без наложения - прозрачная текстура.
 uniform sampler2D u_overlay;
 uniform vec4 u_overlay_uv;
+uniform vec4 u_overlay_fx;
 // Облака поверх подложки и наложения, тоже с премноженной альфой
 // и окном в картинке предка, см. render/clouds.py.
 uniform sampler2D u_clouds;
 uniform vec4 u_clouds_uv;
+uniform vec4 u_clouds_fx;
 // Температура моря и суши под наложением, так же, см. render/gibs.py.
 uniform sampler2D u_sea;
 uniform vec4 u_sea_uv;
+uniform vec4 u_sea_fx;
 uniform sampler2D u_land;
 uniform vec4 u_land_uv;
+uniform vec4 u_land_fx;
 // Уклон или экспозиция по высотам, над температурой, см. core/slope.py.
 uniform sampler2D u_slope;
 uniform vec4 u_slope_uv;
+uniform vec4 u_slope_fx;
 // Видимость из точки, над уклоном, см. core/viewshed.py.
 uniform sampler2D u_viewshed;
 uniform vec4 u_viewshed_uv;
+uniform vec4 u_viewshed_fx;
 // Инсоляция, над видимостью, см. core/insolation.py.
 uniform sampler2D u_insolation;
 uniform vec4 u_insolation_uv;
+uniform vec4 u_insolation_fx;
 // Тема NASA GIBS: осадки, газы, снег и другие, см. core/themes.py.
 uniform sampler2D u_theme;
 uniform vec4 u_theme_uv;
+uniform vec4 u_theme_fx;
 // Шторка сравнения дат (ui/swipe.py): левее доли u_swipe ширины кадра
 // вместо темы - та же тема на другой день u_compare, по границе - белая
 // линия. Шторка выключена - u_swipe меньше нуля.
 uniform sampler2D u_compare;
 uniform vec4 u_compare_uv;
+uniform vec4 u_compare_fx;
 // Заливка скорости течений под струйками, core/flow.py.
 uniform sampler2D u_currents;
 uniform vec4 u_currents_uv;
+uniform vec4 u_currents_fx;
 // Магнитные аномалии EMAG2v3, core/emag.py.
 uniform sampler2D u_emag;
 uniform vec4 u_emag_uv;
+uniform vec4 u_emag_fx;
 // Горизонтали рельефа, core/contours.py.
 uniform sampler2D u_contours;
 uniform vec4 u_contours_uv;
+uniform vec4 u_contours_fx;
 // Кадастр Росреестра, core/cadastre.py.
 uniform sampler2D u_cadastre;
 uniform vec4 u_cadastre_uv;
+uniform vec4 u_cadastre_fx;
 uniform float u_swipe;
 // Шторка исторических карт (core/oldmaps.py): левее шторки u_compare - то же
 // наложение слоёв проекта с картой другого года, вместо u_overlay.
@@ -379,8 +392,12 @@ uniform float u_plain;
 out vec4 frag_color;
 """ + ATMOSPHERE + """
 // uv.w - доля прозрачности слоя (ползунок «На глобусе»), 0 - как есть.
-vec3 lay(vec3 under, sampler2D image, vec4 uv) {
-    vec4 top = texture(image, uv.xy + uv.z * v_uv) * (1.0 - uv.w);
+// fx - проявление картинки тайла (core/appear.py): x - сдвиг уровня
+// мипмапа, картинка сначала с разрешением прежней, y - доля прозрачности
+// картинки, которой у тайла раньше не было. Ноль - картинка как есть.
+vec3 lay(vec3 under, sampler2D image, vec4 uv, vec4 fx) {
+    vec4 top = texture(image, uv.xy + uv.z * v_uv, fx.x)
+        * (1.0 - uv.w) * (1.0 - fx.y);
     return under * (1.0 - top.a) + top.rgb;
 }
 void main() {
@@ -412,29 +429,29 @@ void main() {
         shade = 1.0;
     } else {
         base = texture(u_texture, v_uv, u_fade.x).rgb;
-        base = lay(base, u_sea, u_sea_uv);
-        base = lay(base, u_land, u_land_uv);
-        base = lay(base, u_slope, u_slope_uv);
-        base = lay(base, u_viewshed, u_viewshed_uv);
-        base = lay(base, u_insolation, u_insolation_uv);
+        base = lay(base, u_sea, u_sea_uv, u_sea_fx);
+        base = lay(base, u_land, u_land_uv, u_land_fx);
+        base = lay(base, u_slope, u_slope_uv, u_slope_fx);
+        base = lay(base, u_viewshed, u_viewshed_uv, u_viewshed_fx);
+        base = lay(base, u_insolation, u_insolation_uv, u_insolation_fx);
         float edge = gl_FragCoord.x - u_swipe * u_viewport.x;
         bool left = u_swipe >= 0.0 && edge < 0.0;
         bool maps = u_swipe_maps > 0.5;
         if (left && !maps) {
-            base = lay(base, u_compare, u_compare_uv);
+            base = lay(base, u_compare, u_compare_uv, u_compare_fx);
         } else {
-            base = lay(base, u_theme, u_theme_uv);
+            base = lay(base, u_theme, u_theme_uv, u_theme_fx);
         }
-        base = lay(base, u_emag, u_emag_uv);
-        base = lay(base, u_currents, u_currents_uv);
-        base = lay(base, u_contours, u_contours_uv);
-        base = lay(base, u_cadastre, u_cadastre_uv);
+        base = lay(base, u_emag, u_emag_uv, u_emag_fx);
+        base = lay(base, u_currents, u_currents_uv, u_currents_fx);
+        base = lay(base, u_contours, u_contours_uv, u_contours_fx);
+        base = lay(base, u_cadastre, u_cadastre_uv, u_cadastre_fx);
         if (left && maps) {
-            base = lay(base, u_compare, u_compare_uv);
+            base = lay(base, u_compare, u_compare_uv, u_compare_fx);
         } else {
-            base = lay(base, u_overlay, u_overlay_uv);
+            base = lay(base, u_overlay, u_overlay_uv, u_overlay_fx);
         }
-        base = lay(base, u_clouds, u_clouds_uv);
+        base = lay(base, u_clouds, u_clouds_uv, u_clouds_fx);
         if (u_swipe >= 0.0 && abs(edge) < SWIPE_LINE) {
             base = vec3(1.0);
         }

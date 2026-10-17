@@ -211,6 +211,26 @@ class TestLayers(unittest.TestCase):
             kml.KFolder("x", True, [place]))).children[0]
         self.assertEqual(again.pace, (None, 2.0))
 
+    def test_view_state_round_trip(self):
+        # Сектор разреза, земля над моделью и непрозрачности строк
+        # переживают KML, неверные значения отбрасываются.
+        layers = {"cutaway": True, "@wedge": [120, 160, 0, 38.5],
+                  "@ground": {"opacity": 0.4, "cut": True, "under": 0,
+                              "junk": "x"},
+                  "@opacity": {"quakes": 0.5, "grid": "bad"},
+                  "@unknown": 5}
+        place = kml.KPlace("Остановка", "point", [(58.0, 56.0)],
+                           layers=layers)
+        again = kml.read_kml(kml.write_kml(
+            kml.KFolder("x", True, [place]))).children[0]
+        self.assertEqual(again.layers, {
+            "cutaway": True, "@wedge": [120.0, 160.0, 0.0, 38.5],
+            "@ground": {"opacity": 0.4, "cut": True, "under": False},
+            "@opacity": {"quakes": 0.5}})
+        # Без состояния - только строки.
+        self.assertEqual(kml.lookat.switches(again.layers),
+                         {"cutaway": True})
+
     def test_no_layers_no_data(self):
         place = kml.KPlace("Точка", "point", [(58.0, 56.0)])
         text = kml.write_kml(kml.KFolder("x", True, [place]))

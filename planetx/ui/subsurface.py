@@ -71,8 +71,8 @@ BED_COLORS = ((214, 168, 96), (122, 172, 112), (96, 146, 196),
               (160, 150, 200), (190, 180, 110))
 # Кровля и подошва одного пласта - имена слоёв с этими окончаниями,
 # пара даёт плиту пласта с торцами (core.grid_walls).
-TOPS = ("top", "roof", "кровля", "кр")
-BOTTOMS = ("bottom", "bot", "base", "подошва", "под")
+TOPS = core.TOPS
+BOTTOMS = core.BOTTOMS
 WALL_SHADE = 0.8  # торец пласта темнее его поверхности
 HOST_COLOR = (176, 168, 156)  # вмещающая порода между пластами гридов
 FLOOR_COLOR = (74, 68, 62)  # дно блока под гридами
@@ -414,17 +414,7 @@ def label_by_field(layer, field):
     layer.setLabelsEnabled(True)
 
 
-def bed_key(code):
-    """Пласт и сторона по имени грида: («В», "top») у «В_top», («В»,
-    "bottom») у «В подошва», (code, None) без такого окончания."""
-    text = str(code).strip()
-    lower = text.lower()
-    for side, words in (("top", TOPS), ("bottom", BOTTOMS)):
-        for word in words:
-            for sep in ("_", " ", "-", "."):
-                if lower.endswith(sep + word):
-                    return text[:-len(word) - 1].strip(" _-."), side
-    return text, None
+bed_key = core.bed_key
 
 
 def _with_alpha(color, alpha):
