@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.97.0
+version=0.98.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,20 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.97.0 New data rows. The GLiM lithological map shows surface
+changelog=0.98.0 Map tiles fade in smoothly, like the base map. A finer
+      picture starts at the resolution of the previous one and becomes
+      sharp, a tile without a picture fades in from transparency - NASA
+      themes, geophysics and geology maps, soils, water and project
+      layers. A click on a placemark opens a card with its description,
+      the Explain this button asks the assistant about it. A placemark
+      view keeps the Earth cutaway sector, the ground over the
+      subsurface model and row opacities, tour stop layers fade in and
+      out. During a tour the Right and Left keys step through stops,
+      Space pauses, Esc stops, the view turns with the mouse during a
+      pause. The Model section window fills beds and the rock between
+      them with different colours and outlines tops and bottoms, a right
+      click sets own colours kept in the project.
+      0.97.0 New data rows. The GLiM lithological map shows surface
       rocks in 16 classes. Historical earthquakes show about 74 thousand
       strong earthquakes since 1904 from the ISC-GEM catalogue. Land
       cover shows the ESA WorldCover 2021 map with a 10 m pixel. Water
