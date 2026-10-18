@@ -155,6 +155,47 @@ class TestMovers(unittest.TestCase):
         self.assertEqual(movers.chase(60.0, 25.0, 30.0, math.nan, 2000.0,
                                       60.0), (60.0, 25.0, 30.0, 2000.0))
 
+    def test_turning_object_follows_arc(self):
+        # 100 м/с, поворот 3°/с: за 30 с курс 90° -> 180°, хорда - на
+        # азимут 135°, длина 2R·sin 45°, R = v / ω.
+        fleet = movers.Movers(extrapolate=60.0)
+        fleet.update([movers.Sample("a", 1000.0, 60.0, 25.0, 100.0, 90.0,
+                                    90.0, 1000.0, 0.0, math.nan, 3.0)],
+                     0.0, clock=1000.0)
+        (_, lat, lon, heading, _), = fleet.positions(0.0, clock=1030.0)
+        self.assertAlmostEqual(heading, 180.0, delta=1e-6)
+        radius = 100.0 / math.radians(3.0)
+        self.assertAlmostEqual(trains._metres(60.0, 25.0, lat, lon),
+                               2.0 * radius * math.sin(math.radians(45.0)),
+                               delta=2.0)
+        self.assertLess(lat, 60.0)
+        self.assertGreater(lon, 25.0)
+
+    def test_turn_from_two_samples_and_attitude(self):
+        fleet = movers.Movers()
+        fleet.update([movers.Sample("a", 1000.0, 60.0, 25.0, 100.0, 90.0,
+                                    math.nan, 1000.0, 5.0, math.nan)],
+                     0.0, clock=1000.0)
+        fleet.update([movers.Sample("a", 1010.0, 60.0, 25.02, 100.0, 110.0,
+                                    math.nan, 1050.0, 5.0, math.nan)],
+                     1.0, clock=1010.0)
+        item = fleet.items["a"]
+        self.assertAlmostEqual(item.sample.turn, 2.0)
+        pitch, roll = fleet.attitude(item, 1010.0)
+        self.assertAlmostEqual(pitch, math.degrees(math.atan2(5.0, 100.0)))
+        self.assertAlmostEqual(roll, math.degrees(math.atan(
+            math.radians(2.0) * 100.0 / movers.G)))
+        # Через полкруга от 350° к 10° - поворот вправо, не влево.
+        a = movers.Sample("b", 0.0, 0, 0, 50.0, 350.0)
+        b = movers.Sample("b", 10.0, 0, 0, 50.0, 10.0)
+        self.assertAlmostEqual(movers.turn_between(a, b), 2.0)
+        # Данный крен главнее, на земле крена нет.
+        item.sample.roll = -7.0
+        self.assertEqual(fleet.attitude(item, 1010.0)[1], -7.0)
+        item.sample.roll = math.nan
+        item.sample.alt = math.nan
+        self.assertEqual(fleet.attitude(item, 1010.0), (0.0, 0.0))
+
     def test_new_sample_blends(self):
         fleet = movers.Movers()
         fleet.update([movers.Sample("a", 1000.0, 60.0, 25.0, 10.0, 0.0)],

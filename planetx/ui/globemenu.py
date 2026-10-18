@@ -123,6 +123,13 @@ def show(window, px, py):
             lambda *a: fly_here(view, lat, lon))
         menu.addAction(tr("Облететь вокруг")).triggered.connect(
             lambda *a: window.spin_here(lat, lon))
+        if not drawing:
+            fly = menu.addAction(tr("Полёт отсюда"))
+            fly.setToolTip(tr(
+                "Свой самолёт над этой точкой. Стрелки - нос и крен, "
+                "PageUp и PageDown - тяга, Esc - выход."))
+            fly.triggered.connect(
+                lambda *a: window.flight.start(lat, lon))
         if not drawing and window.planet.earth:
             route_items(window, menu, place, lat, lon)
         menu.addSeparator()

@@ -44,6 +44,7 @@ from ..render.view import GlobeView, start_keys
 from .about import show_about
 from .snapshot import BRAND_HEIGHT, brand_image
 from . import guide as guide_ui
+from . import style
 from .sidepanel import SidePanel
 from .layer_labels import LayerLabels
 from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
@@ -79,6 +80,7 @@ from .satellites import SatelliteManager
 from .track import TrackManager
 from .trains import TrainManager
 from .live import AircraftManager, VesselManager
+from .flightsim import FlightSim
 from .swipe import SwipeBar
 from .sync import MapSync
 from .timebar import TimeBar
@@ -147,6 +149,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # размеры тела общие для модуля.
         self.planet = EARTH_PLANET
         ellipsoid.set_body(EARTH_PLANET.body)
+        # Оформление - до плашек и значков, они берут его цвета.
+        style.apply(QgsSettings().value(style.THEME_KEY, style.DARK))
 
         self.view = GlobeView(self)
         # Подписи неба - раньше панели значков, чтобы лечь под неё.
@@ -181,6 +185,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.view.on_motion = set_moving
         self.view.load_changed.connect(self._show_state)
         self.panel = LayerPanel(self)
+        self.panel.setObjectName("planetxPanel")
         self.place = self.panel.place
         self.status = self.panel.status
         self.toolbar = ViewToolbar(self.view)
@@ -455,6 +460,12 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Панель свойств справа от вида (ui/sidepanel.py): окна свойств
         # метки, папки, картинки, батиметрии и выдавливания.
         self.side = SidePanel(self)
+        self.side.setObjectName("planetxSide")
+        self.setObjectName("planetxWindow")
+        for part in (self, self.panel, self.side):
+            part.setAttribute(enum(Qt, "WidgetAttribute",
+                                   "WA_StyledBackground"))
+        self.setStyleSheet(style.window_style())
         splitter.addWidget(self.side)
         # Разделитель показывает добавленную панель, пустая - скрыта.
         self.side.hide()
@@ -886,6 +897,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Живые объекты: запись облёта ведёт их по своим часам.
         self.live_managers = (self.train_manager, self.vessel_manager,
                               self.aircraft_manager)
+        # Режим полёта своего самолёта (ui/flightsim.py).
+        self.flight = FlightSim(self)
         self.route_manager = RouteManager(self)
         # Погода: поля прогноза GFS темой группы «Погода», окна прогноза
         # в точке.
@@ -960,6 +973,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.train_manager.close()
             self.vessel_manager.close()
             self.aircraft_manager.close()
+            self.flight.close()
             self.route_manager.close()
             self.weather.close()
             self.flow.close()

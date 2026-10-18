@@ -39,11 +39,10 @@ from qgis.PyQt.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel,
 from ..core import clock, when
 from ..i18n import tr
 from ..qt_compat import enum
-from .style import GLYPHS, MUTED, icon, plate_style, set_glyph
+from .style import GLYPHS, MUTED, icon, plate, set_glyph
 
 MARGIN = 12  # пикселей от верхнего края вида
 # Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
-STYLE = plate_style("planetxTime")
 TRACK_WIDTH = 320  # логических пикселей
 HANDLE = 6.0  # полуширина бегунка
 PLAY_PERIOD = 40  # мс между шагами проигрывания
@@ -214,8 +213,7 @@ class TimeBar(QFrame):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.setObjectName("planetxTime")
-        self.setStyleSheet(STYLE)
+        plate(self, "planetxTime")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(4, 3, 6, 3)
         layout.setSpacing(4)

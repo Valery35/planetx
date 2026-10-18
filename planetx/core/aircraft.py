@@ -85,6 +85,11 @@ def _number(value):
     return number if math.isfinite(number) else None
 
 
+def _nan(value):
+    number = _number(value)
+    return math.nan if number is None else number
+
+
 class Info:
     """Сведения о борте: позывной, бортовой номер, тип, категория,
     на земле ли он."""
@@ -136,7 +141,7 @@ def parse(data):
             math.nan if track is None else track,
             math.nan if heading is None else heading, alt,
             0.0 if ground else rate * FOOT / 60.0,
-            _number(ac.get("roll")) or 0.0))
+            _nan(ac.get("roll")), _nan(ac.get("track_rate"))))
         info[key] = Info((ac.get("flight") or "").strip(),
                          (ac.get("r") or "").strip(),
                          (ac.get("t") or "").strip(),

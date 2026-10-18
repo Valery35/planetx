@@ -29,6 +29,7 @@ from ...qt_compat import enum
 from ..tilesource import TileSourceDialog
 from ..nasamaps import ANY_BODY, RELIEF_BODY, layer_names, map_names
 from .. import export as layer_export
+from .. import style
 from ..weather import field_attribution, field_valid_text
 from .base import (ACCEPTED_KEY, ACTIVE_ORDER, BASEMAP_KEY, EARTH_EXTRAS,
                    EXTRA_KEY, FLOW_LAYERS, GIBS_FADES, LANGUAGE_KEY, LINES_KEY,
@@ -60,6 +61,15 @@ class StateMixin:
     def relief_scale(self):
         return self._scale
 
+    def set_ui_theme(self, name):
+        """Оформление окна глобуса и окон модуля, меняется сразу."""
+        QgsSettings().setValue(style.THEME_KEY, name)
+        style.apply(name)
+        self.setStyleSheet(style.window_style())
+        style.restyle(self)
+        self.view.update()
+        journal.note("Оформление: {}".format(style.current()))
+
     def state(self):
         """Состояние для окна свойств."""
         return {"basemap": self._basemap, "groups": self._groups,
@@ -67,7 +77,7 @@ class StateMixin:
                 "language": self._language, "sync": self.sync.direction,
                 "follow": self.follow, "new_shown": self.new_shown,
                 "auto": self.auto_refresh, "coords": self.coords,
-                "sea": self.sea_depths}
+                "sea": self.sea_depths, "ui_theme": style.current()}
 
     def set_sync_direction(self, way):
         """Кто за кем следует при синхронизации с картой."""

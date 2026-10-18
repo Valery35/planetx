@@ -15,7 +15,7 @@ from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton
 from ..core.planets import MENU
 from ..i18n import tr
 from ..qt_compat import QActionGroup, enum
-from .style import icon, plate_style
+from .style import icon, plate
 
 
 def body_names():
@@ -35,7 +35,6 @@ ICON_SIZE = QSize(20, 20)
 # вместе с демо «Тоннели Vegas Loop».
 SUBSURFACE = True
 # Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
-STYLE = plate_style("planetxToolbar")
 # Пункты меню новой метки - вид объекта и подпись, порядок вкладок окна
 # «Новая метка» (ui/draw.py, MODES).
 PLACE_MODES = (("point", "Метка"), ("path", "Путь"),
@@ -70,8 +69,7 @@ class ViewToolbar(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("planetxToolbar")
-        self.setStyleSheet(STYLE)
+        plate(self, "planetxToolbar")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)
         layout.setSpacing(2)

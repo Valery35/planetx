@@ -8,6 +8,12 @@
 курсом, высотой и скоростью подъёма. Между положениями объект идёт
 своим курсом со своей скоростью не дольше extrapolate секунд, новое
 положение принимает переходом BLEND секунд, как поезд core.trains.
+
+Объект с известной скоростью поворота (track_rate ADS-B или разность
+курсов двух положений) идёт по дуге, а не по прямой. Тангаж модели
+самолёта - по подъёму и скорости, крен без данных - координированный,
+по скорости поворота (attitude). Просьба автора от 19 октября
+2026 года - «кинематику доделывай».
 """
 import math
 import time
@@ -21,15 +27,21 @@ except ImportError:  # headless-тесты
 
 KNOT = 1852.0 / 3600.0  # м/с в узле
 FOOT = 0.3048
+G = 9.81
+TURN_MAX = 6.0  # °/с, скорость поворота по двум положениям не больше
+TURN_GAP = 60.0  # с, положения дальше друг от друга поворот не дают
+ROLL_MAX = 45.0  # крен по скорости поворота не больше
 
 
 class Sample:
     """Положение объекта: ключ, время (секунды UTC), точка, скорость м/с,
     курс по земле, азимут корпуса (NaN - нет), высота м (NaN - на
-    поверхности), подъём м/с, крен."""
+    поверхности), подъём м/с, крен (NaN - нет), скорость поворота °/с
+    (NaN - нет)."""
 
     def __init__(self, key, t, lat, lon, speed=0.0, course=math.nan,
-                 heading=math.nan, alt=math.nan, climb=0.0, roll=0.0):
+                 heading=math.nan, alt=math.nan, climb=0.0, roll=0.0,
+                 turn=math.nan):
         self.key = key
         self.t = t
         self.lat = lat
@@ -40,6 +52,7 @@ class Sample:
         self.alt = alt
         self.climb = climb
         self.roll = roll
+        self.turn = turn
 
 
 class Mover:
@@ -81,6 +94,8 @@ class Movers:
                 continue
             if sample.t <= item.sample.t:
                 continue
+            if sample.turn != sample.turn:
+                sample.turn = turn_between(item.sample, sample)
             shown = self.place(item, now, clock)
             item.sample = sample
             item.blend_from = shown
@@ -97,8 +112,11 @@ class Movers:
         lat, lon = sample.lat, sample.lon
         course = sample.course
         if course == course and sample.speed > 0.0 and elapsed > 0.0:
-            lat, lon = destination(lat, lon, course,
-                                   sample.speed * elapsed)
+            turn = sample.turn if sample.turn == sample.turn else 0.0
+            bearing, run = arc(course, sample.speed, turn, elapsed)
+            lat, lon = destination(lat, lon, bearing, run)
+            if heading == heading:
+                heading = (heading + turn * elapsed) % 360.0
         alt = sample.alt
         if alt == alt:
             alt = max(alt + sample.climb * elapsed, 0.0)
@@ -119,11 +137,53 @@ class Movers:
                     alt = a[3] + k * (alt - a[3])
         return lat, lon, heading, alt
 
+    def attitude(self, item, clock):
+        """(тангаж, крен) модели в градусах: тангаж - по подъёму
+        и скорости, крен - данный или по скорости поворота."""
+        sample = item.sample
+        pitch = 0.0
+        if sample.alt == sample.alt and sample.speed > 1.0:
+            pitch = math.degrees(math.atan2(sample.climb, sample.speed))
+        roll = sample.roll
+        if roll != roll:
+            turn = sample.turn if sample.turn == sample.turn else 0.0
+            roll = bank(turn, sample.speed)
+            if sample.alt != sample.alt:
+                roll = 0.0
+        return pitch, roll
+
     def positions(self, now, clock=None):
         """[(ключ, широта, долгота, азимут, высота)] на момент."""
         clock = time.time() if clock is None else clock
         return [(key,) + self.place(item, now, clock)
                 for key, item in self.items.items()]
+
+
+def arc(course, speed, turn, seconds):
+    """(азимут хорды, длина хорды) пути с постоянной скоростью speed м/с
+    и поворотом turn °/с за seconds секунд от курса course."""
+    run = speed * seconds
+    swing = math.radians(turn * seconds)
+    if abs(swing) < 1e-6:
+        return course, run
+    chord = 2.0 * run / swing * math.sin(swing / 2.0)
+    return (course + math.degrees(swing) / 2.0) % 360.0, abs(chord)
+
+
+def turn_between(old, new):
+    """Скорость поворота °/с по курсам двух положений или NaN."""
+    gap = new.t - old.t
+    if not (0.0 < gap <= TURN_GAP) or old.course != old.course \
+            or new.course != new.course or new.speed <= 0.0:
+        return math.nan
+    delta = (new.course - old.course + 180.0) % 360.0 - 180.0
+    return min(max(delta / gap, -TURN_MAX), TURN_MAX)
+
+
+def bank(turn, speed):
+    """Координированный крен по скорости поворота °/с и скорости м/с."""
+    roll = math.degrees(math.atan(math.radians(turn) * speed / G))
+    return min(max(roll, -ROLL_MAX), ROLL_MAX)
 
 
 CHASE_MIN = 50.0  # м, камера следом не ближе к объекту

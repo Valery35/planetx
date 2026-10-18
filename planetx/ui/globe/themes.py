@@ -132,6 +132,7 @@ class ThemesMixin:
         одно на глобус. Панель и список «Слоёв» остаются как были."""
         if getattr(self, "gallery", None) is None:
             self.gallery = NasaMaps(self, self)
+            self.gallery.setObjectName("planetxCatalog")
         if not self.gallery.isVisible():
             self.gallery.place()
         self.gallery.show()

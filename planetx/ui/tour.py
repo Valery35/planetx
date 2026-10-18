@@ -30,7 +30,7 @@ from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QFrame, QHBoxLayout,
 from ..core.tour import PAUSE, Tour, clock
 from ..i18n import tr
 from ..qt_compat import enum
-from .style import plate_style, set_glyph
+from .style import plate, set_glyph
 from . import stopcaption
 from .stopcaption import StopCaption, plain
 
@@ -38,7 +38,6 @@ PAUSE_KEY = "PlanetX/tour_pause"
 LOOP_KEY = "PlanetX/tour_loop"
 MARGIN = 12  # пикселей от нижнего края вида, если шкалы времени нет
 # Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
-STYLE = plate_style("planetxTour")
 # Поза камеры сдвинута мышью, если ушла дальше этой доли расстояния.
 MOVED = 1e-3
 SLIDER_STEPS = 1000  # делений ползунка на весь тур
@@ -69,8 +68,7 @@ class TourBar(QFrame):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.setObjectName("planetxTour")
-        self.setStyleSheet(STYLE)
+        plate(self, "planetxTour")
         column = QVBoxLayout(self)
         column.setContentsMargins(4, 3, 6, 3)
         column.setSpacing(2)

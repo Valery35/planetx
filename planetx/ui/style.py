@@ -14,14 +14,27 @@
 эмодзи Windows.
 
 Цвета и толщина линий - выбор помощника, утверждает автор.
+
+Оформление - просьба автора от 19 октября 2026 года, «переключатель
+в свойствах вида, для всего модуля», «в окне карты в светлом стиле
+пусть более серыми будут», «по умолчанию тёмная тема». Три
+оформления (THEMES): «Тёмное» (по умолчанию) - тёмные плашки и тёмные
+окна; «Светлое» - серые плашки с тёмными значками и светлые окна;
+«Как в QGIS» - тёмные плашки на виде, окна модуля в оформлении QGIS.
+Цвета плашек - общие объекты QColor, apply меняет их на месте,
+restyle перекрашивает плашки (plate), значки
+набора (icon помнит имя значка по cacheKey) и окна модуля
+(window_style - левая панель, панель свойств, каталог, окна QDialog).
 """
 import math
+import os
 
 from qgis.PyQt.QtCore import QPointF, QRectF, QSize, Qt
 from qgis.PyQt.QtGui import (QColor, QIcon, QImage, QPainter, QPainterPath,
                              QPen, QPixmap, QPolygonF)
+from qgis.PyQt.QtWidgets import QAbstractButton, QWidget
 
-from ..qt_compat import enum
+from ..qt_compat import QAction, enum
 
 # Плашка, линия, текст, подсветка, акцент.
 PLATE = QColor(30, 33, 38, 215)
@@ -31,6 +44,14 @@ MUTED = QColor(170, 176, 184)
 HOVER = QColor(255, 255, 255, 30)
 ACCENT = QColor(74, 163, 255)
 RECORD = QColor(240, 86, 72)
+CHECKED = QColor(74, 163, 255, 110)
+LIST = QColor(40, 44, 50)
+# Органы навигации: заливка, линии, кружок и буква N.
+NAV_FILL = QColor(24, 24, 24)
+NAV_LINE = QColor(255, 255, 255)
+NAV_ACCENT = QColor(120, 190, 255)
+NORTH_FILL = QColor(240, 240, 240)
+NORTH_TEXT = QColor(30, 30, 30)
 ICON_SIDE = 20  # сторона значка, логических пикселей
 STROKE = 1.7  # толщина линии значка в долях клетки 24
 
@@ -43,6 +64,178 @@ def _rgba(color):
 # Фон выпадающих меню непрозрачный: всплывающее окно без прозрачного
 # фона Windows заливает долю прозрачности чёрным.
 MENU = QColor(36, 40, 46)
+
+THEME_KEY = "PlanetX/ui_theme"
+QGIS, LIGHT, DARK = "qgis", "light", "dark"
+THEMES = (QGIS, LIGHT, DARK)
+_DARK_PLATES = {
+    "PLATE": (30, 33, 38, 215), "BORDER": (255, 255, 255, 45),
+    "TEXT": (236, 239, 243, 255), "MUTED": (170, 176, 184, 255),
+    "HOVER": (255, 255, 255, 30), "ACCENT": (74, 163, 255, 255),
+    "MENU": (36, 40, 46, 255), "CHECKED": (74, 163, 255, 110),
+    "LIST": (40, 44, 50, 255), "NAV_FILL": (24, 24, 24, 255),
+    "NAV_LINE": (255, 255, 255, 255), "NAV_ACCENT": (120, 190, 255, 255),
+    "NORTH_FILL": (240, 240, 240, 255), "NORTH_TEXT": (30, 30, 30, 255)}
+# Светлое: плашки серые, а не белые - просьба автора, значки тёмные.
+_LIGHT_PLATES = {
+    "PLATE": (214, 218, 223, 225), "BORDER": (0, 0, 0, 45),
+    "TEXT": (34, 38, 44, 255), "MUTED": (98, 105, 114, 255),
+    "HOVER": (0, 0, 0, 24), "ACCENT": (26, 104, 204, 255),
+    "MENU": (228, 231, 235, 255), "CHECKED": (26, 104, 204, 70),
+    "LIST": (238, 240, 243, 255), "NAV_FILL": (205, 209, 215, 255),
+    "NAV_LINE": (40, 44, 50, 255), "NAV_ACCENT": (26, 104, 204, 255),
+    "NORTH_FILL": (52, 56, 62, 255), "NORTH_TEXT": (240, 242, 245, 255)}
+PLATES = {QGIS: _DARK_PLATES, LIGHT: _LIGHT_PLATES, DARK: _DARK_PLATES}
+# Окна модуля: фон, текст, поле, рамка, кнопка, кнопка под курсором,
+# выделение, приглушённый текст.
+WINDOWS = {
+    LIGHT: {"back": "#eef0f3", "text": "#1f2329", "field": "#ffffff",
+            "border": "#bfc5cd", "button": "#e1e5ea", "hover": "#d4d9e0",
+            "select": "#2f6fbf", "muted": "#7b828c", "alt": "#f5f6f8"},
+    DARK: {"back": "#262a30", "text": "#e3e7ec", "field": "#1d2025",
+           "border": "#454b54", "button": "#353a42", "hover": "#3f454e",
+           "select": "#2f6fbf", "muted": "#7f8690", "alt": "#22262c"}}
+# Части окна глобуса, которые перекрашивает window_style: окна свойств
+# и прочие QDialog, левая панель, панель свойств справа, каталог.
+WINDOW_PARTS = ("QDialog", "#planetxPanel", "#planetxSide",
+                "#planetxCatalog")
+# Части, у которых фон из правил рисуется только с WA_StyledBackground.
+STYLED_BACK = ("planetxWindow", "planetxPanel", "planetxSide")
+CHECK = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data",
+                     "check.svg").replace("\\", "/")
+_current = [DARK]  # по умолчанию тёмное, просьба автора
+
+
+def current():
+    return _current[0]
+
+
+def apply(name):
+    """Оформление name: цвета плашек меняются на месте."""
+    if name not in THEMES:
+        name = QGIS
+    _current[0] = name
+    colors = globals()
+    for key, rgba in PLATES[name].items():
+        colors[key].setRgb(*rgba)
+
+
+def window_style(name=None):
+    """Правила окон модуля для оформления name, «Как в QGIS» - пусто."""
+    w = WINDOWS.get(current() if name is None else name)
+    if w is None:
+        return ""
+    rules = (
+        "{p} {{ background-color: {back}; color: {text}; }}"
+        "{p} QWidget {{ background-color: {back}; color: {text}; }}"
+        "{p} QLabel, {p} QCheckBox, {p} QRadioButton {{ background: "
+        "transparent; }}"
+        "{p} QLineEdit, {p} QTextEdit, {p} QPlainTextEdit, "
+        "{p} QAbstractSpinBox, {p} QComboBox {{ background-color: {field}; "
+        "border: 1px solid {border}; border-radius: 3px; padding: 2px 4px; "
+        "selection-background-color: {select}; selection-color: white; }}"
+        "{p} QComboBox QAbstractItemView {{ background-color: {field}; "
+        "selection-background-color: {select}; }}"
+        "{p} QAbstractItemView {{ background-color: {field}; "
+        "alternate-background-color: {alt}; border: 1px solid {border}; "
+        "selection-background-color: {select}; selection-color: white; }}"
+        "{p} QHeaderView::section {{ background-color: {button}; "
+        "border: none; border-right: 1px solid {border}; padding: 3px; }}"
+        "{p} QPushButton {{ background-color: {button}; border: 1px solid "
+        "{border}; border-radius: 3px; padding: 3px 10px; }}"
+        "{p} QPushButton:hover, {p} QToolButton:hover {{ background-color: "
+        "{hover}; }}"
+        "{p} QPushButton:pressed, {p} QPushButton:checked, "
+        "{p} QToolButton:checked {{ background-color: {select}; "
+        "color: white; }}"
+        "{p} QPushButton:disabled, {p} QLabel:disabled, "
+        "{p} QCheckBox:disabled {{ color: {muted}; }}"
+        "{p} QToolButton {{ background: transparent; border: none; "
+        "border-radius: 3px; padding: 2px; }}"
+        "{p} QGroupBox {{ border: 1px solid {border}; border-radius: 4px; "
+        "margin-top: 10px; padding-top: 4px; }}"
+        "{p} QGroupBox::title {{ subcontrol-origin: margin; left: 8px; "
+        "padding: 0 3px; }}"
+        "{p} QTabBar::tab {{ background-color: {button}; border: 1px solid "
+        "{border}; padding: 4px 10px; }}"
+        "{p} QTabBar::tab:selected {{ background-color: {field}; }}"
+        "{p} QScrollBar:vertical {{ background: {alt}; width: 11px; "
+        "margin: 0; }}"
+        "{p} QScrollBar:horizontal {{ background: {alt}; height: 11px; "
+        "margin: 0; }}"
+        "{p} QScrollBar::handle {{ background: {border}; border-radius: "
+        "4px; min-height: 20px; min-width: 20px; }}"
+        "{p} QScrollBar::add-line, {p} QScrollBar::sub-line {{ width: 0; "
+        "height: 0; }}"
+        "{p} QScrollBar::add-page, {p} QScrollBar::sub-page {{ "
+        "background: none; }}"
+        "{p} QMenu {{ background-color: {field}; border: 1px solid "
+        "{border}; }}"
+        "{p} QMenu::item:selected {{ background-color: {select}; "
+        "color: white; }}"
+        "{p} QSplitter::handle {{ background-color: {border}; }}"
+        # Флажки рисуются правилами: на тёмном фоне пустой флажок стиля
+        # QGIS не виден.
+        "{p} QAbstractItemView::indicator, {p} QCheckBox::indicator, "
+        "{p} QGroupBox::indicator {{ width: 12px; height: 12px; "
+        "border: 1px solid {muted}; border-radius: 2px; "
+        "background-color: {field}; }}"
+        "{p} QAbstractItemView::indicator:checked, "
+        "{p} QCheckBox::indicator:checked, "
+        "{p} QGroupBox::indicator:checked {{ background-color: {select}; "
+        "border-color: {select}; image: url({check}); }}"
+        "{p} QAbstractItemView::indicator:indeterminate, "
+        "{p} QCheckBox::indicator:indeterminate {{ background-color: "
+        "{muted}; border-color: {muted}; }}")
+    out = "".join(rules.format(p=part, check=CHECK, **w)
+                  for part in WINDOW_PARTS)
+    return out + "QWidget#planetxWindow {{ background-color: {}; }}".format(
+        w["back"])
+
+
+def plate(widget, name, kind="QFrame", label=False):
+    """Плашка kind#name на виджете: имя, стиль и метка для restyle.
+    label - у подписи-плашки свой цвет текста и поля."""
+    widget.setObjectName(name)
+    widget.setProperty("planetxPlate", "{}|{}".format(kind, int(label)))
+    widget.setStyleSheet(_plate_sheet(name, kind, label))
+
+
+def _plate_sheet(name, kind, label):
+    sheet = plate_style(name, kind)
+    if label:
+        sheet += " {}#{} {{ color: {}; padding: 3px 6px; }}".format(
+            kind, name, _rgba(TEXT))
+    return sheet
+
+
+# Значки набора по cacheKey: имя, свой ли цвет, стрелка меню, сторона.
+_ICONS = {}
+
+
+def restyle(root):
+    """Перекрасить плашки, значки набора и окна модуля под root."""
+    widgets = [root] + list(root.findChildren(QWidget))
+    for widget in widgets:
+        found = widget.property("planetxPlate")
+        if found:
+            kind, label = str(found).split("|")
+            widget.setStyleSheet(_plate_sheet(widget.objectName(), kind,
+                                              label == "1"))
+        if isinstance(widget, QAbstractButton):
+            _reicon(widget)
+        for action in widget.actions():
+            _reicon(action)
+        widget.update()
+    for action in root.findChildren(QAction):
+        _reicon(action)
+
+
+def _reicon(item):
+    found = _ICONS.get(item.icon().cacheKey())
+    if found is not None:
+        name, menu, side = found
+        item.setIcon(icon(name, side=side, menu=menu))
 
 
 def menu_rules(selector):
@@ -66,7 +259,7 @@ def menu_style():
     """Стиль меню, которое живёт вне плашки (setStyleSheet самого меню)."""
     return menu_rules("QMenu").format(
         text=_rgba(TEXT), muted=_rgba(MUTED), border=_rgba(BORDER),
-        checked="rgba(74, 163, 255, 110)")
+        checked=_rgba(CHECKED))
 
 
 def plate_style(name, kind="QFrame"):
@@ -88,7 +281,7 @@ def plate_style(name, kind="QFrame"):
         "border: 1px solid {border}; border-radius: 3px; padding: 1px 4px; "
         "}}"
         "{kind}#{name} QComboBox QAbstractItemView {{ color: {text}; "
-        "background: rgb(40, 44, 50); selection-background-color: "
+        "background: {list}; selection-background-color: "
         "{checked}; }}"
         "{kind}#{name} QSlider::groove:horizontal {{ height: 4px; "
         "background: {border}; border-radius: 2px; }}"
@@ -99,7 +292,8 @@ def plate_style(name, kind="QFrame"):
         + menu_rules("{kind}#{name} QMenu")
     ).format(kind=kind, name=name, plate=_rgba(PLATE), border=_rgba(BORDER),
              text=_rgba(TEXT), muted=_rgba(MUTED), hover=_rgba(HOVER),
-             checked="rgba(74, 163, 255, 110)", accent=_rgba(ACCENT))
+             checked=_rgba(CHECKED), accent=_rgba(ACCENT),
+             list=_rgba(LIST))
 
 
 def _pen(color, width):
@@ -275,6 +469,7 @@ def icon(name, color=None, side=ICON_SIDE, menu=False):
     например тёмный для светлых окон. menu - белая стрелка вниз в правом
     нижнем углу у кнопки с меню, замечание автора от 17 октября 2026
     года - стрелку меню Qt стиль плашки прятал."""
+    own = color is None
     color = TEXT if color is None else color
     ratio = 2
     image = QImage(side * ratio, side * ratio,
@@ -294,7 +489,10 @@ def icon(name, color=None, side=ICON_SIDE, menu=False):
     p.end()
     pixmap = QPixmap.fromImage(image)
     pixmap.setDevicePixelRatio(ratio)
-    return QIcon(pixmap)
+    out = QIcon(pixmap)
+    if own:
+        _ICONS[out.cacheKey()] = (name, menu, side)
+    return out
 
 
 # Символы прежних кнопок и значки набора.

@@ -129,6 +129,10 @@ class LiveManager(QObject):
         остаются до устаревания."""
         return False
 
+    def attitude(self, item, clock):
+        """(тангаж, крен) модели в градусах."""
+        return 0.0, 0.0
+
     # Включение.
 
     def set_on(self, on):
@@ -441,8 +445,8 @@ class LiveManager(QObject):
                 heading = 0.0
             if alt != alt:
                 alt = self._ground(lat, lon)
-            roll = getattr(item.sample, "roll", 0.0)
-            return lat, lon, models.moved(base, lat, lon, heading, 0.0,
+            pitch, roll = self.attitude(item, clock)
+            return lat, lon, models.moved(base, lat, lon, heading, pitch,
                                           roll, size), alt
         return mover
 
@@ -565,6 +569,9 @@ class AircraftManager(LiveManager):
 
     def keep(self):
         return True
+
+    def attitude(self, item, clock):
+        return self.fleet.attitude(item, clock)
 
     def parse(self, data):
         return aircraft.parse(data)

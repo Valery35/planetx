@@ -10,10 +10,9 @@ from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QLabel, QSlider, \
 from ..core import paleo
 from ..i18n import tr
 from ..qt_compat import enum
-from .style import plate_style, set_glyph
+from .style import plate, set_glyph
 
 # Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
-STYLE = plate_style("planetxPaleo")
 PLAY_PERIOD = 900  # мс на шаг возраста при показе
 SLIDER_WIDTH = 260
 
@@ -35,8 +34,7 @@ class PaleoBar(QFrame):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.setObjectName("planetxPaleo")
-        self.setStyleSheet(STYLE)
+        plate(self, "planetxPaleo")
         layout = QHBoxLayout(self)
         layout.setContentsMargins(6, 3, 6, 3)
         layout.setSpacing(6)

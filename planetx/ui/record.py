@@ -177,6 +177,10 @@ class TourRecorder(QObject):
         for live in getattr(self.window, "live_managers", ()):
             if live.on:
                 live.freeze()
+        # Камеру ведёт запись, полёт кончается.
+        flight = getattr(self.window, "flight", None)
+        if flight is not None:
+            flight.stop()
         self._next()
         return True
 

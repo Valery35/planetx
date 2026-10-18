@@ -19,6 +19,7 @@ from ..core.places import AS_QGIS, LABEL_LANGUAGES, LOCAL
 from ..core.sync import BOTH, GLOBE_TO_MAP, MAP_TO_GLOBE
 from ..i18n import tr
 from ..qt_compat import enum
+from .style import DARK, LIGHT, QGIS
 
 # Пределы и шаг вертикального масштаба рельефа.
 SCALE_RANGE = (0.5, 10.0)
@@ -69,6 +70,7 @@ class PropertiesDialog(QDialog):
     history_clear_requested = pyqtSignal()
     sources_requested = pyqtSignal()
     subsurface_requested = pyqtSignal()
+    ui_theme_chosen = pyqtSignal(str)
 
     def __init__(self, sources, state, parent=None):
         super().__init__(parent)
@@ -207,6 +209,21 @@ class PropertiesDialog(QDialog):
         subsurface = QGroupBox(tr("Недра"), self)
         QHBoxLayout(subsurface).addWidget(under)
 
+        self.ui_theme = QComboBox(self)
+        self.ui_themes = [(QGIS, tr("Как в QGIS")),
+                          (LIGHT, tr("Светлое")), (DARK, tr("Тёмное"))]
+        self.ui_theme.addItems([name for _, name in self.ui_themes])
+        self.ui_theme.setToolTip(tr(
+            "Оформление окна глобуса. «Как в QGIS» - тёмные плашки на "
+            "виде, окна модуля в оформлении QGIS. «Светлое» - серые "
+            "плашки с тёмными значками и светлые окна. «Тёмное» - тёмные "
+            "плашки и тёмные окна. Оформление меняется сразу."))
+        self.ui_theme.currentIndexChanged.connect(
+            lambda index: self.ui_theme_chosen.emit(
+                self.ui_themes[index][0]))
+        looks = QGroupBox(tr("Оформление"), self)
+        QFormLayout(looks).addRow(tr("Оформление"), self.ui_theme)
+
         assistant = QGroupBox(tr("Помощник"), self)
         row = QHBoxLayout(assistant)
         for text, tip, signal in (
@@ -236,6 +253,7 @@ class PropertiesDialog(QDialog):
         layout.addWidget(canvas)
         layout.addWidget(layers)
         layout.addWidget(coordinates)
+        layout.addWidget(looks)
         layout.addWidget(subsurface)
         layout.addWidget(assistant)
         layout.addStretch(1)
@@ -246,7 +264,7 @@ class PropertiesDialog(QDialog):
         """Показать состояние окна. Сигналы при этом не идут."""
         widgets = [self.basemap, self.scale, self.language, self.sync,
                    self.follow, self.new_shown, self.auto, self.coords,
-                   self.sea]
+                   self.sea, self.ui_theme]
         for widget in widgets:
             widget.blockSignals(True)
         self.basemap.setCurrentIndex(state["basemap"])
@@ -266,5 +284,9 @@ class PropertiesDialog(QDialog):
         fmt = state.get("coords", FORMATS[0])
         self.coords.setCurrentIndex(FORMATS.index(fmt)
                                     if fmt in FORMATS else 0)
+        codes = [code for code, _ in self.ui_themes]
+        look = state.get("ui_theme", QGIS)
+        self.ui_theme.setCurrentIndex(codes.index(look)
+                                      if look in codes else 0)
         for widget in widgets:
             widget.blockSignals(False)

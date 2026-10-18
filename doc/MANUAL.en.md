@@ -1147,6 +1147,7 @@ window. The window does not block work with the globe.
 | QGIS map | New layers straight to the globe | A new project layer is checked on the globe at once |
 | Update | Update automatically | The globe refreshes after every change without the Refresh button, on by default |
 | Coordinates | Format | Decimal degrees, degrees-minutes-seconds, UTM or MGRS in the status line and the Features window. North of 84° and south of 80° UTM and MGRS are replaced with decimal degrees |
+| Look | Look | Dark (the default) - dark plates on the view and dark module windows. Light - grey plates with dark icons and light windows. As in QGIS - dark plates, module windows in the QGIS look. The look changes at once |
 | Inside the Earth | Subsurface mode… | Opens the Subsurface mode window, see [Subsurface mode](#subsurface-mode) |
 
 The default base map is Esri World Imagery, listed as an example. Esri
@@ -2879,12 +2880,45 @@ cargo, tankers, fishing, tugs and service, high-speed, yachts and boats.
 
 Aircraft are ADS-B signals of the adsb.lol volunteer network in a circle
 around the point of view, every 10 s. An aircraft in the air is shown at
-its altitude, on the ground on the terrain. The model close up (view
+its altitude, on the ground on the terrain. Between updates a turning
+aircraft follows an arc, its turn rate comes from ADS-B or from the
+difference of the courses of two positions. The model nose rises with
+the vertical speed, the bank comes from ADS-B, without it from the turn
+rate. The model close up (view
 strip narrower than 15 km) is a schematic aircraft of the size of its
 ADS-B category with its bank. The fin colour shows the category - light,
 small, airliners and freighters, heavy, helicopters. The network has
 almost no receivers over Russia, and no aircraft are seen there. The
 licence of the adsb.lol output is not named as of 19 October 2026.
+
+---
+
+## Flight mode
+
+The Fly from here item of the right-click menu on the globe puts your own
+aircraft 1000 m above the clicked point. The aircraft flies at 300 km/h
+along the view heading, and the camera follows it from behind and above.
+
+| Key | Action |
+|---|---|
+| up arrow | nose down |
+| down arrow | nose up |
+| left and right arrows | bank and turn to the same side |
+| PageUp, PageDown | more and less thrust |
+| V | cockpit view and back |
+| Esc | end of the flight |
+
+Without keys the bank returns to zero by itself, the pitch stays. The top
+speed at full thrust is about 500 km/h. Below 100 km/h the aircraft
+stalls and the nose drops by itself. At the bottom of the view a readout
+shows the speed, the altitude above sea level and above the ground, the
+heading, the vertical speed and the thrust. The wheel changes the
+distance from the camera to the aircraft, the middle mouse button the
+view tilt. From the cockpit the model is not shown, the frame tilts with
+the bank, and the view looks along the heading no higher than 5° below
+the horizon, so the horizon stays in the upper part of the frame.
+Touching the ground ends the flight. A flight recording also
+ends it - the recording drives the camera.
 
 ---
 

@@ -28,6 +28,7 @@ from ..core.navpad import (FAINT, angle_delta, look_step, move_step,
                            zoom_factor)
 from ..i18n import tr
 from ..qt_compat import enum
+from . import style
 
 MARGIN = 8  # логических пикселей от края вида
 NEAR_ZONE = 48  # столько пикселей вокруг органов курсор их проявляет
@@ -269,9 +270,12 @@ class NavPad(QWidget):
         try:
             p.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
             # Вдали от курсора остаётся контур без заливки.
-            fill = QColor(24, 24, 24, 0 if faint else int(150 * alpha))
-            line = QColor(255, 255, 255, int(210 * alpha))
-            accent = QColor(120, 190, 255, int(230 * alpha))
+            fill = QColor(style.NAV_FILL)
+            fill.setAlpha(0 if faint else int(150 * alpha))
+            line = QColor(style.NAV_LINE)
+            line.setAlpha(int(210 * alpha))
+            accent = QColor(style.NAV_ACCENT)
+            accent.setAlpha(int(230 * alpha))
             p.setPen(QPen(line, 1.2))
             p.setBrush(fill)
             self._circle(p, RING, R_OUT - 0.5)
@@ -308,13 +312,17 @@ class NavPad(QWidget):
         y = RING[1] - R_NORTH * math.cos(a)
         # Светлый кружок с тёмной буквой, как в Google Earth.
         p.setPen(enum(Qt, "PenStyle", "NoPen"))
-        p.setBrush(QColor(240, 240, 240, int(235 * alpha)))
+        north = QColor(style.NORTH_FILL)
+        north.setAlpha(int(235 * alpha))
+        p.setBrush(north)
         p.drawEllipse(QPointF(x, y), 7.0, 7.0)
         font = QFont(p.font())
         font.setPixelSize(10)
         font.setBold(True)
         p.setFont(font)
-        p.setPen(QColor(30, 30, 30, int(255 * alpha)))
+        letter = QColor(style.NORTH_TEXT)
+        letter.setAlpha(int(255 * alpha))
+        p.setPen(letter)
         p.drawText(QRectF(x - 7, y - 7, 14, 14),
                    enum(Qt, "AlignmentFlag", "AlignCenter"), "N")
 

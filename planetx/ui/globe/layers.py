@@ -1569,6 +1569,7 @@ class LayersMixin:
             self.properties.follow_changed.connect(self.set_follow)
             self.properties.new_shown_changed.connect(self.set_new_shown)
             self.properties.coords_chosen.connect(self.set_coords)
+            self.properties.ui_theme_chosen.connect(self.set_ui_theme)
             self.properties.sea_changed.connect(self.set_sea_depths)
             self.properties.assistant_requested.connect(self.open_assistant)
             self.properties.assistant_settings_requested.connect(

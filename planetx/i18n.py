@@ -4360,6 +4360,31 @@ EN = {
         "Each object gets its own path and label.",
     "Цвет пройденного пути.": "Color of the path travelled.",
     "Камера следом": "Camera follows",
+    "Полёт отсюда": "Fly from here",
+    "Светлое": "Light",
+    "Тёмное": "Dark",
+    "Оформление окна глобуса. «Как в QGIS» - тёмные плашки на виде, "
+    "окна модуля в оформлении QGIS. «Светлое» - серые плашки с тёмными "
+    "значками и светлые окна. «Тёмное» - тёмные плашки и тёмные окна. "
+    "Оформление меняется сразу.":
+        "Look of the globe window. As in QGIS - dark plates on the view, "
+        "module windows in the QGIS look. Light - grey plates with dark "
+        "icons and light windows. Dark - dark plates and dark windows. The "
+        "look changes at once.",
+    "Свой самолёт над этой точкой. Стрелки - нос и крен, "
+    "PageUp и PageDown - тяга, Esc - выход.":
+        "Your own aircraft above this point. Arrows - nose and bank, "
+        "PageUp and PageDown - thrust, Esc - exit.",
+    "Касание земли - полёт окончен.":
+        "Touched the ground - the flight is over.",
+    "{speed} км/ч · высота {alt} м, над землёй {height} м · "
+    "курс {heading}° · подъём {climb} м/с · тяга {throttle} %":
+        "{speed} km/h · altitude {alt} m, above ground {height} m · "
+        "heading {heading}° · climb {climb} m/s · thrust {throttle} %",
+    "↑ ↓ - нос вниз и вверх · ← → - крен · PageUp, PageDown - "
+    "тяга · V - вид из кабины · Esc - выход":
+        "↑ ↓ - nose down and up · ← → - bank · PageUp, PageDown - "
+        "thrust · V - cockpit view · Esc - exit",
     "Камера держит первый объект трека в центре, азимут - по ходу "
     "движения. Расстояние и наклон меняются колесом и мышью.":
         "The camera keeps the first object of the track in the center, "

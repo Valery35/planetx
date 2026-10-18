@@ -9384,6 +9384,163 @@ def aircraft_follow():
 
 
 @check(1000)
+def flight_sim():
+    """Режим полёта: клавиши на виде, модель и камера следом, строка
+    показаний, Esc, касание земли кончает полёт."""
+    import numpy as np
+    from qgis.PyQt.QtCore import QEvent, Qt
+    from qgis.PyQt.QtGui import QKeyEvent
+    from qgis.PyQt.QtWidgets import QApplication
+    from planetx.core import ellipsoid
+    from planetx.core.navigation import Pose
+    from planetx.qt_compat import enum
+    window = state["window"]
+    view = window.view
+    flight = window.flight
+    look = state.setdefault("flight_sim", {"phase": 0})
+    out = result.setdefault("flight_sim", {})
+
+    def key(name, press=True):
+        kind = enum(QEvent, "Type", "KeyPress" if press else "KeyRelease")
+        QApplication.sendEvent(view, QKeyEvent(
+            kind, enum(Qt, "Key", name),
+            enum(Qt, "KeyboardModifier", "NoModifier")))
+
+    phase = look["phase"]
+    look["phase"] += 1
+    if phase == 0:
+        view.navigator.stop()
+        view.navigator.show(Pose(60.20, 24.80, 3000.0, 90.0, 60.0))
+        view.update()
+        flight.start(60.20, 24.80)
+        plane = flight.plane
+        out["start"] = [round(plane.alt, 0), round(plane.heading, 1),
+                        round(plane.speed * 3.6, 0)]
+        look["heading"] = plane.heading
+        key("Key_Right")
+        return 1000
+    if phase == 1:
+        plane = flight.plane
+        out["roll_held"] = round(plane.roll, 1)
+        key("Key_Right", False)
+        key("Key_PageUp")
+        look["speed"] = plane.speed
+        return 1500
+    if phase == 2:
+        plane = flight.plane
+        key("Key_PageUp", False)
+        out["turned"] = round((plane.heading - look["heading"]) % 360.0, 1)
+        out["throttle"] = round(plane.throttle, 2)
+        out["faster"] = plane.speed > look["speed"]
+        point = np.asarray([ellipsoid.geodetic_to_ecef(
+            plane.lat, plane.lon, plane.alt * view.store.scale)],
+            dtype=np.float64)
+        pixels, front = view.camera.project(point)
+        out["on_screen_px"] = [
+            round(float(pixels[0][0] - view.camera.width / 2.0), 1),
+            round(float(pixels[0][1] - view.camera.height / 2.0), 1)]
+        out["front"] = bool(front[0])
+        view.repaint()
+        view.grabFramebuffer().save(os.path.join(TEMP,
+                                                 "planetx_flight.png"))
+        out["drawn"] = view.models.drawn
+        out["lines"] = flight.readout.lines
+        out["readout_visible"] = flight.readout.isVisible()
+        # Из кабины: модели нет, глаз у самолёта, при крене вправо
+        # правая сторона земли на кадре выше левой.
+        key("Key_V")
+        plane.roll = 30.0
+        plane.pitch = -10.0
+        flight._follow(flight._ground(plane.lat, plane.lon))
+        eye = ellipsoid.ecef_to_geodetic(np.asarray(view.camera.eye))
+        from planetx.core.trains import destination
+        side = []
+        for turn in (-20.0, 20.0):
+            s_lat, s_lon = destination(plane.lat, plane.lon,
+                                       plane.heading + turn, 3000.0)
+            side.append(ellipsoid.geodetic_to_ecef(
+                s_lat, s_lon, flight._ground(s_lat, s_lon)
+                * view.store.scale))
+        px, _ = view.camera.project(np.asarray(side, dtype=np.float64))
+        out["cockpit"] = {
+            "on": flight.cockpit,
+            "model": flight._mover(0.0) is None,
+            "eye_to_plane_m": round(float(np.hypot(
+                (eye[0] - plane.lat) * 111320.0,
+                (eye[1] - plane.lon) * 111320.0
+                * np.cos(np.radians(plane.lat)))), 1),
+            "eye_alt": round(float(eye[2]), 0),
+            "plane_alt": round(plane.alt * view.store.scale, 0),
+            "left_y": round(float(px[0][1]), 1),
+            "right_y": round(float(px[1][1]), 1)}
+        view.repaint()
+        view.grabFramebuffer().save(os.path.join(TEMP,
+                                                 "planetx_cockpit.png"))
+        key("Key_V")
+        out["cockpit_off"] = [flight.cockpit, flight._mover(0.0) is not None]
+        key("Key_Escape")
+        out["after_esc"] = [flight.plane is None,
+                            len(view.models.groups.get("flightsim", [])),
+                            flight.readout.isVisible()]
+        # Касание земли: полёт низко с носом вниз.
+        flight.start(60.20, 24.80)
+        plane = flight.plane
+        plane.alt = flight._ground(plane.lat, plane.lon) + 30.0
+        plane.pitch = -20.0
+        return 2500
+    if phase == 3:
+        out["crashed"] = [flight.plane is not None
+                          and flight.plane.crashed, flight.readout.lines]
+        return 3500
+    out["after_crash"] = [flight.plane is None,
+                          len(view.models.groups.get("flightsim", []))]
+    out["gl"] = dict(view.gl_errors)
+    return None
+
+
+@check(1500)
+def ui_theme():
+    """Оформление: светлое, тёмное и «Как в QGIS» из окна свойств вида.
+    Цвет плашки панели значков, значка, левой панели и окна свойств,
+    снимки всего окна."""
+    from planetx.ui import style
+    window = state["window"]
+    look = state.setdefault("ui_theme", {"n": 0})
+    out = result.setdefault("ui_theme", {})
+    order = [style.LIGHT, style.DARK, style.QGIS]
+    n = look["n"]
+    if n > 0:
+        name = order[n - 1]
+        image = window.grab().toImage()
+        image.save(os.path.join(TEMP, "planetx_theme_{}.png".format(name)))
+        bar = window.toolbar
+        corner = bar.mapTo(window, bar.rect().topLeft())
+        plate = image.pixelColor(corner.x() + 3, bar.height() // 2
+                                 + corner.y()).name()
+        panel = window.panel
+        spot = panel.mapTo(window, panel.rect().center())
+        dialog = window.properties
+        out[name] = {
+            "current": style.current(),
+            "toolbar_plate": plate,
+            "panel": image.pixelColor(spot.x(), spot.y()).name(),
+            "icon_text": style.TEXT.name(),
+            "window_rules": len(window.styleSheet()),
+            "dialog_combo": dialog.ui_theme.currentText(),
+            "toolbar_sheet_has_plate": style._rgba(style.PLATE)
+            in bar.styleSheet()}
+    if n >= len(order):
+        window.properties.close()
+        return None
+    look["n"] += 1
+    window._show_properties()
+    index = [code for code, _ in window.properties.ui_themes].index(
+        order[n])
+    window.properties.ui_theme.setCurrentIndex(index)
+    return 1500
+
+
+@check(1000)
 def live_close():
     """Поздние ответы служб после закрытия менеджеров окна не трогают."""
     window = state["window"]
