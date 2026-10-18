@@ -1024,6 +1024,76 @@ def gallery_wait():
     window.panel.geo.grab().save(os.path.join(TEMP, "planetx_layers.png"))
 
 
+@check(500)
+def gallery_bases():
+    """Категория «Подоснова» каталога: все подложки с превью, щелчок
+    ставит подоснову, у Google - через окно согласия."""
+    from qgis.core import QgsSettings
+    from planetx.ui import window as wmod
+    window = state["window"]
+    window.set_body("earth")
+    settings = QgsSettings()
+    state["bases_before"] = (settings.value(wmod.READY_KEY, []),
+                             settings.value(wmod.ACCEPTED_KEY, []),
+                             window.source.name)
+    window.panel.add_data.click()
+    gallery = window.gallery
+    gallery._set_group("basemaps")
+    rows = [k for k, (it, g, kind) in gallery.items.items()
+            if not it.isHidden()]
+    result["gallery_bases"] = {
+        "rows": len(rows), "first": rows[:3],
+        "in_all": any(not gallery.items[k][0].isHidden()
+                      for k in rows if gallery._set_group("") is None)}
+    gallery._set_group("basemaps")
+    state["bases_started"] = time.monotonic()
+
+
+@check(500)
+def gallery_bases_wait():
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    gallery = window.gallery
+    spent = time.monotonic() - state["bases_started"]
+    keys = [k for k in gallery.items if k.startswith("base:")]
+    waiting = [k for k in keys if k in gallery._replies
+               or k in gallery._queue]
+    if waiting and spent < 40.0:
+        return 500
+    out = result["gallery_bases"]
+    out["thumbs_loaded"] = sum(1 for k in keys if k in gallery._loaded)
+    checked = [k for k in keys if gallery.items[k][0].checkState()
+               == Qt.CheckState.Checked]
+    out["checked_before"] = checked
+    gallery._clicked(gallery.items["base:esri_ocean"][0])
+    out["ocean"] = [window.source.name,
+                    gallery.items["base:esri_ocean"][0].checkState()
+                    == Qt.CheckState.Checked]
+    asked = []
+    window._accept_terms = lambda name, terms: asked.append(name) or False
+    gallery._clicked(gallery.items["base:google_satellite"][0])
+    del window._accept_terms
+    out["google_declined"] = [asked, window.source.name]
+    gallery._clicked(gallery.items["base:esri_imagery"][0])
+    out["back"] = window.source.name
+    gallery.grab().save(os.path.join(TEMP, "planetx_gallery_bases.png"))
+    gallery.close()
+    settings_restore = state.pop("bases_before")
+    from qgis.core import QgsSettings
+    from planetx.ui import window as wmod
+    settings = QgsSettings()
+    for key, value in ((wmod.READY_KEY, settings_restore[0]),
+                       (wmod.ACCEPTED_KEY, settings_restore[1])):
+        if value:
+            settings.setValue(key, value)
+        else:
+            settings.remove(key)
+    window.sources = wmod.all_sources()
+    names = [s.name for s in window.sources]
+    name = settings_restore[2]
+    window._panel_basemap(names.index(name) if name in names else 0)
+
+
 def panel_row(window):
     """Строка карты каталога в списке «Слоёв», "" - её нет."""
     row = window.panel.active_rows.get("map")
@@ -15628,6 +15698,8 @@ def crossfade_check():
         return round(float(np.abs(a - b).mean()), 2)
 
     before = frame()
+    # Прежний кадр лежит в текстуре перехода с конца кадра (_cross_keep).
+    out["kept_before"] = view._cross_kept
     old = window.source
     other = [s for s in window.sources if s is not old]
     window._switch_basemap(other[0])

@@ -202,6 +202,10 @@ class LayersMixin:
         # и сам их не попросит. Без этого смена подложки до прихода
         # уровней 0-2 оставляла окно пустым, нашлось 26 сентября 2026.
         self.loader.want_many((key, -key[0]) for key in start_keys())
+        # Отметка подосновы в открытом каталоге «Добавить данные».
+        gallery = getattr(self, "gallery", None)
+        if gallery is not None and gallery.isVisible():
+            gallery.refresh()
 
     # Наложение.
 

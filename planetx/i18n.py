@@ -1529,6 +1529,17 @@ EN = {
         "for its use.<br><br>Terms of the service: {terms}",
     "Готовые источники": "Ready sources",
     "NASA и USGS": "NASA and USGS",
+    "Подоснова": "Base maps",
+    "Подложки глобуса - снимки и карты. На глобусе одна подоснова, под "
+    "картами и слоями.":
+        "Base maps of the globe - imagery and maps. The globe has one base "
+        "map, under the maps and layers.",
+    "Подоснова на глобусе - одна": "Base map on the globe - one",
+    "Подоснова на глобусе": "Base map on the globe",
+    "Поставить подосновой": "Set as base map",
+    "Подложка глобуса до уровня {level}. Подпись на глобусе - {credit}.":
+        "Base map of the globe up to level {level}. The credit on the "
+        "globe is {credit}.",
     "Наложения карт": "Map overlays",
     "Прозрачные карты поверх подложки - морские знаки, пешие "
     "и велосипедные маршруты. Включать можно несколько сразу.":

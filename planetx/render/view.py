@@ -430,6 +430,8 @@ class GlobeView(QOpenGLWidget):
         self._cross = None
         self._cross_texture = None
         self._cross_size = None
+        # В текстуре перехода лежит прошлый кадр (_cross_keep).
+        self._cross_kept = False
         self.cross_program = None
         self.floor = None
         # Рамка фона под прозрачной землёй (юг, север, запад, восток,
@@ -1525,6 +1527,7 @@ class GlobeView(QOpenGLWidget):
         self.cross_uniforms = uniforms(self.cross_program, (
             "u_image", "u_viewport", "u_alpha"))
         self._cross_texture = None
+        self._cross_kept = False
         self._cross = None
         # Профиль Core требует привязанный массив вершин и там, где
         # вершины берутся из gl_VertexID.
@@ -1579,6 +1582,7 @@ class GlobeView(QOpenGLWidget):
         if self._cross_texture is not None:
             GL.glDeleteTextures([self._cross_texture])
             self._cross_texture = None
+            self._cross_kept = False
         self._cross = None
         self.labels.release_gl()
         self.features.release_gl()
@@ -1905,6 +1909,8 @@ class GlobeView(QOpenGLWidget):
         self._fit_camera()
         self._cross_capture()
         self._render(self.devicePixelRatioF())
+        if self._cross is None:
+            self._cross_keep()
         self._cross_draw()
 
     # Плавная смена подложки и дня темы: прежний кадр держится поверх
@@ -1924,13 +1930,33 @@ class GlobeView(QOpenGLWidget):
         self.update()
 
     def _cross_capture(self):
-        """Копия кадра, который ещё лежит в буфере окна, в текстуру."""
+        """Начало перехода: прежний кадр уже лежит в текстуре перехода,
+        его кладёт туда _cross_keep в конце каждого кадра.
+
+        Первый вариант копировал буфер окна в начале следующего кадра.
+        Qt 6 объявляет буфер окна недействительным после показа кадра,
+        и у автора 18 октября 2026 года в копию попал мусор видеопамяти -
+        весь вид Wayback засыпало обрывками чужих снимков на время
+        перехода."""
         state = self._cross
         if state is None or not state.get("capture"):
             return
         w, h = int(self.camera.width), int(self.camera.height)
-        if w <= 0 or h <= 0:
+        if not self._cross_kept or self._cross_size != (w, h):
             self._cross = None
+            return
+        state.update(capture=False, start=time.monotonic(), fading=None,
+                     eye=tuple(np.round(self.camera.eye, 1)),
+                     axes=tuple(np.round(self.camera.rotation.ravel(), 6)))
+
+    def _cross_keep(self):
+        """Копия только что нарисованного кадра в текстуру перехода, пока
+        перехода нет. Копия идёт внутри видеокарты."""
+        self._cross_kept = False
+        if not self.tile_fade or self.show_holes:
+            return
+        w, h = int(self.camera.width), int(self.camera.height)
+        if w <= 0 or h <= 0:
             return
         if self._cross_texture is None or self._cross_size != (w, h):
             if self._cross_texture is not None:
@@ -1944,12 +1970,11 @@ class GlobeView(QOpenGLWidget):
             GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0,
                             GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
             self._cross_size = (w, h)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
+        gl = gpu.gl
+        gl.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
         GL.glCopyTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, 0, 0, w, h)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
-        state.update(capture=False, start=time.monotonic(), fading=None,
-                     eye=tuple(np.round(self.camera.eye, 1)),
-                     axes=tuple(np.round(self.camera.rotation.ravel(), 6)))
+        gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
+        self._cross_kept = True
 
     def _cross_alpha(self):
         """Непрозрачность прежнего кадра или None - переход кончился."""

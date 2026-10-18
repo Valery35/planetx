@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.0.0
+version=1.1.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,18 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.0.0 The Section window puts the ISC-GEM historical
+changelog=1.1.0 The Base maps category of the Add data catalog shows
+      all base maps with previews, and a click sets one on the globe.
+      Nineteen new base maps - Esri street, gray, National Geographic,
+      ocean, terrain and relief maps, OSM Humanitarian, OSM France,
+      CyclOSM, NASA Blue Marble and four USGS maps of the USA. The new
+      Map overlays category lays OpenSeaMap sea marks and Waymarked
+      Trails hiking and cycling routes over any base map. Earthquake
+      circles stand at the epicentres on the surface, a focus is shown
+      at its depth only in the removed sector of the Earth cutaway.
+      Paging the Wayback archive or changing the base map no longer
+      covers the view with scraps of other images for a few seconds.
+      1.0.0 The Section window puts the ISC-GEM historical
       earthquakes since 1904 onto the section while their row is on,
       with a light outline, and shows only the foci of the time slider
       interval. The Copy view icon puts the view on the clipboard with

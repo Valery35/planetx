@@ -35,8 +35,9 @@ from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
 from ..core import (clouds, cutaway, deposits, fires, flow, paleo,
                     plants, plates, quakes, slope, stars, sun, temperature,
                     themes, weather)
+from ..core import basemap
 from ..core import satellites as satellites_core
-from ..i18n import tr
+from ..i18n import is_russian, tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum, enum_int
 from .satellites import group_names as satellite_group_names
@@ -58,6 +59,14 @@ LAYER = "layer"  # вид строки витрины: слой глобуса �
 # внизу окна висело некрасиво. Во вкладке «Все» карточек групп нет.
 SAT = "sat:"
 SAT_GROUP = "satellites"
+# Категория «Подоснова»: встроенные и готовые подложки (basemap.READY),
+# ключ BASE + ключ источника. Просьба автора от 18 октября 2026 года -
+# готовые источники в подменю меню «Основа» он не нашёл. Щелчок ставит
+# подложку, у источников с предупреждением - через окно согласия.
+# Превью таких источников не просится до согласия.
+BASE = "base:"
+BASE_GROUP = "basemaps"
+BUILTIN_BASES = ("esri_imagery", "osm")
 # Категория «Карта»: группы векторной основы (ключ VECTOR + номер
 # группы панели) и строки, которые до 12 октября 2026 года стояли
 # в группе «Карта» раздела «Слои».
@@ -799,6 +808,61 @@ def layer_url(key):
         "{y}", str(y))
 
 
+def base_keys():
+    """Строки категории «Подоснова» по порядку: встроенные подложки,
+    затем готовые источники групп меню «Основа»."""
+    return [BASE + k for k in BUILTIN_BASES] + [
+        BASE + k for _, keys in basemap.READY_GROUPS for k in keys]
+
+
+def base_key(source):
+    """Ключ строки «Подосновы» источника подложки или ""."""
+    if source.ready:
+        return BASE + source.ready
+    if source.builtin:
+        return BASE + ("esri_imagery" if source.example else "osm")
+    return ""
+
+
+def _base_source(key):
+    name = key[len(BASE):]
+    if name == "esri_imagery":
+        return basemap.esri_imagery()
+    if name == "osm":
+        return basemap.osm()
+    return basemap.ready_source(name, is_russian())
+
+
+def base_name(key):
+    """Название и подсказка строки «Подосновы»."""
+    source = _base_source(key)
+    row = basemap.ready_entry(key[len(BASE):])
+    if row is not None and row[7]:
+        tip = tr("Условия сервиса не разрешают брать тайлы по прямому "
+                 "адресу. Перед добавлением окно предупредит об этом.")
+    else:
+        tip = tr("Подложка глобуса до уровня {level}. Подпись на "
+                 "глобусе - {credit}.", level=source.max_level,
+                 credit=source.attribution[0])
+    return source.name, tip
+
+
+def base_credit(key):
+    """Вторая строка «Подосновы» - подпись источника."""
+    return _base_source(key).attribution[0]
+
+
+def base_url(key):
+    """Адрес тайла превью подложки или None - у строк не
+    «Подосновы» и у источников с предупреждением до согласия."""
+    if not key.startswith(BASE):
+        return None
+    row = basemap.ready_entry(key[len(BASE):])
+    if row is not None and row[7]:
+        return None
+    return _base_source(key).tile_url(*themes.THUMB_TILE)
+
+
 def day_text(day):
     """«2026-10-05» в «05.10.2026»."""
     if not day:
@@ -851,6 +915,9 @@ class NasaMaps(QWidget):
         self.groups.setWordWrap(True)
         for key, title, tip in [
                 (ALL, tr("Все"), tr("Все карты и слои каталога.")),
+                (BASE_GROUP, tr("Подоснова"), tr(
+                    "Подложки глобуса - снимки и карты. На глобусе "
+                    "одна подоснова, под картами и слоями.")),
                 (MAP, tr("Карта"), tr(
                     "Векторная основа OpenFreeMap, координатная сетка, "
                     "3D-здания и горизонтали."))] \
@@ -896,6 +963,11 @@ class NasaMaps(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.addLayout(top)
         layout.addLayout(body, 1)
+        self._head("bases", tr("Подоснова на глобусе - одна"))
+        for key in base_keys():
+            self.names[key] = base_name(key)
+            self._row(key, BASE_GROUP, BASE)
+            self.thumbs[key] = ramp_image([])
         self._head("maps", tr("Карта на глобусе - одна"))
         for key, group, kind in themes.gallery_items():
             self._row(key, group, kind)
@@ -960,8 +1032,11 @@ class NasaMaps(QWidget):
         self.base = None if image.isNull() else image
         self._queue = []
         for key, (item, group, kind) in self.items.items():
-            if kind in ("gibs", themes.TEMPERATURE) or layer_url(key):
+            if kind in ("gibs", themes.TEMPERATURE) or layer_url(key) \
+                    or base_url(key):
                 self._queue.append(key)
+            elif kind == BASE:
+                self._label(key)
             elif kind == LAYER:
                 self._set_thumb(key, self._layer_thumb(key))
             elif kind in (SAT, VECTOR):
@@ -1016,6 +1091,8 @@ class NasaMaps(QWidget):
     def _thumb_url(self, key):
         if self.items[key][2] == LAYER:
             return layer_url(key)
+        if self.items[key][2] == BASE:
+            return base_url(key)
         if key == themes.TEMPERATURE:
             z, x, y = themes.THUMB_TILE
             return temperature.url_template(temperature.LAND).replace(
@@ -1036,6 +1113,10 @@ class NasaMaps(QWidget):
             self._loaded.add(key)
         if self.items[key][2] == LAYER:
             self._set_thumb(key, self._layer_thumb(key, data))
+        elif self.items[key][2] == BASE:
+            tile = QImage.fromData(data) if data else QImage()
+            self._set_thumb(key, _over(None if tile.isNull() else tile,
+                                       None))
         else:
             self._set_thumb(key, tile_image(data, self.base,
                                             themes.CLEAR.get(key, ())))
@@ -1066,6 +1147,8 @@ class NasaMaps(QWidget):
                 and key[len(SAT):] in window.satellite_manager.groups
         if kind == VECTOR:
             return bool(self._vector_keys(key) & set(window._groups))
+        if kind == BASE:
+            return base_key(window.source) == key
         return key == window.gallery_key()
 
     def _vector_keys(self, key):
@@ -1096,6 +1179,8 @@ class NasaMaps(QWidget):
             return tr("OpenFreeMap")
         if kind == SAT:
             return tr("CelesTrak")
+        if kind == BASE:
+            return base_credit(key)
         return SOURCES.get(key, "")
 
     def _label(self, key):
@@ -1118,8 +1203,8 @@ class NasaMaps(QWidget):
             item.setCheckState(checked if self.is_on(key) else unchecked)
             usable = planet.earth or key in ANY_BODY + ("grid",) \
                 or (key in RELIEF_BODY + ("contours",) and relief)
-            # Спутники только у Земли, как и слой.
-            usable = usable and (kind != SAT or planet.earth)
+            # Спутники и подоснова Земли - только у Земли.
+            usable = usable and (kind not in (SAT, BASE) or planet.earth)
             flags = item.flags()
             item.setFlags(flags | enabled if usable else flags & ~enabled)
         self._quiet = False
@@ -1147,6 +1232,10 @@ class NasaMaps(QWidget):
         self._chosen = key
         if kind == SAT:
             self._toggle_satellites(key[len(SAT):])
+        elif kind == BASE:
+            # Подоснова не снимается, щелчок по включённой - ничего.
+            if not self.is_on(key):
+                self._set_base(key)
         elif kind == LAYER:
             self.globe.set_extra(key, not self.globe.extras.get(key))
         elif kind == VECTOR:
@@ -1183,6 +1272,10 @@ class NasaMaps(QWidget):
             Qt, "ItemFlag", "ItemIsEnabled")))
         self.toggle.setText(tr("Убрать с глобуса") if on
                             else tr("Показать на глобусе"))
+        if self.items[key][2] == BASE:
+            self.toggle.setEnabled(self.toggle.isEnabled() and not on)
+            self.toggle.setText(tr("Подоснова на глобусе") if on
+                                else tr("Поставить подосновой"))
         self.export.setVisible(bool(self.globe.export_key(key)))
 
     def _toggle_chosen(self):
@@ -1193,6 +1286,19 @@ class NasaMaps(QWidget):
         row = self.globe.export_key(self._chosen)
         if row:
             self.globe.active_export(row)
+
+    def _set_base(self, key):
+        """Подложка строки key подосновой глобуса."""
+        name = key[len(BASE):]
+        window = self.globe
+        if name in BUILTIN_BASES:
+            index = next((n for n, s in enumerate(window.sources)
+                          if base_key(s) == key), None)
+            if index is not None:
+                window._panel_basemap(index)
+        else:
+            window.add_ready_source(name)
+        self.refresh()
 
     def _toggle_satellites(self, group):
         """Группа спутников на глобус или с глобуса. Первая группа
@@ -1223,7 +1329,7 @@ class NasaMaps(QWidget):
 
     def _filter(self, *args):
         text = self.search.text().strip().lower()
-        seen = {"maps": False, "layers": False}
+        seen = {"maps": False, "layers": False, "bases": False}
         for key, (item, group, kind) in self.items.items():
             # Во «Всех» групп спутников нет, во вкладке «Спутники» есть
             # и сам слой. Поиск идёт по всему каталогу.
@@ -1231,13 +1337,14 @@ class NasaMaps(QWidget):
                 fits = text in self.names[key][0].lower() \
                     or text in self.names[key][1].lower()
             elif self._group == ALL:
-                fits = kind != SAT
+                fits = kind not in (SAT, BASE)
             else:
                 fits = group == self._group or (
                     self._group == SAT_GROUP and key == "satellites")
             item.setHidden(not fits)
             if fits:
-                seen["layers" if kind in (LAYER, SAT, VECTOR)
+                seen["bases" if kind == BASE
+                     else "layers" if kind in (LAYER, SAT, VECTOR)
                      else "maps"] = True
         for name, head in self.heads.items():
             head.setHidden(not seen[name])
@@ -1282,5 +1389,6 @@ class NasaMaps(QWidget):
 
     def _thumb_missing(self, key, kind):
         """Превью по тайлу, которое не пришло, - закрытие сняло запрос."""
-        return (kind in ("gibs", themes.TEMPERATURE) or layer_url(key)) \
+        return (kind in ("gibs", themes.TEMPERATURE) or layer_url(key)
+                or base_url(key)) \
             and key not in self._replies and key not in self._loaded

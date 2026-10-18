@@ -1010,6 +1010,10 @@ and the XYZ Tiles connections of the QGIS browser, the chosen base map
 is checked. A choice changes the base map on the globe at once. On other
 bodies the row shows the imagery of the body, there is no choice.
 
+The same base maps with previews are gathered in the Base maps
+category of the Add data catalog, a click on a row sets the base map
+of the globe.
+
 The Ready sources submenu adds a base map with one click. The sources
 are gathered in the OpenStreetMap, Esri, NASA and USGS, and Google,
 Bing, Yandex, 2GIS submenus:
