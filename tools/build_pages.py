@@ -855,22 +855,24 @@ def page_data(img):
     img_ref[0] = img
     intro = section(
         "catalogue", ("Каталог «Добавить данные»", "The Add data catalogue"),
-        ("Около 90 карт и слоёв о Земле одной панелью",
-         "About 90 maps and layers about the Earth in one panel"),
-        ("Кнопка «Добавить данные» раздела «Слои» открывает каталог на "
-         "месте списка. Слой включается флажком, щелчок по строке "
+        ("Около 90 карт и слоёв о Земле в одном окне",
+         "About 90 maps and layers about the Earth in one window"),
+        ("Кнопка «Добавить данные» раздела «Слои» открывает каталог "
+         "отдельным окном поверх глобуса, список «Слоёв» остаётся на "
+         "месте. Слой включается флажком, щелчок по строке "
          "показывает источник, разрешение, период и условия. Данные "
          "запрашиваются у источников при показе, модуль их не "
          "распространяет.",
          "The Add data button of the Layers section opens the catalogue in "
-         "place of the list. A layer is turned on with a check box, a click "
+         "its own window over the globe, the Layers list stays in place. "
+         "A layer is turned on with a check box, a click "
          "on a row shows the source, resolution, period and terms. The data "
          "are requested from the sources when shown, the plugin does not "
          "redistribute them."),
         '<div class="side">%s%s</div>' % (
             figure(img("catalog.png", NARROW), t(
-                "catalogue.fig", "Каталог в левой панели окна глобуса.",
-                "The catalogue in the left panel of the globe window.")),
+                "catalogue.fig", "Каталог «Добавить данные».",
+                "The Add data catalogue.")),
             table(features("work", (
                 ("Значение в точке", "Value at a point",
                  "Щелчок по глобусу даёт значение карты, класс породы или "
