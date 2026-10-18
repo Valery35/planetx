@@ -10,6 +10,14 @@
 обновлениями. Самолёт в воздухе стоит на своей высоте, судно и борт на
 земле - на поверхности под собой, над водой - на уровне воды. Запись
 облёта ведёт объекты по своим часам (freeze, set_clock), как поезда.
+
+Точка с подписью остаётся и вблизи у объекта, до которого от глаза
+дальше SEEN его длин: модель там меньше примерно 10 пикселей. Замечание
+автора от 19 октября 2026 года - «самолёты при приближении пропадают»,
+«точку рано убираешь».
+
+Камера следом (follow) держит выбранный объект в середине вида
+с азимутом по его курсу, самолёт - на своей высоте (core.movers.chase).
 """
 import json
 import time
@@ -20,6 +28,7 @@ from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 
 from .. import journal
 from ..core import aircraft, ellipsoid, models, movers, vessels
+from ..core.navigation import Pose
 from ..core.features import Shape
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
@@ -31,6 +40,8 @@ POINT_REACH = 3.0  # точки - не дальше стольких полос 
 MODEL_REACH = 1.5  # модели - не дальше стольких полос вида
 POINT_SIZE = 7.0
 PICK_PIXELS = 10.0
+SEEN = 150.0  # длин объекта от глаза, ближе - модель без точки
+FOLLOW_TICK = 50  # мс между шагами камеры следом
 HEADERS = {"Digitraffic-User": "PlanetX"}
 
 
@@ -72,6 +83,11 @@ class LiveManager(QObject):
         self.view_timer = QTimer(self)
         self.view_timer.setInterval(VIEW_TICK)
         self.view_timer.timeout.connect(self._check_view)
+        self.followed = None
+        self._chase_extra = 0.0  # прошлый отрезок от объекта до земли
+        self.follow_timer = QTimer(self)
+        self.follow_timer.setInterval(FOLLOW_TICK)
+        self.follow_timer.timeout.connect(self._follow_step)
 
     # Наследнику.
 
@@ -142,6 +158,8 @@ class LiveManager(QObject):
     def _stop(self):
         self.poll.stop()
         self.view_timer.stop()
+        self.follow_timer.stop()
+        self.followed = None
         replies = [self.reply, self.info_reply]
         self.reply = self.info_reply = None
         for reply in replies:
@@ -161,6 +179,8 @@ class LiveManager(QObject):
     # Часы записи облёта.
 
     def freeze(self, clock=None):
+        # Камеру ведёт запись облёта.
+        self.set_follow(None)
         self.poll.stop()
         for item in self.fleet.items.values():
             item.blend_from = None
@@ -260,7 +280,7 @@ class LiveManager(QObject):
             0.3 * width) or abs(width - self._points_at[2]) > 0.3 * width
         if near != self.near or moved:
             self._rebuild()
-        elif near:
+        elif near or self.followed is not None:
             self._update_models(lat, lon, width)
 
     def _ground(self, lat, lon):
@@ -276,25 +296,27 @@ class LiveManager(QObject):
         self._points_at = (lat, lon, width)
         self.near = width < self.model_view
         shapes = []
-        if not self.near:
-            now, clock = self._clock()
-            found = []
-            reach = POINT_REACH * width
-            for key, plat, plon, _, alt in self.fleet.positions(now, clock):
-                gap = movers._metres(lat, lon, plat, plon)
-                if gap <= reach:
-                    found.append((gap, key, plat, plon, alt))
-            found.sort(key=lambda row: row[0])
-            for _, key, plat, plon, alt in found[:MAX_POINTS]:
-                color = _rgba(self.color(self.group_of(key)))
-                if alt == alt:
-                    shapes.append(Shape("point", [(plat, plon)],
-                                        name=self.label(key), color=color,
-                                        width=POINT_SIZE, alts=[alt]))
-                else:
-                    shapes.append(Shape("point", [(plat, plon)],
-                                        name=self.label(key), color=color,
-                                        width=POINT_SIZE))
+        now, clock = self._clock()
+        found = []
+        reach = POINT_REACH * width
+        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
+        for key, plat, plon, _, alt in self.fleet.positions(now, clock):
+            gap = movers._metres(lat, lon, plat, plon)
+            if gap > reach or key == self.followed:
+                continue
+            if self.near and not self._small(key, plat, plon, alt, eye):
+                continue
+            found.append((gap, key, plat, plon, alt))
+        found.sort(key=lambda row: row[0])
+        for _, key, plat, plon, alt in found[:MAX_POINTS]:
+            color = _rgba(self.color(self.group_of(key)))
+            # Маркер точки поднимается на height над поверхностью, высоты
+            # alts он не читает: точка самолёта лежала на земле под ним.
+            lift = max(alt - self._ground(plat, plon), 0.0) if alt == alt \
+                else 0.0
+            shapes.append(Shape("point", [(plat, plon)],
+                                name=self.label(key), color=color,
+                                width=POINT_SIZE, height=lift))
         self._shapes = shapes
         self._update_models(lat, lon, width)
         self.window._refresh_shapes()
@@ -302,6 +324,71 @@ class LiveManager(QObject):
 
     def shapes(self):
         return list(self._shapes) if self.on else []
+
+    def _small(self, key, lat, lon, alt, eye):
+        """Модель объекта мала на экране - дальше SEEN его длин от глаза:
+        вблизи у него остаётся точка с подписью."""
+        height = alt * self.view.store.scale if alt == alt \
+            else self.view.label_height(lat, lon)
+        where = np.asarray(ellipsoid.geodetic_to_ecef(lat, lon, height),
+                           dtype=np.float64)
+        return float(np.linalg.norm(where - eye)) > SEEN * self.size(key)[1]
+
+    # Камера следом.
+
+    def where(self, key):
+        """(широта, долгота, азимут, высота над уровнем моря или NaN)
+        объекта на экране или None."""
+        item = self.fleet.items.get(key)
+        if item is None:
+            return None
+        now, clock = self._clock()
+        return self.fleet.place(item, now, clock)
+
+    def under(self, px, py):
+        """Ключ объекта под пикселем кадра или None."""
+        found = self._picked(px, py, 1)
+        return found[0] if found else None
+
+    def set_follow(self, key):
+        """Камера следом за объектом key, None - отпустить."""
+        was = self.followed
+        self.followed = key if self.on else None
+        if self.followed is None:
+            self.follow_timer.stop()
+            if was is not None and self.on:
+                self._rebuild(force=True)
+            return
+        for other in getattr(self.window, "live_managers", ()):
+            if other is not self and getattr(other, "followed", None):
+                other.set_follow(None)
+        self._chase_extra = 0.0
+        self.follow_timer.start()
+        self._rebuild(force=True)
+        self._follow_step()
+
+    def _follow_step(self):
+        found = self.where(self.followed) if self.followed is not None \
+            else None
+        if found is None:
+            self.set_follow(None)
+            return
+        lat, lon, heading, alt = found
+        if heading != heading:
+            heading = self.view.navigator.pose.heading
+        height = 0.0
+        if alt == alt:
+            height = max(alt - self._ground(lat, lon), 0.0) \
+                * self.view.store.scale
+        pose = self.view.navigator.pose
+        # Колесо меняет расстояние вида, от него - расстояние до объекта.
+        reach = pose.distance - self._chase_extra
+        look_lat, look_lon, look, distance = movers.chase(
+            lat, lon, heading, height, reach, pose.tilt)
+        self._chase_extra = distance - max(reach, movers.CHASE_MIN)
+        self.view.navigator.show(Pose(look_lat, look_lon, distance, look,
+                                      pose.tilt))
+        self.view.update()
 
     def _mesh(self, group):
         found = self._meshes.get(group)
@@ -322,6 +409,9 @@ class LiveManager(QObject):
                 sample = item.sample
                 if movers.near(lat, lon, sample.lat, sample.lon, reach):
                     keys.append(key)
+        # Объект под камерой следом - моделью на любом расстоянии вида.
+        if self.followed in self.fleet.items and self.followed not in keys:
+            keys.append(self.followed)
         keys.sort(key=str)
         if keys == self._models_keys:
             return
@@ -342,7 +432,8 @@ class LiveManager(QObject):
     def _mover(self, key, base, size):
         def mover(now):
             item = self.fleet.items.get(key)
-            if item is None or not self.near or not self.on:
+            if item is None or not self.on \
+                    or not (self.near or key == self.followed):
                 return None
             now, clock = self._clock(now)
             lat, lon, heading, alt = self.fleet.place(item, now, clock)
@@ -359,6 +450,11 @@ class LiveManager(QObject):
 
     def identify(self, px, py):
         """Объекты под пикселем кадра: [(название, [(поле, значение)])]."""
+        return [(self.label(key), self.values(key, self.fleet.items[key]))
+                for key in self._picked(px, py, 5)]
+
+    def _picked(self, px, py, limit):
+        """Ключи объектов под пикселем кадра, ближние к нему первыми."""
         if not self.on or not len(self.fleet):
             return []
         now, clock = self._clock()
@@ -375,11 +471,9 @@ class LiveManager(QObject):
             * (3.0 if self.near else 1.0)
         found = []
         for n in np.argsort(gap):
-            if gap[n] > radius or not front[n] or len(found) >= 5:
+            if gap[n] > radius or not front[n] or len(found) >= limit:
                 break
-            key = keys[int(n)]
-            found.append((self.label(key),
-                          self.values(key, self.fleet.items[key])))
+            found.append(keys[int(n)])
         return found
 
 

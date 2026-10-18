@@ -110,6 +110,7 @@ def show(window, px, py):
             menu.addAction(tr("Свойства…")).triggered.connect(
                 lambda *a, p=place: window._open_place_properties(p))
         satellite_items(window, menu, px, py)
+        live_items(window, menu, px, py)
     if ground is not None:
         lat, lon = ground
         if not menu.actions()[-1].isSeparator():
@@ -235,6 +236,28 @@ def satellite_items(window, menu, px, py):
     follow.setChecked(chosen and manager.follow)
     follow.toggled.connect(
         lambda on, n=number: follow_satellite(manager, n, on))
+
+
+def live_items(window, menu, px, py):
+    """Поезд, судно или самолёт под курсором: «Камера следом». Если
+    камера идёт следом, а объекта под курсором нет, - пункт, который её
+    отпускает."""
+    for manager in getattr(window, "live_managers", ()):
+        key = manager.under(px, py) if manager.on else None
+        if key is None:
+            key = manager.followed
+        if key is None:
+            continue
+        if not menu.isEmpty():
+            menu.addSeparator()
+        title = menu.addAction(manager.label(key))
+        title.setEnabled(False)
+        follow = menu.addAction(tr("Камера следом"))
+        follow.setCheckable(True)
+        follow.setChecked(manager.followed == key)
+        follow.toggled.connect(
+            lambda on, m=manager, k=key: m.set_follow(k if on else None))
+        return
 
 
 def follow_satellite(manager, number, on):

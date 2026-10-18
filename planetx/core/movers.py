@@ -13,8 +13,10 @@ import math
 import time
 
 try:  # внутри плагина QGIS
+    from .tour import bearing
     from .trains import BLEND, _blend, _metres, destination
 except ImportError:  # headless-тесты
+    from tour import bearing
     from trains import BLEND, _blend, _metres, destination
 
 KNOT = 1852.0 / 3600.0  # м/с в узле
@@ -122,6 +124,29 @@ class Movers:
         clock = time.time() if clock is None else clock
         return [(key,) + self.place(item, now, clock)
                 for key, item in self.items.items()]
+
+
+CHASE_MIN = 50.0  # м, камера следом не ближе к объекту
+
+
+def chase(lat, lon, heading, height, reach, tilt):
+    """Поза камеры следом за объектом на высоте height над поверхностью:
+    (широта и долгота точки взгляда, азимут взгляда, расстояние до неё).
+    Камера в reach метрах позади объекта по курсу heading, наклон tilt
+    от отвеса. Объект лежит на луче взгляда: точка взгляда - продолжение
+    луча через объект до поверхности, впереди на height · tan(tilt).
+    Азимут берётся в самой точке взгляда - курс по дуге большого круга
+    там другой, и объект уходил бы вбок."""
+    height = max(float(height), 0.0) if height == height else 0.0
+    tilt = min(max(float(tilt), 0.0), 85.0)
+    reach = max(float(reach), CHASE_MIN)
+    ahead = height * math.tan(math.radians(tilt))
+    if ahead < 1.0:
+        return lat, lon, heading, reach
+    look_lat, look_lon = destination(lat, lon, heading, ahead)
+    look = (bearing(look_lat, look_lon, lat, lon) + 180.0) % 360.0
+    return look_lat, look_lon, look, \
+        reach + height / math.cos(math.radians(tilt))
 
 
 def near(lat, lon, other_lat, other_lon, reach):

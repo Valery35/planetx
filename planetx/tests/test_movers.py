@@ -136,6 +136,25 @@ class TestMovers(unittest.TestCase):
         fleet.update([], 0.0, clock=1102.0)
         self.assertEqual(len(fleet), 0)
 
+    def test_chase_puts_object_on_view_ray(self):
+        # Самолёт на 10 км, наклон 60°, курс на восток, камера в 4 км
+        # позади: точка взгляда впереди на 10 км · tan 60°, расстояние
+        # до неё 4 км + 10 км / cos 60°.
+        lat, lon, look, distance = movers.chase(60.0, 25.0, 90.0, 10000.0,
+                                                4000.0, 60.0)
+        ahead = trains._metres(60.0, 25.0, lat, lon)
+        self.assertAlmostEqual(ahead, 10000.0 * math.tan(math.radians(60)),
+                               delta=1.0)
+        self.assertGreater(lon, 25.0)
+        self.assertAlmostEqual(distance, 24000.0, delta=1e-6)
+        # Азимут в точке взгляда - продолжение дуги: на 60° с. ш. за
+        # 17 км на восток курс больше 90° на схождение меридианов.
+        self.assertGreater(look, 90.0)
+        self.assertLess(look, 90.5)
+        # Поезд на земле: точка взгляда - он сам, курс прежний.
+        self.assertEqual(movers.chase(60.0, 25.0, 30.0, math.nan, 2000.0,
+                                      60.0), (60.0, 25.0, 30.0, 2000.0))
+
     def test_new_sample_blends(self):
         fleet = movers.Movers()
         fleet.update([movers.Sample("a", 1000.0, 60.0, 25.0, 10.0, 0.0)],

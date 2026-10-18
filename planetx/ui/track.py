@@ -518,8 +518,14 @@ class TrackManager(QObject):
                         alts=position.alts if flying and absolute
                         else None))
                 if flying and absolute:
+                    # Маркер точки поднимается на height над поверхностью,
+                    # высоты alts он не читает.
+                    scale = self.view.store.scale
+                    ground = self.view.label_height(
+                        position.lat, position.lon) / scale if scale else 0.0
                     point = Shape("point", [(position.lat, position.lon)],
-                                  name=position.key, alts=[position.alt])
+                                  name=position.key,
+                                  height=max(position.alt - ground, 0.0))
                 elif flying:
                     point = Shape("point", [(position.lat, position.lon)],
                                   name=position.key, height=position.alt)

@@ -2829,7 +2829,11 @@ moves along the rails and through switches, and the cars of the consist
 bend along the track. The train takes a new position smoothly over 2 s.
 
 A click on a train opens the Features window with the type, category,
-line, operator, number, speed and time of the position.
+line, operator, number, speed and time of the position. The Camera
+follows item of the right-click menu over a train puts it in the
+middle of the view with the heading along its travel. The distance and
+tilt stay with the user, the wheel zooms in. Clearing the item, turning
+the row off or recording a flight releases the camera.
 
 While a flight is recorded the trains move by the tour time, a frame of
 the video is 1/25 s of their travel even when the frame with loading
@@ -2850,6 +2854,20 @@ object is a dot in the colour of its group with a label, no more than
 schematic model that keeps its course and speed between updates. A
 click opens the Features window with details. A flight recording moves
 ships and aircraft by the tour time, like trains.
+
+Close up an object keeps its dot with the label while it is farther
+than 150 of its lengths from the eye - the model is smaller than about
+10 pixels there. An aircraft 40 m long is shown as a dot farther than
+6 km, a ship 100 m long farther than 15 km. The dot of an aircraft is at
+its altitude.
+
+The Camera follows item of the right-click menu over a ship or an
+aircraft, as for a train, keeps the object in the middle of the view
+with the heading along its course. The aircraft lies on the view ray at
+its altitude, the point of view is the ray continued to the ground
+ahead. The wheel changes the distance to the aircraft, the middle
+button the tilt. Under the follow camera the object is shown as a model
+at any distance.
 
 Ships are AIS signals of the Gulfs of Finland and Bothnia and the
 Baltic near Finland, Fintraffic Digitraffic open data under the CC BY

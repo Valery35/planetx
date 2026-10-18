@@ -22,6 +22,7 @@ from .. import journal
 from ..core import ellipsoid, models, routing
 from ..core import trains as core
 from ..core.features import Shape
+from ..core.navigation import Pose
 from ..i18n import tr
 from ..net.overlay import fetch_bytes, fetch_json, post_json
 from ..render.models import Model as ModelItem
@@ -89,13 +90,19 @@ class TrainManager(QObject):
         # своей доли секунды, по настенным часам поезда прыгали бы.
         self.frozen = None
         self._frozen_at = None
+        # Камера следом за поездом: ключ или None.
+        self.followed = None
+        self.follow_timer = QTimer(self)
+        self.follow_timer.setInterval(50)
+        self.follow_timer.timeout.connect(self._follow_step)
 
     # Часы съёмки.
 
     def freeze(self, clock=None):
         """Поезда идут по часам съёмки: положения больше не просятся,
         переходы к новым положениям сняты, время двигают step_clock
-        и set_clock."""
+        и set_clock. Камеру ведёт запись облёта."""
+        self.set_follow(None)
         self.poll.stop()
         for train in self.fleet.trains.values():
             train.blend_from = None
@@ -136,6 +143,8 @@ class TrainManager(QObject):
         else:
             self.poll.stop()
             self.view_timer.stop()
+            self.followed = None
+            self.follow_timer.stop()
             self.fleet = core.Fleet()
             self.asked = set()
             self.one_replies = {}
@@ -158,6 +167,8 @@ class TrainManager(QObject):
         ответ службы после перезагрузки модуля звал удалённое окно."""
         self.on = False
         self.frozen = None
+        self.followed = None
+        self.follow_timer.stop()
         self.poll.stop()
         self.view_timer.stop()
         replies = [self.reply, self.types_reply, self._tilejson] \
@@ -432,7 +443,68 @@ class TrainManager(QObject):
         self.fleet.set_rails(core.Rails(lines) if lines else None)
         self.view.update()
 
+    # Камера следом.
+
+    def under(self, px, py):
+        """Ключ поезда под пикселем кадра или None."""
+        found = self._picked(px, py, 1)
+        return found[0] if found else None
+
+    def label(self, key):
+        return core.label(key, self.fleet.info.get(key))
+
+    def set_follow(self, key):
+        """Камера следом за поездом key, None - отпустить."""
+        self.followed = key if self.on else None
+        if self.followed is None:
+            self.follow_timer.stop()
+            return
+        for other in getattr(self.window, "live_managers", ()):
+            if other is not self and getattr(other, "followed", None):
+                other.set_follow(None)
+        self.follow_timer.start()
+        self._follow_step()
+
+    def _follow_step(self):
+        train = self.fleet.trains.get(self.followed) \
+            if self.followed is not None else None
+        if train is None:
+            self.set_follow(None)
+            return
+        now, clock = time.monotonic(), time.time()
+        if self.frozen is not None:
+            now, clock = self.frozen
+        lat, lon, heading = self.fleet.place(train, now, clock)
+        pose = self.view.navigator.pose
+        if heading != heading:
+            heading = pose.heading
+        self.view.navigator.show(Pose(lat, lon, pose.distance, heading,
+                                      pose.tilt))
+        self.view.update()
+
     # Опрос щелчком.
+
+    def _picked(self, px, py, limit):
+        """Ключи поездов под пикселем кадра, ближние первыми."""
+        if not self.on or not self.fleet.trains:
+            return []
+        now, clock = time.monotonic(), time.time()
+        keys, points = [], []
+        for key, lat, lon, _ in self.fleet.positions(now, clock):
+            keys.append(key)
+            points.append(ellipsoid.geodetic_to_ecef(
+                lat, lon, self.view.label_height(lat, lon)))
+        pixels, front = self.view.camera.project(
+            np.asarray(points, dtype=np.float64))
+        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
+        radius = PICK_PIXELS * self.view.devicePixelRatioF() \
+            * (3.0 if self.near else 1.0)
+        found = []
+        for n in np.argsort(gap):
+            if gap[n] > radius or not front[n] or len(found) >= limit:
+                break
+            found.append(keys[int(n)])
+        return found
 
     def identify(self, px, py):
         """Поезда под пикселем кадра: [(название, [(поле, значение)])]."""

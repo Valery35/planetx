@@ -400,6 +400,25 @@ vec3 lay(vec3 under, sampler2D image, vec4 uv, vec4 fx) {
         * (1.0 - uv.w) * (1.0 - fx.y);
     return under * (1.0 - top.a) + top.rgb;
 }
+// Доля, в которой видна картинка наложения слоёв. Пока у места нет
+// своей картинки, на экране растянута картинка предка - окном или
+// заплаткой предка. Линии толщиной в пиксели картинки (границы, дороги)
+// растягиваются вместе с ней: граница стран в 2 пикселя у предка на
+// 3 уровня грубее была полосой в 16 пикселей. Растяжение меряется на
+// экране - пикселей кадра на тексель картинки по производным координат.
+// При выборе тайлов по экранной ошибке это 1-2 пикселя, до
+// OVERLAY_KEEP картинка видна целиком, к OVERLAY_GONE гаснет, снимок
+// под ней остаётся.
+const float OVERLAY_KEEP = 3.0;
+const float OVERLAY_GONE = 6.0;
+float overlay_keep() {
+    vec2 texel = (u_overlay_uv.xy + u_overlay_uv.z * v_uv)
+        * vec2(textureSize(u_overlay, 0));
+    float spread = min(length(dFdx(texel)), length(dFdy(texel)));
+    float pixels = 1.0 / max(spread, 1e-6);
+    return clamp((OVERLAY_GONE - pixels) / (OVERLAY_GONE - OVERLAY_KEEP),
+                 0.0, 1.0);
+}
 void main() {
     // Заплатка: предок на месте неготового потомка, только его доля
     // текстурных координат (u_fade.yz - угол, u_fade.w - сторона).
@@ -456,7 +475,9 @@ void main() {
         if (left && maps) {
             base = lay(base, u_compare, u_compare_uv, u_compare_fx);
         } else {
-            base = lay(base, u_overlay, u_overlay_uv, u_overlay_fx);
+            vec4 fx = u_overlay_fx;
+            fx.y = 1.0 - (1.0 - fx.y) * overlay_keep();
+            base = lay(base, u_overlay, u_overlay_uv, fx);
         }
         base = lay(base, u_clouds, u_clouds_uv, u_clouds_fx);
         if (u_swipe >= 0.0 && abs(edge) < SWIPE_LINE) {

@@ -9307,6 +9307,83 @@ def aircraft_near():
 
 
 @check(1000)
+def aircraft_follow():
+    """Камера следом за самолётом на 10 км и точка у далёкого борта
+    вблизи. Борт условный: положение подставлено в менеджер, служба
+    на шаг не влияет."""
+    import numpy as np
+    from planetx.core import ellipsoid, movers
+    from planetx.core.aircraft import Info
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    manager = window.aircraft_manager
+    look = state.setdefault("aircraft_follow", {"since": None})
+    if look["since"] is None:
+        window.set_extra("aircraft", True)
+        manager.poll.stop()
+        view.navigator.stop()
+        view.navigator.show(Pose(60.20, 24.80, 4000.0, 0.0, 60.0))
+        view.update()
+        now = time.time()
+        manager.fleet.items.clear()
+        manager.fleet.update([
+            movers.Sample("test1", now, 60.20, 24.80, 230.0, 90.0, 90.0,
+                          10000.0, 0.0),
+            movers.Sample("test2", now, 60.30, 24.90, 120.0, 180.0, 180.0,
+                          3000.0, 0.0)], time.monotonic(), keep=True)
+        manager.fleet.info.update({
+            "test1": Info("TEST1", "", "A320", "A3"),
+            "test2": Info("TEST2", "", "A320", "A3")})
+        manager._rebuild(force=True)
+        look["points_near"] = sorted(
+            (s.name, round(s.height, 0)) for s in manager.shapes())
+        manager.set_follow("test1")
+        look["since"] = time.monotonic()
+        return 1500
+    pose = view.navigator.pose
+    lat, lon, heading, alt = manager.where("test1")
+    point = np.asarray([ellipsoid.geodetic_to_ecef(
+        lat, lon, alt * view.store.scale)], dtype=np.float64)
+    pixels, front = view.camera.project(point)
+    centre = (view.camera.width / 2.0, view.camera.height / 2.0)
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_aircraft_follow.png"))
+    result["aircraft_follow"] = {
+        "points_near": look["points_near"],
+        "followed": manager.followed, "heading": round(pose.heading, 1),
+        "distance": round(pose.distance, 0), "tilt": round(pose.tilt, 1),
+        "on_screen_px": [round(float(pixels[0][0] - centre[0]), 1),
+                         round(float(pixels[0][1] - centre[1]), 1)],
+        "front": bool(front[0]), "frame": view.camera.height}
+    probe = np.asarray([
+        ellipsoid.geodetic_to_ecef(pose.lat, pose.lon, 0.0),
+        ellipsoid.geodetic_to_ecef(lat, lon, 0.0)], dtype=np.float64)
+    px2, _ = view.camera.project(probe)
+    result["aircraft_follow"]["look_px"] = [round(float(v), 1)
+                                              for v in px2[0]]
+    result["aircraft_follow"]["ground_px"] = [round(float(v), 1)
+                                                for v in px2[1]]
+    result["aircraft_follow"]["size"] = [view.camera.width,
+                                           view.camera.height]
+    eye = ellipsoid.ecef_to_geodetic(np.asarray(view.camera.eye))
+    result["aircraft_follow"]["eye"] = [round(float(v), 4) for v in eye]
+    result["aircraft_follow"]["plane"] = [round(lat, 4), round(lon, 4),
+                                            round(alt, 0)]
+    result["aircraft_follow"]["look"] = [round(pose.lat, 4),
+                                           round(pose.lon, 4)]
+    result["aircraft_follow"]["models"] = [
+        [item.key[1], item.mover(time.monotonic()) is not None]
+        for item in view.models.groups.get("aircraft", [])]
+    result["aircraft_follow"]["drawn"] = view.models.drawn
+    manager.set_follow(None)
+    result["aircraft_follow"]["after"] = manager.follow_timer.isActive()
+    window.set_extra("aircraft", False)
+    return None
+
+
+@check(1000)
 def live_close():
     """Поздние ответы служб после закрытия менеджеров окна не трогают."""
     window = state["window"]
@@ -9327,6 +9404,57 @@ def live_close():
     for key in ("vessels", "aircraft"):
         window.set_extra(key, False)
     result["live_close"] = out
+
+
+@check(1000, manual=True)
+def borders_probe():
+    """Жёлтые полосы границ издалека: кадр через 1 с после позы и после
+    полной загрузки, жёлтые пиксели и недостающие картинки наложения.
+    PLANETX_BORDERS_POSE - широта, долгота, расстояние, азимут, наклон."""
+    import numpy as np
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("borders_probe", {"since": None})
+    pose = Pose(*[float(v) for v in os.environ.get(
+        "PLANETX_BORDERS_POSE", "62.0,25.5,1500000,0,0").split(",")])
+
+    def yellow(image):
+        bits = image.constBits()
+        bits.setsize(image.sizeInBytes())
+        px = np.frombuffer(bits, np.uint8).reshape(
+            image.height(), image.width(), 4)
+        b, g, r = (px[..., k].astype(np.int16) for k in range(3))
+        return int(((r > 200) & (g > 200) & (b < 90)).sum())
+    if look["since"] is None:
+        window.set_body("earth")
+        view.navigator.stop()
+        view.navigator.show(pose)
+        view.update()
+        look["since"] = time.monotonic()
+        return 1000
+    if "early" not in look:
+        view.repaint()
+        image = view.grabFramebuffer()
+        image.save(os.path.join(TEMP, "planetx_borders_early.png"))
+        look["early"] = {"yellow": yellow(image),
+                         "overlay_missing": view._overlay_missing,
+                         "load_missing": view.load_missing}
+        return 1000
+    waited = time.monotonic() - look["since"]
+    if (view.load_missing or waited < 10.0) and waited < 90.0:
+        return 1000
+    view.repaint()
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_borders_late.png"))
+    result["borders_probe"] = {
+        "early": look["early"],
+        "late": {"yellow": yellow(image),
+                 "overlay_missing": view._overlay_missing,
+                 "load_missing": view.load_missing,
+                 "waited": round(waited, 1)},
+        "groups": sorted(getattr(window, "_groups", []))}
+    return None
 
 
 def _image_server():
