@@ -938,13 +938,16 @@ def gallery_open():
                     for i in range(panel.geo.topLevelItemCount())
                     if not panel.geo.topLevelItem(i).isHidden()],
            "row": panel_row(window)}
-    # Кнопка «Добавить данные» ставит каталог на место списка.
+    # Кнопка «Добавить данные» открывает каталог отдельным окном, панель
+    # и список «Слоёв» не меняются.
+    width = window.splitter.sizes()[0]
     panel.add_data.click()
     gallery = window.gallery
     out["visible"] = gallery.isVisible()
-    out["in_panel"] = panel.layers_stack.currentWidget() is gallery
+    out["window"] = gallery.isWindow()
+    out["list_visible"] = panel.geo.isVisible()
     out["items"] = len(gallery.items)
-    out["panel_width"] = window.splitter.sizes()[0]
+    out["panel_width"] = [width, window.splitter.sizes()[0]]
     state["gallery_started"] = time.monotonic()
     result["gallery"] = out
 
@@ -1147,7 +1150,7 @@ def shot_layout_wait():
         return out
     from qgis.core import QgsLayoutExporter, QgsLayoutItemPicture
     dialog = state["shot"]["dialog"]
-    layout = dialog.layout
+    layout = dialog.target_layout
     if layout is not None:
         pictures = [i for i in layout.items()
                     if isinstance(i, QgsLayoutItemPicture)]
@@ -11666,12 +11669,12 @@ def section_check():
     dialog.chart.hovered.emit(-1)
     out["mark_after"] = window._section_mark is not None
     # Глубина 2891 км - до границы ядра.
-    dialog.depth.setCurrentIndex(3)
+    dialog.depth_box.setCurrentIndex(3)
     out["depth_core"] = dialog.chart.section.depth
     dialog.grab().save(os.path.join(TEMP, "planetx_section_core.png"))
     # Стенка на глобусе: вид с юга с наклоном, разрез до 700 км.
     from planetx.core.navigation import Pose
-    dialog.depth.setCurrentIndex(2)
+    dialog.depth_box.setCurrentIndex(2)
     view = window.view
     view.navigator.stop()
     view.navigator.show(Pose(30.0, 139.0, 3500000.0, 0.0, 55.0))
@@ -11918,6 +11921,44 @@ def vegas_check():
         os.path.join(TEMP, "planetx_vegas_section.png"))
     window.model_section_dialog.close()
     out["gl"] = dict(view.gl_errors)
+
+
+@check(1000)
+def stop_ground():
+    """Земля над подземной моделью у вида метки (@ground): прозрачность,
+    вырез и камера под землёй переживают файл меток и возвращаются
+    видом метки. Идёт после vegas_*, модель тоннелей уже собрана."""
+    from planetx.core import lookat
+    from planetx.core.features import Shape
+    window = state["window"]
+    sub = window.subsurface
+    out = result["stop_ground"] = {"model": sub.model is not None}
+    if sub.model is None:
+        return
+    before = {k: sub.settings[k] for k in ("opacity", "cut", "under")}
+    state["ground_before"] = before
+    sub.set_options(dict(sub.settings, opacity=0.3, cut=True, under=False))
+    snap = window.view_state()
+    out["snapshot"] = snap.get(lookat.GROUND)
+    store = window.myplaces
+    key = store.add(Shape("point", [(36.13, -115.16)], name="Земля"),
+                    view=(36.13, -115.16, 3000.0, 0.0, 45.0))
+    store.update(key, {"layers": lookat.layers_text(snap)})
+    layers = store.find(key).layers
+    out["stored"] = layers.get(lookat.GROUND)
+    # Другие настройки, потом вид метки возвращает свои.
+    sub.set_options(dict(sub.settings, opacity=0.9, cut=False, under=True))
+    out["changed"] = [sub.settings["opacity"], sub.settings["cut"],
+                      sub.settings["under"]]
+    window._apply_view_layers(layers)
+    out["back"] = [sub.settings["opacity"], sub.settings["cut"],
+                   sub.settings["under"]]
+    out["alpha"] = round(window.view.surface_alpha, 3)
+    out["floor_off"] = window.view.floor is None
+    store.remove(key)
+    sub.set_options(dict(sub.settings, **before))
+    out["restored"] = [sub.settings[k] for k in ("opacity", "cut", "under")]
+    out["gl"] = dict(window.view.gl_errors)
 
 
 @check(8000)
@@ -12308,6 +12349,64 @@ def model_section_open():
         "stats": dialog.stats.text()}
     dialog.grab().save(os.path.join(TEMP, "planetx_model_section.png"))
     dialog.close()
+
+@check(500)
+def model_section_menu():
+    """Меню правой кнопки окна «Разрез модели»: свой цвет пласта под
+    курсором и «Цвета разреза по умолчанию». Меню и окно выбора цвета
+    подменяются - шаг нажимает пункт сам."""
+    from qgis.PyQt.QtCore import QPoint
+    from qgis.PyQt.QtGui import QColor, QContextMenuEvent
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.qt_compat import enum
+    from planetx.ui import subsection
+    window = state["window"]
+    model = window.subsurface.model
+    south, north, west, east = model.box()
+    lat = model.holes[0][1]
+    window._open_model_section("Проба", [(lat, west), (lat, east)])
+    dialog = window.model_section_dialog
+    chart = dialog.chart
+    chart.reset_colors()
+    out = result.setdefault("subsurface", {})["section_menu"] = {}
+    # Точка графика над пластом.
+    spot = None
+    for y in range(10, chart.height(), 6):
+        k, _ = chart._at(QPoint(chart.width() // 2, y))
+        if k is not None and chart.owner(k) != subsection.core.HOST:
+            spot = QPoint(chart.width() // 2, y)
+            break
+    out["spot"] = spot is not None
+    seen = []
+    pick = {"index": 0}
+
+    class Menu(QMenu):
+        def exec(self, *args):
+            actions = [a for a in self.actions() if not a.isSeparator()]
+            seen.append([a.text() for a in actions])
+            actions[pick["index"]].trigger()
+    menu_class, get_color = subsection.QMenu, subsection.QColorDialog.getColor
+    subsection.QMenu = Menu
+    subsection.QColorDialog.getColor = staticmethod(
+        lambda *args: QColor(10, 200, 30))
+    try:
+        if spot is not None:
+            reason = enum(QContextMenuEvent, "Reason", "Mouse")
+            chart.contextMenuEvent(QContextMenuEvent(
+                reason, spot, chart.mapToGlobal(spot)))
+            out["own"] = {k: dict(v) for k, v in chart.own.items()}
+            out["saved"] = bool(subsection.read_section_colors())
+            pick["index"] = -1
+            chart.contextMenuEvent(QContextMenuEvent(
+                reason, spot, chart.mapToGlobal(spot)))
+            out["own_after_reset"] = dict(chart.own)
+            out["saved_after_reset"] = bool(subsection.read_section_colors())
+    finally:
+        subsection.QMenu = menu_class
+        subsection.QColorDialog.getColor = get_color
+    out["menus"] = seen
+    dialog.close()
+
 
 @check(500)
 def subsurface_under():
@@ -17382,6 +17481,330 @@ def series_landsat_check():
     dialog.close()
     return None
 
+POINTCLOUD = os.environ.get(
+    "PLANETX_POINTCLOUD",
+    r"C:\Dev\pointclouds\autzen\autzen-classified.copc.laz")
+POINTCLOUD_LAZ = os.environ.get(
+    "PLANETX_POINTCLOUD_LAZ",
+    r"C:\Dev\pointclouds\columbia_lake\SRMT_final_580000_5568000.laz")
+
+
+def _pc_add(path, name, provider, distance, tilt):
+    """Облако слоем проекта, отмечено на глобусе, камера над ним."""
+    from qgis.core import (QgsCoordinateReferenceSystem,
+                           QgsCoordinateTransform, QgsPointCloudLayer,
+                           QgsProject)
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    layer = QgsPointCloudLayer(path, name, provider)
+    QgsProject.instance().addMapLayer(layer)
+    window.set_layer_shown(layer.id(), True)
+    window._apply_vector(force=True)
+    tr = QgsCoordinateTransform(layer.crs(),
+                                QgsCoordinateReferenceSystem("EPSG:4326"),
+                                QgsProject.instance())
+    center = tr.transform(layer.extent().center())
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(center.y(), center.x(), distance,
+                                    20.0, tilt))
+    window.view.update()
+    state.setdefault("pc_layers", []).append(layer.id())
+    state["pc_began"] = time.monotonic()
+    return layer, (round(center.y(), 5), round(center.x(), 5))
+
+
+def _pc_settled(limit):
+    """Ждать конца перевода и клеток облаков: None - готово."""
+    window = state["window"]
+    manager = window.pointclouds
+    view = window.view
+    view.update()
+    busy = manager.processes or manager.jobs or view.pointclouds.pending
+    # После перевода в COPC первая клетка просится в следующем кадре.
+    busy = busy or any(e.cloud is None or not (e.ready or e.arrived)
+                       or any(e.arrived.values())
+                       for e in manager.entries.values())
+    if busy and time.monotonic() - state["pc_began"] < limit:
+        return 500
+    return None
+
+
+def _pc_report(name):
+    window = state["window"]
+    view = window.view
+    manager = window.pointclouds
+    out = result.setdefault("pointcloud", {}).setdefault(name, {})
+    out["seconds"] = round(time.monotonic() - state["pc_began"], 1)
+    out["cells"] = view.pointclouds.drawn
+    out["points"] = view.pointclouds.points
+    out["blocks"] = len(view.pointclouds.blocks)
+    out["entries"] = {e.name: {"copc": bool(e.copc),
+                               "cloud": e.cloud is not None,
+                               "ready": len(e.ready), "zfactor":
+                               round(e.zfactor, 4)}
+                      for e in manager.entries.values()}
+    out["in_overlay"] = [i for i in state.get("pc_layers", ())
+                         if i in window._overlay_layers()]
+    out["pending"] = view.data_pending
+    out["gl"] = dict(view.gl_errors)
+    return out
+
+
+@check(1000)
+def pointcloud_open():
+    """Облако COPC (Autzen) слоем проекта точками на глобусе."""
+    if not os.path.exists(POINTCLOUD):
+        state["pc_began"] = time.monotonic()
+        result.setdefault("pointcloud", {})["autzen"] = {"skipped": True}
+        return
+    layer, center = _pc_add(POINTCLOUD, "Autzen", "copc", 3000.0, 45.0)
+    result.setdefault("pointcloud", {})["autzen"] = {
+        "valid": layer.isValid(), "center": center,
+        "program": state["window"].pointclouds.program}
+
+
+@check(1000)
+def pointcloud_wait():
+    wait = _pc_settled(120.0)
+    if wait:
+        return wait
+    _pc_report("autzen")
+
+
+@check(1500)
+def pointcloud_near():
+    """Ближе - клетки делятся, точек больше."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    pose = window.view.navigator.pose
+    window.view.navigator.show(Pose(pose.lat, pose.lon, 600.0, 40.0, 60.0))
+    window.view.update()
+    state["pc_began"] = time.monotonic()
+
+
+@check(1000)
+def pointcloud_near_wait():
+    wait = _pc_settled(120.0)
+    if wait:
+        return wait
+    out = _pc_report("autzen_near")
+    state["window"].view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_pointcloud.png"))
+    out["far_points"] = result["pointcloud"]["autzen"].get("points")
+
+
+@check(1000)
+def pointcloud_laz():
+    """LAZ с дрона: перевод в COPC один раз, потом клетки."""
+    if not os.path.exists(POINTCLOUD_LAZ):
+        result.setdefault("pointcloud", {})["laz"] = {"skipped": True}
+        return
+    layer, center = _pc_add(POINTCLOUD_LAZ, "Columbia Lake", "pdal",
+                            700.0, 50.0)
+    result.setdefault("pointcloud", {})["laz"] = {
+        "valid": layer.isValid(), "center": center}
+
+
+@check(1000)
+def pointcloud_laz_wait():
+    if result.get("pointcloud", {}).get("laz", {}).get("skipped"):
+        return
+    wait = _pc_settled(240.0)
+    if wait:
+        return wait
+    out = _pc_report("laz_done")
+    state["window"].view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_pointcloud_laz.png"))
+    from planetx.ui.pointcloud import cache_folder
+    out["cache"] = sorted(n for n in os.listdir(cache_folder())
+                          if n.endswith(".copc.laz"))
+
+
+def _pc_entry(name):
+    for entry in state["window"].pointclouds.entries.values():
+        if entry.name == name:
+            return entry
+    return None
+
+
+@check(1000)
+def pointcloud_menu():
+    """Меню слоя облака, шкала классов, смена цвета на высоты."""
+    from qgis.PyQt.QtWidgets import QMenu
+    window = state["window"]
+    entry = _pc_entry("Columbia Lake")
+    out = result.setdefault("pointcloud", {})["menu"] = {}
+    if entry is None:
+        out["entry"] = None
+        return
+    menu = QMenu()
+    window.panel._cloud_menu(menu, entry.layer_id)
+    out["menu"] = {a.text(): [b.text() for b in a.menu().actions()
+                              if b.text()]
+                   for a in menu.actions() if a.menu() is not None}
+    menu.deleteLater()
+    legend = window.cloud_legend
+    out["legend_class"] = [legend.isVisible(), legend.title,
+                           len(legend.rows())]
+    out["seen"] = sorted(entry.seen)
+    out["has_rgb"] = entry.has_rgb
+    state["pc_fetched"] = window.pointclouds.fetched
+    window.set_pointcloud_style(entry.layer_id,
+                                {"mode": "height", "size": 3.0})
+    window.view.update()
+    state["pc_began"] = time.monotonic()
+
+
+@check(1000)
+def pointcloud_menu_wait():
+    wait = _pc_settled(120.0)
+    if wait:
+        return wait
+    from planetx.ui.project import read_pointclouds
+    window = state["window"]
+    entry = _pc_entry("Columbia Lake")
+    out = result["pointcloud"]["menu"]
+    legend = window.cloud_legend
+    out["legend_height"] = [legend.isVisible(), legend.title,
+                            [r[1] for r in legend.rows()]]
+    out["stored"] = read_pointclouds().get(entry.layer_id)
+    out["size"] = window.view.pointclouds.sizes.get(entry.layer_id)
+    out["refetched"] = window.pointclouds.fetched - state["pc_fetched"]
+    out["points_height"] = window.view.pointclouds.points
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_pointcloud_height.png"))
+    window.set_pointcloud_style(entry.layer_id,
+                                {"mode": "class", "size": 2.0,
+                                 "classes": [2]})
+    window.view.update()
+    state["pc_began"] = time.monotonic()
+
+
+@check(1000)
+def pointcloud_ground_wait():
+    wait = _pc_settled(120.0)
+    if wait:
+        return wait
+    window = state["window"]
+    view = window.view
+    out = result["pointcloud"]["menu"]
+    out["points_ground"] = view.pointclouds.points
+    out["legend_ground"] = [r[1] for r in window.cloud_legend.rows()]
+    view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_pointcloud_ground.png"))
+    entry = _pc_entry("Columbia Lake")
+    window.set_pointcloud_style(entry.layer_id, {"mode": "rgb"})
+    view.update()
+    state["pc_began"] = time.monotonic()
+
+
+@check(1000)
+def pointcloud_pick():
+    """Точка облака под серединой кадра - опрос щелчком."""
+    wait = _pc_settled(120.0)
+    if wait:
+        return wait
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    camera = view.camera
+    out = result.setdefault("pointcloud", {}).setdefault("pick", {})
+    if not window.pointclouds.entries:
+        out["skipped"] = True
+        return
+    # Пиксель одной из точек клетки в кадре, рядом с серединой.
+    key = next((k for k in view.pointclouds.shown
+                if k in view.pointclouds.blocks), None)
+    if key is None:
+        if time.monotonic() - state["pc_began"] < 60.0:
+            view.update()
+            return 500
+        out["block"] = None
+        return
+    from qgis.core import (QgsDoubleRange, QgsGeometry, QgsPointXY,
+                           QgsRectangle)
+    from planetx.core import pointcloud as pcore
+    from planetx.core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
+    entry = window.pointclouds.entries[key[0]]
+    block = view.pointclouds.blocks[key]
+    del ecef_to_geodetic, block
+    x0, y0, x1, y1 = pcore.bounds(entry.cloud, key[2])
+    rows = entry.layer.dataProvider().identify(
+        pcore.spacing(entry.cloud),
+        QgsGeometry.fromRect(QgsRectangle(x0, y0, x1, y1)),
+        QgsDoubleRange(), 50)
+    if not rows:
+        out["probe"] = None
+        return
+    row = rows[0]
+    p = entry.transform.transform(QgsPointXY(float(row["X"]),
+                                             float(row["Y"])))
+    h = pcore.display(np.array([float(row["Z"])]), entry.cloud,
+                      entry.zfactor, view.store.scale)[0]
+    xyz = np.array(geodetic_to_ecef(p.y(), p.x(), float(h)))
+    pixel, front = camera.project(np.asarray([xyz]))
+    px, py = (float(v) for v in pixel[0])
+    out["probe"] = {"z": round(float(row["Z"]), 2),
+                    "class": int(row.get("Classification", 0))}
+    started = time.perf_counter()
+    found = window.pointclouds.identify(camera, px, py, 12.0)
+    out["seconds"] = round(time.perf_counter() - started, 3)
+    out["pixel"] = [round(px), round(py)]
+    out["found"] = found
+
+
+@check(1000)
+def pointcloud_relief():
+    """Смена масштаба рельефа: точки идут за рельефом без новых
+    запросов к PDAL."""
+    window = state["window"]
+    out = result.setdefault("pointcloud", {})["relief"] = {
+        "fetched_before": window.pointclouds.fetched,
+        "scale_before": window.view.store.scale}
+    state["pc_scale"] = window.view.store.scale
+    window.view.set_relief(1.0 if window.view.store.scale != 1.0 else 2.0)
+    window.view.update()
+    state["pc_began"] = time.monotonic()
+
+
+@check(3000)
+def pointcloud_relief_check():
+    import numpy as np
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    window = state["window"]
+    view = window.view
+    out = result["pointcloud"]["relief"]
+    out["scale_after"] = view.store.scale
+    out["fetched_after"] = window.pointclouds.fetched
+    out["points"] = view.pointclouds.points
+    blocks = [view.pointclouds.blocks[k] for k in view.pointclouds.shown
+              if k in view.pointclouds.blocks][:3]
+    gaps = []
+    for block in blocks:
+        middle, _ = block.lifted(view.store.scale)
+        lat, lon, h = (float(v) for v in ecef_to_geodetic(middle))
+        gaps.append(round(h - float(view.store.height_at(lat, lon)), 1))
+    out["cell_middle_minus_terrain"] = gaps
+    view.set_relief(state.pop("pc_scale"))
+    view.update()
+
+
+@check(500)
+def pointcloud_off():
+    """Снятие отметки убирает точки из видеокарты."""
+    from qgis.core import QgsProject
+    window = state["window"]
+    for layer_id in state.get("pc_layers", ()):
+        window.set_layer_shown(layer_id, False)
+    window._apply_vector(force=True)
+    window.view.repaint()
+    out = result.setdefault("pointcloud", {})["off"] = {}
+    out["entries"] = len(window.pointclouds.entries)
+    out["blocks"] = len(window.view.pointclouds.blocks)
+    out["chooser"] = window.view.pointclouds.chooser is not None
+    QgsProject.instance().removeMapLayers(state.pop("pc_layers", []))
+
+
 @check(1000)
 def close_without_heights():
     # Закрытие окна на теле без загрузчика высот. Окно закрывается,
@@ -17484,6 +17907,11 @@ GLOBE = (
     "slope_check", "buildings_on", "buildings_wait", "buildings_off",
     "tile_fade", "tile_fade_check", "layer_appear", "layer_appear_check",
     "crossfade_on", "crossfade_check", "fields_on", "fields_check",
+    "pointcloud_open", "pointcloud_wait", "pointcloud_near",
+    "pointcloud_near_wait", "pointcloud_laz", "pointcloud_laz_wait",
+    "pointcloud_menu", "pointcloud_menu_wait", "pointcloud_ground_wait",
+    "pointcloud_pick", "pointcloud_relief", "pointcloud_relief_check",
+    "pointcloud_off",
     "close_without_heights",
 )
 

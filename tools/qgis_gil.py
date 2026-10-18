@@ -47,7 +47,7 @@ class GilCheck(QObject):
         self.part = 0
         self.t0 = time.monotonic()
         self.stop = threading.Event()
-        self.thread = None
+        self.spinner = None
         self.done = False
         view.frameSwapped.connect(self._frame)
         self.timer = QTimer(self)
@@ -60,12 +60,12 @@ class GilCheck(QObject):
         if part != self.part:
             self.part = part
             if part == 1:
-                self.thread = threading.Thread(target=_spin,
+                self.spinner = threading.Thread(target=_spin,
                                                args=(self.stop,))
-                self.thread.start()
+                self.spinner.start()
             elif part == 2:
                 self.stop.set()
-                self.thread.join()
+                self.spinner.join()
             elif part >= 3:
                 self.timer.stop()
                 self.view.frameSwapped.disconnect(self._frame)

@@ -93,7 +93,7 @@ class Guide(QWidget):
 
     def __init__(self, window):
         super().__init__(window)
-        self.window = window
+        self.globe = window
         self.index = 0
         self.items = stops()
         self.shade = Shade(window)
@@ -143,13 +143,13 @@ class Guide(QWidget):
 
     def finish(self):
         """Знакомство закрыто."""
-        self.window.removeEventFilter(self)
+        self.globe.removeEventFilter(self)
         self.shade.hide()
         self.shade.deleteLater()
         self.hide()
         self.deleteLater()
-        if getattr(self.window, "guide", None) is self:
-            self.window.guide = None
+        if getattr(self.globe, "guide", None) is self:
+            self.globe.guide = None
 
     def show_stop(self, index):
         self.index = max(0, min(index, len(self.items) - 1))
@@ -173,7 +173,7 @@ class Guide(QWidget):
 
     def _prepare(self, target):
         """Подсвеченное место видно: панель открыта, раздел развёрнут."""
-        window = self.window
+        window = self.globe
         if target in ("search", "layers") and window.panel.isHidden():
             window.set_sidebar(True)
         if target == "layers":
@@ -197,7 +197,7 @@ class Guide(QWidget):
 
     def target(self, name):
         """Виджет остановки или None."""
-        window = self.window
+        window = self.globe
         return {"view": window.view, "menu": window.view,
                 "search": window.panel.place,
                 "layers": window.panel.geo,
@@ -205,7 +205,7 @@ class Guide(QWidget):
 
     def place(self):
         """Вырез вокруг виджета остановки и окошко рядом с ним."""
-        window = self.window
+        window = self.globe
         self.shade.setGeometry(0, 0, window.width(), window.height())
         widget = self.target(self.items[self.index][0])
         if widget is None or not widget.isVisible():
@@ -240,7 +240,7 @@ class Guide(QWidget):
             self.place()
 
     def eventFilter(self, watched, event):
-        if watched is self.window and event.type() in (
+        if watched is self.globe and event.type() in (
                 enum(QEvent, "Type", "Resize"), enum(QEvent, "Type", "Show")):
             self.place()
         return False

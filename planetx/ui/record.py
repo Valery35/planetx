@@ -79,12 +79,12 @@ class RecordDialog(QDialog):
             note.setWordWrap(True)
             layout.addWidget(note)
         layout.addWidget(self.frames)
-        self.size = QComboBox(self)
-        self.size.addItems(size_names())
-        self.size.setToolTip(tr(
+        self.size_box = QComboBox(self)
+        self.size_box.addItems(size_names())
+        self.size_box.setToolTip(tr(
             "Размер кадров PNG. Кадр крупнее окна рисуется заново в этом "
             "размере, надписи и линии крупнее в той же доле."))
-        layout.addWidget(self.size)
+        layout.addWidget(self.size_box)
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok
             | QDialogButtonBox.StandardButton.Cancel, self)
@@ -96,20 +96,20 @@ class RecordDialog(QDialog):
         (self.video if mode == "video" and video.available()
          else self.frames).setChecked(True)
         index = int(settings.value(SIZE_KEY, 0) or 0)
-        self.size.setCurrentIndex(index if 0 <= index < len(SIZES) else 0)
+        self.size_box.setCurrentIndex(index if 0 <= index < len(SIZES) else 0)
         self.video.toggled.connect(self._mode)
         self._mode()
 
     def _mode(self, *args):
-        self.size.setEnabled(self.frames.isChecked())
+        self.size_box.setEnabled(self.frames.isChecked())
 
     def choice(self):
         """Режим «video» или «frames» и размер кадров (0, 0 - окно)."""
         mode = "video" if self.video.isChecked() else "frames"
         settings = QgsSettings()
         settings.setValue(MODE_KEY, mode)
-        settings.setValue(SIZE_KEY, self.size.currentIndex())
-        return mode, SIZES[self.size.currentIndex()]
+        settings.setValue(SIZE_KEY, self.size_box.currentIndex())
+        return mode, SIZES[self.size_box.currentIndex()]
 
 
 class TourRecorder(QObject):

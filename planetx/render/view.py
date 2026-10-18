@@ -48,6 +48,7 @@ from .gibs import LAYERS as GIBS_LAYERS, NEAR_ONLY, GibsLayer
 from .gibs import MIN_LEVELS as GIBS_MIN
 from .subsurface import FACE_OFFSET, ImageWalls, Subsurface
 from .models import Models
+from .pointcloud import PointClouds
 from .flow import FlowLines, PathFlowLines
 from .quakes import (DepositPoints, FirePoints, PlantPoints, Quakes,
                      VolcanoPoints)
@@ -358,6 +359,8 @@ class GlobeView(QOpenGLWidget):
         self.photos = ImageWalls()
         # 3D-модели «Моих меток» (render/models.py), точка - по рельефу.
         self.models = Models()
+        # Облака точек слоёв проекта (ui/pointcloud.py).
+        self.pointclouds = PointClouds()
         self.models.anchor = self._model_anchor
         self._models_version = None
         self._terrain_nearest = None
@@ -1544,6 +1547,7 @@ class GlobeView(QOpenGLWidget):
         self.image_walls.init_gl()
         self.photos.init_gl()
         self.models.init_gl()
+        self.pointclouds.init_gl()
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
         self.section_wall.init_gl()
@@ -1584,6 +1588,7 @@ class GlobeView(QOpenGLWidget):
         self.image_walls.release_gl()
         self.photos.release_gl()
         self.models.release_gl()
+        self.pointclouds.release_gl()
         self.cutaway.release_gl()
         self.cutaway_slabs.release_gl()
         self.section_wall.release_gl()
@@ -2090,6 +2095,14 @@ class GlobeView(QOpenGLWidget):
         if model is not None:
             self.camera.nearest = model if self.camera.nearest is None \
                 else min(self.camera.nearest, model)
+        # Клетки облаков точек выбираются до ближней плоскости: точки
+        # у глаза не срезаются.
+        if self.pointclouds.active and not self.show_holes:
+            self.pointclouds.choose(self.camera)
+            cloud = self.pointclouds.nearest(self.camera.eye)
+            if cloud is not None:
+                self.camera.nearest = cloud if self.camera.nearest is None \
+                    else min(self.camera.nearest, cloud)
         marks.append(time.perf_counter())
         sel = lod.select(self.camera, self.textures.__contains__,
                          max_level=self.max_level,
@@ -2294,6 +2307,10 @@ class GlobeView(QOpenGLWidget):
             self.models.draw(self.camera)
         else:
             self.models.drawn = 0
+        if self.pointclouds.active and not self.show_holes:
+            self.pointclouds.draw(self.camera, ratio)
+        else:
+            self.pointclouds.drawn = 0
         if sky:
             self._draw_sky()
         if self.show_stars and not self.show_holes:

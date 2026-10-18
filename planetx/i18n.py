@@ -2228,6 +2228,69 @@ EN = {
     "{name} · {kind}": "{name} · {kind}",
     "Подлететь": "Fly to",
     "растр": "raster",
+    "облако точек": "point cloud",
+    "Облако точек": "Point cloud",
+    "Цвет точек": "Point colour",
+    "Размер точек": "Point size",
+    "Классы точек": "Point classes",
+    "Все классы": "All classes",
+    "Только земля": "Ground only",
+    "Класс 2 - точки поверхности земли.":
+        "Class 2 - points of the ground surface.",
+    "Цвет съёмки": "Survey colour",
+    "Цвет RGB из файла облака. Если цвета в файле нет, точки окрашиваются "
+    "по классу.":
+        "The RGB colour from the cloud file. If the file has no colour, the "
+        "points are coloured by class.",
+    "По классу": "By class",
+    "Классы ASPRS - земля, растительность, здания, вода и другие. Подписи - "
+    "в шкале в углу вида.":
+        "ASPRS classes - ground, vegetation, buildings, water and others. "
+        "The names are in the legend in the corner of the view.",
+    "По высоте": "By height",
+    "От синего внизу облака к красному вверху.":
+        "From blue at the bottom of the cloud to red at the top.",
+    "По интенсивности": "By intensity",
+    "Сила отражённого сигнала лидара оттенками серого.":
+        "The strength of the returned lidar signal in shades of grey.",
+    "{value} пикс.": "{value} px",
+    "Класс {code}": "Class {code}",
+    "Не классифицировано": "Never classified",
+    "Без класса": "Unclassified",
+    "Низкая растительность": "Low vegetation",
+    "Средняя растительность": "Medium vegetation",
+    "Высокая растительность": "High vegetation",
+    "Здания": "Buildings",
+    "Низкий шум": "Low noise",
+    "Ключевые точки": "Model key points",
+    "Дорожное покрытие": "Road surface",
+    "Перекрытие": "Overlap",
+    "Провода, защита": "Wire guard",
+    "Провода": "Wire conductor",
+    "Опоры ЛЭП": "Transmission towers",
+    "Провода, соединители": "Wire connectors",
+    "Мосты": "Bridge deck",
+    "Высокий шум": "High noise",
+    "Широта, долгота": "Latitude, longitude",
+    "Интенсивность": "Intensity",
+    "Отражение": "Return",
+    "{number} из {count}": "{number} of {count}",
+    "Облако точек «{name}»": "Point cloud {name}",
+    "Точка облака": "Cloud point",
+    "Классы облака «{name}»": "Classes of the cloud {name}",
+    "Щелчок - точка облака": "A click gives the cloud point",
+    "Высоты облака «{name}»": "Heights of the cloud {name}",
+    "Облако «{name}» не показано: в составе QGIS нет программы PDAL.":
+        "The point cloud {name} is not shown, QGIS has no PDAL program.",
+    "Облако «{name}» не прочитано: {error}":
+        "The point cloud {name} was not read, {error}",
+    "Облако «{name}» переводится в COPC, это делается один раз.":
+        "The point cloud {name} is converted to COPC, this is done once.",
+    "Облако «{name}» не переведено в COPC, подробности в журнале работы.":
+        "The point cloud {name} was not converted to COPC, the details are "
+        "in the work log.",
+    "Облако «{name}» не открылось.":
+        "The point cloud {name} did not open.",
     "точки": "points",
     "линии": "lines",
     "полигоны": "polygons",
@@ -4418,14 +4481,13 @@ EN = {
     "Карта на глобусе - одна":
         "One map on the globe",
     "Каталог карт и слоёв - карты NASA, прогноз погоды, пожары, небо, недра, "
-    "инфраструктура, анализ рельефа и строки векторной основы. Каталог встаёт "
-    "на место списка, глобус остаётся виден.":
+    "инфраструктура, анализ рельефа и строки векторной основы. Каталог "
+    "открывается отдельным окном, его можно держать открытым рядом "
+    "с глобусом.":
         "The catalogue of maps and layers - NASA maps, weather forecast, "
         "fires, sky, subsurface, infrastructure, terrain analysis and the "
-        "vector base rows. The catalogue takes the place of the list, the "
-        "globe stays visible.",
-    "Назад к списку слоёв":
-        "Back to the layer list",
+        "vector base rows. The catalogue opens as a separate window, it can "
+        "stay open next to the globe.",
     "Отметка показывает слой на глобусе, видимость на карте QGIS не меняется. "
     "Двойной щелчок переносит к слою, меню «⋯» - перелёт, прозрачность, роль "
     "на глобусе и свойства.":

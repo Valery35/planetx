@@ -221,6 +221,10 @@ class IdentifyMixin:
         height = h / scale if scale else None
         self._mark("{:.5f}, {:.5f}".format(lat, lon), lat, lon)
         self._identify_at = (lat, lon, height, tolerance, px, py, found)
+        # Точка облака под курсором - один раз на щелчок, окно
+        # уточняется по приходу других сведений без нового запроса.
+        self._cloud_hits = self.pointclouds.identify(
+            camera, px, py, IDENTIFY_PIXELS * view.devicePixelRatioF())
         self._ask_parcels(lat, lon)
         self._ask_field(lat, lon)
         self._ask_geology(lat, lon)
@@ -305,6 +309,9 @@ class IdentifyMixin:
             return
         lat, lon, height, tolerance, px, py, found = args
         groups = list(found)
+        for name, values in getattr(self, "_cloud_hits", ()):
+            groups.append((Group(tr("Облако точек «{name}»", name=name)),
+                           [(tr("Точка облака"), values, None)]))
         groups += self._identify_parcels()
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
@@ -617,9 +624,9 @@ class IdentifyMixin:
             return tr("Для разреза нужны хотя бы две точки.")
         self._open_section(tr("Разрез помощника"), pts)
         dialog = self.section_dialog
-        best = min(range(dialog.depth.count()), key=lambda i: abs(
-            dialog.depth.itemData(i) - float(depth_km)))
-        dialog.depth.setCurrentIndex(best)
+        best = min(range(dialog.depth_box.count()), key=lambda i: abs(
+            dialog.depth_box.itemData(i) - float(depth_km)))
+        dialog.depth_box.setCurrentIndex(best)
         found = dialog.chart.section
         if found is None:
             return tr("Разрез не построен.")

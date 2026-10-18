@@ -34,6 +34,8 @@ BATHYMETRY = "bathymetry"
 # {номер слоя: год}, core/oldmaps.py.
 MAP_YEARS = "map_years"
 SECTION_COLORS = "section_colors"  # свои цвета окна «Разрез модели»
+# Облака точек: {номер слоя: {"mode", "size", "classes"}}.
+POINTCLOUDS = "pointclouds"
 
 
 def map_layers(project=None):
@@ -159,6 +161,23 @@ def write_section_colors(colors, project=None):
             for key, parts in colors.items() if parts}
     project.writeEntry(ENTRY, SECTION_COLORS,
                        json.dumps(data, sort_keys=True))
+
+
+def read_pointclouds(project=None):
+    """Настройки облаков точек на глобусе: {номер слоя: словарь
+    core.pointcloud.style}."""
+    project = project or QgsProject.instance()
+    value, ok = project.readEntry(ENTRY, POINTCLOUDS, "")
+    try:
+        data = json.loads(value) if ok and value else {}
+    except ValueError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def write_pointclouds(styles, project=None):
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, POINTCLOUDS, json.dumps(styles, sort_keys=True))
 
 
 def layer_group(layer_id, project=None):

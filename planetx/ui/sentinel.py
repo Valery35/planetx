@@ -880,7 +880,7 @@ class SentinelDialog(QDialog):
 
     def __init__(self, window, parent=None):
         super().__init__(parent)
-        self.window = window
+        self.globe = window
         self.setWindowTitle(tr("Космоснимки"))
         self.setModal(False)
         # Ключ SAS коллекции нынешнего спутника и момент, после которого
@@ -1800,7 +1800,7 @@ class SentinelDialog(QDialog):
             layer.setMetadata(metadata)
             project.addMapLayer(layer, False)
             day.addLayer(layer)
-            self.window.set_layer_shown(layer.id(), True)
+            self.globe.set_layer_shown(layer.id(), True)
             layers.append(layer)
         return layers
 

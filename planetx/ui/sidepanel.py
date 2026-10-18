@@ -57,10 +57,10 @@ class SidePanel(QWidget):
         line = QFrame(self)
         line.setFrameShape(enum(QFrame, "Shape", "HLine"))
         layout.addWidget(line)
-        self.scroll = QScrollArea(self)
-        self.scroll.setWidgetResizable(True)
-        self.scroll.setFrameShape(enum(QFrame, "Shape", "NoFrame"))
-        layout.addWidget(self.scroll, 1)
+        self.scroll_area = QScrollArea(self)
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(enum(QFrame, "Shape", "NoFrame"))
+        layout.addWidget(self.scroll_area, 1)
         self.hide()
 
     def host(self, dialog):
@@ -75,13 +75,13 @@ class SidePanel(QWidget):
         # Прежде прокрутка растягивала окно на всю высоту панели, и его
         # строки расходились пустотами, замечание автора от 17 октября
         # 2026 года.
-        holder = QWidget(self.scroll)
+        holder = QWidget(self.scroll_area)
         column = QVBoxLayout(holder)
         column.setContentsMargins(0, 0, 0, 0)
         dialog.setParent(holder, enum(Qt, "WindowType", "Widget"))
         column.addWidget(dialog)
         column.addStretch(1)
-        self.scroll.setWidget(holder)
+        self.scroll_area.setWidget(holder)
         self.title.setText(dialog.windowTitle())
         dialog.windowTitleChanged.connect(self._retitle)
         dialog.finished.connect(lambda *a, d=dialog: self._released(d))
@@ -102,7 +102,7 @@ class SidePanel(QWidget):
         if dialog is not self.dialog:
             return
         self.dialog = None
-        taken = self.scroll.takeWidget()
+        taken = self.scroll_area.takeWidget()
         if taken is not None:
             taken.hide()
             taken.deleteLater()

@@ -226,15 +226,15 @@ class SectionDialog(QDialog):
         super().__init__(parent)
         self.setModal(False)
         self.provider = provider
-        self.depth = QComboBox(self)
+        self.depth_box = QComboBox(self)
         for value in section.DEPTHS:
-            self.depth.addItem(km_text(value), value)
-        self.depth.setCurrentIndex(section.DEPTHS.index(section.DEPTH))
-        self.depth.setToolTip(tr(
+            self.depth_box.addItem(km_text(value), value)
+        self.depth_box.setCurrentIndex(section.DEPTHS.index(section.DEPTH))
+        self.depth_box.setToolTip(tr(
             "До какой глубины идёт разрез. 700 км - низ переходной зоны, "
             "глубже землетрясений почти нет. 2891 км - граница ядра, "
             "6371 км - центр Земли."))
-        self.depth.currentIndexChanged.connect(self.refresh)
+        self.depth_box.currentIndexChanged.connect(self.refresh)
         self.band = QDoubleSpinBox(self)
         self.band.setRange(10.0, 1000.0)
         self.band.setDecimals(0)
@@ -248,7 +248,7 @@ class SectionDialog(QDialog):
             "дальние очаги лежат не там, где линия."))
         self.band.valueChanged.connect(self.refresh)
         form = QFormLayout()
-        form.addRow(tr("Глубина"), self.depth)
+        form.addRow(tr("Глубина"), self.depth_box)
         form.addRow(tr("Полоса очагов"), self.band)
         self.chart = SectionChart(self)
         self.chart.hovered.connect(self._hovered)
@@ -276,7 +276,7 @@ class SectionDialog(QDialog):
         self.refresh()
 
     def settings(self):
-        return float(self.depth.currentData()), float(self.band.value())
+        return float(self.depth_box.currentData()), float(self.band.value())
 
     def refresh(self, *args):
         depth, width = self.settings()

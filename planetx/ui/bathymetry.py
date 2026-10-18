@@ -31,15 +31,15 @@ class BathymetryDialog(QDialog):
             "высота рельефа в середине растра, у озера это обычно "
             "поверхность воды.", name=name), self)
         about.setWordWrap(True)
-        self.depth = QRadioButton(tr("Значения - глубины"), self)
-        self.depth.setToolTip(tr(
+        self.depth_button = QRadioButton(tr("Значения - глубины"), self)
+        self.depth_button.setToolTip(tr(
             "Глубина под поверхностью воды, со знаком плюс или минус. "
             "Отметка дна - уровень воды минус глубина."))
         self.bed = QRadioButton(tr("Значения - отметки дна"), self)
         self.bed.setToolTip(tr(
             "Высота дна над уровнем моря, как у рельефа. Уровень воды "
             "нужен только для поверхности воды."))
-        (self.depth if kind == "depth" else self.bed).setChecked(True)
+        (self.depth_button if kind == "depth" else self.bed).setChecked(True)
         self.level = QDoubleSpinBox(self)
         self.level.setRange(-500.0, 9000.0)
         self.level.setDecimals(2)
@@ -49,7 +49,7 @@ class BathymetryDialog(QDialog):
             "Высота поверхности воды над уровнем моря. Вода рисуется на "
             "этой высоте над всеми точками, где дно ниже."))
         form = QFormLayout()
-        form.addRow(self.depth)
+        form.addRow(self.depth_button)
         form.addRow(self.bed)
         form.addRow(tr("Уровень воды"), self.level)
         buttons = QDialogButtonBox(
@@ -71,5 +71,5 @@ class BathymetryDialog(QDialog):
 
     def setting(self):
         """Выбранные (вид, уровень)."""
-        return ("depth" if self.depth.isChecked() else "bed",
+        return ("depth" if self.depth_button.isChecked() else "bed",
                 float(self.level.value()))

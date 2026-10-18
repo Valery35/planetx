@@ -25,8 +25,9 @@
 import html
 import os
 
-from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
-                       QgsSettings, QgsVectorLayer, QgsWkbTypes)
+from qgis.core import (QgsApplication, QgsPointCloudLayer, QgsProject,
+                       QgsRasterLayer, QgsSettings, QgsVectorLayer,
+                       QgsWkbTypes)
 from qgis.PyQt.QtCore import (QEvent, QItemSelectionModel, QRect, Qt,
                               QTimer, pyqtSignal)
 from qgis.PyQt.QtGui import QCursor, QFont, QIcon, QKeySequence, QPalette
@@ -35,7 +36,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView,
                                  QLineEdit,
                                  QListWidget, QMenu, QPushButton,
                                  QSizePolicy, QSlider, QSplitter,
-                                 QStackedWidget, QStyle,
+                                 QStyle,
                                  QStyledItemDelegate, QStyleOptionButton,
                                  QStyleOptionViewItem,
                                  QToolButton, QTreeWidget,
@@ -43,6 +44,7 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView,
                                  QWidgetAction)
 
 from ..core import basemap, geoid, icons, lookat
+from ..core import pointcloud as cloud_core
 from ..core.placetree import is_folder
 from ..i18n import is_russian, tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
@@ -50,6 +52,7 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            WATER_NAMES)
 from ..qt_compat import QAction, enum, enum_int
 from .placeprops import icon_image
+from .pointcloud import class_names
 from .spinner import BusySpinner
 
 # Роль данных строки: номер слоя QGIS, у строки «Глобус» - None.
@@ -95,7 +98,6 @@ MORE_ROLE = ACTIVE_ROLE + 1
 MENU_ROW = "menu"
 ADD_SOURCE = -1  # пункт «Добавить источник тайлов…» меню основы
 MORE_WIDTH = 22  # пикселей, место «⋯» у правого края строки
-CATALOG_SHARE = 0.75  # доля высоты панели под каталогом, выбор помощника
 FOUND_HEIGHT = 160  # пикселей, наибольшая высота списка найденных мест
 # Клавиши строки поиска и списка подсказок под ней.
 KEY_PRESS = enum(QEvent, "Type", "KeyPress")
@@ -199,6 +201,8 @@ def layer_kind(layer):
     """Тип слоя словами, как в списке 3D-сцены Isoliner3D."""
     if isinstance(layer, QgsRasterLayer):
         return tr("растр")
+    if isinstance(layer, QgsPointCloudLayer):
+        return tr("облако точек")
     if isinstance(layer, QgsVectorLayer):
         # Номер Qgis.GeometryType: 0 точки, 1 линии, 2 полигоны.
         kinds = {0: tr("точки"), 1: tr("линии"), 2: tr("полигоны")}
@@ -473,6 +477,8 @@ class LayerPanel(QWidget):
     grid_toggled = pyqtSignal(str, bool)
     # Векторный слой с Z - объёмом по отметкам, пункт меню слоя.
     zlayer_toggled = pyqtSignal(str, bool)
+    # Облако точек: номер слоя, настройки core.pointcloud.style.
+    pointcloud_style = pyqtSignal(str, object)
     # Растр - изолинии в проект QGIS, пункт меню слоя.
     contours_requested = pyqtSignal(object)
     # Векторный слой - выдавливание по полю, пункт меню слоя.
@@ -833,17 +839,20 @@ class LayerPanel(QWidget):
         # Растры проекта - поверхности по отметкам под землёй.
         self.grid_ids = set()
         self.zlayer_ids = set()  # векторные слои объёмом по отметкам Z
+        # Облака точек: настройки и встреченные классы по номеру слоя.
+        self.pointcloud_styles = {}
+        self.pointcloud_classes = {}
         # Папка - сетевая ссылка KML: её меню получает «Загрузить заново».
         self.is_link = lambda key: False
-        # Кнопка каталога над списком, каталог встаёт на место списка.
+        # Кнопка каталога над списком, каталог - отдельным окном.
         self.add_data = QPushButton(tr("Добавить данные"), self)
         self.add_data.setIcon(QIcon(os.path.join(
             os.path.dirname(os.path.dirname(__file__)), "maps.svg")))
         self.add_data.setToolTip(tr(
             "Каталог карт и слоёв - карты NASA, прогноз погоды, пожары, "
             "небо, недра, инфраструктура, анализ рельефа и строки "
-            "векторной основы. Каталог встаёт на место списка, глобус "
-            "остаётся виден."))
+            "векторной основы. Каталог открывается отдельным окном, "
+            "его можно держать открытым рядом с глобусом."))
         self.add_data.clicked.connect(
             lambda _=False: self.gallery_requested.emit())
         page = QWidget(self)
@@ -852,10 +861,6 @@ class LayerPanel(QWidget):
         page_layout.setSpacing(2)
         page_layout.addWidget(self.add_data)
         page_layout.addWidget(self.geo, 1)
-        self._split_before = None  # деление панели до каталога
-        self.layers_stack = QStackedWidget(self)
-        self.layers_stack.addWidget(page)
-        self._layers_page = page
         upper = QWidget(self)
         upper_layout = QVBoxLayout(upper)
         upper_layout.setContentsMargins(0, 0, 0, 0)
@@ -879,7 +884,7 @@ class LayerPanel(QWidget):
                 "показывает слой на глобусе, видимость на карте QGIS не "
                 "меняется. Меню слоя - «⋯» справа или правая кнопка."),
                 self),
-            Section("base", tr("Слои"), self.layers_stack, tr(
+            Section("base", tr("Слои"), page, tr(
                 "Свернуть или развернуть слои на глобусе."), self)]
         split = QSplitter(enum(Qt, "Orientation", "Vertical"), self)
         split.setChildrenCollapsible(False)
@@ -1316,30 +1321,6 @@ class LayerPanel(QWidget):
             if on:
                 self._vector_seen.add(id(group))
             group.setHidden(id(group) not in self._vector_seen)
-
-    def set_catalog(self, widget):
-        """Каталог «Добавить данные» - вторая страница раздела «Слои»."""
-        if self.layers_stack.indexOf(widget) < 0:
-            self.layers_stack.addWidget(widget)
-
-    def show_catalog(self, widget, on):
-        """Каталог на месте списка или снова список. Раздел «Слои»
-        раскрывается."""
-        shown = self.layers_stack.currentWidget() is widget
-        self.layers_stack.setCurrentWidget(widget if on
-                                           else self._layers_page)
-        if on and not shown:
-            # Каталогу - CATALOG_SHARE высоты панели, «Меткам» - остаток.
-            # Закрытый каталог возвращает прежнее деление.
-            self.section("base").set_open(True)
-            sizes = self.split.sizes()
-            self._split_before = sizes
-            total = sum(sizes)
-            base = int(total * CATALOG_SHARE)
-            self.split.setSizes([total - base, base])
-        elif not on and shown and self._split_before:
-            self.split.setSizes(self._split_before)
-            self._split_before = None
 
     def section(self, name):
         """Раздел панели по имени: «places» или «base»."""
@@ -1965,6 +1946,66 @@ class LayerPanel(QWidget):
         """Меню строки слоя проекта под точкой списка раздела."""
         self._geo_menu(point, self.project_tree)
 
+    def _cloud_menu(self, menu, layer_id):
+        """Пункты облака точек: цвет, размер точки, классы."""
+        style = cloud_core.style(self.pointcloud_styles.get(layer_id))
+
+        def emit(**change):
+            self.pointcloud_style.emit(layer_id, dict(style, **change))
+        colors = menu.addMenu(tr("Цвет точек"))
+        colors.setToolTipsVisible(True)
+        for mode, text, tip in (
+                ("rgb", tr("Цвет съёмки"), tr(
+                    "Цвет RGB из файла облака. Если цвета в файле нет, "
+                    "точки окрашиваются по классу.")),
+                ("class", tr("По классу"), tr(
+                    "Классы ASPRS - земля, растительность, здания, вода "
+                    "и другие. Подписи - в шкале в углу вида.")),
+                ("height", tr("По высоте"), tr(
+                    "От синего внизу облака к красному вверху.")),
+                ("intensity", tr("По интенсивности"), tr(
+                    "Сила отражённого сигнала лидара оттенками серого."))):
+            action = colors.addAction(text)
+            action.setCheckable(True)
+            action.setChecked(style["mode"] == mode)
+            action.setToolTip(tip)
+            action.triggered.connect(lambda _=False, m=mode: emit(mode=m))
+        sizes = menu.addMenu(tr("Размер точек"))
+        for size in cloud_core.SIZES:
+            action = sizes.addAction(tr("{value} пикс.", value="{:g}".format(
+                size)))
+            action.setCheckable(True)
+            action.setChecked(abs(style["size"] - size) < 0.01)
+            action.triggered.connect(lambda _=False, v=size: emit(size=v))
+        seen = sorted(self.pointcloud_classes.get(layer_id, ()))
+        chosen = style["classes"]
+        classes = menu.addMenu(tr("Классы точек"))
+        classes.setToolTipsVisible(True)
+        every = classes.addAction(tr("Все классы"))
+        every.setCheckable(True)
+        every.setChecked(chosen is None)
+        every.triggered.connect(lambda: emit(classes=None))
+        ground = classes.addAction(tr("Только земля"))
+        ground.setToolTip(tr("Класс 2 - точки поверхности земли."))
+        ground.triggered.connect(lambda: emit(classes=[2]))
+        if seen:
+            classes.addSeparator()
+        names = class_names()
+        for code in seen:
+            action = classes.addAction(names.get(code, tr(
+                "Класс {code}", code=code)))
+            action.setCheckable(True)
+            action.setChecked(chosen is None or code in chosen)
+
+            def toggle(on, code=code):
+                kept = set(seen if chosen is None else chosen)
+                if on:
+                    kept.add(code)
+                else:
+                    kept.discard(code)
+                emit(classes=None if kept >= set(seen) else sorted(kept))
+            action.toggled.connect(toggle)
+
     def _layer_menu_at(self, layer, pos):
         """Меню слоя проекта: перелёт, прозрачность, трек, рельеф
         глобуса у растра, свойства."""
@@ -1973,6 +2014,8 @@ class LayerPanel(QWidget):
         menu.addAction(tr("Подлететь")).triggered.connect(
             lambda: self.fly_to_layer.emit(layer))
         menu.addAction(self._opacity_action(menu, layer))
+        if isinstance(layer, QgsPointCloudLayer):
+            self._cloud_menu(menu, layer.id())
         if isinstance(layer, QgsVectorLayer) \
                 and enum_int(layer.geometryType()) == 0:
             menu.addAction(tr("Трек…")).triggered.connect(

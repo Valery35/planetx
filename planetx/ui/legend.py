@@ -576,6 +576,34 @@ class _RowsLegend(Closable, QWidget):
         painter.end()
 
 
+class PointCloudLegend(_RowsLegend):
+    """Шкала облаков точек: классы ASPRS встреченных точек или высоты
+    по цветам облака."""
+
+    def __init__(self, parent=None):
+        self._rows = []
+        self.title = tr("Облако точек")
+        super().__init__(parent)
+
+    def rows(self):
+        return self._rows
+
+    def set_rows(self, title, rows, footer=""):
+        """rows - [(цвет RGB, подпись)]."""
+        self.title = title
+        self.footer = footer
+        self._rows = [(color, text, "dot", 0.0) for color, text in rows]
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        texts = [self.title, self.footer] + [r[1] for r in self._rows]
+        width = max(_text_width(metrics, text) for text in texts if text)
+        self.setFixedSize(max(BAR_WIDTH + 2 * PAD + 8,
+                              width + PAD + 26 + PAD + 16),
+                          line * (len(self._rows) + 1
+                                  + (1 if footer else 0)) + PAD)
+        self.update()
+
+
 class PlantLegend(_RowsLegend):
     """Шкала электростанций: цвет - вид топлива, размер - мощность."""
 

@@ -74,7 +74,6 @@ ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
     "grid", "buildings", "contours", "cadastre", "infra_osm", "cables",
     "fires", "temperature")
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
-CATALOG_WIDTH = 460
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
 # пересчитанному предку. У Марса пиксель уровня 5 около 2.6 км, уровня
 # 9 - около 160 м. Выбор помощника.

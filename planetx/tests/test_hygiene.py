@@ -389,6 +389,86 @@ def shadowed_methods(source):
     return found
 
 
+# Методы QWidget, QDialog, QObject и QPaintDevice с именем без заглавных
+# букв - такие имена совпадают с полями в стиле модуля. Список снят
+# в QGIS 4.0.3 17 октября 2026 года, exec_ - имя Qt 5.
+QT_METHODS = frozenset((
+    "accept", "actions", "children", "close", "create", "cursor", "depth",
+    "destroy", "disconnect", "done", "event", "exec", "exec_", "find",
+    "font", "geometry", "grab", "height", "hide", "inherits", "layout",
+    "locale", "lower", "mask", "metric", "move", "open", "palette",
+    "parent", "pos", "property", "raise_", "receivers", "rect", "reject",
+    "render", "repaint", "resize", "result", "screen", "scroll", "sender",
+    "show", "size", "style", "thread", "tr", "update", "width", "window",
+    "x", "y"))
+# Методы самого QObject из того же списка - их закрывают и поля классов,
+# которые не виджеты: менеджеров, загрузчиков, задач.
+QOBJECT_METHODS = frozenset((
+    "children", "disconnect", "event", "inherits", "parent", "property",
+    "receivers", "sender", "thread", "tr"))
+# Корни классов Qt, которые не виджеты.
+NOT_WIDGETS = frozenset(("QObject", "QRunnable", "QThread", "QTimer",
+                         "QNetworkAccessManager"))
+
+
+def shadowed_qt_methods(source):
+    """Присваивания self.имя в классе Qt, где имя - метод QWidget.
+
+    Поле экземпляра закрывает метод Qt, и его вызов из Python падает.
+    Поле self.height окна свойств метки уронило dialog.height(),
+    17 октября 2026 года. Тот же день нашёл ещё 12 полей - depth, size,
+    scroll, layout, window. Класс Qt - базовый класс с именем Q и
+    заглавной буквы или такой же класс того же файла. У класса от
+    QObject, QRunnable и подобных проверяются только методы QObject,
+    у элементов списков (…Item) - ничего.
+    """
+    tree = ast.parse(source)
+    classes = [c for c in ast.walk(tree) if isinstance(c, ast.ClassDef)]
+
+    def base_name(base):
+        if isinstance(base, ast.Attribute):
+            return base.attr
+        return base.id if isinstance(base, ast.Name) else ""
+    # Набор проверяемых имён по классу: виджет, QObject или ничего.
+    kinds = {}
+    grown = True
+    while grown:
+        grown = False
+        for cls in classes:
+            if cls.name in kinds:
+                continue
+            for name in map(base_name, cls.bases):
+                if name in kinds:
+                    kind = kinds[name]
+                elif name[:1] == "Q" and name[1:2].isupper():
+                    kind = frozenset() if name.endswith("Item") else \
+                        QOBJECT_METHODS if name in NOT_WIDGETS else QT_METHODS
+                else:
+                    continue
+                kinds[cls.name] = kind
+                grown = True
+                break
+    found = []
+    for cls in classes:
+        names = kinds.get(cls.name)
+        if not names:
+            continue
+        for node in ast.walk(cls):
+            targets = []
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, (ast.AnnAssign, ast.AugAssign)):
+                targets = [node.target]
+            for target in targets:
+                for part in ast.walk(target):
+                    if isinstance(part, ast.Attribute) \
+                            and isinstance(part.value, ast.Name) \
+                            and part.value.id == "self" \
+                            and part.attr in names:
+                        found.append(part.lineno)
+    return found
+
+
 def shadowed_across(sources):
     """То же, что shadowed_methods, для класса из нескольких файлов:
     окно глобуса GlobeWindow и его примеси ui/globe/*.py. Атрибут,
@@ -632,6 +712,9 @@ class TestCodeRules(unittest.TestCase):
     def test_no_attribute_shadows_a_method(self):
         self.assertEqual(scan(shadowed_methods, self.paths), [])
 
+    def test_no_attribute_shadows_a_qt_method(self):
+        self.assertEqual(scan(shadowed_qt_methods, self.paths), [])
+
     def test_globe_window_parts_do_not_shadow_each_other(self):
         # Окно глобуса разделено на примеси 15 октября 2026 года, прежний
         # сторож видит класс только в пределах одного файла.
@@ -818,6 +901,23 @@ class TestGuardsCatch(unittest.TestCase):
             "class W:\n    def __init__(self):\n"
             "        self._ground_rasters = []\n"
             "    def _ground(self, px, py):\n        return px\n")
+
+    def test_shadowed_qt_method_guard(self):
+        bad = ("class Dialog(QDialog):\n    def __init__(self):\n"
+               "        self.height = QDoubleSpinBox(self)\n"
+               "class Side(Dialog):\n    def __init__(self):\n"
+               "        self.layout = None\n")
+        self.assertEqual(shadowed_qt_methods(bad), [3, 6])
+        self.assertEqual(shadowed_qt_methods(
+            bad.replace("height", "lift").replace("layout", "target")), [])
+        # Класс не Qt - поле с тем же именем годится.
+        self.assertEqual(shadowed_qt_methods(
+            "class Box:\n    def __init__(self):\n"
+            "        self.height = 1\n"), [])
+        # У QObject нет метода window, но есть thread.
+        manager = ("class Manager(QObject):\n    def __init__(self):\n"
+                   "        self.window = None\n        self.thread = None\n")
+        self.assertEqual(shadowed_qt_methods(manager), [4])
 
     def test_shadowed_across_guard(self):
         window = ("class GlobeWindow(AMixin):\n    def __init__(self):\n"

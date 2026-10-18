@@ -25,11 +25,12 @@ import os
 import time
 
 import numpy as np
-from qgis.PyQt.QtCore import QSize, Qt
+from qgis.core import QgsSettings
+from qgis.PyQt.QtCore import QPoint, QSize, Qt
 from qgis.PyQt.QtGui import QColor, QIcon, QImage, QPainter, QPixmap
 from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
                                  QListWidget, QListWidgetItem, QPushButton,
-                                 QToolButton, QVBoxLayout, QWidget)
+                                 QVBoxLayout, QWidget)
 
 from ..core import (clouds, cutaway, deposits, fires, flow, paleo,
                     plants, plates, quakes, slope, stars, sun, temperature,
@@ -46,6 +47,9 @@ THUMB = 104  # пикселей стороны превью
 ICON = 40  # пикселей стороны значка строки каталога
 CATEGORY_WIDTH = 116  # пикселей, столбец категорий каталога
 PARALLEL = 4  # запросов превью сразу
+# Место и размер окна каталога. Размер первого показа - выбор помощника.
+GEOMETRY_KEY = "PlanetX/catalog_geometry"
+SIZE = (780, 640)
 KEY_ROLE = enum_int(enum(Qt, "ItemDataRole", "UserRole"))
 ALL = ""  # кнопка «Все» групп
 LAYER = "layer"  # вид строки витрины: слой глобуса со своим флажком
@@ -779,19 +783,23 @@ def day_text(day):
 
 
 class NasaMaps(QWidget):
-    """Каталог «Добавить данные» в левой панели. window - окно глобуса.
+    """Каталог «Добавить данные» - немодальное окно поверх глобуса.
+    window - окно глобуса.
 
-    До 12 октября 2026 года - отдельное окно «Карты и слои». Решение
-    автора того же дня - каталог выезжает в панели поверх списка
-    «Слоёв», глобус остаётся виден. Слева категории, справа строки
-    с флажками и описание выбранной строки. Карты витрины - одна на
-    глобусе, слои включаются вместе, строки «Карты» - категория
-    каталога.
+    До 12 октября 2026 года - отдельное окно «Карты и слои», потом
+    каталог выезжал в левой панели поверх списка «Слоёв». Решение автора
+    от 18 октября 2026 года - снова отдельное немодальное окно: в панели
+    каталог закрывал список и раздвигал панель, «каждый раз приходится
+    остальное прятать». Слева категории, справа строки с флажками
+    и описание выбранной строки. Карты витрины - одна на глобусе, слои
+    включаются вместе, строки «Карты» - категория каталога. Место
+    и размер окна помнят настройки (GEOMETRY_KEY).
     """
 
     def __init__(self, window, parent=None):
-        super().__init__(parent)
-        self.window = window
+        super().__init__(parent, enum(Qt, "WindowType", "Tool"))
+        self.setWindowTitle(tr("Добавить данные"))
+        self.globe = window
         self.names = dict(map_names(), **layer_names())
         self.lights = None  # тайл огней городов для превью солнца
         self.items = {}
@@ -807,18 +815,6 @@ class NasaMaps(QWidget):
         self._chosen = ""  # строка, описание которой показано
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
-        back = QToolButton(self)
-        # Синий значок, как кнопки шкалы времени: чёрная стрелка шрифтом
-        # терялась, замечание автора от 15 октября 2026 года.
-        from .style import ACCENT
-        from .timebar import ICON_SIDE, blue_icon
-        # Каталог - в светлой панели, стрелка синими линиями.
-        back.setIcon(blue_icon("←", ACCENT))
-        back.setIconSize(QSize(ICON_SIDE, ICON_SIDE))
-        back.setAutoRaise(True)
-        back.setToolTip(tr("Назад к списку слоёв"))
-        back.clicked.connect(self.close)
-        top.addWidget(back)
         self.search = QLineEdit(self)
         self.search.setPlaceholderText(tr("снег, рудники, ветер"))
         self.search.setClearButtonEnabled(True)
@@ -872,7 +868,7 @@ class NasaMaps(QWidget):
         body.addWidget(self.groups)
         body.addLayout(right, 1)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.addLayout(top)
         layout.addLayout(body, 1)
         self._head("maps", tr("Карта на глобусе - одна"))
@@ -929,7 +925,7 @@ class NasaMaps(QWidget):
 
     def _load_base(self):
         """Тайл подложки под превью, затем тайлы тем."""
-        source = self.window.sources[self.window._basemap]
+        source = self.globe.sources[self.globe._basemap]
         url = source.tile_url(*themes.THUMB_TILE)
         self._replies["base"] = fetch_bytes(url, self._base_done)
 
@@ -999,10 +995,10 @@ class NasaMaps(QWidget):
             z, x, y = themes.THUMB_TILE
             return temperature.url_template(temperature.LAND).replace(
                 "{z}", str(z)).replace("{x}", str(x)).replace("{y}", str(y))
-        intervals = self.window._theme_domains.get(key)
+        intervals = self.globe._theme_domains.get(key)
         if intervals is None:
             theme = themes.BY_KEY[key]
-            self.window._theme_fetch(key, "domains", theme.domains_url())
+            self.globe._theme_fetch(key, "domains", theme.domains_url())
             return None
         day = themes.pick_day(intervals)
         if day is None:
@@ -1037,7 +1033,7 @@ class NasaMaps(QWidget):
     def is_on(self, key):
         """Строка каталога показана на глобусе."""
         kind = self.items[key][2]
-        window = self.window
+        window = self.globe
         if kind == LAYER:
             return bool(window.extras.get(key))
         if kind == SAT:
@@ -1056,7 +1052,7 @@ class NasaMaps(QWidget):
         """Вторая строка: источник и день карты."""
         kind = self.items[key][2]
         if kind == "gibs":
-            intervals = self.window._theme_domains.get(key)
+            intervals = self.globe._theme_domains.get(key)
             day = themes.pick_day(intervals) if intervals else None
             return tr("NASA GIBS, {day}", day=day_text(day)) if day \
                 else tr("NASA GIBS")
@@ -1085,7 +1081,7 @@ class NasaMaps(QWidget):
         self._quiet = True
         checked = enum(Qt, "CheckState", "Checked")
         unchecked = enum(Qt, "CheckState", "Unchecked")
-        planet = self.window.planet
+        planet = self.globe.planet
         relief = bool(getattr(planet, "terrain", None)) or planet.earth
         enabled = enum(Qt, "ItemFlag", "ItemIsEnabled")
         for key, (item, group, kind) in self.items.items():
@@ -1123,14 +1119,14 @@ class NasaMaps(QWidget):
         if kind == SAT:
             self._toggle_satellites(key[len(SAT):])
         elif kind == LAYER:
-            self.window.set_extra(key, not self.window.extras.get(key))
+            self.globe.set_extra(key, not self.globe.extras.get(key))
         elif kind == VECTOR:
             keys = self._vector_keys(key)
-            groups = set(self.window._groups)
+            groups = set(self.globe._groups)
             groups = groups - keys if keys & groups else groups | keys
-            self.window.set_line_groups(groups)
+            self.globe.set_line_groups(groups)
         else:
-            self.window.set_theme("" if key == self.window.gallery_key()
+            self.globe.set_theme("" if key == self.globe.gallery_key()
                                   else key)
         self.refresh()
 
@@ -1158,22 +1154,22 @@ class NasaMaps(QWidget):
             Qt, "ItemFlag", "ItemIsEnabled")))
         self.toggle.setText(tr("Убрать с глобуса") if on
                             else tr("Показать на глобусе"))
-        self.export.setVisible(bool(self.window.export_key(key)))
+        self.export.setVisible(bool(self.globe.export_key(key)))
 
     def _toggle_chosen(self):
         if self._chosen in self.items:
             self._clicked(self.items[self._chosen][0])
 
     def _export_chosen(self):
-        row = self.window.export_key(self._chosen)
+        row = self.globe.export_key(self._chosen)
         if row:
-            self.window.active_export(row)
+            self.globe.active_export(row)
 
     def _toggle_satellites(self, group):
         """Группа спутников на глобус или с глобуса. Первая группа
         включает слой «Спутники», последняя снятая - выключает."""
-        manager = self.window.satellite_manager
-        on = bool(self.window.extras.get("satellites"))
+        manager = self.globe.satellite_manager
+        on = bool(self.globe.extras.get("satellites"))
         groups = set(manager.groups)
         if on and group in groups:
             groups.discard(group)
@@ -1181,9 +1177,9 @@ class NasaMaps(QWidget):
             groups.add(group)
         manager.set_groups(groups)
         if groups and not on:
-            self.window.set_extra("satellites", True)
+            self.globe.set_extra("satellites", True)
         elif not groups and on:
-            self.window.set_extra("satellites", False)
+            self.globe.set_extra("satellites", False)
         self.refresh()
 
     def _set_group(self, group):
@@ -1217,11 +1213,20 @@ class NasaMaps(QWidget):
         for name, head in self.heads.items():
             head.setHidden(not seen[name])
 
-    def close(self):
-        """Каталог уходит, панель снова показывает список слоёв."""
+    def place(self):
+        """Место и размер окна: прежние из настроек, впервые - у левого
+        верхнего угла вида глобуса."""
+        saved = QgsSettings().value(GEOMETRY_KEY)
+        if saved is not None and self.restoreGeometry(saved):
+            return
+        self.resize(*SIZE)
+        view = self.globe.view
+        self.move(view.mapToGlobal(QPoint(40, 40)))
+
+    def closeEvent(self, event):
+        QgsSettings().setValue(GEOMETRY_KEY, self.saveGeometry())
         self.stop()
-        self.window.close_gallery()
-        return True
+        super().closeEvent(event)
 
     def stop(self):
         # Снятый запрос отвечает сразу, и обработчик ответа запускал

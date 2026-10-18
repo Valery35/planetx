@@ -50,7 +50,7 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, CurrentLegend, FaultLegend, FieldLegend,
-                     InfraLegend,
+                     InfraLegend, PointCloudLegend,
                      PlantLegend, VolcanoLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
@@ -68,6 +68,7 @@ from .extrude import ExtrudeManager
 from .navpad import NavPad
 from .skylabels import SkyLabels
 from .properties import SCALE_RANGE
+from .pointcloud import PointCloudManager
 from .subsurface import SubsurfaceManager
 from .record import TourRecorder
 from .tour import TourPlayer
@@ -696,6 +697,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             lambda: self._open_snapshot(True))
         # Подземный режим: скважины, кровли, разрезы, вырез блока.
         self.subsurface = SubsurfaceManager(self)
+        # Облака точек слоёв проекта (ui/pointcloud.py).
+        self.pointclouds = PointCloudManager(self)
         self.model_section_dialog = None
         self.panel.subsurface_requested.connect(self.subsurface.open_dialog)
         self.toolbar.set_auto(self.auto_refresh)
@@ -737,6 +740,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             lambda value: self.subsurface.set_opacity(value))
         self.panel.grid_ids = set(read_grids())
         self.panel.zlayer_toggled.connect(self.set_zlayer)
+        self.panel.pointcloud_style.connect(self.set_pointcloud_style)
         self.panel.zlayer_ids = set(read_zlayers())
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
@@ -872,6 +876,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.field_legend = FieldLegend(self.view)
         self.field_legend.hide()
         self.legend_panel.add(self.field_legend)
+        self.cloud_legend = PointCloudLegend(self.view)
+        self.cloud_legend.hide()
+        self.legend_panel.add(self.cloud_legend)
         self.class_legend = ClassLegend(self.view)
         self.class_legend.hide()
         self.legend_panel.add(self.class_legend)
@@ -925,7 +932,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.weather.close()
             self.flow.close()
             if getattr(self, "gallery", None) is not None:
-                self.gallery.stop()
+                self.gallery.close()
             self._address_timer.stop()
             reply, self._address_reply = self._address_reply, None
             if reply is not None:
@@ -963,6 +970,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             if self.insolation_tiles is not None:
                 self.insolation_tiles.abort()
             self.subsurface.close()
+            self.pointclouds.close()
             self.loader.abort()
             if self.place_loader is not None:
                 self.place_loader.abort()

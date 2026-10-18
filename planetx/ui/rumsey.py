@@ -302,7 +302,7 @@ class RumseyDialog(QDialog):
 
     def __init__(self, window):
         super().__init__(window)
-        self.window = window
+        self.globe = window
         self.loader = window.rumsey_loader
         self.setWindowTitle(tr("Карты Рамсея"))
         self.rows = []
@@ -443,7 +443,7 @@ class RumseyDialog(QDialog):
             return
         rows = self._shown_rows()[:core.LIST_MAX]
         selected = self._selected()
-        self.window.set_rumsey_footprints(
+        self.globe.set_rumsey_footprints(
             [tuple(cat.box[r]) for r in rows],
             None if selected is None else tuple(cat.box[selected]))
 
@@ -452,7 +452,7 @@ class RumseyDialog(QDialog):
         if row is None:
             return
         box = self.loader.catalogue.box[row]
-        self.window.view.fly_pose(
+        self.globe.view.fly_pose(
             (box[1] + box[3]) / 2.0, (box[0] + box[2]) / 2.0,
             core.fly_distance(box), 0.0, 0.0)
 
@@ -472,12 +472,12 @@ class RumseyDialog(QDialog):
     def _built(self, path, row):
         self.load_button.setEnabled(True)
         cat = self.loader.catalogue
-        self.window.add_rumsey_map(path, cat.year[row], cat.title[row])
+        self.globe.add_rumsey_map(path, cat.year[row], cat.title[row])
         self.status.setText(tr("Карта в проекте: {title}.",
                                title=cat.title[row]))
 
     def closeEvent(self, event):
         self.loader.cancel()
-        self.window.set_rumsey_footprints([], None)
+        self.globe.set_rumsey_footprints([], None)
         self.load_button.setEnabled(True)
         super().closeEvent(event)

@@ -838,19 +838,19 @@ class OverlayDialog(QDialog):
         self.corner.setToolTip(tr("Угол вида, к которому прижата картинка."))
         self.corner.currentIndexChanged.connect(self._screen)
         form.addRow(tr("Место"), self.corner)
-        self.size = QDoubleSpinBox(self)
-        self.size.setRange(0.0, 100.0)
-        self.size.setSuffix(" %")
-        self.size.setDecimals(0)
+        self.width_box = QDoubleSpinBox(self)
+        self.width_box.setRange(0.0, 100.0)
+        self.width_box.setSuffix(" %")
+        self.width_box.setDecimals(0)
         width = self.overlay.size
-        self.size.setValue(width[0] * 100.0 if width[0] > 0
+        self.width_box.setValue(width[0] * 100.0 if width[0] > 0
                            and width[2] == "fraction" else 0.0)
-        self.size.setSpecialValueText(tr("свой размер"))
-        self.size.setToolTip(tr(
+        self.width_box.setSpecialValueText(tr("свой размер"))
+        self.width_box.setToolTip(tr(
             "Ширина картинки в долях ширины вида. Ноль - картинка своего "
             "размера в пикселях."))
-        self.size.valueChanged.connect(self._screen)
-        form.addRow(tr("Ширина"), self.size)
+        self.width_box.valueChanged.connect(self._screen)
+        form.addRow(tr("Ширина"), self.width_box)
 
     def _screen(self, *args):
         key = self.corner.currentData()
@@ -868,7 +868,7 @@ class OverlayDialog(QDialog):
                     place[0] if x_units == "fraction" else inset_x,
                     place[1] if y_units == "fraction" else inset_y,
                     x_units, y_units)
-        share = self.size.value() / 100.0
+        share = self.width_box.value() / 100.0
         self.overlay.size = (share, 0.0, "fraction", "fraction") if share \
             else (-1.0, -1.0, "fraction", "fraction")
         self.changed.emit()

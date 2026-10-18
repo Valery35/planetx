@@ -189,11 +189,11 @@ class SnapshotDialog(QDialog):
 
     def __init__(self, window, to_layout, parent=None):
         super().__init__(parent or window)
-        self.window = window
+        self.globe = window
         self.view = window.view
         self.to_layout = to_layout
         self.path = None
-        self.layout = None
+        self.target_layout = None
         self.ratio = 1.0
         # Снимок начат этим окном. Сигналы вида слышат оба окна снимка.
         self.mine = False
@@ -400,17 +400,17 @@ class SnapshotDialog(QDialog):
                 "Видеокарта не создала буфер такого размера. Уменьшите "
                 "снимок."))
             return
-        if self.window.view.sky_view is not None:
+        if self.globe.view.sky_view is not None:
             # Подписи неба рисует слой поверх вида, в кадр они не
             # попадают. На снимок они ложатся той же проекцией.
             painter = QPainter(image)
             try:
-                labels = self.window.sky_labels
+                labels = self.globe.sky_labels
                 labels.shot_shown = labels.draw(
                     painter, image.width(), image.height(), self.ratio)
             finally:
                 painter.end()
-        draw_attribution(image, plain_text(self.window.attribution.text()),
+        draw_attribution(image, plain_text(self.globe.attribution.text()),
                          self.ratio)
         note = "" if complete else tr(
             " Часть тайлов не загрузилась, там менее подробный снимок.")
@@ -418,7 +418,7 @@ class SnapshotDialog(QDialog):
             layout = self._chosen_layout()
             if layout is None:
                 layout = new_layout(QgsProject.instance())
-            self.layout = layout
+            self.target_layout = layout
             insert_picture(layout, image, self.width_mm.value(),
                            self.height_mm.value())
             self.status.setText(tr("Картинка вставлена в макет «{name}».",

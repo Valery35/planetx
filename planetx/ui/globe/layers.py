@@ -47,11 +47,14 @@ from ..identify import Group
 from ..legend import class_names, class_titles, field_titles
 from ..layer_labels import range_key
 from ..project import (AUTO_REFRESH, FOLLOW, map_layers, layer_group,
-                       read_flag, read_grids, read_map_years, read_zlayers,
-                       visible_on_map, write_flag, write_map_years,
+                       read_flag, read_grids, read_map_years,
+                       read_pointclouds, read_zlayers, visible_on_map,
+                       write_flag, write_map_years, write_pointclouds,
                        write_shown)
 from ..sources import SourcesDialog
 from ..properties import PropertiesDialog
+from ..pointcloud import class_names as cloud_class_names, cloud_ids
+from ...core import pointcloud as cloud_core
 from ..subsurface import subsurface_ids
 from ..weather import field_attribution
 from ..track import date_range, layer_span, timed_layer
@@ -141,6 +144,10 @@ class LayersMixin:
         if force and hasattr(self, "extruder"):
             # Выдавленные слои - только на Земле, sync это проверяет.
             self.extruder.sync(self._shown_in_order())
+        if hasattr(self, "pointclouds"):
+            # Облака точек - точками в 3D, только на Земле.
+            self.pointclouds.sync(self._shown_in_order()
+                                  if self.planet.earth else [])
         layers = self._overlay_layers() if force else self._applied_layers
         if layers is None:
             layers = self._overlay_layers()
@@ -197,11 +204,56 @@ class LayersMixin:
 
     # Наложение.
 
+    # Облака точек (ui/pointcloud.py).
+
+    def set_pointcloud_style(self, layer_id, data):
+        """Цвет, размер точки или классы облака из меню слоя: запись
+        проекта и показ."""
+        styles = read_pointclouds()
+        styles[layer_id] = cloud_core.style(data)
+        write_pointclouds(styles)
+        self.pointclouds.set_style(layer_id, styles[layer_id])
+        self._pointclouds_seen()
+
+    def _pointclouds_seen(self):
+        """Меню слоя и шкала облака по встреченным классам и цвету."""
+        manager = self.pointclouds
+        self.panel.pointcloud_classes = {
+            e.layer_id: set(e.seen) for e in manager.entries.values()}
+        self.panel.pointcloud_styles = read_pointclouds()
+        found = None
+        for entry in manager.entries.values():
+            by_class = entry.mode == "class" \
+                or entry.mode == "rgb" and entry.has_rgb is False
+            if by_class and entry.seen:
+                names = cloud_class_names()
+                shown = sorted(entry.seen if entry.classes is None
+                               else entry.seen & entry.classes)
+                found = (tr("Классы облака «{name}»", name=entry.name),
+                         [(cloud_core.CLASS_COLORS.get(
+                             c, cloud_core.OTHER_COLOR),
+                           names.get(c, tr("Класс {code}", code=c)))
+                          for c in shown], tr("Щелчок - точка облака"))
+                break
+            if entry.mode == "height" and entry.cloud is not None:
+                low = entry.cloud.zmin * entry.zfactor
+                high = entry.cloud.zmax * entry.zfactor
+                found = (tr("Высоты облака «{name}»", name=entry.name),
+                         [(rgb, tr("{value} м", value="{:.0f}".format(
+                             low + (high - low) * share)))
+                          for share, rgb in reversed(
+                              cloud_core.HEIGHT_STOPS)], "")
+                break
+        if found is not None:
+            self.cloud_legend.set_rows(*found)
+        self.cloud_legend.setVisible(found is not None)
+        self._place_attribution()
+
     def _overlay_layers(self):
         """Номера отмеченных слоёв проекта в порядке карты, кроме
         геологических - те идут в подземное (_apply_vector)."""
         shown = self._shown_in_order()
-        under = subsurface_ids(shown)
+        under = subsurface_ids(shown) | set(cloud_ids(shown))
         return [i for i in shown if i not in under]
 
     # Исторические карты по годам.

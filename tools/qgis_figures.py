@@ -261,7 +261,7 @@ def demo_wait():
 
 
 def catalog_start():
-    # Каталог «Добавить данные» на месте списка «Слоёв», категория
+    # Окно каталога «Добавить данные», категория
     # «Планета воды» и описание течений.
     window = state["window"]
     gallery = window.open_gallery()
@@ -279,7 +279,7 @@ def catalog_wait():
         QTimer.singleShot(1000, catalog_wait)
         return
     QgsApplication.processEvents()
-    save(window.panel.grab().toImage(), "catalog.png")
+    save(gallery.grab().toImage(), "catalog.png")
     gallery.close()
     QTimer.singleShot(500, currents_start)
 

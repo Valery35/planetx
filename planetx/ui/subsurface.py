@@ -738,8 +738,10 @@ def detect_role(layer):
     """Роль слоя подземного режима или None: по имени таблицы - имени
     слоя или layername источника GeoPackage, иначе по полям. Разрезы
     и вырез узнаются только по имени, у линий и многоугольников полей
-    для них нет."""
-    if isinstance(layer, QgsRasterLayer):
+    для них нет. Растры, облака точек, сетки и векторные тайлы ролей
+    не имеют: у облака нет fields(), отмеченное облако роняло
+    пересборку слоёв, 18 октября 2026 года."""
+    if not isinstance(layer, QgsVectorLayer):
         return None
     names = [layer.name().strip().lower()]
     source = layer.source().lower()

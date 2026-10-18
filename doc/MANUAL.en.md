@@ -297,8 +297,8 @@ the eastward and northward speeds) with the globe legend. A NASA theme,
 clouds and surface temperature go as a NASA GIBS image of the same date,
 the temperature as two rasters - sea and land.
 
-The Add data button at the top of the section puts the catalogue in
-place of the list, see Add data catalogue. The vector base groups hold
+The Add data button at the top of the section opens the catalogue
+window, see Add data catalogue. The vector base groups hold
 rows. Borders and names holds Borders, Places and Water names.
 Transport holds Roads, Road numbers, Railways and Airports. Nature
 holds Rivers, Lakes and reservoirs, Peaks, Reserves and national parks.
@@ -436,9 +436,11 @@ it loads. When the window opens, the row is off.
 
 #### Add data catalogue
 
-The Add data button of the Layers section puts the catalogue in place
-of the list, the panel grows wider for that time, the globe stays
-visible. The ← arrow brings the list back. The categories stand on the
+The Add data button of the Layers section opens the catalogue as a
+separate window over the globe. The window is not modal - the globe, the
+panel and the Layers list stay as they were, the catalogue can stay
+open. The window remembers its place and size. The categories stand on
+the
 left - Map (the vector base, coordinate grid, 3D buildings, contours),
 Weather, NASA themes by groups, Sky and light (Stars, Atmosphere,
 Clouds, Sun, Satellites), Inside the Earth (Geological map, Earthquakes,
@@ -462,7 +464,7 @@ cross on its scale in the lower left corner of the view also removes
 it. A satellite group card shows or removes the group. The first group
 switches the Satellites layer on, the last removed one switches it off.
 
-<img src="figures/en/catalog.png" width="460" alt="The Add data catalogue in the left panel">
+<img src="figures/en/catalog.png" width="460" alt="The Add data catalogue window">
 
 NASA themes are rasters by days, months or years from the NASA GIBS
 service. A day of a series counts as ready a day later, before that
@@ -1168,8 +1170,8 @@ The label language changes at once.
 
 The QGIS project section stands between Places and Layers. It lists the
 layers of the current project in the order of the
-QGIS map, each with its type - raster, points, lines, polygons or
-table. The check box of a layer shows it on the globe and does not
+QGIS map, each with its type - raster, points, lines, polygons, point
+cloud or table. The check box of a layer shows it on the globe and does not
 change its visibility on the map. In a new project the boxes are clear.
 The checks are stored in the project.
 
@@ -1195,7 +1197,52 @@ The right-click menu:
 - Globe terrain - for rasters, see [Own terrain](#own-terrain).
 - Extrusion… - for vector layers, see
   [Extrusion by field](#extrusion-by-field).
+- Point colour, Point size, Point classes - for point clouds, see
+  [Point clouds](#point-clouds).
 - Layer Properties… - the standard QGIS layer properties window.
+
+### Point clouds
+
+A point cloud is a lidar or drone survey in a LAS, LAZ or COPC file. It
+is added to the project as an ordinary QGIS point cloud layer and
+checked in the QGIS project section. On the globe the cloud stands as
+points in space at their own elevations, with depth testing, like 3D
+models.
+
+The points are read by the PDAL program shipped with QGIS, in separate
+processes, and the window does not wait for them. A COPC file is read
+at once. A LAS or LAZ file is converted to COPC once, the copy goes to
+the PlanetX/pointclouds folder of the QGIS profile, the source file does
+not change. A drone tile of 5.7 million points is converted in about
+15 s, later views take the copy.
+
+The detail of the cloud depends on the distance. The cloud is divided
+into cells, near cells are smaller and hold more points, far cells the
+other way round. A frame holds at most 3 million points. While cells
+load, the loading icon to the right of the icon bar is shown.
+
+The elevations of the cloud are converted to metres by the coordinate
+system of the file, for example from feet. With terrain the heights are
+stretched by the terrain scale, like 3D models, without terrain the
+cloud stands with its bottom on the surface. The points are moved
+slightly towards the eye, about 0.5 % of the distance. The globe
+terrain is smoothed over tens of metres, and without this the ground
+points of the survey would go under it.
+
+The menu of a cloud layer:
+
+- Point colour - the survey colour (RGB from the file, without it - by
+  class), by ASPRS class, by height from blue to red or by intensity in
+  shades of grey.
+- Point size - from 1 to 6 pixels.
+- Point classes - all classes, ground only or chosen classes among those
+  met in the cloud.
+
+The legend in the corner of the view shows the classes of the cloud or
+the heights in metres. A click in the Identify features mode gives the
+cloud point under the cursor - class, elevation, latitude and longitude,
+intensity, return number and colour. The cloud settings are stored in
+the project.
 
 ### Extrusion by field
 

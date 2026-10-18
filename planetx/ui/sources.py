@@ -142,7 +142,7 @@ class SourcesDialog(QDialog):
 
     def __init__(self, window, parent=None):
         super().__init__(parent)
-        self.window = window
+        self.globe = window
         self.setWindowTitle(tr("Источники данных"))
         self.setModal(False)
         self.setMinimumWidth(760)
@@ -323,7 +323,7 @@ class SourcesDialog(QDialog):
         """Строки таблицы по нынешним адресам и подложкам."""
         self.tree.clear()
         base = QTreeWidgetItem(self.tree, [tr("Подложки")])
-        for index, source in enumerate(self.window.sources):
+        for index, source in enumerate(self.globe.sources):
             what = tr("Снимок или карта под всеми слоями")
             terms = source.attribution[1] or SOURCES_DOC
             if source.url == basemap.ESRI_URL:
@@ -341,11 +341,11 @@ class SourcesDialog(QDialog):
                 else sources.tile_probe(source.url)
             item = self._row(base, source.name, what, terms, probe)
             item.setData(NAME, SOURCE_ROLE, index)
-        terrain, encoding = self.window._terrain_choice()
+        terrain, encoding = self.globe._terrain_choice()
         router = sources.router(QgsSettings().value(sources.ROUTER_KEY, ""))
         model = dem.choice(QgsSettings().value(sources.DEM_KEY, ""))
         sea = dem.sea_choice(QgsSettings().value(sources.SEA_DEM_KEY, ""))
-        for group, rows in catalogue(terrain, self.window._vector_choice(),
+        for group, rows in catalogue(terrain, self.globe._vector_choice(),
                                      router, model, sea):
             parent = QTreeWidgetItem(self.tree, [group])
             for name, what, terms, probe in rows:
@@ -373,7 +373,7 @@ class SourcesDialog(QDialog):
         index = item.data(NAME, SOURCE_ROLE) if item is not None else None
         if index is None:
             return None
-        return self.window.sources[index]
+        return self.globe.sources[index]
 
     def _current(self, item, previous):
         source = self._selected_source()
@@ -479,7 +479,7 @@ class SourcesDialog(QDialog):
     # Подложки.
 
     def _add(self):
-        pose = self.window.view.navigator.pose
+        pose = self.globe.view.navigator.pose
         dialog = TileSourceDialog(self, (pose.lat, pose.lon))
         if dialog.exec():
             self.changed.emit("basemaps")
@@ -489,7 +489,7 @@ class SourcesDialog(QDialog):
         source = self._selected_source()
         if source is None or source.builtin:
             return
-        pose = self.window.view.navigator.pose
+        pose = self.globe.view.navigator.pose
         dialog = TileSourceDialog(self, (pose.lat, pose.lon), edit=source)
         if dialog.exec():
             self.changed.emit("basemaps")
@@ -510,7 +510,7 @@ class SourcesDialog(QDialog):
         if answer != enum(QMessageBox, "StandardButton", "Yes"):
             return
         if source.ready:
-            self.window.remove_ready_source(source.ready)
+            self.globe.remove_ready_source(source.ready)
         else:
             remove_connection(source.name)
         self.changed.emit("basemaps")

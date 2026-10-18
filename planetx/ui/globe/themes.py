@@ -32,7 +32,7 @@ from ..inset import DeepSource, DemSource, terrain_prepare
 from ..contours import ContourSource, digit_glyphs
 from ..properties import SCALE_RANGE
 from ..nasamaps import NasaMaps, map_names
-from .base import (BODY_CONTOUR_DEEPER, CATALOG_WIDTH, CIRCLE_COLOR,
+from .base import (BODY_CONTOUR_DEEPER, CIRCLE_COLOR,
                    GRID_COLOR, GRID_WIDTH, RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
                    SURFACE_EXTRAS, THEME_KEY, TILE_SIZE, buildings_decoder,
                    contours_prepare, gibs_source, prepare_theme, slope_prepare)
@@ -124,42 +124,25 @@ class ThemesMixin:
         self.guide.start()
 
     def open_gallery(self):
-        """Каталог «Добавить данные» на месте списка «Слоёв», один на
-        глобус. Панель уже CATALOG_WIDTH раздвигается за счёт вида,
-        закрытие каталога возвращает прежнюю ширину."""
+        """Каталог «Добавить данные» - немодальное окно поверх глобуса,
+        одно на глобус. Панель и список «Слоёв» остаются как были."""
         if getattr(self, "gallery", None) is None:
-            self.gallery = NasaMaps(self, self.panel)
-            self.panel.set_catalog(self.gallery)
-        if self.panel.isHidden():
-            self.set_sidebar(True)
-        sizes = self.splitter.sizes()
+            self.gallery = NasaMaps(self, self)
         if not self.gallery.isVisible():
-            self._panel_width = sizes[0]
-        if sizes[0] < CATALOG_WIDTH:
-            grow = min(CATALOG_WIDTH - sizes[0], max(sizes[1] - 200, 0))
-            sizes[0] += grow
-            sizes[1] -= grow
-            self.splitter.setSizes(sizes)
-        self.panel.show_catalog(self.gallery, True)
+            self.gallery.place()
+        self.gallery.show()
+        self.gallery.raise_()
+        self.gallery.activateWindow()
         self.gallery.resume()
         self._mark_gallery()
         self.gallery.refresh()
         return self.gallery
 
     def close_gallery(self):
-        """Каталог уходит, панель снова показывает список и прежнюю
-        ширину."""
+        """Закрыть окно каталога."""
         gallery = getattr(self, "gallery", None)
-        if gallery is None:
-            return
-        self.panel.show_catalog(gallery, False)
-        width = getattr(self, "_panel_width", None)
-        sizes = self.splitter.sizes()
-        if width is not None and sizes[0] > width:
-            sizes[1] += sizes[0] - width
-            sizes[0] = width
-            self.splitter.setSizes(sizes)
-        self._panel_width = None
+        if gallery is not None and gallery.isVisible():
+            gallery.close()
 
     def _theme_on(self):
         return bool(self.theme_key) and self.planet.earth \
