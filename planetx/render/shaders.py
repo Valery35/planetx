@@ -401,6 +401,13 @@ vec3 lay(vec3 under, sampler2D image, vec4 uv, vec4 fx) {
     return under * (1.0 - top.a) + top.rgb;
 }
 void main() {
+    // Заплатка: предок на месте неготового потомка, только его доля
+    // текстурных координат (u_fade.yz - угол, u_fade.w - сторона).
+    if (u_fade.w > 0.0 && (v_uv.x < u_fade.y || v_uv.y < u_fade.z
+            || v_uv.x > u_fade.y + u_fade.w
+            || v_uv.y > u_fade.z + u_fade.w)) {
+        discard;
+    }
     if (u_wedge_on > 0.5) {
         float up = length(v_up);
         float sin_lat = up > 0.0 ? v_up.z / up : 0.0;

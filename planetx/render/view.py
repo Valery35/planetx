@@ -750,7 +750,7 @@ class GlobeView(QOpenGLWidget):
             self.update()
         return out
 
-    def _draw_water(self, items, mvps):
+    def _draw_water(self, items, mvps, fades=None):
         """Вода над дном океана: те же сетки тайлов, опущенные на уровень
         моря (TileMesh.sea), только там, где рельеф ниже нуля. Глубину
         не пишет, поэтому дно видно сквозь неё, а суша выше нуля
@@ -768,8 +768,12 @@ class GlobeView(QOpenGLWidget):
                                GL.GL_ZERO, GL.GL_ONE)
         gl.glDepthMask(GL.GL_FALSE)
         try:
-            gpu.draw_batch(items, mvps, self.u_mvp)
+            # fades - доли заплаток, вода заплатки тоже только на своём
+            # месте.
+            gpu.draw_batch(items, mvps, self.u_mvp, fades=fades,
+                           u_fade=self.u_fade)
         finally:
+            gl.glUniform4f(self.u_fade, 0.0, 0.0, 0.0, 0.0)
             gl.glDepthMask(GL.GL_TRUE)
             gl.glDisable(GL.GL_BLEND)
             gl.glUniform1f(self.u_water, 0.0)
@@ -2229,6 +2233,13 @@ class GlobeView(QOpenGLWidget):
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
         surface = len(items)
         fades = [0.0] * len(self.caps) + self._tile_fades(sel.draw)
+        if sel.holes and any(sel.holes):
+            # Заплатки предков на месте неготовых потомков, core/lod.
+            caps = len(self.caps)
+            for n, (key, hole) in enumerate(zip(sel.draw, sel.holes)):
+                if hole is not None:
+                    fades[caps + n] = (fades[caps + n],) + lod.hole_rect(
+                        key, hole)
         scales = [1.0] * surface
         # Подстилка закрыла бы подземное сквозь прозрачную поверхность
         # и вырез блока.
@@ -2318,7 +2329,8 @@ class GlobeView(QOpenGLWidget):
             gpu.gl.glUniform1f(self.u_alpha, 1.0)
         if self.sea_floor and self.store.scale and not self.show_holes:
             self._draw_water(items[len(self.caps):surface],
-                             mvps[len(self.caps):surface])
+                             mvps[len(self.caps):surface],
+                             fades[len(self.caps):surface])
         if self.hole_check:
             holes = self._count_holes()
             gl.glUseProgram(self.program)

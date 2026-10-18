@@ -16143,6 +16143,230 @@ def post_flows_shot():
 
 
 @check(500, manual=True)
+def post_turbines():
+    """Ручной шаг: демо ветряков во весь экран для объявления."""
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("air", True)
+    _post_full(True)
+    window.clear_places(confirm=False)
+    window.open_demo("turbines")
+    state["ls_started"] = time.monotonic()
+
+
+@check(1000, manual=True)
+def post_turbines_video():
+    """Кадр и ролик MP4 на один оборот ротора. Время анимации ставится
+    на каждый кадр само: ролик идёт с настоящей скоростью при любой
+    скорости съёмки. Ветряки повёрнуты по фазе, чтобы не крутились
+    одинаково. PLANETX_POST_POSE - широта, долгота, расстояние, азимут,
+    наклон через запятую. PLANETX_POST_ORBIT - облёт: градусы азимута
+    за ролик и длительность в секундах через запятую. Перед кадром
+    облёта шаг ждёт загрузки тайлов новой позы, не дольше 3 с."""
+    from qgis.PyQt.QtTest import QTest
+    import ctypes
+    from qgis.PyQt.QtCore import Qt as _Qt
+    from qgis.PyQt.QtGui import QImage
+    from planetx.core import video
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 4.0:
+        return 1000
+    if "post_posed" not in state:
+        state["post_posed"] = time.monotonic()
+        pose = os.environ.get("PLANETX_POST_POSE", "57.9936,56.0185,420,"
+                              "130,84")
+        view.navigator.stop()
+        view.navigator.show(Pose(*[float(v) for v in pose.split(",")]))
+        view.update()
+        return 2000
+    waited = time.monotonic() - state["post_posed"]
+    if (view.load_missing or waited < 10.0) and waited < 60.0:
+        return 1000
+    fps, seconds = 25, 6.0
+    orbit = os.environ.get("PLANETX_POST_ORBIT")
+    turn = 0.0
+    if orbit:
+        turn, seconds = (float(v) for v in orbit.split(","))
+    start = view.navigator.pose
+    first = view.grabFramebuffer()
+    width, height = video.even_size(first.width() // 2,
+                                    first.height() // 2)
+    out = os.path.join(TEMP, "planetx_post_turbines.mp4")
+    writer = video.Mp4Writer(out, width, height, fps)
+    keys = sorted(view.models.started)
+    phases = {key: n * 0.9 for n, key in enumerate(keys)}
+    try:
+        for k in range(int(fps * seconds)):
+            if turn:
+                share = k / (fps * seconds)
+                view.navigator.show(Pose(start.lat, start.lon,
+                                         start.distance,
+                                         (start.heading + turn * share)
+                                         % 360.0, start.tilt))
+                view.update()
+                QTest.qWait(30)
+                waited_at = time.monotonic()
+                while view.load_missing and \
+                        time.monotonic() - waited_at < 3.0:
+                    QTest.qWait(50)
+            now = time.monotonic()
+            for key in keys:
+                view.models.started[key] = now - k / fps - phases[key]
+            image = view.grabFramebuffer().scaled(
+                width, height, _Qt.AspectRatioMode.IgnoreAspectRatio,
+                _Qt.TransformationMode.SmoothTransformation)
+            image = image.convertToFormat(QImage.Format.Format_RGB32)
+            if k == 0:
+                image.save(os.path.join(TEMP, "planetx_post_turbines.png"))
+            bits = image.constBits()
+            bits.setsize(image.sizeInBytes())
+            frame = bytearray(bytes(bits))
+            holder = ctypes.c_char.from_buffer(frame)
+            writer.write(ctypes.addressof(holder))
+            del holder
+    finally:
+        writer.close()
+    result["post_turbines"] = {"frames": writer.count, "size": [width,
+                                                                height],
+                               "models": len(keys), "waited": round(
+                                   waited, 1)}
+    state.pop("post_posed", None)
+    return None
+
+
+@check(1000, manual=True)
+def flicker_probe():
+    """Ручной шаг: облёт по кругу с 450 м у Перми, на каждом кадре -
+    разброс яркости нижней половины кадра (у «плоского» кадра без
+    снимка он мал) и что рисовал кадр. PLANETX_FLICKER_FRAMES -
+    количество кадров."""
+    import numpy as np
+    from qgis.PyQt.QtTest import QTest
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.set_body("earth")
+    count = int(os.environ.get("PLANETX_FLICKER_FRAMES", "200"))
+    start = Pose(57.9940, 56.0170, 450.0, 130.0, 72.0)
+    view.navigator.stop()
+    view.navigator.show(start)
+    view.update()
+    since = time.monotonic()
+    while time.monotonic() - since < 30.0 and (
+            view.load_missing or time.monotonic() - since < 8.0):
+        QTest.qWait(200)
+    seen = {}
+    original = view._tile_fades
+
+    def fades(draw):
+        out = original(draw)
+        seen["tiles"] = len(draw)
+        seen["fade_max"] = max(out) if out else 0.0
+        seen["fading"] = sum(1 for v in out if v > 0.0)
+        return out
+    view._tile_fades = fades
+    forgot = {"n": 0}
+    forget = view._forget
+
+    lost = []
+
+    def counted(key):
+        forgot["n"] += 1
+        if key[0] <= 8:
+            import traceback as _tb
+            frame = _tb.extract_stack(limit=3)[0]
+            sel = view.selection
+            lost.append((key, "%s:%d" % (frame.name, frame.lineno),
+                         bool(sel and key in sel.keep)))
+        return forget(key)
+    view._forget = counted
+    rows = []
+    try:
+        for k in range(count):
+            view.navigator.show(Pose(start.lat, start.lon, start.distance,
+                                     (start.heading + 360.0 * k / count)
+                                     % 360.0, start.tilt))
+            view.update()
+            QTest.qWait(30)
+            waited = time.monotonic()
+            while view.load_missing and time.monotonic() - waited < 3.0:
+                QTest.qWait(50)
+            image = view.grabFramebuffer()
+            bits = image.constBits()
+            bits.setsize(image.sizeInBytes())
+            pixels = np.frombuffer(bits, np.uint8).reshape(
+                image.height(), image.width(), 4)
+            low = pixels[pixels.shape[0] // 2::8, ::8, :3].astype(
+                np.float32)
+            sel = view.selection
+            levels = {}
+            for key in (sel.draw if sel else ()):
+                levels[key[0]] = levels.get(key[0], 0) + 1
+            rows.append({"k": k, "lost": [str(x) for x in lost[-12:]],
+                         "std": round(float(low.std()), 1),
+                         "levels": levels, "textures": len(view.textures),
+                         "forgot": forgot["n"],
+                         "want": len(sel.want) if sel else None,
+                         "missing": view.load_missing,
+                         "mean": [round(float(v), 1)
+                                  for v in low.mean(axis=(0, 1))],
+                         "cross": view._cross is not None,
+                         "errors": dict(view.gl_errors), **dict(seen)})
+            del lost[:]
+            if low.std() < 30.0:
+                image.save(os.path.join(TEMP, "planetx_flat_%d.png" % k))
+                from planetx.core import lod as _lod
+                fresh = _lod.select(view.camera, view.textures.__contains__,
+                                    max_level=view.max_level,
+                                    heights=view.store.range_for)
+                plain = {}
+                for key in fresh.draw:
+                    plain[key[0]] = plain.get(key[0], 0) + 1
+                rows[-1]["without_memo"] = plain
+                again = view.grabFramebuffer()
+                bits = again.constBits()
+                bits.setsize(again.sizeInBytes())
+                px = np.frombuffer(bits, np.uint8).reshape(
+                    again.height(), again.width(), 4)
+                rows[-1]["again_std"] = round(float(
+                    px[px.shape[0] // 2::8, ::8, :3].astype(
+                        np.float32).std()), 1)
+                rows[-1]["memo_size"] = len(view.memo.values)
+                top = min(fresh.draw)
+                loader = view.loader
+                kids = {}
+                for kid in _lod.children(top):
+                    kids[str(kid)] = {
+                        "texture": kid in view.textures,
+                        "pending": kid in view.pending,
+                        "want": round(fresh.want[kid], 1)
+                        if kid in fresh.want else None,
+                        "keep": kid in fresh.keep,
+                        "queued": kid in getattr(loader.queue, "waiting",
+                                                 {}),
+                        "active": kid in loader.queue.active,
+                        "failed": kid in loader.queue.failed_at,
+                        "missing": kid in loader.missing,
+                        "busy": loader.busy()}
+                rows[-1]["top"] = str(top)
+                rows[-1]["kids"] = kids
+                rows[-1]["eye"] = [round(float(v), 1)
+                                   for v in view.camera.eye]
+    finally:
+        view._tile_fades = original
+        view._forget = forget
+    stds = [r["std"] for r in rows]
+    result["flicker"] = {
+        "frames": len(rows), "median_std": float(np.median(stds)),
+        "flat": [r for r in rows if r["std"] < 30.0],
+        "min_std": min(stds),
+        "sample": rows[:3]}
+
+
+@check(500, manual=True)
 def post_caption():
     """Ручной шаг: подпись остановки тура на кадре."""
     from planetx.core.tour import Stop

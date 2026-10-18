@@ -360,8 +360,9 @@ def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
     без него - (0, 0).
     Это наложение слоёв проекта, облака и температура. Блоки слоёв,
     которых в списке нет, не трогаются. fades - сдвиг уровня мипмапа
-    подложки по одному на сетку (проявление нового тайла), u_fade -
-    место в шейдере, без fades сдвиг не меняется.
+    подложки по одному на сетку (проявление нового тайла) или четвёрка
+    (сдвиг, u0, v0, сторона) - сдвиг и доля заплатки, core.lod.hole_rect.
+    u_fade - место в шейдере, без fades сдвиг не меняется.
 
     Горячий путь кадра идёт через функции OpenGL.raw без проверки ошибок
     после каждого вызова. Замер 26 сентября 2026 года: glUniformMatrix4fv
@@ -380,7 +381,10 @@ def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
     for i, (mesh, texture) in enumerate(items):
         if fades is not None and fades[i] != last_fade:
             last_fade = fades[i]
-            _uniform4f(u_fade, last_fade, 0.0, 0.0, 0.0)
+            if isinstance(last_fade, tuple):
+                _uniform4f(u_fade, *last_fade)
+            else:
+                _uniform4f(u_fade, last_fade, 0.0, 0.0, 0.0)
         for n, layer in enumerate(layers):
             unit, u_uv, pairs = layer[:3]
             pair = pairs[i]

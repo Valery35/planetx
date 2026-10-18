@@ -56,9 +56,8 @@ def coverage(cam, selection, samples=400, seed=11):
     в пределах сетки Mercator.
     """
     rng = np.random.default_rng(seed)
-    by_level = {}
-    for z, x, y in selection.draw:
-        by_level.setdefault(z, set()).add((x, y))
+    holes = selection.holes or [None] * len(selection.draw)
+    entries = list(zip(selection.draw, holes))
     counts = []
     for px, py in rng.uniform(0, 1, (samples, 2)) * [cam.width, cam.height]:
         origin, d = cam.ray(px, py)
@@ -69,8 +68,12 @@ def coverage(cam, selection, samples=400, seed=11):
         lat, lon = float(lat), float(lon)
         if abs(lat) >= tl.MAX_LAT:
             continue
-        counts.append(sum(1 for z, cells in by_level.items()
-                          if tl.lonlat_to_tile(lat, lon, z) in cells))
+        # Заплатка покрывает точку, только если та лежит в её дыре.
+        counts.append(sum(
+            1 for key, hole in entries
+            if tl.lonlat_to_tile(lat, lon, key[0]) == key[1:]
+            and (hole is None
+                 or tl.lonlat_to_tile(lat, lon, hole[0]) == hole[1:])))
     return counts
 
 
@@ -133,7 +136,8 @@ class TestReplacement(unittest.TestCase):
 
     def test_parent_stays_until_all_children_ready(self):
         # Не готов ни тайл z11 под камерой, ни его потомки. Закрыть
-        # его место нечем, поэтому рисуется родитель z10 целиком.
+        # его место нечем, поэтому родитель z10 рисуется заплаткой на
+        # месте z11, а готовые братья z11 - своими потомками.
         cam = view(*PERM, 500.0)
         missing = (11,) + tl.lonlat_to_tile(*PERM, 11)
         parent = (10, missing[1] // 2, missing[2] // 2)
@@ -145,19 +149,62 @@ class TestReplacement(unittest.TestCase):
             return (x >> (z - 11), y >> (z - 11)) != missing[1:]
 
         sel = lod.select(cam, ready)
-        self.assertIn(parent, sel.draw)
-        for z, x, y in sel.draw:
-            if z > 10:
-                self.assertNotEqual((x >> (z - 10), y >> (z - 10)),
-                                    parent[1:], "потомок рядом с родителем")
+        pairs = list(zip(sel.draw, sel.holes))
+        self.assertIn((parent, missing), pairs)
+        self.assertNotIn((parent, None), pairs)
+        for (z, x, y), hole in pairs:
+            if z > 11:
+                self.assertNotEqual((x >> (z - 11), y >> (z - 11)),
+                                    missing[1:], "потомок в дыре")
         self.assertIn(missing, sel.want)
 
+    def test_far_missing_tile_keeps_near_detail(self):
+        # Камера низко с наклоном, как при облёте. Не готов дальний
+        # тайл у края кадра. Прежде его предок рисовался целиком вместо
+        # всех потомков, и местность под камерой становилась размытой.
+        cam = view(*PERM, 450.0, 130.0, 72.0)
+        full = lod.select(cam, everything)
+        near = centre_tile(cam, full)[0]
+        # Брат предка тайла под камерой на самом глубоком уровне, где
+        # он виден: их общий родитель прежде рисовался целиком.
+        far = None
+        for level in range(near[0] - 1, 3, -1):
+            shift = near[0] - level
+            mine = (near[1] >> shift, near[2] >> shift)
+            far = next((k for k in sorted(full.keep)
+                        if k[0] == level and k[1:] != mine
+                        and (k[1] >> 1, k[2] >> 1) == (mine[0] >> 1,
+                                                       mine[1] >> 1)),
+                       None)
+            if far is not None:
+                break
+        self.assertIsNotNone(far)
+
+        def ready(key):
+            z, x, y = key
+            if z < far[0]:
+                return True
+            up = z - far[0]
+            return (x >> up, y >> up) != far[1:]
+        sel = lod.select(cam, ready)
+        self.assertIn((near, None), list(zip(sel.draw, sel.holes)))
+        self.assertEqual(sorted(set(coverage(cam, sel))), [1])
+
     def test_no_tile_drawn_with_its_ancestor(self):
+        # Предок рядом с потомком - только заплатка на чужом месте.
         sel = lod.select(view(*PERM, 2000.0, 30.0, 70.0), half_ready)
-        drawn = set(sel.draw)
-        for z, x, y in sel.draw:
+        pairs = list(zip(sel.draw, sel.holes))
+        whole = {key for key, hole in pairs if hole is None}
+        for (z, x, y), hole in pairs:
             for up in range(1, z + 1):
-                self.assertNotIn((z - up, x >> up, y >> up), drawn)
+                anc = (z - up, x >> up, y >> up)
+                self.assertNotIn(anc, whole)
+                for key, ahole in pairs:
+                    if key == anc and ahole is not None \
+                            and ahole[0] <= z:
+                        shift = z - ahole[0]
+                        self.assertNotEqual((x >> shift, y >> shift),
+                                            ahole[1:])
 
 
 class TestWant(unittest.TestCase):
@@ -316,20 +363,21 @@ def reference_select(camera, ready, heights=None):
             if not kids:
                 keep.discard(key)
                 want.pop(key, None)
-                return [], True
+                return [], []
             if not is_ready and not any(ready(k) for k in kids):
-                return [], False
-            draws, complete = [], True
+                return [], [key]
+            draws, holes = [], []
             for kid in kids:
-                d, c = visit(kid)
+                d, h = visit(kid)
                 draws.extend(d)
-                complete = complete and c
-            if complete:
-                return draws, True
-        return ([key], True) if is_ready else ([], False)
+                holes.extend(h)
+            if holes and is_ready:
+                return draws + [(key, h) for h in holes], []
+            return draws, holes
+        return ([(key, None)], []) if is_ready else ([], [key])
 
-    draw, _ = visit((0, 0, 0))
-    return draw, want, keep
+    pairs, _ = visit((0, 0, 0))
+    return [k for k, _ in pairs], want, keep, [h for _, h in pairs]
 
 
 class TestFastPath(unittest.TestCase):
@@ -344,8 +392,10 @@ class TestFastPath(unittest.TestCase):
             for ready in (everything, half_ready, lambda k: k[0] <= 2):
                 for heights in (None, hills):
                     sel = lod.select(cam, ready, heights=heights)
-                    draw, want, keep = reference_select(cam, ready, heights)
+                    draw, want, keep, holes = reference_select(cam, ready,
+                                                               heights)
                     self.assertEqual(sel.draw, draw, name)
+                    self.assertEqual(sel.holes, holes, name)
                     self.assertEqual(sel.keep, keep, name)
                     # Расстояние считается через sqrt, а не math.dist,
                     # приоритеты расходятся в последнем знаке.

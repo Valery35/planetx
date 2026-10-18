@@ -35,13 +35,26 @@ MIN_DISTANCE = 0.5
 CACHE_LIMIT = 200000
 
 TileInfo = namedtuple("TileInfo", "center radius direction alpha texel")
-Selection = namedtuple("Selection", "draw want keep visited")
+Selection = namedtuple("Selection", "draw want keep visited holes",
+                       defaults=(None,))
 Selection.__doc__ = """Итог выбора.
 
 draw - тайлы для рисования, без перекрытий. want - тайлы для загрузки
 с приоритетом. keep - все нужные кадру тайлы, их нельзя вытеснять
-из памяти. visited - количество просмотренных узлов дерева.
+из памяти. visited - количество просмотренных узлов дерева. holes -
+по одному на тайл draw: None - тайл рисуется целиком, ключ потомка -
+тайл рисуется заплаткой только на месте этого потомка, его снимок
+ещё не готов. Тайл с заплатками может стоять в draw несколько раз.
 """
+
+
+def hole_rect(key, hole):
+    """Доля дыры hole в текстурных координатах тайла key: (u0, v0,
+    сторона). v идёт от северного края, как у сетки тайла."""
+    shift = hole[0] - key[0]
+    n = float(1 << shift)
+    return ((hole[1] - (key[1] << shift)) / n,
+            (hole[2] - (key[2] << shift)) / n, 1.0 / n)
 
 _cache = {}
 
@@ -343,7 +356,15 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
         return info.texel * focal / d
 
     def visit(key, error):
-        """Возвращает тайлы для рисования и признак полного покрытия."""
+        """Тайлы для рисования - пары (ключ, дыра или None) - и дыры:
+        места, которые ничем не закрыты, ключи неготовых тайлов.
+
+        Готовый тайл закрывает дыры потомков заплаткой - собой, но только
+        на месте дыры (отсечение по её доле в шейдере тайла). Прежде он
+        рисовался целиком вместо всех потомков. Неготовый дальний тайл
+        у края кадра заменял грубым предком и местность под камерой:
+        при облёте вид мигал размытыми пятнами, замечание автора
+        от 18 октября 2026 года."""
         visited[0] += 1
         z, x, y = key
         keep.add(key)
@@ -370,25 +391,27 @@ def select(camera, ready, threshold=THRESHOLD, max_level=MAX_LEVEL,
                 # и тайл. Его сфера задела пирамиду под землёй.
                 keep.discard(key)
                 want.pop(key, None)
-                return [], True
+                return [], []
             if not is_ready and not any(ready(kid) for kid, _ in kids):
                 # Фронт загрузки. Ниже неготового тайла без готовых детей
                 # рисовать нечего, а просить его потомков рано: они
                 # понадобятся, только когда придёт он сам. Без этого
                 # правила камера у самой земли просила тысячи тайлов
                 # всех уровней сразу, начиная с самых глубоких.
-                return [], False
+                return [], [key]
             draws = []
-            complete = True
+            holes = []
             for kid, kid_error in kids:
-                kid_draw, kid_complete = visit(kid, kid_error)
+                kid_draw, kid_holes = visit(kid, kid_error)
                 draws.extend(kid_draw)
-                complete = complete and kid_complete
-            if complete:
-                return draws, True
-            return ([key], True) if is_ready else ([], False)
-        return ([key], True) if is_ready else ([], False)
+                holes.extend(kid_holes)
+            if holes and is_ready:
+                draws.extend((key, hole) for hole in holes)
+                return draws, []
+            return draws, holes
+        return ([(key, None)], []) if is_ready else ([], [key])
 
     root = (0, 0, 0)
-    draw, _ = visit(root, probe(root, False))
-    return Selection(draw, want, keep, visited[0])
+    pairs, _ = visit(root, probe(root, False))
+    return Selection([k for k, _ in pairs], want, keep, visited[0],
+                     [h for _, h in pairs])
