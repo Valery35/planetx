@@ -167,7 +167,9 @@ class IdentifyMixin:
                     or self._infra_under(px, py, faults=True)
                     or self._identify_quakes(px, py)
                     or self._identify_fires(px, py)
-                    or self._identify_satellites(px, py))
+                    or self._identify_satellites(px, py)
+                    or self._identify_trains(px, py)
+                    or self._identify_live(px, py))
 
     def _infra_under(self, px, py, faults=False):
         """Линия или подстанция OSM под пикселем кадра, с faults -
@@ -323,7 +325,9 @@ class IdentifyMixin:
         groups += self._identify_plants(px, py)
         groups += self._identify_volcanoes(px, py)
         groups += self._identify_infra(lat, lon, tolerance)
-        groups = self._identify_satellites(px, py) + groups
+        groups = self._identify_satellites(px, py) \
+            + self._identify_trains(px, py) \
+            + self._identify_live(px, py) + groups
         under = self.subsurface.identify(
             px, py, IDENTIFY_PIXELS * self.view.devicePixelRatioF())
         if under:
@@ -811,6 +815,23 @@ class IdentifyMixin:
         found = self.satellite_manager.identify(px, py)
         features = [(name, values, None) for name, values in found]
         return [(Group(tr("Спутники")), features)] if features else []
+
+    def _identify_trains(self, px, py):
+        """Поезда у точки щелчка на экране, группа окна «Объекты»."""
+        found = self.train_manager.identify(px, py)
+        features = [(name, values, None) for name, values in found]
+        return [(Group(tr("Поезда")), features)] if features else []
+
+    def _identify_live(self, px, py):
+        """Суда и самолёты у точки щелчка, группы окна «Объекты»."""
+        out = []
+        for title, manager in ((tr("Суда"), self.vessel_manager),
+                               (tr("Самолёты"), self.aircraft_manager)):
+            features = [(name, values, None)
+                        for name, values in manager.identify(px, py)]
+            if features:
+                out.append((Group(title), features))
+        return out
 
     def _identify_fires(self, px, py):
         """Очаги пожаров у точки щелчка на экране, не больше 20."""

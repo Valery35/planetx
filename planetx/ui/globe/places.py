@@ -440,6 +440,9 @@ class PlacesMixin:
         if getattr(self, "satellite_manager", None) is not None \
                 and self.planet.earth:
             shapes += self.satellite_manager.shapes()
+        if self.planet.earth:
+            for manager in getattr(self, "live_managers", ()):
+                shapes += manager.shapes()
         shapes += getattr(self, "grid_shapes", [])
         shapes += getattr(self, "parcel_shapes", [])
         shapes += self._pole_shapes()

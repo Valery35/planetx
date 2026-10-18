@@ -2763,6 +2763,24 @@ The Track… item in the menu of a point layer opens the settings window:
 | Object | A field that tells the objects apart. One object - all points form one path |
 | Color | Color of the travelled path |
 | Camera follows | The camera keeps the first object in the middle of the view along the motion |
+| 3D model | A glTF, Collada or OBJ model file. An empty field shows the object as a placemark |
+| Model scale | The size factor of the model, 1 - the size from the file in metres |
+| Model turn | The clockwise turn of the model to the direction of travel |
+| Height | Where the height of a point comes from: the point Z or a numeric field. On the ground - the object stands on the terrain |
+| Height reference | Above sea level - the flight altitude, above the ground - the rise over the terrain under the point |
+| Height units | Metres or feet. ADS-B aircraft altitude is given in feet |
+
+With a model file every object of the track gets its own model moving
+along the path. Its front faces the direction of travel. The direction
+is taken along the track path over the last 30 s. A glTF model facing
+the viewer gets a turn of 180°. A model with node animation moves
+along and moves its parts.
+
+With a height the object and the model rise above the ground. Between
+points the height changes evenly in time. A path with the height above
+sea level is drawn in the air at the heights of its points, a path with
+the height above the ground lies on the terrain. A track of an aircraft
+by GPS or ADS-B points shows the take-off and the landing this way.
 
 The time of a track enters the extent of the time slider. Each object
 grows its travelled path up to the right handle of the slider, and a
@@ -2772,6 +2790,83 @@ its usual look. Track settings are stored in the project.
 
 During a tour recording the tracks grow along the tour over the range
 of the open slider, with the slider closed over the whole track time.
+
+---
+
+## Trains of Finland
+
+The Trains of Finland row of the Transport category of the Add data
+catalogue shows all trains of Finland in real time. The train
+positions are Fintraffic Digitraffic open data under the CC BY 4.0
+licence. The service updates them every 10 s, and the plugin asks at
+the same step. It asks for the type and category of the trains every
+5 minutes.
+
+From afar a train is a dot in the colour of its category with a label,
+for example "IC 9", or "R 9123" for a commuter train of line R. When
+the view strip is narrower than 6 km, a train is shown as a consist of
+schematic cars in the colour of its category. A long-distance train
+has 6 cars, a commuter train 4, a cargo train 12, a locomotive one.
+The service gives the real length of a consist with a separate
+request, and the plugin does not ask for it.
+
+| Colour | Category |
+|---|---|
+| red | Long-distance |
+| purple | Commuter |
+| blue | Cargo |
+| orange | Locomotives |
+| grey | Shunting |
+| yellow | On-track machines |
+
+A train whose type the service has not given yet is light grey.
+
+Between updates a train moves at its own speed for no longer than 30 s.
+When the view strip is narrower than 8 km, the plugin takes the rails
+from the OpenStreetMap vector base map tiles at the point of view. A
+train point closer than 40 m to the rails is set on them. The train
+moves along the rails and through switches, and the cars of the consist
+bend along the track. The train takes a new position smoothly over 2 s.
+
+A click on a train opens the Features window with the type, category,
+line, operator, number, speed and time of the position.
+
+While a flight is recorded the trains move by the tour time, a frame of
+the video is 1/25 s of their travel even when the frame with loading
+took several seconds. The start is the computer clock at the moment of
+the recording, and new positions are not requested during it. After
+the recording the trains follow the computer clock again. The Trains of
+Finland, live demo puts the camera above the tracks at Pasila station
+in Helsinki.
+
+---
+
+## Baltic ships and aircraft
+
+The Baltic ships and Aircraft rows of the Transport category of the
+Add data catalogue show ships and aircraft in real time. From afar an
+object is a dot in the colour of its group with a label, no more than
+600 nearest to the point of view are shown. Close up an object is a
+schematic model that keeps its course and speed between updates. A
+click opens the Features window with details. A flight recording moves
+ships and aircraft by the tour time, like trains.
+
+Ships are AIS signals of the Gulfs of Finland and Bothnia and the
+Baltic near Finland, Fintraffic Digitraffic open data under the CC BY
+4.0 licence. The positions come every 20 s, the names, types and sizes
+every 10 minutes. The ship model close up (view strip narrower than
+20 km) is a hull of its AIS length and width with a superstructure at
+the stern, at the water level. The colour shows the type group - passenger,
+cargo, tankers, fishing, tugs and service, high-speed, yachts and boats.
+
+Aircraft are ADS-B signals of the adsb.lol volunteer network in a circle
+around the point of view, every 10 s. An aircraft in the air is shown at
+its altitude, on the ground on the terrain. The model close up (view
+strip narrower than 15 km) is a schematic aircraft of the size of its
+ADS-B category with its bank. The fin colour shows the category - light,
+small, airliners and freighters, heavy, helicopters. The network has
+almost no receivers over Russia, and no aircraft are seen there. The
+licence of the adsb.lol output is not named as of 19 October 2026.
 
 ---
 
@@ -2980,6 +3075,7 @@ taken from the profile without the network.
 | Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
 | Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
 | Earth | Animated model, wind turbines | Three glTF wind turbines with a rotating rotor at an arbitrary place near Perm. The model is synthetic, the rotor is a node with rotation keys. See [3D models](#3d-models) |
+| Earth | Trains of Finland, live | Live trains of Finland as consists on the rails at the Pasila, Helsinki and Tikkurila stations. See [Trains of Finland](#trains-of-finland) |
 | Earth | Flow of goods, a scheme | Paths with flow from Berezniki to the ports of Ust-Luga and Vostochny by rail and from Ust-Luga to Rotterdam by sea. The paths are schemes through large cities and straits, not real routes |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |

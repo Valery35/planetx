@@ -171,6 +171,12 @@ class TourRecorder(QObject):
         self.n = 0
         self.frames = []
         self.incomplete = []
+        # Поезда идут по шкале записи, а не по часам компьютера: кадр
+        # с догрузкой снимается секунды, поезда прыгали бы. Просьба
+        # автора от 19 октября 2026 года.
+        for live in getattr(self.window, "live_managers", ()):
+            if live.on:
+                live.freeze()
         self._next()
         return True
 
@@ -186,6 +192,8 @@ class TourRecorder(QObject):
         tracks = self.window.tracks
         if frame.moment is not None:
             tracks.set_moment(frame.moment)
+        for live in getattr(self.window, "live_managers", ()):
+            live.set_clock(frame.t)
         self.view.navigator.show(frame.pose)
         if not self.view.start_shot(self.size[0], self.size[1], self.ratio):
             self._finish(False, tr("Глобус ещё не готов к снимку."))
@@ -295,4 +303,7 @@ class TourRecorder(QObject):
                 ok = False
                 text = tr("Видео не дописано: {error}", error=str(error))
         self.window.tracks.release()
+        for live in getattr(self.window, "live_managers", ()):
+            if live.frozen is not None:
+                live.unfreeze()
         self.done.emit(ok, text)

@@ -304,6 +304,15 @@ class StateMixin:
         elif key == "satellites":
             self.satellite_manager.set_on(on)
             self._update_timebar()
+        elif key == "trains":
+            self.train_manager.set_on(on)
+            self.train_legend.setVisible(on)
+        elif key == "vessels":
+            self.vessel_manager.set_on(on)
+            self.vessel_legend.setVisible(on)
+        elif key == "aircraft":
+            self.aircraft_manager.set_on(on)
+            self.aircraft_legend.setVisible(on)
 
     # Раздел «На глобусе»: включённые слои, непрозрачность, выгрузка.
 

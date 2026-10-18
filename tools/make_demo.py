@@ -907,7 +907,39 @@ def turbines():
     print(path, os.path.getsize(path))
 
 
+# Поезда Финляндии вживую: строка «Поезда Финляндии» и камера над
+# путями у станции Пасила, где сходятся почти все линии Хельсинки.
+# Место и вид - выбор помощника.
+TRAIN_STOPS = (("Станция Пасила", 60.1987, 24.9334,
+                (60.1987, 24.9334, 1500.0, 20.0, 60.0)),
+               ("Хельсинки, главный вокзал", 60.1719, 24.9414,
+                (60.1719, 24.9414, 1200.0, 0.0, 55.0)),
+               ("Тиккурила", 60.2925, 25.0440,
+                (60.2925, 25.0440, 1500.0, 340.0, 60.0)))
+
+
+def trains():
+    """Поезда Финляндии в реальном времени по данным Digitraffic."""
+    title = "PlanetX: демо, поезда Финляндии"
+    note = ("Положения поездов - открытые данные Fintraffic Digitraffic "
+            "в реальном времени, раз в 10 с. Вблизи модели вагонов едут "
+            "по рельсам OpenStreetMap.")
+    items = [KPlace(name, "point", [(lat, lon)], icon="rail",
+                    description=note, view=view)
+             for name, lat, lon, view in TRAIN_STOPS]
+    root = KFolder(title, children=items)
+    extras = dict(QUIET_EXTRAS, trains=True)
+    view = dict(EARTH_VIEW, scale=1.0, extras=extras)
+    scene = Scene(TRAIN_STOPS[0][3], None, [], view, title,
+                  "Поезда Финляндии, вживую")
+    path = os.path.join(DEMO, "trains.planetx")
+    with open(path, "wb") as fh:
+        fh.write(write_scene(scene, write_kmz(root)))
+    print(path, os.path.getsize(path))
+
+
 def main():
+    trains()
     turbines()
     flows()
     perm()

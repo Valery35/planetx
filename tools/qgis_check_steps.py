@@ -8342,6 +8342,16 @@ def models_clean():
     out["gl"] = dict(window.view.gl_errors)
 
 
+@check(1000, manual=True)
+def clean_models():
+    """Убрать из «Моих меток» проверочного профиля модели, оставшиеся
+    от прерванных прогонов и съёмки роликов."""
+    window = state["window"]
+    keys = [o.key for o in window.myplaces.overlays if o.kind == "model"]
+    if keys:
+        window.myplaces.remove_many(keys)
+    result["clean_models"] = {"removed": len(keys)}
+
 @check(9000)
 def models_anim():
     """Анимированная модель: куб Collada с ключами поворота вокруг оси
@@ -8530,6 +8540,793 @@ def turbines_demo_check():
         window.myplaces.remove_many(state["turbines_demo"])
     result["turbines_demo"]["models_after"] = len(view.models.source)
     del _time
+
+
+@check(1500)
+def track_model():
+    """Модель по треку: куб Collada едет по пути двух объектов слоя
+    в памяти на момент шкалы времени, азимут - по ходу движения."""
+    from qgis.core import QgsFeature, QgsGeometry, QgsPointXY, QgsVectorLayer
+    from qgis.PyQt.QtCore import QDateTime
+    from planetx.core.navigation import Pose
+    from planetx.ui.track import seconds
+    window = state["window"]
+    window.set_body("earth")
+    layer = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=t:datetime&field=obj:string",
+        "Трек модели", "memory")
+    base = QDateTime.fromString("2026-10-18T10:00:00", "yyyy-MM-ddTHH:mm:ss")
+    # Восточный объект идёт на восток, северный - на север, 600 м за 60 с.
+    rows = [("east", 0, 58.0100, 56.2200), ("east", 60, 58.0100, 56.2302),
+            ("north", 0, 58.0050, 56.2250), ("north", 60, 58.0104, 56.2250)]
+    features = []
+    for obj, dt, lat, lon in rows:
+        f = QgsFeature(layer.fields())
+        f.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
+        f["t"] = base.addSecs(dt)
+        f["obj"] = obj
+        features.append(f)
+    layer.dataProvider().addFeatures(features)
+    QgsProject.instance().addMapLayer(layer)
+    state["track_model_layer"] = layer
+    path = _cube_dae(os.path.join(TEMP, "planetx_track_model"))
+    t0 = seconds(base)
+    state["track_model_t0"] = t0
+    window.tracks.set_track(layer, {"time": "t", "object": "obj",
+                                    "color": [255, 80, 40, 255],
+                                    "follow": False, "model": path,
+                                    "model_scale": 2.0, "model_turn": 0.0})
+    _open_time(t0, t0 + 30)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.0090, 56.2260, 2500.0, 0.0, 45.0))
+    window.view.update()
+
+
+@check(1500)
+def track_model_check():
+    import time as _time
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    t0 = state["track_model_t0"]
+    items = view.models.groups.get("tracks", [])
+    out = {"models": len(items),
+           "meshes": len({item.mesh for item in items})}
+
+    def where():
+        found = {}
+        for item in items:
+            moved = item.mover(_time.monotonic())
+            if moved is None:
+                continue
+            lat, lon, linear = moved
+            # Ось X модели (восток у исходного места) после поворота -
+            # куда она смотрит: азимут по местным осям точки.
+            from planetx.core.camera import enu
+            axes = enu(lat, lon) @ (linear @ (np.linalg.inv(enu(0.0, 0.0))
+                                              @ np.array([0.0, 1.0, 0.0])))
+            heading = float(np.degrees(np.arctan2(axes[0], axes[1]))) % 360
+            found[item.key[2]] = [round(lat, 5), round(lon, 5),
+                                  round(heading, 1)]
+        return found
+    out["at_30s"] = where()
+    window.timebar.set_range(t0, t0 + 45)
+    QgsApplication.processEvents()
+    out["at_45s"] = where()
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_track_model.png"))
+    out["drawn"] = view.models.drawn
+    window._time_toggled(False)
+    window.toolbar.set_time_shown(False)
+    window.tracks.set_track(state["track_model_layer"], None)
+    QgsProject.instance().removeMapLayer(state["track_model_layer"].id())
+    out["models_after"] = len(view.models.groups.get("tracks", []))
+    out["gl"] = dict(view.gl_errors)
+    result["track_model"] = out
+
+
+@check(1500)
+def track_height():
+    """Высота трека: «самолёт» - Z точки над уровнем моря в футах,
+    «дрон» - поле h над землёй в метрах. Модель встаёт на высоту,
+    путь самолёта - в воздухе."""
+    import time as _time
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPoint,
+                           QgsVectorLayer)
+    from qgis.PyQt.QtCore import QDateTime
+    from planetx.core import ellipsoid
+    from planetx.core.navigation import Pose
+    from planetx.ui.track import FOOT, HEIGHT_Z, seconds
+    window = state["window"]
+    view = window.view
+    base = QDateTime.fromString("2026-10-19T10:00:00", "yyyy-MM-ddTHH:mm:ss")
+    t0 = seconds(base)
+    out = {}
+    path = _cube_dae(os.path.join(TEMP, "planetx_track_model"))
+    plane = QgsVectorLayer("PointZ?crs=EPSG:4326&field=t:datetime",
+                           "Самолёт", "memory")
+    rows = [(0, 58.000, 56.200, 1000.0), (60, 58.010, 56.200, 5000.0)]
+    features = []
+    for dt, lat, lon, z in rows:
+        f = QgsFeature(plane.fields())
+        f.setGeometry(QgsGeometry(QgsPoint(lon, lat, z)))
+        f["t"] = base.addSecs(dt)
+        features.append(f)
+    plane.dataProvider().addFeatures(features)
+    drone = QgsVectorLayer("Point?crs=EPSG:4326&field=t:datetime"
+                           "&field=h:double", "Дрон", "memory")
+    features = []
+    for dt, lat, lon, h in ((0, 58.005, 56.210, 100.0),
+                            (60, 58.005, 56.220, 100.0)):
+        f = QgsFeature(drone.fields())
+        f.setGeometry(QgsGeometry(QgsPoint(lon, lat)))
+        f["t"] = base.addSecs(dt)
+        f["h"] = h
+        features.append(f)
+    drone.dataProvider().addFeatures(features)
+    QgsProject.instance().addMapLayers([plane, drone])
+    common = {"time": "t", "object": "", "color": [255, 80, 40, 255],
+              "follow": False, "model": path, "model_scale": 1.0,
+              "model_turn": 0.0}
+    window.tracks.set_track(plane, dict(common, height=HEIGHT_Z,
+                                        height_mode="absolute",
+                                        height_unit=FOOT))
+    window.tracks.set_track(drone, dict(common, height="h",
+                                        height_mode="relative",
+                                        height_unit=1.0))
+    _open_time(t0, t0 + 30)
+    view.navigator.stop()
+    view.navigator.show(Pose(58.004, 56.205, 3000.0, 0.0, 70.0))
+    view.update()
+    QgsApplication.processEvents()
+    items = {item.key[1]: item for item in
+             view.models.groups.get("tracks", [])}
+    scale = view.store.scale
+    for name, layer in (("plane", plane), ("drone", drone)):
+        item = items.get(layer.id())
+        moved = item.mover(_time.monotonic()) if item else None
+        if moved is None:
+            out[name] = None
+            continue
+        item.place = (moved[0], moved[1], item.place[2],
+                      moved[3] if len(moved) > 3 else 0.0)
+        center = view._model_anchor(item)
+        _, _, h = ellipsoid.ecef_to_geodetic(center)
+        ground = view.store.height_at(moved[0], moved[1]) \
+            if view.store.scale else 0.0
+        out[name] = {"mode": item.place[2],
+                     "alt_m": round(moved[3], 1) if len(moved) > 3
+                     else None,
+                     "center_h": round(float(h), 1),
+                     "ground": round(float(ground), 1),
+                     "relief_scale": scale}
+    lines = [s for s in window.tracks.shapes() if s.kind == "line"]
+    out["air_lines"] = [[round(a, 1) for a in s.alts] for s in lines
+                        if s.alts]
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_track_height.png"))
+    out["gl"] = dict(view.gl_errors)
+    window._time_toggled(False)
+    window.toolbar.set_time_shown(False)
+    for layer in (plane, drone):
+        window.tracks.set_track(layer, None)
+        QgsProject.instance().removeMapLayer(layer.id())
+    out["models_after"] = len(view.models.groups.get("tracks", []))
+    result["track_height"] = out
+
+
+@check(1000)
+def trains_on():
+    """Поезда Финляндии: строка включена, положения пришли со службы
+    Digitraffic, издалека - точки с подписями."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    manager = window.train_manager
+    look = state.setdefault("trains_on", {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        window.view.navigator.stop()
+        window.view.navigator.show(Pose(62.0, 25.5, 1500000.0, 0.0, 0.0))
+        window.view.update()
+        window.set_extra("trains", True)
+        look["since"] = time.monotonic()
+        return 1000
+    waited = time.monotonic() - look["since"]
+    if (not manager.count() or not manager.fleet.info) and waited < 40.0:
+        return 1000
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_trains_far.png"))
+    names = window.train_legend.rows()
+    result["trains_on"] = {
+        "waited": round(waited, 1), "trains": manager.count(),
+        "typed": sum(1 for k in manager.fleet.trains
+                     if k in manager.fleet.info),
+        "points": len(manager.shapes()), "near": manager.near,
+        "error": manager.error, "legend_rows": len(names),
+        "legend_shown": window.train_legend.isVisible(),
+        "credit": "digitraffic" in window.attribution.text().lower()}
+    return None
+
+
+@check(1000)
+def trains_near():
+    """Вблизи Хельсинки: рельсы из основы, модели вагонов едут по ним."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    manager = window.train_manager
+    look = state.setdefault("trains_near", {"since": None})
+    if look["since"] is None:
+        view.navigator.stop()
+        # Пути у Пасилы, к северу от главного вокзала.
+        view.navigator.show(Pose(60.1990, 24.9330, 2500.0, 0.0, 55.0))
+        view.update()
+        look["since"] = time.monotonic()
+        return 2000
+    waited = time.monotonic() - look["since"]
+    ready = manager.fleet.rails is not None and not manager.rail_replies \
+        and view.models.groups.get("trains")
+    if (not ready or view.load_missing) and waited < 60.0:
+        return 1000
+    result["trains_near"] = {"waited": round(waited, 1)}
+    return None
+
+
+@check(1000)
+def trains_near_check():
+    import time as _time
+    import numpy as np
+    from qgis.PyQt.QtTest import QTest
+    from planetx.core import ellipsoid, routing, trains as core
+    window = state["window"]
+    view = window.view
+    manager = window.train_manager
+    fleet = manager.fleet
+    out = result["trains_near"]
+    items = view.models.groups.get("trains", [])
+    out["near"] = manager.near
+    out["models"] = len(items)
+    out["meshes"] = len({item.mesh for item in items})
+    out["rail_lines"] = len(fleet.rails) if fleet.rails is not None else 0
+    out["points"] = len(manager.shapes())
+    now, clock = _time.monotonic(), _time.time()
+    snapped, gaps = 0, []
+    for item in items:
+        train = fleet.trains.get(tuple(item.key[1:3]))
+        if train is None or item.key[3]:
+            continue
+        lat, lon, _ = fleet.place(train, now, clock)
+        if train.rail is not None:
+            snapped += 1
+            x, y = routing.to_grid(lat, lon)
+            found = fleet.rails.snap(x, y, 1e9)
+            if found is not None:
+                xy, _ = fleet.rails.point(*found)
+                gaps.append(float(np.hypot(xy[0] - x, xy[1] - y))
+                            * routing.unit_metres(lat))
+    out["snapped"] = snapped
+    out["rail_gap_m"] = round(max(gaps), 3) if gaps else None
+    view.repaint()
+    first = view.grabFramebuffer()
+    out["drawn"] = view.models.drawn
+    out["animated"] = view.models.animated
+    QTest.qWait(1500)
+    second = view.grabFramebuffer()
+    second.save(os.path.join(TEMP, "planetx_trains_near.png"))
+
+    def pixels(image):
+        bits = image.constBits()
+        bits.setsize(image.sizeInBytes())
+        return np.frombuffer(bits, np.uint8).astype(np.int16)
+    out["changed_share"] = round(float(
+        (np.abs(pixels(first) - pixels(second)) > 30).mean()), 5)
+    # Опрос щелчком у первой модели на экране.
+    picked = None
+    for item in items:
+        if item.mover is None:
+            continue
+        moved = item.mover(_time.monotonic())
+        if moved is None:
+            continue
+        lat, lon, _ = moved
+        point = np.asarray([ellipsoid.geodetic_to_ecef(
+            lat, lon, view.label_height(lat, lon))], dtype=np.float64)
+        pixels_xy, front = view.camera.project(point)
+        if front[0]:
+            found = window._identify_trains(float(pixels_xy[0][0]),
+                                            float(pixels_xy[0][1]))
+            if found:
+                picked = [found[0][1][0][0]] + [
+                    v for v in found[0][1][0][1][:3]]
+                break
+    out["picked"] = picked
+    out["gl"] = dict(view.gl_errors)
+    del core
+
+
+@check(1500)
+def trains_off():
+    window = state["window"]
+    window.set_extra("trains", False)
+    QgsApplication.processEvents()
+    manager = window.train_manager
+    result["trains_off"] = {
+        "trains": manager.count(),
+        "models": len(window.view.models.groups.get("trains", [])),
+        "points": len(manager.shapes()),
+        "polling": manager.poll.isActive(),
+        "legend_shown": window.train_legend.isVisible()}
+
+
+@check(1000)
+def trains_demo():
+    """Демо «Поезда Финляндии, вживую»: строка поездов из сцены, камера
+    над путями у Пасилы, модели вагонов на рельсах."""
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("trains_demo", {"since": None})
+    if look["since"] is None:
+        action = next(a for a in window.toolbar.demo.menu().actions()
+                      if a.text() in ("Поезда Финляндии, вживую",
+                                      "Trains of Finland, live"))
+        folders = {f.key for f in window.myplaces.folders}
+        action.trigger()
+        look["folders"] = [f.key for f in window.myplaces.folders
+                           if f.key not in folders]
+        look["since"] = time.monotonic()
+        return 3000
+    manager = window.train_manager
+    waited = time.monotonic() - look["since"]
+    ready = manager.on and manager.near and manager.fleet.rails is not None \
+        and not manager.rail_replies and view.models.drawn
+    if (not ready or view.load_missing) and waited < 60.0:
+        return 1000
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_trains_demo.png"))
+    result["trains_demo"] = {
+        "waited": round(waited, 1), "on": window.extras.get("trains"),
+        "near": manager.near, "drawn": view.models.drawn,
+        "rails": len(manager.fleet.rails) if manager.fleet.rails else 0,
+        "camera": [round(view.navigator.pose.lat, 4),
+                   round(view.navigator.pose.lon, 4)],
+        "gl": dict(view.gl_errors)}
+    if look["folders"]:
+        window.myplaces.remove_many(look["folders"])
+    window.set_extra("trains", False)
+    result["trains_demo"]["models_after"] = len(
+        view.models.groups.get("trains", []))
+    return None
+
+
+@check(1000, manual=True)
+def post_trains_video():
+    """Ролик поездов для поста: демо «Поезда Финляндии, вживую», облёт
+    над путями у Пасилы, кадры со знаком PlanetX и подписью источников.
+    Поезда идут по часам съёмки - кадр ровно 1/25 с хода.
+    PLANETX_POST_POSE - широта, долгота, расстояние, азимут, наклон,
+    PLANETX_POST_ORBIT - градусы азимута за ролик и секунды."""
+    import ctypes
+    from qgis.PyQt.QtCore import Qt as _Qt
+    from qgis.PyQt.QtGui import QImage
+    from qgis.PyQt.QtTest import QTest
+    from planetx.core import video
+    from planetx.core.navigation import Pose
+    from planetx.ui.snapshot import draw_attribution, plain_text
+    window = state["window"]
+    view = window.view
+    manager = window.train_manager
+    look = state.setdefault("post_trains", {"since": None})
+    pose = Pose(*[float(v) for v in os.environ.get(
+        "PLANETX_POST_POSE", "60.1925,24.9318,1100,345,62").split(",")])
+    if look["since"] is None:
+        # Своя основа прерванного шага sources_vector в подписи ролика
+        # не нужна.
+        from qgis.core import QgsSettings
+        from planetx.core import sources as _sources
+        QgsSettings().remove(_sources.VECTOR_KEY)
+        QgsSettings().remove(_sources.VECTOR_CREDIT_KEY)
+        window.sources_changed("vector")
+        action = next(a for a in window.toolbar.demo.menu().actions()
+                      if a.text() in ("Поезда Финляндии, вживую",
+                                      "Trains of Finland, live"))
+        action.trigger()
+        look["since"] = time.monotonic()
+        return 4000
+    if not look.get("posed"):
+        view.navigator.stop()
+        view.navigator.show(pose)
+        view.update()
+        look["posed"] = time.monotonic()
+        return 2000
+    waited = time.monotonic() - look["posed"]
+    ready = manager.near and manager.fleet.rails is not None \
+        and not manager.rail_replies and view.models.drawn
+    # Вид прибывших поездов приходит по одному за несколько опросов.
+    if (not ready or view.load_missing or waited < 40.0) and waited < 90.0:
+        return 1000
+    fps, seconds, turn = 25, 16.0, 0.0
+    orbit = os.environ.get("PLANETX_POST_ORBIT", "50,16")
+    if orbit:
+        turn, seconds = (float(v) for v in orbit.split(","))
+    first = view.grabFramebuffer()
+    width, height = video.even_size(first.width() // 2,
+                                    first.height() // 2)
+    out = os.path.join(TEMP, "planetx_post_trains.mp4")
+    writer = video.Mp4Writer(out, width, height, fps)
+    manager.freeze()
+    try:
+        for k in range(int(fps * seconds)):
+            share = k / (fps * seconds)
+            view.navigator.show(Pose(pose.lat, pose.lon, pose.distance,
+                                     (pose.heading + turn * share) % 360.0,
+                                     pose.tilt))
+            view.update()
+            QTest.qWait(30)
+            started = time.monotonic()
+            while view.load_missing and time.monotonic() - started < 3.0:
+                QTest.qWait(50)
+            view.repaint()
+            image = view.grabFramebuffer().scaled(
+                width, height, _Qt.AspectRatioMode.IgnoreAspectRatio,
+                _Qt.TransformationMode.SmoothTransformation)
+            image = image.convertToFormat(QImage.Format.Format_RGB32)
+            image.setDevicePixelRatio(1.0)
+            draw_attribution(image, plain_text(
+                window.attribution.text()), 1.0)
+            if k == 0:
+                image.save(os.path.join(TEMP, "planetx_post_trains.png"))
+            bits = image.constBits()
+            bits.setsize(image.sizeInBytes())
+            frame = bytearray(bytes(bits))
+            holder = ctypes.c_char.from_buffer(frame)
+            writer.write(ctypes.addressof(holder))
+            del holder
+            manager.step_clock(1.0 / fps)
+    finally:
+        writer.close()
+        manager.unfreeze()
+    result["post_trains"] = {"frames": writer.count, "size": [width, height],
+                             "models": len(view.models.groups.get(
+                                 "trains", [])),
+                             "drawn": view.models.drawn,
+                             "waited": round(waited, 1)}
+    return None
+
+
+@check(1000)
+def trains_record():
+    """Запись облёта с поездами: часы поездов идут по шкале записи,
+    кадр - 1/25 с, после записи - снова часы компьютера."""
+    import time as _time
+    from planetx.core.tour import Stop
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    manager = window.train_manager
+    look = state.setdefault("trains_record", {"since": None})
+    if look["since"] is None:
+        window.set_extra("trains", True)
+        view.navigator.stop()
+        view.navigator.show(Pose(60.1972, 24.9338, 650.0, 330.0, 62.0))
+        view.update()
+        look["since"] = _time.monotonic()
+        return 2000
+    waited = _time.monotonic() - look["since"]
+    ready = manager.near and manager.fleet.rails is not None \
+        and not manager.rail_replies and view.models.drawn
+    if not look.get("started"):
+        if not ready and waited < 60.0:
+            return 1000
+        clocks = look["clocks"] = []
+        original = manager.set_clock
+
+        def spy(seconds):
+            original(seconds)
+            clocks.append(manager.frozen[1])
+        manager.set_clock = spy
+        if os.path.exists(TRAINS_VIDEO):
+            os.remove(TRAINS_VIDEO)
+        state["record_done"] = None
+        if "record_link" not in state:
+            state["record_link"] = window.recorder.done.connect(
+                lambda ok, text: state.__setitem__("record_done",
+                                                   (ok, text)))
+        window.tour.bar.pause.setValue(0.4)
+        window.tour.start([Stop("A", 60.1972, 24.9338, 650.0, 330.0, 62.0),
+                           Stop("B", 60.1990, 24.9330, 700.0, 350.0, 60.0)])
+        look["polling_before"] = manager.poll.isActive()
+        look["began"] = window.record_tour(TRAINS_VIDEO, "video")
+        look["started"] = _time.monotonic()
+        return 1000
+    if window.recorder.active and _time.monotonic() - look["started"] < 600:
+        if look.get("polling_during") is None:
+            look["polling_during"] = manager.poll.isActive()
+        return 1000
+    del manager.set_clock
+    clocks = look["clocks"]
+    steps = [round(b - a, 4) for a, b in zip(clocks, clocks[1:])]
+    result["trains_record"] = {
+        "began": look["began"], "done": state["record_done"],
+        "frames": len(clocks), "steps": sorted(set(steps))[:5],
+        "polling_before": look["polling_before"],
+        "polling_during": look.get("polling_during"),
+        "frozen_after": manager.frozen is not None,
+        "polling_after": manager.poll.isActive(),
+        "bytes": os.path.getsize(TRAINS_VIDEO)
+        if os.path.exists(TRAINS_VIDEO) else 0,
+        "gl": dict(view.gl_errors)}
+    window.set_extra("trains", False)
+    return None
+
+
+TRAINS_VIDEO = os.path.join(TEMP, "planetx_trains_tour.mp4")
+
+
+@check(1000)
+def trains_close():
+    """Ответы службы после закрытия окна окна не трогают: менеджер
+    выключен, ждущие запросы сняты. 19 октября 2026 года ответ после
+    перезагрузки модуля звал удалённое окно (RuntimeError)."""
+    window = state["window"]
+    manager = window.train_manager
+    window.set_extra("trains", True)
+    QgsApplication.processEvents()
+    calls = []
+    original = window._refresh_shapes
+    window._refresh_shapes = lambda: calls.append(1)
+    try:
+        pending = manager.reply is not None
+        manager.close()
+        manager._latest(b"[]", "")
+        manager._types({"data": {"currentlyRunningTrains": []}}, "")
+        manager._one((1, "2026-10-19"), [], "")
+    finally:
+        window._refresh_shapes = original
+    result["trains_close"] = {"pending_before": pending,
+                              "window_calls": len(calls),
+                              "on": manager.on,
+                              "reply": manager.reply is not None,
+                              "polling": manager.poll.isActive()}
+    window.set_extra("trains", False)
+
+
+def _live_wait(name, key, pose, ready, limit=60.0):
+    """Общий ход шагов судов и самолётов: включить строку, поставить
+    позу, ждать ready() не дольше limit секунд. Возвращает паузу шага
+    или None, когда пора проверять."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault(name, {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        if key:
+            window.set_extra(key, True)
+        view.navigator.stop()
+        view.navigator.show(Pose(*pose))
+        view.update()
+        look["since"] = time.monotonic()
+        return 2000
+    look["waited"] = round(time.monotonic() - look["since"], 1)
+    if not ready() and look["waited"] < limit:
+        return 1000
+    return None
+
+
+def _live_pick(window, manager):
+    """Опрос щелчком у первой точки или модели на экране."""
+    import numpy as np
+    from planetx.core import ellipsoid
+    view = window.view
+    now = time.monotonic()
+    for key, lat, lon, _, alt in manager.fleet.positions(now):
+        height = alt * view.store.scale if alt == alt \
+            else view.label_height(lat, lon)
+        point = np.asarray([ellipsoid.geodetic_to_ecef(lat, lon, height)])
+        pixels, front = view.camera.project(point)
+        if not front[0] or not (0 <= pixels[0][0] < view.camera.width
+                                and 0 <= pixels[0][1] < view.camera.height):
+            continue
+        found = window._identify_live(float(pixels[0][0]),
+                                      float(pixels[0][1]))
+        if found:
+            name, values, _ = found[0][1][0]
+            return [name] + [list(v) for v in values[:4]]
+    return None
+
+
+@check(1000)
+def vessels_on():
+    """Суда Балтики издалека: положения Digitraffic, сведения о судах,
+    точки с названиями."""
+    window = state["window"]
+    manager = window.vessel_manager
+    pause = _live_wait("vessels_on", "vessels",
+                       (60.0, 23.5, 400000.0, 0.0, 0.0),
+                       lambda: len(manager.fleet) and manager.fleet.info)
+    if pause:
+        return pause
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_vessels.png"))
+    groups = {}
+    for key in manager.fleet.items:
+        group = manager.group_of(key)
+        groups[group] = groups.get(group, 0) + 1
+    result["vessels_on"] = {
+        "waited": state["vessels_on"]["waited"],
+        "ships": len(manager.fleet), "info": len(manager.fleet.info),
+        "groups": groups, "points": len(manager.shapes()),
+        "near": manager.near, "error": manager.error,
+        "legend": window.vessel_legend.isVisible(),
+        "credit": "digitraffic" in window.attribution.text().lower()}
+    return None
+
+
+@check(1000)
+def vessels_near():
+    """Суда у Хельсинки вблизи: модели своей длины на воде."""
+    window = state["window"]
+    view = window.view
+    manager = window.vessel_manager
+    pause = _live_wait("vessels_near", None,
+                       (60.150, 24.960, 4000.0, 0.0, 55.0),
+                       lambda: view.models.groups.get("vessels")
+                       and not view.load_missing)
+    if pause:
+        return pause
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_vessels_near.png"))
+    items = view.models.groups.get("vessels", [])
+    heights = []
+    for item in items[:20]:
+        moved = item.mover(time.monotonic())
+        if moved is not None:
+            heights.append(round(moved[3], 1))
+    result["vessels_near"] = {
+        "waited": state["vessels_near"]["waited"], "near": manager.near,
+        "models": len(items), "drawn": view.models.drawn,
+        "heights": sorted(set(heights))[:6],
+        "picked": _live_pick(window, manager),
+        "gl": dict(view.gl_errors)}
+    window.set_extra("vessels", False)
+    result["vessels_near"]["after"] = [
+        len(view.models.groups.get("vessels", [])), len(manager.shapes()),
+        manager.poll.isActive(), window.vessel_legend.isVisible()]
+    return None
+
+
+@check(1000, manual=True)
+def vessels_look():
+    """Кадр крупного судна вблизи: модель глазами. Ручной шаг после
+    vessels_on, PLANETX_LOOK_DISTANCE - расстояние камеры, м."""
+    from planetx.core import ellipsoid
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    manager = window.vessel_manager
+    look = state.setdefault("vessels_look", {"since": None})
+    if look["since"] is None:
+        manager.set_on(True)
+        window.set_extra("vessels", True)
+        moving = [(item.sample.speed, key)
+                  for key, item in manager.fleet.items.items()
+                  if manager.group_of(key) in ("passenger", "cargo")]
+        if not moving:
+            return 2000
+        _, key = max(moving)
+        look["key"] = key
+        sample = manager.fleet.items[key].sample
+        view.navigator.stop()
+        view.navigator.show(Pose(sample.lat, sample.lon, float(
+            os.environ.get("PLANETX_LOOK_DISTANCE", "600")), 30.0, 60.0))
+        view.update()
+        look["since"] = time.monotonic()
+        return 2000
+    waited = time.monotonic() - look["since"]
+    if (view.load_missing or waited < 10.0) and waited < 40.0:
+        return 1000
+    key = look["key"]
+    item = manager.fleet.items.get(key)
+    lat, lon, heading, alt = manager.fleet.place(item, time.monotonic(),
+                                                 time.time())
+    view.navigator.show(Pose(lat, lon, view.navigator.pose.distance, 30.0,
+                             60.0))
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_vessel_look.png"))
+    result["vessels_look"] = {
+        "name": manager.label(key), "group": manager.group_of(key),
+        "size": manager.size(key), "ground": round(manager._ground(lat,
+                                                                   lon), 1),
+        "store_h": round(view.store.height_at(lat, lon), 1),
+        "sea_floor": view.sea_floor, "drawn": view.models.drawn,
+        "speed_kn": round(item.sample.speed / 0.514444, 1)}
+    return None
+
+
+@check(1000)
+def aircraft_on():
+    """Самолёты у Хельсинки: борта adsb.lol в круге у точки взгляда,
+    в воздухе - на своей высоте."""
+    window = state["window"]
+    manager = window.aircraft_manager
+    pause = _live_wait("aircraft_on", "aircraft",
+                       (60.32, 24.96, 150000.0, 0.0, 0.0),
+                       lambda: len(manager.fleet))
+    if pause:
+        return pause
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_aircraft.png"))
+    airborne = [item.sample.alt for item in manager.fleet.items.values()
+                if item.sample.alt == item.sample.alt]
+    air_points = [s for s in manager.shapes() if s.alts]
+    result["aircraft_on"] = {
+        "waited": state["aircraft_on"]["waited"],
+        "aircraft": len(manager.fleet), "airborne": len(airborne),
+        "highest_m": round(max(airborne), 0) if airborne else None,
+        "points": len(manager.shapes()), "air_points": len(air_points),
+        "url": manager.url(), "error": manager.error,
+        "credit": "adsb.lol" in window.attribution.text(),
+        "picked": _live_pick(window, manager)}
+    return None
+
+
+@check(1000)
+def aircraft_near():
+    """Самолёты вблизи аэропорта Хельсинки-Вантаа: модели на высоте
+    борта, на земле - на рельефе."""
+    window = state["window"]
+    view = window.view
+    manager = window.aircraft_manager
+    pause = _live_wait("aircraft_near", None,
+                       (60.3172, 24.9633, 6000.0, 0.0, 50.0),
+                       lambda: manager.near and not view.load_missing,
+                       limit=30.0)
+    if pause:
+        return pause
+    items = view.models.groups.get("aircraft", [])
+    rows = []
+    for item in items[:10]:
+        moved = item.mover(time.monotonic())
+        fleet_item = manager.fleet.items.get(item.key[1])
+        if moved is None or fleet_item is None:
+            continue
+        rows.append([item.key[1], round(moved[3], 0),
+                     None if fleet_item.sample.alt != fleet_item.sample.alt
+                     else round(fleet_item.sample.alt, 0)])
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_aircraft_near.png"))
+    result["aircraft_near"] = {
+        "waited": state["aircraft_near"]["waited"], "near": manager.near,
+        "models": len(items), "drawn": view.models.drawn,
+        "model_vs_sample_alt": rows, "gl": dict(view.gl_errors)}
+    return None
+
+
+@check(1000)
+def live_close():
+    """Поздние ответы служб после закрытия менеджеров окна не трогают."""
+    window = state["window"]
+    calls = []
+    original = window._refresh_shapes
+    window._refresh_shapes = lambda: calls.append(1)
+    out = {}
+    try:
+        for manager in (window.vessel_manager, window.aircraft_manager):
+            manager.set_on(True)
+            manager.close()
+            manager._done(b'{"features": [], "ac": [], "now": 0}', "")
+            manager._info_done(b"[]", "")
+            out[manager.group_name()] = manager.on
+    finally:
+        window._refresh_shapes = original
+    out["window_calls"] = len(calls)
+    for key in ("vessels", "aircraft"):
+        window.set_extra(key, False)
+    result["live_close"] = out
 
 
 def _image_server():
@@ -16169,6 +16966,7 @@ def post_turbines_video():
     from qgis.PyQt.QtGui import QImage
     from planetx.core import video
     from planetx.core.navigation import Pose
+    from planetx.ui.snapshot import draw_attribution, plain_text
     window = state["window"]
     view = window.view
     spent = time.monotonic() - state["ls_started"]
@@ -16219,6 +17017,12 @@ def post_turbines_video():
                 width, height, _Qt.AspectRatioMode.IgnoreAspectRatio,
                 _Qt.TransformationMode.SmoothTransformation)
             image = image.convertToFormat(QImage.Format.Format_RGB32)
+            # Кадр несёт масштаб экрана: без сброса знак и подпись
+            # рисовались бы за краем картинки.
+            image.setDevicePixelRatio(1.0)
+            # Подпись источников и знак PlanetX - как у записи тура.
+            draw_attribution(image, plain_text(
+                window.attribution.text()), 1.0)
             if k == 0:
                 image.save(os.path.join(TEMP, "planetx_post_turbines.png"))
             bits = image.constBits()

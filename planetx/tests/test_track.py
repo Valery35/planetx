@@ -18,6 +18,22 @@ ITEMS = [("car", 0.0, 58.00, 56.00), ("car", 100.0, 58.10, 56.00),
          ("elk", 150.0, 57.00, 55.00), ("elk", 250.0, 57.00, 55.10)]
 
 
+class TestAltitude(unittest.TestCase):
+
+    def test_height_between_points_and_along_path(self):
+        track = tk.Track([("plane", 0.0, 58.0, 56.0, 0.0),
+                          ("plane", 100.0, 58.1, 56.0, 1000.0),
+                          ("plane", 200.0, 58.2, 56.0, 3000.0),
+                          ("car", 0.0, 57.0, 55.0)])
+        found = {p.key: p for p in track.at(150.0)}
+        plane = found["plane"]
+        self.assertAlmostEqual(plane.alt, 2000.0)
+        self.assertEqual(plane.alts, [0.0, 1000.0, 2000.0])
+        self.assertEqual(len(plane.alts), len(plane.path))
+        self.assertTrue(math.isnan(found["car"].alt))
+        self.assertIsNone(found["car"].alts)
+
+
 class TestTrack(unittest.TestCase):
 
     def setUp(self):

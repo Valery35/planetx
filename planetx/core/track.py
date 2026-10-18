@@ -12,6 +12,10 @@
 Решения автора от 28 сентября 2026 года: треки из точечного слоя QGIS
 с полем времени, время задаёт временной контроллер QGIS, камера идёт
 следом по ходу движения.
+
+У точки может быть высота в метрах (просьба автора от 19 октября 2026
+года - самолёты и дроны): между точками она тоже линейна по времени.
+Нет высоты - NaN.
 """
 import math
 
@@ -28,14 +32,18 @@ HEADING_SPAN = 30.0
 
 
 class Position:
-    """Объект в момент t: путь, текущая точка, азимут движения."""
+    """Объект в момент t: путь, текущая точка, азимут движения, высота
+    точки и высоты пути в метрах или NaN."""
 
-    def __init__(self, key, path, lat, lon, heading):
+    def __init__(self, key, path, lat, lon, heading, alt=math.nan,
+                 alts=None):
         self.key = key
         self.path = path  # [(широта, долгота)], последняя - текущая
         self.lat = lat
         self.lon = lon
         self.heading = heading
+        self.alt = alt
+        self.alts = alts  # высоты точек path или None
 
 
 class Glide:
@@ -67,23 +75,28 @@ class Glide:
 class Track:
     """Точки объектов по времени.
 
-    items - (объект, время, широта, долгота). Точки без времени
-    пропускает тот, кто читает слой. Точки одного объекта с одинаковым
-    временем оставляются первой.
+    items - (объект, время, широта, долгота) или с высотой пятым
+    числом. Точки без времени пропускает тот, кто читает слой. Точки
+    одного объекта с одинаковым временем оставляются первой.
     """
 
     def __init__(self, items):
         groups = {}
-        for key, t, lat, lon in items:
+        for item in items:
+            key, t, lat, lon = item[:4]
+            alt = float(item[4]) if len(item) > 4 and item[4] is not None \
+                else math.nan
             groups.setdefault(key, []).append((float(t), float(lat),
-                                               float(lon)))
+                                               float(lon), alt))
         self.objects = {}
+        self.alts = {}
         for key, rows in groups.items():
             rows.sort(key=lambda r: r[0])
             data = np.asarray(rows, dtype=np.float64)
             keep = np.concatenate([[True], np.diff(data[:, 0]) > 0])
             data = data[keep]
             self.objects[key] = (data[:, 0], data[:, 1], data[:, 2])
+            self.alts[key] = data[:, 3]
         times = [t for t, _, _ in self.objects.values() if len(t)]
         self.start = min(t[0] for t in times) if times else None
         self.end = max(t[-1] for t in times) if times else None
@@ -103,6 +116,7 @@ class Track:
         """Объекты в момент t, None - весь трек, объект в конце пути."""
         out = []
         for key, (times, lats, lons) in self.objects.items():
+            heights = self.alts[key]
             if not len(times):
                 continue
             moment = times[-1] if t is None else t
@@ -117,6 +131,12 @@ class Track:
                                               moment - HEADING_SPAN))
             heading = bearing(lat0, lon0, lat, lon) \
                 if (lat0, lon0) != (lat, lon) else math.nan
+            alt, alts = math.nan, None
+            if not np.all(np.isnan(heights)):
+                _, (alt, _) = self._point(times, heights, heights, moment)
+                alts = heights[:i + 1].tolist()
+                if len(alts) < len(path):
+                    alts.append(float(alt))
             out.append(Position(key, path, float(lat), float(lon),
-                                heading))
+                                heading, float(alt), alts))
         return out

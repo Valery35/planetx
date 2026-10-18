@@ -156,6 +156,14 @@ def frame(lat, lon, heading=0.0, tilt=0.0, roll=0.0,
         @ np.diag([float(v) for v in scale])
 
 
+def moved(base, lat, lon, heading=0.0, tilt=0.0, roll=0.0,
+          scale=(1.0, 1.0, 1.0)):
+    """Поворот 3×3 вершин, посчитанных с матрицей base (frame), в место
+    lat, lon с азимутом heading: модель трека или поезд едет, вершины
+    в видеокарте остаются прежними."""
+    return frame(lat, lon, heading, tilt, roll, scale) @ np.linalg.inv(base)
+
+
 def vertices(parts, lat, lon, heading=0.0, tilt=0.0, roll=0.0,
              scale=(1.0, 1.0, 1.0)):
     """Вершины частей для видеокарты: список массивов MODEL_VERTEX,

@@ -19,7 +19,8 @@ from qgis.PyQt.QtWidgets import QVBoxLayout, QWidget
 
 from ..core import (contours, cutaway, deposits, faults, fields, fires, flow,
                     infra, insolation, plants, quakes, slope, temperature,
-                    tomography, volcanoes)
+                    tomography, trains, vessels, volcanoes)
+from ..core import aircraft
 from ..i18n import tr
 from ..qt_compat import enum
 from .style import ACCENT, HOVER, MUTED, PLATE, TEXT as STYLE_TEXT
@@ -665,6 +666,75 @@ class InfraLegend(_RowsLegend):
             + [(c[1], names[c[0]], "line", c[2]) for c in infra.CABLES] \
             + [(s[2], names[s[0]], "line", infra.PIPE_WIDTH)
                for s in infra.SUBSTANCES]
+
+
+def train_names():
+    """Категории поездов Digitraffic по ключам core.trains.CATEGORIES."""
+    return {"Long-distance": tr("Дальнего следования"),
+            "Commuter": tr("Пригородные"),
+            "Cargo": tr("Грузовые"),
+            "Locomotive": tr("Локомотивы"),
+            "Shunting": tr("Маневровые"),
+            "On-track machines": tr("Путевые машины")}
+
+
+class TrainLegend(_RowsLegend):
+    """Шкала поездов Финляндии: цвет - категория поезда."""
+
+    def __init__(self, parent=None):
+        self.title = tr("Поезда Финляндии")
+        self.footer = tr("Щелчок по поезду - сведения")
+        super().__init__(parent)
+
+    def rows(self):
+        names = train_names()
+        return [(tuple(int(round(v * 255)) for v in color), names[key],
+                 "dot", 0.0) for key, color in trains.CATEGORIES]
+
+
+def vessel_names():
+    """Группы судов по ключам core.vessels.GROUPS."""
+    return {"passenger": tr("Пассажирские"), "cargo": tr("Грузовые"),
+            "tanker": tr("Танкеры"), "fishing": tr("Рыболовные"),
+            "service": tr("Буксиры и служебные"),
+            "fast": tr("Скоростные"), "pleasure": tr("Яхты и катера"),
+            "other": tr("Прочие и без сведений")}
+
+
+def aircraft_names():
+    """Группы бортов по ключам core.aircraft.GROUPS."""
+    return {"light": tr("Лёгкие"), "small": tr("Малые"),
+            "large": tr("Пассажирские и грузовые"),
+            "heavy": tr("Тяжёлые"), "rotor": tr("Вертолёты"),
+            "other": tr("Прочие и без сведений")}
+
+
+class VesselLegend(_RowsLegend):
+    """Шкала судов Балтики: цвет - группа типа AIS."""
+
+    def __init__(self, parent=None):
+        self.title = tr("Суда Балтики")
+        self.footer = tr("Щелчок по судну - сведения")
+        super().__init__(parent)
+
+    def rows(self):
+        names = vessel_names()
+        return [(tuple(int(round(v * 255)) for v in color), names[key],
+                 "dot", 0.0) for key, color, _ in vessels.GROUPS]
+
+
+class AircraftLegend(_RowsLegend):
+    """Шкала самолётов: цвет - категория ADS-B."""
+
+    def __init__(self, parent=None):
+        self.title = tr("Самолёты")
+        self.footer = tr("Щелчок по борту - сведения")
+        super().__init__(parent)
+
+    def rows(self):
+        names = aircraft_names()
+        return [(tuple(int(round(v * 255)) for v in color), names[key],
+                 "dot", 0.0) for key, _, _, color in aircraft.GROUPS]
 
 
 def fault_names():

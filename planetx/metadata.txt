@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.2.1
+version=1.3.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.2.1 The view no longer flickers with blurred patches
+changelog=1.3.0 Live transport on the globe in the new Transport
+      category of the Add data catalogue. Trains of Finland move as
+      consists along OpenStreetMap rails and through switches,
+      Baltic ships by AIS keep their course as models of their own
+      length, aircraft by ADS-B fly at their altitude with their
+      bank. A click shows the type, number and speed. A model can
+      ride along a track of a project layer, at the height from the
+      point Z or a field, in metres or feet. A recorded flight moves
+      trains, ships and aircraft smoothly. New demo Trains of
+      Finland, live.
+      1.2.1 The view no longer flickers with blurred patches
       while flying around: while a far tile is still loading, the
       coarser tile covers only its place, and the detailed ground
       under the camera stays.

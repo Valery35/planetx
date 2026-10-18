@@ -12,6 +12,128 @@ import os
 __all__ = ["tr", "is_russian", "set_language", "EN"]
 
 EN = {
+    # Суда Балтики и самолёты, 19 октября 2026 года.
+    "Пассажирские": "Passenger",
+    "Танкеры": "Tankers",
+    "Рыболовные": "Fishing",
+    "Буксиры и служебные": "Tugs and service",
+    "Скоростные": "High-speed",
+    "Яхты и катера": "Yachts and boats",
+    "Прочие и без сведений": "Other and unknown",
+    "Лёгкие": "Light",
+    "Малые": "Small",
+    "Пассажирские и грузовые": "Airliners and freighters",
+    "Тяжёлые": "Heavy",
+    "Вертолёты": "Helicopters",
+    "Суда Балтики": "Baltic ships",
+    "Суда": "Ships",
+    "Щелчок по судну - сведения": "Click a ship for details",
+    "Самолёты": "Aircraft",
+    "Щелчок по борту - сведения": "Click an aircraft for details",
+    "MMSI": "MMSI",
+    "{value} уз": "{value} kn",
+    "Код ICAO": "ICAO code",
+    "{metres} м ({feet} футов)": "{metres} m ({feet} ft)",
+    "на земле": "on the ground",
+    "Позывной": "Call sign",
+    "IMO": "IMO",
+    "Назначение": "Destination",
+    "Размеры": "Size",
+    "{length} × {width} м": "{length} × {width} m",
+    "Бортовой номер": "Registration",
+    "Суда Финского и Ботнического заливов и Балтики у Финляндии по "
+    "сигналам AIS, открытые данные Fintraffic Digitraffic, положения раз "
+    "в 20 с. Издалека судно - точка цвета типа с названием, вблизи - "
+    "условная модель своей длины, которая идёт своим курсом. Щелчок "
+    "показывает тип, позывной, назначение, размеры и скорость.":
+        "Ships of the Gulfs of Finland and Bothnia and the Baltic near "
+        "Finland by AIS signals, Fintraffic Digitraffic open data, the "
+        "positions every 20 s. From afar a ship is a dot in the colour of "
+        "its type with its name, close up a schematic model of its length "
+        "that keeps its course. A click shows the type, call sign, "
+        "destination, size and speed.",
+    "Самолёты по сигналам ADS-B сети добровольцев adsb.lol в круге у "
+    "точки взгляда, раз в 10 с. Самолёт в воздухе стоит на своей высоте, "
+    "вблизи - условная модель размера своей категории с креном. Щелчок "
+    "показывает позывной, тип, бортовой номер, высоту и скорость. Над "
+    "Россией приёмников сети почти нет.":
+        "Aircraft by ADS-B signals of the adsb.lol volunteer network in a "
+        "circle around the point of view, every 10 s. An aircraft in the "
+        "air is shown at its altitude, close up as a schematic model of "
+        "the size of its category with its bank. A click shows the call "
+        "sign, type, registration, altitude and speed. The network has "
+        "almost no receivers over Russia.",
+
+    # Высота точек трека, 19 октября 2026 года.
+    "По земле": "On the ground",
+    "Откуда высота точки: Z точки или числовое поле. «По земле» - объект "
+    "и модель стоят на рельефе.":
+        "Where the height of a point comes from: the point Z or a numeric "
+        "field. On the ground - the object and the model stand on the "
+        "terrain.",
+    "над уровнем моря": "above sea level",
+    "над землёй": "above the ground",
+    "Над уровнем моря - высота полёта по барометру или GPS, путь рисуется "
+    "в воздухе. Над землёй - подъём над рельефом под точкой, например у "
+    "дрона.":
+        "Above sea level - the flight altitude by barometer or GPS, the "
+        "path is drawn in the air. Above the ground - the rise over the "
+        "terrain under the point, for example for a drone.",
+    "метры": "metres",
+    "футы": "feet",
+    "Единицы высоты. Высоту самолётов ADS-B передают в футах.":
+        "Height units. ADS-B aircraft altitude is given in feet.",
+    "Единицы высоты": "Height units",
+    # Модель по треку и поезда Финляндии, 18 октября 2026 года.
+    "Дальнего следования": "Long-distance",
+    "Пригородные": "Commuter",
+    "Грузовые": "Cargo",
+    "Локомотивы": "Locomotives",
+    "Маневровые": "Shunting",
+    "Путевые машины": "On-track machines",
+    "Поезда Финляндии": "Trains of Finland",
+    "Поезда": "Trains",
+    "Щелчок по поезду - сведения": "Click a train for details",
+    "Поезда Финляндии, суда Балтики и самолёты в реальном времени по "
+    "открытым данным Fintraffic и сети ADS-B adsb.lol.":
+        "Trains of Finland, Baltic ships and aircraft in real time from "
+        "Fintraffic open data and the adsb.lol ADS-B network.",
+    "Поезда Финляндии в реальном времени по открытым данным Fintraffic "
+    "Digitraffic, положения обновляются раз в 10 с. Издалека поезд - точка "
+    "цвета категории с номером, вблизи - модель вагона, которая едет по "
+    "рельсам OpenStreetMap между обновлениями. Щелчок по поезду показывает "
+    "вид, номер и скорость.":
+        "Trains of Finland in real time from Fintraffic Digitraffic open "
+        "data, the positions are updated every 10 s. From afar a train is "
+        "a dot in the colour of its category with its number, close up it "
+        "is a car model that moves along OpenStreetMap rails between "
+        "updates. A click on a train shows its type, number and speed.",
+    "без модели": "no model",
+    "Файл 3D-модели glTF, Collada или OBJ. Модель едет по пути каждого "
+    "объекта трека, перёд смотрит по ходу движения. Пустое поле - объект "
+    "показан меткой.":
+        "A glTF, Collada or OBJ 3D model file. The model moves along the "
+        "path of every object of the track, its front facing the direction "
+        "of travel. An empty field shows the object as a placemark.",
+    "Выбрать файл модели.": "Choose the model file.",
+    "Множитель размера модели. С множителем 1 модель стоит в своих метрах, "
+    "больший множитель делает её заметной издалека.":
+        "The size factor of the model. With the factor 1 the model keeps "
+        "its own metres, a larger factor makes it visible from afar.",
+    "Масштаб модели": "Model scale",
+    "Поворот модели по часовой стрелке к ходу движения. Нужен, если перёд "
+    "модели в файле смотрит не на север, например 180° у модели glTF, "
+    "повёрнутой передом к зрителю.":
+        "The clockwise turn of the model to the direction of travel. It is "
+        "needed when the front of the model in the file does not face "
+        "north, for example 180° for a glTF model facing the viewer.",
+    "Поворот модели": "Model turn",
+    "3D-модель трека": "Track 3D model",
+    "3D-модели ({patterns})": "3D models ({patterns})",
+    "Номер поезда": "Train number",
+    "{value} км/ч": "{value} km/h",
+    "Положение, UTC": "Position, UTC",
+    "Категория": "Category",
     "Журнал работы": "Log",
     "Открывает журнал модуля программой системы. В журнале - события "
     "модуля, ошибки Python и стеки потоков, если QGIS не отвечал "
@@ -4654,6 +4776,7 @@ EN = {
         "Triangles {count}, materials {parts}, images {images}. "
         "Size {x:.1f} × {y:.1f} × {z:.1f} m.",
     "Анимированная модель, ветряки": "Animated model, wind turbines",
+    "Поезда Финляндии, вживую": "Trains of Finland, live",
     "Анимация {seconds:.1f} с, движется частей {tracks}.":
         "Animation {seconds:.1f} s, moving parts {tracks}.",
     "Широта точки модели. Точка - начало координат файла модели.":

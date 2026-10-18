@@ -27,7 +27,9 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      plants as plants_core, fires as fires_core, crust, plates,
                      volcanoes as volcanoes_core, faults as faults_core,
                      geology, iscgem, quakes, slabs, themes, tilemaps,
-                     satellites as satellites_core)
+                     satellites as satellites_core,
+                     trains as trains_core, vessels as vessels_core,
+                     aircraft as aircraft_core)
 from ...core import sources as datasources
 from ...core import tileoverlays
 from ...core.features import Shape
@@ -1123,6 +1125,16 @@ class LayersMixin:
         manager = getattr(self, "satellite_manager", None)
         if manager is not None and manager.on and manager.count():
             parts.append(link_html(*satellites_core.ATTRIBUTION))
+        manager = getattr(self, "train_manager", None)
+        if manager is not None and manager.on and manager.count() \
+                and self.planet.earth:
+            parts.append(link_html(*trains_core.ATTRIBUTION))
+        for name, core_module in (("vessel_manager", vessels_core),
+                                  ("aircraft_manager", aircraft_core)):
+            manager = getattr(self, name, None)
+            if manager is not None and manager.on and manager.count() \
+                    and self.planet.earth:
+                parts.append(link_html(*core_module.ATTRIBUTION))
         if self.planet.earth and getattr(self, "extras", {}).get("plates") \
                 and self.plates_data is not None:
             parts.append(link_html(*plates.ATTRIBUTION))

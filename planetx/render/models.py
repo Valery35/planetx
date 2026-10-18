@@ -13,6 +13,10 @@ MODEL_VERTEX от точки модели и картинка или цвет. �
 Анимированная модель (core/animation.py) получает у части с дорожкой
 свою матрицу на момент: время идёт по кругу длительности от показа
 модели, пока модель видна, вид просит кадр раз в ANIMATION_TICK.
+
+Движущаяся модель (модель трека, поезд) несёт mover - по моменту он
+даёт точку и поворот 3×3 вершин, посчитанных на исходном месте. Модели
+с одним mesh делят буферы видеокарты: сотня поездов - одна загрузка.
 """
 import ctypes
 import time
@@ -81,10 +85,17 @@ class Model:
     0-1, дорожка анимации или None)], place - (широта, долгота,
     altitudeMode, высота), radius - радиус шара вокруг точки, метры,
     alpha - непрозрачность 0-1. animation - core.animation.Animation
-    или None, frame - матрица core.models.frame места модели."""
+    или None, frame - матрица core.models.frame места модели.
+
+    mover(now) - (широта, долгота, поворот 3×3 вершин) на момент
+    time.monotonic, четвёртым числом - высота по altitudeMode места,
+    или None, если модели сейчас нет. live - mover
+    меняется со временем сам, вид просит кадры. mesh - ключ буферов,
+    общий у одинаковых моделей, без него - key."""
 
     def __init__(self, key, parts, place, radius, alpha=1.0,
-                 animation=None, frame=None):
+                 animation=None, frame=None, mover=None, live=False,
+                 mesh=None):
         self.key = key
         self.parts = parts
         self.place = place
@@ -92,6 +103,24 @@ class Model:
         self.alpha = alpha
         self.animation = animation
         self.frame = frame
+        self.mover = mover
+        self.live = live
+        self.mesh = key if mesh is None else mesh
+        self.linear = None  # поворот вершин от mover в этом кадре
+
+
+def _moved(linear, pose):
+    """Поза части движущейся модели: поворот вершин linear после
+    анимации части pose или без неё."""
+    matrix = np.eye(4)
+    matrix[:3, :3] = linear
+    if pose is not None:
+        matrix = matrix @ pose[0]
+    try:
+        turn = np.linalg.inv(matrix[:3, :3]).T
+    except np.linalg.LinAlgError:
+        turn = matrix[:3, :3]
+    return matrix, np.ascontiguousarray(turn, dtype=np.float32)
 
 
 class Models:
@@ -101,7 +130,9 @@ class Models:
         self.program = None
         self.locations = {}
         self.source = []  # Model окна
-        self.loaded = {}  # ключ - [_Part]
+        self.groups = {}  # имя группы - [Model]
+        self.loaded = {}  # mesh - [_Part]
+        self.hidden = set()  # номера source, которых сейчас нет
         self.pending = True
         self.centers = []  # точки моделей в ECEF, по source
         # anchor(Model) - точка модели в ECEF по рельефу, ставит вид.
@@ -130,10 +161,13 @@ class Models:
             GL.glDeleteProgram(self.program)
         self.program = None
 
-    def set_models(self, items):
-        """Новый список Model. Части загружаются в видеокарту в кадре,
-        модели с прежним ключом не загружаются заново."""
-        self.source = list(items)
+    def set_models(self, items, group="overlays"):
+        """Новый список Model группы: наложения «Моих меток», треки,
+        поезда. Части загружаются в видеокарту в кадре, модели
+        с прежним mesh не загружаются заново."""
+        self.groups[group] = list(items)
+        self.source = [item for items in self.groups.values()
+                       for item in items]
         self.pending = True
         self.place()
 
@@ -142,7 +176,29 @@ class Models:
         if self.anchor is None:
             self.centers = []
             return
+        self.move(time.monotonic())
         self.centers = [self.anchor(item) for item in self.source]
+
+    def move(self, now):
+        """Места движущихся моделей на момент now. Возвращает, есть ли
+        модель, которая движется сама."""
+        self.hidden = set()
+        live = False
+        for i, item in enumerate(self.source):
+            if item.mover is None:
+                continue
+            live = live or item.live
+            found = item.mover(now)
+            if found is None:
+                self.hidden.add(i)
+                continue
+            lat, lon, linear = found[:3]
+            if len(found) > 3:
+                item.place = (lat, lon, item.place[2], found[3])
+            else:
+                item.place = (lat, lon) + tuple(item.place[2:])
+            item.linear = linear
+        return live
 
     def poses(self, item, now):
         """{дорожка: (матрица 4×4 смещений ECEF, поворот нормалей 3×3)}
@@ -168,21 +224,25 @@ class Models:
         """Расстояние от глаза до ближайшей модели за вычетом её радиуса,
         не меньше 1 м, или None без моделей."""
         found = None
-        for item, center in zip(self.source, self.centers):
+        for i, (item, center) in enumerate(zip(self.source, self.centers)):
+            if i in self.hidden:
+                continue
             gap = float(np.linalg.norm(center - eye)) - item.radius
             gap = max(gap, 1.0)
             found = gap if found is None else min(found, gap)
         return found
 
     def _upload(self):
-        keys = {item.key for item in self.source}
-        for key in list(self.loaded):
-            if key not in keys:
-                for part in self.loaded.pop(key):
+        meshes = {item.mesh for item in self.source}
+        for mesh in list(self.loaded):
+            if mesh not in meshes:
+                for part in self.loaded.pop(mesh):
                     part.delete()
         for item in self.source:
-            if item.key not in self.loaded:
-                self.loaded[item.key] = [_Part(*part) for part in item.parts]
+            if item.mesh not in self.loaded:
+                self.loaded[item.mesh] = [_Part(*part)
+                                          for part in item.parts]
+        keys = {item.key for item in self.source}
         self.started = {key: value for key, value in self.started.items()
                         if key in keys}
         self.pending = False
@@ -195,13 +255,18 @@ class Models:
             return
         if self.pending:
             self._upload()
+        now = time.monotonic()
+        if any(item.mover is not None for item in self.source):
+            # Движущиеся модели встают на своё место каждый кадр.
+            self.animated = self.move(now)
+            if self.anchor is not None:
+                self.centers = [self.anchor(item) for item in self.source]
         if len(self.centers) != len(self.source):
             self.place()
         if len(self.centers) != len(self.source):
             return
         whole = np.asarray(camera.tiles_mvp(self.centers), dtype=np.float64)
         mvps = np.ascontiguousarray(whole, dtype=np.float32)
-        now = time.monotonic()
         loc = self.locations
         gl.glUseProgram(self.program)
         lat, lon = _latlon(np.asarray(camera.eye, dtype=np.float64))
@@ -216,11 +281,16 @@ class Models:
         stride = mvps.strides[0]
         try:
             for i, item in enumerate(self.source):
+                if i in self.hidden:
+                    continue
                 poses = self.poses(item, now)
                 if poses:
                     self.animated = True
-                for part in self.loaded.get(item.key, ()):
+                move = item.linear if item.mover is not None else None
+                for part in self.loaded.get(item.mesh, ()):
                     pose = poses.get(part.track)
+                    if move is not None:
+                        pose = _moved(move, pose)
                     if pose is None:
                         gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                                             ctypes.c_void_p(

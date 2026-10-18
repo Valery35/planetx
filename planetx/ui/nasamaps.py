@@ -34,7 +34,8 @@ from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
 
 from ..core import (clouds, cutaway, deposits, fires, flow, paleo,
                     plants, plates, quakes, slope, stars, sun, temperature,
-                    themes, weather)
+                    themes, trains, vessels, weather)
+from ..core import aircraft
 from ..core import basemap
 from ..core import satellites as satellites_core
 from ..i18n import is_russian, tr
@@ -120,6 +121,8 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "quakes": "USGS", "plates": "PB2002", "deposits": "USGS",
            "mining": "Maus et al. 2022", "osm_mines": "OpenStreetMap",
            "plants": "WRI", "currents": "NOAA CoastWatch",
+           "trains": "Fintraffic Digitraffic",
+           "vessels": "Fintraffic Digitraffic, AIS", "aircraft": "adsb.lol",
            "cutaway": "PREM, CRUST1.0, Slab2", "paleo": "PALEOMAP",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
@@ -153,6 +156,8 @@ LAYERS = (("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("heatflow", "depths"),
           ("deposits", "depths"), ("mining", "depths"),
           ("osm_mines", "depths"), ("plants", "infra"),
+          ("trains", "transport"), ("vessels", "transport"),
+          ("aircraft", "transport"),
           ("currents", "water"), ("worldcover", "life"),
           ("water_transitions", "water"), ("soil_clay", "soil"),
           ("soil_sand", "soil"), ("soil_soc", "soil"), ("soil_ph", "soil"),
@@ -187,6 +192,10 @@ def layer_group_names():
         ("infra", tr("Энергетика"), tr(
             "Электростанции мира, линии электропередачи, подстанции, "
             "трубопроводы и подводные кабели.")),
+        ("transport", tr("Транспорт"), tr(
+            "Поезда Финляндии, суда Балтики и самолёты в реальном "
+            "времени по открытым данным Fintraffic и сети ADS-B "
+            "adsb.lol.")),
         ("soil", tr("Почвы"), tr(
             "Свойства верхнего слоя почвы 0-5 см по SoilGrids - глина, "
             "песок, органический углерод и кислотность, сетка 250 м.")),
@@ -269,6 +278,27 @@ def layer_names():
             "мощность, год ввода и владельца. У части станций место "
             "в базе указано неверно. Первое включение скачивает около "
             "4 МБ.")),
+        "trains": (tr("Поезда Финляндии"), tr(
+            "Поезда Финляндии в реальном времени по открытым данным "
+            "Fintraffic Digitraffic, положения обновляются раз в 10 с. "
+            "Издалека поезд - точка цвета категории с номером, вблизи - "
+            "модель вагона, которая едет по рельсам OpenStreetMap между "
+            "обновлениями. Щелчок по поезду показывает вид, номер "
+            "и скорость.")),
+        "vessels": (tr("Суда Балтики"), tr(
+            "Суда Финского и Ботнического заливов и Балтики у Финляндии "
+            "по сигналам AIS, открытые данные Fintraffic Digitraffic, "
+            "положения раз в 20 с. Издалека судно - точка цвета типа "
+            "с названием, вблизи - условная модель своей длины, которая "
+            "идёт своим курсом. Щелчок показывает тип, позывной, "
+            "назначение, размеры и скорость.")),
+        "aircraft": (tr("Самолёты"), tr(
+            "Самолёты по сигналам ADS-B сети добровольцев adsb.lol "
+            "в круге у точки взгляда, раз в 10 с. Самолёт в воздухе "
+            "стоит на своей высоте, вблизи - условная модель размера "
+            "своей категории с креном. Щелчок показывает позывной, тип, "
+            "бортовой номер, высоту и скорость. Над Россией приёмников "
+            "сети почти нет.")),
         "currents": (tr("Течения"), tr(
             "Поверхностные течения океана белыми бегущими струйками над "
             "заливкой скорости. Геострофические течения NOAA CoastWatch по "
@@ -784,6 +814,15 @@ def layer_ramp(key):
         return [group[2] for group in deposits.GROUPS]
     if key == "plants":
         return [f[2] for f in plants.FUELS]
+    if key == "trains":
+        return [tuple(int(round(v * 255)) for v in color)
+                for _, color in trains.CATEGORIES]
+    if key == "vessels":
+        return [tuple(int(round(v * 255)) for v in color)
+                for _, color, _ in vessels.GROUPS]
+    if key == "aircraft":
+        return [tuple(int(round(v * 255)) for v in color)
+                for _, _, _, color in aircraft.GROUPS]
     if key == "currents":
         return [c for _, c in flow.CURRENT_STOPS]
     if key == "mining":

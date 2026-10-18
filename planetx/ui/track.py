@@ -16,27 +16,40 @@
 Камера следом держит объект в центре, азимут - по ходу движения,
 расстояние и наклон остаются. Между шагами времени камера доезжает
 до новой точки плавно (core.track.Glide).
+
+Модель по треку - просьба автора от 18 октября 2026 года. У трека
+может быть файл 3D-модели (.glb, .gltf, .dae, .obj): у каждого объекта
+модель едет по пути на момент шкалы, азимут - по ходу движения плюс
+поворот модели из окна. Вершины модели считаются один раз, вид только
+переносит и поворачивает их (render.models.Model.mover).
 """
 import json
 import math
+import os
 import time
 
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsDateTimeRange, QgsFeatureRequest,
-                       QgsProject, QgsVectorLayer)
+                       QgsProject, QgsVectorLayer, QgsWkbTypes)
 from qgis.gui import QgsColorButton
 from qgis.PyQt.QtCore import (QDate, QDateTime, QObject, Qt, QTime,
                               pyqtSignal)
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
-                                 QDialogButtonBox, QFormLayout, QPushButton,
+                                 QDialogButtonBox, QDoubleSpinBox,
+                                 QFileDialog, QFormLayout, QHBoxLayout,
+                                 QLineEdit, QPushButton, QToolButton,
                                  QVBoxLayout)
 
+from .. import journal
+from ..core import models
 from ..core.features import Shape
 from ..core.navigation import Pose
 from ..core.track import Glide, Track
 from ..i18n import tr
 from ..qt_compat import enum, enum_int
+from ..render.models import Model as ModelItem
+from .overlays import image_rgba
 from .project import ENTRY
 
 TRACK_KEY = "tracks"  # запись проекта: настройки треков по слоям, JSON
@@ -45,6 +58,13 @@ TRACK_WIDTH = 3.0
 # Переход камеры между шагами времени, секунд, в этих пределах.
 GLIDE_MIN = 0.05
 GLIDE_MAX = 1.0
+MODEL_SIDE = 2048  # картинки модели трека не больше, пикселей
+# Высота точек трека: из Z точки или поля, над уровнем моря или над
+# землёй, в метрах или футах (ADS-B самолётов - в футах).
+HEIGHT_Z = "@z"
+FOOT = 0.3048
+HEIGHT_MODES = ("absolute", "relative")
+MODEL_FILTER = "*.glb *.gltf *.dae *.obj"
 
 
 JULIAN_1970 = 2440588  # юлианский день 1 января 1970 года
@@ -135,24 +155,55 @@ def point_layer(layer):
         and enum_int(layer.geometryType()) == 0
 
 
-def read_track(layer, time_field, object_field=""):
+def read_track(layer, time_field, object_field="", height="", unit=1.0):
     """Трек core.track.Track из точек слоя. Точки без времени
-    пропускаются."""
+    пропускаются. height - HEIGHT_Z (Z точки), имя поля или пустая
+    строка - без высоты, unit - метров в единице высоты."""
     wgs = QgsCoordinateReferenceSystem("EPSG:4326")
     transform = QgsCoordinateTransform(layer.crs(), wgs,
                                        QgsProject.instance())
     names = [n for n in (time_field, object_field) if n]
+    if height and height != HEIGHT_Z:
+        names.append(height)
     request = QgsFeatureRequest().setSubsetOfAttributes(names,
                                                         layer.fields())
     items = []
     for feature in layer.getFeatures(request):
         t = seconds(feature[time_field])
-        point = _wgs_point(feature.geometry(), transform)
+        geometry = feature.geometry()
+        alt = None
+        if height == HEIGHT_Z:
+            alt = _z_of(geometry)
+        elif height:
+            alt = _number(feature[height])
+        point = _wgs_point(geometry, transform)
         if t is None or point is None:
             continue
         key = feature[object_field] if object_field else layer.name()
-        items.append((str(key), t, point.y(), point.x()))
+        items.append((str(key), t, point.y(), point.x(),
+                      None if alt is None else alt * unit))
     return Track(items)
+
+
+def _z_of(geometry):
+    """Z первой точки геометрии или None."""
+    if geometry is None or geometry.isEmpty():
+        return None
+    for vertex in geometry.vertices():
+        z = vertex.z()
+        return z if z == z else None
+    return None
+
+
+def _number(value):
+    """Число поля или None: пустое значение, текст не числом."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _wgs_point(geometry, transform):
@@ -168,6 +219,11 @@ def _wgs_point(geometry, transform):
         points = geometry.asMultiPoint()
         return points[0] if points else None
     return geometry.asPoint()
+
+
+def _has_z(layer):
+    """Есть ли у геометрии слоя Z."""
+    return QgsWkbTypes.hasZ(layer.wkbType())
 
 
 def default_time_field(layer):
@@ -216,6 +272,71 @@ class TrackDialog(QDialog):
             "Камера держит первый объект трека в центре, азимут - по ходу "
             "движения. Расстояние и наклон меняются колесом и мышью."))
         form.addRow("", self.follow)
+        self.model = QLineEdit(settings.get("model", ""), self)
+        self.model.setPlaceholderText(tr("без модели"))
+        self.model.setToolTip(tr(
+            "Файл 3D-модели glTF, Collada или OBJ. Модель едет по пути "
+            "каждого объекта трека, перёд смотрит по ходу движения. Пустое "
+            "поле - объект показан меткой."))
+        browse = QToolButton(self)
+        browse.setText("…")
+        browse.setToolTip(tr("Выбрать файл модели."))
+        browse.clicked.connect(self._browse)
+        row = QHBoxLayout()
+        row.addWidget(self.model, 1)
+        row.addWidget(browse)
+        form.addRow(tr("3D-модель"), row)
+        self.model_scale = QDoubleSpinBox(self)
+        self.model_scale.setRange(0.01, 10000.0)
+        self.model_scale.setDecimals(2)
+        self.model_scale.setValue(float(settings.get("model_scale", 1.0)))
+        self.model_scale.setToolTip(tr(
+            "Множитель размера модели. С множителем 1 модель стоит в "
+            "своих метрах, больший множитель делает её заметной издалека."))
+        form.addRow(tr("Масштаб модели"), self.model_scale)
+        self.model_turn = QDoubleSpinBox(self)
+        self.model_turn.setRange(-180.0, 180.0)
+        self.model_turn.setDecimals(1)
+        self.model_turn.setSuffix("°")
+        self.model_turn.setValue(float(settings.get("model_turn", 0.0)))
+        self.model_turn.setToolTip(tr(
+            "Поворот модели по часовой стрелке к ходу движения. Нужен, "
+            "если перёд модели в файле смотрит не на север, например "
+            "180° у модели glTF, повёрнутой передом к зрителю."))
+        form.addRow(tr("Поворот модели"), self.model_turn)
+        self.height_source = QComboBox(self)
+        self.height_source.addItem(tr("По земле"), "")
+        if _has_z(layer):
+            self.height_source.addItem(tr("Z точки"), HEIGHT_Z)
+        for field in layer.fields():
+            if field.isNumeric():
+                self.height_source.addItem(field.name(), field.name())
+        index = self.height_source.findData(settings.get("height", ""))
+        self.height_source.setCurrentIndex(max(index, 0))
+        self.height_source.setToolTip(tr(
+            "Откуда высота точки: Z точки или числовое поле. «По земле» - "
+            "объект и модель стоят на рельефе."))
+        form.addRow(tr("Высота"), self.height_source)
+        self.height_mode = QComboBox(self)
+        self.height_mode.addItem(tr("над уровнем моря"), "absolute")
+        self.height_mode.addItem(tr("над землёй"), "relative")
+        index = self.height_mode.findData(settings.get("height_mode",
+                                                       "absolute"))
+        self.height_mode.setCurrentIndex(max(index, 0))
+        self.height_mode.setToolTip(tr(
+            "Над уровнем моря - высота полёта по барометру или GPS, путь "
+            "рисуется в воздухе. Над землёй - подъём над рельефом под "
+            "точкой, например у дрона."))
+        form.addRow(tr("Отсчёт высоты"), self.height_mode)
+        self.height_unit = QComboBox(self)
+        self.height_unit.addItem(tr("метры"), 1.0)
+        self.height_unit.addItem(tr("футы"), FOOT)
+        index = self.height_unit.findData(float(settings.get("height_unit",
+                                                             1.0)))
+        self.height_unit.setCurrentIndex(max(index, 0))
+        self.height_unit.setToolTip(tr(
+            "Единицы высоты. Высоту самолётов ADS-B передают в футах."))
+        form.addRow(tr("Единицы высоты"), self.height_unit)
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Ok")
             | enum(QDialogButtonBox, "StandardButton", "Cancel"), self)
@@ -235,13 +356,26 @@ class TrackDialog(QDialog):
         self.removed = True
         self.accept()
 
+    def _browse(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, tr("3D-модель трека"), os.path.dirname(self.model.text()),
+            tr("3D-модели ({patterns})", patterns=MODEL_FILTER))
+        if path:
+            self.model.setText(path)
+
     def settings(self):
         color = self.color.color()
         return {"time": self.time.currentText(),
                 "object": self.object.currentData() or "",
                 "color": [color.red(), color.green(), color.blue(),
                           color.alpha()],
-                "follow": self.follow.isChecked()}
+                "follow": self.follow.isChecked(),
+                "model": self.model.text().strip(),
+                "model_scale": self.model_scale.value(),
+                "model_turn": self.model_turn.value(),
+                "height": self.height_source.currentData() or "",
+                "height_mode": self.height_mode.currentData(),
+                "height_unit": float(self.height_unit.currentData())}
 
 
 class TrackManager(QObject):
@@ -260,6 +394,11 @@ class TrackManager(QObject):
         self._wanted = None  # момент шкалы, его возвращает release
         self._shapes = []
         self._last_step = None
+        # Модели треков: путь файла - (время правки, разбор или None),
+        # место объектов на момент - (номер слоя, объект) - (широта,
+        # долгота, азимут).
+        self._model_cache = {}
+        self._at = {}
         # Момент держит запись тура, шкала его не меняет.
         self.held = False
         self.load()
@@ -297,10 +436,16 @@ class TrackManager(QObject):
             if layer is None or not point_layer(layer) \
                     or settings.get("time") not in layer.fields().names():
                 continue
-            self.tracks[layer_id] = read_track(layer, settings["time"],
-                                               settings.get("object", ""))
+            height = settings.get("height", "")
+            if height and height != HEIGHT_Z \
+                    and height not in layer.fields().names():
+                height = ""
+            self.tracks[layer_id] = read_track(
+                layer, settings["time"], settings.get("object", ""),
+                height, float(settings.get("height_unit", 1.0)))
         self.reloaded.emit()
         self._apply()
+        self._set_models()
 
     # Время.
 
@@ -348,20 +493,121 @@ class TrackManager(QObject):
 
     def _build(self):
         shapes = []
+        at = {}
         for layer_id, track in self.tracks.items():
             settings = self.settings.get(layer_id, {})
             color = tuple(settings.get("color", TRACK_COLOR))
+            absolute = settings.get("height_mode",
+                                    "absolute") == "absolute"
             for position in track.at(self.moment):
+                heading = position.heading
+                if heading != heading:
+                    # Курса ещё нет: модель стоит, как стояла.
+                    heading = self._at.get((layer_id, position.key),
+                                           (0.0, 0.0, 0.0))[2]
+                at[(layer_id, position.key)] = (position.lat, position.lon,
+                                                heading, position.alt)
+                flying = position.alts is not None \
+                    and not any(a != a for a in position.alts)
                 if len(position.path) >= 2:
-                    shapes.append(Shape("line", position.path, color=color,
-                                        width=TRACK_WIDTH))
-                shapes.append(Shape("point", [(position.lat, position.lon)],
-                                    name=position.key))
+                    # Над уровнем моря путь лежит в воздухе на своих
+                    # высотах, над землёй - на рельефе.
+                    shapes.append(Shape(
+                        "line", position.path, color=color,
+                        width=TRACK_WIDTH,
+                        alts=position.alts if flying and absolute
+                        else None))
+                if flying and absolute:
+                    point = Shape("point", [(position.lat, position.lon)],
+                                  name=position.key, alts=[position.alt])
+                elif flying:
+                    point = Shape("point", [(position.lat, position.lon)],
+                                  name=position.key, height=position.alt)
+                else:
+                    point = Shape("point", [(position.lat, position.lon)],
+                                  name=position.key)
+                shapes.append(point)
         self._shapes = shapes
+        self._at = at
 
     def shapes(self):
         """Пути и метки объектов для глобуса."""
         return list(self._shapes)
+
+    # Модели.
+
+    def _model(self, path):
+        """Разбор файла модели: (части, {путь: RGBA}, анимация) или None.
+        Файл читается заново, если сменилось время правки."""
+        try:
+            stamp = os.path.getmtime(path)
+        except OSError:
+            return None
+        cached = self._model_cache.get(path)
+        if cached is not None and cached[0] == stamp:
+            return cached[1]
+        found = None
+        package = models.package_file(path)
+        if package:
+            try:
+                parts, pictures, moving = models.read_animated(package)
+                found = (parts, {key: image_rgba(raw, MODEL_SIDE)
+                                 for key, raw in pictures.items()}, moving)
+            except models.ModelError as error:
+                journal.note("track model unreadable: {}".format(error))
+        self._model_cache[path] = (stamp, found)
+        return found
+
+    def _set_models(self):
+        """Модели объектов треков на вид, группа «tracks»."""
+        items = []
+        used = set()
+        for layer_id, track in self.tracks.items():
+            settings = self.settings.get(layer_id, {})
+            path = settings.get("model") or ""
+            found = self._model(path) if path else None
+            if found is None:
+                continue
+            used.add(path)
+            parts, pictures, moving = found
+            scale = float(settings.get("model_scale", 1.0)) or 1.0
+            scales = (scale, scale, scale)
+            turn = float(settings.get("model_turn", 0.0))
+            base = models.frame(0.0, 0.0, 0.0, 0.0, 0.0, scales)
+            arrays = models.vertices(parts, 0.0, 0.0, 0.0, 0.0, 0.0, scales)
+            radius = models.radius(parts, scales)
+            mesh = ("track", path, scale)
+            mode = "clampToGround"
+            if settings.get("height"):
+                mode = "relativeToGround" if settings.get(
+                    "height_mode") == "relative" else "absolute"
+            shared = [(array, pictures.get(part.image), part.rgba,
+                       part.track) for array, part in zip(arrays, parts)]
+            for key in track.objects:
+                items.append(ModelItem(
+                    ("track", layer_id, key), shared,
+                    (0.0, 0.0, mode, 0.0), radius, 1.0, moving,
+                    base, mover=self._mover(layer_id, key, base, turn,
+                                            scales),
+                    mesh=mesh))
+        self._model_cache = {path: value for path, value
+                             in self._model_cache.items() if path in used}
+        self.view.models.set_models(items, group="tracks")
+        self.view.update()
+
+    def _mover(self, layer_id, key, base, turn, scales):
+        def mover(now):
+            del now
+            found = self._at.get((layer_id, key))
+            if found is None:
+                return None
+            lat, lon, heading, alt = found
+            linear = models.moved(base, lat, lon, heading + turn, 0.0, 0.0,
+                                  scales)
+            if alt != alt:
+                return lat, lon, linear
+            return lat, lon, linear, alt
+        return mover
 
     # Камера.
 
