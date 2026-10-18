@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=0.99.0
+version=1.0.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=0.99.0 The Esri Wayback map of the new Imagery archive
+changelog=1.0.0 The Section window puts the ISC-GEM historical
+      earthquakes since 1904 onto the section while their row is on,
+      with a light outline, and shows only the foci of the time slider
+      interval. The Copy view icon puts the view on the clipboard with
+      the scales, labels and credits, without the icon bar, navigation
+      controls, time slider and tour bar. A flight to a path, polygon,
+      folder or opened KML across the date line now goes to the
+      object, not to the other side of the Earth.
+      0.99.0 The Esri Wayback map of the new Imagery archive
       category shows past releases of the Esri World Imagery base map
       since 2014. The time slider selects a release, the steps go
       through the releases in which the image at the centre of the view
