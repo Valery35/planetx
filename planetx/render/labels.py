@@ -38,9 +38,6 @@ from collections import deque
 
 import numpy as np
 from OpenGL import GL
-from OpenGL.raw.GL.VERSION.GL_1_1 import glDrawArrays as raw_draw_arrays
-from OpenGL.raw.GL.VERSION.GL_1_5 import (glBeginQuery, glEndQuery,
-                                          glGetQueryObjectuiv)
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QPointF, QRectF, Qt
 from qgis.PyQt.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QImage,
@@ -53,6 +50,7 @@ from ..core.places import KIND, identity, select_labels
 from ..i18n import tr
 from ..qt_compat import enum
 from . import gpu
+from .gpu import gl
 from .shaders import (LABEL_FRAGMENT, LABEL_VERTEX, POINT_FRAGMENT,
                       POINT_VERTEX)
 
@@ -406,33 +404,33 @@ class Labels:
         self.u_atlas = GL.glGetUniformLocation(self.program, "u_atlas")
         self.vao = GL.glGenVertexArrays(1)
         self.vbo = GL.glGenBuffers(1)
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         stride = 5 * 4
-        GL.glEnableVertexAttribArray(0)
-        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, stride,
+        gl.glEnableVertexAttribArray(0)
+        gl.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, stride,
                                  ctypes.c_void_p(0))
-        GL.glEnableVertexAttribArray(1)
-        GL.glVertexAttribPointer(1, 2, GL.GL_FLOAT, GL.GL_FALSE, stride,
+        gl.glEnableVertexAttribArray(1)
+        gl.glVertexAttribPointer(1, 2, GL.GL_FLOAT, GL.GL_FALSE, stride,
                                  ctypes.c_void_p(12))
-        GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
         # Число, а не массив: атлас привязывает gpu.gl.glBindTexture.
         self.texture = int(np.ravel(GL.glGenTextures(1))[0])
         self._clear_atlas()
         self.point_program = gpu.build_program(POINT_VERTEX, POINT_FRAGMENT)
         self.point_vao = GL.glGenVertexArrays(1)
         self.point_vbo = GL.glGenBuffers(1)
-        GL.glBindVertexArray(self.point_vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.point_vbo)
-        GL.glEnableVertexAttribArray(0)
-        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 12,
+        gl.glBindVertexArray(self.point_vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.point_vbo)
+        gl.glEnableVertexAttribArray(0)
+        gl.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 12,
                                  ctypes.c_void_p(0))
-        GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
     def _clear_atlas(self):
-        GL.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
         GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, ATLAS, ATLAS, 0,
                         GL.GL_RGBA, GL.GL_UNSIGNED_BYTE,
                         np.zeros((ATLAS, ATLAS, 4), dtype=np.uint8))
@@ -441,8 +439,8 @@ class Labels:
                             (GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE),
                             (GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE),
                             (GL.GL_TEXTURE_MAX_LEVEL, 0)):
-            GL.glTexParameteri(GL.GL_TEXTURE_2D, name, value)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+            gl.glTexParameteri(GL.GL_TEXTURE_2D, name, value)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
         self.atlas = _Atlas()
         self.entries = {}
 
@@ -600,11 +598,10 @@ class Labels:
             if spot is None:
                 return None
         x, y = spot
-        GL.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
-        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
-        GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, x, y, w, h, GL.GL_RGBA,
-                           GL.GL_UNSIGNED_BYTE, rgba)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
+        gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
+        gl.tex_region(x, y, w, h, rgba)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
         _, _, ax, ay = self._layout(place)
         entry = (x / ATLAS, y / ATLAS, (x + w) / ATLAS, (y + h) / ATLAS,
                  w, h, ax, ay)
@@ -778,16 +775,15 @@ class Labels:
         gpu.gl.glUseProgram(self.point_program)
         gpu.gl.glBindVertexArray(self.point_vao)
         gpu.gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.point_vbo)
-        GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
-                        GL.GL_STREAM_DRAW)
-        GL.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE)
+        gl.stream_data(GL.GL_ARRAY_BUFFER, data)
+        gl.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE)
         gpu.gl.glDepthMask(GL.GL_FALSE)
         gpu.gl.glEnable(GL.GL_DEPTH_TEST)
         for n, query in enumerate(queries):
-            glBeginQuery(GL.GL_ANY_SAMPLES_PASSED, query)
-            raw_draw_arrays(GL.GL_POINTS, n, 1)
-            glEndQuery(GL.GL_ANY_SAMPLES_PASSED)
-        GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
+            gl.glBeginQuery(GL.GL_ANY_SAMPLES_PASSED, query)
+            gl.glDrawArrays(GL.GL_POINTS, n, 1)
+            gl.glEndQuery(GL.GL_ANY_SAMPLES_PASSED)
+        gl.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
         gpu.gl.glDepthMask(GL.GL_TRUE)
         gpu.gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
         gpu.gl.glBindVertexArray(0)
@@ -804,16 +800,14 @@ class Labels:
         value = (ctypes.c_uint * 1)()
         while self.batches:
             queries, keys, stamp = self.batches[0]
-            glGetQueryObjectuiv(queries[-1], GL.GL_QUERY_RESULT_AVAILABLE,
-                                value)
+            gl.query_uint(queries[-1], GL.GL_QUERY_RESULT_AVAILABLE, value)
             if not value[0]:
                 break
             self.batches.popleft()
             if len(self.hidden) > 20000:
                 self.hidden.clear()
             for query, key in zip(queries, keys):
-                glGetQueryObjectuiv(query, GL.GL_QUERY_RESULT,
-                                    value)
+                gl.query_uint(query, GL.GL_QUERY_RESULT, value)
                 self.hidden[key] = (value[0] == 0, stamp)
             self.free_queries.extend(queries)
 
@@ -841,10 +835,9 @@ class Labels:
         gpu.gl.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
         gpu.gl.glBindVertexArray(self.vao)
         gpu.gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
-        GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
-                        GL.GL_STREAM_DRAW)
+        gl.stream_data(GL.GL_ARRAY_BUFFER, data)
         gpu.gl.glEnable(GL.GL_BLEND)
-        GL.glBlendFunc(GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA)
+        gl.glBlendFunc(GL.GL_ONE, GL.GL_ONE_MINUS_SRC_ALPHA)
         gpu.gl.glDisable(GL.GL_DEPTH_TEST)
         gpu.gl.glDrawArrays(GL.GL_TRIANGLES, 0, 6 * len(q))
         gpu.gl.glEnable(GL.GL_DEPTH_TEST)

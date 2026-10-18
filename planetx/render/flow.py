@@ -19,6 +19,7 @@ from ..core import flow as core
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.subsurface import display
 from . import gpu
+from .gpu import gl
 from .quakes import FRAGMENT, GL_PROGRAM_POINT_SIZE, VERTEX
 
 WIND_COLOR = (0.96, 0.97, 1.0)  # струйки поверх раскраски скорости
@@ -109,15 +110,15 @@ class PathFlowLines:
                           for name in ("u_mvp", "u_viewport", "u_width")}
         self.vao = GL.glGenVertexArrays(1)
         self.vbo = GL.glGenBuffers(1)
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         stride = 8 * 4
         for index, size, offset in ((0, 3, 0), (1, 1, 3), (2, 4, 4)):
-            GL.glEnableVertexAttribArray(index)
-            GL.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
+            gl.glEnableVertexAttribArray(index)
+            gl.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
                                      stride, ctypes.c_void_p(offset * 4))
-        GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
     def release_gl(self):
         if self.program is None:
@@ -142,15 +143,15 @@ class PathFlowLines:
         mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
                                    dtype=np.float32)
         loc = self.locations
-        GL.glUseProgram(self.program)
+        gl.glUseProgram(self.program)
         GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
-        GL.glUniform2f(loc["u_viewport"], float(camera.width),
+        gl.glUniform2f(loc["u_viewport"], float(camera.width),
                        float(camera.height))
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
-        GL.glDisable(GL.GL_DEPTH_TEST)
-        GL.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glDisable(GL.GL_DEPTH_TEST)
+        gl.glEnable(GL.GL_BLEND)
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         try:
             for xyz, color, width in self.groups:
@@ -169,16 +170,16 @@ class PathFlowLines:
                 data[1::2, 0:3] = b
                 data[:, 3] = 1.0
                 data[:, 4:8] = color
-                GL.glUniform1f(loc["u_width"], float(width) * float(ratio))
+                gl.glUniform1f(loc["u_width"], float(width) * float(ratio))
                 GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                                 GL.GL_STREAM_DRAW)
-                GL.glDrawArrays(GL.GL_LINES, 0, 2 * m)
+                gl.glDrawArrays(GL.GL_LINES, 0, 2 * m)
                 self.drawn += len(pts)
         finally:
-            GL.glBindVertexArray(0)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-            GL.glDisable(GL.GL_BLEND)
-            GL.glEnable(GL.GL_DEPTH_TEST)
+            gl.glBindVertexArray(0)
+            gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            gl.glDisable(GL.GL_BLEND)
+            gl.glEnable(GL.GL_DEPTH_TEST)
 
 
 class FlowLines:
@@ -208,15 +209,15 @@ class FlowLines:
             for name in ("u_mvp", "u_viewport", "u_width")}
         self.vao = GL.glGenVertexArrays(1)
         self.vbo = GL.glGenBuffers(1)
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         stride = 8 * 4
         for index, size, offset in ((0, 3, 0), (1, 1, 3), (2, 4, 4)):
-            GL.glEnableVertexAttribArray(index)
-            GL.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
+            gl.glEnableVertexAttribArray(index)
+            gl.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
                                      stride, ctypes.c_void_p(offset * 4))
-        GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
     def release_gl(self):
         if self.program is None:
@@ -305,33 +306,33 @@ class FlowLines:
         mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
                                    dtype=np.float32)
         line = self.line_locations
-        GL.glUseProgram(self.line_program)
+        gl.glUseProgram(self.line_program)
         GL.glUniformMatrix4fv(line["u_mvp"], 1, GL.GL_TRUE, mvp)
-        GL.glUniform2f(line["u_viewport"], float(camera.width),
+        gl.glUniform2f(line["u_viewport"], float(camera.width),
                        float(camera.height))
-        GL.glUniform1f(line["u_width"], LINE_WIDTH * float(ratio))
+        gl.glUniform1f(line["u_width"], LINE_WIDTH * float(ratio))
         loc = self.locations
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                         GL.GL_STREAM_DRAW)
-        GL.glDisable(GL.GL_DEPTH_TEST)
-        GL.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glDisable(GL.GL_DEPTH_TEST)
+        gl.glEnable(GL.GL_BLEND)
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
-        GL.glEnable(GL_PROGRAM_POINT_SIZE)
+        gl.glEnable(GL_PROGRAM_POINT_SIZE)
         try:
-            GL.glDrawArrays(GL.GL_LINES, 0, 2 * m)
+            gl.glDrawArrays(GL.GL_LINES, 0, 2 * m)
             if n:
-                GL.glUseProgram(self.program)
+                gl.glUseProgram(self.program)
                 GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
-                GL.glUniform1f(loc["u_ratio"], float(ratio))
-                GL.glUniform1f(loc["u_points"], 1.0)
-                GL.glDrawArrays(GL.GL_POINTS, 2 * m, n)
+                gl.glUniform1f(loc["u_ratio"], float(ratio))
+                gl.glUniform1f(loc["u_points"], 1.0)
+                gl.glDrawArrays(GL.GL_POINTS, 2 * m, n)
             self.drawn = m
         finally:
-            GL.glBindVertexArray(0)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-            GL.glDisable(GL.GL_BLEND)
-            GL.glDisable(GL_PROGRAM_POINT_SIZE)
-            GL.glEnable(GL.GL_DEPTH_TEST)
+            gl.glBindVertexArray(0)
+            gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            gl.glDisable(GL.GL_BLEND)
+            gl.glDisable(GL_PROGRAM_POINT_SIZE)
+            gl.glEnable(GL.GL_DEPTH_TEST)

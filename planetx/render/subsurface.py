@@ -18,6 +18,7 @@ from OpenGL import GL
 from ..core.subsurface import IMAGE_VERTEX
 from ..core.tiling import AMBIENT
 from . import gpu
+from .gpu import gl
 from .buildings import _Buffers, _latlon, light_at
 from .shaders import (IMAGE_WALL_FRAGMENT, IMAGE_WALL_VERTEX,
                       SUBSURFACE_FRAGMENT, SUBSURFACE_VERTEX)
@@ -125,7 +126,6 @@ class Subsurface:
             camera.tiles_mvp([item.center for item in items]),
             dtype=np.float32)
         loc = self.locations
-        gl = gpu.gl
         gl.glUseProgram(self.program)
         lat, lon = _latlon(np.asarray(camera.eye, dtype=np.float64))
         gl.glUniform3f(loc["u_light"], *light_at(lat, lon).tolist())
@@ -133,17 +133,17 @@ class Subsurface:
         # Полупрозрачные части (стенки, если так задан цвет) не пишут
         # глубину сами в себя заметно: сеток мало, порядок - по имени.
         gl.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         if self.offset:
             factor, units = OFFSET if self.offset is True else self.offset
-            GL.glEnable(GL.GL_POLYGON_OFFSET_FILL)
-            GL.glPolygonOffset(factor, units)
+            gl.glEnable(GL.GL_POLYGON_OFFSET_FILL)
+            gl.glPolygonOffset(factor, units)
         if self.xray:
-            GL.glDisable(GL.GL_DEPTH_TEST)
-            GL.glDepthMask(GL.GL_FALSE)
+            gl.glDisable(GL.GL_DEPTH_TEST)
+            gl.glDepthMask(GL.GL_FALSE)
         if self.glass:
-            GL.glDepthMask(GL.GL_FALSE)
+            gl.glDepthMask(GL.GL_FALSE)
         base = mvps.ctypes.data
         stride = mvps.strides[0]
         null = ctypes.c_void_p(0)
@@ -153,24 +153,24 @@ class Subsurface:
                                     ctypes.c_void_p(base + stride * i))
                 face = self.cull.get(names[i])
                 if face is not None:
-                    GL.glEnable(GL.GL_CULL_FACE)
-                    GL.glCullFace(face)
+                    gl.glEnable(GL.GL_CULL_FACE)
+                    gl.glCullFace(face)
                 gpu._bind_vao(item.vao)
                 gpu._draw_elements(GL.GL_TRIANGLES, item.count,
                                    GL.GL_UNSIGNED_INT, null)
                 if face is not None:
-                    GL.glDisable(GL.GL_CULL_FACE)
+                    gl.glDisable(GL.GL_CULL_FACE)
         finally:
-            GL.glDisable(GL.GL_CULL_FACE)
+            gl.glDisable(GL.GL_CULL_FACE)
             gpu._bind_vao(0)
             gl.glDisable(GL.GL_BLEND)
             if self.offset:
-                GL.glDisable(GL.GL_POLYGON_OFFSET_FILL)
+                gl.glDisable(GL.GL_POLYGON_OFFSET_FILL)
             if self.xray:
-                GL.glDepthMask(GL.GL_TRUE)
-                GL.glEnable(GL.GL_DEPTH_TEST)
+                gl.glDepthMask(GL.GL_TRUE)
+                gl.glEnable(GL.GL_DEPTH_TEST)
             if self.glass:
-                GL.glDepthMask(GL.GL_TRUE)
+                gl.glDepthMask(GL.GL_TRUE)
         self.drawn = len(items)
 
 
@@ -182,7 +182,6 @@ class _Wall:
         indices = np.ascontiguousarray(indices, dtype=np.uint32)
         self.center = center
         self.count = len(indices)
-        gl = gpu.gl
         self.vao = gl.gen_names("glGenVertexArrays", 1)[0]
         self.vbo, self.ebo = gl.gen_names("glGenBuffers", 2)
         gl.glBindVertexArray(self.vao)
@@ -275,19 +274,18 @@ class ImageWalls:
             camera.tiles_mvp([wall.center for wall in self.walls]),
             dtype=np.float32)
         loc = self.locations
-        gl = gpu.gl
         gl.glUseProgram(self.program)
         gl.glUniform1i(loc["u_image"], 0)
         gl.glActiveTexture(GL.GL_TEXTURE0)
         gl.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         base = mvps.ctypes.data
         stride = mvps.strides[0]
         null = ctypes.c_void_p(0)
         try:
             for i, wall in enumerate(self.walls):
-                GL.glBindTexture(GL.GL_TEXTURE_2D, wall.texture)
+                gl.glBindTexture(GL.GL_TEXTURE_2D, wall.texture)
                 gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                                     ctypes.c_void_p(base + stride * i))
                 gpu._bind_vao(wall.vao)
@@ -295,6 +293,6 @@ class ImageWalls:
                                    GL.GL_UNSIGNED_INT, null)
         finally:
             gpu._bind_vao(0)
-            GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+            gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
             gl.glDisable(GL.GL_BLEND)
         self.drawn = len(self.walls)

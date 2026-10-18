@@ -19,6 +19,7 @@ from OpenGL import GL
 
 from ..core import stars
 from . import gpu
+from .gpu import gl
 from .shaders import HOLE_VERTEX
 
 SKY_FRAGMENT = """#version 330 core
@@ -95,8 +96,8 @@ class Sky:
         self.pending = None
         if self.texture is None:
             self.texture = gpu.gl.gen_texture()
-        GL.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
-        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+        gl.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
+        gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
         GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGB8, rgba.shape[1],
                         rgba.shape[0], 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE,
                         rgba)
@@ -105,7 +106,7 @@ class Sky:
                             (GL.GL_TEXTURE_WRAP_S, GL.GL_REPEAT),
                             (GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE),
                             (GL.GL_TEXTURE_MAX_LEVEL, 0)):
-            GL.glTexParameteri(GL.GL_TEXTURE_2D, name, value)
+            gl.glTexParameteri(GL.GL_TEXTURE_2D, name, value)
 
     def draw(self, camera, unix_time=None, frame=None, share=None):
         """Нарисовать небо после неба с гало и до точечных звёзд."""
@@ -119,7 +120,6 @@ class Sky:
         if self.texture is None:
             return
         loc = self.locations
-        gl = gpu.gl
         gl.glUseProgram(self.program)
         gl.matrix3(loc["u_sky"], GL.GL_TRUE, sky_matrix(
             camera, time.time() if unix_time is None else unix_time,
@@ -134,7 +134,7 @@ class Sky:
         gl.glActiveTexture(GL.GL_TEXTURE0)
         gl.glBindTexture(GL.GL_TEXTURE_2D, self.texture)
         gl.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_ONE, GL.GL_ONE, GL.GL_ZERO, GL.GL_ONE)
+        gl.glBlendFuncSeparate(GL.GL_ONE, GL.GL_ONE, GL.GL_ZERO, GL.GL_ONE)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)
         try:

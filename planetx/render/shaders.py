@@ -659,14 +659,16 @@ layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec3 a_normal;
 layout(location = 2) in vec2 a_uv;
 uniform mat4 u_mvp;
+uniform mat3 u_turn;
 uniform vec3 u_light;
 uniform float u_ambient;
 out vec2 v_uv;
 out float v_shade;
 void main() {
     gl_Position = u_mvp * vec4(a_position, 1.0);
-    float len = length(a_normal);
-    float lambert = len > 0.0 ? abs(dot(a_normal / len, u_light)) : 1.0;
+    vec3 normal = u_turn * a_normal;
+    float len = length(normal);
+    float lambert = len > 0.0 ? abs(dot(normal / len, u_light)) : 1.0;
     v_shade = u_ambient + (1.0 - u_ambient) * lambert;
     v_uv = a_uv;
 }

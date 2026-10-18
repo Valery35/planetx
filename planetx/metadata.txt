@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.1.0
+version=1.2.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.1.0 The Base maps category of the Add data catalog shows
+changelog=1.2.0 glTF and Collada models with node animation move on
+      the globe: position, rotation and scale keys of their parts play
+      in a loop. The new Animated model, wind turbines demo shows three
+      turbines with rotating rotors. The manual describes converting
+      IFC building models to glTF for the globe. Flying over new places
+      takes less work of the main QGIS thread per frame.
+      1.1.0 The Base maps category of the Add data catalog shows
       all base maps with previews, and a click sets one on the globe.
       Nineteen new base maps - Esri street, gray, National Geographic,
       ocean, terrain and relief maps, OSM Humanitarian, OSM France,

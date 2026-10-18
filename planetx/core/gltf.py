@@ -7,7 +7,8 @@
 mode 5 и 6 разворачиваются), POSITION, NORMAL, TEXCOORD_0, номера
 вершин, материал pbrMetallicRoughness - baseColorFactor и картинка
 baseColorTexture. Узлы сцены - matrix или translation, rotation,
-scale. Сжатие сеток KHR_draco_mesh_compression и EXT_meshopt не
+scale, анимации узлов - первая из animations (core/animation.py).
+Сжатие сеток KHR_draco_mesh_compression и EXT_meshopt не
 читается - такой файл даёт ModelError с именем расширения.
 
 Ось Y glTF смотрит вверх, итог переводится в ось Z вверх
@@ -21,8 +22,10 @@ import struct
 import numpy as np
 
 try:  # внутри плагина QGIS
+    from . import animation
     from .models import Part, ModelError, from_y_up
 except ImportError:  # headless-тесты
+    import animation
     from models import Part, ModelError, from_y_up
 
 COMPONENTS = {5120: np.int8, 5121: np.uint8, 5122: np.int16,
@@ -254,20 +257,99 @@ def _mesh(doc, mesh, matrix, out, pictures):
         out.append(Part(points, normals, uv, name, rgba))
 
 
-def _walk(doc, index, parent, out, pictures, depth=0):
+class _Tracks:
+    """Дорожки анимации при обходе сцены."""
+
+    def __init__(self, moving):
+        self.moving = moving
+        self.chains = {}
+        self.rest = {}
+
+
+def _walk(doc, index, parent, out, pictures, tracks, chain=(), depth=0):
     if depth > 64:
         raise ModelError("node nesting too deep")
     node = doc.item("nodes", index)
     matrix = parent @ _node_matrix(node)
+    chain = chain + (index,)
     if "mesh" in node:
+        start = len(out)
         _mesh(doc, doc.item("meshes", node["mesh"]), matrix, out, pictures)
+        if len(out) > start and tracks.moving.intersection(chain):
+            track = len(tracks.chains)
+            tracks.chains[track] = list(chain)
+            tracks.rest[track] = np.linalg.inv(matrix)
+            for part in out[start:]:
+                part.track = track
     for child in node.get("children") or ():
-        _walk(doc, child, matrix, out, pictures, depth + 1)
+        _walk(doc, child, matrix, out, pictures, tracks, chain, depth + 1)
+
+
+def _channels(doc):
+    """{узел: {путь: (времена, значения, способ)}} первой анимации."""
+    items = doc.list("animations")
+    if not items or not isinstance(items[0], dict):
+        return {}
+    clip = items[0]
+    samplers = clip.get("samplers") or []
+    out = {}
+    for channel in clip.get("channels") or ():
+        target = channel.get("target") or {}
+        path = target.get("path")
+        node = target.get("node")
+        if path not in ("translation", "rotation", "scale") \
+                or not isinstance(node, int):
+            continue
+        index = channel.get("sampler")
+        if not isinstance(index, int) or not 0 <= index < len(samplers):
+            continue
+        sampler = samplers[index]
+        times = doc.accessor(sampler["input"])[:, 0]
+        values = doc.accessor(sampler["output"])
+        if not len(times):
+            continue
+        mode = sampler.get("interpolation", animation.LINEAR)
+        out.setdefault(node, {})[path] = (times, values, mode)
+    return out
+
+
+def _animation(doc, channels, tracks):
+    if not tracks.chains:
+        return None
+    nodes = doc.list("nodes")
+    duration = max(float(keys[0][-1]) for paths in channels.values()
+                   for keys in paths.values())
+
+    def local(index, t):
+        node = nodes[index]
+        paths = channels.get(index)
+        if not paths:
+            return _node_matrix(node)
+        values = {"translation": node.get("translation", (0.0, 0.0, 0.0)),
+                  "rotation": node.get("rotation", (0.0, 0.0, 0.0, 1.0)),
+                  "scale": node.get("scale", (1.0, 1.0, 1.0))}
+        for path, (times, keys, mode) in paths.items():
+            if path == "rotation":
+                found = animation.sample_rotation(times, keys, t, mode)
+            else:
+                found = animation.sample(times, keys, t, mode)
+            if found is not None:
+                values[path] = found
+        return animation.trs(values["translation"], values["rotation"],
+                             values["scale"])
+    return animation.Animation(duration, local, tracks.chains, tracks.rest,
+                               animation.scaled_convert(1.0, True))
 
 
 def read(data, fetch):
     """(части core.models.Part с осью Z вверх, {имя картинки: байты})
     из .gltf или .glb. fetch(uri) - байты файла рядом или None."""
+    parts, pictures, _ = read_animated(data, fetch)
+    return parts, pictures
+
+
+def read_animated(data, fetch):
+    """То же, что read, и анимация core.animation.Animation или None."""
     doc = _Doc(data, fetch)
     scenes = doc.list("scenes")
     if scenes:
@@ -280,8 +362,11 @@ def read(data, fetch):
     out = []
     pictures = {}
     try:
+        channels = _channels(doc)
+        tracks = _Tracks(set(channels))
         for index in roots:
-            _walk(doc, index, np.eye(4), out, pictures)
+            _walk(doc, index, np.eye(4), out, pictures, tracks)
+        moving = _animation(doc, channels, tracks)
     except (KeyError, TypeError) as error:
         raise ModelError("bad glTF: {}".format(error)) from error
-    return [from_y_up(part) for part in out], pictures
+    return [from_y_up(part) for part in out], pictures, moving

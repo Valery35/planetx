@@ -162,10 +162,19 @@ class HeightStore:
     """
 
     RANGE_CACHE = 50000
+    LOG_SIZE = 256  # ключей добавленных тайлов в памяти
+    LOG_CHECK = 32  # не больше стольких новых тайлов сверяется с ключом
 
     def __init__(self):
         self.tiles = {}
         self._ranges = {}
+        # Размахи по ключу тайла подложки без масштаба, см. range_for:
+        # ключ - (размах, количество добавленных тайлов при подсчёте).
+        self._spans = {}
+        self._spans_for = None
+        # Ключи последних добавленных тайлов высот и их общее количество.
+        self._added_log = []
+        self._adds = 0
         self.scale = 1.0
         # Самый подробный уровень тайлов высот источника: у Terrarium 15,
         # у высот Марса и Луны 5. Глубже тайлы не просятся.
@@ -197,6 +206,7 @@ class HeightStore:
         никакого."""
         self.tiles.clear()
         self._ranges.clear()
+        self._spans.clear()
         self.added = []
         self.low = 0.0
         self.version += 1
@@ -210,6 +220,10 @@ class HeightStore:
         if tile is None:
             return
         self.tiles[(tile.z, tile.x, tile.y)] = tile
+        self._added_log.append((tile.z, tile.x, tile.y))
+        if len(self._added_log) > self.LOG_SIZE:
+            del self._added_log[:-self.LOG_SIZE // 2]
+        self._adds += 1
         self.low = min(self.low, float(tile.low))
         self.version += 1
         self.added.append((tile.z, tile.x, tile.y))
@@ -335,6 +349,22 @@ class HeightStore:
         # нужны и при выключенном рельефе.
         return out * self.scale if scaled else out
 
+    def _span_fresh(self, key, seen):
+        """Годен ли размах ключа, посчитанный при seen добавленных
+        тайлах: после него не пришёл тайл высот над ключом."""
+        new = self._adds - seen
+        if new == 0:
+            return True
+        log = self._added_log
+        if new > self.LOG_CHECK or new > len(log):
+            return False
+        z, x, y = key
+        for hz, hx, hy in log[len(log) - new:]:
+            shift = z - hz
+            if shift >= 0 and x >> shift == hx and y >> shift == hy:
+                return False
+        return True
+
     def range_for(self, key):
         """Наименьшая и наибольшая высота для тайла подложки key.
 
@@ -346,11 +376,29 @@ class HeightStore:
         тайлов раздувает сферу тайла на половину размаха, и с грубой
         оценкой мелкие тайлы у камеры дробились бы без нужды.
         """
-        tile = self.best(key) if self.scale else None
-        if tile is None:
+        if not self.scale:
             return (0.0, 0.0)
-        low, high = self._range(key, tile)
-        return (low * self.scale, high * self.scale)
+        # Выбор тайлов спрашивает размах сотни раз за кадр, поиск лучшего
+        # тайла высот подъёмом по предкам был заметной долей выбора при
+        # облёте, выборка 18 октября 2026 года. Размах помнится по ключу
+        # и годен, пока над ключом не пришёл новый тайл высот. Проверка
+        # смотрит только тайлы, пришедшие после подсчёта, не больше
+        # LOG_CHECK, иначе размах считается заново. Смена врезок или
+        # предельного уровня забывает всё.
+        stamp = (id(self.deep), len(self.deep), self.max_level)
+        if stamp != self._spans_for or len(self._spans) > self.RANGE_CACHE:
+            self._spans.clear()
+            self._spans_for = stamp
+        found = self._spans.get(key)
+        if found is not None and self._span_fresh(key, found[1]):
+            span = found[0]
+            if found[1] != self._adds:
+                self._spans[key] = (span, self._adds)
+        else:
+            tile = self.best(key)
+            span = (0.0, 0.0) if tile is None else self._range(key, tile)
+            self._spans[key] = (span, self._adds)
+        return (span[0] * self.scale, span[1] * self.scale)
 
     def _range(self, key, tile):
         """Размах высот тайла подложки key по тайлу высот, без масштаба."""

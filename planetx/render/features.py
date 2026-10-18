@@ -27,6 +27,7 @@ from OpenGL import GL
 
 from ..core.features import centered, geometry, vertices
 from . import gpu
+from .gpu import gl
 from .shaders import (FEATURE_FRAGMENT, FEATURE_LINE_GEOMETRY,
                       FEATURE_VERTEX)
 
@@ -51,14 +52,14 @@ class _Buffers:
                  wall=np.zeros(0, dtype=np.uint32)):
         self.center = center
         self.vao = GL.glGenVertexArrays(1)
-        GL.glBindVertexArray(self.vao)
+        gl.glBindVertexArray(self.vao)
         self.vbo = GL.glGenBuffers(1)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, offsets.nbytes, offsets,
                         GL.GL_STATIC_DRAW)
-        GL.glEnableVertexAttribArray(0)
-        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 12, None)
-        GL.glBindVertexArray(0)
+        gl.glEnableVertexAttribArray(0)
+        gl.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 12, None)
+        gl.glBindVertexArray(0)
         # Индексы заливаются через GL_ARRAY_BUFFER. Привязка
         # GL_ELEMENT_ARRAY_BUFFER без массива вершин в профиле Core
         # на части драйверов - ошибка. Как индексы буфер привязывается
@@ -68,11 +69,11 @@ class _Buffers:
                               ("walls", wall)):
             if len(indices):
                 ebo = GL.glGenBuffers(1)
-                GL.glBindBuffer(GL.GL_ARRAY_BUFFER, ebo)
+                gl.glBindBuffer(GL.GL_ARRAY_BUFFER, ebo)
                 GL.glBufferData(GL.GL_ARRAY_BUFFER, indices.nbytes,
                                 indices, GL.GL_STATIC_DRAW)
                 self.index[name] = (ebo, len(indices))
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
     def release(self):
         GL.glDeleteVertexArrays(1, [self.vao])
@@ -267,7 +268,7 @@ class Features:
         # Альфа кадра остаётся 1. С общим смешиванием полупрозрачная
         # линия уменьшала её, окно Qt просвечивало чёрным, и белая
         # сетка выходила тёмной, 29 сентября 2026 года.
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         try:
             self._draw_kinds(camera, projection, ratio)
@@ -295,7 +296,6 @@ class Features:
         stride = mvs.strides[0]
         proj = np.ascontiguousarray(projection, dtype=np.float32)
         null = ctypes.c_void_p(0)
-        gl = gpu.gl
         for kind in KINDS:
             # Геометрический шейдер линий ждёт отрезки. Стена и заливка -
             # треугольники, им программа без него.

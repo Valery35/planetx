@@ -100,10 +100,34 @@ class _Manager(QgsNetworkAccessManager):
         request = QNetworkRequest(request)
         request.setRawHeader(b"User-Agent", USER_AGENT.encode())
         if not request.transferTimeout():
-            request.setTransferTimeout(QgsNetworkAccessManager.timeout())
+            request.setTransferTimeout(_timeout())
         _trusted_cas(request)
         return QNetworkAccessManager.createRequest(self, operation, request,
                                                    data)
+
+
+# Настройка SSL с сертификатами центров и срок ожидания из настроек
+# сети QGIS собираются не чаще раза в SSL_REFRESH секунд. На каждом
+# запросе список из сотен сертификатов переводился в объекты Python,
+# а срок читался из настроек: вместе около половины времени createRequest
+# и шестая часть занятого времени главного потока при облёте новых мест,
+# выборка 18 октября 2026 года. Выбор помощника - 60 с.
+SSL_REFRESH = 60.0
+_ssl = {"time": None, "configs": {}, "timeout": None}
+
+
+def _fresh():
+    now = time.monotonic()
+    if _ssl["time"] is None or now - _ssl["time"] > SSL_REFRESH:
+        _ssl.update(time=now, configs={}, timeout=None)
+
+
+def _timeout():
+    """Срок ожидания запроса из настроек сети QGIS, мс."""
+    _fresh()
+    if _ssl["timeout"] is None:
+        _ssl["timeout"] = QgsNetworkAccessManager.timeout()
+    return _ssl["timeout"]
 
 
 def _trusted_cas(request):
@@ -111,18 +135,27 @@ def _trusted_cas(request):
     QgsNetworkAccessManager::createRequest. К запросам на свои узлы
     (HOST_CAS) добавляются вложенные в модуль сертификаты, только
     к ним и только в запросах PlanetX."""
-    if request.url().scheme().lower() != "https":
+    url = request.url()
+    if url.scheme().lower() != "https":
         return
-    config = request.sslConfiguration()
-    cas = list(config.caCertificates())
-    auth = QgsApplication.authManager()
-    if auth is not None and not auth.isDisabled():
-        cas = QgsAuthCertUtils.casMerge(auth.trustedCaCertsCache(), cas)
-    host = request.url().host().lower()
+    host = url.host().lower()
+    own = None
     for suffix, name in HOST_CAS.items():
         if host == suffix or host.endswith("." + suffix):
-            cas = list(cas) + _bundled_ca(name)
-    config.setCaCertificates(cas)
+            own = name
+    _fresh()
+    config = _ssl["configs"].get(own)
+    if config is None:
+        config = request.sslConfiguration()
+        cas = list(config.caCertificates())
+        auth = QgsApplication.authManager()
+        if auth is not None and not auth.isDisabled():
+            cas = QgsAuthCertUtils.casMerge(auth.trustedCaCertsCache(),
+                                            cas)
+        if own is not None:
+            cas = list(cas) + _bundled_ca(own)
+        config.setCaCertificates(cas)
+        _ssl["configs"][own] = config
     request.setSslConfiguration(config)
 
 

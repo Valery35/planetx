@@ -93,8 +93,10 @@ DAE = b"""<?xml version="1.0" encoding="utf-8"?>
 """
 
 
-def glb(positions, indices, uv=None, picture=None, matrix=None):
-    """Двоичный glTF из массивов."""
+def glb(positions, indices, uv=None, picture=None, matrix=None,
+        extra=None):
+    """Двоичный glTF из массивов. extra(doc, add) дописывает документ,
+    add(массив, вид, тип) даёт номер accessor."""
     blob = bytearray()
     views = []
     accessors = []
@@ -138,6 +140,8 @@ def glb(positions, indices, uv=None, picture=None, matrix=None):
             "baseColorTexture": {"index": 0},
             "baseColorFactor": [1, 1, 1, 1]}}]
         prim["material"] = 0
+    if extra is not None:
+        extra(doc, add)
     while len(blob) % 4:
         blob.append(0)
     doc["buffers"] = [{"byteLength": len(blob)}]

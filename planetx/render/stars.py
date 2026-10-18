@@ -18,6 +18,7 @@ from OpenGL import GL
 
 from ..core import stars
 from . import gpu
+from .gpu import gl
 
 DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data",
                     "stars.npy")
@@ -98,17 +99,17 @@ class Stars:
         self.locations = {name: GL.glGetUniformLocation(self.program, name)
                           for name in ("u_mvp", "u_scale", "u_fade")}
         self.vao = GL.glGenVertexArrays(1)
-        GL.glBindVertexArray(self.vao)
+        gl.glBindVertexArray(self.vao)
         self.vbo = GL.glGenBuffers(1)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                         GL.GL_STATIC_DRAW)
         for index, (size, offset) in enumerate(((3, 0), (1, 12), (4, 16))):
-            GL.glEnableVertexAttribArray(index)
-            GL.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
+            gl.glEnableVertexAttribArray(index)
+            gl.glVertexAttribPointer(index, size, GL.GL_FLOAT, GL.GL_FALSE,
                                      32, ctypes.c_void_p(offset))
-        GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
     def set_points(self, data):
         """Новые вершины (N, 8), в видеокарту - в кадре."""
@@ -132,15 +133,14 @@ class Stars:
         if self.program is None or share <= 0.0:
             return
         if self.pending is not None:
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+            gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
             GL.glBufferData(GL.GL_ARRAY_BUFFER, self.pending.nbytes,
                             self.pending, GL.GL_DYNAMIC_DRAW)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
             self.count = len(self.pending)
             self.pending = None
         mvp = sky_mvp(camera, time.time() if unix_time is None
                       else unix_time, frame)
-        gl = gpu.gl
         gl.glUseProgram(self.program)
         gpu._uniform_matrix(self.locations["u_mvp"], 1, GL.GL_TRUE,
                             ctypes.c_void_p(mvp.ctypes.data))
@@ -149,7 +149,7 @@ class Stars:
         gl.glEnable(GL_PROGRAM_POINT_SIZE)
         gl.glEnable(GL.GL_BLEND)
         # Свет звезды прибавляется к небу, альфа кадра остаётся 1.
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE,
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE,
                                GL.GL_ZERO, GL.GL_ONE)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)

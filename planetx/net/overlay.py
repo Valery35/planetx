@@ -655,6 +655,27 @@ class _PrepareTask(QRunnable):
         self.sink.done.emit(self.key, levels)
 
 
+# Контекст выражений картинок слоёв - глобальные переменные и переменные
+# проекта - собирается не чаще раза в CONTEXT_REFRESH секунд. На каждую
+# картинку тайла globalScope заново читал настройки QGIS, при облёте это
+# была заметная доля главного потока, выборка 18 октября 2026 года.
+# Выбор помощника - 10 с, новая переменная проекта доходит до картинок
+# за это время.
+CONTEXT_REFRESH = 10.0
+_context = {"time": None, "project": None, "value": None}
+
+
+def _expression_context(project):
+    now = time.monotonic()
+    if _context["value"] is None or _context["project"] is not project \
+            or now - _context["time"] > CONTEXT_REFRESH:
+        context = QgsExpressionContext()
+        context.appendScope(QgsExpressionContextUtils.globalScope())
+        context.appendScope(QgsExpressionContextUtils.projectScope(project))
+        _context.update(time=now, project=project, value=context)
+    return _context["value"]
+
+
 class LayerOverlay(QObject):
     """Картинки тайлов из слоёв QGIS.
 
@@ -771,10 +792,7 @@ class LayerOverlay(QObject):
         # выражениях: преобразования и переменные берутся из проекта.
         project = QgsProject.instance()
         settings.setTransformContext(project.transformContext())
-        context = QgsExpressionContext()
-        context.appendScope(QgsExpressionContextUtils.globalScope())
-        context.appendScope(QgsExpressionContextUtils.projectScope(project))
-        settings.setExpressionContext(context)
+        settings.setExpressionContext(_expression_context(project))
         if self.time_range is not None:
             settings.setIsTemporal(True)
             settings.setTemporalRange(self.time_range)

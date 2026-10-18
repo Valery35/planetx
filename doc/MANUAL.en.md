@@ -2253,6 +2253,20 @@ files of all models of its folder. Model images larger than
 meshes is not read, such a file is saved again without compression,
 for example in Blender.
 
+A glTF or Collada model with node animation moves on the globe. The
+position, rotation and scale keys of its parts play in a loop while
+the model is visible. For glTF the first animation of the file is
+played. Skinned meshes and morphing are not played, such a model stands
+in its bind pose. The model properties window shows the animation
+length and the number of moving parts.
+
+The module does not read IFC building models. Such a model is converted
+to glTF with the free IfcConvert program of the IfcOpenShell set, the
+command is `IfcConvert model.ifc model.glb`. Blender with the Bonsai
+add-on and FreeCAD with the BIM workbench do the same conversion. The
+.glb file is added with Add → 3D model… and set in place with the
+model frame handles.
+
 ---
 
 ## Ruler
@@ -2965,6 +2979,7 @@ taken from the profile without the network.
 | Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
 | Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
 | Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
+| Earth | Animated model, wind turbines | Three glTF wind turbines with a rotating rotor at an arbitrary place near Perm. The model is synthetic, the rotor is a node with rotation keys. See [3D models](#3d-models) |
 | Earth | Flow of goods, a scheme | Paths with flow from Berezniki to the ports of Ust-Luga and Vostochny by rail and from Ust-Luga to Rotterdam by sea. The paths are schemes through large cities and straits, not real routes |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |

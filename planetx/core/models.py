@@ -59,15 +59,18 @@ class Part:
 
     positions - (N, 3) метры, N кратно 3. normals - (N, 3) или None,
     uv - (N, 2), v от верха картинки, или None. image - путь картинки
-    в пакете или None, rgba - цвет 0-1, у картинки - множитель."""
+    в пакете или None, rgba - цвет 0-1, у картинки - множитель.
+    track - дорожка анимации core.animation или None у части, которая
+    не движется."""
 
-    def __init__(self, positions, normals, uv, image, rgba):
+    def __init__(self, positions, normals, uv, image, rgba, track=None):
         self.positions = np.asarray(positions, dtype=np.float64)
         self.normals = None if normals is None \
             else np.asarray(normals, dtype=np.float64)
         self.uv = None if uv is None else np.asarray(uv, dtype=np.float64)
         self.image = image
         self.rgba = tuple(float(v) for v in rgba)
+        self.track = track
 
 
 def from_y_up(part):
@@ -79,7 +82,7 @@ def from_y_up(part):
         return np.stack([values[:, 0], -values[:, 2], values[:, 1]],
                         axis=1)
     return Part(turn(part.positions), turn(part.normals), part.uv,
-                part.image, part.rgba)
+                part.image, part.rgba, part.track)
 
 
 def flat_normals(positions):
@@ -92,9 +95,9 @@ def flat_normals(positions):
 
 
 def merge(parts):
-    """Части одного материала - вместе, без нормалей - с нормалями
-    граней. Пустые части пропускаются. Вершин больше MAX_VERTICES -
-    ModelError."""
+    """Части одного материала и одной дорожки анимации - вместе, без
+    нормалей - с нормалями граней. Пустые части пропускаются. Вершин
+    больше MAX_VERTICES - ModelError."""
     groups = {}
     for part in parts:
         if len(part.positions) < 3:
@@ -107,16 +110,17 @@ def merge(parts):
             else flat_normals(positions)
         uv = part.uv[:count] if part.uv is not None and part.image \
             else np.zeros((count, 2))
-        key = (part.image if part.uv is not None else None, part.rgba)
+        key = (part.image if part.uv is not None else None, part.rgba,
+               part.track)
         groups.setdefault(key, []).append((positions, normals, uv))
     out = []
     total = 0
-    for (image, rgba), items in groups.items():
+    for (image, rgba, track), items in groups.items():
         positions = np.concatenate([p for p, _, _ in items])
         total += len(positions)
         out.append(Part(positions, np.concatenate([n for _, n, _ in items]),
                         np.concatenate([u for _, _, u in items]),
-                        image, rgba))
+                        image, rgba, track))
     if total > MAX_VERTICES:
         raise ModelError("too many vertices: {}".format(total))
     if not out:
@@ -350,6 +354,12 @@ def read(data):
     """Части модели из пакета: (части после merge, {путь картинки:
     байты}). Пути картинок частей - пути в пакете, ненайденная
     картинка - часть без картинки, белым цветом материала."""
+    parts, pictures, _ = read_animated(data)
+    return parts, pictures
+
+
+def read_animated(data):
+    """То же, что read, и анимация core.animation.Animation или None."""
     try:
         from . import collada, gltf, obj
     except ImportError:  # headless-тесты
@@ -362,8 +372,11 @@ def read(data):
         return files.get(resolve(files, main, ref, aliases))
     kind = main.lower().rsplit(".", 1)[-1]
     if kind in ("dae", "obj"):
-        parts = collada.read_dae(files[main]) if kind == "dae" \
-            else obj.read(files[main], near)
+        animation = None
+        if kind == "dae":
+            parts, animation = collada.read_dae_animated(files[main])
+        else:
+            parts = obj.read(files[main], near)
         pictures = {}
         for part in parts:
             if part.image is None:
@@ -375,5 +388,5 @@ def read(data):
             else:
                 pictures[found] = files[found]
     else:
-        parts, pictures = gltf.read(files[main], near)
-    return merge(parts), pictures
+        parts, pictures, animation = gltf.read_animated(files[main], near)
+    return merge(parts), pictures, animation

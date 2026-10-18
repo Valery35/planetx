@@ -17,6 +17,7 @@ from OpenGL import GL
 
 from ..core import satellites as core
 from ..core.camera import perspective
+from .gpu import gl
 from .quakes import GL_PROGRAM_POINT_SIZE, Quakes
 
 NEAR = 1000.0  # м
@@ -89,28 +90,28 @@ class SatellitePoints(Quakes):
             camera.tiles_mvp([eye], projection=self.projection(camera))[0],
             dtype=np.float32)
         loc = self.locations
-        GL.glUseProgram(self.program)
+        gl.glUseProgram(self.program)
         GL.glUniformMatrix4fv(loc["u_mvp"], 1, GL.GL_TRUE, mvp)
-        GL.glUniform1f(loc["u_ratio"], float(ratio))
-        GL.glUniform1f(loc["u_points"], 1.0)
-        GL.glBindVertexArray(self.vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glUniform1f(loc["u_ratio"], float(ratio))
+        gl.glUniform1f(loc["u_points"], 1.0)
+        gl.glBindVertexArray(self.vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                         GL.GL_STREAM_DRAW)
-        GL.glDisable(GL.GL_DEPTH_TEST)
-        GL.glEnable(GL_PROGRAM_POINT_SIZE)
-        GL.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glDisable(GL.GL_DEPTH_TEST)
+        gl.glEnable(GL_PROGRAM_POINT_SIZE)
+        gl.glEnable(GL.GL_BLEND)
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         try:
-            GL.glDrawArrays(GL.GL_POINTS, 0, n)
+            gl.glDrawArrays(GL.GL_POINTS, 0, n)
             self.drawn = n
         finally:
-            GL.glBindVertexArray(0)
-            GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
-            GL.glDisable(GL.GL_BLEND)
-            GL.glDisable(GL_PROGRAM_POINT_SIZE)
-            GL.glEnable(GL.GL_DEPTH_TEST)
+            gl.glBindVertexArray(0)
+            gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+            gl.glDisable(GL.GL_BLEND)
+            gl.glDisable(GL_PROGRAM_POINT_SIZE)
+            gl.glEnable(GL.GL_DEPTH_TEST)
 
     def pick(self, camera, x, y, radius):
         """Номер видимого спутника ближе radius пикселей к точке (x, y)

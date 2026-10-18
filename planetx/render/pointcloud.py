@@ -18,6 +18,7 @@ import numpy as np
 from OpenGL import GL
 
 from . import gpu
+from .gpu import gl
 from .quakes import GL_PROGRAM_POINT_SIZE
 
 UPLOADS = 4  # клеток в видеокарту за кадр, не больше
@@ -80,7 +81,6 @@ class _Block:
         self.floor = float(floor)
         self.span = (float(span[0]), float(span[1]))
         self.radius = float(radius)
-        gl = gpu.gl
         self.vao = gl.gen_names("glGenVertexArrays", 1)[0]
         self.vbo = gl.gen_names("glGenBuffers", 1)[0]
         gl.glBindVertexArray(self.vao)
@@ -207,11 +207,10 @@ class PointClouds:
         mvps = np.ascontiguousarray(
             camera.tiles_mvp([b.center for b in blocks]), dtype=np.float32)
         loc = self.locations
-        gl = gpu.gl
         gl.glUseProgram(self.program)
-        GL.glUniform1f(loc["u_bias"], DEPTH_BIAS)
-        GL.glUniform1f(loc["u_scale"], float(self.scale))
-        GL.glEnable(GL_PROGRAM_POINT_SIZE)
+        gl.glUniform1f(loc["u_bias"], DEPTH_BIAS)
+        gl.glUniform1f(loc["u_scale"], float(self.scale))
+        gl.glEnable(GL_PROGRAM_POINT_SIZE)
         base = mvps.ctypes.data
         stride = mvps.strides[0]
         try:
@@ -221,15 +220,15 @@ class PointClouds:
                     if isinstance(keys[i], tuple) else self.size
                 if want != size:
                     size = want
-                    GL.glUniform1f(loc["u_size"], float(size * ratio))
+                    gl.glUniform1f(loc["u_size"], float(size * ratio))
                 gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                                     ctypes.c_void_p(base + stride * i))
-                GL.glUniform3f(loc["u_up"], *block.up.tolist())
-                GL.glUniform1f(loc["u_floor"], block.floor)
+                gl.glUniform3f(loc["u_up"], *block.up.tolist())
+                gl.glUniform1f(loc["u_floor"], block.floor)
                 gpu._bind_vao(block.vao)
-                GL.glDrawArrays(GL.GL_POINTS, 0, block.count)
+                gl.glDrawArrays(GL.GL_POINTS, 0, block.count)
                 self.drawn += 1
                 self.points += block.count
         finally:
             gpu._bind_vao(0)
-            GL.glDisable(GL_PROGRAM_POINT_SIZE)
+            gl.glDisable(GL_PROGRAM_POINT_SIZE)

@@ -13,6 +13,8 @@
 Узлы сцены - matrix, translate, rotate, scale в порядке записи,
 instance_geometry, instance_node и вложенные узлы. Линии (lines,
 linestrips) пропускаются. Единица - unit meter, ось вверх - up_axis.
+Анимации library_animations - ключи преобразований узлов по sid
+(целиком, .X, .Y, .Z, .ANGLE, (n)), см. core/animation.py.
 
 Итог - core.models.Part: координаты в метрах, ось Z вверх. Модель
 Google Earth лежит так, что X смотрит на восток, Y - на север.
@@ -24,9 +26,10 @@ from urllib.parse import unquote
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from . import kml
+    from . import animation, kml
     from .models import Part, ModelError, from_y_up
 except ImportError:  # headless-тесты
+    import animation
     import kml
     from models import Part, ModelError, from_y_up
 
@@ -295,14 +298,23 @@ def _primitive(doc, prim):
     return positions, normals, uv
 
 
-def _transform(node):
-    """Матрица 4×4 узла по его преобразованиям в порядке записи."""
+TRANSFORMS = ("matrix", "translate", "rotate", "scale")
+SELECTORS = {"X": 0, "Y": 1, "Z": 2, "ANGLE": 3}
+
+
+def _transform(node, change=None):
+    """Матрица 4×4 узла по его преобразованиям в порядке записи.
+    change(sid, значения) - значения преобразования на момент
+    анимации."""
     out = np.eye(4)
     for item in node:
         tag = item.tag
         values = None
-        if tag in ("matrix", "translate", "rotate", "scale"):
+        if tag in TRANSFORMS:
             values = _numbers(item)
+            sid = item.get("sid")
+            if change is not None and sid:
+                values = change(sid, values)
         if tag == "matrix" and len(values) == 16:
             step = values.reshape(4, 4)
         elif tag == "translate" and len(values) == 3:
@@ -345,21 +357,117 @@ def _bindings(instance):
     return out
 
 
-def _walk(doc, node, matrix, out, depth=0):
+class _Tracks:
+    """Дорожки анимации при обходе сцены: moving - id узлов с ключами."""
+
+    def __init__(self, moving):
+        self.moving = moving
+        self.chains = {}
+        self.rest = {}
+
+
+def _walk(doc, node, matrix, out, tracks=None, chain=(), depth=0):
     if depth > 64:
         raise ModelError("node nesting too deep")
     matrix = matrix @ _transform(node)
+    chain = chain + (node,)
     for item in node:
         if item.tag == "instance_geometry":
             geometry = doc.find(item.get("url"))
             if geometry is not None:
+                start = len(out)
                 _geometry(doc, geometry, matrix, _bindings(item), out)
+                if tracks is not None and len(out) > start and any(
+                        n.get("id") in tracks.moving for n in chain):
+                    track = len(tracks.chains)
+                    tracks.chains[track] = list(chain)
+                    tracks.rest[track] = np.linalg.inv(matrix)
+                    for part in out[start:]:
+                        part.track = track
         elif item.tag == "instance_node":
             target = doc.find(item.get("url"))
             if target is not None:
-                _walk(doc, target, matrix, out, depth + 1)
+                _walk(doc, target, matrix, out, tracks, chain, depth + 1)
         elif item.tag == "node":
-            _walk(doc, item, matrix, out, depth + 1)
+            _walk(doc, item, matrix, out, tracks, chain, depth + 1)
+
+
+def _target(text):
+    """(id узла, sid, номер значения или None) из target канала."""
+    path, _, sid = (text or "").partition("/")
+    index = None
+    if "." in sid:
+        sid, _, name = sid.partition(".")
+        index = SELECTORS.get(name.upper())
+        if index is None:
+            return None
+    elif "(" in sid:
+        sid, _, rest = sid.partition("(")
+        numbers = [int(v) for v in rest.replace(")", " ").replace(
+            "(", " ").split() if v.isdigit()]
+        if not numbers:
+            return None
+        index = numbers[0] * 4 + numbers[1] if len(numbers) > 1 \
+            else numbers[0]
+    return (path, sid, index) if path and sid else None
+
+
+def _keys(doc):
+    """{(id узла, sid): [(номер, времена, значения, способ)]} всех
+    каналов library_animations."""
+    out = {}
+    for channel in doc.root.iter():
+        if channel.tag != "channel":
+            continue
+        target = _target(channel.get("target"))
+        sampler = doc.find(channel.get("source"))
+        if target is None or sampler is None:
+            continue
+        inputs = {item.get("semantic"): item.get("source")
+                  for item in _children(sampler, "input")}
+        if "INPUT" not in inputs or "OUTPUT" not in inputs:
+            continue
+        times = _source(doc, inputs["INPUT"])[:, 0]
+        values = _source(doc, inputs["OUTPUT"])
+        if not len(times) or len(values) != len(times):
+            continue
+        mode = animation.LINEAR
+        if "INTERPOLATION" in inputs:
+            node = doc.find(inputs["INTERPOLATION"])
+            names = _child(node, "Name_array") if node is not None else None
+            if names is not None and names.text \
+                    and names.text.split()[0] == "STEP":
+                mode = animation.STEP
+        path, sid, index = target
+        out.setdefault((path, sid), []).append((index, times, values, mode))
+    return out
+
+
+def _animation(doc, keys, tracks):
+    if not tracks.chains:
+        return None
+    duration = max(float(times[-1]) for items in keys.values()
+                   for _, times, _, _ in items)
+
+    def local(node, t):
+        ident = node.get("id")
+
+        def change(sid, values):
+            items = keys.get((ident, sid))
+            if not items:
+                return values
+            values = values.copy()
+            for index, times, keyed, mode in items:
+                found = animation.sample(times, keyed, t, mode)
+                if index is None:
+                    if len(found) == len(values):
+                        values = found
+                elif index < len(values) and len(found):
+                    values[index] = found[0]
+            return values
+        return _transform(node, change)
+    return animation.Animation(duration, local, tracks.chains, tracks.rest,
+                               animation.scaled_convert(doc.unit, doc.y_up))
 
 
 def _geometry(doc, geometry, matrix, bindings, out):
@@ -401,6 +509,12 @@ def _geometry(doc, geometry, matrix, bindings, out):
 def read_dae(data):
     """Части модели из байтов .dae: список core.models.Part, метры,
     ось Z вверх."""
+    return read_dae_animated(data)[0]
+
+
+def read_dae_animated(data):
+    """(части, как у read_dae, анимация core.animation.Animation или
+    None)."""
     try:
         root = kml._parse(data)
     except kml.KmlError as error:
@@ -421,15 +535,18 @@ def read_dae(data):
     if visual is None:
         raise ModelError("no visual scene")
     try:
+        keys = _keys(doc)
+        tracks = _Tracks({path for path, _ in keys})
         for node in _children(visual, "node"):
-            _walk(doc, node, np.eye(4), out)
+            _walk(doc, node, np.eye(4), out, tracks)
+        moving = _animation(doc, keys, tracks)
     except (IndexError, ValueError) as error:
         raise ModelError("bad COLLADA: {}".format(error)) from error
     for part in out:
         part.positions = part.positions * doc.unit
     if doc.y_up:
         out = [from_y_up(part) for part in out]
-    return out
+    return out, moving
 
 
 def images(data):

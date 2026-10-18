@@ -8342,6 +8342,86 @@ def models_clean():
     out["gl"] = dict(window.view.gl_errors)
 
 
+@check(9000)
+def models_anim():
+    """Анимированная модель: куб Collada с ключами поворота вокруг оси
+    вверх за 4 с."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(58.0104, 56.2294, 600.0, 30.0,
+                                        40.0))
+    window.view.update()
+    folder = os.path.join(TEMP, "planetx_model_anim")
+    # Куб прерванного прогона не мешает.
+    window.myplaces.remove_many([o.key for o in window.myplaces.overlays
+                                 if (o.href or "").startswith(folder)])
+    path = _cube_dae(folder)
+    with open(path, encoding="utf-8") as stream:
+        text = stream.read()
+    text = text.replace(
+        '<visual_scene id="s"><node>',
+        '<visual_scene id="s"><node id="spin">'
+        '<rotate sid="rz">0 0 1 0</rotate>', 1)
+    text = text.replace("<library_geometries>", """<library_animations>
+<animation><source id="at"><float_array id="ata" count="2">0 4
+</float_array><technique_common><accessor source="#ata" count="2"
+ stride="1"/></technique_common></source><source id="av"><float_array
+ id="ava" count="2">0 360</float_array><technique_common><accessor
+ source="#ava" count="2" stride="1"/></technique_common></source>
+<sampler id="as"><input semantic="INPUT" source="#at"/><input
+ semantic="OUTPUT" source="#av"/></sampler><channel source="#as"
+ target="spin/rz.ANGLE"/></animation></library_animations>
+<library_geometries>""", 1)
+    with open(path, "w", encoding="utf-8") as stream:
+        stream.write(text)
+    key = window.add_model(path=path)
+    state["anim_key"] = key
+    dialog = window.overlay_dialogs.get(key)
+    result["models_anim"] = {
+        "info": dialog.model_info.text() if dialog is not None else None}
+    if dialog is not None:
+        dialog.accept()
+
+
+@check(1500)
+def models_anim_check():
+    import time as _time
+    import numpy as np
+    from qgis.PyQt.QtTest import QTest
+    window = state["window"]
+    view = window.view
+    out = result["models_anim"]
+    out["animated"] = view.models.animated
+    out["drawn"] = view.models.drawn
+    item = view.models.source[0] if view.models.source else None
+    out["turn"] = [round(float(m[0][0][0]), 4) for m in (
+        view.models.poses(item, _time.monotonic() + s)[0]
+        for s in (0.0, 0.5))] if item is not None else None
+    first = view.grabFramebuffer()
+    QTest.qWait(500)
+    second = view.grabFramebuffer()
+
+    def pixels(image):
+        bits = image.constBits()
+        bits.setsize(image.sizeInBytes())
+        return np.frombuffer(bits, np.uint8).astype(np.int16)
+    diff = np.abs(pixels(first) - pixels(second))
+    # Куб поворачивается на 45° за полсекунды - меняется часть кадра.
+    out["changed_share"] = round(float((diff > 30).mean()), 5)
+    second.save(os.path.join(TEMP, "planetx_model_anim.png"))
+    window.myplaces.remove_many([state["anim_key"]])
+    out["models_after"] = len(view.models.source)
+    # Тот же вид без модели: кадры не меняются, сторож доли выше.
+    first = view.grabFramebuffer()
+    QTest.qWait(500)
+    still = np.abs(pixels(first) - pixels(view.grabFramebuffer()))
+    out["still_share"] = round(float((still > 30).mean()), 5)
+    out["animated_after"] = view.models.animated
+    out["gl"] = dict(view.gl_errors)
+
+
 @check(4000)
 def models_demo():
     """Демо «3D-модели, Суздаль и Пермь»: модели из файла сцены
@@ -8408,6 +8488,48 @@ def models_demo_check():
         window.myplaces.remove_many(state["models_demo"])
     out["models_after"] = len(view.models.source)
     out["gl"] = dict(view.gl_errors)
+
+
+@check(12000)
+def turbines_demo():
+    """Демо «Анимированная модель, ветряки»: три модели glTF с ротором
+    на ключах поворота."""
+    window = state["window"]
+    action = next(a for a in window.toolbar.demo.menu().actions()
+                  if a.text() in ("Анимированная модель, ветряки",
+                                  "Animated model, wind turbines"))
+    places = window.myplaces
+    folders = {f.key for f in places.folders}
+    action.trigger()
+    state["turbines_demo"] = [f.key for f in places.folders
+                              if f.key not in folders]
+
+
+@check(1000)
+def turbines_demo_check():
+    import time as _time
+    import numpy as np
+    from qgis.PyQt.QtTest import QTest
+    window = state["window"]
+    view = window.view
+
+    def pixels(image):
+        bits = image.constBits()
+        bits.setsize(image.sizeInBytes())
+        return np.frombuffer(bits, np.uint8).astype(np.int16)
+    first = view.grabFramebuffer()
+    QTest.qWait(700)
+    second = view.grabFramebuffer()
+    second.save(os.path.join(TEMP, "planetx_turbines.png"))
+    result["turbines_demo"] = {
+        "drawn": view.models.drawn, "animated": view.models.animated,
+        "changed_share": round(float(
+            (np.abs(pixels(first) - pixels(second)) > 30).mean()), 5),
+        "gl": dict(view.gl_errors)}
+    if state["turbines_demo"]:
+        window.myplaces.remove_many(state["turbines_demo"])
+    result["turbines_demo"]["models_after"] = len(view.models.source)
+    del _time
 
 
 def _image_server():
@@ -15845,10 +15967,80 @@ def speed_profile():
     timer.start(16)
     # PLANETX_SPEED_NOPROF - замер без профилировщика, он замедляет
     # Python в разы.
+    # PLANETX_SPEED_SAMPLE - выборка стека только главного потока раз
+    # в 4 мс. cProfile в Python 3.12 идёт через sys.monitoring и пишет
+    # все потоки сразу, по нему не видно, что держит главный поток.
+    if os.environ.get("PLANETX_SPEED_SAMPLE"):
+        state["speed_samples"] = _start_sampler()
+        os.environ["PLANETX_SPEED_NOPROF"] = "1"
     prof = state["speed_prof"] = None if os.environ.get(
         "PLANETX_SPEED_NOPROF") else cProfile.Profile()
     if prof is not None:
         prof.enable()
+
+
+@check(500, manual=True)
+def gl_fast_check():
+    """Ручной шаг: включились ли быстрые вызовы кадра и каких адресов
+    не дал контекст."""
+    from planetx.render import gpu
+    view = state["window"].view
+    view.makeCurrent()
+    context = view.context()
+    missing = []
+    for name, _ in gpu._FRAME_CALLS:
+        address = context.getProcAddress(name.encode())
+        if not (int(address) if address is not None else 0):
+            missing.append(name)
+    view.doneCurrent()
+    result["gl_fast"] = {"fast": gpu.gl.fast, "missing": missing}
+
+
+def _start_sampler(period=0.004):
+    """Поток выборки стека главного потока: счёт верхних строк модуля
+    (свой кадр и кадр внутри) и всех функций модуля в стеке."""
+    import sys as _sys
+    import threading
+    main = threading.main_thread().ident
+    data = {"leaf": {}, "inclusive": {}, "via": {}, "total": 0, "busy": 0,
+            "stop": False}
+
+    def name(frame):
+        path = frame.f_code.co_filename.replace("\\", "/")
+        short = path.split("/planetx/")[-1] if "/planetx/" in path \
+            else path.rsplit("/", 1)[-1]
+        return "%s:%s" % (short, frame.f_code.co_name)
+
+    def run():
+        while not data["stop"]:
+            time.sleep(period)
+            frame = _sys._current_frames().get(main)
+            data["total"] += 1
+            if frame is None:
+                continue
+            data["busy"] += 1
+            leaf = "%s:%d" % (name(frame), frame.f_lineno)
+            data["leaf"][leaf] = data["leaf"].get(leaf, 0) + 1
+            # Чужой код наверху - кто из модуля его позвал.
+            if not name(frame).startswith("planetx/"):
+                up = frame
+                while up is not None and not name(up).startswith(
+                        "planetx/"):
+                    up = up.f_back
+                if up is not None:
+                    via = "%s <- %s:%d" % (name(frame), name(up),
+                                           up.f_lineno)
+                    data["via"][via] = data["via"].get(via, 0) + 1
+            seen = set()
+            while frame is not None:
+                key = name(frame)
+                if key not in seen:
+                    seen.add(key)
+                    data["inclusive"][key] = \
+                        data["inclusive"].get(key, 0) + 1
+                frame = frame.f_back
+    threading.Thread(target=run, daemon=True).start()
+    return data
 
 
 @check(1000, manual=True)
@@ -15862,6 +16054,17 @@ def speed_profile_done():
     if prof is not None:
         prof.disable()
     state["speed_timer"].stop()
+    samples = state.get("speed_samples")
+    if samples is not None:
+        samples["stop"] = True
+        result["speed_samples"] = {
+            "total": samples["total"], "busy": samples["busy"],
+            "leaf": sorted(samples["leaf"].items(),
+                           key=lambda kv: -kv[1])[:40],
+            "via": sorted(samples["via"].items(),
+                          key=lambda kv: -kv[1])[:30],
+            "inclusive": sorted(samples["inclusive"].items(),
+                                key=lambda kv: -kv[1])[:60]}
     frames = state["speed_frames"]
     gaps = [g * 1000.0 for g in state["speed_gaps"][1:]]
     iv = [(b - a) * 1000.0 for a, b in zip(frames, frames[1:])]

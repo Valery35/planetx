@@ -198,6 +198,47 @@ class TestStore(unittest.TestCase):
         store.add(tr.make_tile(4, 0, 0, encode(np.full((256, 256), 50.0))))
         self.assertEqual(store.range_for(key), (50.0, 50.0))
 
+    def test_remembered_range_matches_fresh_store(self):
+        # Запомненные размахи совпадают с размахами нового хранилища
+        # с теми же тайлами, в том числе после тайла высот над ключом,
+        # смены врезок и предельного уровня.
+        rng = np.random.default_rng(7)
+        keys = [(z, int(rng.integers(0, 1 << z)), int(rng.integers(0, 1 << z)))
+                for z in rng.integers(1, 17, 400)]
+        keys += [(12, 1, 1), (14, 5, 6), (9, 0, 1)]
+        tiles = [ramp_tile(0, 0, 0),
+                 tr.make_tile(4, 0, 0, encode(np.full((256, 256), 50.0))),
+                 tr.make_tile(8, 0, 0, encode(rng.uniform(0, 900,
+                                                          (256, 256))))]
+        store = tr.HeightStore()
+
+        def check(added):
+            fresh = tr.HeightStore()
+            fresh.deep, fresh.max_level = store.deep, store.max_level
+            for tile in added:
+                fresh.add(tile)
+            for key in keys:
+                self.assertEqual(store.range_for(key), fresh.range_for(key))
+        for n, tile in enumerate(tiles):
+            store.add(tile)
+            check(tiles[:n + 1])
+        store.deep = [(0.0, 0.0, 0.01, 0.01, 17)]
+        check(tiles)
+        store.max_level = 3
+        check(tiles)
+        # Больше LOG_CHECK тайлов после подсчёта и тайл над ключом
+        # среди немногих новых.
+        store.max_level = tr.MAX_LEVEL
+        for n in range(tr.HeightStore.LOG_CHECK + 8):
+            tiles.append(tr.make_tile(9, 100 + n, 200, encode(
+                np.full((256, 256), float(n)))))
+            store.add(tiles[-1])
+        check(tiles)
+        tiles.append(tr.make_tile(11, 2, 3, encode(np.full((256, 256),
+                                                           321.0))))
+        store.add(tiles[-1])
+        check(tiles)
+
     def test_range_is_never_narrower_than_the_mesh(self):
         # Узлы сетки тайла лежат внутри размаха, иначе сфера тайла
         # не накрыла бы его вершины.

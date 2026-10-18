@@ -237,7 +237,8 @@ class PicturesMixin:
 
     def _model_data(self, token, data):
         """Разобранная модель по метке пакета: (части core.models, {путь
-        картинки: RGBA}) или None, если файл не читается. Разбор - раз
+        картинки: RGBA}, анимация или None) или None, если файл не
+        читается. Разбор - раз
         на пакет, итог хранится, пока модель видна."""
         if token in self._model_cache:
             return self._model_cache[token]
@@ -245,9 +246,9 @@ class PicturesMixin:
         package = data()
         if package:
             try:
-                parts, pictures = models.read(package)
+                parts, pictures, moving = models.read_animated(package)
                 found = (parts, {path: image_rgba(raw, MODEL_SIDE)
-                                 for path, raw in pictures.items()})
+                                 for path, raw in pictures.items()}, moving)
             except models.ModelError as error:
                 journal.note("model unreadable: {}".format(error))
                 self.message = (tr("Модель не читается: {error}",
@@ -268,17 +269,18 @@ class PicturesMixin:
             found = self._model_data(token, data)
             if found is None:
                 continue
-            parts, pictures = found
+            parts, pictures, moving = found
             lat, lon, alt, heading, tilt, roll = overlay.camera
             arrays = models.vertices(parts, lat, lon, heading, tilt, roll,
                                      overlay.scale)
             out.append(ModelItem(
                 (token, overlay.params()),
-                [(array, pictures.get(part.image), part.rgba)
+                [(array, pictures.get(part.image), part.rgba, part.track)
                  for array, part in zip(arrays, parts)],
                 (lat, lon, overlay.mode, alt),
                 models.radius(parts, overlay.scale),
-                overlay.color[3] / 255.0))
+                overlay.color[3] / 255.0, moving,
+                models.frame(lat, lon, heading, tilt, roll, overlay.scale)))
         tokens = {token for token, _, _ in shown}
         self._model_cache = {token: value for token, value
                              in self._model_cache.items()
@@ -293,16 +295,21 @@ class PicturesMixin:
         found = self._model_data(token, data)
         if found is None:
             return tr("Модель не читается.")
-        parts, pictures = found
+        parts, pictures, moving = found
         box = models.bounds(parts)
         size = (box[1] - box[0]) * abs(np.asarray(overlay.scale))
         count = sum(len(part.positions) for part in parts)
-        return tr("Треугольников {count}, материалов {parts}, картинок "
+        text = tr("Треугольников {count}, материалов {parts}, картинок "
                   "{images}. Размер {x:.1f} × {y:.1f} × {z:.1f} м.",
                   count=count // 3, parts=len(parts),
                   images=len([p for p in pictures.values()
                               if p is not None]),
                   x=size[0], y=size[1], z=size[2])
+        if moving is not None:
+            text += " " + tr("Анимация {seconds:.1f} с, движется частей "
+                             "{tracks}.", seconds=moving.duration,
+                             tracks=len(moving.tracks))
+        return text
 
     def model_extent(self, item):
         """Коробка модели (xmin, xmax, ymin, ymax) в её единицах или

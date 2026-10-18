@@ -99,7 +99,7 @@ class GpuMesh:
         gl.glBindVertexArray(0)
 
     def draw(self):
-        GL.glBindVertexArray(self.vao)
+        gl.glBindVertexArray(self.vao)
         GL.glDrawElements(GL.GL_TRIANGLES, self.count, GL.GL_UNSIGNED_SHORT,
                           ctypes.c_void_p(0))
 
@@ -168,6 +168,23 @@ _FRAME_CALLS = (
     ("glBufferData", (_U, ctypes.c_ssize_t, _P, _U)),
     ("glEnableVertexAttribArray", (_U,)),
     ("glVertexAttribPointer", (_U, _I, _U, ctypes.c_ubyte, _I, _P)),
+    # Состояние смешивания, глубины и запросы видимости надписей. Через
+    # обёртки PyOpenGL с проверкой ошибок они стоили 16 % занятого
+    # времени главного потока при облёте, выборка 18 октября 2026 года.
+    ("glBlendFunc", (_U, _U)),
+    ("glBlendFuncSeparate", (_U, _U, _U, _U)),
+    ("glColorMask", (ctypes.c_ubyte,) * 4),
+    ("glCullFace", (_U,)),
+    ("glPolygonOffset", (_F, _F)),
+    ("glBeginQuery", (_U, _U)),
+    ("glEndQuery", (_U,)),
+    ("glBindFramebuffer", (_U, _U)),
+    ("glBindRenderbuffer", (_U, _U)),
+    ("glViewport", (_I, _I, _I, _I)),
+    ("glGenerateMipmap", (_U,)),
+    ("glDrawArrays", (_U, _I, _I)),
+    ("glGetQueryObjectuiv", (_U, _U, _P)),
+    ("glCopyTexSubImage2D", (_U, _I, _I, _I, _I, _I, _I, _I)),
 )
 
 
@@ -211,6 +228,33 @@ class _FrameGL:
         else:
             GL.glBufferData(target, array.nbytes, array, GL.GL_STATIC_DRAW)
 
+    def stream_data(self, target, array):
+        """glBufferData из массива NumPy, GL_STREAM_DRAW."""
+        if self.fast:
+            array = np.ascontiguousarray(array)
+            self.glBufferData(target, array.nbytes, array.ctypes.data,
+                              GL.GL_STREAM_DRAW)
+        else:
+            GL.glBufferData(target, array.nbytes, array, GL.GL_STREAM_DRAW)
+
+    def query_uint(self, query, pname, value):
+        """glGetQueryObjectuiv в массив ctypes value."""
+        if self.fast:
+            self.glGetQueryObjectuiv(query, pname, ctypes.addressof(value))
+        else:
+            GL.glGetQueryObjectuiv(query, pname, value)
+
+    def tex_region(self, x, y, w, h, rgba):
+        """glTexSubImage2D участка текстуры RGBA из массива uint8."""
+        if self.fast:
+            data = np.ascontiguousarray(rgba, dtype=np.uint8)
+            self.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, x, y, w, h,
+                                 GL.GL_RGBA, GL.GL_UNSIGNED_BYTE,
+                                 data.ctypes.data)
+        else:
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, x, y, w, h, GL.GL_RGBA,
+                               GL.GL_UNSIGNED_BYTE, rgba)
+
     def gen_texture(self):
         """Имя новой текстуры."""
         if self.fast:
@@ -243,7 +287,8 @@ class _FrameGL:
 gl = _FrameGL()
 
 
-_RAW = {"_bind_texture": _bind_texture, "_draw_elements": _draw_elements,
+_RAW = {"_get_error": _get_error,
+        "_bind_texture": _bind_texture, "_draw_elements": _draw_elements,
         "_uniform_matrix": _uniform_matrix, "_bind_vao": _bind_vao,
         "_active_texture": _active_texture, "_uniform4f": _uniform4f}
 
@@ -293,6 +338,12 @@ def hold_gil(context):
             setattr(gl, gl_name, function)
         gl.fast = True
         done += list(fast)
+    # glGetError возвращает код: свой указатель с типом ответа.
+    address = context.getProcAddress(b"glGetError")
+    address = int(address) if address is not None else 0
+    if address:
+        globals()["_get_error"] = ctypes.PYFUNCTYPE(ctypes.c_uint)(address)
+        done.append("glGetError")
     return done
 
 
@@ -373,14 +424,14 @@ def reset_state():
     не было видно.
     """
     gl.glDisable(GL.GL_BLEND)
-    GL.glBlendFunc(GL.GL_ONE, GL.GL_ZERO)
+    gl.glBlendFunc(GL.GL_ONE, GL.GL_ZERO)
     gl.glEnable(GL.GL_DEPTH_TEST)
     gl.glDepthFunc(GL.GL_LESS)
     gl.glDepthMask(GL.GL_TRUE)
-    GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
+    gl.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
     gl.glDisable(GL.GL_CULL_FACE)
-    GL.glDisable(GL.GL_SCISSOR_TEST)
-    GL.glDisable(GL.GL_STENCIL_TEST)
+    gl.glDisable(GL.GL_SCISSOR_TEST)
+    gl.glDisable(GL.GL_STENCIL_TEST)
     gl.glActiveTexture(GL.GL_TEXTURE0)
 
 
@@ -433,7 +484,7 @@ def create_texture(image, anisotropy=1.0):
     if len(levels) > 1:
         count = len(levels)
     else:
-        GL.glGenerateMipmap(GL.GL_TEXTURE_2D)
+        gl.glGenerateMipmap(GL.GL_TEXTURE_2D)
         count = max(levels[0].shape[:2]).bit_length()
     _texture_parameters(count, anisotropy)
     gl.glBindTexture(GL.GL_TEXTURE_2D, 0)

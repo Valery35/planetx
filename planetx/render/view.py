@@ -40,6 +40,7 @@ from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
                            tile_mesh)
 from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
+from .gpu import gl
 from .buildings import SHOT_UPLOADS as BUILDING_SHOT_UPLOADS, Buildings
 from .buildings import pick as pick_buildings
 from .features import Features
@@ -47,7 +48,7 @@ from .labels import Labels, icon_style
 from .gibs import LAYERS as GIBS_LAYERS, NEAR_ONLY, GibsLayer
 from .gibs import MIN_LEVELS as GIBS_MIN
 from .subsurface import FACE_OFFSET, ImageWalls, Subsurface
-from .models import Models
+from .models import ANIMATION_TICK as MODEL_TICK, Models
 from .pointcloud import PointClouds
 from .flow import FlowLines, PathFlowLines
 from .quakes import (DepositPoints, FirePoints, PlantPoints, Quakes,
@@ -756,7 +757,6 @@ class GlobeView(QOpenGLWidget):
         закрывает её проверкой глубины. Программа - тайла, с дымкой."""
         if not items:
             return
-        gl = gpu.gl
         gl.glUniform1f(self.u_water, 1.0)
         color = WATER_COLOR
         if self.gibs["emag"].shown:
@@ -764,13 +764,13 @@ class GlobeView(QOpenGLWidget):
         gl.glUniform4f(self.u_water_color, *color)
         gl.glUniform1f(self.u_shallow, SHALLOW * self.store.scale)
         gl.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
-        GL.glDepthMask(GL.GL_FALSE)
+        gl.glDepthMask(GL.GL_FALSE)
         try:
             gpu.draw_batch(items, mvps, self.u_mvp)
         finally:
-            GL.glDepthMask(GL.GL_TRUE)
+            gl.glDepthMask(GL.GL_TRUE)
             gl.glDisable(GL.GL_BLEND)
             gl.glUniform1f(self.u_water, 0.0)
 
@@ -922,8 +922,15 @@ class GlobeView(QOpenGLWidget):
                              self.store.scale))
         self.store.add(tile)
         self.last_arrival = time.monotonic()
+        # Точнее новый тайл высот только тайлам под ним. Прежде на каждый
+        # тайл высот проверялись все сетки в памяти, при облёте это была
+        # заметная доля главного потока, выборка 18 октября 2026 года.
+        hz, hx, hy = tile.z, tile.x, tile.y
         for key, level in list(self.mesh_levels.items()):
-            self._maybe_rebuild(key, level)
+            shift = key[0] - hz
+            if shift >= 0 and key[1] >> shift == hx \
+                    and key[2] >> shift == hy:
+                self._maybe_rebuild(key, level)
         self.update()
 
     def change_source(self, max_level, coarse=False):
@@ -1477,10 +1484,10 @@ class GlobeView(QOpenGLWidget):
                                                     "u_swipe_maps")
         self.u_wedge_lat = GL.glGetUniformLocation(self.program,
                                                    "u_wedge_lat")
-        GL.glUseProgram(self.program)
-        GL.glUniform1f(self.u_alpha, 1.0)
-        GL.glUniform1f(self.u_water, 0.0)
-        GL.glUseProgram(0)
+        gl.glUseProgram(self.program)
+        gl.glUniform1f(self.u_alpha, 1.0)
+        gl.glUniform1f(self.u_water, 0.0)
+        gl.glUseProgram(0)
         self.tile_air = uniforms(self.program, AIR_UNIFORMS)
         self.sky_program = gpu.build_program(HOLE_VERTEX, SKY_FRAGMENT)
         self.sky_air = uniforms(self.sky_program, AIR_UNIFORMS + ("u_qc",))
@@ -1534,12 +1541,12 @@ class GlobeView(QOpenGLWidget):
         self.empty_vao = GL.glGenVertexArrays(1)
         self.backdrop_vao = GL.glGenVertexArrays(1)
         self.backdrop_vbo = GL.glGenBuffers(1)
-        GL.glBindVertexArray(self.backdrop_vao)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.backdrop_vbo)
-        GL.glEnableVertexAttribArray(0)
-        GL.glVertexAttribPointer(0, 4, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
-        GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(self.backdrop_vao)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.backdrop_vbo)
+        gl.glEnableVertexAttribArray(0)
+        gl.glVertexAttribPointer(0, 4, GL.GL_FLOAT, GL.GL_FALSE, 0, None)
+        gl.glBindVertexArray(0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
         # glGenQueries(1) в PyOpenGL отдаёт массив, а не число.
         self.hole_query = int(np.ravel(GL.glGenQueries(1))[0])
         self.labels.init_gl()
@@ -1962,17 +1969,16 @@ class GlobeView(QOpenGLWidget):
             if self._cross_texture is not None:
                 GL.glDeleteTextures([self._cross_texture])
             self._cross_texture = int(GL.glGenTextures(1))
-            GL.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
-            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER,
+            gl.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
+            gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER,
                                GL.GL_LINEAR)
-            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER,
+            gl.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER,
                                GL.GL_LINEAR)
             GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0,
                             GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
             self._cross_size = (w, h)
-        gl = gpu.gl
         gl.glBindTexture(GL.GL_TEXTURE_2D, self._cross_texture)
-        GL.glCopyTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, 0, 0, w, h)
+        gl.glCopyTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, 0, 0, w, h)
         gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
         self._cross_kept = True
 
@@ -2002,7 +2008,6 @@ class GlobeView(QOpenGLWidget):
         if alpha is None:
             self._cross = None
             return
-        gl = gpu.gl
         gl.glUseProgram(self.cross_program)
         gl.glUniform1i(self.cross_uniforms["u_image"], 0)
         gl.glUniform2f(self.cross_uniforms["u_viewport"],
@@ -2014,7 +2019,7 @@ class GlobeView(QOpenGLWidget):
         gl.glDisable(GL.GL_DEPTH_TEST)
         gl.glEnable(GL.GL_BLEND)
         # Альфа кадра не трогается: её видит окно Qt.
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         try:
             gl.glBindVertexArray(self.empty_vao)
@@ -2203,7 +2208,7 @@ class GlobeView(QOpenGLWidget):
         if wedge is not None:
             cx, cy, cos_half, sin_s, sin_n = cutaway.uniform(wedge)
             gpu.gl.glUniform4f(self.u_wedge, cx, cy, cos_half, 0.0)
-            GL.glUniform2f(self.u_wedge_lat, sin_s, sin_n)
+            gl.glUniform2f(self.u_wedge_lat, sin_s, sin_n)
         gpu.gl.glUniform1i(self.u_texture, 0)
         gpu.gl.glUniform1i(self.u_overlay, 1)
         for unit, sampler, _ in self.gibs_slots.values():
@@ -2282,15 +2287,15 @@ class GlobeView(QOpenGLWidget):
             # глубину, второй смешивает цвет там, где глубина та же. Так
             # на пиксель приходится один слой поверхности, а юбки тайлов
             # под ней не просвечивают полосами.
-            GL.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE,
+            gl.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE,
                            GL.GL_FALSE)
             gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp,
                            layers, fades, self.u_fade)
-            GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
-            GL.glDepthFunc(GL.GL_LEQUAL)
-            GL.glDepthMask(GL.GL_FALSE)
+            gl.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
+            gl.glDepthFunc(GL.GL_LEQUAL)
+            gl.glDepthMask(GL.GL_FALSE)
             gpu.gl.glEnable(GL.GL_BLEND)
-            GL.glBlendFuncSeparate(
+            gl.glBlendFuncSeparate(
                 GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA, GL.GL_ZERO,
                 GL.GL_ONE)
         gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp, layers,
@@ -2298,8 +2303,8 @@ class GlobeView(QOpenGLWidget):
         gpu.gl.glUniform4f(self.u_fade, 0.0, 0.0, 0.0, 0.0)
         if alpha < 1.0:
             gpu.gl.glDisable(GL.GL_BLEND)
-            GL.glDepthMask(GL.GL_TRUE)
-            GL.glDepthFunc(GL.GL_LESS)
+            gl.glDepthMask(GL.GL_TRUE)
+            gl.glDepthFunc(GL.GL_LESS)
         if layers:
             # Подстилка идёт без наложения и слоёв GIBS.
             self._clear_overlay()
@@ -2307,7 +2312,7 @@ class GlobeView(QOpenGLWidget):
         if self.hole_check:
             # До подстилки: щели между тайлами. После: видимые дыры.
             gaps = self._count_holes()
-            GL.glUseProgram(self.program)
+            gl.glUseProgram(self.program)
         gpu.draw_batch(items[surface:], mvps[surface:], self.u_mvp)
         if alpha < 1.0:
             gpu.gl.glUniform1f(self.u_alpha, 1.0)
@@ -2316,7 +2321,7 @@ class GlobeView(QOpenGLWidget):
                              mvps[len(self.caps):surface])
         if self.hole_check:
             holes = self._count_holes()
-            GL.glUseProgram(self.program)
+            gl.glUseProgram(self.program)
             self.hole_counts.append((self.frame, gaps, holes))
         buildings_busy = False
         if self.buildings.shown and not self.show_holes:
@@ -2329,8 +2334,11 @@ class GlobeView(QOpenGLWidget):
         if self.models.active and not self.show_holes:
             # До неба, как здания.
             self.models.draw(self.camera)
+            if self.models.animated and not shot:
+                QTimer.singleShot(MODEL_TICK, self.update)
         else:
             self.models.drawn = 0
+            self.models.animated = False
         if self.pointclouds.active and not self.show_holes:
             self.pointclouds.draw(self.camera, ratio)
         else:
@@ -2572,17 +2580,17 @@ class GlobeView(QOpenGLWidget):
         """Буфер кадра снимка: цвет RGBA8 и глубина 24 бита."""
         shot.fbo = int(np.ravel(GL.glGenFramebuffers(1))[0])
         shot.buffers = [int(b) for b in np.ravel(GL.glGenRenderbuffers(2))]
-        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, shot.fbo)
+        gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, shot.fbo)
         for buffer, fmt, attach in (
                 (shot.buffers[0], GL.GL_RGBA8, GL.GL_COLOR_ATTACHMENT0),
                 (shot.buffers[1], GL.GL_DEPTH_COMPONENT24,
                  GL.GL_DEPTH_ATTACHMENT)):
-            GL.glBindRenderbuffer(GL.GL_RENDERBUFFER, buffer)
+            gl.glBindRenderbuffer(GL.GL_RENDERBUFFER, buffer)
             GL.glRenderbufferStorage(GL.GL_RENDERBUFFER, fmt, shot.width,
                                      shot.height)
             GL.glFramebufferRenderbuffer(GL.GL_FRAMEBUFFER, attach,
                                          GL.GL_RENDERBUFFER, buffer)
-        GL.glBindRenderbuffer(GL.GL_RENDERBUFFER, 0)
+        gl.glBindRenderbuffer(GL.GL_RENDERBUFFER, 0)
         return GL.glCheckFramebufferStatus(GL.GL_FRAMEBUFFER) \
             == GL.GL_FRAMEBUFFER_COMPLETE
 
@@ -2598,8 +2606,8 @@ class GlobeView(QOpenGLWidget):
                 self._end_shot()
                 self.shot_done.emit(None, False)
                 return
-            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, shot.fbo)
-            GL.glViewport(0, 0, shot.width, shot.height)
+            gl.glBindFramebuffer(GL.GL_FRAMEBUFFER, shot.fbo)
+            gl.glViewport(0, 0, shot.width, shot.height)
             self.camera.width = shot.width
             self.camera.height = shot.height
             missing = self._render(shot.ratio, shot=True)
@@ -2614,14 +2622,14 @@ class GlobeView(QOpenGLWidget):
             else:
                 self.shot_progress.emit(missing)
         finally:
-            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER,
+            gl.glBindFramebuffer(GL.GL_FRAMEBUFFER,
                                  self.defaultFramebufferObject())
             self.doneCurrent()
         self.update()
 
     def _read_shot(self, shot):
         """Пиксели буфера снимка в QImage, строки сверху вниз."""
-        GL.glPixelStorei(GL.GL_PACK_ALIGNMENT, 1)
+        gl.glPixelStorei(GL.GL_PACK_ALIGNMENT, 1)
         data = GL.glReadPixels(0, 0, shot.width, shot.height, GL.GL_RGBA,
                                GL.GL_UNSIGNED_BYTE)
         rgba = np.frombuffer(data, dtype=np.uint8).reshape(
@@ -2639,17 +2647,17 @@ class GlobeView(QOpenGLWidget):
         height = max(1, int(round(self.height() * ratio)))
         self._take_outside_errors()
         gpu.reset_state()
-        GL.glClearColor(*PREVIEW_COLOR, 1.0)
-        GL.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
+        gl.glClearColor(*PREVIEW_COLOR, 1.0)
+        gl.glClear(GL.GL_COLOR_BUFFER_BIT | GL.GL_DEPTH_BUFFER_BIT)
         if shot.fbo is None:
             return
         x0, y0, x1, y1 = letterbox(shot.width, shot.height, width, height)
-        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, shot.fbo)
-        GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER,
+        gl.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, shot.fbo)
+        gl.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER,
                              self.defaultFramebufferObject())
         GL.glBlitFramebuffer(0, 0, shot.width, shot.height, x0, y0, x1, y1,
                              GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
-        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER,
+        gl.glBindFramebuffer(GL.GL_FRAMEBUFFER,
                              self.defaultFramebufferObject())
 
     def _clear_gibs(self):
@@ -2682,23 +2690,23 @@ class GlobeView(QOpenGLWidget):
         кадр, поэтому счётчик включается только в проверочных скриптах.
         В проверочном режиме show_holes такие пиксели пурпурные.
         """
-        GL.glUseProgram(self.hole_program)
+        gl.glUseProgram(self.hole_program)
         u = self.hole_uniforms
         eye = ray_uniforms(u, self.camera, ellipsoid.A - HOLE_MARGIN,
                            ellipsoid.B - HOLE_MARGIN)
-        GL.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
-        GL.glDepthFunc(GL.GL_LEQUAL)
-        GL.glDepthMask(GL.GL_FALSE)
+        gl.glUniform1f(u["u_qc"], float(eye @ eye) - 1.0)
+        gl.glDepthFunc(GL.GL_LEQUAL)
+        gl.glDepthMask(GL.GL_FALSE)
         if not self.show_holes:
-            GL.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE,
+            gl.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE,
                            GL.GL_FALSE)
-        GL.glBeginQuery(GL.GL_SAMPLES_PASSED, self.hole_query)
-        GL.glBindVertexArray(self.empty_vao)
-        GL.glDrawArrays(GL.GL_TRIANGLES, 0, 3)
-        GL.glEndQuery(GL.GL_SAMPLES_PASSED)
-        GL.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
-        GL.glDepthMask(GL.GL_TRUE)
-        GL.glDepthFunc(GL.GL_LESS)
+        gl.glBeginQuery(GL.GL_SAMPLES_PASSED, self.hole_query)
+        gl.glBindVertexArray(self.empty_vao)
+        gl.glDrawArrays(GL.GL_TRIANGLES, 0, 3)
+        gl.glEndQuery(GL.GL_SAMPLES_PASSED)
+        gl.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
+        gl.glDepthMask(GL.GL_TRUE)
+        gl.glDepthFunc(GL.GL_LESS)
         result = np.zeros(1, dtype=np.uint32)
         GL.glGetQueryObjectuiv(self.hole_query, GL.GL_QUERY_RESULT, result)
         return int(result[0])
@@ -2765,7 +2773,6 @@ class GlobeView(QOpenGLWidget):
         w = rel @ mvp[3, :3] + mvp[3, 3]
         data = np.ascontiguousarray(
             np.column_stack([clip, w]), dtype=np.float32)
-        gl = gpu.gl
         u = self.backdrop_uniforms
         gl.glUseProgram(self.backdrop_program)
         gl.glUniform2f(u["u_viewport"], self.camera.width,
@@ -2774,10 +2781,10 @@ class GlobeView(QOpenGLWidget):
         gl.glUniform3f(u["u_bottom"], *BACKDROP_BOTTOM)
         gl.glDisable(GL.GL_DEPTH_TEST)
         gl.glDepthMask(GL.GL_FALSE)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.backdrop_vbo)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.backdrop_vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                         GL.GL_STREAM_DRAW)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
         gl.glBindVertexArray(self.backdrop_vao)
         gl.glDrawArrays(GL.GL_TRIANGLES, 0, len(data))
         gl.glDepthMask(GL.GL_TRUE)
@@ -2790,7 +2797,6 @@ class GlobeView(QOpenGLWidget):
         проверка глубины оставляет только пиксели без тайлов. Дымка
         над самими тайлами считается в шейдере тайла.
         """
-        gl = gpu.gl
         gl.glUseProgram(self.sky_program)
         u = self.sky_air
         eye = air_uniforms(u, self.camera, True, self.sun, self.air_tint)

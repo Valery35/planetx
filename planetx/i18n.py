@@ -4653,6 +4653,9 @@ EN = {
     "Размер {x:.1f} × {y:.1f} × {z:.1f} м.":
         "Triangles {count}, materials {parts}, images {images}. "
         "Size {x:.1f} × {y:.1f} × {z:.1f} m.",
+    "Анимированная модель, ветряки": "Animated model, wind turbines",
+    "Анимация {seconds:.1f} с, движется частей {tracks}.":
+        "Animation {seconds:.1f} s, moving parts {tracks}.",
     "Широта точки модели. Точка - начало координат файла модели.":
         "Latitude of the model point. The point is the origin of the "
         "model file coordinates.",

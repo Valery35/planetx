@@ -35,6 +35,8 @@
 - models - 3D-модели автора: церкви в Суздале и в Перми, KMZ
   из Google Earth Pro, лицензия CC BY 4.0. Файлы моделей едут
   в сцене архивом places.kmz.
+- turbines - анимированная 3D-модель: условный ветропарк из трёх
+  ветряков glTF с вращающимся ротором, модель собирает turbine_glb().
 - mars - места посадок марсоходов и крупные формы рельефа Марса.
 - moon - места посадок «Аполлонов» и «Луноходов».
 - sky - созвездия и яркие объекты неба.
@@ -42,15 +44,21 @@
 Координаты посадок - опубликованные NASA и CNSA, округлены до сотых
 градуса. Виды меток - выбор помощника.
 """
+import json
 import math
 import os
+import struct
 import sys
+
+import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "planetx", "core"))
 
-from kml import (KFolder, KPlace, read_file, write_kml,  # noqa: E402
-                 write_kmz)
+from kml import (KFolder, KOverlay, KPlace, read_file,  # noqa: E402
+                 write_kml, write_kmz)
+from models import pack  # noqa: E402
+from overlays import Overlay  # noqa: E402
 from scene import Scene, write_scene  # noqa: E402
 from skyview import distance_for  # noqa: E402
 
@@ -771,7 +779,136 @@ def flows():
     save("flows", scene, root)
 
 
+# Ветряк - синтетическая модель glTF, метры, ось Y вверх: башня 80 м,
+# гондола, ротор из трёх лопастей по 40 м. Ротор - свой узел с ключами
+# поворота вокруг оси гондолы, оборот за TURBINE_TURN секунд. Размеры,
+# цвета, место и скорость - выбор помощника.
+TURBINE_TURN = 6.0
+TURBINE_HUB = 80.0
+TURBINES = ((57.990, 56.010), (57.994, 56.017), (57.998, 56.024))
+TURBINE_HEADING = 300.0
+
+
+def _box(x0, x1, y0, y1, z0, z1):
+    """Треугольники коробки подряд."""
+    v = [(x0, y0, z0), (x1, y0, z0), (x1, y1, z0), (x0, y1, z0),
+         (x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1)]
+    faces = ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (2, 3, 7, 6),
+             (1, 2, 6, 5), (3, 0, 4, 7))
+    out = []
+    for a, b, c, d in faces:
+        out += [v[a], v[b], v[c], v[a], v[c], v[d]]
+    return out
+
+
+def _tower(bottom, top, height, sides=16):
+    out = []
+    for k in range(sides):
+        a0 = 2 * math.pi * k / sides
+        a1 = 2 * math.pi * (k + 1) / sides
+        p = [(bottom * math.cos(a), 0.0, -bottom * math.sin(a))
+             for a in (a0, a1)]
+        q = [(top * math.cos(a), height, -top * math.sin(a))
+             for a in (a0, a1)]
+        out += [p[0], p[1], q[1], p[0], q[1], q[0]]
+    return out
+
+
+def _turn_z(points, angle):
+    c, s = math.cos(angle), math.sin(angle)
+    return [(c * x - s * y, s * x + c * y, z) for x, y, z in points]
+
+
+def turbine_glb():
+    """Байты .glb ветряка с анимацией ротора."""
+    blob = bytearray()
+    views, accessors = [], []
+
+    def add(array, kind):
+        array = np.ascontiguousarray(array, dtype=np.float32)
+        while len(blob) % 4:
+            blob.append(0)
+        views.append({"buffer": 0, "byteOffset": len(blob),
+                      "byteLength": array.nbytes})
+        blob.extend(array.tobytes())
+        acc = {"bufferView": len(views) - 1, "componentType": 5126,
+               "count": len(array), "type": kind}
+        if kind == "VEC3":
+            acc["min"] = array.min(axis=0).tolist()
+            acc["max"] = array.max(axis=0).tolist()
+        accessors.append(acc)
+        return len(accessors) - 1
+    body = _tower(2.2, 1.5, TURBINE_HUB) + _box(
+        -2.0, 2.0, TURBINE_HUB - 1.5, TURBINE_HUB + 2.5, -7.0, 2.5)
+    blade = _box(-1.0, 1.0, 1.5, 40.0, -0.3, 0.3)
+    rotor = _box(-1.6, 1.6, -1.6, 1.6, -1.0, 2.0)
+    for k in range(3):
+        rotor += _turn_z(blade, 2 * math.pi * k / 3)
+    meshes = [
+        {"primitives": [{"attributes": {"POSITION": add(body, "VEC3")},
+                         "material": 0}]},
+        {"primitives": [{"attributes": {"POSITION": add(rotor, "VEC3")},
+                         "material": 1}]}]
+    times = [TURBINE_TURN * k / 3 for k in range(4)]
+    keys = []
+    for k in range(4):
+        half = -math.pi * k / 3  # по часовой стрелке со стороны ветра
+        keys.append((0.0, 0.0, math.sin(half), math.cos(half)))
+    animation = {"samplers": [{"input": add(np.array(times)[:, None],
+                                            "SCALAR"),
+                               "output": add(keys, "VEC4")}],
+                 "channels": [{"sampler": 0, "target": {
+                     "node": 1, "path": "rotation"}}]}
+    doc = {"asset": {"version": "2.0", "generator": "PlanetX make_demo"},
+           "scene": 0, "scenes": [{"nodes": [0]}],
+           "nodes": [{"mesh": 0, "children": [1]},
+                     {"mesh": 1, "translation": [0.0, TURBINE_HUB, 4.0]}],
+           "meshes": meshes,
+           "materials": [
+               {"pbrMetallicRoughness": {
+                   "baseColorFactor": [0.9, 0.91, 0.92, 1.0]}},
+               {"pbrMetallicRoughness": {
+                   "baseColorFactor": [0.97, 0.97, 0.97, 1.0]}}],
+           "animations": [animation], "accessors": accessors,
+           "bufferViews": views}
+    while len(blob) % 4:
+        blob.append(0)
+    doc["buffers"] = [{"byteLength": len(blob)}]
+    text = json.dumps(doc).encode("utf-8")
+    text += b" " * (-len(text) % 4)
+    total = 12 + 8 + len(text) + 8 + len(blob)
+    return (b"glTF" + struct.pack("<II", 2, total)
+            + struct.pack("<I", len(text)) + b"JSON" + text
+            + struct.pack("<I", len(blob)) + b"BIN\x00" + bytes(blob))
+
+
+def turbines():
+    """Анимированная модель: условный ветропарк из трёх ветряков."""
+    title = "PlanetX: демо, анимированная модель"
+    package = pack("turbine.glb", {"turbine.glb": turbine_glb()})
+    note = ("Модель синтетическая, место условное. Ротор - узел glTF "
+            "с ключами поворота, оборот за {:g} с. Модели glTF и Collada "
+            "с анимацией узлов движутся так же.".format(TURBINE_TURN))
+    items = []
+    for n, (lat, lon) in enumerate(TURBINES, 1):
+        overlay = Overlay("model", camera=(lat, lon, 0.0, TURBINE_HEADING,
+                                           0.0, 0.0))
+        items.append(KOverlay("Ветряк {}".format(n), overlay,
+                              image=package, description=note,
+                              view=(lat, lon, 350.0, 40.0, 70.0)))
+    root = KFolder(title, children=items)
+    lat, lon = TURBINES[1]
+    view = dict(EARTH_VIEW, scale=1.0, extras=dict(QUIET_EXTRAS))
+    scene = Scene((lat, lon, 1600.0, 130.0, 72.0), None, [], view,
+                  title, "Анимированная модель, ветряки")
+    path = os.path.join(DEMO, "turbines.planetx")
+    with open(path, "wb") as fh:
+        fh.write(write_scene(scene, write_kmz(root)))
+    print(path, os.path.getsize(path))
+
+
 def main():
+    turbines()
     flows()
     perm()
     bocachica()

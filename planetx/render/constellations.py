@@ -14,6 +14,7 @@ from OpenGL import GL
 
 from ..core import skydata
 from . import gpu
+from .gpu import gl
 from .stars import sky_mvp
 
 LINE_VERTEX = """#version 330 core
@@ -56,16 +57,16 @@ class Constellations:
         self.locations = {name: GL.glGetUniformLocation(self.program, name)
                           for name in ("u_mvp", "u_color")}
         self.vao = GL.glGenVertexArrays(1)
-        GL.glBindVertexArray(self.vao)
+        gl.glBindVertexArray(self.vao)
         self.vbo = GL.glGenBuffers(1)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, self.vbo)
         GL.glBufferData(GL.GL_ARRAY_BUFFER, data.nbytes, data,
                         GL.GL_STATIC_DRAW)
-        GL.glEnableVertexAttribArray(0)
-        GL.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 12,
+        gl.glEnableVertexAttribArray(0)
+        gl.glVertexAttribPointer(0, 3, GL.GL_FLOAT, GL.GL_FALSE, 12,
                                  ctypes.c_void_p(0))
-        GL.glBindVertexArray(0)
-        GL.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
+        gl.glBindVertexArray(0)
+        gl.glBindBuffer(GL.GL_ARRAY_BUFFER, 0)
 
     def release_gl(self):
         if self.vao is not None:
@@ -82,13 +83,12 @@ class Constellations:
         if self.program is None:
             return
         mvp = sky_mvp(camera, 0.0, frame)
-        gl = gpu.gl
         gl.glUseProgram(self.program)
         gpu._uniform_matrix(self.locations["u_mvp"], 1, GL.GL_TRUE,
                             ctypes.c_void_p(mvp.ctypes.data))
-        GL.glUniform4f(self.locations["u_color"], *COLOR)
+        gl.glUniform4f(self.locations["u_color"], *COLOR)
         gl.glEnable(GL.GL_BLEND)
-        GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE,
+        gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE,
                                GL.GL_ZERO, GL.GL_ONE)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)

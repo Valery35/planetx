@@ -194,7 +194,7 @@ class Camera:
         model_view[:, :3, 3] = shift
         model_view[:, 3, 3] = 1.0
         return np.ascontiguousarray(
-            np.einsum("ij,njk->nik", projection, model_view),
+            projection @ model_view,
             dtype=np.float32)
 
     def project(self, points):
