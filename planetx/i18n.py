@@ -765,6 +765,19 @@ EN = {
         "Catalogue",
     "Запрос к Macrostrat…":
         "Asking Macrostrat…",
+    "Копия вида в буфер обмена":
+        "Copy the view to the clipboard",
+    ("Копия вида в буфер обмена - глобус со шкалами, подписями и надписями, "
+     "без панели значков, органов навигации, шкалы времени и панели тура. "
+     "Картинку можно сразу вставить в письмо, чат или документ."):
+        ("A copy of the view on the clipboard - the globe with the scales, "
+         "credits and labels, without the icon bar, the navigation "
+         "controls, the time slider and the tour bar. The picture can be "
+         "pasted into a letter, a chat or a document at once."),
+    "Вид скопирован в буфер обмена.":
+        "The view is copied to the clipboard.",
+    "Исторических очагов ISC-GEM {count}.":
+        "Historical ISC-GEM foci {count}.",
     "Архив снимков с 2014 года":
         "Imagery archive since 2014",
     "Архив снимков":

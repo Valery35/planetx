@@ -32,6 +32,8 @@ VCENTER = enum(Qt, "AlignmentFlag", "AlignVCenter")
 RIGHT = enum(Qt, "AlignmentFlag", "AlignRight") | VCENTER
 LEFT = enum(Qt, "AlignmentFlag", "AlignLeft") | VCENTER
 QUAKE_SHRINK = 0.6  # очаг на графике меньше, чем на глобусе
+# Обводка исторических очагов ISC-GEM, свежие - тёмной. Выбор помощника.
+HISTORY_OUTLINE = QColor(235, 235, 235)
 
 
 def km_text(value):
@@ -132,12 +134,16 @@ class SectionChart(QWidget):
         self._fill(painter, to_screen, s.slab_top, s.slab_bottom,
                    cutaway.SLAB_COLOR)
         # Очаги: цвет по глубине, размер по магнитуде, как на глобусе.
-        if s.quakes:
-            depth = np.array([q[1] for q in s.quakes])
+        # Исторические ISC-GEM - под свежими, со светлой обводкой.
+        for events, outline in ((s.history, HISTORY_OUTLINE),
+                                (s.quakes, QColor(40, 40, 40))):
+            if not events:
+                continue
+            depth = np.array([q[1] for q in events])
             colors = quakes.depth_colors(depth)
-            sizes = quakes.sizes([q[2] for q in s.quakes]) * QUAKE_SHRINK
-            painter.setPen(QPen(QColor(40, 40, 40), 0.8))
-            for (d, z, _, _), rgb, size in zip(s.quakes, colors, sizes):
+            sizes = quakes.sizes([q[2] for q in events]) * QUAKE_SHRINK
+            painter.setPen(QPen(outline, 0.8))
+            for (d, z, _, _), rgb, size in zip(events, colors, sizes):
                 if z > y1:
                     continue
                 painter.setBrush(QColor(*(int(v) for v in rgb)))
@@ -292,6 +298,9 @@ class SectionDialog(QDialog):
                   "в полосе {count}.",
                   length=distance_text(float(found.distance[-1]) * 1000.0),
                   depth=km_text(found.depth), count=len(found.quakes))
+        if found.history:
+            text += " " + tr("Исторических очагов ISC-GEM {count}.",
+                             count=len(found.history))
         if notes:
             text += " " + notes
         self.stats.setText(text)

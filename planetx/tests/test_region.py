@@ -51,6 +51,17 @@ class TestRegion(unittest.TestCase):
                                delta=500.0)
         self.assertAlmostEqual(rg.center(region)[1] % 360.0, 180.0)
 
+    def test_box_of_points_over_dateline(self):
+        # Рамка пути через линию перемены дат - узкая, восток меньше
+        # запада, середина у 180°, а не на другой стороне Земли.
+        north, south, east, west = rg.box([(-16.5, -174.25),
+                                           (-27.4, -178.14),
+                                           (-35.1, 179.33)])
+        self.assertAlmostEqual(west, 179.33, places=6)
+        self.assertAlmostEqual(east, -174.25, places=6)
+        lat, lon = rg.center(rg.Region(north, south, east, west, 0, -1))
+        self.assertGreater(abs(lon), 177.0)
+
     def test_text_round_trip_and_kml(self):
         region = rg.for_distance([(58.0, 56.0), (58.5, 56.5)], 100.0)
         self.assertEqual(rg.parse(rg.text(region)), region)

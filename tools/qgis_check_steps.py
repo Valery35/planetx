@@ -16294,6 +16294,133 @@ def geology_check():
 
 
 @check(1000)
+def section_history():
+    """Исторические очаги ISC-GEM в окне «Разрез»: строка включена -
+    очаги в полосе своим списком, подпись с их количеством."""
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("iscgem", True)
+    state["sh_started"] = time.monotonic()
+    result["section_history"] = {}
+
+
+@check(1000)
+def section_history_check():
+    window = state["window"]
+    out = result["section_history"]
+    spent = time.monotonic() - state["sh_started"]
+    if not window.history_events and spent < 120.0:
+        return 1000
+    if "opened" not in out:
+        out["events"] = len(window.history_events or [])
+        window._open_section("ISC-GEM", [(38.5, 146.0), (38.5, 132.0)])
+        out["opened"] = True
+        state["sh_started"] = time.monotonic()
+        return 1000
+    if window.crust is None and spent < 60.0:
+        return 1000
+    started = time.monotonic()
+    built, _ = window._section(700.0, 300.0)
+    out["build_s"] = round(time.monotonic() - started, 2)
+    out["recent"] = len(built.quakes)
+    out["history"] = len(built.history)
+    out["deepest"] = max((q[1] for q in built.history), default=None)
+    if "stats" not in out:
+        window.section_dialog.refresh()
+        out["stats"] = window.section_dialog.stats.text()
+        window.section_dialog.grab().save(os.path.join(
+            TEMP, "planetx_section_history.png"))
+        # Шкала на 1950-1980 годы: окно пересобирается само после паузы.
+        import calendar
+        lo = calendar.timegm((1950, 1, 1, 0, 0, 0))
+        hi = calendar.timegm((1980, 1, 1, 0, 0, 0))
+        window._time_changed(float(lo), float(hi))
+        state["sh_started"] = time.monotonic()
+        return 1500
+    out["stats_1950_1980"] = window.section_dialog.stats.text()
+    built, _ = window._section(700.0, 300.0)
+    out["history_1950_1980"] = len(built.history)
+    import datetime
+    epoch = datetime.datetime(1970, 1, 1)
+    years = sorted({(epoch + datetime.timedelta(seconds=q[3].time)).year
+                    for q in built.history if q[3].time is not None})
+    out["years"] = [years[0], years[-1]] if years else []
+    window.section_dialog.grab().save(os.path.join(
+        TEMP, "planetx_section_history_time.png"))
+    window._time_range = None
+    window.set_extra("iscgem", False)
+    window.section_dialog.refresh()
+    out["stats_off"] = window.section_dialog.stats.text()
+    window.section_dialog.close()
+    return None
+
+
+@check(1000)
+def copy_view():
+    """Кнопка «Копия вида в буфер обмена»: кадр глобуса со шкалами
+    и подписями, без панели значков, органов навигации и шкалы
+    времени."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("quakes", True)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(36.0, 140.0, 4000000.0, 0.0, 0.0))
+    window.view.update()
+    state["cv_started"] = time.monotonic()
+    result["copy_view"] = {}
+
+
+@check(1000)
+def copy_view_check():
+    from qgis.PyQt.QtWidgets import QApplication
+    from planetx.ui.commands import build as commands_build
+    window = state["window"]
+    out = result["copy_view"]
+    if not window.view.quakes.events \
+            and time.monotonic() - state["cv_started"] < 60.0:
+        return 1000
+    if not window.timebar.shown():
+        window.toolbar.time.setChecked(True)
+        return 1000
+    QApplication.processEvents()
+    copied = window.copy_view()
+    clip = QApplication.clipboard().image()
+    frame = window.view.grabFramebuffer()
+    ratio = window.view.devicePixelRatioF()
+
+    def differs(widget):
+        """Доля пикселей области виджета, где копия отличается от
+        голого кадра, - нарисован ли виджет в копии."""
+        if widget is None or not widget.isVisible():
+            return None
+        g = widget.geometry()
+        x0, y0 = int(g.x() * ratio), int(g.y() * ratio)
+        x1 = min(int((g.x() + g.width()) * ratio), frame.width())
+        y1 = min(int((g.y() + g.height()) * ratio), frame.height())
+        same = total = 0
+        for y in range(y0, y1, 3):
+            for x in range(x0, x1, 3):
+                total += 1
+                same += copied.pixel(x, y) == frame.pixel(x, y)
+        return round(1.0 - same / max(total, 1), 3)
+    out.update(size=[copied.width(), copied.height()],
+               frame=[frame.width(), frame.height()],
+               clipboard=[clip.width(), clip.height()],
+               toolbar=differs(window.toolbar),
+               navpad=differs(window.navpad),
+               timebar=differs(window.timebar),
+               legend=differs(window.legend_panel),
+               attribution=differs(window.attribution),
+               action="tool:copy_view" in commands_build(window)[1],
+               message=window.message[0] if window.message else "")
+    copied.save(os.path.join(TEMP, "planetx_copy_view.png"))
+    window.toolbar.time.setChecked(False)
+    window.set_extra("quakes", False)
+    return None
+
+
+@check(1000)
 def wayback_on():
     """Архив снимков Esri Wayback над центром Перми: список выпусков,
     цепочка изменений в середине вида, шаг шкалы назад, шторка, дата

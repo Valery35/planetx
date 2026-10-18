@@ -48,6 +48,29 @@ class TestSection(unittest.TestCase):
         self.assertAlmostEqual(s, 556.0, delta=5.0)
         self.assertEqual((depth, mag), (50.0, 6.0))
 
+    def test_history_in_band_by_parts(self):
+        # Исторические очаги - своим списком, полоса считается частями
+        # по NEAR_CHUNK, края частей не теряют очагов.
+        inside = [qk.Quake(0.1, 1.0 + 8.0 * k / 9999.0, 30.0, 6.0, None, "",
+                           "") for k in range(10000)]
+        outside = [qk.Quake(3.0, 5.0, 30.0, 6.0, None, "", "")]
+        self.assertGreater(len(inside), 2 * sc.NEAR_CHUNK)
+        section = sc.build([(0.0, 0.0), (0.0, 10.0)], width=100.0,
+                           history=inside + outside)
+        self.assertEqual(len(section.history), 10000)
+        self.assertEqual(section.quakes, [])
+        self.assertEqual(sc.build([(0.0, 0.0), (0.0, 10.0)]).history, [])
+
+    def test_in_time_follows_time_slider(self):
+        events = [qk.Quake(0.0, 1.0, 10.0, 5.0, 100.0, "", ""),
+                  qk.Quake(0.0, 2.0, 10.0, 5.0, 500.0, "", ""),
+                  qk.Quake(0.0, 3.0, 10.0, 5.0, None, "", "")]
+        self.assertEqual(len(sc.in_time(events, None)), 3)
+        kept = sc.in_time(events, (0.0, 200.0))
+        # Очаг без времени остаётся, как на глобусе.
+        self.assertEqual([q.lon for q in kept], [1.0, 3.0])
+        self.assertEqual(sc.in_time([], (0.0, 1.0)), [])
+
     def test_shells_cut_at_depth(self):
         section = sc.build([(0.0, 0.0), (0.0, 10.0)], depth=700.0)
         keys = [k for k, _, _, _ in sc.shells_below(section)]

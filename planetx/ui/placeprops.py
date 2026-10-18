@@ -29,6 +29,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
 
 from ..core import icons, lookat, region, tour, when
 from ..core.features import MAX_HEIGHT, height_share, share_height
+from ..core.flight import lon_span, wrap_lon
 from ..i18n import tr
 from ..qt_compat import enum
 from ..render.labels import svg_file
@@ -490,8 +491,9 @@ class PlaceProperties(QDialog):
         середина охвата, отвесно."""
         points = self.place.shape.points
         lats = [p[0] for p in points] or [0.0]
-        lons = [p[1] for p in points] or [0.0]
-        return ((min(lats) + max(lats)) / 2.0, (min(lons) + max(lons)) / 2.0,
+        # Середина по наименьшей дуге долгот - и через линию перемены дат.
+        west, east = lon_span([p[1] for p in points] or [0.0])
+        return ((min(lats) + max(lats)) / 2.0, wrap_lon((west + east) / 2.0),
                 3000.0, 0.0, 0.0)
 
     def _set_view(self, view):

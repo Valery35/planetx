@@ -60,6 +60,7 @@ class ViewToolbar(QFrame):
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal(str)
     snapshot_clicked = pyqtSignal()
+    copy_clicked = pyqtSignal()
     scene_save_requested = pyqtSignal()
     scene_open_requested = pyqtSignal()
     share_requested = pyqtSignal()
@@ -146,6 +147,12 @@ class ViewToolbar(QFrame):
             icon("camera"),
             tr("Снимок вида в файл PNG или JPEG, в том числе больше окна."),
             self.snapshot_clicked)
+        self._button(
+            icon("copy"),
+            tr("Копия вида в буфер обмена - глобус со шкалами, подписями "
+               "и надписями, без панели значков, органов навигации, шкалы "
+               "времени и панели тура. Картинку можно сразу вставить "
+               "в письмо, чат или документ."), self.copy_clicked)
         self._button(
             icon("layout"),
             tr("Вид в макет QGIS неизменной картинкой, вставленной "

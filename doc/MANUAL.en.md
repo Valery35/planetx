@@ -80,6 +80,7 @@ plugin.
 | Record a flight | Records the camera movement as a tour into My Places. The ⏺ button of the tour bar records a tour to video |
 | Time slider | Opens and closes the time slider. The slider is shared by placemarks, tracks, project layers, events, maps and the globe clock. It is available when visible data has a time |
 | View snapshot | Saves the view to a PNG or JPEG file |
+| Copy view | Puts the view on the clipboard without the tools |
 | View to layout | Puts the view into a QGIS layout as a picture |
 | Scene | The menu Save Scene… and Open Scene… |
 | Demo | Ready scenes by body, see [Demo](#demo) |
@@ -990,7 +991,12 @@ colours are those of the Earth cutaway faces, the layer scale is to
 the right of the chart. The Depth list sets the depth of the section,
 from 100 km to the centre of the Earth. The Foci band field sets the
 width of the band. A focus is moved onto the section at the nearest
-point of the path. The cursor over the chart marks the point on the
+point of the path. While the Historical earthquakes row is on, the
+foci of the ISC-GEM catalogue since 1904 are put onto the section too.
+They have a light outline and lie under the foci of the 30-day feed,
+the line under the chart counts them separately. With the time slider
+open, the section shows only the foci of its interval, as on the
+globe. The section is rebuilt when the handles stop. The cursor over the chart marks the point on the
 globe and shows the Moho and slab depths there. The crust, the slabs
 and the earthquake feed are loaded when the window opens, if they are
 not there yet, the line under the chart tells what is still loading.
@@ -2969,6 +2975,15 @@ The Save… button asks for a PNG or JPEG file and starts the snapshot.
 The camera stands still meanwhile. The Take now button does not wait
 for the remaining tiles. The source credits stand in the bottom right
 corner of the snapshot.
+
+The Copy view icon next to it puts the view of the window on the
+clipboard with one click, it can be pasted into a letter, a chat or a
+document at once. The copy has the globe, the layer scales, the labels,
+the source credits and the PlanetX mark. The icon bar, the navigation
+controls, the time slider and the tour bar are not in it, on the
+screen they stay. The size of the copy is the size of the view in
+screen pixels. The Copy the view to the clipboard action of the Search
+field does the same.
 
 ### View to layout
 

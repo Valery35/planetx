@@ -196,6 +196,10 @@ def _tools(window, add, earth):
     add("tool:snapshot", tr("Снимок вида"), open_,
         lambda: window._open_snapshot(False),
         ("скриншот", "картинка", "png", "screenshot"))
+    add("tool:copy_view", tr("Копия вида в буфер обмена"), tr("выполнить"),
+        window.copy_view, ("копия экрана", "копия вида", "скриншот",
+                           "буфер обмена", "copy", "clipboard",
+                           "screenshot"))
     add("tool:layout", tr("Вид в макет QGIS"), open_,
         lambda: window._open_snapshot(True), ("макет", "печать", "layout"))
     add("tool:record", tr("Записать облёт"),

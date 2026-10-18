@@ -201,5 +201,36 @@ class TestFitView(unittest.TestCase):
         self.assertEqual(distance, fl.MIN_FIT_DISTANCE)
 
 
+
+class TestDateLine(unittest.TestCase):
+    """Путь автора «Мой путь 3» через линию перемены дат, 18 октября
+    2026 года: перелёт уходил на другую сторону Земли."""
+
+    LONS = (-174.25, -178.14, 179.33)
+    LATS = (-16.51, -27.44, -35.09)
+
+    def test_span_across_date_line(self):
+        west, east = fl.lon_span(self.LONS)
+        self.assertAlmostEqual(west, 179.33, places=6)
+        self.assertAlmostEqual(east, 360.0 - 174.25, places=6)
+
+    def test_span_ordinary(self):
+        self.assertEqual(fl.lon_span([10.0, -5.0, 30.0]), (-5.0, 30.0))
+        self.assertEqual(fl.lon_span([42.0]), (42.0, 42.0))
+
+    def test_fit_view_looks_at_the_path(self):
+        west, east = fl.lon_span(self.LONS)
+        lat, lon, distance = fl.fit_view(west, min(self.LATS), east,
+                                         max(self.LATS), 45.0, 1.5)
+        # Середина пути - около 177.5° з. д., а не 0°.
+        self.assertLess(abs(abs(lon) - 177.46), 0.01)
+        self.assertLess(distance, 5.0e6)
+        # Восток меньше запада - та же рамка в записи Region KML.
+        lat2, lon2, d2 = fl.fit_view(179.33, -35.09, -174.25, -16.51,
+                                     45.0, 1.5)
+        self.assertAlmostEqual(lon2, lon, places=6)
+        self.assertAlmostEqual(d2, distance, places=3)
+
+
 if __name__ == "__main__":
     unittest.main()

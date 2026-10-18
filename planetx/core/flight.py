@@ -169,16 +169,45 @@ MIN_FIT_DISTANCE = 300.0  # метров, ближе к точечному сл�
 M_PER_DEGREE = 111320.0
 
 
+def lon_span(lons):
+    """Наименьшая дуга долгот, на которой лежат все lons: (запад,
+    восток), восток не меньше запада и может быть больше 180°.
+
+    Охват min..max ошибался у объектов через линию перемены дат: путь
+    -174°, -178°, +179° давал охват -178..179 и середину на другой
+    стороне Земли, замечание автора от 18 октября 2026 года. Дуга -
+    круг без самого широкого промежутка между соседними долготами."""
+    ring = sorted((float(v) + 180.0) % 360.0 - 180.0 for v in lons)
+    if not ring:
+        return 0.0, 0.0
+    gap, after = ring[0] + 360.0 - ring[-1], 0
+    for n in range(1, len(ring)):
+        step = ring[n] - ring[n - 1]
+        if step > gap:
+            gap, after = step, n
+    west = ring[after]
+    east = ring[after - 1] + (360.0 if after > 0 else 0.0)
+    return west, east
+
+
+def wrap_lon(lon):
+    """Долгота в промежутке -180..180."""
+    return (float(lon) + 180.0) % 360.0 - 180.0
+
+
 def fit_view(west, south, east, north, fov_y, aspect):
     """Точка взгляда и расстояние, с которых охват виден целиком.
 
     Охват в градусах WGS84. Камера смотрит отвесно в середину охвата.
     Ширина считается по средней широте. Расстояние - такое, чтобы
     охват с запасом FIT_MARGIN поместился и по высоте, и по ширине
-    кадра, но не меньше MIN_FIT_DISTANCE.
+    кадра, но не меньше MIN_FIT_DISTANCE. Восток меньше запада -
+    охват через линию перемены дат, как у Region KML.
     """
+    if east < west:
+        east += 360.0
     lat = 0.5 * (south + north)
-    lon = 0.5 * (west + east)
+    lon = wrap_lon(0.5 * (west + east))
     height = (north - south) * M_PER_DEGREE
     width = (east - west) * M_PER_DEGREE * math.cos(math.radians(lat))
     half = math.tan(math.radians(fov_y) / 2.0)

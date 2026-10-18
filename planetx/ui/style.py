@@ -178,6 +178,10 @@ def _draw(p, name, color):
         p.drawLine(QPointF(10, 4.5), QPointF(14, 4.5))
         p.drawLine(QPointF(14, 4.5), QPointF(15.5, 7))
         p.drawEllipse(QPointF(12, 13), 3.6, 3.6)
+    elif name == "copy":
+        # Копия вида в буфер обмена: два листа один на другом.
+        p.drawRoundedRect(QRectF(4, 3, 12, 14), 1.5, 1.5)
+        p.drawRoundedRect(QRectF(8, 7, 12, 14), 1.5, 1.5)
     elif name == "layout":
         p.drawRoundedRect(QRectF(5, 3, 14, 18), 1.5, 1.5)
         p.drawRect(QRectF(8, 6, 8, 6))

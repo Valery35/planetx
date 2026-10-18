@@ -19,6 +19,7 @@ from qgis.PyQt.QtGui import QDesktopServices, QTextDocument
 from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QLabel, QPushButton,
                                  QTextBrowser, QVBoxLayout)
 
+from ..core.flight import lon_span, wrap_lon
 from ..i18n import tr
 
 # Наибольшая длина описания в вопросе помощнику, знаков.
@@ -103,7 +104,10 @@ def explain_question(place, kind_name):
     разметки, не длиннее EXPLAIN_LIMIT."""
     points = place.shape.points or [(0.0, 0.0)]
     lat = sum(p[0] for p in points) / len(points)
-    lon = sum(p[1] for p in points) / len(points)
+    # Середина дуги долгот: среднее у пути через линию перемены дат
+    # уводило точку на другую сторону Земли.
+    west, east = lon_span(p[1] for p in points)
+    lon = wrap_lon((west + east) / 2.0)
     text = " ".join(_plain(place.description).split())
     if len(text) > EXPLAIN_LIMIT:
         text = text[:EXPLAIN_LIMIT].rsplit(" ", 1)[0] + "…"

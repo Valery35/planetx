@@ -27,12 +27,14 @@ try:  # внутри плагина QGIS
     from . import ellipsoid
     from .cutaway import (CRUST_COLORS, PREM_RADIUS, SHELLS, SLAB_COLOR,
                           crust_layers, layer_colors)
+    from .quakes import in_window
     from .slabs import band
     from .subsurface import merge, wall
 except ImportError:  # headless-тесты
     import ellipsoid
     from cutaway import (CRUST_COLORS, PREM_RADIUS, SHELLS, SLAB_COLOR,
                          crust_layers, layer_colors)
+    from quakes import in_window
     from slabs import band
     from subsurface import merge, wall
 
@@ -41,16 +43,21 @@ WALL_ALPHA = 220  # непрозрачность стенки на глобус�
 DEPTHS = (100.0, 300.0, 700.0, 2891.0, PREM_RADIUS)  # км, выбор окна
 DEPTH = 700.0  # км, глубина по умолчанию - низ переходной зоны
 WIDTH = 100.0  # км, полоса очагов по обе стороны линии вместе
+# Очагов за проход при поиске полосы: матрица очаги × точки линии.
+# Каталог ISC-GEM - 74 тысячи событий, целиком матрица заняла бы
+# около 350 МБ.
+NEAR_CHUNK = 4096
 
 Section = namedtuple(
     "Section",
-    "distance lats lons bounds slab_top slab_bottom quakes depth oceanic",
-    defaults=(None,))
+    "distance lats lons bounds slab_top slab_bottom quakes depth oceanic "
+    "history", defaults=(None, ()))
 Section.__doc__ = """Разрез: distance - км от начала линии, lats, lons -
 точки линии, bounds - отметки границ коры CRUST1.0 (n, 9) в км или None,
 slab_top, slab_bottom - плита в км глубины или NaN, quakes - список
 (км вдоль линии, глубина км, магнитуда, событие), depth - глубина низа
-разреза, км, oceanic - океаническая ли кора по точкам или None."""
+разреза, км, oceanic - океаническая ли кора по точкам или None,
+history - исторические очаги ISC-GEM в полосе, записи как у quakes."""
 
 
 def _unit(lats, lons):
@@ -105,6 +112,18 @@ def along(points, count=SAMPLES):
     return want * radius_km(), lats, lons
 
 
+def in_time(quakes, span):
+    """Очаги в промежутке шкалы времени span = (от, до) в секундах UTC
+    или все при span None - тот же отбор, что у очагов на глобусе
+    (core.quakes.in_window). Очаг без времени остаётся."""
+    quakes = list(quakes)
+    if span is None or not quakes:
+        return quakes
+    times = [np.nan if q.time is None else q.time for q in quakes]
+    keep = in_window(times, span)
+    return [q for q, k in zip(quakes, keep) if k]
+
+
 def near(quakes, lats, lons, distance, width=WIDTH):
     """Очаги в полосе ширины width км вдоль точек линии: список
     (км вдоль линии, глубина, магнитуда, событие). Ближайшая точка
@@ -113,23 +132,27 @@ def near(quakes, lats, lons, distance, width=WIDTH):
     if not quakes:
         return []
     line = _unit(lats, lons)
-    events = _unit([q.lat for q in quakes], [q.lon for q in quakes])
-    dots = events @ line.T
-    nearest = np.argmax(dots, axis=1)
-    gap = np.arccos(np.clip(dots[np.arange(len(quakes)), nearest], -1.0,
-                            1.0)) * radius_km()
-    # Очаг за концом линии не берётся: его ближайшая точка - конец, но
-    # он лежит дальше конца на расстояние больше полосы.
     out = []
-    for q, i, g in zip(quakes, nearest, gap):
-        if g <= width / 2.0:
-            out.append((float(distance[i]), float(q.depth), float(q.mag), q))
+    for start in range(0, len(quakes), NEAR_CHUNK):
+        part = quakes[start:start + NEAR_CHUNK]
+        events = _unit([q.lat for q in part], [q.lon for q in part])
+        dots = events @ line.T
+        nearest = np.argmax(dots, axis=1)
+        gap = np.arccos(np.clip(dots[np.arange(len(part)), nearest], -1.0,
+                                1.0)) * radius_km()
+        # Очаг за концом линии не берётся: его ближайшая точка - конец,
+        # но он лежит дальше конца на расстояние больше полосы.
+        for q, i, g in zip(part, nearest, gap):
+            if g <= width / 2.0:
+                out.append((float(distance[i]), float(q.depth),
+                            float(q.mag), q))
     return out
 
 
 def build(points, crust=None, zones=(), quakes=(), depth=DEPTH,
-          width=WIDTH, count=SAMPLES):
-    """Разрез вдоль points или None, если точек меньше двух."""
+          width=WIDTH, count=SAMPLES, history=()):
+    """Разрез вдоль points или None, если точек меньше двух. history -
+    исторические очаги, они идут в полосе отдельным списком."""
     found = along(points, count)
     if found is None:
         return None
@@ -144,7 +167,8 @@ def build(points, crust=None, zones=(), quakes=(), depth=DEPTH,
         bottom = np.full(len(lats), np.nan)
     return Section(distance, lats, lons, bounds, top, bottom,
                    near(list(quakes), lats, lons, distance, width),
-                   float(depth), oceanic)
+                   float(depth), oceanic,
+                   near(list(history), lats, lons, distance, width))
 
 
 def moho(section):

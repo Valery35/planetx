@@ -24,8 +24,10 @@ from collections import namedtuple
 
 try:  # внутри плагина QGIS
     from .ellipsoid import geodetic_to_ecef
+    from .flight import lon_span, wrap_lon
 except ImportError:  # headless-тесты
     from ellipsoid import geodetic_to_ecef
+    from flight import lon_span, wrap_lon
 
 M_PER_DEGREE = 111320.0
 REF_FOCAL = 500.0 / math.tan(math.radians(30.0))  # 866 пикселей
@@ -82,8 +84,10 @@ def box(points):
     """Рамка точек (широта, долгота): (север, юг, восток, запад). Малая
     рамка растягивается до BOX_SIDE метров."""
     lats = [p[0] for p in points]
-    lons = [p[1] for p in points]
-    north, south, east, west = max(lats), min(lats), max(lons), min(lons)
+    # Наименьшая дуга долгот: у фигуры через линию перемены дат восток
+    # меньше запада, как в LatLonAltBox KML.
+    west, east = lon_span(p[1] for p in points)
+    north, south = max(lats), min(lats)
     half_lat = BOX_SIDE / 2.0 / M_PER_DEGREE
     if north - south < 2.0 * half_lat:
         middle = (north + south) / 2.0
@@ -93,7 +97,7 @@ def box(points):
     if east - west < 2.0 * half_lon:
         middle = (east + west) / 2.0
         east, west = middle + half_lon, middle - half_lon
-    return north, south, east, west
+    return north, south, wrap_lon(east), wrap_lon(west)
 
 
 def for_distance(points, km, old=None):

@@ -183,6 +183,7 @@ class PlacesMixin:
         self.view.history.window = self._time_range
         self.view.fires.window = self._time_range
         self.view.update()
+        self._section_follow_time()
 
     def _time_changed(self, lo, hi):
         self._time_range = (lo, hi)

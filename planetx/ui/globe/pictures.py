@@ -21,7 +21,7 @@ from ... import journal
 from ...core import lookat, models, overlays
 from ...core.ellipsoid import ecef_to_geodetic
 from ...core.features import Shape
-from ...core.flight import fit_view
+from ...core.flight import fit_view, lon_span
 from ...core.kml import (KOverlay, KmlError, image_ext as kml_image_ext,
                          read_file as read_kml_file, read_kml, write_kml,
                          write_kmz, drop_empty_models, model_files)
@@ -743,9 +743,9 @@ class PicturesMixin:
             if item.kind == "model"]
         if points:
             lats = [p[0] for p in points]
-            lons = [p[1] for p in points]
+            west, east = lon_span(p[1] for p in points)
             camera = self.view.camera
-            lat, lon, distance = fit_view(min(lons), min(lats), max(lons),
+            lat, lon, distance = fit_view(west, min(lats), east,
                                           max(lats), camera.fov_y,
                                           camera.aspect)
             self._fly_to(lat, lon, distance)
@@ -839,9 +839,9 @@ class PicturesMixin:
             lat, lon = points[0]
             return Stop(name, lat, lon, SEARCH_MIN_DISTANCE)
         lats = [p[0] for p in points]
-        lons = [p[1] for p in points]
+        west, east = lon_span(p[1] for p in points)
         camera = self.view.camera
-        lat, lon, distance = fit_view(min(lons), min(lats), max(lons),
+        lat, lon, distance = fit_view(west, min(lats), east,
                                       max(lats), camera.fov_y, camera.aspect)
         return Stop(name, lat, lon, distance)
 
@@ -867,8 +867,8 @@ class PicturesMixin:
             return
         camera = self.view.camera
         lats = [p[0] for p in points]
-        lons = [p[1] for p in points]
-        lat, lon, distance = fit_view(min(lons), min(lats), max(lons),
+        west, east = lon_span(p[1] for p in points)
+        lat, lon, distance = fit_view(west, min(lats), east,
                                       max(lats), camera.fov_y, camera.aspect)
         self._fly_to(lat, lon, max(distance, SEARCH_MIN_DISTANCE), 0.0, 0.0)
 

@@ -695,6 +695,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             lambda: self._open_snapshot(False))
         self.toolbar.layout_clicked.connect(
             lambda: self._open_snapshot(True))
+        self.toolbar.copy_clicked.connect(self.copy_view)
         # Подземный режим: скважины, кровли, разрезы, вырез блока.
         self.subsurface = SubsurfaceManager(self)
         # Облака точек слоёв проекта (ui/pointcloud.py).

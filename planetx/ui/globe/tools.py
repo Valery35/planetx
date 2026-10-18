@@ -13,8 +13,10 @@ import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsApplication, QgsCsException, QgsProject,
                        QgsRasterLayer)
-from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import QApplication, QInputDialog, QMessageBox
+from qgis.PyQt.QtCore import Qt, QTimer
+from qgis.PyQt.QtGui import QPainter, QRegion
+from qgis.PyQt.QtWidgets import (QApplication, QInputDialog, QMessageBox,
+                                 QWidget)
 
 from ...core import (ellipsoid, lookat, placetree, insolation, section, slabs,
                      viewshed)
@@ -22,6 +24,7 @@ from ...core.measure import LENGTH_UNITS, convert, number, segment_midpoints
 from ...core.planets import EARTH_PLANET
 from ...core.placetree import is_folder
 from ...core.places import Place as MarkPlace
+from ... import journal
 from ...i18n import tr
 from ...qt_compat import enum
 from ..measure import RulerDialog, unit_short, _xy as ruler_xy
@@ -38,14 +41,54 @@ from ..folderprops import FolderDialog
 from ..viewshed import ResultTiles, ViewshedDialog, display_level
 from ..insolation import InsolationDialog
 from ..subsection import ModelSectionDialog, build as model_section
-from ..snapshot import SnapshotDialog
-from .base import CALC_BUDGET, HEIGHT_CHUNK, VIEWSHED_POLL, VIEWSHED_WAIT
+from ..snapshot import SnapshotDialog, draw_attribution, plain_text
+from .base import (CALC_BUDGET, HEIGHT_CHUNK, SECTION_TIME_PAUSE,
+                   VIEWSHED_POLL, VIEWSHED_WAIT)
 
 
 class ToolsMixin:
     """Часть окна глобуса GlobeWindow."""
 
     # Снимок вида.
+
+    def copy_view(self):
+        """Копия вида в буфер обмена, просьба автора от 18 октября 2026
+        года. Кадр глобуса и поверх него содержательные слои вида -
+        шкалы, подписи источников, знак PlanetX, надписи неба, картинки
+        на экране, подпись остановки тура. Панель значков, органы
+        навигации, значок загрузки, шкала времени, панель тура, шторка,
+        ручки и ползунок палеогеографии в картинку не идут. Их не
+        прячут на экране - скрытая шкала времени поменяла бы промежуток
+        данных."""
+        view = self.view
+        tools = {self.toolbar, self.navpad, self.spinner, self.timebar,
+                 self.swipe_bar, self.handles,
+                 getattr(self, "paleo_bar", None),
+                 getattr(getattr(self, "tour", None), "bar", None),
+                 getattr(self, "guide", None),
+                 # Подпись источников с тенью и знак PlanetX render не
+                 # рисует - их кладёт draw_attribution, как у снимка.
+                 self.attribution, self.brand}
+        image = view.grabFramebuffer()
+        image.setDevicePixelRatio(view.devicePixelRatioF())
+        painter = QPainter(image)
+        children = enum(QWidget, "RenderFlag", "DrawChildren")
+        for child in view.children():
+            if not isinstance(child, QWidget) or child in tools \
+                    or not child.isVisible():
+                continue
+            child.render(painter, child.pos(), QRegion(), children)
+        painter.end()
+        ratio = image.devicePixelRatio()
+        image.setDevicePixelRatio(1.0)
+        draw_attribution(image, plain_text(self.attribution.text()), ratio)
+        image.setDevicePixelRatio(ratio)
+        QApplication.clipboard().setImage(image)
+        journal.note("copy view {}x{}".format(image.width(), image.height()))
+        self.message = (tr("Вид скопирован в буфер обмена."),
+                        time.monotonic())
+        self._show_state()
+        return image
 
     def _open_snapshot(self, to_layout):
         # Окно строится заново: пропорции окна глобуса и список макетов
@@ -685,8 +728,17 @@ class ToolsMixin:
             waiting.append(tr("землетрясения"))
         notes = tr("Загружаются: {what}.", what=", ".join(waiting)) \
             if waiting else ""
+        # Исторические землетрясения ISC-GEM - в разрез, пока включена
+        # их строка. Вопрос автора от 18 октября 2026 года.
+        history = (self.history_events or []) \
+            if self.extras.get("iscgem") else []
+        # Очаги - в промежутке шкалы времени, как на глобусе. Просьба
+        # автора от 18 октября 2026 года.
+        span = getattr(self, "_time_range", None)
         built = section.build(self._section_points, self.crust, zones,
-                              self.quake_events, depth, width)
+                              section.in_time(self.quake_events or [], span),
+                              depth, width,
+                              history=section.in_time(history, span))
         # Стенка на глобусе - из того же разреза.
         self.view.section_wall.set_mesh(
             "wall", section.wall_mesh(built) if built is not None else None)
@@ -751,6 +803,20 @@ class ToolsMixin:
         if self.section_dialog is not None \
                 and self.section_dialog.isVisible():
             self.section_dialog.refresh()
+
+    def _section_follow_time(self):
+        """Шкала времени сдвинулась: открытый разрез пересобирается после
+        паузы SECTION_TIME_PAUSE - сборка с каталогом ISC-GEM стоит
+        около 0.25 с, на каждом шаге показа её не повторить."""
+        if self.section_dialog is None \
+                or not self.section_dialog.isVisible():
+            return
+        timer = getattr(self, "_section_time_timer", None)
+        if timer is None:
+            timer = self._section_time_timer = QTimer(self)
+            timer.setSingleShot(True)
+            timer.timeout.connect(self._refresh_section)
+        timer.start(SECTION_TIME_PAUSE)
 
     def _section_hover(self, point):
         """Точка разреза под курсором графика - метка на глобусе."""
