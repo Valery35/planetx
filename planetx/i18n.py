@@ -765,6 +765,41 @@ EN = {
         "Catalogue",
     "Запрос к Macrostrat…":
         "Asking Macrostrat…",
+    "Архив снимков с 2014 года":
+        "Imagery archive since 2014",
+    "Архив снимков":
+        "Imagery archive",
+    "Прежние выпуски спутниковой подложки Esri World Imagery с 2014 года.":
+        "Past releases of the Esri World Imagery basemap since 2014.",
+    "Esri Wayback":
+        "Esri Wayback",
+    ("Выпуски подложки Esri World Imagery с 20 февраля 2014 года. Шкала "
+     "времени выбирает выпуск, шаги идут по выпускам, где снимок в середине "
+     "вида менялся. «Что здесь?» называет дату съёмки, источник и "
+     "разрешение снимка."):
+        ("Releases of the Esri World Imagery basemap since 20 February 2014. "
+         "The time slider selects a release, the steps go through the "
+         "releases in which the image at the centre of the view changed. "
+         "What's here? names the capture date, the provider and the "
+         "resolution of the image."),
+    "Выпуск {day}":
+        "Release {day}",
+    "Сведения":
+        "Details",
+    "Запрос к Esri…":
+        "Asking Esri…",
+    "Архив снимков Esri Wayback":
+        "Esri Wayback imagery archive",
+    "Нет сведений о снимке":
+        "No details about the image",
+    "Дата съёмки":
+        "Capture date",
+    "Съёмочная система":
+        "Imaging system",
+    "Разрешение, м":
+        "Resolution, m",
+    "Точность, м":
+        "Accuracy, m",
     "Геология":
         "Geology",
     "Macrostrat не ответил":

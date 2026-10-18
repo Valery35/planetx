@@ -13,7 +13,9 @@ from qgis.PyQt.QtCore import QTimer
 
 from ... import journal
 from ...core import (basemap, ellipsoid, stars, sun, graticule, themes,
-                     sources as datasources)
+                     wayback, sources as datasources)
+from ...core.geocode import link_zoom
+from ...core.sync import ground_size
 from ...core.features import Shape
 from ...core.contours import (LEVEL as CONTOUR_LEVEL,
                               SOURCE_LEVEL as CONTOUR_SOURCE,
@@ -25,6 +27,7 @@ from ...i18n import tr
 from ...net.loader import TileLoader
 from ...net.overlay import fetch_bytes, fetch_json
 from .. import guide as guide_ui
+from ..identify import Group
 from ..sidepanel import save_width, saved_width
 from ..themes import theme_names
 from ..project import set_visible_on_map, write_shown
@@ -34,7 +37,8 @@ from ..properties import SCALE_RANGE
 from ..nasamaps import NasaMaps, map_names
 from .base import (BODY_CONTOUR_DEEPER, CIRCLE_COLOR,
                    GRID_COLOR, GRID_WIDTH, RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
-                   SURFACE_EXTRAS, THEME_KEY, TILE_SIZE, buildings_decoder,
+                   SURFACE_EXTRAS, THEME_KEY, TILE_SIZE, WAYBACK_PAUSE,
+                   buildings_decoder,
                    contours_prepare, gibs_source, prepare_theme, slope_prepare)
 
 
@@ -152,6 +156,8 @@ class ThemesMixin:
         """Тема на глобус или с глобуса. Ряд дат и шкала слоя
         просятся при первом показе темы, ответы помнятся."""
         self._time_mode()
+        if not self._theme_on() or self.theme_key != themes.WAYBACK:
+            self._wayback_stop()
         if not self._theme_on() or self.theme_key != "weather_wind":
             self.flow.set_wind(None)
         if not self._theme_on() or not themes.is_weather(self.theme_key):
@@ -180,6 +186,8 @@ class ThemesMixin:
             self._theme_fetch(theme.key, "scale", theme.colormap_url())
         self._update_timebar()
         self._apply_theme()
+        if theme.key == themes.WAYBACK:
+            self._wayback_view()
 
     def _theme_fetch(self, key, kind, url):
         if (key, kind) in self._theme_replies:
@@ -196,8 +204,11 @@ class ThemesMixin:
                                    error=error), time.monotonic())
                 self._show_state()
                 return
-            self._theme_domains[key] = themes.ready_intervals(
-                themes.parse_domains(data), time.time())
+            if key == themes.WAYBACK:
+                self._wayback_config(data)
+            else:
+                self._theme_domains[key] = themes.ready_intervals(
+                    themes.parse_domains(data), time.time())
             self._update_timebar()
             if getattr(self, "gallery", None) is not None:
                 self.gallery.domains_arrived(key)
@@ -317,8 +328,8 @@ class ThemesMixin:
         keep = self._theme_shown is not None \
             and self._theme_shown[0] == theme.key
         self._theme_shown = (theme.key, day)
-        source = basemap.Source("NASA GIBS", theme.url(day), theme.level,
-                                themes.ATTRIBUTION, builtin=True,
+        source = basemap.Source(theme.name, theme.url(day), theme.level,
+                                theme.attribution, builtin=True,
                                 missing=(404,))
         self.view.gibs["theme"].max_level = theme.level
         self.view.crossfade(self._theme_ready)
@@ -378,8 +389,8 @@ class ThemesMixin:
         keep = self._compare_shown is not None \
             and self._compare_shown[0] == theme.key
         self._compare_shown = (theme.key, left)
-        source = basemap.Source("NASA GIBS", theme.url(left), theme.level,
-                                themes.ATTRIBUTION, builtin=True,
+        source = basemap.Source(theme.name, theme.url(left), theme.level,
+                                theme.attribution, builtin=True,
                                 missing=(404,))
         self.view.gibs["compare"].max_level = theme.level
         self._set_gibs("compare", True, (source, prepare_theme(theme.key)),
@@ -402,6 +413,185 @@ class ThemesMixin:
     def _swipe_moved(self, share):
         self.view.swipe = share
         self.view.update()
+
+    # Архив снимков Esri Wayback (core/wayback.py): выпуски - ряд дат
+    # темы, шаги шкалы - выпуски, где снимок в середине вида менялся.
+
+    def _wayback_config(self, data):
+        """Список выпусков пришёл. Ряд дат - все выпуски, пока цепочка
+        изменений в середине вида не готова."""
+        try:
+            releases = wayback.parse_config(bytes(data))
+        except (ValueError, UnicodeDecodeError) as problem:
+            journal.note("wayback config: {}".format(problem))
+            releases = []
+        self._wayback_releases = releases
+        themes.BY_KEY[themes.WAYBACK].releases = wayback.by_day(releases)
+        self._wayback_tile = None
+        self._theme_domains[themes.WAYBACK] = wayback.intervals(releases)
+        self._wayback_view()
+
+    def _wayback_view(self):
+        """Вид сдвинулся: изменения ищутся заново, когда тайл поиска
+        в середине вида сменился и вид постоял WAYBACK_PAUSE."""
+        if getattr(self, "theme_key", "") != themes.WAYBACK \
+                or not self._theme_on() \
+                or not getattr(self, "_wayback_releases", None):
+            return
+        if getattr(self, "_wayback_timer", None) is None:
+            self._wayback_timer = QTimer(self)
+            self._wayback_timer.setSingleShot(True)
+            self._wayback_timer.timeout.connect(self._wayback_search)
+        if self._wayback_target() != getattr(self, "_wayback_tile", None):
+            self._wayback_timer.start(WAYBACK_PAUSE)
+
+    def _wayback_target(self):
+        """Тайл поиска (z, x, y) под точкой взгляда."""
+        pose = self.view.navigator.pose
+        width, _ = ground_size(pose.distance, self.view.camera.fov_y,
+                               self.view.camera.aspect)
+        z = wayback.search_level(width)
+        return (z,) + wayback.tile_of(pose.lat, pose.lon, z)
+
+    def _wayback_search(self):
+        """Цепочка изменений: новейший выпуск, выпуск его тайла, выпуск
+        старше него и так далее, запрос на изменение."""
+        if getattr(self, "theme_key", "") != themes.WAYBACK \
+                or not self._theme_on():
+            return
+        target = self._wayback_target()
+        if target == getattr(self, "_wayback_tile", None):
+            return
+        self._wayback_abort()
+        self._wayback_tile = target
+        self._wayback_chain = []
+        self._wayback_send(self._wayback_releases[-1])
+
+    def _wayback_send(self, release):
+        target = self._wayback_tile
+        self._wayback_reply = fetch_bytes(
+            wayback.tilemap_url(release.number, *target),
+            lambda data, error, target=target, number=release.number:
+            self._wayback_arrived(target, number, data, error))
+
+    def _wayback_arrived(self, target, number, data, error):
+        if target != getattr(self, "_wayback_tile", None) \
+                or getattr(self, "_wayback_reply", None) is None:
+            return  # ответ снятого или прежнего поиска
+        self._wayback_reply = None
+        effective = None
+        if data is not None:
+            try:
+                effective = wayback.parse_tilemap(bytes(data), number)
+            except (ValueError, UnicodeDecodeError) as problem:
+                error = str(problem)
+                data = None
+        if data is None:
+            # Без ответа ряд остаётся всеми выпусками.
+            journal.note("wayback tilemap {}: {}".format(number, error))
+            self._wayback_done(None)
+            return
+        if effective is not None:
+            self._wayback_chain.append(effective)
+            older = wayback.changes_next(self._wayback_releases, effective)
+            if older is not None:
+                self._wayback_send(older)
+                return
+        self._wayback_done(self._wayback_chain)
+
+    def _wayback_done(self, chain):
+        """Ряд дат темы - выпуски с изменениями, без них - все."""
+        numbers = set(chain or ())
+        found = [r for r in self._wayback_releases if r.number in numbers] \
+            or self._wayback_releases
+        self._theme_domains[themes.WAYBACK] = wayback.intervals(found)
+        self._update_timebar()
+        self._apply_theme()
+
+    def _wayback_abort(self):
+        reply = getattr(self, "_wayback_reply", None)
+        self._wayback_reply = None
+        if reply is not None:
+            reply.abort()
+
+    def _wayback_stop(self):
+        """Тема снята: поиск изменений снимается."""
+        timer = getattr(self, "_wayback_timer", None)
+        if timer is not None:
+            timer.stop()
+        self._wayback_abort()
+        self._wayback_tile = None
+
+    def wayback_changes(self):
+        """Даты выпусков в ряду темы Wayback - для шагов проверки."""
+        return themes.days(self._theme_domains.get(themes.WAYBACK) or [])
+
+    def _ask_wayback(self, lat, lon):
+        """Сведения о снимке выпуска под щелчком: дата съёмки, источник,
+        разрешение."""
+        self._wayback_meta = None
+        reply = getattr(self, "_wayback_meta_reply", None)
+        self._wayback_meta_reply = None
+        if reply is not None:
+            reply.abort()
+        if getattr(self, "theme_key", "") != themes.WAYBACK \
+                or not self._theme_on() or not self.theme_day:
+            return
+        release = themes.BY_KEY[themes.WAYBACK].release(self.theme_day)
+        pose = self.view.navigator.pose
+        width, _ = ground_size(pose.distance, self.view.camera.fov_y,
+                               self.view.camera.aspect)
+        url = wayback.metadata_url(release, lat, lon,
+                                   min(link_zoom(lat, width),
+                                       wayback.MAX_LEVEL))
+        if url is None:
+            return
+        point = (lat, lon)
+        self._wayback_meta = (point, release, None, "")
+        self._wayback_meta_reply = fetch_bytes(
+            url, lambda data, error: self._wayback_meta_arrived(
+                point, release, data, error))
+
+    def _wayback_meta_arrived(self, point, release, data, error):
+        state = getattr(self, "_wayback_meta", None)
+        if state is None or state[0] != point:
+            return
+        self._wayback_meta_reply = None
+        info = None
+        if data is not None:
+            try:
+                info = wayback.parse_metadata(bytes(data)) or {}
+            except (ValueError, UnicodeDecodeError) as problem:
+                error = str(problem)
+        self._wayback_meta = (point, release, info, error or "")
+        self._refresh_identified()
+
+    def _identify_wayback(self):
+        """Группа «Архив снимков Esri Wayback» окна «Объекты»."""
+        state = getattr(self, "_wayback_meta", None)
+        if state is None:
+            return []
+        _, release, info, error = state
+        title = tr("Выпуск {day}", day=release.day.isoformat())
+        if info is None and not error:
+            values = [(tr("Сведения"), tr("Запрос к Esri…"))]
+        elif info is None:
+            values = [(tr("Ошибка"), error)]
+        elif not info:
+            values = [(tr("Сведения"), tr("Нет сведений о снимке"))]
+        else:
+            values = []
+            for label, key in ((tr("Дата съёмки"), "date"),
+                               (tr("Источник"), "provider"),
+                               (tr("Съёмочная система"), "sensor")):
+                if info[key]:
+                    values.append((label, info[key]))
+            for label, key in ((tr("Разрешение, м"), "resolution"),
+                               (tr("Точность, м"), "accuracy")):
+                if info[key] is not None:
+                    values.append((label, "{:g}".format(info[key])))
+        return [(Group(tr("Архив снимков Esri Wayback")),
+                 [(title, values, None)])]
 
     def sun_time(self):
         """Момент для солнца, секунды UTC: конец промежутка открытой

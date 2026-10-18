@@ -1089,6 +1089,8 @@ class LayersMixin:
             parts.append(link_html(*(
                 field_attribution(self.theme_key)
                 if themes.is_weather(self.theme_key)
+                else themes.BY_KEY[self.theme_key].attribution
+                if self.theme_key in themes.BY_KEY
                 else themes.ATTRIBUTION)))
         if "lights" in self.gibs_loaders:
             parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))

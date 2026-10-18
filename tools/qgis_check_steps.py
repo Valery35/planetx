@@ -16293,6 +16293,109 @@ def geology_check():
     return None
 
 
+@check(1000)
+def wayback_on():
+    """Архив снимков Esri Wayback над центром Перми: список выпусков,
+    цепочка изменений в середине вида, шаг шкалы назад, шторка, дата
+    съёмки под щелчком, слой XYZ в проект."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.0105, 56.2294, 3000.0, 0.0, 0.0))
+    window.view.update()
+    window.set_theme("wayback")
+    state["wb_started"] = time.monotonic()
+    state.pop("wb_stage", None)
+    result["wayback"] = {}
+
+
+@check(1000)
+def wayback_wait():
+    from planetx.core import themes
+    window = state["window"]
+    view = window.view
+    out = result["wayback"]
+    spent = time.monotonic() - state["wb_started"]
+    timer = getattr(window, "_wayback_timer", None)
+    busy = "wayback" not in window._theme_domains \
+        or getattr(window, "_wayback_tile", None) is None \
+        or getattr(window, "_wayback_reply", None) is not None \
+        or (timer is not None and timer.isActive())
+    layer = view.gibs["theme"]
+    if spent < 90.0 and (busy or layer.missing or layer.pending
+                         or not layer.textures):
+        return 1000
+    stage = state.get("wb_stage")
+    changes = window.wayback_changes()
+    if stage is None:
+        out.update(seconds=round(spent, 1),
+                   releases=len(getattr(window, "_wayback_releases", [])),
+                   changes=len(changes), first=changes[:1],
+                   last=changes[-1:], theme_day=window.theme_day,
+                   tile=list(window._wayback_tile or ()),
+                   textures=len(layer.textures),
+                   credit="Wayback" in window.attribution.text(),
+                   url=themes.BY_KEY["wayback"].url(window.theme_day)[-40:])
+        view.grabFramebuffer().save(os.path.join(TEMP,
+                                                 "planetx_wayback.png"))
+        # Шаг шкалы назад - предыдущий выпуск с изменениями.
+        moment = window._theme_step(themes.moment(window.theme_day), -1)
+        out["step_back"] = moment is not None
+        if moment is not None:
+            window.timebar.set_range(window.timebar.range()[0], moment)
+            window._time_range = window.timebar.range()
+            window._apply_theme()
+        out["stepped_day"] = window.theme_day
+        window.set_compare(True)
+        state["wb_stage"] = "compare"
+        state["wb_started"] = time.monotonic()
+        return 1000
+    compare = view.gibs["compare"]
+    if spent < 60.0 and (not compare.textures or compare.missing
+                         or compare.pending):
+        return 1000
+    out["compare"] = dict(shown=window._compare_shown, swipe=view.swipe,
+                          textures=len(compare.textures))
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_wayback_swipe.png"))
+    window.set_compare(False)
+    window._ask_wayback(58.0105, 56.2294)
+    state["wb_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def wayback_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["wayback"]
+    meta = getattr(window, "_wayback_meta", None)
+    if meta is not None and meta[2] is None and not meta[3] \
+            and time.monotonic() - state["wb_started"] < 30.0:
+        return 1000
+    groups = window._identify_wayback()
+    out["identify"] = [(f[0], f[1]) for _, fs in groups for f in fs]
+    out["exported"] = window.active_export("map")
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - слои глобуса") \
+        or root.findGroup("PlanetX - globe layers")
+    out["project_layer"] = None
+    if group is not None:
+        nodes = group.findLayers()
+        out["project_layer"] = [(n.layer().name(), n.layer().providerType())
+                                for n in nodes]
+        for node in nodes:
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.set_theme("")
+    out["off"] = dict(loader="theme" in window.gibs_loaders,
+                      reply=getattr(window, "_wayback_reply", None) is None,
+                      compare="compare" in window.gibs_loaders)
+    out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
 def _tilemap_start(window, case):
     from planetx.core.navigation import Pose
     key, lat, lon, distance = case[:4]

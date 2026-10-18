@@ -22,7 +22,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
 
 from ..core import (basemap, cadastre, crust, dem, faults, fires, geology,
                     iscgem, paleo, planets, quakes, routing, slabs, sources,
-                    sun, tilemaps)
+                    sun, tilemaps, wayback)
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
@@ -99,6 +99,9 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
              fires.ATTRIBUTION[1]),
             ("NASA SVS", tr("Млечный путь, около 10 МБ"),
              "https://svs.gsfc.nasa.gov/4851", None)]),
+        ("Esri", [
+            ("Esri World Imagery Wayback", tr("Архив снимков с 2014 года"),
+             wayback.ATTRIBUTION[1], wayback.CONFIG_URL)]),
         (tr("Науки о Земле"), [
             ("USGS", tr("Землетрясения за 30 суток"), quakes.ATTRIBUTION[1],
              quakes.FEED),

@@ -511,6 +511,34 @@ fields, fires and surface temperature have no swipe. A change of
 theme keeps the swipe, its day is looked up in the series of the new
 theme. Switching the theme off removes the swipe.
 
+#### Esri Wayback imagery archive
+
+The Esri Wayback map of the Imagery archive category in the catalog
+shows past releases of the Esri World Imagery basemap. The releases
+start on 20 February 2014, in October 2026 there are 197 of them. The
+map opens the time slider at the latest release. The right handle
+selects the release not later than its day.
+
+The ‹ and › steps of the slider go only through the releases in which
+the image at the centre of the view changed. When the view has stood
+still for 0.7 s, the plugin asks the Esri service which release the
+tile at the centre of the view actually comes from. The closer the
+view, the smaller this tile. At the centre of Perm from 3 km there are
+12 such releases out of 197. Until the service answers, the steps go
+through all releases.
+
+The ⇆ swipe compares two releases in the same way as two days of a
+NASA theme. By default the left part shows the release a year earlier.
+
+The release date is not the capture date. What's here? and the
+Identify features mode give the Esri Wayback imagery archive group -
+the capture date, the provider, the imaging system, the resolution and
+the accuracy of the release image at the clicked point. Add to QGIS
+project… of the On the globe row adds the release as an XYZ tile
+layer, no file is written.
+
+The terms are the same as for Esri World Imagery, see Data sources.
+
 #### Weather
 
 The Weather category stands in the catalogue before the NASA themes. Its first map is

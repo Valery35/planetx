@@ -69,6 +69,9 @@ OPACITY_KEY = "PlanetX/opacity/"
 LAYER_FADE = 0.5
 LAYER_FADE_TICK = 30
 OPACITY_PAUSE = 300  # мс, наложение пересобирается после ползунка
+# Архив Wayback: изменения в середине вида ищутся после паузы вида, мс.
+# Выбор помощника, утверждает автор.
+WAYBACK_PAUSE = 700
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
     "grid", "buildings", "contours", "cadastre", "infra_osm", "cables",
@@ -372,6 +375,9 @@ def prepare_temperature(key, rgba):
 def prepare_theme(theme_key):
     """Работа рабочего потока для тайла темы NASA GIBS: прозрачность,
     прозрачные классы темы и уровни мипмапов."""
+    if theme_key == themes.WAYBACK:
+        # Снимок Wayback - подложка, без прозрачности раскраски.
+        return lambda key, rgba: mip_chain(rgba)
     clear = themes.CLEAR.get(theme_key, ())
     return lambda key, rgba: mip_chain(themes.overlay_rgba(rgba,
                                                            clear=clear))

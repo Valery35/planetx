@@ -416,9 +416,11 @@ class StateMixin:
                  or (key,))[0]
         if key == "map":
             title = map_names().get(self.theme_key, (title,))[0]
-        if key == "geology" or key in tilemaps.MAPS:
+        wayback = key == "map" and self.theme_key == themes.WAYBACK
+        if key == "geology" or key in tilemaps.MAPS or wayback:
             # Карты картинками - слоем тайлов или WMS, без файла.
             count = self._export_geology(title) if key == "geology" \
+                else self._export_wayback(title) if wayback \
                 else self._export_tilemap(key, title)
             self.message = (tr("В проект добавлен слой «{title}».",
                                title=title) if count else
@@ -595,6 +597,15 @@ class StateMixin:
         не пишется."""
         layer = layer_export.add_xyz(geology.TILES, title, geology.MAX_LEVEL,
                                      geology.ATTRIBUTION[0])
+        return None if layer is None else 1
+
+    def _export_wayback(self, title):
+        """Выпуск Esri Wayback дня темы в проект слоем тайлов XYZ."""
+        theme = themes.BY_KEY[themes.WAYBACK]
+        layer = layer_export.add_xyz(
+            theme.url(self.theme_day), "{} {}".format(
+                title, str(self.theme_day)[:10]), theme.level,
+            theme.attribution[0])
         return None if layer is None else 1
 
     def _export_tilemap(self, key, title):

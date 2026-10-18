@@ -21,6 +21,11 @@ import re
 
 import numpy as np
 
+try:  # внутри плагина QGIS
+    from . import wayback
+except ImportError:  # headless-тесты
+    import wayback
+
 ROOT = "https://gibs.earthdata.nasa.gov"
 URL = (ROOT + "/wmts/epsg3857/best/{layer}/default/{time}/"
        "GoogleMapsCompatible_Level{level}/{{z}}/{{y}}/{{x}}.{ext}")
@@ -42,13 +47,18 @@ CLEAR = {"snow_mass": ((82, 98, 106),)}
 
 # Группа «weather» - поля прогноза NOAA GFS, не слои GIBS: их грузит
 # ui/weather.py, адрес и ряд дат у них свои (core/weather.py).
-GROUPS = ("weather", "fire", "water", "gases", "life")
+# Группа «archive» - архив снимков Esri Wayback (core/wayback.py).
+GROUPS = ("weather", "fire", "water", "gases", "life", "archive")
 WEATHER = "GFS"  # слой темы-поля прогноза
+WAYBACK = "wayback"  # ключ темы архива снимков
 
 
 class Theme:
     """Слой темы: ключ строки, группа, слой GIBS, расширение тайла,
     предельный уровень, цветовая карта (None - шкалы нет)."""
+
+    name = "NASA GIBS"  # название источника загрузчика
+    attribution = ATTRIBUTION
 
     __slots__ = ("key", "group", "layer", "ext", "level", "colormap")
 
@@ -132,6 +142,44 @@ THEMES = (
     Theme("night", "life", "VIIRS_SNPP_DayNightBand_AtSensor_M15", "jpeg",
           8, None),
 )
+
+
+class WaybackTheme(Theme):
+    """Архив снимков Esri Wayback: день ряда - дата выпуска, адрес тайла
+    - по номеру выпуска. Выпуски ставит окно по ответу CONFIG_URL."""
+
+    __slots__ = ("releases", "name", "attribution")
+
+    def __init__(self):
+        super().__init__(WAYBACK, "archive", "Wayback", "jpg",
+                         wayback.MAX_LEVEL, None)
+        self.releases = {}  # дата YYYY-MM-DD: wayback.Release
+        self.name = "Esri Wayback"
+        self.attribution = wayback.ATTRIBUTION
+
+    def release(self, day):
+        """Выпуск дня day или ближайший более ранний, без выпусков -
+        None."""
+        if not self.releases:
+            return None
+        day = str(day)[:10]
+        found = self.releases.get(day)
+        if found is None:
+            older = [d for d in self.releases if d <= day]
+            found = self.releases[max(older) if older
+                                  else min(self.releases)]
+        return found
+
+    def url(self, day):
+        found = self.release(day)
+        return wayback.tile_url(found.number) if found is not None \
+            else wayback.CURRENT_URL
+
+    def domains_url(self):
+        return wayback.CONFIG_URL
+
+
+THEMES = THEMES + (WaybackTheme(),)
 BY_KEY = {theme.key: theme for theme in THEMES}
 
 

@@ -903,6 +903,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.view.changed.connect(self._update_plate_arrows)
         self.view.changed.connect(self._update_contour_legend)
         self.view.changed.connect(self._overpass_view_changed)
+        self.view.changed.connect(self._wayback_view)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
         self.panel.gallery_requested.connect(self.open_gallery)

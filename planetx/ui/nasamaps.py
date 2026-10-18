@@ -1054,6 +1054,10 @@ class NasaMaps(QWidget):
         if kind == "gibs":
             intervals = self.globe._theme_domains.get(key)
             day = themes.pick_day(intervals) if intervals else None
+            if key == themes.WAYBACK:
+                name = themes.BY_KEY[key].name
+                return "{}, {}".format(name, day_text(day)) if day \
+                    else name
             return tr("NASA GIBS, {day}", day=day_text(day)) if day \
                 else tr("NASA GIBS")
         if kind == "weather":
