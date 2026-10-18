@@ -10,7 +10,7 @@ import zipfile
 import time
 
 import numpy as np
-from qgis.core import QgsApplication
+from qgis.core import QgsApplication, QgsRasterLayer
 from qgis.PyQt.QtCore import QTimer
 
 from ... import journal
@@ -19,6 +19,7 @@ from ...core.measure import surface_level
 from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
+from ...core import tileoverlays
 from ...core import (infra, mining, cables as cables_core,
                      faults as faults_core,
                      plants as plants_core, platemotion, plates, slabs,
@@ -34,6 +35,7 @@ from ...render.view import OBJECT_BUDGET, start_keys
 from ..identify import Group, point_text
 from ..deposits import parse_plants
 from ..legend import fault_names, fuel_names
+from ..nasamaps import layer_names
 from .base import (CURSOR_PERIOD, DATA_DIR, DEPOSIT_POLL, IDENTIFY_PIXELS,
                    MESSAGE_TIME, MOTION_COLOR, MOTION_WIDTH, distance_text)
 
@@ -623,6 +625,25 @@ class ResourcesMixin:
         if on and self.cable_layer is None:
             self.cable_layer = cable_layer(self.cables_data,
                                            self._cable_names())
+        self._update_overlay(keep=True)
+        self._show_attribution()
+        self.view.update()
+
+    def _set_tile_overlay(self, key, on):
+        """Наложение тайлов (core/tileoverlays.py) - слой XYZ QGIS
+        в картинке наложения над векторной основой. Тайлы читает
+        QGIS при отрисовке наложения, только видимые."""
+        if on and key not in self.tile_layers:
+            layer = QgsRasterLayer(tileoverlays.layer_source(key),
+                                   layer_names()[key][0], "wms")
+            if not layer.isValid():
+                journal.note("tile overlay {}: invalid".format(key))
+                self.message = (tr("Наложение «{title}» не открыто.",
+                                   title=layer_names()[key][0]),
+                                time.monotonic())
+                self._show_state()
+                return
+            self.tile_layers[key] = layer
         self._update_overlay(keep=True)
         self._show_attribution()
         self.view.update()

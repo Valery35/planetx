@@ -169,6 +169,20 @@ class TestReady(unittest.TestCase):
                          "yandex_satellite", "dgis_map"} <= warned)
         self.assertNotIn("opentopomap", warned)
 
+    def test_menu_groups_cover_every_source_once(self):
+        grouped = [k for _, keys in bm.READY_GROUPS for k in keys]
+        self.assertEqual(sorted(grouped), sorted(bm.READY_KEYS))
+        self.assertEqual(len(grouped), len(set(grouped)))
+        warned = {r[0] for r in bm.READY if r[7]}
+        self.assertEqual(set(dict(bm.READY_GROUPS)["warned"]), warned)
+
+    def test_osm_france_servers_get_two_requests(self):
+        for key in ("osm_hot", "osm_fr", "cyclosm"):
+            self.assertEqual(bm.ready_source(key).parallel,
+                             bm.OSM_PARALLEL, key)
+        self.assertEqual(bm.ready_source("esri_ocean").parallel,
+                         bm.OTHER_PARALLEL)
+
     def test_bing_uses_quadkey(self):
         src = bm.ready_source("bing_aerial")
         self.assertIn("/a030.jpeg", src.tile_url(3, 2, 2))

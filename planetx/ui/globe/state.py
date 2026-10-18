@@ -18,6 +18,7 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 from qgis.utils import iface
 
 from ... import journal
+from ...core import tileoverlays
 from ...core import (basemap, clouds, fields, geology, temperature,
                      flow as flow_core, quakes, themes, tilemaps)
 from ...core.sync import ground_size, view_box, inside as in_box
@@ -268,6 +269,8 @@ class StateMixin:
             self._set_infra(on)
         elif key == "cables":
             self._set_cables(on)
+        elif key in tileoverlays.OVERLAYS:
+            self._set_tile_overlay(key, on)
         elif key == "currents":
             self._set_currents(on)
         elif key == "cadastre":
@@ -406,6 +409,8 @@ class StateMixin:
                  "infra_osm": [getattr(self, "infra_lines", None),
                                getattr(self, "infra_points", None)],
                  "cables": [getattr(self, "cable_layer", None)]}
+        found.update({k: [layer] for k, layer in
+                      getattr(self, "tile_layers", {}).items()})
         return [layer for layer in found.get(key, ()) if layer is not None]
 
     def active_export(self, key, path=None):
@@ -417,10 +422,13 @@ class StateMixin:
         if key == "map":
             title = map_names().get(self.theme_key, (title,))[0]
         wayback = key == "map" and self.theme_key == themes.WAYBACK
-        if key == "geology" or key in tilemaps.MAPS or wayback:
+        overlay = key in tileoverlays.OVERLAYS
+        if key == "geology" or key in tilemaps.MAPS or wayback \
+                or overlay:
             # Карты картинками - слоем тайлов или WMS, без файла.
             count = self._export_geology(title) if key == "geology" \
                 else self._export_wayback(title) if wayback \
+                else self._export_tile_overlay(key, title) if overlay \
                 else self._export_tilemap(key, title)
             self.message = (tr("В проект добавлен слой «{title}».",
                                title=title) if count else
@@ -606,6 +614,14 @@ class StateMixin:
             theme.url(self.theme_day), "{} {}".format(
                 title, str(self.theme_day)[:10]), theme.level,
             theme.attribution[0])
+        return None if layer is None else 1
+
+    def _export_tile_overlay(self, key, title):
+        """Наложение тайлов в проект слоем XYZ, файл не пишется."""
+        overlay = tileoverlays.OVERLAYS[key]
+        layer = layer_export.add_xyz(overlay.url, title,
+                                     overlay.max_level,
+                                     overlay.attribution)
         return None if layer is None else 1
 
     def _export_tilemap(self, key, title):

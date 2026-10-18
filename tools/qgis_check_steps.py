@@ -3773,6 +3773,8 @@ def quakes_check():
     out["depths"] = sorted(round(q.depth) for q in window.quake_events)[-3:]
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_quakes.png"))
     out["drawn"] = view.quakes.drawn
+    # Без разреза Земли все кружки в эпицентрах на поверхности.
+    out["deep_without_cutaway"] = int(view.quakes.deep().sum())
     out["usgs_credit"] = "USGS" in window.attribution.text()
     out["gl"] = dict(view.gl_errors)
     # Шкала времени: последние 7 суток сводки.
@@ -6627,6 +6629,82 @@ def cables_check():
     window.set_extra("cables", False)
     out["after_off"] = window.overlay is None or not any(
         la is layer for la in window.overlay.layers)
+
+
+TILE_OVERLAYS = ("hiking", "cycling", "sea_marks")
+
+
+@check(1000)
+def tile_overlays_on():
+    """Наложения тайлов в Альпах у Церматта с 40 км: пешие
+    и велосипедные маршруты и морские знаки сразу."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(46.02, 7.75, 40000.0, 0.0, 0.0))
+    window.view.update()
+    for key in TILE_OVERLAYS:
+        window.set_extra(key, True)
+    result["tile_overlays"] = {
+        "layers": sorted(window.tile_layers),
+        "valid": all(window.tile_layers[k].isValid() for k in TILE_OVERLAYS)}
+    state["ls_started"] = time.monotonic()
+
+
+def _overlay_settled(window):
+    overlay = window.overlay
+    return overlay is not None and not overlay.busy() \
+        and not window.view._overlay_missing \
+        and not window.view.load_missing
+
+
+@check(1000)
+def tile_overlays_wait():
+    """Картинки наложения пришли, кадр с наложениями. Потом наложения
+    выключаются."""
+    window = state["window"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 60.0 and not _overlay_settled(window):
+        return 1000
+    out = result["tile_overlays"]
+    out["seconds_on"] = round(spent, 1)
+    out["in_overlay"] = sorted(
+        k for k in TILE_OVERLAYS if window.overlay is not None and any(
+            la is window.tile_layers[k] for la in window.overlay.layers))
+    out["credits"] = window.attribution.text()
+    out["rows"] = [k for k in TILE_OVERLAYS
+                   if k in window.panel.active_rows]
+    state["tile_on"] = window.view.grabFramebuffer()
+    state["tile_on"].save(os.path.join(TEMP, "planetx_tile_overlays.png"))
+    for key in TILE_OVERLAYS:
+        window.set_extra(key, False)
+    state["ls_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def tile_overlays_check():
+    """Без наложений кадр другой, слоёв в наложении нет."""
+    window = state["window"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 60.0 and (window.view.load_missing or (
+            window.overlay is not None and not _overlay_settled(window))):
+        return 1000
+    out = result["tile_overlays"]
+    off = window.view.grabFramebuffer()
+    on = state.pop("tile_on")
+    diff = 0
+    for y in range(0, on.height(), 4):
+        for x in range(0, on.width(), 4):
+            if on.pixel(x, y) != off.pixel(x, y):
+                diff += 1
+    out["changed_share"] = round(diff / ((on.height() // 4)
+                                         * (on.width() // 4)), 3)
+    out["after_off"] = window.overlay is None or not any(
+        la is layer for la in window.overlay.layers
+        for layer in window.tile_layers.values())
+    out["credit_off"] = "waymarkedtrails" not in window.attribution.text()
+    return None
 
 
 @check(1000)
@@ -11782,6 +11860,9 @@ def cutaway_check():
     out["legend"] = window.cutaway_legend.isVisible()
     window.grab().save(os.path.join(TEMP, "planetx_cutaway_window.png"))
     out["faces_drawn"] = view.cutaway.drawn
+    # На своей глубине - только очаги в вынутом секторе.
+    out["quakes_deep"] = [int(view.quakes.deep().sum()),
+                          len(view.quakes.events)]
     out["vertices"] = view.cutaway.vertex_count()
     out["gain"] = view.wedge_gain
     out["slab_vertices"] = view.cutaway_slabs.vertex_count()
@@ -14359,10 +14440,15 @@ def ready_menu():
     settings.remove(wmod.ACCEPTED_KEY)
     menu = window.panel.basemap_menu()
     ready = [a.menu() for a in menu.actions() if a.menu() is not None]
+    groups = [a for a in ready[0].actions() if a.menu() is not None] \
+        if ready else []
+    items = [b for a in groups for b in a.menu().actions()]
     out = result["ready"] = {
-        "submenu": [a.text() for a in ready[0].actions()] if ready else None,
-        "warned_tips": sum(1 for a in ready[0].actions() if a.toolTip()
-                           and a.toolTip() != a.text()) if ready else 0}
+        "submenu": {a.text(): [b.text() for b in a.menu().actions()]
+                    for a in groups},
+        "items": len(items),
+        "warned_tips": sum(1 for a in items if a.toolTip()
+                           and a.toolTip() != a.text())}
     menu.deleteLater()
     asked = []
     window._accept_terms = lambda name, terms: asked.append(name) or False
@@ -14402,6 +14488,30 @@ def ready_wait():
     out["opentopo"] = window.add_ready_source("opentopomap")
     out["opentopo_source"] = window.source.name
     out["attribution"] = window.attribution.text()
+    # Новая подложка 18 октября 2026 года - Blue Marble NASA из космоса.
+    from planetx.core.navigation import Pose
+    out["blue_marble"] = window.add_ready_source("nasa_blue_marble")
+    window.view.navigator.show(Pose(50.0, 60.0, 9000000.0, 0.0, 0.0))
+    window.view.update()
+    state["ready_seen"] = _watch_loader(window.loader, "ready_seen")
+    state["ls_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def ready_new_wait():
+    """Blue Marble пришла тайлами, кадр в файл."""
+    window = state["window"]
+    seen = state["ready_seen"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 25.0 and (window.view.load_missing or seen["loaded"] < 10):
+        return 1000
+    out = result["ready"]
+    out["blue_marble_seen"] = dict(seen, seconds=round(spent, 1),
+                                   source=window.source.name,
+                                   credits=window.attribution.text())
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_ready_bluemarble.png"))
     return None
 
 

@@ -61,6 +61,20 @@ class TestQuakes(unittest.TestCase):
         self.assertAlmostEqual(float(hf[0]), -70000.0, delta=0.1)
         self.assertAlmostEqual(float(he[0]), 200.0, delta=0.1)
 
+    def test_focus_at_depth_only_in_removed_sector(self):
+        # Замечание пользователя от 18 октября 2026 года - вне разреза
+        # очаг стоит в эпицентре на поверхности.
+        events = qk.parse(FEED)
+        focus, epi = qk.points(events, 1.0,
+                               lambda la, lo: np.zeros(len(la)))
+        shown = qk.placed(focus, epi, np.zeros(len(events), dtype=bool))
+        np.testing.assert_array_equal(shown, epi)
+        deep = np.zeros(len(events), dtype=bool)
+        deep[0] = True
+        shown = qk.placed(focus, epi, deep)
+        np.testing.assert_array_equal(shown[0], focus[0])
+        np.testing.assert_array_equal(shown[1:], epi[1:])
+
     def test_facing_hides_far_side(self):
         events = qk.parse(FEED)
         _, epi = qk.points(events, 1.0, lambda la, lo: np.zeros(len(la)))

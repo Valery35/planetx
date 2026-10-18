@@ -28,7 +28,6 @@ class SatellitePoints(Quakes):
 
     def __init__(self):
         super().__init__()
-        self.stems = False
         self.points = np.zeros((0, 3))
         self.ok = np.zeros(0, dtype=bool)
         self.colors = np.zeros((0, 4), dtype=np.float32)

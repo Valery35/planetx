@@ -1528,6 +1528,34 @@ EN = {
         "The source is added by your decision, you bear the responsibility "
         "for its use.<br><br>Terms of the service: {terms}",
     "Готовые источники": "Ready sources",
+    "NASA и USGS": "NASA and USGS",
+    "Наложения карт": "Map overlays",
+    "Прозрачные карты поверх подложки - морские знаки, пешие "
+    "и велосипедные маршруты. Включать можно несколько сразу.":
+        "Transparent maps over the base map - sea marks, hiking and "
+        "cycling routes. Several can be on at once.",
+    "Морские знаки": "Sea marks",
+    "Морские навигационные знаки OpenSeaMap - буи, маяки, створы, "
+    "фарватеры и якорные стоянки. Знаки видны вблизи, с уровня карты "
+    "около 1:500 000. Карта не заменяет навигационную.":
+        "OpenSeaMap navigation marks - buoys, lighthouses, leading lines, "
+        "fairways and anchorages. The marks are seen close up, from map "
+        "scale about 1:500 000. The map does not replace a nautical "
+        "chart.",
+    "Пешие маршруты": "Hiking routes",
+    "Размеченные пешие маршруты из OpenStreetMap по Waymarked Trails - "
+    "международные, национальные, региональные и местные тропы цветом "
+    "своего уровня.":
+        "Waymarked hiking routes from OpenStreetMap by Waymarked Trails - "
+        "international, national, regional and local trails in the colour "
+        "of their level.",
+    "Велосипедные маршруты": "Cycling routes",
+    "Размеченные велосипедные маршруты из OpenStreetMap по Waymarked "
+    "Trails - от международных веломаршрутов до местных.":
+        "Waymarked cycling routes from OpenStreetMap by Waymarked Trails - "
+        "from international cycle routes to local ones.",
+    "Наложение «{title}» не открыто.":
+        "The overlay \"{title}\" is not opened.",
     "Условия сервиса не разрешают брать тайлы по прямому адресу. Перед "
     "добавлением окно предупредит об этом.":
         "The service terms do not allow taking tiles by the direct address. "
@@ -3357,13 +3385,15 @@ EN = {
         "sea is flat. Exists only on the Earth.",
     "Землетрясения": "Earthquakes",
     "Землетрясения магнитудой от 4.5 за последние 30 "
-    "суток по сводке USGS. Кружок стоит в очаге на его "
-    "глубине, линия ведёт к эпицентру на поверхности. "
+    "суток по сводке USGS. Кружок стоит в эпицентре "
+    "на поверхности. На своей глубине очаг виден в вынутом "
+    "секторе строки «Разрез Земли». "
     "Цвет показывает глубину очага, размер - магнитуду. "
     "Сводка загружается при включении строки.":
         "Earthquakes of magnitude 4.5 and above over the last 30 days from "
-        "the USGS feed. A circle marks the focus at its depth, and a line "
-        "leads to the epicentre on the surface. The colour shows the focus "
+        "the USGS feed. A circle marks the epicentre on the surface. "
+        "The focus is seen at its depth in the removed sector of the Earth "
+        "cutaway row. The colour shows the focus "
         "depth, the size shows the magnitude. The feed is loaded when the "
         "row is switched on.",
     "Глубина очага, км": "Focus depth, km",
@@ -4758,15 +4788,17 @@ EN = {
     "Исторические землетрясения": "Historical earthquakes",
     "Сильные землетрясения мира с 1904 по 2024 год по каталогу ISC-GEM "
     "- около 74 тысяч событий магнитудой от 5, места, глубины и магнитуды "
-    "пересчитаны одним способом. Кружок стоит в очаге на его глубине, "
-    "цвет показывает глубину, размер - магнитуду. Промежуток шкалы "
+    "пересчитаны одним способом. Кружок стоит в эпицентре, на своей "
+    "глубине - в вынутом секторе разреза Земли, цвет показывает "
+    "глубину, размер - магнитуду. Промежуток шкалы "
     "времени отбирает события. Щелчок по кружку показывает место, дату, "
     "магнитуду и страницу события USGS. Первое включение скачивает "
     "каталог по частям, около 13 МБ.":
         "Strong earthquakes of the world from 1904 to 2024 from the "
         "ISC-GEM catalogue - about 74 thousand events of magnitude 5 and "
         "above, with locations, depths and magnitudes recomputed in one "
-        "way. A circle sits at the focus at its depth, the colour shows "
+        "way. A circle sits at the epicentre, at its depth - in the "
+        "removed sector of the Earth cutaway, the colour shows "
         "the depth and the size the magnitude. The time slider range "
         "selects the events. A click on a circle shows the place, date, "
         "magnitude and the USGS event page. The first use downloads the "

@@ -11,7 +11,8 @@ import numpy as np
 from qgis.core import QgsSettings
 
 from ...core import (basemap, cadastre, clouds, fields, geology, sun,
-                     temperature, cutaway, slabs, themes, tilemaps)
+                     temperature, cutaway, slabs, themes, tilemaps,
+                     tileoverlays)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
 from ...core.mipmap import mip_chain
@@ -60,7 +61,8 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "water_transitions": ("emag",), "soil_clay": ("emag",),
               "soil_sand": ("emag",), "soil_soc": ("emag",),
               "soil_ph": ("emag",)}
-QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm", "cables")
+QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm",
+               "cables") + tileoverlays.KEYS
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
@@ -171,7 +173,8 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "glim": False, "worldcover": False,
                   "water_occurrence": False,
                   "water_transitions": False, "soil_clay": False,
-                  "soil_sand": False, "soil_soc": False, "soil_ph": False}
+                  "soil_sand": False, "soil_soc": False, "soil_ph": False,
+                  **{key: False for key in tileoverlays.KEYS}}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
@@ -184,7 +187,7 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "faults", "geology", "iscgem", "glim", "worldcover",
                 "water_occurrence",
                 "water_transitions", "soil_clay", "soil_sand", "soil_soc",
-                "soil_ph")
+                "soil_ph") + tileoverlays.KEYS
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}

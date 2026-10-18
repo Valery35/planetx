@@ -402,7 +402,6 @@ class GlobeView(QOpenGLWidget):
         self.quakes = Quakes()
         # Исторические землетрясения (ISC-GEM): точки без линий к эпицентрам.
         self.history = Quakes()
-        self.history.stems = False
         # Пожары NASA FIRMS: очаги точками на рельефе.
         self.fires = FirePoints()
         # Месторождения USGS (core/deposits.py): точки на рельефе.
@@ -2361,6 +2360,7 @@ class GlobeView(QOpenGLWidget):
         else:
             self.fires.drawn = 0
         for layer in (self.history, self.quakes):
+            layer.wedge = self.wedge
             if layer.events and not self.show_holes:
                 layer.draw(self.camera, ratio)
             else:

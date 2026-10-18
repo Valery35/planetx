@@ -137,7 +137,11 @@ def mirror_urls(url):
 
 
 def is_osm(url):
-    return "tile.openstreetmap.org" in url
+    """Сервер тайлов OpenStreetMap или OSM France - не больше двух
+    запросов сразу, как по правилам OSM."""
+    return any(host in url for host in (
+        "tile.openstreetmap.org", "tile.openstreetmap.fr",
+        "tile-cyclosm.openstreetmap.fr"))
 
 
 def osm():
@@ -287,7 +291,97 @@ READY = (
      "https://www.esri.com/en-us/legal/terms/full-master-agreement", False,
      "xyz"),
 )
+# Подложки без ключа по списку модуля basemaps RustGIS, просьба автора
+# от 18 октября 2026 года «делай». Адреса проверены тайлом у Перми
+# (USGS - у Денвера) 18 октября 2026 года. OSM Germany не взята -
+# её правила ограничивают коммерческое и частое использование. Слои
+# Esri - на тех же условиях, что World Imagery (doc/SOURCES.md).
+ESRI_TILES = ("https://server.arcgisonline.com/ArcGIS/rest/services/"
+              "{}/MapServer/tile/{{z}}/{{y}}/{{x}}")
+ESRI_TERMS = "https://www.esri.com/en-us/legal/terms/full-master-agreement"
+OSMFR_TERMS = "https://www.openstreetmap.fr/fonds-de-carte/"
+OSMF_TERMS = "https://operations.osmfoundation.org/policies/tiles/"
+GIBS_TERMS = ("https://www.earthdata.nasa.gov/engage/"
+              "open-data-services-software-policies")
+USGS_TILES = ("https://basemap.nationalmap.gov/arcgis/rest/services/"
+              "{}/MapServer/tile/{{z}}/{{y}}/{{x}}")
+USGS_TERMS = ("https://www.usgs.gov/information-policies-and-instructions/"
+              "copyrights-and-credits")
+USGS_CREDIT = "USGS The National Map"
+READY = READY + (
+    ("osm_hot", "OSM Гуманитарная", "OSM Humanitarian",
+     "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", 19,
+     "© OpenStreetMap contributors, HOT, OpenStreetMap France",
+     OSMFR_TERMS, False, "xyz"),
+    ("osm_fr", "OSM Франция", "OSM France",
+     "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", 19,
+     "© OpenStreetMap France, © OpenStreetMap contributors", OSMFR_TERMS,
+     False, "xyz"),
+    ("cyclosm", "CyclOSM", "CyclOSM",
+     "https://a.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png", 19,
+     "CyclOSM, © OpenStreetMap contributors", OSMF_TERMS, False, "xyz"),
+    ("esri_street", "Esri Улицы", "Esri World Street Map",
+     ESRI_TILES.format("World_Street_Map"), 19,
+     "Esri and its data partners", ESRI_TERMS, False, "xyz"),
+    ("esri_light_gray", "Esri Светло-серая", "Esri Light Gray Canvas",
+     ESRI_TILES.format("Canvas/World_Light_Gray_Base"), 16,
+     "Esri, HERE, Garmin, © OpenStreetMap contributors", ESRI_TERMS, False,
+     "xyz"),
+    ("esri_dark_gray", "Esri Тёмно-серая", "Esri Dark Gray Canvas",
+     ESRI_TILES.format("Canvas/World_Dark_Gray_Base"), 16,
+     "Esri, HERE, Garmin, © OpenStreetMap contributors", ESRI_TERMS, False,
+     "xyz"),
+    ("esri_natgeo", "Esri National Geographic", "Esri National Geographic",
+     ESRI_TILES.format("NatGeo_World_Map"), 16,
+     "National Geographic, Esri, GEBCO, NOAA, iPC", ESRI_TERMS, False,
+     "xyz"),
+    ("esri_ocean", "Esri Океаны", "Esri Ocean",
+     ESRI_TILES.format("Ocean/World_Ocean_Base"), 13,
+     "Esri, GEBCO, NOAA, National Geographic", ESRI_TERMS, False, "xyz"),
+    ("esri_terrain", "Esri Рельеф", "Esri World Terrain",
+     ESRI_TILES.format("World_Terrain_Base"), 13,
+     "Esri, USGS, NPS", ESRI_TERMS, False, "xyz"),
+    ("esri_shaded", "Esri Отмывка", "Esri Shaded Relief",
+     ESRI_TILES.format("World_Shaded_Relief"), 13, "Esri", ESRI_TERMS,
+     False, "xyz"),
+    ("esri_physical", "Esri Физическая", "Esri Physical",
+     ESRI_TILES.format("World_Physical_Map"), 8,
+     "Esri, US National Park Service", ESRI_TERMS, False, "xyz"),
+    ("esri_hillshade", "Esri Отмывка подробная", "Esri World Hillshade",
+     ESRI_TILES.format("Elevation/World_Hillshade"), 16,
+     "Esri, Airbus DS, USGS, NGA, NASA, CGIAR", ESRI_TERMS, False, "xyz"),
+    ("nasa_blue_marble", "NASA Blue Marble", "NASA Blue Marble",
+     "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/"
+     "BlueMarble_ShadedRelief_Bathymetry/default/"
+     "GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg", 8,
+     "NASA Blue Marble, NASA GIBS", GIBS_TERMS, False, "xyz"),
+    ("usgs_imagery", "USGS Снимки (США)", "USGS Imagery (USA)",
+     USGS_TILES.format("USGSImageryOnly"), 16, USGS_CREDIT, USGS_TERMS,
+     False, "xyz"),
+    ("usgs_imagery_topo", "USGS Снимки с картой (США)",
+     "USGS Imagery Topo (USA)", USGS_TILES.format("USGSImageryTopo"), 16,
+     USGS_CREDIT, USGS_TERMS, False, "xyz"),
+    ("usgs_topo", "USGS Топокарта (США)", "USGS Topo (USA)",
+     USGS_TILES.format("USGSTopo"), 16, USGS_CREDIT, USGS_TERMS, False,
+     "xyz"),
+    ("usgs_relief", "USGS Отмывка (США)", "USGS Shaded Relief (USA)",
+     USGS_TILES.format("USGSShadedReliefOnly"), 16, USGS_CREDIT,
+     USGS_TERMS, False, "xyz"),
+)
 READY_KEYS = tuple(r[0] for r in READY)
+# Подменю «Готовых источников»: ключ группы и ключи источников по
+# порядку. Названия групп даёт окно (перевод).
+READY_GROUPS = (
+    ("osm", ("opentopomap", "osm_hot", "osm_fr", "cyclosm")),
+    ("esri", ("esri_topo", "esri_street", "esri_light_gray",
+              "esri_dark_gray", "esri_natgeo", "esri_ocean", "esri_terrain",
+              "esri_shaded", "esri_physical", "esri_hillshade")),
+    ("nasa_usgs", ("nasa_blue_marble", "usgs_imagery", "usgs_imagery_topo",
+                   "usgs_topo", "usgs_relief")),
+    ("warned", ("google_satellite", "google_hybrid", "google_map",
+                "google_terrain", "bing_aerial", "bing_map",
+                "yandex_satellite", "yandex_map", "dgis_map")),
+)
 
 
 def ready_entry(key):

@@ -422,6 +422,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._tilemap_value = None
         self._tilemap_reply = None
         self.cable_layer = None
+        # Наложения тайлов (core/tileoverlays.py): ключ - слой XYZ QGIS.
+        self.tile_layers = {}
         # Активные разломы GEM (core/faults.py): файл профиля, загрузка,
         # разбор в рабочем потоке, слой наложения.
         self.faults_data = None

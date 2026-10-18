@@ -109,6 +109,16 @@ def points(quakes, scale, ground, depth_map=None):
     return focus, epicenter
 
 
+def placed(focus, epicenter, deep):
+    """Места кружков на глобусе (n, 3): очаг на своей глубине только
+    там, где глубина видна, - deep, в вынутом секторе разреза Земли,
+    иначе эпицентр на поверхности. Замечание пользователя от 18 октября
+    2026 года - очаги под непрозрачной поверхностью выглядели так, будто
+    глобус прозрачный."""
+    deep = np.asarray(deep, dtype=bool).reshape(-1, 1)
+    return np.where(deep, focus, epicenter)
+
+
 def times(quakes):
     """Времена событий, секунды UTC, массив. Без времени - NaN."""
     return np.array([np.nan if q.time is None else q.time

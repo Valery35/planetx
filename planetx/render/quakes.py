@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Землетрясения в видеокарте: очаги точками, линии к эпицентрам.
+"""Землетрясения в видеокарте: очаги точками.
 
-Расчёт - core/quakes.py. Очаги лежат под рельефом, поэтому рисуются
-без проверки глубины, поверх поверхности, а очаги за горизонтом
-отбрасываются на процессоре (core.quakes.facing). Каждый кадр вершины
+Расчёт - core/quakes.py. Кружок стоит в эпицентре на поверхности,
+на своей глубине - только в вынутом секторе разреза Земли
+(core.quakes.placed). Линий к эпицентру нет с 18 октября 2026 года -
+в секторе поверхность вынута, и линия висела в пустоте. Кружки
+рисуются без проверки глубины, поверх поверхности, а очаги за
+горизонтом отбрасываются на процессоре (core.quakes.facing). Каждый
+кадр вершины
 считаются от глаза в double и уходят в видеокарту в float32, так
 мировые координаты в видеокарту не попадают (AGENTS, «Координаты»).
 Событий сводки - сотни, пересчёт стоит доли миллисекунды.
@@ -15,6 +19,7 @@ import ctypes
 import numpy as np
 from OpenGL import GL
 
+from ..core import cutaway
 from ..core import quakes as core
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.fires import colors as fire_colors
@@ -23,7 +28,6 @@ from ..core.subsurface import display, ecef
 from . import gpu
 
 GL_PROGRAM_POINT_SIZE = 0x8642
-STEM_ALPHA = 0.55  # непрозрачность линии от эпицентра к очагу
 
 VERTEX = """#version 330 core
 layout(location = 0) in vec3 a_offset;
@@ -79,10 +83,18 @@ class Quakes:
         # Промежуток шкалы времени (от, до) или None - видно всё.
         self.window = None
         self.drawn = 0
-        # Линии от эпицентра к очагу. У пожаров (FirePoints) их нет.
-        self.stems = True
         # Непрозрачность слоя - ползунок раздела «На глобусе».
         self.opacity = 1.0
+        # Сектор разреза Земли (core.cutaway.Wedge) или None. Очаг стоит
+        # на своей глубине только в вынутом секторе, иначе - в эпицентре
+        # на поверхности (core.quakes.placed). Ставит вид каждый кадр.
+        self.wedge = None
+
+    def deep(self):
+        """Признак «очаг виден на своей глубине» по событиям."""
+        if self.wedge is None or not len(self.lats):
+            return np.zeros(len(self.lats), dtype=bool)
+        return cutaway.inside(self.wedge, self.lats, self.lons)
 
     def init_gl(self):
         self.program = gpu.build_program(VERTEX, FRAGMENT)
@@ -129,7 +141,7 @@ class Quakes:
         self.times = core.times(self.events)
 
     def draw(self, camera, ratio):
-        """Нарисовать видимые очаги и линии к ним. Вызывается в кадре
+        """Нарисовать видимые очаги. Вызывается в кадре
         после поверхности и своих объектов, до надписей."""
         self.drawn = 0
         if self.program is None or not len(self.focus):
@@ -139,23 +151,15 @@ class Quakes:
             & core.in_window(self.times, self.window)
         if not np.any(seen):
             return
-        focus = self.focus[seen] - eye
+        deep = self.deep()[seen]
+        epi = self.epicenter[seen] - eye
+        focus = core.placed(self.focus[seen] - eye, epi, deep)
         colors = self.colors[seen]
         n = len(focus)
         dots = np.zeros((n, 8), dtype=np.float32)
         dots[:, 0:3] = focus
         dots[:, 3] = self.sizes[seen]
         dots[:, 4:8] = colors
-        lines = 0
-        if self.stems:
-            epi = self.epicenter[seen] - eye
-            stems = np.zeros((2 * n, 8), dtype=np.float32)
-            stems[0::2, 0:3] = epi
-            stems[1::2, 0:3] = focus
-            stems[:, 4:8] = np.repeat(colors, 2, axis=0)
-            stems[:, 7] = STEM_ALPHA
-            lines = 2 * n
-            dots = np.vstack([stems, dots])
         dots[:, 7] *= self.opacity
         data = np.ascontiguousarray(dots)
         mvp = np.ascontiguousarray(camera.tiles_mvp([eye])[0],
@@ -174,11 +178,8 @@ class Quakes:
         GL.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
         try:
-            if lines:
-                GL.glUniform1f(loc["u_points"], 0.0)
-                GL.glDrawArrays(GL.GL_LINES, 0, lines)
             GL.glUniform1f(loc["u_points"], 1.0)
-            GL.glDrawArrays(GL.GL_POINTS, lines, n)
+            GL.glDrawArrays(GL.GL_POINTS, 0, n)
             self.drawn = n
         finally:
             GL.glBindVertexArray(0)
@@ -195,7 +196,6 @@ class FirePoints(Quakes):
 
     def __init__(self):
         super().__init__()
-        self.stems = False
         self.fires = None
 
     def set_fires(self, fires, scale, ground):
@@ -233,7 +233,6 @@ class DepositPoints(Quakes):
 
     def __init__(self):
         super().__init__()
-        self.stems = False
         self.data = None
         self.up = np.zeros((0, 3))
 

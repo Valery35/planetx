@@ -736,9 +736,8 @@ with the geophysical value maps.
 The Historical earthquakes layer shows the ISC-GEM catalogue - about
 74 thousand strong earthquakes of the world from 1904 to 2024 of
 magnitude 5 and above, with locations, depths and moment magnitudes
-recomputed in one way. A circle sits at the focus at its depth, the
-colour shows the depth and the size the magnitude, as in the
-Earthquakes layer. The catalogue enters the time slider range, and its
+recomputed in one way. The circles stand as in the Earthquakes layer,
+the colour shows the depth and the size the magnitude. The catalogue enters the time slider range, and its
 handles select the events by year. A click on a circle shows the place,
 date, magnitude, depth and a link to the USGS event page. The first use
 downloads the catalogue in parts, about 13 MB, and keeps it as a file
@@ -897,13 +896,13 @@ link to the OpenStreetMap object.
 The Earthquakes layer shows earthquakes of magnitude 4.5 and above
 over the last 30 days from the feed of the U.S. Geological Survey
 (USGS). The feed is loaded each time the row is switched on. A circle
-marks the focus at its depth, and a thin line leads from it to the
-epicentre on the surface. The colour of the circle shows the focus
-depth, from red near the surface to purple at 700 km, the scale is in
-the bottom left corner of the view. The circle grows with the
-magnitude. Foci show through the surface, foci on the far side of the
-Earth are hidden. The depth is stretched by the vertical exaggeration
-of the terrain, like the heights. Each event has a time. With the row
+marks the epicentre on the surface. The colour of the circle shows
+the focus depth, from red near the surface to purple at 700 km, the
+scale is in the bottom left corner of the view. The circle grows with
+the magnitude. Foci on the far side of the Earth are hidden. A focus
+is seen at its depth in the removed sector of the Earth cutaway row -
+there the circle sits at the focus. The depth is stretched by the vertical exaggeration of
+the terrain, like the heights. Each event has a time. With the row
 on, the time slider becomes available, and it shows the events of the
 chosen interval. The row exists only on the Earth.
 
@@ -1011,7 +1010,9 @@ and the XYZ Tiles connections of the QGIS browser, the chosen base map
 is checked. A choice changes the base map on the globe at once. On other
 bodies the row shows the imagery of the body, there is no choice.
 
-The Ready sources submenu adds a base map with one click:
+The Ready sources submenu adds a base map with one click. The sources
+are gathered in the OpenStreetMap, Esri, NASA and USGS, and Google,
+Bing, Yandex, 2GIS submenus:
 
 | Source | What it shows | Warning |
 |---|---|---|
@@ -1021,6 +1022,10 @@ The Ready sources submenu adds a base map with one click:
 | 2GIS Map | city map | yes |
 | OpenTopoMap | topographic map from OpenStreetMap and SRTM, up to level 17 | no |
 | Esri World Topo Map | Esri topographic map | no |
+| Esri World Street Map, Light Gray Canvas, Dark Gray Canvas, National Geographic, Ocean, World Terrain, Shaded Relief, Physical, World Hillshade | Esri maps, the ocean, terrain and shaded relief maps up to level 13, the physical map up to 8 | no |
+| OSM Humanitarian, OSM France, CyclOSM | maps from OpenStreetMap - humanitarian, French and cycling | no |
+| NASA Blue Marble | cloud-free image of the Earth with shaded relief and depths, up to level 8 | no |
+| USGS Imagery, Imagery Topo, Topo, Shaded Relief | maps of the US National Map, the USA only, up to level 16 | no |
 
 The terms of Google, Bing, Yandex and 2GIS do not allow taking their
 tiles into third-party programs by the direct address. Before the first
@@ -1039,6 +1044,12 @@ The assistant sets a base map as well - a ready source or a template
 address of your own, if asked, for example, "set Bing imagery". A ready
 source goes through the same warning, an address of your own is first
 shown to the user and added only after the Yes answer.
+
+The Map overlays category of the Add data catalog lays transparent
+maps over the base map - OpenSeaMap sea marks, Waymarked Trails hiking
+and cycling routes. Several can be on at once, the opacity is in the ⋯
+menu of the row, To QGIS project… adds an XYZ tile layer. Sea marks are
+seen close up, from the scale of about 1:500 000.
 
 The Add tile source… item of the menu opens the new source window. The Address
 field takes an address in any of these forms:

@@ -1426,15 +1426,24 @@ class LayerPanel(QWidget):
                 lambda _=False, i=i: self._basemap_activated(i))
         menu.addSeparator()
         ready = menu.addMenu(tr("Готовые источники"))
-        ready.setToolTipsVisible(True)
-        for key, ru, en, _, _, _, _, warned, _ in basemap.READY:
-            action = ready.addAction(ru if is_russian() else en)
-            if warned:
-                action.setToolTip(tr(
-                    "Условия сервиса не разрешают брать тайлы по прямому "
-                    "адресу. Перед добавлением окно предупредит об этом."))
-            action.triggered.connect(
-                lambda _=False, key=key: self.ready_requested.emit(key))
+        # Названия сервисов не переводятся, через tr они не идут.
+        titles = {"osm": "OpenStreetMap", "esri": "Esri",
+                  "nasa_usgs": tr("NASA и USGS"),
+                  "warned": "Google, Bing, Яндекс, 2ГИС" if is_russian()
+                  else "Google, Bing, Yandex, 2GIS"}
+        for group, keys in basemap.READY_GROUPS:
+            sub = ready.addMenu(titles[group])
+            sub.setToolTipsVisible(True)
+            for key in keys:
+                _, ru, en, _, _, _, _, warned, _ = basemap.ready_entry(key)
+                action = sub.addAction(ru if is_russian() else en)
+                if warned:
+                    action.setToolTip(tr(
+                        "Условия сервиса не разрешают брать тайлы по "
+                        "прямому адресу. Перед добавлением окно предупредит "
+                        "об этом."))
+                action.triggered.connect(
+                    lambda _=False, key=key: self.ready_requested.emit(key))
         menu.addAction(tr("Добавить источник тайлов…")).triggered.connect(
             lambda _=False: self._basemap_activated(ADD_SOURCE))
         return menu

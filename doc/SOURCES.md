@@ -236,6 +236,11 @@ Web Mercator, они лежат в хранилище
 | 2ГИС | [Правовая информация 2ГИС](https://law.2gis.ru/) | есть |
 | OpenTopoMap | [CC-BY-SA, данные OpenStreetMap и SRTM](https://opentopomap.org/about) | нет |
 | Esri World Topo Map | [Esri Master License Agreement](https://www.esri.com/en-us/legal/terms/full-master-agreement) | нет |
+| Esri - улицы, светло-серая и тёмно-серая карты, National Geographic, океаны, рельеф, отмывка, физическая карта | [Esri Master License Agreement](https://www.esri.com/en-us/legal/terms/full-master-agreement), как у World Imagery | нет |
+| OSM Гуманитарная (HOT), OSM Франция | [правила серверов OpenStreetMap France](https://www.openstreetmap.fr/fonds-de-carte/), данные ODbL | нет |
+| CyclOSM | [правила тайлов OSMF](https://operations.osmfoundation.org/policies/tiles/), данные ODbL | нет |
+| NASA Blue Marble | [открытые данные NASA](https://www.earthdata.nasa.gov/engage/open-data-services-software-policies), подпись NASA GIBS | нет |
+| USGS - снимки, снимки с картой, топокарта, отмывка, только США | [общественное достояние США](https://www.usgs.gov/information-policies-and-instructions/copyrights-and-credits), подпись USGS The National Map | нет |
 
 Прямые адреса тайлов Google, Bing, Яндекса и 2ГИС используются
 в обход их программных интерфейсов с ключами, условия этих сервисов
@@ -243,6 +248,30 @@ Web Mercator, они лежат в хранилище
 говорит об этом и даёт ссылку на условия. Источник добавляется только
 по решению пользователя, ответственность за использование на нём.
 До 13 октября 2026 года эти источники в PlanetX не предлагались.
+
+Подложки Esri, OSM Франции, CyclOSM, Blue Marble и USGS добавлены
+18 октября 2026 года по списку модуля basemaps RustGIS, адреса
+проверены тайлом у Перми, у USGS - у Денвера. OSM Germany не взята -
+её правила ограничивают коммерческое и частое использование. К серверам
+OpenStreetMap France идёт не больше двух запросов сразу, как к
+серверам OpenStreetMap.
+
+## Наложения карт
+
+Категория «Наложения карт» каталога «Добавить данные» с 18 октября
+2026 года - прозрачные тайлы XYZ поверх подложки, их рисует QGIS
+в картинке наложения. Тайлы просятся только для видимого места.
+
+| Наложение | Условия | Подпись |
+|---|---|---|
+| Морские знаки OpenSeaMap | [OpenSeaMap](https://openseamap.org/), данные CC-BY-SA | © OpenSeaMap contributors |
+| Пешие и велосипедные маршруты Waymarked Trails | [условия Waymarked Trails](https://hiking.waymarkedtrails.org/#help-legal), стиль CC-BY-SA, данные ODbL | © OpenStreetMap contributors, © waymarkedtrails.org |
+
+OpenRailwayMap не взят, решение автора от 18 октября 2026 года.
+Железные дороги уже есть строкой векторной основы OpenFreeMap,
+а правила OpenRailwayMap требуют свой User-Agent программы, тайлы же
+читает QGIS со своим заголовком. Подписи и дороги Esri не взяты -
+они плоско в картинке повторяют надписи и линии векторной основы.
 
 ## Кадастр Росреестра - НСПД
 
