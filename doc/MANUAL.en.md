@@ -2832,9 +2832,10 @@ bend along the track. The train takes a new position smoothly over 2 s.
 A click on a train opens the Features window with the type, category,
 line, operator, number, speed and time of the position. The Camera
 follows item of the right-click menu over a train puts it in the
-middle of the view with the heading along its travel. The distance and
-tilt stay with the user, the wheel zooms in. Clearing the item, turning
-the row off or recording a flight releases the camera.
+middle of the view with the heading along its travel. The camera starts
+1.5 km from the train, the wheel moves it closer and farther, the middle
+mouse button changes the tilt. Esc, clearing the item, turning the row
+off or recording a flight releases the camera.
 
 While a flight is recorded the trains move by the tour time, a frame of
 the video is 1/25 s of their travel even when the frame with loading

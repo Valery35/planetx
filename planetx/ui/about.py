@@ -282,4 +282,8 @@ class AboutDialog(QDialog):
 
 
 def show_about(parent=None):
-    AboutDialog(parent).exec()
+    dialog = AboutDialog(parent)
+    # Из меню QGIS родитель - главное окно QGIS, правил окна глобуса нет.
+    from .style import dress
+    dress(dialog)
+    dialog.exec()

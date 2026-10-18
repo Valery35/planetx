@@ -26,6 +26,7 @@ from ..core.navigation import Pose
 from ..i18n import tr
 from ..net.overlay import fetch_bytes, fetch_json, post_json
 from ..render.models import Model as ModelItem
+from .chase import ChaseControl
 from .legend import train_names
 
 # Полоса вида уже этого - поезда моделями, шире - точками, метры.
@@ -95,6 +96,8 @@ class TrainManager(QObject):
         self.follow_timer = QTimer(self)
         self.follow_timer.setInterval(50)
         self.follow_timer.timeout.connect(self._follow_step)
+        # Колесо и Esc камеры следом (ui/chase.py).
+        self.chase = ChaseControl(self.view, lambda: self.set_follow(None))
 
     # Часы съёмки.
 
@@ -145,6 +148,7 @@ class TrainManager(QObject):
             self.view_timer.stop()
             self.followed = None
             self.follow_timer.stop()
+            self.chase.stop()
             self.fleet = core.Fleet()
             self.asked = set()
             self.one_replies = {}
@@ -169,6 +173,7 @@ class TrainManager(QObject):
         self.frozen = None
         self.followed = None
         self.follow_timer.stop()
+        self.chase.stop()
         self.poll.stop()
         self.view_timer.stop()
         replies = [self.reply, self.types_reply, self._tilejson] \
@@ -458,10 +463,12 @@ class TrainManager(QObject):
         self.followed = key if self.on else None
         if self.followed is None:
             self.follow_timer.stop()
+            self.chase.stop()
             return
         for other in getattr(self.window, "live_managers", ()):
             if other is not self and getattr(other, "followed", None):
                 other.set_follow(None)
+        self.chase.start()
         self.follow_timer.start()
         self._follow_step()
 
@@ -478,8 +485,8 @@ class TrainManager(QObject):
         pose = self.view.navigator.pose
         if heading != heading:
             heading = pose.heading
-        self.view.navigator.show(Pose(lat, lon, pose.distance, heading,
-                                      pose.tilt))
+        self.view.navigator.show(Pose(lat, lon, self.chase.reach,
+                                      heading, pose.tilt))
         self.view.update()
 
     # Опрос щелчком.

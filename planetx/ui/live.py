@@ -33,6 +33,7 @@ from ..core.features import Shape
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..render.models import Model as ModelItem
+from .chase import ChaseControl
 
 VIEW_TICK = 1000  # мс между проверками вида
 MAX_POINTS = 600  # точек издалека не больше, ближайших к точке взгляда
@@ -84,7 +85,8 @@ class LiveManager(QObject):
         self.view_timer.setInterval(VIEW_TICK)
         self.view_timer.timeout.connect(self._check_view)
         self.followed = None
-        self._chase_extra = 0.0  # прошлый отрезок от объекта до земли
+        # Колесо и Esc камеры следом (ui/chase.py).
+        self.chase = ChaseControl(self.view, lambda: self.set_follow(None))
         self.follow_timer = QTimer(self)
         self.follow_timer.setInterval(FOLLOW_TICK)
         self.follow_timer.timeout.connect(self._follow_step)
@@ -163,6 +165,7 @@ class LiveManager(QObject):
         self.poll.stop()
         self.view_timer.stop()
         self.follow_timer.stop()
+        self.chase.stop()
         self.followed = None
         replies = [self.reply, self.info_reply]
         self.reply = self.info_reply = None
@@ -360,13 +363,14 @@ class LiveManager(QObject):
         self.followed = key if self.on else None
         if self.followed is None:
             self.follow_timer.stop()
+            self.chase.stop()
             if was is not None and self.on:
                 self._rebuild(force=True)
             return
         for other in getattr(self.window, "live_managers", ()):
             if other is not self and getattr(other, "followed", None):
                 other.set_follow(None)
-        self._chase_extra = 0.0
+        self.chase.start()
         self.follow_timer.start()
         self._rebuild(force=True)
         self._follow_step()
@@ -385,11 +389,9 @@ class LiveManager(QObject):
             height = max(alt - self._ground(lat, lon), 0.0) \
                 * self.view.store.scale
         pose = self.view.navigator.pose
-        # Колесо меняет расстояние вида, от него - расстояние до объекта.
-        reach = pose.distance - self._chase_extra
+        # Расстояние до объекта меняет колесо (ChaseControl).
         look_lat, look_lon, look, distance = movers.chase(
-            lat, lon, heading, height, reach, pose.tilt)
-        self._chase_extra = distance - max(reach, movers.CHASE_MIN)
+            lat, lon, heading, height, self.chase.reach, pose.tilt)
         self.view.navigator.show(Pose(look_lat, look_lon, distance, look,
                                       pose.tilt))
         self.view.update()

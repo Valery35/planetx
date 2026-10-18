@@ -9377,6 +9377,30 @@ def aircraft_follow():
         [item.key[1], item.mover(time.monotonic()) is not None]
         for item in view.models.groups.get("aircraft", [])]
     result["aircraft_follow"]["drawn"] = view.models.drawn
+    # Колесо в камере следом: два щелчка ближе - расстояние до самолёта
+    # 0.64 прежнего, поза вида не гасит его. Esc отпускает камеру.
+    from qgis.PyQt.QtCore import QEvent, QPoint, QPointF, Qt
+    from qgis.PyQt.QtGui import QKeyEvent, QWheelEvent
+    from qgis.PyQt.QtWidgets import QApplication
+    from planetx.qt_compat import enum
+    before = manager.chase.reach
+    centre = QPointF(view.width() / 2.0, view.height() / 2.0)
+    QApplication.sendEvent(view, QWheelEvent(
+        centre, QPointF(view.mapToGlobal(centre.toPoint())), QPoint(0, 0),
+        QPoint(0, 240), enum(Qt, "MouseButton", "NoButton"),
+        enum(Qt, "KeyboardModifier", "NoModifier"),
+        enum(Qt, "ScrollPhase", "NoScrollPhase"), False))
+    manager._follow_step()
+    plane = np.asarray([ellipsoid.geodetic_to_ecef(
+        lat, lon, alt * view.store.scale)], dtype=np.float64)
+    eye_gap = float(np.linalg.norm(np.asarray(view.camera.eye) - plane[0]))
+    result["aircraft_follow"]["wheel"] = [round(before, 0),
+                                          round(manager.chase.reach, 0),
+                                          round(eye_gap, 0)]
+    QApplication.sendEvent(view, QKeyEvent(
+        enum(QEvent, "Type", "KeyPress"), enum(Qt, "Key", "Key_Escape"),
+        enum(Qt, "KeyboardModifier", "NoModifier")))
+    result["aircraft_follow"]["esc_released"] = manager.followed is None
     manager.set_follow(None)
     result["aircraft_follow"]["after"] = manager.follow_timer.isActive()
     window.set_extra("aircraft", False)
@@ -9538,6 +9562,62 @@ def ui_theme():
         order[n])
     window.properties.ui_theme.setCurrentIndex(index)
     return 1500
+
+
+@check(1000)
+def ui_theme_windows():
+    """Тёмное оформление окон модуля: профиль высот с графиком, «О модуле»
+    из меню QGIS, меню правой кнопки на глобусе. Снимки окон."""
+    from qgis.PyQt.QtWidgets import QApplication, QDialog, QMenu
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    from planetx.ui import style
+    from planetx.ui.about import AboutDialog
+    window = state["window"]
+    look = state.setdefault("ui_theme_windows", {"n": 0})
+    out = result.setdefault("ui_theme_windows", {})
+    if look["n"] == 0:
+        look["n"] = 1
+        window.set_ui_theme(style.DARK)
+        window.view.navigator.stop()
+        window.view.navigator.set_pose(Pose(43.35, 42.44, 30000.0, 0.0,
+                                            30.0))
+        key = window.myplaces.add(Shape(
+            "line", [(43.30, 42.38), (43.40, 42.50)], name="Профиль"))
+        look["key"] = key
+        window._place_action("profile", key)
+        about = AboutDialog(None)
+        style.dress(about)
+        about.show()
+        look["about"] = about
+        menu = QMenu(window)
+        menu.addAction("Подлететь сюда")
+        menu.addAction("Полёт отсюда")
+        menu.addSeparator()
+        menu.addAction("Что здесь?")
+        menu.popup(window.mapToGlobal(window.rect().center()))
+        look["menu"] = menu
+        return 6000
+    shots = {}
+    for widget in QApplication.topLevelWidgets():
+        if not widget.isVisible() or widget is window:
+            continue
+        if isinstance(widget, (QDialog, QMenu)):
+            name = type(widget).__name__
+            image = widget.grab().toImage()
+            image.save(os.path.join(TEMP, "planetx_dark_{}.png".format(
+                name)))
+            shots[name] = image.pixelColor(image.width() // 2,
+                                           image.height() - 6).name()
+    out["shots"] = shots
+    look["menu"].close()
+    look["about"].close()
+    for widget in QApplication.topLevelWidgets():
+        if widget.isVisible() and type(widget).__name__ == "ProfileDialog":
+            widget.close()
+    window.myplaces.remove(look["key"])
+    window.set_ui_theme(style.QGIS)
+    return None
 
 
 @check(1000)

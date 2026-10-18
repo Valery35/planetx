@@ -189,8 +189,28 @@ def window_style(name=None):
         "{muted}; border-color: {muted}; }}")
     out = "".join(rules.format(p=part, check=CHECK, **w)
                   for part in WINDOW_PARTS)
-    return out + "QWidget#planetxWindow {{ background-color: {}; }}".format(
-        w["back"])
+    # Всплывающие меню окна глобуса - меню правой кнопки на глобусе
+    # и прочие QMenu с родителем-окном. У меню плашек свои правила.
+    menus = (
+        "QMenu {{ background-color: {field}; color: {text}; border: 1px "
+        "solid {border}; padding: 3px 0; }}"
+        "QMenu::item {{ padding: 4px 22px 4px 22px; background: "
+        "transparent; }}"
+        "QMenu::item:selected {{ background-color: {select}; color: "
+        "white; }}"
+        "QMenu::item:disabled {{ color: {muted}; }}"
+        "QMenu::separator {{ height: 1px; background: {border}; "
+        "margin: 3px 8px; }}").format(**w)
+    return out + menus + \
+        "QWidget#planetxWindow {{ background-color: {}; }}".format(w["back"])
+
+
+def dress(dialog):
+    """Окно модуля без родителя-окна глобуса, например «О модуле» из
+    меню QGIS: правила сохранённого оформления."""
+    from qgis.core import QgsSettings
+    name = QgsSettings().value(THEME_KEY, DARK)
+    dialog.setStyleSheet(window_style(name if name in THEMES else DARK))
 
 
 def plate(widget, name, kind="QFrame", label=False):

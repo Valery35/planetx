@@ -29,6 +29,7 @@ from ..core.trains import destination
 from ..i18n import tr
 from ..qt_compat import enum, enum_int
 from ..render.models import Model as ModelItem
+from .chase import wheel_reach
 
 TICK = 33  # мс между шагами полёта
 GROUP = "flightsim"
@@ -50,6 +51,7 @@ BACK = (15, 25, 40, 175)
 
 KEY_PRESS = enum(QEvent, "Type", "KeyPress")
 KEY_RELEASE = enum(QEvent, "Type", "KeyRelease")
+WHEEL = enum(QEvent, "Type", "Wheel")
 
 
 def _key(name):
@@ -132,7 +134,7 @@ class FlightSim(QObject):
         self.keys = _keys()
         self._last = None
         self._ended = None
-        self._chase_extra = 0.0
+        self.reach = CHASE_REACH
         self.cockpit = False
         self._tilt = CHASE_TILT
         self.readout = FlightReadout(self.view)
@@ -167,7 +169,7 @@ class FlightSim(QObject):
                                      ground + flightsim.START_HEIGHT, heading)
         self.held = {}
         self._ended = None
-        self._chase_extra = 0.0
+        self.reach = CHASE_REACH
         self.cockpit = False
         self._last = time.monotonic()
         self.view.navigator.show(Pose(lat, lon, CHASE_REACH, heading,
@@ -251,10 +253,9 @@ class FlightSim(QObject):
         if self.cockpit:
             self._cockpit(height)
             return
-        reach = pose.distance - self._chase_extra
         look_lat, look_lon, look, distance = movers.chase(
-            plane.lat, plane.lon, plane.heading, height, reach, pose.tilt)
-        self._chase_extra = distance - max(reach, movers.CHASE_MIN)
+            plane.lat, plane.lon, plane.heading, height, self.reach,
+            pose.tilt)
         self.view.navigator.show(Pose(look_lat, look_lon, distance, look,
                                       pose.tilt))
         self.view.update()
@@ -288,7 +289,6 @@ class FlightSim(QObject):
         self.cockpit = on
         if not on:
             plane = self.plane
-            self._chase_extra = 0.0
             self.view.navigator.show(Pose(plane.lat, plane.lon, CHASE_REACH,
                                           plane.heading, self._tilt))
         self._follow(self._ground(self.plane.lat, self.plane.lon))
@@ -296,8 +296,16 @@ class FlightSim(QObject):
     def eventFilter(self, watched, event):
         """Клавиши полёта на виде. Прочие клавиши остаются виду."""
         kind = event.type()
-        if watched is not self.view or kind not in (KEY_PRESS, KEY_RELEASE) \
-                or self.plane is None:
+        if watched is not self.view or self.plane is None:
+            return False
+        if kind == WHEEL:
+            # Колесо - расстояние от камеры до самолёта: поза вида
+            # ставится каждый шаг и гасила бы приближение вида.
+            notches = event.angleDelta().y() / 120.0
+            if notches and not self.cockpit:
+                self.reach = wheel_reach(self.reach, notches)
+            return True
+        if kind not in (KEY_PRESS, KEY_RELEASE):
             return False
         key = enum_int(event.key())
         if key == _key("Key_Escape"):
