@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 0.98.0.
+A 3D globe inside QGIS. PlanetX version 0.99.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -82,12 +82,18 @@ and atmosphere, from space down to single streets.
   at the moment of the time slider. It covers a forecast up to 16
   days and the past.
 - **NASA themes.** The Planet of Fire, Planet of Water, Planet of Air and Land
-  and Life groups of the catalogue show 23 NASA GIBS rasters by
+  and Life groups of the catalogue show 22 NASA GIBS rasters by
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,
   vegetation, night lights. The time slider sets the day of a theme.
   The Add data button of the Layers section opens the catalogue, each
   map has a preview and a description. A comparison swipe shows a
   theme for two days side by side.
+- **Imagery archive.** The Esri Wayback map shows past releases of the
+  Esri World Imagery base map since 2014. The time slider selects a
+  release, the steps go through the releases in which the image at the
+  centre of the view changed, the swipe compares two releases. What's
+  here? names the capture date, the provider and the resolution of the
+  image.
 - **Paleogeography.** The Paleogeography layer shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.
@@ -234,6 +240,11 @@ and atmosphere, from space down to single streets.
   with a camera and a screen overlay, as in Google Earth. The image is
   kept in the places file or as a link to a file or address. A
   ground overlay goes into the QGIS project as a GeoTIFF layer.
+- **Point clouds.** LAS, LAZ and COPC layers of the project, for
+  example a drone survey, stand on the globe as points at their
+  elevations. The colour follows the survey image, the class, the height
+  or the intensity, only ground points can be kept. PDAL shipped with
+  QGIS is needed.
 - **Own terrain.** A height raster of the project, for example a
   quarry survey, becomes the globe terrain within its extent, more
   detailed than the common terrain, down to the raster pixel.

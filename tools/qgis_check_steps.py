@@ -16396,6 +16396,61 @@ def wayback_check():
     return None
 
 
+@check(500, manual=True)
+def wayback_frames():
+    """Ручной шаг: кадры Wayback над Пермью во время загрузки, шага
+    выпуска и шторки - поиск полос на снимке автора 18 октября 2026
+    года."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("vector", True) if "vector" in window.extras else None
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.01, 56.25, 19000.0, 0.0, 0.0))
+    window.view.update()
+    window.set_theme("wayback")
+    state["wbf"] = {"t0": time.monotonic(), "n": 0, "stage": 0}
+    result["wayback_frames"] = []
+
+
+@check(300, manual=True)
+def wayback_frames_wait():
+    from planetx.core import themes
+    window = state["window"]
+    view = window.view
+    st = state["wbf"]
+    spent = time.monotonic() - st["t0"]
+    layer = view.gibs["theme"]
+    name = "planetx_wbf_{:02d}.png".format(st["n"])
+    view.grabFramebuffer().save(os.path.join(TEMP, name))
+    result["wayback_frames"].append(dict(
+        name=name, t=round(spent, 1), stage=st["stage"],
+        day=window.theme_day, tex=len(layer.textures),
+        missing=layer.missing, cross=view._cross is not None,
+        appear=layer.appear.busy() if hasattr(layer, "appear") else None))
+    st["n"] += 1
+    if st["stage"] == 0 and spent > 12.0:
+        moment = window._theme_step(themes.moment(window.theme_day), -1)
+        if moment is not None:
+            window.timebar.set_range(window.timebar.range()[0], moment)
+            window._time_range = window.timebar.range()
+            window._apply_theme()
+        st.update(stage=1, t0=time.monotonic())
+    elif st["stage"] == 1 and spent > 6.0:
+        window.set_compare(True)
+        st.update(stage=2, t0=time.monotonic())
+    elif st["stage"] == 2 and spent > 6.0:
+        from planetx.core.navigation import Pose
+        view.navigator.show(Pose(58.0, 56.27, 7000.0, 0.0, 0.0))
+        view.update()
+        st.update(stage=3, t0=time.monotonic())
+    elif st["stage"] == 3 and spent > 6.0:
+        window.set_compare(False)
+        window.set_theme("")
+        return None
+    return 300
+
+
 def _tilemap_start(window, case):
     from planetx.core.navigation import Pose
     key, lat, lon, distance = case[:4]
