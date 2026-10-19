@@ -209,6 +209,26 @@ def chase(lat, lon, heading, height, reach, tilt):
         reach + height / math.cos(math.radians(tilt))
 
 
+CHASE_PASSES = 3
+
+
+def chase_on(lat, lon, heading, alt, ground, reach, tilt):
+    """chase для объекта на высоте alt (как у ground, высоты на экране)
+    над неровной поверхностью ground(lat, lon): высота берётся над
+    рельефом в точке взгляда, а не под объектом. Над впадиной Марса
+    рельеф в 3.7 км впереди выше на 44 м, при 150 м до самолёта он
+    уходил на 16° вниз от середины кадра."""
+    look_lat, look_lon = lat, lon
+    out = None
+    for _ in range(CHASE_PASSES):
+        height = alt - ground(look_lat, look_lon)
+        if height != height:
+            height = 0.0
+        out = chase(lat, lon, heading, height, reach, tilt)
+        look_lat, look_lon = out[0], out[1]
+    return out
+
+
 def near(lat, lon, other_lat, other_lon, reach):
     """Ближе ли точка reach метров."""
     return _metres(lat, lon, other_lat, other_lon) <= reach

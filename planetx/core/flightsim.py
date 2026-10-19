@@ -17,6 +17,9 @@ Earth Pro. Просьба автора от 19 октября 2026 года - «
   g · sin(тангаж);
 - ниже STALL нос опускается сам со скоростью STALL_DROP;
 - касание поверхности кончает полёт.
+Самолёт двух видов (KINDS), как в имитаторе Google Earth Pro, снимок
+окна автора от 19 октября 2026 года, - истребитель и винтовой. Прочие
+величины вида - в Spec, у самолёта - plane.spec.
 Величины - выбор помощника, утверждает автор.
 """
 import math
@@ -27,8 +30,10 @@ except ImportError:  # headless-тесты
     from trains import destination
 
 G = 9.81
-MAX_SPEED = 140.0  # м/с при полной тяге, около 500 км/ч
-THRUST = 6.0  # м/с² при полной тяге
+# Скорость поднята по замечанию автора от 19 октября 2026 года -
+# «скорость полёта маловата», прежде 140 м/с, 6 м/с² и старт 300 км/ч.
+MAX_SPEED = 280.0  # м/с при полной тяге, около 1000 км/ч
+THRUST = 12.0  # м/с² при полной тяге
 DRAG = THRUST / MAX_SPEED ** 2
 STALL = 28.0  # м/с, около 100 км/ч
 STALL_DROP = 15.0  # °/с
@@ -39,20 +44,52 @@ PITCH_RATE = 12.0  # °/с
 PITCH_MAX = 25.0
 THROTTLE_RATE = 0.4  # доля в секунду
 START_HEIGHT = 1000.0  # м над поверхностью
-START_SPEED = 300.0 / 3.6
+START_SPEED = 500.0 / 3.6
 STEP_MAX = 0.1  # с, длиннее шаг делится
 
 
-def cruise_throttle(speed):
+class Spec:
+    """Вид самолёта: наибольшая скорость (м/с), тяга (м/с²), скорость
+    сваливания, крен и тангаж (°/с и предел), старт (м/с), длина (м)."""
+
+    def __init__(self, max_speed, thrust, stall, roll_rate, roll_max,
+                 pitch_rate, pitch_max, start, length):
+        self.max_speed = max_speed
+        self.thrust = thrust
+        self.drag = thrust / max_speed ** 2
+        self.stall = stall
+        self.roll_rate = roll_rate
+        self.roll_max = roll_max
+        self.pitch_rate = pitch_rate
+        self.pitch_max = pitch_max
+        self.start = start
+        self.length = length
+
+
+FIGHTER, LIGHT = "fighter", "light"
+KINDS = {
+    # Истребитель: до 2000 км/ч, старт 900 км/ч, крен 90°/с.
+    FIGHTER: Spec(555.0, 30.0, 70.0, 90.0, 80.0, 20.0, 35.0, 250.0, 15.0),
+    # Винтовой четырёхместный: до 340 км/ч, старт 250 км/ч.
+    LIGHT: Spec(95.0, 4.0, 28.0, 45.0, 60.0, 12.0, 25.0, 250.0 / 3.6, 8.0),
+}
+MIDDLE = Spec(MAX_SPEED, THRUST, STALL, ROLL_RATE, ROLL_MAX, PITCH_RATE,
+              PITCH_MAX, START_SPEED, 16.0)
+
+
+def cruise_throttle(speed, spec=MIDDLE):
     """Тяга ровного полёта на скорости speed."""
-    return min(max((speed / MAX_SPEED) ** 2, 0.0), 1.0)
+    return min(max((speed / spec.max_speed) ** 2, 0.0), 1.0)
 
 
 class Plane:
     """Состояние самолёта: широта, долгота, высота над уровнем моря (м),
     курс, тангаж, крен (°), скорость (м/с), тяга 0..1, подъём (м/с)."""
 
-    def __init__(self, lat, lon, alt, heading, speed=START_SPEED):
+    def __init__(self, lat, lon, alt, heading, speed=None, kind=None):
+        self.spec = KINDS.get(kind, MIDDLE)
+        self.kind = kind
+        speed = self.spec.start if speed is None else speed
         self.lat = float(lat)
         self.lon = float(lon)
         self.alt = float(alt)
@@ -60,7 +97,7 @@ class Plane:
         self.pitch = 0.0
         self.roll = 0.0
         self.speed = float(speed)
-        self.throttle = cruise_throttle(speed)
+        self.throttle = cruise_throttle(speed, self.spec)
         self.climb = 0.0
         self.crashed = False
 
@@ -89,20 +126,21 @@ def step(plane, dt, pitch_in=0, roll_in=0, throttle_in=0, ground=0.0):
 
 
 def _step(plane, dt, pitch_in, roll_in, throttle_in, ground):
+    spec = plane.spec
     plane.throttle = min(max(plane.throttle
                              + throttle_in * THROTTLE_RATE * dt, 0.0), 1.0)
     if roll_in:
-        plane.roll = min(max(plane.roll + roll_in * ROLL_RATE * dt,
-                             -ROLL_MAX), ROLL_MAX)
+        plane.roll = min(max(plane.roll + roll_in * spec.roll_rate * dt,
+                             -spec.roll_max), spec.roll_max)
     else:
         plane.roll = _toward(plane.roll, 0.0, ROLL_RETURN * dt)
     if pitch_in:
-        plane.pitch += pitch_in * PITCH_RATE * dt
-    if plane.speed < STALL:
+        plane.pitch += pitch_in * spec.pitch_rate * dt
+    if plane.speed < spec.stall:
         plane.pitch -= STALL_DROP * dt
-    plane.pitch = min(max(plane.pitch, -PITCH_MAX), PITCH_MAX)
+    plane.pitch = min(max(plane.pitch, -spec.pitch_max), spec.pitch_max)
     pitch = math.radians(plane.pitch)
-    accel = THRUST * plane.throttle - DRAG * plane.speed ** 2 \
+    accel = spec.thrust * plane.throttle - spec.drag * plane.speed ** 2 \
         - G * math.sin(pitch)
     plane.speed = max(plane.speed + accel * dt, 0.0)
     speed = max(plane.speed, 1.0)
@@ -117,6 +155,34 @@ def _step(plane, dt, pitch_in, roll_in, throttle_in, ground):
     if plane.alt <= ground:
         plane.alt = ground
         plane.crashed = True
+
+
+def tape(value, step, half):
+    """Деления ленты прибора: [(отметка, отступ от value)] для отметок,
+    кратных step, в пределах value ± half."""
+    first = math.ceil((value - half) / step)
+    last = math.floor((value + half) / step)
+    return [(n * step, n * step - value) for n in range(first, last + 1)]
+
+
+def heading_tape(heading, step, half):
+    """Деления ленты курса: отметки 0..359 с переходом через север."""
+    return [(mark % 360.0, offset)
+            for mark, offset in tape(heading, step, half)]
+
+
+def ladder(pitch, step=5.0, reach=25.0):
+    """Ступени шкалы тангажа у текущего тангажа: [(отметка, угол от оси
+    взгляда)], отметки не круче ±90°."""
+    return [(mark, mark - pitch) for mark, offset in tape(pitch, step, reach)
+            if abs(mark) <= 90.0]
+
+
+def ladder_offset(angle, focal):
+    """Отступ ступени шкалы тангажа на экране вверх от середины в
+    пикселях: focal - фокусное расстояние кадра в тех же пикселях."""
+    angle = max(min(angle, 89.0), -89.0)
+    return focal * math.tan(math.radians(angle))
 
 
 def readout(plane, ground):

@@ -6,13 +6,16 @@
 
 Клавиши на виде: стрелка вверх - нос вниз, вниз - нос вверх, влево
 и вправо - крен, PageUp и PageDown - тяга, V - вид из кабины и обратно,
-Esc - выход. Камера идёт следом сзади и сверху (core.movers.chase),
-колесо меняет расстояние, средняя кнопка - наклон, как у камеры следом
-за самолётом ADS-B. Из кабины глаз стоит в самолёте, взгляд - по курсу
-с тангажом и креном самолёта, но не выше COCKPIT_TILT от отвеса: поза
-вида смотрит на землю, горизонт тогда вверху кадра.
-Самолёт - условная модель aircraft.unit_plane_parts, внизу вида -
-строка показаний и подсказка клавиш.
+Esc - выход. Камера идёт следом сзади и сверху (core.movers.chase_on -
+высота над рельефом в точке взгляда), колесо меняет расстояние, средняя
+кнопка - наклон, как у камеры следом за самолётом ADS-B. Из кабины глаз
+стоит в самолёте, взгляд - по курсу с тангажом и креном самолёта: точка
+взгляда позы - в воздухе в COCKPIT_LOOK метрах впереди, наклон 90° плюс
+тангаж, горизонт на своём месте, как в имитаторе Google Earth Pro.
+Самолёт - истребитель или винтовой (core.flightsim.KINDS).
+Самолёт - условная модель aircraft.unit_plane_parts. Показания -
+индикатор на стекле ui/flighthud.py, клавиша H прячет его, внизу вида -
+подсказка клавиш.
 """
 import math
 import time
@@ -23,21 +26,21 @@ from qgis.PyQt.QtWidgets import QWidget
 
 from .. import journal
 from ..core import aircraft, flightsim, models, movers
-from ..core.navigation import MAX_TILT, Pose
+from ..core.navigation import Pose
 from ..core.tour import bearing
 from ..core.trains import destination
 from ..i18n import tr
 from ..qt_compat import enum, enum_int
 from ..render.models import Model as ModelItem
 from .chase import wheel_reach
+from .flighthud import FlightHud
 
 TICK = 33  # мс между шагами полёта
 GROUP = "flightsim"
-SIZE = (16.0, 16.0, 16.0)  # размах, длина, высота модели, м
 COLOR = (0.96, 0.45, 0.15)
 CHASE_REACH = 150.0  # м от камеры до самолёта при старте
 CHASE_TILT = 75.0
-COCKPIT_TILT = 85.0  # наибольший наклон позы вида, navigation.MAX_TILT
+COCKPIT_LOOK = 1000.0  # м от глаза до точки взгляда в кабине
 # Знак крена позы вида при крене самолёта вправо, сверен шагом
 # flight_sim: правая сторона земли на кадре поднимается.
 COCKPIT_ROLL = -1.0
@@ -135,9 +138,12 @@ class FlightSim(QObject):
         self._last = None
         self._ended = None
         self.reach = CHASE_REACH
+        self.model_size = (16.0, 16.0, 16.0)
         self.cockpit = False
         self._tilt = CHASE_TILT
         self.readout = FlightReadout(self.view)
+        self.hud = FlightHud(self.view)
+        self.hud_on = True
         self.timer = QTimer(self)
         self.timer.setInterval(TICK)
         self.timer.timeout.connect(self._tick)
@@ -156,9 +162,9 @@ class FlightSim(QObject):
         scale = self.view.store.scale
         return self.view.label_height(lat, lon) / scale if scale else 0.0
 
-    def start(self, lat, lon):
+    def start(self, lat, lon, kind=flightsim.FIGHTER):
         """Полёт с точки lat, lon: на START_HEIGHT над поверхностью,
-        курс - азимут вида."""
+        курс - азимут вида, kind - вид самолёта core.flightsim.KINDS."""
         self.stop()
         for live in getattr(self.window, "live_managers", ()):
             if getattr(live, "followed", None) is not None:
@@ -166,7 +172,10 @@ class FlightSim(QObject):
         heading = self.view.navigator.pose.heading
         ground = self._ground(lat, lon)
         self.plane = flightsim.Plane(lat, lon,
-                                     ground + flightsim.START_HEIGHT, heading)
+                                     ground + flightsim.START_HEIGHT, heading,
+                                     kind=kind)
+        length = self.plane.spec.length
+        self.model_size = (length, length, length)
         self.held = {}
         self._ended = None
         self.reach = CHASE_REACH
@@ -178,7 +187,7 @@ class FlightSim(QObject):
         self.view.setFocus()
         self.view.models.set_models([ModelItem(
             (GROUP, "plane"), self._shared, (0.0, 0.0, "absolute", 0.0),
-            0.6 * max(SIZE), 1.0, None, self._base, mover=self._mover,
+            0.6 * length, 1.0, None, self._base, mover=self._mover,
             live=True, mesh=(GROUP, "plane"))], group=GROUP)
         self.timer.start()
         journal.note("Полёт: старт {:.4f}, {:.4f}".format(lat, lon))
@@ -189,11 +198,13 @@ class FlightSim(QObject):
         if self.plane is None:
             return
         self.timer.stop()
+        self.view.navigator.air = False
         self.plane = None
         self.held = {}
         self.view.removeEventFilter(self)
         self.view.models.set_models([], group=GROUP)
         self.readout.set_lines([])
+        self.hud.set_state(None)
         self.view.update()
 
     def close(self):
@@ -205,7 +216,7 @@ class FlightSim(QObject):
             return None
         return plane.lat, plane.lon, models.moved(
             self._base, plane.lat, plane.lon, plane.heading, plane.pitch,
-            plane.roll, SIZE), plane.alt
+            plane.roll, self.model_size), plane.alt
 
     def _input(self, axis):
         return sum(sign for kind, sign in self.held.values() if kind == axis)
@@ -230,52 +241,64 @@ class FlightSim(QObject):
         if plane.crashed:
             self._ended = now
             self.held = {}
+            self.hud.set_state(None)
             self.readout.set_lines([tr("Касание земли - полёт окончен.")])
             journal.note("Полёт: касание земли")
             return
         out = flightsim.readout(plane, ground)
-        self.readout.set_lines([
-            tr("{speed} км/ч · высота {alt} м, над землёй {height} м · "
-               "курс {heading}° · подъём {climb} м/с · тяга {throttle} %",
-               speed="{:.0f}".format(out["speed"]),
-               alt="{:.0f}".format(out["alt"]),
-               height="{:.0f}".format(out["height"]),
-               heading="{:.0f}".format(out["heading"]),
-               climb="{:+.1f}".format(out["climb"]),
-               throttle="{:.0f}".format(out["throttle"])),
-            tr("↑ ↓ - нос вниз и вверх · ← → - крен · PageUp, PageDown - "
-               "тяга · V - вид из кабины · Esc - выход")])
+        out["pitch"] = plane.pitch
+        out["roll"] = plane.roll
+        hud = self.cockpit and self.hud_on
+        self.hud.set_state(out if hud else None)
+        lines = [tr("↑ ↓ - нос вниз и вверх · ← → - крен · PageUp, "
+                    "PageDown - тяга · V - вид из кабины · H - приборы · "
+                    "Esc - выход")]
+        if not hud:
+            lines.insert(0, tr(
+                "{speed} км/ч · высота {alt} м, над землёй {height} м · "
+                "курс {heading}° · подъём {climb} м/с · тяга {throttle} %",
+                speed="{:.0f}".format(out["speed"]),
+                alt="{:.0f}".format(out["alt"]),
+                height="{:.0f}".format(out["height"]),
+                heading="{:.0f}".format(out["heading"]),
+                climb="{:+.1f}".format(out["climb"]),
+                throttle="{:.0f}".format(out["throttle"])))
+        self.readout.set_lines(lines)
 
     def _follow(self, ground):
         plane = self.plane
-        height = max(plane.alt - ground, 0.0) * self.view.store.scale
         pose = self.view.navigator.pose
         if self.cockpit:
-            self._cockpit(height)
+            self._cockpit()
             return
-        look_lat, look_lon, look, distance = movers.chase(
-            plane.lat, plane.lon, plane.heading, height, self.reach,
-            pose.tilt)
+        look_lat, look_lon, look, distance = movers.chase_on(
+            plane.lat, plane.lon, plane.heading,
+            plane.alt * self.view.store.scale, self.view.label_height,
+            self.reach, pose.tilt)
         self.view.navigator.show(Pose(look_lat, look_lon, distance, look,
                                       pose.tilt))
         self.view.update()
 
-    def _cockpit(self, height):
-        """Глаз в самолёте, взгляд по курсу вниз от горизонта на тангаж,
-        кадр повёрнут на крен."""
+    def _cockpit(self):
+        """Глаз в самолёте, взгляд по курсу с тангажом, кадр повёрнут на
+        крен. Точка взгляда - в воздухе, поза ставится мимо show: show
+        посадил бы её на рельеф и поднял бы глаз над ним."""
         plane = self.plane
-        tilt = min(max(90.0 + plane.pitch, 1.0), min(COCKPIT_TILT,
-                                                     MAX_TILT))
-        height = max(height, 1.0)
-        rad = math.radians(tilt)
-        ahead = height * math.tan(rad)
+        rad = math.radians(plane.pitch)
         look_lat, look_lon = destination(plane.lat, plane.lon,
-                                         plane.heading, ahead)
+                                         plane.heading,
+                                         COCKPIT_LOOK * math.cos(rad))
         look = (bearing(look_lat, look_lon, plane.lat, plane.lon)
                 + 180.0) % 360.0
-        self.view.navigator.show(Pose(look_lat, look_lon,
-                                      height / math.cos(rad), look, tilt,
-                                      roll=COCKPIT_ROLL * plane.roll))
+        height = plane.alt * self.view.store.scale \
+            + COCKPIT_LOOK * math.sin(rad)
+        navigator = self.view.navigator
+        navigator.stop()
+        navigator.set_pose(Pose(look_lat, look_lon, COCKPIT_LOOK, look,
+                                90.0 + plane.pitch, h=height,
+                                terrain=self.view.terrain_at,
+                                roll=COCKPIT_ROLL * plane.roll))
+        navigator.air = True
         self.view.update()
 
     def set_cockpit(self, on):
@@ -287,6 +310,7 @@ class FlightSim(QObject):
         if on:
             self._tilt = pose.tilt
         self.cockpit = on
+        self.view.navigator.air = False
         if not on:
             plane = self.plane
             self.view.navigator.show(Pose(plane.lat, plane.lon, CHASE_REACH,
@@ -315,6 +339,11 @@ class FlightSim(QObject):
         if key == _key("Key_V"):
             if kind == KEY_PRESS and not event.isAutoRepeat():
                 self.set_cockpit(not self.cockpit)
+            return True
+        if key == _key("Key_H"):
+            if kind == KEY_PRESS and not event.isAutoRepeat():
+                self.hud_on = not self.hud_on
+                self._tick()
             return True
         found = self.keys.get(key)
         if found is None:

@@ -384,14 +384,15 @@ class LiveManager(QObject):
         lat, lon, heading, alt = found
         if heading != heading:
             heading = self.view.navigator.pose.heading
-        height = 0.0
-        if alt == alt:
-            height = max(alt - self._ground(lat, lon), 0.0) \
-                * self.view.store.scale
+        scale = self.view.store.scale
+        level = alt * scale if alt == alt else self.view.label_height(lat,
+                                                                      lon)
         pose = self.view.navigator.pose
-        # Расстояние до объекта меняет колесо (ChaseControl).
-        look_lat, look_lon, look, distance = movers.chase(
-            lat, lon, heading, height, self.chase.reach, pose.tilt)
+        # Расстояние до объекта меняет колесо (ChaseControl), высота -
+        # над рельефом в точке взгляда.
+        look_lat, look_lon, look, distance = movers.chase_on(
+            lat, lon, heading, level, self.view.label_height,
+            self.chase.reach, pose.tilt)
         self.view.navigator.show(Pose(look_lat, look_lon, distance, look,
                                       pose.tilt))
         self.view.update()

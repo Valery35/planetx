@@ -67,6 +67,7 @@ class StateMixin:
         style.apply(name)
         self.setStyleSheet(style.window_style())
         style.restyle(self)
+        self.title_bars.apply_all()
         self.view.update()
         journal.note("Оформление: {}".format(style.current()))
 

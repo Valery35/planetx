@@ -512,8 +512,22 @@ class Navigator:
         self.inertia = None
         self.zooming = None
         self.flight = None
+        # Функция рельефа из set_terrain. Новая поза без рельефа (Pose(...)
+        # смены тела, шагов проверки) получает её в set_pose - иначе
+        # точка взгляда стояла на эллипсоиде, а show копировал None
+        # дальше. Над впадиной Марса на -2.6 км камера следом за своим
+        # самолётом висела на 2.7 км выше него, замечание автора от
+        # 19 октября 2026 года.
+        self.terrain = None
+        # Точка взгляда в воздухе, не на рельефе - вид из кабины полёта.
+        # keep_clear её не сажает, show снимает.
+        self.air = False
 
     def set_pose(self, pose):
+        if pose.terrain is None and self.terrain is not None:
+            pose = pose.copy()
+            pose.terrain = self.terrain
+            pose.h = self.terrain(pose.lat, pose.lon)
         self.pose = pose
         pose.apply(self.camera)
 
@@ -521,6 +535,7 @@ class Navigator:
         """Поставить позу кадра записи: на рельеф с зазором, как в
         перелёте. Движение гасится."""
         self.stop()
+        self.air = False
         pose = pose.copy()
         pose.terrain = self.pose.terrain
         if pose.terrain is not None:
@@ -529,6 +544,7 @@ class Navigator:
 
     def set_terrain(self, terrain):
         """Подключить рельеф: функцию высоты (lat, lon) или None."""
+        self.terrain = terrain
         pose = self.pose.copy()
         pose.terrain = terrain
         pose.h = terrain(pose.lat, pose.lon) if terrain is not None else 0.0
@@ -541,7 +557,9 @@ class Navigator:
         если поза изменилась.
         """
         pose = self.pose
-        if pose.terrain is None:
+        # Поза с точкой взгляда в воздухе (air) - вид из кабины режима
+        # полёта, её ставит полёт.
+        if pose.terrain is None or self.air or pose.tilt > MAX_TILT:
             return False
         ground = pose.terrain(pose.lat, pose.lon)
         if abs(ground - pose.h) < 0.01 and allowed(pose):

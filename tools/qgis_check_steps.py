@@ -9497,18 +9497,52 @@ def flight_sim():
             "plane_alt": round(plane.alt * view.store.scale, 0),
             "left_y": round(float(px[0][1]), 1),
             "right_y": round(float(px[1][1]), 1)}
+        # Горизонт: при ровном полёте точка в 20 км впереди на высоте
+        # самолёта - у середины кадра, верх кадра - небо.
+        plane.roll = 0.0
+        plane.pitch = 0.0
+        flight._follow(flight._ground(plane.lat, plane.lon))
+        h_lat, h_lon = destination(plane.lat, plane.lon, plane.heading,
+                                   20000.0)
+        px, ahead = view.camera.project(np.asarray([
+            ellipsoid.geodetic_to_ecef(h_lat, h_lon,
+                                       plane.alt * view.store.scale)],
+            dtype=np.float64))
+        out["cockpit"]["horizon_px"] = [
+            round(float(px[0][0] - view.camera.width / 2.0), 1),
+            round(float(px[0][1] - view.camera.height / 2.0), 1),
+            bool(ahead[0])]
+        out["cockpit"]["tilt"] = round(view.navigator.pose.tilt, 1)
+        out["cockpit"]["air"] = view.navigator.air
         view.repaint()
-        view.grabFramebuffer().save(os.path.join(TEMP,
-                                                 "planetx_cockpit.png"))
+        image = view.grabFramebuffer()
+        image.save(os.path.join(TEMP, "planetx_cockpit.png"))
+        out["cockpit"]["top_rgb"] = image.pixelColor(
+            image.width() // 2, image.height() // 8).name()
+        # Индикатор на стекле - только в кабине, H прячет его.
+        flight._tick()
+        out["hud"] = {"cockpit": flight.hud.isVisible(),
+                      "lines": len(flight.readout.lines)}
+        flight.view.grab().save(os.path.join(TEMP,
+                                             "planetx_cockpit_hud.png"))
+        key("Key_H")
+        out["hud"]["after_h"] = flight.hud.isVisible()
+        out["hud"]["lines_after_h"] = len(flight.readout.lines)
+        key("Key_H")
         key("Key_V")
-        out["cockpit_off"] = [flight.cockpit, flight._mover(0.0) is not None]
+        out["cockpit_off"] = [flight.cockpit, flight._mover(0.0) is not None,
+                              view.navigator.air]
+        flight._tick()
+        out["hud"]["outside"] = flight.hud.isVisible()
         key("Key_Escape")
         out["after_esc"] = [flight.plane is None,
                             len(view.models.groups.get("flightsim", [])),
                             flight.readout.isVisible()]
-        # Касание земли: полёт низко с носом вниз.
-        flight.start(60.20, 24.80)
+        # Касание земли: полёт низко с носом вниз, винтовой самолёт.
+        from planetx.core import flightsim as core_flight
+        flight.start(60.20, 24.80, core_flight.LIGHT)
         plane = flight.plane
+        out["light_start_kmh"] = round(plane.speed * 3.6, 0)
         plane.alt = flight._ground(plane.lat, plane.lon) + 30.0
         plane.pitch = -20.0
         return 2500
@@ -9520,6 +9554,19 @@ def flight_sim():
                           len(view.models.groups.get("flightsim", []))]
     out["gl"] = dict(view.gl_errors)
     return None
+
+
+def _title_dark(widget):
+    """Тёмный ли заголовок окна Windows (атрибут DWM 20), None - не
+    Windows или атрибут не читается."""
+    import ctypes
+    if sys.platform != "win32":
+        return None
+    value = ctypes.c_int(-1)
+    code = ctypes.windll.dwmapi.DwmGetWindowAttribute(
+        ctypes.c_void_p(int(widget.window().winId())), 20,
+        ctypes.pointer(value), ctypes.sizeof(value))
+    return bool(value.value) if code == 0 else None
 
 
 @check(1500)
@@ -9552,7 +9599,9 @@ def ui_theme():
             "window_rules": len(window.styleSheet()),
             "dialog_combo": dialog.ui_theme.currentText(),
             "toolbar_sheet_has_plate": style._rgba(style.PLATE)
-            in bar.styleSheet()}
+            in bar.styleSheet(),
+            "title_dark": _title_dark(window),
+            "dialog_title_dark": _title_dark(dialog)}
     if n >= len(order):
         window.properties.close()
         return None
@@ -9617,6 +9666,69 @@ def ui_theme_windows():
             widget.close()
     window.myplaces.remove(look["key"])
     window.set_ui_theme(style.QGIS)
+    return None
+
+
+@check(1000)
+def flight_mars():
+    """Режим полёта над Марсом: самолёт на кадре, движется, касание
+    поверхности тела. Замечание автора от 19 октября 2026 года - «над
+    Марсом и т. п. не летает»."""
+    import numpy as np
+    from planetx.core import ellipsoid
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    flight = window.flight
+    look = state.setdefault("flight_mars", {"n": 0})
+    out = result.setdefault("flight_mars", {})
+    n = look["n"]
+    look["n"] += 1
+    if n == 0:
+        window.set_body("mars")
+        return 3000
+    if n == 1:
+        view.navigator.stop()
+        view.navigator.show(Pose(18.4, 77.5, 20000.0, 0.0, 60.0))
+        view.update()
+        return 5000
+    if n == 2:
+        flight.start(18.4, 77.5)
+        plane = flight.plane
+        look["start"] = (plane.lat, plane.lon)
+        out["start_alt"] = round(plane.alt, 0)
+        out["ground"] = round(flight._ground(plane.lat, plane.lon), 0)
+        return 3000
+    plane = flight.plane
+    out["moved_m"] = None if plane is None else round(float(np.hypot(
+        (plane.lat - look["start"][0]) * 59000.0,
+        (plane.lon - look["start"][1]) * 59000.0)), 0)
+    out["flying"] = flight.flying
+    if plane is not None:
+        point = np.asarray([ellipsoid.geodetic_to_ecef(
+            plane.lat, plane.lon, plane.alt * view.store.scale)],
+            dtype=np.float64)
+        pixels, front = view.camera.project(point)
+        out["on_screen_px"] = [
+            round(float(pixels[0][0] - view.camera.width / 2.0), 1),
+            round(float(pixels[0][1] - view.camera.height / 2.0), 1)]
+        out["front"] = bool(front[0])
+        eye = ellipsoid.ecef_to_geodetic(np.asarray(view.camera.eye))
+        out["eye"] = [round(float(v), 4) for v in eye]
+        out["plane"] = [round(plane.lat, 4), round(plane.lon, 4),
+                        round(plane.alt, 0)]
+        out["scale"] = view.store.scale
+        out["radius_a"] = ellipsoid.A
+        pose = view.navigator.pose
+        # Точка взгляда на рельефе тела, не на эллипсоиде.
+        out["look_h"] = round(pose.h, 0)
+        out["look_ground"] = round(view.terrain_at(pose.lat, pose.lon), 0)
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_flight_mars.png"))
+    out["drawn"] = view.models.drawn
+    out["lines"] = flight.readout.lines
+    flight.stop()
+    window.set_body("earth")
     return None
 
 

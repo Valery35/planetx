@@ -13,7 +13,7 @@ from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtGui import QCursor
 from qgis.PyQt.QtWidgets import QApplication, QMenu
 
-from ..core import editing, sheets
+from ..core import editing, flightsim, sheets
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import has_alts
 from ..i18n import tr
@@ -124,12 +124,17 @@ def show(window, px, py):
         menu.addAction(tr("Облететь вокруг")).triggered.connect(
             lambda *a: window.spin_here(lat, lon))
         if not drawing:
-            fly = menu.addAction(tr("Полёт отсюда"))
-            fly.setToolTip(tr(
-                "Свой самолёт над этой точкой. Стрелки - нос и крен, "
-                "PageUp и PageDown - тяга, Esc - выход."))
-            fly.triggered.connect(
-                lambda *a: window.flight.start(lat, lon))
+            fly = menu.addMenu(tr("Полёт отсюда"))
+            fly.setToolTipsVisible(True)
+            for kind, text, tip in (
+                    (flightsim.FIGHTER, tr("Истребитель"), tr(
+                        "До 2000 км/ч, старт 900 км/ч, резкий крен.")),
+                    (flightsim.LIGHT, tr("Винтовой самолёт"), tr(
+                        "До 340 км/ч, старт 250 км/ч, плавный."))):
+                action = fly.addAction(text)
+                action.setToolTip(tip)
+                action.triggered.connect(
+                    lambda *a, k=kind: window.flight.start(lat, lon, k))
         if not drawing and window.planet.earth:
             route_items(window, menu, place, lat, lon)
         menu.addSeparator()

@@ -2896,9 +2896,16 @@ licence of the adsb.lol output is not named as of 19 October 2026.
 
 ## Flight mode
 
-The Fly from here item of the right-click menu on the globe puts your own
-aircraft 1000 m above the clicked point. The aircraft flies at 300 km/h
-along the view heading, and the camera follows it from behind and above.
+The Fly from here submenu of the right-click menu on the globe puts
+your own aircraft 1000 m above the clicked point - a fighter jet or a
+propeller aircraft. The aircraft flies along the view heading, and the
+camera follows it from behind and above. The flight works above the Earth
+and above the other bodies of the Body menu.
+
+| Aircraft | Start speed | Top speed | Stall |
+|---|---|---|---|
+| Fighter jet | 900 km/h | about 2000 km/h | 250 km/h |
+| Propeller aircraft | 250 km/h | about 340 km/h | 100 km/h |
 
 | Key | Action |
 |---|---|
@@ -2907,17 +2914,25 @@ along the view heading, and the camera follows it from behind and above.
 | left and right arrows | bank and turn to the same side |
 | PageUp, PageDown | more and less thrust |
 | V | cockpit view and back |
+| H | cockpit instruments or the readout |
 | Esc | end of the flight |
 
-Without keys the bank returns to zero by itself, the pitch stays. The top
-speed at full thrust is about 500 km/h. Below 100 km/h the aircraft
-stalls and the nose drops by itself. At the bottom of the view a readout
+Without keys the bank returns to zero by itself, the pitch stays. The
+fighter jet banks twice as fast as the propeller aircraft. Below the stall
+speed the nose drops by itself. At the bottom of the view a readout
 shows the speed, the altitude above sea level and above the ground, the
 heading, the vertical speed and the thrust. The wheel changes the
 distance from the camera to the aircraft, the middle mouse button the
-view tilt. From the cockpit the model is not shown, the frame tilts with
-the bank, and the view looks along the heading no higher than 5° below
-the horizon, so the horizon stays in the upper part of the frame.
+view tilt. From the cockpit the model is not shown, the view looks
+along the heading with the aircraft pitch, and the frame tilts with the
+bank. In level flight the horizon is in the middle of the frame, with the
+sky above it. In the cockpit green instruments on the windscreen replace
+the readout. These are the pitch ladder with the horizon line turned by
+the bank, the aircraft symbol in the middle, the heading tape at the
+top, the speed tape in km/h on the left and the altitude tape above sea
+level in metres on the right. Below them are the vertical speed, the
+thrust and the height above the ground. The horizon line of the ladder
+matches the horizon in the frame.
 Touching the ground ends the flight. A flight recording also
 ends it - the recording drives the camera.
 

@@ -4371,20 +4371,26 @@ EN = {
         "module windows in the QGIS look. Light - grey plates with dark "
         "icons and light windows. Dark - dark plates and dark windows. The "
         "look changes at once.",
-    "Свой самолёт над этой точкой. Стрелки - нос и крен, "
-    "PageUp и PageDown - тяга, Esc - выход.":
-        "Your own aircraft above this point. Arrows - nose and bank, "
-        "PageUp and PageDown - thrust, Esc - exit.",
+    "Истребитель": "Fighter jet",
+    "Подъём {climb} м/с": "Climb {climb} m/s",
+    "Над землёй {height} м": "Above ground {height} m",
+    "Тяга {throttle} %": "Thrust {throttle} %",
+    "↑ ↓ - нос вниз и вверх · ← → - крен · PageUp, PageDown - тяга · "
+    "V - вид из кабины · H - приборы · Esc - выход":
+        "↑ ↓ - nose down and up · ← → - bank · PageUp, PageDown - thrust "
+        "· V - cockpit view · H - instruments · Esc - exit",
+    "Винтовой самолёт": "Propeller aircraft",
+    "До 2000 км/ч, старт 900 км/ч, резкий крен.":
+        "Up to 2000 km/h, starts at 900 km/h, quick bank.",
+    "До 340 км/ч, старт 250 км/ч, плавный.":
+        "Up to 340 km/h, starts at 250 km/h, smooth.",
     "Касание земли - полёт окончен.":
         "Touched the ground - the flight is over.",
     "{speed} км/ч · высота {alt} м, над землёй {height} м · "
     "курс {heading}° · подъём {climb} м/с · тяга {throttle} %":
         "{speed} km/h · altitude {alt} m, above ground {height} m · "
         "heading {heading}° · climb {climb} m/s · thrust {throttle} %",
-    "↑ ↓ - нос вниз и вверх · ← → - крен · PageUp, PageDown - "
-    "тяга · V - вид из кабины · Esc - выход":
-        "↑ ↓ - nose down and up · ← → - bank · PageUp, PageDown - "
-        "thrust · V - cockpit view · Esc - exit",
+    "км/ч": "km/h",
     "Камера держит первый объект трека в центре, азимут - по ходу "
     "движения. Расстояние и наклон меняются колесом и мышью.":
         "The camera keeps the first object of the track in the center, "

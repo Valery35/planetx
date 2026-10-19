@@ -220,6 +220,32 @@ def hills(lat, lon):
 
 class TestTerrain(unittest.TestCase):
 
+    def test_air_pose_is_not_put_on_terrain(self):
+        # Вид из кабины: точка взгляда в 800 м над рельефом не садится.
+        n = navigator(5000.0, 30.0, 60.0)
+        n.set_pose(nav.Pose(10.0, 20.0, 1000.0, 0.0, 60.0, h=900.0,
+                            terrain=lambda lat, lon: 100.0))
+        n.air = True
+        self.assertFalse(n.keep_clear())
+        self.assertEqual(n.pose.h, 900.0)
+        n.show(nav.Pose(10.0, 20.0, 1000.0, 0.0, 60.0))
+        self.assertFalse(n.air)
+        self.assertEqual(n.pose.h, 100.0)
+
+    def test_new_pose_without_terrain_keeps_navigator_terrain(self):
+        # Поза Pose(...) без рельефа (смена тела) садится на рельеф
+        # навигатора: точка взгляда во впадине на -2600 м, а не на нуле.
+        n = navigator(5000.0, 30.0, 60.0)
+        n.set_terrain(lambda lat, lon: -2600.0)
+        n.set_pose(nav.Pose(18.4, 77.5, 4000.0, 0.0, 75.0))
+        self.assertEqual(n.pose.h, -2600.0)
+        self.assertIsNotNone(n.pose.terrain)
+        n.show(nav.Pose(18.5, 77.5, 3000.0, 0.0, 75.0))
+        self.assertEqual(n.pose.h, -2600.0)
+        n.set_terrain(None)
+        n.set_pose(nav.Pose(18.4, 77.5, 4000.0, 0.0, 75.0))
+        self.assertEqual(n.pose.h, 0.0)
+
     def terrain_navigator(self, distance, tilt=0.0, terrain=hills):
         n = navigator(distance, 30.0, tilt)
         n.set_terrain(terrain)

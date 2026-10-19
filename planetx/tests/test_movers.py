@@ -155,6 +155,21 @@ class TestMovers(unittest.TestCase):
         self.assertEqual(movers.chase(60.0, 25.0, 30.0, math.nan, 2000.0,
                                       60.0), (60.0, 25.0, 30.0, 2000.0))
 
+    def test_chase_on_takes_height_over_look_point(self):
+        # Рельеф растёт на восток на 10 м на км: точка взгляда впереди
+        # выше, высота над ней меньше, точка ближе, чем над ровным.
+        def ground(lat, lon):
+            return (lon - 25.0) * 0.5567 * 1000.0 * 10.0 / 1000.0 * 100.0
+
+        flat = movers.chase(60.0, 25.0, 90.0, 1000.0, 150.0, 75.0)
+        lat, lon, look, distance = movers.chase_on(
+            60.0, 25.0, 90.0, 1000.0, ground, 150.0, 75.0)
+        ahead = trains._metres(60.0, 25.0, lat, lon)
+        height = 1000.0 - ground(lat, lon)
+        self.assertLess(ahead, trains._metres(60.0, 25.0, flat[0], flat[1]))
+        self.assertAlmostEqual(ahead, height * math.tan(math.radians(75)),
+                               delta=5.0)
+
     def test_turning_object_follows_arc(self):
         # 100 м/с, поворот 3°/с: за 30 с курс 90° -> 180°, хорда - на
         # азимут 135°, длина 2R·sin 45°, R = v / ω.

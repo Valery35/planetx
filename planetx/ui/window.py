@@ -466,6 +466,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             part.setAttribute(enum(Qt, "WidgetAttribute",
                                    "WA_StyledBackground"))
         self.setStyleSheet(style.window_style())
+        # Заголовки окна глобуса и окон модуля по оформлению.
+        self.title_bars = style.TitleBars(self)
+        style.title_bar(self)
         splitter.addWidget(self.side)
         # Разделитель показывает добавленную панель, пустая - скрыта.
         self.side.hide()
@@ -974,6 +977,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.vessel_manager.close()
             self.aircraft_manager.close()
             self.flight.close()
+            self.title_bars.close()
             self.route_manager.close()
             self.weather.close()
             self.flow.close()

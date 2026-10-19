@@ -26,8 +26,10 @@ restyle перекрашивает плашки (plate), значки
 набора (icon помнит имя значка по cacheKey) и окна модуля
 (window_style - левая панель, панель свойств, каталог, окна QDialog).
 """
+import ctypes
 import math
 import os
+import sys
 
 from qgis.PyQt.QtCore import QPointF, QRectF, QSize, Qt
 from qgis.PyQt.QtGui import (QColor, QIcon, QImage, QPainter, QPainterPath,
@@ -205,12 +207,78 @@ def window_style(name=None):
         "QWidget#planetxWindow {{ background-color: {}; }}".format(w["back"])
 
 
+# Тёмный заголовок окна Windows - атрибут DWM, Qt его не рисует.
+# Замечание автора от 19 октября 2026 года со снимком - светлая полоса
+# заголовка над тёмным окном глобуса. 20 - Windows 10 20H1 и новее,
+# 19 - ранние сборки Windows 10.
+DARK_TITLE_ATTRIBUTES = (20, 19)
+
+
+def title_bar(widget, dark=None):
+    """Заголовок окна widget тёмный или светлый (по оформлению). Только
+    Windows, на прочих системах ничего не делает."""
+    if sys.platform != "win32" or widget is None:
+        return
+    if dark is None:
+        dark = current() == DARK
+    try:
+        hwnd = ctypes.c_void_p(int(widget.window().winId()))
+        flag = ctypes.c_int(1 if dark else 0)
+        dwm = ctypes.windll.dwmapi
+    except (AttributeError, OSError, RuntimeError, TypeError, ValueError):
+        return
+    for attribute in DARK_TITLE_ATTRIBUTES:
+        if dwm.DwmSetWindowAttribute(hwnd, attribute, ctypes.pointer(flag),
+                                     ctypes.sizeof(flag)) == 0:
+            break
+
+
+class TitleBars:
+    """Заголовки окон модуля по оформлению: окно глобуса, его дочерние
+    окна при показе (сигнал focusWindowChanged приложения - окно
+    получает фокус, когда открывается)."""
+
+    def __init__(self, root):
+        from qgis.PyQt.QtWidgets import QApplication
+        self.root = root
+        self.app = QApplication.instance()
+        self.app.focusWindowChanged.connect(self._focused)
+
+    def close(self):
+        if self.app is None:
+            return
+        try:
+            self.app.focusWindowChanged.disconnect(self._focused)
+        except (TypeError, RuntimeError):
+            # Связь уже снята: окно закрывается второй раз.
+            self.app = None
+
+    def apply_all(self):
+        """Окно глобуса и все открытые окна модуля."""
+        title_bar(self.root)
+        for widget in self.root.findChildren(QWidget):
+            if widget.isWindow() and widget.isVisible():
+                title_bar(widget)
+
+    def _focused(self, window):
+        from qgis.PyQt.QtWidgets import QApplication
+        widget = QApplication.activeWindow()
+        probe = widget
+        while probe is not None:
+            if probe is self.root:
+                title_bar(widget)
+                return
+            probe = probe.parentWidget()
+
+
 def dress(dialog):
     """Окно модуля без родителя-окна глобуса, например «О модуле» из
     меню QGIS: правила сохранённого оформления."""
     from qgis.core import QgsSettings
     name = QgsSettings().value(THEME_KEY, DARK)
-    dialog.setStyleSheet(window_style(name if name in THEMES else DARK))
+    name = name if name in THEMES else DARK
+    dialog.setStyleSheet(window_style(name))
+    title_bar(dialog, name == DARK)
 
 
 def plate(widget, name, kind="QFrame", label=False):

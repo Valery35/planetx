@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.4.1
+version=1.4.2
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.4.1 In the camera following a train, a ship or an
+changelog=1.4.2 The Fly from here submenu chooses the aircraft - a
+      fighter jet up to 2000 km/h or a propeller aircraft up to
+      340 km/h. The cockpit view looks along the heading with the
+      aircraft pitch, the horizon is in the middle of the frame, and
+      green windscreen instruments show the pitch ladder, heading,
+      speed, altitude, vertical speed and thrust, H switches them to
+      the readout. Flight works above Mars, the Moon and other bodies.
+      The following camera keeps an aircraft or a ship in the middle of
+      the view above uneven terrain. In the dark look the title bar of
+      the globe window and of the plugin windows is dark too.
+      1.4.1 In the camera following a train, a ship or an
       aircraft the wheel moves the camera closer and farther and Esc
       releases it, the camera starts 1.5 km from the object. In the
       dark look the right-click menu on the globe and the About window
