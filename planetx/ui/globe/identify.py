@@ -746,8 +746,9 @@ class IdentifyMixin:
                   if p.visible and self._time_ok(p) and not p.tour
                   and p.body == self.planet.key and p.shape.points
                   and p.key not in self._region_hidden]
-        hits = pick.picked([(p.shape.kind, p.shape.points) for p in places],
-                           lat, lon, tolerance)
+        hits = pick.picked([(p.shape.kind, p.shape.points,
+                             getattr(p.shape, "holes", None))
+                            for p in places], lat, lon, tolerance)
         return [places[n] for n in hits]
 
     def _identify_places(self, lat, lon, tolerance):
@@ -773,6 +774,7 @@ class IdentifyMixin:
                 values.append((tr("Измерение"), p.measure))
             if p.description:
                 values.append((tr("Описание"), p.description))
+            values += list(getattr(p, "data", None) or ())
             features.append((shape.name or tr("Без названия"), values, None))
         return [(Group(tr("Мои метки")), features)] if features else []
 

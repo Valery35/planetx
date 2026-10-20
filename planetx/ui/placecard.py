@@ -25,6 +25,7 @@ from qgis.PyQt.QtGui import QDesktopServices, QTextDocument
 from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QLabel, QPushButton,
                                  QTextBrowser, QVBoxLayout)
 
+from ..core import balloon
 from ..core.flight import lon_span, wrap_lon
 from ..i18n import tr
 
@@ -32,6 +33,19 @@ from ..i18n import tr
 EXPLAIN_LIMIT = 2000
 # Строк «Слоёв» глобуса в вопросе помощнику не больше.
 LAYERS_LIMIT = 12
+# Полей объекта в вопросе помощнику не больше.
+FIELDS_LIMIT = 20
+
+
+def fields_html(data):
+    """Поля объекта таблицей HTML под описанием, без полей - пусто."""
+    if not data:
+        return ""
+    rows = "".join(
+        "<tr><td style='padding-right:8px'><b>{}</b></td><td>{}</td></tr>"
+        .format(html.escape(str(n)), html.escape(str(v)))
+        for n, v in data)
+    return "<table>{}</table>".format(rows)
 
 
 def description_html(text):
@@ -107,11 +121,19 @@ class PlaceCard(Card):
     def __init__(self, place, can_explain, parent=None):
         super().__init__(place.key, place.shape.name, can_explain, tr(
             "Спросить помощника, что это за объект и чем интересно место. "
-            "Помощнику уходят название, вид, координаты и описание этой "
-            "метки и названия включённых слоёв глобуса. Ответ появится "
+            "Помощнику уходят название, вид, координаты, описание и поля "
+            "этой метки и названия включённых слоёв глобуса. Ответ появится "
             "здесь и под строкой «Поиск»."), parent)
-        if place.description:
-            self.text.setHtml(description_html(place.description))
+        fields = fields_html(getattr(place, "data", None))
+        template = getattr(place, "balloon", "")
+        if template:
+            # Окно по шаблону BalloonStyle из KML.
+            self.text.setHtml(balloon.fill(
+                template, place.shape.name, place.description,
+                getattr(place, "data", None)))
+        elif place.description or fields:
+            self.text.setHtml(description_html(place.description)
+                              + fields)
         else:
             self.text.setPlainText(tr(
                 "У метки нет описания. Его пишут в окне «Свойства…» метки."))
@@ -216,6 +238,10 @@ def explain_question(place, kind_name, layers=()):
         lat=lat, lon=lon)
     if text:
         question += " " + tr("Описание метки - {text}", text=text)
+    fields = _clip("; ".join("{} = {}".format(n, v) for n, v in (
+        getattr(place, "data", None) or ())[:FIELDS_LIMIT]))
+    if fields:
+        question += " " + tr("Поля объекта - {fields}.", fields=fields)
     extra = layers_text(layers)
     if extra:
         question += " " + extra

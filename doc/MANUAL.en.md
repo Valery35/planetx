@@ -1247,6 +1247,10 @@ The right-click menu:
 - Globe terrain - for rasters, see [Own terrain](#own-terrain).
 - Extrusion… - for vector layers, see
   [Extrusion by field](#extrusion-by-field).
+- To My Places… - for vector layers. The layer features go into My
+  Places as a folder named after the layer, the selected ones,
+  otherwise all. The folder can then be saved to KML, see
+  [KML and KMZ](#kml-and-kmz).
 - Point colour, Point size, Point classes - for point clouds, see
   [Point clouds](#point-clouds).
 - Layer Properties… - the standard QGIS layer properties window.
@@ -2003,6 +2007,8 @@ previous look and shape back.
 | Description | Text of the placemark, it goes into KML too |
 | Icon | Point icon from the QGIS set, in KML a standard icon of the same theme |
 | Color, Width | Color of the point icon, color and width of the line and outline |
+| Icon size | Points only. The icon size as a share of the usual one, as scale in KML. 0 - only the label on the globe |
+| Label colour, Label size | Points only. The colour and size of the label on the globe, as LabelStyle in KML. Size 0 - only the icon, the name stays in the list |
 | Fill | Fill color of the polygon and of the wall |
 | Altitude mode | What the altitude is measured from, as in KML. Clamped to ground - the placemark lies on the ground, over the sea on the water. Clamped to sea floor - on the floor. Relative to ground and Relative to sea floor - the rise above them. Absolute - the altitude above sea level, it may be below zero too |
 | Height | The rise above the surface or the floor, in the absolute mode the altitude above sea level, in metres. The Ground - Space slider under the field sets it from the ground to 100 km. In the Clamped to ground and Clamped to sea floor modes the field is not available |
@@ -2011,6 +2017,7 @@ previous look and shape back.
 | Time | Moment or interval of the placemark for the time slider |
 | Hide beyond | The placemark is visible only while the eye is closer than this distance. 0 - always visible. In KML the field is written as Region |
 | Place view | Look point, range, heading, tilt of the camera at the place and the view date |
+| Object fields | A table of name and value, as ExtendedData in KML. Add field and Remove field change the set. The fields are shown in the placemark card and in the Objects window. An edit of fields from a GIS export does not go back to the source layer, it goes into KML |
 
 Extending works with a height above zero. A path becomes a wall, a
 polygon becomes a block.
@@ -2133,8 +2140,66 @@ not larger than `maxLodPixels`. The box size is counted for a window
 at the same distance in any globe window. The camera flies to the
 contents of the file.
 
+These parts of the file are carried over too:
+
+- polygon holes (`innerBoundaryIs`) - a lake inside a field or the yard
+  of a building stays unfilled. A click in a hole does not select the
+  polygon.
+- object fields from `ExtendedData` - `Data` and `SchemaData`, as GIS
+  write them when exporting to KML. The fields are shown in the
+  placemark card and in the Objects window, Explain this passes them
+  to the assistant.
+- the colour and size of the label (`LabelStyle`) and the size of the
+  point icon. Label size 0 - a placemark without a label, icon size 0 -
+  a label without an icon.
+- the `Camera` view of placemarks, folders and tour steps. It becomes a
+  placemark view - the look point is where the camera looks, the roll
+  is not carried over.
+- the balloon template (`BalloonStyle`) - the placemark card shows the
+  text by the template, the places `$[name]`, `$[description]` and
+  `$[field]` are replaced with the name, the description and the
+  object fields.
+- the icon heading (`heading` in `IconStyle`) - the icon keeps its
+  direction from north and turns with the view.
+- placemark changes during a tour (`gx:AnimatedUpdate`) - visibility,
+  colours, icon size, line width and the point position. The size,
+  width, colours and position change smoothly. The changes act while the
+  tour plays, the placemarks in My Places stay as they were.
+- the tour flight with a climb (`gx:flyToMode bounce`).
+- a model inside a track (`gx:Track` with `Model`) - the 3D model moves
+  along the track by the time slider, turns come from `gx:angles`,
+  without them - along the motion. Outside the track time there is no
+  model, with the slider closed it stands at the end of the path.
+
+All these parts are kept in My Places and go back to KML.
+
+#### Project layer to KML
+
+The To My Places… item of the menu of a vector layer in the QGIS
+project section puts the layer features into My Places as a folder
+named after the layer. With a selection the selected features go,
+otherwise all of them. For a layer with more than 5000 features the
+window asks whether to take only the features in the visible part of
+the globe. Carried over:
+
+- geometry in degrees, polygons with holes, a multipart feature -
+  placemarks by parts with one name. Z values are not carried over.
+- attributes - object fields.
+- name - the QGIS layer label, without labels - the display
+  expression of the layer.
+- colours - the symbol of each feature by the layer style, rules and
+  categories included.
+- point label - the colour and font size of the simple QGIS labels.
+  A point layer without labels shows only icons on the globe.
+- time - the start and end fields of the temporal properties of the
+  layer.
+
+Save as KML… writes the folder to KML or KMZ.
+
 Save as KML… saves a folder or the whole My Places to KMZ or KML. The
-file extension chooses the format.
+file extension chooses the format. The placemark view is written as
+`LookAt`. A project layer goes to KML through My Places, see
+[Project layer to KML](#project-layer-to-kml).
 
 #### Network links
 
@@ -3190,7 +3255,7 @@ taken from the profile without the network.
 | Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
 | Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
 | Earth | Animated model, wind turbines | Three glTF wind turbines with a rotating rotor at an arbitrary place near Perm. The model is synthetic, the rotor is a node with rotation keys. See [3D models](#3d-models) |
-| Earth | Haul trucks, Kachkanar and Haul trucks, Lebedinsky | Six model haul trucks in the Main pit of Kachkanar or in the Lebedinsky pit near Gubkin: loading, the loaded haul, dumping, the empty return. The route is a pit road traced on Esri World Imagery: in Kachkanar from the face at the bottom along the east wall, in the Lebedinsky pit along the switchbacks from the face with an excavator. The trucks are a track of a project layer with a 3D model, the time slider plays ×10 in a loop. The trucks and their motion are a model, not data of the mine. See [Tracks](#tracks) |
+| Earth | Haul trucks, Kachkanar and Haul trucks, Lebedinsky | Six model haul trucks in the Main pit of Kachkanar or in the Lebedinsky pit near Gubkin: loading, the loaded haul, dumping, the empty return. The route is a pit road traced on Esri World Imagery: in Kachkanar from the face at the bottom along the east wall, in the Lebedinsky pit along the switchbacks from the face with an excavator. The trucks are KML tracks with a 3D model (`gx:Track` with `Model`) in My Places, with no project layer, the time slider plays ×10 in a loop, the right-click menu over a truck has Camera follows. The "…, QGIS layer" items show the same haul as a track of a project point layer, as with own data through Track…. The trucks and their motion are a model, not data of the mine. See [Tracks](#tracks) |
 | Earth | Trains of Finland, live | Live trains of Finland as consists on the rails at the Pasila, Helsinki and Tikkurila stations. See [Trains of Finland](#trains-of-finland) |
 | Earth | Flow of goods, a scheme | Paths with flow from Berezniki to the ports of Ust-Luga and Vostochny by rail and from Ust-Luga to Rotterdam by sea. The paths are schemes through large cities and straits, not real routes |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |

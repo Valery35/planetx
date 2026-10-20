@@ -157,14 +157,39 @@ ICON_DOT = 8.0  # полуразмер значка метки, логическ
 ROUND_DOT = 4.5  # полуразмер кружка метки
 
 
-def icon_style(icon, rgba):
+# Пределы размеров значка и подписи из KML, доли обычного.
+SCALE_RANGE = (0.25, 4.0)
+
+
+def _clamp_scale(value):
+    return min(max(float(value), SCALE_RANGE[0]), SCALE_RANGE[1])
+
+
+def icon_style(icon, rgba, icon_scale=1.0, label=None, label_scale=1.0,
+               turn=0.0):
     """Класс надписи для значка icon (core/icons.py) цвета rgba. Стиль
-    заводится один раз на сочетание, место в очереди - как у «mark»."""
-    kind = "icon:%s:%s" % (icon, ",".join(str(int(c)) for c in rgba))
+    заводится один раз на сочетание, место в очереди - как у «mark».
+
+    icon_scale - размер значка, label - цвет подписи RGBA или None
+    (белый), label_scale - размер подписи, доли обычного, как scale
+    IconStyle и LabelStyle KML. turn - поворот значка на экране по
+    часовой стрелке, градусы."""
+    marker = "icon:%s:%s" % (icon, ",".join(str(int(c)) for c in rgba))
+    if turn:
+        marker += ":%g" % round(turn, 1)
+    plain = abs(icon_scale - 1.0) < 1e-6 and label is None \
+        and abs(label_scale - 1.0) < 1e-6 and not turn
+    kind = marker if plain else "%s:%g:%s:%g" % (
+        marker, icon_scale, ",".join(str(int(c)) for c in label or ()),
+        label_scale)
     if kind not in STYLES:
         dot = ROUND_DOT if icon == icons.DEFAULT else ICON_DOT
-        STYLES[kind] = (12, False, False, QColor(255, 255, 255, 245), dot,
-                        kind)
+        # Размер значка 0 - значка нет, как в Google Earth.
+        dot = dot * _clamp_scale(icon_scale) if icon_scale > 0.0 else 0.0
+        size = 12.0 * _clamp_scale(label_scale) if label_scale > 0.0 \
+            else 12.0
+        color = QColor(*label) if label else QColor(255, 255, 255, 245)
+        STYLES[kind] = (int(round(size)), False, False, color, dot, marker)
         KIND[kind] = KIND["mark"]
     return kind
 
@@ -181,7 +206,9 @@ def svg_file(relative):
 def _draw_icon(painter, marker, cx, cy, r, halo):
     """Значок метки: SVG из библиотеки QGIS, окрашенный цветом метки,
     кружок - без SVG. Нет файла - кружок."""
-    _, icon, rgba = marker.split(":", 2)
+    parts = marker.split(":")
+    icon, rgba = parts[1], parts[2]
+    turn = float(parts[3]) if len(parts) > 3 else 0.0
     color = QColor(*(int(v) for v in rgba.split(",")))
     path = svg_file(icons.svg(icon)) if icon != icons.DEFAULT else None
     if path is not None:
@@ -189,8 +216,12 @@ def _draw_icon(painter, marker, cx, cy, r, halo):
         image, _ = QgsApplication.svgCache().svgAsImage(
             path, size, color, QColor(40, 30, 0, 230), 1.0, 1.0)
         if not image.isNull():
-            painter.drawImage(QPointF(cx - image.width() / 2.0,
-                                      cy - image.height() / 2.0), image)
+            painter.save()
+            painter.translate(cx, cy)
+            painter.rotate(turn)
+            painter.drawImage(QPointF(-image.width() / 2.0,
+                                      -image.height() / 2.0), image)
+            painter.restore()
             return
     painter.setPen(QPen(QColor(60, 40, 0, 230), halo))
     painter.setBrush(QBrush(color))

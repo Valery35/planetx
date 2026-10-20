@@ -7187,6 +7187,20 @@ def props_shot():
     dialog.reject()
     QgsApplication.processEvents()
     store.remove(key)
+    # Окно точки - размер значка, подпись и поля объекта,
+    # planetx_props_point.png.
+    from planetx.core import kml
+    tree = kml.read_kml(KML_SPEC.encode("utf-8"))
+    tree.children = [p for p in tree.children if p.name == "Скважина 7"]
+    folder = store.import_tree(tree)
+    point = store.places_in(folder)[0]
+    window._place_action("properties", point.key)
+    QgsApplication.processEvents()
+    dialog = window.prop_dialogs[point.key]
+    window.grab().save(os.path.join(TEMP, "planetx_props_point.png"))
+    dialog.reject()
+    QgsApplication.processEvents()
+    store.remove_many([folder])
 
 
 @check(500)
@@ -9212,6 +9226,379 @@ def altitude_modes_check():
 def _kplace_of(store, place):
     from planetx.ui.myplaces import _kplace
     return _kplace(store.find(place.key))
+
+
+TOUR_ANIM = """<kml xmlns="http://www.opengis.net/kml/2.2"
+  xmlns:gx="http://www.google.com/kml/ext/2.2"><Document>
+  <name>Тур с изменениями</name>
+  <Style id="s"><IconStyle id="si"><scale>1</scale></IconStyle></Style>
+  <Placemark id="a"><name>Движется</name><styleUrl>#s</styleUrl>
+    <Point id="ap"><coordinates>56.20,58.00</coordinates></Point>
+  </Placemark>
+  <Placemark id="b"><name>Появится</name><visibility>0</visibility>
+    <Point><coordinates>56.25,58.02</coordinates></Point></Placemark>
+  <gx:Tour><name>Облёт с изменениями</name><gx:Playlist>
+    <gx:FlyTo><gx:duration>0</gx:duration><LookAt>
+      <longitude>56.2</longitude><latitude>58.0</latitude>
+      <range>12000</range></LookAt></gx:FlyTo>
+    <gx:AnimatedUpdate><gx:duration>4</gx:duration><Update><targetHref/>
+      <Change><IconStyle targetId="si"><scale>3</scale></IconStyle>
+      <Point targetId="ap"><coordinates>56.30,58.00</coordinates></Point>
+      </Change></Update></gx:AnimatedUpdate>
+    <gx:FlyTo><gx:duration>6</gx:duration>
+      <gx:flyToMode>bounce</gx:flyToMode><LookAt>
+      <longitude>56.3</longitude><latitude>58.0</latitude>
+      <range>12000</range></LookAt></gx:FlyTo>
+    <gx:AnimatedUpdate><gx:duration>0</gx:duration>
+      <gx:delayedStart>1</gx:delayedStart><Update><targetHref/><Change>
+      <Placemark targetId="b"><visibility>1</visibility></Placemark>
+      </Change></Update></gx:AnimatedUpdate>
+  </gx:Playlist></gx:Tour></Document></kml>"""
+
+
+@check(3000)
+def track_model_kml():
+    """gx:Track с Model из KML: модель самосвала из демо едет по треку
+    по моменту шкалы времени."""
+    import shutil
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    folder = os.path.join(TEMP, "planetx_track_model")
+    os.makedirs(folder, exist_ok=True)
+    shutil.copy(os.path.join(ROOT, "planetx", "demo", "haul",
+                             "haul_truck.glb"),
+                os.path.join(folder, "truck.glb"))
+    path = os.path.join(folder, "track.kml")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("""<kml xmlns="http://www.opengis.net/kml/2.2"
+  xmlns:gx="http://www.google.com/kml/ext/2.2"><Placemark>
+  <name>Самосвал по треку</name><gx:Track>
+  <when>2026-10-20T10:00:00Z</when><when>2026-10-20T10:10:00Z</when>
+  <gx:coord>56.200 58.000 0</gx:coord><gx:coord>56.210 58.000 0</gx:coord>
+  <Model><Link><href>truck.glb</href></Link>
+  <Scale><x>20</x><y>20</y><z>20</z></Scale></Model>
+  </gx:Track></Placemark></kml>""")
+    window.import_kml(path=path)
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(Pose(58.0, 56.205, 3000.0, 0.0, 40.0))
+    view.update()
+
+
+@check(500)
+def track_model_kml_check():
+    from planetx.core import when
+    window = state["window"]
+    view = window.view
+    out = result["track_model_kml"] = {}
+    store = window.myplaces
+    items = [o for o in store.overlays if o.kind == "model"
+             and o.overlay.track and o.name == "Самосвал по треку"]
+    out["overlays"] = len(items)
+    moving = [i for i in view.models.source
+              if i.mover is not None and "track" in str(i.key)]
+    out["models"] = len(moving)
+    t0 = when.parse("2026-10-20T10:00:00Z")
+    saved = getattr(window, "_time_range", None)
+    places = []
+    for span in ((t0, t0 + 300.0), (t0, t0 + 900.0), None):
+        window._time_range = span
+        found = moving[0].mover(0.0) if moving else None
+        places.append(None if found is None else
+                      (round(found[1], 4), round(found[3], 1)))
+    window._time_range = saved
+    out["places"] = places  # середина, после конца - нет, конец
+    view.repaint()
+    out["drawn"] = view.models.drawn
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_track_model.png"))
+    folder = next((p.folder for p in items), None)
+    if folder:
+        store.remove_many([folder])
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(4500)
+def tour_anim():
+    """Тур с gx:AnimatedUpdate и bounce: изменения меток по времени
+    записи, файл меток не меняется, тур проигрывателем."""
+    from planetx.core import kml
+    window = state["window"]
+    window.set_body("earth")
+    store = window.myplaces
+    out = result["tour_anim"] = {}
+    key = state["tour_anim"] = store.import_tree(
+        kml.read_kml(TOUR_ANIM.encode("utf-8")))
+    places = {p.name: p for p in store.places_in(key)}
+    tour_place = places["Облёт с изменениями"]
+    out["stored"] = (places["Движется"].kml_id,
+                     sorted(tour_place.tour_extra or {}))
+    stop = window.place_stop(tour_place, along=True)
+    out["bounce_up"] = round(stop.pose_at(3.0).distance)
+
+    def seen(name):
+        p = places[name]
+        live = window.tour_live.get(p.key)
+        return (live[0], round(live[1].icon_scale, 2),
+                round(live[1].points[0][1], 3)) if live else None
+    window._tour_live(stop, 2.0)
+    out["at_2"] = (seen("Движется"), seen("Появится"))
+    window._tour_live(stop, 8.0)
+    out["at_8"] = (seen("Движется"), seen("Появится"))
+    out["marks_at_8"] = sorted(m.name for m in window.view._own_marks()
+                               if m.name in ("Движется", "Появится"))
+    window._tour_live(None, 0.0)
+    out["cleared"] = window.tour_live
+    out["file_untouched"] = (store.find(places["Появится"].key).visible,
+                             store.find(places["Движется"].key)
+                             .shape.points[0][1])
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(stop.pose_at(0.0))
+    window.tour.start([stop])
+
+
+@check(500)
+def tour_anim_check():
+    """Проигрыватель дошёл до изменений, после закрытия тура их нет."""
+    window = state["window"]
+    out = result["tour_anim"]
+    out["playing_live"] = len(getattr(window, "tour_live", {}))
+    out["tour_t"] = round(window.tour.t, 1)
+    window.tour.stop()
+    QgsApplication.processEvents()
+    out["after_stop"] = len(window.tour_live)
+    window.myplaces.remove_many([state["tour_anim"]])
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(500)
+def layer_places():
+    """Слой проекта в «Мои метки»: многоугольники в EPSG:3857 с дырой
+    и составным объектом, цвета по категориям, название - выражение
+    отображения, время - поле; точки с подписями QGIS. Потом KML."""
+    from qgis.core import (Qgis, QgsCategorizedSymbolRenderer, QgsFeature,
+                           QgsFillSymbol, QgsGeometry, QgsMarkerSymbol,
+                           QgsPalLayerSettings, QgsRendererCategory,
+                           QgsTextFormat, QgsVectorLayer,
+                           QgsVectorLayerSimpleLabeling,
+                           QgsVectorLayerTemporalProperties)
+    from qgis.PyQt.QtCore import QDateTime
+    from qgis.PyQt.QtGui import QColor
+    from planetx.core import kml
+    window = state["window"]
+    window.set_body("earth")
+    store = window.myplaces
+    out = result["layer_places"] = {}
+    poly = QgsVectorLayer("MultiPolygon?crs=EPSG:3857&field=name:string"
+                          "&field=kind:string&field=t:datetime",
+                          "Участки проверки", "memory")
+    wkts = [("Поле", "field", "MULTIPOLYGON(((6250000 7970000, 6270000 "
+             "7970000, 6270000 7990000, 6250000 7990000, 6250000 7970000),"
+             "(6256000 7976000, 6264000 7976000, 6264000 7984000, 6256000 "
+             "7984000, 6256000 7976000))))"),
+            ("Остров", "forest", "MULTIPOLYGON(((6280000 7970000, 6285000 "
+             "7970000, 6285000 7975000, 6280000 7970000)),((6290000 7970000,"
+             " 6295000 7970000, 6295000 7975000, 6290000 7970000)))")]
+    features = []
+    for n, (name, kind, wkt) in enumerate(wkts):
+        f = QgsFeature(poly.fields())
+        f.setAttributes([name, kind, QDateTime.fromString(
+            "2026-0{}-15T10:00:00".format(n + 5), "yyyy-MM-ddTHH:mm:ss")])
+        f.setGeometry(QgsGeometry.fromWkt(wkt))
+        features.append(f)
+    poly.dataProvider().addFeatures(features)
+    cats = [QgsRendererCategory(value, QgsFillSymbol.createSimple(
+        {"color": color, "outline_color": "0,0,255,255",
+         "outline_width": "0.5"}), value)
+            for value, color in (("field", "255,0,0,255"),
+                                 ("forest", "0,160,0,255"))]
+    poly.setRenderer(QgsCategorizedSymbolRenderer("kind", cats))
+    poly.setDisplayExpression('"name"')
+    props = poly.temporalProperties()
+    props.setIsActive(True)
+    mode = getattr(getattr(Qgis, "VectorTemporalMode", None),
+                   "FeatureDateTimeInstantFromField", None) or getattr(
+        QgsVectorLayerTemporalProperties,
+        "ModeFeatureDateTimeInstantFromField")
+    props.setMode(mode)
+    props.setStartField("t")
+    points = QgsVectorLayer("Point?crs=EPSG:4326&field=code:string",
+                            "Точки проверки", "memory")
+    pts = []
+    for code, x in (("A-1", 56.2), ("A-2", 56.3)):
+        f = QgsFeature(points.fields())
+        f.setAttributes([code])
+        f.setGeometry(QgsGeometry.fromWkt("POINT({} 58.1)".format(x)))
+        pts.append(f)
+    points.dataProvider().addFeatures(pts)
+    points.setRenderer(QgsCategorizedSymbolRenderer("code", [
+        QgsRendererCategory("A-1", QgsMarkerSymbol.createSimple(
+            {"color": "255,128,0,255"}), "A-1"),
+        QgsRendererCategory("A-2", QgsMarkerSymbol.createSimple(
+            {"color": "128,0,255,255"}), "A-2")]))
+    settings = QgsPalLayerSettings()
+    settings.fieldName = "code"
+    fmt = QgsTextFormat()
+    fmt.setColor(QColor(0, 0, 255))
+    fmt.setSize(18.0)  # пункты - 24 пикселя, двойная подпись
+    settings.setFormat(fmt)
+    points.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+    points.setLabelsEnabled(True)
+    QgsProject.instance().addMapLayers([poly, points])
+    keys = []
+    try:
+        key = window.layer_to_places(poly, ask=False)
+        keys.append(key)
+        places = store.places_in(key)
+        out["poly"] = sorted((p.name, len(p.shape.holes or ()),
+                              tuple(p.shape.fill or ()),
+                              tuple(p.shape.color), p.time[0] if p.time
+                              else None, len(p.data or ()))
+                             for p in places)
+        key = window.layer_to_places(points, ask=False)
+        keys.append(key)
+        out["points"] = sorted((p.name, tuple(p.shape.color),
+                                p.shape.label_color, p.shape.label_scale)
+                               for p in store.places_in(key))
+        points.selectByExpression('"code" = \'A-2\'')
+        key = window.layer_to_places(points, ask=False)
+        keys.append(key)
+        out["selected"] = [p.name for p in store.places_in(key)]
+        text = kml.write_kml(store.export_tree(keys[0]))
+        back = kml.read_kml(text.encode("utf-8")).places()
+        out["kml"] = sorted((p.name, len(p.holes or ()),
+                             dict(p.data or ()).get("kind"))
+                            for p in back)
+        out["folder"] = store.find(keys[0]).name
+    finally:
+        store.remove_many([k for k in keys if k])
+        QgsProject.instance().removeMapLayers([poly.id(), points.id()])
+    out["gl"] = dict(window.view.gl_errors)
+
+
+KML_SPEC = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+  <name>Проверка KML</name>
+  <Placemark><name>Поле с озером</name>
+    <Style><PolyStyle><color>a000ff00</color></PolyStyle></Style>
+    <Polygon><outerBoundaryIs><LinearRing><coordinates>
+      56.10,58.00 56.30,58.00 56.30,58.10 56.10,58.10 56.10,58.00
+    </coordinates></LinearRing></outerBoundaryIs>
+    <innerBoundaryIs><LinearRing><coordinates>
+      56.17,58.03 56.23,58.03 56.23,58.07 56.17,58.07 56.17,58.03
+    </coordinates></LinearRing></innerBoundaryIs></Polygon></Placemark>
+  <Placemark><name>Скважина 7</name>
+    <Style><IconStyle><scale>2</scale><heading>90</heading></IconStyle>
+      <BalloonStyle><text>&lt;b&gt;$[name]&lt;/b&gt;
+      глубина $[depth] код $[Код]</text>
+      </BalloonStyle><LabelStyle>
+      <color>ff0000ff</color><scale>1.5</scale></LabelStyle></Style>
+    <ExtendedData><Data name="code"><displayName>Код</displayName>
+      <value>C-07</value></Data><SchemaData schemaUrl="#w">
+      <SimpleData name="depth">412.5</SimpleData></SchemaData>
+    </ExtendedData>
+    <Camera><longitude>56.2</longitude><latitude>58.0</latitude>
+      <altitude>3000</altitude><heading>0</heading><tilt>45</tilt></Camera>
+    <Point><coordinates>56.2,58.05</coordinates></Point></Placemark>
+  <Placemark><name>Без подписи</name>
+    <Style><LabelStyle><scale>0</scale></LabelStyle></Style>
+    <Point><coordinates>56.27,58.085</coordinates></Point></Placemark>
+</Document></kml>"""
+
+
+@check(500)
+def kml_spec():
+    """Дыры многоугольника, поля ExtendedData, LabelStyle и размер
+    значка, вид Camera - KML в «Мои метки», файл меток и глобус."""
+    from planetx.core import kml
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.set_body("earth")
+    store = window.myplaces
+    old = [f.key for f in store.folders if f.name == "Проверка KML"]
+    if old:
+        store.remove_many(old)
+    state["kml_spec"] = store.import_tree(
+        kml.read_kml(KML_SPEC.encode("utf-8")))
+    view.navigator.stop()
+    view.navigator.show(Pose(58.05, 56.2, 25000.0, 0.0, 0.0))
+    view.update()
+    result["kml_spec"] = {}
+
+
+@check(500)
+def kml_spec_check():
+    """Что легло в файл меток и что рисует глобус."""
+    from planetx.core import kml
+    from planetx.render import labels
+    from planetx.render.features import cached_geometry
+    window = state["window"]
+    view = window.view
+    store = window.myplaces
+    out = result["kml_spec"]
+    inside = store.places_in(state["kml_spec"])
+    by_name = {p.name: p for p in inside}
+    field = by_name["Поле с озером"]
+    well = by_name["Скважина 7"]
+    bare = by_name["Без подписи"]
+    out["holes"] = [len(h) for h in field.shape.holes or ()]
+    geo = cached_geometry(field.shape)
+    out["ring_points"] = len(geo.ring)
+    out["triangles"] = len(geo.triangles) // 3
+    out["data"] = well.data
+    out["label"] = (well.shape.icon_scale, well.shape.label_color,
+                    well.shape.label_scale, bare.shape.label_scale)
+    out["view"] = [round(v, 4) for v in well.view] if well.view else None
+    mark = next((m for m in view._own_marks()
+                 if abs(m.lon - well.shape.points[0][1]) < 1e-9), None)
+    style = labels.STYLES.get(mark.kind) if mark else None
+    out["mark_style"] = (style[0], style[3].name(), round(style[4], 2)) \
+        if style else None
+    out["bare_text"] = [m.name for m in view._own_marks()
+                        if abs(m.lon - 56.27) < 1e-9]
+    window.open_place_card(well)
+    card = window.side.dialog
+    out["card_has_fields"] = "глубина 412.5 код C-07" \
+        in card.text.toPlainText()
+    out["heading_marker"] = style[5] if style else None
+    card.reject()
+    text = kml.write_kml(store.export_tree(state["kml_spec"]))
+    back = {p.name: p for p in kml.read_kml(text.encode("utf-8")).places()}
+    out["kml_back"] = (len(back["Поле с озером"].holes or ()),
+                       back["Скважина 7"].data,
+                       back["Скважина 7"].label_scale,
+                       back["Без подписи"].label_scale)
+    # Щелчок в дыру поле не выбирает, щелчок в поле - выбирает.
+    names = lambda hits: [p.name for p in hits]  # noqa: E731
+    out["pick_hole"] = names(window._places_at(58.05, 56.185, 10.0))
+    out["pick_field"] = names(window._places_at(58.015, 56.12, 10.0))
+    # Окно «Свойства…»: размер значка, подпись, поля объекта.
+    from qgis.PyQt.QtGui import QColor
+    window._place_action("properties", well.key)
+    dialog = window.prop_dialogs[well.key]
+    out["props_rows"] = dialog.fields.rowCount()
+    dialog.icon_scale.setValue(1.0)
+    dialog.label_scale.setValue(0.0)
+    dialog.label_color.setColor(QColor(0, 0, 255, 255))
+    dialog._add_field("owner", "ООО «Проба»")
+    dialog.fields.setCurrentCell(1, 0)
+    dialog._remove_field()
+    preview = dialog.preview()
+    out["props_preview"] = (preview.icon_scale, preview.label_color,
+                            preview.label_scale)
+    dialog.accept()
+    QgsApplication.processEvents()
+    saved = store.find(well.key)
+    out["props_saved"] = (saved.shape.icon_scale, saved.shape.label_color,
+                          saved.shape.label_scale, saved.data)
+    out["props_text"] = [m.name for m in view._own_marks()
+                         if abs(m.lon - 56.2) < 1e-9]
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_kml_spec.png"))
+    store.remove_many([state["kml_spec"]])
+    out["gl"] = dict(view.gl_errors)
 
 
 @check(1000, manual=True)
@@ -17577,8 +17964,132 @@ def haul_open():
                                     name="Челленджер"))
     window.myplaces.update(key, {"time": "1875-03-23"})
     state["haul_old_key"] = key
-    window.open_demo(os.environ.get("PLANETX_HAUL", "haul_kachkanar"))
+    window.open_demo(os.environ.get("PLANETX_HAUL", "haulqgis_kachkanar"))
     state["haul_since"] = time.monotonic()
+
+
+@check(2000)
+def haulkml_open():
+    """Демо «Самосвалы, Качканар» треками KML: шесть моделей gx:Track
+    в папке демо, слоя в проекте нет, шкала идёт по кругу."""
+    from qgis.core import QgsProject
+    window = state["window"]
+    window.set_body("earth")
+    result["haulkml"] = {"layers_before": len(
+        QgsProject.instance().mapLayers())}
+    window.open_demo(os.environ.get("PLANETX_HAUL_KML", "haul_kachkanar"))
+    state["haulkml_since"] = time.monotonic()
+
+
+@check(500)
+def haulkml_wait():
+    """Модели на виде, шкала, ход и камера следом."""
+    import numpy as _np
+    from qgis.core import QgsProject
+    from qgis.PyQt.QtCore import QEvent, QPoint, QPointF, Qt
+    from qgis.PyQt.QtGui import QKeyEvent, QWheelEvent
+    from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtWidgets import QApplication, QMenu
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    from planetx.core.navigation import Pose
+    from planetx.qt_compat import enum
+    from planetx.ui import globemenu
+    window = state["window"]
+    view = window.view
+    models = window.model_tracks
+    view.repaint()
+    QgsApplication.processEvents()
+    waited = time.monotonic() - state["haulkml_since"]
+    drawn = getattr(view.models, "drawn", 0)
+    if (view.load_missing or drawn < 6) and waited < 60.0:
+        return 1000
+    out = result["haulkml"]
+    out["waited"] = round(waited, 1)
+    out["layers_after"] = len(QgsProject.instance().mapLayers())
+    out["models"] = len(models.items)
+    out["points"] = [len(rows) for _, _, rows, _ in models.items]
+    out["drawn"] = drawn
+    bar = window.timebar
+    out["playing"] = bar.timer.isActive()
+    span = getattr(window, "_haul_span", None)
+    out["moment_in_trip"] = span is not None \
+        and span[0] <= bar.range()[1] <= span[1]
+    if span is not None:
+        bar.set_point(True, at=span[1] + 60.0)
+        window._haul_loop()
+        out["loop_back"] = abs(bar.range()[1] - span[0]) < 1.0
+        if not bar.timer.isActive():
+            bar.toggle()
+    before = [models.pose(i) for i in models.items]
+    QTest.qWait(2000)
+    after = [models.pose(i) for i in models.items]
+    out["moved"] = sum(1 for a, b in zip(before, after)
+                       if a and b and a[:2] != b[:2])
+    item = models.items[0]
+    lat, lon = models.pose(item)[:2]
+    view.navigator.stop()
+    view.navigator.show(Pose(lat, lon, 1200.0, 0.0, 40.0))
+    view.update()
+    QTest.qWait(500)
+    view.repaint()
+
+    def pixel():
+        lat, lon, level = models.pose(item)[:3]
+        p, _ = view.camera.project(geodetic_to_ecef(
+            _np.array([lat]), _np.array([lon]), _np.array([level])))
+        return float(p[0][0]), float(p[0][1])
+
+    px, py = pixel()
+    out["under"] = models.under(px, py) == item[0]
+    menu = QMenu()
+    globemenu.model_track_items(window, menu, px, py)
+    out["menu"] = [a.text() for a in menu.actions()]
+    follow = [a for a in menu.actions() if a.isCheckable()]
+    if not follow:
+        return None
+    follow[0].setChecked(True)
+    QTest.qWait(3000)
+    view.repaint()
+    x, y = pixel()
+    ratio = view.devicePixelRatioF()
+    out["followed"] = models.followed == item[0]
+    out["off_centre_px"] = round(float(_np.hypot(
+        x - view.width() * ratio / 2.0, y - view.height() * ratio / 2.0)), 1)
+    reach = models.chase.reach
+    point = QPointF(view.width() / 2.0, view.height() / 2.0)
+    QApplication.sendEvent(view, QWheelEvent(
+        point, QPointF(view.mapToGlobal(point.toPoint())), QPoint(0, 0),
+        QPoint(0, 240), enum(Qt, "MouseButton", "NoButton"),
+        enum(Qt, "KeyboardModifier", "NoModifier"),
+        enum(Qt, "ScrollPhase", "NoScrollPhase"), False))
+    out["wheel"] = [round(reach), round(models.chase.reach)]
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_haulkml_follow.png"))
+    QApplication.sendEvent(view, QKeyEvent(
+        enum(QEvent, "Type", "KeyPress"), enum(Qt, "Key", "Key_Escape"),
+        enum(Qt, "KeyboardModifier", "NoModifier")))
+    out["esc_released"] = models.followed is None
+    out["gl"] = dict(view.gl_errors)
+    return None
+
+
+@check(500)
+def haulkml_close():
+    """Снятие папки демо: моделей треков нет, проверка круга шкалы
+    останавливается."""
+    window = state["window"]
+    out = result["haulkml"]
+    folders = [f.key for f in window.myplaces.folders
+               if f.name.startswith("PlanetX: демо, самосвалы")]
+    window.myplaces.remove_many(folders)
+    QgsApplication.processEvents()
+    out["after_models"] = len(window.model_tracks.items)
+    timer = getattr(window, "_haul_timer", None)
+    if timer is not None:
+        window._haul_loop()
+    out["loop_stopped"] = timer is None or not timer.isActive()
+    window.timebar.stop()
 
 
 @check(500)

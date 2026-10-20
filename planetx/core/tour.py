@@ -158,9 +158,17 @@ class RecordedStop(Stop):
     остановке, и проигрывает запись вместо проезда. Между позами
     широта и наклон идут линейно, долгота и азимут - без скачка через
     180° и 360°, расстояние - по логарифму, так приближение ровное.
+
+    bounce - номера поз, к которым запись летит перелётом с подъёмом
+    (gx:flyToMode bounce KML), van Wijk-Nuij за время отрезка. updates -
+    изменения меток по ходу записи (gx:AnimatedUpdate, animated),
+    их применяет окно глобуса.
     """
 
-    def __init__(self, name, samples):
+    def __init__(self, name, samples, bounce=(), updates=()):
+        self.bounce = set(int(i) for i in bounce or ())
+        self.updates = list(updates or ())
+        self._bounces = {}
         data = np.asarray(samples, dtype=np.float64).reshape(-1, 6)
         data = data[np.argsort(data[:, 0], kind="stable")]
         data[:, 0] -= data[0, 0]
@@ -182,6 +190,8 @@ class RecordedStop(Stop):
         j = min(i + 1, len(self.t) - 1)
         span = self.t[j] - self.t[i]
         k = (t - self.t[i]) / span if span > 0 else 0.0
+        if j in self.bounce and j != i and span > 0:
+            return self._bounce(i, j, k)
 
         def mix(values):
             return float(values[i] + k * (values[j] - values[i]))
@@ -192,6 +202,67 @@ class RecordedStop(Stop):
 
     def end_pose(self):
         return self.pose_at(self.glide)
+
+    def _pose(self, n):
+        s = self.samples[n]
+        return Pose(float(s[1]), float(s[2]), float(s[3]), float(s[4]),
+                    float(s[5]))
+
+    def _bounce(self, i, j, k):
+        """Поза отрезка i-j перелётом с подъёмом на доле k времени."""
+        flight = self._bounces.get(j)
+        if flight is None:
+            end = self._pose(j)
+            flight = self._bounces[j] = Flight(
+                self._pose(i), end.lat, end.lon, end.distance, end.heading,
+                end.tilt)
+        return flight.pose_at(k * flight.duration)
+
+
+# Свойства меток, которые меняет gx:AnimatedUpdate: видимость сразу,
+# числа, цвета и вершины - плавно за время изменения.
+UPDATE_KEYS = ("visible", "color", "fill", "icon_scale", "width", "points")
+
+
+def _mix(old, new, share):
+    """Значение на доле share пути от old к new."""
+    if old is None or share >= 1.0:
+        return new
+    if isinstance(new, (int, float)) and isinstance(old, (int, float)):
+        return old + (new - old) * share
+    if isinstance(new, (list, tuple)) and isinstance(old, (list, tuple)) \
+            and len(new) == len(old):
+        mixed = [_mix(a, b, share) for a, b in zip(old, new)]
+        if all(isinstance(v, int) for v in new):
+            return tuple(int(round(v)) for v in mixed)
+        return type(new)(mixed) if isinstance(new, tuple) else mixed
+    return new if share > 0.0 else old
+
+
+def animated(updates, t, base):
+    """Свойства меток на время t записи: base - {id метки KML: {ключ:
+    значение}} до изменений, updates - изменения {"t": начало, "d":
+    длительность, "ids": [id], "set": {ключ UPDATE_KEYS: значение}}.
+    Видимость меняется в начале изменения, прочее - плавно."""
+    state = {key: dict(value) for key, value in base.items()}
+    for update in sorted(updates, key=lambda u: float(u.get("t", 0.0))):
+        start = float(update.get("t", 0.0))
+        if start > t:
+            break
+        span = float(update.get("d", 0.0))
+        share = 1.0 if span <= 0.0 else min(1.0, (t - start) / span)
+        for target in update.get("ids", ()):
+            values = state.get(target)
+            if values is None:
+                continue
+            for key, value in update.get("set", {}).items():
+                if key not in UPDATE_KEYS:
+                    continue
+                if key == "visible":
+                    values[key] = bool(value)
+                else:
+                    values[key] = _mix(values.get(key), value, share)
+    return state
 
 
 def key_indices(samples, count=KEY_POINTS):

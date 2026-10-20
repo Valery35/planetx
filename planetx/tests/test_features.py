@@ -182,6 +182,47 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TestHoles(unittest.TestCase):
+    """Многоугольник с дырой: заливка обходит дыру, контур и стены -
+    у каждого кольца."""
+
+    OUTER = [(0.0, 0.0), (0.0, 0.01), (0.01, 0.01), (0.01, 0.0)]
+    HOLE = [(0.004, 0.004), (0.004, 0.006), (0.006, 0.006),
+            (0.006, 0.004)]
+
+    def _area(self, geo):
+        xy = ft.plane(geo.ring)
+        tri = xy[geo.triangles.reshape(-1, 3)]
+        a, b, c = tri[:, 0], tri[:, 1], tri[:, 2]
+        return float(np.abs((b[:, 0] - a[:, 0]) * (c[:, 1] - a[:, 1])
+                            - (b[:, 1] - a[:, 1]) * (c[:, 0] - a[:, 0]))
+                     .sum() / 2.0)
+
+    def test_fill_leaves_hole_open(self):
+        whole = ft.geometry(ft.Shape("polygon", self.OUTER,
+                                     fill=(255, 255, 255, 60)))
+        holed = ft.geometry(ft.Shape("polygon", self.OUTER,
+                                     fill=(255, 255, 255, 60),
+                                     holes=(self.HOLE,)))
+        share = self._area(holed) / self._area(whole)
+        self.assertAlmostEqual(share, 0.96, places=2)
+        # Середина дыры не лежит ни в одном треугольнике заливки.
+        both = ft.plane(np.vstack([holed.ring, [[0.005, 0.005]]]))
+        xy, middle = both[:-1], both[-1]
+        for a, b, c in xy[holed.triangles.reshape(-1, 3)]:
+            self.assertFalse(ft._inside(middle, a, b, c)
+                             or ft._inside(middle, a, c, b))
+        # Отрезки: контур и дыра замкнуты каждый сам по себе.
+        self.assertEqual(len(holed.lines) // 2, len(holed.ring))
+
+    def test_walls_go_round_every_ring(self):
+        geo = ft.geometry(ft.Shape("polygon", self.OUTER, height=10.0,
+                                   extrude=True, holes=(self.HOLE,)))
+        n = len(geo.ring)
+        self.assertEqual(len(geo.wall) // 6, n)
+        self.assertEqual(int(geo.wall.max()), 2 * n - 1)
+
+
 class TestAltitudeModes(unittest.TestCase):
     """Режимы высоты меток, core.features.MODES."""
 

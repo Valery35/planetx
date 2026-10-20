@@ -243,6 +243,9 @@ class TourPlayer(QObject):
     message = pyqtSignal(str)
     # Тур пришёл к новой остановке, core.tour.Stop.
     stop_reached = pyqtSignal(object)
+    # Записанная остановка с изменениями меток (gx:AnimatedUpdate) и её
+    # время, (None, 0) - изменения сняты.
+    live = pyqtSignal(object, float)
 
     def __init__(self, view, stops, parent=None):
         super().__init__(parent)
@@ -286,6 +289,7 @@ class TourPlayer(QObject):
         self._free_timer = QTimer(self)
         self._free_timer.setInterval(FREE_TICK)
         self._free_timer.timeout.connect(self._free_tick)
+        self._live = None  # остановка, изменения которой на глобусе
         view.changed.connect(self.tick)
         view.installEventFilter(self)
 
@@ -391,6 +395,7 @@ class TourPlayer(QObject):
         self.tour = None
         self.bar.hide()
         self.stop_caption.set_caption("", "", 0.0)
+        self._send_live()
 
     def _captions_toggled(self, on):
         QgsSettings().setValue(stopcaption.KEY, bool(on))
@@ -408,6 +413,21 @@ class TourPlayer(QObject):
         stop = self.tour.stops[i]
         return (stop.name or "", plain(getattr(stop, "description", "")),
                 alpha)
+
+    def _send_live(self):
+        """Изменения меток записанной остановки на время тура: окну
+        глобуса уходит остановка и её время, без изменений - снятие."""
+        stop, local = None, 0.0
+        if self.tour is not None:
+            i = self.tour.index_at(self.t)
+            candidate = self.tour.stops[i] if i >= 0 else None
+            if getattr(candidate, "updates", None) \
+                    and self.t >= self.tour.glides[i]:
+                stop, local = candidate, self.t - self.tour.glides[i]
+        if stop is None and self._live is None:
+            return
+        self._live = stop
+        self.live.emit(stop, float(local))
 
     def _show_caption(self):
         found = self.caption_at(self.t)
@@ -530,3 +550,4 @@ class TourPlayer(QObject):
             self.bar.set_time(min(self.t, self.tour.duration),
                               self.tour.duration)
         self._show_caption()
+        self._send_live()

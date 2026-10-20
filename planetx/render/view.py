@@ -138,6 +138,9 @@ STALL_SHOW = 5.0
 # Вершин своих объектов в видеокарте, больше - строка состояния
 # предупреждает. 29 провинций Афганистана - 22 тысячи.
 OBJECT_BUDGET = 200000
+# Шаг угла вида, градусы, с которым перерисовываются повёрнутые значки
+# меток (heading IconStyle KML).
+TURN_STEP = 5.0
 
 LEFT = enum(Qt, "MouseButton", "LeftButton")
 MIDDLE = enum(Qt, "MouseButton", "MiddleButton")
@@ -682,11 +685,18 @@ class GlobeView(QOpenGLWidget):
         растягивается масштабом рельефа."""
         shapes = self.features.shapes
         scale = self.store.scale or 1.0
+        # Повёрнутый значок (heading KML) держит угол от севера: при
+        # повороте вида он поворачивается на экране, шагами TURN_STEP.
+        turn = round(self.navigator.pose.heading / TURN_STEP) * TURN_STEP \
+            if any(s.kind == "point" and getattr(s, "icon_heading", 0.0)
+                   for s in shapes) else 0.0
         if self._feature_marks[1] is not shapes \
-                or self._feature_marks[2] != scale:
+                or self._feature_marks[2] != (scale, turn):
             marks = []
-            for i, name, lat, lon, lift, icon, color, mode \
+            for i, name, lat, lon, lift, icon, color, mode, look \
                     in self.features.marks():
+                icon_scale, label_color, label_scale, heading = look
+                screen = (heading - turn) % 360.0 if heading else 0.0
                 base = None
                 if mode == ABSOLUTE:
                     base, lift = "abs", lift * scale
@@ -694,10 +704,14 @@ class GlobeView(QOpenGLWidget):
                     base = "floor"
                 if not uses_height(mode):
                     lift = 0.0
-                marks.append(Place(-2 - i, name or "",
-                                   icon_style(icon, color), 1, lat, lon,
-                                   None, lift, base))
-            self._feature_marks = (marks, shapes, scale)
+                # Размер подписи 0 - подписи нет, как в Google Earth.
+                text = (name or "") if label_scale > 0.0 else ""
+                marks.append(Place(-2 - i, text,
+                                   icon_style(icon, color, icon_scale,
+                                              label_color, label_scale,
+                                              screen),
+                                   1, lat, lon, None, lift, base))
+            self._feature_marks = (marks, shapes, (scale, turn))
         return self._feature_marks[0]
 
     def set_search_mark(self, mark):

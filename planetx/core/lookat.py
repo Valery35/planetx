@@ -19,8 +19,22 @@
 «Снимок текущего вида» окна свойств вместе с камерой. Просьба автора
 от 16 октября 2026 года - остановка тура со своими слоями и временем
 для показа.
+
+Camera KML - глаз в точке с высотой, курсом и наклоном взгляда -
+переводится в те же пять чисел (from_camera). Точка взгляда - встреча
+луча взгляда с эллипсоидом, расстояние до неё, азимут и наклон -
+в самой точке взгляда. Крен Camera не переносится. Просьба автора от
+20 октября 2026 года, разбор недостающего из спецификации KML.
 """
 import json
+import math
+
+import numpy as np
+
+try:  # внутри плагина QGIS
+    from . import ellipsoid
+except ImportError:  # headless-тесты
+    import ellipsoid
 
 MAX_TILT = 85.0
 # Метка «Сохранить вид» стоит в точке своего вида. Доля градуса, до
@@ -35,6 +49,44 @@ def make(lat, lon, distance, heading=0.0, tilt=0.0):
         return None
     return (float(lat), float(lon), float(distance),
             float(heading) % 360.0, min(max(float(tilt), 0.0), MAX_TILT))
+
+
+# Наклоны, которые пробует from_camera, если луч Camera проходит мимо
+# Земли: свой, близкий к горизонту, MAX_TILT, отвесный.
+CAMERA_TILTS = (89.0, MAX_TILT, 0.0)
+
+
+def _axes(lat, lon):
+    """Восток, север и верх в точке эллипсоида, ECEF."""
+    up = ellipsoid.surface_normal(lat, lon)
+    lo = math.radians(lon)
+    east = np.array([-math.sin(lo), math.cos(lo), 0.0])
+    return east, np.cross(up, east), up
+
+
+def from_camera(lat, lon, altitude, heading=0.0, tilt=0.0):
+    """Вид по Camera KML: глаз над точкой (lat, lon) на высоте altitude
+    метров над эллипсоидом, курс heading и наклон tilt от отвеса.
+    Луч мимо Земли (взгляд на горизонт и выше) - наклон уменьшается
+    по CAMERA_TILTS. None, если вид не получился."""
+    eye = ellipsoid.geodetic_to_ecef(lat, lon, max(float(altitude), 1.0))
+    east, north, up = _axes(lat, lon)
+    h = math.radians(float(heading))
+    for t in (min(max(float(tilt), 0.0), 89.0),) + CAMERA_TILTS:
+        r = math.radians(t)
+        ray = math.sin(r) * (math.sin(h) * east + math.cos(h) * north) \
+            - math.cos(r) * up
+        reach = ellipsoid.ray_intersect(eye, ray)
+        if reach:
+            break
+    else:
+        return None
+    spot = eye + reach * ray
+    lat2, lon2, _ = ellipsoid.ecef_to_geodetic(spot)
+    east2, north2, up2 = _axes(float(lat2), float(lon2))
+    slope = math.degrees(math.acos(min(max(float(-ray @ up2), -1.0), 1.0)))
+    course = math.degrees(math.atan2(float(ray @ east2), float(ray @ north2)))
+    return make(float(lat2), float(lon2), reach, course, slope)
 
 
 def parse(text, anchor=None):

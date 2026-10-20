@@ -5,7 +5,7 @@
 
 Расчёт без Qt. Чтение даёт дерево: папки KFolder и метки KPlace.
 Document и Folder становятся папками, Placemark - меткой. Point,
-LineString и внешнее кольцо Polygon переносятся, MultiGeometry
+LineString и Polygon с дырами innerBoundaryIs переносятся, MultiGeometry
 разбивается на отдельные метки с тем же названием. Высоты вершин
 отбрасываются, метки лежат на рельефе. Стиль берётся из styleUrl,
 у StyleMap - вариант normal, и из вложенного Style. LookAt метки
@@ -20,12 +20,21 @@ Orientation, Scale и altitudeMode, файл модели по Link и карт�
 пакетом в image наложения, у простого KML href остаётся ссылкой
 на файл рядом, пакет собирает окно глобуса.
 
+Camera метки, папки и шага тура переводится в вид core.lookat
+(from_camera), записывается вид как LookAt.
+
 Значок точки - Icon в IconStyle, адрес узнаётся по имени картинки
 (core/icons.py). Время метки - TimeStamp или TimeSpan, время вида -
 gx:TimeStamp или gx:TimeSpan внутри LookAt, как у Google Earth.
 Время папки достаётся её меткам без своего времени. Время хранится
 строками, как в файле (core/when.py). gx:Tour - записанный тур:
-позы LookAt у gx:FlyTo по времени, gx:Wait держит позу.
+позы LookAt у gx:FlyTo по времени, gx:Wait держит позу, flyToMode
+bounce - перелёт с подъёмом. gx:AnimatedUpdate - изменения меток по
+ходу тура (core.tour.animated): видимость, цвета и размер значка,
+цвет и толщина линии, заливка, положение точки. Цель изменения - id
+метки, стиля или геометрии, она сводится к id меток (_owners), id
+метки хранится в KPlace.kml_id. Запись даёт меткам с id свои id
+стилей и точки, изменения тура пишутся по ним.
 
 Режим высоты altitudeMode и gx:altitudeMode переносится как есть
 (core.features.MODES): у relativeToGround, gx:relativeToSeaFloor
@@ -38,6 +47,11 @@ gx:TimeStamp или gx:TimeSpan внутри LookAt, как у Google Earth.
 
 Цвет в KML записан как aabbggrr в шестнадцатеричном виде, в меткам
 идёт RGBA 0-255.
+
+Поля объекта - Data и SchemaData/SimpleData в ExtendedData, как их
+пишут ГИС при выгрузке в KML, - переносятся парами (имя, значение),
+displayName Data - подпись поля. Служебные поля PlanetX с приставкой
+«planetx:» в них не входят. Запись - Data в том же порядке.
 
 KMZ - архив ZIP, из него читается первый файл .kml, doc.kml
 раньше других.
@@ -56,7 +70,7 @@ from urllib.parse import unquote
 from xml.parsers import expat
 
 try:  # внутри плагина QGIS
-    from . import icons, lookat, models, overlays, region
+    from . import icons, lookat, models, overlays, region, when
     from .tour import pace_parse as tour_pace, pace_text as tour_pace_text
 except ImportError:  # headless-тесты
     import icons
@@ -64,6 +78,7 @@ except ImportError:  # headless-тесты
     import models
     import overlays
     import region
+    import when
     from tour import pace_parse as tour_pace, pace_text as tour_pace_text
 
 NS = "http://www.opengis.net/kml/2.2"
@@ -237,7 +252,29 @@ class KPlace:
                  description="", height=0.0, extrude=False,
                  icon=icons.DEFAULT, time=None, view_time=None,
                  tour=None, alts=None, region=None, flow=False,
-                 layers=None, pace=None, mode=""):
+                 layers=None, pace=None, mode="", holes=None,
+                 data=None, icon_scale=1.0, label_color=None,
+                 label_scale=1.0, icon_heading=0.0, balloon="",
+                 kml_id="", tour_extra=None):
+        # id метки в KML (цель gx:AnimatedUpdate) и добавки записанного
+        # тура: {"bounce": [номера поз], "updates": [изменения]}.
+        self.kml_id = kml_id or ""
+        self.tour_extra = tour_extra
+        # Шаблон всплывающего окна BalloonStyle (core/balloon.py) и
+        # поворот значка от севера (heading IconStyle), градусы.
+        self.balloon = balloon or ""
+        self.icon_heading = icon_heading
+        # Вид точки: размер значка (scale IconStyle), цвет и размер
+        # подписи (LabelStyle), 0 - подписи нет.
+        self.icon_scale = icon_scale
+        self.label_color = label_color
+        self.label_scale = label_scale
+        # Поля объекта из ExtendedData: список пар (имя, значение)
+        # или None.
+        self.data = data
+        # Дыры многоугольника (innerBoundaryIs): кольца (широта,
+        # долгота) без повтора первой вершины или None.
+        self.holes = holes
         # Режим высоты core.features.MODES, пустой - по высоте:
         # с подъёмом relativeToGround, без него clampToGround.
         self.mode = mode or ""
@@ -415,8 +452,7 @@ def _alts(node, coords, count):
 def _outer_rings(polygon):
     """Узлы внешних колец Polygon с coordinates. По стандарту это
     outerBoundaryIs/LinearRing, модели пишут и LinearRing без
-    outerBoundaryIs, и coordinates прямо в Polygon. Дыры innerBoundaryIs
-    не берутся."""
+    outerBoundaryIs, и coordinates прямо в Polygon. Дыры - _holes."""
     found = []
     for outer in _children(polygon, "outerBoundaryIs"):
         ring = _child(outer, "LinearRing")
@@ -429,10 +465,31 @@ def _outer_rings(polygon):
     return [polygon] if _child(polygon, "coordinates") is not None else []
 
 
+def _ring(node):
+    """Вершины кольца без повтора первой."""
+    points = _coords(node)
+    if len(points) > 1 and points[0] == points[-1]:
+        points = points[:-1]
+    return points
+
+
+def _holes(polygon):
+    """Дыры Polygon: кольца innerBoundaryIs не меньше чем из трёх
+    вершин, кортеж или None."""
+    holes = []
+    for inner in _children(polygon, "innerBoundaryIs"):
+        for ring in _children(inner, "LinearRing") or [inner]:
+            points = _ring(ring)
+            if len(points) >= 3:
+                holes.append(points)
+    return tuple(holes) or None
+
+
 def _geometries(node):
-    """(вид, вершины, подъём, выдавливание, высоты) всех геометрий
-    Placemark, MultiGeometry по частям. Высоты - у 3D-линий
-    и многоугольников с altitudeMode absolute, иначе None."""
+    """(вид, вершины, подъём, выдавливание, высоты, режим, дыры) всех
+    геометрий Placemark, MultiGeometry по частям. Высоты - у 3D-линий
+    и многоугольников с altitudeMode absolute, иначе None. Дыры -
+    у многоугольника, иначе None."""
     out = []
     for child in node:
         name = _local(child.tag)
@@ -440,22 +497,23 @@ def _geometries(node):
             points = _coords(child)[:1]
             if points:
                 out.append(("point", points) + _raise(child, child)[:2]
-                           + (None, _raise(child, child)[2]))
+                           + (None, _raise(child, child)[2], None))
         elif name in ("LineString", "LinearRing"):
             points = _coords(child)
             if len(points) >= 2:
                 height, extrude, mode = _raise(child, child)
                 out.append(("line", points, height, extrude,
-                            _alts(child, child, len(points)), mode))
+                            _alts(child, child, len(points)), mode, None))
         elif name == "Polygon":
+            holes = _holes(child)
             for ring in _outer_rings(child):
-                points = _coords(ring)
-                if len(points) > 1 and points[0] == points[-1]:
-                    points = points[:-1]
+                points = _ring(ring)
                 if len(points) >= 3:
                     height, extrude, mode = _raise(child, ring)
                     out.append(("polygon", points, height, extrude,
-                                _alts(child, ring, len(points)), mode))
+                                _alts(child, ring, len(points)), mode,
+                                holes))
+                    holes = None  # дыры - у первого контура
         elif name in ("MultiGeometry", "MultiTrack"):
             out.extend(_geometries(child))
         elif name == "Track":
@@ -465,7 +523,7 @@ def _geometries(node):
             points = _track_points(child)
             if len(points) >= 2:
                 out.append(("line", points, 0.0, False, None,
-                            "clampToGround"))
+                            "clampToGround", None))
     return out
 
 
@@ -511,6 +569,15 @@ def _style_of(node):
     if icon is not None:
         style["icon"] = kml_color(_text(icon, "color"), None)
         style["href"] = _text(_child(icon, "Icon"), "href") or None
+        style["icon_scale"] = _float(icon, "scale", None)
+        style["icon_heading"] = _float(icon, "heading", None)
+    balloon = _child(node, "BalloonStyle")
+    if balloon is not None and _text(balloon, "text"):
+        style["balloon"] = _text(balloon, "text")
+    label = _child(node, "LabelStyle")
+    if label is not None:
+        style["label_color"] = kml_color(_text(label, "color"), None)
+        style["label_scale"] = _float(label, "scale", None)
     listing = _child(node, "ListStyle")
     if listing is not None:
         style["list_type"] = _text(listing, "listItemType") or None
@@ -538,10 +605,17 @@ def _styles(root):
 
 
 def _view(node, anchor):
-    """Вид из LookAt. Без точки взгляда ею считается anchor."""
+    """Вид из LookAt или Camera (core.lookat.from_camera). Без точки
+    взгляда LookAt ею считается anchor."""
     look = _child(node, "LookAt")
     if look is None:
-        return None
+        camera = _child(node, "Camera")
+        if camera is None:
+            return None
+        return lookat.from_camera(
+            _float(camera, "latitude", 0.0), _float(camera, "longitude", 0.0),
+            _float(camera, "altitude", 0.0), _float(camera, "heading", 0.0),
+            _float(camera, "tilt", 0.0))
     lat = _float(look, "latitude", anchor[0]) if anchor else \
         _float(look, "latitude", 0.0)
     lon = _float(look, "longitude", anchor[1]) if anchor else \
@@ -577,8 +651,11 @@ def _geometry_time(node):
 
 
 def _view_time(node):
-    """Время вида: gx:TimeStamp или gx:TimeSpan внутри LookAt."""
+    """Время вида: gx:TimeStamp или gx:TimeSpan внутри LookAt или
+    Camera."""
     look = _child(node, "LookAt")
+    if look is None:
+        look = _child(node, "Camera")
     return _time_of(look) if look is not None else None
 
 
@@ -614,19 +691,26 @@ def _placemark(node, styles, inherited=None):
     if model is not None:
         item = _model(node, model, inherited)
         return [item] if item is not None else []
+    moving = _track_models(node, inherited)
+    if moving:
+        return moving
     out = []
     found = _geometries(node)
     look = _child(node, "LookAt")
+    spot = None
     if not found and look is not None:
-        # Метка одним видом, без геометрии: точкой взгляда.
         spot = _pair("{},{}".format(_text(look, "longitude"),
                                     _text(look, "latitude")))
-        if spot is not None:
-            found = [("point", [spot], 0.0, False, None,
-                      "clampToGround")]
+    elif not found:
+        seen = _view(node, None)  # Camera
+        spot = (seen[0], seen[1]) if seen else None
+    if spot is not None:
+        # Метка одним видом, без геометрии: точкой взгляда.
+        found = [("point", [spot], 0.0, False, None,
+                  "clampToGround", None)]
     time = _time_of(node) or _geometry_time(node) or _track_time(node) \
         or inherited
-    for kind, points, height, extrude, alts, mode in found:
+    for kind, points, height, extrude, alts, mode, holes in found:
         view = _view(node, points[0] if points else None)
         color = style.get("icon" if kind == "point" else "color") \
             or LINE_COLOR
@@ -647,7 +731,15 @@ def _placemark(node, styles, inherited=None):
                           region=_region(node),
                           flow=kind == "line" and _flow(node),
                           layers=_layers(node),
-                          pace=tour_pace(_data(node, PACE_DATA))))
+                          pace=tour_pace(_data(node, PACE_DATA)),
+                          holes=holes, data=_fields(node),
+                          icon_scale=style.get("icon_scale", 1.0),
+                          label_color=style.get("label_color"),
+                          label_scale=style.get("label_scale", 1.0),
+                          icon_heading=style.get("icon_heading", 0.0)
+                          if kind == "point" else 0.0,
+                          balloon=style.get("balloon", ""),
+                          kml_id=node.get("id") or ""))
     return out
 
 
@@ -665,6 +757,30 @@ def _data(node, name):
         if item.get("name") == name:
             return _text(item, "value")
     return None
+
+
+def _fields(node):
+    """Поля объекта из ExtendedData: Data (подпись - displayName, иначе
+    name) и SimpleData внутри SchemaData. Список пар или None."""
+    data = _child(node, "ExtendedData")
+    if data is None:
+        return None
+    out = []
+    for item in data:
+        tag = _local(item.tag)
+        if tag == "Data":
+            name = item.get("name") or ""
+            if name.startswith("planetx:"):
+                continue
+            label = _text(item, "displayName") or name
+            if label:
+                out.append((label, _text(item, "value")))
+        elif tag == "SchemaData":
+            for simple in _children(item, "SimpleData"):
+                name = simple.get("name") or ""
+                if name:
+                    out.append((name, (simple.text or "").strip()))
+    return out or None
 
 
 def _layers(node):
@@ -717,34 +833,138 @@ def _bare(geometry, parent, styles, inherited):
 
 
 def _tour(node):
-    """Записанный тур из gx:Tour: позы LookAt у gx:FlyTo по времени,
-    gx:Wait держит позу. FlyTo с Camera и прочие шаги пропускаются."""
+    """Записанный тур из gx:Tour: позы LookAt или Camera у gx:FlyTo
+    по времени, gx:Wait держит позу. Прочие шаги пропускаются."""
     playlist = _child(node, "Playlist")
     if playlist is None:
         return None
     samples = []
+    bounce = []
+    updates = []
     t = 0.0
     for step in playlist:
         name = _local(step.tag)
         duration = max(_float(step, "duration", 0.0), 0.0)
+        if name == "AnimatedUpdate":
+            # Идёт вместе со следующими шагами, время тура не двигает.
+            start = t + max(_float(step, "delayedStart", 0.0), 0.0)
+            for change in _children(_child(step, "Update") or _Node(
+                    "Update", {}), "Change"):
+                for item in change:
+                    values = _changes(item)
+                    target = item.get("targetId") or ""
+                    if values and target:
+                        updates.append({"t": start, "d": duration,
+                                        "target": target, "set": values})
+            continue
         if name == "FlyTo":
             look = _child(step, "LookAt")
-            if look is None:
+            if look is not None:
+                pose = (_float(look, "latitude", 0.0),
+                        _float(look, "longitude", 0.0),
+                        _float(look, "range", 1000.0),
+                        _float(look, "heading", 0.0),
+                        _float(look, "tilt", 0.0))
+            else:
+                pose = _view(step, None)  # Camera
+            if pose is None:
                 continue
             t += duration
-            samples.append((t, _float(look, "latitude", 0.0),
-                            _float(look, "longitude", 0.0),
-                            _float(look, "range", 1000.0),
-                            _float(look, "heading", 0.0),
-                            _float(look, "tilt", 0.0)))
+            if _text(step, "flyToMode") == "bounce" and samples:
+                bounce.append(len(samples))
+            samples.append((t,) + tuple(pose))
         elif name == "Wait" and samples:
             t += duration
             samples.append((t,) + tuple(samples[-1][1:]))
     if len(samples) < 2:
         return None
     points = [(s[1], s[2]) for s in samples]
+    extra = {}
+    if bounce:
+        extra["bounce"] = bounce
+    if updates:
+        extra["updates"] = updates
     return KPlace(_text(node, "name"), "line", points, visible=_visible(node),
-                  description=_text(node, "description"), tour=samples)
+                  description=_text(node, "description"), tour=samples,
+                  tour_extra=extra or None)
+
+
+def _changes(item):
+    """Свойства из элемента Change gx:AnimatedUpdate, ключи
+    core.tour.UPDATE_KEYS."""
+    tag = _local(item.tag)
+    out = {}
+    if _child(item, "visibility") is not None:
+        out["visible"] = _visible(item)
+    color = kml_color(_text(item, "color"), None)
+    if tag == "IconStyle":
+        if color is not None:
+            out["color"] = list(color)
+        scale = _float(item, "scale", None)
+        if scale is not None:
+            out["icon_scale"] = scale
+    elif tag == "LineStyle":
+        if color is not None:
+            out["color"] = list(color)
+        width = _float(item, "width", None)
+        if width is not None:
+            out["width"] = width
+    elif tag == "PolyStyle" and color is not None:
+        out["fill"] = list(color)
+    elif tag == "Point":
+        points = _coords(item)
+        if points:
+            out["points"] = [list(points[0])]
+    return out
+
+
+def _owners(root):
+    """{id элемента: [id меток]}: метка - сама, её стили и геометрии,
+    общий Style и StyleMap - метки, которые на них ссылаются."""
+    owners = {}
+    users = {}
+    maps = {}
+    for node in root.iter():
+        tag = _local(node.tag)
+        if tag == "StyleMap" and node.get("id"):
+            for pair in _children(node, "Pair"):
+                if _text(pair, "key") == "normal":
+                    maps[node.get("id")] = _text(pair, "styleUrl") \
+                        .lstrip("#")
+    for node in root.iter():
+        if _local(node.tag) != "Placemark" or not node.get("id"):
+            continue
+        pid = node.get("id")
+        for inner in node.iter():
+            if inner.get("id"):
+                owners.setdefault(inner.get("id"), []).append(pid)
+        url = _text(node, "styleUrl").lstrip("#")
+        for sid in (url, maps.get(url)):
+            if sid:
+                users.setdefault(sid, []).append(pid)
+    for node in root.iter():
+        if _local(node.tag) in ("Style", "StyleMap") and node.get("id"):
+            pids = users.get(node.get("id"), [])
+            for inner in node.iter():
+                if inner.get("id"):
+                    owners.setdefault(inner.get("id"), []).extend(pids)
+    return {k: sorted(set(v)) for k, v in owners.items()}
+
+
+def _resolve_updates(folder, owners):
+    """Цели изменений туров папки - id меток."""
+    for child in folder.children:
+        if isinstance(child, KFolder):
+            _resolve_updates(child, owners)
+        elif isinstance(child, KPlace) and child.tour_extra \
+                and child.tour_extra.get("updates"):
+            kept = []
+            for update in child.tour_extra["updates"]:
+                ids = owners.get(update.pop("target", ""), [])
+                if ids:
+                    update["ids"] = ids
+                    kept.append(update)
+            child.tour_extra["updates"] = kept
 
 
 def _list_type(node, styles):
@@ -835,6 +1055,81 @@ def _overlay(node, styles, inherited):
                     description=_text(node, "description"),
                     view=_view(node, anchor),
                     time=_time_of(node) or inherited)
+
+def _track_rows(track):
+    """Строки пути gx:Track: [секунды, широта, долгота, высота, азимут,
+    наклон, крен], азимут None без gx:angles."""
+    stamps = [when.parse((w.text or "").strip())
+              for w in _children(track, "when")]
+    coords = []
+    for item in _children(track, "coord"):
+        parts = (item.text or "").split()
+        try:
+            coords.append((float(parts[1]), float(parts[0]),
+                           float(parts[2]) if len(parts) > 2 else 0.0))
+        except (ValueError, IndexError):
+            coords.append(None)
+    angles = []
+    for item in _children(track, "angles"):
+        try:
+            angles.append(tuple(float(v) for v in
+                                (item.text or "").split()[:3]))
+        except ValueError:
+            angles.append(None)
+    rows = []
+    for n, (stamp, coord) in enumerate(zip(stamps, coords)):
+        if stamp is None or coord is None:
+            continue
+        angle = angles[n] if n < len(angles) else None
+        heading, tilt, roll = (list(angle) + [0.0, 0.0])[:3] \
+            if angle else (None, 0.0, 0.0)
+        rows.append([stamp, coord[0], coord[1], coord[2], heading, tilt,
+                     roll])
+    rows.sort(key=lambda r: r[0])
+    return rows
+
+
+def _track_models(node, inherited):
+    """3D-модели, что едут по gx:Track с Model внутри Placemark: KOverlay
+    вида "model" с путём в Overlay.track, время - от первой точки до
+    последней. Линии пути у такого трека нет."""
+    found = []
+    for track in node.iter():
+        if _local(track.tag) != "Track":
+            continue
+        model = _child(track, "Model")
+        link = _child(model, "Link") if model is not None else None
+        href = _text(link, "href").strip() if link is not None else ""
+        rows = _track_rows(track)
+        if not href or len(rows) < 2:
+            continue
+        mode = _text(track, "altitudeMode", "clampToGround")
+        if mode not in models.MODES:
+            mode = "clampToGround"
+        scale = _child(model, "Scale")
+        first = rows[0]
+        overlay = overlays.Overlay(
+            "model", camera=(first[1], first[2], first[3],
+                             first[4] or 0.0, first[5], first[6]),
+            scale=tuple(_float(scale, axis, 1.0) or 1.0
+                        for axis in ("x", "y", "z")), mode=mode,
+            track=rows)
+        aliases = {}
+        resources = _child(model, "ResourceMap")
+        for alias in _children(resources, "Alias") \
+                if resources is not None else ():
+            source = unquote(_text(alias, "sourceHref"))
+            target = unquote(_text(alias, "targetHref"))
+            if source and target:
+                aliases[source] = target
+        found.append(KOverlay(
+            _text(node, "name"), overlay, href=href, visible=_visible(node),
+            description=_text(node, "description"),
+            view=_view(node, (first[1], first[2])),
+            time=(when.text(rows[0][0]), when.text(rows[-1][0])),
+            aliases=aliases))
+    return found
+
 
 def _model(node, model, inherited):
     """KOverlay вида "model" из Placemark с Model или None без места
@@ -939,6 +1234,7 @@ def read_kml(data, name=""):
     styles = _styles(root)
     top = KFolder(name)
     _walk(root, styles, top)
+    _resolve_updates(top, _owners(root))
     # Один Document - его содержимое и есть корень. Название - имя
     # документа, как в Google Earth, без него - name, обычно имя файла.
     if len(top.children) == 1 and isinstance(top.children[0], KFolder) \
@@ -1077,9 +1373,23 @@ def _placemark_kml(place, indent):
     pad = "  " * indent
     style = ""
     if place.kind == "point":
-        style = "<IconStyle><color>{}</color><Icon><href>{}</href>" \
+        scale = float(getattr(place, "icon_scale", 1.0))
+        heading = float(getattr(place, "icon_heading", 0.0) or 0.0)
+        style = "<IconStyle><color>{}</color>{}{}<Icon><href>{}</href>" \
             "</Icon></IconStyle>".format(
-                color_kml(place.color), escape(icons.href(place.icon)))
+                color_kml(place.color),
+                "<scale>{:g}</scale>".format(scale) if scale != 1.0 else "",
+                "<heading>{:g}</heading>".format(heading) if heading
+                else "",
+                escape(icons.href(place.icon)))
+        label = getattr(place, "label_color", None)
+        label_scale = float(getattr(place, "label_scale", 1.0))
+        if label is not None or label_scale != 1.0:
+            style += "<LabelStyle>{}{}</LabelStyle>".format(
+                "<color>{}</color>".format(color_kml(label))
+                if label is not None else "",
+                "<scale>{:g}</scale>".format(label_scale)
+                if label_scale != 1.0 else "")
     else:
         style = "<LineStyle><color>{}</color><width>{:g}</width>" \
             "</LineStyle>".format(color_kml(place.color), place.width)
@@ -1087,6 +1397,10 @@ def _placemark_kml(place, indent):
             style += "<PolyStyle><color>{}</color><fill>{}</fill>" \
                 "</PolyStyle>".format(color_kml(place.fill or FILL_COLOR),
                                       1 if place.fill else 0)
+    template = getattr(place, "balloon", "") or ""
+    if template:
+        style += "<BalloonStyle><text>{}</text></BalloonStyle>".format(
+            escape(template))
     mode = _raise_kml(place)
     h = float(place.height or 0.0) if _place_mode(place) in (
         "relativeToGround", "relativeToSeaFloor", "absolute") else 0.0
@@ -1105,11 +1419,19 @@ def _placemark_kml(place, indent):
                 tessellate, mode,
                 _coord_text(place.points, height=h, alts=alts))
     else:
+        # Дыры у 3D-многоугольника не пишутся, высот у них нет.
+        holes = "".join(
+            "<innerBoundaryIs><LinearRing><coordinates>{}</coordinates>"
+            "</LinearRing></innerBoundaryIs>".format(
+                _coord_text(hole, close=True, height=h))
+            for hole in (getattr(place, "holes", None) or ())
+            if alts is None and len(hole) >= 3)
         geometry = "<Polygon>{}{}" \
             "<outerBoundaryIs><LinearRing><coordinates>{}</coordinates>" \
-            "</LinearRing></outerBoundaryIs></Polygon>".format(
+            "</LinearRing></outerBoundaryIs>{}</Polygon>".format(
                 tessellate, mode,
-                _coord_text(place.points, close=True, height=h, alts=alts))
+                _coord_text(place.points, close=True, height=h, alts=alts),
+                holes)
     look = ""
     if place.view is not None:
         lat, lon, distance, heading, tilt = place.view
@@ -1122,7 +1444,8 @@ def _placemark_kml(place, indent):
     if place.description:
         parts.append("<description>{}</description>".format(
             escape(place.description)))
-    data = []
+    data = [(str(n), str(v)) for n, v in getattr(place, "data", None)
+            or () if n and not str(n).startswith("planetx:")]
     if place.kind == "line" and getattr(place, "flow", False):
         data.append((FLOW_DATA, "1"))
     layers = lookat.layers_text(getattr(place, "layers", None))
@@ -1132,14 +1455,24 @@ def _placemark_kml(place, indent):
     if pace:
         data.append((PACE_DATA, pace))
     flow = "<ExtendedData>{}</ExtendedData>".format("".join(
-        '<Data name="{}"><value>{}</value></Data>'.format(name, escape(value))
+        '<Data name="{}"><value>{}</value></Data>'.format(
+            escape(name).replace('"', "&quot;"), escape(value))
         for name, value in data)) if data else ""
     parts += ["<visibility>{}</visibility>".format(int(place.visible)),
               region.kml(getattr(place, "region", None)),
               _time_kml(place.time), look,
               "<Style>{}</Style>".format(style), flow, geometry,
               "</Placemark>"]
-    return pad + "".join(p for p in parts if p)
+    text = "".join(p for p in parts if p)
+    kid = escape(getattr(place, "kml_id", "") or "").replace('"', "&quot;")
+    if kid:
+        # Свои id метки, стилей и точки - цели gx:AnimatedUpdate.
+        for tag, suffix in (("Placemark", ""), ("IconStyle", "_icon"),
+                            ("LineStyle", "_line"), ("PolyStyle", "_poly"),
+                            ("Point", "_geom")):
+            text = text.replace("<{}>".format(tag), '<{} id="{}{}">'.format(
+                tag, kid, suffix), 1)
+    return pad + text
 
 
 def _tour_kml(place, indent):
@@ -1147,18 +1480,71 @@ def _tour_kml(place, indent):
     pad = "  " * indent
     steps = []
     last = None
-    for t, lat, lon, distance, heading, tilt in place.tour:
+    extra = getattr(place, "tour_extra", None) or {}
+    bounce = set(extra.get("bounce", ()))
+    updates = sorted(extra.get("updates", ()),
+                     key=lambda u: float(u.get("t", 0.0)))
+    times = [s[0] for s in place.tour]
+    for n, (t, lat, lon, distance, heading, tilt) in enumerate(place.tour):
         duration = 0.0 if last is None else t - last
         last = t
         steps.append(
             "<gx:FlyTo><gx:duration>{:.3f}</gx:duration><gx:flyToMode>"
-            "smooth</gx:flyToMode><LookAt><longitude>{:.8f}</longitude>"
+            "{}</gx:flyToMode><LookAt><longitude>{:.8f}</longitude>"
             "<latitude>{:.8f}</latitude><altitude>0</altitude><heading>"
             "{:.3f}</heading><tilt>{:.3f}</tilt><range>{:.2f}</range>"
-            "</LookAt></gx:FlyTo>".format(duration, lon, lat, heading, tilt,
-                                          distance))
+            "</LookAt></gx:FlyTo>".format(
+                duration, "bounce" if n in bounce else "smooth", lon, lat,
+                heading, tilt, distance))
+        # Изменения, что начинаются до следующей позы, - сразу после
+        # этой, с задержкой gx:delayedStart.
+        upto = times[n + 1] if n + 1 < len(times) else float("inf")
+        while updates and float(updates[0].get("t", 0.0)) < upto:
+            steps.append(_update_kml(updates.pop(0), t))
     return pad + "<gx:Tour><name>{}</name><gx:Playlist>{}</gx:Playlist>" \
         "</gx:Tour>".format(escape(place.name), "".join(steps))
+
+
+def _update_kml(update, now):
+    """gx:AnimatedUpdate изменения update после позы тура в момент now."""
+    values = update.get("set", {})
+    parts = []
+    for target in update.get("ids", ()):
+        tid = escape(target).replace('"', "&quot;")
+        if "visible" in values:
+            parts.append('<Placemark targetId="{}"><visibility>{}'
+                         '</visibility></Placemark>'.format(
+                             tid, int(bool(values["visible"]))))
+        icon = "".join(s for s in (
+            "<color>{}</color>".format(color_kml(values["color"]))
+            if "color" in values else "",
+            "<scale>{:g}</scale>".format(values["icon_scale"])
+            if "icon_scale" in values else "") if s)
+        if icon:
+            parts.append('<IconStyle targetId="{}_icon">{}</IconStyle>'
+                         .format(tid, icon))
+            if "color" in values:
+                parts.append('<LineStyle targetId="{}_line"><color>{}'
+                             '</color></LineStyle>'.format(
+                                 tid, color_kml(values["color"])))
+        if "width" in values:
+            parts.append('<LineStyle targetId="{}_line"><width>{:g}'
+                         '</width></LineStyle>'.format(tid, values["width"]))
+        if "fill" in values:
+            parts.append('<PolyStyle targetId="{}_poly"><color>{}</color>'
+                         '</PolyStyle>'.format(tid,
+                                               color_kml(values["fill"])))
+        if values.get("points"):
+            lat, lon = values["points"][0][:2]
+            parts.append('<Point targetId="{}_geom"><coordinates>{:.8f},'
+                         '{:.8f}</coordinates></Point>'.format(tid, lon, lat))
+    delay = max(float(update.get("t", 0.0)) - now, 0.0)
+    return "<gx:AnimatedUpdate><gx:duration>{:.3f}</gx:duration>" \
+        "<Update><targetHref/><Change>{}</Change></Update>{}" \
+        "</gx:AnimatedUpdate>".format(
+            float(update.get("d", 0.0)), "".join(parts),
+            "<gx:delayedStart>{:.3f}</gx:delayedStart>".format(delay)
+            if delay > 0.0 else "")
 
 
 def _look_kml(view):
@@ -1259,6 +1645,29 @@ def _model_kml(item, indent, href, aliases=None):
               _time_kml(item.time)]
     if item.view is not None:
         parts.append(_look_kml(item.view))
+    if overlay.track:
+        # Модель едет по треку: gx:Track с when, gx:coord, gx:angles.
+        rows = overlay.track
+        parts += ["<gx:Track><altitudeMode>{}</altitudeMode>".format(
+            escape(overlay.mode))]
+        parts += ["<when>{}</when>".format(when.text(r[0])) for r in rows]
+        parts += ["<gx:coord>{!r} {!r} {!r}</gx:coord>".format(
+            float(r[2]), float(r[1]), float(r[3])) for r in rows]
+        if all(r[4] is not None for r in rows):
+            parts += ["<gx:angles>{!r} {!r} {!r}</gx:angles>".format(
+                float(r[4]), float(r[5]), float(r[6])) for r in rows]
+        parts += ["<Model>", "<Scale><x>{!r}</x><y>{!r}</y><z>{!r}</z>"
+                  "</Scale>".format(*(float(v) for v in overlay.scale)),
+                  "<Link><href>{}</href></Link>".format(escape(href or ""))]
+        if aliases:
+            parts.append("<ResourceMap>")
+            for source, target in sorted(aliases.items()):
+                parts.append("<Alias><targetHref>{}</targetHref>"
+                             "<sourceHref>{}</sourceHref></Alias>".format(
+                                 escape(target), escape(source)))
+            parts.append("</ResourceMap>")
+        parts += ["</Model>", "</gx:Track>", "</Placemark>"]
+        return pad + "".join(p for p in parts if p)
     parts += ["<Model><altitudeMode>{}</altitudeMode>".format(
                   escape(overlay.mode)),
               "<Location><longitude>{!r}</longitude><latitude>{!r}"

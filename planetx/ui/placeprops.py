@@ -25,6 +25,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
                                  QDoubleSpinBox, QFormLayout, QGroupBox,
                                  QHBoxLayout, QLabel, QLineEdit,
                                  QPlainTextEdit, QPushButton, QSlider,
+                                 QTableWidget, QTableWidgetItem,
                                  QVBoxLayout, QWidget)
 
 from ..core import icons, lookat, region, tour, when
@@ -37,7 +38,14 @@ from ..i18n import tr
 from ..qt_compat import enum
 from ..render.labels import svg_file
 from . import regionfield
-from .myplaces import DEFAULT_FILL
+from .myplaces import DEFAULT_FILL, data_text, label_text
+
+# Цвет подписи по умолчанию - белый, как у надписи метки на глобусе
+# (render.labels, класс «mark»). Такой цвет в файл не пишется.
+LABEL_COLOR = (255, 255, 255, 245)
+# Размеры значка и подписи - доли обычного, как scale KML. 0 - нет.
+SCALE_MAX = 4.0
+SCALE_STEP = 0.25
 
 SLIDER_STEPS = 1000  # делений ползунка высоты
 # Наименьшая абсолютная высота, м: дно Марианского жёлоба около -11 км.
@@ -237,6 +245,7 @@ class PlaceProperties(QDialog):
         self.description.setMaximumHeight(90)
         form.addRow(tr("Описание"), self.description)
         self.color = self.line_width = self.fill = self.icon = None
+        self.icon_scale = self.label_color = self.label_scale = None
         look_box, form = self._group(tr("Оформление"))
         if place.kind == "point":
             self.color = QgsColorButton(self)
@@ -258,6 +267,25 @@ class PlaceProperties(QDialog):
             self.icon.currentIndexChanged.connect(self._changed)
             form.addRow(tr("Значок"), self.icon)
             form.addRow(tr("Цвет"), self.color)
+            self.icon_scale = self._scale_box(
+                getattr(shape, "icon_scale", 1.0), tr("Без значка"),
+                tr("Размер значка, доля обычного, как scale IconStyle "
+                   "в KML. 0 - на глобусе только подпись."))
+            form.addRow(tr("Размер значка"), self.icon_scale)
+            self.label_color = QgsColorButton(self)
+            self.label_color.setAllowOpacity(True)
+            self.label_color.setColor(QColor(*(
+                getattr(shape, "label_color", None) or LABEL_COLOR)))
+            self.label_color.setToolTip(tr(
+                "Цвет подписи метки на глобусе, как LabelStyle в KML. "
+                "Тёмная подпись получает светлую обводку."))
+            self.label_color.colorChanged.connect(self._changed)
+            form.addRow(tr("Цвет подписи"), self.label_color)
+            self.label_scale = self._scale_box(
+                getattr(shape, "label_scale", 1.0), tr("Без подписи"),
+                tr("Размер подписи, доля обычного. 0 - на глобусе только "
+                   "значок, название остаётся в списке."))
+            form.addRow(tr("Размер подписи"), self.label_scale)
         if place.kind != "point":
             self.color = QgsColorButton(self)
             self.color.setAllowOpacity(True)
@@ -362,6 +390,7 @@ class PlaceProperties(QDialog):
         self.far = regionfield.make(self, getattr(place, "region", None))
         form.addRow(tr("Скрывать дальше"), self.far)
         self.look = self._view_group(place.view)
+        self.fields_box = self._fields_group(getattr(place, "data", None))
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Ok")
             | enum(QDialogButtonBox, "StandardButton", "Cancel"), self)
@@ -369,10 +398,86 @@ class PlaceProperties(QDialog):
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
         layout.addLayout(self._top_form)
-        for box in (look_box, height_box, time_box, self.look):
+        for box in (look_box, height_box, time_box, self.look,
+                    self.fields_box):
             layout.addWidget(box)
         layout.addStretch(1)
         layout.addWidget(buttons)
+
+    def _fields_group(self, data):
+        """Группа «Поля объекта» - таблица имя и значение, как
+        ExtendedData KML. Поля из выгрузки ГИС правятся здесь, в исходный
+        слой правка не возвращается, она уходит в KML."""
+        group = QGroupBox(tr("Поля объекта"), self)
+        layout = QVBoxLayout(group)
+        self.fields = QTableWidget(0, 2, group)
+        self.fields.setHorizontalHeaderLabels([tr("Поле"), tr("Значение")])
+        self.fields.horizontalHeader().setStretchLastSection(True)
+        self.fields.verticalHeader().hide()
+        self.fields.setToolTip(tr(
+            "Поля объекта, как ExtendedData в KML. Их показывают карточка "
+            "метки и окно «Объекты», «Объясни это» отдаёт их помощнику. "
+            "Поле без имени не сохраняется."))
+        for name, value in data or ():
+            self._add_field(name, value)
+        self.fields.setMinimumHeight(110)
+        layout.addWidget(self.fields)
+        row = QHBoxLayout()
+        add = QPushButton(tr("Добавить поле"), group)
+        add.clicked.connect(lambda: self._add_field("", "", edit=True))
+        remove = QPushButton(tr("Удалить поле"), group)
+        remove.clicked.connect(self._remove_field)
+        row.addWidget(add)
+        row.addWidget(remove)
+        row.addStretch(1)
+        layout.addLayout(row)
+        return group
+
+    def _add_field(self, name, value, edit=False):
+        n = self.fields.rowCount()
+        self.fields.insertRow(n)
+        self.fields.setItem(n, 0, QTableWidgetItem(str(name)))
+        self.fields.setItem(n, 1, QTableWidgetItem(str(value)))
+        if edit:
+            self.fields.setCurrentCell(n, 0)
+            self.fields.editItem(self.fields.item(n, 0))
+
+    def _remove_field(self):
+        rows = sorted({i.row() for i in self.fields.selectedIndexes()}
+                      or ({self.fields.currentRow()}
+                          if self.fields.currentRow() >= 0 else set()),
+                      reverse=True)
+        for n in rows:
+            self.fields.removeRow(n)
+
+    def field_pairs(self):
+        """Поля из таблицы парами (имя, значение), без пустых имён."""
+        out = []
+        for n in range(self.fields.rowCount()):
+            name = self.fields.item(n, 0)
+            value = self.fields.item(n, 1)
+            name = name.text().strip() if name is not None else ""
+            if name:
+                out.append((name, value.text() if value is not None
+                            else ""))
+        return out
+
+    def _scale_box(self, value, zero, tip):
+        """Поле размера от 0 до SCALE_MAX, 0 показывается словом zero."""
+        box = QDoubleSpinBox(self)
+        box.setRange(0.0, SCALE_MAX)
+        box.setSingleStep(SCALE_STEP)
+        box.setDecimals(2)
+        box.setSpecialValueText(zero)
+        box.setValue(float(1.0 if value is None else value))
+        box.setToolTip(tip)
+        box.valueChanged.connect(self._changed)
+        return box
+
+    def _label(self):
+        """Цвет подписи из окна, белый по умолчанию - None."""
+        rgba = _rgba(self.label_color.color())
+        return None if rgba == LABEL_COLOR else rgba
 
     def _group(self, title):
         """Группа окна с формой: (группа, форма)."""
@@ -627,6 +732,9 @@ class PlaceProperties(QDialog):
             values["fill"] = _rgba(self.fill.color())
         if self.icon is not None:
             values["icon"] = self.icon.currentData()
+            values["icon_scale"] = float(self.icon_scale.value())
+            values["label_color"] = self._label()
+            values["label_scale"] = float(self.label_scale.value())
         if self.flow is not None:
             values["flow"] = self.flow.isChecked()
         return self.place.shape._replace(**values)
@@ -650,13 +758,17 @@ class PlaceProperties(QDialog):
                    and self.keep_layers.isChecked() else None),
                "pace": tour.pace_text((
                    None if self.stop_pause.value() < 0.0
-                   else self.stop_pause.value(), self.stop_speed.value()))}
+                   else self.stop_pause.value(), self.stop_speed.value())),
+               "data": data_text(self.field_pairs())}
         if self.color is not None:
             out["color"] = _color_text(_rgba(self.color.color()))
         if self.line_width is not None:
             out["width"] = float(self.line_width.value())
         if self.icon is not None:
             out["icon"] = self.icon.currentData()
+            out["iconscale"] = float(self.icon_scale.value())
+            out["label"] = label_text(self._label(),
+                                      self.label_scale.value())
         if self.fill is not None:
             out["fill"] = _color_text(_rgba(self.fill.color()))
         if self.flow is not None:

@@ -112,6 +112,7 @@ def show(window, px, py):
         satellite_items(window, menu, px, py)
         live_items(window, menu, px, py)
         track_items(window, menu, px, py)
+        model_track_items(window, menu, px, py)
     if ground is not None:
         lat, lon = ground
         if not menu.actions()[-1].isSeparator():
@@ -295,12 +296,48 @@ def track_items(window, menu, px, py):
 
 
 def follow_track(window, target, on):
-    """Камера следом за объектом трека: живые объекты отпускают её."""
+    """Камера следом за объектом трека: живые объекты и модели треков
+    KML отпускают её."""
     if on:
         for manager in getattr(window, "live_managers", ()):
             if getattr(manager, "followed", None) is not None:
                 manager.set_follow(None)
+        models = getattr(window, "model_tracks", None)
+        if models is not None and models.followed is not None:
+            models.set_follow(None)
     window.tracks.set_follow(target if on else None)
+
+
+def model_track_items(window, menu, px, py):
+    """Модель трека KML (gx:Track с Model) под курсором: «Камера
+    следом», как у объекта трека слоя."""
+    models = getattr(window, "model_tracks", None)
+    if models is None:
+        return
+    target = models.under(px, py) or models.followed
+    if target is None:
+        return
+    if not menu.isEmpty():
+        menu.addSeparator()
+    title = menu.addAction(models.label(target) or tr("Модель"))
+    title.setEnabled(False)
+    follow = menu.addAction(tr("Камера следом"))
+    follow.setCheckable(True)
+    follow.setChecked(models.followed == target)
+    follow.toggled.connect(
+        lambda on, t=target: follow_model(window, t, on))
+
+
+def follow_model(window, target, on):
+    """Камера следом за моделью трека KML: треки слоёв и живые объекты
+    отпускают её."""
+    if on:
+        for manager in getattr(window, "live_managers", ()):
+            if getattr(manager, "followed", None) is not None:
+                manager.set_follow(None)
+        if window.tracks.followed is not None:
+            window.tracks.set_follow(None)
+    window.model_tracks.set_follow(target if on else None)
 
 
 def follow_satellite(manager, number, on):

@@ -949,10 +949,15 @@ HAUL = (("kachkanar", "Качканар, Главный карьер",
 
 
 def haul():
-    """Самосвалы по дороге карьеров Качканара и Гая."""
+    """Самосвалы по дороге карьеров Качканара и Лебединского. Сцена
+    haul_<карьер> - самосвалы треками KML (gx:Track с Model) в папке
+    демо, сцена haulqgis_<карьер> - прежний вариант, самосвалы слоем
+    точек GeoPackage и треком слоя (окно глобуса, open_demo)."""
     with open(os.path.join(DEMO, "haul", "haul.json"),
               encoding="utf-8") as fh:
         found = {item["key"]: item for item in json.load(fh)}
+    with open(os.path.join(DEMO, "haul", "haul_truck.glb"), "rb") as fh:
+        package = pack("haul_truck.glb", {"haul_truck.glb": fh.read()})
     for key, name, menu, distance, heading in HAUL:
         item = found[key]
         lat, lon = item["center"]
@@ -968,17 +973,30 @@ def haul():
                 "движение - модель, не данные предприятия.".format(
                     item["length"] / 1000.0, item["depth"],
                     item["cycle"] / 60.0))
-        items = [KPlace("Погрузка", "point", [(blat, blon)],
-                        description=note,
-                        view=(blat, blon, 900.0, heading, 60.0))]
-        root = KFolder(title, children=items)
+        start = KPlace("Погрузка", "point", [(blat, blon)],
+                       description=note,
+                       view=(blat, blon, 900.0, heading, 60.0))
+        with open(os.path.join(DEMO, "haul", "haul_{}_tracks.json".format(
+                key)), encoding="utf-8") as fh:
+            tracks = json.load(fh)
+        trucks = [KOverlay(truck, Overlay(
+            "model", camera=tuple(rows[0][1:3]) + (0.0, rows[0][4], 0.0,
+                                                   0.0),
+            mode="clampToGround", track=rows), image=package,
+            description="Самосвал едет по треку KML - gx:Track с моделью. "
+                        "Меню правой кнопки над ним - «Камера следом».")
+            for truck, rows in tracks.items()]
         view = dict(EARTH_VIEW, scale=1.0, extras=dict(QUIET_EXTRAS))
-        scene = Scene((lat, lon, distance, heading, 55.0), None, [], view,
-                      title, menu)
-        path = os.path.join(DEMO, "haul_{}.planetx".format(key))
-        with open(path, "wb") as fh:
-            fh.write(write_scene(scene, write_kmz(root)))
-        print(path, os.path.getsize(path))
+        for scene_key, scene_menu, children in (
+                ("haul_" + key, menu, [start] + trucks),
+                ("haulqgis_" + key, menu + ", слой QGIS", [start])):
+            root = KFolder(title, children=children)
+            scene = Scene((lat, lon, distance, heading, 55.0), None, [],
+                          view, title, scene_menu)
+            path = os.path.join(DEMO, scene_key + ".planetx")
+            with open(path, "wb") as fh:
+                fh.write(write_scene(scene, write_kmz(root)))
+            print(path, os.path.getsize(path))
 
 
 def main():

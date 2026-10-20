@@ -67,7 +67,18 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Темп остановки тура - своя пауза и скорость, core/tour.py.
           ("pace", "string"),
           # Режим высоты core.features.MODES, пустой - по подъёму.
-          ("altmode", "string"))
+          ("altmode", "string"),
+          # Поля объекта из ExtendedData KML: JSON списка пар.
+          ("data", "string(0)"),
+          # Вид точки из KML: размер значка, цвет и размер подписи -
+          # «r,g,b,a;размер», пустое - белая подпись обычного размера.
+          ("iconscale", "double"), ("label", "string"),
+          # Поворот значка от севера, градусы (heading IconStyle KML),
+          # и шаблон всплывающего окна (BalloonStyle KML).
+          ("iconheading", "double"), ("balloon", "string(0)"),
+          # id метки в KML - цель изменений gx:AnimatedUpdate, и добавки
+          # записанного тура: перелёты bounce и изменения меток, JSON.
+          ("kmlid", "string"), ("tourx", "string(0)"))
 FOLDER_TABLE = "folders"
 # Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
 # на поверхности, у картинки на экране и фото пусто. params - свойства
@@ -132,11 +143,38 @@ def _points(kind, geometry):
         line = geometry.asPolyline() or (geometry.asMultiPolyline()
                                          or [[]])[0]
         return [(p.y(), p.x()) for p in line]
+    rings = _rings(geometry)
+    return rings[0] if rings else []
+
+
+def _rings(geometry):
+    """Кольца многоугольника (широта, долгота) без повтора первой
+    вершины: контур, потом дыры."""
+    if geometry is None or geometry.isEmpty():
+        return []
     rings = geometry.asPolygon() or (geometry.asMultiPolygon() or [[[]]])[0]
-    ring = rings[0] if rings else []
-    if len(ring) > 1 and ring[0] == ring[-1]:
-        ring = ring[:-1]
-    return [(p.y(), p.x()) for p in ring]
+    out = []
+    for ring in rings:
+        if len(ring) > 1 and ring[0] == ring[-1]:
+            ring = ring[:-1]
+        out.append([(p.y(), p.x()) for p in ring])
+    return out
+
+
+def _holes(kind, geometry):
+    """Дыры многоугольника из геометрии файла, кортеж или None."""
+    if kind != "polygon":
+        return None
+    holes = [r for r in _rings(geometry)[1:] if len(r) >= 3]
+    return tuple(holes) or None
+
+
+def _scale(value):
+    """Доля размера из поля файла, пустое поле - 1."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 1.0
 
 
 def _int(value):
@@ -164,13 +202,18 @@ def _folder_fid(key):
     return int(key.split(":")[1]) if key else None
 
 
-def _geometry(kind, points):
+def _geometry(kind, points, holes=None):
     xy = [QgsPointXY(lon, lat) for lat, lon in points]
     if kind == "point":
         return QgsGeometry.fromPointXY(xy[0])
     if kind == "line":
         return QgsGeometry.fromPolylineXY(xy)
-    return QgsGeometry.fromPolygonXY([xy + xy[:1]])
+    rings = [xy + xy[:1]]
+    for hole in holes or ():
+        ring = [QgsPointXY(lon, lat) for lat, lon in hole]
+        if len(ring) >= 3:
+            rings.append(ring + ring[:1])
+    return QgsGeometry.fromPolygonXY(rings)
 
 
 def _add_missing(layer, fields=None):
@@ -237,6 +280,62 @@ def alts_from_text(text, count):
         return None
 
 
+def json_text(value):
+    """Значение для поля файла JSON, пустое - пустая строка."""
+    return json.dumps(value, ensure_ascii=False) if value else ""
+
+
+def json_from_text(text):
+    """Словарь из поля файла JSON или None."""
+    if not text:
+        return None
+    try:
+        value = json.loads(str(text))
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def data_text(data):
+    """Поля объекта для файла: JSON списка пар, пустые - пустая строка."""
+    if not data:
+        return ""
+    return json.dumps([[str(n), str(v)] for n, v in data],
+                      ensure_ascii=False)
+
+
+def data_from_text(text):
+    """Поля объекта из поля файла: список пар или None."""
+    if not text:
+        return None
+    try:
+        rows = json.loads(str(text))
+    except ValueError:
+        return None
+    pairs = [(str(r[0]), str(r[1])) for r in rows
+             if isinstance(r, list) and len(r) == 2] \
+        if isinstance(rows, list) else []
+    return pairs or None
+
+
+def label_text(color, scale):
+    """Цвет и размер подписи для поля файла, обычная подпись - пусто."""
+    if color is None and float(scale) == 1.0:
+        return ""
+    return "{};{:g}".format(_color_text(color) if color else "",
+                            float(scale))
+
+
+def label_from_text(text):
+    """(цвет или None, размер) подписи из поля файла."""
+    color, _, scale = str(text or "").partition(";")
+    try:
+        size = float(scale) if scale else 1.0
+    except ValueError:
+        size = 1.0
+    return _color(color, None) if color else None, max(size, 0.0)
+
+
 def _value(feature, layer, name):
     """Значение поля или None, если поля в слое нет."""
     return feature[name] if layer.fields().indexOf(name) >= 0 else None
@@ -254,7 +353,16 @@ def _kplace(place):
                   view_time=place.view_time, tour=place.tour,
                   alts=shape.alts, region=place.region, flow=shape.flow,
                   layers=getattr(place, "layers", None),
-                  pace=getattr(place, "pace", None))
+                  pace=getattr(place, "pace", None),
+                  holes=getattr(shape, "holes", None),
+                  data=getattr(place, "data", None),
+                  icon_scale=getattr(shape, "icon_scale", 1.0),
+                  label_color=getattr(shape, "label_color", None),
+                  label_scale=getattr(shape, "label_scale", 1.0),
+                  icon_heading=getattr(shape, "icon_heading", 0.0),
+                  balloon=getattr(place, "balloon", ""),
+                  kml_id=getattr(place, "kml_id", ""),
+                  tour_extra=getattr(place, "tour_extra", None))
 
 
 class Place:
@@ -263,8 +371,16 @@ class Place:
     def __init__(self, kind, fid, shape, visible, measure="", view=None,
                  position=None, folder=None, description="",
                  time=None, view_time=None, tour=None, body="earth",
-                 region=None, layers=None, pace=None):
+                 region=None, layers=None, pace=None, data=None,
+                 balloon="", kml_id="", tour_extra=None):
         self.kind = kind
+        # id метки в KML и добавки записанного тура (core/kml.py).
+        self.kml_id = kml_id
+        self.tour_extra = tour_extra
+        # Шаблон всплывающего окна BalloonStyle KML или пустая строка.
+        self.balloon = balloon
+        # Поля объекта из ExtendedData KML: список пар или None.
+        self.data = data
         # Темп остановки тура: (пауза или None, скорость) или None.
         self.pace = pace
         # Слои вида: {ключ строки «Слоёв»: включена} или None.
@@ -482,7 +598,15 @@ class MyPlaces(QObject):
                     alts=alts_from_text(_value(feature, layer, "alts"),
                                         len(points)),
                     flow=kind == "line"
-                    and bool(_int(_value(feature, layer, "flow"))))
+                    and bool(_int(_value(feature, layer, "flow"))),
+                    holes=_holes(kind, feature.geometry()),
+                    icon_scale=_scale(_value(feature, layer, "iconscale")),
+                    label_color=label_from_text(
+                        _value(feature, layer, "label"))[0],
+                    label_scale=label_from_text(
+                        _value(feature, layer, "label"))[1],
+                    icon_heading=_float(_value(feature, layer,
+                                               "iconheading")))
                 visible = _int(feature["visible"])
                 self.places.append(Place(
                     kind, feature.id(), shape,
@@ -499,7 +623,11 @@ class MyPlaces(QObject):
                     str(_value(feature, layer, "body") or "earth"),
                     region.parse(_value(feature, layer, "region")),
                     lookat.layers_parse(_value(feature, layer, "layers")),
-                    tour_core.pace_parse(_value(feature, layer, "pace"))))
+                    tour_core.pace_parse(_value(feature, layer, "pace")),
+                    data_from_text(_value(feature, layer, "data")),
+                    str(_value(feature, layer, "balloon") or ""),
+                    str(_value(feature, layer, "kmlid") or ""),
+                    json_from_text(_value(feature, layer, "tourx"))))
         self.overlays = []
         layer = self.overlay_layer
         if layer is not None:
@@ -609,7 +737,8 @@ class MyPlaces(QObject):
         if folder is not None and self.find(folder) is None:
             folder = None
         feature = QgsFeature(layer.fields())
-        feature.setGeometry(_geometry(shape.kind, shape.points))
+        feature.setGeometry(_geometry(shape.kind, shape.points,
+                                      getattr(shape, "holes", None)))
         values = {"name": shape.name, "description": "",
                   "color": _color_text(shape.color),
                   "width": float(shape.width),
@@ -728,7 +857,8 @@ class MyPlaces(QObject):
                 or shape.kind != item.kind:
             return False
         if not layer.dataProvider().changeGeometryValues(
-                {item.fid: _geometry(shape.kind, shape.points)}):
+                {item.fid: _geometry(shape.kind, shape.points,
+                                     getattr(shape, "holes", None))}):
             return False
         self._write({key: {"name": shape.name,
                            "color": _color_text(shape.color),
@@ -1005,7 +1135,8 @@ class MyPlaces(QObject):
             features = []
             for place, key, position in items:
                 feature = QgsFeature(layer.fields())
-                feature.setGeometry(_geometry(kind, place.points))
+                feature.setGeometry(_geometry(
+                    kind, place.points, getattr(place, "holes", None)))
                 values = {
                     "name": place.name, "description": place.description,
                     "color": _color_text(place.color),
@@ -1028,7 +1159,16 @@ class MyPlaces(QObject):
                     "layers": lookat.layers_text(
                         getattr(place, "layers", None)),
                     "pace": tour_core.pace_text(
-                        getattr(place, "pace", None))}
+                        getattr(place, "pace", None)),
+                    "data": data_text(getattr(place, "data", None)),
+                    "iconscale": float(getattr(place, "icon_scale", 1.0)),
+                    "label": label_text(getattr(place, "label_color", None),
+                                        getattr(place, "label_scale", 1.0)),
+                    "iconheading": float(getattr(place, "icon_heading", 0.0)
+                                         or 0.0),
+                    "balloon": getattr(place, "balloon", "") or "",
+                    "kmlid": getattr(place, "kml_id", "") or "",
+                    "tourx": json_text(getattr(place, "tour_extra", None))}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

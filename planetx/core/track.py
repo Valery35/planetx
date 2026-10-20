@@ -140,3 +140,34 @@ class Track:
             out.append(Position(key, path, float(lat), float(lon),
                                 heading, float(alt), alts))
         return out
+
+
+def model_pose(rows, t):
+    """Поза модели gx:Track с Model на момент t: (широта, долгота,
+    высота, азимут, наклон, крен) или None вне времени трека.
+
+    rows - [секунды, широта, долгота, высота, азимут, наклон, крен] по
+    возрастанию времени, азимут None - без gx:angles, он берётся по
+    направлению движения. Между точками всё идёт линейно, азимут - по
+    кратчайшему повороту."""
+    if not rows or t < rows[0][0] or t > rows[-1][0]:
+        return None
+    times = [r[0] for r in rows]
+    i = max(0, min(int(np.searchsorted(times, t, side="right")) - 1,
+                   len(rows) - 1))
+    j = min(i + 1, len(rows) - 1)
+    span = rows[j][0] - rows[i][0]
+    k = (t - rows[i][0]) / span if span > 0 else 0.0
+    a, b = rows[i], rows[j]
+
+    def mix(n):
+        return a[n] + (b[n] - a[n]) * k
+    lat, lon, alt = mix(1), mix(2), mix(3)
+    if a[4] is None or b[4] is None:
+        p, q = (a, b) if j != i else (rows[max(i - 1, 0)], a)
+        heading = bearing(p[1], p[2], q[1], q[2]) \
+            if (p[1], p[2]) != (q[1], q[2]) else 0.0
+        return lat, lon, alt, heading, 0.0, 0.0
+    turn = (b[4] - a[4] + 180.0) % 360.0 - 180.0
+    return (lat, lon, alt, (a[4] + turn * k) % 360.0, mix(5),
+            (mix(6) if a[6] is not None and b[6] is not None else 0.0))

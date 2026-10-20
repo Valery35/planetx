@@ -98,7 +98,9 @@ def cached_geometry(shape):
     key = (shape.kind, tuple(map(tuple, shape.points)),
            shape.fill is not None,
            bool(shape.extrude) and uses_height(altitude_mode(shape)),
-           tuple(alts) if alts is not None else None)
+           tuple(alts) if alts is not None else None,
+           tuple(tuple(map(tuple, h)) for h in getattr(shape, "holes", None)
+                 or ()))
     if key not in _geometries:
         if len(_geometries) >= GEOMETRY_CACHE:
             _geometries.clear()
@@ -121,6 +123,11 @@ def build(shape, heights_at=None, geo=None, surface_at=None, scale=1.0):
                    scale=scale)
     center, offsets = centered(xyz)
     return center, offsets, geo.lines, geo.triangles, geo.wall
+
+
+def _scale(value):
+    """Доля размера значка, None - 1."""
+    return 1.0 if value is None else float(value)
 
 
 def program_for(kind, line_program, fill_program):
@@ -164,10 +171,15 @@ class Features:
 
     def marks(self):
         """Точечные объекты: (номер, имя, широта, долгота, подъём,
-        значок, цвет, режим высоты)."""
+        значок, цвет, режим высоты, вид подписи). Вид подписи - размер
+        значка, цвет подписи или None, размер подписи, поворот значка."""
         return [(i, shape.name, shape.points[0][0], shape.points[0][1],
                  float(shape.height or 0.0), shape.icon,
-                 tuple(shape.color), altitude_mode(shape))
+                 tuple(shape.color), altitude_mode(shape),
+                 (_scale(getattr(shape, "icon_scale", 1.0)),
+                  getattr(shape, "label_color", None),
+                  float(getattr(shape, "label_scale", 1.0)),
+                  float(getattr(shape, "icon_heading", 0.0) or 0.0)))
                 for i, shape in enumerate(self.shapes)
                 if shape.kind == "point" and shape.points]
 

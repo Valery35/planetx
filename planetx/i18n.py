@@ -4824,6 +4824,9 @@ EN = {
     "Поезда Финляндии, вживую": "Trains of Finland, live",
     "Самосвалы, Качканар": "Haul trucks, Kachkanar",
     "Самосвалы, Лебединский": "Haul trucks, Lebedinsky",
+    "Самосвалы, Качканар, слой QGIS": "Haul trucks, Kachkanar, QGIS layer",
+    "Самосвалы, Лебединский, слой QGIS":
+        "Haul trucks, Lebedinsky, QGIS layer",
     "Самосвалы в карьере": "Haul trucks in the pit",
     "Самосвалы": "Haul trucks",
     "Анимация {seconds:.1f} с, движется частей {tracks}.":
@@ -5097,13 +5100,14 @@ EN = {
         "placemark Properties… window.",
     "Объясни это": "Explain this",
     "Спросить помощника, что это за объект и чем интересно место. "
-    "Помощнику уходят название, вид, координаты и описание этой "
+    "Помощнику уходят название, вид, координаты, описание и поля этой "
     "метки и названия включённых слоёв глобуса. Ответ появится "
     "здесь и под строкой «Поиск».":
         "Ask the assistant what this object is and why the place is of "
-        "interest. The assistant receives the name, kind, coordinates and "
-        "description of this placemark and the names of the globe layers "
-        "turned on. The answer appears here and under the Search box.",
+        "interest. The assistant receives the name, kind, coordinates, "
+        "description and fields of this placemark and the names of the "
+        "globe layers turned on. The answer appears here and under the "
+        "Search box.",
     "Помощник не подключён. Ключ API вводят в окне «Настройки "
     "помощника».":
         "The assistant is not connected. The API key is entered in the "
@@ -5113,6 +5117,61 @@ EN = {
         "Explain what this object is and why this place is of interest. "
         "{kind} \"{name}\", point {lat:.5f}, {lon:.5f}.",
     "Описание метки - {text}": "Placemark description - {text}",
+    "Поля объекта - {fields}.": "Object fields - {fields}.",
+    # Окно «Свойства…» метки, вид точки и поля объекта, ui/placeprops.py.
+    "Размер значка": "Icon size",
+    "Без значка": "No icon",
+    "Размер значка, доля обычного, как scale IconStyle в KML. 0 - на "
+    "глобусе только подпись.":
+        "Icon size as a share of the usual one, as the IconStyle scale "
+        "in KML. 0 - only the label on the globe.",
+    "Цвет подписи": "Label colour",
+    "Цвет подписи метки на глобусе, как LabelStyle в KML. Тёмная подпись "
+    "получает светлую обводку.":
+        "Colour of the placemark label on the globe, as LabelStyle in "
+        "KML. A dark label gets a light outline.",
+    "Размер подписи": "Label size",
+    "Без подписи": "No label",
+    "Размер подписи, доля обычного. 0 - на глобусе только значок, "
+    "название остаётся в списке.":
+        "Label size as a share of the usual one. 0 - only the icon on "
+        "the globe, the name stays in the list.",
+    "Поля объекта": "Object fields",
+    "Поле": "Field",
+    "Поля объекта, как ExtendedData в KML. Их показывают карточка метки "
+    "и окно «Объекты», «Объясни это» отдаёт их помощнику. Поле без имени "
+    "не сохраняется.":
+        "Object fields, as ExtendedData in KML. The placemark card and "
+        "the Objects window show them, Explain this passes them to the "
+        "assistant. A field without a name is not saved.",
+    "Добавить поле": "Add field",
+    # Слой проекта в «Мои метки», ui/globe/places.py.
+    "В «Мои метки»…": "To My Places…",
+    "Объекты слоя ложатся в «Мои метки» папкой с именем слоя - "
+    "выделенные, иначе все. Цвета - стиль слоя, название - подпись слоя, "
+    "атрибуты - поля объекта, время - временные свойства слоя. Папку "
+    "можно сохранить в KML.":
+        "The layer features go into My Places as a folder named after "
+        "the layer - the selected ones, otherwise all. Colours come from "
+        "the layer style, names from the layer labels, attributes become "
+        "object fields, time comes from the temporal properties of the "
+        "layer. The folder can be saved to KML.",
+    "Слои проекта ложатся только на Землю.":
+        "Project layers lie on the Earth only.",
+    "В слое объектов {count}. Взять только объекты в видимой части "
+    "глобуса? «Нет» - весь слой.":
+        "The layer has {count} features. Take only the features in the "
+        "visible part of the globe? No - the whole layer.",
+    "В слое нет объектов с геометрией.":
+        "The layer has no features with geometry.",
+    "Объекты дадут вершин {count}, глобус рисует свои объекты до {limit} "
+    "вершин, дальше вид замедлится. Записать всё равно?":
+        "The features give {count} vertices, the globe draws its own "
+        "objects up to {limit} vertices, beyond that the view slows "
+        "down. Write them anyway?",
+    "В «Мои метки» записано объектов {count}.":
+        "Features written to My Places: {count}.",
+    "Удалить поле": "Remove field",
     # Цвета окна «Разрез модели», ui/subsection.py.
     "Между пластами": "Between beds",
     "Цвет породы между пластами…": "Colour of the rock between beds…",

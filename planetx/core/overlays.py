@@ -74,7 +74,9 @@ class Overlay:
     0 - не обновляется, как refreshMode onInterval в Icon KML.
     У 3D-модели (core/models.py) camera - место (широта, долгота,
     высота, азимут, наклон, крен), как Location и Orientation KML,
-    scale - масштаб по осям X, Y, Z, mode - altitudeMode.
+    scale - масштаб по осям X, Y, Z, mode - altitudeMode. track - путь
+    модели gx:Track: [секунды, широта, долгота, высота, азимут, наклон,
+    крен], азимут None - по ходу (core.track.model_pose), или None.
     """
 
     def __init__(self, kind, corners=None, color=WHITE, order=0,
@@ -83,8 +85,9 @@ class Overlay:
                  size=(-1.0, -1.0, "fraction", "fraction"), rotation=0.0,
                  camera=None, fov=(-30.0, 30.0, -20.0, 20.0), near=100.0,
                  box=None, refresh=0.0, scale=(1.0, 1.0, 1.0),
-                 mode="clampToGround"):
+                 mode="clampToGround", track=None):
         self.kind = kind
+        self.track = [list(r) for r in track] if track else None
         self.scale = tuple(float(v) for v in scale)
         self.mode = mode
         self.refresh = refresh_interval(refresh)
@@ -128,6 +131,8 @@ class Overlay:
         elif self.kind == "model":
             data.update(camera=list(self.camera or ()),
                         scale=list(self.scale), mode=self.mode)
+            if self.track:
+                data["track"] = self.track
         else:
             data.update(camera=list(self.camera or ()), fov=list(self.fov),
                         near=self.near)
@@ -172,7 +177,9 @@ def from_params(kind, text, corners=None):
         refresh=data.get("refresh", 0.0),
         scale=tuple(float(v) for v in scale) if isinstance(scale, list)
         and len(scale) == 3 else base.scale,
-        mode=mode if mode in MODEL_MODES else base.mode)
+        mode=mode if mode in MODEL_MODES else base.mode,
+        track=data.get("track") if isinstance(data.get("track"), list)
+        else None)
 
 
 def _metres_per_degree(lat):

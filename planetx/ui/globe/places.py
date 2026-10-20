@@ -45,6 +45,74 @@ class PlacesMixin:
 
     # «Мои метки».
 
+    def layer_to_places(self, layer, ask=True):
+        """Слой проекта в «Мои метки» папкой (ui/layer_places.py):
+        выделенные объекты, иначе все. У крупного слоя окно спрашивает,
+        брать ли только видимую часть глобуса. Возвращает ключ папки."""
+        from qgis.core import (QgsCoordinateReferenceSystem,
+                               QgsCoordinateTransform, QgsRectangle)
+        from ...core.sync import ground_size, view_box
+        from ..layer_places import FEATURE_LIMIT, layer_tree
+        from ...qt_compat import enum
+        from ...render.view import OBJECT_BUDGET
+        if self.planet.key != "earth":
+            QMessageBox.information(self, tr("В «Мои метки»"), tr(
+                "Слои проекта ложатся только на Землю."))
+            return None
+        ids = layer.selectedFeatureIds() if layer.selectedFeatureCount() \
+            else None
+        rect = None
+        if ids is None and ask and layer.featureCount() > FEATURE_LIMIT:
+            answer = QMessageBox.question(
+                self, tr("В «Мои метки»"), tr(
+                    "В слое объектов {count}. Взять только объекты "
+                    "в видимой части глобуса? «Нет» - весь слой.",
+                    count=layer.featureCount()),
+                enum(QMessageBox, "StandardButton", "Yes")
+                | enum(QMessageBox, "StandardButton", "No")
+                | enum(QMessageBox, "StandardButton", "Cancel"))
+            if answer == enum(QMessageBox, "StandardButton", "Cancel"):
+                return None
+            if answer == enum(QMessageBox, "StandardButton", "Yes"):
+                pose = self.view.navigator.pose
+                camera = self.view.camera
+                width, height = ground_size(pose.distance, camera.fov_y,
+                                            camera.aspect)
+                west, south, east, north = view_box(pose.lat, pose.lon,
+                                                    width, height)
+                if east < west:
+                    west, east = -180.0, 180.0
+                rect = QgsCoordinateTransform(
+                    QgsCoordinateReferenceSystem("EPSG:4326"), layer.crs(),
+                    QgsProject.instance()).transformBoundingBox(
+                        QgsRectangle(west, south, east, north))
+        tree, count, vertices = layer_tree(layer, ids, rect)
+        if not tree.children:
+            QMessageBox.information(self, tr("В «Мои метки»"), tr(
+                "В слое нет объектов с геометрией."))
+            return None
+        if ask and vertices > OBJECT_BUDGET:
+            answer = QMessageBox.question(
+                self, tr("В «Мои метки»"), tr(
+                    "Объекты дадут вершин {count}, глобус рисует свои "
+                    "объекты до {limit} вершин, дальше вид замедлится. "
+                    "Записать всё равно?", count=vertices,
+                    limit=OBJECT_BUDGET))
+            if answer != enum(QMessageBox, "StandardButton", "Yes"):
+                return None
+        key = self.myplaces.import_tree(tree, body="earth")
+        if key is None:
+            return None
+        self.panel.select_place(key)
+        folder = self.myplaces.find(key)
+        if folder is not None:
+            self.fly_to_folder(folder)
+        self._show_made_time(key)
+        self.message = (tr("В «Мои метки» записано объектов {count}.",
+                           count=count), time.monotonic())
+        self._show_state()
+        return key
+
     @staticmethod
     def _item_colors(item):
         """Цвета объекта для ползунка непрозрачности: линия или значок
@@ -135,6 +203,10 @@ class PlacesMixin:
                       when.stamp(when.text(time.time()))]
         # Треки и слои проекта со временем - их охват.
         times += getattr(self, "_data_marks", [])
+        # Модели на треках KML (gx:Track с Model) - время их пути.
+        times += [o.time for o in self.myplaces.overlays
+                  if o.visible and o.time and o.kind == "model"
+                  and o.overlay.track]
         # Исторические карты с годом - от первой до последней.
         if hasattr(self, "_map_years"):
             times += [when.stamp(when.text(t)) for t in self._map_moments()]
@@ -266,6 +338,42 @@ class PlacesMixin:
         if span is None or shape.kind != "line":
             return shape
         return grown(shape, when.share(place.time, span[1]))
+
+    def _tour_live(self, stop, t):
+        """Изменения меток записанного тура (gx:AnimatedUpdate) на время
+        t записи - поверх «Моих меток», файл меток не меняется. stop
+        None - изменения сняты."""
+        from ...core.tour import animated
+        live = {}
+        if stop is not None:
+            places = [p for p in self.myplaces.places_in(
+                getattr(stop, "scope", None)) if getattr(p, "kml_id", "")]
+            base = {}
+            for p in places:
+                shape = p.shape
+                base[p.kml_id] = {
+                    "visible": p.visible, "color": tuple(shape.color),
+                    "fill": tuple(shape.fill) if shape.fill else None,
+                    "icon_scale": float(shape.icon_scale),
+                    "width": float(shape.width),
+                    "points": [list(q) for q in shape.points]}
+            state = animated(stop.updates, t, base)
+            for p in places:
+                values = state.get(p.kml_id)
+                if values is None or values == base[p.kml_id]:
+                    continue
+                change = {"color": tuple(values["color"]),
+                          "icon_scale": float(values["icon_scale"]),
+                          "width": float(values["width"])}
+                if values.get("fill") is not None:
+                    change["fill"] = tuple(values["fill"])
+                if len(values["points"]) == len(p.shape.points):
+                    change["points"] = [tuple(q) for q in values["points"]]
+                live[p.key] = (bool(values["visible"]),
+                               p.shape._replace(**change))
+        if live != getattr(self, "tour_live", {}):
+            self.tour_live = live
+            self._refresh_shapes()
 
     def _stop_reached(self, stop):
         """Тур полетел к остановке: её время и её слои. Слои включаются
@@ -415,10 +523,13 @@ class PlacesMixin:
     def _refresh_shapes(self):
         """На глобусе видимые «Мои метки», треки и фигура открытой
         линейки."""
-        # Метка с открытым окном свойств показывается с правками окна.
-        shapes = [self._timed_shape(p)
+        # Метка с открытым окном свойств показывается с правками окна,
+        # метка, которую меняет идущий тур, - с изменениями тура.
+        live = getattr(self, "tour_live", {})
+        shapes = [live[p.key][1] if p.key in live else self._timed_shape(p)
                   for p in self.myplaces.places
-                  if p.visible and self._time_ok(p)
+                  if (live[p.key][0] if p.key in live else p.visible)
+                  and self._time_ok(p)
                   and (not p.tour or p.key in self.previews)
                   and p.body == self.planet.key
                   and p.key not in self._region_hidden]
@@ -684,12 +795,16 @@ class PlacesMixin:
                 self.set_insets(read_insets() + [layer_id])
         if name == "moscow":
             self._demo_maps(tr("Москва, исторические карты"), moscow_maps())
-        if name.startswith("haul_"):
-            pit = name[len("haul_"):]
+        if name.startswith("haulqgis_"):
+            # Прежний вариант - слой точек проекта и трек слоя.
+            pit = name[len("haulqgis_"):]
             self._demo_trucks(
                 tr("Самосвалы в карьере"),
                 os.path.join(demo, "haul", "haul_{}.gpkg".format(pit)),
                 os.path.join(demo, "haul", "haul_truck.glb"))
+        elif name.startswith("haul_"):
+            # Самосвалы - треки KML с моделью в папке демо, без слоя.
+            QTimer.singleShot(0, self._play_model_trucks)
         return key
 
     def _demo_trucks(self, title, path, model):
@@ -719,6 +834,16 @@ class PlacesMixin:
             "height_mode": "relative", "height_unit": 1.0})
         QTimer.singleShot(0, lambda: self._play_trucks(layer.id()))
 
+    def _play_model_trucks(self):
+        """Шкала времени демо самосвалов на треках KML: как
+        _play_trucks, охват - пути моделей."""
+        self._refresh_overlays()
+        span = self.model_tracks.span()
+        if span is None:
+            return
+        self._play_haul(span, lambda: self.model_tracks.span() is not None
+                        and self.model_tracks.span()[0] == span[0])
+
     def _play_trucks(self, layer_id):
         """Шкала времени демо самосвалов: момент в начале рейса, ×10,
         показ идёт. Начало - начало трека самосвалов, а не шкалы: у
@@ -726,14 +851,24 @@ class PlacesMixin:
         и самосвалов не было (снимок 19 октября 2026 года). Конец
         рейса возвращает момент к его началу (_haul_loop) - круг шкалы
         шёл бы по всему её охвату."""
-        bar = self.timebar
         track = self.tracks.tracks.get(layer_id)
-        if not bar.known or track is None or track.start is None:
+        if track is None or track.start is None:
+            return
+        start = track.start
+        self._play_haul((track.start, track.end), lambda: any(
+            t.start == start for t in self.tracks.tracks.values()))
+
+    def _play_haul(self, span, alive):
+        """Шкала на начало рейса span, ×10, показ идёт, конец рейса -
+        снова начало (_haul_loop). alive - есть ли ещё демо."""
+        bar = self.timebar
+        if not bar.known:
             return
         bar.open_bar()
         self.toolbar.set_time_shown(True)
-        self._haul_span = (track.start, track.end)
-        bar.set_point(True, at=track.start)
+        self._haul_span = span
+        self._haul_alive = alive
+        bar.set_point(True, at=span[0])
         bar.speed.setCurrentIndex(bar.speed.findData(HAUL_RATE))
         if not bar.timer.isActive():
             bar.toggle()
@@ -747,8 +882,8 @@ class PlacesMixin:
         """Момент шкалы прошёл конец рейса самосвалов - снова начало.
         Демо снято (трека нет) - проверка останавливается."""
         span = getattr(self, "_haul_span", None)
-        if span is None or not any(t.start == span[0]
-                                   for t in self.tracks.tracks.values()):
+        alive = getattr(self, "_haul_alive", None)
+        if span is None or alive is None or not alive():
             self._haul_timer.stop()
             return
         bar = self.timebar

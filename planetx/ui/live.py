@@ -373,6 +373,9 @@ class LiveManager(QObject):
         tracks = getattr(self.window, "tracks", None)
         if tracks is not None and tracks.followed is not None:
             tracks.set_follow(None)
+        models = getattr(self.window, "model_tracks", None)
+        if models is not None and models.followed is not None:
+            models.set_follow(None)
         self.chase.start()
         self.follow_timer.start()
         self._rebuild(force=True)

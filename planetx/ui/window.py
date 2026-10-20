@@ -752,9 +752,13 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.toolbar.body_chosen.connect(self.set_body)
         self._update_timebar()
         self.tour.stop_reached.connect(self._stop_reached)
+        self.tour.live.connect(self._tour_live)
         # Растущие треки точечных слоёв по шкале времени глобуса.
         self.tracks = TrackManager(self.view, self)
         self.tracks.set_visible(self._shown)
+        # Модели треков KML (gx:Track с Model) и камера следом за ними.
+        from .modeltrack import ModelTracks
+        self.model_tracks = ModelTracks(self)
         self.tracks.changed.connect(self._refresh_shapes)
         self.tracks.reloaded.connect(self._update_data_marks)
         self._update_data_marks()
@@ -769,6 +773,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             lambda layer: self.contour_export.grid_contours(layer))
         self.panel.extrude_requested.connect(
             lambda layer: self.extruder.configure(layer))
+        self.panel.places_requested.connect(self.layer_to_places)
         self.panel.ground_alpha.connect(
             lambda value: self.subsurface.set_opacity(value))
         self.panel.grid_ids = set(read_grids())

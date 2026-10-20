@@ -62,27 +62,33 @@ def _inside(xy):
     return bool(np.sum(crosses & (at > 0.0)) % 2)
 
 
-def distance(kind, points, lat, lon):
+def distance(kind, points, lat, lon, holes=None):
     """Расстояние от точки щелчка до объекта, метры. Внутри
-    многоугольника - 0."""
+    многоугольника - 0. В его дыре (holes - кольца (широта, долгота))
+    - расстояние до ближайшей стороны, как снаружи: щелчок в озеро
+    внутри поля поле не выбирает."""
     if not points:
         return float("inf")
     xy = _local(points, lat, lon)
     if kind == "polygon" and len(xy) >= 3:
-        if _inside(xy):
+        rings = [_local(h, lat, lon) for h in holes or () if len(h) >= 3]
+        if _inside(xy) and not any(_inside(r) for r in rings):
             return 0.0
-        return _segments(xy, True)
+        return min([_segments(xy, True)]
+                   + [_segments(r, True) for r in rings])
     if kind == "point":
         return float(np.hypot(*xy[0]))
     return _segments(xy, False)
 
 
 def picked(shapes, lat, lon, metres):
-    """Номера объектов (вид, точки) ближе metres к точке щелчка, от
-    ближнего к дальнему."""
+    """Номера объектов (вид, точки) или (вид, точки, дыры) ближе
+    metres к точке щелчка, от ближнего к дальнему."""
     found = []
-    for n, (kind, points) in enumerate(shapes):
-        gap = distance(kind, points, lat, lon)
+    for n, item in enumerate(shapes):
+        kind, points = item[0], item[1]
+        gap = distance(kind, points, lat, lon,
+                       item[2] if len(item) > 2 else None)
         if gap <= metres:
             found.append((gap, n))
     return [n for _, n in sorted(found)]

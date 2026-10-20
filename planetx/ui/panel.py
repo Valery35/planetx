@@ -483,6 +483,8 @@ class LayerPanel(QWidget):
     contours_requested = pyqtSignal(object)
     # Векторный слой - выдавливание по полю, пункт меню слоя.
     extrude_requested = pyqtSignal(object)
+    # Слой проекта в «Мои метки» папкой, ui/layer_places.py.
+    places_requested = pyqtSignal(object)
     # Непрозрачность земли над подземной моделью, от 0 до 1.
     ground_alpha = pyqtSignal(float)
     # Кнопка строки «Земля над гридами» - окно «Подземный режим».
@@ -2045,6 +2047,14 @@ class LayerPanel(QWidget):
                 "столбиком, линия - стенкой. Цвет - стиль слоя."))
             raise_.triggered.connect(
                 lambda: self.extrude_requested.emit(layer))
+            to_places = menu.addAction(tr("В «Мои метки»…"))
+            to_places.setToolTip(tr(
+                "Объекты слоя ложатся в «Мои метки» папкой с именем слоя - "
+                "выделенные, иначе все. Цвета - стиль слоя, название - "
+                "подпись слоя, атрибуты - поля объекта, время - временные "
+                "свойства слоя. Папку можно сохранить в KML."))
+            to_places.triggered.connect(
+                lambda: self.places_requested.emit(layer))
         if isinstance(layer, QgsVectorLayer) \
                 and enum_int(layer.geometryType()) in (1, 2) \
                 and QgsWkbTypes.hasZ(layer.wkbType()):

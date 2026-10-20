@@ -11,8 +11,10 @@
 раздел «Координаты»).
 
 Заливка многоугольника режется на треугольники отсечением ушей
-в касательной плоскости у его середины. Треугольники проходят
-по высотам вершин контура. В горах середина большого многоугольника
+в касательной плоскости у его середины. Дыры многоугольника
+(innerBoundaryIs KML) соединяются с контуром мостами, как дворы
+зданий (core.buildings.roof). Треугольники проходят по высотам
+вершин контура. В горах середина большого многоугольника
 может уйти под рельеф, облегание рельефа заливкой не сделано.
 """
 import math
@@ -36,9 +38,11 @@ SHAPE_POINTS = 800
 
 Shape = namedtuple("Shape",
                    "kind points color width fill name height extrude "
-                   "icon alts flow mode",
+                   "icon alts flow mode holes icon_scale label_color "
+                   "label_scale icon_heading",
                    defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
-                             False, "dot", None, False, ""))
+                             False, "dot", None, False, "", None, 1.0,
+                             None, 1.0, 0.0))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
@@ -52,7 +56,13 @@ extrude - стена от объекта до земли, у точки - сто
 в пространстве, как «абсолютная высота» KML: отрезки прямые, на рельеф
 не садятся, height не действует. flow - по пути бегут штрихи потока,
 core/pathflow.py. mode - режим высоты KML (MODES), пустой - прежняя
-запись: с подъёмом relativeToGround, без него clampToGround.
+запись: с подъёмом relativeToGround, без него clampToGround. holes -
+дыры многоугольника: кортеж колец (широта, долгота) без повтора первой
+вершины или None. icon_scale - размер значка точки, доля обычного
+(scale IconStyle KML). label_color - цвет подписи точки RGBA или None -
+белый, label_scale - размер подписи, доля обычного, 0 - подписи нет
+(LabelStyle KML). icon_heading - поворот значка по часовой стрелке
+от севера, градусы (heading IconStyle KML).
 """
 
 # Режимы высоты, как altitudeMode KML и вкладка «Высота» Google Earth.
@@ -140,17 +150,95 @@ def fill(points, step=STEP, max_points=MAX_POINTS):
     """
     pts = np.asarray(points, dtype=np.float64).reshape(-1, 2)
     ring = densify(pts, closed=True, step=step, max_points=max_points)
+    starts = _starts(ring, pts)
+    tri = triangulate(plane(pts))
+    return ring, np.asarray([starts[i] for i in tri], dtype=np.uint32)
+
+
+def _starts(ring, pts):
+    """Места исходных вершин pts в сгущённом контуре ring. Вершины
+    стоят в контуре по порядку, каждая - первой точкой своей стороны,
+    densify ставит их точно."""
     starts = []
     position = 0
     for vertex in pts:
-        # Вершины стоят в контуре по порядку, каждая - первой точкой
-        # своей стороны, densify ставит их точно.
         while position < len(ring) and not np.array_equal(ring[position],
                                                           vertex):
             position += 1
         starts.append(position)
-    tri = triangulate(plane(pts))
-    return ring, np.asarray([starts[i] for i in tri], dtype=np.uint32)
+    return starts
+
+
+def holes_of(shape):
+    """Дыры многоугольника не меньше чем из трёх вершин, список."""
+    if shape.kind != "polygon":
+        return []
+    return [list(h) for h in (getattr(shape, "holes", None) or ())
+            if len(h) >= 3]
+
+
+def holed_triangles(rings):
+    """Заливка многоугольника с дырами, номера вершин колец подряд
+    (контур, потом дыры), uint32.
+
+    Нарезка - core.buildings.roof: контур против часовой стрелки, дыры
+    по часовой, мосты от дыр к контуру. Дыра без моста закрыта
+    заливкой, как двор здания."""
+    try:  # внутри плагина QGIS
+        from .buildings import roof
+    except ImportError:  # headless-тесты
+        from buildings import roof
+    points = plane(np.vstack([np.asarray(r, dtype=np.float64).reshape(-1, 2)
+                              for r in rings]))
+    numbers = []
+    offset = 0
+    for n, ring in enumerate(rings):
+        index = list(range(offset, offset + len(ring)))
+        offset += len(ring)
+        outward = _area2(points[index]) > 0
+        if outward != (n == 0):
+            index.reverse()
+        numbers.append(index)
+    return np.asarray(roof(points, numbers), dtype=np.uint32)
+
+
+def _ring_walls(sizes, total):
+    """Стены колец подряд: верх кольца - его вершины, низ - те же
+    номера плюс total."""
+    out = []
+    offset = 0
+    for size in sizes:
+        a = np.arange(size, dtype=np.int64) + offset
+        b = np.roll(a, -1)
+        out.append(np.stack([a, b, b + total, a, b + total, a + total],
+                            axis=1).ravel())
+        offset += size
+    return np.concatenate(out).astype(np.uint32) if out else \
+        np.zeros(0, dtype=np.uint32)
+
+
+def _holed(shape, raised):
+    """Контур многоугольника с дырами: кольца подряд, отрезки каждого
+    кольца, заливка мостами, стены по всем кольцам."""
+    rings = [list(shape.points)] + holes_of(shape)
+    budget = max(SHAPE_POINTS // len(rings), 16)
+    parts, starts, lines = [], [], []
+    offset = 0
+    for ring in rings:
+        pts = np.asarray(ring, dtype=np.float64).reshape(-1, 2)
+        dense = densify(pts, closed=True, max_points=budget)
+        starts += [offset + s for s in _starts(dense, pts)]
+        lines.append(segments(len(dense), closed=True) + offset)
+        parts.append(dense)
+        offset += len(dense)
+    empty = np.zeros(0, dtype=np.uint32)
+    triangles = empty
+    if shape.fill is not None:
+        tri = holed_triangles(rings)
+        triangles = np.asarray([starts[i] for i in tri], dtype=np.uint32)
+    wall = _ring_walls([len(p) for p in parts], offset) if raised else empty
+    return Geometry(np.vstack(parts), np.concatenate(lines).astype(np.uint32),
+                    triangles, wall, False)
 
 
 def lift(latlon, height_at=None, offset=0.0, heights_at=None):
@@ -265,6 +353,8 @@ def geometry(shape):
         return Geometry(ring, segments(len(ring), closed=closed), triangles,
                         empty, False,
                         np.asarray(shape.alts, dtype=np.float64))
+    if closed and holes_of(shape):
+        return _holed(shape, raised)
     if closed and shape.fill is not None:
         ring, triangles = fill(shape.points, max_points=SHAPE_POINTS)
     else:

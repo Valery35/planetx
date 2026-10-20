@@ -38,6 +38,21 @@ class TestPick(unittest.TestCase):
         self.assertAlmostEqual(pk.distance("polygon", square, 0.5, 1.001),
                                111.2, delta=0.5)
 
+    def test_hole_is_outside(self):
+        """Щелчок в дыру многоугольника - не внутри: расстояние до
+        стороны дыры. Прежде в дыре выходил 0, озеро выбирало поле."""
+        outer = [(0.0, 0.0), (0.0, 0.01), (0.01, 0.01), (0.01, 0.0)]
+        hole = [(0.004, 0.004), (0.004, 0.006), (0.006, 0.006),
+                (0.006, 0.004)]
+        gap = pk.distance("polygon", outer, 0.005, 0.005, holes=[hole])
+        self.assertAlmostEqual(gap, 111.3, delta=1.0)
+        self.assertEqual(pk.distance("polygon", outer, 0.002, 0.002,
+                                     holes=[hole]), 0.0)
+        self.assertEqual(pk.picked([("polygon", outer, [hole])],
+                                   0.005, 0.005, 50.0), [])
+        self.assertEqual(pk.picked([("polygon", outer)],
+                                   0.005, 0.005, 50.0), [0])
+
     def test_picked_sorted_by_gap(self):
         shapes = [("point", [(0.0, 0.002)]), ("point", [(0.0, 0.001)]),
                   ("point", [(0.0, 1.0)])]

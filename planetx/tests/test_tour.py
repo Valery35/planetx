@@ -167,6 +167,56 @@ class TestPath(unittest.TestCase):
         self.assertAlmostEqual(leg.lon, 56.34, 4)
 
 
+class TestAnimated(unittest.TestCase):
+    """Изменения меток записанного тура и перелёт с подъёмом."""
+
+    def test_bounce_rises_between_poses(self):
+        samples = [(0.0, 58.0, 56.0, 2000.0, 0.0, 0.0),
+                   (10.0, 58.0, 57.0, 2000.0, 0.0, 0.0)]
+        flat = tr.RecordedStop("ровно", samples)
+        high = tr.RecordedStop("подъём", samples, bounce=[1])
+        self.assertAlmostEqual(flat.pose_at(5.0).distance, 2000.0, places=3)
+        self.assertGreater(high.pose_at(5.0).distance, 4000.0)
+        self.assertAlmostEqual(high.pose_at(10.0).lon, 57.0, places=6)
+
+    def test_animated_changes(self):
+        base = {"a": {"visible": False, "color": (255, 0, 0, 255),
+                      "icon_scale": 1.0, "points": [[58.0, 56.0]]}}
+        updates = [{"t": 2.0, "d": 4.0, "ids": ["a"],
+                    "set": {"visible": True, "icon_scale": 3.0,
+                            "color": [0, 0, 255, 255],
+                            "points": [[58.0, 57.0]]}},
+                   {"t": 9.0, "d": 0.0, "ids": ["zz"],
+                    "set": {"visible": True}}]
+        self.assertEqual(tr.animated(updates, 1.0, base), base)
+        half = tr.animated(updates, 4.0, base)["a"]
+        self.assertTrue(half["visible"])
+        self.assertAlmostEqual(half["icon_scale"], 2.0)
+        self.assertEqual(half["color"], (128, 0, 128, 255))
+        self.assertAlmostEqual(half["points"][0][1], 56.5)
+        end = tr.animated(updates, 10.0, base)["a"]
+        self.assertEqual(end["color"], [0, 0, 255, 255])
+        self.assertEqual(base["a"]["icon_scale"], 1.0)  # base не тронут
+
+
+class TestModelPose(unittest.TestCase):
+    """Поза модели по gx:Track."""
+
+    def test_angles_and_heading_from_motion(self):
+        import track
+        rows = [[0.0, 58.0, 56.0, 1000.0, 350.0, 0.0, 0.0],
+                [10.0, 58.0, 56.1, 2000.0, 10.0, 10.0, 20.0]]
+        lat, lon, alt, heading, tilt, roll = track.model_pose(rows, 5.0)
+        self.assertAlmostEqual(lon, 56.05)
+        self.assertAlmostEqual(alt, 1500.0)
+        self.assertAlmostEqual(heading, 0.0)  # кратчайший поворот
+        self.assertAlmostEqual((tilt, roll), (5.0, 10.0))
+        self.assertIsNone(track.model_pose(rows, 11.0))
+        bare = [r[:4] + [None, 0.0, 0.0] for r in rows]
+        self.assertAlmostEqual(track.model_pose(bare, 5.0)[3], 90.0,
+                               delta=0.1)
+
+
 class TestRecorded(unittest.TestCase):
     """Записанный тур: позы между моментами, переходы через 180°,
     прореживание, место в туре."""

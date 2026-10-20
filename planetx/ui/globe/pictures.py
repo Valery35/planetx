@@ -185,8 +185,12 @@ class PicturesMixin:
         photos = []
         screens = []
         shown_models = []
+        moving = []
         for item in items:
             token, overlay, data = self._overlay_edit(item)
+            if item.kind == "model" and overlay.track:
+                moving.append((item.key, item.name, overlay.track,
+                               overlay.mode))
             if item.kind == "ground":
                 entries.append((token, item.fid, item.name, overlay, data))
             elif item.kind == "model":
@@ -229,6 +233,8 @@ class PicturesMixin:
                                   in self._photo_images.items()
                                   if token in tokens}
         self._show_models(shown_models)
+        if getattr(self, "model_tracks", None) is not None:
+            self.model_tracks.set_items(moving)
         key = [(token, overlay.params()) for token, overlay, _ in screens]
         if key != self._screen_key:
             self._screen_key = key
@@ -270,6 +276,10 @@ class PicturesMixin:
             if found is None:
                 continue
             parts, pictures, moving = found
+            if overlay.track:
+                out.append(self._track_model(token, overlay, parts,
+                                             pictures, moving))
+                continue
             lat, lon, alt, heading, tilt, roll = overlay.camera
             arrays = models.vertices(parts, lat, lon, heading, tilt, roll,
                                      overlay.scale)
@@ -287,6 +297,34 @@ class PicturesMixin:
                              if token in tokens}
         self.view.models.set_models(out)
         self.view.update()
+
+    def _track_model(self, token, overlay, parts, pictures, moving):
+        """Модель gx:Track: вершины один раз у начала координат, место
+        и поворот на момент шкалы времени (core.track.model_pose).
+        Закрытая шкала - модель в конце пути, вне времени пути её нет."""
+        from ...core.track import model_pose
+        scale = overlay.scale
+        base = models.frame(0.0, 0.0, 0.0, 0.0, 0.0, scale)
+        arrays = models.vertices(parts, 0.0, 0.0, 0.0, 0.0, 0.0, scale)
+        rows = overlay.track
+        first = rows[0]
+
+        def mover(now):
+            del now
+            span = getattr(self, "_time_range", None)
+            pose = model_pose(rows, span[1] if span else rows[-1][0])
+            if pose is None:
+                return None
+            lat, lon, alt, heading, tilt, roll = pose
+            return lat, lon, models.moved(base, lat, lon, heading, tilt,
+                                          roll, scale), alt
+        return ModelItem(
+            (token, overlay.params()),
+            [(array, pictures.get(part.image), part.rgba, part.track)
+             for array, part in zip(arrays, parts)],
+            (first[1], first[2], overlay.mode, first[3]),
+            models.radius(parts, scale), overlay.color[3] / 255.0, moving,
+            base, mover=mover)
 
     def model_summary(self, item):
         """Сведения о модели для окна свойств: части, вершины, размеры
@@ -827,7 +865,12 @@ class PicturesMixin:
         name = place.shape.name
         if place.tour:
             # Записанный тур: проигрывание, перелёт - к его началу.
-            recorded = RecordedStop(name, place.tour)
+            extra = getattr(place, "tour_extra", None) or {}
+            recorded = RecordedStop(name, place.tour,
+                                    extra.get("bounce", ()),
+                                    extra.get("updates", ()))
+            # Метки, которые меняет тур, - в папке тура (_tour_live).
+            recorded.scope = place.folder
             return recorded if along else Stop(
                 name, *place.tour[0][1:])
         if along and place.kind == "line" and len(points) > 1:

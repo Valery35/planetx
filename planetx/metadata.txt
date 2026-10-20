@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.5.0
+version=1.6.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,18 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.5.0 Wikipedia nearby - an Encyclopedia row of the
+changelog=1.6.0 A project layer goes into My Places with the To My
+      Places… item of its menu - geometry with holes, attributes,
+      colours by the layer style, labels and time - and from there to
+      KML. KML now carries polygon holes, ExtendedData fields, label
+      colour and size, icon size and heading, the Camera view, balloon
+      templates, gx:AnimatedUpdate and bounce flights in tours and 3D
+      models moving along gx:Track. The placemark properties window
+      edits the icon size, the label and the object fields. A click in
+      a polygon hole no longer selects the polygon. The haul truck
+      demos run on KML tracks with Camera follows, the previous
+      variant with a QGIS layer is kept.
+      1.5.0 Wikipedia nearby - an Encyclopedia row of the
       Add data catalogue shows articles about places near the view, a
       click opens the first paragraph, the Explain this button and a
       placemark from the article. Explain this tells the assistant the

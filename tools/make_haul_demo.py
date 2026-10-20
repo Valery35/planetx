@@ -64,7 +64,10 @@ UP_SPEED = 15.0 / 3.6  # м/с гружёный на подъёме
 DOWN_SPEED = 30.0 / 3.6  # м/с порожний на спуске
 LOAD_WAIT = 150.0  # с погрузки
 DUMP_WAIT = 60.0  # с разгрузки
-STEP = 4.0  # с между точками трека
+STEP = 4.0  # с между точками трека слоя GeoPackage
+# Допуск упрощения дороги для треков KML, м: точки трека - только на
+# вершинах упрощённой дороги и на сменах стоянки и хода.
+SIMPLIFY = 1.5
 HOURS = 1.0  # часов записи
 DAY = datetime.datetime(2026, 10, 20, 8, 0, 0)
 
@@ -295,6 +298,70 @@ def write_gpkg(path, name, points, epsg):
     print(name, path, os.path.getsize(path))
 
 
+def simplify(xy, tolerance):
+    """Номера вершин ломаной xy после Дугласа-Пекера."""
+    keep = np.zeros(len(xy), dtype=bool)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(xy) - 1)]
+    while stack:
+        a, b = stack.pop()
+        if b - a < 2:
+            continue
+        p, q = xy[a], xy[b]
+        d = q - p
+        span = np.hypot(*d)
+        pts = xy[a + 1:b] - p
+        gaps = np.abs(d[0] * pts[:, 1] - d[1] * pts[:, 0]) / span \
+            if span > 0 else np.hypot(pts[:, 0], pts[:, 1])
+        k = int(np.argmax(gaps))
+        if gaps[k] > tolerance:
+            keep[a + 1 + k] = True
+            stack += [(a, a + 1 + k), (a + 1 + k, b)]
+    return np.flatnonzero(keep)
+
+
+def track_rows(path, s, at, cycle, shift, back, epoch):
+    """Строки gx:Track самосвала: [секунды, широта, долгота, 0, азимут,
+    0, 0] на вершинах упрощённой дороги и сменах стоянки и хода за HOURS
+    часов. Азимут - по ходу, на стоянке - прежний."""
+    keep = simplify(path[:, :2], SIMPLIFY)
+    marks = s[keep]
+    length = float(s[-1])
+    up = length / UP_SPEED
+    down = length / DOWN_SPEED
+    local = [0.0, LOAD_WAIT, LOAD_WAIT + up, LOAD_WAIT + up + DUMP_WAIT]
+    local += [LOAD_WAIT + m / UP_SPEED for m in marks]
+    local += [LOAD_WAIT + up + DUMP_WAIT + (length - m) / DOWN_SPEED
+              for m in marks]
+    end = HOURS * 3600.0
+    times = {0.0, end}
+    for m in range(-1, int(end / cycle) + 2):
+        for u in local:
+            t = u - shift + m * cycle
+            if 0.0 <= t <= end:
+                times.add(round(t, 2))
+    rows = []
+    for t in sorted(times):
+        d, _ = at(t + shift)
+        x = float(np.interp(d, s, path[:, 0]))
+        y = float(np.interp(d, s, path[:, 1]))
+        rows.append([t, x, y])
+    headings = [None] * len(rows)
+    for i in range(len(rows) - 1):
+        dx = rows[i + 1][1] - rows[i][1]
+        dy = rows[i + 1][2] - rows[i][2]
+        if abs(dx) + abs(dy) > 0.01:
+            headings[i] = float(np.degrees(np.arctan2(dx, dy)) % 360.0)
+    last = next((h for h in headings if h is not None), 0.0)
+    out = []
+    for (t, x, y), heading in zip(rows, headings):
+        last = heading if heading is not None else last
+        lon, lat, _ = back.TransformPoint(x, y)
+        out.append([round(epoch + t, 2), round(lat, 7), round(lon, 7), 0.0,
+                    round(last, 1), 0.0, 0.0])
+    return out
+
+
 def build(key, title, lat, lon, half, radius, start):
     z, x0, y0, epsg = read_dem(lat, lon, half)
     utm = osr.SpatialReference()
@@ -341,6 +408,17 @@ def build(key, title, lat, lon, half, radius, start):
     os.makedirs(OUT, exist_ok=True)
     write_gpkg(os.path.join(OUT, "haul_{}.gpkg".format(key)), title,
                points, epsg)
+    # Треки KML: те же самосвалы, точки - на вершинах дороги.
+    back = osr.CoordinateTransformation(utm, wgs)
+    epoch = (DAY - datetime.datetime(1970, 1, 1)).total_seconds()
+    tracks = {"БелАЗ {}".format(n + 1): track_rows(
+        path, s, at, cycle, cycle * n / TRUCKS, back, epoch)
+        for n in range(TRUCKS)}
+    tracks_path = os.path.join(OUT, "haul_{}_tracks.json".format(key))
+    with open(tracks_path, "w", encoding="utf-8") as fh:
+        json.dump(tracks, fh, ensure_ascii=False, separators=(",", ":"))
+    print(key, "треки KML, точек на самосвал",
+          [len(r) for r in tracks.values()], os.path.getsize(tracks_path))
     # Середина и вид для сцены: середина съезда, азимут взгляда.
     back = osr.CoordinateTransformation(utm, wgs)
     mx, my = float(np.mean(path[:, 0])), float(np.mean(path[:, 1]))

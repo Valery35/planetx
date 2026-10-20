@@ -169,6 +169,220 @@ class TestWrite(unittest.TestCase):
                           ("relativeToSeaFloor", 20.0),
                           ("absolute", -40.0)])
 
+    def test_polygon_holes_round_trip(self):
+        """Дыры innerBoundaryIs читаются и пишутся обратно. Прежде
+        они отбрасывались, озеро внутри контура закрашивалось."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark>
+          <name>Двор</name><Polygon>
+          <outerBoundaryIs><LinearRing><coordinates>
+            56,58 56.4,58 56.4,58.4 56,58.4 56,58</coordinates>
+          </LinearRing></outerBoundaryIs>
+          <innerBoundaryIs><LinearRing><coordinates>
+            56.1,58.1 56.2,58.1 56.2,58.2 56.1,58.1</coordinates>
+          </LinearRing></innerBoundaryIs>
+          <innerBoundaryIs><LinearRing><coordinates>
+            56.3,58.3 56.35,58.3 56.35,58.35</coordinates>
+          </LinearRing></innerBoundaryIs></Polygon></Placemark></kml>"""
+        place = kml.read_kml(text.encode("utf-8")).children[0]
+        self.assertEqual(len(place.points), 4)
+        self.assertEqual([len(h) for h in place.holes], [3, 3])
+        self.assertEqual(place.holes[0][0], (58.1, 56.1))
+        written = kml.write_kml(kml.KFolder("x", True, [place]))
+        self.assertEqual(written.count("<innerBoundaryIs>"), 2)
+        again = kml.read_kml(written.encode("utf-8")).children[0]
+        self.assertEqual([len(h) for h in again.holes], [3, 3])
+
+    def test_extended_data_fields_round_trip(self):
+        """Поля Data и SchemaData/SimpleData переносятся парами,
+        служебные поля PlanetX в них не входят. Прежде поля из выгрузки
+        ГИС пропадали."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+          <Schema name="wells" id="wells"><SimpleField name="depth"
+            type="double"/></Schema>
+          <Placemark><name>Скв. 7</name><ExtendedData>
+            <Data name="code"><displayName>Код</displayName>
+              <value>C-07</value></Data>
+            <Data name="planetx:flow"><value>1</value></Data>
+            <SchemaData schemaUrl="#wells">
+              <SimpleData name="depth">412.5</SimpleData>
+              <SimpleData name="owner">A &amp; B</SimpleData>
+            </SchemaData></ExtendedData>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          </Document></kml>"""
+        place = kml.read_kml(text.encode("utf-8")).children[0]
+        self.assertEqual(place.data, [("Код", "C-07"), ("depth", "412.5"),
+                                      ("owner", "A & B")])
+        written = kml.write_kml(kml.KFolder("x", True, [place]))
+        again = kml.read_kml(written.encode("utf-8")).children[0]
+        self.assertEqual(again.data, place.data)
+
+    def test_label_style_and_icon_scale_round_trip(self):
+        """LabelStyle (цвет, размер, 0 - без подписи) и scale значка
+        читаются из стиля по styleUrl и пишутся обратно."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+          <Style id="s"><IconStyle><scale>1.5</scale></IconStyle>
+            <LabelStyle><color>ff0000ff</color><scale>0.8</scale>
+            </LabelStyle></Style>
+          <Placemark><name>А</name><styleUrl>#s</styleUrl>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          <Placemark><name>Б</name><Style><LabelStyle><scale>0</scale>
+            </LabelStyle></Style>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          </Document></kml>"""
+        a, b = kml.read_kml(text.encode("utf-8")).children
+        self.assertEqual((a.icon_scale, a.label_color, a.label_scale),
+                         (1.5, (255, 0, 0, 255), 0.8))
+        self.assertEqual((b.icon_scale, b.label_color, b.label_scale),
+                         (1.0, None, 0.0))
+        written = kml.write_kml(kml.KFolder("x", True, [a, b]))
+        again = kml.read_kml(written.encode("utf-8")).children
+        self.assertEqual([(p.icon_scale, p.label_color, p.label_scale)
+                          for p in again],
+                         [(1.5, (255, 0, 0, 255), 0.8), (1.0, None, 0.0)])
+
+    def test_balloon_and_icon_heading_round_trip(self):
+        """BalloonStyle и heading значка читаются из стиля и пишутся
+        обратно."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+          <Style id="w"><IconStyle><heading>135</heading></IconStyle>
+            <BalloonStyle><text><![CDATA[<b>$[name]</b> $[speed]]]>
+            </text></BalloonStyle></Style>
+          <Placemark><name>Ветер</name><styleUrl>#w</styleUrl>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          </Document></kml>"""
+        place = kml.read_kml(text.encode("utf-8")).children[0]
+        self.assertEqual(place.icon_heading, 135.0)
+        self.assertEqual(place.balloon, "<b>$[name]</b> $[speed]")
+        written = kml.write_kml(kml.KFolder("x", True, [place]))
+        again = kml.read_kml(written.encode("utf-8")).children[0]
+        self.assertEqual((again.icon_heading, again.balloon),
+                         (135.0, "<b>$[name]</b> $[speed]"))
+
+    def test_animated_update_and_bounce_round_trip(self):
+        """gx:AnimatedUpdate: цели - метка, общий стиль и точка, они
+        сводятся к id меток. flyToMode bounce - номер позы. Запись
+        и чтение обратно дают те же изменения."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"
+          xmlns:gx="http://www.google.com/kml/ext/2.2"><Document>
+          <Style id="s"><IconStyle id="si"><scale>1</scale></IconStyle>
+          </Style>
+          <Placemark id="a"><name>А</name><styleUrl>#s</styleUrl>
+            <Point id="ap"><coordinates>56,58</coordinates></Point>
+          </Placemark>
+          <Placemark id="b"><name>Б</name><visibility>0</visibility>
+            <Point><coordinates>56.1,58</coordinates></Point></Placemark>
+          <gx:Tour><name>Тур</name><gx:Playlist>
+            <gx:FlyTo><gx:duration>0</gx:duration><LookAt>
+              <longitude>56</longitude><latitude>58</latitude>
+              <range>5000</range></LookAt></gx:FlyTo>
+            <gx:AnimatedUpdate><gx:duration>2</gx:duration><Update>
+              <targetHref/><Change>
+              <IconStyle targetId="si"><scale>3</scale></IconStyle>
+              <Point targetId="ap"><coordinates>56.05,58</coordinates>
+              </Point></Change></Update></gx:AnimatedUpdate>
+            <gx:FlyTo><gx:duration>4</gx:duration>
+              <gx:flyToMode>bounce</gx:flyToMode><LookAt>
+              <longitude>57</longitude><latitude>58</latitude>
+              <range>5000</range></LookAt></gx:FlyTo>
+            <gx:AnimatedUpdate><gx:duration>0</gx:duration>
+              <gx:delayedStart>1</gx:delayedStart><Update><targetHref/>
+              <Change><Placemark targetId="b"><visibility>1</visibility>
+              </Placemark></Change></Update></gx:AnimatedUpdate>
+          </gx:Playlist></gx:Tour></Document></kml>"""
+        places = kml.read_kml(text.encode("utf-8")).children
+        a, b, tour = places
+        self.assertEqual((a.kml_id, b.kml_id), ("a", "b"))
+        extra = tour.tour_extra
+        self.assertEqual(extra["bounce"], [1])
+        self.assertEqual(
+            [(u["t"], u["d"], u["ids"], u["set"]) for u in
+             extra["updates"]],
+            [(0.0, 2.0, ["a"], {"icon_scale": 3.0}),
+             (0.0, 2.0, ["a"], {"points": [[58.0, 56.05]]}),
+             (5.0, 0.0, ["b"], {"visible": True})])
+        written = kml.write_kml(kml.KFolder("x", True, places))
+        again = kml.read_kml(written.encode("utf-8")).children
+        extra = again[2].tour_extra
+        self.assertEqual(extra["bounce"], [1])
+        self.assertEqual(
+            sorted((u["t"], u["d"], u["ids"], sorted(u["set"]))
+                   for u in extra["updates"]),
+            [(0.0, 2.0, ["a"], ["icon_scale"]),
+             (0.0, 2.0, ["a"], ["points"]),
+             (5.0, 0.0, ["b"], ["visible"])])
+
+    def test_model_on_track_round_trip(self):
+        """gx:Track с Model - модель едет по треку: путь со временем
+        и углами в Overlay.track, линии пути нет. Запись даёт тот же
+        gx:Track."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"
+          xmlns:gx="http://www.google.com/kml/ext/2.2"><Placemark>
+          <name>Борт</name><gx:Track>
+          <altitudeMode>absolute</altitudeMode>
+          <when>2026-10-20T10:00:00Z</when><when>2026-10-20T10:01:00Z</when>
+          <gx:coord>56.0 58.0 1000</gx:coord>
+          <gx:coord>56.1 58.0 1500</gx:coord>
+          <gx:angles>90 5 10</gx:angles><gx:angles>95 0 0</gx:angles>
+          <Model><Link><href>files/plane.dae</href></Link>
+            <Scale><x>2</x><y>2</y><z>2</z></Scale></Model>
+          </gx:Track></Placemark></kml>"""
+        items = kml.read_kml(text.encode("utf-8")).children
+        self.assertEqual(len(items), 1)
+        item = items[0]
+        self.assertEqual(item.kind, "model")
+        self.assertEqual(item.href, "files/plane.dae")
+        self.assertEqual(item.overlay.mode, "absolute")
+        self.assertEqual(item.overlay.scale, (2.0, 2.0, 2.0))
+        rows = item.overlay.track
+        self.assertEqual([r[1:] for r in rows],
+                         [[58.0, 56.0, 1000.0, 90.0, 5.0, 10.0],
+                          [58.0, 56.1, 1500.0, 95.0, 0.0, 0.0]])
+        self.assertEqual(rows[1][0] - rows[0][0], 60.0)
+        self.assertEqual(item.time, ("2026-10-20T10:00:00Z",
+                                     "2026-10-20T10:01:00Z"))
+        written = kml._model_kml(item, 0, "files/plane.dae")
+        again = kml.read_kml(('<kml xmlns="http://www.opengis.net/kml/2.2" '
+                              'xmlns:gx="http://www.google.com/kml/ext/2.2">'
+                              + written + "</kml>").encode("utf-8"))
+        self.assertEqual(again.children[0].overlay.track, rows)
+
+    def test_camera_view(self):
+        """Camera метки и шага тура становится видом: отвесно вниз -
+        точка под глазом на расстоянии высоты, наклон 60° - точка
+        впереди по курсу. Прежде вид Camera терялся."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"
+          xmlns:gx="http://www.google.com/kml/ext/2.2"><Document>
+          <Placemark><name>Отвесно</name><Camera><longitude>56</longitude>
+            <latitude>58</latitude><altitude>1000</altitude>
+            <heading>0</heading><tilt>0</tilt></Camera>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          <Placemark><name>Наклон</name><Camera><longitude>56</longitude>
+            <latitude>58</latitude><altitude>1000</altitude>
+            <heading>90</heading><tilt>60</tilt><roll>5</roll></Camera>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          <gx:Tour><name>Тур</name><gx:Playlist>
+            <gx:FlyTo><gx:duration>0</gx:duration><Camera>
+              <longitude>56</longitude><latitude>58</latitude>
+              <altitude>2000</altitude><tilt>0</tilt></Camera></gx:FlyTo>
+            <gx:FlyTo><gx:duration>3</gx:duration><Camera>
+              <longitude>56.1</longitude><latitude>58</latitude>
+              <altitude>2000</altitude><tilt>0</tilt></Camera></gx:FlyTo>
+          </gx:Playlist></gx:Tour></Document></kml>"""
+        down, slant, tour = kml.read_kml(text.encode("utf-8")).children
+        lat, lon, distance, heading, tilt = down.view
+        self.assertAlmostEqual(lat, 58.0, places=6)
+        self.assertAlmostEqual(lon, 56.0, places=6)
+        self.assertAlmostEqual(distance, 1000.0, places=1)
+        self.assertAlmostEqual(tilt, 0.0, places=3)
+        lat, lon, distance, heading, tilt = slant.view
+        self.assertAlmostEqual(distance, 2000.0, delta=1.0)
+        self.assertGreater(lon, 56.0)  # впереди на восток
+        self.assertAlmostEqual(lat, 58.0, places=3)
+        self.assertAlmostEqual(heading, 90.0, delta=0.1)
+        self.assertAlmostEqual(tilt, 60.0, delta=0.1)
+        self.assertEqual(len(tour.tour), 2)
+        self.assertAlmostEqual(tour.tour[1][3], 2000.0, places=1)
+
     def test_colors(self):
         self.assertEqual(kml.color_kml((255, 128, 0, 200)), "c80080ff")
         self.assertEqual(kml.kml_color("c80080ff", None), (255, 128, 0, 200))
@@ -479,8 +693,11 @@ class TestTour(unittest.TestCase):
               </Camera></gx:FlyTo>
           </gx:Playlist></gx:Tour></Document></kml>""".encode("utf-8")
         tour = kml.read_kml(data).places()[0].tour
-        self.assertEqual([s[0] for s in tour], [2.0, 5.0])
+        # Шаг с Camera - поза над своей точкой, с 20 октября 2026 года.
+        self.assertEqual([s[0] for s in tour], [2.0, 5.0, 6.0])
         self.assertEqual(tour[0][1:], tour[1][1:])
+        self.assertAlmostEqual(tour[2][1], 59.0, places=5)
+        self.assertAlmostEqual(tour[2][2], 57.0, places=5)
 
 
 class TestSpace(unittest.TestCase):
