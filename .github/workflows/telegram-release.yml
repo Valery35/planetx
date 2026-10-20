@@ -1,0 +1,48 @@
+# Сообщение автору в Telegram о новом выпуске с кнопкой «Подготовить
+# пост». Кнопку обрабатывает бот PlanetX (bot/planetx_bot.py), пост
+# в канал уходит только после «Опубликовать» в черновике.
+# Секреты хранилища: TELEGRAM_BOT_TOKEN - токен бота, TELEGRAM_OWNER -
+# номер чата автора. Без них шаг ничего не делает. Файл одинаков для
+# всех модулей линейки, имя хранилища бот берёт из кнопки.
+name: Telegram о выпуске
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Сообщение автору
+        env:
+          TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          OWNER: ${{ secrets.TELEGRAM_OWNER }}
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.event.repository.name }}
+          URL: ${{ github.event.release.html_url }}
+        run: |
+          if [ -z "$TOKEN" ] || [ -z "$OWNER" ]; then
+            echo "Секреты TELEGRAM_BOT_TOKEN и TELEGRAM_OWNER не заданы"
+            exit 0
+          fi
+          python3 - <<'EOF'
+          import json, os, urllib.request
+          body = {
+              "chat_id": os.environ["OWNER"],
+              "text": "Вышел выпуск {} {}\n{}".format(
+                  os.environ["REPO"], os.environ["TAG"], os.environ["URL"]),
+              "disable_web_page_preview": True,
+              "reply_markup": {"inline_keyboard": [[{
+                  "text": "Подготовить пост",
+                  "callback_data": "draft:{}:{}".format(
+                      os.environ["REPO"], os.environ["TAG"])}]]},
+          }
+          request = urllib.request.Request(
+              "https://api.telegram.org/bot{}/sendMessage".format(
+                  os.environ["TOKEN"]),
+              data=json.dumps(body).encode("utf-8"),
+              headers={"Content-Type": "application/json"})
+          with urllib.request.urlopen(request, timeout=30) as answer:
+              print(json.loads(answer.read())["ok"])
+          EOF
