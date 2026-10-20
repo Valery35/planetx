@@ -74,6 +74,28 @@ PLUGINS = {
     "repoliner": ("Repoliner",
                   "https://plugins.qgis.org/plugins/repoliner/"),
 }
+# Что делает модуль, для /docs - по описаниям metadata.txt модулей.
+ABOUT = {
+    "ru": {
+        "planetx": "трёхмерный глобус внутри QGIS",
+        "qgis-isoliner": "кригинг и изолинии, контурные полигоны",
+        "qgis-isoliner3d": "3D-просмотр поверхностей, пластов, скважин "
+                           "и подсчёт запасов",
+        "topoliner": "проверка и исправление топологии линий "
+                     "и полигонов",
+        "routeliner": "события на трассе и пикетаж, продольные профили",
+        "repoliner": "свой репозиторий модулей QGIS из архивов",
+    },
+    "en": {
+        "planetx": "a 3D globe inside QGIS",
+        "qgis-isoliner": "kriging and isolines, contour polygons",
+        "qgis-isoliner3d": "3D view of surfaces, beds, boreholes "
+                           "and reserves",
+        "topoliner": "topology check and cleanup of lines and polygons",
+        "routeliner": "route events and chainage, longitudinal profiles",
+        "repoliner": "your own QGIS plugin repository from archives",
+    },
+}
 _REPO = re.compile(r"[A-Za-z0-9_.-]{1,40}")
 SITE = "https://www.informpp.ru/главная-страница/qgis-planetx"
 CONFIG = os.path.join(
@@ -101,19 +123,22 @@ _MARKUP = re.compile(r"[*`]+|^\|?[-:| ]{3,}\|?$|^#+\s*", re.MULTILINE)
 TEXTS = {
     "ru": {
         "start": (
-            "Это бот PlanetX - трёхмерного глобуса для QGIS.\n\n"
-            "Напишите вопрос, например «как добавить 3D-модель», бот "
-            "найдёт разделы руководства.\n\n"
-            "/latest - последний выпуск\n"
-            "/docs - руководство\n"
+            "Это бот модулей QGIS PlanetX, Isoliner, Isoliner3D, "
+            "Topoliner, Routeliner и Repoliner.\n\n"
+            "Напишите вопрос о PlanetX, например «как добавить "
+            "3D-модель», бот найдёт разделы руководства.\n\n"
+            "/latest - последний выпуск модуля\n"
+            "/docs - модули, руководства и каталог QGIS\n"
             "/report текст - сообщение разработчикам об ошибке или "
             "пожелание. Вместе с текстом уходят ваше имя и ник в Telegram."),
         "none": ("В руководстве ничего не нашлось. Попробуйте другие слова "
                  "или откройте руководство: /docs"),
         "found": "Разделы руководства:",
         "show": "Показать раздел",
-        "docs": ("Руководство PlanetX:\n{manual}\n\nPDF прикладывается "
-                 "к каждому выпуску: {releases}\nСтраница модуля: {site}"),
+        "docs": "Модули QGIS ООО «Информ++»:",
+        "pick": "Выпуск какого модуля показать?",
+        "manual": "Руководство PlanetX",
+        "site": "PlanetX на сайте",
         "latest": "{name} {tag} от {date}",
         "zip": "Архив модуля",
         "catalog": "Каталог QGIS",
@@ -126,19 +151,22 @@ TEXTS = {
     },
     "en": {
         "start": (
-            "This is the bot of PlanetX, a 3D globe for QGIS.\n\n"
-            "Ask a question, for example \"how to add a 3D model\", and the "
-            "bot finds the manual sections.\n\n"
-            "/latest - the latest release\n"
-            "/docs - the manual\n"
+            "This is the bot of the QGIS plugins PlanetX, Isoliner, "
+            "Isoliner3D, Topoliner, Routeliner and Repoliner.\n\n"
+            "Ask a question about PlanetX, for example \"how to add a 3D "
+            "model\", and the bot finds the manual sections.\n\n"
+            "/latest - the latest release of a plugin\n"
+            "/docs - plugins, manuals and the QGIS catalog\n"
             "/report text - a bug report or a wish for the developers. "
             "Your Telegram name and user name go with the text."),
         "none": ("Nothing was found in the manual. Try other words or open "
                  "the manual: /docs"),
         "found": "Manual sections:",
         "show": "Show the section",
-        "docs": ("PlanetX manual:\n{manual}\n\nA PDF comes with every "
-                 "release: {releases}\nPlugin page: {site}"),
+        "docs": "QGIS plugins of Inform++ LLC:",
+        "pick": "Which plugin release to show?",
+        "manual": "PlanetX manual",
+        "site": "PlanetX website",
         "latest": "{name} {tag} of {date}",
         "zip": "Plugin archive",
         "catalog": "QGIS catalog",
@@ -157,35 +185,35 @@ TEXTS = {
 PROFILE = {
     "ru": {
         "commands": [
-            ("latest", "Последний выпуск и что нового"),
-            ("docs", "Руководство пользователя"),
+            ("latest", "Последний выпуск модуля и что нового"),
+            ("docs", "Модули, руководства и каталог QGIS"),
             ("report", "Сообщение разработчикам - ошибка или пожелание"),
             ("help", "Что умеет бот"),
         ],
         "description": (
-            "PlanetX - трёхмерный глобус внутри QGIS. Снимки и рельеф "
-            "всей Земли, слои проекта на глобусе, метки, туры, разрезы "
-            "недр, 3D-модели.\n\n"
-            "Бот отвечает на вопросы по руководству, показывает последний "
-            "выпуск и передаёт сообщения разработчикам."),
-        "short": "Трёхмерный глобус для QGIS - руководство, выпуски, "
-                 "сообщения разработчикам",
+            "Модули QGIS ООО «Информ++» - PlanetX, Isoliner, Isoliner3D, "
+            "Topoliner, Routeliner, Repoliner.\n\n"
+            "Бот показывает последние выпуски модулей, отвечает на "
+            "вопросы по руководству PlanetX и передаёт сообщения "
+            "разработчикам."),
+        "short": "Модули QGIS PlanetX, Isoliner, Topoliner и другие - "
+                 "выпуски, руководства, сообщения разработчикам",
     },
     "en": {
         "commands": [
-            ("latest", "The latest release and what is new"),
-            ("docs", "User manual"),
+            ("latest", "The latest plugin release and what is new"),
+            ("docs", "Plugins, manuals and the QGIS catalog"),
             ("report", "A bug report or a wish for the developers"),
             ("help", "What the bot does"),
         ],
         "description": (
-            "PlanetX is a 3D globe inside QGIS. Imagery and terrain of the "
-            "whole Earth, project layers on the globe, places, tours, "
-            "subsurface sections, 3D models.\n\n"
-            "The bot answers questions from the manual, shows the latest "
-            "release and passes messages to the developers."),
-        "short": "A 3D globe for QGIS - manual, releases, messages to "
-                 "the developers",
+            "QGIS plugins of Inform++ LLC - PlanetX, Isoliner, Isoliner3D, "
+            "Topoliner, Routeliner, Repoliner.\n\n"
+            "The bot shows the latest plugin releases, answers questions "
+            "from the PlanetX manual and passes messages to the "
+            "developers."),
+        "short": "QGIS plugins PlanetX, Isoliner, Topoliner and more - "
+                 "releases, manuals, messages to the developers",
     },
 }
 
@@ -298,6 +326,34 @@ def post_args(text):
     return repo, tag
 
 
+def plugin_of(text):
+    """Хранилище модуля по слову /latest: имя модуля или хранилища
+    в любом регистре, иначе None."""
+    word = (text or "").strip().lower()
+    for key, (name, _) in PLUGINS.items():
+        if word in (key, name.lower()):
+            return key
+    return None
+
+
+def docs_reply(lang):
+    """Список модулей HTML: описание, ссылки на GitHub и каталог."""
+    lines = [html.escape(TEXTS[lang]["docs"])]
+    for key, (name, catalog) in PLUGINS.items():
+        lines.append(
+            '\n<b>{}</b> - {}\n<a href="https://github.com/{}/{}">'
+            'GitHub</a> · <a href="{}">{}</a>'.format(
+                html.escape(name), html.escape(ABOUT[lang][key]), OWNER,
+                key, catalog, html.escape(TEXTS[lang]["catalog"])))
+    lines.append('\n<a href="{}">{}</a> · <a href="{}">{}</a>'.format(
+        html.escape("{}/blob/main/doc/{}".format(
+            REPOSITORY, manual_file(lang)), quote=True),
+        html.escape(TEXTS[lang]["manual"]),
+        html.escape(urllib.parse.quote(SITE, safe=":/"), quote=True),
+        html.escape(TEXTS[lang]["site"])))
+    return "\n".join(lines)
+
+
 def read_settings():
     """Поля файла настроек: token, owner, secret. Файл - JSON или один
     токен строкой."""
@@ -374,8 +430,7 @@ class Bot:
         self.owner = owner
         self.channel = channel
         self.index = load_indexes()
-        self.release = None
-        self.release_at = 0.0
+        self.releases = {}  # хранилище - (время, ответ GitHub)
 
     def call(self, method, **params):
         body = json.dumps(params).encode("utf-8")
@@ -398,12 +453,23 @@ class Bot:
             params["reply_markup"] = markup
         self.call("sendMessage", **params)
 
-    def latest(self):
-        if self.release and time.time() - self.release_at < RELEASE_KEEP:
-            return self.release
-        self.release = github(RELEASES.format("planetx", "latest"))
-        self.release_at = time.time()
-        return self.release
+    def latest(self, repo="planetx"):
+        """Последний выпуск хранилища, ответ помнится RELEASE_KEEP."""
+        kept = self.releases.get(repo)
+        if kept and time.time() - kept[0] < RELEASE_KEEP:
+            return kept[1]
+        release = github(RELEASES.format(repo, "latest"))
+        self.releases[repo] = (time.time(), release)
+        return release
+
+    def show_latest(self, chat, lang, repo):
+        try:
+            text, markup = release_reply(self.latest(repo), lang, repo)
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            log("GitHub {}: {}".format(repo, error))
+            self.send(chat, TEXTS[lang]["no_release"])
+            return
+        self.send(chat, text, markup, html_text=True)
 
     def on_message(self, message):
         chat = message["chat"]["id"]
@@ -420,18 +486,15 @@ class Bot:
         elif command == "/id":
             self.send(chat, str(chat))
         elif command == "/docs":
-            self.send(chat, TEXTS[lang]["docs"].format(
-                manual="{}/blob/main/doc/{}".format(
-                    REPOSITORY, manual_file(lang)),
-                releases=REPOSITORY + "/releases", site=SITE))
+            self.send(chat, docs_reply(lang), html_text=True)
         elif command == "/latest":
-            try:
-                text, markup = release_reply(self.latest(), lang)
-            except (urllib.error.URLError, OSError, ValueError) as error:
-                log("GitHub: {}".format(error))
-                self.send(chat, TEXTS[lang]["no_release"])
-                return
-            self.send(chat, text, markup, html_text=True)
+            repo = plugin_of(rest)
+            if repo:
+                self.show_latest(chat, lang, repo)
+            else:
+                self.send(chat, TEXTS[lang]["pick"], {"inline_keyboard": [
+                    [{"text": name, "callback_data": "l:" + key}]
+                    for key, (name, _) in PLUGINS.items()]})
         elif command == "/report":
             self.report(chat, user, lang, rest.strip())
         elif command == "/post" and user.get("id") == self.owner:
@@ -522,6 +585,10 @@ class Bot:
                 self.publish(repo, tag, query)
             else:
                 self.draft(repo, tag)
+            return
+        if action == "l" and message and rest in PLUGINS:
+            self.show_latest(message["chat"]["id"],
+                             language(query.get("from")), rest)
             return
         found = re.fullmatch(r"s:(ru|en):(\d+)", data)
         if not found or not message:
