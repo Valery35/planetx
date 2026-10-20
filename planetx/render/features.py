@@ -25,7 +25,8 @@ import time
 import numpy as np
 from OpenGL import GL
 
-from ..core.features import centered, geometry, vertices
+from ..core.features import (altitude_mode, centered, geometry,
+                             uses_height, vertices)
 from . import gpu
 from .gpu import gl
 from .shaders import (FEATURE_FRAGMENT, FEATURE_LINE_GEOMETRY,
@@ -96,7 +97,7 @@ def cached_geometry(shape):
     alts = getattr(shape, "alts", None)
     key = (shape.kind, tuple(map(tuple, shape.points)),
            shape.fill is not None,
-           bool(shape.extrude) and float(shape.height or 0.0) > 0.0,
+           bool(shape.extrude) and uses_height(altitude_mode(shape)),
            tuple(alts) if alts is not None else None)
     if key not in _geometries:
         if len(_geometries) >= GEOMETRY_CACHE:
@@ -105,16 +106,19 @@ def cached_geometry(shape):
     return _geometries[key]
 
 
-def build(shape, heights_at=None, geo=None):
+def build(shape, heights_at=None, geo=None, surface_at=None, scale=1.0):
     """Вершины объекта: центр, смещения, отрезки, треугольники заливки
-    и стены. geo - готовый контур, иначе считается здесь.
+    и стены. geo - готовый контур, иначе считается здесь. surface_at -
+    поверхность (вода над морем), scale - масштаб рельефа.
 
     None для точки без стойки и для объекта без вершин.
     """
     geo = geo if geo is not None else geometry(shape)
     if geo is None:
         return None
-    xyz = vertices(geo, float(shape.height or 0.0), heights_at)
+    xyz = vertices(geo, float(shape.height or 0.0), heights_at,
+                   mode=altitude_mode(shape), surface_at=surface_at,
+                   scale=scale)
     center, offsets = centered(xyz)
     return center, offsets, geo.lines, geo.triangles, geo.wall
 
@@ -140,6 +144,9 @@ class Features:
         self.fill_program = None
         self.locations = {}  # программа -> места переменных
         self.dirty = False
+        # Поверхность и масштаб рельефа последнего кадра, их берёт _make.
+        self._surface_at = None
+        self._scale = 1.0
 
     def vertex_count(self):
         """Вершин собранных объектов, по контурам."""
@@ -157,10 +164,10 @@ class Features:
 
     def marks(self):
         """Точечные объекты: (номер, имя, широта, долгота, подъём,
-        значок, цвет)."""
+        значок, цвет, режим высоты)."""
         return [(i, shape.name, shape.points[0][0], shape.points[0][1],
                  float(shape.height or 0.0), shape.icon,
-                 tuple(shape.color))
+                 tuple(shape.color), altitude_mode(shape))
                 for i, shape in enumerate(self.shapes)
                 if shape.kind == "point" and shape.points]
 
@@ -192,7 +199,8 @@ class Features:
         self.buffers = []
 
     def _make(self, shape, geo, heights_at, version):
-        built = build(shape, heights_at, geo)
+        built = build(shape, heights_at, geo, self._surface_at,
+                      self._scale)
         return (shape, geo, _Buffers(*built) if built else None, version)
 
     def _update(self, heights_at, version, still=True):
@@ -213,7 +221,8 @@ class Features:
         for key, entry in old.items():
             if entry[1] is not None:
                 spare.setdefault((id(entry[1]), float(
-                    entry[0].height or 0.0)), []).append(key)
+                    entry[0].height or 0.0), altitude_mode(entry[0])),
+                    []).append(key)
         for shape in self.shapes:
             entry = old.get(id(shape))
             if entry is not None and entry[0] is shape:
@@ -230,8 +239,8 @@ class Features:
             else:
                 geo = cached_geometry(shape)
                 entry = None
-                for key in spare.get((id(geo), float(shape.height or 0.0)),
-                                     []):
+                for key in spare.get((id(geo), float(shape.height or 0.0),
+                                      altitude_mode(shape)), []):
                     if key in old and old[key][1] is geo:
                         reuse = old.pop(key)
                         entry = (shape, geo, reuse[2], reuse[3])
@@ -249,7 +258,8 @@ class Features:
 
     # Кадр.
 
-    def draw(self, camera, heights_at, version, ratio, still=True):
+    def draw(self, camera, heights_at, version, ratio, still=True,
+             surface_at=None, scale=1.0):
         """Нарисовать объекты. Вызывается после тайлов, до надписей.
 
         heights_at - высоты массива точек или None без рельефа. still -
@@ -259,6 +269,12 @@ class Features:
         """
         if self.line_program is None or not self.shapes:
             return False
+        if scale != self._scale:
+            # Абсолютная высота растягивается масштабом рельефа.
+            self.dirty = True
+            self._built = {}
+        self._surface_at = surface_at
+        self._scale = scale
         if self.dirty or version != self.version:
             self._update(heights_at, version, still)
         projection = camera.projection().astype(np.float32)

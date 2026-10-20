@@ -36,9 +36,9 @@ SHAPE_POINTS = 800
 
 Shape = namedtuple("Shape",
                    "kind points color width fill name height extrude "
-                   "icon alts flow",
+                   "icon alts flow mode",
                    defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
-                             False, "dot", None, False))
+                             False, "dot", None, False, ""))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
@@ -51,8 +51,38 @@ extrude - стена от объекта до земли, у точки - сто
 над эллипсоидом в метрах или None. С ними объект 3D-линейки стоит
 в пространстве, как «абсолютная высота» KML: отрезки прямые, на рельеф
 не садятся, height не действует. flow - по пути бегут штрихи потока,
-core/pathflow.py.
+core/pathflow.py. mode - режим высоты KML (MODES), пустой - прежняя
+запись: с подъёмом relativeToGround, без него clampToGround.
 """
+
+# Режимы высоты, как altitudeMode KML и вкладка «Высота» Google Earth.
+# Просьба автора от 19 октября 2026 года со снимками окна Google Earth.
+# Поверхность - вода над морем при глубинах, иначе рельеф, дно - рельеф
+# с дном моря. absolute - height над уровнем моря.
+CLAMP = "clampToGround"
+SEAFLOOR = "clampToSeaFloor"
+RELATIVE = "relativeToGround"
+RELATIVE_FLOOR = "relativeToSeaFloor"
+ABSOLUTE = "absolute"
+MODES = (CLAMP, SEAFLOOR, RELATIVE, RELATIVE_FLOOR, ABSOLUTE)
+
+
+def altitude_mode(shape):
+    """Режим высоты объекта из MODES."""
+    mode = getattr(shape, "mode", "") or ""
+    if mode in MODES:
+        return mode
+    return RELATIVE if float(shape.height or 0.0) > 0.0 else CLAMP
+
+
+def uses_height(mode):
+    """Действует ли высота метки в режиме mode."""
+    return mode in (RELATIVE, RELATIVE_FLOOR, ABSOLUTE)
+
+
+def on_floor(mode):
+    """Отсчёт от дна моря, а не от поверхности."""
+    return mode in (SEAFLOOR, RELATIVE_FLOOR)
 
 
 def _unit(lat, lon):
@@ -214,8 +244,7 @@ def has_alts(shape):
 
 def geometry(shape):
     """Контур объекта или None для точки без стойки и пустого объекта."""
-    height = float(shape.height or 0.0)
-    raised = bool(shape.extrude) and height > 0.0
+    raised = bool(shape.extrude) and uses_height(altitude_mode(shape))
     empty = np.zeros(0, dtype=np.uint32)
     if shape.kind == "point":
         if not raised or not shape.points:
@@ -245,13 +274,25 @@ def geometry(shape):
                     wall, False)
 
 
-def vertices(geo, height, heights_at=None):
-    """Вершины контура в ECEF: поднятые, у стены и стойки ещё земля."""
+def vertices(geo, height, heights_at=None, mode=RELATIVE,
+             surface_at=None, scale=1.0):
+    """Вершины контура в ECEF: поднятые, у стены и стойки ещё земля.
+
+    heights_at - рельеф с дном моря, surface_at - поверхность (вода над
+    морем), без неё - тот же рельеф. scale - масштаб рельефа на экране,
+    им растягивается абсолютная высота. Стена и стойка идут до
+    поверхности."""
     if geo.alts is not None:
         return geodetic_to_ecef(geo.ring[:, 0], geo.ring[:, 1], geo.alts)
-    top = lift(geo.ring, offset=height, heights_at=heights_at)
+    surface = surface_at if surface_at is not None else heights_at
+    if mode == ABSOLUTE:
+        top = lift(geo.ring, offset=height * scale)
+    else:
+        top = lift(geo.ring,
+                   offset=height if uses_height(mode) else 0.0,
+                   heights_at=heights_at if on_floor(mode) else surface)
     if len(geo.wall) or geo.stem:
-        return np.vstack([top, lift(geo.ring, heights_at=heights_at)])
+        return np.vstack([top, lift(geo.ring, heights_at=surface)])
     return top
 
 

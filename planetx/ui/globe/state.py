@@ -66,6 +66,7 @@ class StateMixin:
         QgsSettings().setValue(style.THEME_KEY, name)
         style.apply(name)
         self.setStyleSheet(style.window_style())
+        style.dress_parts(self)
         style.restyle(self)
         self.title_bars.apply_all()
         self.view.update()
@@ -276,6 +277,8 @@ class StateMixin:
             self._set_plants(on)
         elif key == "volcanoes":
             self._set_volcanoes(on)
+        elif key == "wiki":
+            self._set_wiki(on)
         elif key == "infra_osm":
             self._set_infra(on)
         elif key == "cables":

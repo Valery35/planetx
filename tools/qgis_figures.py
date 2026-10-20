@@ -10,7 +10,9 @@
 Язык модуля задаёт PLANETX_LANG (ru или en). Картинки ложатся
 в doc/figures/<язык>: окно глобуса над Пермью, угол с инструментами
 управления, окна «Свойства вида» и свойств метки, 3D-здания в центре
-Перми, каталог «Добавить данные», течения над Атлантикой. Глобус ждёт
+Перми, каталог «Добавить данные», течения над Атлантикой, кабина
+истребителя с приборами над долиной Церматта. Оформление - тёмное,
+как по умолчанию у пользователя. Глобус ждёт
 загрузки
 тайлов, но не дольше WAIT секунд. Свои метки сценарий ставит
 в отдельную папку и в конце удаляет. QGIS пользователя не трогается,
@@ -82,6 +84,10 @@ def start():
     # Знакомство с модулем при первом открытии закрыло бы кадр окна
     # своим окошком и затемнением, 12 октября 2026 года.
     QgsSettings().setValue(GUIDE_KEY, True)
+    # Оформление по умолчанию у пользователя - тёмное, профиль картинок
+    # мог запомнить другое.
+    from planetx.ui import style
+    QgsSettings().setValue(style.THEME_KEY, style.DARK)
     plugin = PlanetXPlugin(iface)
     plugin.initGui()
     plugin.run()
@@ -315,6 +321,51 @@ def currents_wait():
     result["currents_field"] = field is not None
     save(view.grabFramebuffer(), "currents.jpg", jpeg=True)
     window.set_extra("currents", False)
+    QTimer.singleShot(500, cockpit_start)
+
+
+def cockpit_start():
+    # Кабина истребителя над долиной Церматта, впереди Маттерхорн,
+    # крен 25° вправо. Полёт стоит - таймер полёта выключен, приборы
+    # показывают поставленные тангаж и крен.
+    from planetx.core import flightsim
+    window = state["window"]
+    flight = window.flight
+    flight.start(46.06, 7.79, flightsim.FIGHTER)
+    flight.timer.stop()
+    plane = flight.plane
+    plane.alt = 4300.0
+    plane.heading = 214.0
+    plane.pitch = -3.0
+    plane.roll = 25.0
+    flight.set_cockpit(True)
+    state["started"] = time.monotonic()
+    QTimer.singleShot(3000, cockpit_wait)
+
+
+def cockpit_wait():
+    window = state["window"]
+    view = window.view
+    flight = window.flight
+    flight._follow(flight._ground(flight.plane.lat, flight.plane.lon))
+    view._heartbeat()
+    spent = time.monotonic() - state["started"]
+    if view.load_missing and spent < BUILDINGS_WAIT:
+        QTimer.singleShot(1000, cockpit_wait)
+        return
+    from planetx.core import flightsim
+    plane = flight.plane
+    ground = flight._ground(plane.lat, plane.lon)
+    out = flightsim.readout(plane, ground)
+    out["pitch"] = plane.pitch
+    out["roll"] = plane.roll
+    flight.hud.set_state(out)
+    flight.readout.set_lines([])
+    QgsApplication.processEvents()
+    view.repaint()
+    result["cockpit_missing"] = view.load_missing
+    save(view.grab().toImage(), "cockpit.jpg", jpeg=True)
+    flight.stop()
     QTimer.singleShot(500, finish)
 
 

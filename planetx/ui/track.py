@@ -17,6 +17,14 @@
 расстояние и наклон остаются. Между шагами времени камера доезжает
 до новой точки плавно (core.track.Glide).
 
+Камера следом за выбранным объектом трека - пункт «Камера следом»
+меню правой кнопки над объектом, как у поездов, судов и самолётов.
+Вопрос автора от 19 октября 2026 года над демо самосвалов - «как мне
+с ним проехать?». Флажок «Камера следом» окна «Трек» ведёт за первым
+объектом слоя, выбрать объект он не даёт. Камера держит объект на
+луче взгляда (core.movers.chase_on), колесо меняет расстояние, Esc
+отпускает (ui/chase.py).
+
 Модель по треку - просьба автора от 18 октября 2026 года. У трека
 может быть файл 3D-модели (.glb, .gltf, .dae, .obj): у каждого объекта
 модель едет по пути на момент шкалы, азимут - по ходу движения плюс
@@ -28,12 +36,13 @@ import math
 import os
 import time
 
+import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
                        QgsCsException, QgsDateTimeRange, QgsFeatureRequest,
                        QgsProject, QgsVectorLayer, QgsWkbTypes)
 from qgis.gui import QgsColorButton
 from qgis.PyQt.QtCore import (QDate, QDateTime, QObject, Qt, QTime,
-                              pyqtSignal)
+                              QTimer, pyqtSignal)
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QDoubleSpinBox,
@@ -42,13 +51,15 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QVBoxLayout)
 
 from .. import journal
-from ..core import models
+from ..core import models, movers
+from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import Shape
 from ..core.navigation import Pose
 from ..core.track import Glide, Track
 from ..i18n import tr
 from ..qt_compat import enum, enum_int
 from ..render.models import Model as ModelItem
+from .chase import ChaseControl
 from .overlays import image_rgba
 from .project import ENTRY
 
@@ -65,6 +76,9 @@ HEIGHT_Z = "@z"
 FOOT = 0.3048
 HEIGHT_MODES = ("absolute", "relative")
 MODEL_FILTER = "*.glb *.gltf *.dae *.obj"
+FOLLOW_TICK = 50  # мс между шагами камеры следом за объектом
+FOLLOW_REACH = 200.0  # м от глаза до объекта при включении
+PICK_PIXELS = 12.0  # логических пикселей до объекта под курсором
 
 
 JULIAN_1970 = 2440588  # юлианский день 1 января 1970 года
@@ -401,6 +415,16 @@ class TrackManager(QObject):
         self._at = {}
         # Момент держит запись тура, шкала его не меняет.
         self.held = False
+        # Камера следом за выбранным объектом: (номер слоя, объект).
+        self.followed = None
+        self.chase = ChaseControl(view, lambda: self.set_follow(None))
+        self.follow_timer = QTimer(self)
+        self.follow_timer.setInterval(FOLLOW_TICK)
+        self.follow_timer.timeout.connect(self._chase_step)
+        # Слои, отмеченные в «Проект QGIS»: трек виден только у них,
+        # None - все. Замечание автора от 20 октября 2026 года - снятый
+        # флажок слоя самосвалов не убирал их с вида.
+        self.visible = None
         self.load()
 
     # Настройки в проекте.
@@ -427,11 +451,23 @@ class TrackManager(QObject):
         self._save()
         self.reload()
 
+    def set_visible(self, ids):
+        """Отмеченные слои проекта. Треки перечитываются, только если
+        сменилась видимость слоя с треком."""
+        ids = set(ids)
+        before = self.visible
+        self.visible = ids
+        if before is None or {i for i in self.settings if i in before} \
+                != {i for i in self.settings if i in ids}:
+            self.reload()
+
     def reload(self):
         """Перечитать точки всех треков, например после правки слоёв."""
         self.tracks = {}
         project = QgsProject.instance()
         for layer_id, settings in list(self.settings.items()):
+            if self.visible is not None and layer_id not in self.visible:
+                continue
             layer = project.mapLayer(layer_id)
             if layer is None or not point_layer(layer) \
                     or settings.get("time") not in layer.fields().names():
@@ -617,7 +653,67 @@ class TrackManager(QObject):
 
     # Камера.
 
+    def under(self, px, py):
+        """Объект трека под пикселем кадра: (номер слоя, объект) или
+        None."""
+        if not self._at:
+            return None
+        keys = list(self._at)
+        lats = np.array([self._at[k][0] for k in keys])
+        lons = np.array([self._at[k][1] for k in keys])
+        heights = self.view.label_heights(lats, lons) \
+            if self.view.store.scale else np.zeros(len(keys))
+        alts = np.array([self._at[k][3] for k in keys], dtype=np.float64)
+        scale = self.view.store.scale or 1.0
+        heights = np.where(np.isfinite(alts), alts * scale, heights)
+        pixels, front = self.view.camera.project(
+            geodetic_to_ecef(lats, lons, heights))
+        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
+        gap = np.where(front, gap, np.inf)
+        n = int(np.argmin(gap))
+        if gap[n] > PICK_PIXELS * self.view.devicePixelRatioF():
+            return None
+        return keys[n]
+
+    def label(self, target):
+        """Подпись объекта для меню: его ключ и слой."""
+        layer = QgsProject.instance().mapLayer(target[0])
+        name = layer.name() if layer is not None else ""
+        return "{} · {}".format(target[1], name) if name else target[1]
+
+    def set_follow(self, target):
+        """Камера следом за объектом target, None - отпустить."""
+        self.followed = target
+        if target is None:
+            self.follow_timer.stop()
+            self.chase.stop()
+            return
+        self.chase.start(FOLLOW_REACH)
+        self.follow_timer.start()
+        self._chase_step()
+
+    def _chase_step(self):
+        found = self._at.get(self.followed) if self.followed else None
+        if found is None:
+            self.set_follow(None)
+            return
+        lat, lon, heading, alt = found
+        pose = self.view.navigator.pose
+        if heading != heading:
+            heading = pose.heading
+        scale = self.view.store.scale
+        level = alt * scale if alt == alt else self.view.label_height(lat,
+                                                                      lon)
+        look_lat, look_lon, look, distance = movers.chase_on(
+            lat, lon, heading, level, self.view.label_height,
+            self.chase.reach, pose.tilt)
+        self.view.navigator.show(Pose(look_lat, look_lon, distance, look,
+                                      pose.tilt))
+        self.view.update()
+
     def _follow(self):
+        if self.followed is not None:
+            return  # камеру ведёт камера следом за выбранным объектом
         target = None
         for layer_id, track in self.tracks.items():
             if self.settings.get(layer_id, {}).get("follow"):

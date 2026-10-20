@@ -95,6 +95,12 @@ OSM_PAUSE = 800
 # Уровень воды Бриенцского озера в демо, м: средний уровень 563.7 м
 # по swisstopo, округлён.
 BRIENZ_LEVEL = 564.0
+# Демо «Самосвалы»: цвет следа и скорость показа шкалы времени. Выбор
+# помощника, утверждает автор.
+HAUL_COLOR = (250, 190, 30, 255)
+HAUL_RATE = 10.0
+HAUL_CHECK = 500  # мс между проверками конца рейса
+HAUL_END = 1.0  # с до конца рейса, когда момент уже в его конце
 # Исторические карты Москвы в демо: год, название, тайлы карты Wikimedia
 # Commons (общественное достояние), привязанной в Wikimaps Warper.
 # Состав - выбор помощника.
@@ -176,6 +182,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "water_occurrence": False,
                   "water_transitions": False, "soil_clay": False,
                   "soil_sand": False, "soil_soc": False, "soil_ph": False,
+                  "wiki": False,
                   **{key: False for key in tileoverlays.KEYS}}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
@@ -191,7 +198,7 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "faults", "geology", "iscgem", "glim", "worldcover",
                 "water_occurrence",
                 "water_transitions", "soil_clay", "soil_sand", "soil_soc",
-                "soil_ph") + tileoverlays.KEYS
+                "soil_ph", "wiki") + tileoverlays.KEYS
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}

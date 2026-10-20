@@ -180,3 +180,49 @@ class TestGrown(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAltitudeModes(unittest.TestCase):
+    """Режимы высоты меток, core.features.MODES."""
+
+    def setUp(self):
+        # Рельеф с дном моря -100 м, поверхность - вода на нуле.
+        self.floor = lambda la, lo: np.full(len(la), -100.0)
+        self.surface = lambda la, lo: np.zeros(len(la))
+
+    def top(self, mode, height, scale=1.0):
+        shape = ft.Shape("point", [(0.0, 0.0)], height=height,
+                               extrude=True, mode=mode)
+        geo = ft.geometry(shape)
+        xyz = ft.vertices(geo, height, self.floor, mode=mode,
+                                surface_at=self.surface, scale=scale)
+        return float(np.linalg.norm(xyz[0])) - el.A, \
+            float(np.linalg.norm(xyz[1])) - el.A
+
+    def test_heights_by_mode(self):
+        cases = ((ft.RELATIVE, 30.0, 30.0),
+                 (ft.RELATIVE_FLOOR, 30.0, -70.0),
+                 (ft.ABSOLUTE, 30.0, 60.0))
+        for mode, height, expected in cases:
+            top, foot = self.top(mode, height, scale=2.0)
+            self.assertAlmostEqual(top, expected, places=3, msg=mode)
+            # Стена идёт до поверхности, над морем - до воды.
+            self.assertAlmostEqual(foot, 0.0, places=3, msg=mode)
+
+    def test_clamp_modes_ignore_height(self):
+        line = ft.Shape("line", [(0.0, 0.0), (0.0, 0.001)],
+                              height=500.0, mode=ft.SEAFLOOR)
+        geo = ft.geometry(line)
+        xyz = ft.vertices(geo, 500.0, self.floor,
+                                mode=ft.SEAFLOOR,
+                                surface_at=self.surface)
+        self.assertAlmostEqual(float(np.linalg.norm(xyz[0])) - el.A,
+                               -100.0, places=3)
+
+    def test_old_records_keep_meaning(self):
+        """Метка без режима: с подъёмом - относительно поверхности."""
+        self.assertEqual(ft.altitude_mode(
+            ft.Shape("point", [(0, 0)], height=10.0)),
+            ft.RELATIVE)
+        self.assertEqual(ft.altitude_mode(
+            ft.Shape("point", [(0, 0)])), ft.CLAMP)

@@ -938,7 +938,51 @@ def trains():
     print(path, os.path.getsize(path))
 
 
+# Самосвалы в карьерах Качканара и Лебединском: данные -
+# tools/make_haul_demo.py
+# (planetx/demo/haul), сцена - вид на карьер и метка у дна. Вид -
+# выбор помощника.
+HAUL = (("kachkanar", "Качканар, Главный карьер",
+         "Самосвалы, Качканар", 4200.0, 25.0),
+        ("lebedinsky", "Губкин, Лебединский карьер",
+         "Самосвалы, Лебединский", 3000.0, 25.0))
+
+
+def haul():
+    """Самосвалы по дороге карьеров Качканара и Гая."""
+    with open(os.path.join(DEMO, "haul", "haul.json"),
+              encoding="utf-8") as fh:
+        found = {item["key"]: item for item in json.load(fh)}
+    for key, name, menu, distance, heading in HAUL:
+        item = found[key]
+        lat, lon = item["center"]
+        blat, blon = item["bottom"]
+        title = "PlanetX: демо, самосвалы - {}".format(name)
+        note = ("Путь самосвалов - дорога карьера, снятая по снимку "
+                "Esri World Imagery, длина {:.1f} км, перепад около "
+                "{:.0f} м по рельефу "
+                "Copernicus DEM 30 м. Шесть условных самосвалов "
+                "грузоподъёмностью 130 т: погрузка на нижнем конце "
+                "дороги, подъём гружёным 15 км/ч, разгрузка, спуск "
+                "порожним 30 км/ч. Цикл {:.0f} мин. Самосвалы и их "
+                "движение - модель, не данные предприятия.".format(
+                    item["length"] / 1000.0, item["depth"],
+                    item["cycle"] / 60.0))
+        items = [KPlace("Погрузка", "point", [(blat, blon)],
+                        description=note,
+                        view=(blat, blon, 900.0, heading, 60.0))]
+        root = KFolder(title, children=items)
+        view = dict(EARTH_VIEW, scale=1.0, extras=dict(QUIET_EXTRAS))
+        scene = Scene((lat, lon, distance, heading, 55.0), None, [], view,
+                      title, menu)
+        path = os.path.join(DEMO, "haul_{}.planetx".format(key))
+        with open(path, "wb") as fh:
+            fh.write(write_scene(scene, write_kmz(root)))
+        print(path, os.path.getsize(path))
+
+
 def main():
+    haul()
     trains()
     turbines()
     flows()

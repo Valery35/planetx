@@ -109,6 +109,8 @@ from .globe.tools import ToolsMixin
 from .globe.pictures import PicturesMixin
 from .globe.identify import IdentifyMixin
 from .globe.resources import ResourcesMixin
+from .globe.wiki import WikiMixin
+from .wikipedia import WikiArticles
 
 # Имена, которые берут из модуля окна снаружи.
 __all__ = ("GlobeWindow", "ACCEPTED_KEY", "READY_KEY", "TERRAIN_MIRRORS",
@@ -128,7 +130,7 @@ def _shadow(widget):
 class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                   LayersMixin, SearchMixin, PlacesMixin, ActionsMixin,
                   ToolsMixin, PicturesMixin, IdentifyMixin, ResourcesMixin,
-                  QWidget):
+                  WikiMixin, QWidget):
     """Отдельное окно поверх главного окна QGIS."""
 
     closed = pyqtSignal()
@@ -375,6 +377,15 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self._place_infra, self._overpass_failed)
         self.infra_lines = None
         self.infra_points = None
+        # Википедия рядом (core/wikipedia.py): статьи по тайлам вида,
+        # запрос первого абзаца открытой карточки.
+        self.wiki_articles = WikiArticles(self.view, self._place_wiki,
+                                          self._wiki_failed)
+        self._summary_reply = None
+        self._wiki_timer = QTimer(self)
+        self._wiki_timer.setSingleShot(True)
+        self._wiki_timer.setInterval(OSM_PAUSE)
+        self._wiki_timer.timeout.connect(self._want_wiki)
         # Электростанции WRI (core/plants.py): файл профиля, загрузка
         # архива и разбор в рабочем потоке.
         self.plant_data = None
@@ -466,6 +477,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             part.setAttribute(enum(Qt, "WidgetAttribute",
                                    "WA_StyledBackground"))
         self.setStyleSheet(style.window_style())
+        style.dress_parts(self)
         # Заголовки окна глобуса и окон модуля по оформлению.
         self.title_bars = style.TitleBars(self)
         style.title_bar(self)
@@ -742,6 +754,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.tour.stop_reached.connect(self._stop_reached)
         # Растущие треки точечных слоёв по шкале времени глобуса.
         self.tracks = TrackManager(self.view, self)
+        self.tracks.set_visible(self._shown)
         self.tracks.changed.connect(self._refresh_shapes)
         self.tracks.reloaded.connect(self._update_data_marks)
         self._update_data_marks()
@@ -947,6 +960,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.view.changed.connect(self._update_plate_arrows)
         self.view.changed.connect(self._update_contour_legend)
         self.view.changed.connect(self._overpass_view_changed)
+        self.view.changed.connect(self._wiki_view_changed)
         self.view.changed.connect(self._wayback_view)
         for key, on in self.extras.items():
             self._apply_extra(key, on)
@@ -979,6 +993,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.flight.close()
             self.title_bars.close()
             self.route_manager.close()
+            self._wiki_timer.stop()
+            self.wiki_articles.stop()
+            reply, self._summary_reply = self._summary_reply, None
+            if reply is not None:
+                reply.abort()
             self.weather.close()
             self.flow.close()
             if getattr(self, "gallery", None) is not None:

@@ -3324,11 +3324,25 @@ EN = {
         "to KML.",
     "Описание": "Description",
     " м": " m",
-    "Подъём над рельефом. Ноль - "
-    "объект лежит на земле.":
-        "Height above the terrain. "
-        "Zero lays the object on the ground.",
-    "Высота над землёй": "Height above ground",
+    "Подъём над поверхностью или дном, в абсолютном режиме - "
+    "высота над уровнем моря.":
+        "The rise above the surface or the sea floor, in the absolute "
+        "mode the altitude above sea level.",
+    "На поверхности": "Clamped to ground",
+    "Вдоль морского дна": "Clamped to sea floor",
+    "Относительно поверхности": "Relative to ground",
+    "Относительно морского дна": "Relative to sea floor",
+    "Абсолютная": "Absolute",
+    "От чего отсчитывается высота. На поверхности - метка лежит "
+    "на земле, над морем на воде. Вдоль морского дна - на дне. "
+    "Относительно поверхности и дна - подъём над ними. "
+    "Абсолютная - высота над уровнем моря. Режим сохраняется "
+    "в KML.":
+        "What the altitude is measured from. Clamped to ground - the "
+        "placemark lies on the ground, over the sea on the water. "
+        "Clamped to sea floor - on the floor. Relative to ground and to "
+        "sea floor - the rise above them. Absolute - the altitude above "
+        "sea level. The mode is saved in KML.",
     "Выдавить до земли": "Extend to ground",
     "Значок": "Icon",
     "Кружок": "Circle", "Кнопка": "Pushpin", "Флаг": "Flag",
@@ -4808,6 +4822,10 @@ EN = {
         "Size {x:.1f} × {y:.1f} × {z:.1f} m.",
     "Анимированная модель, ветряки": "Animated model, wind turbines",
     "Поезда Финляндии, вживую": "Trains of Finland, live",
+    "Самосвалы, Качканар": "Haul trucks, Kachkanar",
+    "Самосвалы, Лебединский": "Haul trucks, Lebedinsky",
+    "Самосвалы в карьере": "Haul trucks in the pit",
+    "Самосвалы": "Haul trucks",
     "Анимация {seconds:.1f} с, движется частей {tracks}.":
         "Animation {seconds:.1f} s, moving parts {tracks}.",
     "Широта точки модели. Точка - начало координат файла модели.":
@@ -5079,12 +5097,13 @@ EN = {
         "placemark Properties… window.",
     "Объясни это": "Explain this",
     "Спросить помощника, что это за объект и чем интересно место. "
-    "Помощнику уходят название, вид, координаты и описание этой метки. "
-    "Ответ появится здесь и под строкой «Поиск».":
+    "Помощнику уходят название, вид, координаты и описание этой "
+    "метки и названия включённых слоёв глобуса. Ответ появится "
+    "здесь и под строкой «Поиск».":
         "Ask the assistant what this object is and why the place is of "
         "interest. The assistant receives the name, kind, coordinates and "
-        "description of this placemark. The answer appears here and under "
-        "the Search box.",
+        "description of this placemark and the names of the globe layers "
+        "turned on. The answer appears here and under the Search box.",
     "Помощник не подключён. Ключ API вводят в окне «Настройки "
     "помощника».":
         "The assistant is not connected. The API key is entered in the "
@@ -5108,6 +5127,60 @@ EN = {
     "Помощник занят прежним вопросом или не подключён.":
         "The assistant is busy with the previous question or is not "
         "connected.",
+    # Википедия рядом, core/wikipedia.py, ui/globe/wiki.py.
+    "Энциклопедия": "Encyclopedia",
+    "Статьи Википедии с координатами у точки взгляда. Щелчок "
+    "по статье открывает её первый абзац, ссылку и кнопку "
+    "«Объясни это».":
+        "Wikipedia articles with coordinates near the view point. A click "
+        "on an article opens its first paragraph, a link and the Explain "
+        "this button.",
+    "Википедия рядом": "Wikipedia nearby",
+    "Статьи Википедии с координатами - города, памятники, реки, "
+    "вершины - подписями с голубым кружком. Статьи просятся, "
+    "когда камера ниже 40 км, на языке интерфейса QGIS. Щелчок "
+    "по подписи открывает карточку статьи - первый абзац, ссылку "
+    "на статью и кнопку «Объясни это». Тексты Википедии - "
+    "CC BY-SA 4.0.":
+        "Wikipedia articles with coordinates - cities, monuments, rivers, "
+        "peaks - as labels with a blue dot. The articles are requested "
+        "when the camera is below 40 km, in the language of the QGIS "
+        "interface. A click on a label opens the article card - the first "
+        "paragraph, a link to the article and the Explain this button. "
+        "Wikipedia texts are under CC BY-SA 4.0.",
+    "Спросить помощника об этом месте по тексту статьи. Помощнику "
+    "уходят заголовок, первый абзац и координаты статьи и названия "
+    "включённых слоёв глобуса. Ответ появится здесь и под строкой "
+    "«Поиск».":
+        "Ask the assistant about this place by the article text. The "
+        "assistant receives the title, the first paragraph and the "
+        "coordinates of the article and the names of the globe layers "
+        "turned on. The answer appears here and under the Search box.",
+    "В «Мои метки»": "To My Places",
+    "Метка в точке статьи с первым абзацем и ссылкой на статью "
+    "в описании.":
+        "A placemark at the article point with the first paragraph and "
+        "a link to the article in the description.",
+    "Текст статьи не загрузился: {error}":
+        "The article text did not load: {error}",
+    "Загрузка статьи…": "Loading the article…",
+    "Статья в Википедии": "Article in Wikipedia",
+    "Текст - Википедия, CC BY-SA 4.0": "Text - Wikipedia, CC BY-SA 4.0",
+    "На глобусе включены слои - {names}.":
+        "Layers turned on on the globe - {names}.",
+    "Объясни, что это за объект и чем интересно это место. Статья "
+    "Википедии «{title}», точка {lat:.5f}, {lon:.5f}.":
+        "Explain what this object is and why this place is of interest. "
+        "Wikipedia article \"{title}\", point {lat:.5f}, {lon:.5f}.",
+    "Первый абзац статьи - {text}": "First paragraph of the article - {text}",
+    "Опирайся на текст статьи и не придумывай того, чего в нём нет.":
+        "Rely on the article text and do not invent what is not in it.",
+    "Википедия не ответила, повтор через 30 с.":
+        "Wikipedia did not answer, retry in 30 s.",
+    "Метка «{name}» записана в «Мои метки».":
+        "The placemark \"{name}\" is written to My Places.",
+    "Статья": "Article",
+    "Википедия": "Wikipedia",
 }
 
 _language = None

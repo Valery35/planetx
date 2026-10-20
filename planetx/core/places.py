@@ -39,6 +39,8 @@ LEVEL_OFFSET = 2
 # подписи экватора, тропиков, полярных кругов и линий координатной
 # сетки. Класс «plate» - название литосферной плиты, core/plates.py.
 # Класс «value» - число поля прогноза погоды, core/weather.py.
+# Класс «wiki» - статья Википедии рядом, core/wikipedia.py, после
+# пунктов основы: статья подписывается там, где остаётся место.
 # Класса у каждого стиля render/labels.py требует test_label_kinds.
 CLASSES = ("search", "mark", "ruler", "layer", "circle", "grid", "plate",
            "value",
@@ -46,7 +48,7 @@ CLASSES = ("search", "mark", "ruler", "layer", "circle", "grid", "plate",
            "capital",
            "city", "state",
            "water", "town", "park", "peak", "airport", "road_ref",
-           "village")
+           "village", "wiki")
 KIND = {name: index for index, name in enumerate(CLASSES)}
 PLACE_CLASSES = {"country", "capital", "city", "state", "town", "village"}
 
@@ -83,15 +85,17 @@ def kinds_at(kinds, height):
     return {kind for kind in kinds
             if height <= MAX_HEIGHT.get(kind, height)}
 
-Place = namedtuple("Place", "id name kind rank lat lon info lift",
-                   defaults=(None, 0.0))
+Place = namedtuple("Place", "id name kind rank lat lon info lift base",
+                   defaults=(None, 0.0, None))
 Place.__doc__ = """Подписываемый пункт: населённый пункт, область, вода,
 заповедник, вершина, аэропорт или номер дороги.
 
 id - номер объекта в тайле или 0. kind - класс из CLASSES. rank - ранг
 OpenMapTiles, меньше - важнее, без ранга 99. lat, lon в градусах.
 info - высота вершины в метрах, у остальных None. lift - подъём
-надписи над рельефом в метрах, у своих поднятых меток.
+надписи над рельефом в метрах, у своих поднятых меток. base - от чего
+отсчитан подъём своей метки: None - поверхность, "floor" - рельеф
+с дном моря, "abs" - уровень моря (подъём уже с масштабом рельефа).
 """
 
 

@@ -21,7 +21,7 @@ planetx-attribution того же подключения.
 """
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QTimer, QUrl
-from qgis.PyQt.QtGui import QImage, QPainter, QPixmap
+from qgis.PyQt.QtGui import QColor, QImage, QPainter, QPixmap
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
 from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
                                  QFormLayout, QHBoxLayout, QLabel, QLayout,
@@ -34,6 +34,7 @@ from ..core.tiling import lonlat_to_tile
 from ..i18n import tr
 from ..net.loader import MARK, REDIRECT, SAFE_REDIRECT, network
 from ..qt_compat import enum
+from . import style
 
 XYZ_PREFIX = "connections/xyz/items/"
 ATTRIBUTION_FIELD = "planetx-attribution"
@@ -42,6 +43,14 @@ PROBE_LEVELS = (19, 18, 17, 16, 15, 14, 12, 10, 8)
 GRID = 24  # точек на сторону при проверке тайла на заглушку
 NO_ERROR = enum(QNetworkReply, "NetworkError", "NoError")
 STATUS = enum(QNetworkRequest, "Attribute", "HttpStatusCodeAttribute")
+DARK_BACK = "#20242c"  # фон мозаики «Как в QGIS»
+
+
+def back_color():
+    """Фон пустой мозаики - цвет полей оформления, в светлом - светлый.
+    Тёмный фон в светлом оформлении - проверка окон 19 октября 2026
+    года."""
+    return style.WINDOWS.get(style.current(), {}).get("field", DARK_BACK)
 
 
 def save_connection(name, url, max_level, attribution):
@@ -133,7 +142,7 @@ class TileSourceDialog(QDialog):
             "использования тайлов задаёт их владелец."))
         self.preview = QLabel(self)
         self.preview.setFixedSize(PREVIEW, PREVIEW)
-        self.preview.setStyleSheet("background: #20242c;")
+        self.preview.setStyleSheet("background: {};".format(back_color()))
         self.status = QLabel(self)
         self.status.setWordWrap(True)
 
@@ -243,7 +252,7 @@ class TileSourceDialog(QDialog):
     def _load_preview(self, url):
         self.canvas = QImage(PREVIEW, PREVIEW,
                              enum(QImage, "Format", "Format_RGB32"))
-        self.canvas.fill(0x20242C)
+        self.canvas.fill(QColor(back_color()))
         self.got = 0
         self.failed = []
         keys = tilesource.preview_keys(1)

@@ -65,7 +65,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           # Слои вида - строки «Слоёв» остановки тура, core/lookat.py.
           ("layers", "string(0)"),
           # Темп остановки тура - своя пауза и скорость, core/tour.py.
-          ("pace", "string"))
+          ("pace", "string"),
+          # Режим высоты core.features.MODES, пустой - по подъёму.
+          ("altmode", "string"))
 FOLDER_TABLE = "folders"
 # Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
 # на поверхности, у картинки на экране и фото пусто. params - свойства
@@ -248,7 +250,7 @@ def _kplace(place):
                   visible=place.visible, view=place.view,
                   description=place.description or place.measure,
                   height=shape.height, extrude=shape.extrude,
-                  icon=shape.icon, time=place.time,
+                  mode=shape.mode, icon=shape.icon, time=place.time,
                   view_time=place.view_time, tour=place.tour,
                   alts=shape.alts, region=place.region, flow=shape.flow,
                   layers=getattr(place, "layers", None),
@@ -474,6 +476,7 @@ class MyPlaces(QObject):
                     height=max(_float(_value(feature, layer, "height")),
                                0.0),
                     extrude=bool(_int(_value(feature, layer, "extrude"))),
+                    mode=str(_value(feature, layer, "altmode") or ""),
                     icon=icons.normal(str(_value(feature, layer, "icon")
                                           or icons.DEFAULT)),
                     alts=alts_from_text(_value(feature, layer, "alts"),
@@ -618,6 +621,7 @@ class MyPlaces(QObject):
                   "folder": _folder_fid(folder),
                   "height": float(shape.height or 0.0),
                   "extrude": int(bool(shape.extrude)),
+                  "altmode": shape.mode or "",
                   "icon": shape.icon, "time": when.pack(period),
                   "view_time": when.pack(view_period),
                   "tour": tour_text(tour), "alts": alts_text(shape.alts),
@@ -1013,6 +1017,7 @@ class MyPlaces(QObject):
                     "position": position, "folder": _folder_fid(key),
                     "height": float(place.height or 0.0),
                     "extrude": int(bool(place.extrude)),
+                    "altmode": getattr(place, "mode", "") or "",
                     "icon": place.icon, "time": when.pack(place.time),
                     "view_time": when.pack(place.view_time),
                     "tour": tour_text(place.tour),

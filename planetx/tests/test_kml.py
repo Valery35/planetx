@@ -143,11 +143,31 @@ class TestWrite(unittest.TestCase):
             </Document></kml>"""
         wall, sea = kml.read_kml(data).children
         self.assertEqual((wall.height, wall.extrude), (120.0, True))
-        # absolute - от уровня моря, рельефа нет, метка на земле.
-        self.assertEqual((sea.height, sea.extrude), (0.0, False))
+        # absolute - высота над уровнем моря, режим переносится.
+        self.assertEqual((sea.height, sea.extrude, sea.mode),
+                         (300.0, False, "absolute"))
         again = kml.read_kml(kml.write_kml(kml.KFolder("x", True, [wall]))
                              .encode("utf-8")).children[0]
         self.assertEqual((again.height, again.extrude), (120.0, True))
+
+    def test_altitude_modes_round_trip(self):
+        """Пять режимов высоты Google Earth переживают запись и чтение,
+        режимы дна - gx:altitudeMode."""
+        places = [kml.KPlace(mode, "point", [(58.0, 56.0)], height=h,
+                             mode=mode)
+                  for mode, h in (("clampToGround", 0.0),
+                                  ("clampToSeaFloor", 0.0),
+                                  ("relativeToGround", 50.0),
+                                  ("relativeToSeaFloor", 20.0),
+                                  ("absolute", -40.0))]
+        text = kml.write_kml(kml.KFolder("x", True, places))
+        self.assertIn("<gx:altitudeMode>clampToSeaFloor", text)
+        again = kml.read_kml(text.encode("utf-8")).children
+        self.assertEqual([(p.mode, p.height) for p in again],
+                         [("clampToGround", 0.0), ("clampToSeaFloor", 0.0),
+                          ("relativeToGround", 50.0),
+                          ("relativeToSeaFloor", 20.0),
+                          ("absolute", -40.0)])
 
     def test_colors(self):
         self.assertEqual(kml.color_kml((255, 128, 0, 200)), "c80080ff")

@@ -30,6 +30,7 @@ from .tilesource import TileSourceDialog, remove_connection
 
 SOURCES_DOC = "https://github.com/Valery35/planetx/blob/main/doc/SOURCES.md"
 NAME, WHAT, TERMS, CHECK = range(4)
+TREE_ROWS = 10  # строк таблицы источников не меньше, выбор помощника
 URL_ROLE = enum(Qt, "ItemDataRole", "UserRole")
 SOURCE_ROLE = URL_ROLE + 1  # индекс подложки в списке источников окна
 
@@ -157,6 +158,11 @@ class SourcesDialog(QDialog):
         self.tree.setColumnWidth(NAME, 210)
         self.tree.setColumnWidth(WHAT, 250)
         self.tree.setColumnWidth(TERMS, 90)
+        # Окно открывается в своём наименьшем размере, и без нижнего
+        # предела таблица сжималась до трёх строк - снимок 19 октября
+        # 2026 года.
+        self.tree.setMinimumHeight(
+            int(self.fontMetrics().height() * 1.6 * TREE_ROWS))
         self.tree.itemClicked.connect(self._clicked)
         self.tree.currentItemChanged.connect(self._current)
 

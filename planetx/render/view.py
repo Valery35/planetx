@@ -31,6 +31,7 @@ from ..core.models import anchor as model_anchor
 from ..core.flight import Flight
 from ..core.navigation import (Navigator, Pose, altitude, ground_under,
                                nearest_terrain)
+from ..core.features import ABSOLUTE, on_floor, uses_height
 from ..core.places import Place, PlaceStore, kinds_at
 from ..core.skyview import (FOV_MAX, FOV_MIN, distance_for, follow_pose,
                             pose_of, ra_dec_of)
@@ -529,11 +530,15 @@ class GlobeView(QOpenGLWidget):
         self.geo_marks = []
         # Подписи устьев скважин подземного режима.
         self.subsurface_marks = []
+        # Статьи Википедии рядом, core.places.Place класса «wiki».
+        self.wiki_marks = []
         # Длины отрезков линейки и точка профиля высот.
         self.tool_marks = []
         self._places_wanted = frozenset()
         self._places_at = 0.0
         self.labels = Labels()
+        self.labels.floor_at = lambda lats, lons: self.store.heights_at(
+            lats, lons)
         # Временная метка найденного места, Place класса «search» или None.
         # Список пунктов с меткой помнится вместе со списком без неё:
         # таблица надписей узнаёт прежний список по тождеству.
@@ -570,7 +575,7 @@ class GlobeView(QOpenGLWidget):
         # Шторка исторических карт: слой «compare» левее шторки заменяет
         # наложение слоёв проекта, а не тему.
         self.swipe_maps = False
-        self._feature_marks = ([], None)
+        self._feature_marks = ([], None, None)
         self._marked = (None, None, [])
         self._context = None
         self._overlay_missing = 0
@@ -672,15 +677,27 @@ class GlobeView(QOpenGLWidget):
         self.update()
 
     def _own_marks(self):
-        """Точечные объекты как надписи класса «mark»."""
+        """Точечные объекты как надписи класса «mark». Режим высоты
+        метки - отсчёт подъёма (Place.base), абсолютная высота
+        растягивается масштабом рельефа."""
         shapes = self.features.shapes
-        if self._feature_marks[1] is not shapes:
-            self._feature_marks = ([
-                Place(-2 - i, name or "", icon_style(icon, color), 1, lat,
-                      lon, None, lift)
-                for i, name, lat, lon, lift, icon, color
-                in self.features.marks()],
-                shapes)
+        scale = self.store.scale or 1.0
+        if self._feature_marks[1] is not shapes \
+                or self._feature_marks[2] != scale:
+            marks = []
+            for i, name, lat, lon, lift, icon, color, mode \
+                    in self.features.marks():
+                base = None
+                if mode == ABSOLUTE:
+                    base, lift = "abs", lift * scale
+                elif on_floor(mode):
+                    base = "floor"
+                if not uses_height(mode):
+                    lift = 0.0
+                marks.append(Place(-2 - i, name or "",
+                                   icon_style(icon, color), 1, lat, lon,
+                                   None, lift, base))
+            self._feature_marks = (marks, shapes, scale)
         return self._feature_marks[0]
 
     def set_search_mark(self, mark):
@@ -2368,7 +2385,9 @@ class GlobeView(QOpenGLWidget):
             features_busy = self.features.draw(
                 self.camera, self.store.heights_at if self.store.scale
                 else None, self.store.version, ratio,
-                still=shot or not motion)
+                still=shot or not motion,
+                surface_at=self.label_heights if self.store.scale
+                else None, scale=self.store.scale or 1.0)
         self.lake_water.prepare()
         if self.lake_water.active and not self.show_holes:
             self.lake_water.draw(self.camera)
@@ -2840,7 +2859,7 @@ class GlobeView(QOpenGLWidget):
         mark = self.search_mark
         own = self._own_marks() + self.layer_marks + self.grid_marks \
             + self.plate_marks + self.value_marks + self.geo_marks \
-            + self.subsurface_marks \
+            + self.subsurface_marks + self.wiki_marks \
             + self.tool_marks
         if mark is not None or own:
             head = ([mark] if mark is not None else []) + own

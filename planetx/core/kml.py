@@ -27,10 +27,10 @@ gx:TimeStamp или gx:TimeSpan внутри LookAt, как у Google Earth.
 строками, как в файле (core/when.py). gx:Tour - записанный тур:
 позы LookAt у gx:FlyTo по времени, gx:Wait держит позу.
 
-Высота над землёй переносится у altitudeMode relativeToGround
-и gx:relativeToSeaFloor: высота первой вершины становится подъёмом
-метки, extrude - стеной до земли. absolute у точки отсчитывается от
-уровня моря, рельефа при чтении ещё нет, такая точка ложится на землю.
+Режим высоты altitudeMode и gx:altitudeMode переносится как есть
+(core.features.MODES): у relativeToGround, gx:relativeToSeaFloor
+и absolute высота первой вершины становится высотой метки, extrude -
+стеной до земли. Без режима метка лежит на земле.
 Линия и многоугольник с absolute и высотой у каждой вершины - 3D-объект
 линейки: высоты вершин переносятся как есть. Высоты рельефа Terrarium
 отсчитаны от уровня моря, глобус ставит их над эллипсоидом, так же
@@ -237,7 +237,10 @@ class KPlace:
                  description="", height=0.0, extrude=False,
                  icon=icons.DEFAULT, time=None, view_time=None,
                  tour=None, alts=None, region=None, flow=False,
-                 layers=None, pace=None):
+                 layers=None, pace=None, mode=""):
+        # Режим высоты core.features.MODES, пустой - по высоте:
+        # с подъёмом relativeToGround, без него clampToGround.
+        self.mode = mode or ""
         self.region = region  # core.region.Region или None
         # Темп остановки тура (пауза или None, скорость) или None,
         # ExtendedData PACE_DATA.
@@ -364,26 +367,36 @@ def _coords(node):
 
 
 RELATIVE = ("relativeToGround", "relativeToSeaFloor")
+MODES = ("clampToGround", "clampToSeaFloor", "relativeToGround",
+         "relativeToSeaFloor", "absolute")
+
+
+def _mode(node):
+    """Режим высоты геометрии: altitudeMode или gx:altitudeMode."""
+    mode = _text(node, "altitudeMode") or _text(node, "gx:altitudeMode")
+    return mode if mode in MODES else "clampToGround"
 
 
 def _raise(node, coords):
-    """Подъём над землёй и выдавливание геометрии node."""
-    mode = _text(node, "altitudeMode")
-    if mode not in RELATIVE:
-        return 0.0, False
+    """Высота, выдавливание и режим высоты геометрии node."""
+    mode = _mode(node)
+    if mode not in RELATIVE and mode != "absolute":
+        return 0.0, False, mode
     first = _items(coords)[:1]
     parts = first[0].split(",") if first else []
     try:
-        height = max(float(parts[2]), 0.0) if len(parts) > 2 else 0.0
+        height = float(parts[2]) if len(parts) > 2 else 0.0
     except ValueError:
         height = 0.0
-    return height, _text(node, "extrude", "0") == "1"
+    if mode != "absolute":
+        height = max(height, 0.0)
+    return height, _text(node, "extrude", "0") == "1", mode
 
 
 def _alts(node, coords, count):
     """Высоты вершин линии или многоугольника с altitudeMode absolute,
     если высота есть у каждой из count вершин, иначе None."""
-    if coords is None or _text(node, "altitudeMode") != "absolute":
+    if coords is None or _mode(node) != "absolute":
         return None
     alts = []
     for item in _items(coords):
@@ -426,21 +439,23 @@ def _geometries(node):
         if name == "Point":
             points = _coords(child)[:1]
             if points:
-                out.append(("point", points) + _raise(child, child)
-                           + (None,))
+                out.append(("point", points) + _raise(child, child)[:2]
+                           + (None, _raise(child, child)[2]))
         elif name in ("LineString", "LinearRing"):
             points = _coords(child)
             if len(points) >= 2:
-                out.append(("line", points) + _raise(child, child)
-                           + (_alts(child, child, len(points)),))
+                height, extrude, mode = _raise(child, child)
+                out.append(("line", points, height, extrude,
+                            _alts(child, child, len(points)), mode))
         elif name == "Polygon":
             for ring in _outer_rings(child):
                 points = _coords(ring)
                 if len(points) > 1 and points[0] == points[-1]:
                     points = points[:-1]
                 if len(points) >= 3:
-                    out.append(("polygon", points) + _raise(child, ring)
-                               + (_alts(child, ring, len(points)),))
+                    height, extrude, mode = _raise(child, ring)
+                    out.append(("polygon", points, height, extrude,
+                                _alts(child, ring, len(points)), mode))
         elif name in ("MultiGeometry", "MultiTrack"):
             out.extend(_geometries(child))
         elif name == "Track":
@@ -449,7 +464,8 @@ def _geometries(node):
             # (_track_time): линия с промежутком растёт по шкале времени.
             points = _track_points(child)
             if len(points) >= 2:
-                out.append(("line", points, 0.0, False, None))
+                out.append(("line", points, 0.0, False, None,
+                            "clampToGround"))
     return out
 
 
@@ -606,10 +622,11 @@ def _placemark(node, styles, inherited=None):
         spot = _pair("{},{}".format(_text(look, "longitude"),
                                     _text(look, "latitude")))
         if spot is not None:
-            found = [("point", [spot], 0.0, False, None)]
+            found = [("point", [spot], 0.0, False, None,
+                      "clampToGround")]
     time = _time_of(node) or _geometry_time(node) or _track_time(node) \
         or inherited
-    for kind, points, height, extrude, alts in found:
+    for kind, points, height, extrude, alts, mode in found:
         view = _view(node, points[0] if points else None)
         color = style.get("icon" if kind == "point" else "color") \
             or LINE_COLOR
@@ -622,7 +639,7 @@ def _placemark(node, styles, inherited=None):
                           visible=_visible(node),
                           view=view,
                           description=_text(node, "description"),
-                          height=height, extrude=extrude,
+                          height=height, extrude=extrude, mode=mode,
                           icon=icons.from_href(style.get("href"))
                           if kind == "point" else icons.DEFAULT,
                           time=time,
@@ -1023,12 +1040,24 @@ def _space(place):
     return alts
 
 
+def _place_mode(place):
+    """Режим высоты метки для записи."""
+    mode = getattr(place, "mode", "") or ""
+    if mode in MODES:
+        return mode
+    return "relativeToGround" if place.height else "clampToGround"
+
+
 def _raise_kml(place):
-    """Режим высоты и выдавливание геометрии для записи."""
-    if not place.height:
+    """Режим высоты и выдавливание геометрии для записи. Режимы дна -
+    gx:altitudeMode, как пишет Google Earth."""
+    mode = _place_mode(place)
+    if mode == "clampToGround":
         return ""
-    return "<extrude>{}</extrude><altitudeMode>relativeToGround" \
-        "</altitudeMode>".format(int(bool(place.extrude)))
+    tag = "gx:altitudeMode" if "SeaFloor" in mode else "altitudeMode"
+    extrude = "<extrude>{}</extrude>".format(int(bool(place.extrude))) \
+        if mode != "clampToSeaFloor" else ""
+    return "{}<{t}>{}</{t}>".format(extrude, mode, t=tag)
 
 
 def _time_kml(time, prefix=""):
@@ -1059,7 +1088,8 @@ def _placemark_kml(place, indent):
                 "</PolyStyle>".format(color_kml(place.fill or FILL_COLOR),
                                       1 if place.fill else 0)
     mode = _raise_kml(place)
-    h = float(place.height or 0.0)
+    h = float(place.height or 0.0) if _place_mode(place) in (
+        "relativeToGround", "relativeToSeaFloor", "absolute") else 0.0
     alts = _space(place)
     # 3D-объект: прямые отрезки на своих высотах, без посадки на рельеф.
     tessellate = "<tessellate>1</tessellate>"

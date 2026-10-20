@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.4.2.
+A 3D globe inside QGIS. PlanetX version 1.5.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -81,6 +81,9 @@ and atmosphere, from space down to single streets.
   temperature, precipitation, wind and clouds of the NOAA GFS model
   at the moment of the time slider. It covers a forecast up to 16
   days and the past.
+- **Wikipedia nearby.** Labels of Wikipedia articles about places near
+  the view. A click opens the first paragraph of the article, the link
+  and the Explain this question to the assistant.
 - **NASA themes.** The Planet of Fire, Planet of Water, Planet of Air and Land
   and Life groups of the catalogue show 22 NASA GIBS rasters by
   date - smoke, carbon monoxide, precipitation, snow, ice, gases,

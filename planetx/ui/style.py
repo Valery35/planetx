@@ -31,12 +31,14 @@ import math
 import os
 import sys
 
-from qgis.PyQt.QtCore import QPointF, QRectF, QSize, Qt
+from qgis.PyQt.QtCore import QEvent, QObject, QPointF, QRectF, QSize, Qt
 from qgis.PyQt.QtGui import (QColor, QIcon, QImage, QPainter, QPainterPath,
                              QPen, QPixmap, QPolygonF)
 from qgis.PyQt.QtWidgets import QAbstractButton, QWidget
 
 from ..qt_compat import QAction, enum
+
+SHOW = enum(QEvent, "Type", "Show")
 
 # Плашка, линия, текст, подсветка, акцент.
 PLATE = QColor(30, 33, 38, 215)
@@ -233,25 +235,55 @@ def title_bar(widget, dark=None):
             break
 
 
+class _ShowWatch(QObject):
+    """Событие Show окна верхнего уровня - заголовок по оформлению.
+    Окно, открытое без фокуса, сигнала focusWindowChanged не получает,
+    и его заголовок оставался светлым - снимок автора от 19 октября
+    2026 года."""
+
+    def __init__(self, bars):
+        super().__init__()
+        self.bars = bars
+
+    def eventFilter(self, watched, event):
+        if event.type() == SHOW and isinstance(watched, QWidget) \
+                and watched.isWindow():
+            self.bars.mine(watched)
+        return False
+
+
 class TitleBars:
     """Заголовки окон модуля по оформлению: окно глобуса, его дочерние
-    окна при показе (сигнал focusWindowChanged приложения - окно
-    получает фокус, когда открывается)."""
+    окна при показе (фильтр событий Show приложения) и при получении
+    фокуса (сигнал focusWindowChanged)."""
 
     def __init__(self, root):
         from qgis.PyQt.QtWidgets import QApplication
         self.root = root
         self.app = QApplication.instance()
         self.app.focusWindowChanged.connect(self._focused)
+        self.watch = _ShowWatch(self)
+        self.app.installEventFilter(self.watch)
 
     def close(self):
         if self.app is None:
             return
+        self.app.removeEventFilter(self.watch)
         try:
             self.app.focusWindowChanged.disconnect(self._focused)
         except (TypeError, RuntimeError):
             # Связь уже снята: окно закрывается второй раз.
             self.app = None
+
+    def mine(self, widget):
+        """Заголовок окна widget, если оно окно модуля (под окном
+        глобуса)."""
+        probe = widget
+        while probe is not None:
+            if probe is self.root:
+                title_bar(widget)
+                return
+            probe = probe.parentWidget()
 
     def apply_all(self):
         """Окно глобуса и все открытые окна модуля."""
@@ -269,6 +301,22 @@ class TitleBars:
                 title_bar(widget)
                 return
             probe = probe.parentWidget()
+
+
+def dress_parts(window):
+    """Правила оформления прямо на частях окна глобуса - левой панели,
+    панели справа и каталоге, а не только наследством от окна.
+
+    Снимок автора от 19 октября 2026 года с рабочего QGIS 3.40.15
+    (Qt 5.15.13) - в тёмном оформлении списки и заголовки разделов
+    левой панели светлые, окно «О модуле» со своими правилами (dress)
+    тёмное. На QGIS 3.36.1 и 4.0.3 наследство доходит, причина на
+    3.40 не найдена."""
+    sheet = window_style()
+    for name in ("panel", "side", "gallery"):
+        part = getattr(window, name, None)
+        if part is not None:
+            part.setStyleSheet(sheet)
 
 
 def dress(dialog):

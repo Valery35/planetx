@@ -1791,6 +1791,7 @@ def tracks():
     layer.dataProvider().addFeatures(features)
     QgsProject.instance().addMapLayer(layer)
     state["track_layer"] = layer
+    window.set_layer_shown(layer.id(), True)
     window.tracks.set_track(layer, {"time": "t", "object": "obj",
                                     "color": [255, 80, 40, 255],
                                     "follow": True})
@@ -2221,6 +2222,7 @@ def record_setup():
     layer.dataProvider().addFeatures(features)
     QgsProject.instance().addMapLayer(layer)
     state["record_layer"] = layer
+    window.set_layer_shown(layer.id(), True)
     window.tracks.set_track(layer, {"time": "t", "object": "obj",
                                     "color": [255, 80, 40, 255],
                                     "follow": False})
@@ -8572,6 +8574,7 @@ def track_model():
     path = _cube_dae(os.path.join(TEMP, "planetx_track_model"))
     t0 = seconds(base)
     state["track_model_t0"] = t0
+    window.set_layer_shown(layer.id(), True)
     window.tracks.set_track(layer, {"time": "t", "object": "obj",
                                     "color": [255, 80, 40, 255],
                                     "follow": False, "model": path,
@@ -8669,9 +8672,11 @@ def track_height():
     common = {"time": "t", "object": "", "color": [255, 80, 40, 255],
               "follow": False, "model": path, "model_scale": 1.0,
               "model_turn": 0.0}
+    window.set_layer_shown(plane.id(), True)
     window.tracks.set_track(plane, dict(common, height=HEIGHT_Z,
                                         height_mode="absolute",
                                         height_unit=FOOT))
+    window.set_layer_shown(drone.id(), True)
     window.tracks.set_track(drone, dict(common, height="h",
                                         height_mode="relative",
                                         height_unit=1.0))
@@ -8991,6 +8996,355 @@ def post_trains_video():
                                  "trains", [])),
                              "drawn": view.models.drawn,
                              "waited": round(waited, 1)}
+    return None
+
+
+def _ease(t, keys):
+    """Значение по опорным точкам [(время, значение)] с плавным
+    переходом половиной косинуса между ними."""
+    if t <= keys[0][0]:
+        return keys[0][1]
+    for (t0, v0), (t1, v1) in zip(keys, keys[1:]):
+        if t <= t1:
+            share = (t - t0) / (t1 - t0) if t1 > t0 else 1.0
+            share = 0.5 - 0.5 * math.cos(math.pi * share)
+            return v0 + (v1 - v0) * share
+    return keys[-1][1]
+
+
+@check(1000, manual=True)
+def post_cockpit_video():
+    """Ролик полёта из кабины для поста: истребитель над долиной
+    Церматта к Маттерхорну, приборы на стекле, знак PlanetX и подпись
+    источников. Полёт идёт шагами по 1/25 с ролика, крен и тангаж -
+    плавный график _ease. PLANETX_POST_FLIGHT - широта, долгота,
+    высота над уровнем моря, курс, PLANETX_POST_SECONDS - длина."""
+    import ctypes
+    from qgis.PyQt.QtCore import QPoint, Qt as _Qt
+    from qgis.PyQt.QtGui import QImage, QPainter, QRegion
+    from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtWidgets import QWidget
+    from planetx.core import flightsim as core_flight, video
+    from planetx.ui.snapshot import draw_attribution, plain_text
+    window = state["window"]
+    view = window.view
+    flight = window.flight
+    look = state.setdefault("post_cockpit", {"since": None})
+    lat, lon, alt, heading = [float(v) for v in os.environ.get(
+        "PLANETX_POST_FLIGHT", "46.06,7.79,4300,212").split(",")]
+    seconds = float(os.environ.get("PLANETX_POST_SECONDS", "16"))
+    if look["since"] is None:
+        flight.start(lat, lon, core_flight.FIGHTER)
+        flight.timer.stop()
+        plane = flight.plane
+        plane.alt = alt
+        plane.heading = heading
+        plane.pitch = -3.0
+        flight.set_cockpit(True)
+        flight._follow(flight._ground(plane.lat, plane.lon))
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    if view.load_missing and waited < 60.0:
+        return 1000
+    fps = 25
+    rolls = [(0.0, 0.0), (3.0, 0.0), (5.0, 35.0), (10.0, 35.0),
+             (12.0, 0.0), (14.0, -20.0), (16.0, 0.0)]
+    pitches = [(0.0, -3.0), (6.0, -3.0), (9.0, 0.0), (13.0, 4.0),
+               (16.0, 2.0)]
+    first = view.grabFramebuffer()
+    width, height = video.even_size(first.width() // 2,
+                                    first.height() // 2)
+    ratio = first.width() / max(view.width(), 1)
+    out = os.path.join(TEMP, "planetx_post_cockpit.mp4")
+    writer = video.Mp4Writer(out, width, height, fps)
+    plane = flight.plane
+    lows = []
+    try:
+        for k in range(int(fps * seconds)):
+            t = k / float(fps)
+            share = t * 16.0 / seconds
+            plane.roll = _ease(share, rolls)
+            plane.pitch = _ease(share, pitches)
+            ground = flight._ground(plane.lat, plane.lon)
+            core_flight.step(plane, 1.0 / fps, ground=ground)
+            if plane.crashed:
+                break
+            ground = flight._ground(plane.lat, plane.lon)
+            lows.append(plane.alt - ground)
+            flight._follow(ground)
+            out_state = core_flight.readout(plane, ground)
+            out_state["pitch"] = plane.pitch
+            out_state["roll"] = plane.roll
+            flight.hud.set_state(out_state)
+            QTest.qWait(30)
+            started = time.monotonic()
+            while view.load_missing and time.monotonic() - started < 3.0:
+                QTest.qWait(50)
+            view.repaint()
+            image = view.grabFramebuffer().convertToFormat(
+                QImage.Format.Format_ARGB32_Premultiplied)
+            image.setDevicePixelRatio(ratio)
+            painter = QPainter(image)
+            # Без фона окна - иначе серый фон закрыл бы кадр.
+            flight.hud.render(painter, QPoint(0, 0), QRegion(),
+                              QWidget.RenderFlag.DrawChildren)
+            painter.end()
+            image.setDevicePixelRatio(1.0)
+            image = image.scaled(
+                width, height, _Qt.AspectRatioMode.IgnoreAspectRatio,
+                _Qt.TransformationMode.SmoothTransformation)
+            image = image.convertToFormat(QImage.Format.Format_RGB32)
+            draw_attribution(image, plain_text(
+                window.attribution.text()), 1.0)
+            if k == int(fps * 6):
+                image.save(os.path.join(TEMP, "planetx_post_cockpit.png"))
+            bits = image.constBits()
+            bits.setsize(image.sizeInBytes())
+            frame = bytearray(bytes(bits))
+            holder = ctypes.c_char.from_buffer(frame)
+            writer.write(ctypes.addressof(holder))
+            del holder
+    finally:
+        writer.close()
+    result["post_cockpit"] = {
+        "frames": writer.count, "size": [width, height],
+        "crashed": plane.crashed, "lowest_m": round(min(lows), 0)
+        if lows else None, "heading": round(plane.heading, 1),
+        "waited": round(waited, 1), "gl": dict(view.gl_errors)}
+    flight.stop()
+    return None
+
+
+@check(4000)
+def altitude_modes():
+    """Режимы высоты метки: окно свойств над Чёрным морем ставит
+    «Вдоль морского дна», режим пишется в файл меток и в KML."""
+    from planetx.core.features import Shape
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    window.set_body("earth")
+    window.set_sea_depths(True)
+    view.navigator.stop()
+    view.navigator.show(Pose(43.0, 34.0, 40000.0, 0.0, 45.0))
+    view.update()
+    store = window.myplaces
+    old = [p.key for p in store.places if p.name.startswith("Режим высоты")]
+    if old:
+        store.remove_many(old)
+    store.add(Shape("point", [(43.0, 34.0)], name="Режим высоты"))
+    store.add(Shape("line", [(42.95, 33.95), (43.05, 34.05)],
+                    name="Режим высоты, путь"))
+    state["alt_keys"] = [p.key for p in store.places
+                         if p.name.startswith("Режим высоты")]
+    result["altitude_modes"] = {}
+
+
+@check(500)
+def altitude_modes_check():
+    """Режим из окна: точка на дне, путь на дне, абсолютная точка на
+    своей высоте, KML переносит режимы."""
+    from planetx.core import features as core_features, kml
+    from planetx.render.features import build
+    window = state["window"]
+    view = window.view
+    store = window.myplaces
+    out = result["altitude_modes"]
+    keys = state["alt_keys"]
+    point = [p for p in store.places if p.key in keys
+             and p.shape.kind == "point"][0]
+    line = [p for p in store.places if p.key in keys
+            and p.shape.kind == "line"][0]
+    window._place_action("properties", point.key)
+    dialog = window.prop_dialogs[point.key]
+    out["modes"] = [dialog.altmode.itemData(i)
+                    for i in range(dialog.altmode.count())]
+    dialog.altmode.setCurrentIndex(dialog.altmode.findData(
+        core_features.SEAFLOOR))
+    out["lift_enabled_on_floor"] = dialog.lift.isEnabled()
+    out["preview_mode"] = [s.mode for s in view.features.shapes
+                           if s.name == "Режим высоты"]
+    dialog.accept()
+    QgsApplication.processEvents()
+    window._place_action("properties", line.key)
+    dialog = window.prop_dialogs[line.key]
+    dialog.altmode.setCurrentIndex(dialog.altmode.findData(
+        core_features.SEAFLOOR))
+    dialog.accept()
+    QgsApplication.processEvents()
+    saved = {p.shape.kind: p for p in store.places if p.key in keys}
+    out["saved"] = {k: p.shape.mode for k, p in saved.items()}
+    floor = float(view.store.heights_at([43.0], [34.0])[0])
+    surface = float(view.label_heights([43.0], [34.0])[0])
+    out["floor_m"] = round(floor, 1)
+    out["surface_m"] = round(surface, 1)
+    built = build(saved["line"].shape, view.store.heights_at,
+                  surface_at=view.label_heights,
+                  scale=view.store.scale or 1.0)
+    center, offsets = built[0], built[1]
+    from planetx.core.ellipsoid import ecef_to_geodetic
+    h = ecef_to_geodetic(center + offsets[0])[2]
+    lat0, lon0 = saved["line"].shape.points[0]
+    out["line_on_floor"] = round(float(h) - float(view.store.heights_at(
+        [lat0], [lon0])[0]), 2)
+    marks = [m for m in view._own_marks() if m.name == "Режим высоты"]
+    out["mark_base"] = marks[0].base if marks else None
+    # Абсолютная высота точки - через файл меток, как окно.
+    store.update(saved["point"].key, {"altmode": core_features.ABSOLUTE,
+                                      "height": 1500.0})
+    QgsApplication.processEvents()
+    window._refresh_shapes()
+    marks = [m for m in view._own_marks() if m.name == "Режим высоты"]
+    out["abs_mark"] = (marks[0].base, round(marks[0].lift, 1)) \
+        if marks else None
+    text = kml.write_kml(kml.KFolder("x", True, [
+        _kplace_of(store, p) for p in saved.values()]))
+    back = kml.read_kml(text.encode("utf-8")).children
+    out["kml_modes"] = sorted((p.kind, p.mode) for p in back)
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_altitude_modes.png"))
+    store.remove_many([p.key for p in saved.values()])
+    out["gl"] = dict(view.gl_errors)
+
+
+def _kplace_of(store, place):
+    from planetx.ui.myplaces import _kplace
+    return _kplace(store.find(place.key))
+
+
+@check(1000, manual=True)
+def post_haul_video():
+    """Ролик проезда с самосвалом для поста: демо «Самосвалы, Качканар»,
+    камера следом за первым самосвалом от погрузки вверх по съезду,
+    знак PlanetX и подпись источников. Момент треков - шагами по
+    1/25 с ролика с ускорением PLANETX_POST_RATE, PLANETX_HAUL - демо,
+    PLANETX_POST_SECONDS - длина, PLANETX_POST_TILT - наклон."""
+    import ctypes
+    from qgis.core import QgsProject
+    from qgis.PyQt.QtCore import Qt as _Qt
+    from qgis.PyQt.QtGui import QImage
+    from qgis.PyQt.QtTest import QTest
+    from planetx.core import video
+    from planetx.core.navigation import Pose
+    from planetx.ui.snapshot import draw_attribution, plain_text
+    from planetx.ui.track import seconds as field_seconds
+    window = state["window"]
+    view = window.view
+    tracks = window.tracks
+    look = state.setdefault("post_haul", {"since": None})
+    rate = float(os.environ.get("PLANETX_POST_RATE", "12"))
+    length = float(os.environ.get("PLANETX_POST_SECONDS", "20"))
+    tilt = float(os.environ.get("PLANETX_POST_TILT", "62"))
+    if look["since"] is None:
+        # Своя основа прерванного шага sources_vector в подписи ролика
+        # не нужна.
+        from qgis.core import QgsSettings
+        from planetx.core import sources as _sources
+        QgsSettings().remove(_sources.VECTOR_KEY)
+        QgsSettings().remove(_sources.VECTOR_CREDIT_KEY)
+        window.sources_changed("vector")
+        window.set_body("earth")
+        # Папки демо прежних прогонов дали бы чужие метки в кадре.
+        old = [f.key for f in window.myplaces.folders
+               if f.name.startswith("PlanetX: демо, самосвалы")]
+        if old:
+            window.myplaces.remove_many(old)
+        window.open_demo(os.environ.get("PLANETX_HAUL", "haul_kachkanar"))
+        look["since"] = time.monotonic()
+        return 3000
+    if not look.get("start"):
+        if not tracks._at and time.monotonic() - look["since"] < 60.0:
+            return 1000
+        timer = getattr(window, "_haul_timer", None)
+        if timer is not None:
+            timer.stop()
+        if window.timebar.timer.isActive():
+            window.timebar.toggle()
+        layer_id = next(iter(tracks.tracks))
+        layer = QgsProject.instance().mapLayer(layer_id)
+        key = sorted(k for k in tracks._at if k[0] == layer_id)[0]
+        rows = sorted((field_seconds(f["time"]), f["loaded"],
+                       f.geometry().asPoint())
+                      for f in layer.getFeatures()
+                      if str(f["truck"]) == key[1])
+        # Начало подъёма - первая гружёная точка, после которой
+        # самосвал сдвинулся, за 8 с до неё - конец погрузки.
+        start = rows[0][0]
+        for a, b in zip(rows, rows[1:]):
+            if a[1] and a[2] != b[2]:
+                start = a[0] - 8.0 * rate / 10.0
+                break
+        look["start"], look["key"] = start, key
+        tracks.set_moment(start)
+        tracks.set_follow(key)
+        tracks.follow_timer.stop()
+        lat, lon = tracks._at[key][:2]
+        view.navigator.stop()
+        view.navigator.show(Pose(lat, lon, 400.0, 0.0, tilt))
+        tracks._chase_step()
+        view.update()
+        look["posed"] = time.monotonic()
+        return 2000
+    waited = time.monotonic() - look["posed"]
+    if view.load_missing and waited < 60.0:
+        return 1000
+    fps = 25
+    reaches = [(0.0, 420.0), (4.0, 140.0), (length - 4.0, 140.0),
+               (length, 260.0)]
+    first = view.grabFramebuffer()
+    width, height = video.even_size(first.width() // 2,
+                                    first.height() // 2)
+    out = os.path.join(TEMP, "planetx_post_haul.mp4")
+    writer = video.Mp4Writer(out, width, height, fps)
+    key = look["key"]
+    path = []
+    try:
+        for k in range(int(fps * length)):
+            t = k / float(fps)
+            tracks.set_moment(look["start"] + t * rate)
+            tracks.chase.reach = _ease(t, reaches)
+            pose = view.navigator.pose
+            view.navigator.show(Pose(pose.lat, pose.lon, pose.distance,
+                                     pose.heading, tilt))
+            tracks._chase_step()
+            if tracks.followed is None:
+                break
+            path.append(tracks._at[key][:2])
+            QTest.qWait(30)
+            started = time.monotonic()
+            while view.load_missing and time.monotonic() - started < 3.0:
+                QTest.qWait(50)
+            view.repaint()
+            image = view.grabFramebuffer().scaled(
+                width, height, _Qt.AspectRatioMode.IgnoreAspectRatio,
+                _Qt.TransformationMode.SmoothTransformation)
+            image = image.convertToFormat(QImage.Format.Format_RGB32)
+            image.setDevicePixelRatio(1.0)
+            draw_attribution(image, plain_text(
+                window.attribution.text()), 1.0)
+            if k == int(fps * 8):
+                image.save(os.path.join(TEMP, "planetx_post_haul.png"))
+            bits = image.constBits()
+            bits.setsize(image.sizeInBytes())
+            frame = bytearray(bytes(bits))
+            holder = ctypes.c_char.from_buffer(frame)
+            writer.write(ctypes.addressof(holder))
+            del holder
+    finally:
+        writer.close()
+        tracks.set_follow(None)
+        tracks.release()
+    moved = 0.0
+    for (a, b), (c, d) in zip(path, path[1:]):
+        moved += math.hypot((c - a) * 111320.0,
+                            (d - b) * 111320.0 * math.cos(math.radians(a)))
+    result["post_haul"] = {"frames": writer.count, "size": [width, height],
+                           "truck": key[1], "moved_m": round(moved),
+                           "drawn": view.models.drawn,
+                           "waited": round(waited, 1),
+                           "gl": dict(view.gl_errors)}
     return None
 
 
@@ -17065,6 +17419,482 @@ def place_card_check():
     window.myplaces.remove(state.pop("card_key"))
     window.panel.set_answer("")
     out["gl"] = dict(view.gl_errors)
+
+
+def _dark_openers(window):
+    """Немодальные окна модуля и окна панели справа: имя - открытие."""
+    from planetx.core.features import Shape
+    store = window.myplaces
+    key = store.add(Shape("point", [(58.01, 56.23)], name="Окна"))
+    state["dark_key"] = key
+
+    def place():
+        return store.find(key)
+
+    def modal(make):
+        # Окна, которые модуль открывает exec, - здесь show, иначе шаг
+        # ждал бы закрытия.
+        def opener():
+            dialog = make()
+            state.setdefault("dark_keep", []).append(dialog)
+            dialog.show()
+        return opener
+
+    from qgis.core import QgsProject, QgsVectorLayer
+    from qgis.PyQt.QtWidgets import QMessageBox
+    from planetx.ui.menulinks import MenuLinksDialog
+    from planetx.ui.netlink import LinkDialog
+    from planetx.ui.record import RecordDialog
+    from planetx.ui.sounding import SoundingDialog
+    from planetx.ui.tilesource import TileSourceDialog
+    from planetx.ui.track import TrackDialog
+    points = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=time:datetime&field=depth:double",
+        "dark points", "memory")
+    from qgis.core import QgsFeature, QgsGeometry, QgsPointXY
+    features = []
+    for k, (lat, lon) in enumerate(((58.01, 56.23), (58.02, 56.24),
+                                    (58.03, 56.22))):
+        feature = QgsFeature(points.fields())
+        feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(lon, lat)))
+        feature.setAttribute("depth", 5.0 + k)
+        features.append(feature)
+    points.dataProvider().addFeatures(features)
+    QgsProject.instance().addMapLayer(points, False)
+    state["dark_layer"] = points
+    cam = window.view.camera
+    return [
+        ("tilesource", modal(lambda: TileSourceDialog(window,
+                                                      (58.0, 56.2)))),
+        ("menulinks", modal(lambda: MenuLinksDialog(window))),
+        ("record", modal(lambda: RecordDialog(window))),
+        ("netlink", modal(lambda: LinkDialog(parent=window))),
+        ("track", modal(lambda: TrackDialog(points, None, window))),
+        ("sounding", modal(lambda: SoundingDialog(
+            points, 0.0, os.path.join(TEMP, "dark.tif"), window))),
+        ("message", modal(lambda: QMessageBox(
+            QMessageBox.Icon.Question, "PlanetX",
+            "Окно вопроса модуля в оформлении окна глобуса.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            window))),
+        ("properties", window._show_properties),
+        ("sources", window.open_sources),
+        ("catalog", window.open_gallery),
+        ("new_place", lambda: window._open_place("point")),
+        ("sheets", lambda: window.sheets_here(58.01, 56.23)),
+        ("sentinel", lambda: window.sentinel_here(58.01, 56.23)),
+        ("identify", lambda: window.identify_here(cam.width / 2.0,
+                                                  cam.height / 2.0)),
+        ("assistant", window.open_assistant),
+        ("snapshot", lambda: window._open_snapshot(False)),
+        ("section", lambda: window._open_section(
+            "Разрез", [(58.0, 56.0), (58.1, 56.5)])),
+        ("ruler", window._open_ruler),
+        ("subsurface", window.subsurface.open_dialog),
+        ("viewshed", lambda: window._open_viewshed(place())),
+        ("insolation", lambda: window._open_insolation(place())),
+        ("place_card", lambda: window.open_place_card(place())),
+        ("place_props", lambda: window._open_place_properties(place())),
+    ]
+
+
+@check(1200, manual=True)
+def dark_windows():
+    """Окна модуля в оформлении PLANETX_THEME (по умолчанию тёмное):
+    каждое открывается, снимается в TEMP/planetx_<оформление>_<имя>.png
+    и закрывается. Доля светлых пикселей окна - поле light, у тёмного
+    окна она мала, title_dark - тёмный ли заголовок окна."""
+    from qgis.PyQt.QtWidgets import QApplication
+    from planetx.ui import style
+    window = state["window"]
+    out = result.setdefault("dark_windows", {})
+    look = state.get("dark")
+    theme = os.environ.get("PLANETX_THEME", style.DARK)
+    if look is None:
+        window.set_ui_theme(theme)
+        look = state["dark"] = {"n": 0, "items": _dark_openers(window),
+                                "before": None}
+    items = look["items"]
+    n = look["n"]
+    if look["before"] is not None:
+        name = items[n][0]
+        shots = []
+        new = [w for w in QApplication.topLevelWidgets()
+               if w.isVisible() and w not in look["before"]
+               and w is not window]
+        if window.side.isVisible() and window.side.dialog is not None:
+            new.append(window.side)
+        for k, widget in enumerate(new):
+            image = widget.grab().toImage()
+            path = os.path.join(TEMP, "planetx_{}_{}{}.png".format(
+                theme, name, "_{}".format(k) if k else ""))
+            image.save(path)
+            light = 0
+            total = 0
+            for y in range(0, image.height(), 6):
+                for x in range(0, image.width(), 6):
+                    c = image.pixelColor(x, y)
+                    total += 1
+                    if c.lightness() > 200:
+                        light += 1
+            shots.append({"widget": type(widget).__name__,
+                          "size": [image.width(), image.height()],
+                          "light": round(light / max(total, 1), 2),
+                          "title_dark": _title_dark(widget)
+                          if widget is not window.side else None})
+            if widget is not window.side:
+                widget.close()
+        window.side.close_dialog()
+        out[name] = shots or "no window"
+        look["before"] = None
+        look["n"] = n = n + 1
+        if n >= len(items):
+            window.myplaces.remove(state.pop("dark_key"))
+            QgsProject_ = __import__("qgis.core", fromlist=["QgsProject"])
+            QgsProject_.QgsProject.instance().removeMapLayer(
+                state.pop("dark_layer").id())
+            return None
+    look["before"] = set(w for w in QApplication.topLevelWidgets()
+                         if w.isVisible())
+    try:
+        items[n][1]()
+    except (AttributeError, TypeError, ValueError, RuntimeError) as error:
+        out[items[n][0]] = "error: {}".format(error)
+    return 1200
+
+
+@check(2000)
+def haul_open():
+    """Демо «Самосвалы, Качканар»: слой самосвалов треком с моделью,
+    шкала времени идёт."""
+    from planetx.core.features import Shape
+    window = state["window"]
+    window.set_body("earth")
+    result["haul"] = {}
+    # Метка со временем 1875 года, как у автора: шкала начинается с
+    # неё, а самосвалы должны стоять на своём рейсе.
+    key = window.myplaces.add(Shape("point", [(11.35, 142.2)],
+                                    name="Челленджер"))
+    window.myplaces.update(key, {"time": "1875-03-23"})
+    state["haul_old_key"] = key
+    window.open_demo(os.environ.get("PLANETX_HAUL", "haul_kachkanar"))
+    state["haul_since"] = time.monotonic()
+
+
+@check(500)
+def haul_wait():
+    """Ждёт моделей самосвалов на виде и загрузки, не дольше 60 с."""
+    window = state["window"]
+    view = window.view
+    view.repaint()
+    QgsApplication.processEvents()
+    waited = time.monotonic() - state["haul_since"]
+    drawn = getattr(view.models, "drawn", 0)
+    if (view.load_missing or not drawn) and waited < 60.0:
+        return 1000
+    out = result["haul"]
+    out["waited"] = round(waited, 1)
+    out["tracks"] = len(window.tracks.tracks)
+    out["at"] = len(window.tracks._at)
+    out["drawn"] = drawn
+    bar = window.timebar
+    out["bar_shown"] = bar.shown()
+    out["playing"] = bar.timer.isActive()
+    out["speed"] = bar.speed.currentData()
+    out["loop"] = bar.loop.isChecked()
+    out["load_missing"] = view.load_missing
+    import datetime as _dt
+    out["bar_start_year"] = (_dt.datetime(1970, 1, 1) + _dt.timedelta(
+        seconds=bar.extent()[0])).year
+    span = getattr(window, "_haul_span", None)
+    moment = bar.range()[1]
+    out["moment_in_trip"] = span is not None \
+        and span[0] <= moment <= span[1]
+    # Конец рейса - момент снова в начале.
+    if span is not None:
+        bar.set_point(True, at=span[1] + 60.0)
+        window._haul_loop()
+        out["loop_back"] = abs(bar.range()[1] - span[0]) < 1.0
+    return None
+
+
+@check(500)
+def haul_check():
+    """Самосвалы едут: положения через 2 с другие, азимут модели - по
+    ходу. Кадр вблизи самосвала - в TEMP."""
+    import math as _math
+    from qgis.PyQt.QtTest import QTest
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    out = result["haul"]
+    before = dict(window.tracks._at)
+    QTest.qWait(2000)
+    after = dict(window.tracks._at)
+    moved = [k for k in after if k in before and before[k][:2]
+             != after[k][:2]]
+    out["moved"] = len(moved)
+    # Азимут по сдвигу точки и азимут модели.
+    gaps = []
+    for k in moved:
+        lat0, lon0 = before[k][:2]
+        lat1, lon1, heading = after[k][:3]
+        dy = (lat1 - lat0) * 111320.0
+        dx = (lon1 - lon0) * 111320.0 * _math.cos(_math.radians(lat1))
+        if _math.hypot(dx, dy) < 2.0:
+            continue
+        course = _math.degrees(_math.atan2(dx, dy)) % 360.0
+        gaps.append(round(((heading - course + 180.0) % 360.0) - 180.0, 1))
+    out["heading_gap"] = gaps
+    # Вблизи первого самосвала, показ на паузе - самосвал стоит.
+    bar = window.timebar
+    if bar.timer.isActive():
+        bar.toggle()
+    after = dict(window.tracks._at)
+    key = sorted(after)[0]
+    lat, lon, heading = after[key][:3]
+    view.navigator.stop()
+    view.navigator.show(Pose(lat, lon, 70.0, heading + 120.0, 62.0))
+    view.update()
+    started = time.monotonic()
+    while time.monotonic() - started < 25.0:
+        QTest.qWait(500)
+        view.repaint()
+        if not view.load_missing:
+            break
+    image = view.grabFramebuffer()
+    shot = os.path.join(TEMP, "planetx_haul_truck.png")
+    image.save(shot)
+    out["shot"] = shot
+    view.navigator.show(Pose(lat, lon, 1500.0, heading, 55.0))
+    view.update()
+    QTest.qWait(3000)
+    view.repaint()
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_haul_pit.png"))
+    out["gl"] = dict(view.gl_errors)
+    return None
+
+@check(500)
+def haul_follow():
+    """Камера следом за самосвалом: пункт меню правой кнопки над
+    самосвалом, самосвал в середине кадра через 3 с хода, колесо меняет
+    расстояние, Esc отпускает."""
+    import numpy as _np
+    from qgis.PyQt.QtCore import QPoint, QPointF, Qt
+    from qgis.PyQt.QtGui import QWheelEvent
+    from qgis.PyQt.QtTest import QTest
+    from qgis.PyQt.QtWidgets import QApplication, QMenu
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    window = state["window"]
+    view = window.view
+    tracks = window.tracks
+    out = result["haul"]
+    bar = window.timebar
+    if not bar.timer.isActive():
+        bar.toggle()
+    key = sorted(tracks._at)[0]
+    lat, lon = tracks._at[key][:2]
+    view.navigator.stop()
+    view.navigator.show(Pose(lat, lon, 1200.0, 0.0, 40.0))
+    view.update()
+    QTest.qWait(500)
+    view.repaint()
+
+    def pixel(target):
+        lat, lon = tracks._at[target][:2]
+        h = view.label_height(lat, lon)
+        p, _ = view.camera.project(geodetic_to_ecef(
+            _np.array([lat]), _np.array([lon]), _np.array([h])))
+        return float(p[0][0]), float(p[0][1])
+
+    px, py = pixel(key)
+    out["under"] = tracks.under(px, py) == key
+    menu = QMenu()
+    globemenu.track_items(window, menu, px, py)
+    texts = [a.text() for a in menu.actions()]
+    out["menu"] = texts
+    follow = [a for a in menu.actions() if a.isCheckable()]
+    if not follow:
+        return None
+    follow[0].setChecked(True)
+    QTest.qWait(3000)
+    view.repaint()
+    x, y = pixel(key)
+    ratio = view.devicePixelRatioF()
+    cx = view.width() * ratio / 2.0
+    cy = view.height() * ratio / 2.0
+    out["followed"] = tracks.followed == key
+    out["off_centre_px"] = round(float(_np.hypot(x - cx, y - cy)), 1)
+    reach = tracks.chase.reach
+    point = QPointF(view.width() / 2.0, view.height() / 2.0)
+    from planetx.qt_compat import enum
+    QApplication.sendEvent(view, QWheelEvent(
+        point, QPointF(view.mapToGlobal(point.toPoint())), QPoint(0, 0),
+        QPoint(0, 240), enum(Qt, "MouseButton", "NoButton"),
+        enum(Qt, "KeyboardModifier", "NoModifier"),
+        enum(Qt, "ScrollPhase", "NoScrollPhase"), False))
+    out["wheel"] = [round(reach), round(tracks.chase.reach)]
+    from qgis.PyQt.QtCore import QEvent
+    from qgis.PyQt.QtGui import QKeyEvent
+    QApplication.sendEvent(view, QKeyEvent(
+        enum(QEvent, "Type", "KeyPress"), enum(Qt, "Key", "Key_Escape"),
+        enum(Qt, "KeyboardModifier", "NoModifier")))
+    out["esc_released"] = tracks.followed is None
+    shot = os.path.join(TEMP, "planetx_haul_follow.png")
+    tracks.set_follow(key)
+    QTest.qWait(2000)
+    view.repaint()
+    view.grabFramebuffer().save(shot)
+    tracks.set_follow(None)
+    out["follow_shot"] = shot
+    return None
+
+
+@check(500)
+def haul_close():
+    """Снятие демо: трек и слой убраны, шкала стоит."""
+    from qgis.core import QgsProject
+    window = state["window"]
+    window.myplaces.remove(state.pop("haul_old_key"))
+    project = QgsProject.instance()
+    root = project.layerTreeRoot()
+    group = root.findGroup("Самосвалы в карьере") \
+        or root.findGroup("Haul trucks in the pit")
+    # Снятый флажок слоя в «Проект QGIS» убирает трек и модели с вида,
+    # замечание автора от 20 октября 2026 года.
+    out = result["haul"]
+    layer_id = group.findLayers()[0].layerId() if group is not None \
+        else None
+    if layer_id is not None:
+        window.set_layer_shown(layer_id, False)
+        out["hidden"] = [len(window.tracks.tracks), len(window.tracks._at),
+                         len(window.view.models.groups.get("tracks", []))]
+        window.set_layer_shown(layer_id, True)
+        out["shown_again"] = [len(window.tracks.tracks),
+                              len(window.view.models.groups.get(
+                                  "tracks", []))]
+    if group is not None:
+        for node in group.findLayers():
+            window.tracks.set_track(node.layer(), None)
+            project.removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.timebar.stop()
+    result["haul"]["after_tracks"] = len(window.tracks.tracks)
+
+
+@check(1500)
+def wiki_on():
+    """Википедия рядом: центр Перми с 6 км, строка «Википедия рядом»
+    и сетка - включённый слой для вопроса помощнику."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    result["wiki"] = {}
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.01, 56.235, 6000.0, 0.0, 0.0))
+    window.view.update()
+    window.set_extra("grid", True)
+    window.set_extra("wiki", True)
+    state["wiki_since"] = time.monotonic()
+
+
+@check(500)
+def wiki_wait():
+    """Ждёт тайлов статей и подписей статей на экране, не дольше 40 с."""
+    from planetx.ui.globe.wiki import WIKI_ID
+    window = state["window"]
+    view = window.view
+    window._want_wiki()
+    view.repaint()
+    QgsApplication.processEvents()
+    shown = [k for k in view.labels.shown if (k[0] or 0) >= WIKI_ID]
+    waited = time.monotonic() - state["wiki_since"]
+    if (len(window.wiki_articles.tiles) < 9 or not shown) and waited < 40.0:
+        return 1000
+    out = result["wiki"]
+    out["waited"] = round(waited, 1)
+    out["tiles"] = len(window.wiki_articles.tiles)
+    out["articles"] = len(window.wiki_articles.articles())
+    out["marks"] = len(view.wiki_marks)
+    out["shown"] = len(shown)
+    out["lang"] = window.wiki_articles.lang
+    out["credit"] = "Wikipedia" in window.attribution.text()
+    return None
+
+
+@check(500)
+def wiki_click():
+    """Щелчок по подписанной статье - карточка статьи в панели."""
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    from planetx.core.places import identity
+    from planetx.ui.placecard import ArticleCard
+    window = state["window"]
+    view = window.view
+    out = result["wiki"]
+    shown = view.labels.shown
+    mark = next((m for m in view.wiki_marks if identity(m) in shown), None)
+    if mark is None:
+        out["click"] = "no shown mark"
+        return None
+    h = float(view.label_heights(np.array([mark.lat]),
+                                 np.array([mark.lon]))[0])
+    pixel, _ = view.camera.project(geodetic_to_ecef(mark.lat, mark.lon, h))
+    px, py = float(pixel[0]), float(pixel[1])
+    state["wiki_pixel"] = (px, py)
+    window.side.close_dialog()
+    # Группа окна «Объекты» - до карточки: панель справа сужает вид,
+    # и точка статьи уходит с пикселя.
+    out["objects_group"] = len(window._identify_wiki(px, py))
+    window._clicked(px, py)
+    card = window.side.dialog
+    out["card"] = isinstance(card, ArticleCard)
+    out["title"] = card.article.title if out["card"] else None
+    out["mark"] = mark.name
+    out["link"] = card.link if out["card"] else None
+    state["wiki_since"] = time.monotonic()
+    return None
+
+
+@check(500)
+def wiki_card():
+    """Первый абзац в карточке, вопрос помощнику со статьёй и слоями,
+    метка из статьи в «Мои метки», снятие строки."""
+    from planetx.ui.placecard import ArticleCard, article_question
+    window = state["window"]
+    out = result["wiki"]
+    card = window.side.dialog
+    if not isinstance(card, ArticleCard):
+        out["summary"] = "no card"
+        return None
+    waited = time.monotonic() - state["wiki_since"]
+    if not card.extract and waited < 20.0:
+        return 1000
+    out["extract"] = card.extract[:120]
+    out["double_space"] = "  " in card.extract
+    a = card.article
+    layers = window._explain_layers()
+    out["layers"] = layers
+    question = article_question(a.title, card.extract, a.lat, a.lon, layers)
+    out["question_has_extract"] = bool(card.extract) \
+        and " ".join(card.extract.split())[:40] in question
+    out["question_has_grid"] = any(name in question for name in layers)
+    before = len(window.myplaces.places)
+    window.keep_article(card)
+    added = [p for p in window.myplaces.places
+             if p.shape.name == a.title]
+    out["kept"] = len(window.myplaces.places) - before
+    out["kept_link"] = bool(added) and card.link in added[-1].description
+    for place in added:
+        window.myplaces.remove(place.key)
+    window.side.close_dialog()
+    window.set_extra("wiki", False)
+    window.set_extra("grid", False)
+    out["marks_after"] = len(window.view.wiki_marks)
+    out["gl"] = dict(window.view.gl_errors)
+    return None
 
 
 @check(8000)

@@ -111,6 +111,7 @@ def show(window, px, py):
                 lambda *a, p=place: window._open_place_properties(p))
         satellite_items(window, menu, px, py)
         live_items(window, menu, px, py)
+        track_items(window, menu, px, py)
     if ground is not None:
         lat, lon = ground
         if not menu.actions()[-1].isSeparator():
@@ -270,6 +271,36 @@ def live_items(window, menu, px, py):
         follow.toggled.connect(
             lambda on, m=manager, k=key: m.set_follow(k if on else None))
         return
+
+
+def track_items(window, menu, px, py):
+    """Объект трека слоя проекта под курсором: «Камера следом». Если
+    камера идёт следом, а объекта под курсором нет, - пункт, который её
+    отпускает."""
+    tracks = getattr(window, "tracks", None)
+    if tracks is None:
+        return
+    target = tracks.under(px, py) or tracks.followed
+    if target is None:
+        return
+    if not menu.isEmpty():
+        menu.addSeparator()
+    title = menu.addAction(tracks.label(target))
+    title.setEnabled(False)
+    follow = menu.addAction(tr("Камера следом"))
+    follow.setCheckable(True)
+    follow.setChecked(tracks.followed == target)
+    follow.toggled.connect(
+        lambda on, t=target: follow_track(window, t, on))
+
+
+def follow_track(window, target, on):
+    """Камера следом за объектом трека: живые объекты отпускают её."""
+    if on:
+        for manager in getattr(window, "live_managers", ()):
+            if getattr(manager, "followed", None) is not None:
+                manager.set_follow(None)
+    window.tracks.set_follow(target if on else None)
 
 
 def follow_satellite(manager, number, on):

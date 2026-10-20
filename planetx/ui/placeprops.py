@@ -28,7 +28,10 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDateTimeEdit,
                                  QVBoxLayout, QWidget)
 
 from ..core import icons, lookat, region, tour, when
-from ..core.features import MAX_HEIGHT, height_share, share_height
+from ..core.features import (ABSOLUTE, CLAMP, MAX_HEIGHT, RELATIVE,
+                             RELATIVE_FLOOR, SEAFLOOR, altitude_mode,
+                             has_alts, height_share, share_height,
+                             uses_height)
 from ..core.flight import lon_span, wrap_lon
 from ..i18n import tr
 from ..qt_compat import enum
@@ -37,6 +40,8 @@ from . import regionfield
 from .myplaces import DEFAULT_FILL
 
 SLIDER_STEPS = 1000  # делений ползунка высоты
+# Наименьшая абсолютная высота, м: дно Марианского жёлоба около -11 км.
+MIN_ALTITUDE = -11000.0
 
 
 def _rgba(color):
@@ -291,16 +296,36 @@ class PlaceProperties(QDialog):
             self.fill.colorChanged.connect(self._changed)
             form.addRow(tr("Заливка"), self.fill)
         height_box, form = self._group(tr("Высота"))
+        self.altmode = QComboBox(self)
+        for mode, title in ((CLAMP, tr("На поверхности")),
+                            (SEAFLOOR, tr("Вдоль морского дна")),
+                            (RELATIVE, tr("Относительно поверхности")),
+                            (RELATIVE_FLOOR,
+                             tr("Относительно морского дна")),
+                            (ABSOLUTE, tr("Абсолютная"))):
+            self.altmode.addItem(title, mode)
+        self.altmode.setCurrentIndex(max(self.altmode.findData(
+            altitude_mode(shape)), 0))
+        self.altmode.setToolTip(tr(
+            "От чего отсчитывается высота. На поверхности - метка лежит "
+            "на земле, над морем на воде. Вдоль морского дна - на дне. "
+            "Относительно поверхности и дна - подъём над ними. "
+            "Абсолютная - высота над уровнем моря. Режим сохраняется "
+            "в KML."))
+        # У 3D-пути и 3D-многоугольника высоты у каждой вершины.
+        self.altmode.setEnabled(not has_alts(shape))
+        self.altmode.currentIndexChanged.connect(self._mode_changed)
+        form.addRow(tr("Отсчёт высоты"), self.altmode)
         self.lift = QDoubleSpinBox(self)
-        self.lift.setRange(0.0, MAX_HEIGHT)
+        self.lift.setRange(MIN_ALTITUDE, MAX_HEIGHT)
         self.lift.setDecimals(1)
         self.lift.setSuffix(tr(" м"))
         self.lift.setValue(float(shape.height or 0.0))
         self.lift.setToolTip(tr(
-            "Подъём над рельефом. "
-            "Ноль - объект лежит на земле."))
+            "Подъём над поверхностью или дном, в абсолютном режиме - "
+            "высота над уровнем моря."))
         self.lift.valueChanged.connect(self._height_typed)
-        form.addRow(tr("Высота над землёй"), self.lift)
+        form.addRow(tr("Высота"), self.lift)
         self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
         self.slider.setRange(0, SLIDER_STEPS)
         self.slider.setValue(int(round(
@@ -323,6 +348,7 @@ class PlaceProperties(QDialog):
             "Работает при высоте больше нуля."))
         self.extrude.toggled.connect(self._changed)
         form.addRow("", self.extrude)
+        self._mode_fields()
         if self.tour_keys is not None:
             form.addRow(tr("Высота облёта"), self._factor_row())
         time_box, form = self._group(tr("Время и видимость"))
@@ -536,6 +562,20 @@ class PlaceProperties(QDialog):
             self.icon.setItemIcon(n, icon_image(icon, rgba))
         self._changed()
 
+    def _mode_fields(self):
+        """Высота и стена доступны в режимах с высотой. Отрицательная
+        высота - только у абсолютной, это впадины ниже уровня моря."""
+        mode = self.altmode.currentData()
+        on = uses_height(mode)
+        for widget in (self.lift, self.slider, self.extrude):
+            widget.setEnabled(on)
+        if mode != ABSOLUTE and self.lift.value() < 0.0:
+            self.lift.setValue(0.0)
+
+    def _mode_changed(self, *args):
+        self._mode_fields()
+        self._changed()
+
     def _height_typed(self, value):
         self.slider.blockSignals(True)
         self.slider.setValue(int(round(height_share(value) * SLIDER_STEPS)))
@@ -577,7 +617,8 @@ class PlaceProperties(QDialog):
         values = {"points": points,
                   "name": self.name.text().strip(),
                   "height": float(self.lift.value()),
-                  "extrude": self.extrude.isChecked()}
+                  "extrude": self.extrude.isChecked(),
+                  "mode": self.altmode.currentData()}
         if self.color is not None:
             values["color"] = _rgba(self.color.color())
         if self.line_width is not None:
@@ -596,6 +637,7 @@ class PlaceProperties(QDialog):
                "description": self.description.toPlainText().strip(),
                "height": float(self.lift.value()),
                "extrude": int(self.extrude.isChecked()),
+               "altmode": self.altmode.currentData(),
                "view": lookat.text(self.view()),
                "region": region.text(regionfield.value(
                    self.far, self.points,

@@ -11,7 +11,7 @@ import time
 import numpy as np
 from urllib.parse import quote
 from qgis.core import (QgsApplication, QgsProject, QgsRasterLayer,
-                       QgsSettings)
+                       QgsSettings, QgsVectorLayer)
 from qgis.PyQt.QtCore import QTimer
 from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 
@@ -33,6 +33,7 @@ from ..record import RecordDialog
 from ..scene import apply as apply_scene, capture as capture_scene
 from ..track import TrackDialog
 from .base import (BRIENZ_LEVEL, DEMO_QUAKE_BAND, FLOW_LAYERS, FLOW_LIFT,
+                   HAUL_CHECK, HAUL_COLOR, HAUL_END, HAUL_RATE,
                    FLOW_REACH, FLOW_TICK, FLOW_WIDER, GIBS_FADES, LAYER_FADE,
                    LAYER_FADE_TICK, OPACITY_DELAY, OPACITY_KEY, PLUGIN_DIR,
                    POINT_LAYERS, POLE_FIRST, QGIS_LAYERS, REGION_MOVE,
@@ -683,7 +684,81 @@ class PlacesMixin:
                 self.set_insets(read_insets() + [layer_id])
         if name == "moscow":
             self._demo_maps(tr("Москва, исторические карты"), moscow_maps())
+        if name.startswith("haul_"):
+            pit = name[len("haul_"):]
+            self._demo_trucks(
+                tr("Самосвалы в карьере"),
+                os.path.join(demo, "haul", "haul_{}.gpkg".format(pit)),
+                os.path.join(demo, "haul", "haul_truck.glb"))
         return key
+
+    def _demo_trucks(self, title, path, model):
+        """Самосвалы демо: слой точек path группой title вверху проекта,
+        трек по полю truck с моделью model на рельефе. Шкала времени
+        открывается на начале и идёт ×10 по кругу (tools/
+        make_haul_demo.py)."""
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        old = root.findGroup(title)
+        if old is not None:
+            for node in old.findLayers():
+                self.tracks.settings.pop(node.layerId(), None)
+                project.removeMapLayer(node.layerId())
+            root.removeChildNode(old)
+        layer = QgsVectorLayer(path + "|layername=trucks",
+                               tr("Самосвалы"), "ogr")
+        if not layer.isValid():
+            return
+        project.addMapLayer(layer, False)
+        root.insertGroup(0, title).addLayer(layer)
+        self.set_layer_shown(layer.id(), True)
+        self.tracks.set_track(layer, {
+            "time": "time", "object": "truck",
+            "color": list(HAUL_COLOR), "follow": False, "model": model,
+            "model_scale": 1.0, "model_turn": 0.0, "height": "",
+            "height_mode": "relative", "height_unit": 1.0})
+        QTimer.singleShot(0, lambda: self._play_trucks(layer.id()))
+
+    def _play_trucks(self, layer_id):
+        """Шкала времени демо самосвалов: момент в начале рейса, ×10,
+        показ идёт. Начало - начало трека самосвалов, а не шкалы: у
+        автора метки со временем с 1875 года, шкала начиналась с них,
+        и самосвалов не было (снимок 19 октября 2026 года). Конец
+        рейса возвращает момент к его началу (_haul_loop) - круг шкалы
+        шёл бы по всему её охвату."""
+        bar = self.timebar
+        track = self.tracks.tracks.get(layer_id)
+        if not bar.known or track is None or track.start is None:
+            return
+        bar.open_bar()
+        self.toolbar.set_time_shown(True)
+        self._haul_span = (track.start, track.end)
+        bar.set_point(True, at=track.start)
+        bar.speed.setCurrentIndex(bar.speed.findData(HAUL_RATE))
+        if not bar.timer.isActive():
+            bar.toggle()
+        if getattr(self, "_haul_timer", None) is None:
+            self._haul_timer = QTimer(self)
+            self._haul_timer.setInterval(HAUL_CHECK)
+            self._haul_timer.timeout.connect(self._haul_loop)
+        self._haul_timer.start()
+
+    def _haul_loop(self):
+        """Момент шкалы прошёл конец рейса самосвалов - снова начало.
+        Демо снято (трека нет) - проверка останавливается."""
+        span = getattr(self, "_haul_span", None)
+        if span is None or not any(t.start == span[0]
+                                   for t in self.tracks.tracks.values()):
+            self._haul_timer.stop()
+            return
+        bar = self.timebar
+        moment = bar.range()[1]
+        # Конец рейса - часто и конец шкалы: момент упирается в него
+        # ровно, и показ шкалы там встаёт.
+        if moment >= span[1] - HAUL_END or moment < span[0]:
+            bar.set_point(True, at=span[0])
+            if not bar.timer.isActive():
+                bar.toggle()
 
     def _demo_folders(self):
         """Где искать крупные файлы демо: папка модуля (рабочая копия),
@@ -837,5 +912,8 @@ class PlacesMixin:
         dialog = TrackDialog(layer, self.tracks.settings.get(layer.id()),
                              self)
         if dialog.exec():
+            if not dialog.removed:
+                # Трек виден у отмеченного слоя, слой отмечается сам.
+                self.set_layer_shown(layer.id(), True)
             self.tracks.set_track(layer, None if dialog.removed
                                   else dialog.settings())

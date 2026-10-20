@@ -1945,13 +1945,45 @@ or HTML, as in KML, links open in the system browser. The card buttons:
 | Close | Closes the card, Esc does the same |
 
 Explain this gives the assistant the name, kind, coordinates and
-description of this one placemark. Pressing the button is consent to
-send them. Without it the names of placemarks do not go to the model.
-The button is available when the assistant is connected, see the
-Assistant section.
+description of this one placemark and the names of the globe layers
+turned on, for example Gravity anomalies. The names of QGIS project
+layers are not sent. Pressing the button is consent to send them.
+Without it the names of placemarks do not go to the model. The button
+is available when the assistant is connected, see the Assistant
+section.
 
 While a properties window is open on the right, a click on a placemark
 does not open the card and the editing in the window goes on.
+
+### Wikipedia nearby
+
+The Wikipedia nearby row of the Encyclopedia category of the Add data
+catalogue shows Wikipedia articles with coordinates - cities,
+monuments, rivers, peaks. An article is a label with a blue dot. The
+articles are requested when the camera is below 40 km, in the language
+of the QGIS interface. Where there are many labels, the important ones
+are seen - regions and cities before landmarks - and the ones near the
+view point.
+
+A click on a label opens the article card on the right - its first
+paragraph and a link to the article. The buttons of the card:
+
+| Button | What it does |
+|---|---|
+| Explain this | Asks the assistant about this place by the article text. The answer appears in the card and under the Search box |
+| Fly to | Flies to the article point |
+| To My Places | A placemark at the article point with the first paragraph and the link in the description |
+| Close | Closes the card |
+
+Explain this gives the assistant the title, the first paragraph and
+the coordinates of the article and the names of the globe layers turned
+on. The assistant answers by the article text. In the Identify features
+mode the articles near the click appear in the Features window as the
+Wikipedia group with links.
+
+Wikipedia texts are distributed under the CC BY-SA 4.0 licence. The
+Wikipedia credit stands in the corner of the view while articles are
+on the globe.
 
 ### Place properties
 
@@ -1972,7 +2004,8 @@ previous look and shape back.
 | Icon | Point icon from the QGIS set, in KML a standard icon of the same theme |
 | Color, Width | Color of the point icon, color and width of the line and outline |
 | Fill | Fill color of the polygon and of the wall |
-| Height above ground | Lift of the object above the terrain in metres. The Ground - Space slider under the field sets it from the ground to 100 km |
+| Altitude mode | What the altitude is measured from, as in KML. Clamped to ground - the placemark lies on the ground, over the sea on the water. Clamped to sea floor - on the floor. Relative to ground and Relative to sea floor - the rise above them. Absolute - the altitude above sea level, it may be below zero too |
+| Height | The rise above the surface or the floor, in the absolute mode the altitude above sea level, in metres. The Ground - Space slider under the field sets it from the ground to 100 km. In the Clamped to ground and Clamped to sea floor modes the field is not available |
 | Extend to ground | A wall from the object to the ground, a post for a placemark |
 | Flow along the path | Paths only. Short dashes of the line colour run along the path from the first point to the last one, like a flow of goods |
 | Time | Moment or interval of the placemark for the time slider |
@@ -2777,6 +2810,18 @@ is taken along the track path over the last 30 s. A glTF model facing
 the viewer gets a turn of 180°. A model with node animation moves
 along and moves its parts.
 
+A track is shown while its layer is checked in the QGIS project
+section. The Track window checks the layer itself, an unchecked layer
+removes the path, the objects and the models from the globe.
+
+The Camera follows item of the right-click menu over a track object
+makes the camera follow this object rather than the first one. The
+object stays in the middle of the view along the motion. The mouse
+wheel changes the distance to the object, the right button with a drag
+the tilt. Esc or the unchecked menu item releases the camera. So in the
+Haul trucks, Kachkanar demo one can ride with a truck from the pit
+bottom to the dump.
+
 With a height the object and the model rise above the ground. Between
 points the height changes evenly in time. A path with the height above
 sea level is drawn in the air at the heights of its points, a path with
@@ -2933,6 +2978,8 @@ top, the speed tape in km/h on the left and the altitude tape above sea
 level in metres on the right. Below them are the vertical speed, the
 thrust and the height above the ground. The horizon line of the ladder
 matches the horizon in the frame.
+
+<img src="figures/en/cockpit.jpg" width="600" alt="Fighter cockpit view with instruments over the Zermatt valley">
 Touching the ground ends the flight. A flight recording also
 ends it - the recording drives the camera.
 
@@ -3143,6 +3190,7 @@ taken from the profile without the network.
 | Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
 | Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
 | Earth | Animated model, wind turbines | Three glTF wind turbines with a rotating rotor at an arbitrary place near Perm. The model is synthetic, the rotor is a node with rotation keys. See [3D models](#3d-models) |
+| Earth | Haul trucks, Kachkanar and Haul trucks, Lebedinsky | Six model haul trucks in the Main pit of Kachkanar or in the Lebedinsky pit near Gubkin: loading, the loaded haul, dumping, the empty return. The route is a pit road traced on Esri World Imagery: in Kachkanar from the face at the bottom along the east wall, in the Lebedinsky pit along the switchbacks from the face with an excavator. The trucks are a track of a project layer with a 3D model, the time slider plays ×10 in a loop. The trucks and their motion are a model, not data of the mine. See [Tracks](#tracks) |
 | Earth | Trains of Finland, live | Live trains of Finland as consists on the rails at the Pasila, Helsinki and Tikkurila stations. See [Trains of Finland](#trains-of-finland) |
 | Earth | Flow of goods, a scheme | Paths with flow from Berezniki to the ports of Ust-Luga and Vostochny by rail and from Ust-Luga to Rotterdam by sea. The paths are schemes through large cities and straits, not real routes |
 | Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |

@@ -130,6 +130,8 @@ STYLES = {
     "plate": (13, True, False, QColor(255, 200, 140, 240), 0.0, None),
     # Число поля прогноза погоды над его раскраской.
     "value": (13, True, False, QColor(255, 255, 255, 250), 0.0, None),
+    # Статья Википедии рядом: голубой кружок с белым кольцом.
+    "wiki": (11, False, False, QColor(205, 228, 255, 235), 3.4, "wiki"),
 }
 # Табличка номера дороги: европейский маршрут зелёный, как на знаках,
 # остальные тёмные.
@@ -137,6 +139,7 @@ SHIELD_E = QColor(30, 125, 70, 235)
 SHIELD = QColor(55, 58, 66, 235)
 PIN = QColor(219, 50, 54, 255)  # метка найденного места
 MARK = QColor(255, 214, 0, 255)  # метка своего объекта, как в Google Earth
+WIKI = QColor(45, 110, 205, 255)  # кружок статьи Википедии
 # Крупный город - город или столица с рангом OpenMapTiles не больше
 # BIG_RANK. Его надпись на BIG_STEP пикселей крупнее и полужирная,
 # иначе Пермь терялась среди окрестных деревень. Жирный шрифт
@@ -313,6 +316,10 @@ class _Style:
             painter.setPen(QPen(QColor(60, 40, 0, 230), r * 0.35))
             painter.setBrush(QBrush(MARK))
             painter.drawEllipse(QRectF(cx - r, cy - r, 2.0 * r, 2.0 * r))
+        elif self.marker == "wiki":
+            painter.setPen(QPen(QColor(255, 255, 255, 235), r * 0.4))
+            painter.setBrush(QBrush(WIKI))
+            painter.drawEllipse(QRectF(cx - r, cy - r, 2.0 * r, 2.0 * r))
         elif self.marker == "square":
             painter.drawRect(QRectF(cx - r * 0.8, cy - r * 0.8,
                                     1.6 * r, 1.6 * r))
@@ -355,6 +362,9 @@ class Labels:
     """Надписи пунктов: атлас в видеокарте и отбор на кадр."""
 
     def __init__(self):
+        # Высоты рельефа с дном моря для своих меток от дна, ставит
+        # вид (GlobeView). None - как у поверхности.
+        self.floor_at = None
         self.program = None
         self.vao = None
         self.vbo = None
@@ -574,6 +584,16 @@ class Labels:
             lons = np.array([p.lon for p in places], dtype=np.float64)
             h = np.asarray(height_at(lats, lons), dtype=np.float64) \
                 if height_at else np.zeros(len(todo))
+            # Своя метка с режимом высоты от дна или от уровня моря
+            # (Place.base, core.features.MODES).
+            bases = [getattr(p, "base", None) for p in places]
+            if "floor" in bases and height_at and self.floor_at:
+                floor = np.array([b == "floor" for b in bases])
+                h[floor] = np.asarray(self.floor_at(lats[floor],
+                                                    lons[floor]),
+                                      dtype=np.float64)
+            if "abs" in bases:
+                h[np.array([b == "abs" for b in bases])] = 0.0
             h = h + np.array([p.lift or 0.0 for p in places])
             self._p[todo] = geodetic_to_ecef(lats, lons, h)
             self._ver[todo] = version

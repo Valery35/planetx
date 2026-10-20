@@ -27,6 +27,7 @@ from ...i18n import tr
 from ...net.loader import TileLoader
 from ...net.overlay import fetch_bytes, fetch_json
 from .. import guide as guide_ui
+from .. import style
 from ..identify import Group
 from ..sidepanel import save_width, saved_width
 from ..themes import theme_names
@@ -133,6 +134,7 @@ class ThemesMixin:
         if getattr(self, "gallery", None) is None:
             self.gallery = NasaMaps(self, self)
             self.gallery.setObjectName("planetxCatalog")
+            self.gallery.setStyleSheet(style.window_style())
         if not self.gallery.isVisible():
             self.gallery.place()
         self.gallery.show()

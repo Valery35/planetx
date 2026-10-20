@@ -77,6 +77,8 @@ WORDS = {
                  "compass"),
     "volcanoes": ("вулканы", "вулкан", "извержения", "gvp", "volcanoes",
                   "volcano"),
+    "wiki": ("википедия", "энциклопедия", "статьи", "достопримечательности",
+             "wikipedia", "encyclopedia", "articles", "landmarks"),
     "platemotion": ("скорости плит", "движение плит", "дрейф",
                     "дрейф континентов", "morvel", "plate motion"),
     "seafloor_age": ("возраст дна", "возраст океанического дна",

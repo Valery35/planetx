@@ -31,7 +31,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import tileoverlays
+from ...core import tileoverlays, wikipedia
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
 from ...core.geocode import link_zoom
@@ -101,6 +101,8 @@ class LayersMixin:
 
     def _changed(self):
         """Выбранное состояние изменилось."""
+        if getattr(self, "tracks", None) is not None:
+            self.tracks.set_visible(self._shown)
         self._sync_properties()
         self._show_layers()
         if self.auto_refresh:
@@ -261,6 +263,10 @@ class LayersMixin:
         геологических - те идут в подземное (_apply_vector)."""
         shown = self._shown_in_order()
         under = subsurface_ids(shown) | set(cloud_ids(shown))
+        # Слой-трек рисует трек, его точки картинкой не нужны.
+        tracks = getattr(self, "tracks", None)
+        if tracks is not None:
+            under |= set(tracks.settings)
         return [i for i in shown if i not in under]
 
     # Исторические карты по годам.
@@ -1119,6 +1125,8 @@ class LayersMixin:
             parts.append(link_html(*plants_core.ATTRIBUTION))
         if self.view.volcanoes.data is not None:
             parts.append(link_html(*volcanoes_core.ATTRIBUTION))
+        if self.view.wiki_marks:
+            parts.append(link_html(*wikipedia.ATTRIBUTION))
         if self.planet.earth and getattr(self, "extras", {}).get("mining") \
                 and self.mining_layer is not None:
             parts.append(link_html(*mining.POLYGONS_ATTRIBUTION))
@@ -1523,6 +1531,7 @@ class LayersMixin:
         self.auto_refresh = read_flag(AUTO_REFRESH, AUTO_DEFAULT)
         self.toolbar.set_auto(self.auto_refresh)
         self._read_shown()
+        self.tracks.visible = set(self._shown)
         self.tracks.load()
         self.subsurface.project_reloaded()
         self._load_insets()

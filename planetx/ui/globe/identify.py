@@ -29,7 +29,7 @@ from ..assistant import (AssistantDialog, current_provider, ready,
                          search_enabled)
 from ..legend import deposit_group_names, mine_kind_names
 from ..myplaces import Place
-from ..placecard import PlaceCard, explain_question
+from ..placecard import Card, PlaceCard, explain_question
 from ..tilesource import save_connection
 from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
                    all_sources, distance_text, parcel_labels)
@@ -82,6 +82,10 @@ class IdentifyMixin:
             if place is not None:
                 self.open_place_card(place)
                 return
+            found = self._article_under(px, py)
+            if found is not None:
+                self.open_article_card(*found)
+                return
             if not self._point_under(px, py):
                 return
         self.identify_here(px, py)
@@ -113,7 +117,7 @@ class IdentifyMixin:
         свойств в панели главнее - щелчок мимо его вершин не должен
         отменять правку."""
         held = self.side.dialog
-        if held is not None and not isinstance(held, PlaceCard):
+        if held is not None and not isinstance(held, Card):
             return
         card = PlaceCard(place, ready(current_provider()), self)
         card.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
@@ -144,7 +148,8 @@ class IdentifyMixin:
         kinds = {"point": tr("Метка"), "line": tr("Путь"),
                  "polygon": tr("Многоугольник")}
         question = explain_question(place, kinds.get(place.shape.kind,
-                                                     tr("Метка")))
+                                                     tr("Метка")),
+                                    self._explain_layers())
         card = getattr(self, "_place_card", None)
         if self._assistant().ask(question):
             self._explaining = card
@@ -324,6 +329,7 @@ class IdentifyMixin:
         groups += self._identify_mining(lat, lon)
         groups += self._identify_plants(px, py)
         groups += self._identify_volcanoes(px, py)
+        groups += self._identify_wiki(px, py)
         groups += self._identify_infra(lat, lon, tolerance)
         groups = self._identify_satellites(px, py) \
             + self._identify_trains(px, py) \
