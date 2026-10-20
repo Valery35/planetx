@@ -13,6 +13,8 @@ PythonAnywhere.
    тариф «Beginner» (бесплатный). Имя учётной записи станет адресом.
 2. Архив. На своём компьютере архив собирает
    `python bot/make_bundle.py`, он ложится в `dist/planetx-bot.zip`.
+   Сценарий берёт руководства модулей из их рабочих копий в
+   `C:\Dev` (`bot/build_index.py`).
    На PythonAnywhere вкладка «Files» - «Upload a file» в папку
    `/home/ИМЯ/`.
 3. Распаковка. Вкладка «Consoles» - «Bash», в консоли:

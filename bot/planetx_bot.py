@@ -31,9 +31,11 @@ channel - канал постов о выпусках (@имя или номер
 Ответы:
 - /latest - последний выпуск на GitHub, что нового, архив;
 - /docs - руководство;
-- текст в личном чате - разделы руководства, поиск core/manualindex.py
-  по указателю data/manual_ru.json или manual_en.json, кнопка под
-  разделом присылает его текст;
+- текст в личном чате - разделы руководств модулей линейки, поиск
+  core/manualindex.py по указателю bot/data/manuals_ru.json или
+  manuals_en.json (собирает bot/build_index.py), имя модуля в вопросе
+  ограничивает поиск его руководством, кнопка под разделом присылает
+  его текст;
 - /report текст - сообщение автору.
 """
 import hmac
@@ -125,8 +127,9 @@ TEXTS = {
         "start": (
             "Это бот модулей QGIS PlanetX, Isoliner, Isoliner3D, "
             "Topoliner, Routeliner и Repoliner.\n\n"
-            "Напишите вопрос о PlanetX, например «как добавить "
-            "3D-модель», бот найдёт разделы руководства.\n\n"
+            "Напишите вопрос, например «как добавить 3D-модель» или "
+            "«topoliner висячие узлы», бот найдёт разделы руководств "
+            "модулей.\n\n"
             "/latest - последний выпуск модуля\n"
             "/docs - модули, руководства и каталог QGIS\n"
             "/report текст - сообщение разработчикам об ошибке или "
@@ -153,8 +156,9 @@ TEXTS = {
         "start": (
             "This is the bot of the QGIS plugins PlanetX, Isoliner, "
             "Isoliner3D, Topoliner, Routeliner and Repoliner.\n\n"
-            "Ask a question about PlanetX, for example \"how to add a 3D "
-            "model\", and the bot finds the manual sections.\n\n"
+            "Ask a question, for example \"how to add a 3D model\" or "
+            "\"topoliner dangles\", and the bot finds the sections of "
+            "the plugin manuals.\n\n"
             "/latest - the latest release of a plugin\n"
             "/docs - plugins, manuals and the QGIS catalog\n"
             "/report text - a bug report or a wish for the developers. "
@@ -194,7 +198,7 @@ PROFILE = {
             "Модули QGIS ООО «Информ++» - PlanetX, Isoliner, Isoliner3D, "
             "Topoliner, Routeliner, Repoliner.\n\n"
             "Бот показывает последние выпуски модулей, отвечает на "
-            "вопросы по руководству PlanetX и передаёт сообщения "
+            "вопросы по руководствам модулей и передаёт сообщения "
             "разработчикам."),
         "short": "Модули QGIS PlanetX, Isoliner, Topoliner и другие - "
                  "выпуски, руководства, сообщения разработчикам",
@@ -210,7 +214,7 @@ PROFILE = {
             "QGIS plugins of Inform++ LLC - PlanetX, Isoliner, Isoliner3D, "
             "Topoliner, Routeliner, Repoliner.\n\n"
             "The bot shows the latest plugin releases, answers questions "
-            "from the PlanetX manual and passes messages to the "
+            "from the plugin manuals and passes messages to the "
             "developers."),
         "short": "QGIS plugins PlanetX, Isoliner, Topoliner and more - "
                  "releases, manuals, messages to the developers",
@@ -228,9 +232,47 @@ def manual_file(lang):
     return "MANUAL.md" if lang == "ru" else "MANUAL.en.md"
 
 
-def section_url(lang, anchor):
-    return "{}/blob/main/doc/{}#{}".format(
-        REPOSITORY, manual_file(lang), urllib.parse.quote(anchor))
+class Manuals:
+    """Руководства модулей линейки одного языка: общий указатель
+    разделов (core/manualindex.py), хранилище и файл каждого раздела.
+    Данные - bot/data/manuals_<язык>.json, их собирает
+    bot/build_index.py."""
+
+    def __init__(self, data):
+        self.index = manualindex.Index(data["sections"])
+        self.plugins = data["plugins"]
+        self.paths = data["paths"]
+
+    def __len__(self):
+        return len(self.index)
+
+    def url(self, n):
+        repo = self.plugins[n]
+        return "https://github.com/{}/{}/blob/main/{}#{}".format(
+            OWNER, repo, self.paths[repo],
+            urllib.parse.quote(self.index.items[n][1]))
+
+    def name(self, n):
+        repo = self.plugins[n]
+        return PLUGINS.get(repo, (repo, None))[0]
+
+    def search(self, query, limit=FOUND):
+        """Разделы к запросу. Имя модуля в запросе ограничивает поиск
+        его руководством."""
+        words = query.split()
+        repo = None
+        for word in words:
+            repo = plugin_of(word.strip(",.?!"))
+            if repo:
+                words.remove(word)
+                break
+        rest = " ".join(words)
+        if repo is None:
+            return self.index.search(query, limit)
+        if not rest.strip():
+            rest = query
+        found = self.index.search(rest, len(self.index))
+        return [n for n in found if self.plugins[n] == repo][:limit]
 
 
 def plain(markdown):
@@ -253,35 +295,37 @@ def cut(text, limit=TEXT_LIMIT):
 def load_indexes():
     out = {}
     for lang in ("ru", "en"):
-        path = os.path.join(PLUGIN, "data", "manual_{}.json".format(lang))
+        path = os.path.join(HERE, "data", "manuals_{}.json".format(lang))
         with open(path, encoding="utf-8") as f:
-            out[lang] = manualindex.Index.from_json(f.read())
+            out[lang] = Manuals(json.load(f))
     return out
 
 
-def found_reply(index, lang, query):
+def found_reply(manuals, lang, query):
     """Текст ответа HTML и кнопки по запросу или None без находок."""
-    numbers = index.search(query, FOUND)
+    numbers = manuals.search(query, FOUND)
     if not numbers:
         return None
     lines = [TEXTS[lang]["found"]]
     buttons = []
     for n in numbers:
-        title, anchor, _ = index.items[n]
-        lines.append('\n<b><a href="{}">{}</a></b>\n{}'.format(
-            html.escape(section_url(lang, anchor), quote=True),
-            html.escape(title), html.escape(index.snippet(n, query))))
-        buttons.append([{"text": "{}: {}".format(
-            TEXTS[lang]["show"], title)[:60],
-            "callback_data": "s:{}:{}".format(lang, n)}])
+        title = manuals.index.items[n][0]
+        name = manuals.name(n)
+        lines.append('\n<b><a href="{}">{} · {}</a></b>\n{}'.format(
+            html.escape(manuals.url(n), quote=True), html.escape(name),
+            html.escape(title),
+            html.escape(manuals.index.snippet(n, query))))
+        buttons.append([{"text": "{}: {}".format(name, title)[:60],
+                         "callback_data": "s:{}:{}".format(lang, n)}])
     return "\n".join(lines), {"inline_keyboard": buttons}
 
 
-def section_reply(index, lang, n):
-    title, anchor, text = index.items[n]
-    more = TEXTS[lang]["more"].format(url=section_url(lang, anchor))
-    body = cut(plain(text), TEXT_LIMIT - len(title) - len(more) - 4)
-    return "{}\n\n{}\n\n{}".format(title, body, more)
+def section_reply(manuals, lang, n):
+    title, _, text = manuals.index.items[n]
+    head = "{} · {}".format(manuals.name(n), title)
+    more = TEXTS[lang]["more"].format(url=manuals.url(n))
+    body = cut(plain(text), TEXT_LIMIT - len(head) - len(more) - 4)
+    return "{}\n\n{}\n\n{}".format(head, body, more)
 
 
 def release_reply(release, lang, repo="planetx"):
