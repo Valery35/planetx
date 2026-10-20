@@ -63,6 +63,16 @@ CHANNEL_LANG = "ru"
 # хранилища и без кнопки каталога.
 PLUGINS = {
     "planetx": ("PlanetX", "https://plugins.qgis.org/plugins/planetx/"),
+    "qgis-isoliner": ("Isoliner",
+                      "https://plugins.qgis.org/plugins/grid_isolines/"),
+    "qgis-isoliner3d": ("Isoliner3D",
+                        "https://plugins.qgis.org/plugins/isoliner3d/"),
+    "topoliner": ("Topoliner",
+                  "https://plugins.qgis.org/plugins/topoliner/"),
+    "routeliner": ("Routeliner",
+                   "https://plugins.qgis.org/plugins/routeliner/"),
+    "repoliner": ("Repoliner",
+                  "https://plugins.qgis.org/plugins/repoliner/"),
 }
 _REPO = re.compile(r"[A-Za-z0-9_.-]{1,40}")
 SITE = "https://www.informpp.ru/главная-страница/qgis-planetx"
@@ -86,7 +96,7 @@ TEXT_LIMIT = 3500
 FOUND = 3
 
 _LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
-_MARKUP = re.compile(r"[*`]+|^\|?[-:| ]{3,}\|?$", re.MULTILINE)
+_MARKUP = re.compile(r"[*`]+|^\|?[-:| ]{3,}\|?$|^#+\s*", re.MULTILINE)
 
 TEXTS = {
     "ru": {
