@@ -33,6 +33,24 @@ class TestExtent(unittest.TestCase):
                          NOW - 5 * clock.HALF)
 
 
+class TestSweep(unittest.TestCase):
+
+    def test_right_edge_runs_from_left_to_end(self):
+        span = (0.0, 100.0)
+        self.assertEqual(clock.sweep(0.0, 0.0, span, 30.0, False),
+                         (30.0, True))
+        self.assertEqual(clock.sweep(0.0, 90.0, span, 30.0, False),
+                         (100.0, False))
+        self.assertEqual(clock.sweep(0.0, 90.0, span, 30.0, True),
+                         (0.0, True))
+
+    def test_full_range_does_not_move_by_advance(self):
+        # Так показ стоял: промежуток на всю шкалу сразу на краю.
+        going = clock.advance(0.0, 100.0, (0.0, 100.0), 5.0, False,
+                              False)[3]
+        self.assertFalse(going)
+
+
 class TestAdvance(unittest.TestCase):
 
     def test_rate_is_real_time_multiple(self):

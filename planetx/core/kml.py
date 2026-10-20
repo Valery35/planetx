@@ -202,13 +202,15 @@ class KFolder:
 
     def __init__(self, name="", visible=True, children=None,
                  description="", view=None, radio=False, expandable=True,
-                 region=None, link="", refresh=0.0):
+                 region=None, link="", refresh=0.0, view_mode=""):
         self.region = region  # core.region.Region или None
         # Сетевая ссылка (NetworkLink): адрес документа и промежуток
         # обновления в секундах, 0 - один раз. Детей у неё в файле нет,
-        # их загружает окно глобуса.
+        # их загружает окно глобуса. view_mode - viewRefreshMode Link,
+        # "onRegion" - ссылка суперналожения (core/superoverlay.py).
         self.link = link
         self.refresh = refresh
+        self.view_mode = view_mode or ""
         self.name = name
         self.visible = visible
         self.children = children if children is not None else []
@@ -255,7 +257,10 @@ class KPlace:
                  layers=None, pace=None, mode="", holes=None,
                  data=None, icon_scale=1.0, label_color=None,
                  label_scale=1.0, icon_heading=0.0, balloon="",
-                 kml_id="", tour_extra=None):
+                 kml_id="", tour_extra=None, highlight=None):
+        # Вид точки под курсором - вариант highlight StyleMap: словарь
+        # color, icon, scale, label, label_scale или None.
+        self.highlight = highlight
         # id метки в KML (цель gx:AnimatedUpdate) и добавки записанного
         # тура: {"bounce": [номера поз], "updates": [изменения]}.
         self.kml_id = kml_id or ""
@@ -313,7 +318,11 @@ class KOverlay:
     None, href - адрес картинки из файла. view, time - как у метки."""
 
     def __init__(self, name, overlay, image=None, href="", visible=True,
-                 description="", view=None, time=None, aliases=None):
+                 description="", view=None, time=None, aliases=None,
+                 region=None):
+        # Region наложения, core.region.Region или None. Его читает
+        # суперналожение (core/superoverlay.py).
+        self.region = region
         # Замены путей ResourceMap модели: {путь в модели: путь файла}.
         self.aliases = aliases or {}
         self.name = name
@@ -584,8 +593,39 @@ def _style_of(node):
     return {k: v for k, v in style.items() if v is not None}
 
 
+def _style_map(node):
+    """Пары StyleMap: (normal, highlight), каждая - id стиля из
+    styleUrl, свой Style словарём или None."""
+    found = {"normal": None, "highlight": None}
+    for pair in _children(node, "Pair"):
+        key = _text(pair, "key").strip()
+        if key not in found:
+            continue
+        inline = _child(pair, "Style")
+        found[key] = _style_of(inline) if inline is not None \
+            else _text(pair, "styleUrl").lstrip("#") or None
+    return found["normal"], found["highlight"]
+
+
+def _mapped(normal, highlight, styles):
+    """Стиль StyleMap: вариант normal, вариант highlight - под ключом
+    highlight, если он есть."""
+    def pick(item):
+        return dict(item) if isinstance(item, dict) \
+            else dict(styles.get(item, {})) if item else {}
+    style = pick(normal)
+    style.pop("highlight", None)
+    lit = pick(highlight)
+    lit.pop("highlight", None)
+    if lit:
+        style["highlight"] = lit
+    return style
+
+
 def _styles(root):
-    """Стили документа по id: Style и StyleMap (вариант normal)."""
+    """Стили документа по id: Style и StyleMap. У StyleMap - вариант
+    normal, вариант highlight (вид метки под курсором) - под ключом
+    highlight."""
     styles = {}
     maps = {}
     for node in root.iter():
@@ -596,12 +636,30 @@ def _styles(root):
         if name == "Style":
             styles[sid] = _style_of(node)
         elif name == "StyleMap":
-            for pair in _children(node, "Pair"):
-                if _text(pair, "key") == "normal":
-                    maps[sid] = _text(pair, "styleUrl").lstrip("#")
-    for sid, target in maps.items():
-        styles[sid] = styles.get(target, {})
+            maps[sid] = _style_map(node)
+    for sid, (normal, highlight) in maps.items():
+        styles[sid] = _mapped(normal, highlight, styles)
     return styles
+
+
+def _highlight(style):
+    """Вид точки под курсором из варианта highlight StyleMap: словарь
+    color, icon, scale, label, label_scale или None."""
+    lit = style.get("highlight")
+    if not lit:
+        return None
+    out = {}
+    if lit.get("icon"):
+        out["color"] = list(lit["icon"])
+    if lit.get("href"):
+        out["icon"] = icons.from_href(lit["href"])
+    if lit.get("icon_scale") is not None:
+        out["scale"] = float(lit["icon_scale"])
+    if lit.get("label_color"):
+        out["label"] = list(lit["label_color"])
+    if lit.get("label_scale") is not None:
+        out["label_scale"] = float(lit["label_scale"])
+    return out or None
 
 
 def _view(node, anchor):
@@ -686,6 +744,9 @@ def _placemark(node, styles, inherited=None):
     inline = _child(node, "Style")
     if inline is not None:
         style.update(_style_of(inline))
+    inline = _child(node, "StyleMap")
+    if inline is not None:
+        style.update(_mapped(*_style_map(inline), styles))
     name = _text(node, "name")
     model = _child(node, "Model")
     if model is not None:
@@ -739,7 +800,9 @@ def _placemark(node, styles, inherited=None):
                           icon_heading=style.get("icon_heading", 0.0)
                           if kind == "point" else 0.0,
                           balloon=style.get("balloon", ""),
-                          kml_id=node.get("id") or ""))
+                          kml_id=node.get("id") or "",
+                          highlight=_highlight(style)
+                          if kind == "point" else None))
     return out
 
 
@@ -1054,7 +1117,8 @@ def _overlay(node, styles, inherited):
                     visible=_visible(node),
                     description=_text(node, "description"),
                     view=_view(node, anchor),
-                    time=_time_of(node) or inherited)
+                    time=_time_of(node) or inherited,
+                    region=_region(node))
 
 def _track_rows(track):
     """Строки пути gx:Track: [секунды, широта, долгота, высота, азимут,
@@ -1203,8 +1267,9 @@ def _walk(node, styles, folder, inherited=None):
 
 def _network_link(node):
     """Папка сетевой ссылки: адрес из Link или старого Url, промежуток
-    по refreshMode onInterval, иначе 0. viewRefreshMode не читается -
-    документ по виду глобус не просит. Без адреса - None."""
+    по refreshMode onInterval, иначе 0. viewRefreshMode onRegion -
+    ссылка суперналожения, прочие режимы не читаются. Без адреса -
+    None."""
     link = _child(node, "Link")
     if link is None:
         link = _child(node, "Url")
@@ -1214,10 +1279,12 @@ def _network_link(node):
     refresh = 0.0
     if _text(link, "refreshMode").strip() == "onInterval":
         refresh = max(_float(link, "refreshInterval", 4.0), 0.0)
+    mode = _text(link, "viewRefreshMode").strip()
     return KFolder(_text(node, "name"), _visible(node),
                    description=_text(node, "description"),
                    view=_view(node, None), region=_region(node),
-                   link=href, refresh=refresh)
+                   link=href, refresh=refresh,
+                   view_mode=mode if mode == "onRegion" else "")
 
 
 def read_kml(data, name=""):
@@ -1401,6 +1468,13 @@ def _placemark_kml(place, indent):
     if template:
         style += "<BalloonStyle><text>{}</text></BalloonStyle>".format(
             escape(template))
+    style = "<Style>{}</Style>".format(style)
+    lit = getattr(place, "highlight", None) if place.kind == "point" \
+        else None
+    if lit:
+        style = "<StyleMap><Pair><key>normal</key>{}</Pair><Pair>" \
+            "<key>highlight</key><Style>{}</Style></Pair></StyleMap>" \
+            .format(style, _highlight_kml(place, lit))
     mode = _raise_kml(place)
     h = float(place.height or 0.0) if _place_mode(place) in (
         "relativeToGround", "relativeToSeaFloor", "absolute") else 0.0
@@ -1461,7 +1535,7 @@ def _placemark_kml(place, indent):
     parts += ["<visibility>{}</visibility>".format(int(place.visible)),
               region.kml(getattr(place, "region", None)),
               _time_kml(place.time), look,
-              "<Style>{}</Style>".format(style), flow, geometry,
+              style, flow, geometry,
               "</Placemark>"]
     text = "".join(p for p in parts if p)
     kid = escape(getattr(place, "kml_id", "") or "").replace('"', "&quot;")
@@ -1473,6 +1547,24 @@ def _placemark_kml(place, indent):
             text = text.replace("<{}>".format(tag), '<{} id="{}{}">'.format(
                 tag, kid, suffix), 1)
     return pad + text
+
+
+def _highlight_kml(place, lit):
+    """Стиль highlight точки: значок и подпись под курсором, недостающее -
+    как в обычном виде."""
+    color = lit.get("color") or place.color
+    icon = lit.get("icon") or place.icon
+    scale = float(lit.get("scale", getattr(place, "icon_scale", 1.0)))
+    text = "<IconStyle><color>{}</color><scale>{:g}</scale><Icon><href>" \
+        "{}</href></Icon></IconStyle>".format(
+            color_kml(color), scale, escape(icons.href(icon)))
+    label = lit.get("label")
+    if label is not None or "label_scale" in lit:
+        text += "<LabelStyle>{}<scale>{:g}</scale></LabelStyle>".format(
+            "<color>{}</color>".format(color_kml(label)) if label else "",
+            float(lit.get("label_scale",
+                          getattr(place, "label_scale", 1.0))))
+    return text
 
 
 def _tour_kml(place, indent):
@@ -1720,6 +1812,9 @@ def _link_kml(folder, indent):
         lines.append(pad + "    <refreshMode>onInterval</refreshMode>"
                      "<refreshInterval>{:g}</refreshInterval>".format(
                          folder.refresh))
+    if getattr(folder, "view_mode", ""):
+        lines.append(pad + "    <viewRefreshMode>{}</viewRefreshMode>"
+                     .format(escape(folder.view_mode)))
     lines.append(pad + "  </Link>")
     lines.append(pad + "</NetworkLink>")
     return lines

@@ -66,6 +66,8 @@ from .project import (AUTO_REFRESH, ProjectWatch, read_flag, read_grids,
 from .inset import DeepSource
 from .contours import ContourExport
 from .netlink import NetLinks
+from .superoverlay import SuperOverlays
+from .watermask import WaterTiles
 from .extrude import ExtrudeManager
 from .navpad import NavPad
 from .skylabels import SkyLabels
@@ -632,6 +634,10 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
         self.myplaces = MyPlaces(parent=self)
         self.netlinks = NetLinks(self)
+        # Суперналожения - ссылки onRegion, тайлы в памяти.
+        self.superoverlays = SuperOverlays(self)
+        # Суша ниже уровня моря - по воде векторной основы.
+        self.water_tiles = WaterTiles(self)
         self.panel.is_link = lambda key: bool(
             getattr(self.myplaces.find(key), "link", ""))
         # Открытые окна свойств меток и их правки для глобуса по ключу.
@@ -989,6 +995,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.watch.blockSignals(True)
             self.sync.close()
             self.netlinks.stop()
+            self.superoverlays.stop()
+            self.water_tiles.stop()
             self._layer_time_timer.stop()
             self._link_timer.stop()
             self.satellite_manager.close()

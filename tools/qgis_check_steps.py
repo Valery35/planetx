@@ -6131,7 +6131,7 @@ def aral_open():
     # Демо «Аральское море» - наложения по ссылкам, просьба автора
     # от 5 октября 2026 года «демки к растрам, можно по ссылкам».
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Аральское море", "Aral Sea"))
     action.trigger()
     key = window.panel.current_folder() if hasattr(
@@ -6211,7 +6211,7 @@ def quarry_open():
     # Врезка своего рельефа, демо «Карьер», решение автора от 5 октября
     # 2026 года. Растр 1 м в UTM 40N, карьер 150 м глубиной.
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Карьер, свой рельеф",
                                   "Quarry, own terrain"))
     started = time.monotonic()
@@ -7395,7 +7395,7 @@ def brienz_open():
     """Своя батиметрия, демо «Бриенцское озеро»: растр отметок дна
     swissBATHY3D, вода на 564 м."""
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Бриенцское озеро, своя батиметрия",
                                   "Lake Brienz, own bathymetry"))
     started = time.monotonic()
@@ -7720,7 +7720,7 @@ def oldmaps_open():
     """Исторические карты, демо «Москва, исторические карты»: пять планов
     Wikimedia Commons тайлами XYZ Wikimaps Warper с годами карт."""
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Москва, исторические карты",
                                   "Moscow, historical maps"))
     action.trigger()
@@ -7909,6 +7909,13 @@ def globe_menu():
                    view.height() * view.devicePixelRatioF() / 2.0)
     menus = [m for m in window.findChildren(QMenu) if m not in before]
     result["globe_menu"] = [a.text() for m in menus for a in m.actions()]
+    # Первая строка копирует координаты. До 20 октября 2026 года цикл
+    # подменю «Полёт отсюда» подменял текст, в буфер шло «Винтовой
+    # самолёт».
+    first = next(a for a in menus[0].actions() if a.text())
+    first.trigger()
+    result["globe_menu_copied"] = [
+        first.text(), QgsApplication.clipboard().text()]
     for menu in menus:
         menu.close()
 
@@ -8453,7 +8460,7 @@ def models_demo():
     """Демо «3D-модели, Суздаль и Пермь»: модели из файла сцены
     places.kmz ложатся в «Мои метки» с файлами."""
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("3D-модели, Суздаль и Пермь",
                                   "3D models, Suzdal and Perm"))
     places = window.myplaces
@@ -8521,7 +8528,7 @@ def turbines_demo():
     """Демо «Анимированная модель, ветряки»: три модели glTF с ротором
     на ключах поворота."""
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Анимированная модель, ветряки",
                                   "Animated model, wind turbines"))
     places = window.myplaces
@@ -8887,7 +8894,7 @@ def trains_demo():
     view = window.view
     look = state.setdefault("trains_demo", {"since": None})
     if look["since"] is None:
-        action = next(a for a in window.toolbar.demo.menu().actions()
+        action = next(a for a in window.toolbar.demo_list
                       if a.text() in ("Поезда Финляндии, вживую",
                                       "Trains of Finland, live"))
         folders = {f.key for f in window.myplaces.folders}
@@ -8946,7 +8953,7 @@ def post_trains_video():
         QgsSettings().remove(_sources.VECTOR_KEY)
         QgsSettings().remove(_sources.VECTOR_CREDIT_KEY)
         window.sources_changed("vector")
-        action = next(a for a in window.toolbar.demo.menu().actions()
+        action = next(a for a in window.toolbar.demo_list
                       if a.text() in ("Поезда Финляндии, вживую",
                                       "Trains of Finland, live"))
         action.trigger()
@@ -13233,7 +13240,8 @@ def route_long_check():
 def menu_actions():
     """Меню на глобусе после причёсывания терминов: координаты первой
     строкой, «Что здесь?» с адресом Nominatim, «Измерить расстояние»,
-    «Скопировать ссылку на место». Один живой запрос к Nominatim."""
+    без «Скопировать ссылку на место» (убрана 20 октября 2026 года).
+    Один живой запрос к Nominatim."""
     from qgis.PyQt.QtWidgets import QApplication, QMenu
     from planetx.core.navigation import Pose
     from planetx.ui import globemenu
@@ -13254,8 +13262,7 @@ def menu_actions():
     first = [a for m in menus for a in m.actions()][0]
     first.trigger()
     out["coords_copied"] = QApplication.clipboard().text() == first.text()
-    actions["Скопировать ссылку на место"].trigger()
-    out["link"] = QApplication.clipboard().text()
+    out["link_item"] = "Скопировать ссылку на место" in actions
     actions["Измерить расстояние"].trigger()
     out["ruler"] = {"open": window._ruler_open(),
                     "points": len(window.ruler.points)}
@@ -13266,6 +13273,113 @@ def menu_actions():
     for menu in menus:
         menu.close()
     state["what_at"] = window._identify_at[:2]
+
+
+@check(2500)
+def timebar_sweep():
+    """Промежуток шкалы на всю её ширину и ▶. До 20 октября 2026 года
+    показ сдвигал промежуток, упирался в конец и вставал сразу."""
+    window = state["window"]
+    bar = window.timebar
+    start = 1792483200.0
+    bar.set_extent((start, start + 3600.0))
+    bar.open_bar()
+    bar.set_range(start, start + 3600.0)
+    bar.loop.setChecked(False)
+    bar.toggle()
+    state["sweep"] = bar.range()
+    result["timebar_sweep"] = {"started": bar.timer.isActive(),
+                               "range_at_start": list(bar.range())}
+
+
+@check(500)
+def timebar_sweep_check():
+    bar = state["window"].timebar
+    lo, hi = bar.range()
+    result["timebar_sweep"].update({
+        "range_after": [lo, hi], "running": bar.timer.isActive(),
+        "moved_s": round(hi - state["sweep"][1], 1)})
+    bar.stop()
+    bar.close_bar()
+
+
+ROOF_POINT = (58.0105, 56.2294)  # центр Перми, Ленина и Комсомольский
+
+
+@check(1000)
+def roofs_city():
+    """Видимость и инсоляция с учётом зданий OpenFreeMap: в центре Перми
+    круг 500 м, сначала без зданий, потом со зданиями."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(*ROOF_POINT, 2000.0, 0.0, 0.0))
+    window.view.update()
+    window.viewshed_here(*ROOF_POINT)
+    dialog = window.viewshed_dialog
+    dialog.buildings.setChecked(False)
+    dialog.build.emit(2.0, 0.0, 500.0)
+    state["roof_stage"] = "bare"
+    state["roof_since"] = time.monotonic()
+    result["roofs"] = {}
+
+
+@check(1000)
+def roofs_city_wait():
+    import numpy as np
+    window = state["window"]
+    stage = state["roof_stage"]
+    out = result["roofs"]
+    waited = time.monotonic() - state["roof_since"]
+    if stage in ("bare", "built"):
+        if window.viewshed_job is not None and waited < 120:
+            return 1000
+        vs = window.viewshed_result
+        out["viewshed_" + stage] = {
+            "share": round(vs.share, 3) if vs else None,
+            "status": window.viewshed_dialog.status.text(),
+            "seconds": round(waited, 1)}
+        if stage == "bare":
+            window.viewshed_dialog.buildings.setChecked(True)
+            window.viewshed_dialog.build.emit(2.0, 0.0, 500.0)
+            state["roof_stage"] = "built"
+        else:
+            window.view.grabFramebuffer().save(os.path.join(
+                TEMP, "planetx_roofs_viewshed.png"))
+            window.viewshed_dialog.clear.emit()
+            window.viewshed_dialog.close()
+            window.insolation_here(*ROOF_POINT)
+            d = window.insolation_dialog
+            d.buildings.setChecked(False)
+            d.radius.setValue(0.5)
+            day = float(1797811200)  # 21 декабря 2026 года
+            d.build.emit(day, day, 500.0)
+            state["roof_stage"] = "ins_bare"
+        state["roof_since"] = time.monotonic()
+        return 1000
+    if window.insolation_job is not None and waited < 180:
+        return 1000
+    res = window.insolation_result if hasattr(
+        window, "insolation_result") else None
+    tiles = window.insolation_tiles
+    hours = tiles.result.hours if tiles is not None else None
+    out[stage] = {
+        "median": round(float(np.median(hours)), 2)
+        if hours is not None else res,
+        "status": window.insolation_dialog.status.text(),
+        "seconds": round(waited, 1)}
+    if stage == "ins_bare":
+        d = window.insolation_dialog
+        d.buildings.setChecked(True)
+        d.build.emit(float(1797811200), float(1797811200), 500.0)
+        state["roof_stage"] = "ins_built"
+        state["roof_since"] = time.monotonic()
+        return 1000
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_roofs_insolation.png"))
+    window.insolation_dialog.clear.emit()
+    window.insolation_dialog.close()
+    return None
 
 
 @check(500)
@@ -13309,7 +13423,17 @@ def menu_links():
             menu.close()
         dialog = menulinks.MenuLinksDialog(window)
         out["rows"] = dialog.table.rowCount()
-        dialog._add()
+        # Готовый сайт из меню кнопки «Добавить сайт».
+        from qgis.PyQt.QtWidgets import QPushButton
+        button = [b for b in dialog.findChildren(QPushButton)
+                  if b.text() == "Добавить сайт"][0]
+        out["presets"] = [a.text() for a in button.menu().actions()
+                          if a.text()]
+        button.menu().actions()[0].trigger()
+        out["preset_row"] = [dialog.table.item(1, c).text()
+                             for c in range(2)]
+        out["preset_url"] = menulinks.menulinks.fill(
+            dialog.table.item(1, 1).text(), 58.0, 56.2, 12)
         dialog.table.item(1, 1).setText("https://x.org/{lat}")
         dialog.accept()
         out["bad_status"] = dialog.status.text()
@@ -14149,7 +14273,7 @@ def quakes_off():
 def vegas_open():
     # Демо «Тоннели Vegas Loop» из меню значка «Демо».
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Тоннели Vegas Loop", "Vegas Loop tunnels"))
     action.trigger()
     result["vegas"] = {"icon": not hasattr(window.toolbar, "subsurface"),
@@ -14318,7 +14442,7 @@ def subsurface_tour_check():
 def subsurface_open():
     # Подземный режим, шаг 4 плана фазы 3: демо из меню значка «Демо».
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Пермские отложения",
                                   "Permian deposits"))
     action.trigger()
@@ -14744,7 +14868,7 @@ def subsurface_under_check():
 def jezero_open():
     # Демо «Кратер Езеро» из меню значка «Демо», шаг 5 плана фазы 3.
     window = state["window"]
-    action = next(a for a in window.toolbar.demo.menu().actions()
+    action = next(a for a in window.toolbar.demo_list
                   if a.text() in ("Кратер Езеро", "Jezero crater"))
     folders = len(window.myplaces.folders)
     action.trigger()
@@ -18009,6 +18133,11 @@ def haulkml_wait():
     out["models"] = len(models.items)
     out["points"] = [len(rows) for _, _, rows, _ in models.items]
     out["drawn"] = drawn
+    out["road_line"] = [
+        (len(p.shape.points), p.visible) for p in window.myplaces.places
+        if p.shape.name == "Дорога самосвалов"]
+    view.grabFramebuffer().save(os.path.join(
+        os.environ["TEMP"], "planetx_haulkml.png"))
     bar = window.timebar
     out["playing"] = bar.timer.isActive()
     span = getattr(window, "_haul_span", None)
@@ -18090,6 +18219,372 @@ def haulkml_close():
         window._haul_loop()
     out["loop_stopped"] = timer is None or not timer.isActive()
     window.timebar.stop()
+
+
+@check(1500)
+def hop_setup():
+    """Две точечные метки у Перми: обычная и с видом highlight
+    StyleMap - значок вдвое крупнее под курсором."""
+    from planetx.core.kml import KFolder, KPlace
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    state["hop_key"] = window.myplaces.import_tree(KFolder(
+        "Проверка наведения", children=[
+            KPlace("Обычная", "point", [(58.0105, 56.2194)]),
+            KPlace("Под курсором крупнее", "point", [(58.0105, 56.2394)],
+                   highlight={"scale": 2.0})]))
+    window.view.navigator.show(Pose(58.0105, 56.2294, 3000.0, 0.0, 0.0))
+    window.view.update()
+
+
+@check(500)
+def hop_check():
+    """Курсор над меткой: метка поднимается и держится, пока курсор на
+    ней, без курсора опускается на место. Метка с видом highlight под
+    курсором рисуется им - значок крупнее."""
+    import numpy as _np
+    from qgis.PyQt.QtGui import QImage
+    window = state["window"]
+    view = window.view
+    labels = view.labels
+
+    def frame():
+        img = view.grabFramebuffer().convertToFormat(
+            QImage.Format.Format_RGB888)
+        ptr = img.constBits()
+        ptr.setsize(img.sizeInBytes())
+        a = _np.frombuffer(ptr, _np.uint8).reshape(
+            img.height(), img.bytesPerLine())[:, :img.width() * 3]
+        return a.reshape(img.height(), img.width(), 3).copy()
+
+    def boxes():
+        return {view.features.shapes[-2 - b[0]].name: b[1:]
+                for b in labels.mark_boxes}
+    frame()
+    found = boxes()
+    out = result["hop"] = {"marks": sorted(found)}
+    if len(found) < 2:
+        return None
+    left, top, right, bottom = found["Обычная"]
+    x, y = (left + right) / 2.0, (top + bottom) / 2.0
+    area = (slice(max(0, int(top) - 20), int(bottom) + 20),
+            slice(max(0, int(left) - 5), int(right) + 5))
+
+    def changed(a, b):
+        return int((_np.abs(a[area].astype(int) - b[area].astype(int))
+                    .max(axis=2) > 40).sum())
+    # Сторож: доля подъёма портила прозрачность - свои метки без курсора
+    # рисовались с прозрачностью 0 и пропадали с глобуса.
+    drawn = []
+    original = labels._draw_quads
+    labels._draw_quads = lambda quads, w, h: (
+        drawn.extend(q[8] for q in quads), original(quads, w, h))[1]
+    try:
+        before = frame()
+    finally:
+        del labels._draw_quads
+    out["alpha_before"] = [round(float(a), 2) for a in drawn]
+    out["entered"] = labels.hover_at(x, y)
+    out["again"] = labels.hover_at(x + 1.0, y)
+    frame()
+    time.sleep(0.3)
+    held = frame()
+    time.sleep(0.6)
+    held_later = frame()
+    out["raised_px"] = changed(held, before)
+    out["held_still_px"] = changed(held_later, held)
+    out["left"] = labels.hover_at(None, None)
+    frame()
+    time.sleep(0.3)
+    after = frame()
+    out["back_px"] = changed(after, before)
+    # Метка с видом highlight.
+    left, top, right, bottom = found["Под курсором крупнее"]
+    out["lit_before"] = (right - left, bottom - top)
+    labels.hover_at((left + right) / 2.0, (top + bottom) / 2.0)
+    frame()
+    time.sleep(0.3)
+    frame()
+    lit = boxes()["Под курсором крупнее"]
+    out["lit_hovered"] = (lit[2] - lit[0], lit[3] - lit[1])
+    labels.hover_at(None, None)
+    frame()
+    lit = boxes()["Под курсором крупнее"]
+    out["lit_after"] = (lit[2] - lit[0], lit[3] - lit[1])
+    window.myplaces.remove_many([state["hop_key"]])
+    return None
+
+
+@check(1500)
+def add_here():
+    """«Добавить метку здесь» меню на глобусе: окно «Новая метка» с точкой
+    под курсором, точка видна на глобусе."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.show(Pose(58.0105, 56.2294, 3000.0, 0.0, 0.0))
+    window.view.update()
+    QgsApplication.processEvents()
+    window.add_place_here(58.0105, 56.2294)
+
+
+@check(500)
+def add_here_check():
+    """Точка новой метки - на виде, после закрытия окна её нет."""
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer()
+    QgsApplication.processEvents()
+    view.grabFramebuffer()
+    out = result["add_here"] = {
+        "points": len(window.drawer.points),
+        "shapes": [s.kind for s in view.features.shapes],
+        "marks": len(view._own_marks()),
+        "boxes": len(view.labels.mark_boxes)}
+    window.place_dialog.reject()
+    QgsApplication.processEvents()
+    view.grabFramebuffer()
+    out["boxes_after"] = len(view.labels.mark_boxes)
+
+
+@check(1000)
+def water_pit_open():
+    """Демо «Самосвалы, Лебединский»: дно карьера ниже уровня моря
+    (около -50 м), метка «Погрузка» на нём."""
+    window = state["window"]
+    window.set_body("earth")
+    from planetx.core.kml import KFolder, KPlace
+    window.view.sea_floor = True
+    window.open_demo("haul_lebedinsky")
+    # Метка на дне карьера, где у автора рельеф -51 м.
+    state["water_key"] = window.myplaces.import_tree(KFolder(
+        "Проверка суши", children=[
+            KPlace("Дно карьера", "point", [(51.28958, 37.63291)])]))
+    state["water_since"] = time.monotonic()
+    state["water_stage"] = 0
+
+
+@check(1000)
+def water_pit_check():
+    """Тайл воды основы пришёл: метка на дне карьера стоит на рельефе,
+    а не на уровне моря. Над Чёрным морем - на уровне моря."""
+    import numpy as _np
+    from planetx.core.navigation import Pose
+    from planetx.core import watermask
+    window = state["window"]
+    view = window.view
+    view.repaint()
+    QgsApplication.processEvents()
+    waited = time.monotonic() - state["water_since"]
+    if state["water_stage"] == 0:
+        lat, lon = 51.28958, 37.63291
+        key = watermask.tile_of(lat, lon)[0]
+        pit = [k for k in view.selection.draw
+               if k[0] >= watermask.MASK_FROM
+               and view.store.range_for(k)[0] < 0.0
+               and watermask.tile_of(lat, lon, k[0])[0] == k]
+        if (key not in view.water.tiles or not pit
+                or view.water_masks.get(max(pit)) is None) and waited < 40:
+            return 1000
+        ground = float(view.store.heights_at(_np.array([lat]),
+                                             _np.array([lon]))[0])
+        out = result["water"] = {
+            "waited": round(waited, 1), "tile": key in view.water.tiles,
+            "ground": round(ground, 1),
+            "label": round(view.label_height(lat, lon), 1),
+            "land": bool(view.water.land([lat], [lon])[0])}
+        view.grabFramebuffer()
+        L = view.labels
+        row = next((L._row[k] for k in L._row
+                    if k[1] == "Дно карьера" and k[0] <= -2), None)
+        if row is not None:
+            from planetx.core.ellipsoid import ecef_to_geodetic
+            out["mark_height"] = round(float(ecef_to_geodetic(
+                _np.array(L._p[row]))[2]), 1)
+        # Маска прохода воды у тайла вида над карьером: на месте дна
+        # карьера суша (красный 0), воды нет.
+        from planetx.render.view import MASK_SIDE, _mask_image
+        out["pose_distance"] = round(view.navigator.pose.distance)
+        out["pit_tiles"] = [list(k) for k in pit]
+        if pit:
+            k = max(pit)
+            _, fx, fy = watermask.tile_of(lat, lon, k[0])
+            rings = watermask.mask_rings(k, view.water.tiles)
+            out["mask_ready"] = rings is not None
+            if rings is not None:
+                image = _mask_image(rings)
+                out["mask_red_at_pit"] = int(image[
+                    min(MASK_SIDE - 1, int(fy * MASK_SIDE)),
+                    min(MASK_SIDE - 1, int(fx * MASK_SIDE)), 0])
+            entry = view.water_masks.get(k)
+            out["mask_texture"] = entry is not None \
+                and entry[1] != view.water_all
+        view.grabFramebuffer().save(os.path.join(TEMP,
+                                                 "planetx_water_pit.png"))
+        folders = [f.key for f in window.myplaces.folders
+                   if f.name.startswith("PlanetX: демо, самосвалы")]
+        window.myplaces.remove_many(folders + [state["water_key"]])
+        view.navigator.show(Pose(43.2, 31.5, 20000.0, 0.0, 0.0))
+        view.update()
+        state["water_stage"] = 1
+        state["water_since"] = time.monotonic()
+        return 1000
+    key = watermask.tile_of(43.2, 31.5)[0]
+    if key not in view.water.tiles and waited < 40:
+        return 1000
+    out = result["water"]
+    out["sea_tile"] = key in view.water.tiles
+    out["sea_ground"] = round(float(view.store.heights_at(
+        _np.array([43.2]), _np.array([31.5]))[0]), 1)
+    out["sea_label"] = round(view.label_height(43.2, 31.5), 1)
+    return None
+
+
+SUPER_URL = "https://mw1.google.com/mw-earth-vectordb/kml-samples/mv-doqq.kml"
+
+
+@check(500)
+def superoverlay_open():
+    """Суперналожение образца Google: Mountain View DOQQ, сотни тайлов
+    по сетевым ссылкам onRegion. Файл образца - в TEMP, открывается
+    в «Мои метки», камера - над Маунтин-Вью с 17 км."""
+    import urllib.request
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    path = os.path.join(os.environ["TEMP"], "planetx_mv_doqq.kml")
+    request = urllib.request.Request(
+        SUPER_URL, headers={"User-Agent": "PlanetX check"})
+    with urllib.request.urlopen(request, timeout=30) as reply:
+        data = reply.read()
+    with open(path, "wb") as fh:
+        fh.write(data)
+    before = {f.key for f in window.myplaces.folders}
+    window.import_kml(path=path)
+    QgsApplication.processEvents()
+    links = [f for f in window.myplaces.folders if f.key not in before
+             and f.link]
+    result["superoverlay"] = {
+        "links": [(f.name, f.view_mode, f.region is not None)
+                  for f in links]}
+    state["super_keys"] = [f.key for f in window.myplaces.folders
+                           if f.key not in before]
+    window.view.navigator.show(Pose(37.401, -122.096, 17000.0, 0.0, 0.0))
+    window.view.update()
+    state["super_since"] = time.monotonic()
+    state["super_stage"] = 0
+
+
+@check(500)
+def superoverlay_wait():
+    """Тайлы приходят: с 17 км - верхние уровни, с 2 км - подробные.
+    Кадры обоих видов - в TEMP."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    manager = window.superoverlays
+    view.repaint()
+    QgsApplication.processEvents()
+    waited = time.monotonic() - state["super_since"]
+    busy = manager.docs or manager.image_replies \
+        or manager.apply_timer.isActive() or view.load_missing
+    if (busy or not manager.rasters) and waited < 60.0:
+        return 1000
+    out = result["superoverlay"]
+    trees = list(manager.trees.values())
+    loaded = [n for _, tree in trees for n in tree.nodes()
+              if n.state == "ready"]
+    stage = "far" if state["super_stage"] == 0 else "near"
+    out[stage] = {
+        "waited": round(waited, 1),
+        "trees": len(trees),
+        "documents": len(loaded),
+        "depth": max((n.depth for n in loaded), default=-1),
+        "rasters": len(manager.rasters),
+        "failed_images": len(manager.failed)}
+    view.grabFramebuffer().save(os.path.join(
+        os.environ["TEMP"], "planetx_super_{}.png".format(stage)))
+    if state["super_stage"] == 0:
+        state["super_stage"] = 1
+        view.navigator.show(Pose(37.4219, -122.0841, 2000.0, 0.0, 0.0))
+        view.update()
+        state["super_since"] = time.monotonic()
+        return 1000
+    return None
+
+
+@check(500)
+def superoverlay_close():
+    """Снятие папки: растров тайлов и деревьев нет."""
+    window = state["window"]
+    window.myplaces.remove_many(state.get("super_keys", []))
+    QgsApplication.processEvents()
+    manager = window.superoverlays
+    manager.tick()
+    QgsApplication.processEvents()
+    time.sleep(1.2)
+    QgsApplication.processEvents()
+    out = result["superoverlay"]
+    out["after_trees"] = len(manager.trees)
+    out["after_rasters"] = len(manager.rasters)
+
+
+@check(500)
+def superdemo_open():
+    """Демо «Суперналожение, Маунтин-Вью» из меню «Демо»: сетевая
+    ссылка onRegion на образец Google, камера над городом."""
+    window = state["window"]
+    before = {f.key for f in window.myplaces.folders}
+    action = next(a for a in window.toolbar.demo_list
+                  if a.text() in ("Суперналожение, Маунтин-Вью",
+                                  "Super-overlay, Mountain View"))
+    action.trigger()
+    QgsApplication.processEvents()
+    state["super_keys"] = [f.key for f in window.myplaces.folders
+                           if f.key not in before]
+    state["super_since"] = time.monotonic()
+    result["superdemo"] = {"links": [
+        (f.name, f.view_mode) for f in window.myplaces.folders
+        if f.key in state["super_keys"] and f.link]}
+    # Значок сетевой ссылки - не значок папки.
+    from qgis.PyQt.QtWidgets import QTreeWidget, QTreeWidgetItemIterator
+    icons = {}
+    for tree in window.panel.findChildren(QTreeWidget):
+        it = QTreeWidgetItemIterator(tree)
+        while it.value():
+            item = it.value()
+            if item.text(0) in ("Маунтин-Вью, снимки DOQQ",
+                                "PlanetX: демо, суперналожение"):
+                icons[item.text(0)] = item.icon(0).pixmap(16, 16) \
+                    .toImage().bits().asstring(16 * 16 * 4) \
+                    if hasattr(item.icon(0).pixmap(16, 16).toImage().bits(),
+                               "asstring") else item.icon(0).cacheKey()
+            it += 1
+    values = list(icons.values())
+    result["superdemo"]["icons_differ"] = len(values) == 2 \
+        and values[0] != values[1]
+
+
+@check(500)
+def superdemo_wait():
+    window = state["window"]
+    view = window.view
+    manager = window.superoverlays
+    view.repaint()
+    QgsApplication.processEvents()
+    waited = time.monotonic() - state["super_since"]
+    busy = manager.docs or manager.image_replies \
+        or manager.apply_timer.isActive() or view.load_missing
+    if (busy or not manager.rasters) and waited < 60.0:
+        return 1000
+    result["superdemo"].update({
+        "waited": round(waited, 1), "trees": len(manager.trees),
+        "rasters": len(manager.rasters)})
+    view.grabFramebuffer().save(os.path.join(
+        os.environ["TEMP"], "planetx_superdemo.png"))
+    window.myplaces.remove_many(state["super_keys"])
+    return None
 
 
 @check(500)

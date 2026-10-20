@@ -172,14 +172,16 @@ class Features:
     def marks(self):
         """Точечные объекты: (номер, имя, широта, долгота, подъём,
         значок, цвет, режим высоты, вид подписи). Вид подписи - размер
-        значка, цвет подписи или None, размер подписи, поворот значка."""
+        значка, цвет подписи или None, размер подписи, поворот значка,
+        вид под курсором (core.features.Shape.highlight)."""
         return [(i, shape.name, shape.points[0][0], shape.points[0][1],
                  float(shape.height or 0.0), shape.icon,
                  tuple(shape.color), altitude_mode(shape),
                  (_scale(getattr(shape, "icon_scale", 1.0)),
                   getattr(shape, "label_color", None),
                   float(getattr(shape, "label_scale", 1.0)),
-                  float(getattr(shape, "icon_heading", 0.0) or 0.0)))
+                  float(getattr(shape, "icon_heading", 0.0) or 0.0),
+                  getattr(shape, "highlight", None)))
                 for i, shape in enumerate(self.shapes)
                 if shape.kind == "point" and shape.points]
 

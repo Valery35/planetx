@@ -312,6 +312,8 @@ class TimeBar(QFrame):
         self.timer.setInterval(PLAY_PERIOD)
         self.timer.timeout.connect(self._step)
         self._last = None
+        # Начало показа при промежутке на всю шкалу (toggle), иначе None.
+        self._sweep = None
         # Место панели: функция без аргументов, отдаёт левый верхний
         # угол. Ставит окно - под панелью значков.
         self.anchor = None
@@ -499,7 +501,15 @@ class TimeBar(QFrame):
             self.stop()
             return
         a, b = self.track.extent
-        if self.track.hi >= b and not self._grows():
+        self._sweep = None
+        if not self.track.point and not self._grows() \
+                and self.track.lo <= a and self.track.hi >= b:
+            # Промежуток на всю шкалу сдвинуть некуда, показ стоял бы.
+            # Левый край стоит в начале, правый идёт от него к концу.
+            self._sweep = a
+            self.track.set_range(a, a)
+            self._moved(self.track.lo, self.track.hi)
+        elif self.track.hi >= b and not self._grows():
             # Проигрывание с начала шкалы, ширина промежутка та же.
             width = self.track.hi - self.track.lo
             self.track.set_range(a, a + width)
@@ -528,6 +538,16 @@ class TimeBar(QFrame):
         dt = now - (self._last or now)
         self._last = now
         step = clock.shift(self.track.extent, self.speed.currentData(), dt)
+        if self._sweep is not None:
+            hi, going = clock.sweep(self._sweep, self.track.hi,
+                                    self.track.extent, step,
+                                    self.loop.isChecked())
+            self.track.set_range(self._sweep, hi)
+            self._moved(self.track.lo, self.track.hi)
+            if not going:
+                self._sweep = None
+                self.stop()
+            return
         lo, hi, extent, going = clock.advance(
             self.track.lo, self.track.hi, self.track.extent, step,
             self._grows(), self.loop.isChecked())

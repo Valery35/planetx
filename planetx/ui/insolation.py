@@ -9,9 +9,10 @@
 import calendar
 
 from qgis.PyQt.QtCore import QDate, pyqtSignal
-from qgis.PyQt.QtWidgets import (QDateEdit, QDialog, QDialogButtonBox,
-                                 QDoubleSpinBox, QFormLayout, QLabel,
-                                 QPushButton, QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QCheckBox, QDateEdit, QDialog,
+                                 QDialogButtonBox, QDoubleSpinBox,
+                                 QFormLayout, QLabel, QPushButton,
+                                 QVBoxLayout)
 
 from ..i18n import tr
 from ..qt_compat import enum
@@ -58,6 +59,12 @@ class InsolationDialog(QDialog):
             "Радиус круга расчёта. Больше - шаг сетки крупнее. Тени "
             "гор берутся с расстояния не меньше радиуса и не меньше "
             "5 км."))
+        self.buildings = QCheckBox(tr("Учитывать здания"), self)
+        self.buildings.setChecked(True)
+        self.buildings.setToolTip(tr(
+            "Здания OpenFreeMap дают тени и сами получают солнце крышей. "
+            "Высота у части зданий условная. Здание уже шага сетки может "
+            "не попасть в расчёт."))
         self.status = QLabel(self)
         self.status.setWordWrap(True)
         form = QFormLayout()
@@ -65,6 +72,7 @@ class InsolationDialog(QDialog):
         form.addRow(tr("Первые сутки"), self.first)
         form.addRow(tr("Последние сутки"), self.last)
         form.addRow(tr("Радиус"), self.radius)
+        form.addRow("", self.buildings)
         buttons = QDialogButtonBox(self)
         run = QPushButton(tr("Построить"), self)
         run.setDefault(True)

@@ -16,8 +16,8 @@ from qgis.PyQt.QtWidgets import QApplication
 from ... import journal
 from ...core import oldmaps, weather as weather_core
 from ...core.flight import Spin
-from ...core.geocode import (SEARCH_INTERVAL, link_zoom, osm_link,
-                             parse_reverse, reverse_url)
+from ...core.geocode import (SEARCH_INTERVAL, link_zoom, parse_reverse,
+                             reverse_url)
 from ...core.sync import ground_size, view_box
 from ...core.placetree import numbered_name
 from ...core.places import Place as MarkPlace
@@ -187,15 +187,6 @@ class ActionsMixin:
         dialog = MenuLinksDialog(self)
         dialog.exec()
         return dialog
-
-    def copy_link(self, lat, lon):
-        """Ссылка на точку на карте OpenStreetMap в буфер обмена. Масштаб
-        - по ширине видимой полосы."""
-        QApplication.clipboard().setText(
-            osm_link(lat, lon, self._view_width()))
-        self.message = (tr("Ссылка на место скопирована."),
-                        time.monotonic())
-        self._show_state()
 
     def _show_weather_tiles(self, tiles, field, grid):
         """Поле прогноза на месте темы, шкала и подпись поля. Прежние

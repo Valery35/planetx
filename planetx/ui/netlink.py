@@ -86,8 +86,11 @@ class NetLinks(QObject):
         self.timer.start()
 
     def links(self):
-        """Папки-ссылки «Моих меток»."""
-        return [f for f in self.window.myplaces.folders if f.link]
+        """Папки-ссылки «Моих меток». Ссылки суперналожений (viewRefreshMode
+        onRegion) загружает ui/superoverlay.py в память, не в файл
+        меток."""
+        return [f for f in self.window.myplaces.folders
+                if f.link and f.view_mode != "onRegion"]
 
     def _shown_depth(self, folder):
         """Глубина ссылки среди ссылок-предков или None, если папка или

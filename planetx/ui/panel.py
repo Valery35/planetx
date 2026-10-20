@@ -1572,6 +1572,9 @@ class LayerPanel(QWidget):
 
     def _fill(self, parent, nodes):
         folder_icon = QgsApplication.getThemeIcon("/mIconFolder.svg")
+        # Сетевая ссылка - значок шара сетевых слоёв QGIS, а не папка.
+        # Замечание автора от 20 октября 2026 года.
+        link_icon = QgsApplication.getThemeIcon("/mIconWms.svg")
         for node in nodes:
             if isinstance(node, tuple):
                 folder, kids = node
@@ -1580,7 +1583,8 @@ class LayerPanel(QWidget):
                 item.setData(0, PLACE_ROLE, folder.key)
                 item.setData(0, RADIO_ROLE, self._radio_parent(parent))
                 item.setData(0, RADIO_FOLDER_ROLE, bool(folder.radio))
-                item.setIcon(0, folder_icon)
+                item.setIcon(0, link_icon if self.is_link(folder.key)
+                             else folder_icon)
                 # Флажок папки-переключателя не трёхпозиционный: он
                 # отмечен, пока виден ребёнок, и сам детям не передаётся.
                 # Снятый гасит всех (core/placetree.radio_states).
@@ -1876,15 +1880,12 @@ class LayerPanel(QWidget):
                 actions.append(("model_wall", tr("Стенка разреза модели")))
             elif key.startswith("polygon:"):
                 actions.append(("model_cut", tr("Вырез модели")))
-            elif key.startswith("point:"):
-                actions.append(("viewshed", tr("Видимость отсюда…")))
-                actions.append(("insolation", tr("Инсоляция…")))
             elif key.startswith("ground:"):
                 actions.append(("ground_project",
                                 tr("Картинку в проект QGIS…")))
-            if key.split(":")[0] in ("point", "line", "polygon"):
-                actions.append(("sentinel",
-                                tr("Космоснимки…")))
+            if key.split(":")[0] in ("line", "polygon"):
+                # Участок по контуру метки. У точки - меню на глобусе.
+                actions.append(("sentinel", tr("Космоснимки…")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),

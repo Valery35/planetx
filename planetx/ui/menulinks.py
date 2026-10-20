@@ -13,11 +13,11 @@ from qgis.PyQt.QtCore import QUrl
 from qgis.PyQt.QtGui import QDesktopServices
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QDialog,
                                  QDialogButtonBox, QHBoxLayout, QLabel,
-                                 QPushButton, QTableWidget, QTableWidgetItem,
-                                 QVBoxLayout)
+                                 QMenu, QPushButton, QTableWidget,
+                                 QTableWidgetItem, QVBoxLayout)
 
 from ..core import menulinks
-from ..i18n import tr
+from ..i18n import is_russian, tr
 from ..qt_compat import enum
 
 LINKS_KEY = "PlanetX/menu_links"
@@ -53,15 +53,16 @@ class MenuLinksDialog(QDialog):
 
     def __init__(self, parent):
         super().__init__(parent)
-        self.setWindowTitle(tr("Свои пункты меню"))
-        self.resize(640, 320)
+        self.setWindowTitle(tr("Сайты меню «Открыть в браузере»"))
+        self.resize(720, 340)
         layout = QVBoxLayout(self)
         help_text = QLabel(tr(
-            "Пункт подменю «Открыть в браузере» меню на глобусе открывает "
-            "адрес с точкой под курсором. В адресе {{lat}} и {{lon}} - "
-            "широта и долгота в градусах, {{zoom}} - масштаб карты по "
-            "виду. "
-            "Пример: {example}", example=menulinks.EXAMPLE[1]), self)
+            "Каждая строка - пункт подменю «Открыть в браузере» меню на "
+            "глобусе. Пункт открывает сайт на точке под курсором. "
+            "«Добавить сайт» ставит готовый сайт или пустую строку для "
+            "своего адреса. Двойной щелчок по ячейке меняет название или "
+            "адрес. В адресе {{lat}} и {{lon}} - широта и долгота "
+            "в градусах, {{zoom}} - масштаб карты по виду."), self)
         help_text.setWordWrap(True)
         layout.addWidget(help_text)
         self.table = QTableWidget(0, 2, self)
@@ -72,10 +73,18 @@ class MenuLinksDialog(QDialog):
         self.table.verticalHeader().setVisible(False)
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        add = QPushButton(tr("Добавить"), self)
-        add.setToolTip(tr("Новая строка с примером адреса, его можно "
-                          "заменить своим."))
-        add.clicked.connect(self._add)
+        add = QPushButton(tr("Добавить сайт"), self)
+        add.setToolTip(tr("Готовый сайт из списка или пустая строка для "
+                          "своего адреса."))
+        presets = QMenu(add)
+        for ru, en, template in menulinks.PRESETS:
+            name = ru if is_russian() else en
+            presets.addAction(name).triggered.connect(
+                lambda *a, n=name, t=template: self._add(n, t))
+        presets.addSeparator()
+        presets.addAction(tr("Свой адрес")).triggered.connect(
+            lambda *a: self._add("", "https://"))
+        add.setMenu(presets)
         remove = QPushButton(tr("Удалить"), self)
         remove.setToolTip(tr("Удалить выделенные строки."))
         remove.clicked.connect(self._remove)
@@ -101,9 +110,13 @@ class MenuLinksDialog(QDialog):
         self.table.setItem(r, 0, QTableWidgetItem(name))
         self.table.setItem(r, 1, QTableWidgetItem(template))
 
-    def _add(self):
-        self._append(*menulinks.EXAMPLE)
-        self.table.setCurrentCell(self.table.rowCount() - 1, 0)
+    def _add(self, name, template):
+        """Новая строка. Без названия - сразу правка названия."""
+        self._append(name, template)
+        r = self.table.rowCount() - 1
+        self.table.setCurrentCell(r, 0)
+        if not name:
+            self.table.editItem(self.table.item(r, 0))
 
     def _remove(self):
         rows = sorted({index.row() for index

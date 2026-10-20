@@ -46,6 +46,19 @@ def shift(span, rate, dt, seconds=FIT_SECONDS):
     return rate * dt
 
 
+def sweep(lo, hi, span, step, loop):
+    """Показ при промежутке на всю шкалу: левый край lo стоит, правый
+    hi идёт на step к концу охвата span. С loop с конца - снова
+    с lo. Возвращает (hi, идёт ли показ)."""
+    _, b = span
+    hi += step
+    if hi < b:
+        return hi, True
+    if loop:
+        return lo, True
+    return b, False
+
+
 def advance(lo, hi, span, step, grow, loop):
     """Промежуток (lo, hi) после сдвига на step при охвате span.
 

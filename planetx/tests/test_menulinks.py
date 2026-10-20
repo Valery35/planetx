@@ -12,6 +12,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
 import menulinks as ml  # noqa: E402
 
 
+class TestPresets(unittest.TestCase):
+
+    def test_presets_are_valid(self):
+        for ru, en, template in ml.PRESETS:
+            self.assertEqual(ml.check(ru, template), "", ru)
+            self.assertIn("58.000000",
+                          ml.fill(template, 58.0, 56.2, 12))
+
+
 class TestMenuLinks(unittest.TestCase):
 
     def test_fill_puts_point_and_zoom(self):

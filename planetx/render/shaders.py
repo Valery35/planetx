@@ -447,6 +447,12 @@ void main() {
         if (v_height >= 0.0 || u_plain > 0.5) {
             discard;
         }
+        // В проходе воды на месте снимка - маска воды тайла
+        // (GlobeView._water_mask): красный 0 - суша ниже нуля, карьер,
+        // впадина, воды там нет.
+        if (texture(u_texture, v_uv, 0.0).r < 0.5) {
+            discard;
+        }
         base = u_water_color.rgb;
         alpha = u_water_color.a * clamp(-v_height / u_shallow, 0.25, 1.0);
         shade = 1.0;

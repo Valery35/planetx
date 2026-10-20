@@ -240,6 +240,44 @@ class TestWrite(unittest.TestCase):
                           for p in again],
                          [(1.5, (255, 0, 0, 255), 0.8), (1.0, None, 0.0)])
 
+    def test_style_map_highlight_round_trip(self):
+        """Вариант highlight StyleMap - вид точки под курсором: ссылкой
+        на Style, своим Style внутри Pair и StyleMap внутри метки.
+        Обычный вид берётся из normal, запись - StyleMap обратно."""
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
+          <Style id="n"><IconStyle><color>ff00ffff</color><scale>1.1
+            </scale></IconStyle></Style>
+          <Style id="h"><IconStyle><scale>1.3</scale></IconStyle>
+            <LabelStyle><color>ff0000ff</color></LabelStyle></Style>
+          <StyleMap id="m"><Pair><key>normal</key><styleUrl>#n</styleUrl>
+            </Pair><Pair><key>highlight</key><styleUrl>#h</styleUrl>
+            </Pair></StyleMap>
+          <Placemark><name>А</name><styleUrl>#m</styleUrl>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          <Placemark><name>Б</name><StyleMap><Pair><key>highlight</key>
+            <Style><IconStyle><scale>2</scale></IconStyle></Style></Pair>
+            </StyleMap><Point><coordinates>56,58</coordinates></Point>
+          </Placemark>
+          <Placemark><name>В</name><styleUrl>#n</styleUrl>
+            <Point><coordinates>56,58</coordinates></Point></Placemark>
+          </Document></kml>"""
+        a, b, c = kml.read_kml(text.encode("utf-8")).children
+        self.assertEqual(a.icon_scale, 1.1)
+        self.assertEqual(a.color, (255, 255, 0, 255))
+        self.assertEqual(a.highlight, {"scale": 1.3,
+                                       "label": [255, 0, 0, 255]})
+        self.assertEqual(b.highlight, {"scale": 2.0})
+        self.assertIsNone(c.highlight)
+        written = kml.write_kml(kml.KFolder("x", True, [a, b, c]))
+        again = kml.read_kml(written.encode("utf-8")).children
+        self.assertEqual([p.highlight for p in again],
+                         [{"color": [255, 255, 0, 255], "scale": 1.3,
+                           "icon": a.icon, "label": [255, 0, 0, 255],
+                           "label_scale": 1.0},
+                          {"color": list(b.color), "scale": 2.0,
+                           "icon": b.icon}, None])
+        self.assertEqual(again[0].icon_scale, 1.1)
+
     def test_balloon_and_icon_heading_round_trip(self):
         """BalloonStyle и heading значка читаются из стиля и пишутся
         обратно."""

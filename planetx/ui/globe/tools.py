@@ -40,10 +40,15 @@ from ..bathymetry import REMOVE as BATHY_REMOVE, BathymetryDialog
 from ..folderprops import FolderDialog
 from ..viewshed import ResultTiles, ViewshedDialog, display_level
 from ..insolation import InsolationDialog
+from ..roofs import RoofLoader
 from ..subsection import ModelSectionDialog, build as model_section
 from ..snapshot import SnapshotDialog, draw_attribution, plain_text
 from .base import (CALC_BUDGET, HEIGHT_CHUNK, SECTION_TIME_PAUSE,
                    VIEWSHED_POLL, VIEWSHED_WAIT)
+
+# Здания для инсоляции - и за кругом: тень здания 100 м при солнце 6°
+# над горизонтом длиной около 1 км. Выбор помощника.
+ROOF_MARGIN = 1000.0
 
 
 class ToolsMixin:
@@ -384,16 +389,20 @@ class ToolsMixin:
 
     def _open_viewshed(self, item):
         """Окно «Видимость из точки» для точечной метки item."""
+        lat, lon = item.shape.points[0]
+        self.viewshed_here(lat, lon, item.name or tr("Без названия"))
+
+    def viewshed_here(self, lat, lon, name=None):
+        """Окно «Видимость из точки» для точки lat, lon - пункт меню
+        на глобусе."""
         dialog = self.viewshed_dialog
         if dialog is None:
             dialog = ViewshedDialog(self)
             dialog.build.connect(self._build_viewshed)
             dialog.clear.connect(self._clear_viewshed)
             self.viewshed_dialog = dialog
-        lat, lon = item.shape.points[0]
         dialog.point = (lat, lon)
-        dialog.place.setText("{}  {:.5f}, {:.5f}".format(
-            item.name or tr("Без названия"), lat, lon))
+        dialog.place.setText(self._point_title(lat, lon, name))
         dialog.status.setText("")
         dialog.show()
         dialog.raise_()
@@ -410,10 +419,13 @@ class ToolsMixin:
         _, keys = viewshed.height_tiles(lat, lon, radius_m, cell,
                                         ellipsoid.A,
                                         self.view.store.max_level)
+        self._stop_roofs(self.viewshed_job)
         self.viewshed_job = {"lat": lat, "lon": lon, "radius": radius_m,
                              "cell": cell, "observer": observer,
                              "target": target, "keys": keys,
-                             "started": time.monotonic()}
+                             "started": time.monotonic(),
+                             "roofs": self._roofs(dialog, lat, lon,
+                                                  radius_m, cell)}
         self.viewshed_timer.start()
         self._viewshed_poll()
 
@@ -431,10 +443,17 @@ class ToolsMixin:
                 done=len(job["keys"]) - len(missing),
                 total=len(job["keys"])))
             return
+        roofs = job["roofs"]
+        if self._roofs_wait(roofs, waited, self.viewshed_timer,
+                            self.viewshed_dialog):
+            return
+        self.viewshed_timer.setInterval(VIEWSHED_POLL)
         self.viewshed_timer.stop()
         self.viewshed_job = None
+        heights = self._surface_heights if roofs is None \
+            else roofs.heights(self._surface_heights)
         result = viewshed.compute(job["lat"], job["lon"], job["radius"],
-                                  job["cell"], self._surface_heights,
+                                  job["cell"], heights,
                                   observer=job["observer"],
                                   target=job["target"])
         self._show_viewshed(result)
@@ -444,6 +463,7 @@ class ToolsMixin:
         if missing:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
+        text += self._roofs_text(roofs)
         self.viewshed_dialog.status.setText(text)
 
     def _show_viewshed(self, result):
@@ -466,26 +486,73 @@ class ToolsMixin:
         self.view.set_gibs("viewshed", True, tiles)
 
     def _clear_viewshed(self):
+        self._stop_roofs(self.viewshed_job)
         self.viewshed_job = None
         self.viewshed_timer.stop()
         self._show_viewshed(None)
         if self.viewshed_dialog is not None:
             self.viewshed_dialog.status.setText("")
 
+    # Здания для видимости и инсоляции (ui/roofs.py).
+
+    def _roofs(self, dialog, lat, lon, reach, cell):
+        """Загрузчик крыш круга или None: флажок окна снят, не Земля."""
+        if not dialog.buildings.isChecked() or not self.planet.earth \
+                or self.view.sky_view is not None:
+            return None
+        return RoofLoader(getattr(self, "_ofm_source", None), lat, lon,
+                          reach, cell)
+
+    def _roofs_wait(self, roofs, waited, timer, dialog):
+        """Ждать ли зданий: разбор пришедших тайлов частями, строка
+        состояния. Пока здания идут, таймер окна - без паузы."""
+        if roofs is None or roofs.ready or waited >= VIEWSHED_WAIT:
+            return False
+        roofs.step(CALC_BUDGET)
+        timer.setInterval(0 if roofs.arrived else VIEWSHED_POLL)
+        dialog.status.setText(tr(
+            "Загрузка зданий: {done} из {total}", done=roofs.done,
+            total=roofs.total))
+        return not roofs.ready
+
+    def _roofs_text(self, roofs):
+        """Добавка строки итога о зданиях."""
+        if roofs is None:
+            return ""
+        roofs.stop()
+        if roofs.skipped:
+            return " " + tr("Здания не учтены - круг слишком большой.")
+        text = " " + tr("Учтено зданий {count}.", count=roofs.grid.count)
+        if roofs.done < roofs.total:
+            text += " " + tr("Загружены не все тайлы зданий.")
+        return text
+
+    def _stop_roofs(self, job):
+        if job is not None and job.get("roofs") is not None:
+            job["roofs"].stop()
+
     # Инсоляция.
+
+    def _point_title(self, lat, lon, name):
+        """Подпись точки окна видимости и инсоляции."""
+        text = "{:.5f}, {:.5f}".format(lat, lon)
+        return "{}  {}".format(name, text) if name else text
 
     def _open_insolation(self, item):
         """Окно «Инсоляция» для точечной метки item."""
+        lat, lon = item.shape.points[0]
+        self.insolation_here(lat, lon, item.name or tr("Без названия"))
+
+    def insolation_here(self, lat, lon, name=None):
+        """Окно «Инсоляция» для точки lat, lon - пункт меню на глобусе."""
         dialog = self.insolation_dialog
         if dialog is None:
             dialog = InsolationDialog(self)
             dialog.build.connect(self._build_insolation)
             dialog.clear.connect(self._clear_insolation)
             self.insolation_dialog = dialog
-        lat, lon = item.shape.points[0]
         dialog.point = (lat, lon)
-        dialog.place.setText("{}  {:.5f}, {:.5f}".format(
-            item.name or tr("Без названия"), lat, lon))
+        dialog.place.setText(self._point_title(lat, lon, name))
         dialog.status.setText("")
         dialog.show()
         dialog.raise_()
@@ -503,10 +570,14 @@ class ToolsMixin:
         _, keys = viewshed.height_tiles(lat, lon, margin * cell + radius_m,
                                         cell, ellipsoid.A,
                                         self.view.store.max_level)
+        self._stop_roofs(self.insolation_job)
         self.insolation_job = {"lat": lat, "lon": lon, "radius": radius_m,
                                "start": start, "end": end, "keys": keys,
                                "started": time.monotonic(),
-                               "work": None, "missing": False}
+                               "work": None, "missing": False,
+                               "roofs": self._roofs(
+                                   dialog, lat, lon,
+                                   radius_m + ROOF_MARGIN, cell)}
         self.insolation_timer.setInterval(VIEWSHED_POLL)
         self.insolation_timer.start()
         self._insolation_poll()
@@ -529,6 +600,9 @@ class ToolsMixin:
                     done=len(job["keys"]) - len(missing),
                     total=len(job["keys"])))
                 return
+            if "points" not in job and self._roofs_wait(
+                    job["roofs"], waited, self.insolation_timer, dialog):
+                return
             # Высоты снимаются в главном потоке, хранилище высот вида
             # меняется только в нём. Узлов 640 тысяч, они снимаются
             # частями по HEIGHT_CHUNK за проход цикла событий, чтобы
@@ -544,8 +618,12 @@ class ToolsMixin:
             done = sum(len(part) for part in job["heights"])
             if done < len(lats):
                 end = done + HEIGHT_CHUNK
-                job["heights"].append(self._surface_heights(
-                    lats[done:end], lons[done:end]))
+                heights = self._surface_heights(lats[done:end],
+                                                lons[done:end])
+                if job["roofs"] is not None:
+                    heights = heights + job["roofs"].grid.at(
+                        lats[done:end], lons[done:end])
+                job["heights"].append(heights)
                 dialog.status.setText(tr(
                     "Высоты узлов сетки: {share}",
                     share="{:.0f}%".format(100.0 * done / len(lats))))
@@ -582,6 +660,7 @@ class ToolsMixin:
         if job["missing"]:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
+        text += self._roofs_text(job["roofs"])
         dialog.status.setText(text)
 
     def _show_insolation(self, result):
@@ -609,6 +688,7 @@ class ToolsMixin:
         self._place_attribution()
 
     def _clear_insolation(self):
+        self._stop_roofs(self.insolation_job)
         self.insolation_job = None
         self.insolation_timer.stop()
         self._show_insolation(None)

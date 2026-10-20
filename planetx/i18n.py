@@ -149,6 +149,26 @@ EN = {
     "Модуль выгружен.": "The plugin is unloaded.",
     "QGIS закрыт.": "QGIS is closed.",
     "Космоснимки здесь…": "Satellite images here…",
+    "Инсоляция здесь…": "Insolation here…",
+    "Учитывать здания": "Include buildings",
+    "Здания OpenFreeMap поднимают рельеф на свою высоту и закрывают обзор. "
+    "Высота у части зданий условная. Здание уже шага расчёта может не "
+    "попасть в расчёт. Только на Земле.":
+        "OpenFreeMap buildings raise the terrain by their height and block "
+        "the view. The height of some buildings is nominal. A building "
+        "narrower than the computation step may be missed. Earth only.",
+    "Здания OpenFreeMap дают тени и сами получают солнце крышей. Высота "
+    "у части зданий условная. Здание уже шага сетки может не попасть "
+    "в расчёт.":
+        "OpenFreeMap buildings cast shadows and get the sun on their roofs. "
+        "The height of some buildings is nominal. A building narrower than "
+        "the grid step may be missed.",
+    "Загрузка зданий: {done} из {total}":
+        "Loading buildings: {done} of {total}",
+    "Здания не учтены - круг слишком большой.":
+        "Buildings are not included, the circle is too large.",
+    "Учтено зданий {count}.": "Buildings included: {count}.",
+    "Загружены не все тайлы зданий.": "Not all building tiles loaded.",
     "Космоснимки…": "Satellite images…",
     "Космоснимки": "Satellite images",
     "Температура поверхности, °C": "Surface temperature, °C",
@@ -1817,6 +1837,9 @@ EN = {
         "per session. The interval is never shorter than 10 s.",
     "Сетевая ссылка «{name}» не загружена: {error}":
         "The network link {name} was not loaded, {error}",
+    "Тайл суперналожения не загружен: {error}":
+        "A super-overlay tile was not loaded, {error}",
+    "Суперналожение": "Super-overlay",
     "Высота облёта":
         "Fly-around height",
     "Камера облёта ближе к земле или дальше от неё во всех позах записи. "
@@ -2032,10 +2055,16 @@ EN = {
         "always visible.",
     "Открыть в браузере":
         "Open in browser",
-    "Свои пункты…":
-        "Custom items…",
-    "Свои пункты меню":
-        "Custom menu items",
+    "Добавить или изменить сайты…":
+        "Add or edit sites…",
+    "Сайты меню «Открыть в браузере»":
+        "Sites of the Open in browser menu",
+    "Добавить сайт":
+        "Add site",
+    "Свой адрес":
+        "Own address",
+    "Готовый сайт из списка или пустая строка для своего адреса.":
+        "A ready site from the list or an empty row for your own address.",
     "Адрес начинается не с https:// или http://.":
         "The address does not start with https:// or http://.",
     "В адресе лишние фигурные скобки или места кроме {lat}, {lon} и {zoom}.":
@@ -2043,16 +2072,17 @@ EN = {
         "{zoom}.",
     "В адресе нет {lat} или {lon}.":
         "The address has no {lat} or {lon}.",
-    "Новая строка с примером адреса, его можно заменить своим.":
-        "A new row with an example address, it can be replaced with your "
-        "own.",
-    "Пункт подменю «Открыть в браузере» меню на глобусе открывает адрес с "
-    "точкой под курсором. В адресе {{lat}} и {{lon}} - широта и долгота в "
-    "градусах, {{zoom}} - масштаб карты по виду. Пример: {example}":
-        "An item of the Open in browser submenu of the globe menu opens an "
-        "address with the point under the cursor. In the address {{lat}} and "
-        "{{lon}} are the latitude and longitude in degrees, {{zoom}} is the "
-        "map scale by the view. Example: {example}",
+    "Каждая строка - пункт подменю «Открыть в браузере» меню на глобусе. "
+    "Пункт открывает сайт на точке под курсором. «Добавить сайт» ставит "
+    "готовый сайт или пустую строку для своего адреса. Двойной щелчок по "
+    "ячейке меняет название или адрес. В адресе {{lat}} и {{lon}} - широта "
+    "и долгота в градусах, {{zoom}} - масштаб карты по виду.":
+        "Each row is an item of the Open in browser submenu of the globe "
+        "menu. The item opens the site at the point under the cursor. Add "
+        "site puts a ready site or an empty row for your own address. "
+        "A double click on a cell changes the name or the address. In the "
+        "address {{lat}} and {{lon}} are the latitude and longitude in "
+        "degrees, {{zoom}} is the map scale by the view.",
     "Строка {n}: {reason}":
         "Row {n}: {reason}",
     "У пункта нет названия.":
@@ -2279,8 +2309,6 @@ EN = {
         "Directions to here",
     "Скопировать координаты в буфер обмена.":
         "Copy the coordinates to the clipboard.",
-    "Скопировать ссылку на место":
-        "Copy link to place",
     "Что здесь?":
         "What's here?",
     "Конец маршрута поставлен. Начало - пункт «Проложить маршрут отсюда» "
@@ -2291,8 +2319,6 @@ EN = {
     "на глобусе.":
         "The route start is set. The end is the Directions to here item of "
         "the globe menu.",
-    "Ссылка на место скопирована.":
-        "The link to the place is copied.",
     "не получен: {error}":
         "not received: {error}",
     "нет":
@@ -2690,6 +2716,11 @@ EN = {
     "3D-здания": "3D buildings",
     "Солнце": "Sun",
     "Земля": "Earth",
+    "Метки и туры": "Placemarks and tours",
+    "Снимки и карты": "Imagery and maps",
+    "Суперналожение, Маунтин-Вью": "Super-overlay, Mountain View",
+    "3D-модели и движение": "3D models and motion",
+    "Самосвалы в карьерах": "Haul trucks in open pits",
     "Марс": "Mars",
     "Луна": "Moon",
     "Ио": "Io",
@@ -2726,7 +2757,6 @@ EN = {
         "Demo: prepared scenes with places and tours on the Earth, Mars, the "
         "Moon and in the sky. The places go to My Places as a new folder, "
         "the ▶ button under the list plays the tour.",
-    "Пермь": "Perm",
     "Бока-Чика, Starbase": "Boca Chica, Starbase",
     "Японский жёлоб": "Japan Trench",
     "Создать метки по теме «{topic}»": "Make places on \"{topic}\"",
@@ -4232,7 +4262,6 @@ EN = {
     "Не найдены {names}.": "Not found: {names}.",
     "Пропущено строк - {count}.": "Rows skipped: {count}.",
     "Инсоляция": "Insolation",
-    "Инсоляция…": "Insolation…",
     "Первые сутки промежутка. Итог - среднее количество часов "
     "прямого солнца в сутки за промежуток.":
         "The first day of the period. The result is the mean number of "

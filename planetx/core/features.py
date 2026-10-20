@@ -39,10 +39,10 @@ SHAPE_POINTS = 800
 Shape = namedtuple("Shape",
                    "kind points color width fill name height extrude "
                    "icon alts flow mode holes icon_scale label_color "
-                   "label_scale icon_heading",
+                   "label_scale icon_heading highlight",
                    defaults=((255, 255, 0, 255), 2.0, None, "", 0.0,
                              False, "dot", None, False, "", None, 1.0,
-                             None, 1.0, 0.0))
+                             None, 1.0, 0.0, None))
 Shape.__doc__ = """Объект глобуса.
 
 kind - "point", "line" или "polygon". points - вершины (широта,
@@ -62,7 +62,9 @@ core/pathflow.py. mode - режим высоты KML (MODES), пустой - п�
 (scale IconStyle KML). label_color - цвет подписи точки RGBA или None -
 белый, label_scale - размер подписи, доля обычного, 0 - подписи нет
 (LabelStyle KML). icon_heading - поворот значка по часовой стрелке
-от севера, градусы (heading IconStyle KML).
+от севера, градусы (heading IconStyle KML). highlight - вид точки под
+курсором (вариант highlight StyleMap KML): словарь color, icon, scale,
+label, label_scale или None.
 """
 
 # Режимы высоты, как altitudeMode KML и вкладка «Высота» Google Earth.

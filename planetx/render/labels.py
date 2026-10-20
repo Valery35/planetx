@@ -92,6 +92,13 @@ FADE_HIGH = 0.35
 # 16 октября 2026 года. Своя метка - точка профиля, длина отрезка -
 # видна сразу: её текст меняется с каждым шагом курсора.
 LABEL_FADE = 0.3
+# Точечная метка «Моих меток» под курсором поднимается: значок
+# с подписью за HOP_TIME секунд встаёт на HOP_HEIGHT логических пикселей
+# выше, держится, пока курсор на нём, и опускается, когда курсор уходит,
+# как в Google Earth. Просьба автора от 20 октября 2026 года, величины -
+# выбор помощника.
+HOP_TIME = 0.15
+HOP_HEIGHT = 7.0
 
 # Вид надписи по классу: кегль в логических пикселях, жирный, курсив,
 # цвет с прозрачностью, размер значка и значок. Значок - точка «dot»,
@@ -201,6 +208,20 @@ def svg_file(relative):
         if os.path.exists(path):
             return path
     return None
+
+
+def lift_step(share, up, dt):
+    """Доля подъёма метки через dt секунд: к 1 под курсором, к 0 без
+    него, весь путь за HOP_TIME."""
+    step = max(dt, 0.0) / HOP_TIME
+    return min(1.0, share + step) if up else max(0.0, share - step)
+
+
+def lift_pixels(share):
+    """Подъём метки в логических пикселях при доле share: плавный
+    разгон и остановка."""
+    share = min(max(share, 0.0), 1.0)
+    return HOP_HEIGHT * share * share * (3.0 - 2.0 * share)
 
 
 def _draw_icon(painter, marker, cx, cy, r, halo):
@@ -405,6 +426,13 @@ class Labels:
         self.entries = {}  # (класс, текст) -> (u0, v0, u1, v1, w, h, ax, ay)
         self.atlas = _Atlas()
         self.shown = set()  # пункты, видные в прошлом кадре
+        # Свои точечные метки прошлого кадра: (номер метки, левый,
+        # верхний, правый, нижний край в пикселях кадра), по ним - метка
+        # под курсором. hovered - номер метки под курсором или None,
+        # lifts - номер - (доля подъёма 0-1, время).
+        self.mark_boxes = []
+        self.hovered = None
+        self.lifts = {}
         # Пункт -> начало проявления, пока надпись проявляется.
         self.born = {}
         # Не все выбранные надписи растрированы или проверены, нужен
@@ -569,6 +597,14 @@ class Labels:
                 old = self.hidden.get(key)
                 if old is not None:
                     self.hidden[key] = (old[0], None)
+            elif row is not None and (place.id or 0) < 0 \
+                    and self._places[row].kind != place.kind:
+                # Своя метка сменила вид на месте: значок под курсором
+                # (highlight StyleMap), правка в окне свойств. Иначе
+                # строка держала бы прежний вид.
+                self._places[row] = place
+                self._size[row] = self._layout(place)
+                self._tier[row] = KIND[place.kind]
             if row is None:
                 if budget <= 0:
                     # Пункт размечается в следующих кадрах, пока его
@@ -748,10 +784,12 @@ class Labels:
         chosen = select_labels(boxes, tiers, previous)
         quads = []
         shown = set()
+        boxes = []
         new = 0
         raster_start = time.perf_counter()
         now = time.monotonic()
         born = {}
+        lifts = {}
         for n in chosen:
             place = self._places[chosen_rows[n]]
             if (place.kind, label_text(place)) not in self.entries:
@@ -776,11 +814,25 @@ class Labels:
                     share = min(1.0, (now - start) / LABEL_FADE)
                     if share < 1.0:
                         born[keys[n]] = start
+            if (place.id or 0) <= -2:
+                # Своя точечная метка (render.view._own_marks).
+                boxes.append((place.id, left, top, left + w, top + h))
+                rise_share, at = self.lifts.get(place.id, (0.0, now))
+                rise_share = lift_step(rise_share,
+                                       place.id == self.hovered, now - at)
+                if rise_share > 0.0 or place.id == self.hovered:
+                    lifts[place.id] = (rise_share, now)
+                top -= round(lift_pixels(rise_share) * ratio)
             quads.append((left, top, left + w, top + h, u0, v0, u1, v1,
                           alpha[n] * share))
             shown.add(keys[n])
         self.shown = shown
+        self.mark_boxes = boxes
+        self.lifts = lifts
         self.born = born
+        if any(0.0 < part < 1.0 or (part == 0.0) == (key == self.hovered)
+               for key, (part, _) in lifts.items()):
+            self.pending = True
         if born:
             self.pending = True
         self.pending = self.pending or unknown or self._more
@@ -788,6 +840,22 @@ class Labels:
             self._draw_quads(quads, camera.width, camera.height)
         self.count = len(quads)
         return self.count
+
+    def hover_at(self, x, y):
+        """Курсор в точке кадра (x, y), None - ушёл с вида. Возвращает
+        номер своей точечной метки под ним или None и True, если метка
+        под курсором сменилась: тогда нужен кадр, метка поднимается или
+        опускается."""
+        key = None
+        if x is not None:
+            for item, left, top, right, bottom in reversed(self.mark_boxes):
+                if left <= x <= right and top <= y <= bottom:
+                    key = item
+                    break
+        if key == self.hovered:
+            return False
+        self.hovered = key
+        return True
 
     def _test(self, keys, test, camera, projection, stamp):
         """Запросы видимости проверочных точек пунктов.

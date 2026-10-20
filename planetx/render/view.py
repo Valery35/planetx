@@ -51,6 +51,8 @@ from .gibs import MIN_LEVELS as GIBS_MIN
 from .subsurface import FACE_OFFSET, ImageWalls, Subsurface
 from .models import ANIMATION_TICK as MODEL_TICK, Models
 from .pointcloud import PointClouds
+from ..core import watermask
+from ..core.watermask import WaterMask
 from .flow import FlowLines, PathFlowLines
 from .quakes import (DepositPoints, FirePoints, PlantPoints, Quakes,
                      VolcanoPoints)
@@ -271,6 +273,41 @@ class _Shot:
         self.force = False
 
 
+# Маски воды прохода воды (GlobeView._water_mask): сторона в пикселях,
+# новых за кадр и всего в видеокарте. Выбор помощника.
+MASK_SIDE = 64
+MASKS_PER_FRAME = 4
+MASKS_KEPT = 400
+
+
+def _mask_image(rings):
+    """Картинка маски воды MASK_SIDE × MASK_SIDE: белые многоугольники
+    объектов rings (доли тайла 0-1, правило чёт-нечет) на чёрном,
+    массив (h, w, 4) uint8, первая строка - северный край."""
+    from qgis.PyQt.QtCore import QPointF
+    from qgis.PyQt.QtGui import QColor, QPainter, QPainterPath, QPolygonF
+    image = QImage(MASK_SIDE, MASK_SIDE,
+                   enum(QImage, "Format", "Format_RGBA8888"))
+    image.fill(QColor(0, 0, 0, 255))
+    painter = QPainter(image)
+    white = QColor(255, 255, 255, 255)
+    for feature in rings:
+        path = QPainterPath()
+        path.setFillRule(enum(Qt, "FillRule", "OddEvenFill"))
+        for ring in feature:
+            path.addPolygon(QPolygonF([QPointF(float(x) * MASK_SIDE,
+                                               float(y) * MASK_SIDE)
+                                       for x, y in ring]))
+            path.closeSubpath()
+        painter.fillPath(path, white)
+    painter.end()
+    ptr = image.constBits()
+    ptr.setsize(image.sizeInBytes())
+    data = np.frombuffer(ptr, np.uint8).reshape(
+        MASK_SIDE, image.bytesPerLine())[:, :MASK_SIDE * 4]
+    return data.reshape(MASK_SIDE, MASK_SIDE, 4).copy()
+
+
 class GlobeView(QOpenGLWidget):
     """Глобус. Ресурсы OpenGL живут и умирают вместе с контекстом."""
 
@@ -446,6 +483,15 @@ class GlobeView(QOpenGLWidget):
         # Дно океана: высоты Земли ниже нуля не обнуляются, над ними
         # рисуется вода (_draw_water). Включает строка «Дно океана».
         self.sea_floor = False
+        # Вода и суша ниже уровня моря по векторной основе: тайлы кладёт
+        # окно (ui/watermask.py).
+        self.water = WaterMask()
+        # Маски воды тайлов для прохода воды: ключ - (счётчик тайлов
+        # воды, текстура), по давности. water_all - вся вода.
+        self.water_masks = {}
+        self.water_all = None
+        self._mask_budget = 0
+        self._mask_more = False
         self.navigator.set_terrain(self.terrain_at)
         self.pending = {}
         # Подложка: наибольший уровень источника и тайлы прежней подложки,
@@ -690,12 +736,26 @@ class GlobeView(QOpenGLWidget):
         turn = round(self.navigator.pose.heading / TURN_STEP) * TURN_STEP \
             if any(s.kind == "point" and getattr(s, "icon_heading", 0.0)
                    for s in shapes) else 0.0
+        # Метка под курсором с видом highlight (StyleMap KML) рисуется
+        # этим видом.
+        hovered = self.labels.hovered
+        lit_at = -2 - hovered if hovered is not None else None
+        lit_key = lit_at if lit_at is not None and 0 <= lit_at < len(
+            shapes) and getattr(shapes[lit_at], "highlight", None) \
+            else None
         if self._feature_marks[1] is not shapes \
-                or self._feature_marks[2] != (scale, turn):
+                or self._feature_marks[2] != (scale, turn, lit_key):
             marks = []
             for i, name, lat, lon, lift, icon, color, mode, look \
                     in self.features.marks():
-                icon_scale, label_color, label_scale, heading = look
+                icon_scale, label_color, label_scale, heading, lit = look
+                if lit and i == lit_key:
+                    icon = lit.get("icon") or icon
+                    color = tuple(lit.get("color") or color)
+                    icon_scale = lit.get("scale", icon_scale)
+                    if lit.get("label"):
+                        label_color = tuple(lit["label"])
+                    label_scale = lit.get("label_scale", label_scale)
                 screen = (heading - turn) % 360.0 if heading else 0.0
                 base = None
                 if mode == ABSOLUTE:
@@ -711,7 +771,7 @@ class GlobeView(QOpenGLWidget):
                                               label_color, label_scale,
                                               screen),
                                    1, lat, lon, None, lift, base))
-            self._feature_marks = (marks, shapes, (scale, turn))
+            self._feature_marks = (marks, shapes, (scale, turn, lit_key))
         return self._feature_marks[0]
 
     def set_search_mark(self, mark):
@@ -781,13 +841,22 @@ class GlobeView(QOpenGLWidget):
             self.update()
         return out
 
-    def _draw_water(self, items, mvps, fades=None):
+    def _draw_water(self, items, mvps, fades=None, keys=None):
         """Вода над дном океана: те же сетки тайлов, опущенные на уровень
         моря (TileMesh.sea), только там, где рельеф ниже нуля. Глубину
         не пишет, поэтому дно видно сквозь неё, а суша выше нуля
-        закрывает её проверкой глубины. Программа - тайла, с дымкой."""
+        закрывает её проверкой глубины. Программа - тайла, с дымкой.
+        keys - ключи тайлов: на месте снимка - маска воды тайла, суша
+        ниже нуля по векторной основе воды не получает."""
         if not items:
             return
+        if keys is not None:
+            self._mask_budget = MASKS_PER_FRAME
+            items = [(mesh, self._water_mask(key))
+                     for (mesh, _), key in zip(items, keys)]
+            if self._mask_more:
+                self._mask_more = False
+                QTimer.singleShot(0, self.update)
         gl.glUniform1f(self.u_water, 1.0)
         color = WATER_COLOR
         if self.gibs["emag"].shown:
@@ -819,16 +888,63 @@ class GlobeView(QOpenGLWidget):
         # на эллипсоиде, как рельеф.
         return model_anchor(lat, lon, mode, alt, ground, self.store.scale)
 
+    def _water_mask(self, key):
+        """Текстура маски воды тайла key для прохода воды: белая - вода,
+        чёрная - суша. Без тайлов воды основы под ним и у тайла без
+        высот ниже нуля - вся белая, вода по высотам, как прежде."""
+        if self.water_all is None:
+            return self.ocean
+        lo, _ = self.store.range_for(key)
+        if lo >= 0.0 or key[0] < watermask.MASK_FROM:
+            return self.water_all
+        found = self.water_masks.get(key)
+        if found is not None and found[0] == self.water.gen:
+            self.water_masks[key] = self.water_masks.pop(key)
+            return found[1]
+        rings = watermask.mask_rings(key, self.water.tiles)
+        if rings is None:
+            return self.water_all if found is None else found[1]
+        if self._mask_budget <= 0:
+            # Новые маски - не больше MASKS_PER_FRAME за кадр.
+            self._mask_more = True
+            return self.water_all if found is None else found[1]
+        self._mask_budget -= 1
+        texture = gpu.create_texture(_mask_image(rings))
+        if found is not None:
+            gpu.delete_texture(found[1])
+        self.water_masks[key] = (self.water.gen, texture)
+        while len(self.water_masks) > MASKS_KEPT:
+            old = next(iter(self.water_masks))
+            gpu.delete_texture(self.water_masks.pop(old)[1])
+        return texture
+
     def label_height(self, lat, lon):
         """Высота надписи: с дном океана - не ниже уровня моря, иначе
-        названия морей лежали бы на дне."""
-        h = self.store.height_at(lat, lon)
-        return max(h, 0.0) if self.sea_floor else h
+        названия морей лежали бы на дне. Суша ниже нуля по векторной
+        основе (core/watermask.py) - карьер, впадина - по рельефу."""
+        return float(self.label_heights(np.array([lat], dtype=np.float64),
+                                         np.array([lon], dtype=np.float64))
+                     [0])
 
     def label_heights(self, lats, lons):
         """То же, что label_height, для массивов широт и долгот."""
         h = self.store.heights_at(lats, lons)
-        return np.maximum(h, 0.0) if self.sea_floor else h
+        if not self.sea_floor:
+            return h
+        h = np.asarray(h, dtype=np.float64)
+        low = h < 0.0
+        if low.any() and self.water.tiles:
+            lats = np.atleast_1d(np.asarray(lats, dtype=np.float64))
+            lons = np.atleast_1d(np.asarray(lons, dtype=np.float64))
+            dry = np.zeros(h.shape, dtype=bool)
+            dry[low] = self.water.land(lats[low], lons[low])
+            low &= ~dry
+        return np.where(low, 0.0, h)
+
+    def surface_version(self):
+        """Версия высот поверхности: растёт с высотами и тайлами воды,
+        по ней метки и подписи встают заново."""
+        return self.store.version + self.water.gen
 
     def terrain_at(self, lat, lon):
         """Высота на экране, по которой ходит камера: рельеф или, если
@@ -1228,6 +1344,10 @@ class GlobeView(QOpenGLWidget):
             return
         px, py = self._pixel(event)
         self.hovered.emit(px, py)
+        # Своя точечная метка под курсором поднимается и держится, пока
+        # курсор на ней, а Земля не тянется мышью.
+        if self.navigator.grab is None and self.labels.hover_at(px, py):
+            self.update()
         if self.sky_view is not None:
             if self._sky_press is not None:
                 x0, y0 = self._sky_press
@@ -1462,6 +1582,8 @@ class GlobeView(QOpenGLWidget):
 
     def leaveEvent(self, event):
         self.hovered.emit(-1.0, -1.0)
+        if self.labels.hover_at(None, None):
+            self.update()
         super().leaveEvent(event)
 
     def wheelEvent(self, event):
@@ -1535,6 +1657,8 @@ class GlobeView(QOpenGLWidget):
         self.pool.allocate(POOL_START)
         self.ocean = gpu.create_texture(
             np.array(OCEAN, dtype=np.uint8).reshape(1, 1, 4))
+        self.water_all = gpu.create_texture(
+            np.full((1, 1, 4), 255, dtype=np.uint8))
         self.underlay_marker = gpu.create_texture(
             np.array(UNDERLAY_COLOR, dtype=np.uint8).reshape(1, 1, 4))
         self.caps = [gpu.GpuMesh(polar_cap_mesh(north))
@@ -1670,6 +1794,12 @@ class GlobeView(QOpenGLWidget):
             gpu.delete_texture(self.clear_texture)
             self.clear_texture = None
         self.overlays = {}
+        for _, texture in self.water_masks.values():
+            gpu.delete_texture(texture)
+        self.water_masks = {}
+        if self.water_all is not None:
+            gpu.delete_texture(self.water_all)
+            self.water_all = None
         if self.ocean is not None:
             gpu.delete_texture(self.ocean)
             for texture in self.cap_textures:
@@ -2361,7 +2491,7 @@ class GlobeView(QOpenGLWidget):
         if self.sea_floor and self.store.scale and not self.show_holes:
             self._draw_water(items[len(self.caps):surface],
                              mvps[len(self.caps):surface],
-                             fades[len(self.caps):surface])
+                             fades[len(self.caps):surface], sel.draw)
         if self.hole_check:
             holes = self._count_holes()
             gl.glUseProgram(self.program)
@@ -2398,7 +2528,7 @@ class GlobeView(QOpenGLWidget):
         if self.features.shapes and not self.show_holes:
             features_busy = self.features.draw(
                 self.camera, self.store.heights_at if self.store.scale
-                else None, self.store.version, ratio,
+                else None, self.surface_version(), ratio,
                 still=shot or not motion,
                 surface_at=self.label_heights if self.store.scale
                 else None, scale=self.store.scale or 1.0)
@@ -2893,7 +3023,7 @@ class GlobeView(QOpenGLWidget):
             places = self._wedged[2]
         height_at = self.label_heights if self.store.scale else None
         self.labels.draw(self.camera, self.camera.projection(), places,
-                         height_at, self.store.version, ratio,
+                         height_at, self.surface_version(), ratio,
                          fade=self.shot is None)
 
     def _underlay_items(self, keep):

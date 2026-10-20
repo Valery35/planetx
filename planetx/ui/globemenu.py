@@ -81,8 +81,10 @@ def show(window, px, py):
         text = point_text(ground[0], ground[1], fmt=window.coords)
         copy = menu.addAction(text)
         copy.setToolTip(tr("Скопировать координаты в буфер обмена."))
+        # Текст - значением по умолчанию: имя text ниже занимает цикл
+        # подменю «Полёт отсюда», и в буфер уходило «Винтовой самолёт».
         copy.triggered.connect(
-            lambda *a: QApplication.clipboard().setText(text))
+            lambda *a, t=text: QApplication.clipboard().setText(t))
         menu.setToolTipsVisible(True)
         menu.addSeparator()
     if drawing:
@@ -120,11 +122,15 @@ def show(window, px, py):
         if not drawing:
             menu.addAction(tr("Добавить метку здесь")).triggered.connect(
                 lambda *a: window.add_place_here(lat, lon))
+            menu.addAction(tr("Измерить расстояние")).triggered.connect(
+                lambda *a: window.measure_from(lat, lon))
             menu.addSeparator()
         menu.addAction(tr("Подлететь сюда")).triggered.connect(
             lambda *a: fly_here(view, lat, lon))
         menu.addAction(tr("Облететь вокруг")).triggered.connect(
             lambda *a: window.spin_here(lat, lon))
+        if not drawing and window.planet.earth:
+            route_items(window, menu, place, lat, lon)
         if not drawing:
             fly = menu.addMenu(tr("Полёт отсюда"))
             fly.setToolTipsVisible(True)
@@ -137,17 +143,24 @@ def show(window, px, py):
                 action.setToolTip(tip)
                 action.triggered.connect(
                     lambda *a, k=kind: window.flight.start(lat, lon, k))
-        if not drawing and window.planet.earth:
-            route_items(window, menu, place, lat, lon)
         menu.addSeparator()
         if not drawing and window.planet.earth:
             menu.addAction(tr("Что здесь?")).triggered.connect(
                 lambda *a: window.what_here(px, py))
-            sheet_items(window, menu, lat, lon)
+        # Окна расчёта и снимков у точки - одной группой, исторические
+        # карты - другой. Просьба автора от 20 октября 2026 года.
+        menu.addSeparator()
+        if not drawing and window._surface_source() is not None:
+            menu.addAction(tr("Видимость отсюда…")).triggered.connect(
+                lambda *a: window.viewshed_here(lat, lon))
+        if not drawing and window.planet.earth:
             # Один пункт на все спутники, окно открывается на прежнем
             # спутнике.
             menu.addAction(tr("Космоснимки здесь…")) \
                 .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
+            menu.addAction(tr("Инсоляция здесь…")).triggered.connect(
+                lambda *a: window.insolation_here(lat, lon))
+            menu.addSeparator()
             menu.addAction(tr("Исторические карты Рамсея здесь…")) \
                 .triggered.connect(lambda *a: window.rumsey_here(lat, lon))
             menu.addAction(tr("Старые карты «Это Место» здесь…")) \
@@ -156,16 +169,11 @@ def show(window, px, py):
                 menu.addAction(tr("Горизонтали вида в проект QGIS…")) \
                     .triggered.connect(
                         lambda *a: window.contour_export.view_contours())
-        if not drawing:
-            menu.addAction(tr("Измерить расстояние")).triggered.connect(
-                lambda *a: window.measure_from(lat, lon))
         if window.planet.earth:
-            menu.addAction(tr("Скопировать ссылку на место")) \
-                .triggered.connect(lambda *a: window.copy_link(lat, lon))
+            menu.addSeparator()
             link_items(window, menu, lat, lon)
-        if not drawing:
-            menu.addAction(tr("Вставить")).triggered.connect(
-                lambda *a: window.paste_places(window.panel.current_folder()))
+            if not drawing:
+                sheet_items(window, menu, lat, lon)
     if menu.isEmpty():
         menu.deleteLater()
         return
@@ -204,7 +212,7 @@ def link_items(window, menu, lat, lon):
             lambda *a, t=template: window.open_menu_link(t, lat, lon))
     if not sub.isEmpty():
         sub.addSeparator()
-    sub.addAction(tr("Свои пункты…")).triggered.connect(
+    sub.addAction(tr("Добавить или изменить сайты…")).triggered.connect(
         lambda *a: window.edit_menu_links())
     return sub
 

@@ -570,6 +570,32 @@ def aral():
     save("aral", scene, root)
 
 
+# Суперналожение - образец Google Mountain View DOQQ: снимки 1 м
+# тайлами по сетевым ссылкам onRegion, в модуле не лежат. Вопрос
+# автора от 20 октября 2026 года - «не нашёл суперналожение, где оно?».
+SUPER_URL = ("https://mw1.google.com/mw-earth-vectordb/kml-samples/"
+             "mv-doqq.kml")
+
+
+def superoverlay():
+    """Снимки Маунтин-Вью суперналожением: папка - сетевая ссылка
+    onRegion на образец, камера над городом."""
+    title = "PlanetX: демо, суперналожение"
+    link = KFolder(
+        "Маунтин-Вью, снимки DOQQ", link=SUPER_URL, view_mode="onRegion",
+        description="Суперналожение KML - снимок, разрезанный на сотни "
+                    "тайлов. Каждый тайл - сетевая ссылка с Region, "
+                    "подробные тайлы грузятся при приближении. Образец "
+                    "Google, снимки DOQQ USGS. Флажок папки снимает "
+                    "суперналожение.")
+    root = KFolder(title, children=[link])
+    view = dict(EARTH_VIEW, extras=dict(EARTH_VIEW["extras"],
+                                        buildings=False))
+    scene = Scene((37.401, -122.096, 17000.0, 0.0, 0.0), None, [], view,
+                  title, "Суперналожение, Маунтин-Вью")
+    save("superoverlay", scene, root)
+
+
 # Карьер: синтетическая съёмка 1 м, planetx/demo/quarry/quarry_dem.tif,
 # её собирает tools/make_quarry_demo.py. Окно кладёт растр в проект
 # и включает его рельефом глобуса (GlobeWindow.open_demo). Координаты
@@ -986,9 +1012,17 @@ def haul():
             description="Самосвал едет по треку KML - gx:Track с моделью. "
                         "Меню правой кнопки над ним - «Камера следом».")
             for truck, rows in tracks.items()]
+        # Линия пути самосвалов - та же дорога, что у треков: у моделей
+        # на gx:Track своей линии нет.
+        with open(os.path.join(ROOT, "tools", "haul_roads.json"),
+                  encoding="utf-8") as fh:
+            coords = json.load(fh)[key]["coords"]
+        line = KPlace("Дорога самосвалов", "line",
+                      [tuple(p) for p in coords], color=YELLOW, width=3.0,
+                      description="Путь самосвалов по дороге карьера.")
         view = dict(EARTH_VIEW, scale=1.0, extras=dict(QUIET_EXTRAS))
         for scene_key, scene_menu, children in (
-                ("haul_" + key, menu, [start] + trucks),
+                ("haul_" + key, menu, [start, line] + trucks),
                 ("haulqgis_" + key, menu + ", слой QGIS", [start])):
             root = KFolder(title, children=children)
             scene = Scene((lat, lon, distance, heading, 55.0), None, [],
@@ -1011,6 +1045,7 @@ def main():
     subsurface()
     vegas()
     aral()
+    superoverlay()
     quarry()
     brienz()
     moscow()

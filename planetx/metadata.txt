@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.6.0
+version=1.7.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,20 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.6.0 A project layer goes into My Places with the To My
+changelog=1.7.0 KML super-overlays - large images and maps in tiles by
+      network links with Region, detailed tiles arrive when zooming
+      in, the Super-overlay, Mountain View demo. The viewshed and
+      insolation include OpenFreeMap 3D buildings. A point placemark
+      under the cursor rises and stays up, the highlight style of a KML
+      StyleMap sets its look. Placemarks on land below sea level stand
+      on the relief, water is not drawn there. The globe menu is
+      grouped, the viewshed and insolation work for any point, the Open
+      in browser submenu gets ready sites - Google Maps, Yandex Maps,
+      2GIS, OpenStreetMap, Windy. The Demo menu is grouped by topic.
+      Network links have their own icon. Fixed - the first line of the
+      globe menu copied another item instead of the coordinates, the
+      time slider with the full range did not start playback.
+      1.6.0 A project layer goes into My Places with the To My
       Places… item of its menu - geometry with holes, attributes,
       colours by the layer style, labels and time - and from there to
       KML. KML now carries polygon holes, ExtendedData fields, label

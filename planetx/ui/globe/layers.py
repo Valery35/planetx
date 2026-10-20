@@ -1271,8 +1271,11 @@ class LayersMixin:
         векторная основа. keep=True - прежние картинки видны, пока их
         не заменят новые, так обновление после правки не мигает.
         """
+        # Тайлы суперналожений - под картинками на поверхности.
+        supers = getattr(self, "superoverlays", None)
         layers, min_levels = self._overlay_stack(
-            self._maps_hidden(), getattr(self, "_ground_rasters", []))
+            self._maps_hidden(), list(getattr(self, "_ground_rasters", []))
+            + (supers.rasters if supers is not None else []))
         if self.overlay is not None:
             self.overlay.abort()
             self.overlay.deleteLater()

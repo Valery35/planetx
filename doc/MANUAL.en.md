@@ -417,7 +417,11 @@ level. The elevation profile, the ruler and the slope use the floor,
 the viewshed and insolation use the water surface. A profile below
 sea level shows the water and a dashed sea level line. Dry
 depressions below zero, for example the Dead Sea, are not told apart
-from the sea by the heights and are filled on the profile too. The
+from the sea by the heights and are filled on the profile. On the
+globe water lies only where the vector base map has it. The bottom of
+a quarry and a dry depression below zero stay land, placemarks, paths
+and labels on them stand on the relief. Until the water layer of the
+base map is loaded, such a place is shown as water. The
 Sea and ocean depths box in the Terrain group of the view properties
 switches them off, then heights below sea level count as zero and the
 sea is flat. Depths exist only on the Earth.
@@ -1579,16 +1583,16 @@ A right click on the globe opens a menu.
 | Finish drawing, Continue drawing | Stops and resumes adding points with clicks |
 | Properties… | Opens the properties of the placemark under the cursor |
 | Add placemark here | Opens the New placemark window with the point under the cursor |
+| Measure distance | Opens the Ruler with its first point here |
 | Fly here | Flies to the point with the same altitude and tilt |
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
+| Viewshed from here… | The Viewshed from a point window for the point under the cursor, see Viewshed from a point |
 | Satellite images here… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
-| Measure distance | Opens the Ruler with its first point here |
-| Copy link to place | A link to the point on the OpenStreetMap map to the clipboard, the scale follows the view. Any browser opens the link |
-| Open in browser | A submenu of custom items. An item opens in the browser an address with the point under the cursor, for example the weather forecast at the point on windy.com. The Custom items… item opens the list window. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
-| Paste | KML placemarks from the clipboard into My Places |
+| Insolation here… | The Insolation window for the point under the cursor, only on the Earth, see Insolation |
+| Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
+| Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
 
 The shape of a 3D path, a 3D polygon and a tour is not edited this way.
 A placemark with a saved measurement loses the measurement text after
@@ -1604,9 +1608,9 @@ per pixel. Two items open the window:
 - Satellite images here… of the globe menu takes a square around the
   point. The square side equals the width of the visible strip of the
   globe, from 1 to 100 km. The Area side field changes it.
-- Satellite images… of the My Places menu takes the area from the
-  placemark. A polygon gives its outline, a path gives its bounding
-  box, a point gives a square around it.
+- Satellite images… of the menu of a path or a polygon in My Places
+  takes the area from the placemark. A polygon gives its outline,
+  a path gives its bounding box.
 
 The Acquired from and to fields set the date range. Scene cloud cover
 up to limits the cloud cover of the whole 110 × 110 km scene by the
@@ -1939,7 +1943,12 @@ whole view back.
 A click on a placemark on the globe, when the ruler, the new placemark
 and the Identify features mode are off, opens the placemark card to the
 right of the view - its name and description. The description is text
-or HTML, as in KML, links open in the system browser. The card buttons:
+or HTML, as in KML, links open in the system browser. A point placemark
+under the cursor rises and stays up while the cursor is on it, so it is
+clear which placemark a click will hit. If a placemark from KML has a
+`highlight` style in a `StyleMap`, it is drawn with that style under the
+cursor, for example larger. The `highlight` style is kept in My Places
+and written back to KML. The card buttons:
 
 | Button | What it does |
 |---|---|
@@ -2106,7 +2115,7 @@ closed slider hides no placemarks, all of them show.
 | Handles | Set the interval. Placemarks outside it are hidden, placemarks without a time always show |
 | Bar between the handles | Dragging moves the whole interval, a click on the bar centres it on the click |
 | ⏮, ⏭ | The interval of the same width moves to the start or the end of the slider |
-| ▶, ⏸ | Playback and pause, the interval moves along the slider |
+| ▶, ⏸ | Playback and pause, the interval moves along the slider. If the interval covers the whole slider, the left handle goes to the start and the right one runs from it to the end |
 | 🔁 | Playback in a loop, after the end of the slider the interval starts from the beginning |
 | Speed | Slider in 20 s crosses the whole slider in 20 seconds. ×1 - time runs as on a clock, ×60 - a minute per second, ×3600 - an hour, ×86400 - a day |
 | Now | The moment goes to the computer clock, time runs at ×1. The button is there when the Sun, satellites or the sky are on |
@@ -2232,6 +2241,25 @@ magnitude 2.5 and above for a week, it is loaded again every 5
 minutes. USGS gives ready link files for its feeds with the
 `_link.kml` ending, for example
 `https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week_depth_link.kml`.
+
+#### Super-overlays
+
+A super-overlay is a large image or map cut into tiles. The document of
+a tile carries its image and network links to the documents of more
+detailed tiles, the links and the images have their own `Region`, the
+links load with the `viewRefreshMode` value `onRegion`. Such a file
+opens with Open KML or KMZ…. The super-overlay link stands in My Places
+as a folder, but the places file does not keep its tiles. The globe
+loads only the documents and images of the tiles near the view. A tile
+gives way to more detailed ones when it is wider than `minLodPixels`
+pixels on the screen. The tiles lie on the relief under the ground
+overlays, a coarse tile under the arrived detailed ones is not drawn.
+Clearing the folder check box removes the super-overlay from the globe.
+
+An example is the Google sample, a 1991 image of Mountain View, more
+than 900 tiles, the address `https://mw1.google.com/mw-earth-vectordb/kml-samples/mv-doqq.kml`.
+The Super-overlay, Mountain View demo of the Imagery and maps group
+opens it by a link. A saved file opens with Open KML or KMZ….
 
 ### Image overlays
 
@@ -2436,8 +2464,8 @@ may exceed 100 %, that is 45°.
 
 ### Viewshed from a point
 
-The Viewshed from here… item in the menu of a point placemark opens
-the Viewshed from a point window. The window sets the observer height
+The Viewshed from here… item of the globe menu opens the Viewshed
+from a point window for the point under the cursor. The window sets the observer height
 above the terrain, the target height and the circle radius. The Build
 button loads the heights under the circle and colours it. Visible places
 are green, places hidden by the terrain are red. The Remove button
@@ -2447,16 +2475,22 @@ Rays leave the point with an equal azimuth step. The step along a ray
 is one five-hundredth of the radius, 20 m for a radius of 10 km. A place
 is visible if the ray from the eye to it does not touch the terrain on
 the way. The computation takes the curvature of the body into account,
-and on the Earth the refraction with the coefficient 0.13. Buildings
-and forest are not taken into account. The window shows the visible
+and on the Earth the refraction with the coefficient 0.13. Forest is
+not taken into account.
+The Include buildings box raises the terrain by the height of the
+OpenFreeMap 3D buildings. Buildings block the view and cast shadows, the
+height of some buildings is nominal, about 5 m. A building narrower than
+the computation step may be missed, so streets need a small radius. The
+result line gives the number of included buildings. A circle wider than
+300 building tiles is computed without them. The window shows the visible
 share of the circle area. If the heights are not loaded within 30 s,
 the computation uses less detailed ones, and the window says so. The
 viewshed is computed on the Earth, Mars and the Moon.
 
 ### Insolation
 
-The Insolation… item in the menu of a point placemark opens the
-Insolation window. The window sets the first and the last day of the
+The Insolation here… item of the globe menu opens the Insolation
+window for the point under the cursor. The window sets the first and the last day of the
 period and the circle radius. The Build button loads the heights and
 colours the circle by the mean number of hours of direct sunlight per
 day. Blue means little light, red means much light. The scale in the
@@ -2468,7 +2502,9 @@ place is lit if the Sun is above the mountain horizon at its azimuth
 and falls on the front side of the slope. The horizon is taken in 32
 directions at a distance of at least the radius and at least 5 km. A
 period longer than 15 days is computed over 15 evenly spaced days.
-Clouds, refraction, buildings and forest are not taken into account.
+Clouds, refraction and forest are not taken into account. Buildings
+are included by the same Include buildings box as in the viewshed, they
+are taken 1 km beyond the circle too.
 The height grid has 800 nodes per side, the step is 25 m for a radius
 of 5 km. The computation runs in parts, and the globe responds to the
 mouse meanwhile. The line under the fields shows the share done.
@@ -3246,26 +3282,25 @@ taken from the profile without the network.
 
 | Section | Scene | What it holds |
 |---|---|---|
-| Earth | Perm | Places with icons and the moments of a walk, place views with a date, a route, an extruded polygon, a path along the Kama, a recorded flight over the centre, 3D buildings |
-| Earth | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
-| Earth | Permian deposits | A synthetic site near Berezniki with drill holes, roofs, sections and a cut. A tour of five stops explains the subsurface mode, see [Subsurface mode](#subsurface-mode) |
-| Earth | Vegas Loop tunnels | The Boring Company tunnels under Las Vegas with their stations, see [Subsurface mode](#subsurface-mode) |
-| Earth | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
-| Earth | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
-| Earth | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
-| Earth | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
-| Earth | Animated model, wind turbines | Three glTF wind turbines with a rotating rotor at an arbitrary place near Perm. The model is synthetic, the rotor is a node with rotation keys. See [3D models](#3d-models) |
-| Earth | Haul trucks, Kachkanar and Haul trucks, Lebedinsky | Six model haul trucks in the Main pit of Kachkanar or in the Lebedinsky pit near Gubkin: loading, the loaded haul, dumping, the empty return. The route is a pit road traced on Esri World Imagery: in Kachkanar from the face at the bottom along the east wall, in the Lebedinsky pit along the switchbacks from the face with an excavator. The trucks are KML tracks with a 3D model (`gx:Track` with `Model`) in My Places, with no project layer, the time slider plays ×10 in a loop, the right-click menu over a truck has Camera follows. The "…, QGIS layer" items show the same haul as a track of a project point layer, as with own data through Track…. The trucks and their motion are a model, not data of the mine. See [Tracks](#tracks) |
-| Earth | Trains of Finland, live | Live trains of Finland as consists on the rails at the Pasila, Helsinki and Tikkurila stations. See [Trains of Finland](#trains-of-finland) |
-| Earth | Flow of goods, a scheme | Paths with flow from Berezniki to the ports of Ust-Luga and Vostochny by rail and from Ust-Luga to Rotterdam by sea. The paths are schemes through large cities and straits, not real routes |
-| Earth | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
+| Placemarks and tours | Boca Chica, Starbase | The Starbase launch site and factory, the beach, nearby towns, the highway from Brownsville, a recorded flight around the launch site |
+| Placemarks and tours | Flow of goods, a scheme | Paths with flow from Berezniki to the ports of Ust-Luga and Vostochny by rail and from Ust-Luga to Rotterdam by sea. The paths are schemes through large cities and straits, not real routes |
+| Imagery and maps | Aral Sea | MODIS images of 2000, 2014 and 2023 as a group of radio buttons, a photo of the ships at Moynaq and a basin map on the screen. All images are links to web addresses, see [Image overlays](#image-overlays) |
+| Imagery and maps | Super-overlay, Mountain View | Mountain View imagery in tiles of the Google sample - a network link onRegion, detailed tiles arrive when zooming in. See [Super-overlays](#super-overlays) |
+| Imagery and maps | Moscow, historical maps | Maps of Moscow of 1813, 1860, 1900, 1917 and 1935 as tiles in the QGIS project with map years, the Kremlin and the Cathedral of Christ the Saviour. See [Historical maps](#historical-maps) |
+| Subsurface | Japan Trench | Earthquakes, the Earth cutaway with a sector from the equator to 38.5° N, the Slab2 slab under Japan, the epicentre of the 2011 Tohoku earthquake, Mount Fuji. The Section window along 38.5° N opens with the demo, the foci band is 300 km |
+| Subsurface | Permian deposits | A synthetic site near Berezniki with drill holes, roofs, sections and a cut. A tour of five stops explains the subsurface mode, see [Subsurface mode](#subsurface-mode) |
+| Subsurface | Vegas Loop tunnels | The Boring Company tunnels under Las Vegas with their stations, see [Subsurface mode](#subsurface-mode) |
+| Own terrain | Quarry, own terrain | A synthetic 1 m survey of a quarry near Berezniki as the globe terrain: 10 benches of 15 m, a waste dump, a path for the elevation profile. The raster goes into the QGIS project, see [Own terrain](#own-terrain) |
+| 3D models and motion | 3D models, Suzdal and Perm | Models of the Church of the Conception in Suzdal and of the Church of the Intercession of the Theotokos in Perm from Google Earth Pro, licence CC BY 4.0. See [3D models](#3d-models) |
+| 3D models and motion | Animated model, wind turbines | Three glTF wind turbines with a rotating rotor at an arbitrary place near Perm. The model is synthetic, the rotor is a node with rotation keys. See [3D models](#3d-models) |
+| 3D models and motion | Trains of Finland, live | Live trains of Finland as consists on the rails at the Pasila, Helsinki and Tikkurila stations. See [Trains of Finland](#trains-of-finland) |
+| Haul trucks in open pits | Haul trucks, Kachkanar and Haul trucks, Lebedinsky | Six model haul trucks in the Main pit of Kachkanar or in the Lebedinsky pit near Gubkin: loading, the loaded haul, dumping, the empty return. The route is a pit road traced on Esri World Imagery: in Kachkanar from the face at the bottom along the east wall, in the Lebedinsky pit along the switchbacks from the face with an excavator. The trucks are KML tracks with a 3D model (`gx:Track` with `Model`) in My Places, with no project layer, the time slider plays ×10 in a loop, the right-click menu over a truck has Camera follows. The "…, QGIS layer" items show the same haul as a track of a project point layer, as with own data through Track…. The trucks and their motion are a model, not data of the mine. See [Tracks](#tracks) |
 | Mars | Rover landing sites | Olympus Mons, Valles Marineris, the landing sites of Curiosity, Perseverance, Zhurong, Spirit and Opportunity |
 | Mars | Jezero crater | The Perseverance landing site, the surroundings of the crater, an elevation profile across the crater, a point on the rim for the viewshed, a flight around the crater, the Slope layer and terrain with scale 3 |
 | Moon | Apollo and Lunokhod sites | The landing sites of six Apollo missions, Lunokhod 1 and Lunokhod 2 |
 | Sky | Constellations and bright sky objects | Orion, the Pleiades, the Andromeda Galaxy (M31), Cassiopeia, Ursa Major, Lyra with Vega, the Southern Cross |
 
-The Perm walk time is fictional. Landing coordinates are rounded to
-hundredths of a degree.
+Landing coordinates are rounded to hundredths of a degree.
 
 ---
 

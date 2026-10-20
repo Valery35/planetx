@@ -25,6 +25,24 @@ EXAMPLE = ("Windy", "https://embed.windy.com/embed.html?type=map"
            "&lat={lat}&lon={lon}&detailLat={lat}&detailLon={lon}"
            "&detail=true")
 
+# Готовые сайты окна списка: название по-русски и по-английски, адрес.
+# Адреса - форматы ссылок из описаний сайтов, подстановка проверена
+# шагом menu_links, Google Карты в браузере открыл автор. Просьба
+# автора от 20 октября 2026 года - «хочу, к примеру, гугл мапс
+# добавить». Названия сайтов - данные, а не строки интерфейса.
+PRESETS = (
+    ("Google Карты", "Google Maps",
+     "https://www.google.com/maps/@?api=1&map_action=map"
+     "&center={lat},{lon}&zoom={zoom}&basemap=satellite"),
+    ("Яндекс Карты", "Yandex Maps",
+     "https://yandex.ru/maps/?ll={lon},{lat}&z={zoom}&pt={lon},{lat}"),
+    ("2ГИС", "2GIS", "https://2gis.ru/?m={lon},{lat}/{zoom}"),
+    ("OpenStreetMap", "OpenStreetMap",
+     "https://www.openstreetmap.org/?mlat={lat}&mlon={lon}"
+     "#map={zoom}/{lat}/{lon}"),
+    ("Windy", "Windy", EXAMPLE[1]),
+)
+
 
 def check(name, template):
     """Причина, по которой пункт не годится, или "" - годится. Строки

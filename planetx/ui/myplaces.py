@@ -78,7 +78,9 @@ FIELDS = (("name", "string"), ("description", "string"),
           ("iconheading", "double"), ("balloon", "string(0)"),
           # id метки в KML - цель изменений gx:AnimatedUpdate, и добавки
           # записанного тура: перелёты bounce и изменения меток, JSON.
-          ("kmlid", "string"), ("tourx", "string(0)"))
+          ("kmlid", "string"), ("tourx", "string(0)"),
+          # Вид точки под курсором - вариант highlight StyleMap, JSON.
+          ("highlight", "string(0)"))
 FOLDER_TABLE = "folders"
 # Наложения картинок, 5 октября 2026 года: геометрия - углы картинки
 # на поверхности, у картинки на экране и фото пусто. params - свойства
@@ -105,7 +107,9 @@ FOLDER_FIELDS = (("name", "string"), ("parent", "integer"),
                  ("expandable", "integer"), ("region", "string"),
                  # Сетевая ссылка KML: адрес документа и промежуток
                  # обновления, с. Содержимое папки загружает окно.
-                 ("link", "string(0)"), ("refresh", "double"))
+                 ("link", "string(0)"), ("refresh", "double"),
+                 # viewRefreshMode ссылки, onRegion - суперналожение.
+                 ("linkmode", "string"))
 # Цвета по умолчанию, как у Google Earth: жёлтая метка и линия, белый
 # контур многоугольника с полупрозрачной заливкой.
 DEFAULT_COLOR = {"point": (255, 214, 0, 255), "line": (255, 214, 0, 255),
@@ -362,7 +366,8 @@ def _kplace(place):
                   icon_heading=getattr(shape, "icon_heading", 0.0),
                   balloon=getattr(place, "balloon", ""),
                   kml_id=getattr(place, "kml_id", ""),
-                  tour_extra=getattr(place, "tour_extra", None))
+                  tour_extra=getattr(place, "tour_extra", None),
+                  highlight=getattr(shape, "highlight", None))
 
 
 class Place:
@@ -419,15 +424,18 @@ def _kfolder(folder):
                    description=folder.description, view=folder.view,
                    radio=folder.radio, expandable=folder.expandable,
                    region=folder.region, link=folder.link,
-                   refresh=folder.refresh)
+                   refresh=folder.refresh, view_mode=folder.view_mode)
 
 class Folder:
     """Папка «Моих меток»."""
 
     def __init__(self, fid, name, parent, position, visible, expanded,
                  description="", view=None, radio=False, expandable=True,
-                 region=None, link="", refresh=0.0):
+                 region=None, link="", refresh=0.0, view_mode=""):
         self.region = region  # Region KML папки, core.region или None
+        # viewRefreshMode ссылки: "onRegion" - суперналожение, его
+        # тайлы держит память окна (ui/superoverlay.py), не файл меток.
+        self.view_mode = view_mode
         # Сетевая ссылка: адрес документа KML или KMZ и промежуток
         # обновления в секундах, 0 - один раз за сеанс.
         self.link = link
@@ -606,7 +614,9 @@ class MyPlaces(QObject):
                     label_scale=label_from_text(
                         _value(feature, layer, "label"))[1],
                     icon_heading=_float(_value(feature, layer,
-                                               "iconheading")))
+                                               "iconheading")),
+                    highlight=json_from_text(
+                        _value(feature, layer, "highlight")) or None)
                 visible = _int(feature["visible"])
                 self.places.append(Place(
                     kind, feature.id(), shape,
@@ -672,7 +682,8 @@ class MyPlaces(QObject):
                     bool(1 if expandable is None else expandable),
                     region.parse(_value(feature, layer, "region")),
                     str(_value(feature, layer, "link") or ""),
-                    float(_value(feature, layer, "refresh") or 0.0)))
+                    float(_value(feature, layer, "refresh") or 0.0),
+                    str(_value(feature, layer, "linkmode") or "")))
         # Метка или папка в папке, которой нет, стоит в корне.
         known = {f.key for f in self.folders}
         for place in self.places + self.overlays:
@@ -1097,7 +1108,8 @@ class MyPlaces(QObject):
                      int(bool(getattr(node, "expandable", True)))),
                     ("region", region.text(getattr(node, "region", None))),
                     ("link", getattr(node, "link", "")),
-                    ("refresh", float(getattr(node, "refresh", 0.0)))):
+                    ("refresh", float(getattr(node, "refresh", 0.0))),
+                    ("linkmode", getattr(node, "view_mode", ""))):
                 if layer.fields().indexOf(field) >= 0:
                     feature[field] = value
             ok, added = layer.dataProvider().addFeatures([feature])
@@ -1168,7 +1180,9 @@ class MyPlaces(QObject):
                                          or 0.0),
                     "balloon": getattr(place, "balloon", "") or "",
                     "kmlid": getattr(place, "kml_id", "") or "",
-                    "tourx": json_text(getattr(place, "tour_extra", None))}
+                    "tourx": json_text(getattr(place, "tour_extra", None)),
+                    "highlight": json_text(getattr(place, "highlight",
+                                                   None))}
                 for name, value in values.items():
                     if layer.fields().indexOf(name) >= 0:
                         feature[name] = value

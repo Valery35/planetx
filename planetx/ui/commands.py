@@ -301,9 +301,7 @@ def _tools(window, add, earth):
 def _menus(window, add):
     """Демо и тела глобуса из меню панели значков."""
     bar = window.toolbar
-    for action in bar.demo.menu().actions():
-        if action.isSeparator() or not action.text():
-            continue
+    for action in bar.demo_list:
         add("demo:" + action.text(), action.text(), tr("открыть демо"),
             action.trigger, ("демо", "пример", "demo"))
     for key, action in bar.body_actions.items():

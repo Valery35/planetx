@@ -87,7 +87,7 @@ def tiles_ready():
 def demo(text):
     """Демо из меню значка «Демо» по началу названия."""
     w = window()
-    action = next(a for a in w.toolbar.demo.menu().actions()
+    action = next(a for a in w.toolbar.demo_list
                   if a.text().startswith(text))
     action.trigger()
 

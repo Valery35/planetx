@@ -14,9 +14,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
-from qgis.PyQt.QtWidgets import (QDialog, QDialogButtonBox, QDoubleSpinBox,
-                                 QFormLayout, QLabel, QLayout, QPushButton,
-                                 QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
+                                 QDoubleSpinBox, QFormLayout, QLabel,
+                                 QLayout, QPushButton, QVBoxLayout)
 
 from ..core import viewshed
 from ..core.mipmap import mip_chain
@@ -172,6 +172,12 @@ class ViewshedDialog(QDialog):
         self.radius.setToolTip(tr(
             "Радиус круга расчёта. Больше - шаг расчёта крупнее, он "
             "около пятисотой доли радиуса."))
+        self.buildings = QCheckBox(tr("Учитывать здания"), self)
+        self.buildings.setChecked(True)
+        self.buildings.setToolTip(tr(
+            "Здания OpenFreeMap поднимают рельеф на свою высоту и закрывают "
+            "обзор. Высота у части зданий условная. Здание уже шага расчёта "
+            "может не попасть в расчёт. Только на Земле."))
         self.status = QLabel(self)
         self.status.setWordWrap(True)
         form = QFormLayout()
@@ -179,6 +185,7 @@ class ViewshedDialog(QDialog):
         form.addRow(tr("Высота наблюдателя"), self.observer)
         form.addRow(tr("Высота цели"), self.target)
         form.addRow(tr("Радиус"), self.radius)
+        form.addRow("", self.buildings)
         buttons = QDialogButtonBox(self)
         run = QPushButton(tr("Построить"), self)
         run.setDefault(True)

@@ -196,46 +196,55 @@ class ViewToolbar(QFrame):
         demo.setPopupMode(enum(QToolButton, "ToolButtonPopupMode",
                                "InstantPopup"))
         menu = QMenu(demo)
-        for section, items in (
-                (tr("Земля"), (("perm", tr("Пермь")),
-                               ("bocachica", tr("Бока-Чика, Starbase")),
-                               ("japan", tr("Японский жёлоб")),
-                               ("subsurface", tr("Пермские отложения")),
-                               ("vegas", tr("Тоннели Vegas Loop")),
-                               ("aral", tr("Аральское море")),
-                               ("quarry", tr("Карьер, свой рельеф")),
-                               ("brienz",
-                                tr("Бриенцское озеро, своя батиметрия")),
-                               ("moscow", tr("Москва, исторические карты")),
-                               ("models", tr("3D-модели, Суздаль и Пермь")),
-                               ("turbines",
-                                tr("Анимированная модель, ветряки")),
-                               ("trains",
-                                tr("Поезда Финляндии, вживую")),
-                               ("haul_kachkanar",
-                                tr("Самосвалы, Качканар")),
-                               ("haul_lebedinsky",
-                                tr("Самосвалы, Лебединский")),
-                               ("haulqgis_kachkanar",
-                                tr("Самосвалы, Качканар, слой QGIS")),
-                               ("haulqgis_lebedinsky",
-                                tr("Самосвалы, Лебединский, слой QGIS")),
-                               ("flows", tr("Поток грузов, схема")))),
+        # Демо подменю по темам. Просьба автора от 20 октября 2026 года -
+        # «убери Пермь из примеров, попробуй их сгруппировать». Сцена
+        # perm осталась файлом для проверок и снимков руководства.
+        self.demo_list = []
+        for entry in (
+                (tr("Метки и туры"),
+                 (("bocachica", tr("Бока-Чика, Starbase")),
+                  ("flows", tr("Поток грузов, схема")))),
+                (tr("Снимки и карты"),
+                 (("aral", tr("Аральское море")),
+                  ("superoverlay",
+                   tr("Суперналожение, Маунтин-Вью")),
+                  ("moscow", tr("Москва, исторические карты")))),
+                (tr("Недра"),
+                 (("japan", tr("Японский жёлоб")),
+                  ("subsurface", tr("Пермские отложения")),
+                  ("vegas", tr("Тоннели Vegas Loop")))),
+                (tr("Свой рельеф"),
+                 (("quarry", tr("Карьер, свой рельеф")),
+                  ("brienz", tr("Бриенцское озеро, своя батиметрия")))),
+                (tr("3D-модели и движение"),
+                 (("models", tr("3D-модели, Суздаль и Пермь")),
+                  ("turbines", tr("Анимированная модель, ветряки")),
+                  ("trains", tr("Поезда Финляндии, вживую")))),
+                (tr("Самосвалы в карьерах"),
+                 (("haul_kachkanar", tr("Самосвалы, Качканар")),
+                  ("haul_lebedinsky", tr("Самосвалы, Лебединский")),
+                  ("haulqgis_kachkanar",
+                   tr("Самосвалы, Качканар, слой QGIS")),
+                  ("haulqgis_lebedinsky",
+                   tr("Самосвалы, Лебединский, слой QGIS")))),
+                None,
                 (tr("Марс"), (("mars", tr("Места посадок марсоходов")),
                               ("jezero", tr("Кратер Езеро")))),
                 (tr("Луна"), (("moon",
                                tr("«Аполлоны» и «Луноходы»")),)),
                 (tr("Небо"), (("sky", tr("Созвездия и яркие объекты")),))):
-            # Заголовок раздела - неактивный пункт: в меню со своим
-            # стилем (ui/style.menu_rules) Qt не рисует текст addSection.
-            if menu.actions():
+            if entry is None:
                 menu.addSeparator()
-            menu.addAction(section).setEnabled(False)
+                continue
+            section, items = entry
+            sub = menu.addMenu(section)
             for key, title in items:
                 if key in ("subsurface", "vegas") and not SUBSURFACE:
                     continue
-                menu.addAction(title).triggered.connect(
+                action = sub.addAction(title)
+                action.triggered.connect(
                     lambda checked=False, k=key: self.demo_requested.emit(k))
+                self.demo_list.append(action)
         demo.setMenu(menu)
         self.layout().addWidget(demo)
         self.demo = demo
