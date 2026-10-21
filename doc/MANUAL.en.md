@@ -220,7 +220,7 @@ of the globe together with the elevation.
 - The found place carries a red pin. Clearing the field removes the pin
   and closes the list.
 
-Suggestions of four kinds appear below the field while typing:
+Suggestions of five kinds appear below the field while typing:
 
 - Placemarks of My Places on the body on the screen with a matching
   name.
@@ -231,10 +231,21 @@ Suggestions of four kinds appear below the field while typing:
   lines", "power plants", "imagery", "contours", "iss".
 - Earlier queries.
 - Stars and constellations when the sky view is open.
+- Sections of this manual, no more than three, at the end of the list,
+  for example for the question "how to add a wind turbine model".
+  A section fits if it has at least half of the query words, words in
+  the title weigh more. Words are compared by their beginning, so
+  "model" also finds "models". Question words such as "how" and
+  "where" do not count. The suggestion tooltip shows the paragraph with
+  the query words.
 
 A click on a suggestion or Enter on it starts a flight to the placemark
 or the sky object or runs the action, an earlier query is searched
-again. Ctrl+K from anywhere in the globe window puts the cursor into
+again. A manual section opens to the right of the view at the paragraph
+with the query words. A link to another section opens it in the same
+place, the Open on GitHub button shows the section in the browser with
+pictures. The manual in the plugin is in the QGIS interface language,
+without pictures, and needs no network. Ctrl+K from anywhere in the globe window puts the cursor into
 the field and shows the layers that are on and the earlier queries. The Down key
 moves into the list of suggestions, in an empty field it shows the
 earlier queries. Escape closes the list. Place names from the network
@@ -1968,6 +1979,32 @@ section.
 While a properties window is open on the right, a click on a placemark
 does not open the card and the editing in the window goes on.
 
+### Project layer object card
+
+A click on an object of a vector project layer checked on the globe
+opens the object card on the right. My Places placemarks and Wikipedia
+articles under the same click come first. The card shows the layer
+name, the text of the description field and a table of the other
+fields. The description field is the first of the fields
+`description`, `descr`, `comment`, `note`, `remarks` and their
+Russian names, letter case does not matter. Empty fields
+are not shown. The object name is the display expression of the QGIS
+layer. Rasters give no card, their values at a point are shown by the
+Identify features mode. The card buttons:
+
+| Button | What it does |
+|---|---|
+| Explain this | Asks the assistant what this object is and why the place is of interest. The answer stands in the card and under the Search box |
+| Fly to | Flight to the extent of the object |
+| Select on map | Selects the object in the QGIS layer - on the map, in the attribute table and on the globe |
+| Close | Closes the card |
+
+Explain this gives the assistant the layer name, the name, description
+and fields of this one object, the clicked point and the names of the
+globe layers turned on. Pressing the button is consent to send them.
+Without it the names of project layers and the object fields do not go
+to the model.
+
 ### Wikipedia nearby
 
 The Wikipedia nearby row of the Encyclopedia category of the Add data
@@ -2478,11 +2515,13 @@ the way. The computation takes the curvature of the body into account,
 and on the Earth the refraction with the coefficient 0.13. Forest is
 not taken into account.
 The Include buildings box raises the terrain by the height of the
-OpenFreeMap 3D buildings. Buildings block the view and cast shadows, the
-height of some buildings is nominal, about 5 m. A building narrower than
-the computation step may be missed, so streets need a small radius. The
-result line gives the number of included buildings. A circle wider than
-300 building tiles is computed without them. The window shows the visible
+OpenFreeMap 3D buildings and of own buildings - extruded My Places
+polygons, extruded project layers and placed 3D models. Buildings block
+the view and cast shadows, the height of some OpenFreeMap buildings is
+nominal, about 5 m. A building narrower than the computation step may be
+missed, so streets need a small radius. The result line gives the number
+of included buildings and own ones among them. A circle wider than 300
+building tiles is computed without OpenFreeMap buildings. The window shows the visible
 share of the circle area. If the heights are not loaded within 30 s,
 the computation uses less detailed ones, and the window says so. The
 viewshed is computed on the Earth, Mars and the Moon.
@@ -3571,6 +3610,33 @@ The ruler, synchronization and feature identification are off in the
 sky. A view snapshot saves the sky with its labels. A scene keeps the
 view direction and the field of view. To return to a body, choose it
 in the same menu.
+
+---
+
+## Telegram bot
+
+The [@PlanetXQgisBot](https://t.me/PlanetXQgisBot) bot answers
+questions about this manual and the manuals of the other plugins of the
+line - Isoliner, Isoliner3D, Topoliner, Routeliner, Repoliner. A plugin
+name in the question limits the search to its manual. A question is written as plain text, for
+example "how to add a 3D model" or "record a tour to video". The bot
+sends up to three manual sections with a paragraph and a link, the
+button under a section sends it whole. The answer language is the
+Telegram language of the user, Russian or English.
+
+Bot commands:
+
+- /latest - the latest release of a plugin - PlanetX, Isoliner,
+  Isoliner3D, Topoliner, Routeliner or Repoliner, what is new in it,
+  a link to the archive and the page in the QGIS catalog.
+- /docs - the plugins, their pages on GitHub and in the QGIS
+  catalog, the PlanetX manual.
+- /report text - a bug report or a wish for the developers. The
+  Telegram name and user name go with the text.
+
+The Telegram bot button of the About window opens the bot. Posts about
+releases of the plugin line appear in the
+[@qgis_isolines](https://t.me/qgis_isolines) channel.
 
 ---
 

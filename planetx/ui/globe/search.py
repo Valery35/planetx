@@ -7,6 +7,7 @@
 import time
 
 from qgis.core import QgsSettings
+from qgis.PyQt.QtCore import Qt
 
 from ... import journal
 from ...core.coords import parse_point
@@ -15,10 +16,14 @@ from ...core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                              place_text, search_url)
 from ...core import assistant as assistant_core, searchbar, skydata
 from ...core.places import Place as MarkPlace
+from ...core.searchbar import Suggestion
 from ...i18n import tr, ui_language
 from ...net.overlay import fetch_json
+from ...qt_compat import enum
 from .. import commands as commands_ui
 from ..assistant import current_provider, ready, search_enabled
+from ..manualcard import ManualCard, load_index
+from ..placecard import Card
 from .base import (CURSOR_PERIOD, FLIGHT_DISTANCE, HISTORY_KEY,
                    SEARCH_MAX_DISTANCE, SEARCH_MIN_DISTANCE, STATUS_PERIOD,
                    label_languages)
@@ -312,7 +317,29 @@ class SearchMixin:
             text, self._search_places(), self.search_history(),
             self._search_sky(), searchbar.LIMIT + searchbar.HISTORY,
             actions=actions)
-        return searchbar.drop_repeats(found)[:searchbar.LIMIT]
+        manual = self._manual_hints(text)
+        return searchbar.drop_repeats(found)[
+            :searchbar.LIMIT - len(manual)] + manual
+
+    def _manual_hints(self, text):
+        """Разделы руководства к тексту строки - в конце подсказок,
+        им всегда есть место."""
+        index = load_index()
+        return [Suggestion("manual", index.items[n][0], n, None, None, None,
+                           index.snippet(n, text))
+                for n in index.search(text)]
+
+    def open_manual(self, number, query=""):
+        """Раздел руководства в панели справа. Окно свойств в панели
+        главнее, как у карточек меток."""
+        held = self.side.dialog
+        if held is not None and not isinstance(held, Card):
+            return
+        card = ManualCard(load_index(), number, query, self)
+        card.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        self._place_card = card
+        card.finished.connect(lambda *a, c=card: self._card_closed(c))
+        self.side.host(card)
 
     def focus_search(self):
         """Ctrl+K: боковая панель видна, курсор в строке «Поиск», текст
@@ -356,6 +383,10 @@ class SearchMixin:
         неба начинается перелёт."""
         if item.kind == "action":
             self.run_action(item)
+            return
+        if item.kind == "manual":
+            self.panel.hide_hints()
+            self.open_manual(item.key, self.place.text())
             return
         self.place.setText(item.text)
         if item.kind == "history":

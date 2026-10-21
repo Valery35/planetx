@@ -32,6 +32,7 @@ class RoofLoader:
         self.arrived = []  # (ключ, байты) ждут разбора
         self.failed = 0
         self.done = 0
+        self.own = 0  # своих зданий в растре
         self.stopped = False
         self._pump()
 

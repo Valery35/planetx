@@ -165,9 +165,10 @@ EN = {
         "the grid step may be missed.",
     "Загрузка зданий: {done} из {total}":
         "Loading buildings: {done} of {total}",
-    "Здания не учтены - круг слишком большой.":
-        "Buildings are not included, the circle is too large.",
+    "Здания OpenFreeMap не учтены - круг слишком большой.":
+        "OpenFreeMap buildings are not included, the circle is too large.",
     "Учтено зданий {count}.": "Buildings included: {count}.",
+    "Своих {count}.": "Own {count}.",
     "Загружены не все тайлы зданий.": "Not all building tiles loaded.",
     "Космоснимки…": "Satellite images…",
     "Космоснимки": "Satellite images",
@@ -4909,6 +4910,13 @@ EN = {
     "модулей QGIS.":
         "Opens the plugin page in the QGIS plugin catalog "
         "in the browser.",
+    "Бот в Telegram": "Telegram bot",
+    "Открывает бота PlanetX в Telegram. Бот находит разделы "
+    "руководства по вопросу, показывает последний выпуск "
+    "и передаёт сообщения разработчикам.":
+        "Opens the PlanetX bot in Telegram. The bot finds manual sections "
+        "for a question, shows the latest release and passes messages "
+        "to the developers.",
     "Система не открыла {target}.":
         "The system did not open {target}.",
     "Система не открыла файл руководства {path}. "
@@ -5147,6 +5155,33 @@ EN = {
         "{kind} \"{name}\", point {lat:.5f}, {lon:.5f}.",
     "Описание метки - {text}": "Placemark description - {text}",
     "Поля объекта - {fields}.": "Object fields - {fields}.",
+    # Карточка объекта слоя проекта, ui/placecard.py.
+    "Спросить помощника, что это за объект и чем интересно место. "
+    "Помощнику уходят название слоя, название и поля этого объекта, "
+    "точка щелчка и названия включённых слоёв глобуса. Ответ появится "
+    "здесь и под строкой «Поиск».":
+        "Ask the assistant what this object is and why the place is of "
+        "interest. The assistant receives the layer name, the name and "
+        "fields of this object, the clicked point and the names of the "
+        "globe layers turned on. The answer appears here and under the "
+        "Search box.",
+    "Слой «{name}»": "Layer \"{name}\"",
+    "Выделить объект в слое QGIS. Выделение видно на карте, в таблице "
+    "атрибутов и на глобусе.":
+        "Select the object in the QGIS layer. The selection is seen on "
+        "the map, in the attribute table and on the globe.",
+    "Объясни, что это за объект и чем интересно это место. Объект "
+    "«{name}» слоя «{layer}», точка {lat:.5f}, {lon:.5f}.":
+        "Explain what this object is and why this place is of interest. "
+        "Object \"{name}\" of the layer \"{layer}\", point {lat:.5f}, "
+        "{lon:.5f}.",
+    "Описание объекта - {text}": "Object description - {text}",
+    # Разделы руководства в строке «Поиск», ui/manualcard.py.
+    "{name} - раздел руководства": "{name} - manual section",
+    "Открыть на GitHub": "Open on GitHub",
+    "Раздел руководства этой версии модуля в браузере, с картинками.":
+        "The manual section of this plugin version in the browser, with "
+        "pictures.",
     # Окно «Свойства…» метки, вид точки и поля объекта, ui/placeprops.py.
     "Размер значка": "Icon size",
     "Без значка": "No icon",

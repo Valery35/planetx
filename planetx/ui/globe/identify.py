@@ -7,7 +7,7 @@
 import time
 
 import numpy as np
-from qgis.core import QgsProject, QgsRectangle
+from qgis.core import QgsProject, QgsRectangle, QgsVectorLayer
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.utils import iface
@@ -29,7 +29,8 @@ from ..assistant import (AssistantDialog, current_provider, ready,
                          search_enabled)
 from ..legend import deposit_group_names, mine_kind_names
 from ..myplaces import Place
-from ..placecard import Card, PlaceCard, explain_question
+from ..placecard import (Card, FeatureCard, PlaceCard, explain_question,
+                         feature_question)
 from ..tilesource import save_connection
 from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
                    all_sources, distance_text, parcel_labels)
@@ -87,6 +88,9 @@ class IdentifyMixin:
                 self.open_article_card(*found)
                 return
             if not self._point_under(px, py):
+                found = self._feature_under(px, py)
+                if found is not None:
+                    self.open_feature_card(*found)
                 return
         self.identify_here(px, py)
 
@@ -156,6 +160,69 @@ class IdentifyMixin:
             if card is not None:
                 card.show_answer(tr("Помощник думает…"))
         elif card is not None:
+            card.show_answer(tr("Помощник занят прежним вопросом или не "
+                                "подключён."))
+
+    def _feature_under(self, px, py):
+        """Объект отмеченного векторного слоя проекта под пикселем кадра:
+        (слой, название, поля, номер, широта, долгота) или None. Растры
+        карточки не дают - их значения есть в режиме опроса."""
+        if not self.planet.earth or self.view.sky_view is not None:
+            return None
+        found = self._click_point(px, py)
+        if found is None:
+            return None
+        project = QgsProject.instance()
+        layers = [project.mapLayer(i) for i in self._applied_layers or ()]
+        layers = [layer for layer in layers
+                  if isinstance(layer, QgsVectorLayer)]
+        for layer, features in identify(layers, *found):
+            title, values, fid = features[0]
+            return layer, title, values, fid, found[0], found[1]
+        return None
+
+    def open_feature_card(self, layer, title, values, fid, lat, lon):
+        """Карточка объекта слоя проекта в панели справа. Окно свойств
+        в панели главнее, как у карточки метки."""
+        held = self.side.dialog
+        if held is not None and not isinstance(held, Card):
+            return
+        card = FeatureCard(layer.id(), fid, layer.name(), title, values,
+                           (lat, lon), ready(current_provider()), self)
+        card.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        card.explain.connect(lambda key, c=card: self.explain_feature(c))
+        card.fly.connect(lambda key: self._fly_feature(*key))
+        card.select.connect(lambda key: self._select_feature(*key))
+        self._place_card = card
+        card.finished.connect(lambda *a, c=card: self._card_closed(c))
+        self.side.host(card)
+
+    def _feature_of(self, layer_id, fid):
+        layer = QgsProject.instance().mapLayer(layer_id)
+        if not isinstance(layer, QgsVectorLayer):
+            return None, None
+        feature = layer.getFeature(fid)
+        return layer, feature if feature.isValid() else None
+
+    def _fly_feature(self, layer_id, fid):
+        layer, feature = self._feature_of(layer_id, fid)
+        if feature is not None and not feature.geometry().isEmpty():
+            self._fly_extent(feature.geometry().boundingBox(), layer.crs())
+
+    def _select_feature(self, layer_id, fid):
+        layer, feature = self._feature_of(layer_id, fid)
+        if feature is not None:
+            layer.selectByIds([fid])
+
+    def explain_feature(self, card):
+        """«Объясни это» карточки объекта слоя проекта."""
+        question = feature_question(card.layer_name, card.title,
+                                    card.values, *card.point,
+                                    layers=self._explain_layers())
+        if self._assistant().ask(question):
+            self._explaining = card
+            card.show_answer(tr("Помощник думает…"))
+        else:
             card.show_answer(tr("Помощник занят прежним вопросом или не "
                                 "подключён."))
 

@@ -340,9 +340,20 @@ def label_from_text(text):
     return _color(color, None) if color else None, max(size, 0.0)
 
 
-def _value(feature, layer, name):
-    """Значение поля или None, если поля в слое нет."""
-    return feature[name] if layer.fields().indexOf(name) >= 0 else None
+def _columns(layer):
+    """Номера полей слоя по имени: чтение тысяч меток не ищет поле
+    по имени у каждого объекта."""
+    return {name: i for i, name in enumerate(layer.fields().names())}
+
+
+def _getter(cols, feature):
+    """Значение поля объекта по имени, None - поля в слое нет."""
+    attrs = feature.attributes()
+
+    def get(name):
+        i = cols.get(name)
+        return attrs[i] if i is not None else None
+    return get
 
 
 def _kplace(place):
@@ -407,10 +418,9 @@ class Place:
         self.measure = measure
         self.view = view
         self.folder = folder  # ключ папки или None - корень
-
-    @property
-    def key(self):
-        return "{}:{}".format(self.kind, self.fid)
+        # Ключ - полем: на тысячах меток свойство с format занимало
+        # большую часть поиска и обхода.
+        self.key = "{}:{}".format(kind, fid)
 
     @property
     def name(self):
@@ -450,10 +460,7 @@ class Folder:
         self.view = view  # вид core.lookat или None
         self.radio = radio  # содержимое - группа переключателей
         self.expandable = expandable  # папку можно раскрыть
-
-    @property
-    def key(self):
-        return _folder_key(self.fid)
+        self.key = _folder_key(fid)
 
 
 class OverlayItem:
@@ -511,6 +518,7 @@ class MyPlaces(QObject):
         self.places = []
         self.folders = []
         self.overlays = []
+        self._lookup = None  # ключ - метка, строится find
         self.layers = {}
         self.folder_layer = None
         self.overlay_layer = None
@@ -586,104 +594,109 @@ class MyPlaces(QObject):
     def _read(self):
         self.places = []
         for kind, layer in self.layers.items():
+            cols = _columns(layer)
             for feature in layer.getFeatures():
+                get = _getter(cols, feature)
                 points = _points(kind, feature.geometry())
                 if not points:
                     continue
                 shape = Shape(
                     kind, points,
-                    color=_color(feature["color"], DEFAULT_COLOR[kind]),
-                    width=float(feature["width"] or DEFAULT_WIDTH),
-                    fill=_color(feature["fill"], None) if kind == "polygon"
+                    color=_color(get("color"), DEFAULT_COLOR[kind]),
+                    width=float(get("width") or DEFAULT_WIDTH),
+                    fill=_color(get("fill"), None) if kind == "polygon"
                     else None,
-                    name=str(feature["name"] or ""),
-                    height=max(_float(_value(feature, layer, "height")),
+                    name=str(get("name") or ""),
+                    height=max(_float(get("height")),
                                0.0),
-                    extrude=bool(_int(_value(feature, layer, "extrude"))),
-                    mode=str(_value(feature, layer, "altmode") or ""),
-                    icon=icons.normal(str(_value(feature, layer, "icon")
+                    extrude=bool(_int(get("extrude"))),
+                    mode=str(get("altmode") or ""),
+                    icon=icons.normal(str(get("icon")
                                           or icons.DEFAULT)),
-                    alts=alts_from_text(_value(feature, layer, "alts"),
+                    alts=alts_from_text(get("alts"),
                                         len(points)),
                     flow=kind == "line"
-                    and bool(_int(_value(feature, layer, "flow"))),
+                    and bool(_int(get("flow"))),
                     holes=_holes(kind, feature.geometry()),
-                    icon_scale=_scale(_value(feature, layer, "iconscale")),
+                    icon_scale=_scale(get("iconscale")),
                     label_color=label_from_text(
-                        _value(feature, layer, "label"))[0],
+                        get("label"))[0],
                     label_scale=label_from_text(
-                        _value(feature, layer, "label"))[1],
-                    icon_heading=_float(_value(feature, layer,
-                                               "iconheading")),
+                        get("label"))[1],
+                    icon_heading=_float(get("iconheading")),
                     highlight=json_from_text(
-                        _value(feature, layer, "highlight")) or None)
-                visible = _int(feature["visible"])
+                        get("highlight")) or None)
+                visible = _int(get("visible"))
                 self.places.append(Place(
                     kind, feature.id(), shape,
                     bool(1 if visible is None else visible),
-                    str(feature["measure"] or ""),
-                    lookat.parse(_value(feature, layer, "view"),
+                    str(get("measure") or ""),
+                    lookat.parse(get("view"),
                                  points[0] if points else None),
-                    _int(_value(feature, layer, "position")),
-                    _folder_key(_int(_value(feature, layer, "folder"))),
-                    str(feature["description"] or ""),
-                    when.unpack(_value(feature, layer, "time")),
-                    when.unpack(_value(feature, layer, "view_time")),
-                    tour_from_text(_value(feature, layer, "tour")),
-                    str(_value(feature, layer, "body") or "earth"),
-                    region.parse(_value(feature, layer, "region")),
-                    lookat.layers_parse(_value(feature, layer, "layers")),
-                    tour_core.pace_parse(_value(feature, layer, "pace")),
-                    data_from_text(_value(feature, layer, "data")),
-                    str(_value(feature, layer, "balloon") or ""),
-                    str(_value(feature, layer, "kmlid") or ""),
-                    json_from_text(_value(feature, layer, "tourx"))))
+                    _int(get("position")),
+                    _folder_key(_int(get("folder"))),
+                    str(get("description") or ""),
+                    when.unpack(get("time")),
+                    when.unpack(get("view_time")),
+                    tour_from_text(get("tour")),
+                    str(get("body") or "earth"),
+                    region.parse(get("region")),
+                    lookat.layers_parse(get("layers")),
+                    tour_core.pace_parse(get("pace")),
+                    data_from_text(get("data")),
+                    str(get("balloon") or ""),
+                    str(get("kmlid") or ""),
+                    json_from_text(get("tourx"))))
         self.overlays = []
         layer = self.overlay_layer
         if layer is not None:
+            cols = _columns(layer)
             for feature in layer.getFeatures():
-                kind = str(feature["kind"] or "")
+                get = _getter(cols, feature)
+                kind = str(get("kind") or "")
                 if kind not in overlays.KINDS:
                     continue
                 corners = _points("polygon", feature.geometry()) \
                     if kind == "ground" else None
-                overlay = overlays.from_params(kind, feature["params"],
+                overlay = overlays.from_params(kind, get("params"),
                                                corners)
                 if kind == "ground" and len(overlay.corners) != 4:
                     continue
                 if kind in ("photo", "model") and not overlay.camera:
                     continue
-                visible = _int(feature["visible"])
+                visible = _int(get("visible"))
                 self.overlays.append(OverlayItem(
-                    feature.id(), overlay, str(feature["name"] or ""),
+                    feature.id(), overlay, str(get("name") or ""),
                     bool(1 if visible is None else visible),
-                    _int(feature["position"]),
-                    _folder_key(_int(feature["folder"])),
-                    str(feature["description"] or ""),
-                    lookat.parse(feature["view"], None),
-                    when.unpack(feature["time"]), _int(feature["image"]),
-                    str(feature["href"] or ""),
-                    str(feature["body"] or "earth")))
+                    _int(get("position")),
+                    _folder_key(_int(get("folder"))),
+                    str(get("description") or ""),
+                    lookat.parse(get("view"), None),
+                    when.unpack(get("time")), _int(get("image")),
+                    str(get("href") or ""),
+                    str(get("body") or "earth")))
         self.folders = []
         if self.folder_layer is not None:
             layer = self.folder_layer
+            cols = _columns(layer)
             for feature in layer.getFeatures():
-                visible = _int(feature["visible"])
-                expandable = _int(_value(feature, layer, "expandable"))
+                get = _getter(cols, feature)
+                visible = _int(get("visible"))
+                expandable = _int(get("expandable"))
                 self.folders.append(Folder(
-                    feature.id(), str(feature["name"] or ""),
-                    _folder_key(_int(feature["parent"])),
-                    _int(feature["position"]),
+                    feature.id(), str(get("name") or ""),
+                    _folder_key(_int(get("parent"))),
+                    _int(get("position")),
                     bool(1 if visible is None else visible),
-                    bool(_int(feature["expanded"]) or 0),
-                    str(_value(feature, layer, "description") or ""),
-                    lookat.parse(_value(feature, layer, "view"), None),
-                    bool(_int(_value(feature, layer, "radio")) or 0),
+                    bool(_int(get("expanded")) or 0),
+                    str(get("description") or ""),
+                    lookat.parse(get("view"), None),
+                    bool(_int(get("radio")) or 0),
                     bool(1 if expandable is None else expandable),
-                    region.parse(_value(feature, layer, "region")),
-                    str(_value(feature, layer, "link") or ""),
-                    float(_value(feature, layer, "refresh") or 0.0),
-                    str(_value(feature, layer, "linkmode") or "")))
+                    region.parse(get("region")),
+                    str(get("link") or ""),
+                    float(get("refresh") or 0.0),
+                    str(get("linkmode") or "")))
         # Метка или папка в папке, которой нет, стоит в корне.
         known = {f.key for f in self.folders}
         for place in self.places + self.overlays:
@@ -694,6 +707,7 @@ class MyPlaces(QObject):
                 folder.parent = None
         order = {n.key: i for i, n in enumerate(placetree.walk(self.nodes()))}
         self.places.sort(key=lambda p: order.get(p.key, 0))
+        self._lookup = None
         self.changed.emit()
 
     def nodes(self):
@@ -707,14 +721,18 @@ class MyPlaces(QObject):
         """Дети папки parent по порядку: (Folder, дети) или Place."""
         by_key = {p.key: p for p in self.places + self.overlays}
         by_key.update({f.key: f for f in self.folders})
-        out = []
-        for node in placetree.children(self.nodes(), parent):
-            item = by_key[node.key]
-            if placetree.is_folder(node.key):
-                out.append((item, self.tree(node.key)))
-            else:
-                out.append(item)
-        return out
+        kids = placetree.index(self.nodes())
+
+        def build(folder):
+            out = []
+            for node in kids.get(folder, []):
+                item = by_key[node.key]
+                if placetree.is_folder(node.key):
+                    out.append((item, build(node.key)))
+                else:
+                    out.append(item)
+            return out
+        return build(parent)
 
     # Метки.
 
@@ -723,10 +741,13 @@ class MyPlaces(QObject):
         return [p.shape for p in self.places if p.visible]
 
     def find(self, key):
-        if placetree.is_folder(key):
-            return next((f for f in self.folders if f.key == key), None)
-        return next((p for p in self.places + self.overlays
-                     if p.key == key), None)
+        """Метка, наложение или папка по ключу. Словарь строится раз после
+        чтения файла: удаление папки с 8 тысячами точек искало каждую
+        перебором и шло 30 с, 20 октября 2026 года."""
+        if self._lookup is None:
+            self._lookup = {item.key: item for item
+                            in self.places + self.overlays + self.folders}
+        return self._lookup.get(key)
 
     def places_in(self, folder=None):
         """Метки папки folder и её вложенных папок по порядку списка."""
@@ -826,7 +847,18 @@ class MyPlaces(QObject):
                     item.fid] = attrs
         for layer, values in per_layer.values():
             layer.dataProvider().changeAttributeValues(values)
-        if read:
+        if read and changes and all(set(v) == {"name"}
+                                    for v in changes.values()):
+            # Одно название меняется и в памяти: перечитывание файла
+            # с 8 тысячами точек шло больше секунды.
+            for key, values in changes.items():
+                item = self.find(key)
+                if isinstance(item, Folder):
+                    item.name = values["name"]
+                elif item is not None:
+                    item.shape = item.shape._replace(name=values["name"])
+            self.changed.emit()
+        elif read:
             self._read()
 
     def move(self, key, parent, index):
@@ -897,18 +929,26 @@ class MyPlaces(QObject):
             self._write(changes)
 
     def set_visible_many(self, states):
-        """Флажки меток и папок разом: {ключ: включена}."""
+        """Флажки меток и папок разом: {ключ: включена}. Файл не
+        перечитывается - флажок меняется и в памяти, на 8 тысячах точек
+        перечитывание шло 2 с."""
         self._write({key: {"visible": 1 if on else 0}
-                     for key, on in states.items()})
+                     for key, on in states.items()}, read=False)
+        for key, on in states.items():
+            item = self.find(key)
+            if item is not None:
+                item.visible = bool(on)
+        self.changed.emit()
 
     def with_contents(self, keys):
         """Ключи вместе со всем содержимым выбранных папок."""
         nodes = self.nodes()
+        kids = placetree.index(nodes)
         out = []
         for key in placetree.top_keys(nodes, keys):
             out.append(key)
             if placetree.is_folder(key):
-                out += placetree.descendants(nodes, key)
+                out += [n.key for n in placetree.walk(nodes, key, kids)]
         return out
 
     def set_visible(self, key, on):
@@ -1145,8 +1185,10 @@ class MyPlaces(QObject):
             if layer is None:
                 continue
             features = []
+            fields = layer.fields()
+            cols = _columns(layer)
             for place, key, position in items:
-                feature = QgsFeature(layer.fields())
+                feature = QgsFeature(fields)
                 feature.setGeometry(_geometry(
                     kind, place.points, getattr(place, "holes", None)))
                 values = {
@@ -1184,8 +1226,9 @@ class MyPlaces(QObject):
                     "highlight": json_text(getattr(place, "highlight",
                                                    None))}
                 for name, value in values.items():
-                    if layer.fields().indexOf(name) >= 0:
-                        feature[name] = value
+                    i = cols.get(name)
+                    if i is not None:
+                        feature.setAttribute(i, value)
                 features.append(feature)
             layer.dataProvider().addFeatures(features)
         if found and self.overlay_layer is not None:

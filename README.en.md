@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.7.0.
+A 3D globe inside QGIS. PlanetX version 1.8.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -274,6 +274,17 @@ About window.
 In QGIS open **Plugins → Manage and Install Plugins**, find PlanetX
 and install it. The globe opens with the button on the PlanetX toolbar
 or from **Web → PlanetX**.
+
+## Telegram bot
+
+The [@PlanetXQgisBot](https://t.me/PlanetXQgisBot) bot finds sections
+of the manuals of PlanetX and the other plugins of the line for a
+question, for example "how to add a 3D model". The
+/latest command shows the latest release of PlanetX, Isoliner,
+Isoliner3D, Topoliner, Routeliner or Repoliner with a link to the archive,
+/report passes a bug report or a wish to the developers. Posts about
+plugin releases appear in the [@qgis_isolines](https://t.me/qgis_isolines)
+channel.
 
 ## Requirements
 

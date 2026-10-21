@@ -221,6 +221,8 @@ def hint_text(item):
         return tr("{name} - созвездие", name=item.text)
     if item.kind == "action":
         return tr("{name} - {what}", name=item.text, what=item.note)
+    if item.kind == "manual":
+        return tr("{name} - раздел руководства", name=item.text)
     return tr("{name} - прежний запрос", name=item.text)
 
 
@@ -963,6 +965,10 @@ class LayerPanel(QWidget):
         self._hints = list(items)
         self.hints.clear()
         self.hints.addItems([hint_text(item) for item in self._hints])
+        for row, item in enumerate(self._hints):
+            if item.kind == "manual" and item.note:
+                # Абзац раздела, где больше всего слов запроса.
+                self.hints.item(row).setToolTip(item.note)
         if self._hints:
             row = self.hints.sizeHintForRow(0)
             height = row * len(self._hints) + 2 * self.hints.frameWidth()
@@ -1540,6 +1546,17 @@ class LayerPanel(QWidget):
         и пары (Folder, дети). Сигналы при этом не идут."""
         self.list.blockSignals(True)
         group = self.places_group
+        # Те же строки, сменились только флажки - строки не строятся
+        # заново: на 8 тысячах точек перестройка шла 0.35 с на каждый
+        # флажок, 20 октября 2026 года.
+        signature = self._signature(tree)
+        if tree and signature == getattr(self, "_places_signature", None) \
+                and group.childCount() == len(tree):
+            self._update_checks(group, tree)
+            self.list.blockSignals(False)
+            self._tour_state()
+            return
+        self._places_signature = signature
         # Выделение и текущая строка переживают перестройку списка: её
         # зовёт любая запись «Моих меток», в том числе ползунок
         # непрозрачности выделенного.
@@ -1557,6 +1574,49 @@ class LayerPanel(QWidget):
             self._reselect(group, chosen, current)
         self.list.blockSignals(False)
         self._tour_state()
+
+    def _signature(self, nodes):
+        """Всё, кроме флажков, из чего _fill строит строки."""
+        out = []
+        for node in nodes:
+            if isinstance(node, tuple):
+                folder, kids = node
+                out.append((folder.key, folder.name, bool(folder.radio),
+                            bool(folder.expandable), folder.description,
+                            bool(folder.expanded), self.is_link(folder.key),
+                            self._signature(kids)))
+                continue
+            shape = node.shape
+            out.append((node.key, node.name, node.measure,
+                        bool(getattr(node, "tour", None)), node.kind,
+                        shape.icon, tuple(shape.color or ()),
+                        lookat.is_view_mark(node.kind, shape.points,
+                                            node.view)))
+        return out
+
+    def _update_checks(self, parent, nodes):
+        """Флажки строк по дереву той же формы, что у _fill."""
+        for i, node in enumerate(nodes):
+            item = parent.child(i)
+            if isinstance(node, tuple):
+                folder, kids = node
+                radio = bool(folder.radio and folder.expandable and kids)
+                if folder.expandable:
+                    self._update_checks(item, kids)
+                else:
+                    kids = []
+                if radio:
+                    lit = any(getattr(k[0] if isinstance(k, tuple) else k,
+                                      "visible", False) for k in kids)
+                    state = CHECKED if lit else UNCHECKED
+                elif not kids:
+                    state = CHECKED if folder.visible else UNCHECKED
+                else:
+                    continue
+            else:
+                state = CHECKED if node.visible else UNCHECKED
+            if item.checkState(0) != state:
+                item.setCheckState(0, state)
 
     def _reselect(self, parent, chosen, current):
         for i in range(parent.childCount()):

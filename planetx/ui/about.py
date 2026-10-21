@@ -24,7 +24,9 @@ ROOT = os.path.dirname(os.path.dirname(__file__))
 REPOSITORY = "https://github.com/Valery35/planetx"
 ISSUES = REPOSITORY + "/issues"
 CATALOG = "https://plugins.qgis.org/plugins/planetx/"
-OSM = "https://www.openstreetmap.org/copyright"
+# Бот модулей линейки в Telegram, bot/planetx_bot.py.
+TELEGRAM = "https://t.me/PlanetXQgisBot"
+OSM ="https://www.openstreetmap.org/copyright"
 TERRAIN = ("https://github.com/tilezen/joerd/blob/master/docs/"
            "attribution.md")
 OPENFREEMAP = "https://openfreemap.org/"
@@ -215,6 +217,11 @@ class AboutDialog(QDialog):
                      tr("Открывает в браузере страницу модуля в каталоге "
                         "модулей QGIS."),
                      lambda: self._open_url(QUrl(CATALOG)))
+        self._button(second, "telegram", tr("Бот в Telegram"), tr(
+            "Открывает бота PlanetX в Telegram. Бот находит разделы "
+            "руководства по вопросу, показывает последний выпуск "
+            "и передаёт сообщения разработчикам."),
+            lambda: self._open_url(QUrl(TELEGRAM)))
         # Подписи и ссылки источников - здесь и в окне «Источники
         # данных», на карте только неяркие названия. Просьба автора от
         # 17 октября 2026 года.

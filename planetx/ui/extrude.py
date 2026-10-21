@@ -111,6 +111,9 @@ class ExtrudeManager(QObject):
         self.shown = []
         self.version = None
         self.counts = {}  # номер слоя - количество выдавленных объектов
+        # Номер слоя - здания записи buildings.Footprint: крыши для
+        # видимости и инсоляции (core/roofs.py).
+        self.footprints = {}
         self.timer = QTimer(self)
         self.timer.setInterval(REBUILD_PAUSE)
         self.timer.timeout.connect(self._heights_moved)
@@ -156,6 +159,7 @@ class ExtrudeManager(QObject):
             if name not in wanted:
                 view.extruded.set_mesh(name, None)
                 self.counts.pop(name, None)
+                self.footprints.pop(name, None)
         project = QgsProject.instance()
         for layer_id in wanted:
             layer = project.mapLayer(layer_id)
@@ -212,7 +216,9 @@ class ExtrudeManager(QObject):
                 renderer.stopRender(context)
         footprint = parts.footprint(layer.id())
         if footprint is None:
+            self.footprints.pop(layer.id(), None)
             return None, 0
+        self.footprints[layer.id()] = footprint
         store = self.window.view.store
         return extrude.mesh(footprint, parts.follow(),
                             store.heights_at), len(parts.height)

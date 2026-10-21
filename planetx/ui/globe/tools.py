@@ -41,6 +41,7 @@ from ..folderprops import FolderDialog
 from ..viewshed import ResultTiles, ViewshedDialog, display_level
 from ..insolation import InsolationDialog
 from ..roofs import RoofLoader
+from ...core import roofs
 from ..subsection import ModelSectionDialog, build as model_section
 from ..snapshot import SnapshotDialog, draw_attribution, plain_text
 from .base import (CALC_BUDGET, HEIGHT_CHUNK, SECTION_TIME_PAUSE,
@@ -500,8 +501,44 @@ class ToolsMixin:
         if not dialog.buildings.isChecked() or not self.planet.earth \
                 or self.view.sky_view is not None:
             return None
-        return RoofLoader(getattr(self, "_ofm_source", None), lat, lon,
-                          reach, cell)
+        loader = RoofLoader(getattr(self, "_ofm_source", None), lat, lon,
+                            reach, cell)
+        loader.own = self._burn_own(loader.grid)
+        return loader
+
+    def _burn_own(self, grid):
+        """Свои здания в растр крыш: выдавленные многоугольники «Моих
+        меток», выдавленные слои проекта и 3D-модели на месте. Просьба
+        автора от 20 октября 2026 года. Возвращает их количество."""
+        before = grid.count
+        for shape in self.view.features.shapes:
+            if shape.kind != "polygon" or not shape.extrude \
+                    or shape.height <= 0.0 or shape.alts is not None:
+                continue
+            height = float(shape.height)
+            if shape.mode == "absolute":
+                lats, lons = np.array(shape.points).T
+                height -= float(np.min(self._true_heights(lats, lons)))
+            rings = [np.array(shape.points)] + [
+                np.array(hole) for hole in (shape.holes or ())]
+            grid.burn(rings, height)
+        for footprint in self.extruder.footprints.values():
+            grid.burn_footprint(footprint)
+        for parts, overlay in getattr(self, "_roof_models", []):
+            lat, lon, alt, heading, tilt, roll = overlay.camera
+            if overlay.mode == "absolute":
+                lift = alt - float(self._true_heights(
+                    np.array([lat]), np.array([lon]))[0])
+            elif overlay.mode == "relativeToGround":
+                lift = alt
+            else:
+                lift = 0.0
+            for part in parts:
+                grid.burn_triangles(*roofs.model_triangles(
+                    part.positions, lat, lon, heading, tilt, roll,
+                    overlay.scale, lift))
+            grid.count -= len(parts) - 1  # модель - одно здание
+        return grid.count - before
 
     def _roofs_wait(self, roofs, waited, timer, dialog):
         """Ждать ли зданий: разбор пришедших тайлов частями, строка
@@ -521,10 +558,15 @@ class ToolsMixin:
             return ""
         roofs.stop()
         if roofs.skipped:
-            return " " + tr("Здания не учтены - круг слишком большой.")
-        text = " " + tr("Учтено зданий {count}.", count=roofs.grid.count)
-        if roofs.done < roofs.total:
-            text += " " + tr("Загружены не все тайлы зданий.")
+            text = " " + tr("Здания OpenFreeMap не учтены - круг слишком "
+                            "большой.")
+        else:
+            text = " " + tr("Учтено зданий {count}.",
+                            count=roofs.grid.count)
+            if roofs.done < roofs.total:
+                text += " " + tr("Загружены не все тайлы зданий.")
+        if roofs.own:
+            text += " " + tr("Своих {count}.", count=roofs.own)
         return text
 
     def _stop_roofs(self, job):

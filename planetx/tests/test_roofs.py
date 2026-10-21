@@ -63,6 +63,50 @@ class TestBurn(unittest.TestCase):
         self.assertIn(PERM, roofs.tiles_around(lat, lon, 1500.0))
 
 
+def cube(size):
+    """Куб size метров треугольниками подряд, низ на нуле, ось Z вверх."""
+    s = size / 2.0
+    v = np.array([[x, y, z] for z in (0.0, size) for y in (-s, s)
+                  for x in (-s, s)])
+    faces = [(0, 1, 3), (0, 3, 2), (4, 5, 7), (4, 7, 6), (0, 1, 5),
+             (0, 5, 4), (2, 3, 7), (2, 7, 6), (0, 2, 6), (0, 6, 4),
+             (1, 3, 7), (1, 7, 5)]
+    return v[np.array(faces).ravel()]
+
+
+class TestOwn(unittest.TestCase):
+
+    def test_model_rotation_matches_models(self):
+        import models
+        for angles in ((0, 0, 0), (37, 10, -5), (200, 0, 90)):
+            self.assertTrue(np.allclose(roofs._rotation(*angles),
+                                        models.rotation(*angles)))
+
+    def test_model_cube_on_ground(self):
+        grid = roofs.Roofs(LAT, LON, 100.0, 1.0)
+        lats, lons, tops = roofs.model_triangles(
+            cube(20.0), LAT, LON, 45.0, 0.0, 0.0, (1.0, 1.0, 1.0), 3.0)
+        grid.burn_triangles(lats, lons, tops)
+        inside = grid.at(*np.array([metres(0, 0), metres(5, 5)]).T)
+        outside = grid.at(*np.array([metres(0, 15)]).T)
+        # Куб на подъёме 3 м: крыша 23 м, угол повёрнутого куба - снаружи
+        # квадрата 20 м по оси.
+        self.assertEqual(inside.tolist(), [23.0, 23.0])
+        self.assertEqual(outside.tolist(), [0.0])
+
+    def test_footprint_of_extruded_layer(self):
+        import buildings
+        path = os.path.join(DATA, "building_perm_{}_{}_{}.mvt".format(*PERM))
+        with open(path, "rb") as f:
+            fp = buildings.footprints(PERM, f.read())
+        lat, lon = fp.latlon.mean(axis=0)
+        grid = roofs.Roofs(lat, lon, 1500.0, 2.0)
+        grid.burn_footprint(fp)
+        self.assertGreater(grid.count, 100)
+        self.assertAlmostEqual(float(grid.top.max()), float(fp.height.max()),
+                               places=3)
+
+
 class TestViewshed(unittest.TestCase):
 
     def test_wall_hides_ground_behind(self):

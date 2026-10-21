@@ -13382,6 +13382,255 @@ def roofs_city_wait():
     return None
 
 
+OWN_POINT = (57.9885, 56.0100)  # 170 м южнее первого ветряка демо
+
+
+@check(1000)
+def own_roofs():
+    """Свои здания в видимости: демо ветряков (3D-модели) и выдавленный
+    многоугольник «Моих меток» 60 м в 50 м к северу от наблюдателя."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    look = state.setdefault("own_roofs", {"stage": None})
+    out = result.setdefault("own_roofs", {})
+    if look["stage"] is None:
+        window.set_body("earth")
+        window.open_demo("turbines")
+        look["stage"] = "models"
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    if look["stage"] == "models":
+        if not getattr(window, "_roof_models", None) and waited < 60:
+            return 1000
+        out["models"] = len(getattr(window, "_roof_models", []))
+        window.view.navigator.show(Pose(*OWN_POINT, 1500.0, 0.0, 0.0))
+        window.viewshed_here(*OWN_POINT)
+        window.viewshed_dialog.buildings.setChecked(True)
+        window.viewshed_dialog.build.emit(2.0, 0.0, 600.0)
+        look["stage"] = "bare"
+        look["since"] = time.monotonic()
+        return 1000
+    if window.viewshed_job is not None and waited < 120:
+        return 1000
+    vs = window.viewshed_result
+    out[look["stage"]] = {
+        "share": round(vs.share, 3) if vs else None,
+        "status": window.viewshed_dialog.status.text()}
+    if look["stage"] == "bare":
+        from planetx.core.kml import KFolder, KPlace
+        lat, lon = OWN_POINT
+        dn = 50.0 / 111320.0
+        de = 15.0 / (111320.0 * math.cos(math.radians(lat)))
+        box = [(lat + dn, lon - de), (lat + dn, lon + de),
+               (lat + dn + 30.0 / 111320.0, lon + de),
+               (lat + dn + 30.0 / 111320.0, lon - de)]
+        look["key"] = window.myplaces.import_tree(KFolder(
+            "Свои здания", children=[KPlace(
+                "Башня", "polygon", box, fill=(200, 200, 200, 255),
+                height=60.0, extrude=True)]))
+        QgsApplication.processEvents()
+        window.viewshed_dialog.build.emit(2.0, 0.0, 600.0)
+        look["stage"] = "tower"
+        look["since"] = time.monotonic()
+        return 1000
+    window.viewshed_dialog.clear.emit()
+    window.viewshed_dialog.close()
+    old = [f.key for f in window.myplaces.folders
+           if f.name.startswith("PlanetX: демо, анимированная")]
+    window.myplaces.remove_many(old + [look["key"]])
+    return None
+
+
+@check(1000)
+def post_viewshed_shot():
+    """Кадр для поста 1.7: видимость с перекрёстка в центре Перми со
+    зданиями, глаз PLANETX_POST_EYE м, круг PLANETX_POST_RADIUS км,
+    кадр «Копией вида». Файл - TEMP."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_vs", {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        tilt = float(os.environ.get("PLANETX_POST_TILT", "35"))
+        view.navigator.show(Pose(58.0110, 56.2330, 2300.0, 20.0, tilt))
+        view.update()
+        window.viewshed_here(*ROOF_POINT)
+        d = window.viewshed_dialog
+        d.buildings.setChecked(True)
+        d.hide()
+        eye = float(os.environ.get("PLANETX_POST_EYE", "2"))
+        radius = float(os.environ.get("PLANETX_POST_RADIUS", "0.8"))
+        d.build.emit(eye, 0.0, radius * 1000.0)
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    if (window.viewshed_job is not None or window.viewshed_tiles is None
+            or view.load_missing) and waited < 180:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 4000
+    image = window.copy_view()
+    path = os.path.join(TEMP, "planetx_post_viewshed.png")
+    image.save(path)
+    result["post_viewshed"] = {
+        "path": path, "size": [image.width(), image.height()],
+        "status": window.viewshed_dialog.status.text(),
+        "waited": round(waited, 1)}
+    return None
+
+
+@check(1000)
+def quarry_viewshed():
+    """Видимость со дна карьера демо «Карьер, свой рельеф» - расчёт
+    идёт по своему рельефу растра проекта. Без него дна нет, видно
+    почти всё вокруг."""
+    import numpy as np
+    from planetx.core import viewshed as core_vs, ellipsoid as core_ell
+    window = state["window"]
+    look = state.setdefault("quarry_vs", {"since": None})
+    out = result.setdefault("quarry_vs", {})
+    if look["since"] is None:
+        wait = _quarry_wait(60)
+        if wait:
+            return wait
+        lat, lon = 59.490, 56.970
+        window.viewshed_here(lat, lon)
+        d = window.viewshed_dialog
+        d.buildings.setChecked(False)
+        d.build.emit(2.0, 0.0, 1000.0)
+        level, _ = core_vs.height_tiles(lat, lon, 1000.0, 1000.0 / 500,
+                                        core_ell.A,
+                                        window.view.store.max_level)
+        out["level"] = level
+        out["bottom"] = round(float(window._true_heights(
+            np.array([lat]), np.array([lon]))[0]), 1)
+        look["since"] = time.monotonic()
+        return 1000
+    if window.viewshed_job is not None \
+            and time.monotonic() - look["since"] < 120:
+        return 1000
+    vs = window.viewshed_result
+    out["share"] = round(vs.share, 3) if vs else None
+    out["status"] = window.viewshed_dialog.status.text()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_quarry_viewshed.png"))
+    window.viewshed_dialog.clear.emit()
+    window.viewshed_dialog.close()
+    return None
+
+
+def _profiled(fn, top=14):
+    """Время вызова и самые дорогие функции модуля по cumulative."""
+    import cProfile
+    import pstats
+    import io
+    prof = cProfile.Profile()
+    started = time.perf_counter()
+    prof.enable()
+    try:
+        value = fn()
+    finally:
+        prof.disable()
+    seconds = time.perf_counter() - started
+    stream = io.StringIO()
+    stats = pstats.Stats(prof, stream=stream)
+    rows = []
+    for (path, line, name), (cc, nc, tt, ct, _) in stats.stats.items():
+        rows.append((ct, tt, nc, "{}:{}:{}".format(
+            os.path.basename(path), line, name)))
+    rows.sort(reverse=True)
+    return value, {"s": round(seconds, 3), "top": [
+        "{:.3f} {:.3f} {} {}".format(*r) for r in rows[:top]]}
+
+
+@check(1000)
+def places_many():
+    """«Мои метки» на тысячах точек: импорт, кадры, флажок папки, правка
+    одной метки, удаление. Количество - PLANETX_MANY, по умолчанию
+    8000, как пример Лебединского ГОК у автора."""
+    from planetx.core.kml import KFolder, KPlace
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    count = int(os.environ.get("PLANETX_MANY", "8000"))
+    lat0, lon0 = 51.29, 37.63
+    side = int(count ** 0.5) + 1
+    kids = [KPlace("Скв. {}".format(i), "point",
+                   [(lat0 + (i // side) * 0.0003,
+                     lon0 + (i % side) * 0.0005)])
+            for i in range(count)]
+    out = result.setdefault("places_many", {"count": count})
+    view.navigator.show(Pose(lat0 + side * 0.00015, lon0 + side * 0.00025,
+                             6000.0, 0.0, 0.0))
+    key, out["import"] = _profiled(lambda: window.myplaces.import_tree(
+        KFolder("Много точек", children=kids)))
+    state["many_key"] = key
+    _, out["events"] = _profiled(QgsApplication.processEvents)
+    frames = []
+    for _ in range(5):
+        t0 = time.perf_counter()
+        view.grabFramebuffer()
+        frames.append(round(time.perf_counter() - t0, 3))
+    out["frames"] = frames
+    _, out["frame_prof"] = _profiled(view.grabFramebuffer)
+    _, out["hide"] = _profiled(
+        lambda: window.myplaces.set_visible(key, False))
+    _, out["show"] = _profiled(
+        lambda: window.myplaces.set_visible(key, True))
+    first = next(p for p in window.myplaces.places if p.folder == key)
+    _, out["rename"] = _profiled(
+        lambda: window.myplaces.update(first.key, {"name": "Скв. новая"}))
+    _, out["remove"] = _profiled(
+        lambda: window.myplaces.remove_many([key]))
+
+
+@check(1000)
+def post_insolation_shot():
+    """Кадр для поста 1.7: инсоляция центра Перми со зданиями
+    21 декабря, круг PLANETX_POST_RADIUS км, кадр «Копией вида» -
+    шкала, подпись источников и знак PlanetX. Файл - TEMP."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_ins", {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        tilt = float(os.environ.get("PLANETX_POST_TILT", "35"))
+        view.navigator.show(Pose(58.0110, 56.2330, 2300.0, 20.0, tilt))
+        view.update()
+        window.insolation_here(*ROOF_POINT)
+        d = window.insolation_dialog
+        d.buildings.setChecked(True)
+        radius = float(os.environ.get("PLANETX_POST_RADIUS", "0.8"))
+        d.radius.setValue(radius)
+        d.hide()
+        day = float(1797811200)  # 21 декабря 2026 года
+        d.build.emit(day, day, radius * 1000.0)
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    tiles = window.insolation_tiles
+    if (window.insolation_job is not None or tiles is None
+            or view.load_missing) and waited < 180:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 4000
+    image = window.copy_view()
+    path = os.path.join(TEMP, "planetx_post_insolation.png")
+    image.save(path)
+    result["post_insolation"] = {
+        "path": path, "size": [image.width(), image.height()],
+        "status": window.insolation_dialog.status.text(),
+        "waited": round(waited, 1)}
+    return None
+
+
 @check(500)
 def menu_links():
     """Свои пункты меню на глобусе: подменю «Открыть в браузере», адрес
@@ -17932,6 +18181,118 @@ def place_card_check():
     out["gl"] = dict(view.gl_errors)
 
 
+@check(1500)
+def feature_card():
+    """Щелчок по объекту слоя проекта - карточка объекта с полями
+    и «Объясни это», 20 октября 2026 года."""
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPointXY, QgsProject,
+                           QgsVectorLayer)
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    layer = QgsVectorLayer(
+        "Polygon?crs=EPSG:4326&field=name:string&field=description:string"
+        "&field=depth:double&field=empty:string", "Участки", "memory")
+    feature = QgsFeature(layer.fields())
+    ring = [QgsPointXY(lon, lat) for lat, lon in (
+        (57.99, 56.20), (57.99, 56.26), (58.03, 56.26), (58.03, 56.20),
+        (57.99, 56.20))]
+    feature.setGeometry(QgsGeometry.fromPolygonXY([ring]))
+    feature.setAttribute("name", "Участок 7")
+    feature.setAttribute("description", "<b>Карьер</b> песка.")
+    feature.setAttribute("depth", 12.5)
+    layer.dataProvider().addFeatures([feature])
+    layer.setDisplayExpression('"name"')
+    QgsProject.instance().addMapLayer(layer)
+    state["card_layer"] = layer
+    window.set_layer_shown(layer.id(), True)
+    window.refresh()
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.01, 56.23, 3000.0, 0.0, 0.0))
+    window.view.update()
+    result["feature_card"] = {}
+
+
+@check(1000)
+def feature_card_check():
+    from qgis.core import QgsProject
+    from planetx.ui.placecard import FeatureCard, feature_question
+    window = state["window"]
+    out = result.setdefault("feature_card", {})
+    layer = state["card_layer"]
+    view = window.view
+    view.repaint()
+    QgsApplication.processEvents()
+    cam = view.camera
+    window.side.close_dialog()
+    window._clicked(cam.width / 2.0, cam.height / 2.0)
+    card = window.side.dialog
+    out["card"] = isinstance(card, FeatureCard)
+    if isinstance(card, FeatureCard):
+        out["title"] = card.windowTitle()
+        out["text"] = card.text.toPlainText()
+        out["question"] = feature_question(
+            card.layer_name, card.title, card.values, *card.point)
+        window._explaining = card
+        window._assistant_said("assistant", "Это участок.")
+        out["answer"] = card.answer.text()
+        card.select.emit(card.key)
+        out["selected"] = list(layer.selectedFeatureIds())
+        layer.removeSelection()
+    window.side.close_dialog()
+    # Снятый слой карточки не даёт.
+    window.set_layer_shown(layer.id(), False)
+    window.refresh()
+    window._clicked(cam.width / 2.0, cam.height / 2.0)
+    out["hidden_layer"] = window.side.dialog is None
+    window.side.close_dialog()
+    QgsProject.instance().removeMapLayer(state.pop("card_layer").id())
+    window.panel.set_answer("")
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(500)
+def manual_search():
+    """Разделы руководства в подсказках строки «Поиск» и карточка
+    раздела, 20 октября 2026 года."""
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.ui.manualcard import ManualCard, load_index
+    window = state["window"]
+    out = result["manual_search"] = {}
+    out["sections"] = len(load_index())
+    query = "Как добавить анимированную модель ветряка?"
+    hints = window.search_suggestions(query)
+    manual = [h for h in hints if h.kind == "manual"]
+    out["hints"] = [h.text for h in manual]
+    out["snippet"] = manual[0].note[:80] if manual else ""
+    window.panel.set_hints(hints)
+    rows = [window.panel.hints.item(n).text()
+            for n in range(window.panel.hints.count())]
+    out["rows"] = [r for r in rows if "руководства" in r or "manual" in r]
+    out["tooltip"] = bool(manual) and bool(window.panel.hints.item(
+        len(hints) - len(manual)).toolTip())
+    window.panel.hide_hints()
+    out["short"] = [h.kind for h in window.search_suggestions("как")
+                    if h.kind == "manual"]
+    window.side.close_dialog()
+    if manual:
+        window.place.setText(query)
+        window.choose_suggestion(manual[0])
+        card = window.side.dialog
+        out["card"] = isinstance(card, ManualCard)
+        if isinstance(card, ManualCard):
+            out["title"] = card.windowTitle()
+            out["selected"] = card.text.textCursor().selectedText()
+            out["length"] = len(card.text.toPlainText())
+            QgsApplication.processEvents()
+            window.side.grab().save(os.path.join(TEMP,
+                                                 "planetx_manual_card.png"))
+            card._link(QUrl("#" + load_index().items[0][1]))
+            out["link_title"] = card.windowTitle()
+    window.side.close_dialog()
+    window.place.clear()
+
+
 def _dark_openers(window):
     """Немодальные окна модуля и окна панели справа: имя - открытие."""
     from planetx.core.features import Shape
@@ -21897,6 +22258,7 @@ SMOKE = (
     # состояние вида метки, свободная камера и клавиши тура, карточка
     "stop_state", "stop_state_check", "stop_state_done", "tour_free",
     "tour_free_wait", "tour_keys", "place_card", "place_card_check",
+    "feature_card", "feature_card_check", "manual_search",
     "close_without_heights",
 )
 

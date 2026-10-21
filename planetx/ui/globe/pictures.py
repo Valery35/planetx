@@ -271,11 +271,15 @@ class PicturesMixin:
             return
         self._model_key = key
         out = []
+        # Модели на месте - и крыши видимости и инсоляции (core/roofs.py).
+        self._roof_models = []
         for token, overlay, data in shown:
             found = self._model_data(token, data)
             if found is None:
                 continue
             parts, pictures, moving = found
+            if not overlay.track:
+                self._roof_models.append((parts, overlay))
             if overlay.track:
                 out.append(self._track_model(token, overlay, parts,
                                              pictures, moving))

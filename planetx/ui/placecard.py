@@ -17,6 +17,11 @@
 глобуса (layers_text) - слои проекта по-прежнему не уходят. Карточка
 статьи Википедии рядом (ArticleCard) - первый абзац статьи, ссылка на
 неё и та же кнопка. Помощник получает текст статьи и отвечает по нему.
+
+С 20 октября 2026 года щелчок по объекту отмеченного слоя проекта
+открывает карточку объекта (FeatureCard) - поля и «Объясни это».
+Названия слоёв проекта и поля объектов уходят в модель только по нажатию
+кнопки, это согласие на один объект, решение автора того же дня.
 """
 import html
 
@@ -92,9 +97,9 @@ class Card(QDialog):
         self.explain_button.clicked.connect(
             lambda: self.explain.emit(self.key))
         self.buttons.addWidget(self.explain_button)
-        fly = QPushButton(tr("Подлететь"), self)
-        fly.clicked.connect(lambda: self.fly.emit(self.key))
-        self.buttons.addWidget(fly)
+        self.fly_button = QPushButton(tr("Подлететь"), self)
+        self.fly_button.clicked.connect(lambda: self.fly.emit(self.key))
+        self.buttons.addWidget(self.fly_button)
         layout.addLayout(self.buttons)
 
     def finish_buttons(self):
@@ -183,6 +188,89 @@ class ArticleCard(Card):
                               html.escape(tr("Статья в Википедии")),
                               html.escape(tr("Текст - Википедия, "
                                              "CC BY-SA 4.0"))))
+
+
+class FeatureCard(Card):
+    """Карточка объекта слоя проекта - просьба автора от 20 октября
+    2026 года, хвост пакета «баллоны». Поле описания (DESCRIPTION_FIELDS)
+    стоит текстом над таблицей прочих полей. Ключ сигналов - (номер слоя,
+    номер объекта)."""
+
+    select = pyqtSignal(object)
+
+    def __init__(self, layer_id, fid, layer_name, title, values, point,
+                 can_explain, parent=None):
+        super().__init__((layer_id, fid), title, can_explain, tr(
+            "Спросить помощника, что это за объект и чем интересно место. "
+            "Помощнику уходят название слоя, название и поля этого объекта, "
+            "точка щелчка и названия включённых слоёв глобуса. Ответ "
+            "появится здесь и под строкой «Поиск»."), parent)
+        self.layer_name = layer_name
+        self.title = title
+        self.point = point
+        self.values = feature_values(values)
+        text, rest = split_description(self.values)
+        head = "<p style='color:gray'>{}</p>".format(html.escape(tr(
+            "Слой «{name}»", name=layer_name)))
+        body = description_html(text) if text else ""
+        self.text.setHtml(head + body + fields_html(rest))
+        pick = QPushButton(tr("Выделить на карте"), self)
+        pick.setToolTip(tr("Выделить объект в слое QGIS. Выделение видно "
+                           "на карте, в таблице атрибутов и на глобусе."))
+        pick.clicked.connect(lambda: self.select.emit(self.key))
+        self.buttons.addWidget(pick)
+        self.finish_buttons()
+
+
+# Поля, текст которых - описание объекта, без учёта регистра.
+DESCRIPTION_FIELDS = ("description", "descr", "desc", "comment",
+                      "comments", "note", "notes", "remarks", "описание",
+                      "комментарий", "примечание")
+
+
+def feature_values(values):
+    """Поля объекта без пустых: [(поле, текст)]. NULL QGIS 3 - QVariant,
+    его текст «NULL»."""
+    out = []
+    for name, value in values or ():
+        if value is None:
+            continue
+        text = str(value)
+        if text in ("", "NULL"):
+            continue
+        out.append((str(name), text))
+    return out
+
+
+def split_description(values):
+    """Текст первого поля описания и остальные поля."""
+    for n, (name, value) in enumerate(values):
+        if name.lower() in DESCRIPTION_FIELDS:
+            return value, values[:n] + values[n + 1:]
+    return "", list(values)
+
+
+def feature_question(layer_name, title, values, lat, lon, layers=()):
+    """Вопрос помощнику об объекте слоя проекта: слой, название, точка
+    щелчка, описание и поля не длиннее EXPLAIN_LIMIT, включённые слои
+    глобуса."""
+    question = tr(
+        "Объясни, что это за объект и чем интересно это место. Объект "
+        "«{name}» слоя «{layer}», точка {lat:.5f}, {lon:.5f}.",
+        name=title or tr("Без названия"), layer=layer_name, lat=lat,
+        lon=lon)
+    text, rest = split_description(feature_values(values))
+    text = _clip(_plain(text))
+    if text:
+        question += " " + tr("Описание объекта - {text}", text=text)
+    fields = _clip("; ".join("{} = {}".format(n, v)
+                             for n, v in rest[:FIELDS_LIMIT]))
+    if fields:
+        question += " " + tr("Поля объекта - {fields}.", fields=fields)
+    extra = layers_text(layers)
+    if extra:
+        question += " " + extra
+    return question
 
 
 def layers_text(names):

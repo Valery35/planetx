@@ -41,13 +41,30 @@ def children(nodes, parent):
                   key=Node.order)
 
 
-def walk(nodes, parent=None):
-    """Все узлы под parent в порядке списка, папка раньше своих детей."""
+def index(nodes):
+    """Дети каждой папки по порядку списка: {родитель: [узлы]}. Один
+    проход по узлам - на тысячах меток обход по папкам перебирал бы все
+    узлы для каждой папки."""
+    out = {}
+    for node in nodes:
+        out.setdefault(node.parent, []).append(node)
+    for kids in out.values():
+        kids.sort(key=Node.order)
+    return out
+
+
+def walk(nodes, parent=None, kids=None):
+    """Все узлы под parent в порядке списка, папка раньше своих детей.
+    kids - готовый index(nodes)."""
+    if kids is None:
+        kids = index(nodes)
     out = []
-    for node in children(nodes, parent):
+    stack = list(reversed(kids.get(parent, [])))
+    while stack:
+        node = stack.pop()
         out.append(node)
         if is_folder(node.key):
-            out.extend(walk(nodes, node.key))
+            stack.extend(reversed(kids.get(node.key, [])))
     return out
 
 
@@ -60,11 +77,12 @@ def top_keys(nodes, keys):
     """Выбранные ключи без тех, что лежат внутри выбранной папки, в
     порядке списка. Папка и так переносится и удаляется с содержимым."""
     chosen = set(keys)
+    kids = index(nodes)
     inside = set()
     for key in chosen:
         if is_folder(key):
-            inside.update(descendants(nodes, key))
-    return [n.key for n in walk(nodes)
+            inside.update(n.key for n in walk(nodes, key, kids))
+    return [n.key for n in walk(nodes, None, kids)
             if n.key in chosen and n.key not in inside]
 
 
