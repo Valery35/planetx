@@ -74,6 +74,38 @@ class TestSearch(unittest.TestCase):
         self.assertEqual(self.index.search("как"), [])
         self.assertEqual(self.index.search("где это"), [])
 
+    def test_endings_and_synonyms(self):
+        """«картой» находит «карты», «экспорт» - «выгрузку», «снимок» -
+        «снимки». На прежней обрезке основы «карто» и без групп
+        синонимов раздела нет."""
+        index = manualindex.Index([
+            ["Синхронизация", "s", "Окно карты QGIS следует за глобусом."],
+            ["Горизонтали", "g", "Выгрузка горизонталей в GeoPackage."],
+            ["Космоснимки", "k", "Снимки Sentinel-2 участком."],
+        ])
+        self.assertEqual(index.search("связь с картой")[:1], [0])
+        self.assertEqual(index.search("экспорт горизонталей")[:1], [1])
+        self.assertEqual(index.search("снимок sentinel")[:1], [2])
+        self.assertEqual(manualindex.stem("ветряков"), "ветряк")
+        self.assertEqual(manualindex.stem("models"), "model")
+
+    def test_words_together_in_paragraph_outrank_scattered(self):
+        """Раздел, где все слова вопроса в одном абзаце, выше длинного
+        раздела, где они разбросаны по разным абзацам, даже если там
+        слова встречаются чаще."""
+        index = manualindex.Index([
+            ["Слои", "a", "Горизонтали рельефа.\n\nГоризонтали вблизи.\n\n"
+             "Горизонтали тайлами.\n\nСлой проекта QGIS.\n\n"
+             "Проект QGIS и слой."],
+            ["Выгрузка", "b", "Горизонтали вида в проект QGIS."],
+        ])
+        self.assertEqual(index.search("горизонтали в проект")[:1], [1])
+
+    def test_table_rows_are_separate_paragraphs(self):
+        self.assertEqual(manualindex.parts("| a | b |\n| c | d |\n\nтекст"),
+                         [("| a | b |", True), ("| c | d |", True),
+                          ("текст", False)])
+
     def test_snippet_is_matching_paragraph(self):
         n = self.index.find("анимация")
         self.assertEqual(self.index.snippet(n, "ветряк"),

@@ -10,26 +10,33 @@ doc/MANUAL.md и doc/MANUAL.en.md режется по заголовкам ## - 
 data/manual_ru.json и manual_en.json - папки doc в архиве модуля нет.
 
 Раздел - [заголовок, якорь GitHub, текст Markdown без картинок].
-Поиск (Index.search) - по основам слов: слово запроса длиннее
-STEM_LONG знаков обрезается на STEM_CUT знака, но не короче STEM_MIN,
-и совпадает со всеми словами раздела, которые с этой основы
-начинаются. Так «модель ветряка» находит «модели» и «ветряки». Слово
-в заголовке весит TITLE_WEIGHT, в тексте - 1, при равенстве выше
-раздел, где слова встречаются чаще. Подходит раздел, где нашлась хотя
-бы половина значимых слов запроса. Вопросительные и служебные слова
-(STOP) не считаются. Морфологии нет, приставки и чередования основ не узнаются.
+Поиск (Index.search) - по основам слов: у слова запроса снимается
+окончание (stem), основа совпадает со всеми словами раздела, которые
+с неё начинаются. Так «модель ветряка» находит «модели» и «ветряки».
+Синонимы и чередования основ («снимок» - «снимки», «экспорт» -
+«выгрузка») - группы SYNONYMS. Раздел ранжируется сначала по лучшему
+абзацу - сколько слов запроса в одном абзаце вместе с заголовком,
+затем по словам в заголовке и по весу: слово в заголовке весит
+TITLE_WEIGHT, в тексте - 1, при равенстве выше раздел, где слова
+встречаются чаще. Подходит раздел, где нашлась хотя бы половина
+значимых слов запроса. Вопросительные и служебные слова (STOP) не
+считаются. Полной морфологии нет, приставки не узнаются.
 """
 import bisect
 import json
 import re
 
-# Основа слова: длиннее STEM_LONG знаков - без последних STEM_CUT,
-# но не короче STEM_MIN. Выбор помощника.
-STEM_LONG = 5
-STEM_CUT = 3
-STEM_MIN = 5
+# Основа слова запроса не короче STEM_MIN знаков. Выбор помощника.
+STEM_MIN = 3
 # Вес слова, найденного в заголовке раздела, против слова в тексте.
 TITLE_WEIGHT = 3
+# Слово запроса в заголовке раздела добавляет к лучшему абзацу эту долю:
+# раздел о самом предмете вопроса выше строки таблицы, где все слова
+# стоят рядом. Выбор помощника по пробным вопросам.
+HEAD_SHARE = 0.5
+# Строка таблицы засчитывается абзацем на эту долю слова меньше:
+# при равном покрытии выше обычный абзац.
+ROW_PENALTY = 0.5
 # Разделов в подсказках не больше.
 LIMIT = 3
 # Запрос короче - разделы руководства не ищутся.
@@ -47,6 +54,32 @@ STOP = frozenset((
     "the", "and", "for", "how", "what", "where", "why", "can", "does",
     "with", "from", "into", "this", "that", "are", "you", "your", "use"))
 
+# Окончания, которые снимает основа слова запроса, длинные первыми.
+ENDINGS_RU = (
+    "иями", "ями", "ами", "ого", "его", "ому", "ему", "ыми", "ими",
+    "ать", "ять", "ить", "еть", "ует", "ают", "яют", "ует",
+    "ой", "ей", "ий", "ый", "ая", "яя", "ое", "ее", "ые", "ие", "ую",
+    "юю", "ов", "ев", "ам", "ям", "ах", "ях", "ом", "ем", "ию", "ия",
+    "ет", "ит", "ут", "ют", "ть",
+    "а", "я", "о", "е", "и", "ы", "у", "ю", "ь", "й")
+ENDINGS_EN = ("ing", "ies", "es", "ed", "s")
+# Основы, которые запрос считает одним словом: синонимы и чередования
+# основ, которых обрезка окончаний не ловит («снимок» - «снимки»).
+# Выбор помощника по пробным вопросам к руководствам линейки.
+SYNONYMS = (
+    ("выгруз", "экспорт"),
+    ("измер", "линейк", "расстоя", "длин"),
+    ("анимац", "анимир", "анимиров"),
+    ("видео", "ролик", "mp4"),
+    ("снимо", "снимк"),
+    ("удали", "удал", "убра"),
+    ("тен", "тень", "инсоляц"),
+    ("export", "save"),
+    ("distance", "length", "measure", "ruler"),
+    ("video", "movie", "clip", "mp4"),
+    ("shadow", "insolation"),
+)
+
 _HEADING = re.compile(r"^(#{2,4})\s+(.*?)\s*#*\s*$")
 _IMAGE = re.compile(r"^\s*!\[[^\]]*\]\([^)]*\)\s*$")
 _WORD = re.compile(r"\w+", re.UNICODE)
@@ -62,10 +95,25 @@ def words(text):
 
 
 def stem(word):
-    """Основа слова запроса для сравнения началом."""
-    if len(word) > STEM_LONG:
-        return word[:max(STEM_MIN, len(word) - STEM_CUT)]
+    """Основа слова запроса для сравнения началом: без окончания из
+    ENDINGS_RU или ENDINGS_EN, не короче STEM_MIN знаков. «картой»
+    находит «карта» и «карты», «ветряков» - «ветряки»."""
+    ends = ENDINGS_EN if word.isascii() else ENDINGS_RU
+    for end in ends:
+        if word.endswith(end) and len(word) - len(end) >= STEM_MIN:
+            return word[:-len(end)]
     return word
+
+
+def alternatives(base):
+    """Основы, которые считаются одним словом запроса: сама основа и её
+    группа SYNONYMS, если основа начинается с основы группы или группа
+    с неё."""
+    out = [base]
+    for group in SYNONYMS:
+        if any(base.startswith(g) or g.startswith(base) for g in group):
+            out.extend(g for g in group if g not in out)
+    return out
 
 
 def slug(title, taken):
@@ -110,35 +158,62 @@ def sections(markdown):
     return out
 
 
+def parts(text):
+    """Абзацы текста раздела для оценки близости слов: [(текст, строка
+    таблицы ли)]. Строка таблицы Markdown - свой абзац: таблица демо
+    и источников иначе собрала бы в один абзац слова всех тем."""
+    out = []
+    for part in re.split(r"\n\s*\n", text):
+        lines = part.splitlines()
+        if lines and all(line.lstrip().startswith("|") for line in lines):
+            out.extend((line, True) for line in lines)
+        else:
+            out.append((part, False))
+    return out
+
+
 class Index:
     """Разделы руководства с наборами слов заголовка и текста."""
 
     def __init__(self, items):
         self.items = [tuple(item) for item in items]
-        # Слово - номера разделов с ним в заголовке и в тексте. Слова
-        # отсортированы: основа ищется делением пополам, а не перебором.
+        # Слово - номера разделов с ним в заголовке, в тексте и номера
+        # абзацев с ним. Слова отсортированы: основа ищется делением
+        # пополам, а не перебором.
         self._title = {}
         self._text = {}  # слово - {номер раздела: сколько раз}
+        self._para = {}  # слово - номера абзацев
+        self._owner = []  # абзац - номер раздела
+        self._row = set()  # абзацы - строки таблиц
         for n, (title, _, text) in enumerate(self.items):
             for w in set(words(title)):
                 self._title.setdefault(w, set()).add(n)
             for w in words(text):
                 seen = self._text.setdefault(w, {})
                 seen[n] = seen.get(n, 0) + 1
+            for part, row in parts(text):
+                if row:
+                    self._row.add(len(self._owner))
+                for w in set(words(part)):
+                    self._para.setdefault(w, set()).add(len(self._owner))
+                self._owner.append(n)
         self._vocab = sorted(set(self._title) | set(self._text))
 
-    def _having(self, prefix):
-        """Разделы со словом на prefix: номера с ним в заголовке
-        и {номер: сколько раз в тексте}."""
-        title, text = set(), {}
-        n = bisect.bisect_left(self._vocab, prefix)
-        while n < len(self._vocab) and self._vocab[n].startswith(prefix):
-            w = self._vocab[n]
-            title |= self._title.get(w, set())
-            for k, count in self._text.get(w, {}).items():
-                text[k] = text.get(k, 0) + count
-            n += 1
-        return title, text
+    def _having(self, prefixes):
+        """Разделы со словом на одну из основ prefixes: номера с ним
+        в заголовке, {номер: сколько раз в тексте} и номера абзацев."""
+        title, text, paras = set(), {}, set()
+        for prefix in prefixes:
+            n = bisect.bisect_left(self._vocab, prefix)
+            while (n < len(self._vocab)
+                   and self._vocab[n].startswith(prefix)):
+                w = self._vocab[n]
+                title |= self._title.get(w, set())
+                for k, count in self._text.get(w, {}).items():
+                    text[k] = text.get(k, 0) + count
+                paras |= self._para.get(w, set())
+                n += 1
+        return title, text, paras
 
     @classmethod
     def from_json(cls, text):
@@ -156,8 +231,14 @@ class Index:
             return []
         need = (len(stems) + 1) // 2
         score, hits, often = {}, {}, {}
+        # Абзац - сколько слов запроса в нём и в заголовке его раздела.
+        # Раздел ранжируется сначала по лучшему абзацу: в длинном разделе
+        # слова, разбросанные по разным абзацам, весят меньше, чем все
+        # слова вопроса в одном абзаце.
+        found = []  # слово запроса - (разделы по заголовку, абзацы)
         for s in stems:
-            title, text = self._having(s)
+            title, text, paras = self._having(alternatives(s))
+            found.append((title, paras))
             for n in title | set(text):
                 score[n] = score.get(n, 0) + (TITLE_WEIGHT if n in title
                                               else 1)
@@ -165,19 +246,35 @@ class Index:
                 # Вхождения в тексте - не больше OFTEN на слово, иначе
                 # длинный раздел перевешивал бы точный.
                 often[n] = often.get(n, 0) + min(text.get(n, 0), OFTEN)
-        scored = [(-score[n], -often[n], -hits[n], n)
+        # Слово заголовка дополняет любой абзац своего раздела.
+        heads = {n: sum(1 for title, _ in found if n in title)
+                 for n in score}
+        best = dict(heads)
+        for p in set().union(*(paras for _, paras in found)):
+            n = self._owner[p]
+            if n in best:
+                count = sum(1 for title, paras in found
+                            if p in paras or n in title)
+                if p in self._row:
+                    # Строка таблицы - перечень: слова в ней рядом,
+                    # но о предмете вопроса там одна строка.
+                    count -= ROW_PENALTY
+                best[n] = max(best[n], count)
+        scored = [(-best[n] - HEAD_SHARE * heads[n], -heads[n], -score[n],
+                   -often[n], -hits[n], n)
                   for n in score if hits[n] >= need]
         scored.sort()
-        return [n for _, _, _, n in scored[:limit]]
+        return [item[-1] for item in scored[:limit]]
 
     def snippet(self, n, query, size=SNIPPET):
         """Абзац раздела n, где больше всего слов запроса, не длиннее
         size знаков, без разметки таблиц и выделения."""
-        stems = self.stems(query)
+        groups = [alternatives(s) for s in self.stems(query)]
         best, found = "", -1
         for part in re.split(r"\n\s*\n", self.items[n][2]):
             have = words(part)
-            hit = sum(1 for s in stems if any(w.startswith(s) for w in have))
+            hit = sum(1 for group in groups
+                      if any(w.startswith(g) for w in have for g in group))
             if hit > found:
                 best, found = part, hit
         text = " ".join(_MARKUP.sub(" ", best).split())

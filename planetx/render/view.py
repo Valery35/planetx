@@ -110,6 +110,9 @@ POOL_START = 64  # текстур в запасе при создании кон
 POOL_TARGET = 128  # до стольких запас пополняется в кадрах без движения
 POOL_REFILL = 2  # текстур за такой кадр
 LOADER_PERIOD = 0.1  # секунд между вызовами загрузчика при смене набора
+# Камера стоит столько секунд - просятся тайлы подписей основы.
+# Выбор помощника.
+PLACES_PAUSE = 0.3
 MAX_TEXTURES = 1500  # 256×256 RGBA с мипмапами - около 350 МБ
 MAX_PENDING = 400
 MAX_OVERLAYS = 600  # картинок наложения в видеокарте
@@ -625,6 +628,13 @@ class GlobeView(QOpenGLWidget):
         # наложение слоёв проекта, а не тему.
         self.swipe_maps = False
         self._feature_marks = ([], None, None)
+        self._headed = (None, False)
+        self._label_eye = None
+        self._label_moved = 0.0
+        # Кадр после паузы движения - просить тайлы подписей.
+        self._places_timer = QTimer(self)
+        self._places_timer.setSingleShot(True)
+        self._places_timer.timeout.connect(self.update)
         self._marked = (None, None, [])
         self._context = None
         self._overlay_missing = 0
@@ -733,9 +743,14 @@ class GlobeView(QOpenGLWidget):
         scale = self.store.scale or 1.0
         # Повёрнутый значок (heading KML) держит угол от севера: при
         # повороте вида он поворачивается на экране, шагами TURN_STEP.
+        # Есть ли такие значки, считается раз на набор объектов: проход
+        # по тысячам меток в каждом кадре стоил миллисекунды.
+        if self._headed[0] is not shapes:
+            self._headed = (shapes, any(
+                s.kind == "point" and getattr(s, "icon_heading", 0.0)
+                for s in shapes))
         turn = round(self.navigator.pose.heading / TURN_STEP) * TURN_STEP \
-            if any(s.kind == "point" and getattr(s, "icon_heading", 0.0)
-                   for s in shapes) else 0.0
+            if self._headed[1] else 0.0
         # Метка под курсором с видом highlight (StyleMap KML) рисуется
         # этим видом.
         hovered = self.labels.hovered
@@ -2983,11 +2998,27 @@ class GlobeView(QOpenGLWidget):
         gl.glDepthMask(GL.GL_TRUE)
         gl.glDepthFunc(GL.GL_LESS)
 
+
     def _draw_labels(self, sel, ratio):
         """Надписи пунктов поверх кадра, с проверкой глубины."""
         now = time.monotonic()
         loader = self.place_loader
-        if loader is not None and now - self._places_at > LOADER_PERIOD:
+        # Тайлы подписей основы просятся на паузе движения камеры. Их
+        # разбор на Python держит GIL рабочего потока, и главный поток
+        # при облёте новых мест ждал его: без подписей облёт шёл 19-20
+        # кадров в секунду вместо 15, худшая пауза 210 мс вместо 400,
+        # 21 октября 2026 года. Подписи нового места приходят, когда
+        # камера постоит PLACES_PAUSE. Снимок и запись тура ждут всё.
+        eye = tuple(np.round(self.camera.eye, 1))
+        if eye != self._label_eye:
+            self._label_eye = eye
+            self._label_moved = now
+        still = self.shot is not None \
+            or now - self._label_moved >= PLACES_PAUSE
+        if loader is not None and not still:
+            self._places_timer.start(int(PLACES_PAUSE * 1000) + 20)
+        if loader is not None and still \
+                and now - self._places_at > LOADER_PERIOD:
             wanted = {key: -key[0] for key in self.places.wanted(sel.draw)
                       if key not in self.places.tiles}
             keys = frozenset(wanted)
@@ -3001,14 +3032,20 @@ class GlobeView(QOpenGLWidget):
             else kinds_at(self.label_kinds, self.camera.altitude())
         places = self.places.collect(sel.draw, kinds)
         mark = self.search_mark
-        own = self._own_marks() + self.layer_marks + self.grid_marks \
-            + self.plate_marks + self.value_marks + self.geo_marks \
-            + self.subsurface_marks + self.wiki_marks \
-            + self.tool_marks
-        if mark is not None or own:
-            head = ([mark] if mark is not None else []) + own
-            if self._marked[0] is not places or self._marked[1] != head:
-                self._marked = (places, head, head + places)
+        # Списки своих надписей сравниваются по тождеству: каждый
+        # меняется заменой целиком. Сборка общего списка и сравнение
+        # тысяч меток по значению в каждом кадре стоили миллисекунды.
+        parts = (self._own_marks(), self.layer_marks, self.grid_marks,
+                 self.plate_marks, self.value_marks, self.geo_marks,
+                 self.subsurface_marks, self.wiki_marks, self.tool_marks)
+        if mark is not None or any(parts):
+            old = self._marked[1]
+            if self._marked[0] is not places or old is None \
+                    or old[0] != mark \
+                    or any(a is not b for a, b in zip(old[1], parts)):
+                head = ([mark] if mark is not None else []) \
+                    + [p for part in parts for p in part]
+                self._marked = (places, (mark, parts), head + places)
             places = self._marked[2]
         if self.wedge is not None and places:
             # Пункты вынутого сектора висели бы над его гранями.

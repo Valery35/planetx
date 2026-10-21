@@ -1227,6 +1227,10 @@ country. Fifteen languages follow. When there is no name in the chosen
 language, Latin-script languages get the Latin name, the others the
 local one.
 
+Labels of a new place load when the camera stops. During a flyover and
+a flight their loading takes no time from the frames, at a stop they
+appear in a fraction of a second.
+
 Without automatic update a change of base map, terrain exaggeration or
 project layers shows after the Refresh button on the icon bar. The status line reminds about it.
 The label language changes at once.
@@ -1490,6 +1494,10 @@ My Places is the folder at the top of the Places section, marked with a
 star. It holds placemarks, paths, polygons, saved views and
 measurements. The places are kept in one file `PlanetX/myplaces.gpkg`
 in the QGIS profile folder and are visible in any project.
+
+The icon of a point placemark is always visible, even with thousands of
+placemarks on the screen. A label stands at the placemarks that have
+room for it, the other labels appear when zooming in.
 
 ### List rows
 

@@ -76,6 +76,8 @@ NEW_ROWS_PER_FRAME = 60
 RASTER_TIME = 0.004
 HEIGHTS_PER_FRAME = 80  # высот пунктов уточняется за кадр, не больше
 MAX_CANDIDATES = 600  # пунктов в окне, которые спорят за место
+# Значков своих меток без подписи в кадре, не больше.
+MAX_ICONS = 20000
 # Зазор между надписями, логических пикселей. При 3 пикселях надписи
 # из космоса шли сплошным ковром, 26 сентября 2026 года.
 PADDING = 10.0
@@ -461,6 +463,12 @@ class Labels:
         self._ver = np.empty(0, dtype=np.int64)
         self._size = np.empty((0, 4))
         self._tier = np.empty(0, dtype=np.int64)
+        # Строка своей метки со значком - номер её класса в _icon_kinds,
+        # иначе -1. Значок такой метки виден и без подписи.
+        self._icon = np.empty(0, dtype=np.int64)
+        self._icon_kinds = {}  # класс - номер
+        self._icon_places = []  # номер - пункт этого класса без текста
+        self.icons = 0  # значков без подписи в прошлом кадре
         self._table_ratio = None
         self._list = None
         self._more = False  # список пунктов размечен не весь
@@ -554,7 +562,7 @@ class Labels:
             grown = np.zeros((cap, width))
             grown[:size] = getattr(self, name)
             setattr(self, name, grown)
-        for name in ("_ver", "_tier"):
+        for name in ("_ver", "_tier", "_icon"):
             grown = np.full(cap, -1, dtype=np.int64)
             grown[:size] = getattr(self, name)
             setattr(self, name, grown)
@@ -605,6 +613,7 @@ class Labels:
                 self._places[row] = place
                 self._size[row] = self._layout(place)
                 self._tier[row] = KIND[place.kind]
+                self._icon[row] = self._icon_of(place)
             if row is None:
                 if budget <= 0:
                     # Пункт размечается в следующих кадрах, пока его
@@ -620,6 +629,7 @@ class Labels:
                 self._n[row] = surface_normal(place.lat, place.lon)
                 self._size[row] = self._layout(place)
                 self._tier[row] = KIND[place.kind]
+                self._icon[row] = self._icon_of(place)
                 self._ver[row] = NO_HEIGHT
             rows.append(row)
         rows = np.asarray(rows, dtype=np.int64)
@@ -627,6 +637,55 @@ class Labels:
         self._list = None if self._more else places
         self._rows = rows
         return rows
+
+    def _icon_of(self, place):
+        """Номер класса значка своей метки или -1: значок рисуется и там,
+        где подписи метки нет места."""
+        if (place.id or 0) > -2 or not label_text(place):
+            return -1
+        style = STYLES.get(place.kind)
+        if style is None or not style[4] or not str(
+                style[5] or "").startswith("icon:"):
+            return -1
+        number = self._icon_kinds.get(place.kind)
+        if number is None:
+            number = self._icon_kinds[place.kind] = len(self._icon_places)
+            self._icon_places.append(place._replace(name=""))
+        return number
+
+    def _icon_quads(self, rows, inside, px, py, alpha, drawn):
+        """Значки своих меток в окне, которым не досталось места для
+        подписи: массив прямоугольников для _draw_quads. Как в Google
+        Earth - тысячи точек видны значками, подписи у тех, кому есть
+        место. Проверки видимости за рельефом у них нет, как у своих
+        меток до ответа запроса."""
+        icon = self._icon[rows]
+        pick = np.nonzero(inside & (icon >= 0))[0]
+        if not len(pick):
+            return None
+        if drawn:
+            pick = pick[~np.isin(rows[pick], np.fromiter(
+                drawn, dtype=np.int64, count=len(drawn)))]
+        pick = pick[:MAX_ICONS]
+        if not len(pick):
+            return None
+        out = np.zeros((len(pick), 9))
+        kinds = icon[pick]
+        for number in np.unique(kinds):
+            entry = self._entry(self._icon_places[number])
+            if entry is None:
+                continue
+            u0, v0, u1, v1, w, h, ax, ay = entry
+            mask = kinds == number
+            left = np.round(px[pick[mask]] - ax)
+            top = np.round(py[pick[mask]] - ay)
+            out[mask] = np.stack([
+                left, top, left + w, top + h,
+                np.full(len(left), u0), np.full(len(left), v0),
+                np.full(len(left), u1), np.full(len(left), v1),
+                alpha[pick[mask]]], axis=1)
+        out = out[out[:, 2] > out[:, 0]]
+        return out if len(out) else None
 
     def _positions(self, rows, height_at, version):
         """Точки пунктов в ECEF и нормали по строкам rows.
@@ -790,6 +849,10 @@ class Labels:
         now = time.monotonic()
         born = {}
         lifts = {}
+        # Строки с нарисованной подписью и строки, которые проверка
+        # видимости нашла за рельефом, - у них нет отдельного значка.
+        drawn = {int(rows[index[n]]) for n, e in enumerate(entries)
+                 if e is not None and e[0]}
         for n in chosen:
             place = self._places[chosen_rows[n]]
             if (place.kind, label_text(place)) not in self.entries:
@@ -826,6 +889,7 @@ class Labels:
             quads.append((left, top, left + w, top + h, u0, v0, u1, v1,
                           alpha[n] * share))
             shown.add(keys[n])
+            drawn.add(int(chosen_rows[n]))
         self.shown = shown
         self.mark_boxes = boxes
         self.lifts = lifts
@@ -836,9 +900,16 @@ class Labels:
         if born:
             self.pending = True
         self.pending = self.pending or unknown or self._more
+        icons = self._icon_quads(
+            rows, inside, px, py, np.clip((rise - FADE_LOW)
+                                          / (FADE_HIGH - FADE_LOW), 0.0,
+                                          1.0), drawn)
+        if icons is not None:
+            self._draw_quads(icons, camera.width, camera.height)
         if quads:
             self._draw_quads(quads, camera.width, camera.height)
         self.count = len(quads)
+        self.icons = 0 if icons is None else len(icons)
         return self.count
 
     def hover_at(self, x, y):

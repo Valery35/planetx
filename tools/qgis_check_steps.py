@@ -13588,6 +13588,183 @@ def places_many():
         lambda: window.myplaces.remove_many([key]))
 
 
+@check(200)
+def places_pause():
+    """Тайлы подписей основы просятся на паузе движения камеры: пока
+    камера движется над новым местом, тайлов подписей не прибавляется,
+    после паузы они приходят и надписи видны. На прежнем коде тайлы
+    просились и в движении."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    view = window.view
+    look = state.setdefault("places_pause", {"n": 0})
+    out = result.setdefault("places_pause", {})
+    lat, lon = 46.95, 7.45  # Берн, в других шагах не бывает
+    n = look["n"]
+    look["n"] += 1
+    if n == 0:
+        if os.environ.get("PLANETX_PLACES_PAUSE"):
+            from planetx.render import view as view_module
+            view_module.PLACES_PAUSE = float(
+                os.environ["PLANETX_PLACES_PAUSE"])
+        look["tiles0"] = len(view.places.tiles)
+        # Вызовы загрузчика подписей за время движения.
+        loader = view.place_loader
+        calls = look["calls"] = []
+        real = loader.want_many
+
+        def counted(items):
+            items = list(items)
+            if look["n"] <= 30:
+                calls.append(len(items))
+            return real(items)
+        loader.want_many = counted
+        look["real"] = real
+    if n < 30:
+        # 3 с движения шагами по 100 мс над новым местом - короче
+        # паузы подписей и на медленном QGIS 3.36.
+        view.navigator.show(Pose(lat, lon + n * 0.005, 60000.0, n * 1.5,
+                                 40.0))
+        # Кадр рисуется сам: окно проверочного QGIS бывает закрыто
+        # другими, и Qt его не рисует.
+        now = time.monotonic()
+        if "last" in look:
+            look.setdefault("gaps", []).append(now - look["last"])
+        view.grabFramebuffer()
+        look["last"] = time.monotonic()
+        return 100
+    if n == 30:
+        out["moving_tiles_added"] = len(view.places.tiles) \
+            - look["tiles0"]
+        out["moving_requests"] = sum(look["calls"])
+        out["step_gap_max_s"] = round(max(look.get("gaps", [0])), 3)
+        look["tiles1"] = len(view.places.tiles)
+        return 500
+    if n < 40:
+        # Камера стоит: кадры по 300 мс, после паузы тайлы просятся.
+        view.grabFramebuffer()
+        return 300
+    out["still_tiles_added"] = len(view.places.tiles) - look["tiles1"]
+    view.place_loader.want_many = look["real"]
+    view.grabFramebuffer()
+    out["labels_drawn"] = view.labels.count
+    return None
+
+
+@check(500)
+def gil_request():
+    """Цена вызовов Qt из Python, пока рабочий поток держит GIL: запрос
+    сети и простой вызов QUrl.host(). Ручной замер к облёту новых мест."""
+    import threading
+    from qgis.PyQt.QtCore import QUrl
+    from qgis.PyQt.QtNetwork import QNetworkRequest
+    import planetx.net.loader as loader
+    nam = loader.network()
+    urls = ["https://tile.openstreetmap.org/14/%d/5300.png" % x
+            for x in range(10900, 10940)]
+    out = result.setdefault("gil_request", {})
+
+    def measure(label):
+        from qgis.PyQt import sip
+        url = QUrl(urls[0])
+        t = time.perf_counter()
+        for _ in range(200):
+            url.host()
+        host = (time.perf_counter() - t) / 200 * 1000
+        row = {"host_ms": round(host, 4)}
+        for name, send in (("get_ms", nam.get),):
+            replies = []
+            t = time.perf_counter()
+            for u in urls:
+                r = QNetworkRequest(QUrl(u))
+                r.setAttribute(loader.CACHE_CONTROL, loader.PREFER_CACHE)
+                replies.append(send(r))
+            row[name] = round((time.perf_counter() - t) / len(urls) * 1000,
+                              3)
+            row[name + "_py_owned"] = sip.ispyowned(replies[0])
+            row[name + "_ua"] = bytes(replies[0].request().rawHeader(
+                b"User-Agent")).decode()[:20]
+            for r in replies:
+                r.abort()
+                r.deleteLater()
+        out[label] = row
+
+    measure("idle")
+    stop = threading.Event()
+
+    def spin():
+        n = 0
+        while not stop.is_set():
+            n += 1
+    worker = threading.Thread(target=spin, daemon=True)
+    worker.start()
+    try:
+        measure("busy")
+    finally:
+        stop.set()
+        worker.join()
+
+
+@check(1000)
+def many_marks():
+    """Кадр с тысячами точечных меток при движении камеры: время кадра
+    с метками и без них, профиль одного кадра. Количество -
+    PLANETX_MANY, по умолчанию 8000, как у Лебединского ГОК."""
+    from planetx.core.kml import KFolder, KPlace
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    count = int(os.environ.get("PLANETX_MANY", "8000"))
+    lat0, lon0 = 51.29, 37.63
+    side = int(count ** 0.5) + 1
+    kids = [KPlace("Скв. {}".format(i), "point",
+                   [(lat0 + (i // side) * 0.0003,
+                     lon0 + (i % side) * 0.0005)])
+            for i in range(count)]
+    out = result.setdefault("many_marks", {"count": count})
+    centre = (lat0 + side * 0.00015, lon0 + side * 0.00025)
+
+    def frames(n=20):
+        times = []
+        for k in range(n):
+            view.navigator.show(Pose(centre[0], centre[1] + k * 0.0002,
+                                     float(os.environ.get(
+                                         "PLANETX_MANY_DIST", "6000")),
+                                     k * 0.5, 30.0))
+            t0 = time.perf_counter()
+            view.grabFramebuffer()
+            times.append(time.perf_counter() - t0)
+        times.sort()
+        return {"median_ms": round(times[len(times) // 2] * 1000, 1),
+                "max_ms": round(times[-1] * 1000, 1)}
+
+    frames(5)
+    out["without"] = frames()
+    key = window.myplaces.import_tree(KFolder("Много точек", children=kids))
+    QgsApplication.processEvents()
+    t0 = time.perf_counter()
+    out["first"] = frames(5)
+    # Новые надписи размечаются частями по кадрам (NEW_ROWS_PER_FRAME):
+    # замер - когда разметка кончилась.
+    settle = 0
+    while view.labels._list is None and settle < 400:
+        view.grabFramebuffer()
+        settle += 1
+    out["settle"] = {"frames": settle,
+                     "s": round(time.perf_counter() - t0, 1)}
+    out["with"] = frames()
+    view.navigator.show(Pose(centre[0], centre[1], 6000.0, 3.0, 30.0))
+    _, out["frame_prof"] = _profiled(view.grabFramebuffer, top=25)
+    out["drawn_marks"] = len(getattr(view.labels, "mark_boxes", []))
+    out["icons"] = getattr(view.labels, "icons", None)
+    image = view.grabFramebuffer()
+    path = os.path.join(TEMP, "planetx_many_marks.png")
+    image.save(path)
+    out["shot"] = path
+    window.myplaces.remove_many([key])
+
+
 @check(1000)
 def post_insolation_shot():
     """Кадр для поста 1.7: инсоляция центра Перми со зданиями
@@ -18260,7 +18437,7 @@ def manual_search():
     window = state["window"]
     out = result["manual_search"] = {}
     out["sections"] = len(load_index())
-    query = "Как добавить анимированную модель ветряка?"
+    query = "Как добавить 3D-модель здания?"
     hints = window.search_suggestions(query)
     manual = [h for h in hints if h.kind == "manual"]
     out["hints"] = [h.text for h in manual]
@@ -19414,6 +19591,17 @@ def speed_profile():
     window = state["window"]
     window.set_body("earth")
     view = window.view
+    # PLANETX_SWITCH - свой интервал переключения GIL на время замера.
+    if os.environ.get("PLANETX_SWITCH"):
+        sys.setswitchinterval(float(os.environ["PLANETX_SWITCH"]))
+    # PLANETX_NOPLACES - облёт без загрузки подписей основы, опыт: сколько
+    # стоит разбор векторных тайлов в рабочих потоках.
+    if os.environ.get("PLANETX_NOPLACES"):
+        view.place_loader = None
+    # PLANETX_PLACES_PAUSE - своя пауза подписей, 0 - прежнее поведение.
+    if os.environ.get("PLANETX_PLACES_PAUSE"):
+        from planetx.render import view as view_module
+        view_module.PLACES_PAUSE = float(os.environ["PLANETX_PLACES_PAUSE"])
     frames = state["speed_frames"] = []
     gaps = state["speed_gaps"] = []
     view.frameSwapped.connect(lambda: frames.append(time.perf_counter()))
@@ -19483,10 +19671,26 @@ def _start_sampler(period=0.004):
         return "%s:%s" % (short, frame.f_code.co_name)
 
     def run():
+        me = threading.get_ident()
+        others = data["others"] = {}
         while not data["stop"]:
             time.sleep(period)
-            frame = _sys._current_frames().get(main)
+            frames = _sys._current_frames()
+            frame = frames.get(main)
             data["total"] += 1
+            # Прочие потоки: верхняя строка модуля - чем заняты рабочие
+            # потоки, пока главный ждёт GIL.
+            for ident, other in frames.items():
+                if ident in (main, me):
+                    continue
+                up = other
+                while up is not None and not name(up).startswith(
+                        "planetx/"):
+                    up = up.f_back
+                if up is not None:
+                    key = "%s:%d <- %s" % (name(up), up.f_lineno,
+                                           name(other))
+                    others[key] = others.get(key, 0) + 1
             if frame is None:
                 continue
             data["busy"] += 1
@@ -19535,7 +19739,9 @@ def speed_profile_done():
             "via": sorted(samples["via"].items(),
                           key=lambda kv: -kv[1])[:30],
             "inclusive": sorted(samples["inclusive"].items(),
-                                key=lambda kv: -kv[1])[:60]}
+                                key=lambda kv: -kv[1])[:60],
+            "others": sorted(samples.get("others", {}).items(),
+                             key=lambda kv: -kv[1])[:40]}
     frames = state["speed_frames"]
     gaps = [g * 1000.0 for g in state["speed_gaps"][1:]]
     iv = [(b - a) * 1000.0 for a, b in zip(frames, frames[1:])]
