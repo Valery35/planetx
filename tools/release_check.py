@@ -43,7 +43,7 @@ QGIS = {
                          r"C:\Program Files\QGIS 3.36.1"),
           "planetx_qt5", "qt5"),
 }
-USER_TEXTS = ("README.md", "README.en.md", "CHANGELOG.md",
+USER_TEXTS = ("README.md", "README.ru.md", "CHANGELOG.md",
               os.path.join("doc", "MANUAL.md"),
               os.path.join("doc", "MANUAL.en.md"), "planetx")
 

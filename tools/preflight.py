@@ -36,7 +36,7 @@ ALLOWED = {"qgis", "PyQt5", "PyQt6", "numpy", "OpenGL", "osgeo"}
 VERSION = re.compile(r"\b(\d+\.\d+\.\d+)\b")
 # Файлы, где номер версии плагина повторяется. Ищется номер рядом
 # с именем плагина или в заголовке раздела журнала изменений.
-VERSION_FILES = ("README.md", "README.en.md")
+VERSION_FILES = ("README.md", "README.ru.md")
 
 
 def module_level_imports(path):
