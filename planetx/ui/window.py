@@ -62,7 +62,7 @@ from .myplaces import MyPlaces
 from .paleo import PaleoBar
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, ProjectWatch, read_flag, read_grids,
-                      read_map_years, read_zlayers)
+                      read_map_years, read_zlayers, read_ztrue)
 from .inset import DeepSource
 from .contours import ContourExport
 from .netlink import NetLinks
@@ -786,6 +786,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.zlayer_toggled.connect(self.set_zlayer)
         self.panel.pointcloud_style.connect(self.set_pointcloud_style)
         self.panel.zlayer_ids = set(read_zlayers())
+        self.panel.ztrue_toggled.connect(self.set_ztrue)
+        self.panel.ztrue_ids = set(read_ztrue())
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
         self.toolbar.share_requested.connect(self.share_view)

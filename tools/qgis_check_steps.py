@@ -17824,6 +17824,87 @@ def zlayer_check():
     return None
 
 
+def _zline_heights(window):
+    """Высоты на экране вершин линии с Z - по контуру её Pick."""
+    from planetx.core import ellipsoid
+    manager = window.subsurface
+    if manager.model is None or manager.job is not None:
+        return None
+    pick = [p for p in manager.picks if p.kind == "zshape"]
+    if not pick:
+        return None
+    _, _, h = ellipsoid.ecef_to_geodetic(pick[0].xyz)
+    return [round(float(v), 1) for v in h]
+
+
+@check(500)
+def zlayer_true():
+    """Пункт «Истинные отметки Z»: горизонталь с Z 300 м у Березников
+    (рельеф около 150 м) при выключенном рельефе. Без флажка она от
+    поверхности, около 150 м, с флажком - на 300 м над плоской Землёй.
+    Вопрос Ивана от 22 октября 2026 года."""
+    from qgis.core import QgsFeature, QgsGeometry, QgsProject, \
+        QgsVectorLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    lat0, lon0 = 59.45, 56.88
+    line = QgsVectorLayer("LineStringZ?crs=EPSG:4326&field=name:string",
+                          "Горизонталь 300 проба", "memory")
+    feature = QgsFeature(line.fields())
+    feature.setGeometry(QgsGeometry.fromWkt(
+        "LineString Z ({a} {b} 300, {c} {d} 300)".format(
+            a=lon0 - 0.004, b=lat0, c=lon0 + 0.004, d=lat0 + 0.004)))
+    feature.setAttributes(["300"])
+    line.dataProvider().addFeatures([feature])
+    QgsProject.instance().addMapLayers([line])
+    state["ztrue_layer"] = line.id()
+    state["ztrue_relief"] = window._relief
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(lat0 + 0.002, lon0, 1500.0, 0.0, 60.0))
+    window.view.update()
+    window.set_relief(False)
+    window.set_layer_shown(line.id(), True)
+    window.set_zlayer(line.id(), True)
+    state["ztrue_started"] = time.monotonic()
+    result["zlayer_true"] = {}
+
+
+@check(1000)
+def zlayer_true_flag():
+    window = state["window"]
+    out = result["zlayer_true"]
+    heights = _zline_heights(window)
+    if heights is None and time.monotonic() - state["ztrue_started"] < 30:
+        return 1000
+    out["from_surface"] = heights
+    window.set_ztrue(state["ztrue_layer"], True)
+    out["menu_ids"] = sorted(window.panel.ztrue_ids)
+    state["ztrue_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def zlayer_true_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["zlayer_true"]
+    heights = _zline_heights(window)
+    if heights is None and time.monotonic() - state["ztrue_started"] < 30:
+        return 1000
+    out["true_z"] = heights
+    window.view.repaint()
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_zlayer_true.png"))
+    layer_id = state["ztrue_layer"]
+    window.set_ztrue(layer_id, False)
+    window.set_zlayer(layer_id, False)
+    QgsProject.instance().removeMapLayers([layer_id])
+    window.set_relief(state["ztrue_relief"])
+    out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
 @check(500)
 def crust_export():
     """Кора CRUST1.0 в проект над Восточно-Европейской платформой:

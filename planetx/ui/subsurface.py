@@ -51,7 +51,7 @@ from ..core.places import Place
 from ..i18n import tr
 from ..qt_compat import enum
 from .extrude import in_wgs
-from .project import ENTRY, read_grids, read_zlayers
+from .project import ENTRY, read_grids, read_zlayers, read_ztrue
 from .layer_labels import label_settings
 from .viewshed import ResultTiles, fit_status
 
@@ -450,10 +450,13 @@ def shapes_of(layer, kind, step):
     return out
 
 
-ZShape = namedtuple("ZShape", "layer fields kind parts color")
+ZShape = namedtuple("ZShape", "layer fields kind parts color true_z")
+ZShape.__new__.__defaults__ = (False,)
 ZShape.__doc__ = """Объект слоя с Z (пункт «Объёмом по отметкам Z»):
 название слоя, поля [(имя, значение)], kind - "polygon" или "line",
-parts - массивы (n, 3) широта, долгота, отметка, color - RGBA."""
+parts - массивы (n, 3) широта, долгота, отметка, color - RGBA, true_z -
+без рельефа на истинной отметке над уровнем моря (пункт «Истинные
+отметки Z»), иначе от поверхности."""
 ZLAYER_MAX = 20000  # объектов слоя с Z, не больше
 BACKDROP_MARGIN = 0.05  # запас коробки фона за рамкой модели, доля
 
@@ -487,9 +490,10 @@ def _patches(part):
     return [part]
 
 
-def read_zlayer(layer):
+def read_zlayer(layer, true_z=False):
     """Объекты слоя с Z в широтах и долготах, ZShape. Цвет - поле color
-    или символ стиля QGIS, прозрачность - прозрачность слоя."""
+    или символ стиля QGIS, прозрачность - прозрачность слоя, true_z -
+    истинные отметки без рельефа."""
     if not QgsWkbTypes.hasZ(layer.wkbType()):
         return []
     kind = {1: "line", 2: "polygon"}.get(
@@ -536,7 +540,8 @@ def read_zlayer(layer):
             fields = [(name, _value(feature[name])) for name in names
                       if name != "color"]
             out.append(ZShape(layer.name(), fields, kind, parts,
-                              tuple(color or EMPTY_COLOR) + (alpha,)))
+                              tuple(color or EMPTY_COLOR) + (alpha,),
+                              true_z))
     finally:
         if renderer is not None:
             renderer.stopRender(context)
@@ -1007,10 +1012,11 @@ def load(settings):
                 continue
             model.images.append((name, pts, _number(row, "top", 0.0),
                                  _number(row, "bottom", -100.0), rgba))
+    true_z = set(read_ztrue())
     for layer_id in settings.get("zlayers", []):
         layer = project.mapLayer(layer_id)
         if isinstance(layer, QgsVectorLayer):
-            model.zshapes += read_zlayer(layer)
+            model.zshapes += read_zlayer(layer, layer_id in true_z)
     return model
 
 
@@ -1312,7 +1318,11 @@ def _zshape_mesh(model, scale, ground, radius, picks):
         values = []
         for pts in shape.parts:
             lats, lons, z = pts[:, 0], pts[:, 1], pts[:, 2]
-            g = ground(lats, lons) if not scale else 0.0
+            # Без рельефа отметка - от поверхности, как у скважин, или
+            # истинная над плоской Землёй. Вопрос Ивана от 22 октября
+            # 2026 года - горизонтали с Z без рельефа лежали плоско.
+            g = ground(lats, lons) if not (scale or shape.true_z) \
+                else 0.0
             xyz = core.ecef(lats, lons, core.display(z, scale, g))
             if shape.kind == "polygon":
                 parts.append(core.polygon3d(xyz, shape.color))
@@ -1594,7 +1604,8 @@ class SubsurfaceManager(QObject):
             for role, layer_id in table_roles(used).items():
                 roles.setdefault(role, layer_id)
         used |= set(zlayers)
-        key = (tuple(sorted(roles.items())), tuple(roofs), tuple(zlayers))
+        key = (tuple(sorted(roles.items())), tuple(roofs), tuple(zlayers),
+               tuple(sorted(set(read_ztrue()) & set(zlayers))))
         if key == self._project_key and not restyle:
             return used
         self._project_key = key

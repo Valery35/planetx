@@ -479,6 +479,8 @@ class LayerPanel(QWidget):
     grid_toggled = pyqtSignal(str, bool)
     # Векторный слой с Z - объёмом по отметкам, пункт меню слоя.
     zlayer_toggled = pyqtSignal(str, bool)
+    # Слой с Z - истинные отметки и без рельефа.
+    ztrue_toggled = pyqtSignal(str, bool)
     # Облако точек: номер слоя, настройки core.pointcloud.style.
     pointcloud_style = pyqtSignal(str, object)
     # Растр - изолинии в проект QGIS, пункт меню слоя.
@@ -843,6 +845,7 @@ class LayerPanel(QWidget):
         # Растры проекта - поверхности по отметкам под землёй.
         self.grid_ids = set()
         self.zlayer_ids = set()  # векторные слои объёмом по отметкам Z
+        self.ztrue_ids = set()  # из них - с истинными отметками Z
         # Облака точек: настройки и встреченные классы по номеру слоя.
         self.pointcloud_styles = {}
         self.pointcloud_classes = {}
@@ -2130,6 +2133,18 @@ class LayerPanel(QWidget):
                 "делает землю над ними прозрачной."))
             solid.toggled.connect(
                 lambda on: self.zlayer_toggled.emit(layer.id(), on))
+            true_z = menu.addAction(tr("Истинные отметки Z"))
+            true_z.setCheckable(True)
+            true_z.setEnabled(layer.id() in self.zlayer_ids)
+            true_z.setChecked(layer.id() in self.ztrue_ids)
+            true_z.setToolTip(tr(
+                "При выключенном рельефе вершины стоят на своих отметках "
+                "над уровнем моря, например горизонтали поднимаются над "
+                "плоской Землёй. Без флажка отметка считается от "
+                "поверхности, как глубина скважин и пластов. С рельефом "
+                "флажок ничего не меняет."))
+            true_z.toggled.connect(
+                lambda on: self.ztrue_toggled.emit(layer.id(), on))
         if isinstance(layer, QgsRasterLayer):
             year = menu.addAction(tr("Год карты…"))
             year.setToolTip(tr(

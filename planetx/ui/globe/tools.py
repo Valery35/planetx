@@ -32,8 +32,9 @@ from ..elevation import HeightSource, ProfileDialog
 from ..section import SectionDialog
 from ..myplaces import OverlayItem
 from ..project import (map_layers, read_bathymetry, read_grids, read_insets,
-                       read_zlayers, set_visible_on_map, write_bathymetry,
-                       write_grids, write_insets, write_shown, write_zlayers)
+                       read_zlayers, read_ztrue, set_visible_on_map,
+                       write_bathymetry, write_grids, write_insets,
+                       write_shown, write_zlayers, write_ztrue)
 from ..netlink import LinkDialog
 from ..inset import prepare as prepare_inset, water_mesh
 from ..bathymetry import REMOVE as BATHY_REMOVE, BathymetryDialog
@@ -372,6 +373,16 @@ class ToolsMixin:
         self.panel.zlayer_ids = set(ids)
         self._apply_vector(force=True)
         self._show_state()
+
+    def set_ztrue(self, layer_id, on):
+        """Слой с Z layer_id и без рельефа - на истинных отметках над
+        уровнем моря или от поверхности. Модель собирается заново."""
+        ids = [i for i in read_ztrue() if i != layer_id]
+        if on:
+            ids.append(layer_id)
+        write_ztrue(ids)
+        self.panel.ztrue_ids = set(ids)
+        self._apply_vector(force=True)
 
     def set_insets(self, ids):
         """Растры проекта ids - рельеф глобуса, прочие - нет."""

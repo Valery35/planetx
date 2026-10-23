@@ -2654,6 +2654,13 @@ a light background shows, from pale blue at the top of the frame to
 almost white at the bottom. The background lies only under the frame of
 the model, the sky and space around it do not change.
 
+With terrain off, the elevation of a layer with Z is counted from the
+surface by default, like the depth of drill holes and beds. So terrain
+contours with Z lie on the ground without terrain. The True Z elevations
+item of the same menu puts the vertices at their elevations above sea
+level, and the contours rise above the flat Earth. With terrain on, the
+item changes nothing.
+
 The Contours to the QGIS project… item of the raster menu exports
 contours of the raster values as a GeoPackage layer to the PlanetX -
 contours group. The interval is the same as on the globe grid, every

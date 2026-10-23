@@ -51,7 +51,8 @@ from ..legend import class_names, class_titles, field_titles
 from ..layer_labels import range_key
 from ..project import (AUTO_REFRESH, FOLLOW, map_layers, layer_group,
                        read_flag, read_grids, read_map_years,
-                       read_pointclouds, read_zlayers, visible_on_map,
+                       read_pointclouds, read_zlayers, read_ztrue,
+                       visible_on_map,
                        write_flag, write_map_years, write_pointclouds,
                        write_shown)
 from ..sources import SourcesDialog
@@ -1541,6 +1542,7 @@ class LayersMixin:
         self._read_map_years()
         self.panel.grid_ids = set(read_grids())
         self.panel.zlayer_ids = set(read_zlayers())
+        self.panel.ztrue_ids = set(read_ztrue())
         self._refresh_relief()
 
     def _mark_dirty(self, dirty):

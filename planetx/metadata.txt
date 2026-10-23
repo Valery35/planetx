@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.9.0
+version=1.9.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,10 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.9.0 The manual search of the Search bar finds words in any
+changelog=1.9.1 The True Z elevations item of the menu of a layer
+      with Z puts its vertices at their elevations above sea level with
+      terrain off, for example contours rise above the flat Earth.
+      1.9.0 The manual search of the Search bar finds words in any
       form and synonyms, a section with all words of the question in
       one paragraph goes first. The icon of a point placemark is always
       visible, even with thousands of placemarks, labels stand where

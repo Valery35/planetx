@@ -2673,6 +2673,17 @@ EN = {
         "it, for example a vertical section fence. The colour is the "
         "color field or the QGIS layer style. The Ground above grids "
         "slider makes the ground above them transparent.",
+    "Истинные отметки Z": "True Z elevations",
+    "При выключенном рельефе вершины стоят на своих отметках "
+    "над уровнем моря, например горизонтали поднимаются над "
+    "плоской Землёй. Без флажка отметка считается от "
+    "поверхности, как глубина скважин и пластов. С рельефом "
+    "флажок ничего не меняет.":
+        "With terrain off, the vertices stand at their elevations above "
+        "sea level, for example contours rise above the flat Earth. "
+        "Without the check box the elevation is counted from the "
+        "surface, like the depth of drill holes and beds. With terrain "
+        "on, the check box changes nothing.",
     "Подписи остановок на кадре. На остановке внизу кадра "
     "крупно стоят название и описание метки, в перелёте подписи "
     "нет. Подписи попадают и в запись тура.":
