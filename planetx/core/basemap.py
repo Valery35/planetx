@@ -494,3 +494,61 @@ class WmsSource(Source):
     def tile_url(self, z, x, y):
         box = ",".join("{:.2f}".format(v) for v in tile_bbox(z, x, y))
         return self.urls[self.mirror].replace("{bbox}", box)
+
+
+def over(base, top):
+    """Картинка top с прозрачностью поверх base, массивы RGBA."""
+    base = np.asarray(base, dtype=np.float32)
+    top = np.asarray(top, dtype=np.float32)
+    if top.shape != base.shape:
+        return np.asarray(base, dtype=np.uint8)
+    share = top[:, :, 3:4] / 255.0
+    out = base * (1.0 - share) + top * share
+    out[:, :, 3] = 255.0
+    return np.clip(out + 0.5, 0, 255).astype(np.uint8)
+
+
+class RegionalWms(WmsSource):
+    """Подложка из службы WMS со своим районом (core/wms.py).
+
+    box - охват слоя в метрах EPSG:3857 (запад, юг, восток, север),
+    base - шаблон XYZ подложки под ней. Тайл вне охвата берётся у base,
+    тайл с охватом собирается из тайла base и картинки WMS поверх него,
+    так край района и пустые места снимка не остаются чёрными. entry -
+    запись настройки PlanetX/wms_sources, по ней окно правит и удаляет
+    источник."""
+
+    __slots__ = ("box", "base", "entry", "min_level")
+
+    def __init__(self, name, url, box, base, *args, entry=None, min_level=0,
+                 **kwargs):
+        super().__init__(name, url, *args, **kwargs)
+        self.box = box
+        self.base = base
+        self.entry = entry
+        # Мельче этого уровня тайл берётся у base. Тайл во много раз
+        # больше района служба PASDA считала долго и отвечала 500, а
+        # неготовый грубый тайл держит загрузку подробных под ним.
+        self.min_level = min_level
+
+    def inside(self, z, x, y):
+        if self.box is None:
+            return True
+        if z < self.min_level:
+            return False
+        w, s, e, n = tile_bbox(z, x, y)
+        return w < self.box[2] and e > self.box[0] \
+            and s < self.box[3] and n > self.box[1]
+
+    def tile_url(self, z, x, y):
+        if self.base and not self.inside(z, x, y):
+            return tile_url(self.base, z, x, y)
+        return super().tile_url(z, x, y)
+
+    def parts(self, z, x, y):
+        if not self.base or not self.inside(z, x, y):
+            return None
+        return [tile_url(self.base, z, x, y), super().tile_url(z, x, y)]
+
+    def assemble(self, z, x, y, images):
+        return over(images[0], images[1])

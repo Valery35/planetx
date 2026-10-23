@@ -1078,6 +1078,8 @@ field takes an address in any of these forms:
 - the address of one tile copied from a browser, for example
   `https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/5/10/17`
 - an address with the level, column and row in the query
+- the address of a WMS service, for example
+  `https://imagery.pasda.psu.edu/arcgis/services/pasda/DVRPC2020/MapServer/WMSServer`
 
 The window turns the address into a template and suggests a name from
 the server name. Below it builds a mosaic of the whole world from four
@@ -1091,6 +1093,19 @@ snapshots, for known servers it is filled in by itself.
 The source is saved as a QGIS XYZ Tiles connection and becomes the
 base map at once. It is also visible in the QGIS browser, where it can
 be edited or removed. The owner of the tiles sets their terms of use.
+
+The window recognises a WMS service address by the words `WMSServer`,
+`/wms` or `service=WMS` and reads the layer list of the service
+(GetCapabilities). The layer is chosen in the Layer list. The All
+layers row shows all layers of the group together. Instead of the
+mosaic the window shows one picture of the layer extent. The globe asks
+the service for a picture of every tile in the Web Mercator projection
+(EPSG:3857). Many services cover only their own area. Outside the layer
+extent and at small scales the globe shows Esri World Imagery, at the
+edge of the area the service picture lies over it. Such a source is
+kept in the PlanetX settings, not as a QGIS connection. It can be
+edited or removed in the Data sources window. A WMS service draws every
+picture anew, so a base map from it loads slower than tiles.
 
 ### Rosreestr cadastre
 

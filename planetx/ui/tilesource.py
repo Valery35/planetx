@@ -18,16 +18,22 @@
 Источник сохраняется подключением XYZ Tiles QGIS, поэтому он виден
 и в обозревателе QGIS. Подпись источника лежит в поле
 planetx-attribution того же подключения.
+
+Адрес службы WMS (core/wms.py) окно узнаёт само, читает GetCapabilities
+и даёт выбрать слой. Предпросмотр - одна картинка охвата слоя. Такой
+источник пишется в настройку PlanetX/wms_sources, подключение XYZ QGIS
+места {bbox} не понимает.
 """
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QTimer, QUrl
 from qgis.PyQt.QtGui import QColor, QImage, QPainter, QPixmap
 from qgis.PyQt.QtNetwork import QNetworkReply, QNetworkRequest
-from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
-                                 QFormLayout, QHBoxLayout, QLabel, QLayout,
-                                 QLineEdit, QSpinBox, QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
+                                 QDialogButtonBox, QFormLayout, QHBoxLayout,
+                                 QLabel, QLayout, QLineEdit, QSpinBox,
+                                 QVBoxLayout)
 
-from ..core import tilesource
+from ..core import tilesource, wms
 from ..core.basemap import MAX_LEVEL, attribution_for, tile_url
 from ..core.placeholder import PLACEHOLDER_SHARE
 from ..core.tiling import lonlat_to_tile
@@ -44,6 +50,8 @@ GRID = 24  # точек на сторону при проверке тайла �
 NO_ERROR = enum(QNetworkReply, "NetworkError", "NoError")
 STATUS = enum(QNetworkRequest, "Attribute", "HttpStatusCodeAttribute")
 DARK_BACK = "#20242c"  # фон мозаики «Как в QGIS»
+CAPS_TRIES = 6  # запросов списка слоёв WMS при ответе 5xx
+CAPS_PAUSE = 1500  # мс между ними
 
 
 def back_color():
@@ -93,6 +101,24 @@ def remove_connection(name):
     QgsSettings().remove(XYZ_PREFIX + name)
 
 
+def wms_entries():
+    """Источники WMS из настройки PlanetX/wms_sources."""
+    return wms.entries_parse(QgsSettings().value(wms.SETTINGS_KEY, "[]"))
+
+
+def save_wms(entry, old=None):
+    """Записать источник WMS, запись с названием old заменяется."""
+    names = (old, entry["name"])
+    items = [e for e in wms_entries() if e["name"] not in names]
+    QgsSettings().setValue(wms.SETTINGS_KEY,
+                           wms.entries_text(items + [entry]))
+
+
+def remove_wms(name):
+    QgsSettings().setValue(wms.SETTINGS_KEY, wms.entries_text(
+        [e for e in wms_entries() if e["name"] != name]))
+
+
 class TileSourceDialog(QDialog):
     """Новый источник тайлов или правка готового. point - (широта,
     долгота) точки взгляда глобуса, в ней ищется наибольший уровень.
@@ -108,6 +134,11 @@ class TileSourceDialog(QDialog):
         self.template = None
         self.name_edited = False
         self.credit_edited = False
+        # Служба WMS: адрес без своих параметров, ответ GetCapabilities,
+        # охват выбранного слоя в градусах.
+        self.wms_base = None
+        self.caps = None
+        self.wms_box = None
         self.setMinimumWidth(620)
 
         self.address = QLineEdit(self)
@@ -116,9 +147,17 @@ class TileSourceDialog(QDialog):
         self.address.setToolTip(tr(
             "Адрес тайлов в любом виде - шаблон с {z}, {x}, {y}, адрес "
             "одного тайла из браузера или адрес с z, x, y в параметрах "
-            "запроса. Окно само приводит его к шаблону."))
+            "запроса. Окно само приводит его к шаблону. Адрес службы WMS "
+            "окно узнаёт и предлагает выбрать слой."))
         self.parsed = QLabel(self)
         self.parsed.setWordWrap(True)
+        self.layer_label = QLabel(tr("Слой"), self)
+        self.layer = QComboBox(self)
+        self.layer.setToolTip(tr(
+            "Слой службы WMS. Строка «Все слои» показывает все слои группы "
+            "вместе. Вне охвата слоя глобус показывает снимки Esri World "
+            "Imagery."))
+        self.layer.currentIndexChanged.connect(self._layer_changed)
         self.name = QLineEdit(self)
         self.name.setToolTip(tr(
             "Название источника в списке подложек и в обозревателе QGIS. "
@@ -149,6 +188,7 @@ class TileSourceDialog(QDialog):
         form = QFormLayout()
         form.addRow(tr("Адрес"), self.address)
         form.addRow("", self.parsed)
+        form.addRow(self.layer_label, self.layer)
         form.addRow(tr("Название"), self.name)
         form.addRow("", self.tms)
         form.addRow(tr("Уровни до"), self.level)
@@ -176,8 +216,15 @@ class TileSourceDialog(QDialog):
         self.timer.setSingleShot(True)
         self.timer.setInterval(600)
         self.timer.timeout.connect(self._check)
+        # Повтор запроса списка слоёв WMS. Таймер окна гаснет вместе
+        # с ним, новый адрес его останавливает (_abort).
+        self.caps_timer = QTimer(self)
+        self.caps_timer.setSingleShot(True)
+        self.caps_timer.timeout.connect(self._ask_capabilities)
+        self.caps_tries = 0
         self.address.textChanged.connect(lambda _: self.timer.start())
         self.tms.toggled.connect(lambda _: self._check())
+        self._show_wms(False)
         self._update()
         if edit is not None:
             # Правка: поля готового подключения, название и подпись
@@ -187,7 +234,12 @@ class TileSourceDialog(QDialog):
             self.credit.setText(edit.attribution[0]
                                 if edit.attribution[0] != edit.name else "")
             self.credit_edited = True
-            self.address.setText(edit.url)
+            entry = getattr(edit, "entry", None)
+            if entry is not None:
+                self.credit.setText(entry.get("credit", ""))
+                self.address.setText(entry.get("base", ""))
+            else:
+                self.address.setText(edit.url)
             self.level.setValue(edit.max_level)
 
     # Разбор адреса.
@@ -201,6 +253,10 @@ class TileSourceDialog(QDialog):
 
     def _check(self):
         self._abort()
+        if wms.is_wms(self.address.text()):
+            self._check_wms()
+            return
+        self._show_wms(False)
         try:
             url = tilesource.template(self.address.text())
         except tilesource.ParseError:
@@ -226,6 +282,118 @@ class TileSourceDialog(QDialog):
         self._update()
         self._load_preview(url)
 
+    # Служба WMS.
+
+    def _show_wms(self, shown):
+        self.layer_label.setVisible(shown)
+        self.layer.setVisible(shown)
+        self.tms.setVisible(not shown)
+
+    def _check_wms(self):
+        self._show_wms(True)
+        self.template = None
+        self.wms_base = wms.base_url(self.address.text())
+        self.caps = None
+        self.layer.blockSignals(True)
+        self.layer.clear()
+        self.layer.blockSignals(False)
+        self.preview.clear()
+        self.parsed.setText(tr("Служба WMS - загрузка списка слоёв…"))
+        self.status.clear()
+        self._update()
+        self.caps_tries = 0
+        self._ask_capabilities()
+
+    def _ask_capabilities(self):
+        self.caps_tries += 1
+        self._get(wms.capabilities_url(self.wms_base), self._capabilities)
+
+    def _capabilities(self, reply):
+        if reply in self.replies:
+            self.replies.remove(reply)
+        reply.deleteLater()
+        if reply.error() != NO_ERROR:
+            code = reply.attribute(STATUS)
+            # Служба PASDA отвечала 500 на два запроса списка из трёх,
+            # картинки при этом приходили, 23 октября 2026 года.
+            if (not code or code >= 500) and self.caps_tries < CAPS_TRIES:
+                self.caps_timer.start(CAPS_PAUSE)
+                return
+            self.parsed.setText(tr(
+                "Служба не ответила на GetCapabilities - {error}.",
+                error=str(code) if code else reply.errorString()))
+            return
+        try:
+            self.caps = wms.parse(bytes(reply.readAll()))
+        except wms.WmsError as error:
+            self.parsed.setText(tr(
+                "Ответ службы не разобран как WMS - {error}.",
+                error=str(error)[:200]))
+            return
+        entry = getattr(self.edit, "entry", None) or {}
+        chosen = 0
+        self.layer.blockSignals(True)
+        for n, layer in enumerate(self.caps.layers):
+            title = tr("Все слои - {title}", title=layer.title) \
+                if layer.group else layer.title
+            self.layer.addItem(title)
+            if list(layer.names) == list(entry.get("layers", ())):
+                chosen = n
+        self.layer.setCurrentIndex(chosen)
+        self.layer.blockSignals(False)
+        if not self.name_edited:
+            self.name.setText(self.caps.title or tilesource.name_for(
+                self.wms_base))
+        if not self.credit_edited:
+            self.credit.setText(self.caps.attribution or self.caps.title)
+        if not entry:
+            self.level.setValue(MAX_LEVEL)
+        self._layer_changed(chosen)
+
+    def _layer_changed(self, index):
+        if self.caps is None or not 0 <= index < len(self.caps.layers):
+            return
+        self._abort()
+        layer = self.caps.layers[index]
+        self.wms_box = layer.box
+        self.template = wms.getmap_template(
+            self.wms_base, self.caps.version, layer.names,
+            wms.mercator_code(layer.crs), wms.pick_format(self.caps.formats))
+        if wms.is_world(layer.box):
+            area = tr("Слой покрывает весь мир.")
+        else:
+            w, s, e, n = layer.box
+            area = tr("Охват слоя - {w:.2f}…{e:.2f}° по долготе, "
+                      "{s:.2f}…{n:.2f}° по широте. Вне охвата - снимки "
+                      "Esri World Imagery.", w=w, e=e, s=s, n=n)
+        self.parsed.setText(tr("Шаблон - {url}", url=self.template)
+                            + "\n" + area)
+        self.adjustSize()
+        self._update()
+        url = self.template.replace(
+            "{bbox}", wms.bbox_text(wms.preview_bbox(layer.box)))
+        self.status.setText(tr("Загрузка картинки слоя…"))
+        self._get(url, self._wms_preview)
+
+    def _wms_preview(self, reply):
+        if reply in self.replies:
+            self.replies.remove(reply)
+        reply.deleteLater()
+        image, error = self._image(reply)
+        if image is None:
+            self.status.setText(tr("Картинка слоя не пришла - {error}.",
+                                   error=error))
+            return
+        canvas = QImage(PREVIEW, PREVIEW,
+                        enum(QImage, "Format", "Format_RGB32"))
+        canvas.fill(QColor(back_color()))
+        painter = QPainter(canvas)
+        painter.drawImage(0, 0, image.scaled(PREVIEW, PREVIEW))
+        painter.end()
+        self.preview.setPixmap(QPixmap.fromImage(canvas))
+        self.status.setText(tr("Картинка слоя пришла."))
+        self.adjustSize()
+
     def _update(self):
         ok = self.template is not None and bool(self.name.text().strip())
         button = self.buttons.button(
@@ -243,6 +411,8 @@ class TileSourceDialog(QDialog):
         reply.finished.connect(lambda reply=reply: done(reply))
 
     def _abort(self):
+        if hasattr(self, "caps_timer"):
+            self.caps_timer.stop()
         for reply in self.replies:
             reply.finished.disconnect()
             reply.abort()
@@ -322,8 +492,24 @@ class TileSourceDialog(QDialog):
         self._abort()
         name = self.name.text().strip()
         old = self.edit.name if self.edit is not None else None
-        if name != old and name in taken_names():
+        taken = taken_names() | {e["name"] for e in wms_entries()}
+        if name != old and name in taken:
             name = "%s (PlanetX)" % name
+        if self.caps is not None:
+            layer = self.caps.layers[max(0, self.layer.currentIndex())]
+            if old is not None and getattr(self.edit, "entry", None) is None:
+                remove_connection(old)
+            save_wms({"name": name, "base": self.wms_base,
+                      "layers": list(layer.names), "template": self.template,
+                      "box": list(layer.box) if layer.box else None,
+                      "level": self.level.value(),
+                      "credit": self.credit.text().strip()}, old)
+            self.saved_name = name
+            super().accept()
+            return
+        if old is not None and getattr(self.edit, "entry", None) is not None:
+            remove_wms(old)
+            old = None
         if old is not None and name != old:
             remove_connection(old)
         save_connection(name, self.template, self.level.value(),

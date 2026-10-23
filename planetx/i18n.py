@@ -3435,10 +3435,39 @@ EN = {
     "Новый источник тайлов": "New tile source",
     "Адрес тайлов в любом виде - шаблон с {z}, {x}, {y}, адрес "
     "одного тайла из браузера или адрес с z, x, y в параметрах "
-    "запроса. Окно само приводит его к шаблону.":
+    "запроса. Окно само приводит его к шаблону. Адрес службы WMS "
+    "окно узнаёт и предлагает выбрать слой.":
         "A tile address in any form - a template with {z}, {x}, {y}, the "
         "address of one tile from a browser or an address with z, x, y in "
-        "the query. The window turns it into a template itself.",
+        "the query. The window turns it into a template itself. The window "
+        "recognises the address of a WMS service and offers a layer.",
+    "Слой": "Layer",
+    "Слой службы WMS. Строка «Все слои» показывает все слои группы "
+    "вместе. Вне охвата слоя глобус показывает снимки Esri World "
+    "Imagery.":
+        "The layer of the WMS service. The \"All layers\" row shows all "
+        "layers of the group together. Outside the layer extent the globe "
+        "shows Esri World Imagery.",
+    "Служба WMS - загрузка списка слоёв…":
+        "WMS service - loading the layer list…",
+    "Служба не ответила на GetCapabilities - {error}.":
+        "The service did not answer GetCapabilities - {error}.",
+    "Ответ службы не разобран как WMS - {error}.":
+        "The service answer is not understood as WMS - {error}.",
+    "Все слои - {title}": "All layers - {title}",
+    "Слой покрывает весь мир.": "The layer covers the whole world.",
+    "Охват слоя - {w:.2f}…{e:.2f}° по долготе, "
+    "{s:.2f}…{n:.2f}° по широте. Вне охвата - снимки "
+    "Esri World Imagery.":
+        "Layer extent - {w:.2f}…{e:.2f}° in longitude, {s:.2f}…{n:.2f}° in "
+        "latitude. Outside the extent - Esri World Imagery.",
+    "Загрузка картинки слоя…": "Loading the layer picture…",
+    "Картинка слоя не пришла - {error}.":
+        "The layer picture did not arrive - {error}.",
+    "Картинка слоя пришла.": "The layer picture arrived.",
+    "Служба WMS": "WMS service",
+    "Удалить подложку WMS «{name}»?":
+        "Delete the WMS base map \"{name}\"?",
     "Название источника в списке подложек и в обозревателе QGIS. "
     "Предлагается по имени сервера.":
         "The source name in the base map list and in the QGIS browser. It "

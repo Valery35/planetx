@@ -15508,6 +15508,261 @@ def tile_source_check():
             settings.remove(key)
 
 
+WMS_TEST = ("https://imagery.pasda.psu.edu/arcgis/services/pasda/DVRPC2020/"
+            "MapServer/WMSServer")
+
+
+@check(500)
+def wms_source():
+    """Служба WMS в окне «Новый источник тайлов», просьба автора от
+    23 октября 2026 года: ортофото PASDA DVRPC 2020 у Филадельфии."""
+    from planetx.ui.tilesource import TileSourceDialog
+    window = state["window"]
+    window.set_body("earth")
+    pose = window.view.navigator.pose
+    dialog = TileSourceDialog(window, (pose.lat, pose.lon))
+    dialog.show()
+    dialog.address.setText(WMS_TEST + "?request=GetCapabilities&service=WMS")
+    dialog._check()
+    state["wms_dialog"] = dialog
+    state["wms_began"] = time.monotonic()
+    state["wms_before"] = window.source.name
+    result["wms_source"] = {}
+
+
+@check(1000)
+def wms_source_wait():
+    dialog = state["wms_dialog"]
+    spent = time.monotonic() - state["wms_began"]
+    if (dialog.replies or dialog.preview.pixmap() is None
+            or dialog.preview.pixmap().isNull()) and spent < 60:
+        return 1000
+    from qgis.PyQt.QtWidgets import QDialogButtonBox
+    from planetx.qt_compat import enum
+    out = result["wms_source"]
+    out.update({
+        "seconds": round(spent, 1), "parsed": dialog.parsed.text(),
+        "layers": [dialog.layer.itemText(i)
+                   for i in range(dialog.layer.count())],
+        "layer_shown": dialog.layer.isVisible(),
+        "tms_hidden": not dialog.tms.isVisible(),
+        "name": dialog.name.text(), "credit": dialog.credit.text(),
+        "template": dialog.template, "status": dialog.status.text(),
+        "ok": dialog.buttons.button(
+            enum(QDialogButtonBox, "StandardButton", "Ok")).isEnabled()})
+    dialog.grab().save(os.path.join(TEMP, "planetx_wms_dialog.png"))
+    return None
+
+
+@check(1000)
+def wms_source_save():
+    """Источник записан, стал подложкой, вид над Филадельфией."""
+    import planetx.ui.globe.state as smod
+    from planetx.core.navigation import Pose
+    from planetx.ui.tilesource import wms_entries
+    window = state["window"]
+    dialog = state["wms_dialog"]
+    dialog.accept()
+
+    class Done:
+        saved_name = dialog.saved_name
+
+        def __init__(self, *args):
+            pass
+
+        def exec(self):
+            return True
+    real = smod.TileSourceDialog
+    smod.TileSourceDialog = Done
+    try:
+        window.add_tile_source()
+    finally:
+        smod.TileSourceDialog = real
+    out = result["wms_source"]
+    out["saved"] = dialog.saved_name
+    out["entries"] = [e["name"] for e in wms_entries()]
+    out["source"] = window.source.name
+    out["kind"] = type(window.source).__name__
+    out["rows_after"] = window.panel.basemap_names()
+    nav = window.view.navigator
+    nav.stop()
+    nav.show(Pose(39.9526, -75.1652, 2500.0, 0.0, 0.0))
+    window.view.update()
+    state["wms_seen"] = _watch_loader(window.loader, "wms_seen")
+    state["wms_began"] = time.monotonic()
+
+
+@check(1000)
+def wms_source_view():
+    window = state["window"]
+    seen = state["wms_seen"]
+    spent = time.monotonic() - state["wms_began"]
+    if spent < 40.0 and (window.view.load_missing or seen["loaded"] < 20):
+        return 1000
+    out = result["wms_source"]
+    source = window.source
+    started = list(window.loader.started)
+    out["city"] = dict(seen, seconds=round(spent, 1),
+                       with_wms=sum(1 for k in started
+                                    if source.parts(*k)),
+                       base_only=sum(1 for k in started
+                                     if not source.parts(*k)),
+                       credits=window.attribution.text())
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_wms_city.png"))
+    # Край района: запад охвата у -76.15°, с 60 км видны обе стороны.
+    from planetx.core.navigation import Pose
+    window.view.navigator.show(Pose(39.9, -76.15, 60000.0, 0.0, 0.0))
+    window.view.update()
+    state["wms_seen"] = _watch_loader(window.loader, "wms_seen")
+    state["wms_began"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def wms_source_edge():
+    window = state["window"]
+    seen = state["wms_seen"]
+    spent = time.monotonic() - state["wms_began"]
+    if spent < 40.0 and (window.view.load_missing or seen["loaded"] < 20):
+        return 1000
+    out = result["wms_source"]
+    source = window.source
+    started = list(window.loader.started)
+    out["edge"] = dict(seen, seconds=round(spent, 1),
+                       with_wms=sum(1 for k in started if source.parts(*k)),
+                       base_only=sum(1 for k in started
+                                     if not source.parts(*k)))
+    out["gl"] = dict(window.view.gl_errors)
+    out["errors"] = len(window.errors)
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_wms_edge.png"))
+    return None
+
+
+@check(500)
+def wms_source_cleanup():
+    from planetx.ui import window as wmod
+    from planetx.ui.tilesource import remove_wms
+    window = state["window"]
+    remove_wms(result["wms_source"].get("saved", ""))
+    window.sources = wmod.all_sources()
+    names = [s.name for s in window.sources]
+    before = state["wms_before"]
+    window._panel_basemap(names.index(before) if before in names else 0)
+    result["wms_source"]["restored"] = window.source.name
+    state["wms_dialog"].deleteLater()
+
+
+VALDAI = (57.98, 33.25)  # Валдай, видео пользователя от 23.10.2026
+
+
+@check(1000, manual=True)
+def valdai_setup():
+    """Зависание у пользователя Владимира 23 октября 2026 года: Яндекс
+    Спутник, рельеф Copernicus 30 м, слой полигонов лесных выделов,
+    подлёт с высоты к участку. Слой - синтетика: выделы-многоугольники
+    по 80 вершин и извилистый берег в 60 000 вершин."""
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPointXY,
+                           QgsProject, QgsSettings, QgsVectorLayer)
+    from planetx.core import sources
+    from planetx.core.navigation import Pose
+    from planetx.ui import window as wmod
+    window = state["window"]
+    window.set_body("earth")
+    settings = QgsSettings()
+    accepted = settings.value(wmod.ACCEPTED_KEY, []) or []
+    if "yandex_satellite" not in accepted:
+        settings.setValue(wmod.ACCEPTED_KEY, list(accepted)
+                          + ["yandex_satellite"])
+    window.add_ready_source("yandex_satellite", ask=False)
+    settings.setValue(sources.DEM_KEY, "copernicus30")
+    window.sources_changed("terrain")
+    layer = QgsVectorLayer("Polygon?crs=EPSG:4326", "valdai_stands",
+                           "memory")
+    feats = []
+    lat0, lon0 = VALDAI
+    for i in range(40):
+        for j in range(40):
+            cy = lat0 - 0.1 + i * 0.005
+            cx = lon0 - 0.15 + j * 0.0075
+            ring = [QgsPointXY(
+                cx + 0.003 * math.cos(a) * (1 + 0.2 * math.sin(5 * a)),
+                cy + 0.002 * math.sin(a) * (1 + 0.2 * math.cos(7 * a)))
+                for a in [k * 2 * math.pi / 80 for k in range(80)]]
+            f = QgsFeature()
+            f.setGeometry(QgsGeometry.fromPolygonXY([ring]))
+            feats.append(f)
+    coast = [QgsPointXY(
+        lon0 + 0.12 * math.cos(a) + 0.004 * math.sin(97 * a),
+        lat0 + 0.08 * math.sin(a) + 0.003 * math.cos(131 * a))
+        for a in [k * 2 * math.pi / 60000 for k in range(60000)]]
+    f = QgsFeature()
+    f.setGeometry(QgsGeometry.fromPolygonXY([coast]))
+    feats.append(f)
+    layer.dataProvider().addFeatures(feats)
+    QgsProject.instance().addMapLayer(layer)
+    window.set_layer_shown(layer.id(), True)
+    state["valdai_layer"] = layer.id()
+    nav = window.view.navigator
+    nav.stop()
+    nav.show(Pose(lat0, lon0, 40000.0, 0.0, 0.0))
+    window.view.update()
+    beat = state["valdai_beat"] = {"last": time.monotonic(), "max": 0.0,
+                                   "over1": 0}
+
+    def tick():
+        now = time.monotonic()
+        gap = now - beat["last"]
+        beat["max"] = max(beat["max"], gap)
+        beat["over1"] += gap > 1.0
+        beat["last"] = now
+    timer = state["valdai_timer"] = QTimer()
+    timer.timeout.connect(tick)
+    timer.start(50)
+    state["valdai_t0"] = time.monotonic()
+    result["valdai"] = {"source": window.source.name}
+
+
+@check(200, manual=True)
+def valdai_fly():
+    """Спуск с 40 км до 600 м за 30 с с поворотом, как на видео."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    t = time.monotonic() - state["valdai_t0"]
+    if t < 40.0:
+        share = min(1.0, t / 30.0)
+        dist = 40000.0 * (600.0 / 40000.0) ** share
+        window.view.navigator.show(Pose(
+            VALDAI[0] + 0.02 * share, VALDAI[1] + 0.03 * share, dist,
+            20.0 * share, 30.0 * share))
+        window.view.update()
+        return 200
+    beat = state["valdai_beat"]
+    result["valdai"].update({
+        "max_gap_s": round(beat["max"], 2), "gaps_over_1s": beat["over1"],
+        "dem": window.dem.errors if window.dem is not None else None,
+        "missing": window.view.load_missing,
+        "loader_failed": len(getattr(window.loader, "failed_keys", []))
+        if hasattr(window.loader, "failed_keys") else None,
+        "errors": len(window.errors)})
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_valdai.png"))
+    return None
+
+
+@check(500, manual=True)
+def valdai_done():
+    from qgis.core import QgsProject, QgsSettings
+    from planetx.core import sources
+    window = state["window"]
+    state["valdai_timer"].stop()
+    QgsProject.instance().removeMapLayer(state["valdai_layer"])
+    QgsSettings().setValue(sources.DEM_KEY, "")
+    window.sources_changed("terrain")
+    window._panel_basemap(0)
+
+
 @check(500)
 def basemap_checkbox():
     """Строки «Основа» и «Рельеф» наверху списка «Слоёв», выбор - меню

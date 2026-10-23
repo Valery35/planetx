@@ -22,11 +22,11 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
 
 from ..core import (basemap, cadastre, crust, dem, faults, fires, geology,
                     iscgem, paleo, planets, quakes, routing, slabs, sources,
-                    sun, tilemaps, wayback)
+                    sun, tilemaps, wayback, wms)
 from ..i18n import tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
-from .tilesource import TileSourceDialog, remove_connection
+from .tilesource import TileSourceDialog, remove_connection, remove_wms
 
 SOURCES_DOC = "https://github.com/Valery35/planetx/blob/main/doc/SOURCES.md"
 NAME, WHAT, TERMS, CHECK = range(4)
@@ -342,12 +342,21 @@ class SourcesDialog(QDialog):
                 terms = "https://operations.osmfoundation.org/policies/tiles/"
             elif source.ready:
                 what = tr("Готовый источник меню «Основа»")
+            elif getattr(source, "entry", None) is not None:
+                what = tr("Служба WMS")
             elif not source.builtin:
                 what = tr("Подключение XYZ Tiles QGIS")
             # У готовых источников бывают {q} и пересчёт тайлов, проба -
-            # адрес тайла самого источника.
-            probe = source.tile_url(1, 1, 0) if source.ready \
-                else sources.tile_probe(source.url)
+            # адрес тайла самого источника. У службы WMS - картинка
+            # охвата слоя.
+            entry = getattr(source, "entry", None)
+            if entry is not None:
+                probe = source.url.replace("{bbox}", wms.bbox_text(
+                    wms.preview_bbox(entry.get("box"))))
+            elif source.ready:
+                probe = source.tile_url(1, 1, 0)
+            else:
+                probe = sources.tile_probe(source.url)
             item = self._row(base, source.name, what, terms, probe)
             item.setData(NAME, SOURCE_ROLE, index)
         terrain, encoding = self.globe._terrain_choice()
@@ -508,10 +517,13 @@ class SourcesDialog(QDialog):
         source = self._selected_source()
         if source is None or source.builtin:
             return
+        entry = getattr(source, "entry", None)
         if source.ready:
             question = tr("Убрать «{name}» из списка подложек? Вернуть его "
                           "можно меню «Основа» - «Готовые источники».",
                           name=source.name)
+        elif entry is not None:
+            question = tr("Удалить подложку WMS «{name}»?", name=source.name)
         else:
             question = tr("Удалить подключение «{name}» из QGIS?",
                           name=source.name)
@@ -520,6 +532,8 @@ class SourcesDialog(QDialog):
             return
         if source.ready:
             self.globe.remove_ready_source(source.ready)
+        elif entry is not None:
+            remove_wms(source.name)
         else:
             remove_connection(source.name)
         self.changed.emit("basemaps")

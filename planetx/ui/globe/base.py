@@ -12,7 +12,7 @@ from qgis.core import QgsSettings
 
 from ...core import (basemap, cadastre, clouds, fields, geology, sun,
                      temperature, cutaway, slabs, themes, tilemaps,
-                     tileoverlays)
+                     tileoverlays, wms)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
 from ...core.mipmap import mip_chain
@@ -448,10 +448,17 @@ def ready_sources():
             for key in basemap.READY_KEYS if key in chosen]
 
 
+def wms_sources():
+    """Подложки из служб WMS окна «Новый источник тайлов»."""
+    from ..tilesource import wms_entries
+    return [wms.source(entry) for entry in wms_entries()]
+
+
 def all_sources():
-    """Подложки Земли: встроенные, добавленные готовые, подключения XYZ
-    QGIS."""
-    return basemap.builtins() + ready_sources() + xyz_sources()
+    """Подложки Земли: встроенные, добавленные готовые, службы WMS,
+    подключения XYZ QGIS."""
+    return (basemap.builtins() + ready_sources() + wms_sources()
+            + xyz_sources())
 
 
 def settings_list(key):
