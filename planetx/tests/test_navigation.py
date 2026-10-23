@@ -478,5 +478,61 @@ class TestInertia(unittest.TestCase):
         self.assertIsNone(n.inertia)
 
 
+ELBRUS = (43.35, 42.44)
+
+
+def ridged(lat, lon):
+    """Гора 5600 м с рябью хребтов 300 м через 2 км."""
+    dy = (lat - ELBRUS[0]) * 111.32
+    dx = (lon - ELBRUS[1]) * 111.32 * math.cos(math.radians(lat))
+    return (1000.0 + 4600.0 * math.exp(-(dx * dx + dy * dy) / 72.0)
+            + 300.0 * math.sin(dx * 3.0) * math.cos(dy * 2.0))
+
+
+def first_ground(cam, px, py, terrain):
+    """Первая встреча луча с рельефом мелкими шагами - эталон."""
+    from ellipsoid import ecef_to_geodetic
+    origin, d = cam.ray(px, py)
+    d = d / np.linalg.norm(d)
+    t = 0.0
+    while t < 3.0e5:
+        lat, lon, h = ecef_to_geodetic(origin + d * t)
+        g = float(h) - terrain(float(lat), float(lon))
+        if g <= 0.0:
+            return origin + d * t
+        t += max(5.0, 0.2 * g)
+    return None
+
+
+class TestGroundOnMountain(unittest.TestCase):
+    """Точка под курсором у горы - первая встреча луча с рельефом.
+    Метод секущих с эллипсоида брал склон за хребтом или уходил на
+    тысячи километров, и приближение колесом «телепортировало» вид,
+    замечание автора от 23 октября 2026 года."""
+
+    def test_point_is_first_hit(self):
+        rng = np.random.default_rng(1)
+        misses = []
+        for _ in range(40):
+            cam = cm.Camera(np.zeros(3), np.eye(3), width=W, height=H)
+            pose = nav.Pose(ELBRUS[0] + rng.uniform(-0.15, 0.15),
+                            ELBRUS[1] + rng.uniform(-0.2, 0.2),
+                            rng.uniform(800, 30000), rng.uniform(0, 360),
+                            rng.uniform(40, 84))
+            pose.terrain = ridged
+            pose.h = ridged(pose.lat, pose.lon)
+            nav.lifted(pose).apply(cam)
+            for _ in range(5):
+                px, py = rng.uniform(0.1, 0.9) * W, rng.uniform(0.3, 0.95) * H
+                want = first_ground(cam, px, py, ridged)
+                got = nav.ground_under(cam, px, py, ridged)
+                if want is None or got is None:
+                    continue
+                near = float(np.linalg.norm(want - cam.eye))
+                misses.append(float(np.linalg.norm(got - want)) / near)
+        self.assertGreater(len(misses), 150)
+        self.assertLess(max(misses), 0.05)
+
+
 if __name__ == "__main__":
     unittest.main()

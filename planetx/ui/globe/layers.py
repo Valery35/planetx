@@ -31,7 +31,8 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import tileoverlays, wikipedia
+from ...core import polar, tileoverlays, wikipedia
+from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
 from ...core.geocode import link_zoom
@@ -211,6 +212,27 @@ class LayersMixin:
         gallery = getattr(self, "gallery", None)
         if gallery is not None and gallery.isVisible():
             gallery.refresh()
+        self._update_polar()
+
+    # Полярные шапки снимком, core/polar.py.
+
+    def _update_polar(self):
+        """Шапки снимками полярных служб на Земле при подложке-снимке,
+        иначе цветом края тайла, как прежде."""
+        caps = getattr(self, "polar_caps", None)
+        if caps is None:
+            return
+        on = bool(self.planet.earth) and contour_is_imagery(
+            self.source.name, self.source.url)
+        if on != self.view.polar_on:
+            self.view.polar_on = on
+            self.view.update()
+            self._show_attribution()
+        self._polar_view()
+
+    def _polar_view(self):
+        pose = self.view.navigator.pose
+        self.polar_caps.check(pose.lat, pose.distance)
 
     # Наложение.
 
@@ -1069,6 +1091,10 @@ class LayersMixin:
         parts = [attribution_html(self.source)]
         # Подложка и рельеф - целиком, их условия просят полную подпись.
         kept = 1
+        if self.view.polar_on and self.view.polar_textures.keys() \
+                | self.view.polar_pending.keys() \
+                and "Earthstar" not in self.source.attribution[0]:
+            parts.append(link_html(polar.CREDIT, polar.TERMS))
         if "cadastre" in self.gibs_loaders:
             parts.append(link_html(*cadastre.ATTRIBUTION))
         if self._magnetic_on():

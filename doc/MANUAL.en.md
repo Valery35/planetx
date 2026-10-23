@@ -3711,8 +3711,10 @@ error report.
   raised or extruded by a field. Your own places have lift and extrusion.
 - A layer with time from an expression does not enter the extent of
   the time slider, its range is set with the handles manually.
-- Above latitude 85° the poles are covered with the ocean color, the Web
-  Mercator tile grid ends there.
+- The Web Mercator tile grid ends at latitude 85°. With an imagery
+  base map the poles are covered with the imagery of the Esri polar
+  services Arctic Imagery and Antarctic Imagery, about 930 m per pixel,
+  with a map base map - with the color of the map edge.
 - Recording a tour takes longer than the tour itself.
 - Buildings are blocks with flat roofs, roof shapes and facades
   are not shown.

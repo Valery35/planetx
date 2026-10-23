@@ -28,6 +28,7 @@ except ImportError:  # headless-тесты
     from terrain import grid_shares, sample
 
 MAX_LAT = math.degrees(math.atan(math.sinh(math.pi)))
+CAP_SINK = 1.0  # м, высота узлов северной шапки ниже нуля для воды
 MAX_LEVEL = 19
 MIN_SKIRT = 2.0
 
@@ -289,38 +290,62 @@ def tile_mesh(z, x, y, height_tile=None, exaggeration=1.0):
 
 
 
-def polar_cap_mesh(north, count=256):
-    """Шапка над краем сетки у полюса, веер треугольников.
+def polar_cap_mesh(north, count=256, rings=8, uv=None):
+    """Шапка над краем сетки у полюса: полюс и rings колец по count
+    вершин от края к полюсу.
 
-    Край шапки лежит на широте MAX_LAT, вершина веера на полюсе. Шапка
-    закрашивается сплошным цветом, поэтому uv всех вершин нулевые.
-    Возвращается в том же виде, что и тайл, с z = -1.
+    Край шапки лежит на широте MAX_LAT. uv - функция (широты, долготы)
+    -> (u, v) мозаики полярного снимка (core.polar.Layout.uv), без неё
+    шапка красится одним цветом и uv нулевые. Возвращается в том же
+    виде, что и тайл, с z = -1.
     """
     sign = 1.0 if north else -1.0
     lon = np.arange(count) / count * 360.0 - 180.0
-    rim = geodetic_to_ecef(np.full(count, sign * MAX_LAT), lon)
-    pole = geodetic_to_ecef(sign * 90.0, 0.0)
-    world = np.concatenate([pole[None, :], rim])
+    # Кольцо 0 - край, далее к полюсу.
+    lats = sign * (MAX_LAT + (90.0 - MAX_LAT) * np.arange(rings) / rings)
+    ring_lat = np.repeat(lats, count)
+    ring_lon = np.tile(lon, rings)
+    all_lat = np.concatenate([[sign * 90.0], ring_lat])
+    all_lon = np.concatenate([[0.0], ring_lon])
+    world = geodetic_to_ecef(all_lat, all_lon)
+    pole = world[0].copy()
     center = pole.copy()
     offsets = world - center
     radius = float(np.sqrt((offsets * offsets).sum(axis=1)).max())
 
     k = np.arange(count)
     k_next = (k + 1) % count
+    tris = []
     # Долгота растёт на восток. Над северным полюсом обход против часовой
     # стрелки снаружи идёт в сторону роста долготы, над южным наоборот.
-    if north:
-        tri = np.stack([np.zeros(count, dtype=np.int64), k + 1, k_next + 1],
-                       axis=1)
-    else:
-        tri = np.stack([np.zeros(count, dtype=np.int64), k_next + 1, k + 1],
-                       axis=1)
+    for r in range(rings - 1):
+        outer, inner = 1 + r * count, 1 + (r + 1) * count
+        a, b = outer + k, outer + k_next
+        c, d = inner + k, inner + k_next
+        tris += [np.stack([a, b, d], axis=1), np.stack([a, d, c], axis=1)]
+    last = 1 + (rings - 1) * count
+    tris.append(np.stack([np.zeros(count, dtype=np.int64), last + k,
+                          last + k_next], axis=1))
+    tri = np.concatenate(tris)
+    if not north:
+        tri = tri[:, ::-1]
     indices = tri.ravel().astype(np.uint16)
     indices.setflags(write=False)
-    uv = np.zeros((len(world), 2), dtype=np.float32)
+    if uv is None:
+        uv = np.zeros((len(world), 2), dtype=np.float32)
+    else:
+        u, v = uv(all_lat, all_lon)
+        uv = np.stack([np.asarray(u), np.asarray(v)], axis=1) \
+            .astype(np.float32)
     flat = np.ones(len(world), dtype=np.float32)
     up = world / np.linalg.norm(world, axis=1, keepdims=True)
-    sea = np.hstack([up, np.zeros((len(world), 1))]).astype(np.float32)
+    # Под северной шапкой океан: высота узла -CAP_SINK, чуть ниже нуля,
+    # и проход воды кладёт на неё воду, как на тайлы с дном ниже нуля.
+    # Четвёртое число - высота узла: проход воды опускает узел на неё,
+    # большая глубина подняла бы шапку.
+    depth = -CAP_SINK if north else 0.0
+    sea = np.hstack([up, np.full((len(world), 1), depth)]) \
+        .astype(np.float32)
     return TileMesh(-1, 0, 0 if north else 1, count, center, radius,
                     offsets.astype(np.float32), uv, indices, flat,
                     up.astype(np.float32), sea)

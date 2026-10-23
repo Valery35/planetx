@@ -236,7 +236,10 @@ class TestTerrainMesh(unittest.TestCase):
         _, _, grid_h = el.ecef_to_geodetic(pos[:side * side])
         self.assertLess(np.abs(grid_h - mesh.sea[:side * side, 3]).max(),
                         0.05)
+        # Северная шапка - океан чуть ниже нуля, южная - суша на нуле.
         cap = tl.polar_cap_mesh(True)
+        self.assertTrue(np.all(cap.sea[:, 3] == -tl.CAP_SINK))
+        cap = tl.polar_cap_mesh(False)
         self.assertTrue(np.all(cap.sea[:, 3] == 0.0))
 
     def test_flat_ground_is_not_shaded(self):
@@ -312,7 +315,10 @@ class TestPolarCap(unittest.TestCase):
                 cap.center + cap.positions.astype(np.float64))
             sign = 1.0 if north else -1.0
             self.assertAlmostEqual(float(lat[0]), sign * 90.0, places=6)
-            self.assertLess(np.abs(lat[1:] - sign * tl.MAX_LAT).max(), 1e-6)
+            # Кольцо 0 - край шапки, дальше кольца к полюсу.
+            rim = lat[1:1 + cap.segments]
+            self.assertLess(np.abs(rim - sign * tl.MAX_LAT).max(), 1e-6)
+            self.assertTrue((np.abs(lat) >= tl.MAX_LAT - 1e-6).all())
             self.assertLess(np.abs(h).max(), 1.0)
 
     def test_cap_faces_outward(self):
@@ -329,7 +335,8 @@ class TestPolarCap(unittest.TestCase):
         # Край шапки совпадает с краем сетки тайлов уровня 0.
         grid = tl.grid_ecef(0, 0, 0)
         cap = tl.polar_cap_mesh(True, count=tl.segments(0))
-        rim = cap.center + cap.positions[1:].astype(np.float64)
+        rim = cap.center + cap.positions[1:1 + cap.segments] \
+            .astype(np.float64)
         self.assertLess(np.abs(rim - grid[0, :-1]).max(), 2.0)
 
 

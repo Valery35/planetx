@@ -23,6 +23,10 @@ class BodyMixin:
     # Тело глобуса.
 
     def set_body(self, key):
+        self._set_body(key)
+        self._update_polar()
+
+    def _set_body(self, key):
         """Земля, Марс или Луна. Размеры тела, подложка, воздух,
         земные слои и вид - всё сразу. Камера встаёт над домашней
         точкой тела."""

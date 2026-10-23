@@ -37,8 +37,9 @@ from ..core.skyview import (FOV_MAX, FOV_MIN, distance_for, follow_pose,
                             pose_of, ra_dec_of)
 from ..core.snapshot import letterbox
 from ..core.terrain import FLAT_LEVEL, HeightStore
-from ..core.tiling import (HOLE_MARGIN, UNDERLAY_DEPTH, polar_cap_mesh,
-                           tile_mesh)
+from ..core.tiling import (CAP_SINK, HOLE_MARGIN, UNDERLAY_DEPTH,
+                           polar_cap_mesh, tile_mesh)
+from ..core.polar import Layout as PolarLayout
 from ..qt_compat import QOpenGLWidget, enum
 from . import gpu
 from .gpu import gl
@@ -223,6 +224,15 @@ def start_keys():
 
 
 START_KEYS = frozenset(start_keys())
+
+
+def cap_meshes():
+    """Сетки полярных шапок, северная первая, с координатами мозаики
+    полярного снимка. Только при текущем контексте OpenGL."""
+    return [gpu.GpuMesh(polar_cap_mesh(north, uv=PolarLayout(north).uv))
+            for north in (True, False)]
+
+
 REBUILD_TIME = 0.002  # секунд на подмену пересобранных сеток в кадре
 # Приоритет замены тайла старой подложки, который виден в кадре. Выше
 # экранной ошибки любого нового тайла, мелкие уровни раньше.
@@ -532,6 +542,12 @@ class GlobeView(QOpenGLWidget):
         # Шапки выше 85.05° красятся цветом края тайла 0/0/0 подложки,
         # до его прихода - цветом воды OSM. Северная первая.
         self.cap_textures = []
+        # Снимки полярных шапок (core/polar.py): текстуры по полюсу,
+        # пришедшие картинки ждут загрузки в кадре. polar_on - показывать
+        # их, окно включает на Земле при подложке-снимке.
+        self.polar_textures = {}
+        self.polar_pending = {}
+        self.polar_on = False
         self.anisotropy = 1.0
         self.gl_info = {}
         self.error = ""
@@ -856,7 +872,7 @@ class GlobeView(QOpenGLWidget):
             self.update()
         return out
 
-    def _draw_water(self, items, mvps, fades=None, keys=None):
+    def _draw_water(self, items, mvps, fades=None, keys=None, shallow=None):
         """Вода над дном океана: те же сетки тайлов, опущенные на уровень
         моря (TileMesh.sea), только там, где рельеф ниже нуля. Глубину
         не пишет, поэтому дно видно сквозь неё, а суша выше нуля
@@ -877,7 +893,9 @@ class GlobeView(QOpenGLWidget):
         if self.gibs["emag"].shown:
             color = color[:3] + (color[3] * WATER_UNDER_FIELD,)
         gl.glUniform4f(self.u_water_color, *color)
-        gl.glUniform1f(self.u_shallow, SHALLOW * self.store.scale)
+        # shallow - глубина полной воды, у шапки она равна её высоте.
+        gl.glUniform1f(self.u_shallow, shallow if shallow is not None
+                       else SHALLOW * self.store.scale)
         gl.glEnable(GL.GL_BLEND)
         gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
                                GL.GL_ZERO, GL.GL_ONE)
@@ -1155,8 +1173,7 @@ class GlobeView(QOpenGLWidget):
             for texture in self.cap_textures:
                 gpu.delete_texture(texture)
             self.cap_textures = []
-            self.caps = [gpu.GpuMesh(polar_cap_mesh(north))
-                         for north in (True, False)]
+            self.caps = cap_meshes()
             self.underlay_meshes = {
                 key: gpu.GpuMesh(tile_mesh(*key)) for key in START_KEYS
                 if key[0] == UNDERLAY_LEVEL}
@@ -1676,8 +1693,7 @@ class GlobeView(QOpenGLWidget):
             np.full((1, 1, 4), 255, dtype=np.uint8))
         self.underlay_marker = gpu.create_texture(
             np.array(UNDERLAY_COLOR, dtype=np.uint8).reshape(1, 1, 4))
-        self.caps = [gpu.GpuMesh(polar_cap_mesh(north))
-                     for north in (True, False)]
+        self.caps = cap_meshes()
         # Подстилка - свои плоские тайлы уровня 2. Тайлы с рельефом
         # из грубых высот могли бы подняться над дном долины.
         self.underlay_meshes = {
@@ -1819,6 +1835,9 @@ class GlobeView(QOpenGLWidget):
             gpu.delete_texture(self.ocean)
             for texture in self.cap_textures:
                 gpu.delete_texture(texture)
+            for texture in self.polar_textures.values():
+                gpu.delete_texture(texture)
+            self.polar_textures = {}
             gpu.delete_texture(self.underlay_marker)
         if self.program is not None:
             GL.glDeleteProgram(self.program)
@@ -1982,6 +2001,27 @@ class GlobeView(QOpenGLWidget):
         if len(self.overlay_pending) > MAX_PENDING:
             for key in [k for k in self.overlay_pending if k not in keep]:
                 self.overlay_pending.pop(key)
+
+    def set_polar_image(self, north, rgba):
+        """Снимок шапки полюса north (core.polar.Layout.mosaic). Текстура
+        создаётся в кадре, при текущем контексте."""
+        self.polar_pending[north] = rgba
+        self.update()
+
+    def _cap_textures(self):
+        """Текстуры шапок, северная первая: снимок полюса, иначе цвет
+        края тайла 0/0/0, до него - цвет воды. Только из paintGL."""
+        for north in list(self.polar_pending):
+            old = self.polar_textures.pop(north, None)
+            if old is not None:
+                gpu.delete_texture(old)
+            self.polar_textures[north] = gpu.create_texture(
+                self.polar_pending.pop(north), self.anisotropy)
+        plain = self.cap_textures or [self.ocean] * 2
+        if not self.polar_on:
+            return plain
+        return [self.polar_textures.get(north, color)
+                for north, color in zip((True, False), plain)]
 
     def _paint_caps(self, image):
         """Цвет полярных шапок по краю тайла 0/0/0.
@@ -2405,7 +2445,7 @@ class GlobeView(QOpenGLWidget):
         alpha = self.surface_alpha if underground else 1.0
         gpu.gl.glUniform1f(self.u_alpha, alpha)
 
-        items = list(zip(self.caps, self.cap_textures or [self.ocean] * 2))
+        items = list(zip(self.caps, self._cap_textures()))
         items += [(self.meshes[key], self.textures[key]) for key in sel.draw]
         surface = len(items)
         fades = [0.0] * len(self.caps) + self._tile_fades(sel.draw)
@@ -2507,6 +2547,12 @@ class GlobeView(QOpenGLWidget):
             self._draw_water(items[len(self.caps):surface],
                              mvps[len(self.caps):surface],
                              fades[len(self.caps):surface], sel.draw)
+            if self.polar_on and self.caps:
+                # Северная шапка - Северный Ледовитый океан, снимок
+                # шапки без воды выходил темнее воды вокруг. Южная -
+                # Антарктида, воды нет.
+                self._draw_water([(self.caps[0], self.water_all)],
+                                 mvps[:1], [0.0], None, shallow=CAP_SINK)
         if self.hole_check:
             holes = self._count_holes()
             gl.glUseProgram(self.program)
@@ -3083,5 +3129,5 @@ class GlobeView(QOpenGLWidget):
                 out.append((self.underlay_meshes[key],
                             marker or self.textures[key]))
         out += [(cap, marker or texture) for cap, texture
-                in zip(self.caps, self.cap_textures or [self.ocean] * 2)]
+                in zip(self.caps, self._cap_textures())]
         return out

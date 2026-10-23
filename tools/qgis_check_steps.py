@@ -15654,113 +15654,73 @@ def wms_source_cleanup():
     state["wms_dialog"].deleteLater()
 
 
-VALDAI = (57.98, 33.25)  # Валдай, видео пользователя от 23.10.2026
-
-
-@check(1000, manual=True)
-def valdai_setup():
-    """Зависание у пользователя Владимира 23 октября 2026 года: Яндекс
-    Спутник, рельеф Copernicus 30 м, слой полигонов лесных выделов,
-    подлёт с высоты к участку. Слой - синтетика: выделы-многоугольники
-    по 80 вершин и извилистый берег в 60 000 вершин."""
-    from qgis.core import (QgsFeature, QgsGeometry, QgsPointXY,
-                           QgsProject, QgsSettings, QgsVectorLayer)
-    from planetx.core import sources
+@check(1000)
+def polar_caps():
+    """Шапки выше 85° - снимками полярных служб Esri, решение автора от
+    23 октября 2026 года. Вид на Южный полюс с 3000 км."""
     from planetx.core.navigation import Pose
-    from planetx.ui import window as wmod
     window = state["window"]
     window.set_body("earth")
-    settings = QgsSettings()
-    accepted = settings.value(wmod.ACCEPTED_KEY, []) or []
-    if "yandex_satellite" not in accepted:
-        settings.setValue(wmod.ACCEPTED_KEY, list(accepted)
-                          + ["yandex_satellite"])
-    window.add_ready_source("yandex_satellite", ask=False)
-    settings.setValue(sources.DEM_KEY, "copernicus30")
-    window.sources_changed("terrain")
-    layer = QgsVectorLayer("Polygon?crs=EPSG:4326", "valdai_stands",
-                           "memory")
-    feats = []
-    lat0, lon0 = VALDAI
-    for i in range(40):
-        for j in range(40):
-            cy = lat0 - 0.1 + i * 0.005
-            cx = lon0 - 0.15 + j * 0.0075
-            ring = [QgsPointXY(
-                cx + 0.003 * math.cos(a) * (1 + 0.2 * math.sin(5 * a)),
-                cy + 0.002 * math.sin(a) * (1 + 0.2 * math.cos(7 * a)))
-                for a in [k * 2 * math.pi / 80 for k in range(80)]]
-            f = QgsFeature()
-            f.setGeometry(QgsGeometry.fromPolygonXY([ring]))
-            feats.append(f)
-    coast = [QgsPointXY(
-        lon0 + 0.12 * math.cos(a) + 0.004 * math.sin(97 * a),
-        lat0 + 0.08 * math.sin(a) + 0.003 * math.cos(131 * a))
-        for a in [k * 2 * math.pi / 60000 for k in range(60000)]]
-    f = QgsFeature()
-    f.setGeometry(QgsGeometry.fromPolygonXY([coast]))
-    feats.append(f)
-    layer.dataProvider().addFeatures(feats)
-    QgsProject.instance().addMapLayer(layer)
-    window.set_layer_shown(layer.id(), True)
-    state["valdai_layer"] = layer.id()
+    window._panel_basemap(0)
     nav = window.view.navigator
     nav.stop()
-    nav.show(Pose(lat0, lon0, 40000.0, 0.0, 0.0))
+    nav.show(Pose(-89.0, 0.0, 3.0e6, 0.0, 0.0))
     window.view.update()
-    beat = state["valdai_beat"] = {"last": time.monotonic(), "max": 0.0,
-                                   "over1": 0}
-
-    def tick():
-        now = time.monotonic()
-        gap = now - beat["last"]
-        beat["max"] = max(beat["max"], gap)
-        beat["over1"] += gap > 1.0
-        beat["last"] = now
-    timer = state["valdai_timer"] = QTimer()
-    timer.timeout.connect(tick)
-    timer.start(50)
-    state["valdai_t0"] = time.monotonic()
-    result["valdai"] = {"source": window.source.name}
+    state["polar_t0"] = time.monotonic()
+    result["polar"] = {"polar_on": window.view.polar_on}
 
 
-@check(200, manual=True)
-def valdai_fly():
-    """Спуск с 40 км до 600 м за 30 с с поворотом, как на видео."""
-    from planetx.core.navigation import Pose
+def _pole_rgb(window):
+    """Средний цвет круга в середине кадра - там полюс."""
+    import numpy as np
+    from planetx.net.loader import image_to_rgba
+    image = window.view.grabFramebuffer()
+    rgba = image_to_rgba(image)
+    h, w = rgba.shape[:2]
+    part = rgba[h // 2 - 40:h // 2 + 40, w // 2 - 40:w // 2 + 40, :3]
+    return [round(float(v)) for v in part.reshape(-1, 3).mean(axis=0)], \
+        image
+
+
+@check(1000)
+def polar_caps_wait():
     window = state["window"]
-    t = time.monotonic() - state["valdai_t0"]
-    if t < 40.0:
-        share = min(1.0, t / 30.0)
-        dist = 40000.0 * (600.0 / 40000.0) ** share
-        window.view.navigator.show(Pose(
-            VALDAI[0] + 0.02 * share, VALDAI[1] + 0.03 * share, dist,
-            20.0 * share, 30.0 * share))
-        window.view.update()
-        return 200
-    beat = state["valdai_beat"]
-    result["valdai"].update({
-        "max_gap_s": round(beat["max"], 2), "gaps_over_1s": beat["over1"],
-        "dem": window.dem.errors if window.dem is not None else None,
-        "missing": window.view.load_missing,
-        "loader_failed": len(getattr(window.loader, "failed_keys", []))
-        if hasattr(window.loader, "failed_keys") else None,
-        "errors": len(window.errors)})
-    window.view.grabFramebuffer().save(os.path.join(
-        TEMP, "planetx_valdai.png"))
+    spent = time.monotonic() - state["polar_t0"]
+    if False not in window.view.polar_textures and spent < 60:
+        return 1000
+    out = result["polar"]
+    out["south_seconds"] = round(spent, 1)
+    out["south_texture"] = False in window.view.polar_textures
+    out["south_rgb"], image = _pole_rgb(window)
+    image.save(os.path.join(TEMP, "planetx_polar_south.png"))
+    out["credits"] = window.attribution.text()[-160:]
+    from planetx.core.navigation import Pose
+    window.view.navigator.show(Pose(89.0, 0.0, 3.0e6, 0.0, 0.0))
+    window.view.update()
+    state["polar_t0"] = time.monotonic()
     return None
 
 
-@check(500, manual=True)
-def valdai_done():
-    from qgis.core import QgsProject, QgsSettings
-    from planetx.core import sources
+@check(1000)
+def polar_caps_check():
     window = state["window"]
-    state["valdai_timer"].stop()
-    QgsProject.instance().removeMapLayer(state["valdai_layer"])
-    QgsSettings().setValue(sources.DEM_KEY, "")
-    window.sources_changed("terrain")
-    window._panel_basemap(0)
+    spent = time.monotonic() - state["polar_t0"]
+    if True not in window.view.polar_textures and spent < 60:
+        return 1000
+    out = result["polar"]
+    out["north_seconds"] = round(spent, 1)
+    out["north_texture"] = True in window.view.polar_textures
+    out["north_rgb"], image = _pole_rgb(window)
+    image.save(os.path.join(TEMP, "planetx_polar_north.png"))
+    # Подложка-карта: шапка снова одним цветом.
+    names = window.panel.basemap_names()
+    window.panel._basemap_activated(names.index("OpenStreetMap"))
+    out["osm_polar_on"] = window.view.polar_on
+    window.panel._basemap_activated(0)
+    out["back_polar_on"] = window.view.polar_on
+    out["gl"] = dict(window.view.gl_errors)
+    out["errors"] = len(window.errors)
+    return None
 
 
 @check(500)

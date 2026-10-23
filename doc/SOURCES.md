@@ -127,6 +127,18 @@ Tiles из обозревателя QGIS.
 определённость, особенно в коммерческой работе, сверяет условия
 с Esri или выбирает в свойствах вида другую подложку.
 
+## Esri Arctic Imagery и Antarctic Imagery - полярные шапки
+
+Выше 85.05° сетка Web Mercator кончается. При подложке из снимков
+шапки выше этой широты закрываются снимками служб Esri
+`Polar/Arctic_Imagery` (EPSG:5936) и `Polar/Antarctic_Imagery`
+(EPSG:3031) на `server.arcgisonline.com`, по 36 тайлов уровня 8 на
+полюс, решение автора от 23 октября 2026 года. Подпись службы - «Source:
+Earthstar Geographics», сверено 23 октября 2026 года. Условия - Esri
+Master License Agreement, как у World Imagery. На снимке подпись
+«Earthstar Geographics, Esri» стоит, если подпись подложки её не
+содержит.
+
 ## Esri World Imagery Wayback - архив снимков
 
 Тема «Esri Wayback» группы «Архив снимков» показывает прежние выпуски

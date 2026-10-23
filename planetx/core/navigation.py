@@ -208,6 +208,66 @@ def ground_under(camera, px, py, terrain=None):
         lat, lon, h = ecef_to_geodetic(origin + d * t)
         return float(h) - terrain(float(lat), float(lon))
 
+    t = first_hit(origin, d, gap)
+    if t is not None:
+        return origin + d * t
+    return _secant(origin, d, t0, gap, terrain)
+
+
+MARCH_STEPS = 400  # шагов вдоль луча до первой встречи с рельефом
+MARCH_SHARE = 0.5  # доля зазора на шаг: склон впереди не перескакивается
+MARCH_FLOOR = 0.5  # наименьший уклон луча в расчёте шага
+BISECT_STEPS = 40
+
+
+def first_hit(origin, d, gap):
+    """Расстояние вдоль луча до первой встречи с рельефом или None.
+
+    Луч идёт от глаза шагами: зазор над рельефом g делится на скорость,
+    с которой луч опускается к земле, и берётся MARCH_SHARE этого пути.
+    Первый узел под рельефом и предыдущий над ним дают отрезок, корень
+    в нём ищется делением пополам. Метод секущих с эллипсоида на косом
+    луче над горами сходился к склону за хребтом или уходил на тысячи
+    километров - приближение колесом «телепортировало» вид, замечание
+    автора от 23 октября 2026 года, сторож - тест
+    test_navigation.TestGroundOnMountain.
+    """
+    length = float(np.linalg.norm(d))
+    t, g = 0.0, gap(0.0)
+    if not math.isfinite(g) or g <= 0.0:
+        return None
+    for _ in range(MARCH_STEPS):
+        point = origin + d * t
+        up = point / max(float(np.linalg.norm(point)), 1.0)
+        sink = -float(d @ up)
+        # Луч почти вдоль земли опускается медленно: путь шага не больше
+        # MARCH_SHARE / MARCH_FLOOR зазоров, не меньше 0.5 м.
+        rate = max(sink, MARCH_FLOOR * length)
+        step = max(MARCH_SHARE * g / rate, 0.5 / length)
+        nxt = t + step
+        g_next = gap(nxt)
+        if not math.isfinite(g_next):
+            return None
+        if g_next <= 0.0:
+            low, high = t, nxt
+            for _ in range(BISECT_STEPS):
+                mid = 0.5 * (low + high)
+                if gap(mid) > 0.0:
+                    low = mid
+                else:
+                    high = mid
+                if (high - low) * length < TERRAIN_TOLERANCE:
+                    break
+            return high
+        if sink <= 0.0 and g_next > g:
+            # Луч поднимается над рельефом - за горизонтом земли нет.
+            return None
+        t, g = nxt, g_next
+    return None
+
+
+def _secant(origin, d, t0, gap, terrain):
+    """Прежний поиск методом секущих - запасной путь first_hit."""
     f0 = gap(t0)
     lat, lon, _ = ecef_to_geodetic(origin + d * t0)
     t1 = ray_intersect(origin, d, terrain(float(lat), float(lon)))

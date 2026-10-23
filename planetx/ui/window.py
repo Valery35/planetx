@@ -76,6 +76,7 @@ from .pointcloud import PointCloudManager
 from .subsurface import SubsurfaceManager
 from .record import TourRecorder
 from .tour import TourPlayer
+from .polar import PolarCaps
 from .routing import RouteManager
 from .weather import WeatherManager
 from .satellites import SatelliteManager
@@ -975,6 +976,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.view.changed.connect(self._overpass_view_changed)
         self.view.changed.connect(self._wiki_view_changed)
         self.view.changed.connect(self._wayback_view)
+        # Снимки полярных шапок, ui/polar.py.
+        self.polar_caps = PolarCaps(self.view, self)
+        self.polar_caps.arrived.connect(self._show_attribution)
+        self.view.changed.connect(self._polar_view)
+        self._update_polar()
         for key, on in self.extras.items():
             self._apply_extra(key, on)
         self.panel.gallery_requested.connect(self.open_gallery)
@@ -1008,6 +1014,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.flight.close()
             self.title_bars.close()
             self.route_manager.close()
+            self.polar_caps.close()
             self._wiki_timer.stop()
             self.wiki_articles.stop()
             reply, self._summary_reply = self._summary_reply, None
