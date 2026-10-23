@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Крупные файлы демо в выпуске GitHub: адреса, поиск, проверка."""
+"""Крупные файлы демо в planetx-terrain: адреса, поиск, проверка."""
 import os
 import sys
 import tempfile
@@ -23,13 +23,13 @@ class TestDemoFiles(unittest.TestCase):
             if os.path.exists(full):
                 self.assertEqual(os.path.getsize(full), size, path)
 
-    def test_release_names_are_unique(self):
-        names = [p.rsplit("/", 1)[-1] for p in demofiles.FILES]
-        self.assertEqual(len(names), len(set(names)))
+    def test_url_keeps_demo_layout(self):
+        # Файл в planetx-terrain/demo лежит по тому же пути, что в папке
+        # demo модуля.
         self.assertEqual(
             demofiles.url("quarry/quarry_dem.tif"),
-            "https://github.com/Valery35/planetx/releases/download/"
-            "demo-data/quarry_dem.tif")
+            "https://raw.githubusercontent.com/Valery35/planetx-terrain/"
+            "main/demo/quarry/quarry_dem.tif")
 
     def test_wrong_size_is_missing(self):
         with tempfile.TemporaryDirectory() as folder:

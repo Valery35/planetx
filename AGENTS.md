@@ -436,6 +436,13 @@ PDF руководства собирается по образцу Topoliner, �
 `test_demofiles.test_sizes_match_working_copy`. Проверка - шаги
 `demo_fetch`, `demo_fetch_check`, QGIS 4.0.3 и 3.36.1 - дно озера
 0.8 МБ пришло за 1.7-1.8 с, слой годен.
+Решение автора от 23 октября 2026 года - одно место демо для модуля
+и PlanetX Lite, папка `demo` хранилища planetx-terrain (GPL 3,
+источники - `demo/SOURCES.md` там же). Раскладка та же, что
+в `planetx/demo`, `demofiles.url` даёт адрес
+`raw.githubusercontent.com/Valery35/planetx-terrain/main/demo/<путь>`.
+Выпуск `demo-data` остаётся для вышедших версий. Пересобранный файл
+демо теперь кладётся и в planetx-terrain/demo.
 
 Архив собирает `tools/build_zip.py` в `dist/planetx-<версия>.zip`. Перед
 сборкой он прогоняет `tools/preflight.py` и при ошибках архив не собирает.

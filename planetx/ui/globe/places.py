@@ -733,7 +733,7 @@ class PlacesMixin:
         journal.note("open_demo {}".format(name))
         demo = os.path.join(PLUGIN_DIR,
                             "demo")
-        # Крупные файлы демо - в выпуске GitHub, core/demofiles.py.
+        # Крупные файлы демо - в planetx-terrain, core/demofiles.py.
         folders = self._demo_folders()
         need = demofiles.missing(name, folders)
         if need:
