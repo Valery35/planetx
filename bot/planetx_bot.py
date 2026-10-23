@@ -112,6 +112,11 @@ POLL_WAIT = 50
 TIMEOUT = 65
 # Пауза после ошибки сети, с.
 RETRY = 10
+# Попытки запроса к Telegram и пауза между ними, с. Прокси бесплатного
+# PythonAnywhere время от времени отвечает 503 на соединение, 22-23
+# октября 2026 года так пропадали ответы на вопросы.
+CALL_TRIES = 3
+CALL_PAUSE = 2
 # Выпуск с GitHub помнится, с.
 RELEASE_KEEP = 600
 # Предел текста сообщения Telegram 4096 знаков, берётся с запасом.
@@ -481,8 +486,19 @@ class Bot:
         request = urllib.request.Request(
             self.api + method, data=body,
             headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as answer:
-            data = json.loads(answer.read().decode("utf-8"))
+        for attempt in range(CALL_TRIES):
+            try:
+                with urllib.request.urlopen(request,
+                                            timeout=TIMEOUT) as answer:
+                    data = json.loads(answer.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError:
+                raise  # ответ Telegram, повтор его не изменит
+            except urllib.error.URLError as error:
+                if attempt + 1 == CALL_TRIES:
+                    raise
+                log("Повтор {}: {}".format(method, error))
+                time.sleep(CALL_PAUSE)
         if not data.get("ok"):
             raise RuntimeError("{}: {}".format(
                 method, data.get("description")))
