@@ -28,6 +28,7 @@ MANUALS = {
     "topoliner": ("doc/MANUAL.md", "doc/MANUAL.en.md"),
     "routeliner": ("manual/manual.md", "manual/manual_en.md"),
     "repoliner": ("README_ru.md", "README.md"),
+    "planetx-lite": ("doc/manual/MANUAL.ru.md", "doc/manual/MANUAL.en.md"),
 }
 
 

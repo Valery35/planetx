@@ -75,6 +75,13 @@ PLUGINS = {
                    "https://plugins.qgis.org/plugins/routeliner/"),
     "repoliner": ("Repoliner",
                   "https://plugins.qgis.org/plugins/repoliner/"),
+    "planetx-lite": ("PlanetX Lite", None),
+}
+# Слова вопроса, которые ограничивают поиск руководством PlanetX Lite.
+LITE_WORDS = ("lite", "лайт", "лайте", "лайта", "лайтом", "planetx-lite")
+# Страница в браузере у программ без каталога QGIS, для /docs.
+WEB_PAGES = {
+    "planetx-lite": "https://valery35.github.io/planetx-lite/",
 }
 # Что делает модуль, для /docs - по описаниям metadata.txt модулей.
 ABOUT = {
@@ -87,6 +94,8 @@ ABOUT = {
                      "и полигонов",
         "routeliner": "события на трассе и пикетаж, продольные профили",
         "repoliner": "свой репозиторий модулей QGIS из архивов",
+        "planetx-lite": "глобус PlanetX без QGIS - программа для "
+                        "Windows, Linux и macOS и страница в браузере",
     },
     "en": {
         "planetx": "a 3D globe inside QGIS",
@@ -96,6 +105,8 @@ ABOUT = {
         "topoliner": "topology check and cleanup of lines and polygons",
         "routeliner": "route events and chainage, longitudinal profiles",
         "repoliner": "your own QGIS plugin repository from archives",
+        "planetx-lite": "the PlanetX globe without QGIS - a program for "
+                        "Windows, Linux and macOS and a web page",
     },
 }
 _REPO = re.compile(r"[A-Za-z0-9_.-]{1,40}")
@@ -131,7 +142,7 @@ TEXTS = {
     "ru": {
         "start": (
             "Это бот модулей QGIS PlanetX, Isoliner, Isoliner3D, "
-            "Topoliner, Routeliner и Repoliner.\n\n"
+            "Topoliner, Routeliner, Repoliner и программы PlanetX Lite.\n\n"
             "Напишите вопрос, например «как добавить 3D-модель» или "
             "«topoliner висячие узлы», бот найдёт разделы руководств "
             "модулей.\n\n"
@@ -150,6 +161,7 @@ TEXTS = {
         "latest": "{name} {tag} от {date}",
         "zip": "Архив модуля",
         "catalog": "Каталог QGIS",
+        "web": "В браузере",
         "no_release": "Не удалось узнать последний выпуск, попробуйте позже.",
         "report_empty": ("Напишите текст после команды, например:\n"
                          "/report глобус не открывается в QGIS 3.40"),
@@ -160,7 +172,8 @@ TEXTS = {
     "en": {
         "start": (
             "This is the bot of the QGIS plugins PlanetX, Isoliner, "
-            "Isoliner3D, Topoliner, Routeliner and Repoliner.\n\n"
+            "Isoliner3D, Topoliner, Routeliner, Repoliner and of the "
+            "PlanetX Lite program.\n\n"
             "Ask a question, for example \"how to add a 3D model\" or "
             "\"topoliner dangles\", and the bot finds the sections of "
             "the plugin manuals.\n\n"
@@ -179,6 +192,7 @@ TEXTS = {
         "latest": "{name} {tag} of {date}",
         "zip": "Plugin archive",
         "catalog": "QGIS catalog",
+        "web": "In the browser",
         "no_release": "The latest release is unavailable, try again later.",
         "report_empty": ("Write the text after the command, for example:\n"
                          "/report the globe does not open in QGIS 3.40"),
@@ -266,7 +280,15 @@ class Manuals:
         его руководством."""
         words = query.split()
         repo = None
-        for word in words:
+        clean = [word.strip(",.?!").lower() for word in words]
+        # «PlanetX Lite», «Lite», «лайт» - программа без QGIS, а не модуль.
+        for i, word in enumerate(clean):
+            if word in LITE_WORDS:
+                repo = "planetx-lite"
+                drop = [i - 1, i] if i and clean[i - 1] == "planetx" else [i]
+                words = [w for j, w in enumerate(words) if j not in drop]
+                break
+        for word in ([] if repo else words):
             repo = plugin_of(word.strip(",.?!"))
             if repo:
                 words.remove(word)
@@ -389,11 +411,17 @@ def docs_reply(lang):
     """Список модулей HTML: описание, ссылки на GitHub и каталог."""
     lines = [html.escape(TEXTS[lang]["docs"])]
     for key, (name, catalog) in PLUGINS.items():
+        if catalog:
+            other = '<a href="{}">{}</a>'.format(
+                catalog, html.escape(TEXTS[lang]["catalog"]))
+        else:
+            other = '<a href="{}">{}</a>'.format(
+                WEB_PAGES[key], html.escape(TEXTS[lang]["web"]))
         lines.append(
             '\n<b>{}</b> - {}\n<a href="https://github.com/{}/{}">'
-            'GitHub</a> · <a href="{}">{}</a>'.format(
+            'GitHub</a> · {}'.format(
                 html.escape(name), html.escape(ABOUT[lang][key]), OWNER,
-                key, catalog, html.escape(TEXTS[lang]["catalog"])))
+                key, other))
     lines.append('\n<a href="{}">{}</a> · <a href="{}">{}</a>'.format(
         html.escape("{}/blob/main/doc/{}".format(
             REPOSITORY, manual_file(lang)), quote=True),
