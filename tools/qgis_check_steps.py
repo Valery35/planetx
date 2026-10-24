@@ -15833,6 +15833,9 @@ def sky_survey_wide():
     # Сторож значка загрузки в виде неба - на прежнем коде всегда 0.
     out["mid_spinner_max"] = max(out.get("mid_spinner_max", 0),
                                  window.view.load_missing)
+    # Сторож проявления тайлов неба - на прежнем коде флага нет.
+    out["mid_fading_seen"] = bool(out.get("mid_fading_seen")
+                                  or getattr(starmap, "fading", False))
     if _sky_busy(window) and spent < 90:
         return 1000
     out["mid_seconds"] = round(spent, 1)

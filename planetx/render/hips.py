@@ -10,15 +10,20 @@
 тайл порядка 3 из Allsky.jpg. Слой проявляется по полю зрения
 (hips.share) смешиванием с тем, что нарисовано под ним. Выбор тайлов
 вида - want, загрузку ведёт ui/skysurvey.py.
+
+Пришедшая картинка проявляется из прозрачности за appear.DURATION той же
+кривой, что тайлы Земли. Пока она проявляется, под ней рисуется ближайший
+готовый предок или Allsky.
 """
 import ctypes
 import math
+import time
 from collections import OrderedDict
 
 import numpy as np
 from OpenGL import GL
 
-from ..core import hips
+from ..core import appear, hips
 from . import gpu
 from .gpu import gl
 from .stars import sky_mvp
@@ -50,6 +55,7 @@ KEEP = 160  # тайлов в видеокарте, около 160 МБ с ми�
 UPLOADS = 3  # новых текстур за кадр
 MESHES = 600  # сеток тайлов в памяти
 WANT_LIMIT = 120  # тайлов вида не больше
+ALLSKY = "allsky"  # ключ времени появления Allsky в born
 
 
 class HipsSky:
@@ -70,6 +76,9 @@ class HipsSky:
         self.meshes = OrderedDict()  # (порядок, номер): (vao, vbo)
         self.want = []  # недостающие тайлы вида, важные первыми
         self.drawn = 0
+        self.born = {}  # ключ тайла или ALLSKY: время появления картинки
+        self.fading = False  # в последнем кадре что-то проявлялось
+        self.fade = True  # проявлять пришедшие картинки
 
     def set_allsky(self, rgba):
         self.allsky_pending = rgba
@@ -110,6 +119,7 @@ class HipsSky:
             if self.allsky is not None:
                 gpu.delete_texture(self.allsky[0])
         self.textures.clear()
+        self.born.clear()
         self.allsky = None
 
     def _mesh(self, key):
@@ -147,14 +157,25 @@ class HipsSky:
             self.allsky_pending = None
             self.allsky = (gpu.create_texture(rgba), rgba.shape[1],
                            rgba.shape[0])
+            self.born[ALLSKY] = time.monotonic()
         for _ in range(UPLOADS):
             if not self.pending:
                 break
             key, rgba = self.pending.popitem(last=False)
             self.textures[key] = gpu.create_texture(rgba)
+            self.born[key] = time.monotonic()
         while len(self.textures) > KEEP:
-            _, texture = self.textures.popitem(last=False)
+            key, texture = self.textures.popitem(last=False)
+            self.born.pop(key, None)
             gpu.delete_texture(texture)
+
+    def opacity(self, key):
+        """Доля проявления картинки тайла или Allsky, 0..1."""
+        born = self.born.get(key)
+        if born is None or not self.fade:
+            return 1.0
+        return 1.0 - appear.curve((time.monotonic() - born)
+                                  / appear.DURATION)
 
     def select(self, axis, reach, radians_per_pixel):
         """Тайлы кадра: что рисовать (от грубых к подробным) и чего
@@ -164,7 +185,7 @@ class HipsSky:
             order = self.layer.low
         if order is not None:
             order = max(order, self.layer.low)
-        draw = {}
+        draw = set()  # (ключ, вид); вид "allsky" рисуется до "tile"
         want = []
         if order is not None:
             cells = hips.visible(order, axis, reach)
@@ -178,21 +199,23 @@ class HipsSky:
                 ipix = int(ipix)
                 if (order, ipix) not in self.textures:
                     want.append((order, ipix))
+                # Готовый тайл и, пока он проявляется, предки под ним.
                 for level in range(order, self.layer.low - 1, -1):
                     key = (level, ipix >> (2 * (order - level)))
                     if key in self.textures:
-                        draw[key] = "tile"
+                        draw.add((key, "tile"))
                         self.textures.move_to_end(key)
-                        break
+                        if self.opacity(key) >= 1.0:
+                            break
                 else:
                     if self.layer.allsky:
-                        draw[(hips.MIN_ORDER, ipix >> (
-                            2 * (order - hips.MIN_ORDER)))] = "allsky"
+                        draw.add(((hips.MIN_ORDER, ipix >> (
+                            2 * (order - hips.MIN_ORDER))), "allsky"))
         else:
             for ipix in hips.visible(hips.MIN_ORDER, axis, reach):
-                draw[(hips.MIN_ORDER, int(ipix))] = "allsky"
+                draw.add(((hips.MIN_ORDER, int(ipix)), "allsky"))
         self.want = [k for k in want if k not in self.pending]
-        return sorted(draw.items())
+        return sorted(draw)
 
     def draw(self, camera, view, share=1.0):
         """Нарисовать слой с долей проявления share поверх того, что
@@ -216,29 +239,31 @@ class HipsSky:
         gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                             ctypes.c_void_p(mvp.ctypes.data))
         gl.glUniform1i(loc["u_map"], 0)
-        gl.glUniform1f(loc["u_alpha"], float(share))
         gl.glActiveTexture(GL.GL_TEXTURE0)
-        if share < 1.0:
-            gl.glEnable(GL.GL_BLEND)
-            gpu.gl.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
-        else:
-            gl.glDisable(GL.GL_BLEND)
+        gl.glEnable(GL.GL_BLEND)
+        gpu.gl.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)
         count = len(self.indices)
         null = ctypes.c_void_p(0)
+        self.fading = False
         try:
             for key, kind in items:
                 if kind == "tile":
                     texture = self.textures[key]
                     rect = (0.0, 0.0, 1.0, 1.0)
+                    seen = self.opacity(key)
                 elif self.allsky is not None:
                     texture, width, height = self.allsky
                     rect = hips.allsky_rect(key[1], width, height)
+                    seen = self.opacity(ALLSKY)
                 else:
                     continue
+                if seen < 1.0:
+                    self.fading = True
                 vao, _ = self._mesh(key)
                 gl.glBindTexture(GL.GL_TEXTURE_2D, texture)
+                gl.glUniform1f(loc["u_alpha"], float(share * seen))
                 gl.glUniform4f(loc["u_rect"], *(float(v) for v in rect))
                 gl.glBindVertexArray(vao)
                 gpu._draw_elements(GL.GL_TRIANGLES, count,

@@ -2755,7 +2755,11 @@ class GlobeView(QOpenGLWidget):
         if base > 0.0:
             self.sky.draw(cam, frame=frame, share=1.0)
         for sky, share in zip(self.hips_layers, shares):
+            sky.fade = self._appear_on()
             sky.draw(cam, self.sky_view, share)
+            if sky.fading:
+                # Пришедшие тайлы неба проявляются - нужен следующий кадр.
+                self.update()
         if self.show_constellations:
             self.constellations.draw(cam, frame)
         else:
