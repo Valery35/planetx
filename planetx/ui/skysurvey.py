@@ -7,8 +7,12 @@ render/hips.py).
 У слоя с Allsky.jpg сначала она - всё небо порядка 3 одной картинкой.
 Тайлы вида, которых не хватает (HipsSky.want), просятся, пока слой
 проявлен, не больше PARALLEL сразу на все слои, через кэш QGIS. Тайлы,
-ушедшие из вида, снимаются. Тайл без ответа не просится снова.
+ушедшие из вида, снимаются. Тайл без ответа просится снова не раньше
+RETRY. Сколько тайлов вида ещё нет, вид знает по sky_pending - его
+показывает значок загрузки.
 """
+import time
+
 from qgis.PyQt.QtCore import QObject, QTimer
 from qgis.PyQt.QtGui import QImage
 
@@ -18,6 +22,7 @@ from ..net.overlay import fetch_bytes
 
 PARALLEL = 6
 TICK = 120  # мс между проверками нужных тайлов
+RETRY = 60.0  # с до повторной просьбы тайла без ответа
 ALLSKY = "allsky"
 
 
@@ -28,7 +33,7 @@ class SkySurveys(QObject):
         self.view = view
         self.on = False
         self.loading = {}  # (ключ слоя, ключ тайла или ALLSKY): ответ
-        self.failed = set()
+        self.failed = {}  # ключ: время отказа
         self.timer = QTimer(self)
         self.timer.setInterval(TICK)
         self.timer.timeout.connect(self._tick)
@@ -49,11 +54,23 @@ class SkySurveys(QObject):
 
     def _abort(self):
         loading, self.loading = self.loading, {}
+        self.view.sky_pending = 0
         for reply in loading.values():
             reply.abort()
 
+    def _refused(self, key):
+        """Отказ свежее RETRY - тайл пока не просится."""
+        when = self.failed.get(key)
+        if when is None:
+            return False
+        if time.monotonic() - when < RETRY:
+            return True
+        del self.failed[key]
+        return False
+
     def _tick(self):
         if not self.on or self.view.sky_view is None:
+            self.view.sky_pending = 0
             return
         wanted = set()
         queue = []
@@ -64,11 +81,12 @@ class SkySurveys(QObject):
             if layer.allsky and sky.allsky is None \
                     and sky.allsky_pending is None:
                 key = (layer.key, ALLSKY)
-                wanted.add(key)
-                queue.append((key, hips.allsky_url(layer.base), sky))
+                if not self._refused(key):
+                    wanted.add(key)
+                    queue.append((key, hips.allsky_url(layer.base), sky))
             for tile in sky.want:
                 key = (layer.key, tile)
-                if key in self.failed or sky.has(tile):
+                if sky.has(tile) or self._refused(key):
                     continue
                 wanted.add(key)
                 queue.append((key, hips.tile_url(layer.base, *tile), sky))
@@ -78,9 +96,13 @@ class SkySurveys(QObject):
         for key, url, sky in queue:
             if len(self.loading) >= PARALLEL:
                 break
-            if key in self.loading or key in self.failed:
+            if key in self.loading:
                 continue
             self._fetch(key, url, sky)
+        pending = len(wanted | set(self.loading))
+        if pending != self.view.sky_pending:
+            self.view.sky_pending = pending
+            self.view.update()
 
     def _fetch(self, key, url, sky):
         self.loading[key] = fetch_bytes(
@@ -93,7 +115,7 @@ class SkySurveys(QObject):
         del self.loading[key]
         image = QImage.fromData(data) if data else QImage()
         if image.isNull():
-            self.failed.add(key)
+            self.failed[key] = time.monotonic()
             return
         rgba = image_to_rgba(image)
         if key[1] == ALLSKY:

@@ -444,6 +444,8 @@ class GlobeView(QOpenGLWidget):
         # Запросов данных вне загрузчиков тайлов: файлы зон плит.
         # Входят в счётчик загрузки, его показывает значок загрузки.
         self.data_pending = 0
+        # Тайлов снимков неба вида, которых ещё нет (ui/skysurvey.py).
+        self.sky_pending = 0
         # Стенка разреза вдоль линии (окно «Разрез»): видна сквозь
         # поверхность.
         self.section_wall = Subsurface(xray=True)
@@ -710,10 +712,11 @@ class GlobeView(QOpenGLWidget):
     def _check_load(self, sel):
         """Сколько ждёт кадр и стоит ли загрузка, для строки состояния."""
         if self.sky_view is not None:
-            # Небо ничего не ждёт. Загрузка глобуса под ним стоит, но
-            # это не остановка.
-            if self.load_missing or self.load_stalled:
-                self.load_missing, self.load_stalled = 0, 0.0
+            # Небо ждёт только снимки неба (ui/skysurvey.py). Загрузка
+            # глобуса под ним стоит, но это не остановка.
+            missing = self.sky_pending
+            if missing != self.load_missing or self.load_stalled:
+                self.load_missing, self.load_stalled = missing, 0.0
                 self.load_changed.emit()
             return
         if sel is None or self.shot is not None:

@@ -15830,6 +15830,9 @@ def sky_survey_wide():
         state["survey_t0"] = time.monotonic()
         return 1000
     spent = time.monotonic() - state["survey_t0"]
+    # Сторож значка загрузки в виде неба - на прежнем коде всегда 0.
+    out["mid_spinner_max"] = max(out.get("mid_spinner_max", 0),
+                                 window.view.load_missing)
     if _sky_busy(window) and spent < 90:
         return 1000
     out["mid_seconds"] = round(spent, 1)
@@ -15851,6 +15854,8 @@ def sky_survey_check():
     if _sky_busy(window) and spent < 90:
         return 1000
     out = result["survey"]
+    out["near_spinner"] = window.view.load_missing
+    out["failed"] = len(window.sky_surveys.failed)
     out["near_seconds"] = round(spent, 1)
     out["near_shares"] = (starmap.share, dss.share)
     out["near_orders"] = sorted({k[0] for k in dss.textures})
