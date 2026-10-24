@@ -1673,6 +1673,13 @@ EN = {
     "Готовые источники": "Ready sources",
     "NASA и USGS": "NASA and USGS",
     "Подоснова": "Base maps",
+    "Локальные данные": "Local data",
+    "Подробные снимки и карты отдельных районов из служб "
+    "их владельцев. Строка ставит подоснову, вне района "
+    "на глобусе снимки Esri.":
+        "Detailed imagery and maps of separate areas from the services of "
+        "their owners. The row sets the base map, outside the area the "
+        "globe shows Esri imagery.",
     "Подложки глобуса - снимки и карты. На глобусе одна подоснова, под "
     "картами и слоями.":
         "Base maps of the globe - imagery and maps. The globe has one base "

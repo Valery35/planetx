@@ -18,7 +18,7 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 from qgis.utils import iface
 
 from ... import journal
-from ...core import tileoverlays
+from ...core import tileoverlays, wms
 from ...core import (basemap, clouds, fields, geology, temperature,
                      flow as flow_core, quakes, themes, tilemaps)
 from ...core.sync import ground_size, view_box, inside as in_box
@@ -162,6 +162,25 @@ class StateMixin:
             self.properties.close()
             self.properties = None
         self._panel_basemap(names.index(source.name))
+        return True
+
+    def add_local_source(self, key):
+        """Подложка категории «Локальные данные» (core.wms.LOCAL):
+        запись в источники WMS и подоснова. Истина - поставлена."""
+        from ..tilesource import save_wms, wms_entries
+        entry = wms.local_entry(key, is_russian())
+        if not any(e.get("local") == key for e in wms_entries()):
+            save_wms(entry)
+        self.sources = all_sources()
+        index = next((n for n, s in enumerate(self.sources)
+                      if (getattr(s, "entry", None) or {}).get("local")
+                      == key), None)
+        if index is None:
+            return False
+        if self.properties is not None:
+            self.properties.close()
+            self.properties = None
+        self._panel_basemap(index)
         return True
 
     def remove_ready_source(self, key):

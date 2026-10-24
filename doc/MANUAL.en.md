@@ -1027,7 +1027,11 @@ bodies the row shows the imagery of the body, there is no choice.
 
 The same base maps with previews are gathered in the Base maps
 category of the Add data catalog, a click on a row sets the base map
-of the globe.
+of the globe. The Local data category of the same catalog holds
+detailed imagery of separate areas from the services of their owners.
+The first row is the spring 2020 orthophoto of nine counties around
+Philadelphia (PASDA DVRPC 2020). The row sets the base map, outside
+the area the globe shows Esri imagery.
 
 The Ready sources submenu adds a base map with one click. The sources
 are gathered in the OpenStreetMap, Esri, NASA and USGS, and Google,

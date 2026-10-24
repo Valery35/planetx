@@ -294,6 +294,53 @@ def entries_text(items):
     return json.dumps(items, ensure_ascii=False)
 
 
+# Категория «Локальные данные» каталога «Добавить данные» - службы WMS
+# с подробными снимками и картами отдельных районов, просьба автора от
+# 24 октября 2026 года. Поля: ключ, название по-русски и по-английски,
+# описание по-русски и по-английски, адрес службы, слои, охват
+# в градусах, подпись. PASDA (Pennsylvania Spatial Data Access) -
+# ортофото DVRPC весны 2020 года, Nearmap, 9 округов вокруг Филадельфии,
+# GetCapabilities от 23 октября 2026 года.
+PASDA_DVRPC = ("https://imagery.pasda.psu.edu/arcgis/services/pasda/"
+               "DVRPC2020/MapServer/WMSServer")
+LOCAL = (
+    ("pasda_dvrpc2020", "PASDA DVRPC 2020, Филадельфия",
+     "PASDA DVRPC 2020, Philadelphia",
+     "Ортофото весны 2020 года девяти округов вокруг Филадельфии (США), "
+     "служба Pennsylvania Spatial Data Access. Служба медленная, "
+     "картинки приходят за несколько секунд.",
+     "Spring 2020 orthophoto of nine counties around Philadelphia (USA), "
+     "the Pennsylvania Spatial Data Access service. The service is slow, "
+     "pictures arrive in a few seconds.",
+     PASDA_DVRPC, tuple(str(n) for n in range(9)),
+     (-76.145206, 39.514075, -74.385339, 40.608742),
+     "PASDA, DVRPC, Nearmap 2020"),
+)
+LOCAL_KEYS = tuple(row[0] for row in LOCAL)
+
+
+def local_entry(key, russian=True):
+    """Запись настройки PlanetX/wms_sources для строки LOCAL."""
+    for row in LOCAL:
+        if row[0] == key:
+            _, ru, en, _, _, base, layers, box, credit = row
+            return {"name": ru if russian else en, "base": base,
+                    "layers": list(layers),
+                    "template": getmap_template(base, "1.3.0", layers,
+                                                MERCATOR_CODES[0],
+                                                "image/png"),
+                    "box": list(box), "level": basemap.MAX_LEVEL,
+                    "credit": credit, "local": key}
+    raise KeyError(key)
+
+
+def local_about(key, russian=True):
+    for row in LOCAL:
+        if row[0] == key:
+            return row[3] if russian else row[4]
+    raise KeyError(key)
+
+
 def source(entry):
     """Подложка по записи настройки. Под районом службы - Esri World
     Imagery, её подпись идёт следом за подписью службы."""

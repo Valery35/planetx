@@ -15655,6 +15655,62 @@ def wms_source_cleanup():
 
 
 @check(1000)
+def gallery_local():
+    """Категория «Локальные данные» каталога, просьба автора от
+    24 октября 2026 года: строка PASDA ставит подоснову-WMS."""
+    from planetx.ui import nasamaps
+    from planetx.ui.tilesource import remove_wms, wms_entries
+    window = state["window"]
+    window.set_body("earth")
+    window._panel_basemap(0)
+    for entry in wms_entries():
+        if entry.get("local"):
+            remove_wms(entry["name"])
+    window.open_gallery()
+    gallery = window.gallery
+    gallery._set_group(nasamaps.LOCAL_GROUP)
+    key = nasamaps.BASE + "pasda_dvrpc2020"
+    item = gallery.items[key][0]
+    out = result["gallery_local"] = {
+        "groups": [gallery.groups.item(n).text()
+                   for n in range(gallery.groups.count())],
+        "shown": [gallery.items[k][0].text().split("\n")[0]
+                  for k in gallery.items if not gallery.items[k][0].isHidden()],
+        "on_before": gallery.is_on(key), "preview_url":
+        (nasamaps.base_url(key) or "")[:80]}
+    gallery._clicked(item)
+    out["source"] = window.source.name
+    out["on_after"] = gallery.is_on(key)
+    out["entries"] = [e["name"] for e in wms_entries()]
+    state["gallery_t0"] = time.monotonic()
+
+
+@check(1000)
+def gallery_local_wait():
+    window = state["window"]
+    gallery = window.gallery
+    key = "base:pasda_dvrpc2020"
+    spent = time.monotonic() - state["gallery_t0"]
+    if key not in gallery._loaded and spent < 60:
+        return 1000
+    out = result["gallery_local"]
+    out["preview_loaded"] = key in gallery._loaded
+    out["seconds"] = round(spent, 1)
+    gallery.grab().save(os.path.join(TEMP, "planetx_gallery_local.png"))
+    from planetx.ui.tilesource import remove_wms, wms_entries
+    for entry in wms_entries():
+        if entry.get("local"):
+            remove_wms(entry["name"])
+    from planetx.ui import window as wmod
+    window.sources = wmod.all_sources()
+    window._panel_basemap(0)
+    out["restored"] = window.source.name
+    out["errors"] = len(window.errors)
+    window.close_gallery()
+    return None
+
+
+@check(1000)
 def polar_caps():
     """Шапки выше 85° - снимками полярных служб Esri, решение автора от
     23 октября 2026 года. Вид на Южный полюс с 3000 км."""

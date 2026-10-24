@@ -36,7 +36,7 @@ from ..core import (clouds, cutaway, deposits, fires, flow, paleo,
                     plants, plates, quakes, slope, stars, sun, temperature,
                     themes, trains, vessels, weather)
 from ..core import aircraft
-from ..core import basemap
+from ..core import basemap, wms
 from ..core import satellites as satellites_core
 from ..i18n import is_russian, tr
 from ..net.overlay import fetch_bytes
@@ -67,6 +67,10 @@ SAT_GROUP = "satellites"
 # Превью таких источников не просится до согласия.
 BASE = "base:"
 BASE_GROUP = "basemaps"
+# Категория «Локальные данные» - подложки отдельных районов из служб WMS
+# (core.wms.LOCAL), строки того же вида, что «Подоснова», просьба
+# автора от 24 октября 2026 года.
+LOCAL_GROUP = "local"
 BUILTIN_BASES = ("esri_imagery", "osm")
 # Категория «Карта»: группы векторной основы (ключ VECTOR + номер
 # группы панели) и строки, которые до 12 октября 2026 года стояли
@@ -867,8 +871,16 @@ def base_keys():
         BASE + k for _, keys in basemap.READY_GROUPS for k in keys]
 
 
+def local_keys():
+    """Строки категории «Локальные данные»."""
+    return [BASE + k for k in wms.LOCAL_KEYS]
+
+
 def base_key(source):
     """Ключ строки «Подосновы» источника подложки или ""."""
+    entry = getattr(source, "entry", None)
+    if entry is not None and entry.get("local"):
+        return BASE + entry["local"]
     if source.ready:
         return BASE + source.ready
     if source.builtin:
@@ -882,12 +894,16 @@ def _base_source(key):
         return basemap.esri_imagery()
     if name == "osm":
         return basemap.osm()
+    if name in wms.LOCAL_KEYS:
+        return wms.source(wms.local_entry(name, is_russian()))
     return basemap.ready_source(name, is_russian())
 
 
 def base_name(key):
     """Название и подсказка строки «Подосновы»."""
     source = _base_source(key)
+    if key[len(BASE):] in wms.LOCAL_KEYS:
+        return source.name, wms.local_about(key[len(BASE):], is_russian())
     row = basemap.ready_entry(key[len(BASE):])
     if row is not None and row[7]:
         tip = tr("Условия сервиса не разрешают брать тайлы по прямому "
@@ -909,7 +925,14 @@ def base_url(key):
     «Подосновы» и у источников с предупреждением до согласия."""
     if not key.startswith(BASE):
         return None
-    row = basemap.ready_entry(key[len(BASE):])
+    name = key[len(BASE):]
+    if name in wms.LOCAL_KEYS:
+        # Превью района - картинка охвата службы, тайл 1/1/0 мира был
+        # бы снимком Esri.
+        entry = wms.local_entry(name)
+        return entry["template"].replace("{bbox}", wms.bbox_text(
+            wms.preview_bbox(entry["box"])))
+    row = basemap.ready_entry(name)
     if row is not None and row[7]:
         return None
     return _base_source(key).tile_url(*themes.THUMB_TILE)
@@ -970,6 +993,10 @@ class NasaMaps(QWidget):
                 (BASE_GROUP, tr("Подоснова"), tr(
                     "Подложки глобуса - снимки и карты. На глобусе "
                     "одна подоснова, под картами и слоями.")),
+                (LOCAL_GROUP, tr("Локальные данные"), tr(
+                    "Подробные снимки и карты отдельных районов из служб "
+                    "их владельцев. Строка ставит подоснову, вне района "
+                    "на глобусе снимки Esri.")),
                 (MAP, tr("Карта"), tr(
                     "Векторная основа OpenFreeMap, координатная сетка, "
                     "3D-здания и горизонтали."))] \
@@ -1019,6 +1046,10 @@ class NasaMaps(QWidget):
         for key in base_keys():
             self.names[key] = base_name(key)
             self._row(key, BASE_GROUP, BASE)
+            self.thumbs[key] = ramp_image([])
+        for key in local_keys():
+            self.names[key] = base_name(key)
+            self._row(key, LOCAL_GROUP, BASE)
             self.thumbs[key] = ramp_image([])
         self._head("maps", tr("Карта на глобусе - одна"))
         for key, group, kind in themes.gallery_items():
@@ -1348,6 +1379,8 @@ class NasaMaps(QWidget):
                           if base_key(s) == key), None)
             if index is not None:
                 window._panel_basemap(index)
+        elif name in wms.LOCAL_KEYS:
+            window.add_local_source(name)
         else:
             window.add_ready_source(name)
         self.refresh()

@@ -164,6 +164,19 @@ class TestSource(unittest.TestCase):
         self.assertEqual(tuple(out[0, 0]), (200, 0, 0, 255))
         self.assertEqual(tuple(out[1, 1]), (100, 100, 100, 255))
 
+    def test_local_entry(self):
+        entry = wms.local_entry("pasda_dvrpc2020")
+        self.assertEqual(entry["local"], "pasda_dvrpc2020")
+        self.assertIn("LAYERS=0,1,2,3,4,5,6,7,8", entry["template"])
+        back = wms.entries_parse(wms.entries_text([entry]))
+        source = wms.source(back[0])
+        self.assertEqual(source.entry["local"], "pasda_dvrpc2020")
+        self.assertEqual(source.min_level, 6)
+        self.assertIn("Philadelphia",
+                      wms.local_entry("pasda_dvrpc2020", False)["name"])
+        with self.assertRaises(KeyError):
+            wms.local_entry("nope")
+
     def test_entries_round_trip(self):
         items = [self.entry((-75.3, 39.8, -74.9, 40.2)),
                  {"name": "bad", "template": "https://h.org/{z}"}]
