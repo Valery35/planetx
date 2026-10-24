@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.11.1
+version=1.11.2
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,9 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.11.1 The loading icon shows sky imagery that is still
+changelog=1.11.2 Sky imagery tiles fade in smoothly over their coarser
+      parent, like the Earth tiles, instead of appearing abruptly.
+      1.11.1 The loading icon shows sky imagery that is still
       loading. A sky tile that did not arrive is requested again a
       minute later instead of staying coarse until the window is
       reopened.
