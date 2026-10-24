@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.10.0.
+A 3D globe inside QGIS. PlanetX version 1.11.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -53,6 +53,10 @@ and atmosphere, from space down to single streets.
 - **Starry sky.** The Body icon also opens the sky from the centre of the
   celestial sphere. It shows the Milky Way, stars, constellation lines
   and names, the Sun, the Moon and the planets at the chosen time.
+  Zoomed in, the sky shows the detailed NASA sky map and, closer,
+  DSS survey images with nebulae and galaxies. Deep-sky objects are
+  labelled, a click opens a card, and the Search bar finds them by
+  designation or name.
 - **Inside the Earth.** The terrain shows sea and ocean depths under
   semi-transparent water. The Earthquakes layer shows the foci of the last
   30 days from the USGS feed at their depth. The Earth cutaway layer
@@ -310,7 +314,10 @@ Clouds come from [NASA GIBS](https://www.earthdata.nasa.gov/engage/open-data-ser
 VIIRS imagery. Temperature comes from NASA GIBS, MODIS and GHRSST MUR.
 Stars come from the Yale Bright Star Catalogue. The
 Milky Way comes from [NASA/Goddard Space Flight Center Scientific Visualization Studio](https://svs.gsfc.nasa.gov/4851),
-Gaia DR2 - ESA/Gaia/DPAC.
+Gaia DR2 - ESA/Gaia/DPAC. Close-up sky images come from the Digitized
+Sky Survey (STScI/NASA) through the CDS HiPS service. Deep-sky objects
+come from the [OpenNGC](https://github.com/mattiaverga/OpenNGC)
+catalogue, CC BY-SA 4.0, other names from the CDS Sesame service.
 
 Mars imagery - NASA, USGS, Viking MDIM2.1. Moon imagery - USGS,
 LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).

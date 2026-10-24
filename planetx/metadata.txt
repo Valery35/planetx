@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.10.0
+version=1.11.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.10.0 The New tile source window takes the address of a
+changelog=1.11.0 The sky view shows imagery when zoomed in. From afar
+      it is the Milky Way with catalogue stars, closer than 50 degrees
+      the detailed NASA sky map appears, closer than 6 degrees the DSS
+      survey images with nebulae and galaxies. Deep-sky objects of the
+      Messier catalogue and bright NGC and IC objects are labelled with
+      a circle of their size, a click opens a card. The Search bar
+      finds them by designation or name, other objects through the
+      Sesame name service.
+      1.10.0 The New tile source window takes the address of a
       WMS service and offers its layers, the Local data category of
       the Add data catalog holds detailed imagery of separate areas,
       the first is the 2020 orthophoto around Philadelphia. With an
