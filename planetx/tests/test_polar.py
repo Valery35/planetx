@@ -76,9 +76,15 @@ class TestLayout(unittest.TestCase):
         self.assertEqual([round(v) for v in have[3]], [10, 40, 100])
         out = polar.matched(image, lay, have, [(15, 60, 150)] * 8)
         self.assertEqual(tuple(out[5, 5, :3]), (15, 60, 150))
-        # Множитель ограничен: чёрный край не делает снимок белым.
+        # Множитель и сдвиг ограничены: тёмный край не делает снимок
+        # белым.
         out = polar.matched(image, lay, have, [(255, 255, 255)] * 8)
-        self.assertEqual(int(out[5, 5, 2]), 200)
+        self.assertEqual(int(out[5, 5, 2]), 200 + int(polar.SHIFT_MAX))
+        # Почти нулевой красный канал Arctic Imagery поднимается сдвигом.
+        image[..., :3] = (0, 40, 90)
+        have = polar.rim_color(lay, image)
+        out = polar.matched(image, lay, have, [(25, 80, 100)] * 8)
+        self.assertEqual(tuple(out[5, 5, :3]), (25, 80, 100))
         self.assertEqual(polar.edge_rows(False), slice(240, 256))
 
     def test_sector_gain_follows_longitude(self):

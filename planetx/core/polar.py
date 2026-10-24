@@ -134,9 +134,12 @@ class Layout:
 # и синее World Imagery, шапка выделялась тёмным кругом - снимок автора
 # от 24 октября 2026 года. Средний цвет кольца шапки у края (RIM_LAT)
 # приводится к среднему цвету подложки сразу за краем, множитель канала
-# в пределах GAIN_RANGE.
+# в пределах GAIN_RANGE. Красный канал Arctic Imagery у края около 0.5
+# против 15-30 у подложки, множитель его не поднимает - остаток после
+# множителя добавляется сдвигом не больше SHIFT_MAX.
 RIM_LAT = 84.9
 GAIN_RANGE = (0.5, 2.0)
+SHIFT_MAX = 48.0
 
 
 SECTORS = 8  # секторов по долготе - тайлы уровня 3 у края
@@ -179,22 +182,29 @@ def pixel_lon(layout, shape):
 
 
 def matched(image, layout, have, want):
-    """Мозаика с каналами, умноженными на want / have по секторам долготы
-    (массивы секторов × 3). Между серединами секторов множитель плавно
-    переходит, к полюсу - к среднему по всем секторам."""
+    """Мозаика с цветом have, приведённым к want по секторам долготы
+    (массивы секторов × 3): множитель канала и сдвиг остатка. Между
+    серединами секторов они плавно переходят, к полюсу - к среднему по
+    всем секторам."""
     have = np.asarray(have, dtype=np.float64).reshape(-1, 3)
     want = np.asarray(want, dtype=np.float64).reshape(-1, 3)
     gains = np.clip(want / np.maximum(have, 1.0), *GAIN_RANGE)
+    shifts = np.clip(want - have * gains, -SHIFT_MAX, SHIFT_MAX)
     count = len(gains)
     lon, share = pixel_lon(layout, image.shape)
     pos = (lon + 180.0) / 360.0 * count - 0.5
     low = np.floor(pos).astype(int)
     t = (pos - low)[..., None]
-    gain = gains[low % count] * (1 - t) + gains[(low + 1) % count] * t
     w = np.clip(share, 0.0, 1.0)[..., None]
-    gain = gain * w + gains.mean(axis=0) * (1 - w)
+
+    def spread(values):
+        near = values[low % count] * (1 - t) \
+            + values[(low + 1) % count] * t
+        return (near * w + values.mean(axis=0) * (1 - w)) \
+            .astype(np.float32)
+
     out = image.astype(np.float32)
-    out[:, :, :3] *= gain.astype(np.float32)
+    out[:, :, :3] = out[:, :, :3] * spread(gains) + spread(shifts)
     return np.clip(out + 0.5, 0, 255).astype(np.uint8)
 
 
