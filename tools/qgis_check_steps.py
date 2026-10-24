@@ -15675,7 +15675,8 @@ def gallery_local():
         "groups": [gallery.groups.item(n).text()
                    for n in range(gallery.groups.count())],
         "shown": [gallery.items[k][0].text().split("\n")[0]
-                  for k in gallery.items if not gallery.items[k][0].isHidden()],
+                  for k in gallery.items
+                  if not gallery.items[k][0].isHidden()],
         "on_before": gallery.is_on(key), "preview_url":
         (nasamaps.base_url(key) or "")[:80]}
     gallery._clicked(item)

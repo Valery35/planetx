@@ -67,6 +67,39 @@ class TestLayout(unittest.TestCase):
         self.assertEqual(out[256 + 5, 512 + 5, 0], 200)
         self.assertEqual(out[5, 5, 0], 40)
 
+    def test_rim_color_matches_base(self):
+        lay = polar.Layout(True)
+        image = lay.mosaic({})
+        image[..., :3] = (10, 40, 100)
+        have = polar.rim_color(lay, image)
+        self.assertEqual(have.shape, (polar.SECTORS, 3))
+        self.assertEqual([round(v) for v in have[3]], [10, 40, 100])
+        out = polar.matched(image, lay, have, [(15, 60, 150)] * 8)
+        self.assertEqual(tuple(out[5, 5, :3]), (15, 60, 150))
+        # Множитель ограничен: чёрный край не делает снимок белым.
+        out = polar.matched(image, lay, have, [(255, 255, 255)] * 8)
+        self.assertEqual(int(out[5, 5, 2]), 200)
+        self.assertEqual(polar.edge_rows(False), slice(240, 256))
+
+    def test_sector_gain_follows_longitude(self):
+        # Сектор 0 (долготы -180..-135) светлее вдвое, прочие как есть:
+        # точка края на -157.5° вдвое светлее, на 22.5° без изменений.
+        for north in (True, False):
+            lay = polar.Layout(north)
+            image = lay.mosaic({})
+            image[..., :3] = 100
+            want = np.full((8, 3), 100.0)
+            want[0] = 200.0
+            out = polar.matched(image, lay, np.full((8, 3), 100.0), want)
+            lat = np.array([polar.RIM_LAT if north else -polar.RIM_LAT] * 2)
+            u, v = lay.uv(lat, np.array([-157.5, 22.5]))
+            h, w = out.shape[:2]
+            got = out[(v * h).astype(int), (u * w).astype(int), 0]
+            self.assertGreater(int(got[0]), 185, north)
+            self.assertEqual(int(got[1]), 100, north)
+            lon, share = polar.pixel_lon(lay, image.shape)
+            self.assertLess(float(share.min()), 0.01)
+
     def test_needed(self):
         self.assertEqual(polar.needed(10.0, 2.5e7), (True, False))
         self.assertEqual(polar.needed(70.0, 1.0e5), (True,))

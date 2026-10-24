@@ -130,6 +130,74 @@ class Layout:
         return out
 
 
+# Подгонка цвета шапки к подложке. Снимок Esri Arctic Imagery темнее
+# и синее World Imagery, шапка выделялась тёмным кругом - снимок автора
+# от 24 октября 2026 года. Средний цвет кольца шапки у края (RIM_LAT)
+# приводится к среднему цвету подложки сразу за краем, множитель канала
+# в пределах GAIN_RANGE.
+RIM_LAT = 84.9
+GAIN_RANGE = (0.5, 2.0)
+
+
+SECTORS = 8  # секторов по долготе - тайлы уровня 3 у края
+
+
+def rim_color(layout, image, count=3600, sectors=SECTORS):
+    """Средние цвета RGB мозаики на кольце RIM_LAT шапки по секторам
+    долготы от -180°, массив sectors × 3."""
+    lat = np.full(count, RIM_LAT if layout.north else -RIM_LAT)
+    lon = np.arange(count) * 360.0 / count - 180.0
+    u, v = layout.uv(lat, lon)
+    h, w = image.shape[:2]
+    cols = np.clip((u * w).astype(int), 0, w - 1)
+    rows = np.clip((v * h).astype(int), 0, h - 1)
+    colors = image[rows, cols, :3].astype(np.float64)
+    return colors.reshape(sectors, -1, 3).mean(axis=1)
+
+
+def edge_rows(north, size=SIDE, rows=16):
+    """Строки тайлов Web Mercator уровня 3 у края шапки: верхние ряда 0
+    у севера, нижние ряда 7 у юга."""
+    return slice(0, rows) if north else slice(size - rows, size)
+
+
+def pixel_lon(layout, shape):
+    """Долгота и доля радиуса края шапки у пикселей мозаики."""
+    srv = SERVICES[layout.north]
+    h, w = shape[:2]
+    x = layout.x0 + (np.arange(w) + 0.5) / w * layout.width
+    y = layout.y0 - (np.arange(h) + 0.5) / h * layout.height
+    x, y = np.meshgrid(x, y)
+    fx, fy = srv["shift"]
+    dx, dy = x - fx, y - fy
+    turn = np.arctan2(dx, -dy) if layout.north else np.arctan2(dx, dy)
+    lon = (np.degrees(turn) + srv["lon0"] + 180.0) % 360.0 - 180.0
+    ex, ey = project(MAX_LAT if layout.north else -MAX_LAT, 0.0,
+                     layout.north)
+    rim = math.hypot(float(ex - fx), float(ey - fy))
+    return lon, np.hypot(dx, dy) / rim
+
+
+def matched(image, layout, have, want):
+    """Мозаика с каналами, умноженными на want / have по секторам долготы
+    (массивы секторов × 3). Между серединами секторов множитель плавно
+    переходит, к полюсу - к среднему по всем секторам."""
+    have = np.asarray(have, dtype=np.float64).reshape(-1, 3)
+    want = np.asarray(want, dtype=np.float64).reshape(-1, 3)
+    gains = np.clip(want / np.maximum(have, 1.0), *GAIN_RANGE)
+    count = len(gains)
+    lon, share = pixel_lon(layout, image.shape)
+    pos = (lon + 180.0) / 360.0 * count - 0.5
+    low = np.floor(pos).astype(int)
+    t = (pos - low)[..., None]
+    gain = gains[low % count] * (1 - t) + gains[(low + 1) % count] * t
+    w = np.clip(share, 0.0, 1.0)[..., None]
+    gain = gain * w + gains.mean(axis=0) * (1 - w)
+    out = image.astype(np.float32)
+    out[:, :, :3] *= gain.astype(np.float32)
+    return np.clip(out + 0.5, 0, 255).astype(np.uint8)
+
+
 def needed(lat, altitude):
     """Полюса, шапку которых видно: глаз выше 2000 км видит оба, ближе -
     тот, к которому ближе широта точки взгляда."""

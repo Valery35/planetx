@@ -224,6 +224,8 @@ class LayersMixin:
             return
         on = bool(self.planet.earth) and contour_is_imagery(
             self.source.name, self.source.url)
+        if on:
+            caps.set_source(self.source)
         if on != self.view.polar_on:
             self.view.polar_on = on
             self.view.update()

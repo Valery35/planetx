@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.9.1
+version=1.10.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.9.1 The True Z elevations item of the menu of a layer
+changelog=1.10.0 The New tile source window takes the address of a
+      WMS service and offers its layers, the Local data category of
+      the Add data catalog holds detailed imagery of separate areas,
+      the first is the 2020 orthophoto around Philadelphia. With an
+      imagery base map the poles above 85 degrees show Esri polar
+      imagery instead of a flat color. Zooming toward a mountain no
+      longer jumps the view far away. The 30 m terrain and sea
+      depths load through the QGIS network settings.
+      1.9.1 The True Z elevations item of the menu of a layer
       with Z puts its vertices at their elevations above sea level with
       terrain off, for example contours rise above the flat Earth.
       1.9.0 The manual search of the Search bar finds words in any
