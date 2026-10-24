@@ -14,11 +14,12 @@ from ...core.coords import parse_point
 from ...core.flight import fit_view
 from ...core.geocode import (SEARCH_INTERVAL, normalize, parse_places,
                              place_text, search_url)
-from ...core import assistant as assistant_core, searchbar, skydata
+from ...core import (assistant as assistant_core, deepsky, searchbar,
+                     skydata)
 from ...core.places import Place as MarkPlace
 from ...core.searchbar import Suggestion
 from ...i18n import tr, ui_language
-from ...net.overlay import fetch_json
+from ...net.overlay import fetch_bytes, fetch_json
 from ...qt_compat import enum
 from .. import commands as commands_ui
 from ..assistant import current_provider, ready, search_enabled
@@ -109,6 +110,12 @@ class SearchMixin:
         if action is not None:
             self.run_action(action)
             return
+        # Объект неба вне каталога ищет служба имён Sesame CDS.
+        # Просьба словами по-прежнему уходит помощнику.
+        if query and self.view.sky_view is not None \
+                and not assistant_core.is_request(query):
+            self._sky_search(query)
+            return
         # Просьба словами уходит помощнику, название места - Nominatim.
         # Вне Земли Nominatim не работает, туда идёт любой запрос.
         if query and assistant and (assistant_core.is_request(query)
@@ -155,6 +162,41 @@ class SearchMixin:
         self._search_reply = fetch_json(
             search_url(*key),
             lambda data, error: self._search_done(key, data, error))
+
+    def _sky_search(self, query):
+        """Объект неба по имени через Sesame CDS, ответ - перелёт
+        взгляда. Запрос один за раз, прежний снимается."""
+        reply = getattr(self, "_sesame_reply", None)
+        if reply is not None:
+            reply.abort()
+        self.message = (tr("Поиск на небе: {text}", text=query),
+                        time.monotonic())
+        self._show_state()
+        self._set_busy("search", True)
+        self._sesame_reply = fetch_bytes(
+            deepsky.sesame_url(query),
+            lambda data, error: self._sky_found(query, data, error))
+
+    def _sky_found(self, query, data, error):
+        self._sesame_reply = None
+        self._set_busy("search", False)
+        found = None
+        if data is not None:
+            found = deepsky.parse_sesame(bytes(data).decode("utf-8",
+                                                            "replace"))
+        if found is None:
+            self.message = (tr("На небе не найдено: {text}", text=query)
+                            if data is not None else
+                            tr("Поиск не удался: {error}", error=error),
+                            time.monotonic())
+            self._show_state()
+            return
+        ra, dec, name = found
+        self.message = (tr("Найдено: {name}", name=name or query),
+                        time.monotonic())
+        self._show_state()
+        if self.view.sky_view is not None:
+            self.view.fly_sky(ra, dec, deepsky.FOV_UNKNOWN)
 
     def _set_busy(self, reason, on):
         """Значок ожидания у строки «Поиск». reason - чего ждём,
@@ -289,8 +331,8 @@ class SearchMixin:
             return []
         if self._sky_objects is None:
             language = "ru" if ui_language() == "ru" else "en"
-            self._sky_objects = searchbar.sky_objects(skydata.load(),
-                                                      language)
+            self._sky_objects = searchbar.sky_objects(
+                skydata.load(), language, self.sky_labels.deep)
         return self._sky_objects
 
     def _search_actions(self):
@@ -414,6 +456,8 @@ class SearchMixin:
         else:
             # Плавный перелёт взгляда, как двойной щелчок по небу.
             self.view.fly_sky(ra, item.lat, item.fov)
+        if item.kind == "deepsky":
+            self.open_deep_card(item.key)
         self.view.setFocus()
 
     def _mark(self, name, lat, lon):

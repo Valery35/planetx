@@ -22,19 +22,27 @@ Nominatim при вводе не спрашивается: правила слу
 import re
 from collections import namedtuple
 
+try:  # внутри плагина QGIS
+    from . import deepsky
+except ImportError:  # headless-тесты
+    import deepsky
+
 Suggestion = namedtuple("Suggestion", "kind text key lat lon fov note words",
                         defaults=("", ()))
 Suggestion.__doc__ = """Подсказка строки поиска.
 
 kind - "place" (своя метка, key - её ключ), "star", "constellation"
 (lat - склонение, lon - прямое восхождение, градусы, fov - поле
-зрения), "history" (text - прежний запрос), "action" (действие модуля,
-key - его ключ, note - что оно сделает, words - другие слова, по
-которым оно находится), "manual" (раздел руководства, key - номер
-раздела в core.manualindex.Index, note - его абзац со словами запроса).
+зрения), "deepsky" (объект глубокого неба, key - номер в каталоге
+core.deepsky, words - другие его имена), "history" (text - прежний
+запрос), "action" (действие модуля, key - его ключ, note - что оно
+сделает, words - другие слова, по которым оно находится), "manual"
+(раздел руководства, key - номер раздела в core.manualindex.Index,
+note - его абзац со словами запроса).
 text - название."""
 
 KIND_ORDER = {"place": 0, "action": 0, "constellation": 1, "star": 1,
+              "deepsky": 1,
               "history": 2, "manual": 3}
 LIMIT = 12  # подсказок в списке
 HISTORY = 30  # запросов в истории
@@ -99,7 +107,12 @@ def suggestions(query, places=(), history=(), sky=(), limit=LIMIT,
             found.append((r, Suggestion("place", name, key, lat, lon,
                                         None)))
     for item in sky:
-        r = rank(q, item.text)
+        if item.words:
+            # Имя целиком - лучшее совпадение: «ngc224» раньше NGC 2243.
+            exact_word = any(norm(w) == q for w in item.words)
+            r = -1 if exact_word else action_rank(q, item)
+        else:
+            r = rank(q, item.text)
         if r is not None:
             found.append((r, item))
     for text in history:
@@ -127,7 +140,7 @@ def exact(query, items):
     q = norm(query)
     return [s for s in items
             if q and (norm(s.text) == q
-                      or (s.kind == "action"
+                      or (s.kind in ("action", "deepsky")
                           and any(norm(w) == q for w in s.words)))]
 
 
@@ -148,9 +161,10 @@ def remember(history, query, size=HISTORY):
     return ([query.strip()] + [h for h in history if norm(h) != q])[:size]
 
 
-def sky_objects(data, language="ru"):
-    """Звёзды и созвездия неба из data/constellations.json как
-    подсказки. language - "ru" или "en"."""
+def sky_objects(data, language="ru", deep=()):
+    """Звёзды и созвездия неба из data/constellations.json и объекты
+    глубокого неба deep (core.deepsky.DeepObject) как подсказки.
+    language - "ru" или "en"."""
     out = []
 
     def lon_of(ra):
@@ -165,4 +179,11 @@ def sky_objects(data, language="ru"):
         out.append(Suggestion("star", item.get(language) or item.get("en", ""),
                               None, float(item["dec"]),
                               lon_of(float(item["ra"])), STAR_FOV))
+    for n, obj in enumerate(deep):
+        name = deepsky.title(obj, language)
+        text = obj.label if name == obj.label \
+            else "{} ({})".format(name, obj.label)
+        out.append(Suggestion("deepsky", text, n, float(obj.dec),
+                              lon_of(float(obj.ra)), deepsky.fov_for(obj),
+                              "", tuple(deepsky.names(obj, language))))
     return [s for s in out if s.text]

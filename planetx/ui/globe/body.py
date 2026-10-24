@@ -5,16 +5,22 @@
 
 Часть окна глобуса GlobeWindow (ui/window.py)."""
 from qgis.core import QgsSettings
+from qgis.PyQt.QtCore import Qt
 
 from ... import journal
-from ...core import basemap, ellipsoid
+from ...core import basemap, deepsky, ellipsoid
 from ...core.navigation import Pose
 from ...core.planets import planet_by_key
 from ...core.skyview import SkyView
 from ...net.overlay import label_kinds
+from ...i18n import tr
+from ...qt_compat import enum
 from ...render.view import start_keys
+from ..assistant import current_provider, ready
+from ..placecard import Card, DeepSkyCard, deep_question
 from ..project import FOLLOW, map_layers, read_flag, read_shown, visible_on_map
-from .base import CONSTELLATIONS_KEY, EARTH_EXTRAS, SKY_SURVEY_KEY
+from .base import (CONSTELLATIONS_KEY, DEEPSKY_KEY, EARTH_EXTRAS,
+                   SKY_IMAGERY_KEY)
 
 
 class BodyMixin:
@@ -160,15 +166,55 @@ class BodyMixin:
         self.toolbar.constellations.setChecked(bool(on))
         self.view.update()
 
-    def set_sky_survey(self, key):
-        """Снимок неба: ключ обзора HiPS core.hips.SURVEYS, пусто -
-        Млечный путь."""
-        self.sky_surveys.set_survey(key or None)
-        key = self.sky_surveys.key or ""
-        QgsSettings().setValue(SKY_SURVEY_KEY, key)
-        action = self.toolbar.survey_actions.get(key)
-        if action is not None:
-            action.setChecked(True)
+    def set_deepsky(self, on):
+        """Подписи объектов глубокого неба (core/deepsky.py)."""
+        self.view.show_deepsky = bool(on)
+        QgsSettings().setValue(DEEPSKY_KEY, bool(on))
+        self.toolbar.deepsky.setChecked(bool(on))
+        self.view.update()
+
+    def open_deep_card(self, number):
+        """Карточка объекта глубокого неба в панели справа. Окно свойств
+        в панели главнее, как у карточки метки."""
+        held = self.side.dialog
+        if held is not None and not isinstance(held, Card):
+            return
+        obj = self.sky_labels.deep[number]
+        card = DeepSkyCard(number, obj, self.sky_labels.language,
+                           ready(current_provider()), self)
+        card.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
+        card.explain.connect(self.explain_deep)
+        card.fly.connect(self.fly_deep)
+        self._place_card = card
+        card.finished.connect(lambda *a, c=card: self._card_closed(c))
+        self.side.host(card)
+
+    def fly_deep(self, number):
+        """Перелёт взгляда к объекту глубокого неба."""
+        obj = self.sky_labels.deep[number]
+        if self.view.sky_view is None:
+            self.show_sky(obj.ra, obj.dec, deepsky.fov_for(obj))
+        else:
+            self.view.fly_sky(obj.ra, obj.dec, deepsky.fov_for(obj))
+
+    def explain_deep(self, number):
+        """«Объясни это» карточки объекта неба."""
+        card = getattr(self, "_place_card", None)
+        question = deep_question(self.sky_labels.deep[number],
+                                 self.sky_labels.language)
+        if self._assistant().ask(question):
+            self._explaining = card
+            if card is not None:
+                card.show_answer(tr("Помощник думает…"))
+        elif card is not None:
+            card.show_answer(tr("Помощник занят прежним вопросом или не "
+                                "подключён."))
+
+    def set_sky_imagery(self, on):
+        """Снимки неба при приближении (core.hips.LAYERS)."""
+        self.sky_surveys.set_on(on)
+        QgsSettings().setValue(SKY_IMAGERY_KEY, bool(on))
+        self.toolbar.imagery.setChecked(bool(on))
         self._show_attribution()
         self.view.update()
 

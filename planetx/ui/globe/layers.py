@@ -1089,11 +1089,10 @@ class LayersMixin:
         if self.view.sky_view is not None:
             credits = [link_html(*credit) for credit in SKY_ATTRIBUTION]
             surveys = getattr(self, "sky_surveys", None)
-            survey = hips.survey(surveys.key) if surveys else None
-            if survey is not None:
-                # Снимок обзора вместо Млечного пути и точек звёзд.
-                credits = [link_html(survey[5], survey[6]), credits[2],
-                           credits[3]]
+            if surveys is not None and surveys.on:
+                # Карта NASA SVS - тот же источник, что у Млечного пути,
+                # к подписи добавляется DSS.
+                credits.append(link_html(hips.DSS_CREDIT, hips.DSS_TERMS))
             self._set_credits(credits, len(credits))
             return
         parts = [attribution_html(self.source)]

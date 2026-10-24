@@ -67,6 +67,11 @@ class IdentifyMixin:
                 ra, dec = ra_dec_of(sky.direction_at(px, py, cam.width,
                                                      cam.height))
                 tool.add(dec, ra - 360.0 if ra > 180.0 else ra)
+            elif tool is None:
+                # Щелчок по подписи объекта глубокого неба - карточка.
+                number = self.sky_labels.object_at(px, py)
+                if number is not None:
+                    self.open_deep_card(number)
             return
         if tool is not None:
             if tool is self.ruler and tool.spatial():

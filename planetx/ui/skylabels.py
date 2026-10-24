@@ -16,7 +16,7 @@ from qgis.PyQt.QtCore import QRectF, Qt
 from qgis.PyQt.QtGui import QColor, QFont, QFontMetricsF, QPainter
 from qgis.PyQt.QtWidgets import QWidget
 
-from ..core import skydata
+from ..core import deepsky, skydata
 from ..core.skydata import direction
 from ..i18n import is_russian, tr
 from ..qt_compat import enum
@@ -26,6 +26,9 @@ FONT_PIXELS = 12.0  # кегль подписи в логических пикс
 STAR_COLOR = QColor(235, 235, 225, 210)
 CONSTELLATION_COLOR = QColor(120, 160, 220, 200)
 PLACE_COLOR = QColor(255, 214, 64)  # метки неба, как метки глобуса
+DEEP_COLOR = QColor(140, 215, 170, 220)  # объекты глубокого неба
+MARK = 4.0  # радиус кружка мелкого объекта, логических пикселей
+PICK = 10.0  # допуск щелчка по кружку, логических пикселей
 
 
 def body_name(key):
@@ -56,9 +59,30 @@ class SkyLabels(QWidget):
             self.fixed.append((direction(entry["ra"], entry["dec"]),
                                entry[key], "constellation",
                                20.0 + entry["rank"]))
+        # Объекты глубокого неба, вид подписи "deep:номер".
+        self.language = key
+        self.deep = deepsky.load()
         self.shown = []  # подписи последнего рисования, для проверок
         self.shot_shown = []  # подписи последнего снимка вида
+        # Объекты глубокого неба последнего рисования для щелчка:
+        # (номер, x, y, радиус значка, прямоугольник подписи).
+        self.hits = []
         self.hide()
+
+    def object_at(self, px, py, slack=PICK):
+        """Номер объекта глубокого неба под пикселем кадра px, py -
+        по значку или подписи последнего рисования, иначе None."""
+        best, near = None, None
+        ratio = self.view.devicePixelRatioF()
+        for n, x, y, r, rect in self.hits:
+            d = ((px - x) ** 2 + (py - y) ** 2) ** 0.5
+            if rect.contains(px, py):
+                d = 0.0
+            elif d > max(r, slack * ratio):
+                continue
+            if near is None or d < near:
+                best, near = n, d
+        return best
 
     def sync(self):
         """Показать слой, если вид в режиме неба, и перерисовать."""
@@ -80,6 +104,13 @@ class SkyLabels(QWidget):
                      skydata.bodies(moment))]
         items += [(v, name, "place", 9.0)
                   for v, name in self.view.sky_places]
+        sky = self.view.sky_view
+        if getattr(self.view, "show_deepsky", True) and sky is not None:
+            items += [(direction(obj.ra, obj.dec),
+                       deepsky.title(obj, self.language), "deep:%d" % n,
+                       deepsky.rank(obj))
+                      for n, obj in enumerate(self.deep)
+                      if deepsky.shown(obj, sky.fov)]
         if self.view.show_constellations:
             return items + self.fixed
         return items + [item for item in self.fixed if item[2] == "star"]
@@ -101,25 +132,41 @@ class SkyLabels(QWidget):
         gap = GAP * scale
         painter.setRenderHint(enum(QPainter, "RenderHint",
                                    "TextAntialiasing"))
-        taken, shown = [], []
+        taken, shown, hits = [], [], []
         flags = enum(Qt, "AlignmentFlag", "AlignLeft") \
             | enum(Qt, "AlignmentFlag", "AlignVCenter")
+        step = sky.radians_per_pixel(height)
         for (_, text, kind, _), (x, y), ahead in zip(items, pixels, front):
             if not ahead or not (0.0 <= x <= width and 0.0 <= y <= height):
                 continue
             body = kind.startswith("body") or kind == "place"
+            deep = kind.startswith("deep:")
             metrics = QFontMetricsF(big if body else font)
             w = metrics.horizontalAdvance(text) if hasattr(
                 metrics, "horizontalAdvance") else metrics.width(text)
             h = metrics.height()
+            radius = 0.0
+            if deep:
+                obj = self.deep[int(kind[5:])]
+                radius = min(max(deepsky.radius_pixels(obj, step),
+                                 MARK * scale), float(max(width, height)))
             if kind == "constellation":
                 rect = QRectF(x - w / 2.0, y - h / 2.0, w, h)
+            elif deep:
+                rect = QRectF(x + radius * 0.7 + gap, y - h / 2.0, w, h)
             else:
                 rect = QRectF(x + gap, y - h - scale, w, h)
             if any(rect.intersects(other) for other in taken):
                 continue
             taken.append(rect)
-            if kind == "place":
+            if deep:
+                # Круг размера объекта, мелкий - кружок значка.
+                color = DEEP_COLOR
+                painter.setPen(color)
+                painter.drawEllipse(QRectF(x - radius, y - radius,
+                                           2.0 * radius, 2.0 * radius))
+                hits.append((int(kind[5:]), x, y, radius, rect))
+            elif kind == "place":
                 # Кружок на месте метки: у светил и звёзд точку рисует
                 # видеокарта, у метки неба - этот слой.
                 color = PLACE_COLOR
@@ -137,6 +184,7 @@ class SkyLabels(QWidget):
             painter.setPen(color)
             painter.drawText(rect, flags, text)
             shown.append((kind, text, round(x), round(y)))
+        self.last_hits = hits
         return shown
 
     def paintEvent(self, event):
@@ -147,5 +195,7 @@ class SkyLabels(QWidget):
             # Проекция - в пикселях кадра, холст виджета - в логических.
             p.scale(1.0 / ratio, 1.0 / ratio)
             self.shown = self.draw(p, cam.width, cam.height, ratio)
+            # Щелчок ищет объект на экране, а не на снимке вида.
+            self.hits = getattr(self, "last_hits", [])
         finally:
             p.end()

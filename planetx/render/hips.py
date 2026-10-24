@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Обзор неба HiPS в виде неба (core/hips.py).
+"""Слой снимков неба HiPS в виде неба (core/hips.py, Layer).
 
 Тайл - сетка вершин-направлений на бесконечности, как у линий
 созвездий (w = 0, глубина 1.0), с картинкой тайла. Рисуются от
-грубых к подробным без смешивания: подробный тайл закрывает предка.
-Пока подробного нет, виден загруженный предок, без него - тайл
-порядка 3 из Allsky.jpg. Выбор тайлов вида - want, загрузку ведёт
-ui/skysurvey.py.
+грубых к подробным: подробный тайл закрывает предка. Пока подробного
+нет, виден загруженный предок не мельче layer.low, у слоя с Allsky -
+тайл порядка 3 из Allsky.jpg. Слой проявляется по полю зрения
+(hips.share) смешиванием с тем, что нарисовано под ним. Выбор тайлов
+вида - want, загрузку ведёт ui/skysurvey.py.
 """
 import ctypes
 import math
@@ -37,10 +38,11 @@ void main() {
 
 TILE_FRAGMENT = """#version 330 core
 uniform sampler2D u_map;
+uniform float u_alpha;
 in vec2 v_uv;
 out vec4 frag;
 void main() {
-    frag = vec4(texture(u_map, v_uv).rgb, 1.0);
+    frag = vec4(texture(u_map, v_uv).rgb, u_alpha);
 }
 """
 
@@ -51,15 +53,16 @@ WANT_LIMIT = 120  # тайлов вида не больше
 
 
 class HipsSky:
-    """Тайлы одного обзора в видеокарте и выбор тайлов вида."""
+    """Тайлы одного слоя в видеокарте и выбор тайлов вида."""
 
-    def __init__(self):
+    def __init__(self, layer):
+        self.layer = layer
         self.program = None
         self.locations = {}
         self.indices = hips.mesh_indices()
         self.ebo = None
-        self.key = None  # ключ обзора
-        self.top = hips.MIN_ORDER
+        self.top = layer.top
+        self.share = 0.0  # проявление слоя в последнем кадре
         self.allsky = None  # (текстура, ширина, высота)
         self.allsky_pending = None
         self.textures = OrderedDict()  # (порядок, номер): текстура
@@ -67,17 +70,6 @@ class HipsSky:
         self.meshes = OrderedDict()  # (порядок, номер): (vao, vbo)
         self.want = []  # недостающие тайлы вида, важные первыми
         self.drawn = 0
-
-    def set_survey(self, key, top):
-        """Другой обзор: прежние картинки уходят."""
-        if key == self.key:
-            return
-        self.key = key
-        self.top = top
-        self._drop_textures()
-        self.allsky_pending = None
-        self.pending.clear()
-        self.want = []
 
     def set_allsky(self, rgba):
         self.allsky_pending = rgba
@@ -91,7 +83,7 @@ class HipsSky:
     def init_gl(self):
         self.program = gpu.build_program(TILE_VERTEX, TILE_FRAGMENT)
         self.locations = {name: GL.glGetUniformLocation(self.program, name)
-                          for name in ("u_mvp", "u_rect", "u_map")}
+                          for name in ("u_mvp", "u_rect", "u_map", "u_alpha")}
         self.ebo = int(np.ravel(GL.glGenBuffers(1))[0])
         gl.glBindBuffer(GL.GL_ELEMENT_ARRAY_BUFFER, self.ebo)
         GL.glBufferData(GL.GL_ELEMENT_ARRAY_BUFFER, self.indices.nbytes,
@@ -168,13 +160,17 @@ class HipsSky:
         """Тайлы кадра: что рисовать (от грубых к подробным) и чего
         не хватает. Порядок тайлов вида - по пикселю экрана."""
         order = hips.order_for(radians_per_pixel, self.top)
+        if order is None and not self.layer.allsky:
+            order = self.layer.low
+        if order is not None:
+            order = max(order, self.layer.low)
         draw = {}
         want = []
         if order is not None:
             cells = hips.visible(order, axis, reach)
             if len(cells) > WANT_LIMIT:
                 # Поле шире, чем держит запас: тайлы порядком грубее.
-                while order > hips.MIN_ORDER and len(cells) > WANT_LIMIT:
+                while order > self.layer.low and len(cells) > WANT_LIMIT:
                     order -= 1
                     cells = hips.visible(order, axis, reach)
             near = hips.centers(order, cells) @ axis
@@ -182,28 +178,34 @@ class HipsSky:
                 ipix = int(ipix)
                 if (order, ipix) not in self.textures:
                     want.append((order, ipix))
-                for level in range(order, hips.MIN_ORDER - 1, -1):
+                for level in range(order, self.layer.low - 1, -1):
                     key = (level, ipix >> (2 * (order - level)))
                     if key in self.textures:
                         draw[key] = "tile"
                         self.textures.move_to_end(key)
                         break
                 else:
-                    draw[(hips.MIN_ORDER,
-                          ipix >> (2 * (order - hips.MIN_ORDER)))] = "allsky"
+                    if self.layer.allsky:
+                        draw[(hips.MIN_ORDER, ipix >> (
+                            2 * (order - hips.MIN_ORDER)))] = "allsky"
         else:
             for ipix in hips.visible(hips.MIN_ORDER, axis, reach):
                 draw[(hips.MIN_ORDER, int(ipix))] = "allsky"
         self.want = [k for k in want if k not in self.pending]
         return sorted(draw.items())
 
-    def draw(self, camera, view):
-        """Нарисовать обзор вместо картинки Млечного пути. view -
-        core.skyview.SkyView."""
+    def draw(self, camera, view, share=1.0):
+        """Нарисовать слой с долей проявления share поверх того, что
+        под ним. view - core.skyview.SkyView. Без проявления тайлы вида
+        не просятся."""
         self.drawn = 0
-        if self.program is None or self.key is None:
+        self.share = share
+        if self.program is None:
             return
         self._upload()
+        if share <= 0.0:
+            self.want = []
+            return
         t = math.tan(math.radians(camera.fov_y) / 2.0)
         reach = math.atan(t * math.hypot(1.0, camera.aspect))
         items = self.select(view.forward(), reach,
@@ -214,8 +216,13 @@ class HipsSky:
         gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                             ctypes.c_void_p(mvp.ctypes.data))
         gl.glUniform1i(loc["u_map"], 0)
+        gl.glUniform1f(loc["u_alpha"], float(share))
         gl.glActiveTexture(GL.GL_TEXTURE0)
-        gl.glDisable(GL.GL_BLEND)
+        if share < 1.0:
+            gl.glEnable(GL.GL_BLEND)
+            gpu.gl.glBlendFunc(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA)
+        else:
+            gl.glDisable(GL.GL_BLEND)
         gl.glDepthFunc(GL.GL_LEQUAL)
         gl.glDepthMask(GL.GL_FALSE)
         count = len(self.indices)
@@ -240,5 +247,6 @@ class HipsSky:
         finally:
             gl.glBindVertexArray(0)
             gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
+            gl.glDisable(GL.GL_BLEND)
             gl.glDepthMask(GL.GL_TRUE)
             gl.glDepthFunc(GL.GL_LESS)

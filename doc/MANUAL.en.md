@@ -3632,13 +3632,31 @@ The Constellations item of the same menu hides and shows the
 constellation lines and names. Stars, their names, the Sun, the Moon
 and the planets stay.
 
-The Sky imagery submenu of the same menu changes the sky image. Milky
-Way is the NASA SVS image with catalog stars as points. DSS, visible
-light and 2MASS, near infrared are sky surveys of the CDS service
-(Strasbourg): on zooming in, tiles load in finer detail, down to 0.8″
-per pixel. Nebulae, galaxies and stars are in the image itself, catalog
-points are not drawn. The images are scans of photographic plates,
-neighbouring plates differ in brightness and show as squares from afar.
+The Sky imagery on zooming in item of the same menu is on by default.
+From afar the sky is the NASA SVS Milky Way image with catalog stars as
+points. At a field of view from 50° to 35° the detailed NASA SVS Deep
+Star Maps 2020 sky map built from Gaia and Tycho stars, about 40″ per
+pixel, fades in instead. At a field of view from 6° to 3° images of the
+DSS survey of the CDS service (Strasbourg), down to 0.8″ per pixel, fade
+in over the map. DSS tiles arrive with a delay, until then the map is
+visible. DSS images are scans of photographic plates, neighbouring
+plates differ in brightness, and the brightness changes at a plate
+edge.
+
+The Deep-sky objects item of the same menu shows labels of galaxies,
+nebulae and clusters. These are all Messier objects and NGC and IC
+objects brighter than magnitude 10 or with a common name, 617 in
+total, OpenNGC data. Messier objects are labelled at any field of
+view, the others at a field narrower than 40°. A circle shows the
+object size. A click on a label opens a card in the right panel with
+the type, designations, constellation, magnitude, size, coordinates
+and a link to the SIMBAD database. The Fly to button turns the view to
+the object, Explain this asks the assistant.
+
+The Search line in the sky view finds catalog objects by designation
+and name - M31, M 31, NGC 224, Andromeda. An object outside the
+catalog is looked up on Enter by the CDS Sesame name service, for
+example Crab or NGC 6543.
 
 Places and tours work in the sky. Save view puts a place with the
 view direction and the field of view. New place puts a point with a

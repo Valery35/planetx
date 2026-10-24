@@ -92,7 +92,7 @@ from .toolbar import ViewToolbar
 from .globe.base import (ACCEPTED_KEY, ATTRIBUTION_STYLE, AUTO_DEFAULT,
                          BRAND_STYLE,
                          BASEMAP_KEY, CONSTELLATIONS_KEY, COORDS_KEY,
-                         SKY_SURVEY_KEY,
+                         DEEPSKY_KEY, SKY_IMAGERY_KEY,
                          DEFAULT_GROUPS, EXTRA_DEFAULTS, EXTRA_KEY,
                          FLOW_LAYERS, GIBS_FADES, GROUND_DELAY, GUIDE_DELAY,
                          LANGUAGE_KEY, LAYER_TIME_DELAY, LINES_KEY, LINK_TICK,
@@ -168,6 +168,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.view.changed.connect(self.handles.sync)
         self.view.show_constellations = QgsSettings().value(
             CONSTELLATIONS_KEY, True, type=bool)
+        self.view.show_deepsky = QgsSettings().value(
+            DEEPSKY_KEY, True, type=bool)
         self._sky_state = None  # взгляд на небо до выхода из него
         # Шкала времени меток, своя, как в Google Earth. Она нужна
         # до первого чтения «Моих меток».
@@ -758,6 +760,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.view.show_constellations)
         self.toolbar.constellations_toggled.connect(
             self.set_constellations)
+        self.toolbar.deepsky.setChecked(self.view.show_deepsky)
+        self.toolbar.deepsky_toggled.connect(self.set_deepsky)
         self.toolbar.body_chosen.connect(self.set_body)
         self._update_timebar()
         self.tour.stop_reached.connect(self._stop_reached)
@@ -983,8 +987,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.polar_caps.arrived.connect(self._show_attribution)
         self.view.changed.connect(self._polar_view)
         self.sky_surveys = SkySurveys(self.view, self)
-        self.toolbar.survey_chosen.connect(self.set_sky_survey)
-        self.set_sky_survey(QgsSettings().value(SKY_SURVEY_KEY, ""))
+        self.toolbar.imagery_toggled.connect(self.set_sky_imagery)
+        self.set_sky_imagery(QgsSettings().value(SKY_IMAGERY_KEY, True,
+                                                 type=bool))
         self._update_polar()
         for key, on in self.extras.items():
             self._apply_extra(key, on)

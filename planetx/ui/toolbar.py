@@ -13,8 +13,7 @@ from qgis.PyQt.QtCore import QSize, pyqtSignal
 from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton
 
 from ..core.planets import MENU
-from ..core import hips
-from ..i18n import is_russian, tr
+from ..i18n import tr
 from ..qt_compat import QActionGroup, enum
 from .style import icon, plate
 
@@ -56,7 +55,8 @@ class ViewToolbar(QFrame):
     time_toggled = pyqtSignal(bool)
     body_chosen = pyqtSignal(str)
     constellations_toggled = pyqtSignal(bool)
-    survey_chosen = pyqtSignal(str)  # ключ обзора неба, пусто - нет
+    deepsky_toggled = pyqtSignal(bool)
+    imagery_toggled = pyqtSignal(bool)  # снимки неба при приближении
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal(str)
@@ -297,26 +297,25 @@ class ViewToolbar(QFrame):
                             "и светила."))
         lines.toggled.connect(self.constellations_toggled)
         self.constellations = lines
-        # Обзор неба HiPS вместо картинки Млечного пути.
-        surveys = menu.addMenu(tr("Снимок неба"))
-        surveys.setToolTipsVisible(True)
-        survey_group = QActionGroup(surveys)
-        self.survey_actions = {}
-        rows = [("", tr("Млечный путь"), tr(
-            "Картинка неба NASA SVS и звёзды каталога точками."))]
-        for key, _, _, ru, en, _, _ in hips.SURVEYS:
-            rows.append((key, ru if is_russian() else en, tr(
-                "Снимки неба при приближении - тайлы обзора HiPS службы "
-                "CDS. Звёзды и туманности на снимке, точки каталога "
-                "не рисуются.")))
-        for key, name, tip in rows:
-            action = surveys.addAction(name)
-            action.setCheckable(True)
-            action.setActionGroup(survey_group)
-            action.setToolTip(tip)
-            action.triggered.connect(
-                lambda checked, k=key: self.survey_chosen.emit(k))
-            self.survey_actions[key] = action
+        deep = menu.addAction(tr("Объекты глубокого неба"))
+        deep.setCheckable(True)
+        deep.setChecked(True)
+        deep.setToolTip(tr("Подписи галактик, туманностей и скоплений "
+                           "каталогов Мессье, NGC и IC. Щелчок по подписи "
+                           "открывает карточку объекта."))
+        deep.toggled.connect(self.deepsky_toggled)
+        self.deepsky = deep
+        # Снимки неба HiPS при приближении (core.hips.LAYERS).
+        imagery = menu.addAction(tr("Снимки неба при приближении"))
+        imagery.setCheckable(True)
+        imagery.setChecked(True)
+        imagery.setToolTip(tr(
+            "Ближе поля зрения около 50° вместо картинки Млечного пути "
+            "проявляется подробная карта неба NASA, ближе 6° - снимки "
+            "обзора DSS. Без флажка небо - картинка Млечного пути "
+            "и звёзды каталога."))
+        imagery.toggled.connect(self.imagery_toggled)
+        self.imagery = imagery
         body.setMenu(menu)
         self.layout().addWidget(body)
         self.body = body

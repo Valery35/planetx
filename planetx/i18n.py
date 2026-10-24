@@ -13,16 +13,44 @@ __all__ = ["tr", "is_russian", "set_language", "EN"]
 
 EN = {
     # Снимок неба - обзоры HiPS, 24 октября 2026 года.
-    "Снимок неба": "Sky imagery",
-    "Млечный путь": "Milky Way",
-    "Картинка неба NASA SVS и звёзды каталога точками.":
-        "NASA SVS sky image and catalog stars as points.",
-    "Снимки неба при приближении - тайлы обзора HiPS службы "
-    "CDS. Звёзды и туманности на снимке, точки каталога "
-    "не рисуются.":
-        "Sky images on zooming in - tiles of a CDS HiPS survey. "
-        "Stars and nebulae are in the image, catalog points are "
-        "not drawn.",
+    "Объекты глубокого неба": "Deep-sky objects",
+    "Подписи галактик, туманностей и скоплений каталогов Мессье, NGC "
+    "и IC. Щелчок по подписи открывает карточку объекта.":
+        "Labels of galaxies, nebulae and clusters of the Messier, NGC and "
+        "IC catalogues. A click on a label opens the object card.",
+    "Спросить помощника об этом объекте неба. Помощнику уходят "
+    "обозначение, название, вид, созвездие и координаты объекта. Ответ "
+    "появится здесь и под строкой «Поиск».":
+        "Ask the assistant about this sky object. The assistant receives "
+        "the designation, name, type, constellation and coordinates of "
+        "the object. The answer appears here and under the Search line.",
+    "Обозначение": "Designation",
+    "Созвездие": "Constellation",
+    "Другое название": "Other name",
+    "Звёздная величина": "Magnitude",
+    "Размер": "Size",
+    "{size}′": "{size}′",
+    "Прямое восхождение": "Right ascension",
+    "Объект в базе SIMBAD": "Object in the SIMBAD database",
+    "Каталог - OpenNGC, CC BY-SA 4.0": "Catalogue - OpenNGC, CC BY-SA 4.0",
+    "Объясни, что это за объект неба и чем он интересен наблюдателю. "
+    "{kind} {label} «{name}» в созвездии {const}, прямое восхождение "
+    "{ra}, склонение {dec}.":
+        "Explain what this sky object is and what makes it interesting to "
+        "an observer. {kind} {label} \"{name}\" in the constellation "
+        "{const}, right ascension {ra}, declination {dec}.",
+    "Поиск на небе: {text}": "Sky search: {text}",
+    "На небе не найдено: {text}": "Not found in the sky: {text}",
+    "Найдено: {name}": "Found: {name}",
+    "Снимки неба при приближении": "Sky imagery on zooming in",
+    "Ближе поля зрения около 50° вместо картинки Млечного пути "
+    "проявляется подробная карта неба NASA, ближе 6° - снимки "
+    "обзора DSS. Без флажка небо - картинка Млечного пути "
+    "и звёзды каталога.":
+        "Below a field of view of about 50° the detailed NASA sky map "
+        "fades in instead of the Milky Way image, below 6° the DSS "
+        "survey images. Without the check box the sky is the Milky Way "
+        "image and catalog stars.",
     # Суда Балтики и самолёты, 19 октября 2026 года.
     "Пассажирские": "Passenger",
     "Танкеры": "Tankers",

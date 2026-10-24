@@ -14,6 +14,7 @@ Norder{k}/Dir{ipix // 10000 * 10000}/Npix{ipix}.jpg. Весь порядок 3 -
 J2000 у обзоров в экваториальной системе.
 """
 import math
+from collections import namedtuple
 
 import numpy as np
 
@@ -28,27 +29,39 @@ JRLL = (2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4)
 JPLL = (1, 3, 5, 7, 0, 2, 4, 6, 1, 3, 5, 7)
 
 CDS = "https://alasky.cds.unistra.fr/"
+TERRAIN = "https://raw.githubusercontent.com/Valery35/planetx-terrain/main/"
 
-# Обзоры: ключ, адрес, наибольший порядок, названия по-русски
-# и по-английски, подпись источника и её ссылка. Условия -
-# doc/SOURCES.md.
-SURVEYS = (
-    ("dss", CDS + "DSS/DSSColor/", 9,
-     "DSS, видимый свет", "DSS, visible light",
-     "DSS: STScI/NASA, CDS", "https://archive.stsci.edu/dss/"
-     "acknowledging.html"),
-    ("2mass", CDS + "2MASS/Color/", 9,
-     "2MASS, ближний инфракрасный", "2MASS, near infrared",
-     "2MASS: UMass, IPAC/Caltech, CDS", "https://www.ipac.caltech.edu/"
-     "2mass/"),
+Layer = namedtuple("Layer", "key base top allsky low far near")
+Layer.__doc__ = """Слой снимков неба. base - адрес HiPS, top - наибольший
+порядок, allsky - есть ли Allsky.jpg на месте недостающих тайлов, low -
+наименьший порядок своих тайлов, far и near - поле зрения (градусы),
+на котором слой начинает проявляться и проявлен целиком."""
+
+# Решение автора от 24 октября 2026 года после снимка DSS на среднем
+# приближении - пластинки разной яркости и следы спутников: без выбора
+# обзора в меню. Издалека картинка Млечного пути со звёздами каталога,
+# ближе карта NASA SVS Deep Star Maps 2020 (тот же источник, переход без
+# скачка яркости, тайлы - tools/build_starmap.py в planetx-terrain),
+# совсем вблизи DSS - только его загруженные тайлы, на месте прочих
+# видна карта. Поля зрения - выбор помощника, утверждает автор.
+LAYERS = (
+    Layer("starmap", TERRAIN + "sky/starmap/", 4, True, 3, 50.0, 35.0),
+    Layer("dss", CDS + "DSS/DSSColor/", 9, False, 5, 6.0, 3.0),
 )
 
 
-def survey(key):
-    for item in SURVEYS:
-        if item[0] == key:
-            return item
-    return None
+DSS_CREDIT = "DSS: STScI/NASA, CDS"
+DSS_TERMS = "https://archive.stsci.edu/dss/acknowledging.html"
+
+
+def share(layer, fov):
+    """Доля проявления слоя при поле зрения fov, от 0 до 1, плавно."""
+    if fov >= layer.far:
+        return 0.0
+    if fov <= layer.near:
+        return 1.0
+    t = (layer.far - fov) / (layer.far - layer.near)
+    return t * t * (3.0 - 2.0 * t)
 
 
 def tile_url(base, order, ipix):

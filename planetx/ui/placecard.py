@@ -30,7 +30,7 @@ from qgis.PyQt.QtGui import QDesktopServices, QTextDocument
 from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QLabel, QPushButton,
                                  QTextBrowser, QVBoxLayout)
 
-from ..core import balloon
+from ..core import balloon, deepsky
 from ..core.flight import lon_span, wrap_lon
 from ..i18n import tr
 
@@ -220,6 +220,53 @@ class FeatureCard(Card):
         pick.clicked.connect(lambda: self.select.emit(self.key))
         self.buttons.addWidget(pick)
         self.finish_buttons()
+
+
+class DeepSkyCard(Card):
+    """Карточка объекта глубокого неба (core.deepsky.DeepObject) -
+    часть 2 снимка неба, решение автора от 24 октября 2026 года. Ключ
+    сигналов - номер объекта в каталоге."""
+
+    def __init__(self, number, obj, language, can_explain, parent=None):
+        super().__init__(number, deepsky.title(obj, language), can_explain,
+                         tr("Спросить помощника об этом объекте неба. "
+                            "Помощнику уходят обозначение, название, вид, "
+                            "созвездие и координаты объекта. Ответ появится "
+                            "здесь и под строкой «Поиск»."), parent)
+        self.obj = obj
+        rows = [(tr("Тип"), deepsky.kind_name(obj.kind, language)),
+                (tr("Обозначение"), ", ".join(
+                    n for n in (obj.label, obj.other) if n)),
+                (tr("Созвездие"), obj.const)]
+        other = obj.en if language == "ru" else ""
+        if other and other != deepsky.title(obj, language):
+            rows.append((tr("Другое название"), other))
+        if obj.mag is not None:
+            rows.append((tr("Звёздная величина"), "{:.1f}".format(obj.mag)))
+        if obj.size:
+            rows.append((tr("Размер"), tr("{size}′", size="{:.1f}".format(
+                obj.size))))
+        rows += [(tr("Прямое восхождение"), deepsky.ra_text(obj.ra)),
+                 (tr("Склонение"), deepsky.dec_text(obj.dec))]
+        self.text.setHtml(
+            "<p><b>{}</b></p>{}<p><a href=\"{}\">{}</a></p>"
+            "<p style='color:gray'>{}</p>".format(
+                html.escape(deepsky.title(obj, language)), fields_html(rows),
+                html.escape(deepsky.simbad_url(obj), quote=True),
+                html.escape(tr("Объект в базе SIMBAD")),
+                html.escape(tr("Каталог - OpenNGC, CC BY-SA 4.0"))))
+        self.finish_buttons()
+
+
+def deep_question(obj, language="ru"):
+    """Вопрос помощнику об объекте глубокого неба."""
+    return tr(
+        "Объясни, что это за объект неба и чем он интересен наблюдателю. "
+        "{kind} {label} «{name}» в созвездии {const}, прямое восхождение "
+        "{ra}, склонение {dec}.", kind=deepsky.kind_name(obj.kind, language),
+        label=", ".join(n for n in (obj.label, obj.other) if n),
+        name=deepsky.title(obj, language), const=obj.const,
+        ra=deepsky.ra_text(obj.ra), dec=deepsky.dec_text(obj.dec))
 
 
 # Поля, текст которых - описание объекта, без учёта регистра.

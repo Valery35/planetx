@@ -74,6 +74,20 @@ class TestTiles(unittest.TestCase):
                          "b/Norder5/Dir10000/Npix12345.jpg")
         self.assertEqual(hips.allsky_url("b/"), "b/Norder3/Allsky.jpg")
 
+    def test_layers_fade_in_order(self):
+        # Издалека снимков нет, ближе - карта, совсем вблизи - DSS.
+        starmap, dss = hips.LAYERS
+        self.assertEqual(hips.share(starmap, 70.0), 0.0)
+        self.assertEqual(hips.share(starmap, 20.0), 1.0)
+        self.assertEqual(hips.share(dss, 20.0), 0.0)
+        self.assertEqual(hips.share(dss, 1.0), 1.0)
+        middle = hips.share(starmap, (starmap.far + starmap.near) / 2)
+        self.assertAlmostEqual(middle, 0.5)
+        # Карта проявлена раньше, чем начинается DSS.
+        self.assertLessEqual(dss.far, starmap.near)
+        self.assertTrue(starmap.allsky)
+        self.assertFalse(dss.allsky)
+
     def test_order_for_view(self):
         # Широкий вид - Allsky.jpg, поле 1° на 1000 пикселей - порядок
         # с пикселем не крупнее 1.5 пикселя экрана, не глубже обзора.

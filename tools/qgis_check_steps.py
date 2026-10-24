@@ -15782,16 +15782,23 @@ def polar_caps_check():
 
 @check(1000)
 def sky_survey():
-    """Снимок неба DSS в виде неба, просьба автора от 24 октября
-    2026 года. Сначала всё небо с полем 60°, потом туманность Ориона
-    с полем 1.5°."""
+    """Снимки неба при приближении, решение автора от 24 октября
+    2026 года: с полем 60° картинка Млечного пути, с 25° у M51 карта
+    NASA SVS из planetx-terrain, с 1.5° у туманности Ориона - DSS."""
     window = state["window"]
+    # PLANETX_STARMAP_DIR - папка тайлов карты вместо planetx-terrain.
+    folder = os.environ.get("PLANETX_STARMAP_DIR")
+    if folder:
+        from qgis.PyQt.QtCore import QUrl
+        starmap = window.view.hips_layers[0]
+        starmap.layer = starmap.layer._replace(
+            base=QUrl.fromLocalFile(folder).toString() + "/")
+    window.set_sky_imagery(True)
     window.show_sky(83.82, -5.39, 60.0)
-    window.set_sky_survey("dss")
+    window.view.update()
     state["survey_t0"] = time.monotonic()
-    result["survey"] = {"key": window.sky_surveys.key,
-                        "action": window.toolbar.survey_actions[
-                            "dss"].isChecked()}
+    result["survey"] = {"on": window.sky_surveys.on,
+                        "action": window.toolbar.imagery.isChecked()}
 
 
 def _sky_frame(window, name):
@@ -15804,20 +15811,32 @@ def _sky_frame(window, name):
     return round(float(rgb.mean()), 1), round(float(rgb.std()), 1)
 
 
+def _sky_busy(window):
+    return window.sky_surveys.loading or any(
+        sky.want or sky.pending for sky in window.view.hips_layers)
+
+
 @check(1000)
 def sky_survey_wide():
     window = state["window"]
-    hips = window.view.hips
-    spent = time.monotonic() - state["survey_t0"]
-    if (hips.allsky is None or hips.want or window.sky_surveys.loading) \
-            and spent < 60:
-        return 1000
+    starmap, dss = window.view.hips_layers
     out = result["survey"]
-    out["wide_seconds"] = round(spent, 1)
-    out["wide_allsky"] = hips.allsky is not None
-    out["wide_drawn"] = hips.drawn
-    out["wide_tiles"] = len(hips.textures)
-    out["wide_frame"] = _sky_frame(window, "planetx_sky_dss_wide.png")
+    if "wide_frame" not in out:
+        time.sleep(0.5)
+        out["wide_shares"] = (starmap.share, dss.share)
+        out["wide_frame"] = _sky_frame(window, "planetx_sky_wide.png")
+        window.show_sky(202.47, 47.2, 25.0)
+        window.view.update()
+        state["survey_t0"] = time.monotonic()
+        return 1000
+    spent = time.monotonic() - state["survey_t0"]
+    if _sky_busy(window) and spent < 90:
+        return 1000
+    out["mid_seconds"] = round(spent, 1)
+    out["mid_shares"] = (starmap.share, dss.share)
+    out["mid_tiles"] = sorted({k[0] for k in starmap.textures})
+    out["mid_drawn"] = starmap.drawn
+    out["mid_frame"] = _sky_frame(window, "planetx_sky_m51.png")
     window.show_sky(83.82, -5.39, 1.5)
     window.view.update()
     state["survey_t0"] = time.monotonic()
@@ -15827,24 +15846,74 @@ def sky_survey_wide():
 @check(1000)
 def sky_survey_check():
     window = state["window"]
-    hips = window.view.hips
+    starmap, dss = window.view.hips_layers
     spent = time.monotonic() - state["survey_t0"]
-    if (hips.want or window.sky_surveys.loading or hips.pending) \
-            and spent < 90:
+    if _sky_busy(window) and spent < 90:
         return 1000
     out = result["survey"]
     out["near_seconds"] = round(spent, 1)
-    out["near_orders"] = sorted({k[0] for k in hips.textures})
-    out["near_drawn"] = hips.drawn
-    out["near_frame"] = _sky_frame(window, "planetx_sky_dss_m42.png")
-    out["credits"] = window.attribution.text()[:120]
-    window.set_sky_survey("2mass")
-    out["switched"] = (window.sky_surveys.key, len(hips.textures))
-    window.set_sky_survey("")
-    out["off"] = (window.view.hips.key, window.sky_surveys.timer
-                  .isActive())
+    out["near_shares"] = (starmap.share, dss.share)
+    out["near_orders"] = sorted({k[0] for k in dss.textures})
+    out["near_drawn"] = dss.drawn
+    out["near_frame"] = _sky_frame(window, "planetx_sky_m42.png")
+    out["credits"] = window.attribution.text()[:160]
+    window.set_sky_imagery(False)
+    window.view.repaint()
+    out["off"] = (window.sky_surveys.timer.isActive(), starmap.drawn,
+                  dss.drawn)
+    window.set_sky_imagery(True)
     window.set_body("earth")
     out["gl"] = dict(window.view.gl_errors)
+    out["errors"] = len(window.errors)
+    return None
+
+
+@check(1000)
+def deep_sky():
+    """Объекты глубокого неба: подписи с кругом, щелчок - карточка,
+    поиск «M31» по каталогу и «Crab» через Sesame."""
+    window = state["window"]
+    if "deep_shown" not in state:
+        state["deep_shown"] = True
+        window.set_deepsky(True)
+        window.show_sky(83.82, -5.39, 10.0)
+        window.view.update()
+        return 3000  # вид неба встаёт кадрами
+    window.sky_labels.sync()
+    window.sky_labels.repaint()
+    labels = window.sky_labels
+    out = result["deep"] = {}
+    names = [labels.deep[n].label for n, *_ in labels.hits]
+    out["hits"] = len(labels.hits)
+    out["m42_shown"] = "M42" in names
+    if "M42" in names:
+        n, x, y, r, rect = labels.hits[names.index("M42")]
+        out["m42_radius"] = round(r, 1)
+        window._clicked(x, y)
+        card = getattr(window, "_place_card", None)
+        out["card"] = card.windowTitle() if card is not None else None
+    found = window._exact_match("M31")
+    out["exact_m31"] = found.text if found else None
+    window.place.setText("Crab")
+    window.fly("Crab")
+    state["deep_t0"] = time.monotonic()
+
+
+@check(1000)
+def deep_sky_check():
+    window = state["window"]
+    spent = time.monotonic() - state["deep_t0"]
+    if getattr(window, "_sesame_reply", None) is not None and spent < 30:
+        return 1000
+    if "deep_flown" not in state:
+        state["deep_flown"] = True
+        return 4000  # перелёт взгляда идёт кадрами
+    out = result["deep"]
+    sky = window.view.sky_view
+    out["crab_view"] = (round(math.degrees(sky.ra), 2),
+                        round(math.degrees(sky.dec), 2), round(sky.fov, 2))
+    out["message"] = window.message[0]
+    window.set_body("earth")
     out["errors"] = len(window.errors)
     return None
 
