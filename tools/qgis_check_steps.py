@@ -15780,6 +15780,75 @@ def polar_caps_check():
     return None
 
 
+@check(1000)
+def sky_survey():
+    """Снимок неба DSS в виде неба, просьба автора от 24 октября
+    2026 года. Сначала всё небо с полем 60°, потом туманность Ориона
+    с полем 1.5°."""
+    window = state["window"]
+    window.show_sky(83.82, -5.39, 60.0)
+    window.set_sky_survey("dss")
+    state["survey_t0"] = time.monotonic()
+    result["survey"] = {"key": window.sky_surveys.key,
+                        "action": window.toolbar.survey_actions[
+                            "dss"].isChecked()}
+
+
+def _sky_frame(window, name):
+    """Средняя яркость и разброс кадра неба, кадр в TEMP."""
+    import numpy as np
+    from planetx.net.loader import image_to_rgba
+    image = window.view.grabFramebuffer()
+    image.save(os.path.join(TEMP, name))
+    rgb = image_to_rgba(image)[..., :3].astype(float)
+    return round(float(rgb.mean()), 1), round(float(rgb.std()), 1)
+
+
+@check(1000)
+def sky_survey_wide():
+    window = state["window"]
+    hips = window.view.hips
+    spent = time.monotonic() - state["survey_t0"]
+    if (hips.allsky is None or hips.want or window.sky_surveys.loading) \
+            and spent < 60:
+        return 1000
+    out = result["survey"]
+    out["wide_seconds"] = round(spent, 1)
+    out["wide_allsky"] = hips.allsky is not None
+    out["wide_drawn"] = hips.drawn
+    out["wide_tiles"] = len(hips.textures)
+    out["wide_frame"] = _sky_frame(window, "planetx_sky_dss_wide.png")
+    window.show_sky(83.82, -5.39, 1.5)
+    window.view.update()
+    state["survey_t0"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def sky_survey_check():
+    window = state["window"]
+    hips = window.view.hips
+    spent = time.monotonic() - state["survey_t0"]
+    if (hips.want or window.sky_surveys.loading or hips.pending) \
+            and spent < 90:
+        return 1000
+    out = result["survey"]
+    out["near_seconds"] = round(spent, 1)
+    out["near_orders"] = sorted({k[0] for k in hips.textures})
+    out["near_drawn"] = hips.drawn
+    out["near_frame"] = _sky_frame(window, "planetx_sky_dss_m42.png")
+    out["credits"] = window.attribution.text()[:120]
+    window.set_sky_survey("2mass")
+    out["switched"] = (window.sky_surveys.key, len(hips.textures))
+    window.set_sky_survey("")
+    out["off"] = (window.view.hips.key, window.sky_surveys.timer
+                  .isActive())
+    window.set_body("earth")
+    out["gl"] = dict(window.view.gl_errors)
+    out["errors"] = len(window.errors)
+    return None
+
+
 @check(500)
 def basemap_checkbox():
     """Строки «Основа» и «Рельеф» наверху списка «Слоёв», выбор - меню

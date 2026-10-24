@@ -31,7 +31,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import polar, tileoverlays, wikipedia
+from ...core import hips, polar, tileoverlays, wikipedia
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
@@ -1088,6 +1088,12 @@ class LayersMixin:
     def _show_attribution(self):
         if self.view.sky_view is not None:
             credits = [link_html(*credit) for credit in SKY_ATTRIBUTION]
+            surveys = getattr(self, "sky_surveys", None)
+            survey = hips.survey(surveys.key) if surveys else None
+            if survey is not None:
+                # Снимок обзора вместо Млечного пути и точек звёзд.
+                credits = [link_html(survey[5], survey[6]), credits[2],
+                           credits[3]]
             self._set_credits(credits, len(credits))
             return
         parts = [attribution_html(self.source)]

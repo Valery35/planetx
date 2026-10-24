@@ -136,6 +136,7 @@ READY_KEY = "PlanetX/ready_sources"
 ACCEPTED_KEY = "PlanetX/ready_accepted"
 SIDEBAR_KEY = "PlanetX/sidebar"  # видна ли левая панель окна
 CONSTELLATIONS_KEY = "PlanetX/constellations"  # линии созвездий на небе
+SKY_SURVEY_KEY = "PlanetX/sky_survey"  # обзор неба HiPS, пусто - нет
 # Прежние запросы строки «Поиск», список строк от новых к старым.
 HISTORY_KEY = "PlanetX/search_history"
 # Включена ли группа линий векторной основы, по группам.

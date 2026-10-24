@@ -12,6 +12,17 @@ import os
 __all__ = ["tr", "is_russian", "set_language", "EN"]
 
 EN = {
+    # Снимок неба - обзоры HiPS, 24 октября 2026 года.
+    "Снимок неба": "Sky imagery",
+    "Млечный путь": "Milky Way",
+    "Картинка неба NASA SVS и звёзды каталога точками.":
+        "NASA SVS sky image and catalog stars as points.",
+    "Снимки неба при приближении - тайлы обзора HiPS службы "
+    "CDS. Звёзды и туманности на снимке, точки каталога "
+    "не рисуются.":
+        "Sky images on zooming in - tiles of a CDS HiPS survey. "
+        "Stars and nebulae are in the image, catalog points are "
+        "not drawn.",
     # Суда Балтики и самолёты, 19 октября 2026 года.
     "Пассажирские": "Passenger",
     "Танкеры": "Tankers",

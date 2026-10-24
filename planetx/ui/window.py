@@ -77,6 +77,7 @@ from .subsurface import SubsurfaceManager
 from .record import TourRecorder
 from .tour import TourPlayer
 from .polar import PolarCaps
+from .skysurvey import SkySurveys
 from .routing import RouteManager
 from .weather import WeatherManager
 from .satellites import SatelliteManager
@@ -91,6 +92,7 @@ from .toolbar import ViewToolbar
 from .globe.base import (ACCEPTED_KEY, ATTRIBUTION_STYLE, AUTO_DEFAULT,
                          BRAND_STYLE,
                          BASEMAP_KEY, CONSTELLATIONS_KEY, COORDS_KEY,
+                         SKY_SURVEY_KEY,
                          DEFAULT_GROUPS, EXTRA_DEFAULTS, EXTRA_KEY,
                          FLOW_LAYERS, GIBS_FADES, GROUND_DELAY, GUIDE_DELAY,
                          LANGUAGE_KEY, LAYER_TIME_DELAY, LINES_KEY, LINK_TICK,
@@ -980,6 +982,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.polar_caps = PolarCaps(self.view, self)
         self.polar_caps.arrived.connect(self._show_attribution)
         self.view.changed.connect(self._polar_view)
+        self.sky_surveys = SkySurveys(self.view, self)
+        self.toolbar.survey_chosen.connect(self.set_sky_survey)
+        self.set_sky_survey(QgsSettings().value(SKY_SURVEY_KEY, ""))
         self._update_polar()
         for key, on in self.extras.items():
             self._apply_extra(key, on)
@@ -1015,6 +1020,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.title_bars.close()
             self.route_manager.close()
             self.polar_caps.close()
+            self.sky_surveys.close()
             self._wiki_timer.stop()
             self.wiki_articles.stop()
             reply, self._summary_reply = self._summary_reply, None

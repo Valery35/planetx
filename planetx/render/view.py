@@ -59,6 +59,7 @@ from .quakes import (DepositPoints, FirePoints, PlantPoints, Quakes,
                      VolcanoPoints)
 from .satellites import SatellitePoints
 from .constellations import Constellations
+from .hips import HipsSky
 from .sky import Sky
 from .stars import Stars
 from .shaders import (BACKDROP_FRAGMENT, BACKDROP_VERTEX, CROSS_FRAGMENT,
@@ -629,6 +630,8 @@ class GlobeView(QOpenGLWidget):
         self.sky_camera = Camera((0.0, 0.0, 0.0), np.eye(3))
         self.constellations = Constellations()
         self.show_constellations = True
+        # Обзор неба HiPS вместо картинки Млечного пути, ui/skysurvey.py.
+        self.hips = HipsSky()
         self.bodies = Stars(source=lambda: skydata.body_points(time.time()))
         # Метки неба: (направление J2000, название), ставит окно.
         self.sky_places = []
@@ -1766,6 +1769,7 @@ class GlobeView(QOpenGLWidget):
         self.stars.init_gl()
         self.sky.init_gl(self.empty_vao)
         self.constellations.init_gl()
+        self.hips.init_gl()
         self.bodies.init_gl()
         self._context = ctx
         ctx.aboutToBeDestroyed.connect(self.release_gl)
@@ -1808,6 +1812,7 @@ class GlobeView(QOpenGLWidget):
         self.stars.release_gl()
         self.sky.release_gl()
         self.constellations.release_gl()
+        self.hips.release_gl()
         self.bodies.release_gl()
         self.build_pool.clear()
         self.build_pool.waitForDone(2000)
@@ -2729,12 +2734,19 @@ class GlobeView(QOpenGLWidget):
         cam = self.sky_frame_camera()
         frame = np.eye(3)
         gpu.gl.glEnable(GL.GL_DEPTH_TEST)
-        self.sky.draw(cam, frame=frame, share=1.0)
+        survey = self.hips.key is not None
+        if survey:
+            self.hips.draw(cam, self.sky_view)
+        else:
+            self.sky.draw(cam, frame=frame, share=1.0)
         if self.show_constellations:
             self.constellations.draw(cam, frame)
         else:
             self.constellations.drawn = 0
-        self.stars.draw(cam, ratio, frame=frame, share=1.0)
+        if not survey:
+            # На снимке обзора звёзды уже есть, точки каталога легли бы
+            # поверх пятен звёзд.
+            self.stars.draw(cam, ratio, frame=frame, share=1.0)
         moment = self.sky_time if self.sky_time is not None \
             else time.time()
         if self._bodies_time is None or abs(moment - self._bodies_time) > 30:

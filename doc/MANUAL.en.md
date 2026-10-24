@@ -3615,7 +3615,7 @@ on a star chart.
 | Action | What it does |
 |---|---|
 | Drag with the left button | The sky follows the cursor |
-| Wheel, PageUp, PageDown, plus, minus | Changes the field of view from 2° to 110° |
+| Wheel, PageUp, PageDown, plus, minus | Changes the field of view from 0.1° to 110° |
 | Double click with the left button | The point moves to the centre, the field of view halves |
 | Double click with the right button | The field of view doubles |
 | Arrows | The view moves by a tenth of the window height |
@@ -3631,6 +3631,14 @@ by at most 0.3°.
 The Constellations item of the same menu hides and shows the
 constellation lines and names. Stars, their names, the Sun, the Moon
 and the planets stay.
+
+The Sky imagery submenu of the same menu changes the sky image. Milky
+Way is the NASA SVS image with catalog stars as points. DSS, visible
+light and 2MASS, near infrared are sky surveys of the CDS service
+(Strasbourg): on zooming in, tiles load in finer detail, down to 0.8″
+per pixel. Nebulae, galaxies and stars are in the image itself, catalog
+points are not drawn. The images are scans of photographic plates,
+neighbouring plates differ in brightness and show as squares from afar.
 
 Places and tours work in the sky. Save view puts a place with the
 view direction and the field of view. New place puts a point with a

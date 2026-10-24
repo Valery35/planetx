@@ -14,7 +14,7 @@ from ...core.skyview import SkyView
 from ...net.overlay import label_kinds
 from ...render.view import start_keys
 from ..project import FOLLOW, map_layers, read_flag, read_shown, visible_on_map
-from .base import CONSTELLATIONS_KEY, EARTH_EXTRAS
+from .base import CONSTELLATIONS_KEY, EARTH_EXTRAS, SKY_SURVEY_KEY
 
 
 class BodyMixin:
@@ -158,6 +158,18 @@ class BodyMixin:
         self.view.show_constellations = bool(on)
         QgsSettings().setValue(CONSTELLATIONS_KEY, bool(on))
         self.toolbar.constellations.setChecked(bool(on))
+        self.view.update()
+
+    def set_sky_survey(self, key):
+        """Снимок неба: ключ обзора HiPS core.hips.SURVEYS, пусто -
+        Млечный путь."""
+        self.sky_surveys.set_survey(key or None)
+        key = self.sky_surveys.key or ""
+        QgsSettings().setValue(SKY_SURVEY_KEY, key)
+        action = self.toolbar.survey_actions.get(key)
+        if action is not None:
+            action.setChecked(True)
+        self._show_attribution()
         self.view.update()
 
     def _leave_sky(self):

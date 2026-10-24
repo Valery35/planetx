@@ -13,7 +13,8 @@ from qgis.PyQt.QtCore import QSize, pyqtSignal
 from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QMenu, QToolButton
 
 from ..core.planets import MENU
-from ..i18n import tr
+from ..core import hips
+from ..i18n import is_russian, tr
 from ..qt_compat import QActionGroup, enum
 from .style import icon, plate
 
@@ -55,6 +56,7 @@ class ViewToolbar(QFrame):
     time_toggled = pyqtSignal(bool)
     body_chosen = pyqtSignal(str)
     constellations_toggled = pyqtSignal(bool)
+    survey_chosen = pyqtSignal(str)  # ключ обзора неба, пусто - нет
     identify_toggled = pyqtSignal(bool)
     ruler_clicked = pyqtSignal()
     place_clicked = pyqtSignal(str)
@@ -295,6 +297,26 @@ class ViewToolbar(QFrame):
                             "и светила."))
         lines.toggled.connect(self.constellations_toggled)
         self.constellations = lines
+        # Обзор неба HiPS вместо картинки Млечного пути.
+        surveys = menu.addMenu(tr("Снимок неба"))
+        surveys.setToolTipsVisible(True)
+        survey_group = QActionGroup(surveys)
+        self.survey_actions = {}
+        rows = [("", tr("Млечный путь"), tr(
+            "Картинка неба NASA SVS и звёзды каталога точками."))]
+        for key, _, _, ru, en, _, _ in hips.SURVEYS:
+            rows.append((key, ru if is_russian() else en, tr(
+                "Снимки неба при приближении - тайлы обзора HiPS службы "
+                "CDS. Звёзды и туманности на снимке, точки каталога "
+                "не рисуются.")))
+        for key, name, tip in rows:
+            action = surveys.addAction(name)
+            action.setCheckable(True)
+            action.setActionGroup(survey_group)
+            action.setToolTip(tip)
+            action.triggered.connect(
+                lambda checked, k=key: self.survey_chosen.emit(k))
+            self.survey_actions[key] = action
         body.setMenu(menu)
         self.layout().addWidget(body)
         self.body = body
