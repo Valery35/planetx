@@ -22,8 +22,9 @@ from concurrent.futures import TimeoutError
 import numpy as np
 from qgis.core import QgsApplication
 
-from ..core import basemap, bathymetry, dem, inset, subsurface
-from ..net.gdalnet import executor, thread_gdal
+from ..core import basemap, bathymetry, cog, dem, inset, subsurface
+from ..net import ranges
+from ..net.gdalnet import executor
 from ..core.terrain import (MAX_LEVEL, SIZE, HeightTile, ancestor, decode,
                             resample)
 
@@ -253,14 +254,17 @@ def _window(path, bounds):
 
 class DemSource:
     """Модель рельефа 30 м поверх Terrarium (core/dem.py): окно тайла
-    из файлов в сети через GDAL. Читает постоянный пул «dem»
-    (net/gdalnet.py), рабочий поток загрузчика ждёт его ответа.
+    из файлов COG в сети. Читает постоянный пул «dem» (net/gdalnet.py),
+    рабочий поток загрузчика ждёт его ответа. Части файлов просит сеть
+    модуля (net/ranges.py), разбор и выборка - core/cog.py, без GDAL:
+    curl GDAL завершал свои потоки после запросов, у пользователя QGIS
+    вставал при подлёте с рельефом Copernicus, 23 октября 2026 года.
 
-    Открытые файлы помнит каждый поток пула, файлы, которых нет
-    (Copernicus над морем отвечает 404), - общий список."""
+    Разобранные файлы общие для потоков, файлы, которых нет (Copernicus
+    над морем отвечает 403 или 404), - общий список."""
 
     WORKERS = 6  # тайлов, читаемых сразу
-    KEEP = 24  # открытых файлов на поток
+    KEEP = 48  # разобранных файлов в памяти
     WAIT = 120.0  # с ожидания окна, дальше тайл остаётся Terrarium
     WINDOWS = 160  # прочитанных окон в памяти, по 256 КБ
 
@@ -270,7 +274,10 @@ class DemSource:
         self.sea = kind == dem.GEBCO
         self.min_level, self.read_level = dem.levels(kind)
         self.absent = set()
-        self.local = threading.local()
+        self.files = OrderedDict()
+        self.file_lock = threading.Lock()
+        self.opening = {}
+        ranges.bridge()  # мост сети создаётся в главном потоке
         self.lock = threading.Lock()
         self.jobs = OrderedDict()  # ключ уровня до READ_LEVEL -> задача
         self.errors = 0  # окон, не прочитанных из-за сети
@@ -325,70 +332,56 @@ class DemSource:
         return [dem.copernicus_url(lat, lon) for lat, lon in
                 dem.copernicus_cells(west, south, east, north)]
 
-    def _open(self, gdal, url):
-        cache = getattr(self.local, "files", None)
-        if cache is None:
-            cache = self.local.files = {}
-        if url in cache:
-            cache[url] = cache.pop(url)
-            return cache[url]
-        if url in self.absent:
-            return None
+    def _open(self, url):
+        """Разобранный файл url или None, если его нет. Один поток
+        разбирает файл, остальные ждут его."""
+        while True:
+            with self.file_lock:
+                if url in self.absent:
+                    return None
+                if url in self.files:
+                    self.files.move_to_end(url)
+                    return self.files[url]
+                waiting = self.opening.get(url)
+                if waiting is None:
+                    waiting = self.opening[url] = threading.Event()
+                    break
+            waiting.wait(ranges.TIMEOUT)
         try:
-            data = gdal.Open("/vsicurl/" + url)
-        except RuntimeError as error:
-            if "404" in str(error):
+            data = cog.Cog(lambda start, length:
+                           ranges.fetch(url, start, length))
+            with self.file_lock:
+                self.files[url] = data
+                while len(self.files) > self.KEEP:
+                    self.files.popitem(last=False)
+            return data
+        except ranges.Missing:
+            with self.file_lock:
                 self.absent.add(url)
-                return None
+            return None
+        except (OSError, cog.CogError) as error:
             # Сеть: задача кончается ошибкой, окно прочитается заново
             # при следующей просьбе (_job).
             self.errors += 1
             self.last_error = str(error)
             raise OSError(str(error)) from error
-        if data is None:
-            # Без режима исключений GDAL ошибка - в последнем сообщении.
-            message = gdal.GetLastErrorMsg()
-            if "404" in message:
-                self.absent.add(url)
-                return None
-            self.errors += 1
-            self.last_error = message
-            raise OSError(message)
-        cache[url] = data
-        while len(cache) > self.KEEP:
-            cache.pop(next(iter(cache)))
-        return data
+        finally:
+            with self.file_lock:
+                self.opening.pop(url).set()
 
     def window(self, key):
         """Окно тайла key, 256 × 256 float32, NaN без данных, или None.
         Поток пула «dem»."""
-        gdal = thread_gdal()
-        gdal.PushErrorHandler("CPLQuietErrorHandler")
+        files = [d for d in (self._open(url) for url in self._urls(key))
+                 if d is not None]
+        if not files:
+            return None
         try:
-            files = [d for d in (self._open(gdal, url)
-                                 for url in self._urls(key))
-                     if d is not None]
-            if not files:
-                return None
-            try:
-                out = gdal.Warp("", files, format="MEM",
-                                dstSRS="EPSG:3857",
-                                outputBounds=dem.tile_meters(*key),
-                                width=SIZE, height=SIZE,
-                                resampleAlg="bilinear",
-                                outputType=gdal.GDT_Float32,
-                                dstNodata=NODATA)
-            except RuntimeError as error:
-                self.last_error = str(error)
-                out = None
-            if out is None:
-                self.errors += 1
-                raise OSError(self.last_error or "warp")
-            array = out.GetRasterBand(1).ReadAsArray()
-            out = None
-            return array
-        finally:
-            gdal.PopErrorHandler()
+            return cog.tile_window(files, *key, size=SIZE)
+        except (OSError, cog.CogError) as error:
+            self.errors += 1
+            self.last_error = str(error)
+            raise OSError(str(error)) from error
 
 
 def apply(entries, key, heights):
