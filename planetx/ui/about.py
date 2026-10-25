@@ -160,6 +160,7 @@ def about_html():
         "<p>{} {}</p>".format(
             html.escape(tr("Разработка при поддержке")),
             _link(INFORM, tr("ООО «Информ++»"))),
+        "<p>{}</p>".format(_link(SUPPORT, tr("Поддержать разработку"))),
         "<p>{}</p>".format(html.escape(tr("Лицензия GNU GPL версии 3."))),
     ))
 
@@ -237,12 +238,6 @@ class AboutDialog(QDialog):
                 "источников, которые показывает глобус."),
                 lambda: (self.accept(), QTimer.singleShot(0, sources)))
         second.addStretch(1)
-        # Тихая ссылка текстом в конце ряда, не кнопкой.
-        support = QLabel(_link(SUPPORT, tr("Поддержать разработку")), self)
-        support.setOpenExternalLinks(True)
-        support.setTextInteractionFlags(enum(
-            Qt, "TextInteractionFlag", "TextBrowserInteraction"))
-        second.addWidget(support)
         layout.addLayout(first)
         layout.addLayout(second)
 
