@@ -43,6 +43,10 @@ PAGES = (
 NEWS_FROM = (0, 93, 0)  # «Что нового» - выпуски с этого номера
 RELEASES = "https://github.com/Valery35/planetx/releases/latest"
 CHANGELOG_URL = "https://github.com/Valery35/planetx/blob/main/CHANGELOG.md"
+# «Поддержать разработку» - раздел профиля автора на GitHub, как в README
+SUPPORT_URL = ("https://github.com/Valery35#%D0%BF%D0%BE%D0%B4%D0%B4%D0%B5"
+               "%D1%80%D0%B6%D0%B0%D1%82%D1%8C-%D1%80%D0%B0%D0%B7%D1%80"
+               "%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D1%83")
 
 
 def url(path):
@@ -1314,6 +1318,9 @@ def page(key, img, version):
     t("ftr.line1", build_site.RU["ftr.line1"], build_site.EN["ftr.line1"])
     t("ftr.line2", build_site.RU["ftr.line2"], build_site.EN["ftr.line2"])
     t("ftr.line3", build_site.RU["ftr.line3"], build_site.EN["ftr.line3"])
+    t("ftr.free", "Модуль бесплатный и открытый.",
+      "The plugin is free and open source.")
+    t("ftr.support", "Поддержать разработку", "Support development")
     texts = {"ru": {k: v[0] for k, v in T.items()},
              "en": {k: v[1] for k, v in T.items()}}
     style = re.search(r"<style>(.*?)</style>", build_site.PAGE,
@@ -1339,13 +1346,16 @@ def page(key, img, version):
 PlanetX %s &middot; <span data-i18n="ftr.line1"></span><br>
 <span data-i18n="ftr.line2"></span>,
 <a target="_blank" href="https://www.informpp.ru/">www.informpp.ru</a><br>
-<span data-i18n="ftr.line3"></span>
+<span data-i18n="ftr.line3"></span><br>
+<span data-i18n="ftr.free"></span>
+<a target="_blank" href="%s" data-i18n="ftr.support"></a>
 </div></footer>
 <script>
 var TEXTS = %s;
 %s</script>
 """ % (title_ru, style, STYLE_EXTRA, url(""), "\n".join(nav), body,
-       version, json.dumps(texts, ensure_ascii=False), script)
+       version, SUPPORT_URL, json.dumps(texts, ensure_ascii=False),
+       script)
 
 
 # Снимки руководства, от которых на странице нужна часть: файл в
