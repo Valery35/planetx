@@ -3126,8 +3126,10 @@ EN = {
         "Layers",
     "Границы и названия":
         "Borders and names",
-    "Границы стран и областей и подписи на глобусе.":
-        "Country and region borders and labels on the globe.",
+    "Границы стран и областей, реки и водоёмы, подписи на "
+    "глобусе.":
+        "Country and region borders, rivers and water bodies, labels on "
+        "the globe.",
     "Границы стран ярко-жёлтые, границы областей тонкие белые. Морские "
     "границы не рисуются.":
         "Country borders are bright yellow, region borders thin and white. "
@@ -3162,8 +3164,8 @@ EN = {
         "Labelled from altitudes below 1000 km.",
     "Природа":
         "Nature",
-    "Реки, вершины и охраняемые территории.":
-        "Rivers, peaks and protected areas.",
+    "Вершины и охраняемые территории.":
+        "Peaks and protected areas.",
     "Вершины":
         "Peaks",
     "Вершины и вулканы с высотой в метрах, треугольный значок. "
@@ -5604,17 +5606,21 @@ EN = {
     "Линия стока": "Flow line",
     "Путь воды от точки вниз по рельефу - линия в «Моих "
     "метках». Впадины заполнены до перелива, поэтому линия "
-    "проходит через озёра и бессточные котловины.":
+    "проходит через озёра и бессточные котловины. У пути "
+    "и многоугольника - линии от всех их узлов, папкой.":
         "The path of water from the point down the terrain, a line in "
         "My Places. Depressions are filled up to their spill level, so "
-        "the line passes through lakes and closed basins.",
+        "the line passes through lakes and closed basins. For a path or "
+        "a polygon, lines from all their nodes, as a folder.",
     "Водосбор": "Catchment",
     "Площадь, с которой вода стекает к точке, и главный "
     "водоток - папка в «Моих метках» с площадью, уклонами "
-    "и длиной водотока. Точка притягивается к водотоку рядом.":
+    "и длиной водотока. Водосбор строится от русла рядом "
+    "с точкой.":
         "The area from which water flows to the point and the main "
         "stream, a folder in My Places with the area, slopes and the "
-        "stream length. The point snaps to a stream nearby.",
+        "stream length. The catchment starts at the channel next to the "
+        "point.",
     "В точке нет высот.": "There are no heights at the point.",
     "Уровень не выше точки, воды нет.":
         "The level is not above the point, there is no water.",
@@ -5646,8 +5652,8 @@ EN = {
     "{name}: {text}": "{name}: {text}",
     "К точке вода не стекает: водосбора "
     "нет.": "No water flows to the point, there is no catchment.",
-    "Створ притянут к водотоку в {m} м от точки.":
-        "The outlet snapped to a stream {m} m from the point.",
+    "Створ перенесён на русло в {m} м от точки.":
+        "The outlet moved to the channel {m} m from the point.",
     "Водосбор доходит до края участка, его часть "
     "за краем не учтена. Нужен больший радиус.":
         "The catchment reaches the edge of the area, its part beyond the "
@@ -5672,6 +5678,85 @@ EN = {
         "gullies.",
     " км²": " km²",
     "Водотоки от": "Streams from",
+    "Порядок от": "Order from",
+    "Наименьший порядок водотока по Стралеру в речной сети. "
+    "Исток - порядок 1, после слияния двух водотоков одного "
+    "порядка - на единицу больше. Больше - в проект идут только "
+    "крупные реки, порядки считаются по всей сети.":
+        "The lowest Strahler order of a stream in the network. A source "
+        "has order 1, the confluence of two streams of the same order "
+        "gives one more. A larger value sends only large rivers to the "
+        "project, the orders are counted over the whole network.",
+    "Радиус поиска русла": "Channel search radius",
+    "В этом радиусе от точки ищется русло - место с наибольшим "
+    "водосбором, водосбор строится от него. Щелчок рядом с "
+    "рекой так даёт водосбор реки. 0 - водосбор ровно от точки.":
+        "Within this radius of the point the channel is searched for, "
+        "the place with the largest catchment, and the catchment starts "
+        "there. So a click near a river gives the catchment of the "
+        "river. 0 means the catchment starts exactly at the point.",
+    "Обрывать на водотоке": "Stop at a stream",
+    "Линия стока кончается, дойдя до водотока с водосбором "
+    "от площади поля «Водотоки от». Без флажка линия идёт до "
+    "края квадрата.":
+        "The flow line ends where it reaches a stream with a catchment "
+        "of at least the area of the Streams from field. Without the "
+        "check box the line runs to the edge of the square.",
+    "Обрывать на выполаживании": "Stop where the slope flattens",
+    "Линия стока кончается там, где средний уклон на длине "
+    "участка ниже порога - у подножия склона, на террасе, на "
+    "пойме. Короткая полка на крутом склоне линию не обрывает.":
+        "The flow line ends where the mean slope over the segment "
+        "length is below the threshold, at the foot of a slope, on "
+        "a terrace, on a floodplain. A short ledge on a steep slope "
+        "does not end the line.",
+    "Уклон выполаживания": "Flattening slope",
+    "Уклон, ниже которого рельеф считается выположенным.":
+        "The slope below which the terrain counts as flattened.",
+    "Длина участка": "Segment length",
+    "Длина участка, на которой меряется средний уклон. Больше - "
+    "линию обрывает только долгое выполаживание.":
+        "The length over which the mean slope is measured. A larger "
+        "value ends the line only on a long flattening.",
+    "Обрывать при слиянии": "Stop at a confluence",
+    "Линии от метки кончаются, вливаясь в линию, построенную "
+    "раньше, и общее русло идёт одной линией. Без флажка каждая "
+    "линия идёт до конца, и по общему руслу проходят все.":
+        "Lines from the placemark end where they join a line built "
+        "earlier, and a shared channel is one line. Without the check "
+        "box each line runs to its end, and all of them follow the "
+        "shared channel.",
+    "Бассейны": "Basins",
+    "Квадрат, поделённый на бассейны устьев - мест, где водотоки "
+    "с водосбором от площади поля «Водотоки от» уходят из "
+    "квадрата. Слой многоугольников GeoPackage в проект QGIS.":
+        "The square divided into basins of outlets, the places where "
+        "streams with a catchment of at least the area of the Streams "
+        "from field leave the square. A GeoPackage polygon layer in the "
+        "QGIS project.",
+    "Вода от метки никуда не стекает.":
+        "Water from the placemark does not flow anywhere.",
+    "Линия стока {n}": "Flow line {n}",
+    "Линии стока «{name}»": "Flow lines of {name}",
+    "{name}: линий {count}, общая длина {km} км.":
+        "{name}: {count} lines, total length {km} km.",
+    "Самых коротких линий не вошло {count}.":
+        "{count} of the shortest lines are left out.",
+    "Водотоков с таким водосбором у края квадрата нет.":
+        "No streams with such a catchment at the edge of the square.",
+    "Бассейны в проект QGIS": "Basins to the QGIS project",
+    "Бассейны не записаны в «{path}».":
+        "The basins were not written to {path}.",
+    "В проект добавлено бассейнов {count}, они покрывают "
+    "{area} км² квадрата.":
+        "{count} basins added to the project, they cover {area} km² of "
+        "the square.",
+    "Линия кончается на водотоке.": "The line ends at a stream.",
+    "Линия кончается, где рельеф выполаживается.":
+        "The line ends where the terrain flattens.",
+    "Линия вливается в другую линию стока.":
+        "The line joins another flow line.",
+    "Линии стока от метки…": "Flow lines from placemark…",
     "Речная сеть": "Stream network",
     "Водотоки квадрата с порядком по Стралеру - слой линий "
     "GeoPackage в проект QGIS, толщина линии растёт с порядком.":
@@ -5697,8 +5782,9 @@ EN = {
         "The connection with the sea is not checked, so lowlands inside "
         "continents are flooded too.",
     "Водотоков с таким водосбором "
-    "в квадрате нет.":
-        "There are no streams with such a catchment in the square.",
+    "и порядком в квадрате нет.":
+        "There are no streams with such a catchment and order in the "
+        "square.",
     "Речная сеть в проект QGIS": "Stream network to the QGIS project",
     "Речная сеть не записана в "
     "«{path}».": "The stream network is not written to \"{path}\".",

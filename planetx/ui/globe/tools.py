@@ -1171,6 +1171,8 @@ class ToolsMixin:
             self._show_state()
         elif action == "catchment":
             self.hydro.catchment_of(item)
+        elif action == "flow_lines":
+            self.hydro.flow_from(item)
         elif action == "viewshed":
             self._open_viewshed(item)
         elif action == "insolation":

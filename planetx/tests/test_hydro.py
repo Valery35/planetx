@@ -189,6 +189,85 @@ class TestFlow(unittest.TestCase):
         self.assertIn(2, orders)
         for s in streams:
             self.assertGreater(len(s.rows), 1)
+        # Порядок от 2 оставляет только звенья ниже слияния, порядок
+        # у них прежний - он считается по всей сети.
+        trunk = hydro.rivers(z, 10.0, area=20 * 100.0, order=2)
+        self.assertTrue(trunk)
+        self.assertEqual({s.order for s in trunk},
+                         {o for o in orders if o >= 2})
+        self.assertLess(len(trunk), len(streams))
+
+    def test_line_stops_on_stream(self):
+        # Долина на юг: линия со склона кончается на оси долины.
+        yy, xx = np.mgrid[0:41, 0:41]
+        z = np.abs(xx - 20) * 2.0 + (40 - yy) * 0.5 + 10.0
+        whole = hydro.flow_line(z, (10, 5), 10.0)
+        self.assertEqual(whole.end, "edge")
+        line = hydro.flow_line(z, (10, 5), 10.0, area=60 * 100.0)
+        self.assertEqual(line.end, "stream")
+        self.assertLessEqual(abs(int(line.cols[-1]) - 20), 1)
+        self.assertLess(line.length, whole.length)
+
+    def test_line_stops_on_flattening(self):
+        # Крутой склон 30° на 20 ячеек, дальше равнина 0.5°.
+        x = np.arange(60, dtype=np.float64)
+        profile = np.where(x < 20, (20 - x) * 10.0 * math.tan(
+            math.radians(30.0)), 0.0) - x * 10.0 * math.tan(
+            math.radians(0.5))
+        z = np.tile(profile, (21, 1)) + np.abs(
+            np.arange(21) - 10)[:, None] * 0.001
+        whole = hydro.flow_line(z, (10, 2), 10.0)
+        line = hydro.flow_line(z, (10, 2), 10.0, flat=(2.0, 50.0))
+        self.assertEqual(line.end, "flat")
+        self.assertLess(line.length, whole.length)
+        self.assertLessEqual(abs(int(line.cols[-1]) - 20), 2)
+
+    def test_flattening_with_step_not_dividing_window(self):
+        # Шаг 16.7 м не делит окно 50 м: прежде уклон окна не мерился.
+        cell = 16.7
+        x = np.arange(80, dtype=np.float64)
+        profile = np.where(x < 20, (20 - x) * cell * math.tan(
+            math.radians(30.0)), 0.0) - x * cell * math.tan(
+            math.radians(0.5))
+        z = np.tile(profile, (21, 1)) + np.abs(
+            np.arange(21) - 10)[:, None] * 0.001
+        line = hydro.flow_line(z, (10, 2), cell, flat=(2.0, 50.0))
+        self.assertEqual(line.end, "flat")
+        self.assertLessEqual(abs(int(line.cols[-1]) - 20), 2)
+
+    def test_lines_from_shape_merge(self):
+        # Линии от многих узлов поперёк склона долины сливаются в одну.
+        yy, xx = np.mgrid[0:41, 0:41]
+        z = np.abs(xx - 20) * 2.0 + (40 - yy) * 0.5 + 10.0
+        seeds = [10 * 41 + c for c in range(2, 39)]
+        apart = hydro.flow_lines(z, seeds, 10.0)
+        joined = hydro.flow_lines(z, seeds, 10.0, merge=True)
+        self.assertEqual(len(apart), len(seeds))
+        self.assertLessEqual(len(joined), len(seeds))
+        ends = {line.end for line in joined}
+        self.assertIn("merge", ends)
+        self.assertIn("edge", ends)
+        cells = [set(zip(l.rows.tolist(), l.cols.tolist()))
+                 for l in joined]
+        # Узел принадлежит одной линии, кроме узла слияния.
+        total = sum(len(c) for c in cells)
+        merged = sum(1 for l in joined if l.end == "merge")
+        self.assertEqual(len(set().union(*cells)), total - merged)
+
+    def test_outlet_basins_split_square(self):
+        # Хребет посередине: две долины, два устья у нижнего края.
+        n = 41
+        yy, xx = np.mgrid[0:n, 0:n]
+        z = np.minimum(np.abs(xx - 10), np.abs(xx - 30)) * 2.0 \
+            + (n - yy) * 0.5
+        regions = hydro.outlet_basins(z, 10.0, area=100 * 100.0)
+        self.assertEqual(len(regions), 2)
+        left, right = sorted(regions, key=lambda r: np.argwhere(
+            r.mask)[:, 1].mean())
+        self.assertTrue(left.mask[0, 10])
+        self.assertTrue(right.mask[0, 30])
+        self.assertFalse(left.mask[0, 30])
+        self.assertAlmostEqual(left.area, left.mask.sum() * 100.0)
 
     def test_shape_grid_covers_shape(self):
         lat, lon, side = hydro.shape_grid([(50.0, 30.0), (50.01, 30.0)], R)

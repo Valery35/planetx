@@ -311,9 +311,10 @@ the temperature as two rasters - sea and land.
 
 The Add data button at the top of the section opens the catalogue
 window, see Add data catalogue. The vector base groups hold
-rows. Borders and names holds Borders, Places and Water names.
-Transport holds Roads, Road numbers, Railways and Airports. Nature
-holds Rivers, Lakes and reservoirs, Peaks, Reserves and national parks.
+rows. Borders and names holds Borders, Places, Water names, Rivers
+and Lakes and reservoirs. Transport holds Roads, Road numbers,
+Railways and Airports. Nature holds Peaks, Reserves and national
+parks. Rivers and lakes are off by default.
 
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
@@ -2736,8 +2737,11 @@ builds the area from which water flows to the point and the main
 stream. They go to My Places as a folder, the catchment outline keeps
 the area, the heights, the length, fall and gradient of the main
 stream, the mean hillslope gradient by SP 33-101-2003 and the stream
-network density. The catchment point snaps to a stream within 150 m,
-so a click near a river gives the catchment of the river.
+network density. The catchment starts at the channel, the place with
+the largest catchment within the Channel search radius field of the
+point, 150 m by default, so a click near a river gives the catchment
+of the river. With 0 the
+catchment starts exactly at the point.
 
 The calculation uses D8 flow directions over the terrain with the
 depressions filled up to their spill level. So the line passes
@@ -2746,11 +2750,29 @@ calculation square, a catchment larger than the square is not counted
 in full, the window says so. The calculation is ported from the
 Isoliner plugin.
 
+The Stop at a stream check box ends the line where it reaches a
+stream with a catchment of at least the Streams from field. The Stop
+where the slope flattens check box ends it where the mean slope over
+the Segment length field is below the Flattening slope field, 2° over
+50 m by default. This is the foot of a slope, a terrace or a
+floodplain, a short ledge on a steep slope does not end the line. The
+line keeps the reason it ended.
+
+The Basins button divides the square into basins of outlets, the
+places where streams with a catchment of at least the Streams from
+field leave the square. The basins go as a GeoPackage polygon layer to
+the PlanetX - terrain water group, each keeps its number and area,
+the largest first.
+
 The Stream network button builds the streams of the square with a
 catchment of at least the Streams from field and writes them as a
 GeoPackage line layer to the PlanetX - terrain water group. Each line
 keeps its Strahler order and catchment area, the line width grows with
 the order. The smaller the Streams from field, the denser the network.
+The Order from field keeps streams of at least the given order. A
+source has order 1, the confluence of two streams of the same order
+raises the order by one. The orders are counted over the whole
+network, so a large river keeps its order at any value of the field.
 
 The Placemark catchment item of the menu of a path or polygon in My
 Places builds the area from which water comes to the placemark. A path
@@ -2759,6 +2781,16 @@ The catchment outline goes as a polygon next to the placemark, it keeps
 the area and the heights. If the catchment reaches the edge of the
 square, the square grows 2.5 times and the calculation repeats until
 half its side reaches 50 km.
+
+The Flow lines from placemark… item of the same menu opens the Water
+flow window for the placemark, the calculation square covers it. The
+Flow line button builds lines from all grid nodes under the
+placemark, for example from a waste dump, and writes them to My Places
+as a folder. With the Stop at a confluence check box a line ends
+where it joins a line built earlier, and a shared channel is one
+line. The lines go from high nodes to low ones, at most the 300
+longest go to the folder. The stop at a stream and where the slope
+flattens check boxes act here too.
 
 ### Sea level
 

@@ -16769,6 +16769,8 @@ def hydro_rivers():
         menu.actions()[0].text()] + [a.text() for a in sub.actions()]
     dialog = window.hydro.flow_here(*HYDRO_BAKSAN)
     dialog.net.setValue(2.0)
+    # Порядок от 2: истоки порядка 1 в слой не идут, порядки прежние.
+    dialog.order.setValue(2)
     state["rivers_path"] = os.path.join(TEMP, "planetx_rivers.gpkg")
     original = window.hydro._rivers
     window.hydro._rivers = lambda d, g, z, p: original(
@@ -16832,6 +16834,139 @@ def hydro_shape_basin_wait():
     out["shape_message"] = window.status.text().split(chr(10))[0][:160]
     window.myplaces.remove_many([p.key for p in added]
                                 + [state["hydro_line"]])
+
+
+def _hydro_added(window):
+    return [p for p in window.myplaces.places
+            if p.key not in state["hydro_before"]]
+
+
+def _hydro_clean(window):
+    keys = [p.key for p in _hydro_added(window)]
+    keys += [n.key for n in window.myplaces.nodes()
+             if n.key not in state["hydro_folders"] and n.key not in keys]
+    window.myplaces.remove_many(keys)
+
+
+@check(500)
+def hydro_stops():
+    # Линия стока от Терскола с остановкой на водотоке от 2 км².
+    window = state["window"]
+    state["hydro_before"] = {p.key for p in window.myplaces.places}
+    state["hydro_folders"] = {n.key for n in window.myplaces.nodes()}
+    dialog = window.hydro.flow_here(*HYDRO_BAKSAN)
+    dialog.net.setValue(2.0)
+    dialog.on_stream.setChecked(True)
+    dialog.on_flat.setChecked(False)
+    state["hydro_started"] = time.monotonic()
+    dialog.line.emit(10000.0)
+
+
+@check(500)
+def hydro_stops_wait():
+    window = state["window"]
+    if window.hydro.job is not None \
+            and time.monotonic() - state["hydro_started"] < 45.0:
+        return 500
+    out = result.setdefault("hydro", {})
+    dialog = window.hydro.flow_dialog
+    out["stream_status"] = dialog.status.text()
+    out["stream_points"] = [len(p.shape.points)
+                            for p in _hydro_added(window)]
+    _hydro_clean(window)
+    # Остановка на выполаживании 3° на 50 м: дно долины Баксана положе.
+    dialog.on_stream.setChecked(False)
+    dialog.on_flat.setChecked(True)
+    dialog.flat_slope.setValue(3.0)
+    out["flat_fields"] = dialog.flat_slope.isEnabled()
+    state["hydro_started"] = time.monotonic()
+    dialog.line.emit(10000.0)
+
+
+@check(500)
+def hydro_flat_wait():
+    window = state["window"]
+    if window.hydro.job is not None \
+            and time.monotonic() - state["hydro_started"] < 45.0:
+        return 500
+    out = result["hydro"]
+    dialog = window.hydro.flow_dialog
+    out["flat_status"] = dialog.status.text()
+    out["flat_points"] = [len(p.shape.points) for p in _hydro_added(window)]
+    _hydro_clean(window)
+    dialog.on_flat.setChecked(False)
+    dialog.close()
+    # Линии стока от пути поперёк склона долины выше Терскола.
+    from planetx.core.features import Shape
+    key = window.myplaces.add(Shape(
+        "line", [(43.2600, 42.5000), (43.2500, 42.5100)],
+        name="Склон Баксана"))
+    state["hydro_before"].add(key)
+    state["hydro_slope"] = key
+    window._place_action("flow_lines", key)
+    dialog = window.hydro.flow_dialog
+    out["shape_dialog"] = [dialog.isVisible(), dialog.merge.isVisible(),
+                           dialog.place.text(), dialog.radius.value()]
+    state["hydro_started"] = time.monotonic()
+    dialog.line.emit(dialog.radius.value() * 1000.0)
+
+
+@check(500)
+def hydro_shape_lines_wait():
+    window = state["window"]
+    if window.hydro.job is not None \
+            and time.monotonic() - state["hydro_started"] < 45.0:
+        return 500
+    out = result["hydro"]
+    dialog = window.hydro.flow_dialog
+    out["lines_status"] = dialog.status.text()
+    added = _hydro_added(window)
+    out["lines"] = len(added)
+    out["lines_text"] = [p.description[:80] for p in added[:3]]
+    out["lines_folder"] = [n.name for n in window.myplaces.nodes()
+                           if n.key not in state["hydro_folders"]][:2]
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_flow_lines.png"))
+    _hydro_clean(window)
+    window.myplaces.remove_many([state["hydro_slope"]])
+    dialog.close()
+    # Бассейны квадрата у Терскола слоем в проект.
+    dialog = window.hydro.flow_here(*HYDRO_BAKSAN)
+    out["basin_enabled"] = dialog.basin_button.isEnabled()
+    dialog.net.setValue(2.0)
+    state["basins_path"] = os.path.join(TEMP, "planetx_basins.gpkg")
+    original = window.hydro._outlet_basins
+    window.hydro._outlet_basins = lambda d, g, z, p: original(
+        d, g, z, p, path=state["basins_path"])
+    state["hydro_basins_original"] = original
+    dialog.basins.emit(8000.0)
+
+
+@check(10000)
+def hydro_basins_wait():
+    from qgis.core import QgsProject
+    from planetx.i18n import tr as planetx_tr
+    window = state["window"]
+    if window.hydro.job is not None:
+        return 500
+    window.hydro._outlet_basins = state["hydro_basins_original"]
+    out = result["hydro"]
+    out["basins_status"] = window.hydro.flow_dialog.status.text()
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr("PlanetX - вода по рельефу"))
+    layers = group.findLayers() if group is not None else []
+    if layers:
+        layer = layers[0].layer()
+        out["basins_features"] = layer.featureCount()
+        out["basins_km2"] = round(sum(f["area_km2"]
+                                      for f in layer.getFeatures()), 1)
+        out["basins_valid"] = all(f.geometry().isGeosValid()
+                                  for f in layer.getFeatures())
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        group.parent().removeChildNode(group)
+    window.hydro.flow_dialog.close()
 
 
 @check(8000)

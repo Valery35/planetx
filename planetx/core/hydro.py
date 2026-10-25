@@ -177,30 +177,111 @@ def drainage(z):
 Line = namedtuple("Line", "rows cols length drop end")
 Line.__doc__ = """Линия стока: номера узлов rows, cols от старта вниз,
 length - длина, м, drop - падение по исходным высотам, м, end - чем
-кончилась: "edge" (край сетки), "pit" (сток, ниже некуда)."""
+кончилась: "edge" (край сетки), "pit" (сток, ниже некуда), "stream"
+(дошла до водотока), "flat" (рельеф выположился), "merge" (влилась
+в линию, построенную раньше)."""
+
+# Короче MIN_LINE ячеек линии от метки не идут в ответ: старт у самой
+# чужой линии сливается с ней через шаг.
+MIN_LINE = 3
 
 
-def flow_line(z, seed, cell):
-    """Линия стока от узла seed по заполненному рельефу."""
-    filled, downstream, _ = drainage(z)
+def flow_lines(z, seeds, cell, area=None, flat=None, merge=False):
+    """Линии стока от узлов seeds - плоских номеров (инструмент 2.23
+    Isoliner «Линии стока от точек, линий и контуров»). area - линия
+    кончается на водотоке с водосбором от area м², flat - (уклон
+    в градусах, длина участка в метрах): линия кончается, где средний
+    уклон на этой длине ниже порога. merge - линия кончается, вливаясь
+    в построенную раньше, без merge каждая идёт до конца. Со слиянием
+    линии строятся от высоких узлов к низким: первые - самые длинные,
+    узлы, через которые прошла линия, своих линий не дают."""
+    filled, downstream, empty = drainage(z)
     shape = filled.shape
-    start = seed[0] * shape[1] + seed[1]
-    path = topo_flow.trace_downhill(downstream, [start], shape)[0]
-    metrics = topo_flow.path_metrics(path, z, shape, float(cell))
-    reason = topo_flow.path_reason(path, downstream, shape)
-    rows, cols = np.divmod(np.asarray(path, dtype=np.int64), shape[1])
-    # По краю сетки D8 ведёт воду вдоль рамки до угла: линия кончается
-    # на первом узле края, дальше рельефа нет.
-    edge = np.flatnonzero((rows == 0) | (rows == shape[0] - 1)
-                          | (cols == 0) | (cols == shape[1] - 1))
-    if edge.size:
-        cut = int(edge[0]) + 1
-        path, rows, cols = path[:cut], rows[:cut], cols[:cut]
+    if merge:
+        seeds = np.asarray(list(seeds), dtype=np.int64)
+        heights = np.nan_to_num(filled.ravel()[seeds], nan=-np.inf)
+        seeds = seeds[np.argsort(-heights, kind="stable")]
+    rivers = set()
+    if area:
+        acc = topo_flow.flow_accumulation(downstream, shape,
+                                          nodata_mask=empty)
+        rivers = set(int(i) for i in np.flatnonzero(
+            acc.ravel() >= float(area) / float(cell) ** 2))
+    owned = set()
+    stop = set(rivers)
+    out = []
+    for start in seeds:
+        start = int(start)
+        if start in owned:
+            continue
+        path = topo_flow.trace_downhill(downstream, [start], shape,
+                                        stop=stop)[0]
+        if not path:
+            continue
+        last = int(path[-1])
+        if len(path) > 1 and last in rivers:
+            end = "stream"
+        elif len(path) > 1 and last in owned:
+            end = "merge"
+        else:
+            end = "pit"
+        rows, cols = np.divmod(np.asarray(path, dtype=np.int64), shape[1])
+        # По краю сетки D8 ведёт воду вдоль рамки до угла: линия
+        # кончается на первом узле края, дальше рельефа нет.
+        edge = np.flatnonzero((rows == 0) | (rows == shape[0] - 1)
+                              | (cols == 0) | (cols == shape[1] - 1))
+        if edge.size and (int(edge[0]) + 1 < len(path) or end == "pit"):
+            path = path[:int(edge[0]) + 1]
+            end = "edge"
+        if flat:
+            path, cut = topo_flow.cut_on_flattening(
+                path, z, shape, float(cell),
+                topo_flow.slope_from_degrees(flat[0]), float(flat[1]))
+            if cut:
+                end = "flat"
+        path = [int(i) for i in path]
+        if merge:
+            # Обрезанное выполаживанием не занято: линия ниже по склону
+            # может идти через эти узлы дальше.
+            owned.update(path)
+            stop.update(path)
+        rows, cols = np.divmod(np.asarray(path, dtype=np.int64), shape[1])
         metrics = topo_flow.path_metrics(path, z, shape, float(cell))
-        reason = "край листа"
-    end = "edge" if reason == "край листа" else "pit"
-    drop = metrics["drop"] if math.isfinite(metrics["drop"]) else 0.0
-    return Line(rows, cols, metrics["length"], drop, end)
+        drop = metrics["drop"] if math.isfinite(metrics["drop"]) else 0.0
+        out.append(Line(rows, cols, metrics["length"], drop, end))
+    return out
+
+
+def flow_line(z, seed, cell, area=None, flat=None):
+    """Линия стока от узла seed по заполненному рельефу."""
+    start = seed[0] * np.asarray(z).shape[1] + seed[1]
+    return flow_lines(z, [start], cell, area=area, flat=flat)[0]
+
+
+Region = namedtuple("Region", "mask area")
+Region.__doc__ = """Бассейн квадрата: mask - узлы, area - площадь, м²."""
+
+
+def outlet_basins(z, cell, area=NET_AREA):
+    """Бассейны квадрата от устьев - узлов, где вода уходит из квадрата
+    с водосбором от area м² (инструмент 2.07 Isoliner «Бассейны» без
+    точек). Каждый узел квадрата получает бассейн своего устья, узлы
+    с меньших устьев в ответ не идут. Крупные первыми."""
+    filled, downstream, empty = drainage(z)
+    shape = filled.shape
+    acc = topo_flow.flow_accumulation(downstream, shape, nodata_mask=empty)
+    labels = topo_flow.basins(downstream, shape, nodata_mask=empty, acc=acc,
+                              threshold=max(1.0, float(area)
+                                            / float(cell) ** 2))
+    counts = np.bincount(labels.ravel())
+    out = []
+    for label in np.flatnonzero(counts):
+        if label == 0:
+            continue
+        out.append(Region(labels == label,
+                          float(counts[label]) * float(cell) ** 2))
+    out.sort(key=lambda region: -region.area)
+    return out
 
 
 Basin = namedtuple("Basin", "mask seed report stream edge")
@@ -296,16 +377,19 @@ Stream.__doc__ = """Звено речной сети: узлы вниз по т�
 по Стралеру и площадь водосбора в замыкании звена, м²."""
 
 
-def rivers(z, cell, area=NET_AREA):
+def rivers(z, cell, area=NET_AREA, order=1):
     """Речная сеть сетки - водотоки с водосбором от area м², звенья
     с порядком Стралера (topo_flow.river_network, инструмент 2.06
-    Isoliner)."""
+    Isoliner). order - наименьший порядок звена в ответе, порядки
+    считаются по всей сети."""
     filled, downstream, empty = drainage(z)
     shape = filled.shape
     acc = topo_flow.flow_accumulation(downstream, shape, nodata_mask=empty)
     cells = max(1.0, float(area) / float(cell) ** 2)
     out = []
     for link in topo_flow.river_network(downstream, acc, cells, shape):
+        if int(link["order"]) < order:
+            continue
         chain = list(link["cells"])
         # Звено кончается перед узлом слияния: узел приёмника замыкает
         # линию, иначе звенья на глобусе шли бы с разрывами.

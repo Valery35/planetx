@@ -483,7 +483,11 @@ def cut_on_flattening(path, z, shape, cell_x, min_slope, window,
         return list(path), False
     j0 = 0
     for j in range(1, len(idx)):
-        while s[j] - s[j0] > win and j0 < j - 1:
+        # Начало окна - последний узел, от которого до j не меньше
+        # окна. Прежде начало шло до первого узла не дальше окна, и уклон
+        # мерился, только когда путь ровно равен окну: при шаге, не
+        # кратном окну, выполаживание не находилось никогда.
+        while j0 < j - 1 and s[j] - s[j0 + 1] >= win:
             j0 += 1
         if s[j] - s[j0] < win:
             continue
