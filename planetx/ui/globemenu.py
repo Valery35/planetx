@@ -151,16 +151,13 @@ def show(window, px, py):
         # карты - другой. Просьба автора от 20 октября 2026 года.
         menu.addSeparator()
         if not drawing and window._surface_source() is not None:
-            menu.addAction(tr("Видимость отсюда…")).triggered.connect(
-                lambda *a: window.viewshed_here(lat, lon))
+            relief_items(window, menu, lat, lon)
             hydro_items(window, menu, lat, lon)
         if not drawing and window.planet.earth:
             # Один пункт на все спутники, окно открывается на прежнем
             # спутнике.
             menu.addAction(tr("Космоснимки здесь…")) \
                 .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
-            menu.addAction(tr("Инсоляция здесь…")).triggered.connect(
-                lambda *a: window.insolation_here(lat, lon))
             menu.addAction(tr("Облака точек лидара здесь")).triggered.connect(
                 lambda *a: window.lidar_here(lat, lon))
             menu.addSeparator()
@@ -181,6 +178,30 @@ def show(window, px, py):
         menu.deleteLater()
         return
     menu.popup(QCursor.pos())
+
+
+def relief_items(window, menu, lat, lon):
+    """Подменю «Анализ рельефа»: уклон и экспозиция квадрата у точки
+    (ui/relief.py), видимость и инсоляция. Просьба автора от 26 октября
+    2026 года - по образцу «Гидрологии»."""
+    sub = menu.addMenu(tr("Анализ рельефа"))
+    sub.setToolTipsVisible(True)
+    items = [
+        (tr("Уклон и экспозиция здесь…"),
+         tr("Уклон и экспозиция квадрата вокруг точки по высотам, "
+            "сводка, растры и вершины с ямами."),
+         lambda *a: window.relief.relief_here(lat, lon)),
+        (tr("Видимость отсюда…"),
+         tr("Что видно из точки в круге заданного радиуса."),
+         lambda *a: window.viewshed_here(lat, lon))]
+    if window.planet.earth:
+        items.append((tr("Инсоляция здесь…"),
+                      tr("Часы прямого солнца в сутки вокруг точки."),
+                      lambda *a: window.insolation_here(lat, lon)))
+    for text, tip, slot in items:
+        action = sub.addAction(text)
+        action.setToolTip(tip)
+        action.triggered.connect(slot)
 
 
 def hydro_items(window, menu, lat, lon):

@@ -16969,6 +16969,88 @@ def hydro_basins_wait():
     window.hydro.flow_dialog.close()
 
 
+@check(500)
+def relief_open():
+    # Уклон и экспозиция квадрата у Терскола: подменю «Анализ рельефа»,
+    # общая строка «Уклон» гаснет, квадрат занимает её слой вида.
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(HYDRO_BAKSAN[0], HYDRO_BAKSAN[1], 12000.0, 0.0, 0.0))
+    window.view.update()
+    menu = QMenu()
+    globemenu.relief_items(window, menu, *HYDRO_BAKSAN)
+    sub = menu.actions()[0].menu()
+    out = result.setdefault("relief", {})
+    out["menu"] = [menu.actions()[0].text()] + [
+        a.text() for a in sub.actions()]
+    window.set_extra("slope", True)
+    out["global_loader"] = type(window.view.gibs["slope"].loader).__name__
+    state["hydro_before"] = {p.key for p in window.myplaces.places}
+    state["hydro_folders"] = {n.key for n in window.myplaces.nodes()}
+    dialog = window.relief.relief_here(*HYDRO_BAKSAN)
+    state["relief_started"] = time.monotonic()
+    dialog.build.emit(3000.0)
+
+
+@check(500)
+def relief_wait():
+    window = state["window"]
+    tool = window.relief
+    layer = window.view.gibs["slope"]
+    if (tool.job is not None or not layer.textures) \
+            and time.monotonic() - state["relief_started"] < 60.0:
+        return 500
+    if "relief_seen" not in state:
+        # Тайлы проявляются за 0.7 с, кадр - после проявления.
+        state["relief_seen"] = True
+        return 3000
+    out = result["relief"]
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    out["slope_row"] = bool(window.extras.get("slope"))
+    out["loader"] = type(layer.loader).__name__
+    out["textures"] = len(layer.textures)
+    out["legend"] = window.slope_legend.isVisible()
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_relief.png"))
+    dialog.shown.setCurrentIndex(1)
+    out["mode"] = tool.state["result"].mode
+    out["legend_mode"] = window.slope_legend.mode
+    path = os.path.join(TEMP, "planetx_relief_slope.tif")
+    out["export"] = bool(tool.export(path))
+    from qgis.core import QgsProject
+    from planetx.i18n import tr as planetx_tr
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr("PlanetX - анализ рельефа"))
+    layers = group.findLayers() if group is not None else []
+    out["layers"] = [n.name() for n in layers]
+    if layers:
+        stats = layers[0].layer().dataProvider().bandStatistics(1)
+        out["slope_range"] = [round(stats.minimumValue, 1),
+                              round(stats.maximumValue, 1)]
+    if group is not None:
+        for node in layers:
+            QgsProject.instance().removeMapLayer(node.layerId())
+        group.parent().removeChildNode(group)
+    tool.find_peaks()
+    out["peaks_status"] = dialog.status.text()
+    added = _hydro_added(window)
+    out["peaks"] = len(added)
+    out["peak_names"] = [p.name for p in added[:3]]
+    _hydro_clean(window)
+    # Строка «Уклон» снимает квадрат, без неё он не возвращается.
+    window.set_extra("slope", True)
+    out["after_row"] = [tool.state is None,
+                        type(layer.loader).__name__]
+    window.set_extra("slope", False)
+    out["after_off"] = [layer.shown, tool.tiles is None]
+    dialog.close()
+
+
 @check(8000)
 def sea_level_on():
     # Подъём моря у дельты Рейна: Нидерланды с 250 км.

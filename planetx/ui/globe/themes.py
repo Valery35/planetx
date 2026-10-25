@@ -838,9 +838,17 @@ class ThemesMixin:
                     None)
         found = self._surface_source()
         self._set_contours(found)
+        # Тот же слой вида занимает квадрат окна «Уклон и экспозиция»
+        # (ui/relief.py): включённая строка его снимает, без строки он
+        # возвращается.
+        local = getattr(self, "relief", None)
+        if mode is not None and local is not None:
+            local.clear(quiet=True)
         if mode is None or found is None or self.view.sky_view is not None:
             self._set_gibs("slope", False)
             self.slope_legend.hide()
+            if local is not None:
+                local.show()
             return
         source, floor, insets = found
         self.view.gibs["slope"].max_level = source.max_level

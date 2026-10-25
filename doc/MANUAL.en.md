@@ -1725,9 +1725,9 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Viewshed from here… | The Viewshed from a point window for the point under the cursor, see Viewshed from a point |
+| Terrain analysis | A submenu with Slope and aspect here…, Viewshed from here… and Insolation here… (only on the Earth) for the point under the cursor, see Slope and aspect of a square, Viewshed from a point and Insolation |
+| Hydrology | A submenu with Flooding from here…, Water flow from here… and Sea level…, see Flooding |
 | Satellite images here… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
-| Insolation here… | The Insolation window for the point under the cursor, only on the Earth, see Insolation |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
 
@@ -2649,10 +2649,42 @@ stretch not shorter than three pixels of height data, so roughness of
 the data does not pass for a cliff. On steep mountains the maximum slope
 may exceed 100 %, that is 45°.
 
+### Slope and aspect of a square
+
+Slope and aspect of a square, viewshed and insolation are collected in
+the Terrain analysis submenu of the menu on the globe. The Slope and
+aspect here… item opens the Slope and aspect window for the point
+under the cursor. The Radius field sets half the side of the
+calculation square, the grid step is about one six-hundredth of the
+side. The Build button loads the heights of the square and colours it
+on the globe. The heights are the same as those of the globe terrain,
+with the 30 m land refinement and own terrain from a project raster if
+they are on.
+
+Slope and aspect are computed with a 3 × 3 kernel (Horn, as in
+gdaldem), the computation is ported from the Isoliner plugin. Aspect is
+the direction the slope faces, flat ground under 0.5° has none. The
+Show list selects the colouring of the square, slope or aspect, the
+colours and the scale are those of the Slope and Aspect rows of the
+Layers section. The square takes the same globe layer, so the rows
+switch off meanwhile, and a row switched on removes the square. Under
+the fields is a summary, the lowest, the highest and the median slope,
+the areas by slope classes and the three directions most slopes face.
+
+The To QGIS project… button writes slope and aspect rasters in degrees
+as GeoTIFF to the PlanetX - terrain analysis group. The Peaks and pits
+button finds the peaks and closed depressions of the square and writes
+them to My Places as a folder of points with the elevation and the
+rise. A peak is higher than everything around it within the Peak
+radius field, a pit is lower, and the rise to the lowest or highest
+point around is at least the Rise from field. The Remove button
+removes the colouring.
+
 ### Viewshed from a point
 
-The Viewshed from here… item of the globe menu opens the Viewshed
-from a point window for the point under the cursor. The window sets the observer height
+The Viewshed from here… item of the Terrain analysis submenu of the
+globe menu opens the Viewshed from a point window for the point under
+the cursor. The window sets the observer height
 above the terrain, the target height and the circle radius. The Build
 button loads the heights under the circle and colours it. Visible places
 are green, places hidden by the terrain are red. The Remove button
@@ -2678,8 +2710,8 @@ viewshed is computed on the Earth, Mars and the Moon.
 
 ### Insolation
 
-The Insolation here… item of the globe menu opens the Insolation
-window for the point under the cursor. The window sets the first and the last day of the
+The Insolation here… item of the Terrain analysis submenu of the globe
+menu opens the Insolation window for the point under the cursor. The window sets the first and the last day of the
 period and the circle radius. The Build button loads the heights and
 colours the circle by the mean number of hours of direct sunlight per
 day. Blue means little light, red means much light. The scale in the

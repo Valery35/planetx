@@ -405,20 +405,71 @@ class _Message:
             self.window._show_state()
 
 
-class HydroTool(QObject):
-    """Затопление, линия стока и водосбор у точки окна глобуса."""
+class GridHeights(QObject):
+    """Высоты квадрата у точки окна расчёта - общая часть воды
+    по рельефу и анализа рельефа (ui/relief.py)."""
 
     def __init__(self, window):
         super().__init__(window)
         self.window = window
         self.job = None
+        self.timer = QTimer(self)
+        self.timer.setInterval(POLL)
+        self.timer.timeout.connect(self._poll)
+
+    def _start(self, dialog, radius_m, done):
+        """Высоты квадрата у точки окна dialog, потом done(dialog, сетка,
+        высоты, загружены ли не все)."""
+        window = self.window
+        if window._surface_source() is None \
+                or window.view.sky_view is not None:
+            dialog.status.setText(tr("Для этого тела высот нет."))
+            return
+        lat, lon = dialog.point
+        store = window.view.store
+        pixel = 2.0 * math.pi * ellipsoid.A * math.cos(math.radians(lat)) \
+            / (TILE * 2 ** store.max_level)
+        grid = hydro.make_grid(lat, lon, radius_m, pixel, ellipsoid.A)
+        _, keys = viewshed.height_tiles(lat, lon, radius_m * math.sqrt(2.0),
+                                        grid.cell, ellipsoid.A,
+                                        store.max_level)
+        self.job = {"dialog": dialog, "grid": grid, "keys": keys,
+                    "done": done, "started": time.monotonic()}
+        self.timer.start()
+        self._poll()
+
+    def _poll(self):
+        job = self.job
+        if job is None:
+            self.timer.stop()
+            return
+        window = self.window
+        dialog = job["dialog"]
+        missing = [k for k in job["keys"] if not window._has_height_tile(k)]
+        if missing and time.monotonic() - job["started"] < WAIT:
+            window.view.want_tool_heights(missing)
+            dialog.status.setText(tr("Загрузка высот: {done} из {total}",
+                                     done=len(job["keys"]) - len(missing),
+                                     total=len(job["keys"])))
+            return
+        self.timer.stop()
+        self.job = None
+        grid = job["grid"]
+        lats, lons = hydro.nodes(grid, ellipsoid.A)
+        z = np.asarray(window._true_heights(lats.ravel(), lons.ravel()),
+                       dtype=np.float64).reshape(lats.shape)
+        job["done"](dialog, grid, z, bool(missing))
+
+
+class HydroTool(GridHeights):
+    """Затопление, линия стока и водосбор у точки окна глобуса."""
+
+    def __init__(self, window):
+        super().__init__(window)
         self.state = None  # затопление: сетка, высоты, уровни, уровень
         self.flood_dialog = None
         self.flow_dialog = None
         self.sea_dialog = None
-        self.timer = QTimer(self)
-        self.timer.setInterval(POLL)
-        self.timer.timeout.connect(self._poll)
 
     # --- окна --------------------------------------------------------------
 
@@ -531,51 +582,6 @@ class HydroTool(QObject):
         self._start(sink, side, lambda dialog, grid, z, partial:
                     self._shape_basin(dialog, grid, z, partial, item,
                                       side))
-
-    # --- высоты участка ----------------------------------------------------
-
-    def _start(self, dialog, radius_m, done):
-        """Высоты квадрата у точки окна dialog, потом done(dialog, сетка,
-        высоты, загружены ли не все)."""
-        window = self.window
-        if window._surface_source() is None \
-                or window.view.sky_view is not None:
-            dialog.status.setText(tr("Для этого тела высот нет."))
-            return
-        lat, lon = dialog.point
-        store = window.view.store
-        pixel = 2.0 * math.pi * ellipsoid.A * math.cos(math.radians(lat)) \
-            / (TILE * 2 ** store.max_level)
-        grid = hydro.make_grid(lat, lon, radius_m, pixel, ellipsoid.A)
-        _, keys = viewshed.height_tiles(lat, lon, radius_m * math.sqrt(2.0),
-                                        grid.cell, ellipsoid.A,
-                                        store.max_level)
-        self.job = {"dialog": dialog, "grid": grid, "keys": keys,
-                    "done": done, "started": time.monotonic()}
-        self.timer.start()
-        self._poll()
-
-    def _poll(self):
-        job = self.job
-        if job is None:
-            self.timer.stop()
-            return
-        window = self.window
-        dialog = job["dialog"]
-        missing = [k for k in job["keys"] if not window._has_height_tile(k)]
-        if missing and time.monotonic() - job["started"] < WAIT:
-            window.view.want_tool_heights(missing)
-            dialog.status.setText(tr("Загрузка высот: {done} из {total}",
-                                     done=len(job["keys"]) - len(missing),
-                                     total=len(job["keys"])))
-            return
-        self.timer.stop()
-        self.job = None
-        grid = job["grid"]
-        lats, lons = hydro.nodes(grid, ellipsoid.A)
-        z = np.asarray(window._true_heights(lats.ravel(), lons.ravel()),
-                       dtype=np.float64).reshape(lats.shape)
-        job["done"](dialog, grid, z, bool(missing))
 
     # --- затопление --------------------------------------------------------
 

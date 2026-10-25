@@ -5757,6 +5757,84 @@ EN = {
     "Линия вливается в другую линию стока.":
         "The line joins another flow line.",
     "Линии стока от метки…": "Flow lines from placemark…",
+    "Уклон и экспозиция здесь…": "Slope and aspect here…",
+    "Уклон и экспозиция квадрата вокруг точки по высотам, сводка, "
+    "растры и вершины с ямами.":
+        "Slope and aspect of the square around the point from the "
+        "heights, a summary, rasters, peaks and pits.",
+    "Что видно из точки в круге заданного радиуса.":
+        "What is visible from the point within a circle of the given "
+        "radius.",
+    "Часы прямого солнца в сутки вокруг точки.":
+        "Hours of direct sun per day around the point.",
+    "PlanetX - анализ рельефа": "PlanetX - terrain analysis",
+    "север": "north",
+    "северо-восток": "north-east",
+    "восток": "east",
+    "юго-восток": "south-east",
+    "юг": "south",
+    "юго-запад": "south-west",
+    "запад": "west",
+    "северо-запад": "north-west",
+    "Уклон от {low}° до {high}°, медиана {median}°.":
+        "Slope from {low}° to {high}°, median {median}°.",
+    "Площади по уклону: {parts}.": "Areas by slope: {parts}.",
+    "{side} {share}": "{side} {share}",
+    "Вершины и ямы {point}": "Peaks and pits {point}",
+    "{low}-{high}° - {area} км²": "{low}-{high}° - {area} km²",
+    "Чаще всего склоны смотрят на {sides}.":
+        "Most slopes face {sides}.",
+    "Ровного места {share}.": "Flat ground {share}.",
+    "Уклон и экспозиция": "Slope and aspect",
+    "Что показывает квадрат на глобусе - крутизну склона или сторону "
+    "света, куда он обращён. Строки «Уклон» и «Экспозиция» раздела "
+    "«Слои» на это время гаснут.":
+        "What the square shows on the globe, the steepness of the slope "
+        "or the direction it faces. The Slope and Aspect rows of the "
+        "Layers section switch off meanwhile.",
+    "Вершина выше всего вокруг себя в этом радиусе, яма ниже. Больше - "
+    "остаются только крупные вершины и ямы.":
+        "A peak is higher than everything around it within this radius, "
+        "a pit is lower. A larger value keeps only large peaks and pits.",
+    "Наименьший перепад вершины над низшей точкой вокруг неё или ямы "
+    "под высшей. Меньше - больше мелких бугров и западин.":
+        "The least rise of a peak above the lowest point around it or "
+        "depth of a pit below the highest. A smaller value gives more "
+        "small mounds and hollows.",
+    "Показывать": "Show",
+    "Радиус вершины": "Peak radius",
+    "Перепад от": "Rise from",
+    "Уклон и экспозиция квадрата по высотам, ядро 3 × 3 - раскраска "
+    "на глобусе и сводка по классам уклона и сторонам света.":
+        "Slope and aspect of the square from the heights, 3 × 3 kernel, "
+        "colouring on the globe and a summary by slope classes and "
+        "directions.",
+    "Растры уклона и экспозиции в градусах в проект QGIS.":
+        "Slope and aspect rasters in degrees to the QGIS project.",
+    "Вершины и ямы": "Peaks and pits",
+    "Вершины и замкнутые понижения квадрата - точки в «Моих метках» "
+    "с отметкой и перепадом.":
+        "Peaks and closed depressions of the square, points in My Places "
+        "with the elevation and the rise.",
+    "Убрать раскраску квадрата с глобуса.":
+        "Remove the colouring of the square from the globe.",
+    "{name} - уклон, °": "{name} - slope, °",
+    "{name} - экспозиция, °": "{name} - aspect, °",
+    "В «Мои метки» записано вершин {peaks} и ям {pits}.":
+        "{peaks} peaks and {pits} pits written to My Places.",
+    "В квадрате нет высот.": "No heights in the square.",
+    "Уклон и экспозиция в проект QGIS":
+        "Slope and aspect to the QGIS project",
+    "Растры не записаны в «{path}».":
+        "The rasters were not written to {path}.",
+    "Вершин и ям с таким перепадом в квадрате нет.":
+        "No peaks or pits with such a rise in the square.",
+    "Вершина {height} м": "Peak {height} m",
+    "Отметка {height} м, превышение {drop} м.":
+        "Elevation {height} m, rise {drop} m.",
+    "Яма {height} м": "Pit {height} m",
+    "Отметка {height} м, глубина {drop} м.":
+        "Elevation {height} m, depth {drop} m.",
     "Речная сеть": "Stream network",
     "Водотоки квадрата с порядком по Стралеру - слой линий "
     "GeoPackage в проект QGIS, толщина линии растёт с порядком.":
