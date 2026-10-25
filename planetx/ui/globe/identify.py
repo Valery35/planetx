@@ -27,7 +27,9 @@ from ...qt_compat import enum
 from ..identify import Group, IdentifyDialog, identify, point_text
 from ..assistant import (AssistantDialog, current_provider, ready,
                          search_enabled)
+from .. import projectread
 from ..legend import deposit_group_names, mine_kind_names
+from ..manualcard import load_index
 from ..myplaces import Place
 from ..placecard import (Card, FeatureCard, PlaceCard, explain_question,
                          feature_question)
@@ -432,7 +434,8 @@ class IdentifyMixin:
         """Окно «Помощник», одно на окно глобуса, создаётся скрытым."""
         if self.assistant_dialog is None:
             dialog = AssistantDialog(self.assistant_tool,
-                                     self.assistant_context, self)
+                                     self.assistant_context, self,
+                                     describe=self._assistant_describe)
             dialog.said.connect(self._assistant_said)
             dialog.busy_changed.connect(self._assistant_busy)
             dialog.generated.connect(self._places_made)
@@ -576,7 +579,9 @@ class IdentifyMixin:
     def assistant_context(self):
         """Что уходит в модель с запросом: точка взгляда, тело,
         включённые строки, сектор разреза. Названия слоёв проекта
-        и меток не уходят, решение автора от 3 октября 2026 года."""
+        и меток с запросом не уходят, решение автора от 3 октября 2026
+        года. Слои проекта модель читает инструментами по разрешению
+        пользователя, решение автора от 25 октября 2026 года."""
         pose = self.view.navigator.pose
         on = (["relief"] if self._relief else []) \
             + [k for k, v in self.extras.items() if v] \
@@ -655,6 +660,29 @@ class IdentifyMixin:
         self._actions[item.key]()
         return tr("Выполнено: {title} - {note}.", title=item.text,
                   note=item.note)
+
+    def _assistant_describe(self, call):
+        """Вопрос о разрешении вызова для окна «Помощник»."""
+        return projectread.describe(call, self._search_actions())
+
+    def _tool_search_docs(self, query):
+        return assistant_core.search_docs_text(load_index(), str(query))
+
+    def _tool_read_doc(self, anchor, offset=0,
+                       limit=assistant_core.DOC_LINES):
+        return assistant_core.read_doc_text(load_index(), anchor, offset,
+                                            limit)
+
+    def _tool_list_project_layers(self):
+        journal.note("assistant reads project layers")
+        return projectread.layers_text()
+
+    def _tool_read_features(self, layer, where="", fields=None, limit=50,
+                            geometry=False):
+        journal.note("assistant reads features")
+        return projectread.features_text(projectread.find_layer(layer),
+                                         where, fields, limit,
+                                         bool(geometry))
 
     def _tool_set_opacity(self, key, value):
         key = str(key)

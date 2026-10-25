@@ -433,9 +433,10 @@ class TestHelpers(unittest.TestCase):
         def item(key, text, note):
             return Suggestion("action", text, key, None, None, None,
                               note, ())
+        # Окна выбора файла и запись облёта с 25 октября 2026 года
+        # доступны по разрешению пользователя, разговор - нет.
         actions = [item("layer:grid", "Координатная сетка", "включить"),
-                   item("tool:record", "Записать облёт", "начать"),
-                   item("tool:scene_open", "Открыть сцену", "открыть окно"),
+                   item("tool:assistant", "Помощник", "открыть окно"),
                    item("map:weather_aurora", "Полярное сияние", "")]
         allowed = ai.assistant_actions(actions)
         self.assertEqual([a.key for a in allowed],

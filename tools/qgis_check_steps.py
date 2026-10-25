@@ -3997,6 +3997,7 @@ def _fake_model():
     import http.server
     import threading
     seen = []
+    tries = []  # запросы «перегрузка»: первый отвечает 529
     kml = ('<kml xmlns="http://www.opengis.net/kml/2.2"><Document>'
            '<name>Проба помощника</name><Placemark><name>Токио</name>'
            '<Point><coordinates>139.69,35.69,0</coordinates></Point>'
@@ -4017,6 +4018,17 @@ def _fake_model():
                 first = body["messages"][0]["content"]
                 if isinstance(first, str) and "течения" in first:
                     answer = self.actions(len(body["messages"]))
+                elif isinstance(first, str) and "слоях проекта" in first:
+                    answer = self.gate(len(body["messages"]))
+                elif isinstance(first, str) and "перегрузка" in first:
+                    tries.append(1)
+                    if len(tries) == 1:
+                        self.reply_json(529, {"type": "error", "error": {
+                            "type": "overloaded_error",
+                            "message": "Overloaded"}})
+                        return
+                    answer = {"content": [{"type": "text",
+                                           "text": "Ответил после повтора."}]}
                 elif isinstance(last, str):
                     answer = {"content": [
                         {"type": "text", "text": "Лечу к Японии."},
@@ -4062,12 +4074,32 @@ def _fake_model():
                 else:
                     answer = {"output": [{"type": "message", "content": [
                         {"type": "output_text", "text": "Предложил."}]}]}
+            self.reply_json(200, answer)
+
+        def reply_json(self, status, answer):
             data = json.dumps(answer).encode("utf-8")
-            self.send_response(200)
+            self.send_response(status)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+
+        def gate(self, count):
+            """Круги разговора о слоях проекта: список слоёв, строки слоя
+            дважды одним вызовом, руководство, потом текст."""
+            rows = {"layer": "1", "fields": ["name"], "limit": 3,
+                    "geometry": True}
+            calls = {1: (("list_project_layers", {}),),
+                     3: (("read_features", rows),),
+                     5: (("read_features", rows),),
+                     7: (("search_docs", {"query": "линейка расстояние"}),
+                         ("read_doc", {"anchor": "линейка", "limit": 5}))}
+            if count not in calls:
+                return {"content": [{"type": "text", "text": "Готово."}]}
+            return {"content": [
+                {"type": "tool_use", "id": "g%d_%d" % (count, n),
+                 "name": name, "input": args}
+                for n, (name, args) in enumerate(calls[count])]}
 
         def actions(self, count):
             """Круги разговора о слоях: список действий, потом течения,
@@ -4269,16 +4301,25 @@ def assistant_actions():
     dialog = window.assistant_dialog
     _use_service(dialog, ai.ANTHROPIC,
                  "http://127.0.0.1:%d" % server.server_port)
+    dialog.agent = ai.Agent()  # новый разговор
     dialog.input.setText("Покажи течения и включи горизонтали")
     dialog.send()
 
 
 @check(1000)
 def assistant_actions_check():
+    from planetx.core import assistant as ai
     from planetx.ui import assistant as ui_ai
     window = state["window"]
     server, seen = state["fake_actions"]
     out = result.setdefault("assistant_actions", {})
+    dialog = window.assistant_dialog
+    if dialog.confirm.isVisible() and "record_asked" not in out:
+        # Запись облёта - по разрешению: окно спрашивает, отказ.
+        out["record_asked"] = dialog.confirm_text.text()
+        out["recording_before"] = window.toolbar.record.isChecked()
+        dialog._decide(ai.DENY)
+        return 1000
     out["requests"] = len(seen)
     listed = seen[1][1]["messages"][-1]["content"][0]["content"] \
         if len(seen) > 1 else ""
@@ -4301,6 +4342,102 @@ def assistant_actions_check():
     window.assistant_dialog.close()
     server.shutdown()
     ui_ai.load_key = state["real_load_key"]
+    out["gl"] = dict(window.view.gl_errors)
+
+
+@check(3000)
+def assistant_gate():
+    # Слои проекта - по разрешению на каждое чтение, «в этом разговоре»
+    # помнит тот же вызов. Руководство - search_docs и read_doc.
+    from qgis.core import QgsFeature, QgsGeometry, QgsPointXY, QgsProject
+    from qgis.core import QgsVectorLayer
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    window.set_body("earth")
+    layer = QgsVectorLayer("Point?crs=EPSG:4326&field=name:string"
+                           "&field=depth:double", "Скважины пробы",
+                           "memory")
+    features = []
+    for n in range(5):
+        feature = QgsFeature(layer.fields())
+        feature.setAttributes(["C-%d" % n, 100.0 + n])
+        feature.setGeometry(QgsGeometry.fromPointXY(
+            QgsPointXY(56.2 + n * 0.01, 58.0)))
+        features.append(feature)
+    layer.dataProvider().addFeatures(features)
+    QgsProject.instance().addMapLayer(layer)
+    root = QgsProject.instance().layerTreeRoot()
+    node = root.findLayer(layer.id())
+    root.insertChildNode(0, node.clone())
+    root.removeChildNode(node)
+    state["gate_layer"] = layer.id()
+    server, seen = _fake_model()
+    state["fake_gate"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    dialog = window._assistant()
+    dialog.hide()
+    _use_service(dialog, ai.ANTHROPIC,
+                 "http://127.0.0.1:%d" % server.server_port)
+    dialog.agent = ai.Agent()  # новый разговор
+    dialog.ask("Что в слоях проекта?")
+    result["assistant_gate"] = {"asked": []}
+    state["gate_started"] = time.monotonic()
+
+
+@check(1000)
+def assistant_gate_check():
+    from planetx.core import assistant as ai
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_gate"]
+    out = result["assistant_gate"]
+    spent = time.monotonic() - state["gate_started"]
+    if dialog.confirm.isVisible():
+        out["asked"].append(dialog.confirm_text.text())
+        out.setdefault("shown_for_confirm", dialog.isVisible())
+        # Список - один раз, строки - в этом разговоре.
+        dialog._decide(ai.ALLOW if len(out["asked"]) == 1
+                       else ai.ALLOW_ALWAYS)
+        return 500
+    if "Готово." not in dialog.history.toPlainText() and spent < 30.0:
+        return 500
+
+    def results(n):
+        if len(seen) <= n:
+            return None
+        return [r["content"] for r in
+                seen[n][1]["messages"][-1]["content"]]
+    out["requests"] = len(seen)
+    out["layers"] = (results(1) or [""])[0][:300]
+    out["rows"] = (results(2) or [""])[0][:400]
+    out["rows_again_same"] = results(3) == results(2)
+    out["docs"] = [text[:200] for text in results(4) or []]
+    dialog.agent = ai.Agent()
+    dialog.ask("перегрузка")
+    state["gate_retry"] = time.monotonic()
+
+
+@check(1000)
+def assistant_gate_retry():
+    from qgis.core import QgsProject
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    dialog = window.assistant_dialog
+    server, seen = state["fake_gate"]
+    out = result["assistant_gate"]
+    history = dialog.history.toPlainText()
+    if "Ответил после повтора." not in history \
+            and time.monotonic() - state["gate_retry"] < 20.0:
+        return 500
+    out["retry_note"] = "Сервис занят" in history \
+        or "service is busy" in history
+    out["retried"] = "Ответил после повтора." in history
+    dialog.close()
+    server.shutdown()
+    ui_ai.load_key = state["real_load_key"]
+    QgsProject.instance().removeMapLayer(state["gate_layer"])
     out["gl"] = dict(window.view.gl_errors)
 
 

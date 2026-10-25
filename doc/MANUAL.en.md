@@ -2108,7 +2108,7 @@ and written back to KML. The card buttons:
 Explain this gives the assistant the name, kind, coordinates and
 description of this one placemark and the names of the globe layers
 turned on, for example Gravity anomalies. The names of QGIS project
-layers are not sent. Pressing the button is consent to send them.
+layers are not sent with this question. Pressing the button is consent to send them.
 Without it the names of placemarks do not go to the model. The button
 is available when the assistant is connected, see the Assistant
 section.
@@ -2139,8 +2139,8 @@ Identify features mode. The card buttons:
 Explain this gives the assistant the layer name, the name, description
 and fields of this one object, the clicked point and the names of the
 globe layers turned on. Pressing the button is consent to send them.
-Without it the names of project layers and the object fields do not go
-to the model.
+Without it the names of project layers and the object fields go to the
+model only when you allow their reading, see the Assistant section.
 
 ### Wikipedia nearby
 
@@ -3638,20 +3638,51 @@ OpenRouter with a free model is chosen.
   earthquake summary in a box. All actions of the Search field are
   available to the assistant as well - catalog layers and maps,
   windows and tools, demos and bodies. It also changes the opacity of
-  a shown layer. The assistant does not open file choice windows and
-  does not start tour recording, the user opens them.
+  a shown layer. File choice windows, tour recording and the CRUST1.0
+  export are opened by the assistant only with permission.
+- **Manual.** To a question how to do something in the plugin, the
+  assistant searches this manual and reads the section instead of
+  guessing.
 - **Placemarks in KML.** The assistant proposes placemarks, paths,
   polygons, folders and tours as a KML document. Below the conversation
   a proposal appears with the Write to My Places and Cancel buttons.
   Nothing is written without the button. Placemarks selected in My
   Places can be read by the assistant as KML and returned corrected.
+- **Project layers.** The assistant can ask for the list of project
+  layers - names, fields, coordinate systems and feature counts - and
+  for rows of a vector layer, no more than 200 at a time, with a QGIS
+  expression filter. You allow each such reading.
 - **What goes to the model server.** The request text, the look-at
-  point, the body and the rows switched on in the Layers section. Names
-  of project layers and My Places do not go, except placemarks selected
-  by the user.
+  point, the body and the rows switched on in the Layers section.
+  Project layers, their fields and rows go only when you allowed the
+  reading. From My Places only selected placemarks go.
 
-The assistant's actions show in the conversation as Action lines. It
-makes no more than six rounds of actions in a row, then it stops.
+The assistant's actions show in the conversation as Action lines.
+
+### Assistant permissions
+
+The assistant reads project layers, opens file choice windows and
+records a tour only with permission. Below the conversation a question
+appears saying what the assistant wants to do, with three buttons. If
+the question came from the Search field, the Assistant window opens by
+itself.
+
+| Button | What it does |
+|---|---|
+| Allow | Runs the action once |
+| Allow in this conversation | Exactly the same request is not asked again until a new conversation. Another layer or another filter is asked again |
+| Decline | The assistant gets a refusal and answers without this action |
+
+A new question while a permission question waits removes it - the
+assistant gets a refusal.
+
+The assistant makes no more than 16 rounds of actions in a row. Then
+the Continue button appears below the conversation - the assistant
+continues where it stopped - and Stop. If the model service is busy or
+limits the request rate, the assistant repeats the request up to three
+times with pauses of 2, 5 and 10 s. Long action answers are shortened -
+the model gets the beginning and the end, in a long conversation old
+answers are replaced with a mark.
 
 ### Places from a description
 

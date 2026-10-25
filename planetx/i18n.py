@@ -3849,11 +3849,66 @@ EN = {
     "Записать в «Мои метки»":
         "Write to My Places",
     "Запрос, точка взгляда и включённые строки раздела «Слои» уходят на "
-    "сервер выбранной модели. Названия слоёв проекта и «Моих меток» не "
-    "уходят.":
+    "сервер выбранной модели. Слои проекта, их поля и строки уходят, только "
+    "когда вы разрешаете чтение. «Мои метки» уходят только выделенными.":
         "The request, the look-at point and the rows switched on in the "
-        "Layers section go to the server of the chosen model. Names of "
-        "project layers and My Places do not.",
+        "Layers section go to the server of the chosen model. Project "
+        "layers, their fields and rows go only when you allow the reading. "
+        "My Places go only when selected.",
+    "Разрешить":
+        "Allow",
+    "Выполнить это действие один раз.":
+        "Run this action once.",
+    "Разрешить в этом разговоре":
+        "Allow in this conversation",
+    "Точно такой же запрос больше не спрашивается до нового разговора. "
+    "Другой слой или другой отбор спросится снова.":
+        "Exactly the same request is not asked again until a new "
+        "conversation. Another layer or another filter is asked again.",
+    "Отказать":
+        "Decline",
+    "Помощник получает отказ и отвечает без этого действия.":
+        "The assistant gets a refusal and answers without this action.",
+    "Помощник сделал много действий подряд.":
+        "The assistant has made many actions in a row.",
+    "Помощник продолжает с того места, где остановился.":
+        "The assistant continues where it stopped.",
+    "Помощник просит выполнить {name} {args}.":
+        "The assistant asks to run {name} {args}.",
+    "Отказано.":
+        "Declined.",
+    "Сервис занят ({error}), повтор через {seconds} с.":
+        "The service is busy ({error}), retry in {seconds} s.",
+    "Помощник сделал много действий подряд и ждёт «Продолжить».":
+        "The assistant has made many actions in a row and waits for "
+        "Continue.",
+    "В проекте нет слоёв.":
+        "The project has no layers.",
+    "Слоя нет. Номер берётся из list_project_layers.":
+        "No such layer. The number comes from list_project_layers.",
+    "Слой «{name}» не векторный, строк у него нет.":
+        "The layer {name} is not a vector layer, it has no rows.",
+    "Подходящих строк нет.":
+        "No matching rows.",
+    "Помощник просит список слоёв проекта QGIS - названия, поля, системы "
+    "координат и количество объектов.":
+        "The assistant asks for the list of QGIS project layers - names, "
+        "fields, coordinate systems and feature counts.",
+    "Помощник просит прочитать строки слоя «{name}», не больше {limit}.":
+        "The assistant asks to read rows of the layer {name}, no more than "
+        "{limit}.",
+    "Ошибка в выражении отбора: {error}":
+        "Error in the filter expression: {error}",
+    "Строк больше {limit}, показаны первые.":
+        "There are more than {limit} rows, the first ones are shown.",
+    "Отбор: {where}.":
+        "Filter: {where}.",
+    "С координатами объектов.":
+        "With feature coordinates.",
+    "Помощник просит выполнить «{title}». Откроется окно, которое ждёт "
+    "вашего ответа.":
+        "The assistant asks to run {title}. A window opens and waits for "
+        "your answer.",
     "Ключ":
         "Key",
     "Ключ API выбранного сервиса. Он хранится в менеджере паролей QGIS и "
@@ -3892,8 +3947,6 @@ EN = {
         "Search started: {query}.",
     "Помощник":
         "Assistant",
-    "Помощник остановлен: слишком много действий подряд.":
-        "The assistant stopped: too many actions in a row.",
     "Помощник предлагает папку «{name}», меток {count}.":
         "The assistant proposes the folder {name}, placemarks {count}.",
     "Разрез Земли есть только у Земли.":

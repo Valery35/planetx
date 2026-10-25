@@ -16,13 +16,16 @@
 открытым текстом в настройках профиля.
 
 Разговор: запрос пользователя -> модель -> вызовы инструментов ->
-их ответы -> модель, пока модель не ответит текстом, но не больше
-core.assistant.MAX_ROUNDS кругов.
+их ответы -> модель, пока модель не ответит текстом. Круг ведёт
+core.assistant.Agent, окно посылает запросы, исполняет вызовы
+и спрашивает пользователя - разрешить чтение слоёв проекта
+и действия с окнами, продолжить после MAX_ROUNDS кругов.
 """
 import html
+import json
 
 from qgis.core import QgsApplication, QgsAuthMethodConfig, QgsSettings
-from qgis.PyQt.QtCore import pyqtSignal
+from qgis.PyQt.QtCore import QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
                                  QDialogButtonBox, QFormLayout, QHBoxLayout,
                                  QLabel, QLineEdit, QPushButton,
@@ -289,8 +292,10 @@ class AssistantSettings(QDialog):
 class AssistantDialog(QDialog):
     """Немодальное окно помощника. executor(вызов core.assistant.Call)
     исполняет инструмент и даёт текст ответа, context() - словарь
-    контекста вида для модели. Разговор идёт и в скрытом окне, так
-    работает строка поиска глобуса (ask)."""
+    контекста вида для модели, describe(вызов) - что сделает вызов,
+    для вопроса о разрешении. Разговор идёт и в скрытом окне, так
+    работает строка поиска глобуса (ask). Вопрос о разрешении окно
+    показывает."""
 
     # Каждая реплика разговора: кто («user», «assistant», «tool»,
     # «note») и текст.
@@ -302,15 +307,22 @@ class AssistantDialog(QDialog):
     # Метки идут потоком: сколько меток уже пришло целиком.
     progress = pyqtSignal(int)
 
-    def __init__(self, executor, context, parent=None):
+    # Ждёт ли разговор ответа пользователя: разрешения или «Продолжить».
+    waiting_changed = pyqtSignal(bool)
+
+    def __init__(self, executor, context, parent=None, describe=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Помощник"))
         self.setModal(False)
         self.executor = executor
         self.context = context
-        self.dialog = []
-        self.rounds = 0
+        self.describe = describe
+        self.agent = ai.Agent()
         self.reply = None
+        # Пауза перед повтором запроса после временного отказа.
+        self.retry_timer = QTimer(self)
+        self.retry_timer.setSingleShot(True)
+        self.retry_timer.timeout.connect(self._ask)
         self.asked = None  # подключение запроса, который ждёт ответа
         # Поток ответа создания меток (core.assistant.StreamText), число
         # пришедших меток, предел длины запроса и признак остановки.
@@ -338,9 +350,53 @@ class AssistantDialog(QDialog):
             "в строке «Поиск» панели."))
         self.note = QLabel(tr(
             "Запрос, точка взгляда и включённые строки раздела «Слои» "
-            "уходят на сервер выбранной модели. Названия слоёв проекта "
-            "и «Моих меток» не уходят."), self)
+            "уходят на сервер выбранной модели. Слои проекта, их поля "
+            "и строки уходят, только когда вы разрешаете чтение. "
+            "«Мои метки» уходят только выделенными."), self)
         self.note.setWordWrap(True)
+        # Вопрос о разрешении вызова: core.assistant.CONFIRM.
+        self.confirm = QWidget(self)
+        self.confirm_text = QLabel(self.confirm)
+        self.confirm_text.setWordWrap(True)
+        self.allow_button = QPushButton(tr("Разрешить"), self.confirm)
+        self.allow_button.setToolTip(tr("Выполнить это действие один раз."))
+        self.allow_button.clicked.connect(
+            lambda: self._decide(ai.ALLOW))
+        self.always_button = QPushButton(tr("Разрешить в этом разговоре"),
+                                         self.confirm)
+        self.always_button.setToolTip(tr(
+            "Точно такой же запрос больше не спрашивается до нового "
+            "разговора. Другой слой или другой отбор спросится снова."))
+        self.always_button.clicked.connect(
+            lambda: self._decide(ai.ALLOW_ALWAYS))
+        self.deny_button = QPushButton(tr("Отказать"), self.confirm)
+        self.deny_button.setToolTip(tr(
+            "Помощник получает отказ и отвечает без этого действия."))
+        self.deny_button.clicked.connect(lambda: self._decide(ai.DENY))
+        confirm_row = QHBoxLayout(self.confirm)
+        confirm_row.setContentsMargins(0, 0, 0, 0)
+        confirm_row.addWidget(self.confirm_text, 1)
+        confirm_row.addWidget(self.allow_button)
+        confirm_row.addWidget(self.always_button)
+        confirm_row.addWidget(self.deny_button)
+        self.confirm.hide()
+        # Круги кончились: core.assistant.LIMIT.
+        self.more = QWidget(self)
+        more_text = QLabel(tr("Помощник сделал много действий подряд."),
+                           self.more)
+        more_text.setWordWrap(True)
+        self.more_button = QPushButton(tr("Продолжить"), self.more)
+        self.more_button.setToolTip(tr(
+            "Помощник продолжает с того места, где остановился."))
+        self.more_button.clicked.connect(self._resume)
+        stop = QPushButton(tr("Остановить"), self.more)
+        stop.clicked.connect(self.stop_talk)
+        more_row = QHBoxLayout(self.more)
+        more_row.setContentsMargins(0, 0, 0, 0)
+        more_row.addWidget(more_text, 1)
+        more_row.addWidget(self.more_button)
+        more_row.addWidget(stop)
+        self.more.hide()
         self.proposal = QWidget(self)
         self.proposal_text = QLabel(self.proposal)
         self.proposal_text.setWordWrap(True)
@@ -374,6 +430,8 @@ class AssistantDialog(QDialog):
         layout.addLayout(top)
         layout.addWidget(self.history, 1)
         layout.addWidget(self.proposal)
+        layout.addWidget(self.confirm)
+        layout.addWidget(self.more)
         layout.addLayout(ask)
         layout.addWidget(self.note)
         self._show_service()
@@ -422,14 +480,24 @@ class AssistantDialog(QDialog):
         if self.generate(self.input.text()):
             self.input.clear()
 
+    @property
+    def dialog(self):
+        """Разговор в нейтральном виде core.assistant."""
+        return self.agent.dialog
+
     def busy(self):
-        return self.reply is not None
+        return self.reply is not None or self.retry_timer.isActive()
+
+    def waiting(self):
+        """Ждёт ли разговор разрешения или «Продолжить»."""
+        return not self.confirm.isHidden() or not self.more.isHidden()
 
     def ask(self, text):
         """Вопрос модели из поля окна или из строки поиска глобуса.
-        Пока ждётся прежний ответ, вопрос не принимается."""
+        Пока ждётся прежний ответ, вопрос не принимается. Новый вопрос
+        снимает ждущий вопрос о разрешении и «Продолжить»."""
         text = text.strip()
-        if not text or self.reply is not None:
+        if not text or self.busy():
             return False
         if not ready(self.provider_key()):
             # Без ключа вопрос не уходит и не остаётся в разговоре,
@@ -439,10 +507,10 @@ class AssistantDialog(QDialog):
             self.show()
             self.open_settings()
             return False
+        if self.waiting():
+            self.stop_talk()
         self._say("user", text)
-        self.dialog.append({"role": "user", "text": text})
-        self.rounds = 0
-        self._ask()
+        self._step(self.agent.ask(text))
         return True
 
     def generate(self, text):
@@ -451,7 +519,7 @@ class AssistantDialog(QDialog):
         Кругов инструментов нет, разговор в запрос не идёт. Ответ идёт
         потоком: число пришедших меток сообщает сигнал progress."""
         text = text.strip()
-        if not text or self.reply is not None:
+        if not text or self.busy() or self.waiting():
             return False
         if not ready(self.provider_key()):
             self._say("note", tr("Нет ключа API. Его вводят в окне "
@@ -546,7 +614,7 @@ class AssistantDialog(QDialog):
             self._say("note", self.partial)
         # В разговоре остаётся короткий след, сам документ в запросы
         # разговора не идёт.
-        self.dialog.append({"role": "user", "text": text})
+        self.agent.ask(text)
         self.dialog.append({"role": "assistant",
                             "text": tr("Метки созданы документом KML.")})
         self.generated.emit(kml)
@@ -565,7 +633,7 @@ class AssistantDialog(QDialog):
             return
         url, headers, body = ai.request(
             provider, base, provider_model(provider), key,
-            ai.system_text(self.context()), self.dialog)
+            ai.system_text(self.context()), self.agent.dialog_for_request())
         self.send_button.setEnabled(False)
         self.asked = provider
         self.reply = post_json(url, headers, body, self._answered)
@@ -577,43 +645,91 @@ class AssistantDialog(QDialog):
         self.busy_changed.emit(False)
         provider = self.asked or self.provider_key()
         answer = ai.parse(provider, data)
-        if answer.error or (data is None and error):
-            # Без тела ответа причина - в ошибке сети, а не в «no data».
-            reason = (error or answer.error) if data is None \
-                else answer.error
-            self._say("note", tr("Модель не ответила: {error}",
-                                 error=reason))
-            if data is None and not ai.needs_key(provider_base(provider)):
-                self._say("note", tr(
-                    "Сервис на этом компьютере не отвечает. Проверьте, "
-                    "что он запущен, например Ollama, и что адрес "
-                    "в настройках помощника верный."))
-            # Неудачный вопрос не остаётся в разговоре: разговор
-            # откатывается к состоянию до последнего вопроса
-            # пользователя вместе с начатыми вызовами инструментов.
-            for n in range(len(self.dialog) - 1, -1, -1):
-                m = self.dialog[n]
-                if m["role"] == "user" and not m.get("results"):
-                    del self.dialog[n:]
-                    break
-            return
-        self.dialog.append(ai.assistant_message(answer))
-        if answer.text:
+        if not answer.error and answer.text:
             self._say("assistant", answer.text)
-        if not answer.calls:
+        # Без тела ответа причина - в ошибке сети, а не в «no data».
+        step = self.agent.answered(answer, error if data is None else "")
+        if step.kind == ai.FAILED and data is None \
+                and not ai.needs_key(provider_base(provider)):
+            self._say("note", tr("Модель не ответила: {error}",
+                                 error=step.text))
+            self._say("note", tr(
+                "Сервис на этом компьютере не отвечает. Проверьте, "
+                "что он запущен, например Ollama, и что адрес "
+                "в настройках помощника верный."))
             return
-        results = []
-        for call in answer.calls:
-            text = self.executor(call)
+        self._step(step)
+
+    def _step(self, step):
+        """Следующий шаг круга разговора core.assistant.Agent. Вызовы
+        без разрешения исполняются сразу, подряд."""
+        while step.kind == ai.RUN:
+            text = self.executor(step.call)
             self._say("tool", text)
-            results.append(ai.Result(call.id, text))
-        self.dialog.append(ai.results_message(results))
-        self.rounds += 1
-        if self.rounds >= ai.MAX_ROUNDS:
-            self._say("note", tr("Помощник остановлен: слишком много "
-                                 "действий подряд."))
+            step = self.agent.result(text)
+        if step.kind == ai.SEND:
+            self._ask()
+        elif step.kind == ai.RETRY:
+            self._say("note", tr(
+                "Сервис занят ({error}), повтор через {seconds} с.",
+                error=step.text, seconds="{:g}".format(step.delay)))
+            self.retry_timer.start(int(step.delay * 1000))
+            self.busy_changed.emit(True)
+        elif step.kind == ai.CONFIRM:
+            self._ask_user(step.call)
+        elif step.kind == ai.LIMIT:
+            self.more.show()
+            self.waiting_changed.emit(True)
+            self._say("note", tr("Помощник сделал много действий подряд "
+                                 "и ждёт «Продолжить»."))
+            self._bring_up()
+        elif step.kind == ai.FAILED:
+            self._say("note", tr("Модель не ответила: {error}",
+                                 error=step.text))
+
+    def _ask_user(self, call):
+        """Вопрос о разрешении вызова в окне. Вопрос из строки поиска
+        идёт в скрытом окне - окно показывается."""
+        text = self.describe(call) if self.describe else ""
+        self.confirm_text.setText(text or tr(
+            "Помощник просит выполнить {name} {args}.", name=call.name,
+            args=json.dumps(call.args or {}, ensure_ascii=False)))
+        self.confirm.show()
+        self.waiting_changed.emit(True)
+        self._say("note", self.confirm_text.text())
+        self._bring_up()
+
+    def _bring_up(self):
+        self.show()
+        self.raise_()
+        self.activateWindow()
+
+    def _decide(self, choice):
+        """Ответ пользователя на вопрос о разрешении."""
+        if self.confirm.isHidden():
             return
-        self._ask()
+        self.confirm.hide()
+        self.waiting_changed.emit(False)
+        if choice == ai.DENY:
+            self._say("note", tr("Отказано."))
+        self._step(self.agent.decide(choice))
+
+    def _resume(self):
+        self.more.hide()
+        self.waiting_changed.emit(False)
+        self._step(self.agent.resume())
+
+    def stop_talk(self):
+        """Остановить круг разговора: ждущий вопрос о разрешении,
+        «Продолжить» и повтор после отказа снимаются."""
+        self.retry_timer.stop()
+        was = self.waiting()
+        self.confirm.hide()
+        self.more.hide()
+        self.agent.cancel()
+        if was:
+            self.waiting_changed.emit(False)
+        self.busy_changed.emit(self.reply is not None)
 
     # Предложенная метка.
 
@@ -641,6 +757,8 @@ class AssistantDialog(QDialog):
         self.proposal.hide()
 
     def closeEvent(self, event):
+        if self.waiting() or self.retry_timer.isActive():
+            self.stop_talk()
         if self.reply is not None:
             # Поток создания меток снимается без записи пришедшего.
             self.stream = None

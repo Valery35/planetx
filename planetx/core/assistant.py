@@ -20,13 +20,20 @@
 модели.
 
 Ключ - у пользователя, в менеджере паролей QGIS. В модель уходят текст
-запроса, точка взгляда и включённые строки раздела «Слои», названия
-слоёв проекта и «Моих меток» не уходят (решение автора того же дня).
+запроса, точка взгляда и включённые строки раздела «Слои». Названия
+слоёв проекта, их поля и строки уходят только по разрешению
+пользователя на каждое чтение (list_project_layers, read_features) -
+решение автора от 25 октября 2026 года, «да, так и делай», прежде
+названия слоёв проекта не уходили совсем. Названия «Моих меток»
+уходят только выделенными (get_kml).
 
 Диалог - список сообщений в нейтральном виде: {"role": "user" |
 "assistant", "text": ..., "calls": [Call], "results": [Result]}.
 build_* переводит его в тело запроса подключения, parse_* разбирает
-ответ в Reply.
+ответ в Reply. Круг разговора ведёт Agent - без сети и Qt, по образцу
+агента RustGIS (crates/assistant, Apache 2.0): окно только посылает
+запрос, исполняет вызов и спрашивает пользователя. Так цикл переносится
+в PlanetX Lite на Rust.
 """
 import json
 import re
@@ -78,7 +85,21 @@ OPENROUTER_REASONING = {"effort": "low"}
 # Запасной путь бесплатной модели OpenRouter: при отказе, в том числе
 # по частоте запросов, OpenRouter берёт следующую модель списка models.
 OPENROUTER_FREE = "openrouter/free"
-MAX_ROUNDS = 6  # вызовов инструментов подряд в одном ответе, не больше
+# Кругов вызовов инструментов подряд, потом разговор ждёт
+# «Продолжить». Было 6, с 25 октября 2026 года 16, как у RustGIS.
+MAX_ROUNDS = 16
+# Повторы запроса при перегрузке сервиса, пределе частоты и сбое
+# сервера, и пауза перед каждым, с. Выбор помощника по образцу RustGIS.
+MAX_RETRIES = 3
+RETRY_DELAYS = (2.0, 5.0, 10.0)
+# Ответ инструмента не длиннее, знаков: около 10 тысяч токенов, как
+# DEFAULT_OUTPUT_TOKENS RustGIS. Длинный - начало и конец.
+OUTPUT_CHARS = 40000
+# Ответы инструментов в разговоре вместе не длиннее, знаков. Старые
+# сокращаются до пометки, ответы последних KEEP_RESULTS кругов целы.
+DIALOG_CHARS = 120000
+KEEP_RESULTS = 2
+TRIMMED = "(ответ сокращён: разговор длинный, при нужде вызови снова)"
 
 # Строка поиска окна: запрос с этими первыми словами или с вопросительным
 # знаком - просьба помощнику, а не название места. Просьба автора
@@ -193,19 +214,155 @@ TOOLS = (
      "метках». Невыделенные метки недоступны. Так помощник читает "
      "и правит метки пользователя: правка возвращается через add_kml.",
      _obj({}, ())),
+    ("search_docs", "Найти разделы руководства PlanetX по словам "
+     "вопроса. Ответ - якорь, название и абзац раздела. Как сделать что-то "
+     "в модуле, где пункт меню, что значит настройка - сначала сюда.",
+     _obj({"query": STRING}, ("query",))),
+    ("read_doc", "Прочитать раздел руководства по якорю из search_docs: "
+     "строки с offset, не больше limit (по умолчанию и не больше 120).",
+     _obj({"anchor": STRING, "offset": NUMBER, "limit": NUMBER},
+          ("anchor",))),
+    ("list_project_layers", "Слои проекта QGIS: номер, название, вид, "
+     "система координат, количество объектов, поля. Каждый вызов "
+     "разрешает пользователь.", _obj({}, ())),
+    ("read_features", "Прочитать строки векторного слоя проекта по номеру "
+     "из list_project_layers: where - выражение QGIS отбора, fields - "
+     "поля, limit - не больше 200 строк, geometry - добавить точку "
+     "середины объекта. Каждый вызов разрешает пользователь.",
+     _obj({"layer": STRING, "where": STRING,
+           "fields": {"type": "array", "items": STRING},
+           "limit": NUMBER, "geometry": {"type": "boolean"}},
+          ("layer",))),
 )
 TOOL_NAMES = tuple(t[0] for t in TOOLS)
 
-# Действия, которые помощник не выполняет: окна с ожиданием ответа
-# пользователя (выбор файла, запись облёта) остановили бы круг вызовов,
-# разговор с помощником уже открыт.
-ACTION_SKIP = ("tool:assistant", "tool:record", "tool:scene_save",
-               "tool:scene_open", "tool:share", "tool:crust")
+# Действия, которые помощник не выполняет: разговор с помощником уже
+# открыт.
+ACTION_SKIP = ("tool:assistant",)
+# Действия с окнами выбора файла и записью облёта - только по
+# разрешению пользователя. До 25 октября 2026 года помощнику их не
+# давали совсем, круг вызовов ждал бы ответа окна. Разрешение даёт
+# человек, который смотрит на окно, ждать его можно.
+ACTION_GATED = ("tool:record", "tool:scene_save", "tool:scene_open",
+                "tool:share", "tool:crust")
+# Инструменты, каждый вызов которых разрешает пользователь.
+GATED_TOOLS = ("list_project_layers", "read_features")
+FEATURE_LIMIT = 200  # строк слоя за один read_features, не больше
+DOC_LINES = 120  # строк раздела руководства за один read_doc
+DOC_HITS = 5  # разделов в ответе search_docs
 
 
 def assistant_actions(actions):
     """Действия строки «Поиск», доступные помощнику."""
     return [a for a in actions if a.key not in ACTION_SKIP]
+
+
+def needs_approval(call):
+    """Нужно ли разрешение пользователя на вызов."""
+    if call.name in GATED_TOOLS:
+        return True
+    return call.name == "run_action" \
+        and str((call.args or {}).get("key", "")) in ACTION_GATED
+
+
+def approval_key(call):
+    """Ключ разрешения «в этом разговоре»: имя и аргументы JSON
+    с упорядоченными ключами, как approval_key RustGIS. Разрешение
+    действует только на тот же самый вызов."""
+    return call.name + " " + json.dumps(call.args or {}, sort_keys=True,
+                                        ensure_ascii=False)
+
+
+def bounded(text, limit=OUTPUT_CHARS):
+    """Ответ инструмента в пределе длины: начало и конец, между ними
+    пометка, сколько знаков пропущено."""
+    text = str(text)
+    if len(text) <= limit:
+        return text
+    head = limit * 2 // 3
+    tail = limit - head
+    return "{}\n…(пропущено {} знаков)…\n{}".format(
+        text[:head], len(text) - head - tail, text[-tail:])
+
+
+def trimmed(dialog, limit=DIALOG_CHARS, keep=KEEP_RESULTS):
+    """Разговор для запроса: ответы инструментов старше последних keep
+    сообщений с ответами заменяются пометкой TRIMMED, пока их длина
+    больше limit. Сам разговор не меняется - возвращается копия."""
+    marks = [n for n, m in enumerate(dialog) if m.get("results")]
+    total = sum(len(r.text) for n in marks for r in dialog[n]["results"])
+    if total <= limit:
+        return list(dialog)
+    out = list(dialog)
+    for n in marks[:-keep] if keep else marks:
+        if total <= limit:
+            break
+        message = dict(out[n])
+        results = []
+        for r in message["results"]:
+            if total > limit and len(r.text) > len(TRIMMED):
+                total -= len(r.text) - len(TRIMMED)
+                r = Result(r.id, TRIMMED)
+            results.append(r)
+        message["results"] = results
+        out[n] = message
+    return out
+
+
+# Признаки отказа, после которого запрос повторяется: перегрузка
+# сервиса (Anthropic overloaded_error, код 529), предел частоты (429,
+# OpenRouter «rate-limited upstream»), сбой сервера 5xx, срок ответа.
+# Отказ соединения не повторяется: свой сервис не запущен.
+TRANSIENT = ("overload", "rate limit", "rate-limit", "ratelimit",
+             "too many requests", "temporarily", "unavailable",
+             "bad gateway", "gateway timeout", "internal server error",
+             "timed out", "timeout", "try again", "529", "503", "502",
+             "504", "429")
+
+
+def transient(error):
+    """Временный ли отказ - стоит ли повторить тот же запрос."""
+    text = str(error or "").lower()
+    return any(word in text for word in TRANSIENT)
+
+
+def search_docs_text(index, query, limit=DOC_HITS):
+    """Ответ search_docs: строки «якорь - название: абзац»."""
+    found = index.search(query, limit)
+    if not found:
+        return "В руководстве ничего не нашлось. Попробуй другие слова."
+    lines = []
+    for n in found:
+        title, anchor, _ = index.items[n]
+        lines.append("{} - {}: {}".format(anchor, title,
+                                          index.snippet(n, query)))
+    return "\n".join(lines)
+
+
+def read_doc_text(index, anchor, offset=0, limit=DOC_LINES):
+    """Ответ read_doc: строки раздела с offset, не больше limit, и где
+    они в разделе. Якорь можно дать с # или названием раздела."""
+    anchor = str(anchor or "").strip().lstrip("#")
+    n = index.find(anchor)
+    if n is None:
+        for k, (title, _, _) in enumerate(index.items):
+            if title.lower() == anchor.lower():
+                n = k
+                break
+    if n is None:
+        return "Раздела «{}» нет, якорь берётся из search_docs.".format(
+            anchor)
+    title, _, text = index.items[n]
+    lines = text.splitlines()
+    offset = max(0, int(offset or 0))
+    limit = max(1, min(int(limit or DOC_LINES), DOC_LINES))
+    part = lines[offset:offset + limit]
+    head = "## {}\nСтроки {}-{} из {}.".format(
+        title, offset + 1 if part else offset, offset + len(part),
+        len(lines))
+    more = "" if offset + limit >= len(lines) else \
+        "\nДальше - read_doc с offset {}.".format(offset + limit)
+    return head + "\n" + "\n".join(part) + more
 
 
 def actions_text(actions):
@@ -225,7 +382,12 @@ def system_text(context):
         "Слои, карты, окна, инструменты и демо - через list_actions "
         "и run_action, ключ берётся из свежего списка. Если "
         "для ответа нужны данные - вызови point_info или "
-        "quakes_summary, не выдумывай чисел. Метки, пути, "
+        "quakes_summary, не выдумывай чисел. Вопрос о том, как "
+        "работает модуль, где пункт меню или что делает настройка - "
+        "ищи в руководстве через search_docs и read_doc, не "
+        "угадывай. Слои проекта QGIS - list_project_layers "
+        "и read_features, их чтение разрешает пользователь, отказ "
+        "не повторяй. Метки, пути, "
         "многоугольники, папки и туры - только документом KML через "
         "add_kml, пользователь подтверждает запись сам. Правила "
         "документа KML: " + KML_RULES.format(places=KML_PLACES)
@@ -730,3 +892,140 @@ def assistant_message(reply):
 def results_message(results):
     """Ответы инструментов - следующее сообщение пользователя."""
     return {"role": "user", "results": list(results)}
+
+
+# Шаги круга разговора Agent: что окно делает дальше.
+SEND = "send"  # послать запрос с Agent.dialog_for_request()
+RUN = "run"  # исполнить step.call и отдать ответ Agent.result
+CONFIRM = "confirm"  # спросить пользователя о step.call, Agent.decide
+RETRY = "retry"  # подождать step.delay с и послать запрос снова
+LIMIT = "limit"  # круги кончились, Agent.resume по «Продолжить»
+DONE = "done"  # модель ответила текстом step.text
+FAILED = "failed"  # модель не ответила, причина - step.text
+
+# Ответ пользователя на вопрос о вызове.
+ALLOW = "allow"  # этот раз
+ALLOW_ALWAYS = "always"  # этот же вызов до конца разговора
+DENY = "deny"
+DENIED = ("Пользователь отказал в этом действии. Не повторяй его, "
+          "ответь без него.")
+CANCELLED = "Действие отменено: пользователь остановил разговор."
+STOPPED = "(разговор остановлен пользователем)"
+
+Step = namedtuple("Step", "kind call text delay")
+Step.__new__.__defaults__ = (None, "", 0.0)
+Step.__doc__ = """Шаг круга разговора: вид (SEND, RUN, CONFIRM, RETRY,
+LIMIT, DONE, FAILED), вызов, текст и пауза в секундах."""
+
+
+class Agent:
+    """Круг разговора с моделью без сети и Qt, по образцу Agent
+    RustGIS. Окно посылает запросы, исполняет вызовы и спрашивает
+    пользователя, а что делать дальше, решает Agent: каждый метод
+    возвращает следующий Step. Разрешения «в этом разговоре» живут,
+    пока жив Agent, новый разговор - новый Agent."""
+
+    def __init__(self, gated=needs_approval):
+        self.dialog = []
+        self.rounds = 0
+        self.retries = 0
+        self.allowed = set()
+        self.gated = gated
+        self._calls = []
+        self._results = []
+
+    def busy(self):
+        """Ждут ли вызовы своей очереди или ответа пользователя."""
+        return bool(self._calls)
+
+    def ask(self, text):
+        """Вопрос пользователя. Если прежний круг остановлен на ответах
+        инструментов, между ними и вопросом встаёт короткая реплика
+        модели: сообщения пользователя подряд принимают не все
+        форматы."""
+        if self.dialog and self.dialog[-1].get("results"):
+            self.dialog.append({"role": "assistant", "text": STOPPED,
+                                "calls": [], "raw": None})
+        self.dialog.append({"role": "user", "text": text})
+        self.rounds = 0
+        self.retries = 0
+        return Step(SEND)
+
+    def dialog_for_request(self):
+        """Разговор для запроса - с сокращёнными старыми ответами."""
+        return trimmed(self.dialog)
+
+    def answered(self, reply, error=""):
+        """Ответ модели: Reply и ошибка сети, если тела ответа нет -
+        тогда причина в ней, а не в «no data». Временный отказ
+        повторяется не больше MAX_RETRIES раз."""
+        reason = error or reply.error
+        if reason:
+            if transient(reason) and self.retries < MAX_RETRIES:
+                delay = RETRY_DELAYS[min(self.retries,
+                                         len(RETRY_DELAYS) - 1)]
+                self.retries += 1
+                return Step(RETRY, text=str(reason), delay=delay)
+            self._rollback()
+            return Step(FAILED, text=str(reason))
+        self.retries = 0
+        self.dialog.append(assistant_message(reply))
+        if not reply.calls:
+            return Step(DONE, text=reply.text)
+        self._calls = list(reply.calls)
+        self._results = []
+        return self._next()
+
+    def result(self, text):
+        """Ответ инструмента на вызов, который был в шаге RUN."""
+        call = self._calls.pop(0)
+        self._results.append(Result(call.id, bounded(text)))
+        return self._next()
+
+    def decide(self, choice):
+        """Ответ пользователя на шаг CONFIRM."""
+        call = self._calls[0]
+        if choice == DENY:
+            return self.result(DENIED)
+        if choice == ALLOW_ALWAYS:
+            self.allowed.add(approval_key(call))
+        return Step(RUN, call)
+
+    def resume(self):
+        """«Продолжить» после LIMIT: ещё MAX_ROUNDS кругов."""
+        self.rounds = 0
+        return Step(SEND)
+
+    def cancel(self):
+        """Остановить разговор: ждущие вызовы получают ответ «отменено»,
+        иначе следующий запрос был бы неполным."""
+        if self._calls:
+            self._results.extend(Result(c.id, CANCELLED)
+                                 for c in self._calls)
+            self._calls = []
+            self.dialog.append(results_message(self._results))
+            self._results = []
+        return Step(DONE)
+
+    def _next(self):
+        if self._calls:
+            call = self._calls[0]
+            if self.gated(call) and approval_key(call) not in self.allowed:
+                return Step(CONFIRM, call)
+            return Step(RUN, call)
+        self.dialog.append(results_message(self._results))
+        self._results = []
+        self.rounds += 1
+        if self.rounds >= MAX_ROUNDS:
+            return Step(LIMIT)
+        return Step(SEND)
+
+    def _rollback(self):
+        """Неудачный вопрос не остаётся в разговоре: разговор
+        откатывается к состоянию до последнего вопроса пользователя
+        вместе с начатыми вызовами инструментов."""
+        for n in range(len(self.dialog) - 1, -1, -1):
+            m = self.dialog[n]
+            if m["role"] == "user" and not m.get("results"):
+                del self.dialog[n:]
+                break
