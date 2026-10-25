@@ -26,6 +26,10 @@ ISSUES = REPOSITORY + "/issues"
 CATALOG = "https://plugins.qgis.org/plugins/planetx/"
 # Бот модулей линейки в Telegram, bot/planetx_bot.py.
 TELEGRAM = "https://t.me/PlanetXQgisBot"
+# Раздел «Поддержать разработку» в профиле автора на GitHub.
+SUPPORT = ("https://github.com/Valery35#"
+           "%D0%BF%D0%BE%D0%B4%D0%B4%D0%B5%D1%80%D0%B6%D0%B0%D1%82%D1%8C-"
+           "%D1%80%D0%B0%D0%B7%D1%80%D0%B0%D0%B1%D0%BE%D1%82%D0%BA%D1%83")
 OSM ="https://www.openstreetmap.org/copyright"
 TERRAIN = ("https://github.com/tilezen/joerd/blob/master/docs/"
            "attribution.md")
@@ -233,6 +237,12 @@ class AboutDialog(QDialog):
                 "источников, которые показывает глобус."),
                 lambda: (self.accept(), QTimer.singleShot(0, sources)))
         second.addStretch(1)
+        # Тихая ссылка текстом в конце ряда, не кнопкой.
+        support = QLabel(_link(SUPPORT, tr("Поддержать разработку")), self)
+        support.setOpenExternalLinks(True)
+        support.setTextInteractionFlags(enum(
+            Qt, "TextInteractionFlag", "TextBrowserInteraction"))
+        second.addWidget(support)
         layout.addLayout(first)
         layout.addLayout(second)
 

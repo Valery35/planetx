@@ -3094,6 +3094,7 @@ EN = {
         "replaced with decimal degrees.",
     "Руководство": "Manual",
     "Сообщить об ошибке": "Report a bug",
+    "Поддержать разработку": "Support development",
     "Страница в каталоге QGIS": "QGIS plugin page",
     "Трёхмерный глобус внутри QGIS. Рельеф, "
     "атмосфера, подложки из подключений QGIS.":
