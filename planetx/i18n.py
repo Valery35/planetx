@@ -2749,10 +2749,10 @@ EN = {
     "элементы орбит JPL.":
         "Constellations and star names: d3-celestial, © Olaf Frohn. "
         "Planets: JPL orbital elements.",
-    "Марс: NASA, USGS, Viking MDIM2.1. Луна: USGS, LRO LOLA. Тайлы: "
-    "OpenPlanetaryMap.":
-        "Mars: NASA, USGS, Viking MDIM2.1. Moon: USGS, LRO LOLA. Tiles: "
-        "OpenPlanetaryMap.",
+    "Марс: NASA, USGS, Viking MDIM2.1, тайлы OpenPlanetaryMap. Луна: "
+    "NASA, GSFC, ASU, LRO LROC WAC, USGS.":
+        "Mars: NASA, USGS, Viking MDIM2.1, OpenPlanetaryMap tiles. Moon: "
+        "NASA, GSFC, ASU, LRO LROC WAC, USGS.",
     "Облака: NASA GIBS, снимки VIIRS.": "Clouds: NASA GIBS, VIIRS imagery.",
     "Звёзды: каталог ярких звёзд Йельского университета.":
         "Stars: the Yale Bright Star Catalogue.",
@@ -3855,6 +3855,14 @@ EN = {
         "Layers section go to the server of the chosen model. Project "
         "layers, their fields and rows go only when you allow the reading. "
         "My Places go only when selected.",
+    "ALOS AW3D30 30 м - с лесом и домами":
+        "ALOS AW3D30 30 m - with forest and buildings",
+    "NASADEM 30 м - SRTM без пустот, до 60° широты":
+        "NASADEM 30 m - SRTM without voids, up to 60° latitude",
+    "USGS 3DEP 10 м - только США, земля без леса и домов":
+        "USGS 3DEP 10 m - USA only, bare ground without forest and buildings",
+    "Высоты суши 10 м с уровня 9":
+        "Land heights 10 m from level 9",
     "Разрешить":
         "Allow",
     "Выполнить это действие один раз.":
@@ -4340,8 +4348,11 @@ EN = {
         'Heights of land and sea floor, levels 0-15',
     'Марс, Луна и другие тела':
         'Mars, the Moon and other bodies',
-    'Высоты и снимки тел из хранилища planetx-terrain':
-        'Heights and imagery of bodies from the planetx-terrain store',
+    "Высоты Марса и Луны - хранилище planetx-bodies-terrain, снимки - "
+    "planetx-bodies-imagery, снимки других тел - planetx-terrain":
+        "Heights of Mars and the Moon - the planetx-bodies-terrain store, "
+        "their imagery - planetx-bodies-imagery, imagery of other bodies "
+        "- planetx-terrain",
     'Границы, дороги, воды, названия, 3D-здания':
         'Borders, roads, waters, names, 3D buildings',
     'Облака, температура, темы, огни городов':
@@ -5058,6 +5069,8 @@ EN = {
         "snow, mines, wind",
     "Copernicus 30 м":
         "Copernicus 30 m",
+    "3DEP 10 м":
+        "3DEP 10 m",
     "Векторная основа OpenFreeMap, координатная сетка, 3D-здания и "
     "горизонтали.":
         "The OpenFreeMap vector base, the coordinate grid, 3D buildings and "
@@ -5558,6 +5571,99 @@ EN = {
         "The placemark \"{name}\" is written to My Places.",
     "Статья": "Article",
     "Википедия": "Wikipedia",
+    "Затопление": "Flooding",
+    "PlanetX - вода по рельефу": "PlanetX - terrain water",
+    "Затопление отсюда…": "Flooding from here…",
+    "Сток воды отсюда…": "Water flow from here…",
+    "Половина стороны квадрата расчёта. Больше - шаг сетки "
+    "крупнее, он около шестисотой доли стороны.":
+        "Half the side of the calculation square. Larger means a coarser "
+        "grid step, about one six-hundredth of the side.",
+    "Отметка поверхности воды над уровнем моря. Вода заливает "
+    "всё ниже отметки, куда она доходит от точки. Котловины за "
+    "более высоким гребнем остаются сухими.":
+        "Elevation of the water surface above sea level. Water fills "
+        "everything below it that it reaches from the point. Basins "
+        "behind a higher ridge stay dry.",
+    "Подъём воды над высотой точки, до {rise} м.":
+        "Water rise above the height of the point, up to {rise} m.",
+    "Высота точки": "Point height",
+    "Подъём": "Rise",
+    "Растр глубин и многоугольник затопления в проект QGIS.":
+        "Depth raster and flood polygon to the QGIS project.",
+    "Убрать воду с глобуса.": "Remove the water from the globe.",
+    "{h} м": "{h} m",
+    "Сток воды": "Water flow",
+    "Половина стороны квадрата расчёта. Линия стока кончается "
+    "у его края, водосбор больше квадрата учитывается не "
+    "целиком. Шаг сетки - около шестисотой доли стороны.":
+        "Half the side of the calculation square. A flow line ends at "
+        "its edge, a catchment larger than the square is not counted "
+        "in full. The grid step is about one six-hundredth of the side.",
+    "Линия стока": "Flow line",
+    "Путь воды от точки вниз по рельефу - линия в «Моих "
+    "метках». Впадины заполнены до перелива, поэтому линия "
+    "проходит через озёра и бессточные котловины.":
+        "The path of water from the point down the terrain, a line in "
+        "My Places. Depressions are filled up to their spill level, so "
+        "the line passes through lakes and closed basins.",
+    "Водосбор": "Catchment",
+    "Площадь, с которой вода стекает к точке, и главный "
+    "водоток - папка в «Моих метках» с площадью, уклонами "
+    "и длиной водотока. Точка притягивается к водотоку рядом.":
+        "The area from which water flows to the point and the main "
+        "stream, a folder in My Places with the area, slopes and the "
+        "stream length. The point snaps to a stream nearby.",
+    "В точке нет высот.": "There are no heights at the point.",
+    "Уровень не выше точки, воды нет.":
+        "The level is not above the point, there is no water.",
+    "Затоплено {area} км², объём воды {volume} млн м³, "
+    "наибольшая глубина {depth} м.":
+        "Flooded {area} km², water volume {volume} million m³, "
+        "greatest depth {depth} m.",
+    "Вода дошла до края участка и может идти "
+    "дальше. Нужен больший радиус.":
+        "The water reached the edge of the area and may go further. "
+        "A larger radius is needed.",
+    "Шаг сетки {step} м.": "Grid step {step} m.",
+    "Вода видна при включённом рельефе.":
+        "The water is visible with the terrain switched on.",
+    "Затопление в проект QGIS": "Flooding to the QGIS project",
+    "Затопление не записано в «{path}».":
+        "The flooding is not written to \"{path}\".",
+    "{name} - глубина": "{name} - depth",
+    "{name} - контур": "{name} - outline",
+    "Вода из точки никуда не стекает.":
+        "Water from the point does not flow anywhere.",
+    "Длина {km} км, падение {drop} м.": "Length {km} km, drop {drop} m.",
+    "Линия дошла до края участка, дальше вода "
+    "идёт за его пределы.":
+        "The line reached the edge of the area, beyond it the water "
+        "leaves the area.",
+    "Линия кончается у края данных высот.":
+        "The line ends at the edge of the height data.",
+    "{name}: {text}": "{name}: {text}",
+    "К точке вода не стекает: водосбора "
+    "нет.": "No water flows to the point, there is no catchment.",
+    "Створ притянут к водотоку в {m} м от точки.":
+        "The outlet snapped to a stream {m} m from the point.",
+    "Водосбор доходит до края участка, его часть "
+    "за краем не учтена. Нужен больший радиус.":
+        "The catchment reaches the edge of the area, its part beyond the "
+        "edge is not counted. A larger radius is needed.",
+    "Главный водоток": "Main stream",
+    "Площадь {area} км², высоты {low}-{high} м, средняя "
+    "{mean} м.": "Area {area} km², heights {low}-{high} m, mean {mean} m.",
+    "Средний уклон склонов {slope} промилле по "
+    "СП 33-101-2003.":
+        "Mean hillslope gradient {slope} per mille by SP 33-101-2003.",
+    "Густота речной сети {dens} км на км², водотоки "
+    "с водосбором от {area} км².":
+        "Stream network density {dens} km per km², streams with a "
+        "catchment from {area} km².",
+    "Главный водоток {km} км, падение {fall} м, уклон {slope} "
+    "промилле.":
+        "Main stream {km} km, fall {fall} m, gradient {slope} per mille.",
 }
 
 _language = None

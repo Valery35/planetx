@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.13.0.
+A 3D globe inside QGIS. PlanetX version 1.14.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -196,6 +196,9 @@ and atmosphere, from space down to single streets.
   direction. Viewshed from a point placemark shows the places seen
   from it and those hidden by the terrain. Insolation shows the hours
   of direct sunlight per day for chosen dates, with mountain shadows.
+  Flooding fills everything below a water level that the water reaches
+  from a point, the level changes with a slider. Water flow from a
+  point gives the flow line and the catchment with the main stream.
 - **Coordinates.** Degrees, degrees-minutes-seconds, UTM or MGRS in
   the status line, search understands all four.
 - **My Places.** Placemarks, paths and polygons are drawn by clicks
@@ -319,10 +322,11 @@ Sky Survey (STScI/NASA) through the CDS HiPS service. Deep-sky objects
 come from the [OpenNGC](https://github.com/mattiaverga/OpenNGC)
 catalogue, CC BY-SA 4.0, other names from the CDS Sesame service.
 
-Mars imagery - NASA, USGS, Viking MDIM2.1. Moon imagery - USGS,
-LRO LOLA. Tiles of both bodies come from [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
-Mars heights come from NASA MGS MOLA MEGDR, Moon heights from NASA
-LRO LOLA GDR. Imagery of other bodies comes from global mosaics of
+Mars imagery - NASA, USGS, Viking MDIM2.1, tiles of
+[OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
+Moon imagery - NASA, GSFC, Arizona State University, LRO LROC WAC,
+USGS. Mars heights come from NASA MGS MOLA, Moon heights from NASA LRO
+LOLA, both via USGS Astrogeology. Imagery of other bodies comes from global mosaics of
 [USGS Astrogeology](https://astrogeology.usgs.gov/search) and NASA
 Photojournal, made from MESSENGER, Magellan, Galileo, Voyager,
 Cassini and Dawn data.

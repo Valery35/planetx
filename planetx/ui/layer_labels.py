@@ -22,10 +22,11 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsVectorLayerFeatureSource,
                        QgsVectorLayerSimpleLabeling,
                        QgsVectorLayerTemporalContext)
-from qgis.PyQt.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
+from qgis.PyQt.QtCore import QObject, QRunnable, pyqtSignal
 
 from ..core import layer_labels
 from ..core.places import Place
+from ..net import pools
 from ..render.labels import layer_style
 
 WGS84 = "EPSG:4326"
@@ -140,8 +141,11 @@ class _ReadTask(QRunnable):
     def run(self):
         found = []
         for job in self.jobs:
+            if not pools.running(self):
+                return  # окно закрыто
             found.extend(self._read(job))
-        self.sink.done.emit(self.generation, found)
+        if pools.running(self):
+            self.sink.done.emit(self.generation, found)
 
     @staticmethod
     def _read(job):
@@ -186,9 +190,8 @@ class LayerLabels(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.pool = QThreadPool(self)
-        self.pool.setMaxThreadCount(1)
-        self.sink = _Result(self)
+        self.sink = _Result()
+        self.lane = pools.Lane("labels", self.sink)
         self.sink.done.connect(self._done)
         self.generation = 0
         self.marks = []  # надписи core.places.Place для вида
@@ -211,7 +214,7 @@ class LayerLabels(QObject):
                 self.marks = []
                 self.changed.emit()
             return
-        self.pool.start(_ReadTask(self.generation, jobs, self.sink))
+        self.lane.start(_ReadTask(self.generation, jobs, self.sink))
 
     def clear(self):
         self.generation += 1
@@ -264,5 +267,4 @@ class LayerLabels(QObject):
 
     def close(self):
         self.generation += 1
-        self.pool.clear()
-        self.pool.waitForDone(2000)
+        self.lane.stop()

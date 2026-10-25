@@ -30,7 +30,7 @@ import numpy as np
 from qgis.core import (QgsApplication, QgsAuthCertUtils,
                        QgsNetworkAccessManager)
 from qgis.PyQt.QtCore import (QByteArray, QObject, QRunnable, Qt,
-                              QThreadPool, QTimer, QUrl, pyqtSignal)
+                              QTimer, QUrl, pyqtSignal)
 from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtNetwork import (QNetworkAccessManager, QNetworkReply,
                                  QNetworkRequest, QSsl, QSslCertificate)
@@ -41,9 +41,9 @@ from ..core.placeholder import (MAX_FILL_DEPTH, ancestor, crop_window,
 from ..core.tile_queue import TileQueue
 from ..meta import plugin_version
 from ..qt_compat import enum, enum_int
+from . import pools
 
 TERRARIUM_URL = sources.TERRAIN_URL  # адрес по умолчанию, core/sources.py
-DECODE_THREADS = 2
 START_GAP = 0.015  # секунд между запусками запросов, около кадра
 # Пока камера движется, запросы всех загрузчиков и запуски картинок
 # слоёв идут не чаще раза в MOVING_GAP на всех вместе. Запуск стоит
@@ -285,6 +285,8 @@ class _DecodeTask(QRunnable):
         self.assemble = assemble
 
     def run(self):
+        if not pools.running(self):
+            return  # загрузчик снят, задача ничего не делает
         with np.errstate(all="ignore"):
             extra = None
             if self.assemble is not None:
@@ -302,7 +304,8 @@ class _DecodeTask(QRunnable):
                     rgba = MISSING
                 elif rgba is not None and self.prepare is not None:
                     extra = self.prepare(self.key, rgba)
-        self.sink.done.emit(self.key, rgba, extra)
+        if pools.running(self):
+            self.sink.done.emit(self.key, rgba, extra)
 
 
 class _Parts:
@@ -391,9 +394,10 @@ class TileLoader(QObject):
         self.filled = 0  # тайлов, заменённых вырезкой из предка
         self.queue = TileQueue(max_active=self.source.parallel)
         self.replies = {}
-        self.pool = QThreadPool(self)
-        self.pool.setMaxThreadCount(DECODE_THREADS)
-        self.sink = _Decoded(self)
+        # Приёмник без родителя: его держит полоса общего пула, пока
+        # её задачи работают, и после удаления загрузчика.
+        self.sink = _Decoded()
+        self.lane = pools.Lane("decode", self.sink)
         self.sink.done.connect(self._decoded)
         self.decoding = {}
         self.last_start = 0.0
@@ -577,7 +581,7 @@ class TileLoader(QObject):
                 self.recent.move_to_end(key)
                 while len(self.recent) > RECENT_TILES:
                     self.recent.popitem(last=False)
-            self.pool.start(_DecodeTask(key, data, self.sink, self.prepare,
+            self.lane.start(_DecodeTask(key, data, self.sink, self.prepare,
                                         self.size, self.decode,
                                         fill=self.fill))
         reply.deleteLater()
@@ -609,7 +613,7 @@ class TileLoader(QObject):
                 self.queue.done(key, ok=True)
                 self.decoding[key] = True
                 z, x, y = key
-                self.pool.start(_DecodeTask(
+                self.lane.start(_DecodeTask(
                     key, list(group.data), self.sink, self.prepare,
                     self.size, assemble=lambda images, s=self.source,
                     z=z, x=x, y=y: s.assemble(z, x, y, images)))
@@ -674,7 +678,7 @@ class TileLoader(QObject):
         crop = crop_window(key, key[0] - parent[0], self.size or 256)
         self.decoding[key] = True
         self.filled += 1
-        self.pool.start(_DecodeTask(key, data, self.sink, self.prepare,
+        self.lane.start(_DecodeTask(key, data, self.sink, self.prepare,
                                     self.size, crop=crop))
 
     def _check_idle(self):
@@ -690,5 +694,4 @@ class TileLoader(QObject):
         self.pump_timer.stop()
         self.retain([])
         self.sink.done.disconnect()
-        self.pool.clear()
-        self.pool.waitForDone(1000)
+        self.lane.stop()

@@ -1,0 +1,294 @@
+# -*- coding: utf-8 -*-
+# PlanetX - трёхмерный глобус для QGIS.
+# Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
+"""Вода по рельефу: затопление от точки до уровня, линия стока,
+водосбор от точки.
+
+Решение автора от 25 октября 2026 года - «делай 1 и 2, посмотри
+Isoliner, там это реализовано». Ядро стока перенесено из Isoliner:
+заполнение понижений (hydro_fill), направления D8 и аккумуляция
+(topo_flow), морфометрия водосбора (topo_gauge). Здесь - сетка высот
+вокруг точки и то, что глобусу нужно поверх ядра.
+
+Сетка - узлы Web Mercator с равным шагом на местности в середине
+участка. Шаг по осям Меркатора - шаг на местности, делённый на
+косинус широты середины. На участке в десятки километров масштаб по
+широте меняется меньше чем на процент. Строка 0 - северная, как у
+topo_flow.
+
+Затопление - уровень перелива. Для каждого узла это наименьший
+уровень воды, при котором вода от точки доходит до него, то есть
+наименьший по всем путям наибольший рельеф пути. Его даёт то же
+заполнение понижений с единственным стоком в точке и без уклона
+(fill_depressions(outlets=)). Узел затоплен водой уровня H, если
+уровень перелива ниже H, поэтому смена уровня - одно сравнение
+массива. Котловины, не связанные с точкой, остаются сухими. В
+Isoliner полигон затопления связность не проверял.
+"""
+import math
+from collections import namedtuple
+
+import numpy as np
+
+try:  # внутри плагина QGIS
+    from . import contours, topo_flow, topo_gauge
+    from .hydro_fill import fill_depressions
+except ImportError:  # headless-тесты
+    import contours
+    import topo_flow
+    import topo_gauge
+    from hydro_fill import fill_depressions
+
+# Узлов сетки поперёк участка: шаг - диаметр / SIDE, но не мельче
+# пикселя высот. 600 × 600 узлов заполняются за доли секунды - выбор
+# помощника, утверждает автор.
+SIDE = 600
+# Стена вместо пустых высот у затопления: вода через неё не идёт.
+WALL = 1e20
+# Проходов заполнения у уровня перелива: путь от одной точки бывает
+# извилистым, ему нужно больше проходов, чем стоку к краю.
+SPILL_PASSES = 1000
+# Уклон на плоских участках у заполнения для стока, м на ячейку.
+EPSILON = 0.001
+# Притяжка точки водосбора к водотоку: радиус SNAP_METRES, но не
+# меньше SNAP_CELLS ячеек. Щелчок по реке на глобусе промахивается
+# на десятки метров - выбор помощника.
+SNAP_CELLS = 3
+SNAP_METRES = 150.0
+# Водотоки сети в отчёте водосбора - с водосбором от NET_AREA, м².
+NET_AREA = 1e6
+# Узлов сетки поверхности воды по стороне.
+WATER_SIDE = 256
+
+Grid = namedtuple("Grid", "lat lon x0 y0 step cell rows cols")
+Grid.__doc__ = """Сетка высот вокруг точки lat, lon. x0, y0 - узел
+[0, 0] в метрах Web Mercator (северо-западный), step - шаг в метрах
+Меркатора, cell - шаг на местности в метрах, rows и cols - размер."""
+
+
+def make_grid(lat, lon, radius_m, cell, radius):
+    """Сетка квадрата со стороной 2 radius_m с серединой lat, lon, шаг
+    на местности не мельче cell и не больше SIDE узлов поперёк. radius -
+    радиус тела, метры."""
+    cell = max(float(cell), 2.0 * radius_m / SIDE)
+    n = int(math.ceil(2.0 * radius_m / cell)) | 1
+    scale = 1.0 / max(math.cos(math.radians(lat)), 1e-6)
+    step = cell * scale
+    x, y = mercator(lat, lon, radius)
+    half = (n - 1) / 2.0
+    return Grid(lat, lon, x - half * step, y + half * step, step, cell, n, n)
+
+
+def mercator(lat, lon, radius):
+    """Широта и долгота в метрах Web Mercator."""
+    lat = np.radians(np.clip(lat, -85.0511, 85.0511))
+    return (radius * np.radians(lon),
+            radius * np.log(np.tan(math.pi / 4.0 + lat / 2.0)))
+
+
+def latlon(grid, rows, cols, radius):
+    """Широта и долгота узлов с номерами rows, cols (можно дробными)."""
+    x = grid.x0 + np.asarray(cols, dtype=np.float64) * grid.step
+    y = grid.y0 - np.asarray(rows, dtype=np.float64) * grid.step
+    lat = np.degrees(2.0 * np.arctan(np.exp(y / radius)) - math.pi / 2.0)
+    return lat, np.degrees(x / radius)
+
+
+def nodes(grid, radius, stride=1):
+    """Широты и долготы всех узлов (rows, cols), через stride."""
+    r = np.arange(0, grid.rows, stride)
+    c = np.arange(0, grid.cols, stride)
+    cols, rows = np.meshgrid(c, r)
+    return latlon(grid, rows, cols, radius)
+
+
+def index_of(grid, lat, lon, radius):
+    """Узел (строка, столбец), ближайший к точке."""
+    x, y = mercator(lat, lon, radius)
+    c = int(round((float(x) - grid.x0) / grid.step))
+    r = int(round((grid.y0 - float(y)) / grid.step))
+    return (min(max(r, 0), grid.rows - 1), min(max(c, 0), grid.cols - 1))
+
+
+# --- затопление ------------------------------------------------------------
+
+def spill_levels(z, seed):
+    """Уровень перелива от узла seed (строка, столбец): массив той же
+    формы. Пустые высоты (NaN) - стена, у них inf."""
+    z = np.asarray(z, dtype=np.float64)
+    empty = ~np.isfinite(z)
+    work = np.where(empty, WALL, z)
+    outlets = np.zeros(z.shape, dtype=bool)
+    outlets[seed] = True
+    levels, _, _ = fill_depressions(work, epsilon=0.0, outlets=outlets,
+                                    max_passes=SPILL_PASSES)
+    levels[empty | (levels >= WALL)] = np.inf
+    return levels
+
+
+Flood = namedtuple("Flood", "mask area volume depth edge")
+Flood.__doc__ = """Затопление уровнем: mask - затопленные узлы, area -
+площадь, м², volume - объём воды, м³, depth - наибольшая глубина, м,
+edge - вода дошла до края сетки и может идти дальше."""
+
+
+def flood(z, levels, level, cell):
+    """Затопление водой уровня level по уровню перелива levels."""
+    z = np.asarray(z, dtype=np.float64)
+    mask = levels < float(level)
+    if not mask.any():
+        return Flood(mask, 0.0, 0.0, 0.0, False)
+    depth = float(level) - z[mask]
+    area = float(cell) ** 2
+    edge = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any()
+                or mask[:, -1].any())
+    return Flood(mask, area * int(mask.sum()), area * float(depth.sum()),
+                 float(depth.max()), edge)
+
+
+def water_nodes(mask, side=WATER_SIDE):
+    """Узлы поверхности воды не больше side по стороне: (шаг, маска
+    узлов). Узел мокрый, если затоплен любой узел его клетки - иначе
+    узкая протока пропадала бы между узлами. Лишняя вода у берега
+    уходит под рельеф и не видна."""
+    stride = max(1, int(math.ceil(max(mask.shape) / float(side))))
+    if stride == 1:
+        return 1, mask
+    rows = int(math.ceil(mask.shape[0] / float(stride))) * stride
+    cols = int(math.ceil(mask.shape[1] / float(stride))) * stride
+    padded = np.zeros((rows, cols), dtype=bool)
+    padded[:mask.shape[0], :mask.shape[1]] = mask
+    blocks = padded.reshape(rows // stride, stride, cols // stride, stride)
+    return stride, blocks.any(axis=(1, 3))
+
+
+# --- сток ------------------------------------------------------------------
+
+def drainage(z):
+    """Решётка стока: (заполненные высоты, downstream, пустые узлы).
+    Пустые высоты (NaN) - край, вода уходит в них, как в Isoliner."""
+    z = np.asarray(z, dtype=np.float64)
+    empty = ~np.isfinite(z)
+    filled, _, _ = fill_depressions(z, nodata_mask=empty, epsilon=EPSILON)
+    _, downstream = topo_flow.d8_directions(filled, nodata_mask=empty)
+    return filled, downstream, empty
+
+
+Line = namedtuple("Line", "rows cols length drop end")
+Line.__doc__ = """Линия стока: номера узлов rows, cols от старта вниз,
+length - длина, м, drop - падение по исходным высотам, м, end - чем
+кончилась: "edge" (край сетки), "pit" (сток, ниже некуда)."""
+
+
+def flow_line(z, seed, cell):
+    """Линия стока от узла seed по заполненному рельефу."""
+    filled, downstream, _ = drainage(z)
+    shape = filled.shape
+    start = seed[0] * shape[1] + seed[1]
+    path = topo_flow.trace_downhill(downstream, [start], shape)[0]
+    metrics = topo_flow.path_metrics(path, z, shape, float(cell))
+    reason = topo_flow.path_reason(path, downstream, shape)
+    rows, cols = np.divmod(np.asarray(path, dtype=np.int64), shape[1])
+    # По краю сетки D8 ведёт воду вдоль рамки до угла: линия кончается
+    # на первом узле края, дальше рельефа нет.
+    edge = np.flatnonzero((rows == 0) | (rows == shape[0] - 1)
+                          | (cols == 0) | (cols == shape[1] - 1))
+    if edge.size:
+        cut = int(edge[0]) + 1
+        path, rows, cols = path[:cut], rows[:cut], cols[:cut]
+        metrics = topo_flow.path_metrics(path, z, shape, float(cell))
+        reason = "край листа"
+    end = "edge" if reason == "край листа" else "pit"
+    drop = metrics["drop"] if math.isfinite(metrics["drop"]) else 0.0
+    return Line(rows, cols, metrics["length"], drop, end)
+
+
+Basin = namedtuple("Basin", "mask seed report stream edge")
+Basin.__doc__ = """Водосбор: mask - узлы водосбора, seed - створ после
+притяжки к водотоку, report - словарь topo_gauge.REPORT_KEYS, stream -
+главный водоток от створа к истоку (rows, cols), edge - водосбор дошёл
+до края сетки и неполон."""
+
+
+def watershed(z, seed, cell, snap=None):
+    """Водосбор узла seed: створ притягивается к ячейке наибольшей
+    аккумуляции в snap ячейках, как в инструменте «Бассейны» Isoliner.
+    Без snap - SNAP_METRES, не меньше SNAP_CELLS."""
+    if snap is None:
+        snap = max(SNAP_CELLS, int(round(SNAP_METRES / float(cell))))
+    filled, downstream, empty = drainage(z)
+    shape = filled.shape
+    acc = topo_flow.flow_accumulation(downstream, shape, nodata_mask=empty)
+    r, c = topo_gauge.snap_to_max_acc(acc, seed[0], seed[1], snap)
+    start = r * shape[1] + c
+    z = np.asarray(z, dtype=np.float64)
+    finite = z[np.isfinite(z)]
+    interval = contours.grid_step(finite) if finite.size else 0.0
+    report = topo_gauge.gauge_report(
+        filled, downstream, acc, shape, start, float(cell),
+        nodata_mask=empty, iso_interval=interval,
+        net_threshold=NET_AREA / float(cell) ** 2)
+    mask = topo_gauge.basin_mask(downstream, shape, start) & ~empty
+    _, path = topo_gauge.trace_main_stream(downstream, acc, shape, start,
+                                          float(cell))
+    stream = np.divmod(np.asarray(path, dtype=np.int64), shape[1])
+    edge = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any()
+                or mask[:, -1].any())
+    return Basin(mask, (r, c), report, stream, edge)
+
+
+# --- контур ----------------------------------------------------------------
+
+def outline(mask, tolerance=0.5):
+    """Кольца границы маски в дробных номерах узлов (строка, столбец):
+    список массивов (k, 2), первое - самое длинное. Граница проходит
+    посередине между мокрым и сухим узлом, вершины упрощены по
+    Дугласу-Пекеру с допуском tolerance ячеек."""
+    padded = np.zeros((mask.shape[0] + 2, mask.shape[1] + 2))
+    padded[1:-1, 1:-1] = mask
+    rings = []
+    for line in contours.chain(contours.segments(padded, 0.5)):
+        if len(line) < 4:
+            continue
+        ring = simplify(line[:-1] - 1.0 if _closed(line) else line - 1.0,
+                        tolerance)
+        if len(ring) >= 3:
+            rings.append(ring)
+    rings.sort(key=lambda ring: -len(ring))
+    return rings
+
+
+def _closed(line):
+    return bool(np.allclose(line[0], line[-1]))
+
+
+def simplify(points, tolerance):
+    """Дуглас-Пекер без рекурсии: вершины points (k, 2), которые
+    остаются."""
+    points = np.asarray(points, dtype=np.float64)
+    if len(points) < 3:
+        return points
+    keep = np.zeros(len(points), dtype=bool)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(points) - 1)]
+    while stack:
+        first, last = stack.pop()
+        if last - first < 2:
+            continue
+        a, b = points[first], points[last]
+        inner = points[first + 1:last]
+        d = b - a
+        # Расстояние до отрезка, а не до прямой: у кольца концы
+        # соседние, и точки далеко вдоль их прямой иначе выпадали.
+        norm = float(d[0] * d[0] + d[1] * d[1])
+        t = np.zeros(len(inner)) if norm == 0.0 else np.clip(
+            ((inner - a) @ d) / norm, 0.0, 1.0)
+        near = a + t[:, None] * d
+        dist = np.hypot(inner[:, 0] - near[:, 0], inner[:, 1] - near[:, 1])
+        worst = int(np.argmax(dist))
+        if dist[worst] > tolerance:
+            index = first + 1 + worst
+            keep[index] = True
+            stack.append((first, index))
+            stack.append((index, last))
+    return points[keep]

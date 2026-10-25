@@ -27,6 +27,9 @@ QGIS. Запросы идут через сетевые настройки и д
 | Mapzen Terrain Tiles | высоты рельефа | [условия по источникам высот](https://github.com/tilezen/joerd/blob/master/docs/attribution.md) | Terrain: Mapzen, SRTM, GMTED, ETOPO1 and others |
 | Copernicus DEM GLO-30, файлы на AWS (copernicus-dem-30m) | высоты суши 30 м поверх Terrain Tiles с уровня 9, выбор «Уточнение суши 30 м» окна «Источники данных» | [лицензия ESA для Copernicus DEM](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM) - бесплатно, у изменённых данных обязательна подпись «produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved». Коммерческое использование на странице не описано. Часть градусов в открытом наборе не выпущена, над морем файлов нет. Сверено 10 октября 2026 года | та же подпись в углу вида |
 | GEDTM30 v1.2, OpenGeoHub, Ho и др., PeerJ 2025, doi:10.7717/peerj.19673 | высоты суши 30 м без леса и домов поверх Terrain Tiles с уровня 9 | [CC BY 4.0, запись Zenodo](https://zenodo.org/records/14900180), сверено 10 октября 2026 года. Авторы называют набор тестовым и дают его «как есть». Файл COG читается участками с s3.opengeohub.org | GEDTM30 v1.2: OpenGeoHub, Ho et al. 2025, CC BY 4.0 |
+| ALOS World 3D-30m (AW3D30), JAXA, копия Microsoft Planetary Computer (коллекция alos-dem) | высоты суши 30 м с лесом и домами поверх Terrain Tiles с уровня 9, выбор «Уточнение суши 30 м» | [условия JAXA](https://www.eorc.jaxa.jp/ALOS/en/dataset/aw3d30/aw3d30_e.htm) - бесплатно для некоммерческих и коммерческих целей, подпись © JAXA. Ключ SAS Planetary Computer без учётной записи. Сверено 25 октября 2026 года | AW3D30 © JAXA |
+| NASADEM (NASA JPL), копия Microsoft Planetary Computer (коллекция nasadem) | высоты суши 30 м между 60° ю. ш. и 60° с. ш. поверх Terrain Tiles с уровня 9 | данные NASA - общественное достояние США. Ключ SAS без учётной записи. Сверено 25 октября 2026 года | NASADEM: NASA JPL |
+| USGS 3D Elevation Program 1/3″ (около 10 м), копия Microsoft Planetary Computer (коллекция 3dep-seamless, лицензия каталога PDDL-1.0) | высоты земли без леса и домов в США поверх Terrain Tiles с уровня 9 | данные USGS - общественное достояние США. Ключ SAS без учётной записи. Сверено 25 октября 2026 года | USGS 3D Elevation Program |
 | GEBCO 2026 Grid, GEBCO Compilation Group, сетка 15" (около 450 м), копия COG Source Cooperative giswqs/gebco-bathymetry | глубины морей поверх Terrain Tiles с уровня 5, выбор «Глубины морей» окна «Источники данных», по умолчанию | [условия GEBCO](https://www.gebco.net/data-products/gridded-bathymetry/terms-of-use) - общественное достояние, можно копировать, изменять и использовать в коммерческих целях с подписью источника, нельзя выдавать данные за одобренные GEBCO, IHO и IOC, для навигации данные не годятся. Сверено 17 октября 2026 года. Файл COG читается участками, копию выложил Qiusheng Wu, у самого GEBCO файлы только архивом | Bathymetry: GEBCO Compilation Group (2026) GEBCO 2026 Grid |
 | swissBATHY3D, swisstopo, озеро Brienzersee, производный растр | демо «Бриенцское озеро, своя батиметрия»: отметки дна 10 м, файл `planetx/demo/brienz/brienzersee_bed.tif`, собран `tools/make_bathy_demo.py` 10 октября 2026 года из сеток 1 м | [открытые данные swisstopo](https://opendata.swiss/en/dataset/swissbathy3d-bathymetrische-daten-von-schweizer-seen) - «Open use. Must provide the source», сверено 10 октября 2026 года | swisstopo swissBATHY3D, в описании меток и слоя демо |
 | Mapzen Terrain Tiles, производный растр | демо «Карьер, свой рельеф»: высоты вокруг синтетического карьера, файл `planetx/demo/quarry/quarry_dem.tif`, собран `tools/make_quarry_demo.py` 5 октября 2026 года | те же условия, что у Terrain Tiles. Карьер и отвал выдуманы | подпись Terrain Tiles на экране |
@@ -35,9 +38,9 @@ QGIS. Запросы идут через сетевые настройки и д
 | NASA SVS Deep Star Maps 2020 | Млечный путь, строка «Звёзды» | [страница SVS](https://svs.gsfc.nasa.gov/4851), SVS просит указать источник, запретов нет. Переведённая картинка лежит в выпуске `sky-2020` хранилища | NASA/Goddard SVS, Gaia DR2: ESA/Gaia/DPAC, в окне «О модуле» |
 | Yale Bright Star Catalogue, 5-е издание | звёзды, строка «Звёзды» | каталог CDS V/50, условия CDS не сверены, автор принял это 29 сентября 2026 года | нет |
 | OpenPlanetaryMap, Viking MDIM2.1 | снимки Марса | условия не указаны, см. раздел «Марс и Луна» | NASA, USGS, Viking MDIM2.1, OpenPlanetaryMap |
-| OpenPlanetaryMap, LOLA hillshaded albedo | снимки Луны | условия не указаны, см. раздел «Марс и Луна» | USGS, LRO LOLA, OpenPlanetaryMap |
-| NASA MGS MOLA MEGDR, 32 точки на градус | рельеф Марса | данные NASA PDS в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA MGS MOLA MEGDR |
-| NASA LRO LOLA GDR, 64 точки на градус | рельеф Луны | данные NASA PDS в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA LRO LOLA GDR |
+| LRO LROC WAC Global Morphology Mosaic 100 m, USGS Astrogeology | снимки Луны | данные NASA в общественном достоянии, см. раздел «Марс и Луна» | NASA, GSFC, Arizona State University, LRO LROC WAC, USGS |
+| Mars MGS MOLA DEM 463 m, USGS Astrogeology | рельеф Марса | данные NASA в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA MGS MOLA, USGS |
+| Moon LRO LOLA DEM 118 m, USGS Astrogeology | рельеф Луны | данные NASA в общественном достоянии, см. раздел «Марс и Луна» | Terrain: NASA LRO LOLA, USGS |
 | USGS Astrogeology, глобальные мозаики | снимки Меркурия, Венеры, спутников Юпитера и Сатурна, Цереры и Весты | общественное достояние, у части мозаик USGS просит указать авторов, см. раздел «Другие тела» | своя у каждого тела, в углу вида |
 | NASA Photojournal, PIA07782 и PIA17214 | снимки Юпитера и Мимаса | изображения NASA, условия NASA для изображений, см. раздел «Другие тела» | NASA, JPL, Space Science Institute, Cassini |
 | d3-celestial, Olaf Frohn | линии и названия созвездий, имена ярких звёзд, вид неба | [BSD с тремя пунктами](https://github.com/ofrohn/d3-celestial/blob/master/LICENSE), текст лицензии лежит в `planetx/data` | Constellations: d3-celestial © Olaf Frohn |
@@ -191,26 +194,34 @@ QGIS они не пишутся. Лицензия разрешает тольк�
 
 ## Марс и Луна
 
-Снимки Марса и Луны дают базовые карты OpenPlanetaryMap. Это
-сообщество, которое публикует тайлы планетных данных для веб-карт.
-Марс - цветная мозаика Viking MDIM2.1 NASA и USGS, Луна - альбедо
-с отмывкой рельефа LOLA от USGS. Страница базовых карт
+С 25 октября 2026 года снимки и высоты Марса и Луны лежат в двух
+хранилищах, общих с PlanetX Lite, - [planetx-bodies-imagery](https://github.com/Valery35/planetx-bodies-imagery)
+и [planetx-bodies-terrain](https://github.com/Valery35/planetx-bodies-terrain).
+Тайлы Web Mercator 256 × 256 в разметке XYZ, уровни 0-7, загружаются
+по одному тайлу через сеть и кэш QGIS. Задачи нарезки и описание
+источников лежат в самих хранилищах.
+
+Снимки Марса - цветная мозаика Viking MDIM2.1 NASA и USGS в тайлах
+базовых карт OpenPlanetaryMap. Это сообщество, которое публикует тайлы
+планетных данных для веб-карт. Тайлы перенесены без перекодирования,
+ряды переведены из разметки TMS в XYZ. Страница базовых карт
 [OPM Basemaps](https://github.com/openplanetary/opm/wiki/OPM-Basemaps)
-просит подписи «NASA/Viking/USGS» и «LOLA/USGS». Условий
-использования она не называет. Сверено 1 октября 2026 года.
+просит подпись «NASA/Viking/USGS». Условий использования она
+не называет. Сверено 1 октября 2026 года.
 
-Тайлы обоих тел лежат в разметке TMS, ряды считаются от юга. Для Луны
-страница называет разметку XYZ, проверка расположения тайлов показала
-разметку TMS.
+Снимки Луны - LRO LROC WAC Global Morphology Mosaic 100 м USGS
+Astrogeology (NASA, GSFC, Arizona State University), серые PNG.
+До 1.13.1 Луна была картой альбедо LOLA с отмывкой OpenPlanetaryMap,
+около 670 м на пиксель.
 
-Высоты Марса и Луны взяты из сеток PDS Geosciences Node. Марс -
-MOLA MEGDR `megt90n000fb`, 32 точки на градус, высоты над ареоидом.
-Луна - LOLA GDR `ldem_64`, 64 точки на градус, высоты над сферой
-радиусом 1737.4 км. Данные миссий NASA находятся в общественном
-достоянии, NASA просит указывать источник. Из сеток собраны тайлы
-Terrarium уровней 0-5, по 1365 тайлов на тело. Они лежат в отдельном
-хранилище [planetx-terrain](https://github.com/Valery35/planetx-terrain)
-и загружаются по одному тайлу через сеть и кэш QGIS.
+Высоты Марса - мозаика MGS MOLA DEM 463 м USGS Astrogeology, высоты
+над ареоидом, сфера 3396.19 км. Высоты Луны - мозаика LRO LOLA DEM
+118 м, высоты над сферой радиусом 1737.4 км. Данные миссий NASA
+находятся в общественном достоянии, NASA просит указывать источник.
+Тайлы - в записи Terrarium. До 1.13.1 высоты были тайлами уровней 0-5
+из сеток PDS Geosciences Node (MOLA MEGDR 32 точки на градус, LOLA GDR
+64 точки на градус) в хранилище planetx-terrain, они остаются там для
+прежних версий модуля.
 
 ## Другие тела
 

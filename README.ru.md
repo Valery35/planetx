@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-Трёхмерный глобус внутри QGIS. Версия PlanetX 1.13.0.
+Трёхмерный глобус внутри QGIS. Версия PlanetX 1.14.0.
 
 Глобус открывается в отдельном окне и показывает всю Землю с рельефом
 и атмосферой, от вида из космоса до отдельных улиц.
@@ -185,6 +185,9 @@
   света. Видимость из точечной метки показывает видимые с неё места
   и скрытые рельефом. Инсоляция показывает часы прямого солнца
   в сутки за выбранные даты с тенями гор.
+  Затопление заливает всё ниже уровня воды, куда вода доходит от
+  точки, уровень меняется ползунком. Сток воды от точки даёт линию
+  стока и водосбор с главным водотоком.
 - **Координаты.** Градусы, градусы-минуты-секунды, UTM или MGRS
   в строке состояния, поиск понимает все четыре записи.
 - **Мои метки.** Метки, пути и многоугольники рисуются щелчками
@@ -304,9 +307,11 @@ Gaia DR2 - ESA/Gaia/DPAC. Снимки неба вблизи - Digitized Sky Sur
 [OpenNGC](https://github.com/mattiaverga/OpenNGC), CC BY-SA 4.0,
 имена вне каталога - служба Sesame CDS.
 
-Марс - NASA, USGS, Viking MDIM2.1. Луна - USGS, LRO LOLA. Тайлы обоих
-тел - [OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
-Высоты Марса - NASA MGS MOLA MEGDR, высоты Луны - NASA LRO LOLA GDR.
+Марс - NASA, USGS, Viking MDIM2.1, тайлы
+[OpenPlanetaryMap](https://github.com/openplanetary/opm/wiki/OPM-Basemaps).
+Луна - NASA, GSFC, Университет штата Аризона, LRO LROC WAC, USGS.
+Высоты Марса - NASA MGS MOLA, высоты Луны - NASA LRO LOLA, обе через
+USGS Astrogeology.
 Снимки прочих тел - глобальные мозаики [USGS Astrogeology](https://astrogeology.usgs.gov/search)
 и NASA Photojournal по данным миссий MESSENGER, Magellan, Galileo,
 Voyager, Cassini и Dawn.

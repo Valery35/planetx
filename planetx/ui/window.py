@@ -65,6 +65,7 @@ from .project import (AUTO_REFRESH, ProjectWatch, read_flag, read_grids,
                       read_map_years, read_zlayers, read_ztrue)
 from .inset import DeepSource
 from .contours import ContourExport
+from .hydro import HydroTool
 from .netlink import NetLinks
 from .superoverlay import SuperOverlays
 from .watermask import WaterTiles
@@ -702,6 +703,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.viewshed_tiles = None
         self.viewshed_result = None
         self.contour_export = ContourExport(self)
+        # Затопление, линия стока и водосбор у точки (ui/hydro.py).
+        self.hydro = HydroTool(self)
         self.extruder = ExtrudeManager(self)
         self.viewshed_timer = QTimer(self)
         self.viewshed_timer.setInterval(VIEWSHED_POLL)
@@ -1068,6 +1071,11 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                 self.place_dialog.close()
             if self.viewshed_dialog is not None:
                 self.viewshed_dialog.close()
+            for dialog in (self.hydro.flood_dialog,
+                           self.hydro.flow_dialog):
+                if dialog is not None:
+                    dialog.close()
+            self.hydro.timer.stop()
             if self.section_dialog is not None:
                 self.section_dialog.close()
             if self.assistant_dialog is not None:

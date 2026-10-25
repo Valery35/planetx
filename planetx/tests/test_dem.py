@@ -55,6 +55,37 @@ class TestDem(unittest.TestCase):
         self.assertEqual(dem.choice(None), dem.TERRARIUM)
 
 
+class TestModels(unittest.TestCase):
+    # ALOS AW3D30, NASADEM и USGS 3DEP на Planetary Computer, адреса
+    # сверены по каталогу STAC 25 октября 2026 года.
+    def test_cell_names(self):
+        self.assertEqual(dem.cell_name(dem.ALOS, 58, 56), "N058E056")
+        self.assertEqual(dem.cell_name(dem.ALOS, -34, -71), "S034W071")
+        self.assertEqual(dem.cell_name(dem.NASADEM, 57, 56), "n57e056")
+        # 3DEP - по северо-западному углу: градус 39-40, -106..-105.
+        self.assertEqual(dem.cell_name(dem.USGS, 39, -106), "n40w106")
+
+    def test_file_urls(self):
+        urls = dem.file_urls(dem.USGS, -105.5, 39.2, -105.2, 39.8)
+        self.assertEqual(urls, ["https://ai4edataeuwest.blob.core.windows.net/"
+                                "3dep/Elevation/13/TIFF/n40w106/"
+                                "USGS_13_n40w106.tif"])
+        self.assertEqual(len(dem.file_urls(dem.NASADEM, 56.5, 57.5, 57.5,
+                                           58.5)), 4)
+        self.assertEqual(dem.file_urls(dem.GEDTM, 0, 0, 1, 1),
+                         [dem.GEDTM_URL])
+
+    def test_new_choices_need_key(self):
+        for kind in (dem.ALOS, dem.NASADEM, dem.USGS):
+            self.assertEqual(dem.choice(kind), kind)
+            self.assertIn(kind, dem.SAS)
+            self.assertIn(kind, dem.ATTRIBUTION)
+        self.assertNotIn(dem.COPERNICUS, dem.SAS)
+        self.assertEqual(dem.signed("https://a/b.tif", "sv=1&sig=x"),
+                         "https://a/b.tif?sv=1&sig=x")
+        self.assertEqual(dem.signed("https://a/b.tif", ""), "https://a/b.tif")
+
+
 class TestSea(unittest.TestCase):
     def test_merge_sea_keeps_land(self):
         base = np.array([[-3000.0, 0.0], [120.0, -5.0], [0.0, 2.0]],

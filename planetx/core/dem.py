@@ -31,6 +31,20 @@ GEBCO, IHO и IOC, для навигации данные не годятся. �
 выложил Qiusheng Wu, у самого GEBCO файлы только архивом. Проверено
 17 октября 2026 года - 86 400 × 43 200, Int16, DEFLATE, обзоры до
 1350 × 675.
+
+Ещё три модели суши - слово автора от 25 октября 2026 года «рельеф
+запиши в будущие задачи», затем «добавляй источники рельефа».
+Копии на Microsoft Planetary Computer, файлы COG по градусу, ключ
+SAS без учётной записи (SAS_URL), сверено 25 октября 2026 года:
+- ALOS World 3D-30m (AW3D30, JAXA) - модель поверхности, как
+  Copernicus. Условия JAXA - бесплатно и для коммерческого
+  использования, подпись © JAXA. Сжатие LZW.
+- NASADEM (NASA JPL) - доработанный SRTM без пустот, 60° ю. ш. -
+  60° с. ш., общественное достояние США. Сжатие DEFLATE.
+- USGS 3DEP 1/3″ (около 10 м) - только США, модель рельефа без
+  леса и домов, общественное достояние. Имя файла - по северо-
+  западному углу градуса. Сжатие LZW.
+Вне покрытия файлов нет (ответ 404), остаётся Terrarium.
 """
 import math
 
@@ -39,7 +53,15 @@ import numpy as np
 TERRARIUM = "terrarium"
 COPERNICUS = "copernicus30"
 GEDTM = "gedtm30"
-CHOICES = (TERRARIUM, COPERNICUS, GEDTM)
+ALOS = "aw3d30"
+NASADEM = "nasadem"
+USGS = "3dep10"
+CHOICES = (TERRARIUM, COPERNICUS, GEDTM, ALOS, NASADEM, USGS)
+# Коллекции Planetary Computer: ключ SAS к файлам модели.
+SAS = {ALOS: "alos-dem", NASADEM: "nasadem",
+       USGS: "3dep-seamless"}
+SAS_URL = "https://planetarycomputer.microsoft.com/api/sas/v1/token/"
+SAS_LIFE = 45 * 60.0  # с, ключ берётся заново раньше срока в 1 ч
 GEBCO = "gebco2026"
 # Глубины морей: только тайлы высот или GEBCO поверх них. По умолчанию
 # GEBCO - выбор помощника, утверждает автор.
@@ -66,6 +88,12 @@ GEDTM_URL = ("https://s3.opengeohub.org/global/dtm/v1.2/"
              "gedtm_rf_m_30m_s_20060101_20151231_go_epsg.4326.3855_v1.2.tif")
 GEBCO_URL = ("https://data.source.coop/giswqs/gebco-bathymetry/gebco_2026/"
              "gebco_2026.tif")
+ALOS_URL = ("https://ai4edataeuwest.blob.core.windows.net/alos-dem/"
+            "AW3D30_global/ALPSMLC30_{name}_DSM.tif")
+NASADEM_URL = ("https://nasademeuwest.blob.core.windows.net/nasadem-cog/"
+               "v001/NASADEM_HGT_{name}.tif")
+USGS_URL = ("https://ai4edataeuwest.blob.core.windows.net/3dep/"
+            "Elevation/13/TIFF/{name}/USGS_13_{name}.tif")
 
 ATTRIBUTION = {
     COPERNICUS: ("Produced using Copernicus WorldDEM-30 © DLR e.V. "
@@ -77,6 +105,13 @@ ATTRIBUTION = {
                  "collections-description/COP-DEM"),
     GEDTM: ("GEDTM30 v1.2: OpenGeoHub, Ho et al. 2025, CC BY 4.0",
             "https://doi.org/10.7717/peerj.19673"),
+    ALOS: ("AW3D30 © JAXA",
+           "https://www.eorc.jaxa.jp/ALOS/en/dataset/aw3d30/aw3d30_e.htm"),
+    NASADEM: ("NASADEM: NASA JPL",
+              "https://www.earthdata.nasa.gov/data/catalog/"
+              "lpcloud-nasadem-hgt-001"),
+    USGS: ("USGS 3D Elevation Program",
+           "https://www.usgs.gov/3d-elevation-program"),
     GEBCO: ("Bathymetry: GEBCO Compilation Group (2026) GEBCO 2026 Grid",
             "https://www.gebco.net/data-products/gridded-bathymetry/"
             "terms-of-use"),
@@ -150,6 +185,42 @@ def copernicus_cells(west, south, east, north):
 
 def copernicus_url(lat, lon):
     return COPERNICUS_URL.format(name=copernicus_name(lat, lon))
+
+
+def cell_name(kind, lat, lon):
+    """Имя файла модели kind для градуса с юго-западным углом lat,
+    lon."""
+    if kind == ALOS:
+        return "{}{:03d}{}{:03d}".format(
+            "N" if lat >= 0 else "S", abs(lat),
+            "E" if lon >= 0 else "W", abs(lon))
+    if kind == NASADEM:
+        return "{}{:02d}{}{:03d}".format(
+            "n" if lat >= 0 else "s", abs(lat),
+            "e" if lon >= 0 else "w", abs(lon))
+    if kind == USGS:
+        north = lat + 1
+        return "{}{:02d}{}{:03d}".format(
+            "n" if north >= 0 else "s", abs(north),
+            "e" if lon >= 0 else "w", abs(lon))
+    return copernicus_name(lat, lon)
+
+
+def file_urls(kind, west, south, east, north):
+    """Адреса файлов модели kind в рамке в градусах, без ключа."""
+    if kind == GEDTM:
+        return [GEDTM_URL]
+    if kind == GEBCO:
+        return [GEBCO_URL]
+    template = {ALOS: ALOS_URL, NASADEM: NASADEM_URL,
+                USGS: USGS_URL}.get(kind, COPERNICUS_URL)
+    return [template.format(name=cell_name(kind, lat, lon))
+            for lat, lon in copernicus_cells(west, south, east, north)]
+
+
+def signed(url, token):
+    """Адрес файла с ключом SAS."""
+    return url + ("&" if "?" in url else "?") + token if token else url
 
 
 def merge(base, dem):

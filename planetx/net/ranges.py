@@ -24,7 +24,12 @@ TIMEOUT = 60.0  # с ожидания одной части
 
 
 class Missing(OSError):
-    """Файла нет на сервере (404, у Copernicus над морем - 403)."""
+    """Файла нет на сервере (404, у Copernicus над морем - 403).
+    status - код ответа: у файлов с ключом SAS 403 - истёкший ключ."""
+
+    def __init__(self, text, status=None):
+        super().__init__(text)
+        self.status = status
 
 
 class _Bridge(QObject):
@@ -85,5 +90,5 @@ def fetch(url, start, length, timeout=TIMEOUT):
     if "data" in job:
         return job["data"]
     if job.get("status") in (403, 404):
-        raise Missing(job["error"])
+        raise Missing(job["error"], job["status"])
     raise OSError(job.get("error") or "network")

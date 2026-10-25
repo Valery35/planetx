@@ -50,6 +50,8 @@ OSM_ATTRIBUTION = ("© OpenStreetMap contributors",
 MIRRORS = {
     "https://raw.githubusercontent.com/Valery35/planetx-terrain/main/": (
         "https://cdn.jsdelivr.net/gh/Valery35/planetx-terrain@main/",),
+    "https://raw.githubusercontent.com/Valery35/planetx-bodies-terrain/main/":
+        ("https://cdn.jsdelivr.net/gh/Valery35/planetx-bodies-terrain@main/",),
 }
 MIRROR_PAUSE = 30.0  # с, не чаще переходит источник на другое зеркало
 

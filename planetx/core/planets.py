@@ -5,14 +5,14 @@
 
 Размеры тела лежат в core/ellipsoid.py. Здесь - снимки тела, воздух,
 домашняя точка и то, какие земные функции у тела есть. Снимки Марса
-и Луны - тайлы OpenPlanetaryMap в Web Mercator, как у земной
-подложки. Марс - цветная мозаика Viking MDIM2.1 (NASA, USGS), тайлы
-в разметке TMS до уровня 7, около 650 м на пиксель. Луна - альбедо
-с отмывкой по рельефу LOLA (USGS), тоже TMS, до уровня 6, около
-670 м на пиксель. Уровни проверены запросами 30 сентября 2026 года.
-Разметку Луны показала мозаика уровня 2 1 октября 2026 года: в порядке
-XYZ ряды не сходятся по краям, в порядке TMS Море Кризисов стоит
-на 17° с. ш., 59° в. д.
+и Луны - тайлы Web Mercator в разметке XYZ уровней 0-7 из хранилища
+planetx-bodies-imagery, общего с PlanetX Lite, решение автора
+от 25 октября 2026 года. Марс - цветная мозаика Viking MDIM2.1 (NASA,
+USGS) в тайлах OpenPlanetaryMap без перекодирования, ряды переведены
+из TMS в XYZ, около 650 м на пиксель. Луна - мозаика LROC WAC 100 м
+(NASA, GSFC, ASU, USGS), серые PNG, около 330 м на пиксель у экватора.
+До 1.13.1 снимки брались с серверов OpenPlanetaryMap в разметке TMS,
+Луна - альбедо LOLA с отмывкой, 670 м на пиксель.
 
 Воздух задаётся множителем рассеяния к земному по каналам RGB. У Марса
 пыльный воздух рассеивает красный сильнее синего, у Луны воздуха нет.
@@ -25,17 +25,17 @@ try:  # внутри плагина QGIS
 except ImportError:  # headless-тесты
     from ellipsoid import EARTH, MARS, MOON, body_by_key
 
-MARS_VIKING = ("https://s3-eu-west-1.amazonaws.com/whereonmars.cartodb.net/"
-               "viking_mdim21_global/{z}/{x}/{-y}.png")
-MOON_ALBEDO = ("https://s3.amazonaws.com/opmbuilder/301_moon/tiles/w/"
-               "hillshaded-albedo/{z}/{x}/{-y}.png")
-# Тайлы высот уровней 0-5 папками в хранилище planetx-terrain,
-# по одному тайлу, как земной Terrarium. Собирает их
-# tools/build_body_terrain.py из сеток PDS: MOLA MEGDR 32 точки
-# на градус для Марса, LOLA GDR 64 точки на градус для Луны.
+BODY_IMAGERY = ("https://raw.githubusercontent.com/Valery35/"
+                "planetx-bodies-imagery/main/%s/{z}/{x}/{y}.png")
+# Тайлы высот уровней 0-7 папками в хранилище planetx-bodies-terrain,
+# по одному тайлу, как земной Terrarium. Хранилище общее с PlanetX
+# Lite, решение автора от 25 октября 2026 года. Нарезает их
+# scripts/tiles.py того хранилища из мозаик USGS Astrogeology: MOLA
+# 463 м для Марса над ареоидом, LOLA 118 м для Луны над сферой
+# 1737.4 км. До 1.13.1 тайлы уровней 0-5 лежали в planetx-terrain.
 TERRAIN_TILES = ("https://raw.githubusercontent.com/Valery35/"
-                 "planetx-terrain/main/%s/{z}/{x}/{y}.png")
-TERRAIN_LEVEL = 5
+                 "planetx-bodies-terrain/main/%s/{z}/{x}/{y}.png")
+TERRAIN_LEVEL = 7
 
 
 class Planet:
@@ -68,23 +68,24 @@ EARTH_PLANET = Planet(EARTH, None, (1.0, 1.0, 1.0),
                       (58.0105, 56.2294, 2.0e7), earth=True)
 MARS_PLANET = Planet(
     MARS,
-    ("Mars Viking MDIM2.1", MARS_VIKING, 7,
+    ("Mars Viking MDIM2.1", BODY_IMAGERY % "mars", 7,
      "NASA, USGS, Viking MDIM2.1, OpenPlanetaryMap",
      "https://www.openplanetary.org/opm-basemaps/"
      "global-viking-mdim2-1-colorized-mosaic"),
     (1.2, 0.3, 0.07),
     (18.65, -133.8, 1.2e7),  # Олимп
-    terrain=("MOLA MEGDR", TERRAIN_TILES % "mars",
-             TERRAIN_LEVEL, "Terrain: NASA MGS MOLA MEGDR"))
+    terrain=("MOLA DEM 463 m", TERRAIN_TILES % "mars",
+             TERRAIN_LEVEL, "Terrain: NASA MGS MOLA, USGS"))
 MOON_PLANET = Planet(
     MOON,
-    ("Moon LOLA hillshaded albedo", MOON_ALBEDO, 6,
-     "USGS, LRO LOLA, OpenPlanetaryMap",
-     "https://github.com/openplanetary/opm/wiki/OPM-Basemaps"),
+    ("Moon LROC WAC 100 m", BODY_IMAGERY % "moon", 7,
+     "NASA, GSFC, Arizona State University, LRO LROC WAC, USGS",
+     "https://astrogeology.usgs.gov/search/map/moon_lro_lroc_wac_"
+     "global_morphology_mosaic_100m"),
     None,
     (0.674, 23.473, 6.0e6),  # Море Спокойствия, посадка Аполлона-11
-    terrain=("LOLA GDR", TERRAIN_TILES % "moon",
-             TERRAIN_LEVEL, "Terrain: NASA LRO LOLA GDR"))
+    terrain=("LOLA DEM 118 m", TERRAIN_TILES % "moon",
+             TERRAIN_LEVEL, "Terrain: NASA LRO LOLA, USGS"))
 
 # Снимки прочих тел - тайлы JPEG из глобальных мозаик USGS Astrogeology
 # и NASA Photojournal, общественное достояние. Нарезает их

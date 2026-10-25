@@ -33,8 +33,46 @@ def float_predictor(tile):
     return diff.tobytes()
 
 
+def lzw_encode(data):
+    """Кодировщик LZW в разметке TIFF для проверки разбора: сброс в начале,
+    ширина растёт на код раньше, конец - код 257."""
+    out, acc, bits = bytearray(), 0, 0
+
+    def put(code, width):
+        nonlocal acc, bits
+        acc = (acc << width) | code
+        bits += width
+        while bits >= 8:
+            bits -= 8
+            out.append((acc >> bits) & 0xff)
+
+    table = {bytes((i,)): i for i in range(256)}
+    width, word = 9, b""
+    put(256, width)
+    for byte in data:
+        grown = word + bytes((byte,))
+        if grown in table:
+            word = grown
+            continue
+        put(table[word], width)
+        table[grown] = len(table) + 2
+        if len(table) + 2 >= (1 << width) and width < 12:
+            width += 1
+        if len(table) + 2 >= 4093:
+            put(256, width)
+            table = {bytes((i,)): i for i in range(256)}
+            width = 9
+        word = bytes((byte,))
+    if word:
+        put(table[word], width)
+    put(257, width)
+    if bits:
+        out.append((acc << (8 - bits)) & 0xff)
+    return bytes(out)
+
+
 def make_tiff(image, tile=16, point=True, predictor=3, nodata=None,
-              origin=(33.0, 58.0), step=(0.01, 0.01)):
+              origin=(33.0, 58.0), step=(0.01, 0.01), lzw=False):
     """Простой TIFF с тайлами Float32, DEFLATE и привязкой GeoTIFF."""
     h, w = image.shape
     across, down = -(-w // tile), -(-h // tile)
@@ -46,10 +84,11 @@ def make_tiff(image, tile=16, point=True, predictor=3, nodata=None,
             part = padded[r * tile:(r + 1) * tile, c * tile:(c + 1) * tile]
             raw = float_predictor(part) if predictor == 3 \
                 else part.astype("<f4").tobytes()
-            blobs.append(zlib.compress(raw))
+            blobs.append(lzw_encode(raw) if lzw else zlib.compress(raw))
     keys = [1, 1, 0, 1, 1025, 0, 1, 2 if point else 1]
     entries = [
-        (256, 3, [w]), (257, 3, [h]), (258, 3, [32]), (259, 3, [8]),
+        (256, 3, [w]), (257, 3, [h]), (258, 3, [32]),
+        (259, 3, [5 if lzw else 8]),
         (277, 3, [1]), (317, 3, [predictor]), (322, 3, [tile]),
         (323, 3, [tile]), (324, 4, None), (325, 4, [len(b) for b in blobs]),
         (339, 3, [3]), (33550, 12, [step[0], step[1], 0.0]),
@@ -152,6 +191,27 @@ class TestCog(unittest.TestCase):
         before = reader.calls
         file._block(0, 0, 0, 1, 1)
         self.assertEqual(reader.calls, before)
+
+    def test_lzw_tiles(self):
+        # LZW у ALOS AW3D30 и USGS 3DEP, 25 октября 2026 года: прежде
+        # разбор отвечал «compression 5».
+        for predictor in (1, 3):
+            file = cog.Cog(Reader(make_tiff(self.image, predictor=predictor,
+                                            lzw=True)))
+            self.assertTrue(np.array_equal(file._block(0, 0, 0, 49, 39),
+                                           self.image))
+
+    def test_lzw_long_stream_resets_table(self):
+        rng = np.random.default_rng(5)
+        data = rng.integers(0, 256, 30000, dtype=np.uint8).tobytes()
+        self.assertEqual(cog.lzw_decode(lzw_encode(data)), data)
+        self.assertEqual(cog.lzw_decode(lzw_encode(b"a" * 9000)), b"a" * 9000)
+
+    def test_lzw_tiff_wraps_stream(self):
+        raw = lzw_encode(bytes(range(64)))
+        wrapped = cog.lzw_tiff(raw, 16, 4)
+        self.assertTrue(wrapped.startswith(b"II*\0"))
+        self.assertTrue(wrapped.endswith(raw))
 
     def test_not_tiff(self):
         with self.assertRaises(cog.CogError):

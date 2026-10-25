@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.13.0
+version=1.14.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.13.0 The assistant answers questions about the plugin from the
+changelog=1.14.0 Flooding from a point up to a water level with
+      a slider, area, volume and depth, depth raster and outline
+      to the QGIS project. Water flow line and catchment from a
+      point with the main stream to My Places. Three more land
+      height models - ALOS AW3D30, NASADEM and USGS 3DEP 10 m.
+      LROC WAC imagery of the Moon, more detailed heights of Mars
+      and the Moon. QGIS no longer freezes when a layer with slow
+      tile preparation is switched off.
+      1.13.0 The assistant answers questions about the plugin from the
       manual and reads QGIS project layers - the layer list with fields
       and filtered layer rows - each reading only with your permission
       (Allow, Allow in this conversation, Decline). With permission it

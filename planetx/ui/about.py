@@ -133,8 +133,9 @@ def about_html():
         _link(SVS, tr("Млечный путь: NASA/Goddard Space Flight Center "
                       "Scientific Visualization Studio, Gaia DR2: "
                       "ESA/Gaia/DPAC.")),
-        _link(OPM, tr("Марс: NASA, USGS, Viking MDIM2.1. Луна: USGS, "
-                      "LRO LOLA. Тайлы: OpenPlanetaryMap.")),
+        _link(OPM, tr("Марс: NASA, USGS, Viking MDIM2.1, тайлы "
+                      "OpenPlanetaryMap. Луна: NASA, GSFC, ASU, LRO LROC "
+                      "WAC, USGS.")),
         _link(CELESTIAL, tr("Созвездия и имена звёзд: d3-celestial, "
                             "© Olaf Frohn. Планеты: элементы орбит JPL.")),
         _link(NOMINATIM_POLICY, tr("Поиск мест: Nominatim, © участники "

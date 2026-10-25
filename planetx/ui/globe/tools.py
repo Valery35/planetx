@@ -171,6 +171,9 @@ class ToolsMixin:
         for entry in getattr(self, "insets", ()):
             if entry.lake is not None:
                 water.set_mesh(entry.layer_id, water_mesh(entry, scale))
+        hydro = getattr(self, "hydro", None)
+        if hydro is not None:
+            water.set_mesh("flood", hydro.water_mesh())
         self.view.update()
 
     def edit_bathymetry(self, layer_id):

@@ -39,7 +39,11 @@ def dem_titles():
     """Названия выбора рельефа по core.dem.CHOICES."""
     return {dem.TERRARIUM: tr("Нет - только тайлы высот"),
             dem.COPERNICUS: tr("Copernicus DEM 30 м - с лесом и домами"),
-            dem.GEDTM: tr("GEDTM30 30 м - земля без леса и домов")}
+            dem.GEDTM: tr("GEDTM30 30 м - земля без леса и домов"),
+            dem.ALOS: tr("ALOS AW3D30 30 м - с лесом и домами"),
+            dem.NASADEM: tr("NASADEM 30 м - SRTM без пустот, до 60° широты"),
+            dem.USGS: tr("USGS 3DEP 10 м - только США, земля без леса "
+                         "и домов")}
 
 
 def sea_titles():
@@ -56,12 +60,14 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
     terrain_probe = sources.tile_probe(terrain_url)
     mars = planets.TERRAIN_TILES % "mars"
     models = []
-    if model == dem.COPERNICUS:
-        models.append(("Copernicus DEM GLO-30",
-                       tr("Высоты суши 30 м с уровня 9"),
-                       dem.ATTRIBUTION[model][1], None))
-    elif model == dem.GEDTM:
-        models.append(("GEDTM30", tr("Высоты суши 30 м с уровня 9"),
+    names = {dem.COPERNICUS: "Copernicus DEM GLO-30",
+             dem.GEDTM: "GEDTM30", dem.ALOS: "ALOS AW3D30",
+             dem.NASADEM: "NASADEM", dem.USGS: "USGS 3DEP 1/3"}
+    if model in names:
+        models.append((names[model],
+                       tr("Высоты суши 10 м с уровня 9")
+                       if model == dem.USGS
+                       else tr("Высоты суши 30 м с уровня 9"),
                        dem.ATTRIBUTION[model][1], None))
     if sea == dem.GEBCO:
         models.append(("GEBCO 2026", tr("Глубины морей 450 м с уровня 5"),
@@ -75,7 +81,9 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
              "attribution.md" if terrain_url == sources.TERRAIN_URL
              else SOURCES_DOC, terrain_probe),
             (tr("Марс, Луна и другие тела"),
-             tr("Высоты и снимки тел из хранилища planetx-terrain"),
+             tr("Высоты Марса и Луны - хранилище planetx-bodies-terrain, "
+                "снимки - planetx-bodies-imagery, снимки других тел - "
+                "planetx-terrain"),
              SOURCES_DOC, sources.tile_probe(mars))]),
         (tr("Маршруты"), [
             ("OSRM FOSSGIS" if router_url == routing.ROUTER_URL

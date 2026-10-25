@@ -106,10 +106,9 @@ def stale_imports(root):
 
 
 class TestImagery(unittest.TestCase):
-    """Снимки Марса и Луны OpenPlanetaryMap лежат в разметке TMS.
-
-    С рядами XYZ Луна 30 сентября 2026 года вышла полосами по широте.
-    """
+    """Снимки Марса и Луны - хранилище planetx-bodies-imagery в разметке
+    XYZ. До 1.13.1 они шли с OpenPlanetaryMap в разметке TMS, с рядами
+    XYZ Луна 30 сентября 2026 года вышла полосами по широте."""
 
     def test_menu_bodies_exist(self):
         # Каждый ключ меню - тело с размерами и снимками, Земля первая.
@@ -123,10 +122,12 @@ class TestImagery(unittest.TestCase):
             self.assertEqual(planet.key, key)
             self.assertIs(el.body_by_key(key), planet.body)
 
-    def test_mars_and_moon_are_tms(self):
+    def test_mars_and_moon_are_xyz(self):
         import planets
         for planet in (planets.MARS_PLANET, planets.MOON_PLANET):
-            self.assertIn("{-y}", planet.imagery[1], planet.key)
+            url = planet.imagery[1]
+            self.assertIn("planetx-bodies-imagery", url, planet.key)
+            self.assertIn("/{z}/{x}/{y}.png", url, planet.key)
 
 
 class TestNoStaleCopies(unittest.TestCase):

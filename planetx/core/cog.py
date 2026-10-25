@@ -16,8 +16,13 @@ Windows. У пользователя Владимира 23 октября 2026 �
 
 fetch(начало, длина) -> байты: поставляет вызывающий, вызов ждёт ответа.
 Поддержано то, что есть в файлах рельефа: TIFF и BigTIFF с прямым
-порядком байтов, тайлы, сжатие DEFLATE или без сжатия, предиктор 1, 2
-и 3, один канал Float32, Int16 или Int32, система EPSG:4326.
+порядком байтов, тайлы, сжатие DEFLATE, LZW или без сжатия, предиктор
+1, 2 и 3, один канал Float32, Int16 или Int32, система EPSG:4326.
+LZW у ALOS AW3D30 и USGS 3DEP (25 октября 2026 года): сжатый тайл
+заворачивается в маленький TIFF серой картинкой по 8 бит шириной
+в байты строки (lzw_tiff) и раскодируется читателем TIFF Qt, его
+ставит вызывающий (set_lzw). Без него - lzw_decode на Python, для
+тестов, он в десятки раз медленнее.
 
 Картинки - снимки событий Vantor и Planet (core/events.py): три-четыре
 канала по 8 бит вперемежку, сжатие LZW, DEFLATE или JPEG, системы
@@ -54,6 +59,14 @@ _TYPES = {1: ("B", 1), 2: ("s", 1), 3: ("H", 2), 4: ("I", 4), 5: ("II", 8),
           12: ("d", 8), 16: ("Q", 8), 17: ("q", 8), 18: ("Q", 8)}
 _DTYPES = {(3, 32): "<f4", (2, 16): "<i2", (2, 32): "<i4", (1, 16): "<u2",
            (1, 8): "u1", (3, 64): "<f8"}
+# Раскодирование LZW тайла высот: (сжатые байты, байт в строке, строк)
+# -> байты. Ставит вызывающий (set_lzw), иначе lzw_decode_rows.
+_LZW = []
+
+
+def set_lzw(decoder):
+    """Раскодирование LZW средствами вызывающего, None - на Python."""
+    _LZW[:] = [decoder] if decoder is not None else []
 
 
 class CogError(ValueError):
@@ -95,7 +108,7 @@ class Image:
             self.keep = {tag: tags[tag] for tag in PICTURE_TAGS
                          if tag in tags}
         else:
-            if self.compression not in (1, 8, 32946):
+            if self.compression not in (1, 5, 8, 32946):
                 raise CogError("compression %d" % self.compression)
             if (fmt, bits) not in _DTYPES:
                 raise CogError("sample %d/%d" % (fmt, bits))
@@ -115,9 +128,13 @@ class Image:
 
     def decode(self, raw):
         """Распакованный тайл tile_h × tile_w."""
-        if self.compression != 1:
-            raw = zlib.decompress(raw)
         need = self.tile_w * self.tile_h * self.dtype.itemsize
+        if self.compression == 5:
+            columns = self.tile_w * self.dtype.itemsize
+            raw = (_LZW[0] if _LZW else lzw_decode_rows)(
+                bytes(raw), columns, self.tile_h)
+        elif self.compression != 1:
+            raw = zlib.decompress(raw)
         if len(raw) < need:
             raise CogError("short tile")
         raw = raw[:need]
@@ -452,6 +469,64 @@ def tiff_bytes(image, raws):
         at += size
     entries[273] = (4, tuple(offsets))
     return _tiff_head(entries) + b"".join(raws)
+
+
+def lzw_tiff(raw, columns, rows):
+    """Сжатый LZW тайл высот маленьким TIFF: серая картинка по 8 бит
+    columns × rows без предиктора - читатель раскодирует только LZW,
+    байты значений и предиктор разбирает Image.decode."""
+    entries = {256: (4, (columns,)), 257: (4, (rows,)), 258: (3, (8,)),
+               259: (3, (5,)), 262: (3, (1,)), 273: (4, (0,)),
+               277: (3, (1,)), 278: (4, (rows,)), 279: (4, (len(raw),))}
+    entries[273] = (4, (len(_tiff_head(entries)),))
+    return _tiff_head(entries) + raw
+
+
+def lzw_decode_rows(raw, columns, rows):
+    """Раскодирование LZW на Python: columns × rows байт."""
+    out = lzw_decode(raw)
+    need = columns * rows
+    if len(out) < need:
+        raise CogError("short tile")
+    return out[:need]
+
+
+def lzw_decode(raw):
+    """LZW в разметке TIFF: коды от 9 до 12 бит, старший бит первым,
+    ширина растёт на код раньше (early change), 256 - сброс таблицы,
+    257 - конец."""
+    out = bytearray()
+    table = [bytes((i,)) for i in range(256)] + [b"", b""]
+    width = 9
+    acc = bits = 0
+    previous = None
+    for byte in raw:
+        acc = (acc << 8) | byte
+        bits += 8
+        while bits >= width:
+            bits -= width
+            code = (acc >> bits) & ((1 << width) - 1)
+            if code == 257:
+                return bytes(out)
+            if code == 256:
+                del table[258:]
+                width = 9
+                previous = None
+                continue
+            if previous is None:
+                entry = table[code]
+            elif code < len(table):
+                entry = table[code]
+                table.append(previous + entry[:1])
+            else:
+                entry = previous + previous[:1]
+                table.append(entry)
+            out += entry
+            previous = entry
+            if len(table) + 1 >= (1 << width) and width < 12:
+                width += 1
+        acc &= (1 << bits) - 1
+    return bytes(out)
 
 
 def _tiff_head(entries):

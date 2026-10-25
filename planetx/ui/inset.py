@@ -14,13 +14,16 @@ FutureWarning модуля osgeo о режиме исключений выдаё
 предупреждение в рабочем потоке роняет QGIS, см. AGENTS.md.
 """
 import hashlib
+import json
 import os
 import threading
+import time
 from collections import OrderedDict
 from concurrent.futures import TimeoutError
 
 import numpy as np
 from qgis.core import QgsApplication
+from qgis.PyQt.QtGui import QImage
 
 from ..core import basemap, bathymetry, cog, dem, inset, subsurface
 from ..net import ranges
@@ -252,6 +255,21 @@ def _window(path, bounds):
     return array
 
 
+def qt_lzw(raw, columns, rows):
+    """Раскодирование сжатого LZW тайла высот читателем TIFF Qt
+    (libtiff, на C): тайл - серая картинка по 8 бит, core.cog.lzw_tiff.
+    Рабочий поток, QImage в нём допустим. Без читателя - Python."""
+    image = QImage.fromData(cog.lzw_tiff(raw, columns, rows), "TIFF")
+    if image.isNull() or image.width() != columns \
+            or image.height() != rows or image.depth() != 8:
+        return cog.lzw_decode_rows(raw, columns, rows)
+    ptr = image.constBits()
+    ptr.setsize(image.sizeInBytes())
+    lines = np.frombuffer(ptr, np.uint8).reshape(rows,
+                                                 image.bytesPerLine())
+    return lines[:, :columns].tobytes()
+
+
 class DemSource:
     """Модель рельефа 30 м поверх Terrarium (core/dem.py): окно тайла
     из файлов COG в сети. Читает постоянный пул «dem» (net/gdalnet.py),
@@ -281,6 +299,10 @@ class DemSource:
         self.lock = threading.Lock()
         self.jobs = OrderedDict()  # ключ уровня до READ_LEVEL -> задача
         self.errors = 0  # окон, не прочитанных из-за сети
+        self.token = ("", 0.0)  # ключ SAS и когда взят
+        self.token_lock = threading.Lock()
+        # Тайлы LZW (ALOS, 3DEP) раскодирует читатель TIFF Qt.
+        cog.set_lzw(qt_lzw)
         self.last_error = ""  # текст последней ошибки, для журнала
 
     def merge(self, key, heights):
@@ -324,13 +346,39 @@ class DemSource:
             return job
 
     def _urls(self, key):
-        if self.kind == dem.GEDTM:
-            return [dem.GEDTM_URL]
-        if self.kind == dem.GEBCO:
-            return [dem.GEBCO_URL]
-        west, south, east, north = dem.tile_degrees(*key)
-        return [dem.copernicus_url(lat, lon) for lat, lon in
-                dem.copernicus_cells(west, south, east, north)]
+        return dem.file_urls(self.kind, *dem.tile_degrees(*key))
+
+    def _token(self, fresh=False):
+        """Ключ SAS модели Planetary Computer (dem.SAS) или пусто.
+        Берётся тем же мостом сети, раз в dem.SAS_LIFE."""
+        collection = dem.SAS.get(self.kind)
+        if collection is None:
+            return ""
+        with self.token_lock:
+            token, since = self.token
+            if fresh or not token \
+                    or time.monotonic() - since > dem.SAS_LIFE:
+                answer = ranges.fetch(dem.SAS_URL + collection, 0, 65536)
+                try:
+                    token = json.loads(answer.decode("utf-8"))["token"]
+                except (ValueError, KeyError, UnicodeDecodeError) as error:
+                    raise OSError("SAS: " + str(error)) from error
+                self.token = (token, time.monotonic())
+            return token
+
+    def _fetch(self, url, start, length):
+        """Часть файла модели. У файлов с ключом SAS отказ 403 -
+        истёкший ключ: ключ берётся заново, запрос повторяется."""
+        if self.kind not in dem.SAS:
+            return ranges.fetch(url, start, length)
+        try:
+            return ranges.fetch(dem.signed(url, self._token()), start,
+                                length)
+        except ranges.Missing as error:
+            if getattr(error, "status", None) != 403:
+                raise
+        return ranges.fetch(dem.signed(url, self._token(fresh=True)),
+                            start, length)
 
     def _open(self, url):
         """Разобранный файл url или None, если его нет. Один поток
@@ -349,7 +397,7 @@ class DemSource:
             waiting.wait(ranges.TIMEOUT)
         try:
             data = cog.Cog(lambda start, length:
-                           ranges.fetch(url, start, length))
+                           self._fetch(url, start, length))
             with self.file_lock:
                 self.files[url] = data
                 while len(self.files) > self.KEEP:

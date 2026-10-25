@@ -223,7 +223,9 @@ class EarthDataMixin:
         short = {dem_model.TERRARIUM: tr("свой источник") if own
                  else "Terrarium",
                  dem_model.COPERNICUS: tr("Copernicus 30 м"),
-                 dem_model.GEDTM: "GEDTM30"}
+                 dem_model.GEDTM: "GEDTM30", dem_model.ALOS: "AW3D30",
+                 dem_model.NASADEM: "NASADEM",
+                 dem_model.USGS: tr("3DEP 10 м")}
         models = [(key, titles[key], short[key]) for key in dem_model.CHOICES]
         kind = dem_model.choice(QgsSettings().value(datasources.DEM_KEY, ""))
         seas = sea_titles()

@@ -153,6 +153,10 @@ def show(window, px, py):
         if not drawing and window._surface_source() is not None:
             menu.addAction(tr("Видимость отсюда…")).triggered.connect(
                 lambda *a: window.viewshed_here(lat, lon))
+            menu.addAction(tr("Затопление отсюда…")).triggered.connect(
+                lambda *a: window.hydro.flood_here(lat, lon))
+            menu.addAction(tr("Сток воды отсюда…")).triggered.connect(
+                lambda *a: window.hydro.flow_here(lat, lon))
         if not drawing and window.planet.earth:
             # Один пункт на все спутники, окно открывается на прежнем
             # спутнике.

@@ -5895,6 +5895,46 @@ def loader_stopped():
 
 
 @check(4000)
+def loader_dispose():
+    # Сторож зависания 25 октября 2026 года: снятый загрузчик удалялся
+    # с пулом потоков, деструктор пула ждал задачи в главном потоке.
+    # Подготовка тайла здесь идёт 3 с, главный поток не должен ждать.
+    from qgis.PyQt.QtCore import QBuffer, QByteArray, QCoreApplication, QEvent
+    from qgis.PyQt.QtGui import QImage
+    from planetx.core import basemap
+    from planetx.net import loader as loader_module
+    from planetx.qt_compat import enum
+    image = QImage(256, 256, enum(QImage, "Format", "Format_ARGB32"))
+    image.fill(0xff336699)
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(enum(QBuffer, "OpenModeFlag", "WriteOnly"))
+    image.save(buffer, "PNG")
+    started = []
+
+    def slow(key, rgba):
+        started.append(key)
+        time.sleep(3.0)
+        return None
+    loader = loader_module.TileLoader(basemap.osm(), prepare=slow)
+    task = loader_module._DecodeTask((3, 1, 1), bytes(data), loader.sink,
+                                     slow, 256)
+    if hasattr(loader, "lane"):
+        loader.lane.start(task)
+    else:
+        loader.pool.start(task)
+    time.sleep(0.3)
+    began = time.monotonic()
+    loader.abort()
+    loader.deleteLater()
+    QCoreApplication.sendPostedEvents(
+        None, enum(QEvent, "Type", "DeferredDelete"))
+    result["loader_dispose"] = {
+        "task_started": bool(started),
+        "blocked_s": round(time.monotonic() - began, 2)}
+
+
+@check(4000)
 def paleo_close_view():
     # Берег вблизи на возрасте 0: Гибралтар с 600 км - подробность
     # карты 0.1°.
@@ -12674,18 +12714,19 @@ def landsat_built():
 DEM_POINT = (65.0348, 60.1166)  # гора Народная, 1895 м
 
 
-def _dem_set(kind):
-    """Выбор рельефа kind окна «Источники данных», перелёт к Народной."""
+def _dem_set(kind, point=DEM_POINT):
+    """Выбор рельефа kind окна «Источники данных», перелёт к вершине
+    point (по умолчанию Народная)."""
     from qgis.core import QgsSettings
     from planetx.core import sources
     from planetx.core.navigation import Pose
     window = state["window"]
     QgsSettings().setValue(sources.DEM_KEY, kind)
     window.sources_changed("terrain")
-    window.view.navigator.show(Pose(DEM_POINT[0], DEM_POINT[1], 6000.0,
-                                    0.0, 0.0))
+    window.view.navigator.show(Pose(point[0], point[1], 6000.0, 0.0, 0.0))
     window.view.update()
-    state["dem"] = {"kind": kind, "start": time.monotonic(), "still": 0}
+    state["dem"] = {"kind": kind, "start": time.monotonic(), "still": 0,
+                    "point": point}
 
 
 def _dem_wait():
@@ -12701,7 +12742,7 @@ def _dem_wait():
     if (info["still"] < 3 or spent < 5.0) and spent < 150.0:
         return 1000
     store = window.view.store
-    lat, lon = DEM_POINT
+    lat, lon = info["point"]
     k = 1.0 / (111320.0 * math.cos(math.radians(lat)))
     offsets = np.arange(-300.0, 300.0, 10.0)
     lats = lat + offsets[:, None] / 111320.0 + 0 * offsets[None, :]
@@ -12715,6 +12756,7 @@ def _dem_wait():
         "errors": model.errors if model is not None else None,
         "last_error": model.last_error[:200] if model is not None else None,
         "credit": window._terrain_credit()[-60:],
+        "python_lzw": state.get("python_lzw", [0])[0],
     }
     window.view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_dem_{}.png".format(info["kind"] or "terrarium")))
@@ -12748,6 +12790,54 @@ def dem_gedtm():
 
 @check(1000)
 def dem_gedtm_wait():
+    return _dem_wait()
+
+
+# Модели Planetary Computer, 25 октября 2026 года: ALOS - Народная,
+# NASADEM до 60° широты - Эльбрус (5642 м), 3DEP - Пайкс-Пик (4302 м).
+def _count_python_lzw():
+    """Сколько тайлов LZW раскодировано на Python, а не читателем Qt."""
+    from planetx.core import cog
+    count = state.setdefault("python_lzw", [0])
+    if not getattr(cog, "_counted", False):
+        plain = cog.lzw_decode_rows
+
+        def counted(raw, columns, rows):
+            count[0] += 1
+            return plain(raw, columns, rows)
+        cog.lzw_decode_rows = counted
+        cog._counted = True
+
+
+@check(1000)
+def dem_alos():
+    _count_python_lzw()
+    _dem_set("aw3d30")
+
+
+@check(1000)
+def dem_alos_wait():
+    return _dem_wait()
+
+
+@check(1000)
+def dem_nasadem():
+    _dem_set("nasadem", (43.3499, 42.4453))
+
+
+@check(1000)
+def dem_nasadem_wait():
+    return _dem_wait()
+
+
+@check(1000)
+def dem_usgs():
+    _count_python_lzw()
+    _dem_set("3dep10", (38.8405, -105.0442))
+
+
+@check(1000)
+def dem_usgs_wait():
     return _dem_wait()
 
 
@@ -16411,6 +16501,170 @@ def viewshed_check():
     out["cleared"] = not layer.shown and window.viewshed_tiles is None
     window.viewshed_dialog.close()
     window.myplaces.remove(state["vs_key"])
+
+
+# Вода по рельефу (ui/hydro.py): затопление у Камы в Перми, линия стока
+# и водосбор в долине Баксана у Терскола.
+HYDRO_KAMA = (58.0175, 56.2400)
+HYDRO_BAKSAN = (43.2605, 42.5100)
+
+
+@check(500)
+def hydro_flood():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(HYDRO_KAMA[0], HYDRO_KAMA[1], 14000.0, 20.0, 55.0))
+    window.view.update()
+    dialog = window.hydro.flood_here(*HYDRO_KAMA)
+    result["hydro"] = {"flood_dialog": dialog.isVisible()}
+    state["hydro_started"] = time.monotonic()
+    dialog.build.emit(5000.0)
+
+
+@check(10000)
+def hydro_flood_wait():
+    window = state["window"]
+    if window.hydro.state is None \
+            and time.monotonic() - state["hydro_started"] < 45.0:
+        return 500
+    result["hydro"]["flood_seconds"] = round(
+        time.monotonic() - state["hydro_started"], 1)
+
+
+@check(3000)
+def hydro_flood_check():
+    import numpy as np
+    window = state["window"]
+    tool = window.hydro
+    out = result["hydro"]
+    st = tool.state
+    out["built"] = st is not None
+    if st is None:
+        return
+    dialog = tool.flood_dialog
+    out["status"] = dialog.status.text()
+    out["base"] = round(dialog.base, 1)
+    out["grid"] = [st["grid"].rows, st["grid"].cols,
+                   round(st["grid"].cell, 1)]
+    out["nan"] = int(np.isnan(st["z"]).sum())
+    started = time.perf_counter()
+    dialog.water.setValue(dialog.base + 3.0)
+    out["level_ms"] = round(1000.0 * (time.perf_counter() - started), 1)
+    flood = st["flood"]
+    out["area_km2"] = round(flood.area / 1e6, 3)
+    out["depth"] = round(flood.depth, 2)
+    out["edge"] = flood.edge
+    out["slider"] = dialog.slider.value()
+    window.view.lake_water.prepare()
+    out["water_meshes"] = sorted(window.view.lake_water.buffers)
+    out["water_vertices"] = window.view.lake_water.vertex_count()
+    out["status_after"] = dialog.status.text()
+
+
+@check(500)
+def hydro_flood_frame():
+    from planetx.i18n import tr as planetx_tr
+    window = state["window"]
+    out = result["hydro"]
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_flood.png"))
+    out["water_drawn"] = window.view.lake_water.drawn
+    path = os.path.join(TEMP, "planetx_flood.tif")
+    out["export"] = window.hydro.export_flood(path) == path
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr("PlanetX - вода по рельефу"))
+    out["project_layers"] = [n.name() for n in group.children()] \
+        if group is not None else []
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        group.parent().removeChildNode(group)
+    window.hydro.flood_dialog.clear.emit()
+    window.view.lake_water.prepare()
+    out["cleared"] = window.hydro.state is None \
+        and "flood" not in window.view.lake_water.buffers
+    window.hydro.flood_dialog.close()
+
+
+@check(500)
+def hydro_flow():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(HYDRO_BAKSAN[0], HYDRO_BAKSAN[1], 30000.0, 0.0, 40.0))
+    window.view.update()
+    state["hydro_before"] = {p.key for p in window.myplaces.places}
+    state["hydro_folders"] = {n.key for n in window.myplaces.nodes()}
+    dialog = window.hydro.flow_here(*HYDRO_BAKSAN)
+    result.setdefault("hydro", {})["flow_dialog"] = dialog.isVisible()
+    state["hydro_started"] = time.monotonic()
+    dialog.line.emit(10000.0)
+
+
+@check(10000)
+def hydro_flow_wait():
+    window = state["window"]
+    if window.hydro.job is not None \
+            and time.monotonic() - state["hydro_started"] < 45.0:
+        return 500
+    out = result["hydro"]
+    out["line_status"] = window.hydro.flow_dialog.status.text()
+    # Водосбор точки на линии стока ниже по течению обязан накрыть
+    # её начало.
+    line = [p for p in window.myplaces.places
+            if p.key not in state["hydro_before"]][0]
+    points = line.shape.points
+    state["hydro_lower"] = points[len(points) * 2 // 3]
+    dialog = window.hydro.flow_here(*state["hydro_lower"])
+    state["hydro_started"] = time.monotonic()
+    dialog.basin.emit(10000.0)
+
+
+@check(10000)
+def hydro_basin_wait():
+    window = state["window"]
+    if window.hydro.job is not None \
+            and time.monotonic() - state["hydro_started"] < 45.0:
+        return 500
+    out = result["hydro"]
+    out["basin_status"] = window.hydro.flow_dialog.status.text()
+    added = [p for p in window.myplaces.places
+             if p.key not in state["hydro_before"]]
+    out["added"] = [(p.name, p.shape.kind, len(p.shape.points))
+                    for p in added]
+    from planetx.core.pick import distance
+    import numpy as np
+
+    def longest(points, closed):
+        pts = np.radians(np.array(points + points[:1] if closed
+                                  else points))
+        dy = np.diff(pts[:, 0])
+        dx = np.diff(pts[:, 1]) * np.cos(pts[:-1, 0])
+        return float(np.max(np.hypot(dx, dy))) * 6371000.0
+
+    out["longest_m"] = [round(longest(p.shape.points,
+                                      p.shape.kind == "polygon"), 1)
+                        for p in added]
+    out["ends"] = [[p.shape.points[0], p.shape.points[-1]] for p in added]
+    with open(os.path.join(TEMP, "planetx_basin.json"), "w") as fh:
+        json.dump([list(p.shape.points) for p in added], fh)
+    basin = [p for p in added if p.shape.kind == "polygon"]
+    out["start_in_basin"] = bool(basin) and distance(
+        "polygon", basin[0].shape.points, *HYDRO_BAKSAN) == 0.0
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_basin.png"))
+    keys = [p.key for p in added]
+    keys += [n.key for n in window.myplaces.nodes()
+             if n.key not in state["hydro_folders"]
+             and n.key not in keys]
+    window.myplaces.remove_many(keys)
+    out["removed"] = not [p for p in window.myplaces.places
+                          if p.key not in state["hydro_before"]]
+    window.hydro.flow_dialog.close()
 
 
 @check(8000)

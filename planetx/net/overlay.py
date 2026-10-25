@@ -33,7 +33,7 @@ from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
                        QgsVectorTileBasicRenderer,
                        QgsVectorTileBasicRendererStyle, QgsVectorTileLayer,
                        QgsWkbTypes)
-from qgis.PyQt.QtCore import (QObject, QRunnable, QSize, QThreadPool, QTimer,
+from qgis.PyQt.QtCore import (QObject, QRunnable, QSize, QTimer,
                               QUrl, pyqtSignal)
 from qgis.PyQt import sip
 from qgis.PyQt.QtGui import QColor, QImage
@@ -44,6 +44,7 @@ from ..core.mipmap import mip_chain
 from ..core.overlay import mercator_bounds
 from ..core.tile_queue import TileQueue
 from ..qt_compat import enum
+from . import pools
 from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, HTTP_STATUS, MARK,
                      NO_ERROR, PREFER_CACHE, REDIRECT, SAFE_REDIRECT,
                      STALL, Throttle, network)
@@ -55,9 +56,6 @@ REDIRECT_TARGET = enum(QNetworkRequest, "Attribute",
 
 TILE_SIZE = 256
 MAX_JOBS = 6  # отрисовок одновременно, считает QGIS в своих потоках
-# Подготовка картинки - Python и NumPy, она держит GIL. Один поток
-# делит GIL с главным меньше двух, а успевает сотни картинок в секунду.
-PREPARE_THREADS = 1
 
 OPENFREEMAP_TILEJSON = sources.VECTOR_TILEJSON  # core/sources.py
 OPENFREEMAP_ATTRIBUTION = (
@@ -641,6 +639,8 @@ class _PrepareTask(QRunnable):
         self.sink = sink
 
     def run(self):
+        if not pools.running(self):
+            return  # наложение снято
         with np.errstate(all="ignore"):
             image = self.image
             if image.format() != PREMULTIPLIED:
@@ -652,7 +652,8 @@ class _PrepareTask(QRunnable):
             rgba = rows[:, :image.width() * 4].reshape(
                 image.height(), image.width(), 4)
             levels = mip_chain(rgba.copy()) if rgba[..., 3].any() else None
-        self.sink.done.emit(self.key, levels)
+        if pools.running(self):
+            self.sink.done.emit(self.key, levels)
 
 
 # Контекст выражений картинок слоёв - глобальные переменные и переменные
@@ -704,9 +705,8 @@ class LayerOverlay(QObject):
         # его сигнала, значит уронить QGIS. Они отпускаются в следующем
         # проходе цикла событий после своего сигнала finished.
         self.retired = set()
-        self.pool = QThreadPool(self)
-        self.pool.setMaxThreadCount(PREPARE_THREADS)
-        self.sink = _Prepared(self)
+        self.sink = _Prepared()
+        self.lane = pools.Lane("prepare", self.sink)
         self.sink.done.connect(self._prepared)
         self.preparing = {}
         self.last_start = 0.0
@@ -835,7 +835,7 @@ class LayerOverlay(QObject):
         else:
             self.queue.done(key, ok=True)
             self.preparing[key] = True
-            self.pool.start(_PrepareTask(key, job.renderedImage(),
+            self.lane.start(_PrepareTask(key, job.renderedImage(),
                                          self.sink))
         self._pump()
         self._check_idle()
@@ -865,8 +865,7 @@ class LayerOverlay(QObject):
         self.retired.clear()
         self.retain([])
         self.sink.done.disconnect()
-        self.pool.clear()
-        self.pool.waitForDone(1000)
+        self.lane.stop()
         # Слои вне проекта (растры картинок, векторная основа) живут, пока
         # на них есть ссылка. Список снимается здесь, иначе они
         # удаляются при разборе Python после выхода QGIS, и QGIS 3.36

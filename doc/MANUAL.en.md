@@ -286,7 +286,7 @@ take effect at once, without the Refresh button. The rows go like this:
 | Rows | What they hold |
 |---|---|
 | Base map | The base map - imagery or a map. A click on the row opens a menu - Esri World Imagery, OpenStreetMap, the QGIS XYZ Tiles connections and Add tile source… |
-| Relief | The check box turns heights and hill shading on. A click on the name opens a menu - land heights Terrarium, Copernicus DEM 30 m or GEDTM30, Sea and ocean depths with the depth source - the height tiles or GEBCO 2026 - and Data sources… |
+| Relief | The check box turns heights and hill shading on. A click on the name opens a menu - land heights Terrarium, Copernicus DEM 30 m, GEDTM30, ALOS AW3D30, NASADEM or USGS 3DEP 10 m, Sea and ocean depths with the depth source - the height tiles or GEBCO 2026 - and Data sources… |
 | Layers that are on | Layers and the map of the catalogue, the coordinate grid, 3D buildings, contours - everything that is switched on |
 | Vector base groups | Borders and names, Transport, Nature, while something in them is on |
 
@@ -1281,6 +1281,16 @@ tiles:
 - GEDTM30 30 m - the model of the bare ground without forest and buildings,
   OpenGeoHub, CC BY 4.0. It is one large file, its pieces take longer
   to read.
+- ALOS AW3D30 30 m - the JAXA surface model, like Copernicus, forest
+  and buildings are part of the height.
+- NASADEM 30 m - the improved SRTM without voids, NASA, only between
+  60° S and 60° N.
+- USGS 3DEP 10 m - the model of the bare ground without forest and
+  buildings, the USA only.
+
+The ALOS, NASADEM and 3DEP files are copies on Microsoft Planetary
+Computer. The plugin takes a temporary access key to them without an
+account. Outside the coverage of a model the height tiles remain.
 
 The height tiles still give the sea floor and the view from afar. From
 level 9 the model gives the land heights, deeper than level 12 the model
@@ -1288,7 +1298,9 @@ pieces are not read again but resampled from the ones already read. The
 model credit stands in the view corner. The model is read from the
 network for every new area, without the network the height tiles
 remain. At Mount Narodnaya the height tiles give 1816 m, Copernicus and
-GEDTM30 give 1888 m, the summit is 1895 m.
+GEDTM30 give 1888 m, ALOS AW3D30 gives 1892 m, the summit is 1895 m.
+At Pikes Peak in the USA 3DEP gives 4302 m with the summit at
+4302 m.
 
 The Sea depths list chooses the floor of seas and oceans:
 
@@ -2686,6 +2698,53 @@ of 5 km. The computation runs in parts, and the globe responds to the
 mouse meanwhile. The line under the fields shows the share done.
 Insolation is computed only for the Earth.
 
+### Flooding
+
+The Flooding from here… item of the menu on the globe opens the
+Flooding window for the point under the cursor. The Radius field sets
+half the side of the calculation square. The Build button loads the
+heights of the square and puts the water level 2 m above the point.
+The Water level field sets the elevation of the water surface above
+sea level, the Rise slider lifts the water up to 50 m above the point.
+The water on the globe and the summary under the fields change at
+once, without a new calculation.
+
+Water fills everything below the level that it reaches from the point
+through places below the level. A basin behind a ridge higher than the
+level stays dry, even if its bottom is lower. The summary gives the
+area, the water volume and the greatest depth. If the water reached
+the edge of the square, the window says so, then a larger radius is
+needed. A point in a river or in the sea shows the rise of water in
+them. The grid has 601 nodes per side, with a radius of 5 km the step
+is about 17 m. The heights come from the terrain of the globe, with
+the 30 m model and own terrain when they are on. The water is visible
+with the terrain switched on.
+
+The To QGIS project… button writes a GeoTIFF depth raster and a
+GeoPackage flood outline next to it. The layers go to the PlanetX -
+terrain water group. The Remove button takes the water off the
+globe.
+
+### Water flow and catchment
+
+The Water flow from here… item of the menu on the globe opens the
+Water flow window for the point under the cursor. The Flow line button
+traces the path of water from the point down the terrain and writes it
+as a line to My Places with its length and drop. The Catchment button
+builds the area from which water flows to the point and the main
+stream. They go to My Places as a folder, the catchment outline keeps
+the area, the heights, the length, fall and gradient of the main
+stream, the mean hillslope gradient by SP 33-101-2003 and the stream
+network density. The catchment point snaps to a stream within 150 m,
+so a click near a river gives the catchment of the river.
+
+The calculation uses D8 flow directions over the terrain with the
+depressions filled up to their spill level. So the line passes
+through lakes and closed basins. The line ends at the edge of the
+calculation square, a catchment larger than the square is not counted
+in full, the window says so. The calculation is ported from the
+Isoliner plugin.
+
 ---
 
 ## Subsurface mode
@@ -3567,13 +3626,13 @@ Vesta, Ceres and small moons are not spherical in reality, their
 imagery is slightly distorted on the sphere.
 
 Mars imagery is the Viking MDIM2.1 colour mosaic, about 650 m per
-pixel. Moon imagery is the LOLA albedo map with hill shading, about
-670 m per pixel. Mars has a thin, dusty atmosphere, the Moon has none.
+pixel. Moon imagery is the LROC WAC mosaic, about 330 m per pixel at
+the equator. Mars has a thin, dusty atmosphere, the Moon has none.
 
-Mars terrain is built from the MOLA MEGDR heights, Moon terrain from
-the LOLA GDR heights. Heights are rounded to 10 m on Mars and to 20 m
-on the Moon. A height pixel at the equator is 2.6 km on Mars and
-1.3 km on the Moon. The terrain is switched on with the same Terrain
+Mars terrain is built from the MOLA 463 m height mosaic, Moon
+terrain from the LOLA 118 m height mosaic, both by USGS Astrogeology.
+A height pixel at the equator is about 650 m on Mars and about 330 m
+on the Moon. The terrain is switched on with the same Terrain
 row of the Layers section, the vertical scale is set in the view
 properties. Mars heights refer to the areoid, Moon heights refer to
 a sphere of radius 1737.4 km. Depressions below zero are kept, the
@@ -3906,9 +3965,9 @@ Terrain Tiles, SRTM, GMTED, ETOPO1 and other data. Clouds - NASA GIBS,
 VIIRS imagery. Temperature - NASA GIBS, MODIS and GHRSST MUR. Stars - the Yale Bright Star Catalogue. Milky Way -
 NASA/Goddard Space Flight Center Scientific Visualization Studio, Gaia
 DR2 - ESA/Gaia/DPAC. Place search - Nominatim. Mars - NASA, USGS,
-Viking MDIM2.1, the Moon - USGS, LRO LOLA, tiles of both bodies -
-OpenPlanetaryMap. Mars heights - NASA MGS MOLA MEGDR, Moon heights -
-NASA LRO LOLA GDR. Imagery of other bodies - global mosaics of USGS
+Viking MDIM2.1, OpenPlanetaryMap tiles, the Moon - NASA, GSFC, ASU,
+LRO LROC WAC, USGS. Mars heights - NASA MGS MOLA, USGS, Moon heights -
+NASA LRO LOLA, USGS. Imagery of other bodies - global mosaics of USGS
 Astrogeology and NASA Photojournal from data of NASA, JPL, DLR and
 mission institutes, the credit of each body is in the corner of the
 view. Constellation lines, names and star names -
