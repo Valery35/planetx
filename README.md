@@ -7,7 +7,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.14.0.
+A 3D globe inside QGIS. PlanetX version 1.15.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -198,7 +198,9 @@ and atmosphere, from space down to single streets.
   of direct sunlight per day for chosen dates, with mountain shadows.
   Flooding fills everything below a water level that the water reaches
   from a point, the level changes with a slider. Water flow from a
-  point gives the flow line and the catchment with the main stream.
+  point gives the flow line and the catchment with the main stream,
+  the stream network and the catchment of a placemark. Sea level rises
+  or falls over the whole globe.
 - **Coordinates.** Degrees, degrees-minutes-seconds, UTM or MGRS in
   the status line, search understands all four.
 - **My Places.** Placemarks, paths and polygons are drawn by clicks

@@ -2700,7 +2700,8 @@ Insolation is computed only for the Earth.
 
 ### Flooding
 
-The Flooding from here… item of the menu on the globe opens the
+Flooding, water flow and sea level are collected in the Hydrology
+submenu of the menu on the globe. The Flooding from here… item opens the
 Flooding window for the point under the cursor. The Radius field sets
 half the side of the calculation square. The Build button loads the
 heights of the square and puts the water level 2 m above the point.
@@ -2727,7 +2728,7 @@ globe.
 
 ### Water flow and catchment
 
-The Water flow from here… item of the menu on the globe opens the
+The Water flow from here… item of the Hydrology submenu opens the
 Water flow window for the point under the cursor. The Flow line button
 traces the path of water from the point down the terrain and writes it
 as a line to My Places with its length and drop. The Catchment button
@@ -2744,6 +2745,33 @@ through lakes and closed basins. The line ends at the edge of the
 calculation square, a catchment larger than the square is not counted
 in full, the window says so. The calculation is ported from the
 Isoliner plugin.
+
+The Stream network button builds the streams of the square with a
+catchment of at least the Streams from field and writes them as a
+GeoPackage line layer to the PlanetX - terrain water group. Each line
+keeps its Strahler order and catchment area, the line width grows with
+the order. The smaller the Streams from field, the denser the network.
+
+The Placemark catchment item of the menu of a path or polygon in My
+Places builds the area from which water comes to the placemark. A path
+serves as a cross-section of a valley or a ditch, a polygon as a plot.
+The catchment outline goes as a polygon next to the placemark, it keeps
+the area and the heights. If the catchment reaches the edge of the
+square, the square grows 2.5 times and the calculation repeats until
+half its side reaches 50 km.
+
+### Sea level
+
+The Sea level… item of the Hydrology submenu opens the Sea level
+window. The field and the slider set the level above the present one,
+from -130 to +100 m. Water fills everything below the level over the
+whole globe. The connection with the sea is not checked, so lowlands
+inside continents are flooded too, with a raised level also land below
+zero, for example the polders of the Netherlands. A level below zero
+uncovers the shelf and switches on the sea and ocean depths. About
+-120 m is the last glacial maximum, about +70 m is the melting of all
+glaciers. The Present button returns the level to 0. The water is
+visible with the terrain switched on.
 
 ---
 

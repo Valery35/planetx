@@ -10,14 +10,17 @@
 
 Затопление - поверхность воды на уровне сеткой «flood» воды водоёмов
 вида (GlobeView.lake_water), уровень меняется без пересчёта.
-Линия стока и водосбор ложатся в «Мои метки».
+Линия стока, водосбор точки и водосбор метки ложатся в «Мои метки»,
+речная сеть - слоем GeoPackage в проект QGIS. Уровень моря по всему
+глобусу - проход воды тайлов на высоте GlobeView.sea_level.
 """
 import math
 import os
 import time
 
 import numpy as np
-from qgis.core import QgsProject, QgsVectorLayer
+from qgis.core import (QgsLineSymbol, QgsProject, QgsProperty,
+                       QgsSingleSymbolRenderer, QgsVectorLayer)
 from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (QDialog, QDialogButtonBox, QDoubleSpinBox,
                                  QFileDialog, QFormLayout, QLabel,
@@ -26,6 +29,7 @@ from qgis.PyQt.QtWidgets import (QDialog, QDialogButtonBox, QDoubleSpinBox,
 from ..core import bathymetry, ellipsoid, hydro, subsurface, viewshed
 from ..core.features import Shape
 from ..i18n import tr
+from ..net.overlay import STROKE_WIDTH
 from ..qt_compat import enum
 from .export import _to_group, add_raster
 from .viewshed import fit_status
@@ -43,6 +47,17 @@ LINE_COLOR = (30, 110, 255, 255)
 BASIN_COLOR = (20, 90, 220, 255)
 BASIN_FILL = (60, 140, 255, 60)
 DEPTH_COLORS = ((200, 230, 255), (0, 40, 140))
+# Уровень моря окна «Уровень моря», м: от последнего ледникового
+# максимума (около -120 м) до таяния всех ледников (около +70 м)
+# с запасом - выбор помощника, утверждает автор.
+# Водосбор метки у края участка считается на участке в GROW раз шире,
+# пока полусторона не дойдёт до SHAPE_MOST метров. Выбор помощника,
+# утверждает автор.
+GROW = 2.5
+SHAPE_MOST = 50000.0
+SEA_LOW = -130
+SEA_HIGH = 100
+RIVER_COLOR = "30,110,255"
 
 
 def group_name():
@@ -177,10 +192,12 @@ class FloodDialog(QDialog):
 
 
 class FlowDialog(QDialog):
-    """Окно «Сток воды». Сигналы line и basin - радиус в метрах."""
+    """Окно «Сток воды». Сигналы line, basin и rivers - радиус
+    в метрах."""
 
     line = pyqtSignal(float)
     basin = pyqtSignal(float)
+    rivers = pyqtSignal(float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -191,11 +208,17 @@ class FlowDialog(QDialog):
             "Половина стороны квадрата расчёта. Линия стока кончается "
             "у его края, водосбор больше квадрата учитывается не "
             "целиком. Шаг сетки - около шестисотой доли стороны."))
+        self.net = _spin(self, 0.1, 1000.0, hydro.NET_AREA / 1e6,
+                         tr(" км²"), decimals=1)
+        self.net.setToolTip(tr(
+            "Речная сеть - водотоки с водосбором не меньше этой площади. "
+            "Меньше - сеть гуще, с ручьями и оврагами."))
         self.status = QLabel(self)
         self.status.setWordWrap(True)
         form = QFormLayout()
         form.addRow(tr("Точка"), self.place)
         form.addRow(tr("Радиус"), self.radius)
+        form.addRow(tr("Водотоки от"), self.net)
         buttons = QDialogButtonBox(self)
         line = QPushButton(tr("Линия стока"), self)
         line.setToolTip(tr(
@@ -211,7 +234,13 @@ class FlowDialog(QDialog):
             "и длиной водотока. Точка притягивается к водотоку рядом."))
         basin.clicked.connect(
             lambda: self.basin.emit(self.radius.value() * 1000.0))
-        for button in (line, basin):
+        rivers = QPushButton(tr("Речная сеть"), self)
+        rivers.setToolTip(tr(
+            "Водотоки квадрата с порядком по Стралеру - слой линий "
+            "GeoPackage в проект QGIS, толщина линии растёт с порядком."))
+        rivers.clicked.connect(
+            lambda: self.rivers.emit(self.radius.value() * 1000.0))
+        for button in (line, basin, rivers):
             buttons.addButton(button, enum(QDialogButtonBox, "ButtonRole",
                                            "ActionRole"))
         buttons.addButton(enum(QDialogButtonBox, "StandardButton", "Close"))
@@ -221,6 +250,69 @@ class FlowDialog(QDialog):
         layout.addWidget(self.status)
         layout.addWidget(buttons)
         fit_status(self, layout)
+
+
+class SeaLevelDialog(QDialog):
+    """Окно «Уровень моря». Сигнал level - уровень, м над нынешним."""
+
+    level = pyqtSignal(float)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(tr("Уровень моря"))
+        self.value = _spin(self, SEA_LOW, SEA_HIGH, 0.0, tr(" м"))
+        self.value.setKeyboardTracking(False)
+        self.value.setToolTip(tr(
+            "Уровень моря над нынешним. Вода заливает всё ниже уровня, "
+            "ниже нуля открывает шельф. Около -120 м - последний "
+            "ледниковый максимум, около +70 м - таяние всех ледников."))
+        self.slider = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
+        self.slider.setRange(SEA_LOW, SEA_HIGH)
+        self.slider.setToolTip(self.value.toolTip())
+        self.value.valueChanged.connect(self._spun)
+        self.slider.valueChanged.connect(self._slid)
+        self.status = QLabel(self)
+        self.status.setWordWrap(True)
+        form = QFormLayout()
+        form.addRow(tr("Уровень"), self.value)
+        form.addRow("", self.slider)
+        buttons = QDialogButtonBox(self)
+        reset = QPushButton(tr("Нынешний"), self)
+        reset.setToolTip(tr("Вернуть нынешний уровень моря."))
+        reset.clicked.connect(lambda: self.value.setValue(0.0))
+        buttons.addButton(reset, enum(QDialogButtonBox, "ButtonRole",
+                                      "ActionRole"))
+        buttons.addButton(enum(QDialogButtonBox, "StandardButton", "Close"))
+        buttons.rejected.connect(self.close)
+        layout = QVBoxLayout(self)
+        layout.addLayout(form)
+        layout.addWidget(self.status)
+        layout.addWidget(buttons)
+        fit_status(self, layout)
+
+    def _spun(self, value):
+        self.slider.blockSignals(True)
+        self.slider.setValue(int(round(value)))
+        self.slider.blockSignals(False)
+        self.level.emit(value)
+
+    def _slid(self, value):
+        self.value.setValue(float(value))
+
+
+class _Message:
+    """Строка состояния окна глобуса вместо строки окна: расчёт по метке
+    «Моих меток» идёт без своего окна."""
+
+    def __init__(self, window, point):
+        self.window = window
+        self.point = point
+        self.status = self
+
+    def setText(self, text):
+        if text:
+            self.window.message = (text, time.monotonic())
+            self.window._show_state()
 
 
 class HydroTool(QObject):
@@ -233,6 +325,7 @@ class HydroTool(QObject):
         self.state = None  # затопление: сетка, высоты, уровни, уровень
         self.flood_dialog = None
         self.flow_dialog = None
+        self.sea_dialog = None
         self.timer = QTimer(self)
         self.timer.setInterval(POLL)
         self.timer.timeout.connect(self._poll)
@@ -266,6 +359,8 @@ class HydroTool(QObject):
                 self.flow_dialog, r, self._flow_line))
             dialog.basin.connect(lambda r: self._start(
                 self.flow_dialog, r, self._basin))
+            dialog.rivers.connect(lambda r: self._start(
+                self.flow_dialog, r, self._rivers))
             self.flow_dialog = dialog
         dialog.point = (lat, lon)
         dialog.place.setText(self.window._point_title(lat, lon, None))
@@ -273,6 +368,62 @@ class HydroTool(QObject):
         dialog.show()
         dialog.raise_()
         return dialog
+
+    def sea_level_here(self):
+        """Окно «Уровень моря» - пункт подменю «Гидрология»."""
+        dialog = self.sea_dialog
+        if dialog is None:
+            dialog = SeaLevelDialog(self.window)
+            dialog.level.connect(self.set_sea_level)
+            self.sea_dialog = dialog
+        dialog.value.setValue(self.window.view.sea_level)
+        self._sea_text()
+        dialog.show()
+        dialog.raise_()
+        return dialog
+
+    def set_sea_level(self, level):
+        """Уровень моря level м над нынешним по всему глобусу. Ниже нуля
+        нужны глубины морей - они включаются."""
+        window = self.window
+        view = window.view
+        view.sea_level = float(level)
+        if level < 0.0 and window.planet.earth and not view.sea_floor \
+                and not window._geoid_on():
+            window.set_sea_depths(True)
+        view.update()
+        self._sea_text()
+
+    def _sea_text(self):
+        dialog = self.sea_dialog
+        if dialog is None:
+            return
+        level = self.window.view.sea_level
+        if level == 0.0:
+            text = tr("Нынешний уровень моря.")
+        else:
+            text = tr("Вода заливает всё ниже уровня по всему глобусу. "
+                      "Связь с морем не проверяется, поэтому низины "
+                      "внутри материков тоже заливаются.")
+        if not self.window._relief_target():
+            text += " " + tr("Вода видна при включённом рельефе.")
+        dialog.status.setText(text)
+
+    def catchment_of(self, item, side=None):
+        """Водосбор пути или многоугольника «Моих меток» - всё, откуда
+        вода приходит в метку (инструмент 2.16 Isoliner). Итог -
+        многоугольник в «Моих метках» рядом с меткой. Водосбор у края
+        участка считается заново на участке в GROW раз шире, не шире
+        SHAPE_MOST."""
+        points = list(item.shape.points)
+        if not points:
+            return
+        lat, lon, least = hydro.shape_grid(points, ellipsoid.A)
+        side = max(least, side or 0.0)
+        sink = _Message(self.window, (lat, lon))
+        self._start(sink, side, lambda dialog, grid, z, partial:
+                    self._shape_basin(dialog, grid, z, partial, item,
+                                      side))
 
     # --- высоты участка ----------------------------------------------------
 
@@ -320,6 +471,88 @@ class HydroTool(QObject):
         job["done"](dialog, grid, z, bool(missing))
 
     # --- затопление --------------------------------------------------------
+
+    def _rivers(self, dialog, grid, z, partial, path=None):
+        """Речная сеть квадрата слоем GeoPackage в проект QGIS. path -
+        файл, без него - окно выбора."""
+        area = dialog.net.value() * 1e6
+        streams = hydro.rivers(z, grid.cell, area)
+        if not streams:
+            dialog.status.setText(tr("Водотоков с таким водосбором "
+                                     "в квадрате нет."))
+            return None
+        if path is None:
+            path, _ = QFileDialog.getSaveFileName(
+                self.window, tr("Речная сеть в проект QGIS"),
+                os.path.join(QgsProject.instance().homePath()
+                             or os.path.expanduser("~"), "rivers.gpkg"),
+                tr("GeoPackage (*.gpkg)"))
+        if not path:
+            return None
+        lines = []
+        for stream in streams:
+            lats, lons = hydro.latlon(grid, stream.rows, stream.cols,
+                                      ellipsoid.A)
+            lines.append((list(zip(lons.tolist(), lats.tolist())),
+                          stream.order, stream.area / 1e6))
+        if not write_rivers(path, lines):
+            dialog.status.setText(tr("Речная сеть не записана в "
+                                     "«{path}».", path=path))
+            return None
+        name = os.path.splitext(os.path.basename(path))[0]
+        layer = QgsVectorLayer(path + "|layername=rivers", name, "ogr")
+        if layer.isValid():
+            style_rivers(layer)
+            _to_group(layer, group_name())
+        top = max(s.order for s in streams)
+        text = tr("В проект добавлено водотоков {count}, наибольший "
+                  "порядок {order}.", count=len(streams), order=top)
+        if partial:
+            text += " " + tr("Загружены не все высоты, расчёт шёл "
+                             "по менее подробным.")
+        dialog.status.setText(text)
+        return path
+
+    def _shape_basin(self, dialog, grid, z, partial, item, side=None):
+        kind = item.shape.kind
+        seeds, length = hydro.shape_seeds(grid, kind, item.shape.points,
+                                          ellipsoid.A)
+        if not seeds:
+            dialog.status.setText(tr("Метка за краем данных высот."))
+            return None
+        result = hydro.shape_catchment(z, seeds, grid.cell, length)
+        if result.edge and side is not None \
+                and side < SHAPE_MOST * 0.99:
+            self.catchment_of(item, min(side * GROW, SHAPE_MOST))
+            return None
+        rings = hydro.outline(result.mask)
+        if not rings:
+            dialog.status.setText(tr("К метке вода не стекает: водосбора "
+                                     "нет."))
+            return None
+        window = self.window
+        name = tr("Водосбор «{name}»", name=item.name or tr("Без названия"))
+        rep = result.report
+        text = tr("Площадь {area} км², высоты {low}-{high} м, средняя "
+                  "{mean} м.", area=number(rep.get("area_km2")),
+                  low=number(rep.get("z_min"), 4),
+                  high=number(rep.get("z_max"), 4),
+                  mean=number(rep.get("z_mean"), 4))
+        if result.edge:
+            text += " " + tr("Водосбор доходит до края участка, его часть "
+                             "за краем не учтена. Нужен больший радиус.")
+        if partial:
+            text += " " + tr("Загружены не все высоты, расчёт шёл "
+                             "по менее подробным.")
+        ring = rings[0]
+        lats, lons = hydro.latlon(grid, ring[:, 0], ring[:, 1], ellipsoid.A)
+        key = window.myplaces.add(
+            Shape("polygon", list(zip(lats.tolist(), lons.tolist())),
+                  BASIN_COLOR, 2.0, BASIN_FILL, name=name),
+            measure=text, folder=window.panel.current_folder(),
+            body=window.body_key())
+        dialog.status.setText(tr("{name}: {text}", name=name, text=text))
+        return key
 
     def _build_flood(self, radius_m):
         self.flood_dialog.reset()
@@ -605,3 +838,45 @@ def write_flood(path, polygons, grid, depth, mask, level):
     out = None
     source = None
     return code == 0
+
+
+def write_rivers(path, lines):
+    """Звенья речной сети в слой rivers файла GeoPackage path, EPSG:4326,
+    поля order (порядок по Стралеру) и area_km2 (водосбор в замыкании
+    звена). lines - (точки (долгота, широта), порядок, площадь)."""
+    from osgeo import ogr, osr
+    from .inset import warm
+    warm()
+    driver = ogr.GetDriverByName("GPKG")
+    if os.path.exists(path):
+        driver.DeleteDataSource(path)
+    out = driver.CreateDataSource(path)
+    if out is None:
+        return False
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+    srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    layer = out.CreateLayer("rivers", srs, ogr.wkbLineString)
+    layer.CreateField(ogr.FieldDefn("order", ogr.OFTInteger))
+    layer.CreateField(ogr.FieldDefn("area_km2", ogr.OFTReal))
+    for points, order, area in lines:
+        feature = ogr.Feature(layer.GetLayerDefn())
+        feature.SetField("order", int(order))
+        feature.SetField("area_km2", float(area))
+        line = ogr.Geometry(ogr.wkbLineString)
+        for lon, lat in points:
+            line.AddPoint_2D(lon, lat)
+        feature.SetGeometry(line)
+        layer.CreateFeature(feature)
+    out = None
+    return True
+
+
+def style_rivers(layer):
+    """Синие линии водотоков, толщина растёт с порядком."""
+    symbol = QgsLineSymbol.createSimple({"line_color": RIVER_COLOR,
+                                         "line_width": "0.2"})
+    symbol.symbolLayer(0).setDataDefinedProperty(
+        STROKE_WIDTH, QgsProperty.fromExpression(
+            '0.15 + 0.2 * "order"'))
+    layer.setRenderer(QgsSingleSymbolRenderer(symbol))

@@ -5664,6 +5664,62 @@ EN = {
     "Главный водоток {km} км, падение {fall} м, уклон {slope} "
     "промилле.":
         "Main stream {km} km, fall {fall} m, gradient {slope} per mille.",
+    "Речная сеть - водотоки с водосбором не меньше этой площади. "
+    "Меньше - сеть гуще, с ручьями и оврагами.":
+        "The stream network takes streams with a catchment of at least "
+        "this area. Smaller means a denser network with brooks and "
+        "gullies.",
+    " км²": " km²",
+    "Водотоки от": "Streams from",
+    "Речная сеть": "Stream network",
+    "Водотоки квадрата с порядком по Стралеру - слой линий "
+    "GeoPackage в проект QGIS, толщина линии растёт с порядком.":
+        "Streams of the square with the Strahler order, a GeoPackage "
+        "line layer in the QGIS project, the line width grows with the "
+        "order.",
+    "Уровень моря": "Sea level",
+    "Уровень моря над нынешним. Вода заливает всё ниже уровня, "
+    "ниже нуля открывает шельф. Около -120 м - последний "
+    "ледниковый максимум, около +70 м - таяние всех ледников.":
+        "Sea level above the present one. Water fills everything below "
+        "the level, below zero it uncovers the shelf. About -120 m is the "
+        "last glacial maximum, about +70 m is the melting of all "
+        "glaciers.",
+    "Уровень": "Level",
+    "Нынешний": "Present",
+    "Вернуть нынешний уровень моря.": "Return to the present sea level.",
+    "Нынешний уровень моря.": "Present sea level.",
+    "Вода заливает всё ниже уровня по всему глобусу. "
+    "Связь с морем не проверяется, поэтому низины "
+    "внутри материков тоже заливаются.":
+        "Water fills everything below the level over the whole globe. "
+        "The connection with the sea is not checked, so lowlands inside "
+        "continents are flooded too.",
+    "Водотоков с таким водосбором "
+    "в квадрате нет.":
+        "There are no streams with such a catchment in the square.",
+    "Речная сеть в проект QGIS": "Stream network to the QGIS project",
+    "Речная сеть не записана в "
+    "«{path}».": "The stream network is not written to \"{path}\".",
+    "В проект добавлено водотоков {count}, наибольший "
+    "порядок {order}.":
+        "Streams added to the project: {count}, highest order {order}.",
+    "Метка за краем данных высот.":
+        "The placemark is beyond the height data.",
+    "К метке вода не стекает: водосбора "
+    "нет.": "No water flows to the placemark, there is no catchment.",
+    "Водосбор «{name}»": "Catchment of \"{name}\"",
+    "Водосбор метки": "Placemark catchment",
+    "Гидрология": "Hydrology",
+    "Вода от точки до заданной отметки, площадь, объём "
+    "и глубины.":
+        "Water from the point up to a chosen level, area, volume and "
+        "depths.",
+    "Линия стока, водосбор и речная сеть вокруг точки.":
+        "Flow line, catchment and stream network around the point.",
+    "Уровень моря…": "Sea level…",
+    "Подъём и опускание уровня моря по всему глобусу.":
+        "Raising and lowering the sea level over the whole globe.",
 }
 
 _language = None

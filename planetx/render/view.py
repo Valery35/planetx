@@ -500,6 +500,10 @@ class GlobeView(QOpenGLWidget):
         # Дно океана: высоты Земли ниже нуля не обнуляются, над ними
         # рисуется вода (_draw_water). Включает строка «Дно океана».
         self.sea_floor = False
+        # Уровень моря, м над нынешним: подъём и опускание воды по всему
+        # глобусу (ui/hydro.py, окно «Уровень моря»). Вода заливает всё
+        # ниже уровня, связность с морем не проверяется.
+        self.sea_level = 0.0
         # Вода и суша ниже уровня моря по векторной основе: тайлы кладёт
         # окно (ui/watermask.py).
         self.water = WaterMask()
@@ -898,6 +902,7 @@ class GlobeView(QOpenGLWidget):
                 self._mask_more = False
                 QTimer.singleShot(0, self.update)
         gl.glUniform1f(self.u_water, 1.0)
+        gl.glUniform1f(self.u_level, self.sea_level * self.store.scale)
         color = WATER_COLOR
         if self.gibs["emag"].shown:
             color = color[:3] + (color[3] * WATER_UNDER_FIELD,)
@@ -1673,6 +1678,7 @@ class GlobeView(QOpenGLWidget):
         self.u_water_color = GL.glGetUniformLocation(self.program,
                                                      "u_water_color")
         self.u_shallow = GL.glGetUniformLocation(self.program, "u_shallow")
+        self.u_level = GL.glGetUniformLocation(self.program, "u_level")
         self.u_wedge_on = GL.glGetUniformLocation(self.program,
                                                   "u_wedge_on")
         self.u_wedge = GL.glGetUniformLocation(self.program, "u_wedge")
@@ -1685,6 +1691,7 @@ class GlobeView(QOpenGLWidget):
         gl.glUseProgram(self.program)
         gl.glUniform1f(self.u_alpha, 1.0)
         gl.glUniform1f(self.u_water, 0.0)
+        gl.glUniform1f(self.u_level, 0.0)
         gl.glUseProgram(0)
         self.tile_air = uniforms(self.program, AIR_UNIFORMS)
         self.sky_program = gpu.build_program(HOLE_VERTEX, SKY_FRAGMENT)
@@ -2556,7 +2563,8 @@ class GlobeView(QOpenGLWidget):
         gpu.draw_batch(items[surface:], mvps[surface:], self.u_mvp)
         if alpha < 1.0:
             gpu.gl.glUniform1f(self.u_alpha, 1.0)
-        if self.sea_floor and self.store.scale and not self.show_holes:
+        if (self.sea_floor or self.sea_level != 0.0) and self.store.scale \
+                and not self.show_holes:
             self._draw_water(items[len(self.caps):surface],
                              mvps[len(self.caps):surface],
                              fades[len(self.caps):surface], sel.draw)

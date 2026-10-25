@@ -1949,6 +1949,7 @@ class LayerPanel(QWidget):
             if key.split(":")[0] in ("line", "polygon"):
                 # Участок по контуру метки. У точки - меню на глобусе.
                 actions.append(("sentinel", tr("Космоснимки…")))
+                actions.append(("catchment", tr("Водосбор метки")))
             actions += [("snapshot", tr("Снимок вида метки")),
                         ("properties", tr("Свойства…")),
                         ("new_folder_after", tr("Новая папка")),

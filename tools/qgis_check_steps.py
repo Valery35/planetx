@@ -16667,6 +16667,142 @@ def hydro_basin_wait():
     window.hydro.flow_dialog.close()
 
 
+def _water_share(image):
+    """Доля пикселей кадра, где синий заметно больше красного."""
+    import numpy as np
+    from planetx.net.loader import image_to_rgba
+    rgba = image_to_rgba(image).astype(np.int32)
+    return round(float(((rgba[..., 2] - rgba[..., 0]) > 40).mean()), 4)
+
+
+@check(15000)
+def hydro_rivers():
+    # Речная сеть у Терскола слоем в проект, подменю «Гидрология».
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.ui import globemenu
+    window = state["window"]
+    menu = QMenu()
+    globemenu.hydro_items(window, menu, *HYDRO_BAKSAN)
+    sub = menu.actions()[0].menu()
+    result.setdefault("hydro", {})["menu"] = [
+        menu.actions()[0].text()] + [a.text() for a in sub.actions()]
+    dialog = window.hydro.flow_here(*HYDRO_BAKSAN)
+    dialog.net.setValue(2.0)
+    state["rivers_path"] = os.path.join(TEMP, "planetx_rivers.gpkg")
+    original = window.hydro._rivers
+    window.hydro._rivers = lambda d, g, z, p: original(
+        d, g, z, p, path=state["rivers_path"])
+    state["hydro_rivers_original"] = original
+    dialog.rivers.emit(8000.0)
+
+
+@check(10000)
+def hydro_rivers_wait():
+    from qgis.core import QgsProject
+    from planetx.i18n import tr as planetx_tr
+    window = state["window"]
+    if window.hydro.job is not None:
+        return 500
+    window.hydro._rivers = state["hydro_rivers_original"]
+    out = result["hydro"]
+    out["rivers_status"] = window.hydro.flow_dialog.status.text()
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr("PlanetX - вода по рельефу"))
+    layers = group.findLayers() if group is not None else []
+    out["rivers_layers"] = [n.name() for n in layers]
+    if layers:
+        layer = layers[0].layer()
+        orders = [f["order"] for f in layer.getFeatures()]
+        out["rivers_features"] = len(orders)
+        out["rivers_orders"] = sorted(set(orders))
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_rivers.png"))
+    if group is not None:
+        for node in group.findLayers():
+            QgsProject.instance().removeMapLayer(node.layerId())
+        group.parent().removeChildNode(group)
+    window.hydro.flow_dialog.close()
+
+
+@check(500)
+def hydro_shape_basin():
+    # Водосбор пути поперёк долины Баксана ниже Терскола.
+    from planetx.core.features import Shape
+    window = state["window"]
+    state["hydro_before"] = {p.key for p in window.myplaces.places}
+    key = window.myplaces.add(Shape(
+        "line", [(43.2520, 42.5600), (43.2440, 42.5650)],
+        name="Створ Баксана"))
+    state["hydro_line"] = key
+    window._place_action("catchment", key)
+
+
+@check(10000)
+def hydro_shape_basin_wait():
+    window = state["window"]
+    if window.hydro.job is not None:
+        return 500
+    out = result["hydro"]
+    added = [p for p in window.myplaces.places
+             if p.key not in state["hydro_before"]
+             and p.key != state["hydro_line"]]
+    out["shape_basin"] = [(p.name, p.shape.kind, len(p.shape.points),
+                           p.measure[:90]) for p in added]
+    out["shape_message"] = window.status.text().split(chr(10))[0][:160]
+    window.myplaces.remove_many([p.key for p in added]
+                                + [state["hydro_line"]])
+
+
+@check(8000)
+def sea_level_on():
+    # Подъём моря у дельты Рейна: Нидерланды с 250 км.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(52.3, 4.7, 150000.0, 0.0, 0.0))
+    window.view.update()
+    dialog = window.hydro.sea_level_here()
+    result.setdefault("sea_level", {})["dialog"] = dialog.isVisible()
+    dialog.value.setValue(0.0)
+
+
+@check(8000)
+def sea_level_rise():
+    window = state["window"]
+    out = result["sea_level"]
+    frame = window.view.grabFramebuffer()
+    out["water_0"] = _water_share(frame)
+    window.hydro.sea_dialog.value.setValue(10.0)
+    out["view_level"] = window.view.sea_level
+    out["slider"] = window.hydro.sea_dialog.slider.value()
+
+
+@check(12000)
+def sea_level_rise_check():
+    window = state["window"]
+    out = result["sea_level"]
+    frame = window.view.grabFramebuffer()
+    frame.save(os.path.join(TEMP, "planetx_sea_10.png"))
+    out["water_10"] = _water_share(frame)
+    out["status"] = window.hydro.sea_dialog.status.text()
+    window.hydro.sea_dialog.value.setValue(-120.0)
+    out["depths_on"] = window.view.sea_floor
+
+
+@check(8000)
+def sea_level_low_check():
+    window = state["window"]
+    out = result["sea_level"]
+    frame = window.view.grabFramebuffer()
+    frame.save(os.path.join(TEMP, "planetx_sea_-120.png"))
+    out["water_-120"] = _water_share(frame)
+    window.hydro.sea_dialog.value.setValue(0.0)
+    out["reset"] = window.view.sea_level == 0.0
+    out["gl"] = dict(window.view.gl_errors)
+    window.hydro.sea_dialog.close()
+
+
 @check(8000)
 def profile_hover_on():
     # Точка профиля под курсором графика: та же высота в другом месте

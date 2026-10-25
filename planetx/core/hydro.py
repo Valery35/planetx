@@ -237,6 +237,90 @@ def watershed(z, seed, cell, snap=None):
     return Basin(mask, (r, c), report, stream, edge)
 
 
+def shape_grid(points, radius, reach=3.0, least=2000.0, most=50000.0):
+    """Середина и полусторона квадрата расчёта для метки: квадрат
+    накрывает метку и reach её полуразмеров вокруг, не меньше least
+    и не больше most метров. points - (широта, долгота)."""
+    pts = np.radians(np.asarray(points, dtype=np.float64))
+    lat0 = float(np.mean(pts[:, 0]))
+    lon0 = float(np.mean(pts[:, 1]))
+    north = (pts[:, 0] - lat0) * radius
+    east = (pts[:, 1] - lon0) * radius * math.cos(lat0)
+    half = float(max(np.abs(north).max(), np.abs(east).max()))
+    side = min(max(half * reach, least), most)
+    return math.degrees(lat0), math.degrees(lon0), side
+
+
+def shape_seeds(grid, kind, points, radius):
+    """Узлы сетки под меткой: у пути - вдоль линии, у многоугольника -
+    внутренность и контур, у точки - узел точки (topo_gauge,
+    инструмент 2.16 Isoliner «Водосбор линий и контуров»). Возвращает
+    (плоские номера, длина метки в метрах)."""
+    lats, lons = np.asarray(points, dtype=np.float64).T
+    x, y = mercator(lats, lons, radius)
+    cols = (x - grid.x0) / grid.step
+    rows = (grid.y0 - y) / grid.step
+    # Координаты узлов для topo_gauge: x - столбец, y - минус строка,
+    # левый верхний угол клетки узла [0, 0] - (-0.5, 0.5).
+    xy = list(zip(cols.tolist(), (-rows).tolist()))
+    shape = (grid.rows, grid.cols)
+    if kind == "polygon" and len(xy) >= 3:
+        seeds = topo_gauge.cells_in_polygon([xy], -0.5, 0.5, 1.0, shape)
+        length = topo_gauge.polyline_length(xy + xy[:1])
+    else:
+        seeds = topo_gauge.cells_along_polyline(xy, -0.5, 0.5, 1.0, shape)
+        length = topo_gauge.polyline_length(xy)
+    return seeds, length * grid.cell
+
+
+Catchment = namedtuple("Catchment", "mask report edge")
+Catchment.__doc__ = """Водосбор метки: mask - узлы, report - словарь
+topo_gauge.DITCH_KEYS, edge - водосбор дошёл до края сетки."""
+
+
+def shape_catchment(z, seeds, cell, length=None):
+    """Водосбор узлов seeds - всё, откуда вода приходит в метку."""
+    filled, downstream, empty = drainage(z)
+    shape = filled.shape
+    report = topo_gauge.ditch_report(filled, downstream, shape, seeds,
+                                     float(cell), trace_len=length,
+                                     nodata_mask=empty)
+    mask = topo_gauge.catchment_mask(downstream, shape, seeds) & ~empty
+    edge = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any()
+                or mask[:, -1].any())
+    return Catchment(mask, report, edge)
+
+
+Stream = namedtuple("Stream", "rows cols order area")
+Stream.__doc__ = """Звено речной сети: узлы вниз по течению, порядок
+по Стралеру и площадь водосбора в замыкании звена, м²."""
+
+
+def rivers(z, cell, area=NET_AREA):
+    """Речная сеть сетки - водотоки с водосбором от area м², звенья
+    с порядком Стралера (topo_flow.river_network, инструмент 2.06
+    Isoliner)."""
+    filled, downstream, empty = drainage(z)
+    shape = filled.shape
+    acc = topo_flow.flow_accumulation(downstream, shape, nodata_mask=empty)
+    cells = max(1.0, float(area) / float(cell) ** 2)
+    out = []
+    for link in topo_flow.river_network(downstream, acc, cells, shape):
+        chain = list(link["cells"])
+        # Звено кончается перед узлом слияния: узел приёмника замыкает
+        # линию, иначе звенья на глобусе шли бы с разрывами.
+        nxt = int(downstream[chain[-1]])
+        if nxt >= 0:
+            chain.append(nxt)
+        idx = np.asarray(chain, dtype=np.int64)
+        if idx.size < 2:
+            continue
+        r, c = np.divmod(idx, shape[1])
+        out.append(Stream(r, c, int(link["order"]),
+                          float(link["acc_out"]) * float(cell) ** 2))
+    return out
+
+
 # --- контур ----------------------------------------------------------------
 
 def outline(mask, tolerance=0.5):

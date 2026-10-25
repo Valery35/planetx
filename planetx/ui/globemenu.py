@@ -153,10 +153,7 @@ def show(window, px, py):
         if not drawing and window._surface_source() is not None:
             menu.addAction(tr("Видимость отсюда…")).triggered.connect(
                 lambda *a: window.viewshed_here(lat, lon))
-            menu.addAction(tr("Затопление отсюда…")).triggered.connect(
-                lambda *a: window.hydro.flood_here(lat, lon))
-            menu.addAction(tr("Сток воды отсюда…")).triggered.connect(
-                lambda *a: window.hydro.flow_here(lat, lon))
+            hydro_items(window, menu, lat, lon)
         if not drawing and window.planet.earth:
             # Один пункт на все спутники, окно открывается на прежнем
             # спутнике.
@@ -184,6 +181,28 @@ def show(window, px, py):
         menu.deleteLater()
         return
     menu.popup(QCursor.pos())
+
+
+def hydro_items(window, menu, lat, lon):
+    """Подменю «Гидрология»: затопление, сток и водосбор, речная сеть
+    у точки, уровень моря по всему глобусу (ui/hydro.py). Просьба
+    автора от 25 октября 2026 года - вынести в подменю."""
+    sub = menu.addMenu(tr("Гидрология"))
+    sub.setToolTipsVisible(True)
+    for text, tip, slot in (
+            (tr("Затопление отсюда…"),
+             tr("Вода от точки до заданной отметки, площадь, объём "
+                "и глубины."),
+             lambda *a: window.hydro.flood_here(lat, lon)),
+            (tr("Сток воды отсюда…"),
+             tr("Линия стока, водосбор и речная сеть вокруг точки."),
+             lambda *a: window.hydro.flow_here(lat, lon)),
+            (tr("Уровень моря…"),
+             tr("Подъём и опускание уровня моря по всему глобусу."),
+             lambda *a: window.hydro.sea_level_here())):
+        action = sub.addAction(text)
+        action.setToolTip(tip)
+        action.triggered.connect(slot)
 
 
 def sheet_items(window, menu, lat, lon):

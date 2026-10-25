@@ -147,6 +147,57 @@ class TestFlow(unittest.TestCase):
         self.assertAlmostEqual(area, basin.mask.sum(),
                                delta=0.05 * basin.mask.sum())
 
+    def test_catchment_of_line_across_valley(self):
+        # Линия поперёк долины на юг перехватывает всё, что выше неё.
+        grid = hydro.make_grid(50.0, 30.0, 400.0, 10.0, R)
+        n = grid.rows
+        yy, xx = np.mgrid[0:n, 0:n]
+        z = np.abs(xx - n // 2) * 2.0 + (n - yy) * 0.5 + 10.0
+        lat_a, lon_a = hydro.latlon(grid, 60, 10, R)
+        lat_b, lon_b = hydro.latlon(grid, 60, n - 11, R)
+        seeds, length = hydro.shape_seeds(
+            grid, "line", [(float(lat_a), float(lon_a)),
+                           (float(lat_b), float(lon_b))], R)
+        self.assertEqual(len(seeds), n - 20)
+        self.assertAlmostEqual(length, (n - 21) * grid.cell, delta=1.0)
+        result = hydro.shape_catchment(z, seeds, grid.cell, length)
+        self.assertTrue(result.mask[0, n // 2])
+        self.assertFalse(result.mask[n - 1, n // 2])
+        self.assertTrue(result.edge)
+        self.assertGreater(result.report["area_km2"], 0.0)
+
+    def test_polygon_seeds_cover_inside(self):
+        grid = hydro.make_grid(50.0, 30.0, 200.0, 10.0, R)
+        ring = [hydro.latlon(grid, r, c, R) for r, c in
+                ((10, 10), (10, 30), (30, 30), (30, 10))]
+        seeds, _ = hydro.shape_seeds(
+            grid, "polygon", [(float(a), float(b)) for a, b in ring], R)
+        self.assertIn(20 * grid.cols + 20, seeds)
+        self.assertGreaterEqual(len(seeds), 21 * 21 - 5)
+
+    def test_rivers_join_into_higher_order(self):
+        # Две долины сходятся в одну: два звена порядка 1 и звено 2.
+        n = 61
+        yy, xx = np.mgrid[0:n, 0:n]
+        left = np.abs(xx - 15) + np.abs(yy - 45) * 0.0
+        right = np.abs(xx - 45)
+        z = np.where(yy < 40, np.minimum(left, right), np.abs(xx - 30))
+        z = z * 2.0 + (n - yy) * 1.0
+        streams = hydro.rivers(z, 10.0, area=20 * 100.0)
+        orders = sorted({s.order for s in streams})
+        self.assertIn(1, orders)
+        self.assertIn(2, orders)
+        for s in streams:
+            self.assertGreater(len(s.rows), 1)
+
+    def test_shape_grid_covers_shape(self):
+        lat, lon, side = hydro.shape_grid([(50.0, 30.0), (50.01, 30.0)], R)
+        self.assertAlmostEqual(lat, 50.005)
+        self.assertAlmostEqual(side, 2000.0)
+        _, _, side = hydro.shape_grid([(50.0, 30.0), (50.2, 30.0)], R)
+        self.assertAlmostEqual(side, 3 * 0.1 * math.pi / 180.0 * R,
+                               delta=1.0)
+
     def test_simplify_keeps_corners_on_line_of_ring_ends(self):
         # Кольцо начинается посередине длинной стороны, концы цепочки
         # соседние. Дуглас-Пекер до прямой через них выбрасывал углы на

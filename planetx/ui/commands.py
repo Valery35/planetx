@@ -215,6 +215,10 @@ def _tools(window, add, earth):
                            "screenshot"))
     add("tool:layout", tr("Вид в макет QGIS"), open_,
         lambda: window._open_snapshot(True), ("макет", "печать", "layout"))
+    add("tool:sea_level", tr("Уровень моря"), open_,
+        window.hydro.sea_level_here,
+        ("подъём уровня моря", "затопление", "океан", "шельф",
+         "ледниковый период", "sea level", "flood"))
     add("tool:record", tr("Записать облёт"),
         tr("остановить") if bar.record.isChecked() else tr("начать"),
         bar.record.click, ("тур", "запись", "облёт", "tour", "record"))

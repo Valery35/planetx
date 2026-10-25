@@ -1169,6 +1169,8 @@ class ToolsMixin:
             self.message = (names[(action, on)].format(
                 name=item.name or tr("Без названия")), time.monotonic())
             self._show_state()
+        elif action == "catchment":
+            self.hydro.catchment_of(item)
         elif action == "viewshed":
             self._open_viewshed(item)
         elif action == "insolation":

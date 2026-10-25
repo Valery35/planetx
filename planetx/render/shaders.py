@@ -130,10 +130,12 @@ layout(location = 2) in float a_shade;
 layout(location = 3) in vec3 a_normal;
 // Вверх по нормали эллипсоида и высота вершины на экране, см.
 // core.tiling.TileMesh.sea. В проходе воды (u_water) сетка опускается
-// на уровень моря.
+// на уровень моря u_level - высоту на экране, 0 - нынешний уровень
+// (подъём уровня моря, ui/hydro.py).
 layout(location = 4) in vec4 a_sea;
 uniform mat4 u_mvp;
 uniform float u_water;
+uniform float u_level;
 out vec2 v_uv;
 out float v_shade;
 out vec3 v_normal;
@@ -148,7 +150,7 @@ void main() {
     v_height = a_sea.w;
     vec3 p = a_position;
     if (u_water > 0.5) {
-        p -= a_sea.xyz * a_sea.w;
+        p -= a_sea.xyz * (a_sea.w - u_level);
     }
     gl_Position = u_mvp * vec4(p, 1.0);
     v_depth = gl_Position.w;
@@ -386,6 +388,7 @@ uniform vec2 u_wedge_lat;
 uniform float u_water;
 uniform vec4 u_water_color;
 uniform float u_shallow;
+uniform float u_level;
 // Палеогеография: снимок подложки - карта прошлого со своей отмывкой,
 // без отмывки вида, воды и наложений. 1 - включена.
 uniform float u_plain;
@@ -444,17 +447,28 @@ void main() {
     vec3 base;
     float shade = v_shade;
     if (u_water > 0.5) {
-        if (v_height >= 0.0 || u_plain > 0.5) {
+        if (v_height >= u_level || u_plain > 0.5) {
             discard;
         }
         // В проходе воды на месте снимка - маска воды тайла
         // (GlobeView._water_mask): красный 0 - суша ниже нуля, карьер,
-        // впадина, воды там нет.
-        if (texture(u_texture, v_uv, 0.0).r < 0.5) {
+        // впадина, воды там нет. Поднятый уровень заливает и её - польдеры
+        // Нидерландов уходят под воду вместе с сушей выше нуля.
+        bool land = v_height >= 0.0
+            || texture(u_texture, v_uv, 0.0).r < 0.5;
+        if (land && v_height < 0.0 && u_level <= 0.0) {
             discard;
         }
         base = u_water_color.rgb;
-        alpha = u_water_color.a * clamp(-v_height / u_shallow, 0.25, 1.0);
+        alpha = u_water_color.a
+            * clamp((u_level - v_height) / u_shallow, 0.25, 1.0);
+        if (u_level > 0.0) {
+            // Поднятое море: мелкая вода над залитой сушей иначе почти
+            // прозрачна, и затопленное не видно. Польдер без маски воды
+            // не отличить от моря, поэтому доля одна на всю воду. Доля
+            // 0.75 - выбор помощника, утверждает автор.
+            alpha = max(alpha, 0.75);
+        }
         shade = 1.0;
     } else if (u_plain > 0.5) {
         base = texture(u_texture, v_uv, u_fade.x).rgb;
