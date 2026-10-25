@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.11.2
+version=1.12.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.11.2 Sky imagery tiles fade in smoothly over their coarser
+changelog=1.12.0 Disaster imagery from Vantor and Planet as an archive
+      theme with an events window, days on the time slider, a before
+      and after swipe and export of the day's images to the QGIS
+      project. Overture Maps 3D buildings as an option in the Data
+      sources window. The "All NASA GIBS layers" catalogue category
+      with more than a thousand layers and word search. The "Lidar
+      point clouds here" globe menu item streams IGN LiDAR HD (France)
+      and USGS 3DEP (USA) tiles in QGIS 4. The "Trend map…" button of
+      the time series window writes the yearly change per pixel (Sen's
+      slope) and its significance (Mann-Kendall test) as a raster.
+      1.11.2 Sky imagery tiles fade in smoothly over their coarser
       parent, like the Earth tiles, instead of appearing abruptly.
       1.11.1 The loading icon shows sky imagery that is still
       loading. A sky tile that did not arrive is requested again a
