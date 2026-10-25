@@ -30,6 +30,30 @@ VECTOR_CREDIT_KEY = PREFIX + "vector_attribution"
 # Сервис маршрутов OSRM: шаблон адреса и флажок «через сервис».
 ROUTER_KEY = PREFIX + "router_url"
 ROUTER_ON_KEY = PREFIX + "router_on"
+# 3D-здания: слой building векторной основы или архив PMTiles Overture
+# Maps. Пустое значение - основа. Выбор автора от 25 октября 2026 года
+# после разбора RustGIS 0.4.0, основа осталась по умолчанию.
+BUILDINGS_KEY = PREFIX + "buildings"
+OVERTURE = "overture"
+# Выпуск Overture берётся из каталога STAC (поле latest), архив прежних
+# выпусков служба держит несколько месяцев. Без ответа каталога -
+# выпуск OVERTURE_RELEASE.
+OVERTURE_STAC = "https://stac.overturemaps.org/catalog.json"
+OVERTURE_PMTILES = "https://tiles.overturemaps.org/{release}/buildings.pmtiles"
+OVERTURE_RELEASE = "2026-10-21.0"
+OVERTURE_CREDIT = ("Buildings: Overture Maps Foundation, © OpenStreetMap "
+                   "contributors (ODbL), Microsoft, Google Open Buildings, "
+                   "Esri Community Maps (CC BY 4.0)",
+                   "https://docs.overturemaps.org/attribution/")
+
+
+def overture_url(catalog=None):
+    """Адрес архива зданий Overture по корневому каталогу STAC (словарь)
+    или выпуска по умолчанию."""
+    release = (catalog or {}).get("latest") or OVERTURE_RELEASE
+    if not isinstance(release, str) or "/" in release:
+        release = OVERTURE_RELEASE
+    return OVERTURE_PMTILES.format(release=release)
 
 
 def template_ok(url):

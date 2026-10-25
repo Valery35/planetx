@@ -272,14 +272,19 @@ def select(cloud, frame, ready, info_of, budget=POINT_BUDGET,
     return Selection(sorted(draw), want, total)
 
 
-def pipeline(source, cloud, key, out, out_srs="EPSG:4326"):
+def pipeline(source, cloud, key, out, out_srs="EPSG:4326", requests=None):
     """Конвейер PDAL клетки: readers.copc по рамке и шагу, пересчёт
-    в out_srs, LAS 1.4 формата 7 без сжатия в файл out."""
+    в out_srs, LAS 1.4 формата 7 без сжатия в файл out. requests -
+    потоков чтения файла, None - по умолчанию PDAL."""
     x0, y0, x1, y1 = bounds(cloud, key)
+    reader = {"type": "readers.copc", "filename": source,
+              "bounds": "([{!r}, {!r}], [{!r}, {!r}])".format(x0, x1, y0,
+                                                              y1),
+              "resolution": resolution(cloud, key[0])}
+    if requests:
+        reader["requests"] = int(requests)
     stages = [
-        {"type": "readers.copc", "filename": source,
-         "bounds": "([{!r}, {!r}], [{!r}, {!r}])".format(x0, x1, y0, y1),
-         "resolution": resolution(cloud, key[0])},
+        reader,
         {"type": "filters.reprojection", "out_srs": out_srs},
         {"type": "writers.las", "filename": out, "compression": False,
          "minor_version": 4, "dataformat_id": 7,

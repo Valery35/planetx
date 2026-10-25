@@ -282,14 +282,17 @@ def scene_cloud(scene, ring, sas=""):
     return scene.id, cloud, valid
 
 
-def series_value(scene, ring, name, sas=""):
+def series_value(scene, ring, name, sas="", epsg=None):
     """Сводка продукта name по участку сцены для ряда по датам:
-    (номер сцены, core.series.Point или None). Сетка грубее выдачи
-    (core.series.step), пиксели облаков и теней по маске сцены не
-    считаются. Рабочий поток."""
+    (номер сцены, core.series.Point или None, сетка значений с NaN вне
+    чистых пикселей участка). Сетка грубее выдачи (core.series.step),
+    пиксели облаков и теней по маске сцены не считаются. epsg - общая
+    система сеток ряда, у сцен другой зоны UTM окно пересчитывается в неё,
+    так сетки всех сцен совпадают для карты тренда. Рабочий поток."""
     if scene.mission == "mss":
         scene = s2.toa(scene, read_json(_href(scene, "mtl.json", sas)))
-    xy = s2.ring_utm(ring, scene.epsg)
+    srs = epsg or _srs(scene)
+    xy = s2.ring_utm(ring, srs or scene.epsg)
     res = series_core.step(xy, scene.mission)
     box = s2.bounds(xy, res)
     cloud_key = s2.CLOUD_ASSET[scene.mission][0]
@@ -300,8 +303,7 @@ def series_value(scene, ring, name, sas=""):
     raw = {}
     for key in keys:
         raw[key] = read_window(_href(scene, key, sas), box, res,
-                               nearest=near or key == cloud_key,
-                               srs=_srs(scene))
+                               nearest=near or key == cloud_key, srs=srs)
         if raw[key] is None:
             raise OSError(key)
     area = s2.mask(xy, box, res)
@@ -312,7 +314,10 @@ def series_value(scene, ring, name, sas=""):
         bands = {k: s2.reflectance(v, scene.assets[k])
                  for k, v in raw.items() if k != cloud_key}
         values = s2.product(name, bands, scene.mission)
-    return scene.id, series_core.point(values, area, clear)
+    values = np.asarray(values, dtype=np.float32)
+    grid = np.where(area & clear & np.isfinite(values), values, np.nan)
+    return scene.id, series_core.point(values, area, clear), \
+        (grid.astype(np.float32), box, res, srs or scene.epsg)
 
 
 def preview(scene, ring, sas=""):

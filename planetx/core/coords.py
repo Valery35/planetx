@@ -13,6 +13,8 @@ UTM, полярные области UPS выше 84° и ниже 80° не п�
 import math
 import re
 
+import numpy as np
+
 try:  # внутри плагина QGIS
     from .ellipsoid import WGS84_A as A, WGS84_F as F
     from .flight import parse_latlon
@@ -115,6 +117,27 @@ def to_utm(lat, lon, zone=None):
     if lat < 0.0:
         northing += FALSE_NORTHING
     return zone, letter, easting, northing
+
+
+def utm_arrays(lat, lon, zone, south):
+    """Восток и север в метрах зоны zone массивами NumPy - те же ряды,
+    что у to_utm. south - северу прибавляется ложный север южного
+    полушария, как в системах EPSG 327xx."""
+    central = (zone - 1) * 6.0 - 180.0 + 3.0
+    dlon = np.radians((np.asarray(lon, dtype=np.float64) - central + 180.0)
+                      % 360.0 - 180.0)
+    tau = np.tan(np.radians(np.asarray(lat, dtype=np.float64)))
+    sigma = np.sinh(_E * np.arctanh(_E * tau / np.hypot(1.0, tau)))
+    tp = tau * np.hypot(1.0, sigma) - sigma * np.hypot(1.0, tau)
+    xi_p = np.arctan2(tp, np.cos(dlon))
+    eta_p = np.arcsinh(np.sin(dlon) / np.hypot(tp, np.cos(dlon)))
+    xi, eta = xi_p.copy(), eta_p.copy()
+    for j, a in enumerate(_ALPHA, start=1):
+        xi += a * np.sin(2 * j * xi_p) * np.cosh(2 * j * eta_p)
+        eta += a * np.cos(2 * j * xi_p) * np.sinh(2 * j * eta_p)
+    easting = FALSE_EASTING + K0 * _AR * eta
+    northing = K0 * _AR * xi + (FALSE_NORTHING if south else 0.0)
+    return easting, northing
 
 
 def from_utm(zone, south, easting, northing):

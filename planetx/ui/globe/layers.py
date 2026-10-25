@@ -1120,10 +1120,14 @@ class LayersMixin:
                 *tilemaps.MAPS[self._tilemap_shown].attribution))
         if self._geoid_on():
             parts.append(link_html(*geoid.ATTRIBUTION))
+        overture = self.buildings_loader is not None \
+            and self._overture_on()
         if self.planet.earth and (
                 self._applied_groups and self.ofm_layer is not None
-                or self.buildings_loader is not None):
+                or self.buildings_loader is not None and not overture):
             parts.append(self._vector_credit())
+        if self.planet.earth and overture:
+            parts.append(link_html(*datasources.OVERTURE_CREDIT))
         if self.view.store.scale or "slope" in self.gibs_loaders:
             parts.insert(1, self._terrain_credit() if self.planet.earth
                          else html.escape(self.planet.terrain[3])

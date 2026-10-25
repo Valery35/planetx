@@ -42,7 +42,7 @@ from ..i18n import is_russian, tr
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum, enum_int
 from .satellites import group_names as satellite_group_names
-from .themes import group_names, theme_names
+from .themes import group_names, layer_tip, theme_names
 from .weather import AURORA, field_of
 
 THUMB = 104  # пикселей стороны превью
@@ -77,6 +77,9 @@ BUILTIN_BASES = ("esri_imagery", "osm")
 # в группе «Карта» раздела «Слои».
 MAP = "map"
 VECTOR = "vector:"
+# Вид строки слоя всего каталога GIBS: строки приходят по запросу.
+GIBS = "gibsall"
+GIBS_SEARCH = 3  # знаков поиска, с которых просится каталог GIBS
 MAP_ROWS = ("grid", "buildings", "contours", "cadastre")
 # ЛЭП, трубопроводы и кабели - категория «Энергетика», просьба автора
 # от 12 октября 2026 года.
@@ -977,6 +980,7 @@ class NasaMaps(QWidget):
         self._group = ALL
         self._quiet = False  # флажки ставит сам каталог
         self._chosen = ""  # строка, описание которой показано
+        self._series = {}  # ключ слоя каталога GIBS - ряд дат
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         self.search = QLineEdit(self)
@@ -1120,9 +1124,12 @@ class NasaMaps(QWidget):
                 self._queue.append(key)
             elif kind == BASE:
                 self._label(key)
+            elif kind == themes.EVENTS:
+                # Снимки событий: превью - подложка, снимков без события нет.
+                self._set_thumb(key, _over(self.base, None))
             elif kind == LAYER:
                 self._set_thumb(key, self._layer_thumb(key))
-            elif kind in (SAT, VECTOR):
+            elif kind in (SAT, VECTOR, GIBS):
                 self._label(key)
             else:
                 self._set_thumb(key, ramp_image(ramp_of(key), self.base))
@@ -1176,6 +1183,10 @@ class NasaMaps(QWidget):
             return layer_url(key)
         if self.items[key][2] == BASE:
             return base_url(key)
+        if self.items[key][2] == GIBS:
+            day = themes.pick_day(self._gibs_series(key))
+            return themes.thumb_url(themes.BY_KEY[key], day) if day \
+                else None
         if key == themes.TEMPERATURE:
             z, x, y = themes.THUMB_TILE
             return temperature.url_template(temperature.LAND).replace(
@@ -1208,6 +1219,11 @@ class NasaMaps(QWidget):
     def _set_thumb(self, key, image):
         self.thumbs[key] = image
         self._label(key)
+
+    def _gibs_series(self, key):
+        if key not in self._series:
+            self._series[key] = themes.BY_KEY[key].series(time.time())
+        return self._series[key]
 
     def domains_arrived(self, key):
         """Окно глобуса получило ряд дат темы: подпись дня и превью."""
@@ -1251,9 +1267,16 @@ class NasaMaps(QWidget):
                     else name
             return tr("NASA GIBS, {day}", day=day_text(day)) if day \
                 else tr("NASA GIBS")
+        if kind == GIBS:
+            day = themes.pick_day(self._gibs_series(key))
+            return tr("NASA GIBS, {day}", day=day_text(day)) if day \
+                else tr("NASA GIBS")
         if kind == "weather":
             return tr("прогноз NOAA SWPC") if key == AURORA \
                 else tr("прогноз NOAA GFS")
+        if kind == themes.EVENTS:
+            title = self.globe.event_title()
+            return "Vantor, Planet" + (", " + title if title else "")
         if kind == themes.FIRES:
             return tr("NASA FIRMS, 24 часа")
         if kind == themes.TEMPERATURE:
@@ -1282,7 +1305,8 @@ class NasaMaps(QWidget):
         relief = bool(getattr(planet, "terrain", None)) or planet.earth
         enabled = enum(Qt, "ItemFlag", "ItemIsEnabled")
         for key, (item, group, kind) in self.items.items():
-            self._label(key)
+            if kind != GIBS:
+                self._label(key)
             item.setCheckState(checked if self.is_on(key) else unchecked)
             usable = planet.earth or key in ANY_BODY + ("grid",) \
                 or (key in RELIEF_BODY + ("contours",) and relief)
@@ -1343,6 +1367,10 @@ class NasaMaps(QWidget):
             self.export.setVisible(False)
             return
         self._chosen = key
+        if self.items[key][2] == GIBS and key not in self._loaded \
+                and key not in self._replies and key not in self._queue:
+            self._queue.append(key)
+            self._pump()
         name, tip = self.names[key]
         sub = self.subtitle(key)
         text = "<b>{}</b>".format(html.escape(name))
@@ -1414,15 +1442,24 @@ class NasaMaps(QWidget):
 
     def _filter(self, *args):
         text = self.search.text().strip().lower()
-        seen = {"maps": False, "layers": False, "bases": False}
+        if (self._group == themes.GIBS_GROUP or len(text) >= GIBS_SEARCH) \
+                and "gibs" not in self.heads:
+            self.globe.load_gibs(self._gibs_arrived)
+        seen = {"maps": False, "layers": False, "bases": False,
+                "gibs": False}
+        words = text.split()
         for key, (item, group, kind) in self.items.items():
-            # Во «Всех» групп спутников нет, во вкладке «Спутники» есть
-            # и сам слой. Поиск идёт по всему каталогу.
-            if text:
+            # Во «Всех» групп спутников и слоёв каталога GIBS нет, во
+            # вкладке «Спутники» есть и сам слой. Поиск идёт по всему
+            # каталогу, у слоёв GIBS - по всем словам запроса.
+            if text and kind == GIBS:
+                name = (self.names[key][0] + " " + key).lower()
+                fits = all(word in name for word in words)
+            elif text:
                 fits = text in self.names[key][0].lower() \
                     or text in self.names[key][1].lower()
             elif self._group == ALL:
-                fits = kind not in (SAT, BASE)
+                fits = kind not in (SAT, BASE, GIBS)
             else:
                 fits = group == self._group or (
                     self._group == SAT_GROUP and key == "satellites")
@@ -1430,9 +1467,29 @@ class NasaMaps(QWidget):
             if fits:
                 seen["bases" if kind == BASE
                      else "layers" if kind in (LAYER, SAT, VECTOR)
-                     else "maps"] = True
+                     else "gibs" if kind == GIBS else "maps"] = True
         for name, head in self.heads.items():
             head.setHidden(not seen[name])
+
+    def _gibs_arrived(self):
+        """Пришёл каталог GIBS: строки слоёв под своим заголовком. Превью
+        слоя просится, когда строку выбирают."""
+        if "gibs" in self.heads:
+            return
+        self._head("gibs", tr("Слои NASA GIBS - тоже одна карта на "
+                              "глобусе"))
+        blank = ramp_image([])
+        # Подпись строки шлёт itemChanged, и без _quiet каждая из тысячи
+        # строк обновляла весь каталог - 24 с на QGIS 4.
+        self._quiet = True
+        for theme in self.globe.gibs_layers:
+            self.names[theme.key] = (theme.title, layer_tip(theme))
+            self._row(theme.key, themes.GIBS_GROUP, GIBS)
+            self.thumbs[theme.key] = blank
+            self._label(theme.key)
+        self._quiet = False
+        self.refresh()
+        self._filter()
 
     def place(self):
         """Место и размер окна: прежние из настроек, впервые - у левого
@@ -1475,5 +1532,6 @@ class NasaMaps(QWidget):
     def _thumb_missing(self, key, kind):
         """Превью по тайлу, которое не пришло, - закрытие сняло запрос."""
         return (kind in ("gibs", themes.TEMPERATURE) or layer_url(key)
+                or kind == GIBS and key == self._chosen
                 or base_url(key)) \
             and key not in self._replies and key not in self._loaded

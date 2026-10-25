@@ -10,9 +10,17 @@
 процентиля (core/series.py). Щелчок по точке выбирает сцену в списке
 окна снимков, её превью и выдача - как обычно. Таблица ряда пишется
 в CSV.
+
+Карта тренда - по тем же сеткам сцен (ряд считается в одной системе
+UTM для всех сцен): в каждом пикселе наклон Тейла-Сена за год и p теста
+Манна-Кендалла (core/trend.py), GeoTIFF из трёх полос - наклон, p,
+количество сцен - слоем группы «PlanetX - карты тренда».
 """
 import math
 import os
+from collections import Counter
+
+import numpy as np
 
 from qgis.PyQt.QtCore import QPointF, QRectF, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QColor, QPainter, QPainterPath, QPen
@@ -20,7 +28,7 @@ from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
                                  QFileDialog, QHBoxLayout, QLabel,
                                  QPushButton, QVBoxLayout, QWidget)
 
-from ..core import series
+from ..core import series, trend
 from ..i18n import tr
 from ..qt_compat import enum
 from .elevation import NBSP, nice_step
@@ -41,6 +49,8 @@ VCENTER = enum(Qt, "AlignmentFlag", "AlignVCenter")
 RIGHT = enum(Qt, "AlignmentFlag", "AlignRight") | VCENTER
 LEFT = enum(Qt, "AlignmentFlag", "AlignLeft") | VCENTER
 TEMPERATURES = ("lst", "lst_day", "lst_night")
+# Шкала наклона: убыль - красный, рост - синий, у температуры наоборот.
+TREND_RAMP = ((178, 24, 43), (247, 247, 247), (33, 102, 172))
 
 
 def value_text(product, value):
@@ -206,6 +216,8 @@ class SeriesDialog(QDialog):
         self.setModal(False)
         self.jobs = []
         self.values = {}  # номер сцены - Point или None
+        self.grids = {}  # номер сцены - (сетка, рамка, шаг, EPSG)
+        self.trend_job = None
         self.scenes = []
         self.generation = 0
         self.timer = QTimer(self)
@@ -229,10 +241,22 @@ class SeriesDialog(QDialog):
             "процентили, доля участка без облаков. Сцены без значения "
             "идут пустыми строками."))
         self.csv.clicked.connect(lambda _=False: self.save_csv())
+        self.trend = QPushButton(tr("Карта тренда…"), self)
+        self.trend.setToolTip(tr(
+            "Тренд величины в каждом пикселе участка по сценам ряда - "
+            "наклон Тейла-Сена за год и значимость по тесту "
+            "Манна-Кендалла, растром в проект QGIS. Пиксель без {count} "
+            "чистых сцен тренда не получает. Ряд из сцен одного сезона "
+            "даёт тренд между годами, ряд всех месяцев смешивает сезон "
+            "и тренд.", count=trend.MIN_SCENES))
+        self.trend.clicked.connect(lambda _=False: self.make_trend())
+        self.trend.setEnabled(False)
         buttons = QDialogButtonBox(
             enum(QDialogButtonBox, "StandardButton", "Close"), self)
         buttons.rejected.connect(self.close)
         buttons.addButton(self.csv,
+                          enum(QDialogButtonBox, "ButtonRole", "ActionRole"))
+        buttons.addButton(self.trend,
                           enum(QDialogButtonBox, "ButtonRole", "ActionRole"))
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("Величина"), self))
@@ -274,6 +298,8 @@ class SeriesDialog(QDialog):
         self.generation += 1
         self._cancel()
         self.values = {}
+        self.grids = {}
+        self.trend.setEnabled(False)
         self.chart.set_rows([], self.current_product())
         if not self.scenes or not self.current_product():
             self.status.setText(tr("Нет сцен для ряда."))
@@ -289,11 +315,15 @@ class SeriesDialog(QDialog):
         from ..net.gdalnet import executor
         from .sentinel import series_value, warm
         warm()
+        from .sentinel import _srs
         ring = self.owner.ring_used
         name = self.current_product()
         pool = executor("series", SERIES_WORKERS)
+        # Одна система UTM на все сцены - сетки совпадают для тренда.
+        zones = Counter(_srs(s) or s.epsg for s in self.scenes)
+        epsg = zones.most_common(1)[0][0] if zones else None
         self.jobs = [(s.id, pool.submit(series_value, s, ring, name,
-                                        self.owner.sas))
+                                        self.owner.sas, epsg))
                      for s in self.scenes]
         self.timer.start()
 
@@ -304,17 +334,20 @@ class SeriesDialog(QDialog):
                 pending.append((number, job))
                 continue
             try:
-                value = job.result()[1]
+                _, value, grid = job.result()
             except (RuntimeError, ValueError, OSError, KeyError):
                 # Файлы сцены не прочитаны - сцена без точки.
-                value = None
+                value, grid = None, None
             self.values[number] = value
+            if value is not None and grid is not None:
+                self.grids[number] = grid
         changed = len(pending) != len(self.jobs)
         self.jobs = pending
         if changed:
             self._show()
         if not self.jobs:
             self.timer.stop()
+            self.trend.setEnabled(len(self.grids) >= trend.MIN_SCENES)
 
     def rows(self):
         """Точки графика: (сутки, время, номер, Point) сцен со
@@ -363,6 +396,98 @@ class SeriesDialog(QDialog):
                                    error=str(error)))
             return
         self.status.setText(tr("Ряд записан: {path}", path=path))
+
+    def make_trend(self):
+        """Карта тренда по сеткам сцен ряда в рабочем потоке, растр - по
+        готовности."""
+        when = {s.id: s.when for s in self.scenes}
+        shapes = Counter(g[0].shape for g in self.grids.values())
+        if not shapes or self.trend_job is not None:
+            return
+        shape = shapes.most_common(1)[0][0]
+        # У двух сцен бывает одно время - сортировка только по нему.
+        chosen = sorted(((when[k], g) for k, g in self.grids.items()
+                         if g[0].shape == shape and k in when),
+                        key=lambda item: item[0])
+        if len(chosen) < trend.MIN_SCENES:
+            return
+        stack = np.stack([g[0] for _, g in chosen])
+        days = [series.day_number(w) for w, _ in chosen]
+        _, box, res, epsg = chosen[0][1]
+        from ..net.gdalnet import executor
+        self.trend_job = (executor("series", SERIES_WORKERS).submit(
+            trend.trend, stack, days), box, res, epsg,
+            chosen[0][0][:10], chosen[-1][0][:10], self.current_product(),
+            self.generation)
+        self.trend.setEnabled(False)
+        self.status.setText(tr("Считается карта тренда по {count} сценам…",
+                               count=len(chosen)))
+        QTimer.singleShot(POLL, self._trend_poll)
+
+    def _trend_poll(self):
+        job, box, res, epsg, first, last, product, generation = \
+            self.trend_job
+        if not job.done():
+            QTimer.singleShot(POLL, self._trend_poll)
+            return
+        self.trend_job = None
+        self.trend.setEnabled(True)
+        if generation != self.generation:
+            return
+        slope, p_value, count = job.result()
+        layer = self._trend_layer(slope, p_value, count, box, res, epsg,
+                                  first, last, product)
+        if layer is None:
+            return
+        shown = np.isfinite(slope)
+        total = int(shown.sum())
+        significant = int((p_value[shown] < trend.SIGNIFICANT).sum())
+        self.status.setText(tr(
+            "Карта тренда в проекте: пикселей с трендом {total}, значимых "
+            "(p < {p}) {share} %, медиана наклона {median} за год.",
+            total=total, p=trend.SIGNIFICANT,
+            share="{:.0f}".format(100.0 * significant / max(total, 1)),
+            median=value_text(product, float(np.median(slope[shown])))
+            if total else "-"))
+
+    def _trend_layer(self, slope, p_value, count, box, res, epsg, first,
+                     last, product):
+        """GeoTIFF наклона, p и количества сцен в проект QGIS."""
+        from osgeo import gdal, osr
+        from .export import add_raster
+        folder = self.owner.folder
+        try:
+            os.makedirs(folder, exist_ok=True)
+        except OSError as error:
+            self.status.setText(tr("Файл не записан: {error}",
+                                   error=str(error)))
+            return None
+        from .sentinel import free_path
+        path = free_path(folder, "trend_{}_{}_{}".format(
+            product, first, last), ".tif")
+        rows, cols = slope.shape
+        data = gdal.GetDriverByName("GTiff").Create(
+            path, cols, rows, 3, gdal.GDT_Float32, ["COMPRESS=DEFLATE"])
+        if data is None:
+            self.status.setText(tr("Файл не записан: {error}",
+                                   error=path))
+            return None
+        data.SetGeoTransform((box[0], res, 0.0, box[3], 0.0, -res))
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(int(epsg))
+        data.SetProjection(srs.ExportToWkt())
+        for n, band in enumerate((slope, p_value, count.astype(float))):
+            out = data.GetRasterBand(n + 1)
+            out.WriteArray(np.asarray(band, dtype=np.float32))
+            out.SetNoDataValue(float("nan"))
+        data = None
+        low, high = trend.limits(slope)
+        colors = TREND_RAMP[::-1] if product in TEMPERATURES else TREND_RAMP
+        stops = [(low, colors[0]), (0.0, colors[1]), (high, colors[2])]
+        title = tr("Тренд «{name}» {first} - {last}, за год",
+                   name=self.product.currentText(), first=first, last=last)
+        return add_raster(path, title, stops, group=tr(
+            "PlanetX - карты тренда"))
 
     def _cancel(self):
         for _, job in self.jobs:

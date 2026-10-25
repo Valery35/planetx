@@ -6,6 +6,7 @@
 Слои, адреса и даты - core/themes.py. Здесь только то, что видит
 человек, через tr().
 """
+from ..core import themes
 from ..i18n import tr
 from .weather import field_names
 
@@ -32,12 +33,33 @@ def group_names():
             "NASA.")),
         ("archive", tr("Архив снимков"), tr(
             "Прежние выпуски спутниковой подложки Esri World Imagery "
-            "с 2014 года.")))
+            "с 2014 года и снимки чрезвычайных событий Vantor и Planet.")),
+        (themes.GIBS_GROUP, tr("Все слои NASA GIBS"), tr(
+            "Весь каталог NASA GIBS - больше тысячи слоёв снимков и карт "
+            "с рядом дат. Список приходит из каталога службы при первом "
+            "показе категории или поиске, строка поиска находит слой "
+            "по словам названия.")))
+
+
+def layer_tip(theme):
+    """Подсказка слоя каталога GIBS: имя слоя, ряд дат, уровень."""
+    if theme.intervals:
+        first = min(item[0] for item in theme.intervals).isoformat()
+        last = max(item[1] for item in theme.intervals).isoformat()
+        when = tr("снимки с {first} по {last}", first=first, last=last)
+    else:
+        when = tr("без ряда дат")
+    return tr("Слой NASA GIBS {layer}, {when}, подробность до уровня "
+              "{level}.", layer=theme.layer, when=when, level=theme.level)
 
 
 def theme_names():
-    """Тема: ключ - (название, подсказка)."""
-    return dict(field_names(), **{
+    """Тема: ключ - (название, подсказка). Слои каталога GIBS - по
+    названию из каталога службы."""
+    names = {key: (theme.title, layer_tip(theme))
+             for key, theme in themes.BY_KEY.items()
+             if key.startswith(themes.GIBS_PREFIX)}
+    return dict(names, **field_names(), **{
         "smoke": (tr("Дым, аэрозольный индекс"), tr(
             "Поглощающий аэрозоль - дым пожаров и пыль - по OMPS за "
             "сутки, с 2012 года.")),
@@ -112,5 +134,10 @@ def theme_names():
             "Шкала времени выбирает выпуск, шаги идут по выпускам, где "
             "снимок в середине вида менялся. «Что здесь?» называет дату "
             "съёмки, источник и разрешение снимка.")),
+        "events": (tr("Снимки событий"), tr(
+            "Снимки землетрясений, наводнений, пожаров и ураганов из "
+            "открытых каталогов Vantor и Planet. "
+            "Окно выбирает событие, шкала времени - день снимков, шторка "
+            "сравнивает снимки до и после. Лицензия CC BY-NC 4.0.")),
     })
 

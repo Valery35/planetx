@@ -752,6 +752,111 @@ def snow_ready_wait():
 
 
 @check(500)
+def gibs_catalog_open():
+    """Весь каталог NASA GIBS в окне «Добавить данные»: категория
+    подгружает слои из GetCapabilities, поиск по словам, строка ставит
+    слой темой с рядом дат из каталога, превью по выбору строки, слой
+    JPEG без прозрачности."""
+    from planetx.core import themes
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_theme("")
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(62.0, 80.0, 6000000.0, 0.0, 0.0))
+    gallery = window.open_gallery()
+    gallery._set_group(themes.GIBS_GROUP)
+    state["gibs_started"] = time.monotonic()
+    result["gibs_catalog"] = {}
+
+
+def _gibs_rows(gallery):
+    from planetx.ui import nasamaps
+    rows = [(key, item) for key, (item, _, kind) in gallery.items.items()
+            if kind == nasamaps.GIBS]
+    return rows, [key for key, item in rows if not item.isHidden()]
+
+
+@check(500)
+def gibs_catalog_wait():
+    window = state["window"]
+    gallery = window.gallery
+    spent = time.monotonic() - state["gibs_started"]
+    if "gibs" not in gallery.heads and spent < 60.0:
+        return 500
+    out = result["gibs_catalog"]
+    rows, shown = _gibs_rows(gallery)
+    out.update(seconds=round(spent, 1), rows=len(rows),
+               shown_in_category=len(shown))
+    gallery._set_group("")
+    out["shown_in_all"] = len(_gibs_rows(gallery)[1])
+    gallery.search.setText("snow cover daily terra")
+    shown = _gibs_rows(gallery)[1]
+    out["search"] = [gallery.names[k][0] for k in shown][:6]
+    key = next((k for k in shown if k.endswith("NDSI_Snow_Cover_Daily")),
+               shown[0] if shown else None)
+    out["chosen"] = key
+    if key is None:
+        return None
+    gallery._describe(key)
+    gallery._clicked(gallery.items[key][0])
+    state["gibs_started"] = time.monotonic()
+    return None
+
+
+def _theme_settled(window):
+    layer = window.view.gibs["theme"]
+    return layer.shown and layer.textures and not layer.missing \
+        and not layer.pending
+
+
+@check(500)
+def gibs_catalog_theme():
+    window = state["window"]
+    gallery = window.gallery
+    spent = time.monotonic() - state["gibs_started"]
+    if not _theme_settled(window) and spent < 90.0:
+        return 500
+    out = result["gibs_catalog"]
+    key = out.get("chosen")
+    out["theme"] = dict(
+        key=window.theme_key, day=window.theme_day,
+        seconds=round(spent, 1),
+        textures=len(window.view.gibs["theme"].textures),
+        legend=window.theme_legend.isVisible(),
+        scale=window._theme_scales.get(window.theme_key) is not None,
+        timebar=window.timebar.shown(),
+        checked=gallery.is_on(key) if key else None,
+        thumb=key in gallery._loaded,
+        subtitle=gallery.subtitle(key) if key else None)
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_gibs_snow.png"))
+    window.set_theme("gibs:MODIS_Terra_CorrectedReflectance_TrueColor")
+    state["gibs_started"] = time.monotonic()
+    return None
+
+
+@check(500)
+def gibs_catalog_jpeg():
+    window = state["window"]
+    spent = time.monotonic() - state["gibs_started"]
+    if not _theme_settled(window) and spent < 90.0:
+        return 500
+    image = window.view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_gibs_truecolor.png"))
+    out = result["gibs_catalog"]
+    out["jpeg"] = dict(key=window.theme_key, day=window.theme_day,
+                       seconds=round(spent, 1),
+                       textures=len(window.view.gibs["theme"].textures))
+    window.set_theme("")
+    window.gallery.search.clear()
+    window.close_gallery()
+    out["off"] = not window.view.gibs["theme"].shown
+    out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+@check(500)
 def swipe_on():
     """Шторка сравнения: морской лёд над Арктикой, левая часть - год
     назад, белая линия по границе, шаг дня, выключение с темой."""
@@ -21315,6 +21420,190 @@ def wayback_check():
     return None
 
 
+OVERTURE_POSE = (6.45, 3.39, 1500.0, 30.0, 60.0)  # Лагос
+
+
+def _overture_report(window):
+    view = window.view
+    b = view.buildings
+    found = [f for f in b.footprints.values() if f != "empty"]
+    loader = window.buildings_loader
+    return {"loader": type(loader).__name__ if loader else None,
+            "source": b.source, "tiles": len(b.footprints),
+            "with_buildings": len(found),
+            "buildings": sum(len(f.height) for f in found),
+            "tall": sum(int((f.height > 6.0).sum()) for f in found),
+            "buffers": len(b.buffers), "drawn": b.drawn,
+            "vertices": b.vertices, "missing": b.missing(),
+            "failed": len(loader.failed) if isinstance(
+                getattr(loader, "failed", None), dict) else None,
+            "overture_credit": "Overture" in window.attribution.text(),
+            "ofm_credit": "OpenFreeMap" in window.attribution.text(),
+            "gl_errors": dict(view.gl_errors)}
+
+
+@check(60000)
+def overture_on():
+    """3D-здания Overture Maps над Лагосом: выпуск по каталогу STAC,
+    тайлы из архива PMTiles, сетки в видеокарте, подпись Overture. Потом
+    тех же мест здания основы."""
+    from qgis.core import QgsSettings
+    from planetx.core import sources
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    QgsSettings().setValue(sources.BUILDINGS_KEY, sources.OVERTURE)
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(*OVERTURE_POSE))
+    window.set_extra("buildings", False)
+    window.set_extra("buildings", True)
+    view.update()
+
+
+@check(40000)
+def overture_wait():
+    from qgis.core import QgsSettings
+    from planetx.core import sources
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP, "planetx_overture.png"))
+    result["overture"] = {"overture": _overture_report(window),
+                          "url": getattr(window, "_overture_url", None)}
+    QgsSettings().setValue(sources.BUILDINGS_KEY, "")
+    window.sources_changed("vector")
+    view.update()
+
+
+@check(1000)
+def overture_back():
+    window = state["window"]
+    view = window.view
+    view.grabFramebuffer().save(os.path.join(TEMP,
+                                             "planetx_overture_ofm.png"))
+    result["overture"]["vector"] = _overture_report(window)
+    window.set_extra("buildings", False)
+    result["overture"]["off"] = window.buildings_loader is None
+    view.update()
+
+@check(1000)
+def disaster_on():
+    """Снимки событий Vantor и Planet: список событий, землетрясение
+    в Колумбии 10 августа 2026 года (Planet - сцены в UTM, мозаика до
+    события в EPSG:3857 плоскостями JPEG), шторка до и после, потом
+    наводнение в Испании (Vantor, EPSG:4326), снимки в проект."""
+    window = state["window"]
+    window.set_body("earth")
+    window.open_events()
+    state["ev_started"] = time.monotonic()
+    state.pop("ev_stage", None)
+    result["disaster"] = {}
+
+
+def _event_layers_ready(window):
+    view = window.view
+    layers = [view.gibs["theme"]]
+    if window._compare_at is not None:
+        layers.append(view.gibs["compare"])
+    return all(layer.textures and not layer.missing and not layer.pending
+               for layer in layers) \
+        and window.view.navigator.flight is None
+
+
+@check(1000)
+def disaster_wait():
+    from planetx.ui.commands import build as commands_build
+    window = state["window"]
+    view = window.view
+    out = result["disaster"]
+    spent = time.monotonic() - state["ev_started"]
+    stage = state.get("ev_stage")
+    catalog = window.event_catalog
+    if stage is None:
+        if spent < 60.0 and (catalog.busy() or not catalog.events):
+            return 1000
+        found = catalog.ordered()
+        out["catalog"] = dict(
+            seconds=round(spent, 1), events=len(found),
+            vantor=sum(e.source == "vantor" for e in found),
+            planet=sum(e.source == "planet" for e in found),
+            first=[e.title for e in found[:3]],
+            command="tool:events" in commands_build(window)[1])
+        state["ev_found"] = {e.key: e for e in found}
+        event = state["ev_found"].get(
+            "planet/colombia-earthquake-2026-08-10")
+        if event is None:
+            out["planet"] = "no colombia event"
+            return None
+        window.show_event(event)
+        state["ev_stage"] = "planet"
+        state["ev_started"] = time.monotonic()
+        return 1000
+    items = getattr(window, "_event_items", None)
+    if items and "ev_items_at" not in state:
+        state["ev_items_at"] = round(spent, 1)
+    # Готов - три проверки подряд после перелёта: сразу после него вид
+    # ещё не просил тайлы нового места.
+    ready = bool(items) and _event_layers_ready(window)
+    state["ev_calm"] = state.get("ev_calm", 0) + 1 if ready else 0
+    if spent < 300.0 and state["ev_calm"] < 3:
+        return 1000
+    state["ev_calm"] = 0
+    compare = view.gibs["compare"]
+    info = dict(seconds=round(spent, 1), ready=ready,
+                items_at=state.pop("ev_items_at", None),
+                missing=[view.gibs["theme"].missing, compare.missing],
+                items=len(items or ()),
+                days=len(window._theme_domains.get("events") or ()),
+                theme_day=window.theme_day,
+                compare=window._compare_shown, swipe=view.swipe,
+                level=view.gibs["theme"].max_level,
+                textures=len(view.gibs["theme"].textures),
+                compare_textures=len(compare.textures),
+                legend=window.theme_legend.isVisible(),
+                credit=window.attribution.text()[-120:],
+                status=window.events_dialog.status.text())
+    view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_disaster_{}.png".format(stage)))
+    out[stage] = info
+    if stage == "planet":
+        event = state["ev_found"].get(
+            "vantor/Spain-Portugal-Flooding-Feb-2026")
+        if event is None:
+            out["vantor"] = "no spain event"
+            return None
+        window.show_event(event)
+        state["ev_stage"] = "vantor"
+        state["ev_started"] = time.monotonic()
+        return 1000
+    return None
+
+
+@check(1000)
+def disaster_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["disaster"]
+    out["exported"] = window.active_export("map")
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - снимки событий")
+    out["project_layers"] = None
+    if group is not None:
+        nodes = group.findLayers()
+        out["project_layers"] = [(n.layer().name(),
+                                  n.layer().providerType())
+                                 for n in nodes]
+        for node in nodes:
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    window.clear_event()
+    out["off"] = dict(theme=window.theme_key,
+                      loader="theme" in window.gibs_loaders,
+                      compare="compare" in window.gibs_loaders)
+    window.events_dialog.close()
+    out["gl_errors"] = dict(window.view.gl_errors)
+    return None
+
+
 @check(500, manual=True)
 def wayback_frames():
     """Ручной шаг: кадры Wayback над Пермью во время загрузки, шага
@@ -22520,6 +22809,67 @@ def series_check():
 
 
 @check(500)
+def series_trend():
+    """Карта тренда по ряду Sentinel-2 у Перми: NDVI за год, наклон
+    Тейла-Сена и p Манна-Кендалла растром в проект."""
+    series = state["window"].sentinel_dialog.series
+    result["series_trend"] = {}
+    if series is not None:
+        series.product.setCurrentIndex(series.product.findData("ndvi"))
+    state["trend_started"] = time.monotonic()
+
+
+@check(500)
+def series_trend_wait():
+    series = state["window"].sentinel_dialog.series
+    spent = time.monotonic() - state["trend_started"]
+    if series is None:
+        return None
+    if series.jobs and spent < 300.0:
+        return 500
+    out = result["series_trend"]
+    out["grids"] = len(series.grids)
+    out["shapes"] = sorted({str(g[0].shape) for g in series.grids.values()})
+    out["epsg"] = sorted({g[3] for g in series.grids.values()})
+    out["button"] = series.trend.isEnabled()
+    series.make_trend()
+    state["trend_started"] = time.monotonic()
+    return None
+
+
+@check(500)
+def series_trend_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    series = window.sentinel_dialog.series
+    spent = time.monotonic() - state["trend_started"]
+    if series is None:
+        return None
+    if series.trend_job is not None and spent < 120.0:
+        return 500
+    out = result["series_trend"]
+    out["seconds"] = round(spent, 1)
+    out["status"] = series.status.text()
+    root = QgsProject.instance().layerTreeRoot()
+    group = root.findGroup("PlanetX - карты тренда") \
+        or root.findGroup("PlanetX - trend maps")
+    out["layers"] = []
+    if group is not None:
+        for node in group.findLayers():
+            layer = node.layer()
+            provider = layer.dataProvider()
+            stats = provider.bandStatistics(1)
+            out["layers"].append({
+                "name": layer.name(), "crs": layer.crs().authid(),
+                "bands": layer.bandCount(),
+                "size": [layer.width(), layer.height()],
+                "min": round(stats.minimumValue, 4),
+                "max": round(stats.maximumValue, 4)})
+            QgsProject.instance().removeMapLayer(node.layerId())
+        root.removeChildNode(group)
+    return None
+
+@check(500)
 def series_landsat_open():
     """Ряд по датам Landsat: температура поверхности у Перми летом
     2024 года, ключ SAS Planetary Computer."""
@@ -22626,6 +22976,87 @@ def _pc_report(name):
     out["gl"] = dict(view.gl_errors)
     return out
 
+
+LIDAR_POINTS = {"ign": (45.193, 5.718), "usgs": (38.13, -112.4825)}
+
+
+@check(1000)
+def lidar_ign():
+    """Облака точек лидара по сети у точки: IGN LiDAR HD у Гренобля
+    и USGS 3DEP в Юте - плитки из каталогов слоями проекта, точки на
+    глобусе частями файла COPC, у 3DEP - с ключом SAS."""
+    _lidar_start("ign")
+
+
+def _lidar_start(name):
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    lat, lon = LIDAR_POINTS[name]
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(lat, lon, 1500.0, 20.0, 50.0))
+    window.view.update()
+    state["pc_began"] = time.monotonic()
+    state["lidar_name"] = name
+    state["lidar_before"] = len(window.pointclouds.entries)
+    window.lidar_here(lat, lon)
+
+
+def _lidar_wait(limit=150.0):
+    window = state["window"]
+    search = getattr(window, "lidar_search", None)
+    spent = time.monotonic() - state["pc_began"]
+    if search is not None and search.busy() and spent < limit:
+        return 500
+    from planetx.ui import pointcloud
+    remote = [e for e in window.pointclouds.entries.values()
+              if pointcloud.is_remote(e.path)]
+    if len(remote) <= state["lidar_before"] and spent < 60.0:
+        return 500
+    wait = _pc_settled(limit)
+    if wait:
+        return wait
+    name = state["lidar_name"]
+    out = _pc_report("lidar_" + name)
+    out["tiles"] = [e.name for e in remote]
+    out["keyed"] = [("sig=" in (e.copc or "")) for e in remote]
+    out["message"] = str(window.message[0]) if window.message else ""
+    window.view.grabFramebuffer().save(
+        os.path.join(TEMP, "planetx_lidar_{}.png".format(name)))
+    return None
+
+
+@check(1000)
+def lidar_ign_wait():
+    return _lidar_wait()
+
+
+@check(1000)
+def lidar_usgs():
+    _lidar_start("usgs")
+
+
+@check(1000)
+def lidar_usgs_wait():
+    return _lidar_wait()
+
+
+@check(1000)
+def lidar_clean():
+    from qgis.core import QgsProject
+    window = state["window"]
+    project = QgsProject.instance()
+    root = project.layerTreeRoot()
+    for title in ("PlanetX - облака точек лидара",
+                  "PlanetX - lidar point clouds"):
+        group = root.findGroup(title)
+        if group is not None:
+            for node in group.findLayers():
+                project.removeMapLayer(node.layerId())
+            root.removeChildNode(group)
+    window._apply_vector(force=True)
+    result.setdefault("pointcloud", {})["lidar_after"] = len(
+        window.pointclouds.entries)
 
 @check(1000)
 def pointcloud_open():

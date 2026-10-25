@@ -464,12 +464,14 @@ class StateMixin:
         if key == "map":
             title = map_names().get(self.theme_key, (title,))[0]
         wayback = key == "map" and self.theme_key == themes.WAYBACK
+        disaster = key == "map" and self.theme_key == themes.EVENTS
         overlay = key in tileoverlays.OVERLAYS
         if key == "geology" or key in tilemaps.MAPS or wayback \
-                or overlay:
+                or overlay or disaster:
             # Карты картинками - слоем тайлов или WMS, без файла.
             count = self._export_geology(title) if key == "geology" \
                 else self._export_wayback(title) if wayback \
+                else self._export_events() if disaster \
                 else self._export_tile_overlay(key, title) if overlay \
                 else self._export_tilemap(key, title)
             self.message = (tr("В проект добавлен слой «{title}».",

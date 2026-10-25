@@ -16,6 +16,9 @@ QGIS. Запросы идут через сетевые настройки и д
 | Esri World Imagery | космоснимки, подложка по умолчанию | [Esri Master License Agreement](https://www.esri.com/en-us/legal/terms/full-master-agreement) | Esri, Vantor, Earthstar Geographics, and the GIS User Community |
 | OpenStreetMap | карта, подложка на выбор | [ODbL и правила использования тайлов](https://www.openstreetmap.org/copyright) | © OpenStreetMap contributors |
 | OpenFreeMap | границы, реки, дороги, названия пунктов, 3D-здания | [бесплатно, в том числе коммерчески, с подписью](https://openfreemap.org/) | OpenFreeMap © OpenMapTiles, © OpenStreetMap contributors |
+| Overture Maps Foundation, архив `tiles.overturemaps.org/<выпуск>/buildings.pmtiles`, выпуск - поле latest каталога `stac.overturemaps.org/catalog.json` | 3D-здания по выбору в окне «Источники данных», по умолчанию выключено | [ODbL для тем зданий](https://docs.overturemaps.org/attribution/), в теме - OpenStreetMap (ODbL), Microsoft ML Buildings, Google Open Buildings, Esri Community Maps (CC BY 4.0), сверено 25 октября 2026 года, ключ не нужен | Buildings: Overture Maps Foundation, © OpenStreetMap contributors (ODbL), Microsoft, Google Open Buildings, Esri Community Maps (CC BY 4.0) |
+| IGN LiDAR HD, слой WFS `IGNF_LIDAR-HD_METADONNEE:metadata` `data.geopf.fr/wfs`, файлы COPC `data.geopf.fr/telechargement` | облака точек лидара у точки, пункт меню на глобусе | [Licence Ouverte 2.0](https://geoservices.ign.fr/lidarhd), сверено 25 октября 2026 года, ключ не нужен, сервер отвечает 429 на частые запросы | LiDAR HD © IGN, Licence Ouverte 2.0 |
+| USGS 3DEP, коллекция `3dep-lidar-copc` STAC Microsoft Planetary Computer, файлы в Azure по ключу SAS службы без учётной записи | облака точек лидара у точки, пункт меню на глобусе | общественное достояние США, сверено 25 октября 2026 года | USGS 3DEP, public domain |
 | MapLibre GL JS 5.6.0 с unpkg.com, стиль OpenFreeMap Liberty | глобус страницы «Поделиться видом», модуль библиотеку не содержит, её грузит браузер | [лицензия BSD-3-Clause](https://github.com/maplibre/maplibre-gl-js/blob/main/LICENSE.txt), стиль - условия OpenFreeMap | подпись стиля OpenFreeMap и подпись Terrain Tiles на странице |
 | OSRM FOSSGIS, routing.openstreetmap.de | маршруты на машине, велосипеде и пешком, меню на глобусе | [не больше запроса в секунду, User-Agent программы, подпись и ссылка «сообщить об ошибке», без массовых запросов](https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/), сверено 8 октября 2026 года | © OpenStreetMap под строкой маршрута, ссылка «Ошибка на карте» |
 | Copernicus Sentinel-2 L2A, файлы Element 84 на AWS | каналы и индексы слоями проекта, окно «Снимки Sentinel-2» | [правовое уведомление Copernicus](https://sentinels.copernicus.eu/documents/247904/690755/Sentinel_Data_Legal_Notice) - свободное воспроизведение, распространение и изменение. Изменённые данные несут подпись «Contains modified Copernicus Sentinel data [год]». Сверено 9 октября 2026 года | подпись в метаданных слоя и в окне |
@@ -91,6 +94,8 @@ QGIS. Запросы идут через сетевые настройки и д
 | NOAA CoastWatch, ERDDAP nesdisSSH1day - геострофические течения ugos, vgos по спутниковой альтиметрии, сутки, 0.25° | строка «Течения» витрины, выборка через 0.5° за последние сутки | «The data may be used and redistributed for free but is not intended for legal use» ([описание набора](https://coastwatch.pfeg.noaa.gov/erddap/info/nesdisSSH1day/index.html)), сверено 11 октября 2026 года. Файл netCDF около 4 МБ скачивается при включении раз за сеанс, модуль его не хранит | Currents: NOAA CoastWatch, NESDIS SSH |
 | David Rumsey Map Collection: изображения IIIF (images.iiifhosting.com) и каталог Стэнфорда «Georeferenced Maps Metadata» (purl.stanford.edu/ss311gz1992) | окно «Карты Рамсея» меню на глобусе, каталог - planetx-terrain/rumsey | каталог - [CC0](https://purl.stanford.edu/ss311gz1992), изображения - CC BY-NC-SA 3.0 по [записи Стэнфорда](https://purl.stanford.edu/xh235dd9059), сверено 11 октября 2026 года, условия на davidrumsey.com не сверены. Модуль изображения не хранит и не передаёт, карту собирает и привязывает пользователь у себя, в окне и в метаданных слоя - некоммерческое использование. Коммерческое использование - через rumseymapcenter@stanford.edu | Historical maps: David Rumsey Map Collection, CC BY-NC-SA 3.0 |
 | WRI Global Power Plant Database, версия 1.3.0 | строка «Электростанции» витрины, 34 936 электростанций | [CC BY 4.0](https://datasets.wri.org/dataset/globalpowerplantdatabase), сверено 11 октября 2026 года. Архив около 4 МБ скачивается при первом включении, разобранные массивы лежат файлом в профиле QGIS, модуль их не передаёт. Данные на 2021 год, у части станций место указано неверно | Power plants: WRI Global Power Plant Database, CC BY 4.0 |
+| Vantor Open Data (прежде Maxar Open Data), каталог STAC `vantor-opendata.s3.amazonaws.com/events/catalog.json` | карта «Снимки событий» группы «Архив снимков», окно «Снимки событий» | CC BY-NC 4.0 в каталоге и у каждого снимка, сверено 25 октября 2026 года, ключ не нужен. См. раздел «Снимки событий Vantor и Planet» | Vantor Open Data, CC BY-NC 4.0 |
+| Planet Disaster Data, Planet Labs PBC, Source Cooperative, каталог STAC `data.source.coop/planet/disasterdata/catalog.json` | карта «Снимки событий» группы «Архив снимков», окно «Снимки событий» | CC BY-NC 4.0, © Planet Labs PBC, сверено 25 октября 2026 года, ключ не нужен. См. раздел «Снимки событий Vantor и Planet» | Planet Labs PBC, CC BY-NC 4.0 |
 | Nominatim | поиск места по названию | [правила использования Nominatim](https://operations.osmfoundation.org/policies/nominatim/) | © OpenStreetMap contributors, в окне «О модуле» |
 
 ## Nominatim - поиск места
@@ -158,6 +163,31 @@ Master License Agreement, как у World Imagery. На снимке подпи�
 Community». Разбор пунктов соглашения - в разделе об Esri World
 Imagery выше, он относится и к архиву. «В проект QGIS…» добавляет
 выпуск слоем тайлов XYZ без скачивания.
+
+## Снимки событий Vantor и Planet
+
+Карта «Снимки событий» показывает снимки чрезвычайных событий из двух
+открытых каталогов STAC. Каталоги сверены 25 октября 2026 года, в них
+18 событий - 11 у Vantor и 7 у Planet.
+
+- Vantor Open Data (прежде Maxar Open Data) - каталог
+  `vantor-opendata.s3.amazonaws.com/events/catalog.json`, по коллекции
+  на событие. Снимок - полоса WorldView одним облачным GeoTIFF
+  в EPSG:4326 с признаком «до» или «после» события. Лицензия
+  в каталоге и у снимков - CC-BY-NC-4.0.
+- Planet Disaster Data на Source Cooperative - каталог
+  `data.source.coop/planet/disasterdata/catalog.json`. Снимки после
+  события - сцены PlanetScope, SkySat и Pelican в UTM, до события -
+  квадраты квартальной мозаики Planet в EPSG:3857. Лицензия - CC BY-NC
+  4.0, © Planet Labs PBC, контакт crisis-response@planet.com.
+
+Ключ не нужен. Модуль снимки не хранит и не передаёт. Части файлов
+приходят по запросам Range у видимой части Земли, в дисковый кэш
+QGIS они не пишутся. Лицензия разрешает только некоммерческое
+использование и требует подпись. Подпись источника события стоит
+в углу вида, условие названо в окне «Снимки событий» и в руководстве.
+«В проект QGIS…» добавляет снимки растрами по сети с подписью
+в метаданных слоя, файлы не пишутся.
 
 ## Марс и Луна
 

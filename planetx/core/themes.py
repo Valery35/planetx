@@ -51,6 +51,7 @@ CLEAR = {"snow_mass": ((82, 98, 106),)}
 GROUPS = ("weather", "fire", "water", "gases", "life", "archive")
 WEATHER = "GFS"  # слой темы-поля прогноза
 WAYBACK = "wayback"  # ключ темы архива снимков
+EVENTS = "events"  # ключ темы снимков чрезвычайных событий
 
 
 class Theme:
@@ -179,8 +180,127 @@ class WaybackTheme(Theme):
         return wayback.CONFIG_URL
 
 
-THEMES = THEMES + (WaybackTheme(),)
+class EventTheme(Theme):
+    """Снимки чрезвычайного события Vantor или Planet (core/events.py):
+    день ряда - день снимков, картинки тайлов собирает окно из COG, адреса
+    тайла нет. Подпись ставит окно по источнику события."""
+
+    __slots__ = ("name", "attribution")
+
+    def __init__(self):
+        super().__init__(EVENTS, "archive", "", "", 19, None)
+        self.name = "Vantor, Planet"
+        self.attribution = ("Vantor, Planet Labs PBC, CC BY-NC 4.0",
+                            "https://creativecommons.org/licenses/by-nc/4.0/")
+
+    def url(self, day):
+        return None
+
+    def domains_url(self):
+        return None
+
+
+THEMES = THEMES + (WaybackTheme(), EventTheme())
 BY_KEY = {theme.key: theme for theme in THEMES}
+
+# Весь каталог GIBS: растровые слои из GetCapabilities WMTS EPSG:3857
+# строками категории «Все слои NASA GIBS» каталога «Добавить данные».
+# Слой становится темой с ключом GIBS_PREFIX + имя слоя, ряд дат берётся
+# прямо из ответа (Dimension Time), без DescribeDomains. Слои с шагом
+# меньше суток и векторные тайлы не берутся.
+GIBS_PREFIX = "gibs:"
+GIBS_GROUP = "gibs"
+CAPABILITIES = ROOT + "/wmts/epsg3857/best/1.0.0/WMTSCapabilities.xml"
+
+
+class LayerTheme(Theme):
+    """Слой каталога GIBS: title - название из каталога, intervals - ряд
+    дат (список core.themes.parse_domains) или None у слоя без времени,
+    его тайлы - на день default."""
+
+    __slots__ = ("title", "intervals")
+
+    def __init__(self, layer, title, ext, level, colormap, intervals):
+        super().__init__(GIBS_PREFIX + layer, GIBS_GROUP, layer, ext, level,
+                         colormap)
+        self.title = title
+        self.intervals = intervals
+
+    def url(self, day):
+        return URL.format(layer=self.layer, time=day if self.intervals
+                          else "default", level=self.level, ext=self.ext)
+
+    def domains_url(self):
+        return None
+
+    def series(self, now):
+        """Ряд дат темы на момент now (секунды UTC): готовые дни ряда,
+        у слоя без времени - вчерашний день, тайлы от дня не зависят."""
+        if self.intervals:
+            return ready_intervals(self.intervals, now)
+        day = datetime.datetime.fromtimestamp(
+            now - READY_LAG, datetime.timezone.utc).date()
+        return [(day, day, 1, "D")]
+
+
+_LAYER = re.compile(r"<Layer>(.*?)</Layer>", re.S)
+_TITLE = re.compile(r"<ows:Title[^>]*>([^<]*)</ows:Title>")
+_IDENT = re.compile(r"<ows:Identifier>([^<]*)</ows:Identifier>")
+_FORMAT = re.compile(r"<Format>image/(png|jpeg)</Format>")
+_LEVEL = re.compile(r"GoogleMapsCompatible_Level(\d+)</TileMatrixSet>")
+_CMAP = re.compile(r"/colormaps/v1\.3/([^\"'/]+)\.xml")
+_VALUE = re.compile(r"<Value>([^<]*)</Value>")
+
+
+def parse_capabilities(data):
+    """Растровые слои GIBS из ответа GetCapabilities WMTS: список
+    LayerTheme по названию. Слой с Dimension Time без суточного ряда
+    (шаги в минутах и часах) пропускается."""
+    if isinstance(data, bytes):
+        data = data.decode("utf-8", "replace")
+    out = []
+    for body in _LAYER.findall(data or ""):
+        ident = _IDENT.search(body)
+        fmt = _FORMAT.search(body)
+        level = _LEVEL.search(body)
+        if ident is None or fmt is None or level is None:
+            continue
+        title = _TITLE.search(body)
+        name = html.unescape(title.group(1) if title else ident.group(1))
+        cmap = _CMAP.search(body)
+        intervals = None
+        if "<Dimension>" in body:
+            text = "".join(v + " " for v in _VALUE.findall(body))
+            intervals = [(_date(a), _date(b), int(n), unit)
+                         for a, b, n, unit in _INTERVAL.findall(text)]
+            if not intervals:
+                continue
+        out.append(LayerTheme(
+            ident.group(1).strip(),
+            name.strip(),
+            "png" if fmt.group(1) == "png" else "jpg",
+            int(level.group(1)), cmap.group(1) if cmap else None,
+            intervals))
+    out.sort(key=lambda theme: theme.title.lower())
+    return out
+
+
+def register(layers):
+    """Слои каталога GIBS - темы BY_KEY. Прежние слои каталога
+    заменяются, встроенные темы не трогаются."""
+    for key in [k for k in BY_KEY if k.startswith(GIBS_PREFIX)]:
+        del BY_KEY[key]
+    for theme in layers:
+        BY_KEY[theme.key] = theme
+
+
+def search(layers, text):
+    """Слои каталога GIBS, в названии или имени которых есть все слова
+    text, без учёта регистра."""
+    words = (text or "").lower().split()
+    return [theme for theme in layers
+            if all(w in (theme.title + " " + theme.layer).lower()
+                   for w in words)]
 
 
 # Карты витрины, которые не темы GIBS: пожары FIRMS и температура
@@ -193,8 +313,8 @@ THUMB_TILE = (1, 1, 0)  # z, x, y тайла превью: Евразия, се�
 
 def gallery_items():
     """Карты витрины по порядку: (ключ, группа, вид). Вид - "gibs"
-    (тайл темы на день), "weather" (поле прогноза), "fires",
-    "temperature"."""
+    (тайл темы на день), "weather" (поле прогноза), "events" (снимки
+    событий), "fires", "temperature"."""
     out = []
     for group in GROUPS:
         if group == "weather":
@@ -203,7 +323,8 @@ def gallery_items():
             out.append((FIRES, group, FIRES))
         for theme in THEMES:
             if theme.group == group:
-                kind = "weather" if theme.layer == WEATHER else "gibs"
+                kind = "weather" if theme.layer == WEATHER \
+                    else EVENTS if theme.key == EVENTS else "gibs"
                 out.append((theme.key, group, kind))
     return out
 

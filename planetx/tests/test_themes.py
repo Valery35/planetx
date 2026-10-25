@@ -190,6 +190,75 @@ class TestThemes(unittest.TestCase):
 
 
 
+# Три слоя по образцу GetCapabilities GIBS 25 октября 2026 года: с рядом
+# дат и цветовой картой, без времени в JPEG, с шагом 10 минут и векторный.
+CAPS = (
+    "<Contents><Layer><ows:Title xml:lang='en'>"
+    "Snow Cover (Daily, MODIS &amp; Terra)</ows:Title>"
+    "<ows:Identifier>MODIS_Terra_NDSI_Snow_Cover</ows:Identifier>"
+    "<ows:Metadata xlink:href='https://gibs.earthdata.nasa.gov/colormaps/"
+    "v1.3/MODIS_NDSI_Snow_Cover.xml'/><Dimension><ows:Identifier>Time"
+    "</ows:Identifier><Value>2000-02-24/2023-01-01/P1D</Value>"
+    "<Value>2023-02-01/2026-10-24/P1D</Value></Dimension>"
+    "<TileMatrixSetLink><TileMatrixSet>GoogleMapsCompatible_Level8"
+    "</TileMatrixSet></TileMatrixSetLink><Format>image/png</Format>"
+    "</Layer><Layer><ows:Title xml:lang='en'>Blue Marble</ows:Title>"
+    "<ows:Identifier>BlueMarble_NextGeneration</ows:Identifier>"
+    "<TileMatrixSetLink><TileMatrixSet>GoogleMapsCompatible_Level8"
+    "</TileMatrixSet></TileMatrixSetLink><Format>image/jpeg</Format>"
+    "</Layer><Layer><ows:Title xml:lang='en'>GOES</ows:Title>"
+    "<ows:Identifier>GOES-East_ABI_Band2</ows:Identifier><Dimension>"
+    "<Value>2026-10-24T00:00:00Z/2026-10-24T23:50:00Z/PT10M</Value>"
+    "</Dimension><TileMatrixSetLink><TileMatrixSet>"
+    "GoogleMapsCompatible_Level7</TileMatrixSet></TileMatrixSetLink>"
+    "<Format>image/png</Format></Layer><Layer><ows:Title xml:lang='en'>"
+    "Roads</ows:Title><ows:Identifier>OSM_Roads</ows:Identifier>"
+    "<TileMatrixSetLink><TileMatrixSet>GoogleMapsCompatible_Level9"
+    "</TileMatrixSet></TileMatrixSetLink>"
+    "<Format>application/vnd.mapbox-vector-tile</Format></Layer>"
+    "</Contents>")
+
+class TestCatalogue(unittest.TestCase):
+    def setUp(self):
+        self.layers = themes.parse_capabilities(CAPS.encode("utf-8"))
+
+    def tearDown(self):
+        themes.register([])
+
+    def test_raster_daily_layers_only(self):
+        self.assertEqual([t.layer for t in self.layers],
+                         ["BlueMarble_NextGeneration",
+                          "MODIS_Terra_NDSI_Snow_Cover"])
+        snow = self.layers[1]
+        self.assertEqual(snow.title, "Snow Cover (Daily, MODIS & Terra)")
+        self.assertEqual((snow.ext, snow.level, snow.colormap),
+                         ("png", 8, "MODIS_NDSI_Snow_Cover"))
+        self.assertEqual(len(snow.intervals), 2)
+        self.assertEqual(self.layers[0].ext, "jpg")
+        self.assertIsNone(self.layers[0].intervals)
+
+    def test_series_and_url(self):
+        now = calendar.timegm((2026, 10, 25, 12, 0, 0))
+        snow, marble = self.layers[1], self.layers[0]
+        self.assertEqual(themes.pick_day(snow.series(now)), "2026-10-24")
+        self.assertIn("/MODIS_Terra_NDSI_Snow_Cover/default/2026-10-24/"
+                      "GoogleMapsCompatible_Level8/", snow.url("2026-10-24"))
+        self.assertEqual(themes.pick_day(marble.series(now)), "2026-10-24")
+        self.assertIn("/default/default/", marble.url("2026-10-24"))
+        self.assertIsNone(snow.domains_url())
+
+    def test_register_and_search(self):
+        themes.register(self.layers)
+        self.assertIn("gibs:BlueMarble_NextGeneration", themes.BY_KEY)
+        self.assertIn("snow", themes.BY_KEY)
+        self.assertEqual([t.layer for t in themes.search(self.layers,
+                                                         "terra SNOW")],
+                         ["MODIS_Terra_NDSI_Snow_Cover"])
+        themes.register([])
+        self.assertNotIn("gibs:BlueMarble_NextGeneration", themes.BY_KEY)
+        self.assertIn("snow", themes.BY_KEY)
+
+
 class TestWms(unittest.TestCase):
 
     def test_wms_url_axis_order_and_size(self):

@@ -115,6 +115,7 @@ from .globe.pictures import PicturesMixin
 from .globe.identify import IdentifyMixin
 from .globe.resources import ResourcesMixin
 from .globe.wiki import WikiMixin
+from .globe.disasters import DisastersMixin
 from .wikipedia import WikiArticles
 
 # Имена, которые берут из модуля окна снаружи.
@@ -135,7 +136,7 @@ def _shadow(widget):
 class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                   LayersMixin, SearchMixin, PlacesMixin, ActionsMixin,
                   ToolsMixin, PicturesMixin, IdentifyMixin, ResourcesMixin,
-                  WikiMixin, QWidget):
+                  WikiMixin, DisastersMixin, QWidget):
     """Отдельное окно поверх главного окна QGIS."""
 
     closed = pyqtSignal()
@@ -996,9 +997,14 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.gallery_requested.connect(self.open_gallery)
         # Включённые пожары и температура - тоже выбор карты витрины,
         # иначе пустая тема выключила бы их.
+        saved = settings.value(THEME_KEY, "") or ""
         self.set_theme(self.gallery_key() if any(
             self.extras.get(extra) for extra in themes.EXCLUSIVE)
-            else settings.value(THEME_KEY, "") or "")
+            else saved)
+        if saved.startswith(themes.GIBS_PREFIX) and not self.theme_key:
+            # Слой каталога GIBS - тема после прихода каталога.
+            self.load_gibs(lambda: self.set_theme(saved)
+                           if not self.gallery_key() else None)
         self.refresh()
 
     def closeEvent(self, event):
@@ -1035,6 +1041,10 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.flow.close()
             if getattr(self, "gallery", None) is not None:
                 self.gallery.close()
+            self._event_stop()
+            if getattr(self, "events_dialog", None) is not None:
+                self.event_catalog.abort()
+                self.events_dialog.close()
             self._address_timer.stop()
             reply, self._address_reply = self._address_reply, None
             if reply is not None:

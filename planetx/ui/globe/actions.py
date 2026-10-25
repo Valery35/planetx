@@ -9,12 +9,12 @@ import os
 import time
 
 from qgis.core import QgsProject, QgsRasterLayer, QgsRectangle, QgsSettings
-from qgis.PyQt.QtCore import Qt
+from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtGui import QKeySequence
 from qgis.PyQt.QtWidgets import QApplication
 
 from ... import journal
-from ...core import oldmaps, weather as weather_core
+from ...core import lidarnet, oldmaps, weather as weather_core
 from ...core.flight import Spin
 from ...core.geocode import (SEARCH_INTERVAL, link_zoom, parse_reverse,
                              reverse_url)
@@ -23,7 +23,7 @@ from ...core.placetree import numbered_name
 from ...core.places import Place as MarkPlace
 from ...i18n import tr
 from ...net.overlay import fetch_json
-from ...qt_compat import QAction, enum
+from ...qt_compat import QT_MAJOR, QAction, enum
 from ..themes import theme_names
 from ..draw import PlaceDialog
 from .. import globemenu
@@ -34,6 +34,9 @@ from ..menulinks import MenuLinksDialog, open_link
 from ..weather import (LEVEL as WEATHER_LEVEL, value_text, field_valid_text,
                        units_text as weather_units)
 from .base import SIDEBAR_KEY
+
+LIDAR_TRIES = 3  # попыток открыть слой облака по сети
+LIDAR_RETRY = 3000  # мс между попытками
 
 
 class ActionsMixin:
@@ -283,6 +286,64 @@ class ActionsMixin:
             dialog.use_mission(mission)
         dialog.show_point(lat, lon, self._view_width())
         return dialog
+
+    def lidar_here(self, lat, lon):
+        """«Облака точек лидара здесь» меню на глобусе: плитки IGN LiDAR
+        HD или USGS 3DEP у точки слоями проекта, отмечены на глобусе
+        (ui/lidarnet.py)."""
+        from ..lidarnet import LidarSearch
+        if QT_MAJOR < 6:
+            # QGIS 3.36 повис 25 октября 2026 года в конструкторе
+            # QgsPointCloudLayer с адресом в сети - главный поток ждал GIL
+            # в фильтре событий, все три пробы. В QGIS 4 открытие идёт.
+            self.message = (tr("Облака точек лидара по сети открываются "
+                               "в QGIS 4. В QGIS 3 открытие облака по "
+                               "сети останавливает QGIS."), time.monotonic())
+            self._show_state()
+            return
+        search = getattr(self, "lidar_search", None)
+        if search is None:
+            search = self.lidar_search = LidarSearch(self)
+            search.found.connect(self._lidar_found)
+        search.search(lat, lon)
+        self.message = (tr("Облака точек лидара ищутся в каталогах IGN "
+                           "и USGS…"), time.monotonic())
+        self._show_state()
+
+    def _lidar_found(self, tiles, error):
+        if not tiles:
+            self.message = (tr(
+                "У точки нет облаков точек лидара IGN LiDAR HD (Франция) "
+                "и USGS 3DEP (США). {error}", error=error).strip(),
+                time.monotonic())
+            self._show_state()
+            return
+        if any(lidarnet.needs_key(t.url) for t in tiles):
+            self.pointclouds.want_key(
+                lambda key, tiles=tiles: self._lidar_add(tiles, key))
+        else:
+            self._lidar_add(tiles, "")
+
+    def _lidar_add(self, tiles, key, tries=LIDAR_TRIES):
+        """Слои плиток в проект. Не открывшиеся пробуются снова через
+        LIDAR_RETRY мс, всего tries раз."""
+        from ..lidarnet import add_layers
+        ids, failed = add_layers(tiles, key)
+        if failed and tries > 1:
+            QTimer.singleShot(LIDAR_RETRY, lambda: self._lidar_add(
+                failed, key, tries - 1))
+        for layer_id in ids:
+            self._shown.add(layer_id)
+            if self.follow:
+                set_visible_on_map(layer_id, True)
+        write_shown(self._shown)
+        self._show_layers()
+        self.refresh()
+        self.message = (tr("Облаков точек лидара в проекте: {count}, {name}.",
+                           count=len(ids), name=", ".join(
+                               t.name for t in tiles)), time.monotonic())
+        self._show_state()
+        return ids
 
     def etomesto_here(self, lat, lon):
         """«Старые карты «Это Место» здесь…» меню на глобусе: каталог

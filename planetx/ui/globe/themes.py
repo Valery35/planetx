@@ -12,8 +12,8 @@ from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QTimer
 
 from ... import journal
-from ...core import (basemap, ellipsoid, stars, sun, graticule, themes,
-                     wayback, sources as datasources)
+from ...core import (basemap, ellipsoid, events, stars, sun, graticule,
+                     themes, wayback, sources as datasources)
 from ...core.geocode import link_zoom
 from ...core.sync import ground_size
 from ...core.features import Shape
@@ -36,6 +36,7 @@ from ..inset import DeepSource, DemSource, terrain_prepare
 from ..contours import ContourSource, digit_glyphs
 from ..properties import SCALE_RANGE
 from ..nasamaps import NasaMaps, map_names
+from ..overture import OvertureTiles, release_url
 from .base import (BODY_CONTOUR_DEEPER, CIRCLE_COLOR,
                    GRID_COLOR, GRID_WIDTH, RELIEF_KEY, SCALE_KEY, SUN_PERIOD,
                    SURFACE_EXTRAS, THEME_KEY, TILE_SIZE, WAYBACK_PAUSE,
@@ -69,6 +70,37 @@ class ThemesMixin:
         QgsSettings().setValue(THEME_KEY, key)
         self._mark_gallery()
         self._show_theme()
+
+    def load_gibs(self, done=None):
+        """Весь каталог GIBS: слои из GetCapabilities WMTS темами
+        (core.themes.register), done() - когда список пришёл. Список
+        просится один раз за окно, ответ помнит кэш QGIS."""
+        if getattr(self, "gibs_layers", None) is not None:
+            if done is not None:
+                done()
+            return
+        if not hasattr(self, "_gibs_waiting"):
+            self._gibs_waiting = []
+        if done is not None:
+            self._gibs_waiting.append(done)
+        if getattr(self, "_gibs_reply", None) is None:
+            self._gibs_reply = fetch_bytes(themes.CAPABILITIES,
+                                           self._gibs_done)
+
+    def _gibs_done(self, data, error):
+        self._gibs_reply = None
+        if not data:
+            self.message = (tr("Каталог NASA GIBS не загрузился: {error}",
+                               error=error), time.monotonic())
+            self._show_state()
+            self._gibs_waiting = []
+            return
+        self.gibs_layers = themes.parse_capabilities(data)
+        themes.register(self.gibs_layers)
+        journal.note("gibs catalog {} layers".format(len(self.gibs_layers)))
+        waiting, self._gibs_waiting = self._gibs_waiting, []
+        for done in waiting:
+            done()
 
     def gallery_key(self):
         """Карта витрины на глобусе: пожары, температура, тема или ""."""
@@ -183,7 +215,17 @@ class ThemesMixin:
             self._update_timebar()
             return
         theme = themes.BY_KEY[self.theme_key]
-        if theme.key not in self._theme_domains:
+        if theme.key == themes.EVENTS and not self._event_ready():
+            # Снимки событий: ряд дат даёт выбранное событие.
+            self._set_gibs("theme", False)
+            self.theme_legend.hide()
+            self.open_events()
+            return
+        if theme.key not in self._theme_domains \
+                and isinstance(theme, themes.LayerTheme):
+            # Слой каталога GIBS: ряд дат - из ответа GetCapabilities.
+            self._theme_domains[theme.key] = theme.series(time.time())
+        if theme.key not in self._theme_domains and theme.domains_url():
             self._theme_fetch(theme.key, "domains", theme.domains_url())
         if theme.colormap and theme.key not in self._theme_scales:
             self._theme_fetch(theme.key, "scale", theme.colormap_url())
@@ -316,7 +358,8 @@ class ThemesMixin:
             self._show_state()
             return
         self.theme_day = day
-        name = theme_names()[theme.key][0]
+        name = theme_names()[theme.key][0] if theme.key != themes.EVENTS \
+            else self.event_title() or theme_names()[theme.key][0]
         scale = self._theme_scales.get(theme.key)
         units = scale["units"] if scale else ""
         title = tr("{name}, {units} · {day}", name=name, units=units,
@@ -331,11 +374,14 @@ class ThemesMixin:
         keep = self._theme_shown is not None \
             and self._theme_shown[0] == theme.key
         self._theme_shown = (theme.key, day)
+        self.view.crossfade(self._theme_ready)
+        if theme.key == themes.EVENTS:
+            self._event_layer("theme", day, keep)
+            return
         source = basemap.Source(theme.name, theme.url(day), theme.level,
                                 theme.attribution, builtin=True,
                                 missing=(404,))
         self.view.gibs["theme"].max_level = theme.level
-        self.view.crossfade(self._theme_ready)
         self._set_gibs("theme", True, (source, prepare_theme(theme.key)),
                        keep=keep)
 
@@ -365,8 +411,12 @@ class ThemesMixin:
             if on and self._theme_on() \
             and not themes.is_weather(self.theme_key) else None
         if on and intervals:
+            before = events.pre_day(self._event_items) \
+                if self.theme_key == themes.EVENTS \
+                and self._event_ready() else None
             if self._compare_at is None:
-                self._compare_at = themes.moment(themes.compare_day(
+                # У снимков события слева - снимки до события.
+                self._compare_at = themes.moment(before or themes.compare_day(
                     intervals, self.theme_moment()))
             self.view.swipe = self.swipe_bar.share
             self.swipe_bar.set_shown(True)
@@ -392,6 +442,9 @@ class ThemesMixin:
         keep = self._compare_shown is not None \
             and self._compare_shown[0] == theme.key
         self._compare_shown = (theme.key, left)
+        if theme.key == themes.EVENTS:
+            self._event_layer("compare", left, keep)
+            return
         source = basemap.Source(theme.name, theme.url(left), theme.level,
                                 theme.attribution, builtin=True,
                                 missing=(404,))
@@ -627,15 +680,33 @@ class ThemesMixin:
             timer.stop()
         self.view.update()
 
+    def _overture_on(self):
+        """Здания - из архива Overture Maps (окно «Источники данных»)."""
+        return QgsSettings().value(datasources.BUILDINGS_KEY, "") \
+            == datasources.OVERTURE
+
     def _set_buildings(self, on):
-        """3D-здания: загрузчик тайлов OpenFreeMap или никакого. Адрес
-        тайлов даёт TileJSON, до его прихода здания ждут."""
+        """3D-здания: загрузчик тайлов векторной основы, архива Overture
+        Maps или никакого. Адрес тайлов основы даёт TileJSON, адрес
+        архива - каталог STAC Overture, до их прихода здания ждут."""
         old = self.buildings_loader
         if old is not None:
             old.abort()
             old.deleteLater()
         self.buildings_loader = None
-        if on and self._ofm_source is not None:
+        overture = on and self._overture_on()
+        if overture:
+            url = getattr(self, "_overture_url", None)
+            if url is not None:
+                self.buildings_loader = OvertureTiles(url, parent=self)
+                self.buildings_loader.loaded.connect(
+                    lambda key, found, extra: self.view.add_buildings(
+                        key, found))
+            elif getattr(self, "_overture_reply", None) is None:
+                self._overture_reply = fetch_json(
+                    datasources.OVERTURE_STAC, self._overture_catalog,
+                    prefer_cache=False)
+        elif on and self._ofm_source is not None:
             self.buildings_loader = TileLoader(self._ofm_source, parent=self,
                                                decode=buildings_decoder)
             self.buildings_loader.loaded.connect(
@@ -643,8 +714,19 @@ class ThemesMixin:
         elif on and self._tilejson is None:
             self._tilejson = fetch_json(self._vector_choice(),
                                         self._tilejson_done)
-        self.view.set_buildings(on, self.buildings_loader)
+        self.view.set_buildings(on, self.buildings_loader,
+                                "overture" if overture else "vector")
         self._show_attribution()
+
+    def _overture_catalog(self, data, error):
+        """Пришёл каталог STAC Overture: адрес архива последнего выпуска.
+        Без ответа - выпуск по умолчанию."""
+        self._overture_reply = None
+        if error:
+            journal.note("overture catalog: {}".format(error))
+        self._overture_url = release_url(data)
+        if self.extras.get("buildings") and self.buildings_loader is None:
+            self._set_buildings(True)
 
     def _update_layer_labels(self, force=False):
         """Подписи слоёв проекта, которые сейчас на глобусе. Слои

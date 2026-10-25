@@ -394,8 +394,11 @@ def prepare_temperature(key, rgba):
 def prepare_theme(theme_key):
     """Работа рабочего потока для тайла темы NASA GIBS: прозрачность,
     прозрачные классы темы и уровни мипмапов."""
-    if theme_key == themes.WAYBACK:
-        # Снимок Wayback - подложка, без прозрачности раскраски.
+    theme = themes.BY_KEY.get(theme_key)
+    if theme_key == themes.WAYBACK or theme is not None \
+            and theme.group == themes.GIBS_GROUP and theme.ext == "jpg":
+        # Снимок Wayback и снимки каталога GIBS в JPEG - подложка, без
+        # прозрачности раскраски.
         return lambda key, rgba: mip_chain(rgba)
     clear = themes.CLEAR.get(theme_key, ())
     return lambda key, rgba: mip_chain(themes.overlay_rgba(rgba,

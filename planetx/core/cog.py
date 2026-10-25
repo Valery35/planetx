@@ -18,7 +18,14 @@ fetch(начало, длина) -> байты: поставляет вызыва
 Поддержано то, что есть в файлах рельефа: TIFF и BigTIFF с прямым
 порядком байтов, тайлы, сжатие DEFLATE или без сжатия, предиктор 1, 2
 и 3, один канал Float32, Int16 или Int32, система EPSG:4326.
+
+Картинки - снимки событий Vantor и Planet (core/events.py): три-четыре
+канала по 8 бит вперемежку, сжатие LZW, DEFLATE или JPEG, системы
+EPSG:4326, 3857 и UTM WGS84. Тайл картинки здесь не распаковывается,
+он заворачивается в маленький TIFF (tiff_bytes), его раскодирует
+вызывающий - средствами Qt, LZW на Python шёл бы секунды на тайл.
 """
+import math
 import struct
 import threading
 import zlib
@@ -26,10 +33,21 @@ from collections import OrderedDict
 
 import numpy as np
 
+try:  # внутри плагина QGIS
+    from .coords import utm_arrays
+except ImportError:  # headless-тесты
+    from coords import utm_arrays
+
 HEAD = 65536  # байт начала файла: заголовок и каталоги COG
 CACHE_BYTES = 64 << 20  # распакованных тайлов в памяти на файл
 SIDE = 256
 RADIUS = 6378137.0
+# Картинки: сжатие без него, LZW, JPEG, DEFLATE, и теги, которые тайл
+# уносит в свой TIFF - цветовая модель, лишние каналы, таблицы JPEG,
+# прореживание цвета.
+PICTURE_COMPRESSION = (1, 5, 7, 8, 32946)
+PICTURE_TAGS = (262, 338, 347, 530)
+JOIN_GAP = 65536  # байт промежутка, который читается ради одного запроса
 
 _TYPES = {1: ("B", 1), 2: ("s", 1), 3: ("H", 2), 4: ("I", 4), 5: ("II", 8),
           6: ("b", 1), 7: ("B", 1), 8: ("h", 2), 9: ("i", 4), 11: ("f", 4),
@@ -46,7 +64,8 @@ class Image:
     """Один каталог файла: полное разрешение или обзор."""
 
     __slots__ = ("width", "height", "tile_w", "tile_h", "offsets", "counts",
-                 "compression", "predictor", "dtype", "scale")
+                 "compression", "predictor", "dtype", "scale", "samples",
+                 "picture", "keep", "planar")
 
     def __init__(self, tags, fetch_array):
         try:
@@ -57,16 +76,30 @@ class Image:
         except KeyError as error:
             raise CogError("not a tiled TIFF") from error
         self.compression = int(tags.get(259, (1,))[0])
-        if self.compression not in (1, 8, 32946):
-            raise CogError("compression %d" % self.compression)
         self.predictor = int(tags.get(317, (1,))[0])
-        if int(tags.get(277, (1,))[0]) != 1:
-            raise CogError("bands")
+        self.samples = int(tags.get(277, (1,))[0])
         fmt = int(tags.get(339, (1,))[0])
         bits = int(tags.get(258, (8,))[0])
-        if (fmt, bits) not in _DTYPES:
-            raise CogError("sample %d/%d" % (fmt, bits))
-        self.dtype = np.dtype(_DTYPES[(fmt, bits)])
+        self.picture = self.samples > 1
+        self.keep = {}
+        # Каналы вперемежку (1) или плоскостями (2) - у мозаик Planet.
+        self.planar = int(tags.get(284, (1,))[0])
+        if self.picture:
+            # Снимок: каналы по 8 бит, раскодирует вызывающий.
+            if self.samples not in (3, 4) or bits != 8 or fmt != 1 \
+                    or self.planar not in (1, 2):
+                raise CogError("picture layout")
+            if self.compression not in PICTURE_COMPRESSION:
+                raise CogError("compression %d" % self.compression)
+            self.dtype = np.dtype("u1")
+            self.keep = {tag: tags[tag] for tag in PICTURE_TAGS
+                         if tag in tags}
+        else:
+            if self.compression not in (1, 8, 32946):
+                raise CogError("compression %d" % self.compression)
+            if (fmt, bits) not in _DTYPES:
+                raise CogError("sample %d/%d" % (fmt, bits))
+            self.dtype = np.dtype(_DTYPES[(fmt, bits)])
         self.offsets = fetch_array(324)
         self.counts = fetch_array(325)
         self.scale = 1.0  # пикселей полного разрешения на пиксель
@@ -74,6 +107,11 @@ class Image:
     @property
     def across(self):
         return -(-self.width // self.tile_w)
+
+    @property
+    def plane_tiles(self):
+        """Тайлов в одной плоскости каналов."""
+        return self.across * -(-self.height // self.tile_h)
 
     def decode(self, raw):
         """Распакованный тайл tile_h × tile_w."""
@@ -139,6 +177,7 @@ class Cog:
             image.scale = full.width / image.width
         self.nodata = _nodata(first)
         self.transform = _transform(first)
+        self.epsg = _epsg(first)
 
     # Каталоги.
 
@@ -175,7 +214,7 @@ class Cog:
                 tags[tag] = ("@", where, kind, n)
         nxt = struct.unpack_from(next_fmt, block, count * entry)[0]
         for tag in (322, 323, 256, 257, 254, 259, 317, 277, 339, 258, 33550,
-                    33922, 34735, 42113):
+                    33922, 34735, 42113, 262, 284, 338, 347, 530):
             if tag in tags and tags[tag][0] == "@":
                 _, where, kind, n = tags[tag]
                 code, size = _TYPES[kind]
@@ -285,6 +324,178 @@ class Cog:
                 out[ya - r0:yb - r0, xa - c0:xb - c0] = part
         return out
 
+    # Картинки.
+
+    def picture(self, level, col, row, decode):
+        """Тайл картинки (tile_h, tile_w, 4) RGBA uint8 или None, если
+        его нет в файле. decode(байты TIFF) - массив RGBA или None."""
+        key = (level, col, row)
+        with self.lock:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+                return self.cache[key]
+        image = self.images[level]
+        index = row * image.across + col
+        planes = image.samples if image.planar == 2 else 1
+        spans = []
+        for plane in range(planes):
+            at = index + plane * image.plane_tiles
+            if at >= len(image.offsets):
+                return None
+            spans.append((int(image.offsets[at]), int(image.counts[at])))
+        if any(length == 0 for _, length in spans):
+            return None
+        data = decode(tiff_bytes(image, self._spans(spans)))
+        if data is None or data.shape[:2] != (image.tile_h, image.tile_w):
+            raise CogError("picture tile")
+        if image.samples == 3:
+            # Без канала прозрачности чёрное - за краем снимка.
+            data = data.copy()
+            data[..., 3] = np.where(data[..., :3].any(axis=2), 255, 0)
+        with self.lock:
+            self.cache[key] = data
+            self.cached += data.nbytes
+            while self.cached > CACHE_BYTES and len(self.cache) > 1:
+                _, old = self.cache.popitem(last=False)
+                self.cached -= old.nbytes
+        return data
+
+    def _spans(self, spans):
+        """Байты частей файла (начало, длина). Близкие части - одним
+        запросом: плоскости каналов тайла лежат рядом."""
+        lo = min(start for start, _ in spans)
+        hi = max(start + length for start, length in spans)
+        total = sum(length for _, length in spans)
+        if len(spans) > 1 and hi - lo <= 2 * total + JOIN_GAP:
+            block = self.fetch(lo, hi - lo)
+            return [block[start - lo:start - lo + length]
+                    for start, length in spans]
+        return [self.fetch(start, length) for start, length in spans]
+
+    def sample_rgba(self, xs, ys, level, decode):
+        """Цвета RGBA uint8 формы xs + (4,) в точках xs, ys системы
+        файла билинейно с обзора level. Вне снимка - прозрачные. Цвет
+        взвешивается прозрачностью соседей, край снимка не темнеет."""
+        image = self.images[level]
+        x0, dx, _, y0, _, dy = self.transform
+        dx, dy = dx * image.scale, dy * image.scale
+        fx = (xs - x0) / dx - 0.5
+        fy = (ys - y0) / dy - 0.5
+        out = np.zeros(fx.shape + (4,), dtype=np.uint8)
+        inside = (fx > -0.5) & (fy > -0.5) & (fx < image.width - 0.5) \
+            & (fy < image.height - 0.5)
+        if not inside.any():
+            return out
+        fx = np.clip(fx[inside], 0.0, image.width - 1.0)
+        fy = np.clip(fy[inside], 0.0, image.height - 1.0)
+        c0, c1 = int(np.floor(fx.min())), int(np.ceil(fx.max()))
+        r0, r1 = int(np.floor(fy.min())), int(np.ceil(fy.max()))
+        block = self._picture_block(level, c0, r0, c1, r1, decode)
+        ix = np.floor(fx).astype(np.int64)
+        iy = np.floor(fy).astype(np.int64)
+        jx = np.minimum(ix + 1, c1)
+        jy = np.minimum(iy + 1, r1)
+        tx = (fx - ix).astype(np.float32)[:, None]
+        ty = (fy - iy).astype(np.float32)[:, None]
+        color = np.zeros((len(fx), 3), dtype=np.float32)
+        weight = np.zeros((len(fx), 1), dtype=np.float32)
+        for px, py, w in ((ix, iy, (1 - tx) * (1 - ty)),
+                          (jx, iy, tx * (1 - ty)),
+                          (ix, jy, (1 - tx) * ty), (jx, jy, tx * ty)):
+            corner = block[py - r0, px - c0].astype(np.float32)
+            wa = w * corner[:, 3:4] / 255.0
+            color += wa * corner[:, :3]
+            weight += wa
+        rgb = color / np.maximum(weight, 1e-6)
+        part = np.concatenate([rgb, weight * 255.0], axis=1)
+        out[inside] = np.clip(np.rint(part), 0, 255).astype(np.uint8)
+        return out
+
+    def _picture_block(self, level, c0, r0, c1, r1, decode):
+        """Пиксели c0..c1, r0..r1 обзора level картинкой RGBA uint8,
+        тайлов нет - прозрачные."""
+        image = self.images[level]
+        out = np.zeros((r1 - r0 + 1, c1 - c0 + 1, 4), dtype=np.uint8)
+        for row in range(r0 // image.tile_h, r1 // image.tile_h + 1):
+            for col in range(c0 // image.tile_w, c1 // image.tile_w + 1):
+                tile = self.picture(level, col, row, decode)
+                if tile is None:
+                    continue
+                ty, tx = row * image.tile_h, col * image.tile_w
+                ya, yb = max(r0, ty), min(r1 + 1, ty + image.tile_h)
+                xa, xb = max(c0, tx), min(c1 + 1, tx + image.tile_w)
+                out[ya - r0:yb - r0, xa - c0:xb - c0] = \
+                    tile[ya - ty:yb - ty, xa - tx:xb - tx]
+        return out
+
+
+def tiff_bytes(image, raws):
+    """Сжатый тайл картинки image маленьким TIFF: raws - байты тайла,
+    у каналов плоскостями - по плоскости на полосу. Его раскодирует
+    читатель TIFF в Qt (libtiff) - LZW, DEFLATE, JPEG с таблицами файла
+    и предиктором."""
+    n = image.samples
+    sizes = tuple(len(raw) for raw in raws)
+    entries = {256: (4, (image.tile_w,)), 257: (4, (image.tile_h,)),
+               258: (3, (8,) * n), 259: (3, (image.compression,)),
+               262: (3, (2,)), 273: (4, (0,) * len(raws)), 277: (3, (n,)),
+               278: (4, (image.tile_h,)), 279: (4, sizes),
+               284: (3, (image.planar,)), 317: (3, (image.predictor,))}
+    for tag, value in image.keep.items():
+        entries[tag] = (7 if tag == 347 else 3, tuple(int(v) for v in value))
+    # Длина каталога не зависит от смещений полос: сначала место,
+    # потом смещения.
+    data_at = len(_tiff_head(entries))
+    offsets, at = [], data_at
+    for size in sizes:
+        offsets.append(at)
+        at += size
+    entries[273] = (4, tuple(offsets))
+    return _tiff_head(entries) + b"".join(raws)
+
+
+def _tiff_head(entries):
+    """Заголовок и каталог TIFF с длинными значениями после него."""
+    tags = sorted(entries)
+    after = 8 + 2 + 12 * len(tags) + 4
+    extra = bytearray()
+    out = bytearray(b"II*\0" + struct.pack("<I", 8))
+    out += struct.pack("<H", len(tags))
+    for tag in tags:
+        kind, values = entries[tag]
+        code = {3: "H", 4: "I", 7: "B"}[kind]
+        packed = struct.pack("<%d%s" % (len(values), code), *values)
+        if len(packed) <= 4:
+            value = packed.ljust(4, b"\0")
+        else:
+            value = struct.pack("<I", after + len(extra))
+            extra += packed
+            if len(extra) % 2:
+                extra += b"\0"
+        out += struct.pack("<HHI", tag, kind, len(values)) + value
+    out += struct.pack("<I", 0)
+    return bytes(out + extra)
+
+
+def known_crs(epsg):
+    """Система, в которую считает to_crs."""
+    return epsg in (None, 4326, 3857) or 32601 <= epsg <= 32660 \
+        or 32701 <= epsg <= 32760
+
+
+def to_crs(epsg, lon, lat):
+    """Долготы и широты (массивы градусов) в систему файла: EPSG:4326,
+    3857, UTM WGS84 326xx и 327xx. Прочие - CogError."""
+    if epsg in (None, 4326):
+        return lon, lat
+    if epsg == 3857:
+        phi = np.radians(np.clip(lat, -85.0511, 85.0511))
+        return (RADIUS * np.radians(lon),
+                RADIUS * np.log(np.tan(math.pi / 4.0 + phi / 2.0)))
+    if 32601 <= epsg <= 32660 or 32701 <= epsg <= 32760:
+        return utm_arrays(lat, lon, epsg % 100, epsg >= 32701)
+    raise CogError("crs %s" % epsg)
+
 
 def _values(raw, code, n, kind):
     if kind == 2:
@@ -302,6 +513,23 @@ def _nodata(tags):
         return float(str(text[0]).strip())
     except ValueError:
         return None
+
+
+def _epsg(tags):
+    """Код EPSG системы по ключам GeoTIFF: проекции (3072), иначе
+    географической (2048), без ключей - None."""
+    keys = tags.get(34735)
+    if not keys or len(keys) < 4:
+        return None
+    found = {}
+    for i in range(4, len(keys) - 3, 4):
+        if keys[i + 1] == 0:
+            found[keys[i]] = keys[i + 3]
+    if found.get(3072):
+        return int(found[3072])
+    if found.get(2048):
+        return int(found[2048])
+    return 4326 if found.get(1024) == 2 else None
 
 
 def _transform(tags):

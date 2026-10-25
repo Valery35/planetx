@@ -259,6 +259,11 @@ def _tools(window, add, earth):
     add("tool:share", tr("Поделиться видом"), open_, window.share_view,
         ("html", "страница", "браузер", "отправить", "share", "web",
          "page", "browser"))
+    if earth:
+        add("tool:events", tr("Снимки событий"), open_, window.open_events,
+            ("землетрясение", "наводнение", "пожар", "ураган", "катастрофа",
+             "чрезвычайное", "до и после", "vantor", "maxar", "planet",
+             "disaster", "earthquake", "flood", "wildfire", "hurricane"))
     add("tool:subsurface", tr("Подземный режим"), open_,
         window.subsurface.open_dialog, ("скважины", "геология",
                                         "subsurface", "drillholes"))

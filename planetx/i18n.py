@@ -964,8 +964,123 @@ EN = {
         "Imagery archive since 2014",
     "Архив снимков":
         "Imagery archive",
-    "Прежние выпуски спутниковой подложки Esri World Imagery с 2014 года.":
-        "Past releases of the Esri World Imagery basemap since 2014.",
+    ("Прежние выпуски спутниковой подложки Esri World Imagery с 2014 года "
+     "и снимки чрезвычайных событий Vantor и Planet."):
+        ("Past releases of the Esri World Imagery basemap since 2014 and "
+         "disaster imagery from Vantor and Planet."),
+    "Снимки событий":
+        "Disaster imagery",
+    ("Откуда берутся 3D-здания. Векторная основа - здания OpenStreetMap в "
+     "её тайлах. Overture Maps - здания OpenStreetMap, открытые наборы "
+     "Microsoft, Esri и других одним архивом, их больше там, где "
+     "OpenStreetMap неполон, например в Африке и Азии."):
+        ("Where the 3D buildings come from. Vector base - OpenStreetMap "
+         "buildings in its tiles. Overture Maps - buildings of "
+         "OpenStreetMap and open sets of Microsoft, Esri and others in one "
+         "archive, there are more of them where OpenStreetMap is "
+         "incomplete, for example in Africa and Asia."),
+    "PlanetX - облака точек лидара":
+        "PlanetX - lidar point clouds",
+    "Облака точек лидара ищутся в каталогах IGN и USGS…":
+        "Searching the IGN and USGS catalogues for lidar point clouds…",
+    ("У точки нет облаков точек лидара IGN LiDAR HD (Франция) и USGS 3DEP "
+     "(США). {error}"):
+        ("There are no IGN LiDAR HD (France) or USGS 3DEP (USA) lidar point "
+         "clouds at the point. {error}"),
+    "Облаков точек лидара в проекте: {count}, {name}.":
+        "Lidar point clouds in the project: {count}, {name}.",
+    ("Облака точек лидара по сети открываются в QGIS 4. В QGIS 3 открытие "
+     "облака по сети останавливает QGIS."):
+        ("Lidar point clouds over the network open in QGIS 4. In QGIS 3 "
+         "opening a cloud over the network stops QGIS."),
+    "Карта тренда…":
+        "Trend map…",
+    ("Тренд величины в каждом пикселе участка по сценам ряда - наклон "
+     "Тейла-Сена за год и значимость по тесту Манна-Кендалла, растром "
+     "в проект QGIS. Пиксель без {count} чистых сцен тренда не получает. "
+     "Ряд из сцен одного сезона даёт тренд между годами, ряд всех месяцев "
+     "смешивает сезон и тренд."):
+        ("The trend of the value in every pixel of the area over the "
+         "scenes of the series - the Theil-Sen slope per year and the "
+         "significance by the Mann-Kendall test, as a raster in the QGIS "
+         "project. A pixel without {count} clear scenes gets no trend. A "
+         "series of scenes of one season gives the trend between years, "
+         "a series of all months mixes the season and the trend."),
+    "Считается карта тренда по {count} сценам…":
+        "Computing the trend map over {count} scenes…",
+    ("Карта тренда в проекте: пикселей с трендом {total}, значимых "
+     "(p < {p}) {share} %, медиана наклона {median} за год."):
+        ("Trend map in the project: pixels with a trend {total}, "
+         "significant (p < {p}) {share} %, median slope {median} per "
+         "year."),
+    "Тренд «{name}» {first} - {last}, за год":
+        "Trend \"{name}\" {first} - {last}, per year",
+    "PlanetX - карты тренда":
+        "PlanetX - trend maps",
+    "Облака точек лидара здесь":
+        "Lidar point clouds here",
+    "Все слои NASA GIBS":
+        "All NASA GIBS layers",
+    ("Весь каталог NASA GIBS - больше тысячи слоёв снимков и карт с рядом "
+     "дат. Список приходит из каталога службы при первом показе категории "
+     "или поиске, строка поиска находит слой по словам названия."):
+        ("The whole NASA GIBS catalogue - more than a thousand imagery and "
+         "map layers with date series. The list comes from the service "
+         "catalogue on the first showing of the category or on a search, "
+         "the search field finds a layer by the words of its title."),
+    "снимки с {first} по {last}":
+        "imagery from {first} to {last}",
+    "без ряда дат":
+        "without a date series",
+    "Слой NASA GIBS {layer}, {when}, подробность до уровня {level}.":
+        "NASA GIBS layer {layer}, {when}, detail up to level {level}.",
+    "Каталог NASA GIBS не загрузился: {error}":
+        "The NASA GIBS catalogue did not load: {error}",
+    "Слои NASA GIBS - тоже одна карта на глобусе":
+        "NASA GIBS layers - also one map on the globe",
+    "3D-здания по выбору, архив PMTiles":
+        "3D buildings by choice, PMTiles archive",
+    ("Снимки землетрясений, наводнений, пожаров и ураганов из открытых "
+     "каталогов Vantor и Planet. Окно выбирает событие, шкала времени - "
+     "день снимков, шторка сравнивает снимки до и после. Лицензия CC BY-NC "
+     "4.0."):
+        ("Imagery of earthquakes, floods, wildfires and hurricanes from the "
+         "open Vantor and Planet catalogs. The window selects an event, the "
+         "time slider selects the imagery day, the swipe compares the "
+         "imagery before and after. Licence CC BY-NC 4.0."),
+    ("Снимки землетрясений, наводнений, пожаров и ураганов из открытых "
+     "каталогов Vantor и Planet. Шкала времени выбирает день снимков, "
+     "шторка сравнивает снимки до и после события. Лицензия снимков CC "
+     "BY-NC 4.0 - только некоммерческое использование."):
+        ("Imagery of earthquakes, floods, wildfires and hurricanes from the "
+         "open Vantor and Planet catalogs. The time slider selects the "
+         "imagery day, the swipe compares the imagery before and after the "
+         "event. The imagery licence is CC BY-NC 4.0, non-commercial use "
+         "only."),
+    "Событие":
+        "Event",
+    "Дата":
+        "Date",
+    "PlanetX - снимки событий":
+        "PlanetX - disaster imagery",
+    "Снимков: {count}":
+        "Images: {count}",
+    "Загрузка списка событий…":
+        "Loading the event list…",
+    "Список событий не загрузился: {error}":
+        "The event list did not load: {error}",
+    "Событий: {count}":
+        "Events: {count}",
+    "Загрузка снимков события «{title}»…":
+        "Loading the imagery of the event {title}…",
+    "Загрузка снимков события: документов каталога {count}":
+        "Loading the event imagery: catalog documents {count}",
+    "У события нет снимков, которые глобус может показать. {error}":
+        "The event has no imagery the globe can show. {error}",
+    ("Снимков: {count}, дней съёмки: {days}. Шкала времени выбирает день, "
+     "шторка сравнивает снимки до и после."):
+        ("Images: {count}, capture days: {days}. The time slider selects "
+         "the day, the swipe compares the imagery before and after."),
     "Esri Wayback":
         "Esri Wayback",
     ("Выпуски подложки Esri World Imagery с 20 февраля 2014 года. Шкала "

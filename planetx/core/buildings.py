@@ -50,6 +50,10 @@ except ImportError:  # headless-тесты
 
 LAYER = "building"
 LEVEL = 14
+# Высота этажа и здания без высоты и этажей, метры, - как у генератора
+# тайлов OpenMapTiles. По ним считаются здания Overture Maps.
+FLOOR = 3.66
+DEFAULT_HEIGHT = 5.0
 # Цвет здания без поля colour. Величину назначил помощник 29 сентября
 # 2026 года, её утверждает автор.
 DEFAULT_COLOR = (226, 222, 214)
@@ -198,13 +202,12 @@ def _buildings(fields, keys, raw):
         for k, v in zip(tags[0::2], tags[1::2]):
             if k < len(keys) and v < len(raw):
                 attrs[keys[k]] = _value(raw[v])
-        if attrs.get("hide_3d"):
+        if attrs.get("hide_3d") or attrs.get("is_underground"):
             continue
-        height = float(attrs.get("render_height") or 0.0)
-        base = float(attrs.get("render_min_height") or 0.0)
+        height, base = heights(attrs)
         if height <= base:
             continue
-        color = parse_color(attrs.get("colour"))
+        color = parse_color(attrs.get("colour") or attrs.get("facade_color"))
         rings = []
         for ring, s in _rings(geometry):
             if s > 0.0:
@@ -216,6 +219,23 @@ def _buildings(fields, keys, raw):
         if rings:
             out.append(Building(rings, height, base, color))
     return out
+
+
+def heights(attrs):
+    """Высота верха и низа здания, метры. Схема OpenMapTiles -
+    render_height и render_min_height. Схема Overture Maps - height,
+    min_height, иначе этажи num_floors и min_floor по FLOOR, иначе
+    DEFAULT_HEIGHT, как делает генератор тайлов OpenMapTiles."""
+    if "render_height" in attrs:
+        return (float(attrs.get("render_height") or 0.0),
+                float(attrs.get("render_min_height") or 0.0))
+    height = attrs.get("height")
+    if not height and attrs.get("num_floors"):
+        height = float(attrs["num_floors"]) * FLOOR
+    base = attrs.get("min_height")
+    if not base and attrs.get("min_floor"):
+        base = float(attrs["min_floor"]) * FLOOR
+    return float(height or DEFAULT_HEIGHT), float(base or 0.0)
 
 
 def _clip_side(points, axis, limit, below):

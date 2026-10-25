@@ -511,6 +511,20 @@ on 40 %. Snow mass is a SMAP model calculation from satellite data,
 it has no gaps under clouds. The snow themes show land only. Lake ice
 is in the 8-day summary, sea ice is the Sea ice theme.
 
+The All NASA GIBS layers category shows the whole catalogue of the
+service - more than a thousand raster imagery and map layers. The list
+comes from the GIBS catalogue on the first showing of the category or
+on a search of three characters or more, the first time in about 10
+seconds. The Find field finds a layer by all words of the query, for
+example "snow cover daily terra", the layer titles are in English.
+These rows are not shown in All. A catalogue layer behaves as a theme -
+one map on the globe, a date series and the timeline, a colour scale,
+the day swipe. JPEG imagery, for example "Corrected Reflectance (True
+Color, MODIS, Terra)", lies without transparency. Layers without a date
+series show one picture. The globe remembers the chosen layer after a
+restart too. Layers with a step shorter than a day and GIBS vector
+layers are not in the list.
+
 #### Comparison swipe
 
 The ⇆ button of the time slider splits the view with a swipe. Right
@@ -554,6 +568,41 @@ project… of the On the globe row adds the release as an XYZ tile
 layer, no file is written.
 
 The terms are the same as for Esri World Imagery, see Data sources.
+
+#### Disaster imagery
+
+The Disaster imagery map of the Imagery archive category shows imagery
+of earthquakes, floods, wildfires and hurricanes from two open
+catalogs. Vantor (formerly Maxar) provides WorldView strips, Planet
+provides PlanetScope, SkySat and Pelican scenes and the quarterly
+Planet basemap before the event. On 25 October 2026 the catalogs hold
+18 events - 11 from Vantor and 7 from Planet. No key is needed.
+
+The map opens the Disaster imagery window with a list of events. A row
+shows the event, the date and the source, below the list is the
+catalog description. The Search bar
+also opens the window by the words disaster imagery, earthquake, flood
+and the like. Show on the globe loads the list of the event images,
+flies to the event and opens the time slider at the last imagery day.
+The earthquake in Colombia on 10 August 2026 has 164 images over
+5 days.
+
+The right handle of the slider selects the day. The globe shows all
+images not later than that day, newer ones over older ones. The ‹
+and › steps go through the imagery days. If the event has images from
+before it, the ⇆ swipe turns on at once. The left part shows the last
+day before the event, the right part the slider day. The images come
+from cloud-optimised GeoTIFFs in parts, only what is in view. The
+first display of a large event takes several minutes.
+
+Add to QGIS project… of the On the globe row adds the images of the
+day within the view as network rasters to the PlanetX - disaster
+imagery group, at most 12 images, no files are written. Remove from
+the globe in the window takes the imagery away.
+
+The imagery licence is CC BY-NC 4.0. It allows only non-commercial
+use and requires the Vantor or Planet Labs PBC credit. It is
+shown in the corner of the view.
 
 #### Weather
 
@@ -1163,6 +1212,18 @@ The bottom of a building stands at the lowest point of the terrain
 under its outline. A view snapshot waits until all buildings of the
 frame are loaded. A scene remembers whether buildings are on.
 
+The 3D buildings list in the Own vector base group of the Data sources
+window switches the source of buildings to Overture Maps. These are
+OpenStreetMap buildings together with the open sets of Microsoft,
+Google Open Buildings and Esri in one PMTiles archive. Where
+OpenStreetMap is incomplete, there are more buildings. Over Lagos the
+same 22 tiles hold 158 thousand Overture buildings, the base has about
+45 thousand in half of these tiles. The height of an Overture building
+is its height field, otherwise the number of floors times 3.66 m. The
+globe takes the latest Overture release from its catalogue. The
+Overture credit stands in the corner of the view while its buildings
+are on the globe.
+
 ### View properties
 
 <img src="figures/en/properties.png" width="240" alt="View properties">
@@ -1335,6 +1396,31 @@ the heights in metres. A click in the Identify features mode gives the
 cloud point under the cursor - class, elevation, latitude and longitude,
 intensity, return number and colour. The cloud settings are stored in
 the project.
+
+#### Lidar point clouds over the network
+
+The Lidar point clouds here item of the menu on the globe finds tiles
+of open lidar surveys at the point and puts them as point cloud layers
+into the PlanetX - lidar point clouds group of the project, the layers
+are checked on the globe at once. There are two sources:
+
+- IGN LiDAR HD - all of France in 1 km tiles, at least 10 points per
+  square metre, ASPRS classes, Licence Ouverte 2.0. The two nearest
+  tiles of the point are taken.
+- USGS 3DEP - US surveys in tiles of about 1 km, public domain. Up to
+  four tiles of the point are taken, one place sometimes has several
+  surveys of different years.
+
+The COPC files are not downloaded whole, PDAL and QGIS read them in
+parts over the network. The 3DEP files lie in the Microsoft Planetary
+Computer storage, the module asks the service for the access key
+itself, without an account. The key lives an hour, after that the
+layer in the QGIS project stops reading, the globe takes a new key.
+The IGN server limits the request rate, so IGN clouds come slower,
+cells after a server refusal are asked again in 10 s. Near Grenoble
+two IGN tiles give about a million points in 2-3 minutes. Clouds
+over the network open in QGIS 4, in QGIS 3.36 opening such a layer
+stops QGIS, and the menu item says so.
 
 ### Extrusion by field
 
@@ -1898,6 +1984,30 @@ NDVI. The winter points under snow are near zero, from May to October
 they are 0.15-0.22, a city has little vegetation. For a series over
 many years Landsat since 1982 or the 16-day MODIS NDVI are more
 convenient.
+
+#### Trend map
+
+The Trend map… button of the series window computes the trend of the
+value in every pixel of the area over the scenes of the series and puts
+it as a raster into the PlanetX - trend maps group of the project. For
+this the series is computed on one grid in all scenes, scenes of
+another UTM zone are reprojected into the zone of the majority.
+
+- Band 1 - the Theil-Sen slope, the change of the value per year. It is
+  the median of the slopes over all pairs of scenes of the pixel,
+  remains of clouds hardly move it. The scale goes from red (decrease)
+  through white to blue (increase), for temperature the other way.
+- Band 2 - p of the Mann-Kendall test, whether there is a monotonic
+  trend. A trend with p below 0.05 is significant.
+- Band 3 - the number of clear scenes of the pixel.
+
+A pixel without 6 clear scenes gets no trend. The test does not remove
+the seasonal cycle. A series of scenes of one season over several
+years, for example only July - August, gives the trend between years.
+A series of all months mixes the season and the trend - near Perm an
+NDVI series from November to October gives a rise of 0.27 per year,
+that is spring and summer, not a trend over years. The computation over
+44 scenes of a 2 km area takes 2-3 seconds.
 
 ### NASA Earthdata key
 

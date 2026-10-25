@@ -2999,9 +2999,10 @@ class GlobeView(QOpenGLWidget):
         self.last_arrival = time.monotonic()
         self.update()
 
-    def set_buildings(self, on, loader=None):
-        """Показать 3D-здания с загрузчиком loader или скрыть их."""
-        self.buildings.set_shown(on, loader)
+    def set_buildings(self, on, loader=None, source=None):
+        """Показать 3D-здания с загрузчиком loader или скрыть их. source -
+        чьи тайлы, при смене разобранные тайлы прежнего забываются."""
+        self.buildings.set_shown(on, loader, source)
         self.update()
 
     def add_buildings(self, key, footprint):

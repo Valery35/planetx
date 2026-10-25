@@ -17,6 +17,11 @@ Python-обёртка QGIS 4 не отдаёт точки узла индекс�
 (у QgsPointCloudIndex нет nodeData), а identify провайдера строит
 словарь на точку - около 50 мкс на точку в главном потоке. Поэтому
 точки идут через PDAL, проверено 18 октября 2026 года.
+
+Слой может быть и файлом COPC в сети (core/lidarnet.py): PDAL и QGIS
+читают его частями по HTTP, в COPC он не переводится. Файлам USGS 3DEP
+нужен ключ SAS, его менеджер просит раз в SAS_LIFE и подставляет
+в адрес каждой клетки.
 """
 import hashlib
 import os
@@ -29,20 +34,27 @@ from qgis.core import (Qgis, QgsApplication, QgsCoordinateReferenceSystem,
                        QgsCoordinateTransform, QgsDoubleRange, QgsGeometry,
                        QgsPointCloudLayer, QgsPointXY, QgsProject,
                        QgsRectangle)
-from qgis.PyQt.QtCore import QObject, QProcess, QTimer
+from qgis.PyQt.QtCore import QObject, QProcess, QProcessEnvironment, QTimer
 
 from .. import journal
-from ..core import lod
+from ..core import lidarnet, lod
 from ..core import pointcloud as core
 from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..i18n import tr
 from ..net.gdalnet import executor
+from ..net.overlay import fetch_json
 from .project import read_pointclouds
 
 PARALLEL = 3  # процессов PDAL с клетками одновременно, не больше
 POLL = 40  # мс между проверками разбора в рабочем потоке
 WORKERS = 2
 FOLDER = "pointclouds"
+SAS_LIFE = 45 * 60  # с, ключ просится заново раньше часа его жизни
+# Облако по сети: процессов PDAL на облако и потоков в процессе. Сервер
+# IGN 25 октября 2026 года отвечал 429 на 3 процесса по 2 потока.
+REMOTE_PARALLEL = 1  # процессов PDAL на все облака одного сервера
+REMOTE_REQUESTS = 1
+REMOTE_PAUSE = 10.0  # с без новых клеток сервера после отказа
 
 
 def cache_folder():
@@ -86,7 +98,46 @@ def cloud_ids(layer_ids):
     return [i for i in layer_ids if is_cloud(project.mapLayer(i))]
 
 
+def ca_bundle():
+    """Файл корневых сертификатов для curl внутри PDAL. PDAL 2.6 из
+    QGIS 3.36 своего набора не находит, чтение по https отвечало
+    «SSL peer certificate was not OK», 25 октября 2026 года. Берутся
+    сертификаты системы Qt, файлом в профиле - внешних модулей
+    модуль не тянет."""
+    from qgis.PyQt.QtNetwork import QSslConfiguration
+    path = os.path.join(cache_folder(), "ca.pem")
+    if not os.path.exists(path):
+        with open(path, "wb") as handle:
+            for cert in QSslConfiguration.systemCaCertificates():
+                handle.write(bytes(cert.toPem()))
+    return path
+
+
+def pdal_environment():
+    """Окружение процесса PDAL с набором сертификатов для curl."""
+    env = QProcessEnvironment.systemEnvironment()
+    bundle = ca_bundle()
+    for name in ("CURL_CA_BUNDLE", "CURL_CA_INFO", "ARBITER_CA_INFO"):
+        if not env.contains(name):
+            env.insert(name, bundle)
+    return env
+
+
+def is_remote(path):
+    """Файл облака - адрес в сети, а не путь на диске."""
+    return path.lower().startswith(("http://", "https://"))
+
+
+def _host(path):
+    """Сервер облака по сети или "" у файла на диске."""
+    return path.partition("://")[2].split("/")[0].lower() \
+        if is_remote(path or "") else ""
+
+
 def _fingerprint(path):
+    if is_remote(path):
+        base = path.split("?")[0]
+        return hashlib.sha256(base.encode("utf-8")).hexdigest()[:16]
     stat = os.stat(path)
     text = "{}|{}|{}".format(os.path.abspath(path), stat.st_size,
                              int(stat.st_mtime))
@@ -202,6 +253,12 @@ class PointCloudManager(QObject):
         self.fetched = 0  # запросов клеток к PDAL за время окна
         self.size = core.POINT_SIZE
         self.view.pointclouds.size = self.size
+        self.sas = ""  # ключ SAS файлов 3DEP
+        self.paused = {}  # сервер облаков по сети - конец паузы
+        self.environment = None  # окружение процессов PDAL
+        self.sas_until = 0.0
+        self.sas_reply = None
+        self.sas_waiting = []
 
     # Слои.
 
@@ -228,7 +285,8 @@ class PointCloudManager(QObject):
             self._say(tr("Облако «{name}» не показано: в составе QGIS нет "
                          "программы PDAL.", name=entry.name))
             return
-        if entry.path.lower().endswith(".copc.laz"):
+        if is_remote(entry.path) \
+                or entry.path.lower().endswith(".copc.laz"):
             self._opened(entry, entry.path)
         else:
             self._convert(entry)
@@ -316,7 +374,12 @@ class PointCloudManager(QObject):
 
     def _opened(self, entry, copc):
         """Охват и высоты облака по индексу COPC."""
-        layer = QgsPointCloudLayer(copc, entry.name, "copc")
+        # Облако по сети уже открыто слоем проекта - второй раз файл
+        # не спрашивается.
+        layer = QgsProject.instance().mapLayer(entry.layer_id) \
+            if is_remote(copc) else None
+        if layer is None or not layer.isValid():
+            layer = QgsPointCloudLayer(copc, entry.name, "copc")
         if not layer.isValid():
             self._say(tr("Облако «{name}» не открылось.", name=entry.name))
             return
@@ -358,13 +421,23 @@ class PointCloudManager(QObject):
                               budget=budget)
             keys.extend((entry.layer_id, entry.version, cell)
                         for cell in sel.draw)
+            host = _host(entry.copc)
+            if host and time.monotonic() < self.paused.get(host, 0.0):
+                continue
             for _, cell in sel.want:
                 if len(self.processes) >= PARALLEL:
+                    break
+                if host and self._host_running(host) >= REMOTE_PARALLEL:
                     break
                 if cell in entry.running or cell in entry.arrived:
                     continue
                 self._fetch(entry, cell)
         return keys
+
+    def _host_running(self, host):
+        """Клеток в работе у облаков сервера host."""
+        return sum(len(e.running) for e in self.entries.values()
+                   if _host(e.copc) == host)
 
     def _fetch(self, entry, cell):
         level, ix, iy = cell
@@ -374,12 +447,50 @@ class PointCloudManager(QObject):
         out = os.path.join(cache_folder(), stem + ".las")
         spec = os.path.join(cache_folder(), stem + ".json")
         with open(spec, "w", encoding="utf-8") as handle:
-            handle.write(core.pipeline(entry.copc.replace("\\", "/"),
-                                       entry.cloud, cell,
-                                       out.replace("\\", "/")))
+            handle.write(core.pipeline(
+                self._source(entry), entry.cloud, cell,
+                out.replace("\\", "/"),
+                requests=REMOTE_REQUESTS if is_remote(entry.copc) else None))
         entry.running.add(cell)
         self.fetched += 1
         self._run(entry, cell, (out, spec), ["pipeline", spec])
+
+    def _source(self, entry):
+        """Файл облака для PDAL: путь на диске или адрес с действующим
+        ключом SAS."""
+        if not is_remote(entry.copc):
+            return entry.copc.replace("\\", "/")
+        if lidarnet.needs_key(entry.copc):
+            self.want_key()
+            return lidarnet.with_key(entry.copc, self.sas)
+        return entry.copc
+
+    def want_key(self, done=None):
+        """Ключ SAS файлов 3DEP: прежний до SAS_LIFE, потом новый.
+        done(ключ) - когда ключ есть."""
+        if self.sas and time.monotonic() < self.sas_until:
+            if done is not None:
+                done(self.sas)
+            return
+        if done is not None:
+            self.sas_waiting.append(done)
+        if self.sas_reply is None:
+            self.sas_reply = fetch_json(lidarnet.PC_SAS, self._key_done,
+                                        prefer_cache=False)
+
+    def _key_done(self, data, error):
+        self.sas_reply = None
+        token = (data or {}).get("token") if isinstance(data, dict) \
+            else None
+        if not token:
+            journal.note("pointcloud sas: {}".format(error))
+            self.sas_waiting = []
+            return
+        self.sas = token
+        self.sas_until = time.monotonic() + SAS_LIFE
+        waiting, self.sas_waiting = self.sas_waiting, []
+        for done in waiting:
+            done(token)
 
     def _run(self, entry, what, files, arguments):
         process = QProcess(self)
@@ -387,6 +498,9 @@ class PointCloudManager(QObject):
                                    files)
         process.finished.connect(
             lambda code, status, p=process: self._finished(p, code))
+        if self.environment is None:
+            self.environment = pdal_environment()
+        process.setProcessEnvironment(self.environment)
         process.start(self.program, arguments)
         self.view.data_pending += 1
 
@@ -416,9 +530,16 @@ class PointCloudManager(QObject):
             self._discard(out)
             return
         if not ok or not os.path.exists(out):
-            # Клетка без ответа - пустая, иначе её просили бы снова.
             self._discard(out)
             entry.running.discard(what)
+            if is_remote(entry.copc):
+                # Отказ сервера - клетки сервера просятся снова после
+                # паузы.
+                self.paused[_host(entry.copc)] = \
+                    time.monotonic() + REMOTE_PAUSE
+                self.view.update()
+                return
+            # Клетка без ответа - пустая, иначе её просили бы снова.
             entry.arrived[what] = 0
             return
         center, up = core.anchor(entry.cloud, what, entry.to_geo)

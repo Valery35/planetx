@@ -90,7 +90,9 @@ def catalogue(terrain_url, vector_url, router_url=routing.ROUTER_URL,
              else tr("Своя основа"),
              tr("Границы, дороги, воды, названия, 3D-здания"),
              "https://openfreemap.org/" if vector_url
-             == sources.VECTOR_TILEJSON else SOURCES_DOC, vector_url)]),
+             == sources.VECTOR_TILEJSON else SOURCES_DOC, vector_url),
+            ("Overture Maps", tr("3D-здания по выбору, архив PMTiles"),
+             sources.OVERTURE_CREDIT[1], sources.OVERTURE_STAC)]),
         ("NASA", [
             ("NASA GIBS", tr("Облака, температура, темы, огни городов"),
              "https://nasa-gibs.github.io/gibs-api-docs/",
@@ -270,10 +272,22 @@ class SourcesDialog(QDialog):
             settings.value(sources.VECTOR_CREDIT_KEY, "") or "", self)
         self.vector_credit.setToolTip(tr(
             "Подпись своей основы в углу вида и на снимках."))
+        self.buildings = QComboBox(self)
+        self.buildings.addItem(tr("Векторная основа"), "")
+        self.buildings.addItem("Overture Maps", sources.OVERTURE)
+        self.buildings.setCurrentIndex(1 if settings.value(
+            sources.BUILDINGS_KEY, "") == sources.OVERTURE else 0)
+        self.buildings.setToolTip(tr(
+            "Откуда берутся 3D-здания. Векторная основа - здания "
+            "OpenStreetMap в её тайлах. Overture Maps - здания OpenStreetMap, "
+            "открытые наборы Microsoft, Esri и других одним архивом, их "
+            "больше там, где OpenStreetMap неполон, например в Африке "
+            "и Азии."))
         vector = QGroupBox(tr("Своя векторная основа"), self)
         form = QFormLayout(vector)
         form.addRow("TileJSON", self.vector_url)
         form.addRow(tr("Подпись"), self.vector_credit)
+        form.addRow(tr("3D-здания"), self.buildings)
         form.addRow(self._apply_row("vector"))
 
         self.router_on = QCheckBox(tr("Строить маршрут через сервис"), self)
@@ -475,6 +489,8 @@ class SourcesDialog(QDialog):
             settings.setValue(sources.VECTOR_KEY, url)
             settings.setValue(sources.VECTOR_CREDIT_KEY,
                               self.vector_credit.text().strip())
+            settings.setValue(sources.BUILDINGS_KEY,
+                              self.buildings.currentData())
         self.status.setText("")
         self.changed.emit(what)
         self.rebuild()
@@ -492,6 +508,7 @@ class SourcesDialog(QDialog):
         else:
             self.vector_url.clear()
             self.vector_credit.clear()
+            self.buildings.setCurrentIndex(0)
         self._apply(what)
 
     # Подложки.

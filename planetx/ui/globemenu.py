@@ -160,6 +160,8 @@ def show(window, px, py):
                 .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
             menu.addAction(tr("Инсоляция здесь…")).triggered.connect(
                 lambda *a: window.insolation_here(lat, lon))
+            menu.addAction(tr("Облака точек лидара здесь")).triggered.connect(
+                lambda *a: window.lidar_here(lat, lon))
             menu.addSeparator()
             menu.addAction(tr("Исторические карты Рамсея здесь…")) \
                 .triggered.connect(lambda *a: window.rumsey_here(lat, lon))

@@ -92,6 +92,20 @@ class TestDecode(unittest.TestCase):
         self.assertIsNone(bd.parse_color(None))
 
 
+class TestOvertureHeights(unittest.TestCase):
+    def test_schemas(self):
+        # Схема OpenMapTiles главнее, у Overture - высота, иначе этажи.
+        self.assertEqual(bd.heights({"render_height": 20,
+                                     "render_min_height": 5,
+                                     "height": 99}), (20.0, 5.0))
+        self.assertEqual(bd.heights({"height": 31.5, "min_height": 3}),
+                         (31.5, 3.0))
+        top, base = bd.heights({"num_floors": 4, "min_floor": 1})
+        self.assertAlmostEqual(top, 4 * bd.FLOOR)
+        self.assertAlmostEqual(base, bd.FLOOR)
+        self.assertEqual(bd.heights({}), (bd.DEFAULT_HEIGHT, 0.0))
+
+
 class TestClip(unittest.TestCase):
     def test_inside_ring_is_kept(self):
         ring = square(10, 10, 20)

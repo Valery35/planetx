@@ -136,7 +136,9 @@ class Buildings:
 
     def __init__(self):
         self.shown = False
-        self.loader = None  # загрузчик тайлов OpenFreeMap, ставит окно
+        self.loader = None  # загрузчик тайлов зданий, ставит окно
+        self.source = None  # чьи тайлы в footprints: основа или Overture
+        self.dead = []  # сетки прежнего источника, освобождает upload
         self.footprints = OrderedDict()  # ключ -> Footprint или EMPTY
         self.building = {}  # ключ -> уровень высот собираемой сетки
         self.results = {}  # ключ -> (Mesh, уровень), ждут видеокарты
@@ -158,10 +160,19 @@ class Buildings:
 
     # Данные.
 
-    def set_shown(self, on, loader=None):
-        """Показать здания с загрузчиком loader или скрыть их."""
+    def set_shown(self, on, loader=None, source=None):
+        """Показать здания с загрузчиком loader или скрыть их. Смена
+        источника source забывает разобранные тайлы и сетки прежнего."""
         self.shown = bool(on)
         self.loader = loader
+        if on and source != self.source:
+            self.source = source
+            self.footprints.clear()
+            self.building = {}
+            self.results = {}
+            self.dead.extend(self.buffers.values())
+            self.buffers = {}
+            self._asked = frozenset()
         if not on:
             self.drawn = 0
             self.wanted = []
@@ -186,8 +197,8 @@ class Buildings:
             item.level = -2
 
     def _built(self, key, mesh, level, relief):
-        if relief != self.relief:
-            return
+        if relief != self.relief or key not in self.building:
+            return  # прежний масштаб рельефа или прежний источник
         if self.building.get(key) == level:
             del self.building[key]
         self.results[key] = (mesh, level)
@@ -274,6 +285,9 @@ class Buildings:
     def upload(self, count=UPLOADS):
         """Готовые сетки в видеокарту, ближние первыми. Только при
         текущем контексте."""
+        for item in self.dead:
+            item.delete()
+        self.dead = []
         order = [k for k in self.wanted if k in self.results]
         for key in order[:count]:
             mesh, level = self.results.pop(key)
@@ -304,6 +318,9 @@ class Buildings:
         self.pool.waitForDone(2000)
         for item in self.buffers.values():
             item.delete()
+        for item in self.dead:
+            item.delete()
+        self.dead = []
         self.buffers = {}
         self.results = {}
         self.building = {}
