@@ -14140,6 +14140,87 @@ def post_insolation_shot():
     return None
 
 
+@check(1000, manual=True)
+def post_flood_shot():
+    """Кадр для статьи: затопление от точки, «Копия вида». Место -
+    PLANETX_FLOOD «широта,долгота,расстояние,азимут,наклон,подъём,
+    радиус», файл - TEMP."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_flood", {"since": None})
+    lat, lon, dist, head, tilt, rise, radius = (float(v) for v in
+        os.environ.get("PLANETX_FLOOD",
+                       "46.35,48.03,26000,10,50,4,8000").split(","))
+    if look["since"] is None:
+        window.set_body("earth")
+        view.navigator.show(Pose(lat, lon, dist, head, tilt))
+        view.update()
+        dialog = window.hydro.flood_here(lat, lon)
+        dialog.build.emit(radius)
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    if window.hydro.state is None and waited < 60:
+        return 1000
+    dialog = window.hydro.flood_dialog
+    if not look.get("risen"):
+        look["risen"] = True
+        dialog.water.setValue(dialog.base + rise)
+        view.update()
+        return 3000
+    if view.load_missing and waited < 120:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 4000
+    image = window.copy_view()
+    path = os.path.join(TEMP, "planetx_post_flood.png")
+    image.save(path)
+    result["post_flood"] = {"path": path, "status": dialog.status.text(),
+                            "base": round(dialog.base, 1),
+                            "waited": round(waited, 1)}
+    dialog.clear.emit()
+    dialog.close()
+    return None
+
+
+@check(1000, manual=True)
+def post_sky_shot():
+    """Кадр для статьи: звёздное небо со снимками, «Копия вида». Вид -
+    PLANETX_SKY «восхождение,склонение,поле», файл - TEMP."""
+    window = state["window"]
+    look = state.setdefault("post_sky", {"since": None, "n": 0})
+    views = os.environ.get("PLANETX_SKY", "83.8,-1.0,30").split(";")
+    ra, dec, fov = (float(v) for v in views[look["n"]].split(","))
+    if look["since"] is None:
+        window.set_sky_imagery(True)
+        window.show_sky(ra, dec, fov)
+        window.view.update()
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    if _sky_busy(window) and waited < 120:
+        window.view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 3000
+    image = window.copy_view()
+    path = os.path.join(TEMP, "planetx_post_sky_%d.png" % look["n"])
+    image.save(path)
+    result.setdefault("post_sky", []).append(
+        {"path": path, "waited": round(waited, 1)})
+    look["n"] += 1
+    if look["n"] < len(views):
+        look["since"] = None
+        look["settle"] = False
+        return 500
+    window.set_body("earth")
+    return None
+
+
 @check(500)
 def menu_links():
     """Свои пункты меню на глобусе: подменю «Открыть в браузере», адрес
