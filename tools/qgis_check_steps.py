@@ -867,6 +867,107 @@ def export_copy():
         root.removeChildNode(group)
 
 
+def _side_layer(name, color):
+    """Слой в памяти - прямоугольник у Перми одного цвета."""
+    from qgis.core import QgsFeature, QgsGeometry, QgsVectorLayer
+    from qgis.PyQt.QtGui import QColor
+    layer = QgsVectorLayer("Polygon?crs=EPSG:4326", name, "memory")
+    feature = QgsFeature()
+    feature.setGeometry(QgsGeometry.fromWkt(
+        "POLYGON((50 54, 62 54, 62 62, 50 62, 50 54))"))
+    layer.dataProvider().addFeatures([feature])
+    symbol = layer.renderer().symbol()
+    symbol.setColor(QColor(*color))
+    symbol.symbolLayer(0).setStrokeColor(QColor(*color))
+    return layer
+
+
+@check(500)
+def side_swipe():
+    """Шторка слоёв проекта: слой «Слева» только левее шторки, «Справа» -
+    правее, без годов и шкалы времени."""
+    from qgis.core import QgsProject
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_theme("")
+    window.set_follow(False)
+    red = _side_layer("swipe_red", (230, 20, 20))
+    blue = _side_layer("swipe_blue", (20, 40, 230))
+    QgsProject.instance().addMapLayers([red, blue])
+    state["side_layers"] = (red.id(), blue.id())
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.0, 56.0, 900000.0, 0.0, 0.0))
+    window.set_layer_side(red.id(), "left")
+    window.set_layer_side(blue.id(), "right")
+    window.refresh()
+    view.update()
+    state["side_started"] = time.monotonic()
+    result["side_swipe"] = {}
+
+
+@check(1000)
+def side_swipe_wait():
+    window = state["window"]
+    view = window.view
+    red, blue = state["side_layers"]
+    compare = view.gibs["compare"]
+    spent = time.monotonic() - state["side_started"]
+    if spent < 40.0 and (not compare.textures or compare.missing
+                         or compare.pending or spent < 8.0):
+        return 1000
+    out = result["side_swipe"]
+    main = [layer.id() for layer in window.overlay.layers] \
+        if window.overlay is not None else []
+    left = [layer.id() for layer in window.map_compare_overlay.layers] \
+        if window.map_compare_overlay is not None else []
+    rows = [r.text(0) for r in window.panel.project_rows()]
+    out.update(
+        seconds=round(spent, 1), swipe=view.swipe,
+        swipe_maps=view.swipe_maps, bar=window.swipe_bar.isVisible(),
+        main_has=[red in main, blue in main],
+        left_has=[red in left, blue in left],
+        button=[window.panel.swipe_button.isVisible(),
+                window.panel.swipe_button.isChecked()],
+        steps=[b.isVisible() for b in window.swipe_bar.steps],
+        labels=[window.swipe_bar.left_day.text(),
+                window.swipe_bar.right.text()],
+        row_texts=sorted(t for t in rows if "swipe_" in t))
+    image = view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_side_swipe.png"))
+    frame = _frame_array(image).astype(int)
+    h, w = frame.shape[:2]
+    band = frame[h // 3: 2 * h // 3]
+    left_px = band[:, w // 8: 3 * w // 8].reshape(-1, 3).mean(axis=0)
+    right_px = band[:, 5 * w // 8: 7 * w // 8].reshape(-1, 3).mean(axis=0)
+    # Байты кадра - B, G, R.
+    out["left_rgb"] = [round(float(v)) for v in left_px[::-1]]
+    out["right_rgb"] = [round(float(v)) for v in right_px[::-1]]
+    out["left_red"] = bool(left_px[2] > left_px[0] + 30)
+    out["right_blue"] = bool(right_px[0] > right_px[2] + 30)
+    # Крестик снимает шторку слоёв, оба слоя снова на всей поверхности.
+    window._swipe_closed()
+    main = [layer.id() for layer in window.overlay.layers] \
+        if window.overlay is not None else []
+    out["closed"] = dict(swipe=view.swipe, bar=window.swipe_bar.isVisible(),
+                         both=red in main and blue in main,
+                         left_overlay=window.map_compare_overlay is not None,
+                         button=window.panel.swipe_button.isChecked())
+    # Кнопка панели включает шторку снова.
+    window.panel.swipe_button.setChecked(True)
+    out["again"] = dict(swipe=view.swipe is not None,
+                        left=window.map_compare_overlay is not None)
+    for layer_id in (red, blue):
+        window.set_layer_side(layer_id, "")
+    out["cleared"] = dict(swipe=view.swipe,
+                          button=window.panel.swipe_button.isVisible(),
+                          left_overlay=window.map_compare_overlay is not None)
+    from qgis.core import QgsProject
+    QgsProject.instance().removeMapLayers([red, blue])
+    return None
+
+
 @check(500)
 def gibs_catalog_open():
     """Весь каталог NASA GIBS в окне «Добавить данные»: категория

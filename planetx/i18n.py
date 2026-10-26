@@ -1284,6 +1284,32 @@ EN = {
         "The depth raster is not built. Error - {error}.",
     "Год карты…":
         "Map year…",
+    "Шторка":
+        "Swipe",
+    "Слева":
+        "Left",
+    "Справа":
+        "Right",
+    "На обеих сторонах":
+        "Both sides",
+    "Слой виден только левее шторки. Правее - слои «Справа» и общие.":
+        "The layer is shown only left of the swipe. Right of it are the "
+        "Right layers and the shared ones.",
+    "Слой виден только правее шторки.":
+        "The layer is shown only right of the swipe.",
+    "Слой виден по обе стороны шторки.":
+        "The layer is shown on both sides of the swipe.",
+    "⇆ Шторка слоёв":
+        "⇆ Layer swipe",
+    "Сравнение слоёв шторкой. Слои «Слева» видны левее шторки, «Справа» - "
+    "правее, прочие - на обеих сторонах. Сторона слоя - подменю «Шторка» "
+    "меню слоя, шторка тянется мышью.":
+        "Compare layers with a swipe. Left layers are shown left of the "
+        "swipe, Right layers right of it, the others on both sides. The "
+        "side of a layer is set in the Swipe submenu of the layer menu, the "
+        "swipe is dragged with the mouse.",
+    "Общие слои":
+        "Shared layers",
     "Год исторической карты - растра или тайлов. Карты одной группы слоёв "
     "сменяют друг друга на шкале времени - видна последняя карта не позже "
     "момента шкалы. Шаги ◂ ▸ шкалы идут по годам карт.":

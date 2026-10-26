@@ -36,6 +36,10 @@ BATHYMETRY = "bathymetry"
 # Годы исторических карт - растров и тайлов проекта, строка JSON
 # {номер слоя: год}, core/oldmaps.py.
 MAP_YEARS = "map_years"
+# Стороны шторки слоёв проекта - строка JSON {номер слоя: left или
+# right}, core/sides.py, и флажок, включена ли шторка.
+SWIPE_SIDES = "swipe_sides"
+SIDE_SWIPE = "side_swipe"
 SECTION_COLORS = "section_colors"  # свои цвета окна «Разрез модели»
 # Облака точек: {номер слоя: {"mode", "size", "classes"}}.
 POINTCLOUDS = "pointclouds"
@@ -153,6 +157,20 @@ def write_map_years(years, project=None):
     project = project or QgsProject.instance()
     project.writeEntry(ENTRY, MAP_YEARS, json.dumps(
         {k: int(v) for k, v in years.items()}, sort_keys=True))
+
+
+def read_swipe_sides(project=None):
+    """Стороны шторки слоёв: {номер слоя: left или right}."""
+    from ..core.sides import parse
+    project = project or QgsProject.instance()
+    value, ok = project.readEntry(ENTRY, SWIPE_SIDES, "")
+    return parse(value) if ok else {}
+
+
+def write_swipe_sides(sides, project=None):
+    from ..core.sides import dump
+    project = project or QgsProject.instance()
+    project.writeEntry(ENTRY, SWIPE_SIDES, dump(sides))
 
 
 def read_section_colors(project=None):

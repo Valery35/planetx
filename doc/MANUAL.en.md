@@ -3454,6 +3454,28 @@ closed, the layer is shown in full.
 
 ---
 
+## Project layer swipe
+
+The swipe compares project layers without map years and the time
+slider, for example orthophotos of two surveys or a design and an
+image. The Swipe submenu of the layer menu in the QGIS project section
+sets the side of the layer - Left, Right or Both sides. A Left layer is
+shown only left of the swipe, a Right layer only right of it, the
+other layers on both sides. The mark of the side, ◧ or ◨, stands
+before the layer name.
+
+The first side switches the swipe on and puts the layer on the globe.
+The swipe is dragged with the mouse, the tags above it name the layers
+of the sides. A side without its own layers shows the shared layers
+and the base map. The ⇆ Layer swipe button under the section list
+switches the swipe on and off, the cross of the tag also removes it.
+The sides of the layers are kept in the project.
+
+The swipe of NASA map days and the swipe of historical map years
+remove the layer swipe - the swipes share the left part of the view.
+
+---
+
 ## Historical maps
 
 A historical map is a raster, XYZ tiles or a ground image with a year. Maps

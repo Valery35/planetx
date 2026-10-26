@@ -47,6 +47,7 @@ class SwipeBar(QWidget):
         row = QHBoxLayout(self.left)
         row.setContentsMargins(2, 1, 2, 1)
         row.setSpacing(2)
+        self.steps = []
         for text, tip, delta in (
                 ("‹", tr("День левой части на шаг ряда темы назад."), -1),
                 ("›", tr("День левой части на шаг ряда темы вперёд."), 1)):
@@ -54,6 +55,7 @@ class SwipeBar(QWidget):
             button.clicked.connect(
                 lambda _=False, d=delta: self.stepped.emit(d))
             row.addWidget(button)
+            self.steps.append(button)
             if delta < 0:
                 self.left_day = QLabel(self.left)
                 row.addWidget(self.left_day)
@@ -78,8 +80,11 @@ class SwipeBar(QWidget):
             self.left.raise_()
             self.right.raise_()
 
-    def set_days(self, left, right):
-        """Дни левой и правой части, строки YYYY-MM-DD."""
+    def set_days(self, left, right, steps=True):
+        """Дни левой и правой части, строки YYYY-MM-DD, у шторки слоёв -
+        названия слоёв сторон, без шагов ‹ ›."""
+        for button in self.steps:
+            button.setVisible(bool(steps))
         self.left_day.setText(left or "…")
         self.right.setText(right or "…")
         self.left.adjustSize()

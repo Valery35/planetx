@@ -61,8 +61,9 @@ from .measure import Ruler
 from .myplaces import MyPlaces
 from .paleo import PaleoBar
 from .panel import LayerPanel
-from .project import (AUTO_REFRESH, ProjectWatch, read_flag, read_grids,
-                      read_map_years, read_zlayers, read_ztrue)
+from .project import (AUTO_REFRESH, SIDE_SWIPE, ProjectWatch, read_flag,
+                      read_grids, read_map_years, read_swipe_sides,
+                      read_zlayers, read_ztrue)
 from .inset import DeepSource
 from .contours import ContourExport
 from .hydro import HydroTool
@@ -185,7 +186,10 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.swipe_bar = SwipeBar(self.view)
         self.swipe_bar.moved.connect(self._swipe_moved)
         self.swipe_bar.stepped.connect(self._compare_step)
-        self.swipe_bar.closed.connect(lambda: self.set_compare(False))
+        self.swipe_bar.closed.connect(self._swipe_closed)
+        # Шторка слоёв проекта: стороны слоёв и флажок, core/sides.py.
+        self._swipe_sides = read_swipe_sides()
+        self._side_swipe = read_flag(SIDE_SWIPE, False)
         self._compare_at = None
         self._compare_shown = None
         # Шторка исторических карт: момент левой части, ключ её сборки, растры
@@ -802,6 +806,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.zlayer_ids = set(read_zlayers())
         self.panel.ztrue_toggled.connect(self.set_ztrue)
         self.panel.ztrue_ids = set(read_ztrue())
+        self.panel.swipe_side_requested.connect(self.set_layer_side)
+        self.panel.side_swipe_toggled.connect(self.set_side_swipe)
+        self._read_swipe_sides()
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
         self.toolbar.share_requested.connect(self.share_view)

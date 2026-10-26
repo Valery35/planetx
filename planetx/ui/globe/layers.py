@@ -50,12 +50,13 @@ from ...render.view import start_keys
 from ..identify import Group
 from ..legend import class_names, class_titles, field_titles
 from ..layer_labels import range_key
-from ..project import (AUTO_REFRESH, FOLLOW, is_copy, legend_shown,
-                       map_layers, layer_group,
+from ..project import (AUTO_REFRESH, FOLLOW, SIDE_SWIPE, is_copy,
+                       legend_shown, map_layers, layer_group,
                        read_flag, read_grids, read_map_years,
-                       read_pointclouds, read_zlayers, read_ztrue,
-                       write_flag, write_map_years, write_pointclouds,
-                       write_shown)
+                       read_pointclouds, read_swipe_sides, read_zlayers,
+                       read_ztrue, write_flag, write_map_years,
+                       write_pointclouds, write_shown, write_swipe_sides)
+from ...core import sides as swipe_sides
 from ..sources import SourcesDialog
 from ..properties import PropertiesDialog
 from ..pointcloud import class_names as cloud_class_names, cloud_ids
@@ -1311,8 +1312,12 @@ class LayersMixin:
         """
         # Тайлы суперналожений - под картинками на поверхности.
         supers = getattr(self, "superoverlays", None)
+        hidden = self._maps_hidden()
+        if self._side_on():
+            # Правее шторки слоёв нет слоёв стороны «Слева».
+            hidden = hidden | self._side_hidden(swipe_sides.RIGHT)
         layers, min_levels = self._overlay_stack(
-            self._maps_hidden(), list(getattr(self, "_ground_rasters", []))
+            hidden, list(getattr(self, "_ground_rasters", []))
             + (supers.rasters if supers is not None else []))
         if self.overlay is not None:
             self.overlay.abort()
@@ -1436,16 +1441,126 @@ class LayersMixin:
             self._map_compare_at = at
             self._apply_map_compare()
 
+    # Шторка слоёв проекта (core/sides.py) - слои «Слева» и «Справа»
+    # без годов и шкалы времени. Левую часть рисует то же второе
+    # наложение, что у шторки карт по годам. Просьба автора
+    # от 27 октября 2026 года.
+
+    def _side_hidden(self, side):
+        """Слои проекта на глобусе, скрытые на стороне side."""
+        return swipe_sides.hidden(getattr(self, "_swipe_sides", {}),
+                                  self._applied_layers or (), side)
+
+    def _side_on(self):
+        """Идёт ли шторка слоёв: включена, на глобусе есть слой со своей
+        стороной, Земля, не вид неба и нет шторки темы."""
+        return bool(getattr(self, "_side_swipe", False)) \
+            and self.planet.earth and self.view.sky_view is None \
+            and getattr(self, "_compare_at", None) is None \
+            and swipe_sides.active(getattr(self, "_swipe_sides", {}),
+                                   self._applied_layers or ())
+
+    def set_layer_side(self, layer_id, side):
+        """Пункт «Шторка» меню слоя: сторона слоя или "" - обе. Первая
+        сторона включает шторку, слой встаёт на глобус."""
+        sides = dict(getattr(self, "_swipe_sides", {}))
+        if side in swipe_sides.SIDES:
+            sides[layer_id] = side
+        else:
+            sides.pop(layer_id, None)
+        write_swipe_sides(sides)
+        self._swipe_sides = sides
+        self.panel.swipe_sides = dict(sides)
+        added = False
+        if side in swipe_sides.SIDES:
+            if not self.follow and layer_id not in self._shown:
+                self._shown.add(layer_id)
+                write_shown(self._shown)
+                added = True
+            self._side_swipe = True
+            write_flag(SIDE_SWIPE, True)
+        self._sync_side_swipe()
+        self._changed()
+        if added:
+            # Слой со стороной встаёт на глобус сразу.
+            self.refresh()
+        else:
+            self._update_overlay(keep=True)
+
+    def set_side_swipe(self, on):
+        """Кнопка «Шторка слоёв» раздела «Проект QGIS»."""
+        self._side_swipe = bool(on)
+        write_flag(SIDE_SWIPE, self._side_swipe)
+        if self._side_swipe and getattr(self, "_compare_at", None) \
+                is not None:
+            # Шторка слоёв снимает шторку дней темы.
+            self.set_compare(False)
+        self._sync_side_swipe()
+        self._update_overlay(keep=True)
+
+    def _sync_side_swipe(self):
+        """Кнопка панели и шторка карт по годам под шторку слоёв."""
+        self.panel.set_side_swipe(
+            getattr(self, "_side_swipe", False),
+            bool(getattr(self, "_swipe_sides", {})))
+        if getattr(self, "_side_swipe", False) \
+                and self._map_compare_at is not None:
+            # Шторка слоёв и шторка карт по годам делят левую часть.
+            self._map_compare_at = None
+            self._map_compare_key = None
+            self.timebar.set_compare(
+                self.timebar.compare.isVisibleTo(self.timebar), False)
+
+    def _read_swipe_sides(self):
+        """Стороны шторки слоёв из проекта."""
+        self._swipe_sides = read_swipe_sides()
+        self._side_swipe = read_flag(SIDE_SWIPE, False)
+        self.panel.swipe_sides = dict(self._swipe_sides)
+        self.panel.set_side_swipe(self._side_swipe,
+                                  bool(self._swipe_sides))
+        self._show_layers()
+
+    def _swipe_closed(self):
+        """Крестик шторки: шторка слоёв или шторка дней и годов."""
+        if self._side_on():
+            self.set_side_swipe(False)
+        else:
+            self.set_compare(False)
+
+    def _side_names(self, side):
+        project = QgsProject.instance()
+        names = []
+        for layer_id in swipe_sides.on_side(
+                getattr(self, "_swipe_sides", {}),
+                self._applied_layers or (), side):
+            layer = project.mapLayer(layer_id)
+            if layer is not None:
+                names.append(layer.name())
+        return swipe_sides.label(names, tr("Общие слои"))
+
     def _apply_map_compare(self):
         """Наложение левой части шторки карт: те же слои с картами на
-        её момент. Собирается заново, только если сменился состав."""
+        её момент. Собирается заново, только если сменился состав.
+        У шторки слоёв левая часть - слои без стороны «Справа»."""
         at = getattr(self, "_map_compare_at", None)
+        side = self._side_on()
         if at is None:
-            return
+            if not side:
+                if getattr(self, "map_compare_overlay", None) is not None:
+                    # Шторка слоёв снята или ей нечего сравнивать.
+                    self._map_compare_off()
+                return
+            if self.view.swipe is None or not self.view.swipe_maps:
+                self.view.swipe = self.swipe_bar.share
+                self.view.swipe_maps = True
+                self.swipe_bar.set_shown(True)
+        moment = at if at is not None else self._map_moment()
         entries = self._map_layer_entries()
-        seen = oldmaps.shown(entries, at)
+        seen = oldmaps.shown(entries, moment)
         hidden = frozenset(i for i, _, _ in entries if i not in seen)
-        maps = oldmaps.shown(self._map_ground_entries(), at)
+        if side:
+            hidden = hidden | self._side_hidden(swipe_sides.LEFT)
+        maps = oldmaps.shown(self._map_ground_entries(), moment)
         grounds = []
         for item in self.myplaces.overlays:
             if item.kind != "ground" or not item.visible \
@@ -1464,9 +1579,14 @@ class LayersMixin:
                tuple(self._applied_layers or ()),
                range_key(self._layer_range()))
         moment = self._map_moment()
-        self.swipe_bar.set_days(
-            oldmaps.year_label(at),
-            oldmaps.year_label(moment) if moment is not None else "")
+        if at is None:
+            self.swipe_bar.set_days(self._side_names(swipe_sides.LEFT),
+                                    self._side_names(swipe_sides.RIGHT),
+                                    steps=False)
+        else:
+            self.swipe_bar.set_days(
+                oldmaps.year_label(at),
+                oldmaps.year_label(moment) if moment is not None else "")
         if key == self._map_compare_key:
             return
         self._map_compare_key = key
@@ -1575,6 +1695,7 @@ class LayersMixin:
         self.tracks.load()
         self.subsurface.project_reloaded()
         self._load_insets()
+        self._read_swipe_sides()
         self._read_map_years()
         self.panel.grid_ids = set(read_grids())
         self.panel.zlayer_ids = set(read_zlayers())

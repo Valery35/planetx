@@ -62,6 +62,8 @@ CHECKED = enum(Qt, "CheckState", "Checked")
 UNCHECKED = enum(Qt, "CheckState", "Unchecked")
 TRISTATE = enum(Qt, "ItemFlag", "ItemIsAutoTristate")
 RELIEF = "relief"  # строка рельефа в панели «Слои»
+# Знак стороны шторки перед названием слоя проекта, core/sides.py.
+SIDE_MARKS = {"left": "◧", "right": "◨"}
 # Строки раздела «Слои» под рельефом: сетка, звёзды, облака.
 GRID, STARS, CLOUDS = "grid", "stars", "clouds"
 TEMPERATURE = "temperature"
@@ -474,6 +476,9 @@ class LayerPanel(QWidget):
     # Растр проекта - батиметрия водоёма: номер слоя (окно уровня воды).
     bathymetry_requested = pyqtSignal(str)
     map_year_requested = pyqtSignal(str)
+    # Сторона шторки слоя: номер слоя, left, right или "" - обе.
+    swipe_side_requested = pyqtSignal(str, str)
+    side_swipe_toggled = pyqtSignal(bool)  # кнопка «Шторка слоёв»
     sounding_requested = pyqtSignal(str)
     volume_requested = pyqtSignal(str)
     # Растр - поверхность по отметкам, пункт меню слоя.
@@ -803,6 +808,19 @@ class LayerPanel(QWidget):
             lambda _=False: self.subsurface_requested.emit())
         row.addWidget(under)
         ground.setVisible(False)
+        # Шторка слоёв проекта: стороны - подменю «Шторка» меню слоя,
+        # кнопка включает и снимает шторку, видна, пока стороны есть.
+        self.swipe_sides = {}
+        self.swipe_button = QToolButton(self)
+        self.swipe_button.setText(tr("⇆ Шторка слоёв"))
+        self.swipe_button.setCheckable(True)
+        self.swipe_button.setAutoRaise(True)
+        self.swipe_button.setToolTip(tr(
+            "Сравнение слоёв шторкой. Слои «Слева» видны левее шторки, "
+            "«Справа» - правее, прочие - на обеих сторонах. Сторона "
+            "слоя - подменю «Шторка» меню слоя, шторка тянется мышью."))
+        self.swipe_button.toggled.connect(self.side_swipe_toggled.emit)
+        self.swipe_button.setVisible(False)
         # Основа и рельеф - строки наверху списка, как прочие, у обеих
         # меню выбора «▾». Просьба автора от 12 октября 2026 года - «два
         # нижних слоя вверх», «выбор Esri не кнопкой, как все пункты, но
@@ -883,6 +901,7 @@ class LayerPanel(QWidget):
         project_layout.setContentsMargins(0, 0, 0, 0)
         project_layout.setSpacing(2)
         project_layout.addWidget(self.project_tree, 1)
+        project_layout.addWidget(self.swipe_button)
         project_layout.addWidget(ground)
         self.sections = [
             Section("places", tr("Метки"), upper, tr(
@@ -1782,9 +1801,41 @@ class LayerPanel(QWidget):
     def _layer_text(self, layer):
         """Строка слоя проекта: название и тип. Роль на глобусе (рельеф,
         грид) в строке не пишется - решение автора от 12 октября
-        2026 года, «не надо ролей, идея неудачная»."""
-        return tr("{name} · {kind}", name=layer.name(),
+        2026 года, «не надо ролей, идея неудачная». Сторона шторки -
+        знак перед названием."""
+        text = tr("{name} · {kind}", name=layer.name(),
                   kind=layer_kind(layer))
+        mark = SIDE_MARKS.get(self.swipe_sides.get(layer.id()))
+        return mark + " " + text if mark else text
+
+    def set_side_swipe(self, on, any_side):
+        """Кнопка «Шторка слоёв» - нажата, видна, пока у слоёв есть
+        стороны."""
+        self.swipe_button.blockSignals(True)
+        self.swipe_button.setChecked(bool(on))
+        self.swipe_button.blockSignals(False)
+        self.swipe_button.setVisible(bool(any_side))
+
+    def _side_menu(self, menu, layer):
+        """Подменю «Шторка» меню слоя проекта."""
+        sub = menu.addMenu(tr("Шторка"))
+        sub.setToolTipsVisible(True)
+        current = self.swipe_sides.get(layer.id(), "")
+        for side, text, tip in (
+                ("left", tr("Слева"), tr(
+                    "Слой виден только левее шторки. Правее - слои "
+                    "«Справа» и общие.")),
+                ("right", tr("Справа"), tr(
+                    "Слой виден только правее шторки.")),
+                ("", tr("На обеих сторонах"), tr(
+                    "Слой виден по обе стороны шторки."))):
+            action = sub.addAction(text)
+            action.setCheckable(True)
+            action.setChecked(current == side)
+            action.setToolTip(tip)
+            action.triggered.connect(
+                lambda _=False, s=side: self.swipe_side_requested.emit(
+                    layer.id(), s))
 
     def project_rows(self):
         """Строки слоёв проекта раздела «Проект QGIS»."""
@@ -2082,6 +2133,8 @@ class LayerPanel(QWidget):
         menu.addAction(self._opacity_action(menu, layer))
         if isinstance(layer, QgsPointCloudLayer):
             self._cloud_menu(menu, layer.id())
+        else:
+            self._side_menu(menu, layer)
         if isinstance(layer, QgsVectorLayer) \
                 and enum_int(layer.geometryType()) == 0:
             menu.addAction(tr("Трек…")).triggered.connect(

@@ -31,7 +31,8 @@ from .. import style
 from ..identify import Group
 from ..sidepanel import save_width, saved_width
 from ..themes import theme_names
-from ..project import set_visible_on_map, write_shown
+from ..project import (SIDE_SWIPE, set_visible_on_map, write_flag,
+                       write_shown)
 from ..inset import DeepSource, DemSource, terrain_prepare
 from ..contours import ContourSource, digit_glyphs
 from ..properties import SCALE_RANGE
@@ -398,7 +399,15 @@ class ThemesMixin:
         """Шторка сравнения двух дней темы NASA. Левая часть по
         умолчанию - тот же день год назад (themes.compare_day), правая -
         день шкалы времени. Поле прогноза GFS шторки не получает. Без
-        темы при исторических картах - шторка карт двух лет."""
+        темы при исторических картах - шторка карт двух лет. Шторка
+        слоёв проекта при этом снимается - левая часть у шторок одна."""
+        if on and getattr(self, "_side_swipe", False):
+            self._side_swipe = False
+            write_flag(SIDE_SWIPE, False)
+            self.panel.set_side_swipe(False,
+                                      bool(getattr(self, "_swipe_sides", {})))
+            self._map_compare_off()
+            self._update_overlay(keep=True)
         if not (getattr(self, "theme_key", "") and self._theme_on()):
             if self._compare_at is not None \
                     or "compare" in getattr(self, "gibs_loaders", {}):
