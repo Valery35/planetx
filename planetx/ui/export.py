@@ -27,6 +27,7 @@ from qgis.PyQt.QtGui import QColor
 
 from ..core.sync import inside
 from ..i18n import tr
+from .project import COPY_PROPERTY, is_copy
 
 __all__ = ("inside", "write_points", "write_layer", "add_points",
            "add_styled", "write_grid", "write_picture", "add_raster",
@@ -196,10 +197,11 @@ def write_picture(path, data, box):
         gdal.Unlink(source)
 
 
-def add_raster(path, title, stops=None, rights="", group=None):
+def add_raster(path, title, stops=None, rights="", group=None, copy=None):
     """Растр файла в проект: stops - [(значение, (R, G, B[, A]))] -
     раскраска первой полосы, иначе как есть. rights - строка прав,
-    group - название группы, без него «PlanetX - слои глобуса»."""
+    group - название группы, без него «PlanetX - слои глобуса». copy -
+    растр копирует слой глобуса, без него - когда группы нет (_to_group)."""
     layer = QgsRasterLayer(path, title, "gdal")
     if not layer.isValid():
         return None
@@ -218,7 +220,7 @@ def add_raster(path, title, stops=None, rights="", group=None):
         meta = layer.metadata()
         meta.setRights([rights])
         layer.setMetadata(meta)
-    return _to_group(layer, group)
+    return _to_group(layer, group, copy)
 
 
 def add_xyz(url, title, max_level, rights="", group=None):
@@ -258,13 +260,26 @@ def _ramp_type():
     return QgsColorRampShader.Interpolated
 
 
-def _to_group(layer, title=None):
+def _to_group(layer, title=None, copy=None):
+    """Слой в группу title. Без группы - группа «PlanetX - слои глобуса»,
+    слой - копия слоя глобуса (project.COPY_PROPERTY): глобус его сам не
+    показывает, а прежняя копия с тем же названием в группе заменяется,
+    повторная выгрузка не копит одинаковые слои."""
     project = QgsProject.instance()
+    if copy is None:
+        copy = title is None
     title = title or tr("PlanetX - слои глобуса")
     root = project.layerTreeRoot()
     group = root.findGroup(title)
     if group is None:
         group = root.insertGroup(0, title)
+    if copy:
+        layer.setCustomProperty(COPY_PROPERTY, True)
+        old = [node.layerId() for node in group.findLayers()
+               if node.layer() is not None and is_copy(node.layer())
+               and node.layer().name() == layer.name()]
+        if old:
+            project.removeMapLayers(old)
     project.addMapLayer(layer, False)
     group.addLayer(layer)
     return layer

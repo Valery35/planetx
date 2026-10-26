@@ -545,8 +545,8 @@ class SourcesDialog(QDialog):
         entry = getattr(source, "entry", None)
         if source.ready:
             question = tr("Убрать «{name}» из списка подложек? Вернуть его "
-                          "можно меню «Основа» - «Готовые источники».",
-                          name=source.name)
+                          "можно категорией «Подоснова» каталога «Добавить "
+                          "данные».", name=source.name)
         elif entry is not None:
             question = tr("Удалить подложку WMS «{name}»?", name=source.name)
         else:

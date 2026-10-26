@@ -47,7 +47,7 @@ from .weather import AURORA, field_of
 
 THUMB = 104  # пикселей стороны превью
 ICON = 40  # пикселей стороны значка строки каталога
-CATEGORY_WIDTH = 116  # пикселей, столбец категорий каталога
+CATEGORY_WIDTH = 150  # пикселей, столбец категорий каталога
 PARALLEL = 4  # запросов превью сразу
 # Место и размер окна каталога. Размер первого показа - выбор помощника.
 GEOMETRY_KEY = "PlanetX/catalog_geometry"
@@ -154,26 +154,41 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "hiking": "Waymarked Trails", "cycling": "Waymarked Trails",
            "wiki": "Wikipedia"}
 # Слои витрины: ключ строки окна глобуса и группа.
+# Недра с 27 октября 2026 года - четыре подгруппы вместо 21 строки
+# подряд, решение автора.
 LAYERS = (("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
-          ("satellites", "sky"), ("geology", "depths"), ("glim", "depths"),
-          ("quakes", "depths"), ("iscgem", "depths"),
-          ("plates", "depths"), ("faults", "depths"),
-          ("platemotion", "depths"), ("volcanoes", "depths"),
-          ("magpoles", "depths"), ("magdecl", "depths"), ("emag", "depths"),
-          ("gravity", "depths"), ("bouguer", "depths"), ("geoid", "depths"),
-          ("seafloor_age", "depths"),
-          ("heatflow", "depths"),
-          ("deposits", "depths"), ("mining", "depths"),
-          ("osm_mines", "depths"), ("plants", "infra"),
+          ("satellites", "sky"),
+          ("geology", "geology"), ("glim", "geology"),
+          ("cutaway", "geology"), ("paleo", "geology"),
+          ("quakes", "seismic"), ("iscgem", "seismic"),
+          ("plates", "seismic"), ("faults", "seismic"),
+          ("platemotion", "seismic"), ("volcanoes", "seismic"),
+          ("magpoles", "geophysics"), ("magdecl", "geophysics"),
+          ("emag", "geophysics"), ("gravity", "geophysics"),
+          ("bouguer", "geophysics"), ("geoid", "geophysics"),
+          ("seafloor_age", "geophysics"), ("heatflow", "geophysics"),
+          ("deposits", "resources"), ("mining", "resources"),
+          ("osm_mines", "resources"), ("plants", "infra"),
           ("trains", "transport"), ("vessels", "transport"),
           ("aircraft", "transport"),
           ("currents", "water"), ("worldcover", "life"),
+          ("water_occurrence", "water"),
           ("water_transitions", "water"), ("soil_clay", "soil"),
           ("soil_sand", "soil"), ("soil_soc", "soil"), ("soil_ph", "soil"),
-          ("cutaway", "depths"), ("paleo", "depths"), ("slope", "terrain"),
+          ("slope", "terrain"),
           ("aspect", "terrain"), ("sea_marks", "tiles"),
           ("hiking", "tiles"),
           ("cycling", "tiles"), ("wiki", "wiki"))
+# Строки-окна: источник данных у точки взгляда открывает своё окно
+# (действие строки «Поиск» GlobeWindow._actions). Прежде их было видно
+# только в меню на глобусе, решение автора от 27 октября 2026 года.
+TOOL = "tool:"
+TOOLS = (("here:sentinel", "survey"), ("here:lidar", "survey"),
+         ("here:rumsey", "oldmaps"), ("here:etomesto", "oldmaps"))
+# Левый столбец каталога: раздел - заголовок, щелчок по нему показывает
+# все его группы. Ключ раздела «Недра» - прежний ключ группы "depths".
+SECTION = "section:"
+TOOL_COLORS = ((70, 120, 190), (235, 235, 235))  # превью строки-окна
 # ЛЭП и кабели OSM и горизонтали - строки группы «Карта» раздела «Слои»,
 # решение автора от 11 октября 2026 года. Названия берутся отсюда.
 # Слои, которые есть и вне Земли: звёзды везде, уклон - где есть высоты.
@@ -193,11 +208,24 @@ def layer_group_names():
         ("sky", tr("Небо и свет"), tr(
             "Солнце и ночная сторона, звёзды, облака "
             "и искусственные спутники.")),
-        ("depths", tr("Недра"), tr(
-            "Геологическая и литологическая карты, землетрясения, границы "
-            "плит и разломы, "
-            "месторождения и горные разработки, разрез Земли "
+        ("geology", tr("Геология"), tr(
+            "Геологическая и литологическая карты, разрез Земли "
             "и палеогеография.")),
+        ("seismic", tr("Землетрясения и плиты"), tr(
+            "Землетрясения за месяц и с 1904 года, границы плит, активные "
+            "разломы, скорости плит и вулканы.")),
+        ("geophysics", tr("Геофизика"), tr(
+            "Магнитное поле, аномалии силы тяжести, геоид, возраст "
+            "океанического дна и тепловой поток.")),
+        ("resources", tr("Полезные ископаемые"), tr(
+            "Месторождения USGS, горные разработки по снимкам, шахты "
+            "и карьеры OpenStreetMap.")),
+        ("survey", tr("Снимки у точки"), tr(
+            "Окна поиска снимков Sentinel-2, Landsat, MODIS, ASTER "
+            "и облаков точек лидара у точки взгляда.")),
+        ("oldmaps", tr("Исторические карты"), tr(
+            "Окна каталогов исторических карт у точки взгляда - "
+            "коллекция Рамсея и сайт «Это Место».")),
         ("infra", tr("Энергетика"), tr(
             "Электростанции мира, линии электропередачи, подстанции, "
             "трубопроводы и подводные кабели.")),
@@ -223,6 +251,58 @@ def layer_group_names():
         (SAT_GROUP, tr("Спутники"), tr(
             "Группы искусственных спутников CelesTrak. Щелчок по группе "
             "показывает её на глобусе или убирает.")))
+
+
+def catalog_sections():
+    """Разделы левого столбца каталога: ключ, название, подсказка,
+    группы по порядку. Раскладка - решение автора от 27 октября
+    2026 года."""
+    return (
+        (SECTION + "base", tr("Основа"), tr(
+            "Подоснова, векторная карта, прозрачные наложения карт "
+            "и статьи Википедии."),
+         (BASE_GROUP, LOCAL_GROUP, MAP, "tiles", "wiki")),
+        (SECTION + "now", tr("Земля сейчас"), tr(
+            "Погода, снимки и карты NASA по дням - огонь, вода, воздух, "
+            "жизнь, а также почвы."),
+         ("weather", "fire", "water", "gases", "life", "soil",
+          themes.GIBS_GROUP)),
+        (SECTION + "archive", tr("Архив и съёмка"), tr(
+            "Прежние снимки, исторические карты, космоснимки и облака "
+            "точек у точки взгляда."),
+         ("archive", "oldmaps", "survey")),
+        ("depths", tr("Недра"), tr(
+            "Геология, землетрясения и плиты, геофизика и полезные "
+            "ископаемые."),
+         ("geology", "seismic", "geophysics", "resources")),
+        (SECTION + "sky", tr("Небо"), tr(
+            "Солнце, звёзды, облака, атмосфера и искусственные спутники."),
+         ("sky", SAT_GROUP)),
+        (SECTION + "infra", tr("Энергетика и транспорт"), tr(
+            "Электростанции, ЛЭП, трубопроводы, кабели, поезда, суда "
+            "и самолёты."),
+         ("infra", "transport")),
+        (SECTION + "terrain", "", "", ("terrain",)))
+
+
+def tool_names():
+    """Строка-окно каталога: ключ TOOL + действие - (название,
+    подсказка)."""
+    return {
+        TOOL + "here:sentinel": (tr("Космоснимки здесь"), tr(
+            "Окно поиска снимков Sentinel-2, Landsat 1-9, MODIS и ASTER "
+            "участка у точки взгляда - облачность над участком, сочетания "
+            "каналов и индексы слоями проекта, ряд по датам.")),
+        TOOL + "here:lidar": (tr("Облака точек лидара здесь"), tr(
+            "Плитки облаков точек IGN LiDAR HD во Франции и USGS 3DEP "
+            "в США у точки взгляда слоями проекта, точки на глобусе.")),
+        TOOL + "here:rumsey": (tr("Исторические карты Рамсея здесь"), tr(
+            "Карты коллекции Дэвида Рамсея у точки взгляда, привязанные "
+            "по опорным точкам Стэнфорда, слоем проекта с годом карты.")),
+        TOOL + "here:etomesto": (tr("Старые карты «Это Место» здесь"), tr(
+            "Каталог старых карт сайта etomesto.com у точки взгляда. Карта "
+            "открывается страницей сайта в браузере.")),
+    }
 
 
 def layer_names():
@@ -968,6 +1048,7 @@ class NasaMaps(QWidget):
         self.setWindowTitle(tr("Добавить данные"))
         self.globe = window
         self.names = dict(map_names(), **layer_names())
+        self.names.update(tool_names())
         self.lights = None  # тайл огней городов для превью солнца
         self.items = {}
         self.heads = {}  # заголовки строк: «одна на глобусе», «вместе»
@@ -992,22 +1073,43 @@ class NasaMaps(QWidget):
         self.groups.setFixedWidth(CATEGORY_WIDTH)
         self.groups.setTextElideMode(enum(Qt, "TextElideMode", "ElideNone"))
         self.groups.setWordWrap(True)
-        for key, title, tip in [
-                (ALL, tr("Все"), tr("Все карты и слои каталога.")),
-                (BASE_GROUP, tr("Подоснова"), tr(
-                    "Подложки глобуса - снимки и карты. На глобусе "
-                    "одна подоснова, под картами и слоями.")),
-                (LOCAL_GROUP, tr("Локальные данные"), tr(
-                    "Подробные снимки и карты отдельных районов из служб "
-                    "их владельцев. Строка ставит подоснову, вне района "
-                    "на глобусе снимки Esri.")),
-                (MAP, tr("Карта"), tr(
-                    "Векторная основа OpenFreeMap, координатная сетка, "
-                    "3D-здания и горизонтали."))] \
-                + list(group_names()) + list(layer_group_names()):
+        titles = {key: (title, tip) for key, title, tip in [
+            (BASE_GROUP, tr("Подоснова"), tr(
+                "Подложки глобуса - снимки и карты. На глобусе "
+                "одна подоснова, под картами и слоями.")),
+            (LOCAL_GROUP, tr("Локальные данные"), tr(
+                "Подробные снимки и карты отдельных районов из служб "
+                "их владельцев. Строка ставит подоснову, вне района "
+                "на глобусе снимки Esri.")),
+            (MAP, tr("Карта"), tr(
+                "Векторная основа OpenFreeMap, координатная сетка, "
+                "3D-здания и горизонтали."))]
+            + list(group_names()) + list(layer_group_names())}
+        # Раздел - ключ, название, подсказка, группы. Раздел из одной
+        # группы стоит строкой этой группы.
+        self.sections = {}
+        bold = None
+        row = QListWidgetItem(tr("Все"), self.groups)
+        row.setData(KEY_ROLE, ALL)
+        row.setToolTip(tr("Все карты и слои каталога."))
+        for key, title, tip, members in catalog_sections():
+            if len(members) == 1:
+                row = QListWidgetItem(titles[members[0]][0], self.groups)
+                row.setData(KEY_ROLE, members[0])
+                row.setToolTip(titles[members[0]][1])
+                continue
+            self.sections[key] = members
             row = QListWidgetItem(title, self.groups)
             row.setData(KEY_ROLE, key)
             row.setToolTip(tip)
+            if bold is None:
+                bold = row.font()
+                bold.setBold(True)
+            row.setFont(bold)
+            for member in members:
+                row = QListWidgetItem("   " + titles[member][0], self.groups)
+                row.setData(KEY_ROLE, member)
+                row.setToolTip(titles[member][1])
         self.groups.setCurrentRow(0)
         self.groups.currentItemChanged.connect(
             lambda item, _: self._set_group(item.data(KEY_ROLE))
@@ -1082,6 +1184,16 @@ class NasaMaps(QWidget):
             self._row(key, SAT_GROUP, SAT)
             self.thumbs[key] = satellite_group_image(
                 group, satellites_core.COLORS[group])
+        self._head("tools", tr("Окна у точки взгляда"))
+        for action, group in TOOLS:
+            key = TOOL + action
+            self._row(key, group, TOOL)
+            item = self.items[key][0]
+            # У окна нет состояния «на глобусе» - строка без флажка.
+            item.setFlags(item.flags()
+                          & ~enum(Qt, "ItemFlag", "ItemIsUserCheckable"))
+            item.setData(enum(Qt, "ItemDataRole", "CheckStateRole"), None)
+            self.thumbs[key] = ramp_image(TOOL_COLORS)
         self._filter()
         self._load_base()
         self.refresh()
@@ -1129,7 +1241,7 @@ class NasaMaps(QWidget):
                 self._set_thumb(key, _over(self.base, None))
             elif kind == LAYER:
                 self._set_thumb(key, self._layer_thumb(key))
-            elif kind in (SAT, VECTOR, GIBS):
+            elif kind in (SAT, VECTOR, GIBS, TOOL):
                 self._label(key)
             else:
                 self._set_thumb(key, ramp_image(ramp_of(key), self.base))
@@ -1248,6 +1360,8 @@ class NasaMaps(QWidget):
             return bool(self._vector_keys(key) & set(window._groups))
         if kind == BASE:
             return base_key(window.source) == key
+        if kind == TOOL:
+            return False
         return key == window.gallery_key()
 
     def _vector_keys(self, key):
@@ -1287,6 +1401,8 @@ class NasaMaps(QWidget):
             return tr("CelesTrak")
         if kind == BASE:
             return base_credit(key)
+        if kind == TOOL:
+            return tr("окно у точки взгляда")
         return SOURCES.get(key, "")
 
     def _label(self, key):
@@ -1307,11 +1423,14 @@ class NasaMaps(QWidget):
         for key, (item, group, kind) in self.items.items():
             if kind != GIBS:
                 self._label(key)
-            item.setCheckState(checked if self.is_on(key) else unchecked)
+            if kind != TOOL:
+                item.setCheckState(checked if self.is_on(key)
+                                   else unchecked)
             usable = planet.earth or key in ANY_BODY + ("grid",) \
                 or (key in RELIEF_BODY + ("contours",) and relief)
-            # Спутники и подоснова Земли - только у Земли.
-            usable = usable and (kind not in (SAT, BASE) or planet.earth)
+            # Спутники, подоснова и окна у точки - только у Земли.
+            usable = usable and (kind not in (SAT, BASE, TOOL)
+                                 or planet.earth)
             flags = item.flags()
             item.setFlags(flags | enabled if usable else flags & ~enabled)
         self._quiet = False
@@ -1345,6 +1464,13 @@ class NasaMaps(QWidget):
                 self._set_base(key)
         elif kind == LAYER:
             self.globe.set_extra(key, not self.globe.extras.get(key))
+        elif kind == TOOL:
+            # «here:sentinel» - окно GlobeWindow.sentinel_here у точки
+            # взгляда.
+            pose = self.globe.view.navigator.pose
+            getattr(self.globe, key.split(":")[-1] + "_here")(pose.lat,
+                                                              pose.lon)
+            return
         elif kind == VECTOR:
             keys = self._vector_keys(key)
             groups = set(self.globe._groups)
@@ -1383,6 +1509,8 @@ class NasaMaps(QWidget):
             Qt, "ItemFlag", "ItemIsEnabled")))
         self.toggle.setText(tr("Убрать с глобуса") if on
                             else tr("Показать на глобусе"))
+        if self.items[key][2] == TOOL:
+            self.toggle.setText(tr("Открыть окно"))
         if self.items[key][2] == BASE:
             self.toggle.setEnabled(self.toggle.isEnabled() and not on)
             self.toggle.setText(tr("Подоснова на глобусе") if on
@@ -1446,8 +1574,11 @@ class NasaMaps(QWidget):
                 and "gibs" not in self.heads:
             self.globe.load_gibs(self._gibs_arrived)
         seen = {"maps": False, "layers": False, "bases": False,
-                "gibs": False}
+                "gibs": False, "tools": False}
         words = text.split()
+        # Раздел левого столбца - все его группы, кроме слоёв каталога
+        # GIBS: их больше тысячи, они только в своей группе и в поиске.
+        members = self.sections.get(self._group, (self._group,))
         for key, (item, group, kind) in self.items.items():
             # Во «Всех» групп спутников и слоёв каталога GIBS нет, во
             # вкладке «Спутники» есть и сам слой. Поиск идёт по всему
@@ -1460,6 +1591,8 @@ class NasaMaps(QWidget):
                     or text in self.names[key][1].lower()
             elif self._group == ALL:
                 fits = kind not in (SAT, BASE, GIBS)
+            elif self._group in self.sections:
+                fits = group in members and kind != GIBS
             else:
                 fits = group == self._group or (
                     self._group == SAT_GROUP and key == "satellites")
@@ -1467,6 +1600,7 @@ class NasaMaps(QWidget):
             if fits:
                 seen["bases" if kind == BASE
                      else "layers" if kind in (LAYER, SAT, VECTOR)
+                     else "tools" if kind == TOOL
                      else "gibs" if kind == GIBS else "maps"] = True
         for name, head in self.heads.items():
             head.setHidden(not seen[name])
@@ -1482,7 +1616,14 @@ class NasaMaps(QWidget):
         # Подпись строки шлёт itemChanged, и без _quiet каждая из тысячи
         # строк обновляла весь каталог - 24 с на QGIS 4.
         self._quiet = True
+        # Слои, которые уже стоят в каталоге своими картами, второй раз
+        # не идут - замечание автора от 27 октября 2026 года о дублях.
+        known = themes.built_in(clouds.LAYER, temperature.LAND,
+                                temperature.SEA, sun.LIGHTS_LAYER,
+                                basemap.BLUE_MARBLE_LAYER)
         for theme in self.globe.gibs_layers:
+            if theme.layer in known:
+                continue
             self.names[theme.key] = (theme.title, layer_tip(theme))
             self._row(theme.key, themes.GIBS_GROUP, GIBS)
             self.thumbs[theme.key] = blank

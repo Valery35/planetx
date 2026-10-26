@@ -50,10 +50,10 @@ from ...render.view import start_keys
 from ..identify import Group
 from ..legend import class_names, class_titles, field_titles
 from ..layer_labels import range_key
-from ..project import (AUTO_REFRESH, FOLLOW, map_layers, layer_group,
+from ..project import (AUTO_REFRESH, FOLLOW, is_copy, legend_shown,
+                       map_layers, layer_group,
                        read_flag, read_grids, read_map_years,
                        read_pointclouds, read_zlayers, read_ztrue,
-                       visible_on_map,
                        write_flag, write_map_years, write_pointclouds,
                        write_shown)
 from ..sources import SourcesDialog
@@ -1523,7 +1523,7 @@ class LayersMixin:
             # Точки трека могли измениться.
             self.tracks.reload()
         added = [layer.id() for layer in layers
-                 if layer.id() not in self._known]
+                 if layer.id() not in self._known and not is_copy(layer)]
         self._known = {layer.id() for layer in layers}
         if added and self.new_shown and not self.follow:
             self._shown |= set(added)
@@ -1538,8 +1538,7 @@ class LayersMixin:
         """Видимость в дереве слоёв QGIS сменилась."""
         if not self.follow:
             return
-        self._shown = {layer.id() for layer in map_layers()
-                       if visible_on_map(layer)}
+        self._shown = legend_shown(map_layers())
         self._changed()
 
     def set_follow(self, on):

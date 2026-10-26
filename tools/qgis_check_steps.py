@@ -752,6 +752,122 @@ def snow_ready_wait():
 
 
 @check(500)
+def catalog_layout():
+    """Раскладка каталога с 27 октября 2026 года: разделы левого
+    столбца с подгруппами, у каждой строки одна группа, раздел
+    показывает строки всех своих групп, строки-окна открывают окно
+    у точки взгляда, «Ещё подосновы…» меню «Основа» ведёт в каталог.
+    Каталог GIBS просится - его строки проверяет catalog_layout_wait."""
+    from planetx.core import themes
+    from planetx.ui import nasamaps
+    window = state["window"]
+    window.set_body("earth")
+    gallery = window.open_gallery()
+    gallery.search.setText("")
+    out = result["catalog_layout"] = {}
+    column = []
+    for n in range(gallery.groups.count()):
+        row = gallery.groups.item(n)
+        column.append(row.text())
+    out["column"] = column
+    counts = {}
+    for n in range(gallery.groups.count()):
+        key = gallery.groups.item(n).data(nasamaps.KEY_ROLE)
+        if key == themes.GIBS_GROUP:
+            continue
+        gallery._set_group(key)
+        counts[key] = sum(1 for item, g, kind in gallery.items.values()
+                          if not item.isHidden())
+    out["counts"] = counts
+    out["depths_is_sum"] = counts.get("depths") == sum(
+        counts.get(k, 0) for k in gallery.sections.get("depths", ()))
+    # Группа каждой строки есть в левом столбце.
+    keys = {gallery.groups.item(n).data(nasamaps.KEY_ROLE)
+            for n in range(gallery.groups.count())}
+    out["orphans"] = sorted(k for k, (item, g, kind) in gallery.items.items()
+                            if g not in keys)
+    out["water_occurrence"] = "water_occurrence" in gallery.items
+    names = [gallery.names[k][0] for k in gallery.items
+             if gallery.items[k][2] != nasamaps.GIBS]
+    out["same_names"] = sorted({n for n in names if names.count(n) > 1})
+    called = []
+    window.sentinel_here = lambda lat, lon: called.append((lat, lon))
+    gallery._clicked(gallery.items["tool:here:sentinel"][0])
+    del window.sentinel_here
+    out["tool_called"] = len(called)
+    gallery._describe("tool:here:sentinel")
+    out["tool_button"] = gallery.toggle.text()
+    gallery._set_group("depths")
+    gallery.grab().save(os.path.join(TEMP, "planetx_catalog_depths.png"))
+    menu = window.panel.basemap_menu()
+    out["basemap_submenus"] = sum(1 for a in menu.actions()
+                                  if a.menu() is not None)
+    from planetx.i18n import tr
+    more = [a for a in menu.actions() if a.text() == tr("Ещё подосновы…")]
+    if more:
+        more[0].trigger()
+    out["more_bases"] = gallery._group == nasamaps.BASE_GROUP
+    menu.deleteLater()
+    gallery._set_group(themes.GIBS_GROUP)
+    state["catalog_started"] = time.monotonic()
+
+
+@check(500)
+def catalog_layout_wait():
+    """Каталог GIBS без слоёв, которые уже стоят в каталоге своими
+    картами."""
+    from planetx.core import clouds, temperature, themes
+    window = state["window"]
+    gallery = window.gallery
+    spent = time.monotonic() - state["catalog_started"]
+    if "gibs" not in gallery.heads and spent < 60.0:
+        return 500
+    out = result["catalog_layout"]
+    rows = [k for k, (item, g, kind) in gallery.items.items()
+            if g == themes.GIBS_GROUP]
+    builtin = themes.built_in(clouds.LAYER, temperature.LAND)
+    out["gibs_rows"] = len(rows)
+    out["gibs_layers"] = len(window.gibs_layers)
+    out["gibs_repeats"] = sorted(k for k in rows
+                                 if themes.BY_KEY[k].layer in builtin)
+    gallery._set_group("")
+    gallery.close()
+    return None
+
+
+@check(500)
+def export_copy():
+    """Выгрузка слоя глобуса в проект: повтор заменяет прежнюю копию,
+    копия в режиме «как на карте QGIS» на глобус не встаёт."""
+    from qgis.core import QgsProject
+    from planetx.i18n import tr
+    from planetx.ui.nasamaps import layer_names
+    from planetx.ui.project import is_copy
+    window = state["window"]
+    window.set_body("earth")
+    out = result["export_copy"] = {}
+    title = layer_names()["sea_marks"][0]
+    follow = window.follow
+    window.set_follow(True)
+    window.active_export("sea_marks")
+    window.active_export("sea_marks")
+    project = QgsProject.instance()
+    root = project.layerTreeRoot()
+    group = root.findGroup(tr("PlanetX - слои глобуса"))
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    named = [layer for layer in layers if layer.name() == title]
+    out["copies"] = len(named)
+    out["is_copy"] = all(is_copy(layer) for layer in named)
+    out["visible_in_qgis"] = all(
+        root.findLayer(layer.id()).isVisible() for layer in named)
+    out["on_globe"] = any(layer.id() in window._shown for layer in named)
+    window.set_follow(follow)
+    if group is not None:
+        project.removeMapLayers([layer.id() for layer in layers])
+        root.removeChildNode(group)
+
+
+@check(500)
 def gibs_catalog_open():
     """Весь каталог NASA GIBS в окне «Добавить данные»: категория
     подгружает слои из GetCapabilities, поиск по словам, строка ставит
@@ -18543,17 +18659,25 @@ def ready_menu():
                              window.source.name)
     settings.remove(wmod.READY_KEY)
     settings.remove(wmod.ACCEPTED_KEY)
+    # С 27 октября 2026 года подменю «Готовые источники» нет, пункт
+    # «Ещё подосновы…» открывает категорию «Подоснова» каталога.
+    from planetx.ui.nasamaps import BASE_GROUP
     menu = window.panel.basemap_menu()
-    ready = [a.menu() for a in menu.actions() if a.menu() is not None]
-    groups = [a for a in ready[0].actions() if a.menu() is not None] \
-        if ready else []
-    items = [b for a in groups for b in a.menu().actions()]
+    texts = [a.text() for a in menu.actions()]
     out = result["ready"] = {
-        "submenu": {a.text(): [b.text() for b in a.menu().actions()]
-                    for a in groups},
-        "items": len(items),
-        "warned_tips": sum(1 for a in items if a.toolTip()
-                           and a.toolTip() != a.text())}
+        "menu": texts,
+        "submenus": sum(1 for a in menu.actions() if a.menu() is not None)}
+    from planetx.i18n import tr
+    more = [a for a in menu.actions() if a.text() == tr("Ещё подосновы…")]
+    if more:
+        more[0].trigger()
+        gallery = window.gallery
+        shown = [k for k, (item, g, kind) in gallery.items.items()
+                 if not item.isHidden()]
+        out["more_group"] = gallery._group == BASE_GROUP
+        out["more_rows"] = len(shown)
+        out["more_ready"] = sum(1 for k in shown if k.startswith("base:"))
+        window.close_gallery()
     menu.deleteLater()
     asked = []
     window._accept_terms = lambda name, terms: asked.append(name) or False

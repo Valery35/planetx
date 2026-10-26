@@ -18,7 +18,7 @@ from ...qt_compat import enum
 from ...render.view import start_keys
 from ..assistant import current_provider, ready
 from ..placecard import Card, DeepSkyCard, deep_question
-from ..project import FOLLOW, map_layers, read_flag, read_shown, visible_on_map
+from ..project import FOLLOW, legend_shown, map_layers, read_flag, read_shown
 from .base import (CONSTELLATIONS_KEY, DEEPSKY_KEY, EARTH_EXTRAS,
                    SKY_IMAGERY_KEY)
 
@@ -267,8 +267,7 @@ class BodyMixin:
         layers = map_layers()
         self.follow = read_flag(FOLLOW, False)
         if self.follow:
-            self._shown = {layer.id() for layer in layers
-                           if visible_on_map(layer)}
+            self._shown = legend_shown(layers)
             self._known = {layer.id() for layer in layers}
             return
         shown = read_shown()

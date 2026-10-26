@@ -43,10 +43,10 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView,
                                  QTreeWidgetItem, QVBoxLayout, QWidget,
                                  QWidgetAction)
 
-from ..core import basemap, geoid, icons, lookat
+from ..core import geoid, icons, lookat
 from ..core import pointcloud as cloud_core
 from ..core.placetree import is_folder
-from ..i18n import is_russian, tr
+from ..i18n import tr
 from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
                            WATER_NAMES)
@@ -501,8 +501,8 @@ class LayerPanel(QWidget):
     # Подложка выбрана в группе «Основа» - номер источника.
     basemap_chosen = pyqtSignal(int)
     add_source_requested = pyqtSignal()
-    # Готовый источник меню «Основа», ключ basemap.READY.
-    ready_requested = pyqtSignal(str)
+    # «Ещё подосновы…» меню «Основа» - категория «Подоснова» каталога.
+    bases_requested = pyqtSignal()
     relief_toggled = pyqtSignal(bool)
     # Меню строки «Рельеф»: модель высот суши, глубины морей,
     # окно «Источники данных».
@@ -1427,8 +1427,13 @@ class LayerPanel(QWidget):
         self.basemap_menu().exec(pos)
 
     def basemap_menu(self):
-        """Меню строки «Основа»: подложки, готовые источники, свой
-        источник тайлов. Отдельно от показа - его проверяет шаг."""
+        """Меню строки «Основа»: подложки в списке глобуса, «Ещё
+        подосновы…» и свой источник тайлов. Отдельно от показа - его
+        проверяет шаг.
+
+        До 27 октября 2026 года здесь было подменю «Готовые источники»
+        с тем же списком, что категория «Подоснова» каталога. Решение
+        автора - выбор один, в каталоге с превью, меню ведёт туда."""
         menu = QMenu(self)
         for i, name in enumerate(self._basemap_names):
             action = menu.addAction(name)
@@ -1437,25 +1442,8 @@ class LayerPanel(QWidget):
             action.triggered.connect(
                 lambda _=False, i=i: self._basemap_activated(i))
         menu.addSeparator()
-        ready = menu.addMenu(tr("Готовые источники"))
-        # Названия сервисов не переводятся, через tr они не идут.
-        titles = {"osm": "OpenStreetMap", "esri": "Esri",
-                  "nasa_usgs": tr("NASA и USGS"),
-                  "warned": "Google, Bing, Яндекс, 2ГИС" if is_russian()
-                  else "Google, Bing, Yandex, 2GIS"}
-        for group, keys in basemap.READY_GROUPS:
-            sub = ready.addMenu(titles[group])
-            sub.setToolTipsVisible(True)
-            for key in keys:
-                _, ru, en, _, _, _, _, warned, _ = basemap.ready_entry(key)
-                action = sub.addAction(ru if is_russian() else en)
-                if warned:
-                    action.setToolTip(tr(
-                        "Условия сервиса не разрешают брать тайлы по "
-                        "прямому адресу. Перед добавлением окно предупредит "
-                        "об этом."))
-                action.triggered.connect(
-                    lambda _=False, key=key: self.ready_requested.emit(key))
+        menu.addAction(tr("Ещё подосновы…")).triggered.connect(
+            lambda _=False: self.bases_requested.emit())
         menu.addAction(tr("Добавить источник тайлов…")).triggered.connect(
             lambda _=False: self._basemap_activated(ADD_SOURCE))
         return menu

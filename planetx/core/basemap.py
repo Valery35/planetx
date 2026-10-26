@@ -310,6 +310,7 @@ USGS_TILES = ("https://basemap.nationalmap.gov/arcgis/rest/services/"
 USGS_TERMS = ("https://www.usgs.gov/information-policies-and-instructions/"
               "copyrights-and-credits")
 USGS_CREDIT = "USGS The National Map"
+BLUE_MARBLE_LAYER = "BlueMarble_ShadedRelief_Bathymetry"  # слой GIBS
 READY = READY + (
     ("osm_hot", "OSM Гуманитарная", "OSM Humanitarian",
      "https://a.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", 19,
@@ -354,7 +355,7 @@ READY = READY + (
      "Esri, Airbus DS, USGS, NGA, NASA, CGIAR", ESRI_TERMS, False, "xyz"),
     ("nasa_blue_marble", "NASA Blue Marble", "NASA Blue Marble",
      "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/"
-     "BlueMarble_ShadedRelief_Bathymetry/default/"
+     + BLUE_MARBLE_LAYER + "/default/"
      "GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpeg", 8,
      "NASA Blue Marble, NASA GIBS", GIBS_TERMS, False, "xyz"),
     ("usgs_imagery", "USGS Снимки (США)", "USGS Imagery (USA)",

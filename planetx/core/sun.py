@@ -34,8 +34,9 @@ FLAT = AMBIENT + (1.0 - AMBIENT) * math.sin(math.radians(45.0))
 # VIIRS_Night_Lights - только огни, вне них прозрачно. Уровни 0-8,
 # пиксель около 600 м у экватора. Огни прибавляются к снимку там, где
 # солнце ниже TWILIGHT, к DAYLIGHT гаснут, под облаками слабее.
+LIGHTS_LAYER = "VIIRS_Night_Lights"
 LIGHTS_URL = ("https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/"
-              "VIIRS_Night_Lights/default/2016-01-01/"
+              + LIGHTS_LAYER + "/default/2016-01-01/"
               "GoogleMapsCompatible_Level8/{z}/{y}/{x}.png")
 LIGHTS_LEVEL = 8
 LIGHTS_GAIN = 1.0  # яркость огней к яркости картинки слоя

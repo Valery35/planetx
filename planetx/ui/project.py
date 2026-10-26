@@ -55,6 +55,26 @@ def visible_on_map(layer, project=None):
     return node is not None and node.isVisible()
 
 
+# Слой, выгруженный «В проект QGIS…» из слоя глобуса, - копия того, что
+# глобус уже рисует сам. Сам на глобус он не встаёт, ни в режиме
+# «как на карте QGIS», ни новым слоем, иначе одни данные шли бы дважды.
+# Флажок в разделе «Проект QGIS» его показывает. Замечание автора
+# от 27 октября 2026 года.
+COPY_PROPERTY = "planetx/globe_copy"
+
+
+def is_copy(layer):
+    """Слой - выгрузка слоя глобуса в проект."""
+    return bool(layer.customProperty(COPY_PROPERTY, False))
+
+
+def legend_shown(layers, project=None):
+    """Номера слоёв, включённых в дереве слоёв QGIS, без выгрузок слоёв
+    глобуса - видимость глобуса в режиме «как на карте QGIS»."""
+    return {layer.id() for layer in layers
+            if visible_on_map(layer, project) and not is_copy(layer)}
+
+
 def set_visible_on_map(layer_id, on, project=None):
     """Включить или выключить слой в дереве слоёв QGIS."""
     project = project or QgsProject.instance()

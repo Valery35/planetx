@@ -15,6 +15,7 @@ power=line и man_made=pipeline с геометрией, подстанции po
 Силовой кабель power=cable (подземный и подводный) и линия связи
 communication=line - свои классы CABLES, пунктиром.
 """
+import math
 import re
 
 NUMBER = re.compile(r"^\d+(\.\d+)?$")
@@ -84,6 +85,35 @@ def substance_class(text):
     return SUBSTANCES[-1][0]
 
 
+# Подводные кабели строки «Подводные кабели» (data/cables.json,
+# tools/build_cables.py) этой строкой второй раз не рисуются: линии связи
+# под водой и силовые кабели под водой длиннее CABLE_FILE_POWER км.
+# Замечание автора от 27 октября 2026 года о дублях.
+UNDERWATER = ("underwater", "submarine")
+CABLE_FILE_POWER = 5.0  # км, как MIN_POWER tools/build_cables.py
+
+
+def length_km(points):
+    """Длина ломаной [(широта, долгота)] по шару, км."""
+    total = 0.0
+    for (la1, lo1), (la2, lo2) in zip(points, points[1:]):
+        p1, p2 = math.radians(la1), math.radians(la2)
+        h = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) \
+            * math.sin(math.radians(lo2 - lo1) / 2) ** 2
+        total += 2 * 6371.0 * math.asin(min(1.0, math.sqrt(h)))
+    return total
+
+
+def in_cable_file(tags, points):
+    """Объект есть в файле подводных кабелей модуля."""
+    under = tags.get("location") in UNDERWATER
+    if tags.get("communication") == "line":
+        return under or tags.get("submarine") == "yes"
+    if tags.get("power") == "cable":
+        return under and length_km(points) >= CABLE_FILE_POWER
+    return False
+
+
 def parse(answer):
     """Объекты ответа: словари kind (line, cable, telecom, pipe,
     substation), points
@@ -109,7 +139,7 @@ def parse(answer):
         geometry = element.get("geometry") or []
         points = [(g["lat"], g["lon"]) for g in geometry
                   if g and "lat" in g]
-        if len(points) < 2:
+        if len(points) < 2 or in_cable_file(tags, points):
             continue
         if tags.get("power") == "line":
             out.append(dict(common, kind="line", points=points,

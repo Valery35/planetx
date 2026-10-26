@@ -178,6 +178,7 @@ class DisastersMixin:
             rights = events.CREDITS.get(item.source, ("",))[0]
             if add_raster("/vsicurl/" + item.href, title.strip(),
                           rights=rights,
-                          group=tr("PlanetX - снимки событий")) is not None:
+                          group=tr("PlanetX - снимки событий"),
+                          copy=True) is not None:
                 count += 1
         return count or None

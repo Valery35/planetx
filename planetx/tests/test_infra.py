@@ -56,7 +56,7 @@ class TestInfra(unittest.TestCase):
              "tags": {"power": "line"}},
             {"type": "way", "id": 5,
              "geometry": [{"lat": 59.0, "lon": 56.0},
-                          {"lat": 59.0, "lon": 56.3}],
+                          {"lat": 59.0, "lon": 56.03}],
              "tags": {"power": "cable", "voltage": "220000",
                       "location": "underwater"}},
             {"type": "way", "id": 6,
@@ -74,6 +74,25 @@ class TestInfra(unittest.TestCase):
         self.assertEqual(items[1]["style"], "gas")
         self.assertEqual(items[1]["operator"], "Газпром")
         self.assertEqual(items[2]["style"], "v110")
+
+    def test_submarine_cables_left_to_cable_row(self):
+        # Подводные линии связи и длинные силовые кабели под водой рисует
+        # строка «Подводные кабели», у ЛЭП OSM их второй копии нет.
+        line = [{"lat": 59.0, "lon": 20.0}, {"lat": 59.0, "lon": 20.3}]
+        river = [{"lat": 59.0, "lon": 20.0}, {"lat": 59.0, "lon": 20.03}]
+        answer = {"elements": [
+            {"type": "way", "id": 1, "geometry": line,
+             "tags": {"communication": "line", "location": "underwater"}},
+            {"type": "way", "id": 2, "geometry": line,
+             "tags": {"communication": "line", "submarine": "yes"}},
+            {"type": "way", "id": 3, "geometry": line,
+             "tags": {"power": "cable", "location": "submarine"}},
+            {"type": "way", "id": 4, "geometry": river,
+             "tags": {"power": "cable", "location": "underwater"}},
+            {"type": "way", "id": 5, "geometry": line,
+             "tags": {"power": "cable", "location": "underground"}}]}
+        self.assertEqual([i["osm"] for i in infra.parse(answer)],
+                         ["way/4", "way/5"])
 
 
 if __name__ == "__main__":

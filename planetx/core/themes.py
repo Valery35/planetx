@@ -294,6 +294,15 @@ def register(layers):
         BY_KEY[theme.key] = theme
 
 
+def built_in(*extra):
+    """Имена слоёв GIBS, которые уже есть в каталоге своими картами -
+    темы и слои extra (облака, температура, огни, подложка). Каталог GIBS
+    их второй раз не показывает."""
+    return {theme.layer for theme in THEMES
+            if theme.layer and theme.layer != WEATHER
+            and theme.key not in (WAYBACK, EVENTS)} | set(extra)
+
+
 def search(layers, text):
     """Слои каталога GIBS, в названии или имени которых есть все слова
     text, без учёта регистра."""

@@ -286,6 +286,9 @@ def _tools(window, add, earth):
         lambda: window.sentinel_here(*_here(window), mission="aster"),
         ("aster", "астер", "минералы", "изменённые породы", "каолинит",
          "геологические индексы", "swir", "terra aster"))
+    add("here:lidar", tr("Облака точек лидара здесь"), open_,
+        lambda: window.lidar_here(*_here(window)),
+        ("лидар", "облако точек", "lidar", "point cloud", "ign", "3dep"))
     add("here:etomesto", tr("Старые карты «Это Место» здесь"), open_,
         lambda: window.etomesto_here(*_here(window)),
         ("это место", "etomesto", "старые карты", "межевые", "пгм",

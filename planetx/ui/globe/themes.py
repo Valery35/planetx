@@ -177,6 +177,15 @@ class ThemesMixin:
         self.gallery.refresh()
         return self.gallery
 
+    def open_bases(self):
+        """«Ещё подосновы…» меню «Основа» - каталог на категории
+        «Подоснова»."""
+        from ..nasamaps import BASE_GROUP
+        gallery = self.open_gallery()
+        gallery.search.clear()
+        gallery._set_group(BASE_GROUP)
+        return gallery
+
     def close_gallery(self):
         """Закрыть окно каталога."""
         gallery = getattr(self, "gallery", None)

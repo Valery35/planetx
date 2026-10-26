@@ -258,6 +258,13 @@ class TestCatalogue(unittest.TestCase):
         self.assertNotIn("gibs:BlueMarble_NextGeneration", themes.BY_KEY)
         self.assertIn("snow", themes.BY_KEY)
 
+    def test_built_in_layers_are_known(self):
+        # Снег уже есть темой - в каталоге GIBS его второй строки нет.
+        known = themes.built_in("BlueMarble_NextGeneration")
+        fresh = [t.layer for t in self.layers if t.layer not in known]
+        self.assertEqual(fresh, [])
+        self.assertNotIn(themes.WEATHER, themes.built_in())
+
 
 class TestWms(unittest.TestCase):
 

@@ -867,13 +867,82 @@ EN = {
         "Mining areas",
     "Загрузка контуров горных разработок, около 25 МБ…":
         "Loading mining area outlines, about 25 MB…",
-    "Геологическая и литологическая карты, землетрясения, границы плит "
-    "и разломы, месторождения и горные разработки, разрез Земли "
+    "Геологическая и литологическая карты, разрез Земли "
     "и палеогеография.":
-        "The geological and lithological maps, earthquakes, plate "
-        "boundaries and faults, "
-        "mineral deposits and mining areas, the Earth cutaway and "
+        "The geological and lithological maps, the Earth cutaway and "
         "palaeogeography.",
+    "Землетрясения и плиты": "Earthquakes and plates",
+    "Землетрясения за месяц и с 1904 года, границы плит, активные "
+    "разломы, скорости плит и вулканы.":
+        "Earthquakes of the past month and since 1904, plate boundaries, "
+        "active faults, plate velocities and volcanoes.",
+    "Геофизика": "Geophysics",
+    "Магнитное поле, аномалии силы тяжести, геоид, возраст "
+    "океанического дна и тепловой поток.":
+        "The magnetic field, gravity anomalies, the geoid, the age of the "
+        "ocean floor and heat flow.",
+    "Месторождения USGS, горные разработки по снимкам, шахты "
+    "и карьеры OpenStreetMap.":
+        "USGS mineral deposits, mining areas mapped from imagery, mines "
+        "and quarries from OpenStreetMap.",
+    "Снимки у точки": "Imagery at a point",
+    "Окна поиска снимков Sentinel-2, Landsat, MODIS, ASTER "
+    "и облаков точек лидара у точки взгляда.":
+        "Windows that search Sentinel-2, Landsat, MODIS and ASTER imagery "
+        "and lidar point clouds at the look point.",
+    "Исторические карты": "Historical maps",
+    "Окна каталогов исторических карт у точки взгляда - "
+    "коллекция Рамсея и сайт «Это Место».":
+        "Windows of historical map catalogues at the look point - the "
+        "Rumsey collection and the Eto Mesto site.",
+    "Подоснова, векторная карта, прозрачные наложения карт "
+    "и статьи Википедии.":
+        "The base map, the vector map, transparent map overlays and "
+        "Wikipedia articles.",
+    "Земля сейчас": "Earth now",
+    "Погода, снимки и карты NASA по дням - огонь, вода, воздух, "
+    "жизнь, а также почвы.":
+        "Weather, daily NASA imagery and maps of fire, water, air "
+        "and life, and soils.",
+    "Архив и съёмка": "Archive and surveys",
+    "Прежние снимки, исторические карты, космоснимки и облака "
+    "точек у точки взгляда.":
+        "Past imagery, historical maps, satellite scenes and point "
+        "clouds at the look point.",
+    "Геология, землетрясения и плиты, геофизика и полезные "
+    "ископаемые.":
+        "Geology, earthquakes and plates, geophysics and mineral "
+        "resources.",
+    "Солнце, звёзды, облака, атмосфера и искусственные спутники.":
+        "The Sun, stars, clouds, the atmosphere and artificial "
+        "satellites.",
+    "Энергетика и транспорт": "Energy and transport",
+    "Электростанции, ЛЭП, трубопроводы, кабели, поезда, суда "
+    "и самолёты.":
+        "Power plants, power lines, pipelines, cables, trains, ships "
+        "and aircraft.",
+    "Окно поиска снимков Sentinel-2, Landsat 1-9, MODIS и ASTER "
+    "участка у точки взгляда - облачность над участком, сочетания "
+    "каналов и индексы слоями проекта, ряд по датам.":
+        "A window that searches Sentinel-2, Landsat 1-9, MODIS and ASTER "
+        "scenes of an area at the look point - cloud cover over the area, "
+        "band composites and indices as project layers, a time series.",
+    "Плитки облаков точек IGN LiDAR HD во Франции и USGS 3DEP "
+    "в США у точки взгляда слоями проекта, точки на глобусе.":
+        "Point cloud tiles of IGN LiDAR HD in France and USGS 3DEP in the "
+        "USA at the look point as project layers, points on the globe.",
+    "Карты коллекции Дэвида Рамсея у точки взгляда, привязанные "
+    "по опорным точкам Стэнфорда, слоем проекта с годом карты.":
+        "Maps of the David Rumsey collection at the look point, "
+        "georeferenced by the Stanford control points, as a project layer "
+        "with the map year.",
+    "Каталог старых карт сайта etomesto.com у точки взгляда. Карта "
+    "открывается страницей сайта в браузере.":
+        "The catalogue of old maps of etomesto.com at the look point. "
+        "A map opens as a site page in the browser.",
+    "Окна у точки взгляда": "Windows at the look point",
+    "окно у точки взгляда": "window at the look point",
+    "Открыть окно": "Open the window",
     "Активные разломы":
         "Active faults",
     "Около 13.7 тысячи активных разломов мира по базе GEM Global Active "
@@ -1824,8 +1893,6 @@ EN = {
         "imagery into third-party programs by the direct tile address. "
         "The source is added by your decision, you bear the responsibility "
         "for its use.<br><br>Terms of the service: {terms}",
-    "Готовые источники": "Ready sources",
-    "NASA и USGS": "NASA and USGS",
     "Подоснова": "Base maps",
     "Локальные данные": "Local data",
     "Подробные снимки и карты отдельных районов из служб "
@@ -1876,10 +1943,11 @@ EN = {
         "The service terms do not allow taking tiles by the direct address. "
         "The window warns about it before adding.",
     "Готовый источник меню «Основа»": "Ready source of the Base map menu",
-    "Убрать «{name}» из списка подложек? Вернуть его можно меню «Основа» "
-    "- «Готовые источники».":
+    "Убрать «{name}» из списка подложек? Вернуть его можно категорией "
+    "«Подоснова» каталога «Добавить данные».":
         "Remove «{name}» from the base map list? It can be brought back "
-        "by the Base map menu - Ready sources.",
+        "by the Base map category of the Add data catalogue.",
+    "Ещё подосновы…": "More base maps…",
     "Росреестр": "Rosreestr",
     "НСПД Росреестра": "Rosreestr NSPD",
     "Кадастр - земельные участки": "Cadastre - land parcels",
@@ -2381,8 +2449,10 @@ EN = {
     "0.1 мм/ч поле прозрачно.":
         "Precipitation rate at the slider moment from the NOAA GFS model, "
         "mm/h. Below 0.1 mm/h the field is transparent.",
-    "Облачность":
-        "Clouds",
+    "Облачность, прогноз GFS":
+        "Cloud cover, GFS forecast",
+    "Осадки, прогноз GFS": "Precipitation, GFS forecast",
+    "Осадки по спутникам IMERG": "Precipitation, IMERG satellites",
     "Общая облачность по модели NOAA GFS, доля неба в процентах. Это расчёт "
     "модели, а не снимок облаков.":
         "Total cloud cover from the NOAA GFS model, the share of the sky in "
@@ -3816,7 +3886,6 @@ EN = {
     "Страница USGS": "USGS page",
     "Мохо": "Moho",
     "Толщина коры": "Crust thickness",
-    "Осадки": "Precipitation",
     "Осадочный чехол": "Sediments",
     "загружается": "loading",
     "{top}-{bottom} км": "{top}-{bottom} km",

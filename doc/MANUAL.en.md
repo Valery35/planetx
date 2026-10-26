@@ -302,7 +302,11 @@ what is in view to the QGIS project. The To QGIS project… item asks for a GeoP
 file and writes the objects inside the view frame with the record
 fields into it. The layer goes into the PlanetX - globe layers group at
 the top of the project tree. Points keep the globe colour and size,
-lines and outlines keep their style. Colourings go to the project too.
+lines and outlines keep their style. A repeated export replaces the
+earlier layer with the same name in the group. The exported layer is a
+copy of a globe layer, so it does not go onto the globe by itself, in
+the Layers as on the QGIS map mode too. Its check box in the QGIS project
+section shows it. Colourings go to the project too.
 A weather forecast field and currents go as a raster of values inside
 the view frame (degrees, mm/h, m/s, for wind and currents also bands of
 the eastward and northward speeds) with the globe legend. A NASA theme,
@@ -456,18 +460,36 @@ it loads. When the window opens, the row is off.
 The Add data button of the Layers section opens the catalogue as a
 separate window over the globe. The window is not modal - the globe, the
 panel and the Layers list stay as they were, the catalogue can stay
-open. The window remembers its place and size. The categories stand on
-the
-left - Map (the vector base, coordinate grid, 3D buildings, contours),
-Weather, NASA themes by groups, Sky and light (Stars, Atmosphere,
-Clouds, Sun, Satellites), Inside the Earth (Geological map, Earthquakes,
-Plate boundaries, Active faults, Plate motion, Volcanoes, Magnetic poles, Declination lines,
-Magnetic anomalies, Gravity anomalies, Bouguer anomalies, Geoid, Ocean
-floor age, Heat flow, Mineral deposits, Mining areas, OSM mines and quarries, Earth cutaway,
-Paleogeography), Energy (Power plants, Power lines and pipelines,
-Submarine cables), Terrain analysis (Slope, Aspect) and Satellites -
-the satellite groups. The search field looks for a name and a
-description across the whole catalogue.
+open. The window remembers its place and size. Sections with groups
+stand on the left. A click on a section shows the rows of all its
+groups, a click on a group shows only that group.
+- Base - Base maps, Local data, Map (the vector base, coordinate grid,
+  3D buildings, contours, cadastre), Map overlays and Encyclopedia.
+- Earth now - Weather, NASA themes by groups, Soils and All NASA GIBS
+  layers.
+- Archive and surveys - Imagery archive (Esri Wayback, event imagery),
+  Historical maps and Imagery at a point.
+- Inside the Earth - Geology (Geological map, Lithology, Earth cutaway,
+  Paleogeography), Earthquakes and plates (Earthquakes, Historical
+  earthquakes, Plate boundaries, Active faults, Plate motion,
+  Volcanoes), Geophysics (Magnetic poles, Declination lines, Magnetic
+  anomalies, Gravity anomalies, Bouguer anomalies, Geoid, Ocean floor
+  age, Heat flow) and Commodities (Mineral deposits, Mining areas,
+  OSM mines and quarries).
+- Sky - Sky and light (Stars, Atmosphere, Clouds, Sun, Satellites) and
+  Satellites - the satellite groups.
+- Energy and transport - Energy (Power plants, Power lines and
+  pipelines, Submarine cables) and Transport.
+- Terrain analysis - Slope, Aspect.
+
+The search field looks for a name and a description across the whole
+catalogue.
+
+The Windows at the look point rows are Satellite images here, Lidar point
+clouds here, Rumsey historical maps here and Eto Mesto old maps here.
+They have no check box. The Open the window button and a double click
+open the window of the source at the look point, as the same items of
+the globe menu do.
 
 The rows are split into One map on the globe and Layers - switched on
 together. A row has a check box, a preview, the name and the source
@@ -609,8 +631,10 @@ shown in the corner of the view.
 
 The Weather category stands in the catalogue before the NASA themes. Its first map is
 Surface temperature of land and sea from NASA. The others are Air
-temperature at 2 m, Precipitation in mm/h, Wind at 10 m in m/s
-and Clouds in percent. The fields come from the NOAA GFS forecast
+temperature at 2 m, Precipitation, GFS forecast in mm/h, Wind at 10 m
+in m/s and Cloud cover, GFS forecast in percent. Precipitation from
+satellite imagery is the Precipitation, IMERG satellites row of Planet
+of Water. The fields come from the NOAA GFS forecast
 model with a 0.25° grid, about 28 km. A field is chosen in the
 catalogue, as a NASA theme.
 
@@ -1070,22 +1094,22 @@ When the window closes, the wall disappears.
 
 ### Base map and a tile source of your own
 
-The menu of the Base map row lists Esri World Imagery, OpenStreetMap
-and the XYZ Tiles connections of the QGIS browser, the chosen base map
-is checked. A choice changes the base map on the globe at once. On other
-bodies the row shows the imagery of the body, there is no choice.
+The menu of the Base map row lists Esri World Imagery, OpenStreetMap,
+the added ready sources and the XYZ Tiles connections of the QGIS
+browser, the chosen base map is checked. A choice changes the base map
+on the globe at once. On other bodies the row shows the imagery of the
+body, there is no choice.
 
-The same base maps with previews are gathered in the Base maps
-category of the Add data catalog, a click on a row sets the base map
-of the globe. The Local data category of the same catalog holds
+All base maps with previews are gathered in the Base maps category of
+the Add data catalog, a click on a row sets the base map of the globe.
+The More base maps… item of the Base map menu opens the catalog on
+this category. The Local data category of the same catalog holds
 detailed imagery of separate areas from the services of their owners.
 The first row is the spring 2020 orthophoto of nine counties around
 Philadelphia (PASDA DVRPC 2020). The row sets the base map, outside
 the area the globe shows Esri imagery.
 
-The Ready sources submenu adds a base map with one click. The sources
-are gathered in the OpenStreetMap, Esri, NASA and USGS, and Google,
-Bing, Yandex, 2GIS submenus:
+The ready sources of the Base maps category are set with one click:
 
 | Source | What it shows | Warning |
 |---|---|---|

@@ -874,7 +874,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._update_relief_menu()
         self.panel.basemap_chosen.connect(self._panel_basemap)
         self.panel.add_source_requested.connect(self.add_tile_source)
-        self.panel.ready_requested.connect(self.add_ready_source)
+        self.panel.bases_requested.connect(self.open_bases)
         settings = QgsSettings()
         self.extras = {key: settings.value(EXTRA_KEY + key, default,
                                            type=bool)
