@@ -14358,6 +14358,106 @@ def post_insolation_shot():
 
 
 @check(1000, manual=True)
+def post_swipe_shot():
+    """Кадр для поста 1.16: шторка слоёв - слева слой проекта
+    OpenTopoMap, справа снимок подосновы, Эльбрус с наклоном, «Копия
+    вида». Файл - TEMP."""
+    from qgis.core import QgsProject, QgsRasterLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_swipe", {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        window.set_theme("")
+        window.set_follow(False)
+        layer = QgsRasterLayer(
+            "type=xyz&url=https://tile.opentopomap.org/{z}/{x}/{y}.png"
+            "&zmax=17&zmin=0", "OpenTopoMap", "wms")
+        QgsProject.instance().addMapLayer(layer)
+        look["layer"] = layer.id()
+        view.navigator.stop()
+        view.navigator.show(Pose(43.33, 42.45, 26000.0, 200.0, 62.0))
+        window.set_layer_side(layer.id(), "left")
+        window.refresh()
+        view.update()
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    compare = view.gibs["compare"]
+    if (view.load_missing or not compare.textures or compare.missing
+            or compare.pending) and waited < 150:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 5000
+    image = window.copy_view()
+    path = os.path.join(TEMP, "planetx_post_swipe.png")
+    image.save(path)
+    result["post_swipe"] = {"path": path, "waited": round(waited, 1)}
+    window.set_layer_side(look["layer"], "")
+    QgsProject.instance().removeMapLayer(look["layer"])
+    return None
+
+
+@check(1000, manual=True)
+def post_relief_shot():
+    """Кадр для поста 1.16: уклон квадрата у Терскола из подменю
+    «Анализ рельефа», наклонный вид, «Копия вида». Файл - TEMP."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_relief", {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        view.navigator.stop()
+        view.navigator.show(Pose(HYDRO_BAKSAN[0], HYDRO_BAKSAN[1],
+                                 11000.0, 330.0, 58.0))
+        view.update()
+        dialog = window.relief.relief_here(*HYDRO_BAKSAN)
+        dialog.build.emit(3000.0)
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    layer = view.gibs["slope"]
+    if (window.relief.job is not None or not layer.textures
+            or view.load_missing) and waited < 120:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 5000
+    image = window.copy_view()
+    path = os.path.join(TEMP, "planetx_post_relief.png")
+    image.save(path)
+    result["post_relief"] = {"path": path, "waited": round(waited, 1),
+                             "status": window.relief.dialog.status.text()}
+    return None
+
+
+@check(3000, manual=True)
+def post_catalog_shot():
+    """Кадр для поста 1.16: окно каталога, раздел «Недра», выбрана
+    первая строка. Файл - TEMP."""
+    window = state["window"]
+    gallery = window.open_gallery()
+    gallery.resize(900, 640)
+    gallery._set_group("depths")
+    gallery._describe("geology")
+    state["post_catalog"] = gallery
+
+
+@check(500, manual=True)
+def post_catalog_grab():
+    gallery = state["post_catalog"]
+    path = os.path.join(TEMP, "planetx_post_catalog.png")
+    gallery.grab().save(path)
+    result["post_catalog"] = {"path": path}
+    gallery.close()
+
+
+@check(1000, manual=True)
 def post_flood_shot():
     """Кадр для статьи: затопление от точки, «Копия вида». Место -
     PLANETX_FLOOD «широта,долгота,расстояние,азимут,наклон,подъём,
