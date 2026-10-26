@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.15.1
+version=1.16.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.15.1 Support development link in the About window.
+changelog=1.16.0 Swipe submenu of the project layer menu - a layer
+      left or right of the swipe, two layers compared without map
+      years. Terrain analysis submenu - slope, aspect, peaks and pits
+      around a point. Flow lines stop at a stream or a flattening, flow
+      lines from a placemark, basins. Catalogue in sections without
+      repeated data, exported globe layers replace the earlier copy.
+      1.15.1 Support development link in the About window.
       1.15.0 Hydrology submenu of the menu on the globe. Sea
       level raised or lowered over the whole globe from -130 to
       +100 m. Stream network with the Strahler order to the QGIS

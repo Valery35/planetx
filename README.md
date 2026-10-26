@@ -8,7 +8,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.15.1.
+A 3D globe inside QGIS. PlanetX version 1.16.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -133,7 +133,8 @@ The plugin is free and open source. [Support development](https://github.com/Val
   globe in the QGIS map order. A check mark in the QGIS project section shows
   a layer on the globe and leaves the map unchanged. Labels of vector
   layers stay level like city names, with the text and colour of the
-  layer labels in QGIS.
+  layer labels in QGIS. A swipe compares layers - one layer left of
+  it, another right of it.
 
 ![The Earth from space](doc/images/earth.jpg)
 
@@ -203,7 +204,8 @@ The plugin is free and open source. [Support development](https://github.com/Val
   from a point, the level changes with a slider. Water flow from a
   point gives the flow line and the catchment with the main stream,
   the stream network and the catchment of a placemark. Sea level rises
-  or falls over the whole globe.
+  or falls over the whole globe. Slope, aspect, peaks and pits of an
+  area around a point go to the QGIS project and My Places.
 - **Coordinates.** Degrees, degrees-minutes-seconds, UTM or MGRS in
   the status line, search understands all four.
 - **My Places.** Placemarks, paths and polygons are drawn by clicks
