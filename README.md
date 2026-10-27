@@ -8,7 +8,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.16.0.
+A 3D globe inside QGIS. PlanetX version 1.17.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -104,6 +104,11 @@ The plugin is free and open source. [Support development](https://github.com/Val
   centre of the view changed, the swipe compares two releases. What's
   here? names the capture date, the provider and the resolution of the
   image.
+- **Land change and classification.** AlphaEarth Foundations
+  embeddings, 10 m cells for each year of 2017-2025, show where the
+  land changed between two years - construction, logging, quarries,
+  floods. Classification divides an area into classes by control
+  points clicked on the globe. Both go to the QGIS project as rasters.
 - **Paleogeography.** The Paleogeography layer shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.
