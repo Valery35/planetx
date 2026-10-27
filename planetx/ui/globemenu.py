@@ -181,10 +181,12 @@ def show(window, px, py):
 
 
 def relief_items(window, menu, lat, lon):
-    """Подменю «Анализ рельефа»: уклон и экспозиция квадрата у точки
-    (ui/relief.py), видимость и инсоляция. Просьба автора от 26 октября
-    2026 года - по образцу «Гидрологии»."""
-    sub = menu.addMenu(tr("Анализ рельефа"))
+    """Подменю «Анализ участка»: уклон и экспозиция квадрата у точки
+    (ui/relief.py), видимость, инсоляция и изменения местности (ui/aef.py).
+    Просьба автора от 26 октября 2026 года - по образцу «Гидрологии».
+    С 28 октября 2026 года, изменения местности рядом с видимостью по
+    слову автора, подменю названо, как у Google Earth."""
+    sub = menu.addMenu(tr("Анализ участка"))
     sub.setToolTipsVisible(True)
     items = [
         (tr("Уклон и экспозиция здесь…"),
@@ -198,6 +200,11 @@ def relief_items(window, menu, lat, lon):
         items.append((tr("Инсоляция здесь…"),
                       tr("Часы прямого солнца в сутки вокруг точки."),
                       lambda *a: window.insolation_here(lat, lon)))
+        items.append((tr("Изменения местности здесь…"),
+                      tr("Где местность изменилась между двумя годами "
+                         "2017-2025 - по эмбеддингам AlphaEarth, клетка "
+                         "10 м."),
+                      lambda *a: window.change_tool.open_here(lat, lon)))
     for text, tip, slot in items:
         action = sub.addAction(text)
         action.setToolTip(tip)

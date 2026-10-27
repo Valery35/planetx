@@ -17368,6 +17368,167 @@ def relief_wait():
     dialog.close()
 
 
+# Изменения местности AlphaEarth у Перми: стройки на правом берегу Камы.
+CHANGE_POINT = (58.03, 56.39)
+
+
+def _aef_local():
+    """Указатели зон - с локальной копии planetx-terrain, если её
+    указывает PLANETX_TERRAIN_DIR (до публикации aef)."""
+    folder = os.environ.get("PLANETX_TERRAIN_DIR")
+    if folder:
+        from qgis.PyQt.QtCore import QUrl
+        from planetx.ui import aef as ui_aef
+        ui_aef.INDEX_BASE = QUrl.fromLocalFile(folder).toString() + "/"
+
+
+@check(1000)
+def change_open():
+    # Подменю «Анализ участка» - пункт изменений, окно включает строку.
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    _aef_local()
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(CHANGE_POINT[0], CHANGE_POINT[1], 60000.0, 0.0,
+                      0.0))
+    window.view.update()
+    menu = QMenu()
+    globemenu.relief_items(window, menu, *CHANGE_POINT)
+    sub = menu.actions()[0].menu()
+    out = result.setdefault("change", {})
+    out["menu"] = [menu.actions()[0].text()] + [
+        a.text() for a in sub.actions()]
+    window.set_extra("emag", True)
+    dialog = window.change_tool.open_here(*CHANGE_POINT)
+    out["row"] = bool(window.extras.get("aef_change"))
+    out["emag_off"] = not window.extras.get("emag")
+    out["dialog"] = dialog.isVisible()
+    state["change_started"] = time.monotonic()
+
+
+@check(1000)
+def change_wait():
+    window = state["window"]
+    tool = window.change_tool
+    layer = window.view.gibs["emag"]
+    if len(layer.textures) < 4 \
+            and time.monotonic() - state["change_started"] < 120.0:
+        return 1000
+    out = result["change"]
+    out["preview_s"] = round(time.monotonic() - state["change_started"], 1)
+    out["loader"] = type(layer.loader).__name__
+    out["textures"] = len(layer.textures)
+    out["levels"] = sorted({k[0] for k in layer.textures})
+    out["legend"] = [window.field_legend.isVisible(),
+                     window.field_legend.title]
+    out["credit"] = "AlphaEarth" in window.attribution.text()
+    out["volume"] = tool.dialog.volume.text()
+    parts = [p for p in tool.changes.parts.values() if p is not None]
+    if parts:
+        import numpy as np
+        values = np.concatenate([p[3].ravel() for p in parts])
+        values = values[values != 255] / 254.0
+        out["change_pct"] = [round(float(v), 3) for v in
+                             np.percentile(values, [50, 95, 99])]
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_change.png"))
+
+
+@check(1000)
+def change_detail():
+    # Подробный участок 1 км, пиксель 80 м - один блок файла на год.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    tool = window.change_tool
+    dialog = tool.dialog
+    dialog.side.setValue(1.0)
+    dialog.level.setCurrentIndex(dialog.level.findData(3))
+    out = result["change"]
+    out["detail_volume"] = dialog.volume.text()
+    dialog.detail.emit()
+    out["detail_shapes"] = len(window.change_shapes)
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(CHANGE_POINT[0], CHANGE_POINT[1], 2500.0, 0.0, 0.0))
+    window.view.update()
+    state["change_detail_started"] = time.monotonic()
+
+
+@check(1000)
+def change_detail_wait():
+    window = state["window"]
+    tool = window.change_tool
+    layer = window.view.gibs["emag"]
+    deep = [k for k in layer.textures if k[0] > 11]
+    if not deep and time.monotonic() \
+            - state["change_detail_started"] < 300.0:
+        return 2000
+    out = result["change"]
+    out["detail_s"] = round(time.monotonic()
+                            - state["change_detail_started"], 1)
+    out["detail_tiles"] = len(deep)
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_change_detail.png"))
+    path = os.path.join(TEMP, "planetx_change.tif")
+    state["change_before"] = {p.key for p in window.myplaces.places}
+    state["hydro_before"] = state["change_before"]
+    state["hydro_folders"] = {n.key for n in window.myplaces.nodes()}
+    tool.export(path)
+    state["change_export"] = path
+
+
+@check(500)
+def change_export_wait():
+    window = state["window"]
+    tool = window.change_tool
+    if tool.job is not None:
+        return 500
+    out = result["change"]
+    out["export_status"] = tool.dialog.status.text()
+    from qgis.core import QgsProject
+    from planetx.i18n import tr as planetx_tr
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr("PlanetX - изменения местности"))
+    layers = group.findLayers() if group is not None else []
+    out["layers"] = [n.name() for n in layers]
+    if layers:
+        raster = layers[0].layer()
+        out["crs"] = raster.crs().authid()
+        stats = raster.dataProvider().bandStatistics(1)
+        out["range"] = [round(stats.minimumValue, 3),
+                        round(stats.maximumValue, 3)]
+    if group is not None:
+        for node in layers:
+            QgsProject.instance().removeMapLayer(node.layerId())
+        group.parent().removeChildNode(group)
+    tool.find_spots()
+
+
+@check(500)
+def change_spots_wait():
+    window = state["window"]
+    tool = window.change_tool
+    if tool.job is not None:
+        return 500
+    out = result["change"]
+    out["spots_status"] = tool.dialog.status.text()
+    added = [p for p in window.myplaces.places
+             if p.key not in state["change_before"]]
+    out["spots"] = [p.name for p in added[:3]]
+    _hydro_clean(window)
+    # Другая карта слоя «emag» снимает изменения.
+    window.set_extra("geology", True)
+    out["taken"] = [window.extras.get("aef_change"),
+                    type(window.view.gibs["emag"].loader).__name__,
+                    window.change_shapes == []]
+    window.set_extra("geology", False)
+    out["min_level"] = window.view.gibs["emag"].min_level
+    tool.dialog.close()
+
+
 @check(8000)
 def sea_level_on():
     # Подъём моря у дельты Рейна: Нидерланды с 250 км.

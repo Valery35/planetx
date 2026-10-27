@@ -322,6 +322,8 @@ class StateMixin:
             self._set_geology(on)
         elif key in tilemaps.MAPS:
             self._set_tilemap(key, on)
+        elif key == "aef_change":
+            self._set_change(on)
         elif key == "iscgem":
             self._set_history(on)
         elif key == "magpoles":

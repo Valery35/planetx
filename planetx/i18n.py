@@ -5980,6 +5980,117 @@ EN = {
     "Уровень моря…": "Sea level…",
     "Подъём и опускание уровня моря по всему глобусу.":
         "Raising and lowering the sea level over the whole globe.",
+    # Изменения местности по эмбеддингам AlphaEarth (ui/aef.py).
+    "PlanetX - изменения местности": "PlanetX - land change",
+    "Годы сравнения. Каждая клетка 10 м за год описана 64 числами - "
+    "сводкой снимков Sentinel, Landsat и радара. Степень изменения - "
+    "насколько отличаются описания двух лет.":
+        "Years to compare. Each 10 m cell is described for a year by 64 "
+        "numbers, a summary of Sentinel and Landsat images and radar. The "
+        "degree of change shows how much the two years' descriptions "
+        "differ.",
+    "Степень изменения {before}-{after}":
+        "Degree of change {before}-{after}",
+    "Изменения {before}-{after}": "Change {before}-{after}",
+    "Изменения местности": "Land change",
+    "Сторона квадрата подробного участка с серединой в точке окна.":
+        "Side of the detail square centred on the window's point.",
+    "Пиксель подробного участка. Файлы набора хранят блоки 1024 × 1024 "
+    "пикселя, блок за год - 40-50 МБ при любом пикселе: 10 м покрывают "
+    "10 км блоком, 80 м - 82 км.":
+        "Pixel of the detail area. The dataset files store blocks of "
+        "1024 × 1024 pixels, one block per year is 40-50 MB at any pixel "
+        "size: at 10 m a block covers 10 km, at 80 m 82 km.",
+    "Годы": "Years",
+    "Степень от": "Degree from",
+    "Подробный участок": "Detail area",
+    "Пиксель участка": "Area pixel",
+    "Подробно": "Detail",
+    "Степень изменения квадрата с выбранным пикселем. Вне участка глобус "
+    "показывает обзор с пикселем 160 м и крупнее.":
+        "Degree of change of the square at the chosen pixel. Outside the "
+        "area the globe shows an overview with a pixel of 160 m or "
+        "coarser.",
+    "Степень изменения подробного участка растром GeoTIFF в системе UTM "
+    "в проект QGIS.":
+        "Degree of change of the detail area as a GeoTIFF raster in UTM "
+        "to the QGIS project.",
+    "Места изменений": "Change spots",
+    "Места самых сильных изменений участка точками в «Моих метках». "
+    "Дальше их удобно смотреть архивом снимков Wayback и шторкой.":
+        "Spots of the strongest change in the area as points in My "
+        "Places. The Wayback imagery archive and the swipe show them "
+        "next.",
+    "Убрать участок": "Remove area",
+    "Убрать подробный участок, обзор остаётся.":
+        "Remove the detail area, the overview stays.",
+    "Данные - AlphaEarth Foundations Satellite Embedding, CC BY 4.0.":
+        "Data - AlphaEarth Foundations Satellite Embedding, CC BY 4.0.",
+    "Загрузка около {mb} МБ": "Download about {mb} MB",
+    "Участок грузится при приближении к нему. {volume}.":
+        "The area loads when the view comes close to it. {volume}.",
+    "Считается степень изменения участка…":
+        "Computing the degree of change of the area…",
+    "Растр {cols} × {rows} пикселей в проекте.":
+        "Raster of {cols} × {rows} pixels added to the project.",
+    "Ищутся места изменений…": "Looking for change spots…",
+    "В «Мои метки» записано мест: {n}.": "Spots written to My Places: {n}.",
+    "Показывать клетки со степенью изменения в этом промежутке, прочие "
+    "прозрачны. У неизменённой местности степень около 0.05, у стройки, "
+    "вырубки, нового карьера - 0.5 и выше.":
+        "Cells with a degree of change in this range are shown, others "
+        "are transparent. Unchanged land is about 0.05, construction, "
+        "logging or a new quarry 0.5 and higher.",
+    "{pixel} м": "{pixel} m",
+    "до": "to",
+    "и": "and",
+    "Изменения местности: нет библиотеки zstd, файлы AlphaEarth не "
+    "прочитать.":
+        "Land change: the zstd library is missing, AlphaEarth files "
+        "cannot be read.",
+    "Изменения местности в проект QGIS": "Land change to the QGIS project",
+    "Для участка нет данных.": "No data for the area.",
+    "Растр не записан в «{path}».": "The raster was not written to "
+                                    "\"{path}\".",
+    "Изменений сильнее 0.3 на участке нет.":
+        "No change stronger than 0.3 in the area.",
+    "Изменение {n}: {value}": "Change {n}: {value}",
+    "Данные не получены: {error}": "Data not received: {error}",
+    "Степень изменения {value} между {before} и {after} годами по "
+    "эмбеддингам AlphaEarth.":
+        "Degree of change {value} between {before} and {after} from "
+        "AlphaEarth embeddings.",
+    "Изменения местности здесь": "Land change here",
+    "Анализ участка": "Site analysis",
+    "Изменения местности здесь…": "Land change here…",
+    "Где местность изменилась между двумя годами 2017-2025 - по "
+    "эмбеддингам AlphaEarth, клетка 10 м.":
+        "Where the land changed between two years of 2017-2025, from "
+        "AlphaEarth embeddings, 10 m cells.",
+    "Степень изменения": "Degree of change",
+    "Где местность изменилась между двумя годами 2017-2025 - по "
+    "эмбеддингам AlphaEarth Foundations.":
+        "Where the land changed between two years of 2017-2025, from "
+        "AlphaEarth Foundations embeddings.",
+    "Окно сравнения двух лет у точки взгляда - годы, промежуток степени "
+    "изменения, подробный участок с пикселем от 10 м, растр в проект "
+    "QGIS и места изменений в «Мои метки».":
+        "Window comparing two years at the view point - years, range of "
+        "the degree of change, a detail area with a pixel from 10 m, a "
+        "raster to the QGIS project and change spots to My Places.",
+    "Степень изменения местности между двумя годами по эмбеддингам "
+    "AlphaEarth Foundations - описаниям каждой клетки 10 м за год по "
+    "снимкам и радару. Чёрные - без изменений, жёлтые - стройка, "
+    "вырубка, карьер, разлив. Глобус показывает обзор с пикселем 160 м "
+    "и крупнее, подробный участок и годы - окно «Изменения местности» "
+    "подменю «Анализ участка» меню на глобусе.":
+        "Degree of land change between two years from AlphaEarth "
+        "Foundations embeddings, descriptions of each 10 m cell for a "
+        "year from images and radar. Black is no change, yellow is "
+        "construction, logging, a quarry, a flood. The globe shows an "
+        "overview with a pixel of 160 m or coarser, the detail area and "
+        "years are set by the Land change window of the Site analysis "
+        "submenu of the globe menu.",
 }
 
 _language = None

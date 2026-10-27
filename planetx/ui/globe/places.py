@@ -557,6 +557,7 @@ class PlacesMixin:
                 shapes += manager.shapes()
         shapes += getattr(self, "grid_shapes", [])
         shapes += getattr(self, "parcel_shapes", [])
+        shapes += getattr(self, "change_shapes", [])
         shapes += self._pole_shapes()
         shapes += getattr(self, "motion_shapes", [])
         if self._ruler_open():

@@ -31,7 +31,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import hips, polar, tileoverlays, wikipedia
+from ...core import aef, hips, polar, tileoverlays, wikipedia
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
@@ -67,7 +67,7 @@ from ..track import date_range, layer_span, timed_layer
 from ...core.places import Place as MarkPlace
 from .base import (AUTO_DEFAULT, COORDS_KEY, CREDIT_LINK, DATA_DIR, DECL_EAST,
                    DECL_LABEL_POINTS, DECL_WEST, DECL_WIDTH, DECL_ZERO,
-                   DECL_ZERO_WIDTH, GEOID_SCALE_KEY,
+                   DECL_ZERO_WIDTH, EMAG_MAPS, GEOID_SCALE_KEY,
                    MAGNETIC_ATTRIBUTION, MARGIN, NEW_SHOWN_KEY, POLE_COLORS,
                    POLE_WIDTH, REFRESH_DELAY, SELECTION_DELAY, SKY_ATTRIBUTION,
                    TILE_SIZE, attribution_html, imagery_preparer,
@@ -723,7 +723,7 @@ class LayersMixin:
         в рабочем потоке, шкала. Включение снимает прежнюю карту."""
         field = fields.FIELDS[key]
         if on:
-            for other in fields.KEYS + ("geology",) + tilemaps.KEYS:
+            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
                 if other != key and self.extras.get(other):
                     self.set_extra(other, False)
         elif self._field_shown != key:
@@ -815,11 +815,12 @@ class LayersMixin:
         """Строка «Геологическая карта»: тайлы Macrostrat, щелчок даёт
         породу. Включение снимает карту значений."""
         if on:
-            for other in fields.KEYS + tilemaps.KEYS:
-                if self.extras.get(other):
+            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
+                if other != "geology" and self.extras.get(other):
                     self.set_extra(other, False)
         elif self._field_shown is not None \
-                or self._tilemap_shown is not None:
+                or self._tilemap_shown is not None \
+                or self.change_tool.shown:
             # Слой вида занят другой картой.
             self._drop_geology()
             return
@@ -929,7 +930,7 @@ class LayersMixin:
         карту слоя вида."""
         tmap = tilemaps.MAPS[key]
         if on:
-            for other in fields.KEYS + ("geology",) + tilemaps.KEYS:
+            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
                 if other != key and self.extras.get(other):
                     self.set_extra(other, False)
         elif self._tilemap_shown != key:
@@ -959,6 +960,19 @@ class LayersMixin:
             self.class_legend.set_map(tmap)
         self.class_legend.setVisible(bool(on and tmap.classes))
         self._place_attribution()
+        self._mark_gallery()
+
+    # Изменения местности по эмбеддингам AlphaEarth (ui/aef.py) - тот же
+    # слой вида «emag», на глобусе одна карта.
+
+    def _set_change(self, on):
+        """Строка «Изменения местности»: обзор вида и подробный участок
+        окна. Включение снимает прежнюю карту слоя вида."""
+        if on:
+            for other in fields.KEYS + ("geology",) + tilemaps.KEYS:
+                if self.extras.get(other):
+                    self.set_extra(other, False)
+        self.change_tool.set_shown(on and self.planet.earth)
         self._mark_gallery()
 
     def _ask_tilemap(self, lat, lon):
@@ -1119,6 +1133,8 @@ class LayersMixin:
         elif "emag" in self.gibs_loaders and self._tilemap_shown:
             parts.append(link_html(
                 *tilemaps.MAPS[self._tilemap_shown].attribution))
+        elif "emag" in self.gibs_loaders and self.change_tool.shown:
+            parts.append(link_html(aef.ATTRIBUTION, aef.TERMS))
         if self._geoid_on():
             parts.append(link_html(*geoid.ATTRIBUTION))
         overture = self.buildings_loader is not None \

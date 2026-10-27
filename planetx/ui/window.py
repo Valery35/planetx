@@ -68,6 +68,7 @@ from .inset import DeepSource
 from .contours import ContourExport
 from .hydro import HydroTool
 from .relief import ReliefTool
+from .aef import ChangeTool
 from .netlink import NetLinks
 from .superoverlay import SuperOverlays
 from .watermask import WaterTiles
@@ -712,6 +713,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.hydro = HydroTool(self)
         # Уклон, экспозиция, вершины и ямы квадрата (ui/relief.py).
         self.relief = ReliefTool(self)
+        self.change_tool = ChangeTool(self)
+        self.change_shapes = []
         self.extruder = ExtrudeManager(self)
         self.viewshed_timer = QTimer(self)
         self.viewshed_timer.setInterval(VIEWSHED_POLL)
@@ -975,9 +978,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.legend_panel.add(self.class_legend)
         self.class_legend.closer = lambda: self._tilemap_shown and \
             self.set_extra(self._tilemap_shown, False)
-        self.field_legend.closer = lambda: (
-            self._field_shown or self._tilemap_shown) and self.set_extra(
-                self._field_shown or self._tilemap_shown, False)
+        self.field_legend.closer = lambda: self.set_extra(
+            self._field_shown or self._tilemap_shown or "aef_change", False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
@@ -1090,6 +1092,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                 self.relief.dialog.close()
             self.relief.timer.stop()
             self.relief._drop_tiles()
+            self.change_tool.close()
             if self.section_dialog is not None:
                 self.section_dialog.close()
             if self.assistant_dialog is not None:

@@ -44,11 +44,12 @@ class _Bridge(QObject):
         request = QNetworkRequest(QUrl(job["url"]))
         request.setAttribute(MARK, True)
         request.setAttribute(REDIRECT, SAFE_REDIRECT)
-        request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
-        request.setAttribute(CACHE_SAVE, False)
         start, length = job["start"], job["length"]
-        request.setRawHeader(b"Range", "bytes={}-{}".format(
-            start, start + length - 1).encode("ascii"))
+        if length is not None:
+            request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
+            request.setAttribute(CACHE_SAVE, False)
+            request.setRawHeader(b"Range", "bytes={}-{}".format(
+                start, start + length - 1).encode("ascii"))
         reply = network().get(request)
         self.replies.add(reply)
 
@@ -61,7 +62,7 @@ class _Bridge(QObject):
             else:
                 data = bytes(reply.readAll())
                 # Сервер без поддержки Range отдаёт файл целиком.
-                job["data"] = data if status == 206 \
+                job["data"] = data if status == 206 or length is None \
                     else data[start:start + length]
             reply.deleteLater()
             job["event"].set()
@@ -79,10 +80,33 @@ def bridge():
     return _BRIDGE[0]
 
 
+def fetch_many(url, spans, timeout=TIMEOUT):
+    """Байты частей (начало, длина) файла url одним пакетом: запросы
+    уходят сразу все, поток ждёт последнего. У каналов полного
+    разрешения AlphaEarth 64 плоскости блока лежат врозь, по очереди
+    они шли 64 секунды на блок."""
+    jobs = [{"url": url, "start": int(start), "length": int(length),
+             "event": threading.Event()} for start, length in spans]
+    for job in jobs:
+        bridge().ask.emit(job)
+    out = []
+    for job in jobs:
+        if not job["event"].wait(timeout):
+            raise OSError("timeout: " + url)
+        if "data" not in job:
+            if job.get("status") in (403, 404):
+                raise Missing(job["error"], job["status"])
+            raise OSError(job.get("error") or "network")
+        out.append(job["data"])
+    return out
+
+
 def fetch(url, start, length, timeout=TIMEOUT):
     """Байты start..start+length файла url. Рабочий поток, ждёт ответа.
-    Missing - файла нет, OSError - прочие отказы и срок."""
-    job = {"url": url, "start": int(start), "length": int(length),
+    length None - файл целиком через дисковый кэш QGIS (указатели
+    данных). Missing - файла нет, OSError - прочие отказы и срок."""
+    job = {"url": url, "start": int(start),
+           "length": None if length is None else int(length),
            "event": threading.Event()}
     bridge().ask.emit(job)
     if not job["event"].wait(timeout):

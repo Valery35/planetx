@@ -1749,7 +1749,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Terrain analysis | A submenu with Slope and aspect here…, Viewshed from here… and Insolation here… (only on the Earth) for the point under the cursor, see Slope and aspect of a square, Viewshed from a point and Insolation |
+| Site analysis | A submenu with Slope and aspect here…, Viewshed from here…, Insolation here… and Land change here… (the last two only on the Earth) for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation and Land change |
 | Hydrology | A submenu with Flooding from here…, Water flow from here… and Sea level…, see Flooding |
 | Satellite images here… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
@@ -2676,7 +2676,7 @@ may exceed 100 %, that is 45°.
 ### Slope and aspect of a square
 
 Slope and aspect of a square, viewshed and insolation are collected in
-the Terrain analysis submenu of the menu on the globe. The Slope and
+the Site analysis submenu of the menu on the globe. The Slope and
 aspect here… item opens the Slope and aspect window for the point
 under the cursor. The Radius field sets half the side of the
 calculation square, the grid step is about one six-hundredth of the
@@ -2706,7 +2706,7 @@ removes the colouring.
 
 ### Viewshed from a point
 
-The Viewshed from here… item of the Terrain analysis submenu of the
+The Viewshed from here… item of the Site analysis submenu of the
 globe menu opens the Viewshed from a point window for the point under
 the cursor. The window sets the observer height
 above the terrain, the target height and the circle radius. The Build
@@ -2734,7 +2734,7 @@ viewshed is computed on the Earth, Mars and the Moon.
 
 ### Insolation
 
-The Insolation here… item of the Terrain analysis submenu of the globe
+The Insolation here… item of the Site analysis submenu of the globe
 menu opens the Insolation window for the point under the cursor. The window sets the first and the last day of the
 period and the circle radius. The Build button loads the heights and
 colours the circle by the mean number of hours of direct sunlight per
@@ -2754,6 +2754,48 @@ The height grid has 800 nodes per side, the step is 25 m for a radius
 of 5 km. The computation runs in parts, and the globe responds to the
 mouse meanwhile. The line under the fields shows the share done.
 Insolation is computed only for the Earth.
+
+### Land change
+
+The Land change here… item of the Site analysis submenu of the globe
+menu opens the Land change window for the point under the cursor and
+turns on the Land change row of the Layers section. The globe shows
+where the land changed between two years. Black is no change, yellow
+is construction, logging, a new quarry or flooding. The scale of the
+degree of change from 0 to 1 is in the lower left corner of the view.
+
+The data is the AlphaEarth Foundations Satellite Embedding dataset,
+CC BY 4.0. Every 10 m land cell is described for each year from 2017
+to 2025 by a vector of 64 numbers, a summary of Sentinel-2 and Landsat
+images and radar over the year. The degree of change is the
+dissimilarity of the two years' vectors, one minus the cosine of the
+angle between them. Unchanged land is about 0.05, strong change 0.5 and
+higher. The computation reads the dataset files over the network, no
+key or account is needed.
+
+The window sets the years to compare and the range of the degree of
+change, cells outside the range are transparent. The globe shows an
+overview of the view with a pixel of 160 m or coarser by itself, its
+tiles are visible down to about 20 km per tile. More detail comes from
+the detail area. The Detail area field sets the side of a square
+centred on the window's point, the Area pixel list sets the pixel of
+10, 20, 40 or 80 m. The dataset files store blocks of 1024 × 1024
+pixels, one block per year is 40-50 MB at any pixel size, so a download
+estimate is shown under the fields. At 10 m a block covers 10 km, at
+80 m 82 km. The Detail button puts the area on the globe as a frame,
+the area loads when the view comes close to it.
+
+The To QGIS project… button writes the degree of change of the area as
+a GeoTIFF raster in UTM to the PlanetX - land change group. The Change
+spots button finds up to ten spots of the strongest change in the area
+and writes them as points to My Places. What exactly changed is then
+seen with the Esri Wayback imagery archive and the swipe. The Remove
+area button removes the detail area, the overview stays.
+
+Land change, the geophysics value maps, the geological map, lithology,
+water and soils are one layer of the globe with one map on it. A map
+turned on removes the previous one, the cross of the scale turns the
+row off. Land change is computed only for the Earth.
 
 ### Flooding
 

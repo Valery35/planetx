@@ -289,6 +289,11 @@ def _tools(window, add, earth):
     add("here:lidar", tr("Облака точек лидара здесь"), open_,
         lambda: window.lidar_here(*_here(window)),
         ("лидар", "облако точек", "lidar", "point cloud", "ign", "3dep"))
+    add("here:change", tr("Изменения местности здесь"), open_,
+        lambda: window.change_tool.open_here(*_here(window)),
+        ("изменения местности", "обнаружить изменения", "что изменилось",
+         "alphaearth", "эмбеддинги", "change detection", "detect change",
+         "стройка", "вырубка"))
     add("here:etomesto", tr("Старые карты «Это Место» здесь"), open_,
         lambda: window.etomesto_here(*_here(window)),
         ("это место", "etomesto", "старые карты", "межевые", "пгм",

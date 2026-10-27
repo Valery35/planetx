@@ -24,6 +24,11 @@ LZW у ALOS AW3D30 и USGS 3DEP (25 октября 2026 года): сжатый 
 ставит вызывающий (set_lzw). Без него - lzw_decode на Python, для
 тестов, он в десятки раз медленнее.
 
+Каналы - эмбеддинги AlphaEarth Foundations (core/aef.py): 64 канала
+Int8 плоскостями, сжатие ZSTD (код 50000), привязка тегом
+ModelTransformation (34264). ZSTD раскодирует вызывающий (set_zstd) -
+библиотекой zstd из состава QGIS, в Python 3.12 её нет.
+
 Картинки - снимки событий Vantor и Planet (core/events.py): три-четыре
 канала по 8 бит вперемежку, сжатие LZW, DEFLATE или JPEG, системы
 EPSG:4326, 3857 и UTM WGS84. Тайл картинки здесь не распаковывается,
@@ -58,15 +63,23 @@ _TYPES = {1: ("B", 1), 2: ("s", 1), 3: ("H", 2), 4: ("I", 4), 5: ("II", 8),
           6: ("b", 1), 7: ("B", 1), 8: ("h", 2), 9: ("i", 4), 11: ("f", 4),
           12: ("d", 8), 16: ("Q", 8), 17: ("q", 8), 18: ("Q", 8)}
 _DTYPES = {(3, 32): "<f4", (2, 16): "<i2", (2, 32): "<i4", (1, 16): "<u2",
-           (1, 8): "u1", (3, 64): "<f8"}
+           (1, 8): "u1", (3, 64): "<f8", (2, 8): "i1"}
+ZSTD = 50000  # код сжатия ZSTD в TIFF
 # Раскодирование LZW тайла высот: (сжатые байты, байт в строке, строк)
 # -> байты. Ставит вызывающий (set_lzw), иначе lzw_decode_rows.
 _LZW = []
+# Раскодирование ZSTD: (сжатые байты, длина распакованного) -> байты.
+_ZSTD = []
 
 
 def set_lzw(decoder):
     """Раскодирование LZW средствами вызывающего, None - на Python."""
     _LZW[:] = [decoder] if decoder is not None else []
+
+
+def set_zstd(decoder):
+    """Раскодирование ZSTD средствами вызывающего, None - без него."""
+    _ZSTD[:] = [decoder] if decoder is not None else []
 
 
 class CogError(ValueError):
@@ -78,7 +91,7 @@ class Image:
 
     __slots__ = ("width", "height", "tile_w", "tile_h", "offsets", "counts",
                  "compression", "predictor", "dtype", "scale", "samples",
-                 "picture", "keep", "planar")
+                 "picture", "keep", "planar", "bands")
 
     def __init__(self, tags, fetch_array):
         try:
@@ -93,11 +106,20 @@ class Image:
         self.samples = int(tags.get(277, (1,))[0])
         fmt = int(tags.get(339, (1,))[0])
         bits = int(tags.get(258, (8,))[0])
-        self.picture = self.samples > 1
         self.keep = {}
         # Каналы вперемежку (1) или плоскостями (2) - у мозаик Planet.
         self.planar = int(tags.get(284, (1,))[0])
-        if self.picture:
+        # Много каналов значений - эмбеддинги, не картинка.
+        self.bands = self.samples > 4 or (self.samples > 1 and fmt != 1)
+        self.picture = self.samples > 1 and not self.bands
+        if self.bands:
+            if self.compression not in (1, 8, 32946, ZSTD) \
+                    or self.predictor != 1:
+                raise CogError("compression %d" % self.compression)
+            if (fmt, bits) not in _DTYPES:
+                raise CogError("sample %d/%d" % (fmt, bits))
+            self.dtype = np.dtype(_DTYPES[(fmt, bits)])
+        elif self.picture:
             # Снимок: каналы по 8 бит, раскодирует вызывающий.
             if self.samples not in (3, 4) or bits != 8 or fmt != 1 \
                     or self.planar not in (1, 2):
@@ -125,6 +147,30 @@ class Image:
     def plane_tiles(self):
         """Тайлов в одной плоскости каналов."""
         return self.across * -(-self.height // self.tile_h)
+
+    def unpack(self, raw, need):
+        """Распакованные байты тайла или плоскости без предиктора."""
+        if self.compression == ZSTD:
+            if not _ZSTD:
+                raise CogError("no zstd decoder")
+            raw = _ZSTD[0](bytes(raw), need)
+        elif self.compression in (8, 32946):
+            raw = zlib.decompress(raw)
+        if len(raw) < need:
+            raise CogError("short tile")
+        return raw[:need]
+
+    def decode_bands(self, raws):
+        """Тайл каналов (samples, tile_h, tile_w): raws - по плоскости на
+        канал или один тайл каналов вперемежку."""
+        size = self.tile_w * self.tile_h * self.dtype.itemsize
+        if self.planar == 2:
+            data = b"".join(self.unpack(raw, size) for raw in raws)
+            return np.frombuffer(data, self.dtype).reshape(
+                self.samples, self.tile_h, self.tile_w)
+        data = self.unpack(raws[0], size * self.samples)
+        return np.frombuffer(data, self.dtype).reshape(
+            self.tile_h, self.tile_w, self.samples).transpose(2, 0, 1)
 
     def decode(self, raw):
         """Распакованный тайл tile_h × tile_w."""
@@ -159,12 +205,16 @@ class Cog:
     """Файл COG по fetch. Каталоги читаются при создании, тайлы - по
     просьбе, распакованные тайлы помнятся до CACHE_BYTES."""
 
-    def __init__(self, fetch):
+    def __init__(self, fetch, head=HEAD, cache=CACHE_BYTES, fetch_many=None):
         self.fetch = fetch
+        # fetch_many([(начало, длина)]) -> [байты]: части файла одним
+        # пакетом запросов, без него - по очереди.
+        self.fetch_many = fetch_many
         self.lock = threading.Lock()
         self.cache = OrderedDict()
         self.cached = 0
-        head = fetch(0, HEAD)
+        self.cache_bytes = cache
+        head = fetch(0, head)
         if len(head) < 16:
             raise CogError("short header")
         if head[:2] != b"II":
@@ -231,7 +281,7 @@ class Cog:
                 tags[tag] = ("@", where, kind, n)
         nxt = struct.unpack_from(next_fmt, block, count * entry)[0]
         for tag in (322, 323, 256, 257, 254, 259, 317, 277, 339, 258, 33550,
-                    33922, 34735, 42113, 262, 284, 338, 347, 530):
+                    33922, 34264, 34735, 42113, 262, 284, 338, 347, 530):
             if tag in tags and tags[tag][0] == "@":
                 _, where, kind, n = tags[tag]
                 code, size = _TYPES[kind]
@@ -272,7 +322,7 @@ class Cog:
         with self.lock:
             self.cache[key] = data
             self.cached += data.nbytes
-            while self.cached > CACHE_BYTES and len(self.cache) > 1:
+            while self.cached > self.cache_bytes and len(self.cache) > 1:
                 _, old = self.cache.popitem(last=False)
                 self.cached -= old.nbytes
         return data
@@ -341,6 +391,96 @@ class Cog:
                 out[ya - r0:yb - r0, xa - c0:xb - c0] = part
         return out
 
+    # Каналы.
+
+    def band_tile(self, level, col, row):
+        """Тайл всех каналов (samples, tile_h, tile_w) или None, если
+        его нет в файле. Плоскости тайла читаются одним запросом, когда
+        лежат рядом - у обзоров AlphaEarth все 64 подряд."""
+        key = ("bands", level, col, row)
+        with self.lock:
+            if key in self.cache:
+                self.cache.move_to_end(key)
+                return self.cache[key]
+        image = self.images[level]
+        index = row * image.across + col
+        planes = image.samples if image.planar == 2 else 1
+        spans = []
+        for plane in range(planes):
+            at = index + plane * image.plane_tiles
+            if at >= len(image.offsets):
+                return None
+            spans.append((int(image.offsets[at]), int(image.counts[at])))
+        if any(length == 0 for _, length in spans):
+            return None
+        data = image.decode_bands(self._spans(spans))
+        # Тайл обзора меньше тайла файла дополнен до его размера: лишнее
+        # отрезается, у AlphaEarth обзор 512 лежит в тайле 1024.
+        h = min(image.tile_h, image.height - row * image.tile_h)
+        w = min(image.tile_w, image.width - col * image.tile_w)
+        if (h, w) != data.shape[1:]:
+            data = np.ascontiguousarray(data[:, :h, :w])
+        with self.lock:
+            self.cache[key] = data
+            self.cached += data.nbytes
+            while self.cached > self.cache_bytes and len(self.cache) > 1:
+                _, old = self.cache.popitem(last=False)
+                self.cached -= old.nbytes
+        return data
+
+    def band_bytes(self, level, c0, r0, c1, r1):
+        """Сжатых байт в тайлах каналов, которые задевают пиксели
+        c0..c1, r0..r1 обзора level, - оценка загрузки до неё."""
+        image = self.images[level]
+        total = 0
+        for row in range(max(r0, 0) // image.tile_h,
+                         min(r1, image.height - 1) // image.tile_h + 1):
+            for col in range(max(c0, 0) // image.tile_w,
+                             min(c1, image.width - 1) // image.tile_w + 1):
+                index = row * image.across + col
+                planes = image.samples if image.planar == 2 else 1
+                for plane in range(planes):
+                    at = index + plane * image.plane_tiles
+                    if at < len(image.counts):
+                        total += int(image.counts[at])
+        return total
+
+    def band_pixels(self, xs, ys, level):
+        """Векторы каналов в точках xs, ys системы файла, ближайший
+        пиксель обзора level: массив (samples, n) типа файла и маска
+        точек внутри файла. Пиксели без тайла - nodata."""
+        image = self.images[level]
+        x0, dx, _, y0, _, dy = self.transform
+        col = np.floor((xs - x0) / (dx * image.scale)).astype(np.int64)
+        row = np.floor((ys - y0) / (dy * image.scale)).astype(np.int64)
+        inside = (col >= 0) & (row >= 0) & (col < image.width) \
+            & (row < image.height)
+        fill = int(self.nodata) if self.nodata is not None else 0
+        out = np.full((image.samples, len(xs)), fill, dtype=image.dtype)
+        if not inside.any():
+            return out, inside
+        tcol = col // image.tile_w
+        trow = row // image.tile_h
+        for tile_row, tile_col in set(zip(trow[inside].tolist(),
+                                          tcol[inside].tolist())):
+            tile = self.band_tile(level, tile_col, tile_row)
+            if tile is None:
+                continue
+            use = inside & (tcol == tile_col) & (trow == tile_row)
+            out[:, use] = tile[:, row[use] - tile_row * image.tile_h,
+                               col[use] - tile_col * image.tile_w]
+        return out, inside
+
+    def level_for_size(self, pixel):
+        """Самый грубый обзор с пикселем не крупнее pixel единиц
+        системы файла."""
+        full = abs(self.transform[1])
+        best = 0
+        for n, image in enumerate(self.images):
+            if full * image.scale <= pixel:
+                best = n
+        return best
+
     # Картинки.
 
     def picture(self, level, col, row, decode):
@@ -372,7 +512,7 @@ class Cog:
         with self.lock:
             self.cache[key] = data
             self.cached += data.nbytes
-            while self.cached > CACHE_BYTES and len(self.cache) > 1:
+            while self.cached > self.cache_bytes and len(self.cache) > 1:
                 _, old = self.cache.popitem(last=False)
                 self.cached -= old.nbytes
         return data
@@ -387,6 +527,8 @@ class Cog:
             block = self.fetch(lo, hi - lo)
             return [block[start - lo:start - lo + length]
                     for start, length in spans]
+        if self.fetch_many is not None and len(spans) > 1:
+            return self.fetch_many(spans)
         return [self.fetch(start, length) for start, length in spans]
 
     def sample_rgba(self, xs, ys, level, decode):
@@ -613,6 +755,12 @@ def _transform(tags):
     середине пикселя, угол сдвигается на полпикселя, как делает GDAL."""
     scale = tags.get(33550)
     tie = tags.get(33922)
+    matrix = tags.get(34264)
+    if (not scale or not tie) and matrix and len(matrix) >= 8 \
+            and matrix[1] == 0 and matrix[4] == 0:
+        # ModelTransformation без поворота - у файлов AlphaEarth.
+        return (float(matrix[3]), float(matrix[0]), 0.0, float(matrix[7]),
+                0.0, float(matrix[5]))
     if not scale or not tie or len(tie) < 6:
         raise CogError("no georeference")
     sx, sy = float(scale[0]), float(scale[1])
