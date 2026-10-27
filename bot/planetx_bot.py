@@ -137,6 +137,23 @@ FOUND = 3
 
 _LINK = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
 _MARKUP = re.compile(r"[*`]+|^\|?[-:| ]{3,}\|?$|^#+\s*", re.MULTILINE)
+# Описание выпуска: ссылка Markdown (картинка - с «!»), код, жирный.
+_RELEASE_LINK = re.compile(r"(!?)\[([^\]]*)\]\(([^)\s]+)\)")
+_CODE = re.compile(r"`([^`\n]+)`")
+_BOLD = re.compile(r"\*\*(.+?)\*\*|__(.+?)__")
+_ITALIC = re.compile(r"(?<![\w*])\*(?!\s)([^*\n]+?)\*(?![\w*])")
+_HEADING = re.compile(r"^#+[ \t]*(.+?)[ \t]*#*$", re.MULTILINE)
+_BULLET = re.compile(r"^([ \t]*)[*\-+][ \t]+", re.MULTILINE)
+_TABLE_RULE = re.compile(r"^\|?[-:| ]{3,}\|?$", re.MULTILINE)
+# Имена файлов с расширением - доменной зоной: Telegram делает
+# из «isoliner3d.zip» ссылку на сайт http://isoliner3d.zip (задание
+# автора от 28 октября 2026 года). Такое имя идёт кодом или ссылкой
+# на одноимённый файл выпуска.
+FILE_ZONES = ("zip", "mov", "app", "py", "md", "sh", "pl", "rs", "kmz",
+              "gz", "ps", "so", "ai", "cs", "tv", "io", "sql")
+_FILE_NAME = re.compile(
+    r"(?<![\w./@-])([\w.-]+\.(?:%s))(?![\w/-])" % "|".join(FILE_ZONES),
+    re.IGNORECASE)
 
 TEXTS = {
     "ru": {
@@ -355,16 +372,74 @@ def section_reply(manuals, lang, n):
     return "{}\n\n{}\n\n{}".format(head, body, more)
 
 
+def release_html(markdown, assets=()):
+    """Описание выпуска в Markdown - текстом HTML для Telegram. Ссылки
+    остаются ссылками, жирный и заголовки - жирным, код - кодом, имя
+    файла с расширением - доменной зоной идёт ссылкой на файл выпуска
+    с тем же именем, иначе кодом, остальное экранируется."""
+    files = {a.get("name", "").lower(): a.get("browser_download_url")
+             for a in assets if a.get("browser_download_url")}
+    text = _TABLE_RULE.sub("", markdown.replace("\r\n", "\n"))
+    text = re.sub(r"(?<=\S)\n(?![\-*+|>#\d\n]|\s*\n)", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    out = []
+    at = 0
+    for match in _RELEASE_LINK.finditer(text):
+        out.append(_release_text(text[at:match.start()], files))
+        image, label, url = match.groups()
+        if not image and url.startswith(("http://", "https://")):
+            out.append('<a href="{}">{}</a>'.format(
+                html.escape(url, quote=True), html.escape(label)))
+        elif not image:
+            out.append(html.escape(label))
+        at = match.end()
+    out.append(_release_text(text[at:], files))
+    return "".join(out)
+
+
+def _release_text(part, files):
+    """Кусок описания вне ссылок: код, выделение, имена файлов."""
+    out = []
+    at = 0
+    for match in _CODE.finditer(part):
+        out.append(_release_words(part[at:match.start()], files))
+        out.append("<code>{}</code>".format(html.escape(match.group(1))))
+        at = match.end()
+    out.append(_release_words(part[at:], files))
+    return "".join(out)
+
+
+def _release_words(part, files):
+    text = html.escape(part, quote=False)
+    text = _HEADING.sub(r"<b>\1</b>", text)
+    text = _BOLD.sub(lambda m: "<b>{}</b>".format(m.group(1) or m.group(2)),
+                     text)
+    text = _BULLET.sub(r"\1• ", text)
+    text = _ITALIC.sub(r"<i>\1</i>", text)
+    # Звёздочки обрезанного выделения не остаются в тексте.
+    text = text.replace("**", "")
+
+    def file_name(match):
+        name = match.group(1)
+        url = files.get(name.lower())
+        if url:
+            return '<a href="{}">{}</a>'.format(
+                html.escape(url, quote=True), name)
+        return "<code>{}</code>".format(name)
+    return _FILE_NAME.sub(file_name, text)
+
+
 def release_reply(release, lang, repo="planetx"):
     """Ответ /latest HTML и кнопки по ответу GitHub."""
     tag = release.get("tag_name", "")
     date = (release.get("published_at") or "")[:10]
-    body = cut(plain(release.get("body") or ""), 2500)
+    body = release_html(cut(release.get("body") or "", 2500),
+                        release.get("assets") or ())
     name, catalog = PLUGINS.get(repo.lower(), (repo, None))
     text = "<b>{}</b>\n\n{}".format(
         html.escape(TEXTS[lang]["latest"].format(
             name=name, tag=tag, date=date)),
-        html.escape(body))
+        body)
     buttons = []
     for asset in release.get("assets") or ():
         if asset.get("name", "").endswith(".zip"):
