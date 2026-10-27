@@ -294,6 +294,10 @@ def _tools(window, add, earth):
         ("изменения местности", "обнаружить изменения", "что изменилось",
          "alphaearth", "эмбеддинги", "change detection", "detect change",
          "стройка", "вырубка"))
+    add("here:classify", tr("Классификация здесь"), open_,
+        lambda: window.class_tool.open_here(*_here(window)),
+        ("классификация", "классы", "классифицировать", "лес и поле",
+         "классы покрова", "classification", "classify", "land cover"))
     add("here:etomesto", tr("Старые карты «Это Место» здесь"), open_,
         lambda: window.etomesto_here(*_here(window)),
         ("это место", "etomesto", "старые карты", "межевые", "пгм",

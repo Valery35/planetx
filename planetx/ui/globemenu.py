@@ -205,6 +205,10 @@ def relief_items(window, menu, lat, lon):
                          "2017-2025 - по эмбеддингам AlphaEarth, клетка "
                          "10 м."),
                       lambda *a: window.change_tool.open_here(lat, lon)))
+        items.append((tr("Классификация здесь…"),
+                      tr("Классы участка по контрольным точкам на глобусе - "
+                         "по эмбеддингам AlphaEarth, клетка 10 м."),
+                      lambda *a: window.class_tool.open_here(lat, lon)))
     for text, tip, slot in items:
         action = sub.addAction(text)
         action.setToolTip(tip)

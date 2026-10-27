@@ -73,6 +73,11 @@ DETAIL_SIDE = 20000.0  # наибольшая сторона подробног�
 DETAIL_LEVELS = ((0, 10), (1, 20), (2, 40), (3, 80))
 BLOCK_MB = (42.0, 45.0, 50.0, 52.0)
 CHUNK = 128  # строк блока за шаг расчёта: 64 канала float32 в памяти
+# Классификация: ближайших контрольных точек голосуют, наименьшее
+# количество точек класса и классов, как у Google Earth.
+KNN = 5
+MIN_POINTS = 3
+MIN_CLASSES = 2
 KEPT_BYTES = 256 << 20  # байт степени изменения в памяти
 # Шкала - от чёрного к жёлтому, как у Google Earth.
 STOPS = ((0.0, (0, 0, 0)), (0.35, (70, 60, 10)), (0.65, (190, 170, 20)),
@@ -438,6 +443,112 @@ def mosaic(changes, index, box, level=0):
         target[use] = block[use]
         out[np.ix_(okr, okc)] = target
     return x0, y1, step, out
+
+
+def vectors(open_cog, index, box, level, year):
+    """Векторы года на участке box: (x0, y0 - левый верхний угол, шаг м,
+    Int8 (каналы, строки с севера, столбцы)) или None. Сетка - как
+    у mosaic, вне файлов - NODATA."""
+    pieces = []
+    for cell, col, row in detail_parts(index, box, level):
+        name = index.name(cell, year)
+        cog = open_cog(year, index.zone, name) if name else None
+        if cog is None:
+            continue
+        tile = cog.band_tile(level, col, row)
+        if tile is None:
+            continue
+        image = cog.images[level]
+        x0, dx, _, y0, _, dy = cog.transform
+        dx, dy = dx * image.scale, dy * image.scale
+        pieces.append((x0 + col * image.tile_w * dx,
+                       y0 + row * image.tile_h * dy, (dx, dy), tile))
+    if not pieces:
+        return None
+    west, south, east, north = box
+    xs, ys = index.project(np.array([west, east, west, east]),
+                           np.array([south, south, north, north]))
+    step = abs(pieces[0][2][0])
+    x0 = math.floor(xs.min() / step) * step
+    y1 = math.ceil(ys.max() / step) * step
+    width = int(math.ceil((xs.max() - x0) / step))
+    height = int(math.ceil((y1 - ys.min()) / step))
+    bands = pieces[0][3].shape[0]
+    out = np.full((bands, height, width), NODATA, dtype=np.int8)
+    cx = x0 + (np.arange(width) + 0.5) * step
+    cy = y1 - (np.arange(height) + 0.5) * step
+    for px, py, (sx, sy), data in pieces:
+        c = np.floor((cx - px) / sx).astype(int)
+        r = np.floor((cy - py) / sy).astype(int)
+        okc = (c >= 0) & (c < data.shape[2])
+        okr = (r >= 0) & (r < data.shape[1])
+        if not okc.any() or not okr.any():
+            continue
+        block = data[:, r[okr]][:, :, c[okc]]
+        target = out[:, okr][:, :, okc]
+        use = block[0] != NODATA
+        target[:, use] = block[:, use]
+        out[np.ix_(np.arange(bands), okr, okc)] = target
+    return x0, y1, step, out
+
+
+def unit(raw):
+    """Векторы Int8 (64, n) в единичные float32 (n, 64), NaN без
+    данных."""
+    values = LUT[raw.astype(np.int16) + 128].T
+    norm = np.linalg.norm(values, axis=1, keepdims=True)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return values / norm
+
+
+def classify(grid, samples, labels, k=KNN):
+    """Классы клеток участка по контрольным точкам: grid - Int8
+    (64, строки, столбцы), samples - Int8 (64, точек), labels - номера
+    классов точек. Ближайшие k точек по косинусу голосуют сходством.
+    Итог - (классы int16, -1 без данных, сходство с лучшей точкой
+    float32)."""
+    labels = np.asarray(labels)
+    train = unit(samples)
+    good = np.isfinite(train).all(axis=1)
+    train, labels = train[good], labels[good]
+    shape = grid.shape[1:]
+    out = np.full(shape[0] * shape[1], -1, dtype=np.int16)
+    score = np.full(out.shape, np.nan, dtype=np.float32)
+    if not len(train):
+        return out.reshape(shape), score.reshape(shape)
+    k = max(1, min(k, len(train)))
+    classes = np.unique(labels)
+    flat = grid.reshape(grid.shape[0], -1)
+    step = CHUNK * 1024
+    for start in range(0, flat.shape[1], step):
+        values = unit(flat[:, start:start + step])
+        ok = np.isfinite(values).all(axis=1)
+        if not ok.any():
+            continue
+        sim = values[ok] @ train.T
+        near = np.argsort(-sim, axis=1)[:, :k]
+        weight = np.take_along_axis(sim, near, axis=1)
+        votes = np.zeros((len(near), len(classes)), dtype=np.float32)
+        for n, cls in enumerate(classes):
+            votes[:, n] = np.where(labels[near] == cls,
+                                   np.maximum(weight, 0.0) + 1e-6,
+                                   0.0).sum(axis=1)
+        part = np.full(len(values), -1, dtype=np.int16)
+        part[ok] = classes[np.argmax(votes, axis=1)]
+        best = np.full(len(values), np.nan, dtype=np.float32)
+        best[ok] = sim.max(axis=1)
+        out[start:start + len(values)] = part
+        score[start:start + len(values)] = best
+    return out.reshape(shape), score.reshape(shape)
+
+
+def pixel_of(index, x0, y0, step, lat, lon):
+    """Строка и столбец сетки участка для точки, вне сетки - за её
+    пределами, проверяет вызывающий."""
+    xs, ys = index.project(np.array([lon]), np.array([lat]))
+    col = int(math.floor((xs[0] - x0) / step))
+    row = int(math.floor((y0 - ys[0]) / step))
+    return row, col
 
 
 def hot_spots(values, count=10, spacing=10, low=0.3):

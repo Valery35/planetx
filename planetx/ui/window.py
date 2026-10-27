@@ -69,6 +69,7 @@ from .contours import ContourExport
 from .hydro import HydroTool
 from .relief import ReliefTool
 from .aef import ChangeTool
+from .aefclass import ClassTool
 from .netlink import NetLinks
 from .superoverlay import SuperOverlays
 from .watermask import WaterTiles
@@ -715,6 +716,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.relief = ReliefTool(self)
         self.change_tool = ChangeTool(self)
         self.change_shapes = []
+        self.class_tool = ClassTool(self)
+        self.class_shapes = []
         self.extruder = ExtrudeManager(self)
         self.viewshed_timer = QTimer(self)
         self.viewshed_timer.setInterval(VIEWSHED_POLL)
@@ -1093,6 +1096,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.relief.timer.stop()
             self.relief._drop_tiles()
             self.change_tool.close()
+            self.class_tool.close()
             if self.section_dialog is not None:
                 self.section_dialog.close()
             if self.assistant_dialog is not None:

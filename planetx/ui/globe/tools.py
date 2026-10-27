@@ -489,6 +489,8 @@ class ToolsMixin:
             old.deleteLater()
         self.viewshed_tiles = None
         self.viewshed_result = result
+        if result is not None and getattr(self, "class_tool", None):
+            self.class_tool.drop()  # слой вида один на двоих
         if result is None:
             self.view.set_gibs("viewshed", False)
             return

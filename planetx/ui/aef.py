@@ -524,28 +524,10 @@ class ChangeTool(QObject):
     # --- участок в рабочем потоке --------------------------------------
 
     def _run(self, work, done):
-        if not _EXPORT:
-            _EXPORT.append(ThreadPoolExecutor(max_workers=1))
-        self.job = (_EXPORT[0].submit(work), done)
-        self.timer.start()
+        _run_job(self, work, done)
 
     def _poll(self):
-        if self.job is None:
-            self.timer.stop()
-            return
-        future, done = self.job
-        if not future.done():
-            return
-        self.job = None
-        self.timer.stop()
-        try:
-            result = future.result()
-        except (OSError, cog.CogError) as error:
-            if self.dialog is not None:
-                self.dialog.status.setText(tr(
-                    "Данные не получены: {error}", error=error))
-            return
-        done(result)
+        _poll_job(self)
 
     def _mosaic(self):
         """Степень изменения участка (зона, мозаика) в рабочем потоке."""
@@ -643,6 +625,34 @@ class ChangeTool(QObject):
         self._drop_tiles()
         if self.dialog is not None:
             self.dialog.close()
+
+
+def _run_job(owner, work, done):
+    """work() в общем рабочем потоке, done(итог) - в главном. У owner
+    поля job, timer (его timeout зовёт _poll_job) и dialog."""
+    if not _EXPORT:
+        _EXPORT.append(ThreadPoolExecutor(max_workers=1))
+    owner.job = (_EXPORT[0].submit(work), done)
+    owner.timer.start()
+
+
+def _poll_job(owner):
+    if owner.job is None:
+        owner.timer.stop()
+        return
+    future, done = owner.job
+    if not future.done():
+        return
+    owner.job = None
+    owner.timer.stop()
+    try:
+        result = future.result()
+    except (OSError, cog.CogError) as error:
+        if owner.dialog is not None:
+            owner.dialog.status.setText(tr(
+                "Данные не получены: {error}", error=error))
+        return
+    done(result)
 
 
 class _Scale:

@@ -17529,6 +17529,110 @@ def change_spots_wait():
     tool.dialog.close()
 
 
+@check(1000)
+def class_open():
+    # Классификация у той же точки: пункт подменю, окно, точка щелчком
+    # по глобусу и ещё пять точек двумя группами в 900 м к северу и югу.
+    import numpy as np
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    _aef_local()
+    window = state["window"]
+    view = window.view
+    nav = view.navigator
+    nav.stop()
+    nav.set_pose(Pose(CHANGE_POINT[0], CHANGE_POINT[1], 8000.0, 0.0, 0.0))
+    view.update()
+    view.grabFramebuffer()
+    menu = QMenu()
+    globemenu.relief_items(window, menu, *CHANGE_POINT)
+    sub = menu.actions()[0].menu()
+    out = result.setdefault("classify", {})
+    out["menu"] = [a.text() for a in sub.actions()][-2:]
+    window.set_extra("aef_change", True)
+    tool = window.class_tool
+    dialog = tool.open_here(*CHANGE_POINT)
+    dialog.side.setValue(3.0)
+    dialog.level.setCurrentIndex(dialog.level.findData(3))
+    dialog.year.setCurrentIndex(dialog.year.findData(2025))
+    dialog.rows[0].pick.setChecked(True)
+    lat0 = CHANGE_POINT[0] - 0.008
+    xyz = geodetic_to_ecef(np.array([lat0]), np.array([CHANGE_POINT[1]]),
+                           np.zeros(1))
+    pixels, _ = view.camera.project(xyz)
+    window._clicked(*pixels[0])
+    out["clicked"] = len(dialog.rows[0].points)
+    for dlon in (-0.0005, 0.0005):
+        tool.add_point(lat0, CHANGE_POINT[1] + dlon)
+    dialog.rows[1].pick.setChecked(True)
+    for dlon in (-0.0005, 0.0, 0.0005):
+        tool.add_point(CHANGE_POINT[0] + 0.008, CHANGE_POINT[1] + dlon)
+    out["points"] = [len(r.points) for r in dialog.rows]
+    out["shapes"] = len(window.class_shapes)
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+
+
+@check(1000)
+def class_wait():
+    import numpy as np
+    window = state["window"]
+    tool = window.class_tool
+    layer = window.view.gibs["viewshed"]
+    if (tool.job is not None or not layer.textures) \
+            and time.monotonic() - state["class_started"] < 300.0:
+        return 1000
+    out = result["classify"]
+    out["build_s"] = round(time.monotonic() - state["class_started"], 1)
+    out["status"] = tool.dialog.status.text()
+    out["textures"] = len(layer.textures)
+    out["loader"] = type(layer.loader).__name__
+    out["change_kept"] = [window.extras.get("aef_change"),
+                          type(window.view.gibs["emag"].loader).__name__]
+    res = tool.result
+    if res is not None:
+        classes = res["classes"]
+        out["grid"] = list(classes.shape)
+        out["shares"] = [round(float((classes == n).mean()), 3)
+                         for n in range(len(res["colors"]))]
+        # Клетки контрольных точек - своего класса.
+        own = []
+        for n, row in enumerate(tool.dialog.rows):
+            for lat, lon in row.points:
+                r, c = tool.result_pixel(lat, lon)
+                own.append(int(classes[r, c]) == n)
+        out["own_class"] = own
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_classify.png"))
+    path = os.path.join(TEMP, "planetx_classify.tif")
+    out["exported"] = bool(tool.export(path))
+    from qgis.core import QgsProject
+    from planetx.i18n import tr as planetx_tr
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr("PlanetX - классификация"))
+    layers = group.findLayers() if group is not None else []
+    out["layers"] = [n.name() for n in layers]
+    if layers:
+        raster = layers[0].layer()
+        out["crs"] = raster.crs().authid()
+        out["renderer"] = raster.renderer().type()
+        stats = raster.dataProvider().bandStatistics(1)
+        out["range"] = [stats.minimumValue, stats.maximumValue]
+        for node in layers:
+            QgsProject.instance().removeMapLayer(node.layerId())
+        group.parent().removeChildNode(group)
+    # Повтор с другой непрозрачностью - векторы из памяти.
+    tool.dialog.alpha.setValue(30)
+    out["reloaded"] = tool.tiles is not None
+    tool.dialog.clear.emit()
+    out["cleared"] = [tool.tiles is None, layer.shown]
+    tool.dialog.close()
+    out["shapes_after"] = len(window.class_shapes)
+    window.set_extra("aef_change", False)
+
+
 @check(8000)
 def sea_level_on():
     # Подъём моря у дельты Рейна: Нидерланды с 250 км.

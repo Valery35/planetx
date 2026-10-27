@@ -1749,7 +1749,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Directions from here, Directions to here | The start and the end of a route, see Route |
 | What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Site analysis | A submenu with Slope and aspect here…, Viewshed from here…, Insolation here… and Land change here… (the last two only on the Earth) for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation and Land change |
+| Site analysis | A submenu with Slope and aspect here…, Viewshed from here…, Insolation here…, Land change here… and Classification here… (the last three only on the Earth) for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Land change and Classification |
 | Hydrology | A submenu with Flooding from here…, Water flow from here… and Sea level…, see Flooding |
 | Satellite images here… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
@@ -2796,6 +2796,38 @@ Land change, the geophysics value maps, the geological map, lithology,
 water and soils are one layer of the globe with one map on it. A map
 turned on removes the previous one, the cross of the scale turns the
 row off. Land change is computed only for the Earth.
+
+### Classification
+
+The Classification here… item of the Site analysis submenu of the globe
+menu opens the Classification window for the point under the cursor.
+The white frame on the globe is the classification square, the Area
+field sets its side. Classification divides the cells of the area into
+classes by the same AlphaEarth vectors as land change.
+
+A class has a color and a name, the Add class button adds a new one,
+✕ removes a class with its points. The round button of a class selects
+it, and a click on the globe places a point of this class. A point is a
+sample of the class, for example forest, field, buildings or water. At
+least two classes with three points each are needed, there may be more
+points. The Remove point button removes the last point of the selected
+class.
+
+The Build button assigns each cell of the area to the class of the five
+nearest control points by the similarity of the vectors of the selected
+year. The classes appear on the globe in their colors, the line under
+the fields gives the share of each class. Points are placed on the
+globe imagery, and the year of the imagery may differ from the year in
+the window. The 10, 20, 40 or 80 m pixel and the download estimate work
+as for the land change detail area.
+
+The Opacity slider changes the transparency of the classes. The To QGIS
+project… button writes the classes as a GeoTIFF raster in UTM to the
+PlanetX - classification group, with the colors and names of the
+classes. The Remove button removes the classes from the globe, the
+points stay. Classes and the viewshed from a point are one layer of the
+globe, a new viewshed removes the classes. The land change map stays
+visible together with the classes.
 
 ### Flooding
 

@@ -6091,6 +6091,71 @@ EN = {
         "overview with a pixel of 160 m or coarser, the detail area and "
         "years are set by the Land change window of the Site analysis "
         "submenu of the globe menu.",
+    # Классификация участка (ui/aefclass.py).
+    "PlanetX - классификация": "PlanetX - classification",
+    "Классы {year} года: {parts}.": "Classes of {year}: {parts}.",
+    "Щелчок по глобусу ставит точку этого класса.":
+        "A click on the globe places a point of this class.",
+    "Цвет класса на глобусе и в растре.":
+        "Class color on the globe and in the raster.",
+    "Контрольных точек класса.": "Control points of the class.",
+    "Убрать класс и его точки.": "Remove the class and its points.",
+    "Классификация": "Classification",
+    "Год, по векторам которого клетки делятся на классы. Точки ставятся "
+    "по снимку глобуса, он может быть другого года.":
+        "The year whose vectors divide the cells into classes. Points are "
+        "placed on the globe imagery, which may be of another year.",
+    "Сторона квадрата классификации с серединой в точке окна. Точки вне "
+    "квадрата не учитываются.":
+        "Side of the classification square centred at the window point. "
+        "Points outside the square are not used.",
+    "Пиксель классификации. Блок файла за год - 40-50 МБ при любом "
+    "пикселе. Блок пикселя 10 м покрывает 10 км, 80 м - 82 км.":
+        "Classification pixel. A file block for a year is 40-50 MB at any "
+        "pixel. A 10 m block covers 10 km, an 80 m block covers 82 km.",
+    "Добавить класс": "Add class",
+    "Непрозрачность классов на глобусе.":
+        "Opacity of the classes on the globe.",
+    "Щёлкните по глобусу, чтобы поставить точку выбранного класса. Нужно "
+    "хотя бы два класса по три точки.":
+        "Click the globe to place a point of the selected class. At least "
+        "two classes with three points each are needed.",
+    "Пиксель": "Pixel",
+    "Каждая клетка участка относится к классу ближайших контрольных точек "
+    "по векторам AlphaEarth.":
+        "Each cell of the area goes to the class of the nearest control "
+        "points by AlphaEarth vectors.",
+    "Классы участка растром GeoTIFF в системе UTM в проект QGIS.":
+        "Area classes as a GeoTIFF raster in UTM to the QGIS project.",
+    "Убрать точку": "Remove point",
+    "Убрать последнюю точку выбранного класса.":
+        "Remove the last point of the selected class.",
+    "Убрать классы с глобуса, точки остаются.":
+        "Remove the classes from the globe, the points stay.",
+    "Загружаются векторы участка…": "Loading the area vectors…",
+    "Классификация {year}": "Classification {year}",
+    "Растр классов в проекте.": "The class raster is in the project.",
+    "Классы": "Classes",
+    "Класс {n}": "Class {n}",
+    "Нет библиотеки zstd, файлы AlphaEarth не прочитать.":
+        "No zstd library, AlphaEarth files cannot be read.",
+    "Нужно хотя бы два класса по три точки.":
+        "At least two classes with three points each are needed.",
+    "Все точки вне участка.": "All points are outside the area.",
+    "Точек вне участка: {n}.": "Points outside the area: {n}.",
+    "Классификация в проект QGIS": "Classification to the QGIS project",
+    "Классификация здесь…": "Classification here…",
+    "Классы участка по контрольным точкам на глобусе - по эмбеддингам "
+    "AlphaEarth, клетка 10 м.":
+        "Area classes by control points on the globe, from AlphaEarth "
+        "embeddings, 10 m cells.",
+    "Классификация здесь": "Classification here",
+    "Окно классификации участка у точки взгляда - классы с цветом "
+    "и названием, контрольные точки щелчком по глобусу, год, растр "
+    "классов в проект QGIS.":
+        "Window classifying the area at the view point - classes with a "
+        "color and a name, control points by a click on the globe, the "
+        "year, a class raster to the QGIS project.",
 }
 
 _language = None

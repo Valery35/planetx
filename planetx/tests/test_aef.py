@@ -197,6 +197,58 @@ class TestPlacement(unittest.TestCase):
                          2 * len(parts) * aef.BLOCK_MB[0])
 
 
+class TestClassify(unittest.TestCase):
+    """Классы участка по контрольным точкам: точки на севере и на юге
+    делят участок по границе северной четверти квадрата."""
+
+    def setUp(self):
+        self.index = make_index()
+        cog_ = FakeCog(north_block, True)
+        self.open = lambda year, zone, name: cog_
+
+    def test_classes_follow_control_points(self):
+        edge = NORTH - aef.CELL / 4
+        lat, lon = from_utm(40, False, WEST + aef.CELL / 2, edge)
+        box = aef.square(lat, lon, 4000.0)
+        x0, y0, step, grid = aef.vectors(self.open, self.index, box, 2,
+                                         2025)
+        self.assertEqual(step, 40.0)
+        self.assertEqual(grid.shape[0], 4)
+        rows = y0 - (np.arange(grid.shape[1]) + 0.5) * step
+        # Другие векторы - на севере: строки сетки идут с севера.
+        self.assertTrue((grid[2][rows > edge + 100] == -90).all())
+        self.assertTrue((grid[2][rows < edge - 100] == 90).all())
+        samples, labels = [], []
+        for label, shift in ((0, -1500.0), (1, 1500.0)):
+            for dx in (-500.0, 0.0, 500.0):
+                plat, plon = from_utm(40, False, WEST + aef.CELL / 2 + dx,
+                                      edge + shift)
+                r, c = aef.pixel_of(self.index, x0, y0, step, plat, plon)
+                samples.append(grid[:, r, c])
+                labels.append(label)
+        classes, score = aef.classify(grid, np.stack(samples, axis=1),
+                                      labels)
+        rows = y0 - (np.arange(classes.shape[0]) + 0.5) * step
+        # Север - класс точек на севере, у переворота строк наоборот.
+        self.assertTrue((classes[rows > edge + 100] == 1).all())
+        self.assertTrue((classes[rows < edge - 100] == 0).all())
+        self.assertGreater(float(np.nanmin(score)), 0.99)
+
+    def test_cells_without_data_have_no_class(self):
+        grid = np.full((4, 2, 2), 90, dtype=np.int8)
+        grid[:, 0, 0] = aef.NODATA
+        grid[2:, 1, 1] = -90
+        samples = np.stack([vector(90), np.array([90, 90, -90, -90],
+                                                 dtype=np.int8)], axis=1)
+        classes, _ = aef.classify(grid, samples, [3, 7])
+        self.assertEqual(classes.tolist(), [[-1, 3], [3, 7]])
+
+    def test_unit_vectors(self):
+        out = aef.unit(np.stack([vector(90), vector(aef.NODATA)], axis=1))
+        self.assertAlmostEqual(float(np.linalg.norm(out[0])), 1.0, places=5)
+        self.assertTrue(np.isnan(out[1]).all())
+
+
 def band_tiff(width, height, tile, bands):
     """Маленький TIFF каналов Int8 плоскостями, DEFLATE, привязка
     ModelTransformation со строками с юга."""
