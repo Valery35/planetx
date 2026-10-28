@@ -11,6 +11,7 @@ project, your own placemarks, paths and polygons lie on the globe. Tours
 fly over the places, and a tour recording gives frames for a video.
 
 Plugin page - [www.informpp.ru](https://www.informpp.ru/главная-страница/qgis-planetx).
+The PlanetX globe without QGIS, a separate program, is [PlanetX Lite](https://www.informpp.ru/главная-страница/planetx-lite).
 
 ---
 

@@ -5260,6 +5260,10 @@ EN = {
         "in the browser.",
     "Открывает в браузере хранилище модуля на GitHub.":
         "Opens the plugin repository on GitHub in the browser.",
+    "Открывает в браузере страницу PlanetX Lite - глобуса PlanetX "
+    "без QGIS, отдельной программой.":
+        "Opens the page of PlanetX Lite, the PlanetX globe without QGIS "
+        "as a separate program, in the browser.",
     "Открывает в браузере страницу модуля в каталоге "
     "модулей QGIS.":
         "Opens the plugin page in the QGIS plugin catalog "

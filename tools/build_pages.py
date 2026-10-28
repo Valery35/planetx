@@ -40,6 +40,8 @@ PAGES = (
     ("imagery", "imagery", "Космоснимки", "Satellite imagery"),
     ("news", "news", "Что нового", "What's new"),
 )
+# PlanetX Lite - глобус без QGIS, своя группа страниц, последний пункт меню.
+LITE_URL = "https://www.informpp.ru/главная-страница/planetx-lite"
 NEWS_FROM = (0, 93, 0)  # «Что нового» - выпуски с этого номера
 RELEASES = "https://github.com/Valery35/planetx/releases/latest"
 CHANGELOG_URL = "https://github.com/Valery35/planetx/blob/main/CHANGELOG.md"
@@ -1315,6 +1317,7 @@ def page(key, img, version):
         nk = t("nav.%s" % k, ru, en)
         nav.append('<a target="_blank" href="%s" data-i18n="%s"%s></a>'
                    % (url(path), nk, ' class="on"' if k == key else ""))
+    nav.append('<a target="_blank" href="%s">PlanetX Lite</a>' % LITE_URL)
     t("ftr.line1", build_site.RU["ftr.line1"], build_site.EN["ftr.line1"])
     t("ftr.line2", build_site.RU["ftr.line2"], build_site.EN["ftr.line2"])
     t("ftr.line3", build_site.RU["ftr.line3"], build_site.EN["ftr.line3"])

@@ -44,6 +44,8 @@ ESRI_TERMS ="https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
 PAGE = "https://www.informpp.ru/главная-страница/qgis-planetx"
+# PlanetX Lite - глобус без QGIS, страница с 28 октября 2026 года.
+LITE = "https://www.informpp.ru/главная-страница/planetx-lite"
 # Руководство на языке интерфейса: PDF собирает tools/build_manual.py.
 # С 13 октября 2026 года PDF не входят в архив модуля - его предел в
 # каталоге QGIS 10 МБ - и лежат в выпуске своей версии на GitHub.
@@ -216,6 +218,10 @@ class AboutDialog(QDialog):
         self._button(second, "page", tr("Страница модуля"), tr(
             "Открывает в браузере страницу модуля на сайте "
             "ООО «Информ++»."), lambda: self._open_url(QUrl(PAGE)))
+        self._button(second, "lite", "PlanetX Lite", tr(
+            "Открывает в браузере страницу PlanetX Lite - глобуса PlanetX "
+            "без QGIS, отдельной программой."),
+            lambda: self._open_url(QUrl(LITE)))
         self._button(second, "code", tr("Исходный код"), tr(
             "Открывает в браузере хранилище модуля на GitHub."),
             lambda: self._open_url(QUrl(REPOSITORY)))
