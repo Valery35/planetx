@@ -14543,6 +14543,217 @@ def post_sky_shot():
     return None
 
 
+def _post_clean(window):
+    """Кадры статьи: подложка Esri World Imagery, «Мои метки» скрыты.
+    Прежние флажки меток и подложка - в state["post_clean"]."""
+    if "post_clean" in state:
+        return
+    index = next(i for i, s in enumerate(window.sources)
+                 if "World Imagery" in s.name and "Wayback" not in s.name)
+    tops = [n for n in window.myplaces.nodes() if not n.parent]
+    state["post_clean"] = (window._basemap, {
+        n.key: window.myplaces.find(n.key).visible for n in tops})
+    window.myplaces.set_visible_many({n.key: False for n in tops})
+    window.choose_basemap(index)
+    window.refresh()
+
+
+def _post_restore(window):
+    basemap, shown = state.pop("post_clean")
+    window.myplaces.set_visible_many(shown)
+    window.choose_basemap(basemap)
+
+
+def _post_ring(lat, lon, radii):
+    """Многоугольник участка вокруг точки: радиусы в градусах широты по
+    азимутам через равные углы, первая вершина на севере."""
+    import math
+    scale = 1.0 / math.cos(math.radians(lat))
+    step = 2.0 * math.pi / len(radii)
+    return [(lat + r * math.cos(k * step),
+             lon + r * scale * math.sin(k * step))
+            for k, r in enumerate(radii)]
+
+
+def _post_draw(window, area, ring):
+    """Нарисовать участок щелчками по глобусу и замкнуть первой
+    вершиной, как пользователь."""
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    view = window.view
+    area.start_drawing()
+    for lat, lon in ring + ring[:1]:
+        xyz = geodetic_to_ecef(np.array([lat]), np.array([lon]),
+                               view.label_heights(np.array([lat]),
+                                                  np.array([lon])))
+        px, py = view.camera.project(xyz)[0][0]
+        if (lat, lon) == ring[0] and area.ring:
+            handles = window.handles.tool
+            handles.hover(px, py)
+            handles.grab(px, py)
+            handles.drop()
+        else:
+            window._clicked(px, py)
+    return area.closed()
+
+
+@check(1000, manual=True)
+def post_area_shot():
+    """Кадр статьи 1.18: уклон по участку-многоугольнику у Терскола,
+    наклонный вид, окно, затем OK и дерево проекта с подгруппой. Файлы -
+    TEMP planetx_post_area*.png."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_area", {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        _post_clean(window)
+        lat, lon = HYDRO_BAKSAN
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, 9000.0, 0.0, 0.0))
+        view.update()
+        view.grabFramebuffer()
+        dialog = window.relief.relief_here(lat, lon)
+        ring = _post_ring(lat, lon, [0.022, 0.016, 0.02, 0.012, 0.018,
+                                     0.024, 0.014])
+        look["closed"] = _post_draw(window, dialog.area, ring)
+        view.navigator.set_pose(Pose(lat - 0.01, lon, 13000.0, 340.0, 55.0))
+        view.update()
+        dialog.build.emit()
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    layer = view.gibs["slope"]
+    if (window.relief.job is not None or not layer.textures
+            or view.load_missing) and waited < 120:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 5000
+    dialog = window.relief.dialog
+    out = result.setdefault("post_area", {"closed": look["closed"]})
+    out["status"] = dialog.status.text()
+    path = os.path.join(TEMP, "planetx_post_area.png")
+    window.copy_view().save(path)
+    dialog.show()
+    dialog.raise_()
+    QgsApplication.processEvents()
+    dialog.grab().save(os.path.join(TEMP, "planetx_post_area_dialog.png"))
+    dialog.accept()
+    # Своё дерево слоёв проекта - панель слоёв проверочного QGIS узкая.
+    from qgis.core import QgsLayerTreeModel, QgsProject
+    from qgis.gui import QgsLayerTreeView
+    model = QgsLayerTreeModel(QgsProject.instance().layerTreeRoot())
+    model.setFlags(QgsLayerTreeModel.Flag.AllowNodeChangeVisibility)
+    tree = QgsLayerTreeView()
+    tree.setModel(model)
+    tree.expandAll()
+    tree.resize(460, 130)
+    tree.show()
+    QgsApplication.processEvents()
+    tree.grab().save(os.path.join(TEMP, "planetx_post_area_tree.png"))
+    tree.close()
+    state["post_tree"] = (tree, model)
+    out["subgroups"] = _subgroups()
+    return None
+
+
+@check(1000, manual=True)
+def post_change_shot():
+    """Кадр статьи 1.18: изменения местности 2017-2025 у Новой Москвы,
+    обзор с наклоном, «Копия вида». Файл - TEMP."""
+    from planetx.core.navigation import Pose
+    _aef_local()
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_change", {"since": None})
+    lat, lon = (float(v) for v in os.environ.get(
+        "PLANETX_POST_CHANGE", "55.56,37.44").split(","))
+    if look["since"] is None:
+        window.set_body("earth")
+        _post_clean(window)
+        _drop_group()
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, 30000.0, 0.0, 40.0))
+        view.update()
+        window.change_tool.open_here(lat, lon)
+        window.change_tool.dialog.hide()
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    layer = view.gibs["emag"]
+    if (len(layer.textures) < 8 or layer.missing or view.load_missing) \
+            and waited < 180:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 6000
+    path = os.path.join(TEMP, "planetx_post_change.png")
+    window.copy_view().save(path)
+    result["post_change"] = {"path": path, "waited": round(waited, 1)}
+    window.change_tool.dialog.close()
+    window.set_extra("aef_change", False)
+    return None
+
+
+@check(1000, manual=True)
+def post_class_shot():
+    """Кадр статьи 1.18: классификация по участку-многоугольнику у Перми,
+    застройка и лес контрольными точками, «Копия вида». Файл - TEMP."""
+    from planetx.core.navigation import Pose
+    _aef_local()
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_class", {"since": None})
+    lat, lon = CHANGE_POINT
+    if look["since"] is None:
+        window.set_body("earth")
+        _post_clean(window)
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, 7000.0, 0.0, 0.0))
+        view.update()
+        view.grabFramebuffer()
+        tool = window.class_tool
+        dialog = tool.open_here(lat, lon)
+        dialog.level.setCurrentIndex(dialog.level.findData(1))
+        dialog.year.setCurrentIndex(dialog.year.findData(2025))
+        ring = _post_ring(lat, lon, [0.013, 0.011, 0.012, 0.009, 0.012,
+                                     0.01])
+        look["closed"] = _post_draw(window, dialog.area, ring)
+        dialog.rows[0].set_points([(lat - 0.008, lon + d)
+                                   for d in (-0.0005, 0.0, 0.0005)])
+        dialog.rows[1].set_points([(lat + 0.008, lon + d)
+                                   for d in (-0.0005, 0.0, 0.0005)])
+        view.navigator.set_pose(Pose(lat - 0.006, lon, 6500.0, 0.0, 45.0))
+        view.update()
+        dialog.build.emit()
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    tool = window.class_tool
+    layer = view.gibs["viewshed"]
+    if (tool.job is not None or not layer.textures or view.load_missing) \
+            and waited < 300:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 5000
+    path = os.path.join(TEMP, "planetx_post_class.png")
+    window.copy_view().save(path)
+    result["post_class"] = {"path": path, "closed": look["closed"],
+                            "status": tool.dialog.status.text(),
+                            "waited": round(waited, 1)}
+    tool.dialog.reject()
+    tool.dialog.close()
+    _drop_group()
+    _post_restore(window)
+    return None
+
+
 @check(500)
 def menu_links():
     """Свои пункты меню на глобусе: подменю «Открыть в браузере», адрес
