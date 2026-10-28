@@ -83,6 +83,10 @@ LITE_WORDS = ("lite", "лайт", "лайте", "лайта", "лайтом", "p
 WEB_PAGES = {
     "planetx-lite": "https://valery35.github.io/planetx-lite/",
 }
+# Страницы программ на сайте www.informpp.ru, для /docs.
+SITE_PAGES = {
+    "planetx-lite": "https://www.informpp.ru/главная-страница/planetx-lite",
+}
 # Что делает модуль, для /docs - по описаниям metadata.txt модулей.
 ABOUT = {
     "ru": {
@@ -179,6 +183,7 @@ TEXTS = {
         "zip": "Архив модуля",
         "catalog": "Каталог QGIS",
         "web": "В браузере",
+        "on_site": "На сайте",
         "no_release": "Не удалось узнать последний выпуск, попробуйте позже.",
         "report_empty": ("Напишите текст после команды, например:\n"
                          "/report глобус не открывается в QGIS 3.40"),
@@ -210,6 +215,7 @@ TEXTS = {
         "zip": "Plugin archive",
         "catalog": "QGIS catalog",
         "web": "In the browser",
+        "on_site": "Website",
         "no_release": "The latest release is unavailable, try again later.",
         "report_empty": ("Write the text after the command, for example:\n"
                          "/report the globe does not open in QGIS 3.40"),
@@ -492,6 +498,11 @@ def docs_reply(lang):
         else:
             other = '<a href="{}">{}</a>'.format(
                 WEB_PAGES[key], html.escape(TEXTS[lang]["web"]))
+        if key in SITE_PAGES:
+            other += ' · <a href="{}">{}</a>'.format(
+                html.escape(urllib.parse.quote(SITE_PAGES[key], safe=":/"),
+                            quote=True),
+                html.escape(TEXTS[lang]["on_site"]))
         lines.append(
             '\n<b>{}</b> - {}\n<a href="https://github.com/{}/{}">'
             'GitHub</a> · {}'.format(
