@@ -23,6 +23,7 @@ from ..core.mipmap import mip_chain
 from ..core.slope import row_latitudes
 from ..i18n import tr
 from ..qt_compat import enum
+from .results import keep_buttons
 
 SIZE = 256
 POLL = 15  # мс между проверками рабочего потока
@@ -139,11 +140,11 @@ def display_level(step, lat, radius):
 
 
 class ViewshedDialog(QDialog):
-    """Окно «Видимость из точки». Сигналы build - высота наблюдателя,
-    высота цели, радиус в метрах, clear - убрать слой."""
+    """Окно «Видимость из точки». Сигнал build - высота наблюдателя,
+    высота цели, радиус в метрах. OK записывает видимость в проект
+    QGIS, «Отмена» убирает её (ui/results.py)."""
 
     build = pyqtSignal(float, float, float)
-    clear = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -192,15 +193,9 @@ class ViewshedDialog(QDialog):
         run.clicked.connect(lambda: self.build.emit(
             self.observer.value(), self.target.value(),
             self.radius.value() * 1000.0))
-        remove = QPushButton(tr("Убрать"), self)
-        remove.setToolTip(tr("Убрать слой видимости с глобуса."))
-        remove.clicked.connect(self.clear)
         buttons.addButton(run, enum(QDialogButtonBox, "ButtonRole",
                                     "ActionRole"))
-        buttons.addButton(remove, enum(QDialogButtonBox, "ButtonRole",
-                                       "ActionRole"))
-        buttons.addButton(enum(QDialogButtonBox, "StandardButton", "Close"))
-        buttons.rejected.connect(self.close)
+        self.ok = keep_buttons(self, buttons)
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(self.status)

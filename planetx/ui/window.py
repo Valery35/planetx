@@ -668,12 +668,16 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.places_toggled.connect(self._places_toggled)
         self.panel.folder_expanded.connect(self.myplaces.set_expanded)
         self.panel.place_action.connect(self._place_action)
+        # Корень «Моих меток» в списке без «Временных меток» - номер места
+        # пересчитывается (root_index).
         self.panel.place_moved.connect(
             lambda key, parent, index: self.myplaces.move(
-                key, parent or None, index))
+                key, parent or None,
+                index if parent else self.root_index(index)))
         self.panel.places_moved.connect(
             lambda keys, parent, index: self.myplaces.move_many(
-                keys, parent or None, index))
+                keys, parent or None,
+                index if parent else self.root_index(index)))
         self.panel.places_action.connect(self._places_action)
         # Ползунок непрозрачности выделенного: цвета выделения снимаются
         # при выделении, запись идёт после паузы OPACITY_DELAY в
@@ -710,12 +714,14 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.viewshed_tiles = None
         self.viewshed_result = None
         self.contour_export = ContourExport(self)
+        # Участки окон анализа участка (ui/area.py): контуры на глобусе,
+        # вершины щелчками.
+        self.areas = []
         # Затопление, линия стока и водосбор у точки (ui/hydro.py).
         self.hydro = HydroTool(self)
         # Уклон, экспозиция, вершины и ямы квадрата (ui/relief.py).
         self.relief = ReliefTool(self)
         self.change_tool = ChangeTool(self)
-        self.change_shapes = []
         self.class_tool = ClassTool(self)
         self.class_shapes = []
         self.extruder = ExtrudeManager(self)
@@ -741,6 +747,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.draw_vertices = DrawVertices(self)
         self.handles.tool = self.draw_vertices
         self.drawer.changed.connect(self.handles.sync)
+        self.ruler.changed.connect(self.handles.sync)
         # Подсказка у курсора - тому, чьи вершины сейчас на глобусе: окно
         # «Новая метка» или окно свойств метки.
         self.view.hovered.connect(
@@ -763,6 +770,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.subsurface_requested.connect(self.subsurface.open_dialog)
         self.toolbar.set_auto(self.auto_refresh)
         self.myplaces.load()
+        # «Временные метки» выделены: новые метки ложатся туда.
+        self.panel.select_temporary()
         # Тур по отмеченным «Моим меткам».
         self.tour = TourPlayer(self.view, self._tour_stops, self)
         self.tour.bar.attach(self.timebar)
@@ -1026,6 +1035,15 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.refresh()
 
     def closeEvent(self, event):
+        # «Временные метки» с содержимым - вопрос, «Отмена» оставляет
+        # окно открытым.
+        try:
+            keep_open = not self.ask_temporary()
+        except RuntimeError:
+            keep_open = False
+        if keep_open:
+            event.ignore()
+            return
         # Сообщение о закрытии уходит и после ошибки по дороге, иначе
         # плагин держит ссылку на окно, которое Qt уже уничтожил.
         journal.note(tr("Окно глобуса закрыто."))

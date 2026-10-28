@@ -231,6 +231,9 @@ def open_globe():
     # Знакомство с модулем закрывало бы кадры шагов, его проверяет
     # свой шаг guide_tour.
     QgsSettings().setValue(GUIDE_KEY, True)
+    # Вопрос о «Временных метках» при закрытии окна ждал бы ответа,
+    # содержимое остаётся. Вопрос проверяет шаг temporary_places.
+    QgsSettings().setValue("PlanetX/temporary_ask", "keep")
     plugin = PlanetXPlugin(iface)
     plugin.initGui()
     plugin.run()
@@ -13895,14 +13898,14 @@ def roofs_city_wait():
         else:
             window.view.grabFramebuffer().save(os.path.join(
                 TEMP, "planetx_roofs_viewshed.png"))
-            window.viewshed_dialog.clear.emit()
+            window.viewshed_dialog.reject()
             window.viewshed_dialog.close()
             window.insolation_here(*ROOF_POINT)
             d = window.insolation_dialog
             d.buildings.setChecked(False)
-            d.radius.setValue(0.5)
+            d.area.side.setValue(1.0)
             day = float(1797811200)  # 21 декабря 2026 года
-            d.build.emit(day, day, 500.0)
+            d.build.emit(day, day)
             state["roof_stage"] = "ins_bare"
         state["roof_since"] = time.monotonic()
         return 1000
@@ -13920,13 +13923,13 @@ def roofs_city_wait():
     if stage == "ins_bare":
         d = window.insolation_dialog
         d.buildings.setChecked(True)
-        d.build.emit(float(1797811200), float(1797811200), 500.0)
+        d.build.emit(float(1797811200), float(1797811200))
         state["roof_stage"] = "ins_built"
         state["roof_since"] = time.monotonic()
         return 1000
     window.view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_roofs_insolation.png"))
-    window.insolation_dialog.clear.emit()
+    window.insolation_dialog.reject()
     window.insolation_dialog.close()
     return None
 
@@ -13983,7 +13986,7 @@ def own_roofs():
         look["stage"] = "tower"
         look["since"] = time.monotonic()
         return 1000
-    window.viewshed_dialog.clear.emit()
+    window.viewshed_dialog.reject()
     window.viewshed_dialog.close()
     old = [f.key for f in window.myplaces.folders
            if f.name.startswith("PlanetX: демо, анимированная")]
@@ -14067,7 +14070,7 @@ def quarry_viewshed():
     out["status"] = window.viewshed_dialog.status.text()
     window.view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_quarry_viewshed.png"))
-    window.viewshed_dialog.clear.emit()
+    window.viewshed_dialog.reject()
     window.viewshed_dialog.close()
     return None
 
@@ -14332,10 +14335,10 @@ def post_insolation_shot():
         d = window.insolation_dialog
         d.buildings.setChecked(True)
         radius = float(os.environ.get("PLANETX_POST_RADIUS", "0.8"))
-        d.radius.setValue(radius)
+        d.area.side.setValue(2.0 * radius)
         d.hide()
         day = float(1797811200)  # 21 декабря 2026 года
-        d.build.emit(day, day, radius * 1000.0)
+        d.build.emit(day, day)
         look["since"] = time.monotonic()
         return 3000
     waited = time.monotonic() - look["since"]
@@ -14416,7 +14419,8 @@ def post_relief_shot():
                                  11000.0, 330.0, 58.0))
         view.update()
         dialog = window.relief.relief_here(*HYDRO_BAKSAN)
-        dialog.build.emit(3000.0)
+        dialog.area.side.setValue(6.0)
+        dialog.build.emit()
         look["since"] = time.monotonic()
         return 3000
     waited = time.monotonic() - look["since"]
@@ -14474,7 +14478,8 @@ def post_flood_shot():
         view.navigator.show(Pose(lat, lon, dist, head, tilt))
         view.update()
         dialog = window.hydro.flood_here(lat, lon)
-        dialog.build.emit(radius)
+        dialog.area.side.setValue(2.0 * radius / 1000.0)
+        dialog.build.emit()
         look["since"] = time.monotonic()
         return 3000
     waited = time.monotonic() - look["since"]
@@ -14498,7 +14503,7 @@ def post_flood_shot():
     result["post_flood"] = {"path": path, "status": dialog.status.text(),
                             "base": round(dialog.base, 1),
                             "waited": round(waited, 1)}
-    dialog.clear.emit()
+    dialog.reject()
     dialog.close()
     return None
 
@@ -16137,7 +16142,7 @@ def jezero_done():
     window.view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_jezero_viewshed.png"))
     out["gl_after"] = dict(window.view.gl_errors)
-    window.viewshed_dialog.clear.emit()
+    window.viewshed_dialog.reject()
     window.viewshed_dialog.close()
     window.profile_dialog.close()
     window.myplaces.remove(state["jz_folder"])
@@ -16895,7 +16900,7 @@ def viewshed_check():
     out["textures"] = len(layer.textures)
     out["gl"] = dict(view.gl_errors)
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_viewshed.png"))
-    window.viewshed_dialog.clear.emit()
+    window.viewshed_dialog.reject()
     out["cleared"] = not layer.shown and window.viewshed_tiles is None
     window.viewshed_dialog.close()
     window.myplaces.remove(state["vs_key"])
@@ -16919,7 +16924,8 @@ def hydro_flood():
     dialog = window.hydro.flood_here(*HYDRO_KAMA)
     result["hydro"] = {"flood_dialog": dialog.isVisible()}
     state["hydro_started"] = time.monotonic()
-    dialog.build.emit(5000.0)
+    dialog.area.side.setValue(10.0)
+    dialog.build.emit()
 
 
 @check(10000)
@@ -16973,17 +16979,27 @@ def hydro_flood_frame():
     path = os.path.join(TEMP, "planetx_flood.tif")
     out["export"] = window.hydro.export_flood(path) == path
     group = QgsProject.instance().layerTreeRoot().findGroup(
-        planetx_tr("PlanetX - вода по рельефу"))
-    out["project_layers"] = [n.name() for n in group.children()] \
-        if group is not None else []
+        planetx_tr(AREA_GROUP))
+    out["project_layers"] = _subgroups()
+    # Вода записанного затопления - за слоем глубин на глобусе.
+    kept = list(window.hydro.kept)
+    out["kept"] = [len(kept), bool(kept) and kept[0]
+                   in window.shown_layers()]
+    window._apply_vector()
+    window.view.lake_water.prepare()
+    out["kept_water"] = sorted(k for k in window.view.lake_water.buffers
+                               if k != "flood")
+    state["flood_kept"] = kept
     if group is not None:
-        for node in group.findLayers():
-            QgsProject.instance().removeMapLayer(node.layerId())
-        group.parent().removeChildNode(group)
-    window.hydro.flood_dialog.clear.emit()
+        _drop_group()
+    window.hydro.flood_dialog.reject()
+    window._apply_vector()
     window.view.lake_water.prepare()
     out["cleared"] = window.hydro.state is None \
         and "flood" not in window.view.lake_water.buffers
+    # Слой глубин удалён из проекта - его вода ушла.
+    out["kept_after_remove"] = [len(window.hydro.kept), sorted(
+        k for k in window.view.lake_water.buffers if k.startswith("flood"))]
     window.hydro.flood_dialog.close()
 
 
@@ -17000,7 +17016,8 @@ def hydro_flow():
     dialog = window.hydro.flow_here(*HYDRO_BAKSAN)
     result.setdefault("hydro", {})["flow_dialog"] = dialog.isVisible()
     state["hydro_started"] = time.monotonic()
-    dialog.line.emit(10000.0)
+    dialog.area.side.setValue(20.0)
+    dialog.line.emit()
 
 
 @check(10000)
@@ -17013,13 +17030,14 @@ def hydro_flow_wait():
     out["line_status"] = window.hydro.flow_dialog.status.text()
     # Водосбор точки на линии стока ниже по течению обязан накрыть
     # её начало.
-    line = [p for p in window.myplaces.places
-            if p.key not in state["hydro_before"]][0]
-    points = line.shape.points
+    lines = _group_features()
+    out["line_layers"] = [name for name, _, _, _ in lines]
+    points = lines[0][2]
     state["hydro_lower"] = points[len(points) * 2 // 3]
+    _drop_group()
     dialog = window.hydro.flow_here(*state["hydro_lower"])
     state["hydro_started"] = time.monotonic()
-    dialog.basin.emit(10000.0)
+    dialog.basin.emit()
 
 
 @check(10000)
@@ -17030,38 +17048,36 @@ def hydro_basin_wait():
         return 500
     out = result["hydro"]
     out["basin_status"] = window.hydro.flow_dialog.status.text()
-    added = [p for p in window.myplaces.places
-             if p.key not in state["hydro_before"]]
-    out["added"] = [(p.name, p.shape.kind, len(p.shape.points))
-                    for p in added]
+    added = _group_features()
+    out["added"] = [(name, kind, len(points), {
+        f.name(): feature[f.name()] for f in feature.fields()})
+        for name, kind, points, feature in added]
+    out["on_globe"] = all(
+        node.layerId() in window.shown_layers() for node in
+        QgsProject.instance().layerTreeRoot().findLayers()
+        if node.name() in [name for name, _, _, _ in added])
     from planetx.core.pick import distance
     import numpy as np
 
-    def longest(points, closed):
-        pts = np.radians(np.array(points + points[:1] if closed
-                                  else points))
+    def longest(points):
+        pts = np.radians(np.array(points))
         dy = np.diff(pts[:, 0])
         dx = np.diff(pts[:, 1]) * np.cos(pts[:-1, 0])
         return float(np.max(np.hypot(dx, dy))) * 6371000.0
 
-    out["longest_m"] = [round(longest(p.shape.points,
-                                      p.shape.kind == "polygon"), 1)
-                        for p in added]
-    out["ends"] = [[p.shape.points[0], p.shape.points[-1]] for p in added]
+    out["longest_m"] = [round(longest(points), 1)
+                        for _, _, points, _ in added]
     with open(os.path.join(TEMP, "planetx_basin.json"), "w") as fh:
-        json.dump([list(p.shape.points) for p in added], fh)
-    basin = [p for p in added if p.shape.kind == "polygon"]
+        json.dump([points for _, _, points, _ in added], fh)
+    basin = [points for _, kind, points, _ in added if kind == "polygon"]
     out["start_in_basin"] = bool(basin) and distance(
-        "polygon", basin[0].shape.points, *HYDRO_BAKSAN) == 0.0
+        "polygon", basin[0][:-1], *HYDRO_BAKSAN) == 0.0
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_basin.png"))
-    keys = [p.key for p in added]
-    keys += [n.key for n in window.myplaces.nodes()
-             if n.key not in state["hydro_folders"]
-             and n.key not in keys]
-    window.myplaces.remove_many(keys)
-    out["removed"] = not [p for p in window.myplaces.places
-                          if p.key not in state["hydro_before"]]
+    _drop_group()
+    out["removed"] = not _group_features()
+    out["places_untouched"] = {p.key for p in window.myplaces.places} \
+        == state["hydro_before"]
     window.hydro.flow_dialog.close()
 
 
@@ -17093,7 +17109,8 @@ def hydro_rivers():
     window.hydro._rivers = lambda d, g, z, p: original(
         d, g, z, p, path=state["rivers_path"])
     state["hydro_rivers_original"] = original
-    dialog.rivers.emit(8000.0)
+    dialog.area.side.setValue(16.0)
+    dialog.rivers.emit()
 
 
 @check(10000)
@@ -17106,9 +17123,7 @@ def hydro_rivers_wait():
     window.hydro._rivers = state["hydro_rivers_original"]
     out = result["hydro"]
     out["rivers_status"] = window.hydro.flow_dialog.status.text()
-    group = QgsProject.instance().layerTreeRoot().findGroup(
-        planetx_tr("PlanetX - вода по рельефу"))
-    layers = group.findLayers() if group is not None else []
+    layers = _result_layers()
     out["rivers_layers"] = [n.name() for n in layers]
     if layers:
         layer = layers[0].layer()
@@ -17117,10 +17132,7 @@ def hydro_rivers_wait():
         out["rivers_orders"] = sorted(set(orders))
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_rivers.png"))
-    if group is not None:
-        for node in group.findLayers():
-            QgsProject.instance().removeMapLayer(node.layerId())
-        group.parent().removeChildNode(group)
+    _drop_group()
     window.hydro.flow_dialog.close()
 
 
@@ -17143,26 +17155,81 @@ def hydro_shape_basin_wait():
     if window.hydro.job is not None:
         return 500
     out = result["hydro"]
-    added = [p for p in window.myplaces.places
-             if p.key not in state["hydro_before"]
-             and p.key != state["hydro_line"]]
-    out["shape_basin"] = [(p.name, p.shape.kind, len(p.shape.points),
-                           p.measure[:90]) for p in added]
+    added = _group_features()
+    out["shape_basin"] = [(name, kind, len(points), feature["area_km2"])
+                          for name, kind, points, feature in added]
     out["shape_message"] = window.status.text().split(chr(10))[0][:160]
-    window.myplaces.remove_many([p.key for p in added]
-                                + [state["hydro_line"]])
+    _drop_group()
+    window.myplaces.remove_many([state["hydro_line"]])
+
+
+# Результаты анализа участка - подгруппы расчётов в этой группе
+# (ui/results.py), в каждой - слой контура участка «Участок».
+AREA_GROUP = "PlanetX - анализ участка"
+
+
+def _result_layers(title=AREA_GROUP):
+    """Узлы слоёв результатов группы title во всех подгруппах, без
+    слоёв контура участка."""
+    from qgis.core import QgsProject
+    from planetx.i18n import tr as planetx_tr
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr(title))
+    if group is None:
+        return []
+    return [node for node in group.findLayers()
+            if node.name() != planetx_tr("Участок")]
+
+
+def _subgroups(title=AREA_GROUP):
+    """Подгруппы расчётов группы title: [(название, [названия слоёв])]."""
+    from qgis.core import QgsLayerTreeGroup, QgsProject
+    from planetx.i18n import tr as planetx_tr
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr(title))
+    if group is None:
+        return []
+    return [(node.name(), [n.name() for n in node.findLayers()])
+            for node in group.children()
+            if isinstance(node, QgsLayerTreeGroup)]
+
+
+def _group_features(title=AREA_GROUP):
+    """Объекты слоёв результата группы title без контуров участка:
+    [(название слоя, вид геометрии, точки [(широта, долгота)],
+    объект)]."""
+    from qgis.core import QgsVectorLayer
+    found = []
+    for node in _result_layers(title):
+        layer = node.layer()
+        if not isinstance(layer, QgsVectorLayer):
+            continue
+        kind = ("point", "line", "polygon")[int(layer.geometryType())]
+        for feature in layer.getFeatures():
+            points = [(v.y(), v.x()) for v in feature.geometry().vertices()]
+            found.append((layer.name(), kind, points, feature))
+    return found
+
+
+def _drop_group(title=AREA_GROUP):
+    """Убрать группу результата title с её слоями из проекта."""
+    from qgis.core import QgsProject
+    from planetx.i18n import tr as planetx_tr
+    group = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr(title))
+    if group is None:
+        return
+    for node in group.findLayers():
+        QgsProject.instance().removeMapLayer(node.layerId())
+    group.parent().removeChildNode(group)
 
 
 def _hydro_added(window):
-    return [p for p in window.myplaces.places
-            if p.key not in state["hydro_before"]]
+    return [(kind, points) for _, kind, points, _ in _group_features()]
 
 
 def _hydro_clean(window):
-    keys = [p.key for p in _hydro_added(window)]
-    keys += [n.key for n in window.myplaces.nodes()
-             if n.key not in state["hydro_folders"] and n.key not in keys]
-    window.myplaces.remove_many(keys)
+    _drop_group()
 
 
 @check(500)
@@ -17176,7 +17243,8 @@ def hydro_stops():
     dialog.on_stream.setChecked(True)
     dialog.on_flat.setChecked(False)
     state["hydro_started"] = time.monotonic()
-    dialog.line.emit(10000.0)
+    dialog.area.side.setValue(20.0)
+    dialog.line.emit()
 
 
 @check(500)
@@ -17188,8 +17256,8 @@ def hydro_stops_wait():
     out = result.setdefault("hydro", {})
     dialog = window.hydro.flow_dialog
     out["stream_status"] = dialog.status.text()
-    out["stream_points"] = [len(p.shape.points)
-                            for p in _hydro_added(window)]
+    out["stream_points"] = [len(points)
+                            for _, points in _hydro_added(window)]
     _hydro_clean(window)
     # Остановка на выполаживании 3° на 50 м: дно долины Баксана положе.
     dialog.on_stream.setChecked(False)
@@ -17197,7 +17265,7 @@ def hydro_stops_wait():
     dialog.flat_slope.setValue(3.0)
     out["flat_fields"] = dialog.flat_slope.isEnabled()
     state["hydro_started"] = time.monotonic()
-    dialog.line.emit(10000.0)
+    dialog.line.emit()
 
 
 @check(500)
@@ -17209,7 +17277,7 @@ def hydro_flat_wait():
     out = result["hydro"]
     dialog = window.hydro.flow_dialog
     out["flat_status"] = dialog.status.text()
-    out["flat_points"] = [len(p.shape.points) for p in _hydro_added(window)]
+    out["flat_points"] = [len(points) for _, points in _hydro_added(window)]
     _hydro_clean(window)
     dialog.on_flat.setChecked(False)
     dialog.close()
@@ -17223,9 +17291,9 @@ def hydro_flat_wait():
     window._place_action("flow_lines", key)
     dialog = window.hydro.flow_dialog
     out["shape_dialog"] = [dialog.isVisible(), dialog.merge.isVisible(),
-                           dialog.place.text(), dialog.radius.value()]
+                           dialog.place.text(), dialog.area.side.value()]
     state["hydro_started"] = time.monotonic()
-    dialog.line.emit(dialog.radius.value() * 1000.0)
+    dialog.line.emit()
 
 
 @check(500)
@@ -17237,11 +17305,11 @@ def hydro_shape_lines_wait():
     out = result["hydro"]
     dialog = window.hydro.flow_dialog
     out["lines_status"] = dialog.status.text()
-    added = _hydro_added(window)
+    added = _group_features()
     out["lines"] = len(added)
-    out["lines_text"] = [p.description[:80] for p in added[:3]]
-    out["lines_folder"] = [n.name for n in window.myplaces.nodes()
-                           if n.key not in state["hydro_folders"]][:2]
+    out["lines_fields"] = [[feature["length_km"], feature["end"]]
+                           for _, _, _, feature in added[:3]]
+    out["lines_layer"] = sorted({name for name, _, _, _ in added})
     window.view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_flow_lines.png"))
     _hydro_clean(window)
@@ -17256,7 +17324,8 @@ def hydro_shape_lines_wait():
     window.hydro._outlet_basins = lambda d, g, z, p: original(
         d, g, z, p, path=state["basins_path"])
     state["hydro_basins_original"] = original
-    dialog.basins.emit(8000.0)
+    dialog.area.side.setValue(16.0)
+    dialog.basins.emit()
 
 
 @check(10000)
@@ -17269,9 +17338,7 @@ def hydro_basins_wait():
     window.hydro._outlet_basins = state["hydro_basins_original"]
     out = result["hydro"]
     out["basins_status"] = window.hydro.flow_dialog.status.text()
-    group = QgsProject.instance().layerTreeRoot().findGroup(
-        planetx_tr("PlanetX - вода по рельефу"))
-    layers = group.findLayers() if group is not None else []
+    layers = _result_layers()
     if layers:
         layer = layers[0].layer()
         out["basins_features"] = layer.featureCount()
@@ -17279,11 +17346,72 @@ def hydro_basins_wait():
                                       for f in layer.getFeatures()), 1)
         out["basins_valid"] = all(f.geometry().isGeosValid()
                                   for f in layer.getFeatures())
-    if group is not None:
-        for node in group.findLayers():
-            QgsProject.instance().removeMapLayer(node.layerId())
-        group.parent().removeChildNode(group)
+    _drop_group()
     window.hydro.flow_dialog.close()
+
+
+@check(500)
+def temporary_places():
+    # «Временные метки»: строка под «Моими метками», выделена, новая
+    # метка ложится туда, вопрос при закрытии - сохранить или удалить.
+    from qgis.core import QgsSettings
+    from qgis.PyQt.QtWidgets import QMessageBox
+    from planetx.core.features import Shape
+    from planetx.i18n import tr as planetx_tr
+    window = state["window"]
+    panel = window.panel
+    out = result.setdefault("temporary", {})
+    temp = panel.temp_key
+    out["row"] = [panel.temp_item is not None,
+                  panel.temp_item.text(0) if panel.temp_item else None,
+                  panel.list.indexOfTopLevelItem(panel.temp_item)]
+    panel.select_temporary()
+    out["current_folder_is_temp"] = panel.current_folder() == temp
+    before = {p.key for p in window.myplaces.places}
+    key = window.myplaces.add(Shape("point", [(58.0, 56.2)],
+                                    name="Временная"),
+                              folder=panel.current_folder())
+    out["in_temp"] = window.myplaces.find(key).folder == temp
+    out["temp_rows"] = panel.temp_item.childCount()
+    out["root_rows_without_temp"] = all(
+        panel.places_group.child(i).data(0, panel_role()) != temp
+        for i in range(panel.places_group.childCount()))
+    # Вопрос при закрытии: «Сохранить» переносит в «Мои метки».
+    QgsSettings().setValue("PlanetX/temporary_ask", "ask")
+    original = QMessageBox.exec
+
+    def answer(text):
+        def press(box):
+            for button in box.buttons():
+                if button.text() == text:
+                    button.click()
+        return press
+    try:
+        QMessageBox.exec = answer(planetx_tr("Отмена"))
+        out["cancel_keeps_open"] = window.ask_temporary() is False
+        QMessageBox.exec = answer(planetx_tr("Сохранить"))
+        out["save"] = [window.ask_temporary(),
+                       window.myplaces.find(key).folder is None,
+                       window.temporary_items()]
+        window.myplaces.move(key, temp, 0)
+        QMessageBox.exec = answer(planetx_tr("Не сохранять"))
+        out["discard"] = [window.ask_temporary(),
+                          window.myplaces.find(key) is None]
+    finally:
+        QMessageBox.exec = original
+        QgsSettings().setValue("PlanetX/temporary_ask", "keep")
+    out["places_left"] = {p.key for p in window.myplaces.places} == before
+    # Удалённая папка заводится снова.
+    window.myplaces.remove(temp)
+    out["recreated"] = [panel.temp_key is not None,
+                        panel.temp_key != temp,
+                        panel.temp_item is not None]
+    panel.select_temporary()
+
+
+def panel_role():
+    from planetx.ui.panel import PLACE_ROLE
+    return PLACE_ROLE
 
 
 @check(500)
@@ -17310,7 +17438,8 @@ def relief_open():
     state["hydro_folders"] = {n.key for n in window.myplaces.nodes()}
     dialog = window.relief.relief_here(*HYDRO_BAKSAN)
     state["relief_started"] = time.monotonic()
-    dialog.build.emit(3000.0)
+    dialog.area.side.setValue(6.0)
+    dialog.build.emit()
 
 
 @check(500)
@@ -17339,26 +17468,21 @@ def relief_wait():
     out["legend_mode"] = window.slope_legend.mode
     path = os.path.join(TEMP, "planetx_relief_slope.tif")
     out["export"] = bool(tool.export(path))
-    from qgis.core import QgsProject
-    from planetx.i18n import tr as planetx_tr
-    group = QgsProject.instance().layerTreeRoot().findGroup(
-        planetx_tr("PlanetX - анализ рельефа"))
-    layers = group.findLayers() if group is not None else []
+    layers = _result_layers()
     out["layers"] = [n.name() for n in layers]
     if layers:
         stats = layers[0].layer().dataProvider().bandStatistics(1)
         out["slope_range"] = [round(stats.minimumValue, 1),
                               round(stats.maximumValue, 1)]
-    if group is not None:
-        for node in layers:
-            QgsProject.instance().removeMapLayer(node.layerId())
-        group.parent().removeChildNode(group)
     tool.find_peaks()
     out["peaks_status"] = dialog.status.text()
-    added = _hydro_added(window)
+    added = [row for row in _group_features() if row[1] == "point"]
     out["peaks"] = len(added)
-    out["peak_names"] = [p.name for p in added[:3]]
-    _hydro_clean(window)
+    out["peak_fields"] = [[f["kind"], f["height"], f["drop"]]
+                          for _, _, _, f in added[:3]]
+    # Растры и вершины одного расчёта - одна подгруппа с контуром.
+    out["subgroups"] = _subgroups()
+    _drop_group()
     # Строка «Уклон» снимает квадрат, без неё он не возвращается.
     window.set_extra("slope", True)
     out["after_row"] = [tool.state is None,
@@ -17366,6 +17490,102 @@ def relief_wait():
     window.set_extra("slope", False)
     out["after_off"] = [layer.shown, tool.tiles is None]
     dialog.close()
+
+
+@check(500)
+def area_relief():
+    # Участок многоугольником у Терскола: треугольник щелчками
+    # «Нарисовать», уклон только внутри, OK - подгруппа расчёта
+    # с контуром и двумя растрами, удаление подгруппы убирает всё.
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(HYDRO_BAKSAN[0], HYDRO_BAKSAN[1], 12000.0,
+                                 0.0, 0.0))
+    view.update()
+    view.grabFramebuffer()
+    dialog = window.relief.relief_here(*HYDRO_BAKSAN)
+    area = dialog.area
+    area.side.setValue(4.0)
+    out = result.setdefault("area_relief", {})
+    out["square"] = [len(area.ring), area.closed(),
+                     type(window.handles.tool).__name__]
+    lat, lon = HYDRO_BAKSAN
+    corners = [(lat - 0.012, lon - 0.016), (lat - 0.012, lon + 0.016),
+               (lat + 0.014, lon)]
+    area.start_drawing()
+    for plat, plon in corners:
+        xyz = geodetic_to_ecef(np.array([plat]), np.array([plon]),
+                               np.zeros(1))
+        px, py = view.camera.project(xyz)[0][0]
+        window._clicked(px, py)
+    handles = window.handles.tool
+    xyz = geodetic_to_ecef(np.array([corners[0][0]]),
+                           np.array([corners[0][1]]), np.zeros(1))
+    px, py = view.camera.project(xyz)[0][0]
+    handles.hover(px, py)
+    out["hint"] = handles.hint()
+    handles.grab(px, py)
+    handles.drop()
+    out["closed"] = [area.closed(), len(area.ring)]
+    state["relief_started"] = time.monotonic()
+    dialog.build.emit()
+
+
+@check(500)
+def area_relief_wait():
+    import numpy as np
+    from qgis.core import QgsProject
+    window = state["window"]
+    tool = window.relief
+    if (tool.job is not None or tool.state is None) \
+            and time.monotonic() - state["relief_started"] < 60.0:
+        return 500
+    out = result["area_relief"]
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    if tool.state is not None:
+        slopes = tool.state["result"].slope
+        out["inside_share"] = round(float(np.isfinite(slopes).mean()), 3)
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_area_relief.png"))
+    before = len(QgsProject.instance().mapLayers())
+    dialog.accept()
+    groups = _subgroups()
+    out["subgroups"] = groups
+    out["contour_shown"] = [
+        node.layerId() in window.shown_layers()
+        for node in QgsProject.instance().layerTreeRoot().findLayers()
+        if node.name() in ("Участок", "Site")]
+    added = len(QgsProject.instance().mapLayers()) - before
+    out["added"] = added
+    layers = _result_layers()
+    if layers:
+        data = layers[-1].layer().dataProvider()
+        block = data.block(1, data.extent(), data.xSize(), data.ySize())
+        values = np.array([[block.value(r, c) for c in range(
+            0, data.xSize(), 4)] for r in range(0, data.ySize(), 4)])
+        out["raster_nan_share"] = round(float(np.mean(
+            ~np.isfinite(values) | (values == data.sourceNoDataValue(1)))),
+            3)
+    # Удаление подгруппы убирает её слои из проекта.
+    from planetx.i18n import tr as planetx_tr
+    root = QgsProject.instance().layerTreeRoot().findGroup(
+        planetx_tr(AREA_GROUP))
+    sub = root.children()[0] if root is not None and root.children() \
+        else None
+    if sub is not None:
+        root.removeChildNode(sub)
+    # Слои снятого узла QGIS убирает из проекта в цикле событий.
+    from qgis.PyQt.QtCore import QCoreApplication
+    QCoreApplication.processEvents()
+    out["after_remove"] = len(QgsProject.instance().mapLayers()) - before
+    out["handles_after"] = type(window.handles.tool).__name__
+    out["shapes_after"] = len(dialog.area.shapes())
+    _drop_group()
 
 
 # Изменения местности AlphaEarth у Перми: стройки на правом берегу Камы.
@@ -17444,12 +17664,12 @@ def change_detail():
     window = state["window"]
     tool = window.change_tool
     dialog = tool.dialog
-    dialog.side.setValue(1.0)
+    dialog.area.side.setValue(1.0)
     dialog.level.setCurrentIndex(dialog.level.findData(3))
     out = result["change"]
     out["detail_volume"] = dialog.volume.text()
     dialog.detail.emit()
-    out["detail_shapes"] = len(window.change_shapes)
+    out["detail_shapes"] = len(dialog.area.shapes())
     nav = window.view.navigator
     nav.stop()
     nav.set_pose(Pose(CHANGE_POINT[0], CHANGE_POINT[1], 2500.0, 0.0, 0.0))
@@ -17488,11 +17708,7 @@ def change_export_wait():
         return 500
     out = result["change"]
     out["export_status"] = tool.dialog.status.text()
-    from qgis.core import QgsProject
-    from planetx.i18n import tr as planetx_tr
-    group = QgsProject.instance().layerTreeRoot().findGroup(
-        planetx_tr("PlanetX - изменения местности"))
-    layers = group.findLayers() if group is not None else []
+    layers = _result_layers()
     out["layers"] = [n.name() for n in layers]
     if layers:
         raster = layers[0].layer()
@@ -17500,10 +17716,6 @@ def change_export_wait():
         stats = raster.dataProvider().bandStatistics(1)
         out["range"] = [round(stats.minimumValue, 3),
                         round(stats.maximumValue, 3)]
-    if group is not None:
-        for node in layers:
-            QgsProject.instance().removeMapLayer(node.layerId())
-        group.parent().removeChildNode(group)
     tool.find_spots()
 
 
@@ -17515,15 +17727,15 @@ def change_spots_wait():
         return 500
     out = result["change"]
     out["spots_status"] = tool.dialog.status.text()
-    added = [p for p in window.myplaces.places
-             if p.key not in state["change_before"]]
-    out["spots"] = [p.name for p in added[:3]]
-    _hydro_clean(window)
+    added = [row for row in _group_features() if row[1] == "point"]
+    out["spots"] = [[f["n"], f["change"]] for _, _, _, f in added[:3]]
+    out["subgroups"] = _subgroups()
+    _drop_group()
     # Другая карта слоя «emag» снимает изменения.
     window.set_extra("geology", True)
     out["taken"] = [window.extras.get("aef_change"),
                     type(window.view.gibs["emag"].loader).__name__,
-                    window.change_shapes == []]
+                    tool.tiles is None]
     window.set_extra("geology", False)
     out["min_level"] = window.view.gibs["emag"].min_level
     tool.dialog.close()
@@ -17554,7 +17766,7 @@ def class_open():
     window.set_extra("aef_change", True)
     tool = window.class_tool
     dialog = tool.open_here(*CHANGE_POINT)
-    dialog.side.setValue(3.0)
+    dialog.area.side.setValue(3.0)
     dialog.level.setCurrentIndex(dialog.level.findData(3))
     dialog.year.setCurrentIndex(dialog.year.findData(2025))
     dialog.rows[0].pick.setChecked(True)
@@ -17608,29 +17820,244 @@ def class_wait():
                                                     "planetx_classify.png"))
     path = os.path.join(TEMP, "planetx_classify.tif")
     out["exported"] = bool(tool.export(path))
-    from qgis.core import QgsProject
-    from planetx.i18n import tr as planetx_tr
-    group = QgsProject.instance().layerTreeRoot().findGroup(
-        planetx_tr("PlanetX - классификация"))
-    layers = group.findLayers() if group is not None else []
+    layers = _result_layers()
     out["layers"] = [n.name() for n in layers]
+    # Контрольные точки - слоем рядом с растром, цвета по классу.
+    points = _group_features()
+    out["points"] = [len(points), sorted({f["class"]
+                                          for _, _, _, f in points})]
+    out["subgroups"] = _subgroups()
     if layers:
         raster = layers[0].layer()
         out["crs"] = raster.crs().authid()
         out["renderer"] = raster.renderer().type()
         stats = raster.dataProvider().bandStatistics(1)
         out["range"] = [stats.minimumValue, stats.maximumValue]
-        for node in layers:
-            QgsProject.instance().removeMapLayer(node.layerId())
-        group.parent().removeChildNode(group)
+    _drop_group()
     # Повтор с другой непрозрачностью - векторы из памяти.
     tool.dialog.alpha.setValue(30)
     out["reloaded"] = tool.tiles is not None
-    tool.dialog.clear.emit()
+    tool.dialog.reject()
     out["cleared"] = [tool.tiles is None, layer.shown]
     tool.dialog.close()
     out["shapes_after"] = len(window.class_shapes)
     window.set_extra("aef_change", False)
+
+
+@check(2000)
+def busy_stop():
+    # Долгие расчёты - на значке загрузки, меню значка их останавливает.
+    window = state["window"]
+    spinner = window.spinner
+    out = result.setdefault("busy_stop", {})
+    window.viewshed_here(43.27, 42.48)
+    window._build_viewshed(2.0, 0.0, 30000.0)
+    out["viewshed"] = [sorted(spinner.jobs), spinner.toolTip()]
+    spinner.jobs["viewshed"][1]()
+    out["viewshed_stopped"] = [window.viewshed_job is None,
+                               sorted(spinner.jobs),
+                               window.viewshed_dialog.status.text()]
+    window.viewshed_dialog.reject()
+    tool = window.class_tool
+    dialog = tool.open_here(58.03, 56.39)
+    dialog.level.setCurrentIndex(dialog.level.findData(0))
+    for n, row in enumerate(dialog.rows[:2]):
+        row.set_points([(58.03 + 0.003 * n, 56.39 + 0.002 * k)
+                        for k in range(3)])
+    dialog.build.emit()
+    state["busy_class"] = time.monotonic()
+
+
+@check(1000)
+def busy_stop_wait():
+    window = state["window"]
+    spinner = window.spinner
+    tool = window.class_tool
+    out = result["busy_stop"]
+    out["class"] = [sorted(spinner.jobs), spinner.isVisible(),
+                    tool.dialog.status.text()]
+    cancel = spinner.jobs.get("aef:ClassTool", (None, None))[1]
+    if cancel is not None:
+        cancel()
+    out["class_stopped"] = [tool.job is None, sorted(spinner.jobs),
+                            tool.dialog.status.text()]
+    tool.dialog.reject()
+
+
+@check(1000)
+def results_ok():
+    # Видимость и инсоляция: OK - растр в проект QGIS в своей группе,
+    # отмечен на глобусе, предпросмотр снят, «Отмена» - в проекте пусто.
+    import numpy as np
+    from qgis.core import QgsProject
+    from planetx.core import insolation, viewshed
+    from planetx.i18n import tr as planetx_tr
+    window = state["window"]
+    out = result.setdefault("results_ok", {})
+    lat, lon = 58.0, 56.3
+    visible = np.zeros((360, 50), dtype=bool)
+    visible[:180] = True
+
+    def group_layers(title):
+        group = QgsProject.instance().layerTreeRoot().findGroup(
+            planetx_tr(title))
+        return group, _result_layers(title)
+
+    for name, title in (("viewshed", AREA_GROUP),
+                        ("insolation", AREA_GROUP)):
+        rows = {}
+        for code in ("cancel", "ok"):
+            if name == "viewshed":
+                dialog = window.viewshed_here(lat, lon) or \
+                    window.viewshed_dialog
+                window._show_viewshed(viewshed.Viewshed(
+                    lat, lon, 5000.0, 100.0, visible))
+                dialog.ok.setEnabled(True)
+            else:
+                window.insolation_here(lat, lon)
+                dialog = window.insolation_dialog
+                hours = np.full((41, 41), 5.0)
+                window._show_insolation(insolation.Insolation(
+                    lat, lon, 2000.0, 100.0, hours, 1, 6378137.0))
+            gibs = window.view.gibs[name]
+            if code == "ok":
+                dialog.accept()
+            else:
+                dialog.reject()
+            group, layers = group_layers(title)
+            rows[code] = [len(layers), gibs.shown,
+                          bool(layers) and layers[0].layerId()
+                          in window.shown_layers()]
+            if layers:
+                rows["file"] = os.path.basename(
+                    layers[0].layer().source())
+                rows["crs"] = layers[0].layer().crs().authid()
+                rows["subgroups"] = _subgroups()
+        out[name] = rows
+        _drop_group()
+
+
+@check(1000)
+def ruler_close():
+    # Линейка, многоугольник: щелчок по первой точке - подсказка
+    # «Замкнуть фигуру» и конец рисования, как у «Новой метки».
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(58.0, 56.3, 6000.0, 0.0, 0.0))
+    view.update()
+    view.grabFramebuffer()
+    window._open_ruler()
+    ruler = window.ruler
+    ruler.set_mode("polygon")
+    corners = [(57.99, 56.29), (57.99, 56.31), (58.01, 56.31)]
+    for lat, lon in corners:
+        xyz = geodetic_to_ecef(np.array([lat]), np.array([lon]),
+                               np.zeros(1))
+        px, py = view.camera.project(xyz)[0][0]
+        window._clicked(px, py)
+    out = result.setdefault("ruler_close", {})
+    out["points"] = len(ruler.points)
+    tool = window.handles.tool
+    out["tool"] = type(tool).__name__
+    xyz = geodetic_to_ecef(np.array([corners[0][0]]),
+                           np.array([corners[0][1]]), np.zeros(1))
+    px, py = view.camera.project(xyz)[0][0]
+    tool.hover(px, py)
+    out["hint"] = tool.hint()
+    out["grab"] = view.vertex_tool.grab(px, py)
+    view.vertex_tool.drop()
+    out["finished"] = [ruler.finished, len(ruler.points)]
+    window._clicked(px + 60, py + 60)
+    out["after_click"] = len(ruler.points)
+    window.ruler_dialog.close()
+    out["handles_after"] = type(window.handles.tool).__name__
+
+
+@check(1000)
+def class_area():
+    # Участок многоугольником: квадрат при открытии с ручками, затем
+    # «Нарисовать» - три щелчка, подсказка «Замкнуть фигуру» у первой
+    # вершины, щелчок по ней замыкает, классы только внутри.
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    window = state["window"]
+    view = window.view
+    tool = window.class_tool
+    dialog = tool.open_here(*CHANGE_POINT)
+    area = dialog.area
+    area.side.setValue(3.0)
+    dialog.level.setCurrentIndex(dialog.level.findData(3))
+    out = result.setdefault("class_area", {})
+    out["square"] = [len(area.ring), area.closed(),
+                     type(window.handles.tool).__name__,
+                     view.vertex_tool is window.handles.tool]
+    corners = list(area.ring)
+    area.start_drawing()
+    out["drawing"] = [area.drawing, area.taking(), dialog.volume.text()]
+    view.update()
+    view.grabFramebuffer()
+    for lat, lon in corners[:3]:
+        xyz = geodetic_to_ecef(np.array([lat]), np.array([lon]), np.zeros(1))
+        px, py = view.camera.project(xyz)[0][0]
+        window._clicked(px, py)
+    out["vertices"] = len(area.ring)
+    handles = window.handles.tool
+    xyz = geodetic_to_ecef(np.array([corners[0][0]]),
+                           np.array([corners[0][1]]), np.zeros(1))
+    px, py = view.camera.project(xyz)[0][0]
+    handles.hover(px, py)
+    out["hint"] = handles.hint()
+    out["grab"] = handles.grab(px, py)
+    handles.drop()
+    shapes = area.shapes()
+    out["closed"] = [area.closed(), area.drawing,
+                     shapes[0].kind if shapes else None]
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+
+
+@check(1000)
+def class_area_wait():
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 300.0:
+        return 1000
+    out = result["class_area"]
+    out["status"] = tool.dialog.status.text()
+    res = tool.result
+    if res is not None:
+        classes = res["classes"]
+        out["outside_share"] = round(float((classes < 0).mean()), 3)
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_class_area.png"))
+    # Непрозрачность - доля прозрачности слоя вида сразу, без пересборки.
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    layer = window.view.gibs["viewshed"]
+    loader = layer.loader
+    tool.dialog.alpha.setValue(30)
+    out["fade"] = [round(layer.fade, 2), layer.loader is loader]
+    # Щелчок по точке класса убирает её, подсказка «Убрать точку».
+    view = window.view
+    row = tool.dialog.rows[1]
+    before = len(row.points)
+    lat, lon = row.points[0]
+    xyz = geodetic_to_ecef(np.array([lat]), np.array([lon]),
+                           view.label_heights(np.array([lat]),
+                                              np.array([lon])))
+    px, py = view.camera.project(xyz)[0][0]
+    window.handles.tool.hover(px, py)
+    out["point_hint"] = window.handles.tool.hint()
+    window._clicked(px, py)
+    out["removed"] = [before, len(row.points)]
+    tool.dialog.close()
+    out["fade_after"] = layer.fade
+    out["handles_after"] = type(window.handles.tool).__name__
 
 
 @check(8000)
@@ -17878,7 +18305,7 @@ def insolation_on():
                             and dialog.isVisible()}
     dialog.first.setDate(QDate(2026, 12, 21))
     dialog.last.setDate(QDate(2026, 12, 21))
-    dialog.radius.setValue(5.0)
+    dialog.area.side.setValue(10.0)
     _gap_watch("ins")
     _time_calls("ins", [(window, "_insolation_poll"),
                         (window, "_show_insolation"),
@@ -17902,8 +18329,7 @@ def insolation_on():
     out = result["insolation"]
     out["start"] = day_start(dialog.first.date())
     dialog.build.emit(float(out["start"]),
-                      float(day_start(dialog.last.date())),
-                      dialog.radius.value() * 1000.0)
+                      float(day_start(dialog.last.date())))
 
 
 @check(10000)
@@ -17954,7 +18380,7 @@ def insolation_check():
     out["fields"] = {name: [w.height(), w.sizeHint().height()]
                      for name, w in (("first", dialog.first),
                                      ("last", dialog.last),
-                                     ("radius", dialog.radius))}
+                                     ("side", dialog.area.side))}
     out["fields_clipped"] = any(h < hint for h, hint
                                 in out["fields"].values())
     _swing_start("ins_on")
@@ -17998,7 +18424,7 @@ def insolation_turn():
     window = state["window"]
     out = result["insolation"]
     out["swing_with_layer"] = _swing_report("ins_on")
-    window.insolation_dialog.clear.emit()
+    window.insolation_dialog.reject()
     layer = window.view.gibs["insolation"]
     out["cleared"] = not layer.shown and window.insolation_tiles is None \
         and not window.insolation_legend.isVisible()

@@ -73,6 +73,20 @@ class TestAnalyse(unittest.TestCase):
         self.assertGreater(int(aspect[0, 0, 3]), 0)
         self.assertEqual(int(aspect[0, 1, 3]), 0)
 
+    def test_aspect_outside_area_is_empty(self):
+        # Вне участка многоугольником высоты NaN: экспозиция там не
+        # «ровное место» цветом, а прозрачна, как уклон.
+        z = east_plane(self.grid, 0.2)
+        z[:, :self.grid.cols // 2] = np.nan
+        result = relief.analyse(z, self.grid, R, mode="aspect")
+        lat, lon_w = hydro.latlon(self.grid, 5, 3, R)
+        _, lon_e = hydro.latlon(self.grid, 5, self.grid.cols - 4, R)
+        lats = np.array([[float(lat), float(lat)]])
+        lons = np.array([[float(lon_e), float(lon_w)]])
+        rgba = relief.tile_rgba(result, lats, lons, R)
+        self.assertGreater(int(rgba[0, 0, 3]), 0)
+        self.assertEqual(int(rgba[0, 1, 3]), 0)
+
     def test_extremes_of_hill(self):
         rows, cols = np.mgrid[0:self.grid.rows, 0:self.grid.cols]
         z = 100.0 + 60.0 * np.exp(-((rows - 50) ** 2 + (cols - 40) ** 2)

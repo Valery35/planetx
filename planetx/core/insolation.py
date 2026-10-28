@@ -29,10 +29,12 @@ import numpy as np
 
 try:  # внутри плагина QGIS
     from . import ellipsoid
+    from .subsurface import inside as in_ring
     from .sun import direction
     from .viewshed import distance_bearing
 except ImportError:  # headless-тесты
     import ellipsoid
+    from subsurface import inside as in_ring
     from sun import direction
     from viewshed import distance_bearing
 
@@ -155,8 +157,11 @@ class Insolation:
     """Часы прямого света в сутки на внутренней сетке: hours (n, n),
     строки с юга на север, центр сетки - точка (lat, lon)."""
 
-    def __init__(self, lat, lon, radius_m, cell, hours, days, radius):
+    def __init__(self, lat, lon, radius_m, cell, hours, days, radius,
+                 ring=None):
         self.lat = lat
+        # Участок многоугольником (широта, долгота): вне него часов нет.
+        self.ring = list(ring) if ring else None
         self.lon = lon
         self.radius_m = radius_m
         self.cell = cell
@@ -182,6 +187,8 @@ class Insolation:
         dist, _ = distance_bearing(self.lat, self.lon, lats, lons, radius)
         inside = (dist <= self.radius_m) & (row >= 0) & (row < n) \
             & (col >= 0) & (col < n)
+        if self.ring:
+            inside &= in_ring(lats, lons, self.ring)
         values = self.hours[np.clip(row, 0, n - 1), np.clip(col, 0, n - 1)]
         return np.where(inside, values, np.nan), inside
 
@@ -198,14 +205,14 @@ def grid_points(lat, lon, radius_m, radius=None):
     return np.meshgrid(lats, lons, indexing="ij")
 
 
-def parts(lat, lon, radius_m, heights, start, end, radius=None):
+def parts(lat, lon, radius_m, heights, start, end, radius=None, ring=None):
     """Расчёт инсоляции по частям. Генератор: после каждой части в 1-2
     мс отдаёт долю сделанного 0-1, результат Insolation - значение
     StopIteration. Так окно глобуса считает в главном потоке, не дольше
     нескольких миллисекунд за проход цикла событий. Рабочий поток
     отнимал у главного GIL, и вид переставал отвечать мыши.
 
-    Величины - как у compute."""
+    Величины - как у compute, ring - участок многоугольником."""
     radius = radius or ellipsoid.A
     cell, margin, inner = layout(radius_m)
     if callable(heights):
@@ -240,7 +247,7 @@ def parts(lat, lon, radius_m, heights, start, end, radius=None):
             hours += lit * weight
             yield done / total
     days = int(round((end - start) / DAY)) + 1
-    return Insolation(lat, lon, radius_m, cell, hours, days, radius)
+    return Insolation(lat, lon, radius_m, cell, hours, days, radius, ring)
 
 
 def compute(lat, lon, radius_m, heights, start, end, radius=None):
@@ -254,6 +261,25 @@ def compute(lat, lon, radius_m, heights, start, end, radius=None):
             next(work)
         except StopIteration as stop:
             return stop.value
+
+
+def raster(result, radius=None):
+    """Часы сеткой широт и долгот для растра: (север, запад, шаг
+    широты, шаг долготы, часы - строки с севера, вне круга NaN)."""
+    radius = radius or ellipsoid.A
+    n = result.hours.shape[0]
+    north = result.lat + (n - 1) / 2.0 * result.dlat
+    west = result.lon - (n - 1) / 2.0 * result.dlon
+    lats = north - np.arange(n) * result.dlat
+    lons = west + np.arange(n) * result.dlon
+    grid_lat, grid_lon = np.meshgrid(lats, lons, indexing="ij")
+    dist, _ = distance_bearing(result.lat, result.lon, grid_lat, grid_lon,
+                               radius)
+    hours = result.hours[::-1].astype(np.float32)
+    hours[dist > result.radius_m] = np.nan
+    if result.ring:
+        hours[~in_ring(grid_lat, grid_lon, result.ring)] = np.nan
+    return north, west, result.dlat, result.dlon, hours
 
 
 def tile_rgba(result, lats, lons, radius):

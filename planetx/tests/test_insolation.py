@@ -117,5 +117,36 @@ class TestInsolation(unittest.TestCase):
         self.assertLess(time.perf_counter() - started, 20.0)
 
 
+class TestRaster(unittest.TestCase):
+    """Инсоляция растром: строки с севера, вне круга NaN."""
+
+    def test_rows_from_north(self):
+        n = 21
+        hours = np.tile(np.arange(n, dtype=np.float64)[:, None], (1, n))
+        result = ins.Insolation(LAT, LON, 1000.0, 100.0, hours, 1, el.A)
+        north, west, dlat, dlon, data = ins.raster(result, el.A)
+        # Первая строка растра - северная строка сетки (с юга - n - 1).
+        self.assertEqual(data[n // 2, n // 2], n // 2)
+        self.assertEqual(data[n // 2 - 3, n // 2], n // 2 + 3)
+        self.assertTrue(np.isnan(data[0, 0]))
+        self.assertAlmostEqual(north, LAT + (n - 1) / 2.0 * dlat)
+
+    def test_ring_empties_outside_area(self):
+        # Участок многоугольником - треугольник к востоку от точки: вне
+        # него ни часов в растре, ни цвета в тайле.
+        n = 21
+        ring = [(LAT - 0.004, LON - 0.001), (LAT + 0.004, LON - 0.001),
+                (LAT, LON + 0.008)]
+        result = ins.Insolation(LAT, LON, 1000.0, 100.0,
+                                np.full((n, n), 5.0), 1, el.A, ring)
+        _, _, _, _, data = ins.raster(result, el.A)
+        self.assertEqual(data[n // 2, n // 2], 5.0)
+        self.assertTrue(np.isnan(data[n // 2, n // 2 - 3]))
+        rgba = ins.tile_rgba(result, np.array([LAT, LAT]),
+                             np.array([LON + 0.002, LON - 0.004]), el.A)
+        self.assertGreater(int(rgba[0, 3]), 0)
+        self.assertEqual(int(rgba[1, 3]), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

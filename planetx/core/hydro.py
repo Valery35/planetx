@@ -132,6 +132,23 @@ Flood.__doc__ = """Затопление уровнем: mask - затоплен�
 edge - вода дошла до края сетки и может идти дальше."""
 
 
+def border(empty):
+    """Узлы края участка: край сетки и узлы рядом с пустыми высотами
+    empty. Участок многоугольником - сетка его рамки, высоты вне
+    многоугольника пустые (ui/hydro.py)."""
+    empty = np.asarray(empty, dtype=bool)
+    rows, cols = empty.shape
+    edge = np.zeros(empty.shape, dtype=bool)
+    edge[0] = edge[-1] = True
+    edge[:, 0] = edge[:, -1] = True
+    pad = np.pad(empty, 1, constant_values=False)
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if dr or dc:
+                edge |= pad[1 + dr:1 + dr + rows, 1 + dc:1 + dc + cols]
+    return edge
+
+
 def flood(z, levels, level, cell):
     """Затопление водой уровня level по уровню перелива levels."""
     z = np.asarray(z, dtype=np.float64)
@@ -140,8 +157,7 @@ def flood(z, levels, level, cell):
         return Flood(mask, 0.0, 0.0, 0.0, False)
     depth = float(level) - z[mask]
     area = float(cell) ** 2
-    edge = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any()
-                or mask[:, -1].any())
+    edge = bool((mask & border(~np.isfinite(z))).any())
     return Flood(mask, area * int(mask.sum()), area * float(depth.sum()),
                  float(depth.max()), edge)
 
@@ -197,6 +213,7 @@ def flow_lines(z, seeds, cell, area=None, flat=None, merge=False):
     узлы, через которые прошла линия, своих линий не дают."""
     filled, downstream, empty = drainage(z)
     shape = filled.shape
+    near = border(empty)
     if merge:
         seeds = np.asarray(list(seeds), dtype=np.int64)
         heights = np.nan_to_num(filled.ravel()[seeds], nan=-np.inf)
@@ -227,9 +244,9 @@ def flow_lines(z, seeds, cell, area=None, flat=None, merge=False):
             end = "pit"
         rows, cols = np.divmod(np.asarray(path, dtype=np.int64), shape[1])
         # По краю сетки D8 ведёт воду вдоль рамки до угла: линия
-        # кончается на первом узле края, дальше рельефа нет.
-        edge = np.flatnonzero((rows == 0) | (rows == shape[0] - 1)
-                              | (cols == 0) | (cols == shape[1] - 1))
+        # кончается на первом узле края, дальше рельефа нет. Край -
+        # и граница участка многоугольником (border).
+        edge = np.flatnonzero(near[rows, cols])
         if edge.size and (int(edge[0]) + 1 < len(path) or end == "pit"):
             path = path[:int(edge[0]) + 1]
             end = "edge"
@@ -313,8 +330,7 @@ def watershed(z, seed, cell, snap=None):
     _, path = topo_gauge.trace_main_stream(downstream, acc, shape, start,
                                           float(cell))
     stream = np.divmod(np.asarray(path, dtype=np.int64), shape[1])
-    edge = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any()
-                or mask[:, -1].any())
+    edge = bool((mask & border(empty)).any())
     return Basin(mask, (r, c), report, stream, edge)
 
 
@@ -367,8 +383,7 @@ def shape_catchment(z, seeds, cell, length=None):
                                      float(cell), trace_len=length,
                                      nodata_mask=empty)
     mask = topo_gauge.catchment_mask(downstream, shape, seeds) & ~empty
-    edge = bool(mask[0].any() or mask[-1].any() or mask[:, 0].any()
-                or mask[:, -1].any())
+    edge = bool((mask & border(empty)).any())
     return Catchment(mask, report, edge)
 
 

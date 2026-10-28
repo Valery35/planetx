@@ -99,5 +99,26 @@ class TestViewshed(unittest.TestCase):
         self.assertLess(time.perf_counter() - started, 5.0)
 
 
+class TestRaster(unittest.TestCase):
+    """Видимость растром для проекта QGIS: восточная половина видна,
+    западная скрыта, вне круга нет данных."""
+
+    def test_halves_and_outside(self):
+        rays, steps = 360, 50
+        visible = np.zeros((rays, steps), dtype=bool)
+        visible[:180] = True  # азимуты 0-179° - восток
+        result = vs.Viewshed(58.0, 56.0, 5000.0, 100.0, visible)
+        north, west, dlat, dlon, data = vs.raster(result, el.A)
+        rows, cols = data.shape
+        self.assertEqual(data[rows // 2, cols // 2 + cols // 4], 1)
+        self.assertEqual(data[rows // 2, cols // 2 - cols // 4], 0)
+        self.assertEqual(data[0, 0], 255)
+        self.assertGreater(north, 58.0)
+        self.assertLess(west, 56.0)
+        # Шаг растра в метрах - шаг расчёта.
+        self.assertAlmostEqual(math.radians(dlat) * el.A, 100.0, delta=1.0)
+
+
 if __name__ == "__main__":
     unittest.main()
+

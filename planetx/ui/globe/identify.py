@@ -85,11 +85,19 @@ class IdentifyMixin:
             if found is not None:
                 tool.add(found[0], found[1])
             return
+        for area in self.areas:
+            if area.taking():
+                # Участок окна анализа рисуется - щелчок ставит вершину.
+                found = self._ground(px, py)
+                if found is not None:
+                    area.add(found[0], found[1])
+                return
         if self.class_tool.taking():
-            # Окно «Классификация» открыто - щелчок ставит точку класса.
+            # Окно «Классификация» открыто - щелчок ставит вершину участка
+            # или точку класса, по точке класса - убирает её.
             found = self._ground(px, py)
             if found is not None:
-                self.class_tool.add_point(found[0], found[1])
+                self.class_tool.click(px, py, found[0], found[1])
             return
         if not self.identifying:
             place = self._place_under(px, py)

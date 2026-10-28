@@ -196,6 +196,46 @@ class TestPlacement(unittest.TestCase):
         self.assertEqual(aef.detail_megabytes(parts, 0),
                          2 * len(parts) * aef.BLOCK_MB[0])
 
+    def test_ring_mask_and_box(self):
+        lat, lon = self.points(NORTH - aef.CELL / 2)
+        ring = aef.square_ring(lat, lon, 1000.0)
+        box, side = aef.ring_box(ring)
+        self.assertAlmostEqual(side, 1000.0, delta=20.0)
+        # Треугольник - половина квадрата под диагональю юго-запад -
+        # северо-восток.
+        triangle = [ring[0], ring[1], ring[2]]
+        xs, ys = self.index.project(np.array([box[0], box[2]]),
+                                    np.array([box[3], box[1]]))
+        step = 10.0
+        x0, y0 = float(xs[0]), float(ys[0])
+        shape = (int(round((ys[0] - ys[1]) / step)),
+                 int(round((xs[1] - xs[0]) / step)))
+        whole = aef.ring_mask(self.index, x0, y0, step, shape, ring)
+        half = aef.ring_mask(self.index, x0, y0, step, shape, triangle)
+        self.assertGreater(whole.mean(), 0.95)
+        self.assertAlmostEqual(half.mean(), 0.5, delta=0.05)
+        # Юго-восточный угол сетки внутри, северо-западный - нет.
+        self.assertTrue(half[-2, -2])
+        self.assertFalse(half[1, 1])
+
+    def test_auto_level_fits_blocks_and_cells(self):
+        # Середина квадрата файла - угол блоков всех уровней мельче 80 м.
+        lat, lon = self.points(NORTH - aef.CELL / 2)
+        # Малый участок у угла блоков - всё равно 10 м, 80 м дали бы
+        # 25 клеток поперёк.
+        small = aef.square(lat, lon, 2000.0)
+        self.assertEqual(aef.auto_level(self.index, small, 2000.0), 0)
+        # 10 км с пикселем 10 м - миллион клеток, берётся крупнее.
+        side = 10000.0
+        box = aef.square(lat, lon, side)
+        level = aef.auto_level(self.index, box, side)
+        self.assertGreater(level, 0)
+        pixel = dict(aef.DETAIL_LEVELS)[level]
+        self.assertLessEqual((side / pixel) ** 2, aef.AUTO_CELLS)
+        # У угла блоков меньше всего грузит 80 м - один блок.
+        self.assertEqual(level, 3)
+        self.assertEqual(len(aef.detail_parts(self.index, box, level)), 1)
+
 
 class TestClassify(unittest.TestCase):
     """Классы участка по контрольным точкам: точки на севере и на юге

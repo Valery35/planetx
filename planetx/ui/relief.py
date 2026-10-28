@@ -1,41 +1,39 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Анализ рельефа квадрата у точки: окно «Уклон и экспозиция».
+"""Анализ рельефа участка: окно «Уклон и экспозиция».
 
-Расчёт - core/relief.py по высотам квадрата, их даёт общая часть
-GridHeights из ui/hydro.py - с моделью 30 м и своим рельефом. Показ на
-глобусе - слой вида «slope», тот же, что у строк «Уклон»
-и «Экспозиция»: свой квадрат занимает слой, строки при этом гаснут,
-включённая строка снимает квадрат. Растры - GeoTIFF в EPSG:3857
-в группу «PlanetX - анализ рельефа», вершины и ямы - папкой
-в «Мои метки».
+Участок - многоугольник (ui/area.py). Расчёт - core/relief.py по высотам
+рамки участка, их даёт общая часть GridHeights из ui/hydro.py - с моделью
+30 м и своим рельефом, вне многоугольника высот нет. Показ на глобусе -
+слой вида «slope», тот же, что у строк «Уклон» и «Экспозиция»: свой
+участок занимает слой, строки при этом гаснут, включённая строка снимает
+участок. Растры - GeoTIFF в EPSG:3857, вершины и ямы - точечный слой
+GeoPackage, всё - в подгруппу расчёта (ui/results.py).
 """
 import os
 
 import numpy as np
-from qgis.core import QgsProject
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
-                                 QFileDialog, QFormLayout, QLabel,
-                                 QPushButton, QVBoxLayout)
+                                 QFormLayout, QLabel, QPushButton,
+                                 QVBoxLayout)
 
 from ..core import ellipsoid, hydro, relief, slope
-from ..core.kml import KFolder, KPlace
 from ..i18n import tr
 from ..qt_compat import enum
 from .export import add_raster
+from .area import Area
 from .hydro import GridHeights, _spin, number
+from .results import (Session, accepted, add_vector, keep_buttons,
+                      result_path, show_layer, write_vector)
 from .viewshed import ResultTiles, display_level, fit_status
 
 LAYER = "slope"  # слой вида, общий со строками «Уклон» и «Экспозиция»
 PEAK_COLOR = (200, 40, 40, 255)
 PIT_COLOR = (40, 90, 220, 255)
-
-
-def group_name():
-    """Группа слоёв проекта анализа рельефа."""
-    return tr("PlanetX - анализ рельефа")
+SIDE = 4.0  # км, сторона участка по умолчанию
+MOST = 100.0  # км, наибольший участок
 
 
 def side_names():
@@ -76,28 +74,27 @@ def summary_text(rep):
 
 
 class ReliefDialog(QDialog):
-    """Окно «Уклон и экспозиция». Сигналы build - полусторона квадрата
-    в метрах, mode - "slope" или "aspect", export, peaks, clear."""
+    """Окно «Уклон и экспозиция». Сигналы build, mode - "slope" или
+    "aspect", peaks. OK записывает растры в проект QGIS, «Отмена»
+    убирает участок (ui/results.py)."""
 
-    build = pyqtSignal(float)
+    build = pyqtSignal()
     mode = pyqtSignal(str)
-    export = pyqtSignal()
     peaks = pyqtSignal()
-    clear = pyqtSignal()
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, window):
+        super().__init__(window)
         self.setWindowTitle(tr("Уклон и экспозиция"))
+        self.point = None
         self.place = QLabel(self)
-        self.radius = _spin(self, 0.2, 50.0, 2.0, tr(" км"))
-        self.radius.setToolTip(tr(
-            "Половина стороны квадрата расчёта. Больше - шаг сетки "
-            "крупнее, он около шестисотой доли стороны."))
+        self.status = QLabel(self)
+        self.status.setWordWrap(True)
+        self.area = Area(window, self, SIDE, MOST, "PlanetX/relief/side")
         self.shown = QComboBox(self)
         self.shown.addItem(tr("Уклон"), "slope")
         self.shown.addItem(tr("Экспозиция"), "aspect")
         self.shown.setToolTip(tr(
-            "Что показывает квадрат на глобусе - крутизну склона или "
+            "Что показывает участок на глобусе - крутизну склона или "
             "сторону света, куда он обращён. Строки «Уклон» и "
             "«Экспозиция» раздела «Слои» на это время гаснут."))
         self.shown.currentIndexChanged.connect(
@@ -113,11 +110,9 @@ class ReliefDialog(QDialog):
             "Наименьший перепад вершины над низшей точкой вокруг неё "
             "или ямы под высшей. Меньше - больше мелких бугров и "
             "западин."))
-        self.status = QLabel(self)
-        self.status.setWordWrap(True)
         form = QFormLayout()
         form.addRow(tr("Точка"), self.place)
-        form.addRow(tr("Радиус"), self.radius)
+        form.addRow(tr("Участок"), self.area.widget)
         form.addRow(tr("Показывать"), self.shown)
         form.addRow(tr("Радиус вершины"), self.peak_radius)
         form.addRow(tr("Перепад от"), self.peak_drop)
@@ -125,28 +120,19 @@ class ReliefDialog(QDialog):
         run = QPushButton(tr("Построить"), self)
         run.setDefault(True)
         run.setToolTip(tr(
-            "Уклон и экспозиция квадрата по высотам, ядро 3 × 3 - "
+            "Уклон и экспозиция участка по высотам, ядро 3 × 3 - "
             "раскраска на глобусе и сводка по классам уклона и "
             "сторонам света."))
-        run.clicked.connect(
-            lambda: self.build.emit(self.radius.value() * 1000.0))
-        self.to_project = QPushButton(tr("В проект QGIS…"), self)
-        self.to_project.setToolTip(tr(
-            "Растры уклона и экспозиции в градусах в проект QGIS."))
-        self.to_project.clicked.connect(self.export)
+        run.clicked.connect(self.build)
         self.find_button = QPushButton(tr("Вершины и ямы"), self)
         self.find_button.setToolTip(tr(
-            "Вершины и замкнутые понижения квадрата - точки в «Моих "
-            "метках» с отметкой и перепадом."))
+            "Вершины и замкнутые понижения участка - слой точек в проект "
+            "QGIS с отметкой и перепадом."))
         self.find_button.clicked.connect(self.peaks)
-        remove = QPushButton(tr("Убрать"), self)
-        remove.setToolTip(tr("Убрать раскраску квадрата с глобуса."))
-        remove.clicked.connect(self.clear)
-        for button in (run, self.to_project, self.find_button, remove):
+        for button in (run, self.find_button):
             buttons.addButton(button, enum(QDialogButtonBox, "ButtonRole",
                                            "ActionRole"))
-        buttons.addButton(enum(QDialogButtonBox, "StandardButton", "Close"))
-        buttons.rejected.connect(self.close)
+        self.to_project = keep_buttons(self, buttons)
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(self.status)
@@ -160,11 +146,12 @@ class ReliefDialog(QDialog):
 
 
 class ReliefTool(GridHeights):
-    """Уклон, экспозиция, вершины и ямы квадрата у точки."""
+    """Уклон, экспозиция, вершины и ямы участка у точки."""
 
     def __init__(self, window):
         super().__init__(window)
         self.dialog = None
+        self.session = Session(window, tr("Уклон и экспозиция"))
         self.state = None  # сетка, высоты, результат, тело, неполнота
         self.tiles = None
 
@@ -174,18 +161,18 @@ class ReliefTool(GridHeights):
         dialog = self.dialog
         if dialog is None:
             dialog = ReliefDialog(self.window)
-            dialog.build.connect(lambda r: self._start(
-                self.dialog, r, self._built))
+            dialog.build.connect(lambda: self._start(
+                self.dialog, self._built))
             dialog.mode.connect(self.set_mode)
-            dialog.export.connect(self.export)
             dialog.peaks.connect(self.find_peaks)
-            dialog.clear.connect(self.clear)
+            dialog.finished.connect(self._done)
             self.dialog = dialog
         dialog.point = (lat, lon)
         dialog.place.setText(self.window._point_title(lat, lon, None))
         dialog.status.setText("")
         dialog.show()
         dialog.raise_()
+        dialog.area.open_at(lat, lon)
         return dialog
 
     # --- расчёт ------------------------------------------------------------
@@ -195,7 +182,7 @@ class ReliefTool(GridHeights):
         result = relief.analyse(z, grid, ellipsoid.A, mode)
         rep = relief.summary(result)
         if rep is None:
-            dialog.status.setText(tr("В квадрате нет высот."))
+            dialog.status.setText(tr("На участке нет высот."))
             return None
         self.state = {"grid": grid, "z": z, "result": result,
                       "partial": partial, "body": self.window.body_key()}
@@ -227,7 +214,7 @@ class ReliefTool(GridHeights):
     # --- показ на глобусе --------------------------------------------------
 
     def show(self):
-        """Квадрат на глобусе слоем «slope», если расчёт есть и тело
+        """Участок на глобусе слоем «slope», если расчёт есть и тело
         прежнее. Зовётся и окном глобуса, когда строки «Уклон»
         и «Экспозиция» выключены (_set_surface)."""
         window = self.window
@@ -257,10 +244,11 @@ class ReliefTool(GridHeights):
             self.tiles = None
 
     def clear(self, quiet=False):
-        """Убрать квадрат с глобуса. quiet - слой займёт строка
+        """Убрать участок с глобуса. quiet - слой займёт строка
         «Уклон» или «Экспозиция», слой вида не трогается."""
         self.job = None
         self.timer.stop()
+        self.window.spinner.set_job(self.busy_key())
         shown = self.tiles is not None
         self._drop_tiles()
         self.state = None
@@ -274,20 +262,25 @@ class ReliefTool(GridHeights):
 
     # --- выгрузка ----------------------------------------------------------
 
+    def _done(self, code):
+        """Окно закрыто: OK - растры в подгруппу расчёта в проекте QGIS,
+        иначе участок просто убирается (ui/results.py)."""
+        if accepted(code):
+            self.export()
+        self.clear()
+        self.session.reset()
+        self.dialog.area.end()
+
     def export(self, path=None):
-        """Растры уклона и экспозиции GeoTIFF в проект QGIS. path - файл
-        уклона, без него - окно выбора, экспозиция - рядом с _aspect."""
+        """Растры уклона и экспозиции GeoTIFF в проект QGIS, отмечены на
+        глобусе. path - файл уклона, без него - новый файл результата
+        (ui/results.py), экспозиция - рядом с _aspect. Уклон слоем
+        выше - его видно, экспозиция под ним."""
         state = self.state
         if state is None:
             return None
         if path is None:
-            path, _ = QFileDialog.getSaveFileName(
-                self.window, tr("Уклон и экспозиция в проект QGIS"),
-                os.path.join(QgsProject.instance().homePath()
-                             or os.path.expanduser("~"), "slope.tif"),
-                tr("GeoTIFF (*.tif)"))
-        if not path:
-            return None
+            path = result_path("slope")
         result = state["result"]
         aspect_path = os.path.splitext(path)[0] + "_aspect.tif"
         if not (write_grid(path, result.grid, result.slope)
@@ -296,16 +289,28 @@ class ReliefTool(GridHeights):
                                           path=path))
             return None
         name = os.path.splitext(os.path.basename(path))[0]
-        add_raster(path, tr("{name} - уклон, °", name=name),
-                   [(b, c) for b, c in slope.SLOPE_STOPS],
-                   group=group_name())
-        add_raster(aspect_path, tr("{name} - экспозиция, °", name=name),
-                   [(b, c) for b, c in slope.ASPECT_STOPS],
-                   group=group_name())
+        group = self.session.group_for(self.dialog.area.ring)
+        first, second = (aspect_path, path) if result.mode == "slope" \
+            else (path, aspect_path)
+        layers = {}
+        for file in (first, second):
+            if file == path:
+                layers[file] = add_raster(
+                    path, tr("{name} - уклон, °", name=name),
+                    [(b, c) for b, c in slope.SLOPE_STOPS],
+                    group=group)
+            else:
+                layers[file] = add_raster(
+                    aspect_path, tr("{name} - экспозиция, °", name=name),
+                    [(b, c) for b, c in slope.ASPECT_STOPS],
+                    group=group)
+        # На глобусе - то, что показывал участок, второй растр только
+        # в проекте.
+        show_layer(self.window, layers[second])
         return path
 
     def find_peaks(self):
-        """Вершины и ямы квадрата папкой в «Мои метки»."""
+        """Вершины и ямы участка точечным слоем в подгруппу расчёта."""
         state = self.state
         dialog = self.dialog
         if state is None:
@@ -316,35 +321,34 @@ class ReliefTool(GridHeights):
                                 dialog.peak_drop.value())
         if not found:
             dialog.status.setText(tr("Вершин и ям с таким перепадом "
-                                     "в квадрате нет."))
+                                     "на участке нет."))
             return None
-        children = []
+        items = []
         counts = {"peak": 0, "pit": 0}
         for row, col, height, drop, kind in found:
             counts[kind] += 1
             lat, lon = hydro.latlon(grid, row, col, ellipsoid.A)
-            if kind == "peak":
-                name = tr("Вершина {height} м", height=number(height, 4))
-                text = tr("Отметка {height} м, превышение {drop} м.",
-                          height=number(height, 4), drop=number(drop))
-            else:
-                name = tr("Яма {height} м", height=number(height, 4))
-                text = tr("Отметка {height} м, глубина {drop} м.",
-                          height=number(height, 4), drop=number(drop))
-            children.append(KPlace(
-                name, "point", [(float(lat), float(lon))],
-                color=PEAK_COLOR if kind == "peak" else PIT_COLOR,
-                description=text))
-        window = self.window
-        title = tr("Вершины и ямы {point}",
-                   point="{:.4f}, {:.4f}".format(grid.lat, grid.lon))
-        key = window.myplaces.import_tree(
-            KFolder(title, True, children),
-            parent=window.panel.current_folder(), body=window.body_key())
+            items.append(([(float(lat), float(lon))], {
+                "kind": kind, "height": round(float(height), 1),
+                "drop": round(float(drop), 1)}))
+        path = result_path("peaks", ".gpkg")
+        layer = None
+        if write_vector(path, "peaks", "point", items,
+                        [("kind", "str"), ("height", "real"),
+                         ("drop", "real")]):
+            layer = add_vector(
+                self.window, path, "peaks",
+                tr("Вершины и ямы {point}", point="{:.4f}, {:.4f}".format(
+                    grid.lat, grid.lon)),
+                self.session.group_for(dialog.area.ring), PEAK_COLOR,
+                classes=("kind", [("peak", PEAK_COLOR[:3], tr("Вершина")),
+                                  ("pit", PIT_COLOR[:3], tr("Яма"))]))
         dialog.status.setText(tr(
-            "В «Мои метки» записано вершин {peaks} и ям {pits}.",
-            peaks=counts["peak"], pits=counts["pit"]))
-        return key
+            "В проект добавлено вершин {peaks} и ям {pits}.",
+            peaks=counts["peak"], pits=counts["pit"])
+            if layer is not None else
+            tr("Слой не записан в «{path}».", path=path))
+        return layer
 
 
 def write_grid(path, grid, values):

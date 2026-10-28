@@ -1641,6 +1641,19 @@ The icon of a point placemark is always visible, even with thousands of
 placemarks on the screen. A label stands at the placemarks that have
 room for it, the other labels appear when zooming in.
 
+### Temporary Places
+
+Below My Places stands the Temporary Places row. It is selected
+when the globe window opens, so new placemarks, paths,
+measurements and placemarks of the assistant go there. Drag a
+placemark to My Places to keep it at once. The row menu has Save
+to My Places and Clear Temporary Places….
+
+If Temporary Places hold anything when the globe window closes, the
+window asks what to do with it. Save moves the contents to the end
+of My Places, Don't save deletes them, Cancel keeps the window
+open. Clear My Places… does not touch Temporary Places.
+
 ### List rows
 
 The row icon shows the kind of object - placemark, path, polygon, saved
@@ -2636,7 +2649,9 @@ they load, the ground length is preceded by «≈».
 
 A ruler point can be grabbed with the mouse and dragged, Backspace
 removes the last point. Each segment on the globe is labelled with its
-length.
+length. For a polygon and a 3D polygon, the hint Close shape appears
+over the first point. A click on it closes the shape and finishes the
+drawing, after that the points are dragged with the mouse.
 
 The Save button puts the shape into My Places together with the
 measurement. The name is offered with a number, for example Line 1. The
@@ -2673,36 +2688,76 @@ stretch not shorter than three pixels of height data, so roughness of
 the data does not pass for a cliff. On steep mountains the maximum slope
 may exceed 100 %, that is 45°.
 
-### Slope and aspect of a square
+### Site and analysis results
 
-Slope and aspect of a square, viewshed and insolation are collected in
-the Site analysis submenu of the menu on the globe. The Slope and
-aspect here… item opens the Slope and aspect window for the point
-under the cursor. The Radius field sets half the side of the
-calculation square, the grid step is about one six-hundredth of the
-side. The Build button loads the heights of the square and colours it
-on the globe. The heights are the same as those of the globe terrain,
+Slope and aspect, viewshed, insolation, land change and classification
+are collected in the Site analysis submenu of the menu on the globe,
+flooding and water flow in the Hydrology submenu. The windows of these
+tools, except the viewshed, compute over a site, as Google Earth does.
+
+The white outline on the globe is the site. When the window opens, it
+is a square centred on the point under the cursor, the Site field sets
+its side, and the Square button returns the square. The site vertices
+are dragged with the mouse, the circle in the middle of a side adds a
+new vertex. The Draw button erases the site, and the vertices are
+placed by clicks on the globe. At the first vertex the hint Close the
+shape appears, and a click on it closes the site. The calculation runs
+over the frame of the site, there are no results outside the polygon.
+Each window has its own largest site size, the field tooltip names it.
+The viewshed is computed in a circle around the observer.
+
+The windows of slope and aspect, viewshed, insolation, land change,
+classification and flooding have the same buttons. Build shows the
+result on the globe, it can be built again any number of times. OK
+writes the result to the QGIS project and closes the window. Each
+calculation is a subgroup "<tool> <time>" in the PlanetX - site
+analysis group, holding the Site layer with the site outline and all
+layers of this calculation. Layers added by the window buttons before
+OK, such as peaks and pits or change spots, go to the same subgroup.
+The Water flow window has no OK button, its layers go to a subgroup at
+once, and a new site or a new opening of the window starts a new
+subgroup. Removing a subgroup removes the whole calculation.
+
+The files go to the project folder, or to the PlanetX folder of the
+QGIS profile if the project is not saved, the name is the tool and the
+time. After that the result is an ordinary project layer. The globe
+shows it as a project layer, the check box and opacity are in QGIS.
+Cancel and the cross of the window remove the result from the globe,
+nothing is written to the project.
+
+While a long calculation runs - loading heights or AlphaEarth vectors,
+computing a viewshed or insolation - the loading icon to the right of
+the icon bar turns, and its tooltip names the calculation. A click on
+the icon opens the Stop menu. The calculation is interrupted, the
+earlier result stays.
+
+### Slope and aspect of a site
+
+The Slope and aspect here… item of the Site analysis submenu opens the
+Slope and aspect window for the point under the cursor. The site is up
+to 100 km, the grid step is about one six-hundredth of its largest
+size. The Build button loads the heights of the site and colours it on
+the globe. The heights are the same as those of the globe terrain,
 with the 30 m land refinement and own terrain from a project raster if
 they are on.
 
 Slope and aspect are computed with a 3 × 3 kernel (Horn, as in
 gdaldem), the computation is ported from the Isoliner plugin. Aspect is
 the direction the slope faces, flat ground under 0.5° has none. The
-Show list selects the colouring of the square, slope or aspect, the
+Show list selects the colouring of the site, slope or aspect, the
 colours and the scale are those of the Slope and Aspect rows of the
-Layers section. The square takes the same globe layer, so the rows
-switch off meanwhile, and a row switched on removes the square. Under
+Layers section. The site takes the same globe layer, so the rows
+switch off meanwhile, and a row switched on removes the site. Under
 the fields is a summary, the lowest, the highest and the median slope,
 the areas by slope classes and the three directions most slopes face.
 
-The To QGIS project… button writes slope and aspect rasters in degrees
-as GeoTIFF to the PlanetX - terrain analysis group. The Peaks and pits
-button finds the peaks and closed depressions of the square and writes
-them to My Places as a folder of points with the elevation and the
-rise. A peak is higher than everything around it within the Peak
-radius field, a pit is lower, and the rise to the lowest or highest
-point around is at least the Rise from field. The Remove button
-removes the colouring.
+OK writes slope and aspect rasters in degrees to the calculation
+subgroup, the one the site showed is on the globe. The Peaks and pits
+button finds the peaks and closed depressions of the site and writes
+them as a GeoPackage point layer to the same subgroup, each point
+keeps its kind, elevation and rise. A peak is higher than everything around it within the
+Peak radius field, a pit is lower, and the rise to the lowest or
+highest point around is at least the Rise from field.
 
 ### Viewshed from a point
 
@@ -2711,8 +2766,9 @@ globe menu opens the Viewshed from a point window for the point under
 the cursor. The window sets the observer height
 above the terrain, the target height and the circle radius. The Build
 button loads the heights under the circle and colours it. Visible places
-are green, places hidden by the terrain are red. The Remove button
-removes the colouring.
+are green, places hidden by the terrain are red. OK writes the viewshed
+as a raster to the calculation subgroup, its site outline is the
+circle.
 
 Rays leave the point with an equal azimuth step. The step along a ray
 is one five-hundredth of the radius, 20 m for a radius of 10 km. A place
@@ -2735,23 +2791,24 @@ viewshed is computed on the Earth, Mars and the Moon.
 ### Insolation
 
 The Insolation here… item of the Site analysis submenu of the globe
-menu opens the Insolation window for the point under the cursor. The window sets the first and the last day of the
-period and the circle radius. The Build button loads the heights and
-colours the circle by the mean number of hours of direct sunlight per
-day. Blue means little light, red means much light. The scale in the
-bottom left corner of the view runs from zero to the largest value in
-the circle. The Remove button removes the colouring.
+menu opens the Insolation window for the point under the cursor. The
+window sets the first and the last day of the period and a site up to
+40 km. The Build button loads the heights and colours the site by the
+mean number of hours of direct sunlight per day. Blue means little
+light, red means much light. The scale in the bottom left corner of the
+view runs from zero to the largest value. OK writes the hours as a
+raster to the calculation subgroup with the same colours.
 
 The position of the Sun is computed every 10 minutes of the UTC day. A
 place is lit if the Sun is above the mountain horizon at its azimuth
 and falls on the front side of the slope. The horizon is taken in 32
-directions at a distance of at least the radius and at least 5 km. A
+directions at a distance of at least half the site and at least 5 km. A
 period longer than 15 days is computed over 15 evenly spaced days.
 Clouds, refraction and forest are not taken into account. Buildings
 are included by the same Include buildings box as in the viewshed, they
-are taken 1 km beyond the circle too.
-The height grid has 800 nodes per side, the step is 25 m for a radius
-of 5 km. The computation runs in parts, and the globe responds to the
+are taken 1 km beyond the site too. The calculation runs in a circle
+covering the site, the height grid has 800 nodes per side, the step is
+about 25 m for a 7 km square. The computation runs in parts, and the globe responds to the
 mouse meanwhile. The line under the fields shows the share done.
 Insolation is computed only for the Earth.
 
@@ -2777,20 +2834,21 @@ The window sets the years to compare and the range of the degree of
 change, cells outside the range are transparent. The globe shows an
 overview of the view with a pixel of 160 m or coarser by itself, its
 tiles are visible down to about 20 km per tile. More detail comes from
-the detail area. The Detail area field sets the side of a square
-centred on the window's point, the Area pixel list sets the pixel of
+the detail area of up to 20 km, the Area pixel list sets the pixel of
 10, 20, 40 or 80 m. The dataset files store blocks of 1024 × 1024
 pixels, one block per year is 40-50 MB at any pixel size, so a download
 estimate is shown under the fields. At 10 m a block covers 10 km, at
-80 m 82 km. The Detail button puts the area on the globe as a frame,
-the area loads when the view comes close to it.
+80 m 82 km. The Detail button shows detailed values inside the site,
+they load when the view comes close to it.
 
-The To QGIS project… button writes the degree of change of the area as
-a GeoTIFF raster in UTM to the PlanetX - land change group. The Change
-spots button finds up to ten spots of the strongest change in the area
-and writes them as points to My Places. What exactly changed is then
-seen with the Esri Wayback imagery archive and the swipe. The Remove
-area button removes the detail area, the overview stays.
+OK writes the degree of change of the site as a raster in UTM to the
+calculation subgroup, there are no values outside the polygon, Cancel
+removes the site. The overview stays as a row of the Layers section in
+both cases. The Change spots button finds up to ten spots of the
+strongest change in the site and writes them as a GeoPackage point
+layer to the same subgroup. What
+exactly changed is then seen
+with the Esri Wayback imagery archive and the swipe.
 
 Land change, the geophysics value maps, the geological map, lithology,
 water and soils are one layer of the globe with one map on it. A map
@@ -2801,17 +2859,19 @@ row off. Land change is computed only for the Earth.
 
 The Classification here… item of the Site analysis submenu of the globe
 menu opens the Classification window for the point under the cursor.
-The white frame on the globe is the classification square, the Area
-field sets its side. Classification divides the cells of the area into
-classes by the same AlphaEarth vectors as land change.
+Classification divides the cells of the area into classes by the same
+AlphaEarth vectors as land change.
+
+The site is not larger than 10 km, classes are computed only inside
+it.
 
 A class has a color and a name, the Add class button adds a new one,
 ✕ removes a class with its points. The round button of a class selects
 it, and a click on the globe places a point of this class. A point is a
 sample of the class, for example forest, field, buildings or water. At
 least two classes with three points each are needed, there may be more
-points. The Remove point button removes the last point of the selected
-class.
+points. A click on a point of any class removes it, the hint Remove
+point appears at the cursor.
 
 The Build button assigns each cell of the area to the class of the five
 nearest control points by the similarity of the vectors of the selected
@@ -2819,13 +2879,18 @@ year. The classes appear on the globe in their colors, the line under
 the fields gives the share of each class. Points are placed on the
 globe imagery, and the year of the imagery may differ from the year in
 the window. The 10, 20, 40 or 80 m pixel and the download estimate work
-as for the land change detail area.
+as for the land change detail area. The Auto pixel takes the pixel with
+the smallest download at which the area has 14 to 640 thousand cells,
+and the line under the field names it. A file block for a year weighs
+40-50 MB at any pixel, and while it loads, the status line counts the
+blocks.
 
-The Opacity slider changes the transparency of the classes. The To QGIS
-project… button writes the classes as a GeoTIFF raster in UTM to the
-PlanetX - classification group, with the colors and names of the
-classes. The Remove button removes the classes from the globe, the
-points stay. Classes and the viewshed from a point are one layer of the
+The Opacity slider changes the transparency of the classes. OK writes
+the classes as a raster in UTM to the calculation subgroup, with the
+colors, the names of the classes and the same opacity, and
+next to it the training points as a GeoPackage layer with the class
+number and name. The points and classes of the window stay until the window opens again.
+Classes and the viewshed from a point are one layer of the
 globe, a new viewshed removes the classes. The land change map stays
 visible together with the classes.
 
@@ -2833,38 +2898,41 @@ visible together with the classes.
 
 Flooding, water flow and sea level are collected in the Hydrology
 submenu of the menu on the globe. The Flooding from here… item opens the
-Flooding window for the point under the cursor. The Radius field sets
-half the side of the calculation square. The Build button loads the
-heights of the square and puts the water level 2 m above the point.
+Flooding window for the point under the cursor, the site is up to
+100 km. The Build button loads the heights of the site and puts the
+water level 2 m above the point.
 The Water level field sets the elevation of the water surface above
 sea level, the Rise slider lifts the water up to 50 m above the point.
 The water on the globe and the summary under the fields change at
 once, without a new calculation.
 
-Water fills everything below the level that it reaches from the point
-through places below the level. A basin behind a ridge higher than the
+Water fills everything below the level inside the site that it reaches
+from the point through places below the level. A basin behind a ridge higher than the
 level stays dry, even if its bottom is lower. The summary gives the
 area, the water volume and the greatest depth. If the water reached
-the edge of the square, the window says so, then a larger radius is
+the edge of the site, the window says so, then a larger site is
 needed. A point in a river or in the sea shows the rise of water in
-them. The grid has 601 nodes per side, with a radius of 5 km the step
-is about 17 m. The heights come from the terrain of the globe, with
+them. The grid has 601 nodes per side, for a 10 km site the step is
+about 17 m. The heights come from the terrain of the globe, with
 the 30 m model and own terrain when they are on. The water is visible
 with the terrain switched on.
 
-The To QGIS project… button writes a GeoTIFF depth raster and a
-GeoPackage flood outline next to it. The layers go to the PlanetX -
-terrain water group. The Remove button takes the water off the
-globe.
+OK writes a depth raster and a GeoPackage flood outline next to it to
+the calculation subgroup. The water on the globe stays
+together with the depth raster. Clearing the check box of the raster
+or removing it removes the water too.
 
 ### Water flow and catchment
 
 The Water flow from here… item of the Hydrology submenu opens the
-Water flow window for the point under the cursor. The Flow line button
+Water flow window for the point under the cursor, the site is up to
+100 km. The Flow line button
 traces the path of water from the point down the terrain and writes it
-as a line to My Places with its length and drop. The Catchment button
+as a line layer with its length and drop. The Catchment button
 builds the area from which water flows to the point and the main
-stream. They go to My Places as a folder, the catchment outline keeps
+stream as two layers. All of them go to the calculation subgroup and
+are checked on the globe at once. The catchment outline
+keeps
 the area, the heights, the length, fall and gradient of the main
 stream, the mean hillslope gradient by SP 33-101-2003 and the stream
 network density. The catchment starts at the channel, the place with
@@ -2875,9 +2943,10 @@ catchment starts exactly at the point.
 
 The calculation uses D8 flow directions over the terrain with the
 depressions filled up to their spill level. So the line passes
-through lakes and closed basins. The line ends at the edge of the
-calculation square, a catchment larger than the square is not counted
-in full, the window says so. The calculation is ported from the
+through lakes and closed basins. There are no heights outside the
+site, water leaves there as over an edge. The line ends at the edge of
+the site, a catchment larger than the site is not counted in full, the
+window says so. The calculation is ported from the
 Isoliner plugin.
 
 The Stop at a stream check box ends the line where it reaches a
@@ -2888,15 +2957,15 @@ the Segment length field is below the Flattening slope field, 2° over
 floodplain, a short ledge on a steep slope does not end the line. The
 line keeps the reason it ended.
 
-The Basins button divides the square into basins of outlets, the
-places where streams with a catchment of at least the Streams from
-field leave the square. The basins go as a GeoPackage polygon layer to
-the PlanetX - terrain water group, each keeps its number and area,
+The Basins button divides the site into basins of outlets, the places
+where streams with a catchment of at least the Streams from field
+leave the site. The basins go as a GeoPackage polygon layer to the
+calculation subgroup, each keeps its number and area,
 the largest first.
 
-The Stream network button builds the streams of the square with a
+The Stream network button builds the streams of the site with a
 catchment of at least the Streams from field and writes them as a
-GeoPackage line layer to the PlanetX - terrain water group. Each line
+GeoPackage line layer to the calculation subgroup. Each line
 keeps its Strahler order and catchment area, the line width grows with
 the order. The smaller the Streams from field, the denser the network.
 The Order from field keeps streams of at least the given order. A
@@ -2907,19 +2976,20 @@ network, so a large river keeps its order at any value of the field.
 The Placemark catchment item of the menu of a path or polygon in My
 Places builds the area from which water comes to the placemark. A path
 serves as a cross-section of a valley or a ditch, a polygon as a plot.
-The catchment outline goes as a polygon next to the placemark, it keeps
-the area and the heights. If the catchment reaches the edge of the
+The catchment outline goes as a polygon layer to the Placemark
+catchment subgroup with the outline of the calculation square, it
+keeps the area and the heights. If the catchment reaches the edge of the
 square, the square grows 2.5 times and the calculation repeats until
 half its side reaches 50 km.
 
 The Flow lines from placemark… item of the same menu opens the Water
-flow window for the placemark, the calculation square covers it. The
+flow window for the placemark, the site is a square covering it. The
 Flow line button builds lines from all grid nodes under the
-placemark, for example from a waste dump, and writes them to My Places
-as a folder. With the Stop at a confluence check box a line ends
+placemark, for example from a waste dump, and writes them as one line
+layer. With the Stop at a confluence check box a line ends
 where it joins a line built earlier, and a shared channel is one
 line. The lines go from high nodes to low ones, at most the 300
-longest go to the folder. The stop at a stream and where the slope
+longest go to the layer. The stop at a stream and where the slope
 flattens check boxes act here too.
 
 ### Sea level

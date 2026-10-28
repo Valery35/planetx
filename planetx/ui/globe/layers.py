@@ -156,6 +156,10 @@ class LayersMixin:
             # Облака точек - точками в 3D, только на Земле.
             self.pointclouds.sync(self._shown_in_order()
                                   if self.planet.earth else [])
+        if hasattr(self, "hydro"):
+            # Вода затоплений в проекте - за своими слоями глубин.
+            self.hydro.sync_kept(self._shown_in_order()
+                                 if self.planet.earth else [])
         layers = self._overlay_layers() if force else self._applied_layers
         if layers is None:
             layers = self._overlay_layers()

@@ -179,6 +179,26 @@ def compute(lat, lon, radius_m, cell, heights, observer=2.0, target=0.0,
     return Viewshed(lat, lon, radius_m, step, slope_target >= before)
 
 
+def raster(result, radius=None):
+    """Видимость сеткой широт и долгот для растра: (север, запад,
+    шаг широты, шаг долготы, байты - 1 видно, 0 скрыто, 255 вне круга,
+    строки с севера). Шаг - шаг расчёта."""
+    radius = radius or ellipsoid.A
+    south, north, west, east = circle_box(result.lat, result.lon,
+                                          result.radius_m, radius)
+    dlat = math.degrees(result.step / radius)
+    dlon = dlat / max(math.cos(math.radians(result.lat)), 0.01)
+    rows = max(1, int(math.ceil((north - south) / dlat)))
+    cols = max(1, int(math.ceil((east - west) / dlon)))
+    lats = north - (np.arange(rows) + 0.5) * dlat
+    lons = west + (np.arange(cols) + 0.5) * dlon
+    grid_lat, grid_lon = np.meshgrid(lats, lons, indexing="ij")
+    seen, inside = result.at(grid_lat, grid_lon, radius)
+    out = np.full(seen.shape, 255, dtype=np.uint8)
+    out[inside] = seen[inside].astype(np.uint8)
+    return lats[0], lons[0], dlat, dlon, out
+
+
 def tile_rgba(viewshed, lats, lons, radius):
     """Картинка тайла: видимое зелёное, скрытое красное, вне круга
     прозрачно. RGBA uint8 с премноженной альфой."""

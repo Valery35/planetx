@@ -374,6 +374,8 @@ class PlaceTree(QTreeWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.group = None
+        # Прочие корни списка с метками - «Временные метки».
+        self.extra_groups = []
         # Несколько строк выделяются с Ctrl и Shift, как в проводнике.
         self.setSelectionMode(enum(QAbstractItemView, "SelectionMode",
                                    "ExtendedSelection"))
@@ -402,8 +404,9 @@ class PlaceTree(QTreeWidget):
                 if id(child) in chosen and child.data(0, PLACE_ROLE):
                     out.append(child.data(0, PLACE_ROLE))
                 look(child)
-        if self.group is not None:
-            look(self.group)
+        for group in [self.group] + self.extra_groups:
+            if group is not None:
+                look(group)
         return out
 
     def keyPressEvent(self, event):
@@ -684,6 +687,11 @@ class LayerPanel(QWidget):
         self.list.group = self.places_group
         self.places_group.setCheckState(0, CHECKED)
         self.places_group.setExpanded(True)
+        # «Временные метки», как в Google Earth, - папка файла меток
+        # с ключом temp_key, в списке своим корнем под «Моими метками».
+        # Окно ставит ключ до set_places.
+        self.temp_key = None
+        self.temp_item = None
         # Флажок папки меняет все метки, каждая шлёт itemChanged. Метки
         # переписываются в файл после того, как Qt обойдёт все строки,
         # иначе список перестраивался бы посреди обхода.
@@ -1554,16 +1562,27 @@ class LayerPanel(QWidget):
 
     def set_places(self, tree):
         """Строки «Моих меток» по дереву MyPlaces.tree(): метки Place
-        и пары (Folder, дети). Сигналы при этом не идут."""
+        и пары (Folder, дети). Сигналы при этом не идут. Папка temp_key
+        встаёт своим корнем «Временные метки»."""
+        temp = next((node for node in tree if isinstance(node, tuple)
+                     and node[0].key == self.temp_key), None)
+        tree = [node for node in tree if node is not temp]
+        kids = temp[1] if temp is not None else []
         self.list.blockSignals(True)
         group = self.places_group
+        holder = self._temp_holder(temp[0] if temp is not None else None)
         # Те же строки, сменились только флажки - строки не строятся
         # заново: на 8 тысячах точек перестройка шла 0.35 с на каждый
         # флажок, 20 октября 2026 года.
-        signature = self._signature(tree)
-        if tree and signature == getattr(self, "_places_signature", None) \
-                and group.childCount() == len(tree):
+        signature = (self._signature(tree), self._signature(kids))
+        if (tree or kids) \
+                and signature == getattr(self, "_places_signature", None) \
+                and group.childCount() == len(tree) \
+                and (holder is None or holder.childCount() == len(kids)):
             self._update_checks(group, tree)
+            if holder is not None:
+                self._update_checks(holder, kids)
+                self._temp_check(holder, temp[0], kids)
             self.list.blockSignals(False)
             self._tour_state()
             return
@@ -1581,10 +1600,57 @@ class LayerPanel(QWidget):
             # Пустая папка отмечена, новая метка сразу видна.
             group.setCheckState(0, CHECKED)
         group.setExpanded(True)
+        if holder is not None:
+            holder.takeChildren()
+            self._fill(holder, kids)
+            self._temp_check(holder, temp[0], kids)
+            holder.setExpanded(True)
         if chosen or current:
             self._reselect(group, chosen, current)
+            if holder is not None:
+                self._reselect(holder, chosen, current)
         self.list.blockSignals(False)
         self._tour_state()
+
+    def _temp_holder(self, folder):
+        """Строка «Временные метки» для папки folder, None - строки нет."""
+        item = self.temp_item
+        if folder is None:
+            if item is not None:
+                self.list.takeTopLevelItem(
+                    self.list.indexOfTopLevelItem(item))
+                self.list.extra_groups = []
+                self.temp_item = None
+            return None
+        if item is None:
+            item = QTreeWidgetItem(self.list, [tr("Временные метки")])
+            font = QFont(item.font(0))
+            font.setBold(True)
+            item.setFont(0, font)
+            item.setIcon(0, QgsApplication.getThemeIcon(
+                "/mActionHistory.svg"))
+            item.setToolTip(0, tr(
+                "Новые метки, пути и измерения ложатся сюда, пока строка "
+                "выделена. При закрытии окна глобуса содержимое можно "
+                "перенести в «Мои метки» или удалить. Метку, которую "
+                "надо сохранить сразу, перетащите в «Мои метки»."))
+            item.setFlags((item.flags() | CHECKABLE | TRISTATE) & ~DRAG)
+            self.temp_item = item
+            self.list.extra_groups = [item]
+        item.setData(0, PLACE_ROLE, folder.key)
+        return item
+
+    @staticmethod
+    def _temp_check(item, folder, kids):
+        """Флажок пустых «Временных меток» - флажок папки."""
+        if not kids:
+            item.setCheckState(0, CHECKED if folder.visible else UNCHECKED)
+
+    def select_temporary(self):
+        """Сделать «Временные метки» текущей строкой: новые метки
+        ложатся туда."""
+        if self.temp_item is not None:
+            self.list.setCurrentItem(self.temp_item)
 
     def _signature(self, nodes):
         """Всё, кроме флажков, из чего _fill строит строки."""
@@ -1709,6 +1775,11 @@ class LayerPanel(QWidget):
                     return
                 look(child)
         look(self.places_group)
+        if found[0] is None and self.temp_item is not None:
+            if self.temp_item.data(0, PLACE_ROLE) == key:
+                found[0] = self.temp_item
+            else:
+                look(self.temp_item)
         if found[0] is not None:
             self.list.setCurrentItem(found[0])
             self.list.scrollToItem(found[0])
@@ -1946,6 +2017,24 @@ class LayerPanel(QWidget):
                         a, chosen))
             menu.exec(self.list.viewport().mapToGlobal(point))
             return
+        if item is self.temp_item:
+            # «Временные метки»: перенести в «Мои метки» или очистить,
+            # сама строка не удаляется и не переименовывается.
+            self._add_menu(menu, key)
+            for entry in (("paste", tr("Вставить")), None,
+                          ("temp_save", tr("Сохранить в «Мои метки»")),
+                          ("temp_clear", tr("Очистить «Временные метки»…")),
+                          None,
+                          ("export_kml", tr("Сохранить как KML…")),
+                          ("tour", tr("Запустить тур"))):
+                if entry is None:
+                    menu.addSeparator()
+                    continue
+                menu.addAction(entry[1]).triggered.connect(
+                    lambda _=False, a=entry[0]: self.place_action.emit(
+                        a, key))
+            menu.exec(self.list.viewport().mapToGlobal(point))
+            return
         if is_folder(key):
             # Порядок меню папки Google Earth, 2 октября 2026 года,
             # сверху «Подлететь», как у метки.
@@ -2049,7 +2138,8 @@ class LayerPanel(QWidget):
     def _copy_selected(self):
         """Ctrl+C: выделенные строки, без выделения - текущая, корень
         «Мои метки» - все метки."""
-        chosen = self.list.selected_keys()
+        chosen = [key for key in self.list.selected_keys()
+                  if key != self.temp_key]
         if chosen:
             self.places_action.emit("copy", chosen)
             return

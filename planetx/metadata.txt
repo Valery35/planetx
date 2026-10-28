@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.17.0
+version=1.18.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.17.0 Land change between two years of 2017-2025 from
+changelog=1.18.0 The site of the analysis windows is a polygon - a
+      square with draggable vertices or drawn by clicks on the globe.
+      Results only inside the site. Each calculation is a subgroup of
+      the PlanetX - site analysis group with the site outline. Build,
+      OK and Cancel buttons, results as project layers, a long
+      calculation stops from the loading icon. Temporary Places folder.
+      1.17.0 Land change between two years of 2017-2025 from
       AlphaEarth Foundations embeddings, 10 m cells - an overview of
       all land on the globe, a detail area to the QGIS project and
       change spots to My Places. Classification of an area into

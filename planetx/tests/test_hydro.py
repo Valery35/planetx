@@ -124,6 +124,24 @@ class TestFlow(unittest.TestCase):
         self.assertAlmostEqual(line.length, 26 * 5.0, delta=1.0)
         self.assertGreater(line.drop, 25.0)
 
+    def test_line_and_flood_stop_at_area_border(self):
+        # Участок многоугольником: высоты вне него NaN. Линия стока
+        # кончается на краю участка, а не в «яме» перед пустыми
+        # высотами, вода затопления до края участка - край.
+        yy, xx = np.mgrid[0:20, 0:30]
+        z = 100.0 - xx * 1.0 + yy * 0.01
+        z[:, 20:] = np.nan
+        line = hydro.flow_line(z, (10, 3), 5.0)
+        self.assertEqual(line.end, "edge")
+        self.assertEqual(int(line.cols[-1]), 19)
+        bowl = np.full((15, 15), 10.0)
+        bowl[3:12, 3:12] = 0.0
+        bowl[:, 9:] = np.nan
+        levels = hydro.spill_levels(bowl, (7, 5))
+        self.assertTrue(hydro.flood(bowl, levels, 1.0, 1.0).edge)
+        self.assertTrue(hydro.border(np.isnan(bowl))[7, 8])
+        self.assertFalse(hydro.border(np.isnan(bowl))[7, 5])
+
     def test_line_ends_in_pit_area_after_fill(self):
         z = two_pits()
         line = hydro.flow_line(z, (10, 14), 1.0)

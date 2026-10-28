@@ -18,7 +18,8 @@ import uuid
 
 import numpy as np
 from qgis.core import (QgsColorRampShader, QgsCoordinateTransformContext,
-                       QgsMarkerSymbol, QgsProject, QgsProperty,
+                       QgsLayerTreeGroup, QgsMarkerSymbol, QgsProject,
+                       QgsProperty,
                        QgsRasterLayer, QgsRasterShader, QgsRectangle,
                        QgsSingleBandPseudoColorRenderer,
                        QgsSingleSymbolRenderer, QgsSymbolLayer,
@@ -264,15 +265,19 @@ def _to_group(layer, title=None, copy=None):
     """Слой в группу title. Без группы - группа «PlanetX - слои глобуса»,
     слой - копия слоя глобуса (project.COPY_PROPERTY): глобус его сам не
     показывает, а прежняя копия с тем же названием в группе заменяется,
-    повторная выгрузка не копит одинаковые слои."""
+    повторная выгрузка не копит одинаковые слои. title может быть и
+    самой группой дерева слоёв - подгруппой расчёта (ui/results.py)."""
     project = QgsProject.instance()
     if copy is None:
         copy = title is None
-    title = title or tr("PlanetX - слои глобуса")
-    root = project.layerTreeRoot()
-    group = root.findGroup(title)
-    if group is None:
-        group = root.insertGroup(0, title)
+    if isinstance(title, QgsLayerTreeGroup):
+        group = title
+    else:
+        title = title or tr("PlanetX - слои глобуса")
+        root = project.layerTreeRoot()
+        group = root.findGroup(title)
+        if group is None:
+            group = root.insertGroup(0, title)
     if copy:
         layer.setCustomProperty(COPY_PROPERTY, True)
         old = [node.layerId() for node in group.findLayers()

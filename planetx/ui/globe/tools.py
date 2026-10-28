@@ -41,6 +41,9 @@ from ..bathymetry import REMOVE as BATHY_REMOVE, BathymetryDialog
 from ..folderprops import FolderDialog
 from ..viewshed import ResultTiles, ViewshedDialog, display_level
 from ..insolation import InsolationDialog
+from ..export import add_raster
+from ..results import (Session, accepted, add_paletted, result_path,
+                       show_layer, write_lat_lon)
 from ..roofs import RoofLoader
 from ...core import roofs
 from ..subsection import ModelSectionDialog, build as model_section
@@ -174,6 +177,8 @@ class ToolsMixin:
         hydro = getattr(self, "hydro", None)
         if hydro is not None:
             water.set_mesh("flood", hydro.water_mesh())
+            for key, mesh in hydro.kept_meshes().items():
+                water.set_mesh(key, mesh)
         self.view.update()
 
     def edit_bathymetry(self, layer_id):
@@ -414,11 +419,12 @@ class ToolsMixin:
         if dialog is None:
             dialog = ViewshedDialog(self)
             dialog.build.connect(self._build_viewshed)
-            dialog.clear.connect(self._clear_viewshed)
+            dialog.finished.connect(self._viewshed_done)
             self.viewshed_dialog = dialog
         dialog.point = (lat, lon)
         dialog.place.setText(self._point_title(lat, lon, name))
         dialog.status.setText("")
+        dialog.ok.setEnabled(self.viewshed_result is not None)
         dialog.show()
         dialog.raise_()
 
@@ -441,8 +447,20 @@ class ToolsMixin:
                              "started": time.monotonic(),
                              "roofs": self._roofs(dialog, lat, lon,
                                                   radius_m, cell)}
+        self.spinner.set_job("viewshed", tr("Видимость из точки"),
+                             self._stop_viewshed)
         self.viewshed_timer.start()
         self._viewshed_poll()
+
+    def _stop_viewshed(self):
+        """Остановить расчёт видимости - меню значка загрузки. Прежний
+        результат остаётся."""
+        self._stop_roofs(self.viewshed_job)
+        self.viewshed_job = None
+        self.viewshed_timer.stop()
+        self.spinner.set_job("viewshed")
+        if self.viewshed_dialog is not None:
+            self.viewshed_dialog.status.setText(tr("Расчёт остановлен."))
 
     def _viewshed_poll(self):
         job = self.viewshed_job
@@ -465,6 +483,7 @@ class ToolsMixin:
         self.viewshed_timer.setInterval(VIEWSHED_POLL)
         self.viewshed_timer.stop()
         self.viewshed_job = None
+        self.spinner.set_job("viewshed")
         heights = self._surface_heights if roofs is None \
             else roofs.heights(self._surface_heights)
         result = viewshed.compute(job["lat"], job["lon"], job["radius"],
@@ -480,6 +499,7 @@ class ToolsMixin:
                              "по менее подробным.")
         text += self._roofs_text(roofs)
         self.viewshed_dialog.status.setText(text)
+        self.viewshed_dialog.ok.setEnabled(True)
 
     def _show_viewshed(self, result):
         """Слой видимости по результату result, None убирает слой."""
@@ -506,9 +526,37 @@ class ToolsMixin:
         self._stop_roofs(self.viewshed_job)
         self.viewshed_job = None
         self.viewshed_timer.stop()
+        self.spinner.set_job("viewshed")
         self._show_viewshed(None)
         if self.viewshed_dialog is not None:
             self.viewshed_dialog.status.setText("")
+            self.viewshed_dialog.ok.setEnabled(False)
+
+    def _viewshed_done(self, code):
+        """Окно видимости закрыто: OK - растр в подгруппу расчёта
+        в проекте QGIS с контуром круга, иначе предпросмотр просто
+        убирается (ui/results.py)."""
+        result = self.viewshed_result
+        if accepted(code) and result is not None:
+            north, west, dlat, dlon, data = viewshed.raster(result,
+                                                            ellipsoid.A)
+            path = result_path("viewshed")
+            if write_lat_lon(path, data, north, west, dlat, dlon,
+                             byte=True):
+                scale = math.cos(math.radians(result.lat))
+                reach = result.radius_m / 111320.0
+                ring = [(result.lat + reach * math.cos(a),
+                         result.lon + reach * math.sin(a) / scale)
+                        for a in np.linspace(0.0, 2.0 * math.pi, 72,
+                                             endpoint=False)]
+                show_layer(self, add_paletted(
+                    path, tr("Видимость {time}",
+                             time=time.strftime("%H:%M")),
+                    Session(self, tr("Видимость")).group_for(ring),
+                    [(1, viewshed.VISIBLE, tr("Видно")),
+                     (0, viewshed.HIDDEN, tr("Скрыто"))],
+                    opacity=viewshed.OPACITY))
+        self._clear_viewshed()
 
     # Здания для видимости и инсоляции (ui/roofs.py).
 
@@ -607,29 +655,40 @@ class ToolsMixin:
         if dialog is None:
             dialog = InsolationDialog(self)
             dialog.build.connect(self._build_insolation)
-            dialog.clear.connect(self._clear_insolation)
+            dialog.finished.connect(self._insolation_done)
             self.insolation_dialog = dialog
+            self.insolation_session = Session(self, tr("Инсоляция"))
         dialog.point = (lat, lon)
         dialog.place.setText(self._point_title(lat, lon, name))
         dialog.status.setText("")
+        dialog.ok.setEnabled(self.insolation_result is not None)
         dialog.show()
         dialog.raise_()
+        dialog.area.open_at(lat, lon)
 
-    def _build_insolation(self, start, end, radius_m):
-        """Расчёт инсоляции: тайлы высот под сеткой, потом высоты узлов
-        и расчёт частями по проходам цикла событий (_insolation_poll)."""
+    def _build_insolation(self, start, end):
+        """Расчёт инсоляции в круге, накрывающем участок окна: тайлы
+        высот под сеткой, потом высоты узлов и расчёт частями по проходам
+        цикла событий (_insolation_poll). Вне участка часов нет."""
         dialog = self.insolation_dialog
         if not self.planet.earth or self.view.sky_view is not None:
             dialog.status.setText(tr("Инсоляция считается только для "
                                      "Земли."))
             return
-        lat, lon = dialog.point
+        area = dialog.area
+        problem = area.check()
+        if problem:
+            dialog.status.setText(problem)
+            return
+        lat, lon = area.centre()
+        radius_m = max(area.reach(), 100.0)
         cell, margin, _ = insolation.layout(radius_m)
         _, keys = viewshed.height_tiles(lat, lon, margin * cell + radius_m,
                                         cell, ellipsoid.A,
                                         self.view.store.max_level)
         self._stop_roofs(self.insolation_job)
         self.insolation_job = {"lat": lat, "lon": lon, "radius": radius_m,
+                               "ring": list(area.ring),
                                "start": start, "end": end, "keys": keys,
                                "started": time.monotonic(),
                                "work": None, "missing": False,
@@ -637,8 +696,21 @@ class ToolsMixin:
                                    dialog, lat, lon,
                                    radius_m + ROOF_MARGIN, cell)}
         self.insolation_timer.setInterval(VIEWSHED_POLL)
+        self.spinner.set_job("insolation", tr("Инсоляция"),
+                             self._stop_insolation)
         self.insolation_timer.start()
         self._insolation_poll()
+
+    def _stop_insolation(self):
+        """Остановить расчёт инсоляции - меню значка загрузки. Прежний
+        результат остаётся."""
+        self._stop_roofs(self.insolation_job)
+        self.insolation_job = None
+        self.insolation_timer.stop()
+        self.insolation_timer.setInterval(VIEWSHED_POLL)
+        self.spinner.set_job("insolation")
+        if self.insolation_dialog is not None:
+            self.insolation_dialog.status.setText(tr("Расчёт остановлен."))
 
     def _insolation_poll(self):
         job = self.insolation_job
@@ -689,7 +761,7 @@ class ToolsMixin:
             heights = np.concatenate(job["heights"])
             job["work"] = insolation.parts(
                 job["lat"], job["lon"], job["radius"], heights,
-                job["start"], job["end"], ellipsoid.A)
+                job["start"], job["end"], ellipsoid.A, job["ring"])
             return
         # Расчёт идёт частями в главном потоке, не дольше CALC_BUDGET
         # за проход цикла событий. В рабочем потоке он отнимал у вида
@@ -708,18 +780,21 @@ class ToolsMixin:
         self.insolation_timer.stop()
         self.insolation_timer.setInterval(VIEWSHED_POLL)
         self.insolation_job = None
+        self.spinner.set_job("insolation")
         self._show_insolation(result)
+        _, _, _, _, hours = insolation.raster(result, ellipsoid.A)
         text = tr("За {days} сут. прямое солнце светит от {low} "
                   "до {high} ч в сутки. Шаг сетки - {step} м.",
                   days=result.days,
-                  low="{:.1f}".format(float(result.hours.min())),
-                  high="{:.1f}".format(float(result.hours.max())),
+                  low="{:.1f}".format(float(np.nanmin(hours))),
+                  high="{:.1f}".format(float(np.nanmax(hours))),
                   step="{:.0f}".format(result.cell))
         if job["missing"]:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
         text += self._roofs_text(job["roofs"])
         dialog.status.setText(text)
+        dialog.ok.setEnabled(True)
 
     def _show_insolation(self, result):
         """Слой инсоляции по результату result, None убирает слой."""
@@ -749,9 +824,35 @@ class ToolsMixin:
         self._stop_roofs(self.insolation_job)
         self.insolation_job = None
         self.insolation_timer.stop()
+        self.spinner.set_job("insolation")
         self._show_insolation(None)
         if self.insolation_dialog is not None:
             self.insolation_dialog.status.setText("")
+            self.insolation_dialog.ok.setEnabled(False)
+
+    def _insolation_done(self, code):
+        """Окно инсоляции закрыто: OK - часы растром в подгруппу расчёта
+        в проекте QGIS с раскраской шкалы глобуса, иначе предпросмотр
+        убирается."""
+        result = self.insolation_result
+        session = self.insolation_session
+        if accepted(code) and result is not None:
+            north, west, dlat, dlon, hours = insolation.raster(
+                result, ellipsoid.A)
+            path = result_path("insolation")
+            if write_lat_lon(path, hours, north, west, dlat, dlon):
+                layer = add_raster(
+                    path, tr("Инсоляция {time}, ч в сутки",
+                             time=time.strftime("%H:%M")),
+                    [(share * result.top, color)
+                     for share, color in insolation.STOPS],
+                    group=session.group_for(result.ring))
+                if layer is not None:
+                    layer.setOpacity(insolation.OPACITY)
+                show_layer(self, layer)
+        self._clear_insolation()
+        session.reset()
+        self.insolation_dialog.area.end()
 
     def _ruler_changed(self):
         self._update_tool_marks()
@@ -997,12 +1098,17 @@ class ToolsMixin:
         self.ruler_dialog.show()
         self.ruler_dialog.raise_()
         self.view.vertex_tool = self.ruler_vertices
+        self.handles.tool = self.ruler_vertices
+        self.handles.sync()
         self._refresh_shapes()
         self._tool_cursor()
 
     def _ruler_closed(self, *args):
         self.view.vertex_tool = self.wedge_corners \
             if self.view.wedge is not None else None
+        if self.handles.tool is self.ruler_vertices:
+            self.handles.tool = self.draw_vertices
+            self.handles.sync()
         self.ruler.clear()
         self._refresh_shapes()
         self._tool_cursor()
@@ -1050,6 +1156,12 @@ class ToolsMixin:
             return
         if action == "clear":
             self.clear_places()
+            return
+        if action == "temp_save":
+            self.save_temporary()
+            return
+        if action == "temp_clear":
+            self.clear_temporary()
             return
         if action in ("draw_point", "draw_line", "draw_polygon"):
             # «Добавить» в меню папки: окно «Новая метка» на нужной
@@ -1201,7 +1313,9 @@ class ToolsMixin:
     def clear_places(self, confirm=True):
         """«Очистить «Мои метки»» - удалить все метки и папки после
         подтверждения. Просьба автора от 4 октября 2026 года."""
-        top = [n.key for n in self.myplaces.folders if n.parent is None] \
+        # «Временные метки» не трогаются, у них своя очистка.
+        top = [n.key for n in self.myplaces.folders if n.parent is None
+               and n.key != self.panel.temp_key] \
             + [p.key for p in self.myplaces.places + self.myplaces.overlays
                if p.folder is None]
         if not top:

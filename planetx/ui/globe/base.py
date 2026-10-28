@@ -4,6 +4,7 @@
 """Постоянные и функции окна глобуса (ui/window.py) и его частей
 ui/globe."""
 import html
+import math
 import os
 import time
 
@@ -25,6 +26,8 @@ from ...core.buildings import EMPTY as NO_BUILDINGS, footprints
 from ...core.places import AS_QGIS, DecodeError, decode_places, name_languages
 from ...i18n import is_russian, tr, ui_language
 from ...net.overlay import BORDERS, PLACES
+from ...core import editing
+from ..handles import CLICK_PIXELS, DrawVertices
 from ..measure import GRAB_PIXELS
 from ..inset import apply as apply_insets
 from ..nasamaps import LAYERS as GALLERY_LAYERS
@@ -556,44 +559,77 @@ def distance_text(metres):
               .replace(",", " "))
 
 
-class _RulerVertices:
+class _RulerVertices(DrawVertices):
     """Точки линейки, которые тянутся мышью (render/view.py,
-    vertex_tool). Точка хватается, если курсор ближе GRAB_PIXELS."""
+    vertex_tool). Кружков середин у линейки нет. У многоугольника
+    и 3D-многоугольника щелчок по первой точке замыкает фигуру
+    и завершает рисование, у курсора подсказка «Замкнуть фигуру»,
+    как у окна «Новая метка», просьба автора от 28 октября 2026 года."""
 
-    def __init__(self, window):
-        self.window = window
-        self.index = None
+    @property
+    def tool(self):
+        return self.window.ruler
 
-    def grab(self, px, py):
+    def active(self):
         window = self.window
-        ruler = window.ruler
-        points = ruler.points
-        if not points:
-            return False
-        view = window.view
-        lats = np.array([p[0] for p in points])
-        lons = np.array([p[1] for p in points])
-        if ruler.spatial():
-            xyz = window.drawn_points(ruler)
-        else:
-            xyz = geodetic_to_ecef(lats, lons,
-                                   view.store.heights_at(lats, lons))
-        pixels, front = view.camera.project(xyz)
-        self.index = nearest_vertex(pixels, front, px, py,
-                                    GRAB_PIXELS * view.devicePixelRatioF())
-        return self.index is not None
+        return window._ruler_open() and window.view.sky_view is None \
+            and bool(self.tool.points)
+
+    def _mode(self):
+        return "polygon" if self.tool.mode in ("polygon", "polygon3d") \
+            else self.tool.mode
+
+    def closed(self):
+        return self._mode() == "polygon" and self.tool.finished \
+            and len(self.tool.points) >= 3
+
+    def middles(self):
+        return []
+
+    def screen(self):
+        ruler = self.tool
+        if not ruler.spatial():
+            return super().screen()
+        pixels, front = self.window.view.camera.project(
+            self.window.drawn_points(ruler))
+        return (np.asarray(pixels, dtype=np.float64).reshape(-1, 2),
+                np.asarray(front, dtype=bool), np.zeros((0, 2)),
+                np.zeros(0, dtype=bool))
 
     def move(self, px, py):
         window = self.window
+        if self.index is None:
+            return
+        limit = CLICK_PIXELS * window.view.devicePixelRatioF()
+        if not self._moved and self._press is not None and math.hypot(
+                px - self._press[0], py - self._press[1]) <= limit:
+            return
+        self._moved = True
         if window.ruler.spatial():
             found = window._surface(px, py)
         else:
             found = window._ground(px, py)
-        if found is not None and self.index is not None:
+        if found is not None:
             window.ruler.move(self.index, *found)
 
+    def _closing(self, index):
+        ruler = self.tool
+        return self._mode() == "polygon" and editing.click_result(
+            "polygon", len(ruler.points), index,
+            ruler.finished) == editing.CLOSE
+
     def drop(self):
-        self.index = None
+        index, self.index = self.index, None
+        if index is not None and not self._moved and self._closing(index):
+            self.tool.finish()
+
+    def hint(self):
+        if self.hot is None:
+            return ""
+        kind, index = self.hot
+        if kind == editing.VERTEX and self._closing(index):
+            return tr("Замкнуть фигуру")
+        return ""
 
 
 class _WedgeCorners:

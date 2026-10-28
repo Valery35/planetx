@@ -17,13 +17,15 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 
 from ... import journal
 from ...core import (demofiles, ellipsoid, when, oldmaps, pathflow, region,
-                     fires as fires_core, lookat, quakes, themes, opacity)
+                     fires as fires_core, lookat, placetree, quakes, themes,
+                     opacity)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.features import grown, has_alts
 from ...core.skydata import direction as sky_direction
 from ...core.scene import EXTENSION, SceneError, read_scene, write_scene
 from ...i18n import tr
 from ...net.overlay import fetch_bytes
+from ...qt_compat import enum
 from ..myplaces import OverlayItem, Place
 from ..project import (read_bathymetry, read_insets, read_map_years,
                        set_visible_on_map, write_bathymetry, write_map_years,
@@ -39,6 +41,9 @@ from .base import (BRIENZ_LEVEL, DEMO_QUAKE_BAND, FLOW_LAYERS, FLOW_LIFT,
                    POINT_LAYERS, POLE_FIRST, QGIS_LAYERS, REGION_MOVE,
                    moscow_maps)
 
+TEMP_KEY = "PlanetX/temporary_places"  # ключ папки «Временные метки»
+TEMP_ASK_KEY = "PlanetX/temporary_ask"  # ask - спросить, keep - оставить
+
 
 class PlacesMixin:
     """Часть окна глобуса GlobeWindow."""
@@ -53,7 +58,6 @@ class PlacesMixin:
                                QgsCoordinateTransform, QgsRectangle)
         from ...core.sync import ground_size, view_box
         from ..layer_places import FEATURE_LIMIT, layer_tree
-        from ...qt_compat import enum
         from ...render.view import OBJECT_BUDGET
         if self.planet.key != "earth":
             QMessageBox.information(self, tr("В «Мои метки»"), tr(
@@ -154,7 +158,109 @@ class PlacesMixin:
                                       self._opacity_value))
             for key, colors in self._opacity_items})
 
+    # «Временные метки», как в Google Earth. Просьба автора от 28 октября
+    # 2026 года - «выделена по умолчанию, очищается с предупреждением
+    # при выходе, удобно не мусорить объектами». Это папка файла меток,
+    # её ключ - в настройке TEMP_KEY, удалённая папка заводится снова.
+
+    def temporary_key(self):
+        """Ключ папки «Временные метки», заводит её при необходимости.
+        Сигнал changed при заведении идёт, _places_changed зовётся ещё
+        раз."""
+        settings = QgsSettings()
+        key = settings.value(TEMP_KEY, "") or ""
+        if key and self.myplaces.find(key) is not None:
+            return key
+        if getattr(self, "_making_temporary", False):
+            # Сигнал changed новой папки пришёл до записи её ключа.
+            return None
+        self._making_temporary = True
+        try:
+            key = self.myplaces.add_folder(tr("Временные метки"), None)
+        finally:
+            self._making_temporary = False
+        if key:
+            settings.setValue(TEMP_KEY, key)
+        return key
+
+    def temporary_items(self):
+        """Ключи меток и папок, лежащих во «Временных метках»."""
+        key = self.panel.temp_key
+        if not key or self.myplaces.find(key) is None:
+            return []
+        return [node.key for node in placetree.children(
+            self.myplaces.nodes(), key)]
+
+    def save_temporary(self):
+        """Содержимое «Временных меток» - в конец «Моих меток»."""
+        keys = self.temporary_items()
+        if keys:
+            root = placetree.children(self.myplaces.nodes(), None)
+            self.myplaces.move_many(keys, None, len(root))
+        return len(keys)
+
+    def clear_temporary(self, confirm=True):
+        """Удалить содержимое «Временных меток»."""
+        keys = self.temporary_items()
+        if not keys:
+            return 0
+        if confirm:
+            answer = QMessageBox.question(
+                self, tr("Очистить «Временные метки»"), tr(
+                    "Удалить содержимое «Временных меток», меток и папок "
+                    "{count}? Отменить удаление нельзя.", count=len(keys)))
+            if answer != enum(QMessageBox, "StandardButton", "Yes"):
+                return 0
+        self.myplaces.remove_many(keys)
+        return len(keys)
+
+    def ask_temporary(self):
+        """Вопрос при закрытии окна, если во «Временных метках» что-то
+        есть: «Сохранить» - в «Мои метки», «Не сохранять» - удалить,
+        «Отмена» - окно не закрывается. False - закрытие отменено.
+        Настройка TEMP_ASK_KEY «keep» оставляет содержимое без вопроса,
+        ей пользуются проверочные шаги."""
+        if not self.temporary_items() \
+                or QgsSettings().value(TEMP_ASK_KEY, "ask") == "keep":
+            return True
+        box = QMessageBox(self)
+        box.setIcon(enum(QMessageBox, "Icon", "Question"))
+        box.setWindowTitle(tr("Временные метки"))
+        box.setText(tr("В папке «Временные метки» есть несохранённые "
+                       "элементы. Сохранить их в папке «Мои метки»?"))
+        button = enum(QMessageBox, "StandardButton", "Save")
+        save = box.addButton(button)
+        save.setText(tr("Сохранить"))
+        drop = box.addButton(enum(QMessageBox, "StandardButton", "Discard"))
+        drop.setText(tr("Не сохранять"))
+        cancel = box.addButton(enum(QMessageBox, "StandardButton",
+                                    "Cancel"))
+        cancel.setText(tr("Отмена"))
+        box.setDefaultButton(save)
+        box.exec()
+        clicked = box.clickedButton()
+        if clicked is save:
+            self.save_temporary()
+        elif clicked is drop:
+            self.clear_temporary(confirm=False)
+        else:
+            return False
+        return True
+
+    def root_index(self, index):
+        """Номер места в корне «Моих меток» с учётом «Временных меток»:
+        список панели их в корне не показывает."""
+        siblings = [node.key for node in placetree.children(
+            self.myplaces.nodes(), None)]
+        shown = [key for key in siblings if key != self.panel.temp_key]
+        if index >= len(shown):
+            return len(siblings)
+        return siblings.index(shown[index])
+
     def _places_changed(self):
+        temp = self.temporary_key()
+        if temp != self.panel.temp_key:
+            self.panel.temp_key = temp
         self.panel.set_places(self.myplaces.tree())
         # Метки, по которым режется подземная модель, могли измениться.
         if hasattr(self, "subsurface"):
@@ -557,8 +663,9 @@ class PlacesMixin:
                 shapes += manager.shapes()
         shapes += getattr(self, "grid_shapes", [])
         shapes += getattr(self, "parcel_shapes", [])
-        shapes += getattr(self, "change_shapes", [])
         shapes += getattr(self, "class_shapes", [])
+        for area in getattr(self, "areas", ()):
+            shapes += area.shapes()
         shapes += self._pole_shapes()
         shapes += getattr(self, "motion_shapes", [])
         if self._ruler_open():

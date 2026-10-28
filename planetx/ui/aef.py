@@ -9,8 +9,9 @@
 состава QGIS через ctypes. Указатель файлов зоны - planetx-terrain/aef.
 Показ - слой вида «emag», общий с картами значений, Macrostrat
 и картами картинками: на глобусе одна такая карта. Обзор вида идёт
-сам, подробный участок задаёт окно: загрузка блока полного разрешения
-- около 40 МБ на год, окно называет объём до неё.
+сам, подробный участок задаёт окно многоугольником (ui/area.py), вне
+него подробных значений нет: загрузка блока полного разрешения - около
+40 МБ на год, окно называет объём до неё.
 """
 import ctypes
 import ctypes.util
@@ -22,23 +23,24 @@ from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from qgis.core import QgsProject, QgsSettings
+from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
-                                 QFileDialog, QFormLayout, QHBoxLayout,
-                                 QLabel, QPushButton, QVBoxLayout)
+                                 QFormLayout, QHBoxLayout, QLabel,
+                                 QPushButton, QVBoxLayout)
 
 from .. import journal
 from ..core import aef, cog
 from ..core.coords import from_utm
-from ..core.features import Shape
-from ..core.kml import KFolder, KPlace
 from ..core.mipmap import mip_chain
 from ..i18n import tr
 from ..net import ranges
 from ..qt_compat import enum
+from .area import Area
 from .export import add_raster
 from .hydro import _spin
+from .results import (Session, accepted, add_vector, keep_buttons,
+                      result_path, show_layer, write_vector)
 from .threadtiles import ThreadTiles
 from .viewshed import fit_status
 
@@ -50,9 +52,8 @@ WORKERS = 6  # рабочих потоков тайлов: больше ждут
 IN_FLIGHT = 8
 COGS_KEPT = 64  # открытых файлов: заголовок 128 КБ, тайлы не помнятся
 SETTINGS = "PlanetX/aef/"
-DETAIL_COLOR = (255, 230, 40, 255)  # рамка подробного участка
 SPOT_COLOR = (255, 210, 30, 255)
-SPOTS = 10  # мест сильных изменений в «Мои метки»
+SPOTS = 10  # мест сильных изменений в слое проекта
 
 _COGS = OrderedDict()
 _COGS_LOCK = threading.Lock()
@@ -61,11 +62,6 @@ _INDEX = {}  # зона: ZoneIndex или None - указателя нет
 _INDEX_LOCK = threading.Lock()
 _ZSTD = []
 _EXPORT = []  # пул расчёта участка, один поток на всё время QGIS
-
-
-def group_name():
-    """Группа слоёв проекта изменений местности."""
-    return tr("PlanetX - изменения местности")
 
 
 # --- ZSTD ---------------------------------------------------------------
@@ -182,7 +178,7 @@ class ChangeTiles(ThreadTiles):
         s = self.settings
         values = aef.tile_values(self.changes, index_of, *key,
                                  detail=s["detail"],
-                                 detail_level=s["level"])
+                                 detail_level=s["level"], ring=s["ring"])
         if values is None:
             return None, None
         rgba = aef.colors(values, s["low"], s["high"])
@@ -194,20 +190,23 @@ class ChangeTiles(ThreadTiles):
 
 class ChangeDialog(QDialog):
     """Окно «Изменения местности». Сигналы changed - годы или
-    промежуток степени, detail, export, spots, clear."""
+    промежуток степени, detail, spots. OK записывает участок в проект
+    QGIS, «Отмена» снимает его (ui/results.py)."""
 
     changed = pyqtSignal()
     detail = pyqtSignal()
-    export = pyqtSignal()
     spots = pyqtSignal()
-    clear = pyqtSignal()
 
-    def __init__(self, parent=None):
-        super().__init__(parent)
+    def __init__(self, window):
+        super().__init__(window)
         self.setWindowTitle(tr("Изменения местности"))
         self.point = None
         settings = QgsSettings()
         self.place = QLabel(self)
+        self.status = QLabel(self)
+        self.status.setWordWrap(True)
+        self.area = Area(window, self, 3.0, aef.DETAIL_SIDE / 1000.0,
+                         SETTINGS + "side")
         self.before = QComboBox(self)
         self.after = QComboBox(self)
         for year in aef.YEARS:
@@ -234,11 +233,6 @@ class ChangeDialog(QDialog):
                 "промежутке, прочие прозрачны. У неизменённой местности "
                 "степень около 0.05, у стройки, вырубки, нового карьера - "
                 "0.5 и выше."))
-        self.side = _spin(self, 0.5, aef.DETAIL_SIDE / 1000.0, float(
-            settings.value(SETTINGS + "side", 3.0)), tr(" км"))
-        self.side.setToolTip(tr(
-            "Сторона квадрата подробного участка с серединой в точке "
-            "окна."))
         self.level = QComboBox(self)
         for level, pixel in aef.DETAIL_LEVELS:
             self.level.addItem(tr("{pixel} м", pixel=pixel), level)
@@ -249,8 +243,6 @@ class ChangeDialog(QDialog):
             "1024 × 1024 пикселя, блок за год - 40-50 МБ при любом "
             "пикселе: 10 м покрывают 10 км блоком, 80 м - 82 км."))
         self.volume = QLabel(self)
-        self.status = QLabel(self)
-        self.status.setWordWrap(True)
         span = QHBoxLayout()
         span.addWidget(self.low)
         span.addWidget(QLabel(tr("до"), self))
@@ -263,34 +255,25 @@ class ChangeDialog(QDialog):
         form.addRow(tr("Точка"), self.place)
         form.addRow(tr("Годы"), years)
         form.addRow(tr("Степень от"), span)
-        form.addRow(tr("Подробный участок"), self.side)
+        form.addRow(tr("Подробный участок"), self.area.widget)
         form.addRow(tr("Пиксель участка"), self.level)
         form.addRow("", self.volume)
         buttons = QDialogButtonBox(self)
         run = QPushButton(tr("Подробно"), self)
         run.setToolTip(tr(
-            "Степень изменения квадрата с выбранным пикселем. Вне "
+            "Степень изменения участка с выбранным пикселем. Вне "
             "участка глобус показывает обзор с пикселем 160 м и крупнее."))
         run.clicked.connect(self.detail)
-        self.to_project = QPushButton(tr("В проект QGIS…"), self)
-        self.to_project.setToolTip(tr(
-            "Степень изменения подробного участка растром GeoTIFF "
-            "в системе UTM в проект QGIS."))
-        self.to_project.clicked.connect(self.export)
         self.find_button = QPushButton(tr("Места изменений"), self)
         self.find_button.setToolTip(tr(
-            "Места самых сильных изменений участка точками в «Моих "
-            "метках». Дальше их удобно смотреть архивом снимков "
-            "Wayback и шторкой."))
+            "Места самых сильных изменений участка слоем точек в проект "
+            "QGIS. Дальше их удобно смотреть архивом снимков Wayback "
+            "и шторкой."))
         self.find_button.clicked.connect(self.spots)
-        remove = QPushButton(tr("Убрать участок"), self)
-        remove.setToolTip(tr("Убрать подробный участок, обзор остаётся."))
-        remove.clicked.connect(self.clear)
-        for button in (run, self.to_project, self.find_button, remove):
+        for button in (run, self.find_button):
             buttons.addButton(button, enum(QDialogButtonBox, "ButtonRole",
                                            "ActionRole"))
-        buttons.addButton(enum(QDialogButtonBox, "StandardButton", "Close"))
-        buttons.rejected.connect(self.close)
+        self.to_project = keep_buttons(self, buttons)
         credit = QLabel(tr(
             "Данные - AlphaEarth Foundations Satellite Embedding, "
             "CC BY 4.0.") + " " + aef.CREDIT, self)
@@ -305,8 +288,7 @@ class ChangeDialog(QDialog):
             box.currentIndexChanged.connect(lambda _: self._changed())
         for box in (self.low, self.high):
             box.valueChanged.connect(lambda _: self._changed())
-        for box in (self.side,):
-            box.valueChanged.connect(lambda _: self._remember())
+        self.area.changed.connect(self.volume_changed)
         self.level.currentIndexChanged.connect(lambda _: self._remember())
         self.set_ready(False)
 
@@ -323,7 +305,6 @@ class ChangeDialog(QDialog):
         settings.setValue(SETTINGS + "after", self.after.currentData())
         settings.setValue(SETTINGS + "low", self.low.value())
         settings.setValue(SETTINGS + "high", self.high.value())
-        settings.setValue(SETTINGS + "side", self.side.value())
         settings.setValue(SETTINGS + "level", self.level.currentData())
         self.volume_changed()
 
@@ -337,8 +318,11 @@ class ChangeDialog(QDialog):
         if index is None:
             self.volume.setText("")
             return
+        if not self.area.closed():
+            self.volume.setText(tr("Участок не замкнут."))
+            return
         level = self.level.currentData()
-        box = aef.square(lat, lon, self.side.value() * 1000.0)
+        box = self.area.box()
         parts = aef.detail_parts(index, box, level)
         self.volume.setText(tr("Загрузка около {mb} МБ", mb="{:.0f}".format(
             aef.detail_megabytes(parts, level))))
@@ -357,13 +341,13 @@ class ChangeTool(QObject):
         self.dialog = None
         self.tiles = None
         self.changes = None
-        self.detail = None  # (рамка градусами, обзор)
+        self.detail = None  # (рамка градусами, обзор, многоугольник)
         self.shown = False
         self.job = None
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(self._poll)
-        self.shapes = []
+        self.session = Session(window, tr("Изменения местности"))
 
     # --- строка и слой --------------------------------------------------
 
@@ -399,7 +383,6 @@ class ChangeTool(QObject):
             if self.window.gibs_loaders.get(LAYER) is None:
                 view.set_gibs(LAYER, False)
             self.window.field_legend.setVisible(False)
-        self._update_shapes()
 
     def restart(self, keep=True):
         """Новый загрузчик тайлов по годам, промежутку и участку окна.
@@ -414,7 +397,8 @@ class ChangeTool(QObject):
         low, high = self.span()
         settings = {"low": low, "high": high,
                     "detail": self.detail[0] if self.detail else None,
-                    "level": self.detail[1] if self.detail else 0}
+                    "level": self.detail[1] if self.detail else 0,
+                    "ring": self.detail[2] if self.detail else None}
         window = self.window
         view = window.view
         self._drop_tiles()
@@ -459,9 +443,8 @@ class ChangeTool(QObject):
             dialog = ChangeDialog(self.window)
             dialog.changed.connect(lambda: self.restart(keep=True))
             dialog.detail.connect(self.make_detail)
-            dialog.export.connect(self.export)
             dialog.spots.connect(self.find_spots)
-            dialog.clear.connect(self.clear_detail)
+            dialog.finished.connect(self._done)
             self.dialog = dialog
         dialog.point = (lat, lon)
         dialog.place.setText(self.window._point_title(lat, lon, None))
@@ -471,6 +454,7 @@ class ChangeTool(QObject):
         self._load_index(lat, lon)
         dialog.show()
         dialog.raise_()
+        dialog.area.open_at(lat, lon)
         return dialog
 
     def _load_index(self, lat, lon):
@@ -483,13 +467,16 @@ class ChangeTool(QObject):
             self.dialog.volume_changed() if self.dialog else None))
 
     def make_detail(self):
-        """Подробный участок квадратом у точки окна."""
+        """Подробный участок - многоугольник окна."""
         dialog = self.dialog
         if dialog is None or dialog.point is None:
             return
-        lat, lon = dialog.point
-        box = aef.square(lat, lon, dialog.side.value() * 1000.0)
-        self.detail = (box, dialog.level.currentData())
+        problem = dialog.area.check()
+        if problem:
+            dialog.status.setText(problem)
+            return
+        self.detail = (dialog.area.box(), dialog.level.currentData(),
+                       list(dialog.area.ring))
         dialog.set_ready(True)
         dialog.status.setText(tr(
             "Участок грузится при приближении к нему. {volume}.",
@@ -498,7 +485,6 @@ class ChangeTool(QObject):
             self.window.set_extra(KEY, True)
         else:
             self.restart(keep=True)
-        self._update_shapes()
 
     def clear_detail(self):
         self.detail = None
@@ -506,83 +492,92 @@ class ChangeTool(QObject):
             self.dialog.set_ready(False)
             self.dialog.status.setText("")
         self.restart(keep=True)
-        self._update_shapes()
-
-    def _update_shapes(self):
-        shapes = []
-        if self.shown and self.detail is not None:
-            west, south, east, north = self.detail[0]
-            shapes.append(Shape("polygon", [(south, west), (south, east),
-                                            (north, east), (north, west)],
-                                color=DETAIL_COLOR, width=2.5))
-        if shapes == self.shapes:
-            return
-        self.shapes = shapes
-        self.window.change_shapes = shapes
-        self.window._refresh_shapes()
 
     # --- участок в рабочем потоке --------------------------------------
 
-    def _run(self, work, done):
-        _run_job(self, work, done)
+    def _run(self, work, done, text=None):
+        _run_job(self, work, done, text)
 
     def _poll(self):
         _poll_job(self)
 
     def _mosaic(self):
-        """Степень изменения участка (зона, мозаика) в рабочем потоке."""
-        box, level = self.detail
+        """Степень изменения участка (зона, мозаика) в рабочем потоке,
+        вне многоугольника - NaN."""
+        box, level, ring = self.detail
         lat = (box[1] + box[3]) / 2.0
         lon = (box[0] + box[2]) / 2.0
         index = index_of(aef.zone_of(lon, lat))
         if index is None:
             return None
         found = aef.mosaic(self.changes, index, box, level)
-        return None if found is None else (index, found)
+        if found is None:
+            return None
+        x0, y0, step, values = found
+        values[~aef.ring_mask(index, x0, y0, step, values.shape, ring)] = \
+            np.nan
+        return index, (x0, y0, step, values)
 
-    def export(self, path=None):
-        """Степень изменения участка GeoTIFF в проект QGIS. path - файл,
-        без него окно выбора."""
+    def _done(self, code):
+        """Окно закрыто: OK - степень изменения участка растром в подгруппу
+        расчёта в проекте QGIS, участок снимается после записи, иначе
+        сразу (ui/results.py). Обзор - строка раздела «Слои», он
+        остаётся."""
+        self.dialog.area.end()
+        if accepted(code) and self.detail is not None:
+            self.export(then=self._finish)
+        else:
+            self._finish()
+
+    def _finish(self):
+        self.clear_detail()
+        self.session.reset()
+
+    def export(self, path=None, then=None):
+        """Степень изменения участка GeoTIFF в проект QGIS, растр
+        отмечен на глобусе. path - файл, без него - новый файл
+        результата (ui/results.py). then() - после записи."""
         if self.detail is None or self.changes is None:
             return None
         before, after = self.years()
         if path is None:
-            path, _ = QFileDialog.getSaveFileName(
-                self.window, tr("Изменения местности в проект QGIS"),
-                os.path.join(QgsProject.instance().homePath()
-                             or os.path.expanduser("~"),
-                             "change_{}_{}.tif".format(before, after)),
-                tr("GeoTIFF (*.tif)"))
-        if not path:
-            return None
+            path = result_path("change_{}_{}".format(before, after))
         self.dialog.status.setText(tr("Считается степень изменения "
                                       "участка…"))
-        self._run(self._mosaic, lambda found: self._write(path, found))
+        self._run(self._mosaic, lambda found: self._write(path, found, then),
+                  tr("Изменения местности - участок в проект"))
         return path
 
-    def _write(self, path, found):
+    def _write(self, path, found, then=None):
         dialog = self.dialog
         if found is None:
             dialog.status.setText(tr("Для участка нет данных."))
-            return
-        index, (x0, y0, step, values) = found
-        if not write_utm(path, index, x0, y0, step, values):
-            dialog.status.setText(tr("Растр не записан в «{path}».",
-                                     path=path))
-            return
-        before, after = self.years()
-        title = tr("Изменения {before}-{after}", before=before, after=after)
-        add_raster(path, title, [(v, c) for v, c in aef.STOPS],
-                   rights=aef.CREDIT, group=group_name())
-        dialog.status.setText(tr("Растр {cols} × {rows} пикселей в проекте.",
-                                 cols=values.shape[1], rows=values.shape[0]))
+        else:
+            index, (x0, y0, step, values) = found
+            if not write_utm(path, index, x0, y0, step, values):
+                dialog.status.setText(tr("Растр не записан в «{path}».",
+                                         path=path))
+            else:
+                before, after = self.years()
+                title = tr("Изменения {before}-{after}", before=before,
+                           after=after)
+                show_layer(self.window, add_raster(
+                    path, title, [(v, c) for v, c in aef.STOPS],
+                    rights=aef.CREDIT,
+                    group=self.session.group_for(self.detail[2])))
+                dialog.status.setText(tr(
+                    "Растр {cols} × {rows} пикселей в проекте.",
+                    cols=values.shape[1], rows=values.shape[0]))
+        if then is not None:
+            then()
 
     def find_spots(self):
-        """Места сильных изменений участка папкой в «Мои метки»."""
+        """Места сильных изменений участка слоем точек в проект QGIS."""
         if self.detail is None or self.changes is None:
             return
         self.dialog.status.setText(tr("Ищутся места изменений…"))
-        self._run(self._mosaic, self._spots)
+        self._run(self._mosaic, self._spots,
+                  tr("Изменения местности - места изменений"))
 
     def _spots(self, found):
         dialog = self.dialog
@@ -597,28 +592,28 @@ class ChangeTool(QObject):
             dialog.status.setText(tr("Изменений сильнее 0.3 на участке нет."))
             return None
         before, after = self.years()
-        children = []
+        items = []
         for n, (row, col, value) in enumerate(spots, start=1):
             lat, lon = from_utm(index.number, index.south,
                                 x0 + (col + 0.5) * step,
                                 y0 - (row + 0.5) * step)
-            children.append(KPlace(
-                tr("Изменение {n}: {value}", n=n,
-                   value="{:.2f}".format(value)), "point",
-                [(float(lat), float(lon))], color=SPOT_COLOR,
-                description=tr(
-                    "Степень изменения {value} между {before} и {after} "
-                    "годами по эмбеддингам AlphaEarth.",
-                    value="{:.2f}".format(value), before=before,
-                    after=after)))
-        window = self.window
-        key = window.myplaces.import_tree(
-            KFolder(tr("Изменения {before}-{after}", before=before,
-                       after=after), True, children),
-            parent=window.panel.current_folder(), body=window.body_key())
-        dialog.status.setText(tr("В «Мои метки» записано мест: {n}.",
-                                 n=len(children)))
-        return key
+            items.append(([(float(lat), float(lon))], {
+                "n": n, "change": round(float(value), 3),
+                "years": "{}-{}".format(before, after)}))
+        path = result_path("change_spots", ".gpkg")
+        layer = None
+        if write_vector(path, "spots", "point", items,
+                        [("n", "int"), ("change", "real"),
+                         ("years", "str")]):
+            layer = add_vector(
+                self.window, path, "spots",
+                tr("Места изменений {before}-{after}", before=before,
+                   after=after), self.session.group_for(self.detail[2]),
+                SPOT_COLOR)
+        dialog.status.setText(tr("В проект добавлено мест изменений: {n}.",
+                                 n=len(items)) if layer is not None else
+                              tr("Слой не записан в «{path}».", path=path))
+        return layer
 
     def close(self):
         self.timer.stop()
@@ -627,13 +622,47 @@ class ChangeTool(QObject):
             self.dialog.close()
 
 
-def _run_job(owner, work, done):
+class Stopped(Exception):
+    """Расчёт остановлен меню значка загрузки."""
+
+
+def _run_job(owner, work, done, text=None):
     """work() в общем рабочем потоке, done(итог) - в главном. У owner
-    поля job, timer (его timeout зовёт _poll_job) и dialog."""
+    поля job, timer (его timeout зовёт _poll_job), dialog и window.
+    text - что идёт, для значка загрузки, с ним расчёт можно остановить.
+    owner.stopped - событие остановки, work проверяет его сам
+    (stop_point)."""
     if not _EXPORT:
         _EXPORT.append(ThreadPoolExecutor(max_workers=1))
+    owner.stopped = threading.Event()
     owner.job = (_EXPORT[0].submit(work), done)
+    owner.busy_text = text
+    if text:
+        owner.window.spinner.set_job(_busy_key(owner), text,
+                                     lambda: _stop_job(owner))
     owner.timer.start()
+
+
+def _busy_key(owner):
+    return "aef:" + type(owner).__name__
+
+
+def _stop_job(owner):
+    """Остановить расчёт owner: итог не ждётся, работа в потоке
+    кончается на ближайшей stop_point."""
+    owner.stopped.set()
+    owner.job = None
+    owner.timer.stop()
+    owner.window.spinner.set_job(_busy_key(owner))
+    if owner.dialog is not None:
+        owner.dialog.status.setText(tr("Расчёт остановлен."))
+
+
+def stop_point(owner):
+    """В рабочем потоке: расчёт остановлен - Stopped."""
+    stopped = getattr(owner, "stopped", None)
+    if stopped is not None and stopped.is_set():
+        raise Stopped()
 
 
 def _poll_job(owner):
@@ -645,8 +674,12 @@ def _poll_job(owner):
         return
     owner.job = None
     owner.timer.stop()
+    if getattr(owner, "busy_text", None):
+        owner.window.spinner.set_job(_busy_key(owner))
     try:
         result = future.result()
+    except Stopped:
+        return
     except (OSError, cog.CogError) as error:
         if owner.dialog is not None:
             owner.dialog.status.setText(tr(

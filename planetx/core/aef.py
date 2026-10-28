@@ -38,9 +38,11 @@ import numpy as np
 try:  # внутри плагина QGIS
     from .cog import tile_points
     from .coords import utm_arrays
+    from .subsurface import inside as ring_inside
 except ImportError:  # headless-тесты
     from cog import tile_points
     from coords import utm_arrays
+    from subsurface import inside as ring_inside
 
 YEARS = tuple(range(2017, 2026))
 BASE = ("https://storage.googleapis.com/alphaearth_foundations/"
@@ -78,6 +80,10 @@ CHUNK = 128  # строк блока за шаг расчёта: 64 канала
 KNN = 5
 MIN_POINTS = 3
 MIN_CLASSES = 2
+# Пиксель «Авто» классификации: клеток участка от AUTO_FEW до
+# AUTO_CELLS, из таких - с наименьшей загрузкой, при равной - мельче.
+AUTO_CELLS = 800 * 800
+AUTO_FEW = 120 * 120
 KEPT_BYTES = 256 << 20  # байт степени изменения в памяти
 # Шкала - от чёрного к жёлтому, как у Google Earth.
 STOPS = ((0.0, (0, 0, 0)), (0.35, (70, 60, 10)), (0.65, (190, 170, 20)),
@@ -301,11 +307,12 @@ class Changes:
 
 
 def tile_values(changes, index_of, z, x, y, detail=None, detail_level=0,
-                size=256):
+                size=256, ring=None):
     """Степень изменения тайла z/x/y size × size float32, NaN без
     данных, или None - тайл пуст. index_of(зона) - ZoneIndex или None.
     detail - рамка подробного участка (запад, юг, восток, север)
-    в градусах, в ней - обзор detail_level (0 - 10 м)."""
+    в градусах, в ней - обзор detail_level (0 - 10 м). ring - участок
+    многоугольником (широта, долгота): глубже обзора вне него пусто."""
     n = 1 << z
     west = x / n * 360.0 - 180.0
     east = (x + 1) / n * 360.0 - 180.0
@@ -338,6 +345,8 @@ def tile_values(changes, index_of, z, x, y, detail=None, detail_level=0,
             out[pick] = _sample(changes, index, level, xs, ys)
     if not any_index:
         return None
+    if ring and z > PREVIEW_ZOOM:
+        out[~ring_inside(lat, lon, ring)] = np.nan
     return out
 
 
@@ -445,12 +454,34 @@ def mosaic(changes, index, box, level=0):
     return x0, y1, step, out
 
 
-def vectors(open_cog, index, box, level, year):
+def auto_level(index, box, side, most=AUTO_CELLS, few=AUTO_FEW):
+    """Уровень пикселя «Авто» для квадрата box со стороной side метров.
+    Из DETAIL_LEVELS с клетками участка от few до most берётся уровень
+    с наименьшей загрузкой блоков, при равной - мельче. Нет таких -
+    ближайший к пределам."""
+    best = None
+    for level, pixel in DETAIL_LEVELS:
+        cells = (side / pixel) ** 2
+        if cells > most:
+            continue
+        if cells < few and best is not None:
+            break
+        mb = detail_megabytes(detail_parts(index, box, level), level)
+        if best is None or mb < best[0]:
+            best = (mb, level)
+    return DETAIL_LEVELS[-1][0] if best is None else best[1]
+
+
+def vectors(open_cog, index, box, level, year, progress=None):
     """Векторы года на участке box: (x0, y0 - левый верхний угол, шаг м,
     Int8 (каналы, строки с севера, столбцы)) или None. Сетка - как
-    у mosaic, вне файлов - NODATA."""
+    у mosaic, вне файлов - NODATA. progress(готово, всего) зовётся
+    после каждого блока."""
     pieces = []
-    for cell, col, row in detail_parts(index, box, level):
+    parts = detail_parts(index, box, level)
+    for done, (cell, col, row) in enumerate(parts):
+        if progress is not None:
+            progress(done, len(parts))
         name = index.name(cell, year)
         cog = open_cog(year, index.zone, name) if name else None
         if cog is None:
@@ -577,6 +608,48 @@ def detail_megabytes(parts, level):
     """Оценка загрузки подробного участка, МБ: два года на блок, у блока
     64 плоскости около BLOCK_MB мегабайт."""
     return 2 * len(parts) * BLOCK_MB[min(level, len(BLOCK_MB) - 1)]
+
+
+def square_ring(lat, lon, side):
+    """Вершины квадрата side метров с серединой в точке, (широта,
+    долгота) против часовой стрелки с юго-запада."""
+    west, south, east, north = square(lat, lon, side)
+    return [(south, west), (south, east), (north, east), (north, west)]
+
+
+def ring_box(points):
+    """Рамка многоугольника (широта, долгота) в градусах и его наибольший
+    размер в метрах: ((запад, юг, восток, север), сторона)."""
+    lats = [p[0] for p in points]
+    lons = [p[1] for p in points]
+    south, north = min(lats), max(lats)
+    west, east = min(lons), max(lons)
+    middle = math.radians((south + north) / 2.0)
+    side = max((north - south) * 111320.0,
+               (east - west) * 111320.0 * math.cos(middle))
+    return (west, south, east, north), side
+
+
+def ring_mask(index, x0, y0, step, shape, points):
+    """Клетки сетки участка (строки с севера) внутри многоугольника
+    points (широта, долгота), правило чётности по серединам клеток."""
+    xs, ys = index.project(np.array([p[1] for p in points]),
+                           np.array([p[0] for p in points]))
+    rows, cols = shape
+    cx = x0 + (np.arange(cols) + 0.5) * step
+    cy = y0 - (np.arange(rows) + 0.5) * step
+    mask = np.zeros(shape, dtype=bool)
+    x1, y1 = np.asarray(xs, float), np.asarray(ys, float)
+    x2, y2 = np.roll(x1, -1), np.roll(y1, -1)
+    for r, y in enumerate(cy):
+        cross = (y1 > y) != (y2 > y)
+        if not cross.any():
+            continue
+        xa, ya, xb, yb = x1[cross], y1[cross], x2[cross], y2[cross]
+        at = np.sort(xa + (y - ya) * (xb - xa) / (yb - ya))
+        # Клетка внутри, если левее неё нечётное количество пересечений.
+        mask[r] = np.searchsorted(at, cx) % 2 == 1
+    return mask
 
 
 def square(lat, lon, side):

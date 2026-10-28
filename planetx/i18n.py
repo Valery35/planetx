@@ -3836,9 +3836,6 @@ EN = {
     "Высота наблюдателя": "Observer height",
     "Высота цели": "Target height",
     "Построить": "Build",
-    "Убрать": "Remove",
-    "Убрать слой видимости с глобуса.":
-        "Remove the viewshed layer from the globe.",
     "Видно {share} площади круга. Шаг расчёта {step} м.":
         "{share} of the circle area is visible. The computation step is "
         "{step} m.",
@@ -4634,16 +4631,8 @@ EN = {
     "считается по 15 суткам, взятым равномерно.":
         "The last day of the period, inclusive. A long period is computed "
         "over 15 evenly spaced days.",
-    "Радиус круга расчёта. Больше - шаг сетки крупнее. Тени "
-    "гор берутся с расстояния не меньше радиуса и не меньше "
-    "5 км.":
-        "Radius of the computed circle. A larger radius gives a coarser "
-        "grid. Mountain shadows are taken from a distance of at least the "
-        "radius and at least 5 km.",
     "Первые сутки": "First day",
     "Последние сутки": "Last day",
-    "Убрать слой инсоляции с глобуса.":
-        "Remove the insolation layer from the globe.",
     "Прямое солнце, ч в сутки": "Direct sun, h per day",
     "За {days} сут. прямое солнце светит от {low} "
     "до {high} ч в сутки. Шаг сетки - {step} м.":
@@ -5670,53 +5659,16 @@ EN = {
     "Статья": "Article",
     "Википедия": "Wikipedia",
     "Затопление": "Flooding",
-    "PlanetX - вода по рельефу": "PlanetX - terrain water",
     "Затопление отсюда…": "Flooding from here…",
     "Сток воды отсюда…": "Water flow from here…",
-    "Половина стороны квадрата расчёта. Больше - шаг сетки "
-    "крупнее, он около шестисотой доли стороны.":
-        "Half the side of the calculation square. Larger means a coarser "
-        "grid step, about one six-hundredth of the side.",
-    "Отметка поверхности воды над уровнем моря. Вода заливает "
-    "всё ниже отметки, куда она доходит от точки. Котловины за "
-    "более высоким гребнем остаются сухими.":
-        "Elevation of the water surface above sea level. Water fills "
-        "everything below it that it reaches from the point. Basins "
-        "behind a higher ridge stay dry.",
     "Подъём воды над высотой точки, до {rise} м.":
         "Water rise above the height of the point, up to {rise} m.",
     "Высота точки": "Point height",
     "Подъём": "Rise",
-    "Растр глубин и многоугольник затопления в проект QGIS.":
-        "Depth raster and flood polygon to the QGIS project.",
-    "Убрать воду с глобуса.": "Remove the water from the globe.",
     "{h} м": "{h} m",
     "Сток воды": "Water flow",
-    "Половина стороны квадрата расчёта. Линия стока кончается "
-    "у его края, водосбор больше квадрата учитывается не "
-    "целиком. Шаг сетки - около шестисотой доли стороны.":
-        "Half the side of the calculation square. A flow line ends at "
-        "its edge, a catchment larger than the square is not counted "
-        "in full. The grid step is about one six-hundredth of the side.",
     "Линия стока": "Flow line",
-    "Путь воды от точки вниз по рельефу - линия в «Моих "
-    "метках». Впадины заполнены до перелива, поэтому линия "
-    "проходит через озёра и бессточные котловины. У пути "
-    "и многоугольника - линии от всех их узлов, папкой.":
-        "The path of water from the point down the terrain, a line in "
-        "My Places. Depressions are filled up to their spill level, so "
-        "the line passes through lakes and closed basins. For a path or "
-        "a polygon, lines from all their nodes, as a folder.",
     "Водосбор": "Catchment",
-    "Площадь, с которой вода стекает к точке, и главный "
-    "водоток - папка в «Моих метках» с площадью, уклонами "
-    "и длиной водотока. Водосбор строится от русла рядом "
-    "с точкой.":
-        "The area from which water flows to the point and the main "
-        "stream, a folder in My Places with the area, slopes and the "
-        "stream length. The catchment starts at the channel next to the "
-        "point.",
-    "В точке нет высот.": "There are no heights at the point.",
     "Уровень не выше точки, воды нет.":
         "The level is not above the point, there is no water.",
     "Затоплено {area} км², объём воды {volume} млн м³, "
@@ -5724,13 +5676,12 @@ EN = {
         "Flooded {area} km², water volume {volume} million m³, "
         "greatest depth {depth} m.",
     "Вода дошла до края участка и может идти "
-    "дальше. Нужен больший радиус.":
+    "дальше. Нужен больший участок.":
         "The water reached the edge of the area and may go further. "
-        "A larger radius is needed.",
+        "A larger area is needed.",
     "Шаг сетки {step} м.": "Grid step {step} m.",
     "Вода видна при включённом рельефе.":
         "The water is visible with the terrain switched on.",
-    "Затопление в проект QGIS": "Flooding to the QGIS project",
     "Затопление не записано в «{path}».":
         "The flooding is not written to \"{path}\".",
     "{name} - глубина": "{name} - depth",
@@ -5744,16 +5695,14 @@ EN = {
         "leaves the area.",
     "Линия кончается у края данных высот.":
         "The line ends at the edge of the height data.",
-    "{name}: {text}": "{name}: {text}",
     "К точке вода не стекает: водосбора "
     "нет.": "No water flows to the point, there is no catchment.",
     "Створ перенесён на русло в {m} м от точки.":
         "The outlet moved to the channel {m} m from the point.",
     "Водосбор доходит до края участка, его часть "
-    "за краем не учтена. Нужен больший радиус.":
+    "за краем не учтена. Нужен больший участок.":
         "The catchment reaches the edge of the area, its part beyond the "
-        "edge is not counted. A larger radius is needed.",
-    "Главный водоток": "Main stream",
+        "edge is not counted. A larger area is needed.",
     "Площадь {area} км², высоты {low}-{high} м, средняя "
     "{mean} м.": "Area {area} km², heights {low}-{high} m, mean {mean} m.",
     "Средний уклон склонов {slope} промилле по "
@@ -5791,12 +5740,6 @@ EN = {
         "there. So a click near a river gives the catchment of the "
         "river. 0 means the catchment starts exactly at the point.",
     "Обрывать на водотоке": "Stop at a stream",
-    "Линия стока кончается, дойдя до водотока с водосбором "
-    "от площади поля «Водотоки от». Без флажка линия идёт до "
-    "края квадрата.":
-        "The flow line ends where it reaches a stream with a catchment "
-        "of at least the area of the Streams from field. Without the "
-        "check box the line runs to the edge of the square.",
     "Обрывать на выполаживании": "Stop where the slope flattens",
     "Линия стока кончается там, где средний уклон на длине "
     "участка ниже порога - у подножия склона, на террасе, на "
@@ -5822,30 +5765,13 @@ EN = {
         "box each line runs to its end, and all of them follow the "
         "shared channel.",
     "Бассейны": "Basins",
-    "Квадрат, поделённый на бассейны устьев - мест, где водотоки "
-    "с водосбором от площади поля «Водотоки от» уходят из "
-    "квадрата. Слой многоугольников GeoPackage в проект QGIS.":
-        "The square divided into basins of outlets, the places where "
-        "streams with a catchment of at least the area of the Streams "
-        "from field leave the square. A GeoPackage polygon layer in the "
-        "QGIS project.",
     "Вода от метки никуда не стекает.":
         "Water from the placemark does not flow anywhere.",
-    "Линия стока {n}": "Flow line {n}",
     "Линии стока «{name}»": "Flow lines of {name}",
-    "{name}: линий {count}, общая длина {km} км.":
-        "{name}: {count} lines, total length {km} km.",
     "Самых коротких линий не вошло {count}.":
         "{count} of the shortest lines are left out.",
-    "Водотоков с таким водосбором у края квадрата нет.":
-        "No streams with such a catchment at the edge of the square.",
-    "Бассейны в проект QGIS": "Basins to the QGIS project",
     "Бассейны не записаны в «{path}».":
         "The basins were not written to {path}.",
-    "В проект добавлено бассейнов {count}, они покрывают "
-    "{area} км² квадрата.":
-        "{count} basins added to the project, they cover {area} km² of "
-        "the square.",
     "Линия кончается на водотоке.": "The line ends at a stream.",
     "Линия кончается, где рельеф выполаживается.":
         "The line ends where the terrain flattens.",
@@ -5862,7 +5788,6 @@ EN = {
         "radius.",
     "Часы прямого солнца в сутки вокруг точки.":
         "Hours of direct sun per day around the point.",
-    "PlanetX - анализ рельефа": "PlanetX - terrain analysis",
     "север": "north",
     "северо-восток": "north-east",
     "восток": "east",
@@ -5881,12 +5806,6 @@ EN = {
         "Most slopes face {sides}.",
     "Ровного места {share}.": "Flat ground {share}.",
     "Уклон и экспозиция": "Slope and aspect",
-    "Что показывает квадрат на глобусе - крутизну склона или сторону "
-    "света, куда он обращён. Строки «Уклон» и «Экспозиция» раздела "
-    "«Слои» на это время гаснут.":
-        "What the square shows on the globe, the steepness of the slope "
-        "or the direction it faces. The Slope and Aspect rows of the "
-        "Layers section switch off meanwhile.",
     "Вершина выше всего вокруг себя в этом радиусе, яма ниже. Больше - "
     "остаются только крупные вершины и ямы.":
         "A peak is higher than everything around it within this radius, "
@@ -5899,43 +5818,12 @@ EN = {
     "Показывать": "Show",
     "Радиус вершины": "Peak radius",
     "Перепад от": "Rise from",
-    "Уклон и экспозиция квадрата по высотам, ядро 3 × 3 - раскраска "
-    "на глобусе и сводка по классам уклона и сторонам света.":
-        "Slope and aspect of the square from the heights, 3 × 3 kernel, "
-        "colouring on the globe and a summary by slope classes and "
-        "directions.",
-    "Растры уклона и экспозиции в градусах в проект QGIS.":
-        "Slope and aspect rasters in degrees to the QGIS project.",
     "Вершины и ямы": "Peaks and pits",
-    "Вершины и замкнутые понижения квадрата - точки в «Моих метках» "
-    "с отметкой и перепадом.":
-        "Peaks and closed depressions of the square, points in My Places "
-        "with the elevation and the rise.",
-    "Убрать раскраску квадрата с глобуса.":
-        "Remove the colouring of the square from the globe.",
     "{name} - уклон, °": "{name} - slope, °",
     "{name} - экспозиция, °": "{name} - aspect, °",
-    "В «Мои метки» записано вершин {peaks} и ям {pits}.":
-        "{peaks} peaks and {pits} pits written to My Places.",
-    "В квадрате нет высот.": "No heights in the square.",
-    "Уклон и экспозиция в проект QGIS":
-        "Slope and aspect to the QGIS project",
     "Растры не записаны в «{path}».":
         "The rasters were not written to {path}.",
-    "Вершин и ям с таким перепадом в квадрате нет.":
-        "No peaks or pits with such a rise in the square.",
-    "Вершина {height} м": "Peak {height} m",
-    "Отметка {height} м, превышение {drop} м.":
-        "Elevation {height} m, rise {drop} m.",
-    "Яма {height} м": "Pit {height} m",
-    "Отметка {height} м, глубина {drop} м.":
-        "Elevation {height} m, depth {drop} m.",
     "Речная сеть": "Stream network",
-    "Водотоки квадрата с порядком по Стралеру - слой линий "
-    "GeoPackage в проект QGIS, толщина линии растёт с порядком.":
-        "Streams of the square with the Strahler order, a GeoPackage "
-        "line layer in the QGIS project, the line width grows with the "
-        "order.",
     "Уровень моря": "Sea level",
     "Уровень моря над нынешним. Вода заливает всё ниже уровня, "
     "ниже нуля открывает шельф. Около -120 м - последний "
@@ -5954,11 +5842,6 @@ EN = {
         "Water fills everything below the level over the whole globe. "
         "The connection with the sea is not checked, so lowlands inside "
         "continents are flooded too.",
-    "Водотоков с таким водосбором "
-    "и порядком в квадрате нет.":
-        "There are no streams with such a catchment and order in the "
-        "square.",
-    "Речная сеть в проект QGIS": "Stream network to the QGIS project",
     "Речная сеть не записана в "
     "«{path}».": "The stream network is not written to \"{path}\".",
     "В проект добавлено водотоков {count}, наибольший "
@@ -5981,7 +5864,6 @@ EN = {
     "Подъём и опускание уровня моря по всему глобусу.":
         "Raising and lowering the sea level over the whole globe.",
     # Изменения местности по эмбеддингам AlphaEarth (ui/aef.py).
-    "PlanetX - изменения местности": "PlanetX - land change",
     "Годы сравнения. Каждая клетка 10 м за год описана 64 числами - "
     "сводкой снимков Sentinel, Landsat и радара. Степень изменения - "
     "насколько отличаются описания двух лет.":
@@ -5993,8 +5875,6 @@ EN = {
         "Degree of change {before}-{after}",
     "Изменения {before}-{after}": "Change {before}-{after}",
     "Изменения местности": "Land change",
-    "Сторона квадрата подробного участка с серединой в точке окна.":
-        "Side of the detail square centred on the window's point.",
     "Пиксель подробного участка. Файлы набора хранят блоки 1024 × 1024 "
     "пикселя, блок за год - 40-50 МБ при любом пикселе: 10 м покрывают "
     "10 км блоком, 80 м - 82 км.":
@@ -6006,24 +5886,7 @@ EN = {
     "Подробный участок": "Detail area",
     "Пиксель участка": "Area pixel",
     "Подробно": "Detail",
-    "Степень изменения квадрата с выбранным пикселем. Вне участка глобус "
-    "показывает обзор с пикселем 160 м и крупнее.":
-        "Degree of change of the square at the chosen pixel. Outside the "
-        "area the globe shows an overview with a pixel of 160 m or "
-        "coarser.",
-    "Степень изменения подробного участка растром GeoTIFF в системе UTM "
-    "в проект QGIS.":
-        "Degree of change of the detail area as a GeoTIFF raster in UTM "
-        "to the QGIS project.",
     "Места изменений": "Change spots",
-    "Места самых сильных изменений участка точками в «Моих метках». "
-    "Дальше их удобно смотреть архивом снимков Wayback и шторкой.":
-        "Spots of the strongest change in the area as points in My "
-        "Places. The Wayback imagery archive and the swipe show them "
-        "next.",
-    "Убрать участок": "Remove area",
-    "Убрать подробный участок, обзор остаётся.":
-        "Remove the detail area, the overview stays.",
     "Данные - AlphaEarth Foundations Satellite Embedding, CC BY 4.0.":
         "Data - AlphaEarth Foundations Satellite Embedding, CC BY 4.0.",
     "Загрузка около {mb} МБ": "Download about {mb} MB",
@@ -6034,7 +5897,6 @@ EN = {
     "Растр {cols} × {rows} пикселей в проекте.":
         "Raster of {cols} × {rows} pixels added to the project.",
     "Ищутся места изменений…": "Looking for change spots…",
-    "В «Мои метки» записано мест: {n}.": "Spots written to My Places: {n}.",
     "Показывать клетки со степенью изменения в этом промежутке, прочие "
     "прозрачны. У неизменённой местности степень около 0.05, у стройки, "
     "вырубки, нового карьера - 0.5 и выше.":
@@ -6048,18 +5910,12 @@ EN = {
     "прочитать.":
         "Land change: the zstd library is missing, AlphaEarth files "
         "cannot be read.",
-    "Изменения местности в проект QGIS": "Land change to the QGIS project",
     "Для участка нет данных.": "No data for the area.",
     "Растр не записан в «{path}».": "The raster was not written to "
                                     "\"{path}\".",
     "Изменений сильнее 0.3 на участке нет.":
         "No change stronger than 0.3 in the area.",
-    "Изменение {n}: {value}": "Change {n}: {value}",
     "Данные не получены: {error}": "Data not received: {error}",
-    "Степень изменения {value} между {before} и {after} годами по "
-    "эмбеддингам AlphaEarth.":
-        "Degree of change {value} between {before} and {after} from "
-        "AlphaEarth embeddings.",
     "Изменения местности здесь": "Land change here",
     "Анализ участка": "Site analysis",
     "Изменения местности здесь…": "Land change here…",
@@ -6092,7 +5948,6 @@ EN = {
         "years are set by the Land change window of the Site analysis "
         "submenu of the globe menu.",
     # Классификация участка (ui/aefclass.py).
-    "PlanetX - классификация": "PlanetX - classification",
     "Классы {year} года: {parts}.": "Classes of {year}: {parts}.",
     "Щелчок по глобусу ставит точку этого класса.":
         "A click on the globe places a point of this class.",
@@ -6105,14 +5960,46 @@ EN = {
     "по снимку глобуса, он может быть другого года.":
         "The year whose vectors divide the cells into classes. Points are "
         "placed on the globe imagery, which may be of another year.",
-    "Сторона квадрата классификации с серединой в точке окна. Точки вне "
-    "квадрата не учитываются.":
-        "Side of the classification square centred at the window point. "
-        "Points outside the square are not used.",
+    "Квадрат": "Square",
+    "Участок - квадрат стороной из поля слева.":
+        "The area is a square with the side from the field on the left.",
+    "Нарисовать": "Draw",
+    "Щёлкайте по глобусу вершины участка. Щелчок по первой вершине "
+    "замыкает его.":
+        "Click the area vertices on the globe. A click on the first "
+        "vertex closes it.",
+    "Участок не замкнут.": "The area is not closed.",
+    "Участок больше {km} км, уменьшите его.":
+        "The area is larger than {km} km, make it smaller.",
+    "Замкните участок щелчком по его первой вершине.":
+        "Close the area with a click on its first vertex.",
     "Пиксель классификации. Блок файла за год - 40-50 МБ при любом "
-    "пикселе. Блок пикселя 10 м покрывает 10 км, 80 м - 82 км.":
+    "пикселе. Блок пикселя 10 м покрывает 10 км, 80 м - 82 км. «Авто» "
+    "берёт пиксель с наименьшей загрузкой, при котором на участке от "
+    "14 до 640 тысяч клеток.":
         "Classification pixel. A file block for a year is 40-50 MB at any "
-        "pixel. A 10 m block covers 10 km, an 80 m block covers 82 km.",
+        "pixel. A 10 m block covers 10 km, an 80 m block covers 82 km. "
+        "Auto takes the pixel with the smallest download at which the "
+        "area has 14 to 640 thousand cells.",
+    "Авто": "Auto",
+    "Убрать результат с глобуса и закрыть окно.":
+        "Remove the result from the globe and close the window.",
+    "Видимость {time}": "Viewshed {time}",
+    "Инсоляция {time}, ч в сутки": "Insolation {time}, h per day",
+    "Видно": "Visible",
+    "Скрыто": "Hidden",
+    "Высоты участка": "Area heights",
+    "Изменения местности - места изменений": "Land change - change spots",
+    "Изменения местности - участок в проект":
+        "Land change - area to the project",
+    "Остановить всё": "Stop all",
+    "Остановить «{what}»": "Stop {what}",
+    "Расчёт остановлен.": "The calculation is stopped.",
+    "Щелчок - остановить расчёт.": "Click to stop the calculation.",
+    "Пиксель {pixel} м, загрузка около {mb} МБ":
+        "Pixel {pixel} m, download about {mb} MB",
+    "Загружаются векторы участка, блок {n} из {total}…":
+        "Loading the area vectors, block {n} of {total}…",
     "Добавить класс": "Add class",
     "Непрозрачность классов на глобусе.":
         "Opacity of the classes on the globe.",
@@ -6125,13 +6012,7 @@ EN = {
     "по векторам AlphaEarth.":
         "Each cell of the area goes to the class of the nearest control "
         "points by AlphaEarth vectors.",
-    "Классы участка растром GeoTIFF в системе UTM в проект QGIS.":
-        "Area classes as a GeoTIFF raster in UTM to the QGIS project.",
     "Убрать точку": "Remove point",
-    "Убрать последнюю точку выбранного класса.":
-        "Remove the last point of the selected class.",
-    "Убрать классы с глобуса, точки остаются.":
-        "Remove the classes from the globe, the points stay.",
     "Загружаются векторы участка…": "Loading the area vectors…",
     "Классификация {year}": "Classification {year}",
     "Растр классов в проекте.": "The class raster is in the project.",
@@ -6143,7 +6024,6 @@ EN = {
         "At least two classes with three points each are needed.",
     "Все точки вне участка.": "All points are outside the area.",
     "Точек вне участка: {n}.": "Points outside the area: {n}.",
-    "Классификация в проект QGIS": "Classification to the QGIS project",
     "Классификация здесь…": "Classification here…",
     "Классы участка по контрольным точкам на глобусе - по эмбеддингам "
     "AlphaEarth, клетка 10 м.":
@@ -6156,6 +6036,157 @@ EN = {
         "Window classifying the area at the view point - classes with a "
         "color and a name, control points by a click on the globe, the "
         "year, a class raster to the QGIS project.",
+    'В проект добавлен слой «{name}». {text}':
+        'Layer “{name}” added to the project. {text}',
+    'В проект добавлено вершин {peaks} и ям {pits}.':
+        '{peaks} peaks and {pits} pits added to the project.',
+    'В проект добавлено мест изменений: {n}.':
+        'Change spots added to the project: {n}.',
+    'Водосбор {point}':
+        'Catchment {point}',
+    'Главный водоток {point}':
+        'Main stream {point}',
+    'Контрольные точки {year}':
+        'Training points {year}',
+    'Линий {count}, общая длина {km} км.':
+        '{count} lines, total length {km} km.',
+    'Линия стока {point}':
+        'Flow line {point}',
+    'Места изменений {before}-{after}':
+        'Change spots {before}-{after}',
+    'Места самых сильных изменений участка слоем точек в проект QGIS. '
+    'Дальше их удобно смотреть архивом снимков Wayback и шторкой.':
+        'Spots of the strongest change in the area as a point layer in '
+        'the QGIS project. The Wayback imagery archive and the swipe '
+        'show them next.',
+    'Площадь, с которой вода стекает к точке, и главный водоток - два '
+    'слоя в проект QGIS с площадью, высотами, длиной и уклоном '
+    'водотока. Водосбор строится от русла рядом с точкой.':
+        'The area from which water flows to the point and the main '
+        'stream, two layers in the QGIS project with the area, '
+        'elevations, the stream length and slope. The catchment starts '
+        'at the channel next to the point.',
+    'Путь воды от точки вниз по рельефу - слой линии в проект QGIS. '
+    'Впадины заполнены до перелива, поэтому линия проходит через озёра '
+    'и бессточные котловины. У пути и многоугольника - линии от всех их '
+    'узлов одним слоем.':
+        'The path of water from the point down the terrain, a line '
+        'layer in the QGIS project. Depressions are filled up to their '
+        'spill level, so the line passes through lakes and closed '
+        'basins. For a path or a polygon, lines from all their nodes in '
+        'one layer.',
+    'Слой «{name}» не записан.':
+        'Layer “{name}” was not written.',
+    'Слой не записан в «{path}».':
+        'The layer was not written to “{path}”.',
+    'Яма':
+        'Pit',
+    'В папке «Временные метки» есть несохранённые элементы. Сохранить '
+    'их в папке «Мои метки»?':
+        'The Temporary Places folder has unsaved items. Save them to My '
+        'Places?',
+    'Временные метки':
+        'Temporary Places',
+    'Не сохранять':
+        "Don't save",
+    'Новые метки, пути и измерения ложатся сюда, пока строка выделена. '
+    'При закрытии окна глобуса содержимое можно перенести в «Мои метки» '
+    'или удалить. Метку, которую надо сохранить сразу, перетащите в '
+    '«Мои метки».':
+        'New placemarks, paths and measurements go here while the row '
+        'is selected. When the globe window closes, the contents can be '
+        'moved to My Places or deleted. Drag a placemark to My Places '
+        'to keep it at once.',
+    'Очистить «Временные метки»':
+        'Clear Temporary Places',
+    'Очистить «Временные метки»…':
+        'Clear Temporary Places…',
+    'Сохранить в «Мои метки»':
+        'Save to My Places',
+    'Удалить содержимое «Временных меток», меток и папок {count}? '
+    'Отменить удаление нельзя.':
+        'Delete the contents of Temporary Places, {count} placemarks '
+        'and folders? Deletion cannot be undone.',
+    "PlanetX - анализ участка": "PlanetX - site analysis",
+    "Видимость": "Viewshed",
+    "Нет точки окна.": "The window has no point.",
+    "На участке нет высот.": "No heights in the area.",
+    "Точка вне участка или в ней нет высот.":
+        "The point is outside the area or has no heights.",
+    "Больше - шаг сетки крупнее. Тени гор берутся с расстояния не меньше "
+    "половины участка и не меньше 5 км.":
+        "Larger means a coarser grid step. Mountain shadows are taken from a "
+        "distance of at least half the area and at least 5 km.",
+    "В проект добавлено бассейнов {count}, они покрывают {area} км² участка.":
+        "{count} basins added to the project, they cover {area} km² of the "
+        "area.",
+    "Вершин и ям с таким перепадом на участке нет.":
+        "No peaks or pits with such a rise in the area.",
+    "Вершины и замкнутые понижения участка - слой точек в проект QGIS с "
+    "отметкой и перепадом.":
+        "Peaks and closed depressions of the area, a point layer in the QGIS "
+        "project with the elevation and the rise.",
+    "Водотоки участка с порядком по Стралеру - слой линий GeoPackage в проект"
+    " QGIS, толщина линии растёт с порядком.":
+        "Streams of the area with the Strahler order, a GeoPackage line layer"
+        " in the QGIS project, the line width grows with the order.",
+    "Водотоков с таким водосбором и порядком на участке нет.":
+        "There are no streams with such a catchment and order in the area.",
+    "Водотоков с таким водосбором у края участка нет.":
+        "No streams with such a catchment at the edge of the area.",
+    "Записать результат в проект QGIS и закрыть окно. Расчёт ложится "
+    "подгруппой группы «PlanetX - анализ участка» вместе с контуром участка, "
+    "удаление подгруппы убирает его целиком.":
+        "Write the result to the QGIS project and close the window. The "
+        "calculation goes into a subgroup of the PlanetX - site analysis "
+        "group together with the area outline, removing the subgroup removes "
+        "all of it.",
+    "Линия стока кончается у края участка, водосбор больше участка "
+    "учитывается не целиком.":
+        "A flow line ends at the edge of the area, a catchment larger than "
+        "the area is not counted in full.",
+    "Линия стока кончается, дойдя до водотока с водосбором от площади поля "
+    "«Водотоки от». Без флажка линия идёт до края участка.":
+        "The flow line ends where it reaches a stream with a catchment of at "
+        "least the area of the Streams from field. Without the check box the "
+        "line runs to the edge of the area.",
+    "Нарисовать участок многоугольником щелчками по глобусу. Щелчок по первой"
+    " вершине замыкает его. Результат считается только внутри участка.":
+        "Draw the area as a polygon by clicks on the globe. A click on the "
+        "first vertex closes it. The result is computed only inside the area.",
+    "Отметка поверхности воды над уровнем моря. Вода заливает всё ниже "
+    "отметки внутри участка, куда она доходит от точки. Котловины за более "
+    "высоким гребнем остаются сухими.":
+        "Elevation of the water surface above sea level. Water fills "
+        "everything below it inside the area that it reaches from the point. "
+        "Basins behind a higher ridge stay dry.",
+    "Степень изменения участка с выбранным пикселем. Вне участка глобус "
+    "показывает обзор с пикселем 160 м и крупнее.":
+        "Degree of change of the area at the chosen pixel. Outside the area "
+        "the globe shows an overview with a pixel of 160 m or coarser.",
+    "Сторона квадрата участка с серединой в точке окна. Вершины участка "
+    "тянутся мышью, кружок на середине стороны ставит новую вершину. Участок "
+    "не больше {km} км.":
+        "Side of the area square centred at the window point. The area "
+        "vertices are dragged with the mouse, the circle in the middle of a "
+        "side adds a new vertex. The area is at most {km} km.",
+    "Уклон и экспозиция участка по высотам, ядро 3 × 3 - раскраска на глобусе"
+    " и сводка по классам уклона и сторонам света.":
+        "Slope and aspect of the area from the heights, 3 × 3 kernel, "
+        "colouring on the globe and a summary by slope classes and "
+        "directions.",
+    "Участок, поделённый на бассейны устьев - мест, где водотоки с водосбором"
+    " от площади поля «Водотоки от» уходят из участка. Слой многоугольников "
+    "GeoPackage в проект QGIS.":
+        "The area divided into basins of outlets, the places where streams "
+        "with a catchment of at least the area of the Streams from field "
+        "leave the area. A GeoPackage polygon layer in the QGIS project.",
+    "Что показывает участок на глобусе - крутизну склона или сторону света, "
+    "куда он обращён. Строки «Уклон» и «Экспозиция» раздела «Слои» на это "
+    "время гаснут.":
+        "What the area shows on the globe, the steepness of the slope or the "
+        "direction it faces. The Slope and Aspect rows of the Layers section "
+        "switch off meanwhile.",
 }
 
 _language = None

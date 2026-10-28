@@ -112,5 +112,8 @@ def tile_rgba(relief, lats, lons, radius):
         rgba[~inside | ~np.isfinite(values)] = 0
     else:
         rgba = slope.aspect_rgba(values)
-        rgba[~inside] = 0
+        # Экспозиция ровного места - NaN, вне участка NaN и уклон.
+        slopes, _ = sample(relief._replace(mode="slope"), lats, lons,
+                           radius)
+        rgba[~inside | ~np.isfinite(slopes)] = 0
     return rgba
