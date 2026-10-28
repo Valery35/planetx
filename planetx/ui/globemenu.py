@@ -200,6 +200,10 @@ def relief_items(window, menu, lat, lon):
         items.append((tr("Инсоляция здесь…"),
                       tr("Часы прямого солнца в сутки вокруг точки."),
                       lambda *a: window.insolation_here(lat, lon)))
+        items.append((tr("Тени здесь…"),
+                      tr("Где тень и где солнце на момент шкалы времени - "
+                         "по рельефу и зданиям, тени идут за шкалой."),
+                      lambda *a: window.shadows_here(lat, lon)))
         items.append((tr("Изменения местности здесь…"),
                       tr("Где местность изменилась между двумя годами "
                          "2017-2025 - по эмбеддингам AlphaEarth, клетка "

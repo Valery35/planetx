@@ -123,6 +123,93 @@ vec3 air(vec3 dir, float t_end, out vec3 pass) {
        "flat": _sun.FLAT, "twilight": _sun.TWILIGHT,
        "daylight": _sun.DAYLIGHT}
 
+SHADOW_DEFINE = "#define SHADOWS 1\n"
+
+
+def with_shadows(source):
+    """Текст шейдера с выборкой карты теней (render/shadowmap.py):
+    после строки #version ставится #define SHADOWS."""
+    head, _, rest = source.lstrip().partition("\n")
+    return head + "\n" + SHADOW_DEFINE + rest
+
+
+# Карта теней кадра (core/shadowmap.py). v_light - точка в координатах
+# отсечения карты, ортогональная проекция, w = 1. Выборка 3×3 со
+# сравнением глубины, к краю круга карты тень гаснет. Без SHADOWS - свет
+# без теней: тайлу при 16 текстурных блоках места под карту нет.
+SHADOW_SAMPLE = """
+#ifdef SHADOWS
+uniform sampler2DShadow u_shadow_map;
+#endif
+uniform float u_shadow_on;
+// x - тексель карты в долях, y - запас глубины, z - доля радиуса,
+// с которой тень гаснет к краю.
+uniform vec3 u_shadow_params;
+in vec4 v_light;
+float shadow_lit() {
+#ifdef SHADOWS
+    if (u_shadow_on < 0.5) {
+        return 1.0;
+    }
+    vec3 c = v_light.xyz;
+    float r = length(c.xy);
+    if (r >= 1.0 || c.z <= -1.0 || c.z >= 1.0) {
+        return 1.0;
+    }
+    vec3 t = c * 0.5 + 0.5;
+    float sum = 0.0;
+    for (int i = -1; i <= 1; ++i) {
+        for (int j = -1; j <= 1; ++j) {
+            sum += texture(u_shadow_map, vec3(
+                t.xy + vec2(float(i), float(j)) * u_shadow_params.x,
+                t.z - u_shadow_params.y));
+        }
+    }
+    return mix(sum / 9.0, 1.0, smoothstep(u_shadow_params.z, 1.0, r));
+#else
+    return 1.0;
+#endif
+}
+"""
+
+# Точка в карте теней - в вершинном шейдере: сдвиг по нормали на
+# u_shadow_offset метров убирает самозатенение под косым солнцем.
+SHADOW_VERTEX = """
+uniform mat4 u_shadow;
+uniform float u_shadow_offset;
+out vec4 v_light;
+vec4 light_point(vec3 p, vec3 n) {
+    float len = length(n);
+    vec3 shift = len > 0.0 ? n / len * u_shadow_offset : vec3(0.0);
+    return u_shadow * vec4(p + shift, 1.0);
+}
+"""
+
+# Тени в кадре: проход карты глубины со стороны солнца. Тайл - только
+# глубина, заплатка предка отсекается по своей доле, как в тайле.
+SHADOW_TILE_VERTEX = """#version 330 core
+layout(location = 0) in vec3 a_position;
+layout(location = 1) in vec2 a_uv;
+uniform mat4 u_mvp;
+out vec2 v_uv;
+void main() {
+    v_uv = a_uv;
+    gl_Position = u_mvp * vec4(a_position, 1.0);
+}
+"""
+
+SHADOW_TILE_FRAGMENT = """#version 330 core
+in vec2 v_uv;
+uniform vec4 u_fade;
+void main() {
+    if (u_fade.w > 0.0 && (v_uv.x < u_fade.y || v_uv.y < u_fade.z
+            || v_uv.x > u_fade.y + u_fade.w
+            || v_uv.y > u_fade.z + u_fade.w)) {
+        discard;
+    }
+}
+"""
+
 TILE_VERTEX = """#version 330 core
 layout(location = 0) in vec3 a_position;
 layout(location = 1) in vec2 a_uv;
@@ -142,6 +229,7 @@ out vec3 v_normal;
 out float v_depth;
 out float v_height;
 out vec3 v_up;
+""" + SHADOW_VERTEX + """
 void main() {
     v_uv = a_uv;
     v_up = a_sea.xyz;
@@ -154,6 +242,7 @@ void main() {
     }
     gl_Position = u_mvp * vec4(p, 1.0);
     v_depth = gl_Position.w;
+    v_light = light_point(p, a_normal);
 }
 """
 
@@ -393,7 +482,14 @@ uniform float u_level;
 // без отмывки вида, воды и наложений. 1 - включена.
 uniform float u_plain;
 out vec4 frag_color;
-""" + ATMOSPHERE + """
+""" + ATMOSPHERE + SHADOW_SAMPLE + """
+// Свет солнца с тенью: lit гасит прямой свет, рассеянный остаётся.
+float sun_light(float cos_sun, float lit) {
+    float day = smoothstep(TWILIGHT, DAYLIGHT, cos_sun);
+    float ambient = mix(SUN_NIGHT, SUN_AMBIENT, day);
+    return (ambient + (1.0 - SUN_AMBIENT) * max(cos_sun, 0.0) * lit)
+        / SUN_FLAT;
+}
 // uv.w - доля прозрачности слоя (ползунок «На глобусе»), 0 - как есть.
 // fx - проявление картинки тайла (core/appear.py): x - сдвиг уровня
 // мипмапа, картинка сначала с разрешением прежней, y - доля прозрачности
@@ -507,7 +603,7 @@ void main() {
     // Отмывка рельефа: множитель яркости, на равнине 1. С солнцем -
     // свет по нормали и направлению на солнце, с ночной стороной.
     if (u_sun_on > 0.5 && u_plain < 0.5) {
-        shade = sun_brightness(dot(normalize(v_normal), u_sun));
+        shade = sun_light(dot(normalize(v_normal), u_sun), shadow_lit());
     }
     vec3 ground = clamp(base * shade, 0.0, 1.0);
     // Огни городов: ночью по высоте солнца над горизонтом точки, не по
@@ -611,34 +707,45 @@ const float SUN_NIGHT = %(night)r;
 const float SUN_FLAT = %(flat)r;
 const float TWILIGHT = %(twilight)r;
 const float DAYLIGHT = %(daylight)r;
+// Цвет здания, рассеянная и прямая доли света: тень карты теней гасит
+// прямую долю во фрагменте.
 out vec3 v_color;
+out float v_ambient;
+out float v_direct;
+""" % {"ambient": _sun.AMBIENT, "night": _sun.NIGHT, "flat": _sun.FLAT,
+       "twilight": _sun.TWILIGHT, "daylight": _sun.DAYLIGHT} \
+    + SHADOW_VERTEX + """
 void main() {
     gl_Position = u_mvp * vec4(a_position, 1.0);
     vec3 n = a_normal.xyz;
     float len = length(n);
-    float shade;
+    v_color = a_color.rgb;
     if (u_sun_on > 0.5) {
         float c = len > 0.0 ? dot(n / len, u_light) : 1.0;
         float day = smoothstep(TWILIGHT, DAYLIGHT, c);
-        shade = (mix(SUN_NIGHT, SUN_AMBIENT, day)
-                 + (1.0 - SUN_AMBIENT) * max(c, 0.0)) / SUN_FLAT;
+        v_ambient = mix(SUN_NIGHT, SUN_AMBIENT, day) / SUN_FLAT;
+        v_direct = (1.0 - SUN_AMBIENT) * max(c, 0.0) / SUN_FLAT;
     } else {
         float lambert = len > 0.0 ? clamp(dot(n / len, u_light), 0.0, 1.0)
                                   : 1.0;
-        shade = clamp((u_ambient + (1.0 - u_ambient) * lambert) / u_flat,
-                      u_limits.x, u_limits.y);
+        v_ambient = clamp((u_ambient + (1.0 - u_ambient) * lambert)
+                          / u_flat, u_limits.x, u_limits.y);
+        v_direct = 0.0;
     }
-    v_color = min(a_color.rgb * shade, vec3(1.0));
+    v_light = light_point(a_position, n);
 }
-""" % {"ambient": _sun.AMBIENT, "night": _sun.NIGHT, "flat": _sun.FLAT,
-       "twilight": _sun.TWILIGHT, "daylight": _sun.DAYLIGHT}
+"""
 
 BUILDING_FRAGMENT = """
 #version 330 core
 in vec3 v_color;
+in float v_ambient;
+in float v_direct;
 out vec4 frag;
+""" + SHADOW_SAMPLE + """
 void main() {
-    frag = vec4(v_color, 1.0);
+    float shade = v_ambient + v_direct * shadow_lit();
+    frag = vec4(min(v_color * shade, vec3(1.0)), 1.0);
 }
 """
 
@@ -712,6 +819,7 @@ uniform vec3 u_light;
 uniform float u_ambient;
 out vec2 v_uv;
 out float v_shade;
+""" + SHADOW_VERTEX + """
 void main() {
     gl_Position = u_mvp * vec4(a_position, 1.0);
     vec3 normal = u_turn * a_normal;
@@ -719,8 +827,13 @@ void main() {
     float lambert = len > 0.0 ? abs(dot(normal / len, u_light)) : 1.0;
     v_shade = u_ambient + (1.0 - u_ambient) * lambert;
     v_uv = a_uv;
+    // u_shadow уже включает позу части: сдвиг - по нормали файла.
+    v_light = light_point(a_position, a_normal);
 }
 """
+
+# Доля яркости модели в тени карты теней - выбор помощника.
+MODEL_IN_SHADOW = 0.55
 
 MODEL_FRAGMENT = """
 #version 330 core
@@ -730,6 +843,8 @@ uniform sampler2D u_image;
 uniform float u_textured;
 uniform vec4 u_color;
 out vec4 frag;
+""" + SHADOW_SAMPLE + """
+const float IN_SHADOW = """ + repr(MODEL_IN_SHADOW) + """;
 void main() {
     vec4 c = u_color;
     if (u_textured > 0.5) {
@@ -738,6 +853,6 @@ void main() {
     if (c.a < 0.01) {
         discard;
     }
-    frag = vec4(c.rgb * v_shade, c.a);
+    frag = vec4(c.rgb * v_shade * mix(IN_SHADOW, 1.0, shadow_lit()), c.a);
 }
 """

@@ -39,7 +39,8 @@ from ..qt_compat import enum
 from .area import Area
 from .export import add_raster
 from .hydro import _spin
-from .results import (Session, accepted, add_vector, keep_buttons,
+from .results import (Session, accepted, add_vector, built_text,
+                      keep_buttons,
                       result_path, show_layer, write_vector)
 from .threadtiles import ThreadTiles
 from .viewshed import fit_status
@@ -480,7 +481,7 @@ class ChangeTool(QObject):
         dialog.set_ready(True)
         dialog.status.setText(tr(
             "Участок грузится при приближении к нему. {volume}.",
-            volume=dialog.volume.text()))
+            volume=dialog.volume.text()) + " " + built_text())
         if not self.window.extras.get(KEY):
             self.window.set_extra(KEY, True)
         else:

@@ -26,7 +26,7 @@ from ..core.overlay import (MAX_ANCESTOR_DEPTH, urgency,
                             window as overlay_window)
 from ..core.camera import Camera
 from ..core import ellipsoid
-from ..core.ellipsoid import ecef_to_geodetic
+from ..core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ..core.models import anchor as model_anchor
 from ..core.flight import Flight
 from ..core.navigation import (Navigator, Pose, altitude, ground_under,
@@ -65,7 +65,9 @@ from .sky import Sky
 from .stars import Stars
 from .shaders import (BACKDROP_FRAGMENT, BACKDROP_VERTEX, CROSS_FRAGMENT,
                       HOLE_FRAGMENT, HOLE_VERTEX, SKY_FRAGMENT, TILE_FRAGMENT,
-                      TILE_VERTEX, shell)
+                      TILE_VERTEX, shell, with_shadows)
+from .shadowmap import UNIT as SHADOW_UNIT, ShadowMap, uniform_locations
+from ..core import shadowmap
 
 START_LEVELS = (0, 1, 2)
 START_VIEW = (58.0105, 56.2294, 2.0e7)  # над Пермью, 20 000 км
@@ -76,6 +78,7 @@ SPACE = (0.0, 0.0, 0.0)
 BACKDROP_TOP = (0.78, 0.84, 0.92)
 BACKDROP_BOTTOM = (0.97, 0.97, 0.94)
 HOLE = (1.0, 0.0, 1.0)  # пурпурный фон проверочного режима
+EARTH_CIRCLE = 40075016.7  # м, сторона тайла уровня 0 по экватору
 # Проявление тайла, сменившего предка: с, сколько уровней мипмапа
 # сдвиг берёт не больше и на сколько уровней тайл в начале размытее
 # предка. С 17 октября 2026 года, вариант «б» автора - эффект сильнее:
@@ -416,6 +419,11 @@ class GlobeView(QOpenGLWidget):
         self.photos = ImageWalls()
         # 3D-модели «Моих меток» (render/models.py), точка - по рельефу.
         self.models = Models()
+        # Тени в кадре при солнце (render/shadowmap.py). shadows - флажок,
+        # выключенный - свет солнца без теней.
+        self.shadow_map = ShadowMap()
+        self.shadows = True
+        self.shadow_locs = (-1, -1, -1, -1, -1)
         # Облака точек слоёв проекта (ui/pointcloud.py).
         self.pointclouds = PointClouds()
         self.models.anchor = self._model_anchor
@@ -964,6 +972,42 @@ class GlobeView(QOpenGLWidget):
             old = next(iter(self.water_masks))
             gpu.delete_texture(self.water_masks.pop(old)[1])
         return texture
+
+    def _shadow_frame(self):
+        """Оси и матрицы карты теней кадра (core/shadowmap.py) или None:
+        флажок теней снят, солнца нет, точка взгляда далеко, солнце под
+        горизонтом, видеокарте не хватает текстурных блоков."""
+        if not self.shadows or self.sun is None or self.show_holes \
+                or not self.shadow_map.supported:
+            return None
+        pose = self.navigator.pose
+        radius = shadowmap.radius_for(pose.distance)
+        if radius is None:
+            return None
+        center = np.ravel(geodetic_to_ecef(
+            np.array([pose.lat]), np.array([pose.lon]),
+            np.array([pose.h])))
+        frame = shadowmap.LightFrame(center, self.sun, radius)
+        return frame if frame.active else None
+
+    def _shadow_tiles(self, frame, keys):
+        """Номера тайлов кадра, которые задевают квадрат карты теней:
+        середина тайла в осях света ближе к квадрату, чем его сторона."""
+        if not keys:
+            return []
+        centers = [self.meshes[key].center for key in keys]
+        xy = np.abs(frame.project(centers)[:, :2])
+        size = np.array([EARTH_CIRCLE / (1 << key[0]) for key in keys])
+        reach = 1.0 + size / frame.radius
+        return np.nonzero((xy[:, 0] < reach) & (xy[:, 1] < reach))[0] \
+            .tolist()
+
+    def _shadow_extra(self, light):
+        """Здания и модели в карту теней: light - камера света."""
+        if self.buildings.shown:
+            self.buildings.draw(light, self.sun)
+        if self.models.active:
+            self.models.draw(light)
 
     def label_height(self, lat, lon):
         """Высота надписи: с дном океана - не ниже уровня моря, иначе
@@ -1667,7 +1711,15 @@ class GlobeView(QOpenGLWidget):
             return
         # Горячие вызовы кадра не отпускают GIL, см. gpu.hold_gil.
         self.hold_gil = gpu.hold_gil(ctx)
-        self.program = gpu.build_program(TILE_VERTEX, TILE_FRAGMENT)
+        # Карта теней - до шейдеров: от неё зависит, с тенями ли они.
+        self.shadow_map.init_gl()
+        shadows = self.shadow_map.supported
+        if shadows:
+            self.program = gpu.build_program(with_shadows(TILE_VERTEX),
+                                             with_shadows(TILE_FRAGMENT))
+        else:
+            self.program = gpu.build_program(TILE_VERTEX, TILE_FRAGMENT)
+        self.shadow_locs = uniform_locations(self.program)
         self.u_mvp = GL.glGetUniformLocation(self.program, "u_mvp")
         self.u_texture = GL.glGetUniformLocation(self.program, "u_texture")
         # Непрозрачность поверхности. Значение по умолчанию в GLSL - 0,
@@ -1692,6 +1744,9 @@ class GlobeView(QOpenGLWidget):
         gl.glUniform1f(self.u_alpha, 1.0)
         gl.glUniform1f(self.u_water, 0.0)
         gl.glUniform1f(self.u_level, 0.0)
+        gl.glUniform1f(self.shadow_locs[0], 0.0)
+        if shadows:
+            GL.glUniform1i(self.shadow_locs[4], SHADOW_UNIT)
         gl.glUseProgram(0)
         self.tile_air = uniforms(self.program, AIR_UNIFORMS)
         self.sky_program = gpu.build_program(HOLE_VERTEX, SKY_FRAGMENT)
@@ -1757,11 +1812,11 @@ class GlobeView(QOpenGLWidget):
         self.hole_query = int(np.ravel(GL.glGenQueries(1))[0])
         self.labels.init_gl()
         self.features.init_gl()
-        self.buildings.init_gl()
+        self.buildings.init_gl(shadows)
         self.subsurface.init_gl()
         self.image_walls.init_gl()
         self.photos.init_gl()
-        self.models.init_gl()
+        self.models.init_gl(shadows)
         self.pointclouds.init_gl()
         self.cutaway.init_gl()
         self.cutaway_slabs.init_gl()
@@ -1802,6 +1857,7 @@ class GlobeView(QOpenGLWidget):
         self.labels.release_gl()
         self.features.release_gl()
         self.buildings.release_gl()
+        self.shadow_map.release()
         self.subsurface.release_gl()
         self.image_walls.release_gl()
         self.photos.release_gl()
@@ -2490,6 +2546,24 @@ class GlobeView(QOpenGLWidget):
         scales += [1.0 - depth / ellipsoid.A] * len(under)
         mvps = self.camera.tiles_mvp([mesh.center for mesh, _ in items],
                                      scales=scales)
+        # Тени в кадре: карта глубины со стороны солнца у точки взгляда,
+        # потом тайлы, здания и модели сравнивают с ней свою глубину.
+        caps = len(self.caps)
+        frame = self._shadow_frame()
+        if frame is not None:
+            near = self._shadow_tiles(frame, sel.draw)
+            self.shadow_map.render(
+                frame, [items[caps + n] for n in near],
+                [fades[caps + n] for n in near], self._shadow_extra)
+            gpu.gl.glUseProgram(self.program)
+        else:
+            self.shadow_map.frame = None
+            self.shadow_map.drawn = 0
+        shadow_mats = None
+        if self.shadow_map.bind(self.shadow_locs[:3]):
+            shadow_mats = np.ascontiguousarray(self.shadow_map.frame.matrices(
+                [mesh.center for mesh, _ in items[:surface]],
+                scales[:surface]), dtype=np.float32)
         overlays = None
         if self.overlay is not None and not self.show_holes:
             overlays = [(self.clear_texture, gpu.NO_OVERLAY)] * len(self.caps)
@@ -2537,7 +2611,8 @@ class GlobeView(QOpenGLWidget):
             gl.glColorMask(GL.GL_FALSE, GL.GL_FALSE, GL.GL_FALSE,
                            GL.GL_FALSE)
             gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp,
-                           layers, fades, self.u_fade)
+                           layers, fades, self.u_fade, shadow_mats,
+                           self.shadow_locs[3])
             gl.glColorMask(GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE, GL.GL_TRUE)
             gl.glDepthFunc(GL.GL_LEQUAL)
             gl.glDepthMask(GL.GL_FALSE)
@@ -2546,8 +2621,11 @@ class GlobeView(QOpenGLWidget):
                 GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA, GL.GL_ZERO,
                 GL.GL_ONE)
         gpu.draw_batch(items[:surface], mvps[:surface], self.u_mvp, layers,
-                       fades, self.u_fade)
+                       fades, self.u_fade, shadow_mats, self.shadow_locs[3])
         gpu.gl.glUniform4f(self.u_fade, 0.0, 0.0, 0.0, 0.0)
+        if shadow_mats is not None:
+            # Подстилка и вода - без теней: матрицы света у них нет.
+            gpu.gl.glUniform1f(self.shadow_locs[0], 0.0)
         if alpha < 1.0:
             gpu.gl.glDisable(GL.GL_BLEND)
             gl.glDepthMask(GL.GL_TRUE)
@@ -2585,10 +2663,10 @@ class GlobeView(QOpenGLWidget):
                 self.camera, self.store, time.monotonic())
             self.buildings.upload(BUILDING_SHOT_UPLOADS if shot
                                   else 1 if motion else 2)
-            self.buildings.draw(self.camera, self.sun)
+            self.buildings.draw(self.camera, self.sun, self.shadow_map)
         if self.models.active and not self.show_holes:
             # До неба, как здания.
-            self.models.draw(self.camera)
+            self.models.draw(self.camera, self.shadow_map)
             if self.models.animated and not shot:
                 QTimer.singleShot(MODEL_TICK, self.update)
         else:

@@ -37,7 +37,8 @@ from ..net.overlay import STROKE_WIDTH
 from ..qt_compat import enum
 from .export import _property, _to_group, add_raster
 from .area import Area, FixedArea
-from .results import (Session, accepted, add_vector, keep_buttons,
+from .results import (Session, accepted, add_vector, built_text,
+                      keep_buttons,
                       result_path, show_layer, write_vector)
 from .viewshed import fit_status
 
@@ -648,7 +649,7 @@ class HydroTool(GridHeights):
         if partial:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
-        dialog.status.setText(text)
+        dialog.status.setText(text + " " + built_text())
         return path
 
     def _shape_basin(self, dialog, grid, z, partial, item, side=None):
@@ -716,7 +717,7 @@ class HydroTool(GridHeights):
         if layer is None:
             return tr("Слой «{name}» не записан.", name=name)
         return tr("В проект добавлен слой «{name}». {text}", name=name,
-                  text=text)
+                  text=text) + " " + built_text()
 
     def _build_flood(self):
         self.flood_dialog.reset()
@@ -737,7 +738,7 @@ class HydroTool(GridHeights):
             level = old["level"]
         self.state = {"grid": grid, "z": z, "levels": levels,
                       "point": dialog.point, "partial": partial,
-                      "level": level, "flood": None}
+                      "level": level, "flood": None, "built": built_text()}
         dialog.ready(base, level)
         self.set_level(level)
 
@@ -769,8 +770,9 @@ class HydroTool(GridHeights):
                              "по менее подробным.")
         if not self.window._relief_target():
             text += " " + tr("Вода видна при включённом рельефе.")
+        text += " " + state.get("built", "")
         if dialog is not None:
-            dialog.status.setText(text)
+            dialog.status.setText(text.strip())
 
     def _show_water(self):
         """Поверхность воды затопления в воде водоёмов вида."""
@@ -982,7 +984,7 @@ class HydroTool(GridHeights):
         if partial:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
-        dialog.status.setText(text)
+        dialog.status.setText(text + " " + built_text())
         return path
 
     def _basin(self, dialog, grid, z, partial):

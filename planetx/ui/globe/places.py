@@ -355,6 +355,7 @@ class PlacesMixin:
         self._update_sun()
         self._time_quakes()
         self._theme_timer.start()
+        self._shadows_later()
 
     def _time_quakes(self):
         """Землетрясения и пожары в промежутке шкалы времени."""
@@ -371,6 +372,7 @@ class PlacesMixin:
         self._refresh_shapes()
         self._update_sun()
         self._theme_timer.start()
+        self._shadows_later()
         self.flow.set_moment(self.theme_moment())
         if self.view.sky_view is not None:
             self.view.sky_time = self.sky_moment()

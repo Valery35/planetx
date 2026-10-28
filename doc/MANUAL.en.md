@@ -351,8 +351,19 @@ night, under clouds they are weaker. The sun time is the end of the interval of 
 slider, so the light of the hour of a placemark shows. Without the
 slider the sun follows the computer clock. Without the Sun layer the
 light falls from the north-west at 45°, as on a relief map. The
-position of the sun is computed to about 0.01°, there are no
-shadows.
+position of the sun is computed to about 0.01°.
+
+Near the camera the Sun layer casts shadows - the terrain, 3D
+buildings and 3D models shade the ground, buildings and models behind
+them. Shadows are shown while the distance to the look point is at
+most 40 km, in a square of up to 5 km around the look point, and they
+fade towards the edge of the square. Slopes and houses far from the
+look point are lit without shadows. A shadow comes from what is in the
+frame now, so a mountain behind the camera casts none. The view snapshot
+and the flight recording have shadows. The Shadows item of the ⋯ menu
+of the Sun row turns them off, then the frame is drawn faster. The
+graphics card needs at least 17 texture units of the fragment shader,
+otherwise there are no shadows.
 
 Labels stay level at any turn and tilt and do not overlap. A place
 behind a mountain or beyond the horizon has no label.
@@ -2812,6 +2823,31 @@ covering the site, the height grid has 800 nodes per side, the step is
 about 25 m for a 7 km square. The computation runs in parts, and the globe responds to the
 mouse meanwhile. The line under the fields shows the share done.
 Insolation is computed only for the Earth.
+
+### Shadows
+
+The Shadows here… item of the Site analysis submenu of the globe menu
+opens the Shadows window for the point under the cursor. The globe shows
+where the site is in shade and where in sunlight at the chosen moment.
+Shade is a dark bluish fill, sunlight is a light warm haze. The Moment
+line shows the local time of the computer and UTC.
+
+The moment is the right handle of the time slider, without the slider -
+the computer clock. The Build button loads the heights and computes the
+horizon of the site once, then opens the time slider. After that the
+shadows follow the slider - the handle is moved with the mouse or by
+playback ▶, a new map appears 0.3 s after the handle stops, without a
+new download. The line under the fields shows the height of the Sun and
+the share of the site in sunlight. With the Sun below the horizon,
+everything is in shade.
+
+The horizon and the height grid are the same as for insolation, the
+Include buildings box adds OpenFreeMap buildings, your own 3D models and
+extruded polygons. OK writes the map at the current moment as a raster
+to the calculation subgroup - 1 sunlight, 0 shade, no values outside the
+site. Shadows and insolation share one globe layer, a map built in one
+window removes the map of the other. Shadows are computed only for the
+Earth.
 
 ### Land change
 

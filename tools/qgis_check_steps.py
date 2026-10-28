@@ -18597,6 +18597,339 @@ def insolation_check():
     _swing_start("ins_on")
 
 
+# Тени на момент у Чегета: участок 3 км, утро и полдень сегодняшних
+# суток UTC - шкала часов открыта на сутки вокруг «сейчас».
+SHADOWS_POINT = (43.2425, 42.5157)
+
+
+@check(500)
+def shadows_on():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(SHADOWS_POINT[0], SHADOWS_POINT[1], 9000.0, 0.0, 30.0))
+    window.view.update()
+    window.shadows_here(*SHADOWS_POINT)
+    dialog = window.shadows_dialog
+    dialog.area.side.setValue(3.0)
+    dialog.buildings.setChecked(False)
+    result["shadows"] = {"dialog": dialog.isVisible(),
+                         "moment_text": dialog.moment.text()}
+    state["shadows_started"] = time.monotonic()
+    dialog.build.emit()
+
+
+def _shadows_moment(hours):
+    """Момент сегодняшних суток UTC в часах, в охвате шкалы."""
+    window = state["window"]
+    day = math.floor(time.time() / 86400.0) * 86400.0
+    lo, hi = window.timebar.track.extent
+    return min(max(day + hours * 3600.0, lo), hi)
+
+
+def _shadows_snapshot(name):
+    import numpy as np
+    window = state["window"]
+    res = window.shadows_result
+    out = result["shadows"]
+    if res is None:
+        out[name] = None
+        return
+    out[name] = {"moment": res.moment,
+                 "elevation": round(res.elevation, 1),
+                 "share": round(res.share(), 3),
+                 "lit_cells": int(np.count_nonzero(res.lit))}
+
+
+@check(500)
+def shadows_wait():
+    window = state["window"]
+    if window.shadows_horizon is None \
+            and time.monotonic() - state["shadows_started"] < 90.0:
+        return 500
+    out = result["shadows"]
+    out["seconds"] = round(time.monotonic() - state["shadows_started"], 1)
+    out["horizon"] = window.shadows_horizon is not None
+    out["timebar"] = window.timebar.isVisible()
+    out["status_built"] = window.shadows_dialog.status.text()
+    # Полдень у Чегета около 9:10 UTC.
+    window.timebar.set_range(_shadows_moment(9.2), _shadows_moment(9.2))
+
+
+@check(1500)
+def shadows_noon():
+    _shadows_snapshot("noon")
+    window = state["window"]
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_shadows_noon.png"))
+    window.timebar.set_range(_shadows_moment(5.0), _shadows_moment(5.0))
+
+
+@check(1500)
+def shadows_check():
+    window = state["window"]
+    view = window.view
+    _shadows_snapshot("morning")
+    out = result["shadows"]
+    layer = view.gibs["insolation"]
+    out["shown"] = layer.shown
+    out["textures"] = len(layer.textures)
+    out["loader"] = type(layer.loader).__name__
+    out["moment_text"] = window.shadows_dialog.moment.text()
+    out["status"] = window.shadows_dialog.status.text()
+    out["gl"] = dict(view.gl_errors)
+    view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_shadows_morning.png"))
+
+
+@check(500)
+def shadows_ok():
+    import numpy as np
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["shadows"]
+    before = len(QgsProject.instance().mapLayers())
+    window.shadows_dialog.accept()
+    out["added"] = len(QgsProject.instance().mapLayers()) - before
+    layers = _result_layers()
+    if layers:
+        data = layers[-1].layer().dataProvider()
+        block = data.block(1, data.extent(), data.xSize(), data.ySize())
+        values = {block.value(r, c) for c in range(0, data.xSize(), 3)
+                  for r in range(0, data.ySize(), 3)}
+        out["raster_values"] = sorted(int(v) for v in values
+                                      if np.isfinite(v))
+        out["raster_nodata"] = data.sourceNoDataValue(1)
+    out["after"] = [window.shadows_horizon is None,
+                    window.view.gibs["insolation"].shown]
+    _drop_group()
+
+
+# Тени в кадре при строке «Солнце»: Чегет с 4 км под наклоном 60°,
+# низкое утреннее солнце.
+@check(12000)
+def frame_shadows_on():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("sun", True)
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(SHADOWS_POINT[0], SHADOWS_POINT[1], 4000.0, 330.0,
+                      60.0))
+    window.view.update()
+    result["frame_shadows"] = {
+        "supported": window.view.shadow_map.supported,
+        "units": __import__("planetx.render.shadowmap", fromlist=["x"])
+        .units_available()}
+
+
+@check(500)
+def frame_shadows_wait():
+    # Подложка и высоты вида догружаются, не дольше 60 с.
+    window = state["window"]
+    view = window.view
+    state.setdefault("frame_shadows_started", time.monotonic())
+    if (view.load_missing or view.pending) \
+            and time.monotonic() - state["frame_shadows_started"] < 60.0:
+        return 1000
+    result["frame_shadows"]["load_s"] = round(
+        time.monotonic() - state["frame_shadows_started"], 1)
+
+
+@check(4000)
+def frame_shadows_moment():
+    window = state["window"]
+    hours = float(os.environ.get("PLANETX_SHADOW_HOUR", "5.5"))
+    window._update_timebar()
+    if not window.timebar.shown():
+        window.timebar.open_bar()
+        window.toolbar.set_time_shown(True)
+    window.timebar.set_range(_shadows_moment(hours), _shadows_moment(hours))
+    window.view.update()
+
+
+def _frame_stats(view):
+    import numpy as np
+    image = view.grabFramebuffer()
+    ptr = image.constBits()
+    ptr.setsize(image.sizeInBytes())
+    data = np.frombuffer(ptr, dtype=np.uint8).reshape(
+        image.height(), image.bytesPerLine() // 4, 4)[:, :image.width(), :3]
+    return image, data.astype(np.float32).mean(axis=2)
+
+
+@check(500)
+def frame_shadows_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["frame_shadows"]
+    view.shadows = True
+    image, lit = _frame_stats(view)
+    image.save(os.path.join(TEMP, "planetx_frame_shadows.png"))
+    frame = view.shadow_map.frame
+    out["active"] = frame is not None
+    if frame is not None:
+        out["radius"] = round(frame.radius, 1)
+        out["sun_deg"] = round(math.degrees(math.asin(frame.sin_sun)), 1)
+    out["drawn_tiles"] = view.shadow_map.drawn
+    view.shadows = False
+    image, plain = _frame_stats(view)
+    image.save(os.path.join(TEMP, "planetx_frame_noshadows.png"))
+    out["darker_share"] = round(float(np.mean(plain - lit > 8.0)), 3)
+    out["mean"] = [round(float(lit.mean()), 1), round(float(plain.mean()), 1)]
+    times = {}
+    for on in (True, False, True, False):
+        view.shadows = on
+        started = time.perf_counter()
+        for _ in range(5):
+            view.grabFramebuffer()
+        times.setdefault(on, []).append(
+            (time.perf_counter() - started) / 5.0 * 1000.0)
+    out["frame_ms"] = {"shadows": round(min(times[True]), 1),
+                       "plain": round(min(times[False]), 1)}
+    view.shadows = True
+    out["gl"] = dict(view.gl_errors)
+
+
+@check(20000)
+def frame_shadows_city():
+    # Здания центра Перми под утренним солнцем, 1.2 км, наклон 60°.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_extra("buildings", True)
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(58.0105, 56.2294, 1200.0, 300.0, 60.0))
+    window.view.update()
+
+
+@check(500)
+def frame_shadows_city_check():
+    import numpy as np
+    window = state["window"]
+    view = window.view
+    out = result["frame_shadows"]
+    view.shadows = True
+    image, lit = _frame_stats(view)
+    image.save(os.path.join(TEMP, "planetx_frame_shadows_city.png"))
+    out["city_buildings"] = view.buildings.drawn
+    out["city_active"] = view.shadow_map.frame is not None
+    view.shadows = False
+    image, plain = _frame_stats(view)
+    out["city_darker_share"] = round(float(np.mean(plain - lit > 8.0)), 3)
+    view.shadows = True
+    window.set_extra("buildings", False)
+    out["gl_city"] = dict(view.gl_errors)
+    # Модели демо ветряков под тем же солнцем: демо выключает строки,
+    # солнце включается снова.
+    action = next(a for a in window.toolbar.demo_list
+                  if a.text() in ("Анимированная модель, ветряки",
+                                  "Animated model, wind turbines"))
+    folders = {f.key for f in window.myplaces.folders}
+    action.trigger()
+    state["shadow_demo"] = [f.key for f in window.myplaces.folders
+                            if f.key not in folders]
+
+
+@check(500)
+def frame_shadows_models():
+    import numpy as np
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    out = result["frame_shadows"]
+    if "shadow_models" not in state:
+        models = [o for o in window.myplaces.overlays
+                  if o.kind == "model" and o.visible]
+        if not models:
+            out["models"] = None
+            return
+        window.set_extra("sun", True)
+        lat, lon = models[0].overlay.camera[:2]
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, 600.0, 300.0, 55.0))
+        # Демо ставит своё время: шкала - снова на утро сегодня.
+        hours = float(os.environ.get("PLANETX_SHADOW_HOUR", "5.5"))
+        window._update_timebar()
+        if not window.timebar.shown():
+            window.timebar.open_bar()
+            window.toolbar.set_time_shown(True)
+        window.timebar.set_range(_shadows_moment(hours),
+                                 _shadows_moment(hours))
+        view.update()
+        state["shadow_models"] = True
+        out["models_sun"] = window.sun_time()
+        return 3000
+    started = state.setdefault("shadow_models_t", time.monotonic())
+    if view.load_missing and time.monotonic() - started < 30.0:
+        return 1000
+    view.shadows = True
+    image, lit = _frame_stats(view)
+    image.save(os.path.join(TEMP, "planetx_frame_shadows_models.png"))
+    drawn = view.models.drawn
+    active = view.shadow_map.frame is not None
+    pose = view.navigator.pose
+    out["models_debug"] = {"sun": view.sun is not None,
+                           "shadows": view.shadows,
+                           "distance": round(pose.distance, 1),
+                           "flight": view.navigator.flight is not None
+                           if hasattr(view.navigator, "flight") else None,
+                           "frame": view._shadow_frame() is not None,
+                           "extras_sun": window.extras.get("sun")}
+    view.shadows = False
+    _, plain = _frame_stats(view)
+    view.shadows = True
+    out["models"] = {"drawn": drawn,
+                     "active": active,
+                     "darker_share": round(float(np.mean(plain - lit > 8.0)),
+                                           3),
+                     "gl": dict(view.gl_errors)}
+    if state.get("shadow_demo"):
+        window.myplaces.remove_many(state["shadow_demo"])
+
+
+@check(500)
+def frame_shadows_depth():
+    # Ручной: глубины карты теней из видеокарты - пустая ли карта.
+    import numpy as np
+    from OpenGL import GL
+    window = state["window"]
+    view = window.view
+    view.makeCurrent()
+    try:
+        GL.glActiveTexture(GL.GL_TEXTURE0)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, view.shadow_map.texture)
+        data = GL.glGetTexImage(GL.GL_TEXTURE_2D, 0, GL.GL_DEPTH_COMPONENT,
+                                GL.GL_FLOAT)
+        depth = np.frombuffer(bytes(data) if not isinstance(
+            data, np.ndarray) else data.tobytes(), dtype=np.float32)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, 0)
+    finally:
+        view.doneCurrent()
+    result["frame_shadows"]["depth"] = [
+        round(float(depth.min()), 4), round(float(depth.max()), 4),
+        round(float(np.mean(depth < 1.0)), 3)]
+
+
+@check(500)
+def frame_shadows_off():
+    window = state["window"]
+    window.set_sun_shadows(False)
+    window.view.grabFramebuffer()
+    result["frame_shadows"]["flag_off"] = [
+        window.view.shadows, window.view.shadow_map.frame is None]
+    window.set_sun_shadows(True)
+    window.set_extra("sun", False)
+    window.view.update()
+    window.view.grabFramebuffer()
+    result["frame_shadows"]["after_sun_off"] = \
+        window.view.shadow_map.frame is None
+
+
 def _swing_start(name):
     """Камера ходит по долготе ±0.05° от позы, как при перетаскивании
     мышью, 3 с. Паузы цикла событий и кадры пишутся."""

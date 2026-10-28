@@ -38,6 +38,9 @@ PLUGIN_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 VIEWSHED_POLL = 250  # мс между проверками высот видимости
 VIEWSHED_WAIT = 30.0  # с, дальше расчёт идёт по тем высотам, что есть
+# мс паузы движения шкалы времени до карты теней на новый момент.
+# Выбор помощника.
+SHADOWS_PAUSE = 300
 HEIGHT_CHUNK = 20000  # узлов сетки инсоляции за проход цикла событий
 CALC_BUDGET = 0.004  # с расчёта инсоляции за проход цикла событий
 # Region KML пересчитывается, когда глаз ушёл на эту долю расстояния
@@ -152,6 +155,8 @@ RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
 GEOID_SCALE_KEY = "PlanetX/geoid_scale"  # масштаб режима «Геоид»
 # Растягивать ли кору разреза Земли издалека, по умолчанию да.
 STRETCH_KEY = "PlanetX/cutaway_stretch"
+# Тени в кадре при строке «Солнце», по умолчанию да.
+SHADOWS_KEY = "PlanetX/sun_shadows"
 # Раскрашивать ли мантию разреза томографией, по умолчанию нет.
 TOMO_KEY = "PlanetX/cutaway_tomo"
 # Поток по путям (core/pathflow.py): шаг таймера штрихов, мс, подъём

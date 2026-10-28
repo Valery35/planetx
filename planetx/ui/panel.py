@@ -531,6 +531,8 @@ class LayerPanel(QWidget):
     geoid_scale_changed = pyqtSignal(float)
     # Пункт «Растягивать кору» меню строки «Разрез Земли».
     cutaway_stretch_changed = pyqtSignal(bool)
+    # Пункт «Тени» меню строки «Солнце» - тени в кадре.
+    sun_shadows_changed = pyqtSignal(bool)
     # Пункт «Томография мантии» того же меню.
     cutaway_tomo_changed = pyqtSignal(bool)
     # Пункт «Кора CRUST1.0 в проект QGIS…» того же меню.
@@ -738,6 +740,8 @@ class LayerPanel(QWidget):
         # Пункты «Растягивать кору» и «Томография мантии», ставит окно
         # глобуса.
         self.cutaway_stretch = True
+        # Пункт «Тени» строки «Солнце», ставит окно глобуса.
+        self.sun_shadows = True
         self.cutaway_tomo = False
         # Группы векторной основы. Группа видна, пока в ней что-то
         # включено, и после снятия флажков - до «Убрать с глобуса».
@@ -1238,6 +1242,20 @@ class LayerPanel(QWidget):
                     "прозрачнее.")))
         if key == "geoid":
             menu.addAction(self._geoid_scale_action(menu))
+        if key == "sun":
+            shadows = menu.addAction(tr("Тени"))
+            shadows.setCheckable(True)
+            shadows.setChecked(self.sun_shadows)
+            shadows.setToolTip(tr(
+                "Тени рельефа, зданий и 3D-моделей вблизи камеры, в радиусе "
+                "до 5 км от точки взгляда. Без флажка - свет солнца без "
+                "теней, кадр рисуется быстрее."))
+            menu.setToolTipsVisible(True)
+
+            def shadows_toggled(on):
+                self.sun_shadows = bool(on)
+                self.sun_shadows_changed.emit(self.sun_shadows)
+            shadows.toggled.connect(shadows_toggled)
         if key == "cutaway":
             stretch = menu.addAction(tr("Растягивать кору"))
             stretch.setCheckable(True)

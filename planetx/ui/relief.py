@@ -25,7 +25,8 @@ from ..qt_compat import enum
 from .export import add_raster
 from .area import Area
 from .hydro import GridHeights, _spin, number
-from .results import (Session, accepted, add_vector, keep_buttons,
+from .results import (Session, accepted, add_vector, built_text,
+                      keep_buttons,
                       result_path, show_layer, write_vector)
 from .viewshed import ResultTiles, display_level, fit_status
 
@@ -200,7 +201,7 @@ class ReliefTool(GridHeights):
         if partial:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
-        dialog.status.setText(text)
+        dialog.status.setText(text + " " + built_text())
         return result
 
     def set_mode(self, mode):

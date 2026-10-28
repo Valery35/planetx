@@ -347,7 +347,8 @@ def hold_gil(context):
     return done
 
 
-def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
+def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1,
+               shadows=None, u_shadow=-1):
     """Нарисовать набор сеток, у каждой своя текстура и матрица.
 
     items - пары (GpuMesh, текстура), mvps - массив (N, 4, 4) float32
@@ -362,7 +363,9 @@ def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
     которых в списке нет, не трогаются. fades - сдвиг уровня мипмапа
     подложки по одному на сетку (проявление нового тайла) или четвёрка
     (сдвиг, u0, v0, сторона) - сдвиг и доля заплатки, core.lod.hole_rect.
-    u_fade - место в шейдере, без fades сдвиг не меняется.
+    u_fade - место в шейдере, без fades сдвиг не меняется. shadows -
+    матрицы света сеток (N, 4, 4) float32 по строкам для карты теней
+    (render/shadowmap.py), u_shadow - их место в шейдере.
 
     Горячий путь кадра идёт через функции OpenGL.raw без проверки ошибок
     после каждого вызова. Замер 26 сентября 2026 года: glUniformMatrix4fv
@@ -409,6 +412,9 @@ def draw_batch(items, mvps, u_mvp, layers=(), fades=None, u_fade=-1):
             last_texture = texture
         _uniform_matrix(u_mvp, 1, GL.GL_TRUE,
                         ctypes.c_void_p(base + stride * i))
+        if shadows is not None:
+            _uniform_matrix(u_shadow, 1, GL.GL_TRUE, ctypes.c_void_p(
+                shadows.ctypes.data + shadows.strides[0] * i))
         _bind_vao(mesh.vao)
         _draw_elements(GL.GL_TRIANGLES, mesh.count, GL.GL_UNSIGNED_SHORT,
                        null)

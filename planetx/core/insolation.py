@@ -153,6 +153,17 @@ def horizon(h, cell, margin, radius):
     return out
 
 
+def normals(h, cell, margin, inner):
+    """Нормаль поверхности внутренних узлов в осях восток, север, верх:
+    три массива (inner, inner)."""
+    part = h[margin - 1:margin + inner + 1, margin - 1:margin + inner + 1]
+    d_north, d_east = np.gradient(part, cell)
+    d_north = d_north[1:-1, 1:-1]
+    d_east = d_east[1:-1, 1:-1]
+    norm = np.sqrt(d_east ** 2 + d_north ** 2 + 1.0)
+    return -d_east / norm, -d_north / norm, 1.0 / norm
+
+
 class Insolation:
     """Часы прямого света в сутки на внутренней сетке: hours (n, n),
     строки с юга на север, центр сетки - точка (lat, lon)."""
@@ -226,12 +237,7 @@ def parts(lat, lon, radius_m, heights, start, end, radius=None, ring=None):
     for _ in horizon_parts(h, cell, margin, radius, hor):
         done += 1
         yield done / total
-    part = h[margin - 1:margin + inner + 1, margin - 1:margin + inner + 1]
-    d_north, d_east = np.gradient(part, cell)
-    d_north = d_north[1:-1, 1:-1]
-    d_east = d_east[1:-1, 1:-1]
-    norm = np.sqrt(d_east ** 2 + d_north ** 2 + 1.0)
-    nx, ny, nz = -d_east / norm, -d_north / norm, 1.0 / norm
+    nx, ny, nz = normals(h, cell, margin, inner)
     yield done / total
     hours = np.zeros((inner, inner), dtype=np.float64)
     per_day = int(DAY / STEP)

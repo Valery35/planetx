@@ -51,6 +51,7 @@ class BodyMixin:
         # прежнего тела.
         self._clear_viewshed()
         self._clear_insolation()
+        self._clear_shadows()
         self.subsurface.clear()
         self.view.extruded.clear()
         # Разрез вниз - земной: кора, плиты и очаги есть только у Земли.

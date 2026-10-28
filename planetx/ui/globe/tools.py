@@ -41,11 +41,12 @@ from ..bathymetry import REMOVE as BATHY_REMOVE, BathymetryDialog
 from ..folderprops import FolderDialog
 from ..viewshed import ResultTiles, ViewshedDialog, display_level
 from ..insolation import InsolationDialog
+from ..shadows import ShadowsDialog
 from ..export import add_raster
-from ..results import (Session, accepted, add_paletted, result_path,
-                       show_layer, write_lat_lon)
+from ..results import (Session, accepted, add_paletted, built_text,
+                       result_path, show_layer, write_lat_lon)
 from ..roofs import RoofLoader
-from ...core import roofs
+from ...core import roofs, shadows
 from ..subsection import ModelSectionDialog, build as model_section
 from ..snapshot import SnapshotDialog, draw_attribution, plain_text
 from .base import (CALC_BUDGET, HEIGHT_CHUNK, SECTION_TIME_PAUSE,
@@ -498,7 +499,7 @@ class ToolsMixin:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
         text += self._roofs_text(roofs)
-        self.viewshed_dialog.status.setText(text)
+        self.viewshed_dialog.status.setText(text + " " + built_text())
         self.viewshed_dialog.ok.setEnabled(True)
 
     def _show_viewshed(self, result):
@@ -793,7 +794,7 @@ class ToolsMixin:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
         text += self._roofs_text(job["roofs"])
-        dialog.status.setText(text)
+        dialog.status.setText(text + " " + built_text())
         dialog.ok.setEnabled(True)
 
     def _show_insolation(self, result):
@@ -805,9 +806,13 @@ class ToolsMixin:
         self.insolation_tiles = None
         self.insolation_result = result
         if result is None:
-            self.view.set_gibs("insolation", False)
+            # Слой вида общий с тенями.
+            if getattr(self, "shadows_result", None) is None:
+                self.view.set_gibs("insolation", False)
             self.insolation_legend.hide()
             return
+        if getattr(self, "shadows_result", None) is not None:
+            self._clear_shadows()
         tiles = ResultTiles(result, ellipsoid.A, insolation.tile_rgba,
                             parent=self)
         tiles.loaded.connect(lambda key, rgba, levels:
@@ -853,6 +858,237 @@ class ToolsMixin:
         self._clear_insolation()
         session.reset()
         self.insolation_dialog.area.end()
+
+    # Тени на момент (ui/shadows.py). Слой вида - «insolation»: свободных
+    # текстурных блоков нет, тени и инсоляция снимают друг друга.
+
+    def shadows_here(self, lat, lon, name=None):
+        """Окно «Тени» для точки lat, lon - пункт меню на глобусе."""
+        dialog = self.shadows_dialog
+        if dialog is None:
+            dialog = ShadowsDialog(self)
+            dialog.build.connect(self._build_shadows)
+            dialog.finished.connect(self._shadows_done)
+            self.shadows_dialog = dialog
+            self.shadows_session = Session(self, tr("Тени"))
+        dialog.point = (lat, lon)
+        dialog.place.setText(self._point_title(lat, lon, name))
+        dialog.set_moment(self.sun_time())
+        dialog.status.setText("")
+        dialog.ok.setEnabled(self.shadows_result is not None)
+        dialog.show()
+        dialog.raise_()
+        dialog.area.open_at(lat, lon)
+
+    def _build_shadows(self):
+        """Горизонт участка окна теней: тайлы высот и крыш, высоты узлов,
+        расчёт частями по проходам цикла событий (_shadows_poll)."""
+        dialog = self.shadows_dialog
+        if not self.planet.earth or self.view.sky_view is not None:
+            dialog.status.setText(tr("Тени считаются только для Земли."))
+            return
+        area = dialog.area
+        problem = area.check()
+        if problem:
+            dialog.status.setText(problem)
+            return
+        lat, lon = area.centre()
+        radius_m = max(area.reach(), 100.0)
+        cell, margin, _ = insolation.layout(radius_m)
+        _, keys = viewshed.height_tiles(lat, lon, margin * cell + radius_m,
+                                        cell, ellipsoid.A,
+                                        self.view.store.max_level)
+        self._stop_roofs(self.shadows_job)
+        self.shadows_job = {"lat": lat, "lon": lon, "radius": radius_m,
+                            "ring": list(area.ring), "keys": keys,
+                            "started": time.monotonic(),
+                            "work": None, "missing": False,
+                            "roofs": self._roofs(
+                                dialog, lat, lon,
+                                radius_m + ROOF_MARGIN, cell)}
+        self.shadows_timer.setInterval(VIEWSHED_POLL)
+        self.spinner.set_job("shadows", tr("Тени"), self._stop_shadows)
+        self.shadows_timer.start()
+        self._shadows_poll()
+
+    def _stop_shadows(self):
+        """Остановить расчёт теней - меню значка загрузки. Прежняя карта
+        остаётся."""
+        self._stop_roofs(self.shadows_job)
+        self.shadows_job = None
+        self.shadows_timer.stop()
+        self.shadows_timer.setInterval(VIEWSHED_POLL)
+        self.spinner.set_job("shadows")
+        if self.shadows_dialog is not None:
+            self.shadows_dialog.status.setText(tr("Расчёт остановлен."))
+
+    def _shadows_poll(self):
+        job = self.shadows_job
+        dialog = self.shadows_dialog
+        if job is None:
+            self.shadows_timer.stop()
+            return
+        work = job["work"]
+        if work is None:
+            missing = [k for k in job["keys"]
+                       if not self._has_height_tile(k)]
+            waited = time.monotonic() - job["started"]
+            if missing and waited < VIEWSHED_WAIT:
+                self.view.want_tool_heights(missing)
+                dialog.status.setText(tr(
+                    "Загрузка высот: {done} из {total}",
+                    done=len(job["keys"]) - len(missing),
+                    total=len(job["keys"])))
+                return
+            if "points" not in job and self._roofs_wait(
+                    job["roofs"], waited, self.shadows_timer, dialog):
+                return
+            # Высоты снимаются частями в главном потоке, как у инсоляции.
+            if "points" not in job:
+                job["missing"] = bool(missing)
+                lats, lons = insolation.grid_points(job["lat"], job["lon"],
+                                                    job["radius"])
+                job["points"] = (lats.ravel(), lons.ravel())
+                job["heights"] = []
+                self.shadows_timer.setInterval(0)
+            lats, lons = job["points"]
+            done = sum(len(part) for part in job["heights"])
+            if done < len(lats):
+                end = done + HEIGHT_CHUNK
+                heights = self._surface_heights(lats[done:end],
+                                                lons[done:end])
+                if job["roofs"] is not None:
+                    heights = heights + job["roofs"].grid.at(
+                        lats[done:end], lons[done:end])
+                job["heights"].append(heights)
+                dialog.status.setText(tr(
+                    "Высоты узлов сетки: {share}",
+                    share="{:.0f}%".format(100.0 * done / len(lats))))
+                return
+            heights = np.concatenate(job["heights"])
+            job["work"] = shadows.parts(
+                job["lat"], job["lon"], job["radius"], heights,
+                ellipsoid.A, job["ring"])
+            return
+        started = time.perf_counter()
+        horizon = None
+        try:
+            while time.perf_counter() - started < CALC_BUDGET:
+                share = next(work)
+        except StopIteration as stop:
+            horizon = stop.value
+        if horizon is None:
+            dialog.status.setText(tr("Расчёт горизонта: {share}",
+                                     share="{:.0f}%".format(100.0 * share)))
+            return
+        self.shadows_timer.stop()
+        self.shadows_timer.setInterval(VIEWSHED_POLL)
+        self.shadows_job = None
+        self.spinner.set_job("shadows")
+        self.shadows_horizon = horizon
+        note = tr("Шаг сетки - {step} м.", step="{:.0f}".format(horizon.cell))
+        if job["missing"]:
+            note += " " + tr("Загружены не все высоты, расчёт шёл "
+                             "по менее подробным.")
+        note += self._roofs_text(job["roofs"])
+        note += " " + built_text()
+        self._shadows_note = note
+        # Шкала времени с часами - тени идут за её правым бегунком.
+        moment = self.sun_time()
+        self._update_timebar()
+        if not self.timebar.shown():
+            self.timebar.open_bar()
+            self.toolbar.set_time_shown(True)
+            self.timebar.set_range(moment, moment)
+            self._time_range = self.timebar.range()
+        self._shadows_moment()
+        dialog.ok.setEnabled(True)
+
+    def _shadows_later(self):
+        """Шкала времени сдвинулась: новая карта теней после паузы."""
+        timer = getattr(self, "shadows_follow", None)
+        if timer is not None and self.shadows_horizon is not None:
+            timer.start()
+
+    def _shadows_moment(self):
+        """Карта теней на момент шкалы времени по готовому горизонту."""
+        horizon = self.shadows_horizon
+        dialog = self.shadows_dialog
+        if horizon is None or dialog is None:
+            return
+        moment = self.sun_time()
+        result = horizon.at(moment)
+        self._show_shadows(result)
+        dialog.set_moment(moment)
+        if result.elevation <= 0.0:
+            text = tr("Солнце ниже горизонта - тень везде.")
+        else:
+            text = tr("Солнце на высоте {height}°, на солнце {share} "
+                      "участка.", height="{:.1f}".format(result.elevation),
+                      share="{:.0f}%".format(100.0 * result.share()))
+        dialog.status.setText(text + " " + getattr(self, "_shadows_note",
+                                                   ""))
+
+    def _show_shadows(self, result):
+        """Слой теней по карте result, None убирает слой. Новая карта
+        ложится поверх прежней без мигания (keep)."""
+        old = self.shadows_tiles
+        keep = old is not None and result is not None
+        if old is not None:
+            old.abort()
+            old.deleteLater()
+        self.shadows_tiles = None
+        self.shadows_result = result
+        if result is None:
+            if self.insolation_result is None:
+                self.view.set_gibs("insolation", False)
+            return
+        if self.insolation_result is not None:
+            # Слой вида общий: инсоляция уступает место теням.
+            self._clear_insolation()
+        tiles = ResultTiles(result, ellipsoid.A, shadows.tile_rgba,
+                            parent=self)
+        tiles.loaded.connect(lambda key, rgba, levels:
+                             self.view.add_gibs("insolation", key, levels))
+        self.shadows_tiles = tiles
+        self.view.gibs["insolation"].max_level = display_level(
+            result.cell, result.lat, ellipsoid.A)
+        self.view.set_gibs("insolation", True, tiles, keep=keep)
+
+    def _clear_shadows(self):
+        self._stop_roofs(self.shadows_job)
+        self.shadows_job = None
+        self.shadows_timer.stop()
+        self.shadows_follow.stop()
+        self.spinner.set_job("shadows")
+        self.shadows_horizon = None
+        self._show_shadows(None)
+        if self.shadows_dialog is not None:
+            self.shadows_dialog.status.setText("")
+            self.shadows_dialog.ok.setEnabled(False)
+
+    def _shadows_done(self, code):
+        """Окно теней закрыто: OK - карта на текущий момент растром
+        в подгруппу расчёта (1 солнце, 0 тень), иначе предпросмотр
+        убирается."""
+        result = self.shadows_result
+        session = self.shadows_session
+        if accepted(code) and result is not None:
+            north, west, dlat, dlon, data = shadows.raster(result)
+            path = result_path("shadows")
+            if write_lat_lon(path, data, north, west, dlat, dlon,
+                             byte=True):
+                show_layer(self, add_paletted(
+                    path, tr("Тени {moment}", moment=time.strftime(
+                        "%d.%m.%Y %H:%M", time.localtime(result.moment))),
+                    session.group_for(result.ring),
+                    [(shadows.SUN, shadows.SUN_RGBA[:3], tr("Солнце")),
+                     (shadows.SHADE, shadows.SHADE_RGBA[:3], tr("Тень"))],
+                    opacity=0.6))
+        self._clear_shadows()
+        self._update_timebar()
+        session.reset()
+        self.shadows_dialog.area.end()
 
     def _ruler_changed(self):
         self._update_tool_marks()

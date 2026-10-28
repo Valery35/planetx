@@ -26,7 +26,8 @@ from ..core import measure3d
 from ..core.ellipsoid import ecef_to_geodetic, surface_normal
 from ..core.tiling import AMBIENT, LIGHT_ELEVATION, SHADE_LIMITS
 from . import gpu
-from .shaders import BUILDING_FRAGMENT, BUILDING_VERTEX
+from .shaders import BUILDING_FRAGMENT, BUILDING_VERTEX, with_shadows
+from .shadowmap import UNIT as SHADOW_UNIT, uniform_locations
 
 UPLOADS = 1  # сеток за кадр
 SHOT_UPLOADS = 8  # сеток за кадр снимка
@@ -308,10 +309,19 @@ class Buildings:
 
     # Ресурсы OpenGL.
 
-    def init_gl(self):
-        self.program = gpu.build_program(BUILDING_VERTEX, BUILDING_FRAGMENT)
+    def init_gl(self, shadows=False):
+        """shadows - собрать шейдер с картой теней (render/shadowmap.py)."""
+        vertex, fragment = BUILDING_VERTEX, BUILDING_FRAGMENT
+        if shadows:
+            vertex, fragment = with_shadows(vertex), with_shadows(fragment)
+        self.program = gpu.build_program(vertex, fragment)
         self.locations = {name: GL.glGetUniformLocation(self.program, name)
                           for name in UNIFORMS}
+        self.shadow_locations = uniform_locations(self.program)
+        if shadows:
+            GL.glUseProgram(self.program)
+            GL.glUniform1i(self.shadow_locations[4], SHADOW_UNIT)
+            GL.glUseProgram(0)
 
     def release_gl(self):
         self.pool.clear()
@@ -328,9 +338,10 @@ class Buildings:
             GL.glDeleteProgram(self.program)
         self.program = None
 
-    def draw(self, camera, sun=None):
+    def draw(self, camera, sun=None, shadow=None):
         """Нарисовать здания. Вызывается после тайлов, до неба.
-        sun - направление на солнце в ECEF или None - свет отмывки."""
+        sun - направление на солнце в ECEF или None - свет отмывки.
+        shadow - карта теней кадра render.shadowmap.ShadowMap или None."""
         self.drawn = 0
         if not self.shown or self.program is None:
             return
@@ -351,12 +362,22 @@ class Buildings:
         gl.glUniform1f(loc["u_flat"], AMBIENT + (1.0 - AMBIENT)
                        * math.sin(LIGHT_ELEVATION))
         gl.glUniform2f(loc["u_limits"], *SHADE_LIMITS)
+        shadows = None
+        if shadow is not None and shadow.bind(self.shadow_locations[:3]):
+            shadows = np.ascontiguousarray(shadow.frame.matrices(
+                [item.center for item in items]), dtype=np.float32)
+        elif self.shadow_locations[0] != -1:
+            gl.glUniform1f(self.shadow_locations[0], 0.0)
+        u_shadow = self.shadow_locations[3]
         base = mvps.ctypes.data
         stride = mvps.strides[0]
         null = ctypes.c_void_p(0)
         for i, item in enumerate(items):
             gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                                 ctypes.c_void_p(base + stride * i))
+            if shadows is not None:
+                gpu._uniform_matrix(u_shadow, 1, GL.GL_TRUE, ctypes.c_void_p(
+                    shadows.ctypes.data + shadows.strides[0] * i))
             gpu._bind_vao(item.vao)
             gpu._draw_elements(GL.GL_TRIANGLES, item.count,
                                GL.GL_UNSIGNED_INT, null)

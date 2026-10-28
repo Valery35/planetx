@@ -30,7 +30,9 @@ from ..core.tiling import AMBIENT
 from . import gpu
 from .gpu import gl
 from .buildings import _latlon, light_at
-from .shaders import MODEL_FRAGMENT, MODEL_VERTEX as VERTEX_SHADER
+from .shaders import (MODEL_FRAGMENT, MODEL_VERTEX as VERTEX_SHADER,
+                      with_shadows)
+from .shadowmap import UNIT as SHADOW_UNIT, uniform_locations
 
 UNIFORMS = ("u_mvp", "u_turn", "u_light", "u_ambient", "u_image",
             "u_textured", "u_color")
@@ -146,10 +148,19 @@ class Models:
     def active(self):
         return bool(self.source)
 
-    def init_gl(self):
-        self.program = gpu.build_program(VERTEX_SHADER, MODEL_FRAGMENT)
+    def init_gl(self, shadows=False):
+        """shadows - собрать шейдер с картой теней (render/shadowmap.py)."""
+        vertex, fragment = VERTEX_SHADER, MODEL_FRAGMENT
+        if shadows:
+            vertex, fragment = with_shadows(vertex), with_shadows(fragment)
+        self.program = gpu.build_program(vertex, fragment)
         self.locations = {name: GL.glGetUniformLocation(self.program, name)
                           for name in UNIFORMS}
+        self.shadow_locations = uniform_locations(self.program)
+        if shadows:
+            GL.glUseProgram(self.program)
+            GL.glUniform1i(self.shadow_locations[4], SHADOW_UNIT)
+            GL.glUseProgram(0)
 
     def release_gl(self):
         for parts in self.loaded.values():
@@ -247,8 +258,9 @@ class Models:
                         if key in keys}
         self.pending = False
 
-    def draw(self, camera):
-        """Нарисовать модели после поверхности, глубина включена."""
+    def draw(self, camera, shadow=None):
+        """Нарисовать модели после поверхности, глубина включена.
+        shadow - карта теней кадра render.shadowmap.ShadowMap или None."""
         self.drawn = 0
         self.animated = False
         if self.program is None or not self.source:
@@ -273,6 +285,12 @@ class Models:
         gl.glUniform3f(loc["u_light"], *light_at(lat, lon).tolist())
         gl.glUniform1f(loc["u_ambient"], AMBIENT)
         gl.glUniform1i(loc["u_image"], 0)
+        lights = None
+        if shadow is not None and shadow.bind(self.shadow_locations[:3]):
+            lights = shadow.frame.matrices(self.centers)
+        elif self.shadow_locations[0] != -1:
+            gl.glUniform1f(self.shadow_locations[0], 0.0)
+        u_shadow = self.shadow_locations[3]
         gl.glActiveTexture(GL.GL_TEXTURE0)
         gl.glEnable(GL.GL_BLEND)
         gl.glBlendFuncSeparate(GL.GL_SRC_ALPHA, GL.GL_ONE_MINUS_SRC_ALPHA,
@@ -291,6 +309,13 @@ class Models:
                     pose = poses.get(part.track)
                     if move is not None:
                         pose = _moved(move, pose)
+                    if lights is not None:
+                        light = lights[i] if pose is None \
+                            else lights[i] @ pose[0]
+                        light = np.ascontiguousarray(light, dtype=np.float32)
+                        gpu._uniform_matrix(u_shadow, 1, GL.GL_TRUE,
+                                            ctypes.c_void_p(
+                                                light.ctypes.data))
                     if pose is None:
                         gpu._uniform_matrix(loc["u_mvp"], 1, GL.GL_TRUE,
                                             ctypes.c_void_p(

@@ -103,7 +103,8 @@ from .globe.base import (ACCEPTED_KEY, ATTRIBUTION_STYLE, AUTO_DEFAULT,
                          LANGUAGE_KEY, LAYER_TIME_DELAY, LINES_KEY, LINK_TICK,
                          MARGIN, NEW_SHOWN_KEY, OPACITY_PAUSE, OSM_PAUSE,
                          PANEL_WIDTH, POINT_LAYERS, READY_KEY, RECORD_PERIOD,
-                         RELIEF_KEY, SCALE_KEY, SEA_KEY, SIDEBAR_KEY,
+                         RELIEF_KEY, SCALE_KEY, SEA_KEY, SHADOWS_PAUSE,
+                         SIDEBAR_KEY,
                          SWITCH_INTERVAL, SYNC_KEY, TERRAIN_MIRRORS,
                          THEME_DELAY, THEME_KEY, VIEWSHED_POLL, _RulerVertices,
                          _WedgeCorners, all_sources)
@@ -737,6 +738,20 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.insolation_timer = QTimer(self)
         self.insolation_timer.setInterval(VIEWSHED_POLL)
         self.insolation_timer.timeout.connect(self._insolation_poll)
+        # Тени на момент: горизонт участка считается раз, карта - на
+        # каждый момент шкалы времени после паузы её движения.
+        self.shadows_dialog = None
+        self.shadows_job = None
+        self.shadows_tiles = None
+        self.shadows_result = None
+        self.shadows_horizon = None
+        self.shadows_timer = QTimer(self)
+        self.shadows_timer.setInterval(VIEWSHED_POLL)
+        self.shadows_timer.timeout.connect(self._shadows_poll)
+        self.shadows_follow = QTimer(self)
+        self.shadows_follow.setSingleShot(True)
+        self.shadows_follow.setInterval(SHADOWS_PAUSE)
+        self.shadows_follow.timeout.connect(self._shadows_moment)
         self.ruler_vertices = _RulerVertices(self)
         self.view.undo_point.connect(self._undo_point)
         self.ruler_dialog = None
@@ -922,6 +937,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.panel.cutaway_stretch = self.cutaway_stretch()
         self.view.wedge_stretch = self.panel.cutaway_stretch
         self.panel.cutaway_stretch_changed.connect(self.set_cutaway_stretch)
+        self.panel.sun_shadows = self.sun_shadows()
+        self.view.shadows = self.panel.sun_shadows
+        self.panel.sun_shadows_changed.connect(self.set_sun_shadows)
         self.tomo = None
         self._tomo_reply = None
         self._tomo_job = None
@@ -1128,6 +1146,13 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.insolation_job = None
             if self.insolation_tiles is not None:
                 self.insolation_tiles.abort()
+            if self.shadows_dialog is not None:
+                self.shadows_dialog.close()
+            self.shadows_timer.stop()
+            self.shadows_follow.stop()
+            self.shadows_job = None
+            if self.shadows_tiles is not None:
+                self.shadows_tiles.abort()
             self.subsurface.close()
             self.pointclouds.close()
             self.loader.abort()

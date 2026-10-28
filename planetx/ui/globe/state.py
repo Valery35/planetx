@@ -716,8 +716,10 @@ class StateMixin:
         extras = getattr(self, "extras", {})
         planet = getattr(self, "planet", None)
         earth = planet is None or planet.earth
+        # Тени участка идут за шкалой времени (ui/shadows.py).
+        shadows = getattr(self, "shadows_horizon", None) is not None
         return earth and bool(extras.get("sun")
-                              or extras.get("satellites"))
+                              or extras.get("satellites") or shadows)
 
     def satellite_span(self):
         """Момент спутников, секунды UTC: правый бегунок открытой шкалы

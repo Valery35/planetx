@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.18.0
+version=1.19.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.18.0 The site of the analysis windows is a polygon - a
+changelog=1.19.0 Shadows window in the Site analysis submenu - shade
+      and sunlight over the site at the moment of the time slider from
+      the terrain and buildings, the shadows follow the slider. With the
+      Sun layer the terrain, 3D buildings and 3D models cast shadows
+      near the camera, the Shadows item of the Sun row turns them off.
+      Analysis windows show the time a result was built.
+      1.18.0 The site of the analysis windows is a polygon - a
       square with draggable vertices or drawn by clicks on the globe.
       Results only inside the site. Each calculation is a subgroup of
       the PlanetX - site analysis group with the site outline. Build,

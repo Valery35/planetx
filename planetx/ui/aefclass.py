@@ -37,7 +37,8 @@ from .aef import _INDEX, _poll_job, _run_job, index_of, open_cog, \
     stop_point, zstd_ready
 from .area import Area
 from .handles import GRAB_PIXELS
-from .results import (Session, accepted, add_vector, keep_buttons,
+from .results import (Session, accepted, add_vector, built_text,
+                      keep_buttons,
                       result_path, show_layer, write_vector)
 from .threadtiles import ThreadTiles
 from .viewshed import fit_status
@@ -519,7 +520,7 @@ class ClassTool(QObject):
         text = tr("Классы {year} года: {parts}.", year=year, parts=parts)
         if out["outside"]:
             text += " " + tr("Точек вне участка: {n}.", n=out["outside"])
-        dialog.status.setText(text)
+        dialog.status.setText(text + " " + built_text())
         dialog.set_ready(True)
         self.show()
 

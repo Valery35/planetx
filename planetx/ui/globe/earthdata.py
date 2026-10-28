@@ -33,7 +33,8 @@ from .. import export as layer_export
 from ..deposits import deposits_path, parse_deposits
 from ..overpass import brief_error
 from ..tomo import parse_tomo
-from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, STRETCH_KEY, TOMO_KEY,
+from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, SHADOWS_KEY,
+                   STRETCH_KEY, TOMO_KEY,
                    TERRAIN_ATTRIBUTION, TERRAIN_MIRRORS, all_sources,
                    link_html)
 
@@ -307,6 +308,17 @@ class EarthDataMixin:
         self.panel.cutaway_stretch = bool(on)
         self.view.set_wedge_stretch(on)
         self._wedge_gain_changed()
+
+    def sun_shadows(self):
+        """Тени в кадре при строке «Солнце» - настройка пункта «Тени»
+        её меню, по умолчанию да (render/shadowmap.py)."""
+        return QgsSettings().value(SHADOWS_KEY, True, type=bool)
+
+    def set_sun_shadows(self, on):
+        QgsSettings().setValue(SHADOWS_KEY, bool(on))
+        self.panel.sun_shadows = bool(on)
+        self.view.shadows = bool(on)
+        self.view.update()
 
     # Томография мантии на гранях разреза (core/tomography.py).
 

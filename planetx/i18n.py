@@ -189,6 +189,42 @@ EN = {
     "QGIS закрыт.": "QGIS is closed.",
     "Космоснимки здесь…": "Satellite images here…",
     "Инсоляция здесь…": "Insolation here…",
+    "Тени здесь…": "Shadows here…",
+    "Где тень и где солнце на момент шкалы времени - по рельефу и зданиям, "
+    "тени идут за шкалой.":
+        "Shade and sun at the moment of the time slider, from the terrain "
+        "and buildings. The shadows follow the slider.",
+    "Тени": "Shadows",
+    "{local} (UTC {utc})": "{local} (UTC {utc})",
+    "Момент - правый бегунок шкалы времени, без шкалы - часы компьютера. "
+    "После «Построить» тени идут за шкалой: двигайте бегунок или пустите "
+    "показ ▶.":
+        "The moment is the right handle of the time slider, without the "
+        "slider - the computer clock. After Build the shadows follow the "
+        "slider. Move the handle or start playback ▶.",
+    "Здания OpenFreeMap, свои 3D-модели и выдавленные многоугольники дают "
+    "тени. Высота у части зданий OpenFreeMap условная. Здание уже шага "
+    "сетки может не попасть в расчёт.":
+        "OpenFreeMap buildings, your own 3D models and extruded polygons "
+        "cast shadows. Some OpenFreeMap buildings have an assumed height. "
+        "A building narrower than the grid step may be missed.",
+    "Тени считаются только для Земли.":
+        "Shadows are computed for the Earth only.",
+    "Расчёт горизонта: {share}": "Computing the horizon: {share}",
+    "Шаг сетки - {step} м.": "The grid step is {step} m.",
+    "Построено в {time}.": "Built at {time}.",
+    "Солнце ниже горизонта - тень везде.":
+        "The Sun is below the horizon, everything is in shade.",
+    "Солнце на высоте {height}°, на солнце {share} участка.":
+        "The Sun is {height}° high, {share} of the area is in sunlight.",
+    "Тени {moment}": "Shadows {moment}",
+    "Тень": "Shade",
+    "Тени рельефа, зданий и 3D-моделей вблизи камеры, в радиусе до 5 км "
+    "от точки взгляда. Без флажка - свет солнца без теней, кадр рисуется "
+    "быстрее.":
+        "Shadows of the terrain, buildings and 3D models near the camera, "
+        "within 5 km of the look point. Without the box the sunlight has "
+        "no shadows, and the frame is drawn faster.",
     "Учитывать здания": "Include buildings",
     "Здания OpenFreeMap поднимают рельеф на свою высоту и закрывают обзор. "
     "Высота у части зданий условная. Здание уже шага расчёта может не "
