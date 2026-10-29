@@ -110,9 +110,9 @@ class ShadowMap:
         gpu.gl.glUniform1f(offset_loc, frame.offset)
         return True
 
-    def render(self, frame, items, fades, extra):
+    def render(self, frame, items, fades, draw_more):
         """Проход карты глубины: тайлы items (пары сетка, текстура)
-        с долями заплаток fades, потом extra(LightCamera) - здания
+        с долями заплаток fades, потом draw_more(LightCamera) - здания
         и модели. frame - LightFrame или None, тогда теней нет."""
         self.frame = None
         self.drawn = 0
@@ -137,7 +137,7 @@ class ShadowMap:
                 gpu.draw_batch(items, mats, self.u_mvp, fades=fades,
                                u_fade=self.u_fade)
                 gpu.gl.glUniform4f(self.u_fade, 0.0, 0.0, 0.0, 0.0)
-            extra(shadowmap.LightCamera(frame))
+            draw_more(shadowmap.LightCamera(frame))
             self.frame = frame
             self.drawn = len(items)
         finally:

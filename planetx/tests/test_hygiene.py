@@ -535,6 +535,26 @@ def unsafe_xml(source):
     return found
 
 
+SQL_NAMES = ("extra", "RawSQL")
+
+
+def sql_lookalike(source):
+    """Вызов функции с именем extra или RawSQL. Bandit каталога QGIS
+    принимает его за запрос Django (B610, B611) и блокирует версию,
+    так 29 октября 2026 года заблокирована 1.19.0 из-за extra(...)
+    в render/shadowmap.py."""
+    found = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        name = func.attr if isinstance(func, ast.Attribute) else \
+            func.id if isinstance(func, ast.Name) else ""
+        if name in SQL_NAMES:
+            found.append(node.lineno)
+    return found
+
+
 WEAK_HASHES = ("md4", "md5", "sha", "sha1")
 
 
@@ -770,6 +790,11 @@ class TestCodeRules(unittest.TestCase):
                   and os.sep + "tests" + os.sep not in p]
         self.assertEqual(scan(unsafe_xml, plugin), [])
 
+    def test_no_sql_lookalike(self):
+        plugin = [p for p in self.paths if p.startswith(PLUGIN)
+                  and os.sep + "tests" + os.sep not in p]
+        self.assertEqual(scan(sql_lookalike, plugin), [])
+
     def test_no_weak_hash(self):
         plugin = [p for p in self.paths if p.startswith(PLUGIN)
                   and os.sep + "tests" + os.sep not in p]
@@ -944,6 +969,12 @@ class TestGuardsCatch(unittest.TestCase):
                     "from xml.dom import minidom\n"):
             self.assertCatches(unsafe_xml, bad,
                                "from xml.parsers import expat\n")
+
+    def test_sql_lookalike_guard(self):
+        for bad in ("extra(camera)\n", "self.extra(camera)\n",
+                    "RawSQL(text)\n"):
+            self.assertCatches(sql_lookalike, bad,
+                               "draw_more(camera)\nx = extra\n")
 
     def test_weak_hash_guard(self):
         good = ("d = hashlib.md5(b, usedforsecurity=False).digest()\n"
