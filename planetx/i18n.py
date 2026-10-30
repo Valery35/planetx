@@ -12,6 +12,15 @@ import os
 __all__ = ["tr", "is_russian", "set_language", "EN"]
 
 EN = {
+    # Сводка значений участка окон анализа, 30 октября 2026 года.
+    "{title} - среднее {mean}{unit}, разброс {std}{unit}, "
+    "квантили 10, 25, 50, 75 и 90 % - {p10}, {q1}, {median}, "
+    "{q3}, {p90}{unit}.":
+        "{title} - mean {mean}{unit}, standard deviation {std}{unit}, "
+        "quantiles 10, 25, 50, 75 and 90 % - {p10}, {q1}, {median}, "
+        "{q3}, {p90}{unit}.",
+    "Часы солнца": "Sun hours",
+    " ч": " h",
     # Снимок неба - обзоры HiPS, 24 октября 2026 года.
     "Объекты глубокого неба": "Deep-sky objects",
     "Подписи галактик, туманностей и скоплений каталогов Мессье, NGC "

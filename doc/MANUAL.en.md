@@ -2737,6 +2737,13 @@ shows it as a project layer, the check box and opacity are in QGIS.
 Cancel and the cross of the window remove the result from the globe,
 nothing is written to the project.
 
+The slope and aspect, insolation and flooding windows show a summary
+of the site values in the result line - the mean, the standard deviation
+and the 10, 25, 50, 75 and 90 % quantiles. The same summary is in the
+raster description in the layer metadata, the land change raster has
+it too. Cells outside the site do not enter it, flooding counts only
+the flooded cells.
+
 While a long calculation runs - loading heights or AlphaEarth vectors,
 computing a viewshed or insolation - the loading icon to the right of
 the icon bar turns, and its tooltip names the calculation. A click on

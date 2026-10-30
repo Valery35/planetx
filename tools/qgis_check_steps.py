@@ -17168,6 +17168,7 @@ def hydro_flood_check():
     started = time.perf_counter()
     dialog.water.setValue(dialog.base + 3.0)
     out["level_ms"] = round(1000.0 * (time.perf_counter() - started), 1)
+    out["status_level"] = dialog.status.text()
     flood = st["flood"]
     out["area_km2"] = round(flood.area / 1e6, 3)
     out["depth"] = round(flood.depth, 2)
@@ -17685,6 +17686,8 @@ def relief_wait():
         stats = layers[0].layer().dataProvider().bandStatistics(1)
         out["slope_range"] = [round(stats.minimumValue, 1),
                               round(stats.maximumValue, 1)]
+        out["abstracts"] = [n.layer().metadata().abstract()
+                            for n in layers]
     tool.find_peaks()
     out["peaks_status"] = dialog.status.text()
     added = [row for row in _group_features() if row[1] == "point"]

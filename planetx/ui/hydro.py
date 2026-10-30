@@ -38,8 +38,8 @@ from ..qt_compat import enum
 from .export import _property, _to_group, add_raster
 from .area import Area, FixedArea
 from .results import (Session, accepted, add_vector, built_text,
-                      keep_buttons,
-                      result_path, show_layer, write_vector)
+                      keep_buttons, result_path, show_layer, stats_text,
+                      write_vector)
 from .viewshed import fit_status
 
 WAIT = 30.0  # с ожидания тайлов высот, дальше - по тем, что есть
@@ -761,6 +761,9 @@ class HydroTool(GridHeights):
                       area=number(result.area / 1e6),
                       volume=number(result.volume / 1e6),
                       depth=number(result.depth))
+            text += " " + stats_text(tr("Глубина"),
+                                     level - state["z"][result.mask],
+                                     tr(" м"))
             if result.edge:
                 text += " " + tr("Вода дошла до края участка и может идти "
                                  "дальше. Нужен больший участок.")
@@ -867,7 +870,8 @@ class HydroTool(GridHeights):
         raster = add_raster(path, tr("{name} - глубина", name=name),
                             [(0.0, DEPTH_COLORS[0]), (max(top, 0.1),
                                                       DEPTH_COLORS[1])],
-                            group=group)
+                            group=group, abstract=stats_text(
+                                tr("Глубина"), depth, tr(" м")))
         if raster is not None:
             self.kept[raster.id()] = (state["grid"], result.mask.copy(),
                                       state["level"])

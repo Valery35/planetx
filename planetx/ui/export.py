@@ -198,11 +198,13 @@ def write_picture(path, data, box):
         gdal.Unlink(source)
 
 
-def add_raster(path, title, stops=None, rights="", group=None, copy=None):
+def add_raster(path, title, stops=None, rights="", group=None, copy=None,
+               abstract=""):
     """Растр файла в проект: stops - [(значение, (R, G, B[, A]))] -
     раскраска первой полосы, иначе как есть. rights - строка прав,
     group - название группы, без него «PlanetX - слои глобуса». copy -
-    растр копирует слой глобуса, без него - когда группы нет (_to_group)."""
+    растр копирует слой глобуса, без него - когда группы нет (_to_group).
+    abstract - описание в метаданных слоя."""
     layer = QgsRasterLayer(path, title, "gdal")
     if not layer.isValid():
         return None
@@ -217,9 +219,12 @@ def add_raster(path, title, stops=None, rights="", group=None, copy=None):
         raster.setRasterShaderFunction(shader)
         layer.setRenderer(QgsSingleBandPseudoColorRenderer(
             layer.dataProvider(), 1, raster))
-    if rights:
+    if rights or abstract:
         meta = layer.metadata()
-        meta.setRights([rights])
+        if rights:
+            meta.setRights([rights])
+        if abstract:
+            meta.setAbstract(abstract)
         layer.setMetadata(meta)
     return _to_group(layer, group, copy)
 

@@ -26,6 +26,7 @@ from qgis.core import QgsApplication, QgsProject
 from qgis.PyQt import sip
 from qgis.PyQt.QtWidgets import QDialogButtonBox
 
+from ..core import stats
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -41,6 +42,21 @@ def built_text():
     видно, что расчёт прошёл, - замечание автора от 28 октября 2026
     года на окне «Затопление»."""
     return tr("Построено в {time}.", time=time.strftime("%H:%M:%S"))
+
+
+def stats_text(title, values, unit=""):
+    """Сводка значений участка строкой окна и описания слоя: title -
+    величина, unit - единица. Пусто, если значений нет."""
+    rep = stats.describe(values)
+    if rep is None:
+        return ""
+    show = stats.rounded
+    return tr("{title} - среднее {mean}{unit}, разброс {std}{unit}, "
+              "квантили 10, 25, 50, 75 и 90 % - {p10}, {q1}, {median}, "
+              "{q3}, {p90}{unit}.", title=title, mean=show(rep.mean),
+              std=show(rep.std), p10=show(rep.p10), q1=show(rep.q1),
+              median=show(rep.median), q3=show(rep.q3), p90=show(rep.p90),
+              unit=unit)
 
 
 def root_name():

@@ -44,7 +44,7 @@ from ..insolation import InsolationDialog
 from ..shadows import ShadowsDialog
 from ..export import add_raster
 from ..results import (Session, accepted, add_paletted, built_text,
-                       result_path, show_layer, write_lat_lon)
+                       result_path, show_layer, stats_text, write_lat_lon)
 from ..roofs import RoofLoader
 from ...core import roofs, shadows
 from ..subsection import ModelSectionDialog, build as model_section
@@ -790,6 +790,7 @@ class ToolsMixin:
                   low="{:.1f}".format(float(np.nanmin(hours))),
                   high="{:.1f}".format(float(np.nanmax(hours))),
                   step="{:.0f}".format(result.cell))
+        text += " " + stats_text(tr("Часы солнца"), hours, tr(" ч"))
         if job["missing"]:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
@@ -851,7 +852,8 @@ class ToolsMixin:
                              time=time.strftime("%H:%M")),
                     [(share * result.top, color)
                      for share, color in insolation.STOPS],
-                    group=session.group_for(result.ring))
+                    group=session.group_for(result.ring),
+                    abstract=stats_text(tr("Часы солнца"), hours, tr(" ч")))
                 if layer is not None:
                     layer.setOpacity(insolation.OPACITY)
                 show_layer(self, layer)

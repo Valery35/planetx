@@ -40,8 +40,8 @@ from .area import Area
 from .export import add_raster
 from .hydro import _spin
 from .results import (Session, accepted, add_vector, built_text,
-                      keep_buttons,
-                      result_path, show_layer, write_vector)
+                      keep_buttons, result_path, show_layer, stats_text,
+                      write_vector)
 from .threadtiles import ThreadTiles
 from .viewshed import fit_status
 
@@ -565,7 +565,8 @@ class ChangeTool(QObject):
                 show_layer(self.window, add_raster(
                     path, title, [(v, c) for v, c in aef.STOPS],
                     rights=aef.CREDIT,
-                    group=self.session.group_for(self.detail[2])))
+                    group=self.session.group_for(self.detail[2]),
+                    abstract=stats_text(tr("Степень изменения"), values)))
                 dialog.status.setText(tr(
                     "Растр {cols} × {rows} пикселей в проекте.",
                     cols=values.shape[1], rows=values.shape[0]))

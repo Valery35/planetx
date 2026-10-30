@@ -13,7 +13,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
-from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
+from qgis.PyQt.QtCore import QEvent, QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
                                  QDoubleSpinBox, QFormLayout, QLabel,
                                  QLayout, QPushButton, QVBoxLayout)
@@ -118,13 +118,35 @@ STATUS_LINES = 3  # строк под состояние расчёта
 DIALOG_WIDTH = 360  # наименьшая ширина окна, логических пикселей
 
 
+class _StatusFit(QObject):
+    """Высота строки состояния следует за её текстом: новая строка - новая
+    раскладка окна, окно растёт вместе с текстом и поля не сжимаются.
+    Сводка значений участка дала строке пять строк вместо трёх."""
+
+    def __init__(self, dialog, lowest):
+        super().__init__(dialog)
+        self.status = dialog.status
+        self.lowest = lowest
+        dialog.installEventFilter(self)
+
+    def eventFilter(self, watched, event):
+        if event.type() == enum(QEvent, "Type", "LayoutRequest"):
+            need = max(self.lowest,
+                       self.status.heightForWidth(self.status.width()))
+            if need != self.status.minimumHeight():
+                self.status.setMinimumHeight(need)
+        return False
+
+
 def fit_status(dialog, layout):
     """Строка состояния окна расчёта переносится на несколько строк
     после показа окна. Место под STATUS_LINES строк оставляется заранее,
-    и окно не становится меньше содержимого. Иначе поля сжимались
-    и текст в них обрезался снизу."""
+    дальше высоту ведёт _StatusFit, и окно не становится меньше
+    содержимого. Иначе поля сжимались и текст в них обрезался снизу."""
     status = dialog.status
-    status.setMinimumHeight(STATUS_LINES * status.fontMetrics().lineSpacing())
+    lowest = STATUS_LINES * status.fontMetrics().lineSpacing()
+    status.setMinimumHeight(lowest)
+    _StatusFit(dialog, lowest)
     status.setAlignment(enum(Qt, "AlignmentFlag", "AlignTop")
                         | enum(Qt, "AlignmentFlag", "AlignLeft"))
     dialog.setMinimumWidth(DIALOG_WIDTH)

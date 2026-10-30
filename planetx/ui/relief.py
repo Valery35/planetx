@@ -26,8 +26,8 @@ from .export import add_raster
 from .area import Area
 from .hydro import GridHeights, _spin, number
 from .results import (Session, accepted, add_vector, built_text,
-                      keep_buttons,
-                      result_path, show_layer, write_vector)
+                      keep_buttons, result_path, show_layer, stats_text,
+                      write_vector)
 from .viewshed import ResultTiles, display_level, fit_status
 
 LAYER = "slope"  # слой вида, общий со строками «Уклон» и «Экспозиция»
@@ -196,8 +196,9 @@ class ReliefTool(GridHeights):
             window.set_extra(key, False)
         if not rows:
             self.show()
-        text = summary_text(rep) + " " + tr("Шаг сетки {step} м.",
-                                            step=number(grid.cell))
+        text = " ".join(part for part in (
+            summary_text(rep), stats_text(tr("Уклон"), result.slope, "°"),
+            tr("Шаг сетки {step} м.", step=number(grid.cell))) if part)
         if partial:
             text += " " + tr("Загружены не все высоты, расчёт шёл "
                              "по менее подробным.")
@@ -299,7 +300,8 @@ class ReliefTool(GridHeights):
                 layers[file] = add_raster(
                     path, tr("{name} - уклон, °", name=name),
                     [(b, c) for b, c in slope.SLOPE_STOPS],
-                    group=group)
+                    group=group,
+                    abstract=stats_text(tr("Уклон"), result.slope, "°"))
             else:
                 layers[file] = add_raster(
                     aspect_path, tr("{name} - экспозиция, °", name=name),
