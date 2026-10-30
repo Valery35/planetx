@@ -19,6 +19,10 @@ EN = {
         "{title} - mean {mean}{unit}, standard deviation {std}{unit}, "
         "quantiles 10, 25, 50, 75 and 90 % - {p10}, {q1}, {median}, "
         "{q3}, {p90}{unit}.",
+    "Участок общий с прошлым расчётом. «Квадрат» и «Нарисовать» "
+    "начинают новый.":
+        "The site is shared with the previous calculation. Square and "
+        "Draw start a new one.",
     "Часы солнца": "Sun hours",
     " ч": " h",
     # Снимок неба - обзоры HiPS, 24 октября 2026 года.
@@ -196,9 +200,8 @@ EN = {
     "Ошибки SSL запроса {number}:": "SSL errors of request {number}:",
     "Модуль выгружен.": "The plugin is unloaded.",
     "QGIS закрыт.": "QGIS is closed.",
-    "Космоснимки здесь…": "Satellite images here…",
-    "Инсоляция здесь…": "Insolation here…",
-    "Тени здесь…": "Shadows here…",
+    "Инсоляция…": "Insolation…",
+    "Тени…": "Shadows…",
     "Где тень и где солнце на момент шкалы времени - по рельефу и зданиям, "
     "тени идут за шкалой.":
         "Shade and sun at the moment of the time slider, from the terrain "
@@ -286,9 +289,9 @@ EN = {
         "12 bands at a 10 m step, an area with a side over 20 km gets a "
         "20 m step. The layer shows natural colours, the band names are "
         "seen in the QGIS layer properties.",
-    "Ранние снимки Landsat 1972-1993 здесь":
-        "Early Landsat images 1972-1993 here",
-    "Снимки ASTER здесь": "ASTER images here",
+    "Ранние снимки Landsat 1972-1993":
+        "Early Landsat images 1972-1993",
+    "Снимки ASTER": "ASTER images",
     "Landsat 1-5 MSS Collection 2 Level-1 (USGS), файлы и каталог "
     "Microsoft Planetary Computer. Значения - отражение на верху "
     "атмосферы, без поправки на атмосферу. Слои несут подпись «Landsat "
@@ -645,17 +648,14 @@ EN = {
         "View to QGIS layout",
     "Записать облёт":
         "Record a flight",
-    "Исторические карты Рамсея здесь":
-        "Rumsey historical maps here",
-    "Номенклатура листа здесь":
-        "Map sheet numbers here",
+    "Исторические карты Рамсея":
+        "Rumsey historical maps",
     "Определить объекты":
         "Identify features",
     "Разговор с помощником":
         "Talk to the assistant",
     "Синхронизация с картой QGIS":
         "Sync with the QGIS map",
-    "Космоснимки здесь": "Satellite images here",
     "Шкала времени":
         "Time slider",
     "включить":
@@ -697,8 +697,8 @@ EN = {
         "Show on the globe",
     "Перелёт к рамке выбранной карты.":
         "Flight to the frame of the chosen map.",
-    "Исторические карты Рамсея здесь…":
-        "Rumsey historical maps here…",
+    "Исторические карты Рамсея…":
+        "Rumsey historical maps…",
     "Загрузка сведений о карте…":
         "Loading map details…",
     "Загрузка изображения карты…":
@@ -1131,8 +1131,7 @@ EN = {
         "Trend \"{name}\" {first} - {last}, per year",
     "PlanetX - карты тренда":
         "PlanetX - trend maps",
-    "Облака точек лидара здесь":
-        "Lidar point clouds here",
+    "Облака точек лидара": "Lidar point clouds",
     "Все слои NASA GIBS":
         "All NASA GIBS layers",
     ("Весь каталог NASA GIBS - больше тысячи слоёв снимков и карт с рядом "
@@ -1199,12 +1198,12 @@ EN = {
         "Esri Wayback",
     ("Выпуски подложки Esri World Imagery с 20 февраля 2014 года. Шкала "
      "времени выбирает выпуск, шаги идут по выпускам, где снимок в середине "
-     "вида менялся. «Что здесь?» называет дату съёмки, источник и "
+     "вида менялся. «Сведения о точке» называет дату съёмки, источник и "
      "разрешение снимка."):
         ("Releases of the Esri World Imagery basemap since 20 February 2014. "
          "The time slider selects a release, the steps go through the "
          "releases in which the image at the centre of the view changed. "
-         "What's here? names the capture date, the provider and the "
+         "Point details names the capture date, the provider and the "
          "resolution of the image."),
     "Выпуск {day}":
         "Release {day}",
@@ -1830,8 +1829,7 @@ EN = {
         "A Sentinel-2 scene weighs about 1 GB.",
     "Вся сцена, исходные файлы": "Whole scene, source files",
     "Кадастр Росреестра": "Rosreestr cadastre",
-    "Старые карты «Это Место» здесь": "Eto Mesto old maps here",
-    "Старые карты «Это Место» здесь…": "Eto Mesto old maps here…",
+    "Старые карты «Это Место»…": "Eto Mesto old maps…",
     "Старые карты «Это Место»": "Eto Mesto old maps",
     "Запрос к «Это Место»…": "Asking Eto Mesto…",
     "Карт у точки {total}, показано {shown}. Двойной щелчок открывает "
@@ -2604,23 +2602,21 @@ EN = {
         "Measure distance",
     "Облететь вокруг":
         "Orbit around",
-    "Подлететь сюда":
-        "Fly here",
-    "Проложить маршрут отсюда":
-        "Directions from here",
-    "Проложить маршрут сюда":
-        "Directions to here",
+    "Начало маршрута":
+        "Route start",
+    "Конец маршрута":
+        "Route end",
     "Скопировать координаты в буфер обмена.":
         "Copy the coordinates to the clipboard.",
-    "Что здесь?":
-        "What's here?",
-    "Конец маршрута поставлен. Начало - пункт «Проложить маршрут отсюда» "
+    "Сведения о точке":
+        "Point details",
+    "Конец маршрута поставлен. Начало - пункт «Начало маршрута» "
     "меню на глобусе.":
-        "The route end is set. The start is the Directions from here item of "
+        "The route end is set. The start is the Route start item of "
         "the globe menu.",
-    "Начало маршрута поставлено. Конец - пункт «Проложить маршрут сюда» меню "
+    "Начало маршрута поставлено. Конец - пункт «Конец маршрута» меню "
     "на глобусе.":
-        "The route start is set. The end is the Directions to here item of "
+        "The route start is set. The end is the Route end item of "
         "the globe menu.",
     "не получен: {error}":
         "not received: {error}",
@@ -3861,7 +3857,7 @@ EN = {
     "место серое. Включается вместо уклона.":
         "Which way a slope faces - the colour of the compass direction, "
         "flat ground is grey. It replaces the slope when switched on.",
-    "Видимость отсюда…": "Viewshed from here…",
+    "Видимость…": "Viewshed…",
     "Видимость из точки": "Viewshed from a point",
     "Высота глаза или мачты над рельефом в точке. Выше - дальше "
     "видно и меньше мест скрыто за рельефом.":
@@ -4801,7 +4797,7 @@ EN = {
         "Each object gets its own path and label.",
     "Цвет пройденного пути.": "Color of the path travelled.",
     "Камера следом": "Camera follows",
-    "Полёт отсюда": "Fly from here",
+    "Полёт": "Flight",
     "Светлое": "Light",
     "Тёмное": "Dark",
     "Оформление окна глобуса. «Как в QGIS» - тёмные плашки на виде, "
@@ -5113,7 +5109,7 @@ EN = {
     "Удалить вершину": "Delete vertex",
     "Продолжить рисование": "Continue drawing",
     "Завершить рисование": "Finish drawing",
-    "Добавить метку здесь": "Add placemark here",
+    "Добавить метку": "Add placemark",
     "Щелчок по глобусу ставит метку. Метка перетаскивается мышью.":
         "A click on the globe sets the placemark. The placemark can be "
         "dragged with the mouse.",
@@ -5708,8 +5704,8 @@ EN = {
     "Статья": "Article",
     "Википедия": "Wikipedia",
     "Затопление": "Flooding",
-    "Затопление отсюда…": "Flooding from here…",
-    "Сток воды отсюда…": "Water flow from here…",
+    "Затопление…": "Flooding…",
+    "Сток воды…": "Water flow…",
     "Подъём воды над высотой точки, до {rise} м.":
         "Water rise above the height of the point, up to {rise} m.",
     "Высота точки": "Point height",
@@ -5827,7 +5823,7 @@ EN = {
     "Линия вливается в другую линию стока.":
         "The line joins another flow line.",
     "Линии стока от метки…": "Flow lines from placemark…",
-    "Уклон и экспозиция здесь…": "Slope and aspect here…",
+    "Уклон и экспозиция…": "Slope and aspect…",
     "Уклон и экспозиция квадрата вокруг точки по высотам, сводка, "
     "растры и вершины с ямами.":
         "Slope and aspect of the square around the point from the "
@@ -5902,7 +5898,6 @@ EN = {
     "нет.": "No water flows to the placemark, there is no catchment.",
     "Водосбор «{name}»": "Catchment of \"{name}\"",
     "Водосбор метки": "Placemark catchment",
-    "Гидрология": "Hydrology",
     "Вода от точки до заданной отметки, площадь, объём "
     "и глубины.":
         "Water from the point up to a chosen level, area, volume and "
@@ -5965,9 +5960,9 @@ EN = {
     "Изменений сильнее 0.3 на участке нет.":
         "No change stronger than 0.3 in the area.",
     "Данные не получены: {error}": "Data not received: {error}",
-    "Изменения местности здесь": "Land change here",
+    "Окно «Изменения местности»": "Land change window",
     "Анализ участка": "Site analysis",
-    "Изменения местности здесь…": "Land change here…",
+    "Изменения местности…": "Land change…",
     "Где местность изменилась между двумя годами 2017-2025 - по "
     "эмбеддингам AlphaEarth, клетка 10 м.":
         "Where the land changed between two years of 2017-2025, from "
@@ -6073,12 +6068,11 @@ EN = {
         "At least two classes with three points each are needed.",
     "Все точки вне участка.": "All points are outside the area.",
     "Точек вне участка: {n}.": "Points outside the area: {n}.",
-    "Классификация здесь…": "Classification here…",
+    "Классификация…": "Classification…",
     "Классы участка по контрольным точкам на глобусе - по эмбеддингам "
     "AlphaEarth, клетка 10 м.":
         "Area classes by control points on the globe, from AlphaEarth "
         "embeddings, 10 m cells.",
-    "Классификация здесь": "Classification here",
     "Окно классификации участка у точки взгляда - классы с цветом "
     "и названием, контрольные точки щелчком по глобусу, год, растр "
     "классов в проект QGIS.":

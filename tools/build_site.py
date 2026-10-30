@@ -343,7 +343,7 @@ RU = {
               "Token» и нажмите кнопку «Generate Token». Скопируйте длинную "
               "строку ключа целиком.",
     "key.s3": "<b>Ключ в PlanetX.</b> Правой кнопкой по глобусу выберите "
-              "«Космоснимки здесь…», в списке «Спутник» - «ASTER с 2007 года "
+              "«Космоснимки…», в списке «Спутник» - «ASTER с 2007 года "
               "- NASA, нужен ключ Earthdata». Нажмите «Найти», выберите сцену "
               "и нажмите «В проект QGIS». Вставьте ключ в окно запроса и "
               "нажмите «OK».",
@@ -650,7 +650,7 @@ EN = {
               "and press the Generate Token button. Copy the long key string "
               "whole.",
     "key.s3": "<b>Key in PlanetX.</b> Right-click the globe and choose "
-              "Satellite images here…, in the Satellite list choose ASTER "
+              "Satellite images…, in the Satellite list choose ASTER "
               "since 2007 - NASA, an Earthdata key is needed. Press Find, "
               "choose a scene and press To QGIS project. Paste the key "
               "into the request window and press OK.",

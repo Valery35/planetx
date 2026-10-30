@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.20.0
+version=1.21.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.20.0 The slope and aspect, insolation and flooding
+changelog=1.21.0 All analysis tools are in the Site analysis submenu
+      of the globe menu, flooding, water flow and sea level included.
+      A site drawn once is shared by the analysis windows - a window
+      opened inside it takes the same site, and an edit of its
+      vertices reaches the open windows. The items of the globe menu
+      have shorter names, the manual uses the same names.
+      1.20.0 The slope and aspect, insolation and flooding
       windows show a summary of the site values - the mean, the
       standard deviation and the 10, 25, 50, 75 and 90 percent quantiles.
       The same summary goes to the raster description in the layer

@@ -97,7 +97,7 @@ class ActionsMixin:
         return self.new_name(bases[mode])
 
     def add_place_here(self, lat, lon):
-        """«Добавить метку здесь» меню глобуса: окно «Новая метка»
+        """«Добавить метку» меню глобуса: окно «Новая метка»
         с точкой под курсором."""
         self._open_place()
         self.place_dialog.tabs.setCurrentIndex(0)
@@ -119,7 +119,7 @@ class ActionsMixin:
                 return
 
     def what_here(self, px, py):
-        """«Что здесь?» меню на глобусе: окно «Объекты» и адрес места
+        """«Сведения о точке» меню на глобусе: окно «Объекты» и адрес места
         от Nominatim обратным запросом. Запрос - только по этому пункту
         и не чаще раза в SEARCH_INTERVAL, правила Nominatim."""
         self.identify_here(px, py)
@@ -277,10 +277,10 @@ class ActionsMixin:
         return dialog
 
     def sentinel_here(self, lat, lon, mission=None):
-        """«Космоснимки здесь…» меню на глобусе: сцены участка
+        """«Космоснимки…» меню на глобусе: сцены участка
         вокруг точки. Окно одно, новый участок заменяет прежний. mission -
-        спутник окна, у пункта «Ранние снимки Landsat здесь…» - mss,
-        у «Снимков ASTER здесь…» - aster."""
+        спутник окна, у пункта «Ранние снимки Landsat…» - mss,
+        у «Снимков ASTER…» - aster."""
         dialog = self._sentinel_dialog()
         if mission:
             dialog.use_mission(mission)
@@ -288,7 +288,7 @@ class ActionsMixin:
         return dialog
 
     def lidar_here(self, lat, lon):
-        """«Облака точек лидара здесь» меню на глобусе: плитки IGN LiDAR
+        """«Облака точек лидара» меню на глобусе: плитки IGN LiDAR
         HD или USGS 3DEP у точки слоями проекта, отмечены на глобусе
         (ui/lidarnet.py)."""
         from ..lidarnet import LidarSearch
@@ -346,7 +346,7 @@ class ActionsMixin:
         return ids
 
     def etomesto_here(self, lat, lon):
-        """«Старые карты «Это Место» здесь…» меню на глобусе: каталог
+        """«Старые карты «Это Место»…» меню на глобусе: каталог
         карт сайта etomesto.com у точки. Окно одно, новая точка
         заменяет прежнюю."""
         from ..etomesto import EtomestoDialog
@@ -360,7 +360,7 @@ class ActionsMixin:
         return dialog
 
     def rumsey_here(self, lat, lon):
-        """«Исторические карты Рамсея здесь…» меню на глобусе: карты коллекции
+        """«Исторические карты Рамсея…» меню на глобусе: карты коллекции
         у вида. Окно одно, новый вид заменяет прежний."""
         from ..rumsey import RumseyDialog
         dialog = getattr(self, "rumsey_dialog", None)

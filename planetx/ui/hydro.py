@@ -557,7 +557,7 @@ class HydroTool(GridHeights):
         return dialog
 
     def sea_level_here(self):
-        """Окно «Уровень моря» - пункт подменю «Гидрология»."""
+        """Окно «Уровень моря» - пункт подменю «Анализ участка»."""
         dialog = self.sea_dialog
         if dialog is None:
             dialog = SeaLevelDialog(self.window)

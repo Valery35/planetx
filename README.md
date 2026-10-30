@@ -9,7 +9,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.20.0.
+A 3D globe inside QGIS. PlanetX version 1.21.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -105,8 +105,7 @@ The plugin is free and open source. [Support development](https://github.com/Val
 - **Imagery archive.** The Esri Wayback map shows past releases of the
   Esri World Imagery base map since 2014. The time slider selects a
   release, the steps go through the releases in which the image at the
-  centre of the view changed, the swipe compares two releases. What's
-  here? names the capture date, the provider and the resolution of the
+  centre of the view changed, the swipe compares two releases. Point details names the capture date, the provider and the resolution of the
   image.
 - **Land change and classification.** AlphaEarth Foundations
   embeddings, 10 m cells for each year of 2017-2025, show where the
@@ -252,7 +251,7 @@ The plugin is free and open source. [Support development](https://github.com/Val
   follow it. The time slider runs at clock speeds up to a day per
   second, the line between day and night and the satellites move
   with it.
-- **Route.** Directions from here and Directions to here in the globe
+- **Route.** Route start and Route end in the globe
   menu build a path by OpenStreetMap roads by car or on foot. The path
   with the length and travel time goes into My Places. The points lie
   up to 50 km apart.

@@ -12,9 +12,14 @@
 у первой вершины, щелчок по ней замыкает участок. Расчёт идёт по рамке
 участка, вне многоугольника результатов нет. Образец - окно
 классификации, из него участок вынесен сюда.
+
+Участок общий, слово автора от 30 октября 2026 года - нарисовал один
+раз и считаешь по нему разными окнами. Его хранит окно глобуса
+(GlobeWindow.site), смена тела его снимает.
 """
 import math
 
+import numpy as np
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import QObject, pyqtSignal
 from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QHBoxLayout, QPushButton,
@@ -90,8 +95,21 @@ class Area(QObject):
         self.reset_square()
 
     def open_at(self, lat, lon):
-        """Окно открыто у точки: участок - квадрат, вершины на виде."""
+        """Окно открыто у точки. Участок общий у окон анализа: точка
+        внутри прежнего участка берёт его, иначе новый квадрат. Вершины
+        на виде."""
         self.point = (lat, lon)
+        site = self.window.site
+        if site and aef.ring_inside(np.array([lat]), np.array([lon]),
+                                    site)[0]:
+            self.ring = list(site)
+            self.drawing = False
+            self.edited()
+            self.begin()
+            self.dialog.status.setText(tr(
+                "Участок общий с прошлым расчётом. «Квадрат» и «Нарисовать» "
+                "начинают новый."))
+            return
         self.reset_square()
         self.begin()
 
@@ -126,8 +144,19 @@ class Area(QObject):
     def edited(self):
         self.changed.emit()
         window = self.window
+        if self.closed():
+            self._share()
         window._refresh_shapes()
         window.handles.sync()
+
+    def _share(self):
+        """Участок - общий для окон анализа: его берут открытые окна
+        и окна, которые откроются внутри него."""
+        self.window.site = list(self.ring)
+        for other in self.window.areas:
+            if other is not self and other.visible() and not other.drawing:
+                other.ring = list(self.ring)
+                other.changed.emit()
 
     def closed(self):
         return not self.drawing and len(self.ring) >= 3

@@ -1106,12 +1106,12 @@ def page_imagery(img):
         "imagery", ("Космоснимки", "Satellite imagery"),
         ("Снимки спутников участком в проект QGIS",
          "Satellite images of an area into the QGIS project"),
-        ("Пункт «Космоснимки здесь…» меню на глобусе или меню метки "
+        ("Пункт «Космоснимки…» меню на глобусе или меню метки "
          "открывает окно поиска сцен. Участок - квадрат по ширине вида "
          "или многоугольник «Моих меток». Облачность считается над самим "
          "участком по маске сцены, а не по всей сцене. Сочетания каналов "
          "и индексы ложатся слоями проекта со стилем.",
-         "The Satellite images here… item of the globe menu or a placemark "
+         "The Satellite images… item of the globe menu or a placemark "
          "menu opens the scene search window. The area is a square by the "
          "view width or a My Places polygon. Cloud cover is counted over "
          "the area itself by the scene mask, not over the whole scene. "

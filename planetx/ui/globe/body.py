@@ -37,6 +37,7 @@ class BodyMixin:
         земные слои и вид - всё сразу. Камера встаёт над домашней
         точкой тела."""
         journal.note("set_body {}".format(key))
+        self.site = None
         if key == "sky":
             self.show_sky()
             return

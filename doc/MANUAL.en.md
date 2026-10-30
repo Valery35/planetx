@@ -497,8 +497,8 @@ groups, a click on a group shows only that group.
 The search field looks for a name and a description across the whole
 catalogue.
 
-The Windows at the look point rows are Satellite images here, Lidar point
-clouds here, Rumsey historical maps here and Eto Mesto old maps here.
+The Windows at the look point rows are Satellite images, Lidar point
+clouds, Rumsey historical maps and Eto Mesto old maps.
 They have no check box. The Open the window button and a double click
 open the window of the source at the look point, as the same items of
 the globe menu do.
@@ -595,7 +595,7 @@ through all releases.
 The ⇆ swipe compares two releases in the same way as two days of a
 NASA theme. By default the left part shows the release a year earlier.
 
-The release date is not the capture date. What's here? and the
+The release date is not the capture date. Point details and the
 Identify features mode give the Esri Wayback imagery archive group -
 the capture date, the provider, the imaging system, the resolution and
 the accuracy of the release image at the clicked point. Add to QGIS
@@ -1214,8 +1214,7 @@ it is not installed into the system or the rest of QGIS. The layer
 opacity is set by the slider of its row in the Layers list. The credit
 Rosreestr NSPD is in the corner of the view.
 
-With the cadastre on, a click in the Identify features mode or the What's
-here? item of the globe menu asks NSPD about the parcel under the
+With the cadastre on, a click in the Identify features mode or the Point details item of the globe menu asks NSPD about the parcel under the
 point. The Features window shows the Rosreestr cadastre group. It holds
 the cadastral number, the address, the area, the land category and the
 permitted use. It also holds the form of ownership, the type of right,
@@ -1448,7 +1447,7 @@ the project.
 
 #### Lidar point clouds over the network
 
-The Lidar point clouds here item of the menu on the globe finds tiles
+The Lidar point clouds item of the menu on the globe finds tiles
 of open lidar surveys at the point and puts them as point cloud layers
 into the PlanetX - lidar point clouds group of the project, the layers
 are checked on the globe at once. There are two sources:
@@ -1768,15 +1767,14 @@ A right click on the globe opens a menu.
 | Delete vertex | Removes the vertex of the drawn object under the cursor |
 | Finish drawing, Continue drawing | Stops and resumes adding points with clicks |
 | Properties… | Opens the properties of the placemark under the cursor |
-| Add placemark here | Opens the New placemark window with the point under the cursor |
-| Measure distance | Opens the Ruler with its first point here |
-| Fly here | Flies to the point with the same altitude and tilt |
+| Add placemark | Opens the New placemark window with the point under the cursor |
+| Measure distance | Opens the Ruler with its first point under the cursor |
+| Fly to | Flies to the point with the same altitude and tilt |
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
-| Directions from here, Directions to here | The start and the end of a route, see Route |
-| What's here? | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Site analysis | A submenu with Slope and aspect here…, Viewshed from here…, Insolation here…, Land change here… and Classification here… (the last three only on the Earth) for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Land change and Classification |
-| Hydrology | A submenu with Flooding from here…, Water flow from here… and Sea level…, see Flooding |
-| Satellite images here… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
+| Route start, Route end | The start and the end of a route, see Route |
+| Point details | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
+| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification… (the last four only on the Earth), Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification and Flooding |
+| Satellite images… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
 
@@ -1791,7 +1789,7 @@ Sentinel-2 or Landsat satellites over an area and adds the chosen bands and indi
 QGIS project. The scenes are L2A, that is surface reflectance, 10-20 m
 per pixel. Two items open the window:
 
-- Satellite images here… of the globe menu takes a square around the
+- Satellite images… of the globe menu takes a square around the
   point. The square side equals the width of the visible strip of the
   globe, from 1 to 100 km. The Area side field changes it.
 - Satellite images… of the menu of a path or a polygon in My Places
@@ -2084,7 +2082,7 @@ is free, each user has a key of their own.
    press the Generate Token button. A long string of Latin letters,
    digits and dots appears - this is the key. Copy it whole.
 3. Key in PlanetX. Right-click the globe at the place you need and
-   choose Satellite images here…. In the Satellite list choose ASTER since
+   choose Satellite images…. In the Satellite list choose ASTER since
    2007 - NASA, an Earthdata key is needed. Press Find, choose a scene
    and press To QGIS project. The window asks for the key. Paste the
    copied string and press OK. The window keeps the key and does not
@@ -2103,8 +2101,8 @@ too.
 ### Route
 
 A route by roads is built between two points on the Earth. The
-Directions from here item of the globe menu sets the start,
-Directions to here sets the end. With a point placemark under the
+Route start item of the globe menu sets the start,
+Route end sets the end. With a point placemark under the
 cursor the route takes its point and name. When both points are set,
 the route is built by itself and goes into My Places as a path named
 Route N. The camera flies to it. The length and the travel time stand
@@ -2702,10 +2700,11 @@ may exceed 100 %, that is 45°.
 
 ### Site and analysis results
 
-Slope and aspect, viewshed, insolation, land change and classification
-are collected in the Site analysis submenu of the menu on the globe,
-flooding and water flow in the Hydrology submenu. The windows of these
-tools, except the viewshed, compute over a site, as Google Earth does.
+Slope and aspect, viewshed, insolation, land change, classification,
+flooding, water flow and sea level are collected in the Site analysis
+submenu of the menu on the globe. The windows of these tools, except
+the viewshed and the sea level, compute over a site, as Google Earth
+does.
 
 The white outline on the globe is the site. When the window opens, it
 is a square centred on the point under the cursor, the Site field sets
@@ -2717,6 +2716,13 @@ shape appears, and a click on it closes the site. The calculation runs
 over the frame of the site, there are no results outside the polygon.
 Each window has its own largest site size, the field tooltip names it.
 The viewshed is computed in a circle around the observer.
+
+All these windows share the site. A site set in one window is taken by
+the windows open at that moment and by the windows opened later for a
+point inside it. So one site is computed by different tools. The result
+line of the window says that the site is shared. A point outside the
+site and the Square and Draw buttons start a new site. If the site is
+larger than the limit of a window, the window asks to reduce it.
 
 The windows of slope and aspect, viewshed, insolation, land change,
 classification and flooding have the same buttons. Build shows the
@@ -2752,7 +2758,7 @@ earlier result stays.
 
 ### Slope and aspect of a site
 
-The Slope and aspect here… item of the Site analysis submenu opens the
+The Slope and aspect… item of the Site analysis submenu opens the
 Slope and aspect window for the point under the cursor. The site is up
 to 100 km, the grid step is about one six-hundredth of its largest
 size. The Build button loads the heights of the site and colours it on
@@ -2780,7 +2786,7 @@ highest point around is at least the Rise from field.
 
 ### Viewshed from a point
 
-The Viewshed from here… item of the Site analysis submenu of the
+The Viewshed… item of the Site analysis submenu of the
 globe menu opens the Viewshed from a point window for the point under
 the cursor. The window sets the observer height
 above the terrain, the target height and the circle radius. The Build
@@ -2809,7 +2815,7 @@ viewshed is computed on the Earth, Mars and the Moon.
 
 ### Insolation
 
-The Insolation here… item of the Site analysis submenu of the globe
+The Insolation… item of the Site analysis submenu of the globe
 menu opens the Insolation window for the point under the cursor. The
 window sets the first and the last day of the period and a site up to
 40 km. The Build button loads the heights and colours the site by the
@@ -2833,7 +2839,7 @@ Insolation is computed only for the Earth.
 
 ### Shadows
 
-The Shadows here… item of the Site analysis submenu of the globe menu
+The Shadows… item of the Site analysis submenu of the globe menu
 opens the Shadows window for the point under the cursor. The globe shows
 where the site is in shade and where in sunlight at the chosen moment.
 Shade is a dark bluish fill, sunlight is a light warm haze. The Moment
@@ -2858,7 +2864,7 @@ Earth.
 
 ### Land change
 
-The Land change here… item of the Site analysis submenu of the globe
+The Land change… item of the Site analysis submenu of the globe
 menu opens the Land change window for the point under the cursor and
 turns on the Land change row of the Layers section. The globe shows
 where the land changed between two years. Black is no change, yellow
@@ -2901,7 +2907,7 @@ row off. Land change is computed only for the Earth.
 
 ### Classification
 
-The Classification here… item of the Site analysis submenu of the globe
+The Classification… item of the Site analysis submenu of the globe
 menu opens the Classification window for the point under the cursor.
 Classification divides the cells of the area into classes by the same
 AlphaEarth vectors as land change.
@@ -2940,8 +2946,8 @@ visible together with the classes.
 
 ### Flooding
 
-Flooding, water flow and sea level are collected in the Hydrology
-submenu of the menu on the globe. The Flooding from here… item opens the
+Flooding, water flow and sea level are in the Site analysis
+submenu of the menu on the globe. The Flooding… item opens the
 Flooding window for the point under the cursor, the site is up to
 100 km. The Build button loads the heights of the site and puts the
 water level 2 m above the point.
@@ -2968,7 +2974,7 @@ or removing it removes the water too.
 
 ### Water flow and catchment
 
-The Water flow from here… item of the Hydrology submenu opens the
+The Water flow… item of the Site analysis submenu opens the
 Water flow window for the point under the cursor, the site is up to
 100 km. The Flow line button
 traces the path of water from the point down the terrain and writes it
@@ -3034,11 +3040,11 @@ layer. With the Stop at a confluence check box a line ends
 where it joins a line built earlier, and a shared channel is one
 line. The lines go from high nodes to low ones, at most the 300
 longest go to the layer. The stop at a stream and where the slope
-flattens check boxes act here too.
+flattens check boxes apply to these lines too.
 
 ### Sea level
 
-The Sea level… item of the Hydrology submenu opens the Sea level
+The Sea level… item of the Site analysis submenu opens the Sea level
 window. The field and the slider set the level above the present one,
 from -130 to +100 m. Water fills everything below the level over the
 whole globe. The connection with the sea is not checked, so lowlands
@@ -3588,7 +3594,7 @@ licence of the adsb.lol output is not named as of 19 October 2026.
 
 ## Flight mode
 
-The Fly from here submenu of the right-click menu on the globe puts
+The Flight submenu of the right-click menu on the globe puts
 your own aircraft 1000 m above the clicked point - a fighter jet or a
 propeller aircraft. The aircraft flies along the view heading, and the
 camera follows it from behind and above. The flight works above the Earth
@@ -3693,7 +3699,7 @@ The Moscow, historical maps demo puts maps of Moscow of 1813, 1860, 1900,
 the public domain, members of the Wikimaps Warper project
 georeferenced them, the tiles come from its server.
 
-The Rumsey historical maps here… item of the globe menu opens the
+The Rumsey historical maps… item of the globe menu opens the
 Rumsey maps window - maps of the David Rumsey collection at the view.
 The collection holds about 57 thousand georeferenced maps from the 13th
 to the 21st century. The list goes by year, a click on a column header
@@ -3714,7 +3720,7 @@ The collection images are published under CC BY-NC-SA 3.0, it allows
 only non-commercial use with credit to the source. The georeferencing was done by members of
 the collection, for some maps it is rough or wrong.
 
-The Eto Mesto old maps here… item of the globe menu opens the catalogue
+The Eto Mesto old maps… item of the globe menu opens the catalogue
 of the Eto Mesto site (etomesto.com) - georeferenced old maps of Russia
 and the former USSR - city plans, survey atlases, the Schubert and
 Strelbitsky maps, Red Army maps, wartime aerial photos. The window shows

@@ -273,43 +273,43 @@ def _tools(window, add, earth):
                                         "subsurface", "drillholes"))
     if not earth:
         return
-    add("here:sentinel", tr("Космоснимки здесь"), open_,
+    add("here:sentinel", tr("Космоснимки"), open_,
         lambda: window.sentinel_here(*_here(window)),
         ("космоснимки", "спутниковые снимки", "ndvi", "landsat",
          "sentinel", "modis", "imagery"))
-    add("here:mss", tr("Ранние снимки Landsat 1972-1993 здесь"), open_,
+    add("here:mss", tr("Ранние снимки Landsat 1972-1993"), open_,
         lambda: window.sentinel_here(*_here(window), mission="mss"),
         ("mss", "landsat mss", "ранние снимки", "старые снимки",
          "архивные снимки", "1970-е", "1980-е", "landsat 1", "landsat 2",
          "landsat 3", "old imagery", "early landsat"))
-    add("here:aster", tr("Снимки ASTER здесь"), open_,
+    add("here:aster", tr("Снимки ASTER"), open_,
         lambda: window.sentinel_here(*_here(window), mission="aster"),
         ("aster", "астер", "минералы", "изменённые породы", "каолинит",
          "геологические индексы", "swir", "terra aster"))
-    add("here:lidar", tr("Облака точек лидара здесь"), open_,
+    add("here:lidar", tr("Облака точек лидара"), open_,
         lambda: window.lidar_here(*_here(window)),
         ("лидар", "облако точек", "lidar", "point cloud", "ign", "3dep"))
-    add("here:change", tr("Изменения местности здесь"), open_,
+    add("here:change", tr("Окно «Изменения местности»"), open_,
         lambda: window.change_tool.open_here(*_here(window)),
         ("изменения местности", "обнаружить изменения", "что изменилось",
          "alphaearth", "эмбеддинги", "change detection", "detect change",
          "стройка", "вырубка"))
-    add("here:classify", tr("Классификация здесь"), open_,
+    add("here:classify", tr("Классификация"), open_,
         lambda: window.class_tool.open_here(*_here(window)),
         ("классификация", "классы", "классифицировать", "лес и поле",
          "классы покрова", "classification", "classify", "land cover"))
-    add("here:etomesto", tr("Старые карты «Это Место» здесь"), open_,
+    add("here:etomesto", tr("Старые карты «Это Место»"), open_,
         lambda: window.etomesto_here(*_here(window)),
         ("это место", "etomesto", "старые карты", "межевые", "пгм",
          "менде", "шуберт", "стрельбицкий", "ркка", "трёхвёрстка"))
-    add("here:rumsey", tr("Исторические карты Рамсея здесь"), open_,
+    add("here:rumsey", tr("Исторические карты Рамсея"), open_,
         lambda: window.rumsey_here(*_here(window)),
         ("старые карты", "исторические карты", "рамсей", "rumsey",
          "old maps"))
-    add("here:sheets", tr("Номенклатура листа здесь"), open_,
+    add("here:sheets", tr("Номенклатура листа"), open_,
         lambda: window.sheets_here(*_here(window)),
         ("номенклатура", "лист карты", "разграфка", "sheet"))
-    add("here:what", tr("Что здесь?"), tr("выполнить"),
+    add("here:what", tr("Сведения о точке"), tr("выполнить"),
         lambda: window.what_here(window.view.width() / 2.0,
                                  window.view.height() / 2.0),
         ("адрес", "где я", "address"))

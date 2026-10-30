@@ -585,7 +585,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._send_search)
-        # Адреса пункта «Что здесь?»: ответы по ключу (широта, долгота,
+        # Адреса пункта «Сведения о точке»: ответы по ключу (широта, долгота,
         # язык), очередь - общая с поиском по SEARCH_INTERVAL.
         self._addresses = {}
         self._address_key = None
@@ -718,6 +718,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Участки окон анализа участка (ui/area.py): контуры на глобусе,
         # вершины щелчками.
         self.areas = []
+        self.site = None  # общий участок этих окон - вершины
         # Затопление, линия стока и водосбор у точки (ui/hydro.py).
         self.hydro = HydroTool(self)
         # Уклон, экспозиция, вершины и ямы квадрата (ui/relief.py).

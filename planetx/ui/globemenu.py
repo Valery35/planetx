@@ -82,7 +82,7 @@ def show(window, px, py):
         copy = menu.addAction(text)
         copy.setToolTip(tr("Скопировать координаты в буфер обмена."))
         # Текст - значением по умолчанию: имя text ниже занимает цикл
-        # подменю «Полёт отсюда», и в буфер уходило «Винтовой самолёт».
+        # подменю «Полёт», и в буфер уходило «Винтовой самолёт».
         copy.triggered.connect(
             lambda *a, t=text: QApplication.clipboard().setText(t))
         menu.setToolTipsVisible(True)
@@ -120,19 +120,19 @@ def show(window, px, py):
         if not menu.actions()[-1].isSeparator():
             menu.addSeparator()
         if not drawing:
-            menu.addAction(tr("Добавить метку здесь")).triggered.connect(
+            menu.addAction(tr("Добавить метку")).triggered.connect(
                 lambda *a: window.add_place_here(lat, lon))
             menu.addAction(tr("Измерить расстояние")).triggered.connect(
                 lambda *a: window.measure_from(lat, lon))
             menu.addSeparator()
-        menu.addAction(tr("Подлететь сюда")).triggered.connect(
+        menu.addAction(tr("Подлететь")).triggered.connect(
             lambda *a: fly_here(view, lat, lon))
         menu.addAction(tr("Облететь вокруг")).triggered.connect(
             lambda *a: window.spin_here(lat, lon))
         if not drawing and window.planet.earth:
             route_items(window, menu, place, lat, lon)
         if not drawing:
-            fly = menu.addMenu(tr("Полёт отсюда"))
+            fly = menu.addMenu(tr("Полёт"))
             fly.setToolTipsVisible(True)
             for kind, text, tip in (
                     (flightsim.FIGHTER, tr("Истребитель"), tr(
@@ -145,25 +145,24 @@ def show(window, px, py):
                     lambda *a, k=kind: window.flight.start(lat, lon, k))
         menu.addSeparator()
         if not drawing and window.planet.earth:
-            menu.addAction(tr("Что здесь?")).triggered.connect(
+            menu.addAction(tr("Сведения о точке")).triggered.connect(
                 lambda *a: window.what_here(px, py))
         # Окна расчёта и снимков у точки - одной группой, исторические
         # карты - другой. Просьба автора от 20 октября 2026 года.
         menu.addSeparator()
         if not drawing and window._surface_source() is not None:
             relief_items(window, menu, lat, lon)
-            hydro_items(window, menu, lat, lon)
         if not drawing and window.planet.earth:
             # Один пункт на все спутники, окно открывается на прежнем
             # спутнике.
-            menu.addAction(tr("Космоснимки здесь…")) \
+            menu.addAction(tr("Космоснимки…")) \
                 .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
-            menu.addAction(tr("Облака точек лидара здесь")).triggered.connect(
+            menu.addAction(tr("Облака точек лидара")).triggered.connect(
                 lambda *a: window.lidar_here(lat, lon))
             menu.addSeparator()
-            menu.addAction(tr("Исторические карты Рамсея здесь…")) \
+            menu.addAction(tr("Исторические карты Рамсея…")) \
                 .triggered.connect(lambda *a: window.rumsey_here(lat, lon))
-            menu.addAction(tr("Старые карты «Это Место» здесь…")) \
+            menu.addAction(tr("Старые карты «Это Место»…")) \
                 .triggered.connect(lambda *a: window.etomesto_here(lat, lon))
             if window.extras.get("contours"):
                 menu.addAction(tr("Горизонтали вида в проект QGIS…")) \
@@ -185,31 +184,33 @@ def relief_items(window, menu, lat, lon):
     (ui/relief.py), видимость, инсоляция и изменения местности (ui/aef.py).
     Просьба автора от 26 октября 2026 года - по образцу «Гидрологии».
     С 28 октября 2026 года, изменения местности рядом с видимостью по
-    слову автора, подменю названо, как у Google Earth."""
+    слову автора, подменю названо, как у Google Earth. С 30 октября
+    2026 года, слово автора «пусть общими станут», здесь же вода -
+    затопление, сток и уровень моря (ui/hydro.py)."""
     sub = menu.addMenu(tr("Анализ участка"))
     sub.setToolTipsVisible(True)
     items = [
-        (tr("Уклон и экспозиция здесь…"),
+        (tr("Уклон и экспозиция…"),
          tr("Уклон и экспозиция квадрата вокруг точки по высотам, "
             "сводка, растры и вершины с ямами."),
          lambda *a: window.relief.relief_here(lat, lon)),
-        (tr("Видимость отсюда…"),
+        (tr("Видимость…"),
          tr("Что видно из точки в круге заданного радиуса."),
          lambda *a: window.viewshed_here(lat, lon))]
     if window.planet.earth:
-        items.append((tr("Инсоляция здесь…"),
+        items.append((tr("Инсоляция…"),
                       tr("Часы прямого солнца в сутки вокруг точки."),
                       lambda *a: window.insolation_here(lat, lon)))
-        items.append((tr("Тени здесь…"),
+        items.append((tr("Тени…"),
                       tr("Где тень и где солнце на момент шкалы времени - "
                          "по рельефу и зданиям, тени идут за шкалой."),
                       lambda *a: window.shadows_here(lat, lon)))
-        items.append((tr("Изменения местности здесь…"),
+        items.append((tr("Изменения местности…"),
                       tr("Где местность изменилась между двумя годами "
                          "2017-2025 - по эмбеддингам AlphaEarth, клетка "
                          "10 м."),
                       lambda *a: window.change_tool.open_here(lat, lon)))
-        items.append((tr("Классификация здесь…"),
+        items.append((tr("Классификация…"),
                       tr("Классы участка по контрольным точкам на глобусе - "
                          "по эмбеддингам AlphaEarth, клетка 10 м."),
                       lambda *a: window.class_tool.open_here(lat, lon)))
@@ -217,20 +218,13 @@ def relief_items(window, menu, lat, lon):
         action = sub.addAction(text)
         action.setToolTip(tip)
         action.triggered.connect(slot)
-
-
-def hydro_items(window, menu, lat, lon):
-    """Подменю «Гидрология»: затопление, сток и водосбор, речная сеть
-    у точки, уровень моря по всему глобусу (ui/hydro.py). Просьба
-    автора от 25 октября 2026 года - вынести в подменю."""
-    sub = menu.addMenu(tr("Гидрология"))
-    sub.setToolTipsVisible(True)
+    sub.addSeparator()
     for text, tip, slot in (
-            (tr("Затопление отсюда…"),
+            (tr("Затопление…"),
              tr("Вода от точки до заданной отметки, площадь, объём "
                 "и глубины."),
              lambda *a: window.hydro.flood_here(lat, lon)),
-            (tr("Сток воды отсюда…"),
+            (tr("Сток воды…"),
              tr("Линия стока, водосбор и речная сеть вокруг точки."),
              lambda *a: window.hydro.flow_here(lat, lon)),
             (tr("Уровень моря…"),
@@ -279,16 +273,16 @@ def link_items(window, menu, lat, lon):
 
 
 def route_items(window, menu, place, lat, lon):
-    """«Проложить маршрут отсюда» и «сюда». Точечная метка под курсором
+    """«Начало маршрута» и «сюда». Точечная метка под курсором
     даёт маршруту свою точку и название, иначе - точка поверхности."""
     name = ""
     if place is not None and place.kind == "point" and place.shape.points:
         lat, lon = place.shape.points[0]
         name = place.name
     menu.addSeparator()
-    menu.addAction(tr("Проложить маршрут отсюда")).triggered.connect(
+    menu.addAction(tr("Начало маршрута")).triggered.connect(
         lambda *a: window.route_point(lat, lon, name, end=False))
-    menu.addAction(tr("Проложить маршрут сюда")).triggered.connect(
+    menu.addAction(tr("Конец маршрута")).triggered.connect(
         lambda *a: window.route_point(lat, lon, name, end=True))
 
 

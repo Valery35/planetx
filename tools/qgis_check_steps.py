@@ -8412,7 +8412,7 @@ def globe_menu():
     menus = [m for m in window.findChildren(QMenu) if m not in before]
     result["globe_menu"] = [a.text() for m in menus for a in m.actions()]
     # Первая строка копирует координаты. До 20 октября 2026 года цикл
-    # подменю «Полёт отсюда» подменял текст, в буфер шло «Винтовой
+    # подменю «Полёт» подменял текст, в буфер шло «Винтовой
     # самолёт».
     first = next(a for a in menus[0].actions() if a.text())
     first.trigger()
@@ -10890,10 +10890,10 @@ def ui_theme_windows():
         about.show()
         look["about"] = about
         menu = QMenu(window)
-        menu.addAction("Подлететь сюда")
-        menu.addAction("Полёт отсюда")
+        menu.addAction("Подлететь")
+        menu.addAction("Полёт")
         menu.addSeparator()
-        menu.addAction("Что здесь?")
+        menu.addAction("Сведения о точке")
         menu.popup(window.mapToGlobal(window.rect().center()))
         look["menu"] = menu
         return 6000
@@ -12377,7 +12377,7 @@ def mss_command():
     for menu in menus:
         menu.close()
     dialog.close()
-    # Действие «Снимки ASTER здесь»: окно на ASTER с датами 2000-2006.
+    # Действие «Снимки ASTER»: окно на ASTER с датами 2000-2006.
     out["aster_hint"] = [(h.kind, h.text) for h in
                          window.search_suggestions("астер")[:3]]
     dialog.use_mission("sentinel2")
@@ -13791,7 +13791,7 @@ def route_long_check():
 @check(500)
 def menu_actions():
     """Меню на глобусе после причёсывания терминов: координаты первой
-    строкой, «Что здесь?» с адресом Nominatim, «Измерить расстояние»,
+    строкой, «Сведения о точке» с адресом Nominatim, «Измерить расстояние»,
     без «Скопировать ссылку на место» (убрана 20 октября 2026 года).
     Один живой запрос к Nominatim."""
     from qgis.PyQt.QtWidgets import QApplication, QMenu
@@ -13819,7 +13819,7 @@ def menu_actions():
     out["ruler"] = {"open": window._ruler_open(),
                     "points": len(window.ruler.points)}
     window.ruler_dialog.close()
-    actions["Что здесь?"].trigger()
+    actions["Сведения о точке"].trigger()
     out["identified"] = window.identified is not None \
         and window.identified.isVisible()
     for menu in menus:
@@ -17123,6 +17123,14 @@ HYDRO_KAMA = (58.0175, 56.2400)
 HYDRO_BAKSAN = (43.2605, 42.5100)
 
 
+def _prepare_water(window):
+    # Буферы сетки воды - объекты контекста вида, вне кадра нужен он сам.
+    view = window.view
+    view.makeCurrent()
+    view.lake_water.prepare()
+    view.doneCurrent()
+
+
 @check(500)
 def hydro_flood():
     from planetx.core.navigation import Pose
@@ -17174,7 +17182,7 @@ def hydro_flood_check():
     out["depth"] = round(flood.depth, 2)
     out["edge"] = flood.edge
     out["slider"] = dialog.slider.value()
-    window.view.lake_water.prepare()
+    _prepare_water(window)
     out["water_meshes"] = sorted(window.view.lake_water.buffers)
     out["water_vertices"] = window.view.lake_water.vertex_count()
     out["status_after"] = dialog.status.text()
@@ -17198,7 +17206,7 @@ def hydro_flood_frame():
     out["kept"] = [len(kept), bool(kept) and kept[0]
                    in window.shown_layers()]
     window._apply_vector()
-    window.view.lake_water.prepare()
+    _prepare_water(window)
     out["kept_water"] = sorted(k for k in window.view.lake_water.buffers
                                if k != "flood")
     state["flood_kept"] = kept
@@ -17206,7 +17214,7 @@ def hydro_flood_frame():
         _drop_group()
     window.hydro.flood_dialog.reject()
     window._apply_vector()
-    window.view.lake_water.prepare()
+    _prepare_water(window)
     out["cleared"] = window.hydro.state is None \
         and "flood" not in window.view.lake_water.buffers
     # Слой глубин удалён из проекта - его вода ушла.
@@ -17303,12 +17311,12 @@ def _water_share(image):
 
 @check(15000)
 def hydro_rivers():
-    # Речная сеть у Терскола слоем в проект, подменю «Гидрология».
+    # Речная сеть у Терскола слоем в проект, подменю «Анализ участка».
     from qgis.PyQt.QtWidgets import QMenu
     from planetx.ui import globemenu
     window = state["window"]
     menu = QMenu()
-    globemenu.hydro_items(window, menu, *HYDRO_BAKSAN)
+    globemenu.relief_items(window, menu, *HYDRO_BAKSAN)
     sub = menu.actions()[0].menu()
     result.setdefault("hydro", {})["menu"] = [
         menu.actions()[0].text()] + [a.text() for a in sub.actions()]
@@ -17624,6 +17632,43 @@ def temporary_places():
 def panel_role():
     from planetx.ui.panel import PLACE_ROLE
     return PLACE_ROLE
+
+
+@check(500)
+def site_shared():
+    # Участок, нарисованный в одном окне, берут другие окна анализа.
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.ui import globemenu
+    window = state["window"]
+    out = result.setdefault("site", {})
+    menu = QMenu()
+    globemenu.relief_items(window, menu, *HYDRO_BAKSAN)
+    sub = menu.actions()[0].menu()
+    out["menu"] = [a.text() for a in sub.actions()]
+    out["submenus"] = len(menu.actions())
+    lat, lon = HYDRO_BAKSAN
+    window.site = None
+    first = window.relief.relief_here(lat, lon)
+    triangle = [(lat - 0.02, lon - 0.02), (lat - 0.02, lon + 0.03),
+                (lat + 0.03, lon)]
+    first.area.ring[:] = triangle
+    first.area.edited()
+    flood = window.hydro.flood_here(lat, lon)
+    out["follows_open"] = flood.area.ring == triangle
+    out["note"] = flood.status.text()
+    flood.reject()
+    first.area.ring[:] = triangle[:2] + [(lat + 0.04, lon)]
+    first.area.edited()
+    out["site_moved"] = window.site == first.area.ring
+    first.reject()
+    flow = window.hydro.flow_here(lat, lon)
+    out["follows_closed"] = flow.area.ring == window.site
+    flow.reject()
+    far = window.hydro.flow_here(lat + 1.0, lon)
+    out["new_place"] = far.area.ring != triangle \
+        and window.site == far.area.ring
+    far.reject()
+    window.site = None
 
 
 @check(500)
@@ -17976,7 +18021,8 @@ def class_open():
     globemenu.relief_items(window, menu, *CHANGE_POINT)
     sub = menu.actions()[0].menu()
     out = result.setdefault("classify", {})
-    out["menu"] = [a.text() for a in sub.actions()][-2:]
+    names = [a.text() for a in sub.actions()]
+    out["menu"] = names[:names.index("")][-2:]
     window.set_extra("aef_change", True)
     tool = window.class_tool
     dialog = tool.open_here(*CHANGE_POINT)
@@ -21848,7 +21894,7 @@ def hop_check():
 
 @check(1500)
 def add_here():
-    """«Добавить метку здесь» меню на глобусе: окно «Новая метка» с точкой
+    """«Добавить метку» меню на глобусе: окно «Новая метка» с точкой
     под курсором, точка видна на глобусе."""
     from planetx.core.navigation import Pose
     window = state["window"]
