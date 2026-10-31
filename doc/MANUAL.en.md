@@ -2912,8 +2912,9 @@ menu opens the Classification window for the point under the cursor.
 Classification divides the cells of the area into classes by the same
 AlphaEarth vectors as land change or by the bands of a project raster.
 
-The site is not larger than 10 km, classes are computed only inside
-it.
+A site by AlphaEarth embeddings is not larger than 10 km, a site by a
+project raster is up to 1000 km. Classes are computed only inside the
+site.
 
 A class has a color and a name, the Add class button adds a new one,
 ✕ removes a class with its points. The round button of a class selects
@@ -2952,7 +2953,9 @@ numbers of points.
 
 The Auto pixel for a raster is the pixel of the raster itself if the
 area has no more than 640 thousand cells, otherwise it is larger. A 10,
-20, 40 or 80 m pixel sets the area grid as it is. If the raster covers
+20, 40 or 80 m pixel sets the area grid as it is. The grid has no more
+than 16 million cells, otherwise the line under the fields asks for a
+larger pixel or Auto. If the raster covers
 the area partly, the line under the fields gives the covered share. An
 area outside the raster extent gives no classes, and the line reports
 it.

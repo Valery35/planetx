@@ -56,7 +56,9 @@ SETTINGS = "PlanetX/aef_class/"
 COLORS = ((60, 160, 70), (40, 110, 220), (240, 190, 40), (200, 60, 50),
           (150, 90, 200), (120, 120, 120), (240, 130, 40), (60, 200, 200))
 OPACITY = 0.6
-CLASS_SIDE = 10.0  # км, наибольшая сторона участка классификации
+CLASS_SIDE = 10.0  # км, наибольшая сторона участка AlphaEarth
+# км, у растра проекта. Защита от больших сеток - rasterclass.too_big.
+RASTER_SIDE = 1000.0
 AUTO = -1  # пиксель «Авто» в списке
 PIXEL_DEFAULT = 10.0  # м, пиксель «Авто», если растр его не называет
 COVERED = 0.995  # доля участка, ниже которой итог называет покрытие
@@ -289,6 +291,7 @@ class ClassDialog(QDialog):
 
     def _source(self):
         self.year.setEnabled(not self.raster_id())
+        self.area.set_most(RASTER_SIDE if self.raster_id() else CLASS_SIDE)
         self.volume_changed()
         self.source_changed.emit()
 
@@ -812,8 +815,8 @@ def project_rasters():
 def problem_text(code):
     """Текст строки итога для кода отказа расчёта по растру."""
     return {"unreadable": tr("Растр не прочитан."),
-            "big": tr("Сетка участка не помещается в память, возьмите "
-                      "пиксель крупнее."),
+            "big": tr("Сетка участка слишком велика, возьмите пиксель "
+                      "крупнее или «Авто»."),
             "outside": tr("Участок вне охвата растра."),
             "points": tr("Нужно хотя бы два класса с точками на клетках "
                          "растра с данными."),

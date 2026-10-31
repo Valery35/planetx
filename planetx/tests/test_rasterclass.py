@@ -144,6 +144,13 @@ class TestSize(unittest.TestCase):
     def test_too_big(self):
         self.assertFalse(rasterclass.too_big(1000, 1000, 64))
         self.assertTrue(rasterclass.too_big(1000, 1000, 400))
+        # Большой участок: один канал, но клеток больше предела.
+        self.assertFalse(rasterclass.too_big(4000, 4000, 1))
+        self.assertTrue(rasterclass.too_big(4001, 4000, 1))
+        # «Авто» укладывается в предел на участке любого размера.
+        side = 1000000.0
+        step = rasterclass.auto_pixel(1.0, side)
+        self.assertFalse(rasterclass.too_big(side / step, side / step, 8))
 
     def test_covered(self):
         grid = np.ones((2, 2, 2), dtype=np.float32)

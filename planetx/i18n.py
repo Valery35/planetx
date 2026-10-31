@@ -6011,8 +6011,8 @@ EN = {
         "The raster has no coordinate reference system.",
     "Читается растр участка…": "Reading the raster of the area…",
     "Растр не прочитан.": "The raster was not read.",
-    "Сетка участка не помещается в память, возьмите пиксель крупнее.":
-        "The area grid does not fit in memory, choose a larger pixel.",
+    "Сетка участка слишком велика, возьмите пиксель крупнее или «Авто».":
+        "The area grid is too large, choose a larger pixel or Auto.",
     "Участок вне охвата растра.": "The area is outside the raster extent.",
     "Нужно хотя бы два класса с точками на клетках растра с данными.":
         "At least two classes need points on raster cells with data.",

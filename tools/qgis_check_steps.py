@@ -18371,8 +18371,64 @@ def class_raster_rgba():
     dialog.source.setCurrentIndex(0)
     out["year_back"] = dialog.year.isEnabled()
     dialog.reject()
-    for key in ("class_layer", "class_rgba"):
-        QgsProject.instance().removeMapLayer(state[key])
+    QgsProject.instance().removeMapLayer(state["class_rgba"])
+    dialog.close()
+    return None
+
+
+@check(500)
+def class_raster_big():
+    # Участок растра больше 10 км: предел AlphaEarth не действует, мелкий
+    # пиксель на большом участке отказывает до чтения, QGIS не встаёт.
+    lat, lon = CHANGE_POINT
+    window = state["window"]
+    tool = window.class_tool
+    out = result.setdefault("class_big", {})
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(
+        state["class_layer"]))
+    out["most_raster"] = dialog.area.most
+    dialog.level.setCurrentIndex(dialog.level.findData(0))  # 10 м
+    dialog.area.set_square(lat, lon, 50000.0)
+    out["side"] = dialog.area.side.value()
+    out["check"] = dialog.area.check()
+    tool.result = None
+    state["class_started"] = time.monotonic()
+    dialog.build.emit()
+
+
+@check(500)
+def class_raster_big_wait():
+    tool = state["window"].class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 60.0:
+        return 500
+    from qgis.core import QgsProject
+    out = result["class_big"]
+    dialog = tool.dialog
+    stage = state.setdefault("class_big_stage", 0)
+    if stage == 0:
+        out["big_s"] = round(time.monotonic() - state["class_started"], 2)
+        out["big_status"] = dialog.status.text()
+        out["big_result"] = tool.result is not None
+        dialog.level.setCurrentIndex(0)  # «Авто» на том же участке
+        state["class_big_stage"] = 1
+        state["class_started"] = time.monotonic()
+        dialog.build.emit()
+        return 500
+    out["auto_s"] = round(time.monotonic() - state["class_started"], 2)
+    out["auto_status"] = dialog.status.text()
+    res = tool.result
+    if res is not None:
+        out["auto_grid"] = [list(res["classes"].shape), res["step"]]
+    # AlphaEarth: предел 10 км возвращается, участок снова отказывает.
+    dialog.area.set_square(CHANGE_POINT[0], CHANGE_POINT[1], 50000.0)
+    dialog.source.setCurrentIndex(0)
+    out["most_aef"] = dialog.area.most
+    out["aef_check"] = dialog.area.check()
+    dialog.reject()
+    QgsProject.instance().removeMapLayer(state["class_layer"])
     dialog.close()
     return None
 

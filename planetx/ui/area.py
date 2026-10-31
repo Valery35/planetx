@@ -62,11 +62,7 @@ class Area(QObject):
         self.side.setDecimals(1)
         self.side.setValue(min(max(side, 0.1), self.most))
         self.side.setSuffix(tr(" км"))
-        self.side.setToolTip(tr(
-            "Сторона квадрата участка с серединой в точке окна. Вершины "
-            "участка тянутся мышью, кружок на середине стороны ставит "
-            "новую вершину. Участок не больше {km} км.",
-            km="{:g}".format(self.most)))
+        self._side_hint()
         square = QPushButton(tr("Квадрат"), dialog)
         square.setToolTip(tr("Участок - квадрат стороной из поля слева."))
         square.clicked.connect(self.reset_square)
@@ -88,6 +84,20 @@ class Area(QObject):
             areas.append(self)
 
     # --- состояние ------------------------------------------------------
+
+    def _side_hint(self):
+        self.side.setToolTip(tr(
+            "Сторона квадрата участка с серединой в точке окна. Вершины "
+            "участка тянутся мышью, кружок на середине стороны ставит "
+            "новую вершину. Участок не больше {km} км.",
+            km="{:g}".format(self.most)))
+
+    def set_most(self, km):
+        """Новый наибольший размер участка, км: у классификации он
+        зависит от источника."""
+        self.most = float(km)
+        self.side.setMaximum(self.most)
+        self._side_hint()
 
     def _side_changed(self, value):
         if self.key:

@@ -26,6 +26,7 @@ KNN = 5  # контрольных точек голосуют за клетку,
 CHUNK = 128 * 1024  # клеток за шаг расчёта
 AUTO_CELLS = 800 * 800  # клеток участка при пикселе «Авто»
 NEAR = 1e-3  # добавка к расстоянию: точка на самой клетке даёт конечный голос
+MAX_CELLS = 4000 * 4000  # клеток сетки участка
 MAX_BYTES = 1 << 30  # байт сетки float32 в памяти
 
 
@@ -36,8 +37,11 @@ def auto_pixel(native, side, most=AUTO_CELLS):
 
 
 def too_big(rows, cols, bands):
-    """Сетка участка float32 не поместится в MAX_BYTES."""
-    return 4 * int(rows) * int(cols) * int(bands) > MAX_BYTES
+    """Сетка участка больше MAX_CELLS клеток или не помещается в
+    MAX_BYTES байт float32. Защита вместо предела размера участка:
+    большой участок с мелким пикселем не вешает QGIS."""
+    cells = int(rows) * int(cols)
+    return cells > MAX_CELLS or 4 * cells * int(bands) > MAX_BYTES
 
 
 def usable(grid):
