@@ -14754,6 +14754,82 @@ def post_class_shot():
     return None
 
 
+@check(1000, manual=True)
+def post_raster_class_shot():
+    """Кадр объявления 1.22: классы по растру проекта у Перми. Растр и
+    точки готовит внешний сценарий: PLANETX_POST_RASTER - GeoTIFF, рядом
+    .json с точками классов. «Копия вида» - TEMP."""
+    import json
+    from qgis.core import QgsProject, QgsRasterLayer
+    from qgis.PyQt.QtGui import QColor
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_raster", {"since": None})
+    tool = window.class_tool
+    if look["since"] is None:
+        path = os.environ["PLANETX_POST_RASTER"]
+        with open(path + ".json", encoding="utf-8") as fh:
+            info = json.load(fh)
+        window.set_body("earth")
+        _post_clean(window)
+        # Метки проверочного профиля на кадре не нужны, и вложенные тоже.
+        window.myplaces.set_visible_many(
+            {n.key: False for n in window.myplaces.nodes()})
+        layer = QgsRasterLayer(path, "Sentinel-2", "gdal")
+        QgsProject.instance().addMapLayer(layer, False)
+        look["layer"] = layer.id()
+        lat, lon = info["lat"], info["lon"]
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, 12000.0, 0.0, 0.0))
+        view.update()
+        view.grabFramebuffer()
+        dialog = tool.open_here(lat, lon)
+        dialog.source.refill()
+        dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+        dialog.level.setCurrentIndex(0)
+        dialog.area.set_square(lat, lon, info["side"] - 1000.0)
+        colors = {"Вода": (40, 110, 220), "Лес": (30, 120, 60),
+                  "Луга и поля": (240, 200, 60), "Застройка": (210, 60, 50)}
+        while len(dialog.rows) < len(info["points"]):
+            dialog.add_class()
+        for row, (name, points) in zip(dialog.rows, info["points"].items()):
+            row.name.setText(name)
+            row.color = QColor(*colors[name])
+            row._paint()
+            row.set_points([tuple(p) for p in points])
+        dialog.alpha.setValue(70)
+        tool._update_shapes()
+        view.navigator.set_pose(Pose(lat - 0.012, lon, 11000.0, 0.0, 40.0))
+        view.update()
+        dialog.build.emit()
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    layer = view.gibs["viewshed"]
+    if (tool.job is not None or not layer.textures or view.load_missing) \
+            and waited < 120:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 6000
+    path = os.path.join(TEMP, "planetx_post_raster_class.png")
+    window.copy_view().save(path)
+    dialog = tool.dialog
+    dialog.show()
+    dialog.raise_()
+    dialog.grab().save(os.path.join(TEMP,
+                                    "planetx_post_raster_dialog.png"))
+    result["post_raster"] = {"path": path, "waited": round(waited, 1),
+                             "status": dialog.status.text()}
+    dialog.reject()
+    dialog.close()
+    QgsProject.instance().removeMapLayer(look["layer"])
+    _post_restore(window)
+    return None
+
+
 @check(500)
 def menu_links():
     """Свои пункты меню на глобусе: подменю «Открыть в браузере», адрес
