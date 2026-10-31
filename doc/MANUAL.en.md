@@ -2910,7 +2910,7 @@ row off. Land change is computed only for the Earth.
 The Classification… item of the Site analysis submenu of the globe
 menu opens the Classification window for the point under the cursor.
 Classification divides the cells of the area into classes by the same
-AlphaEarth vectors as land change.
+AlphaEarth vectors as land change or by the bands of a project raster.
 
 The site is not larger than 10 km, classes are computed only inside
 it.
@@ -2934,6 +2934,28 @@ the smallest download at which the area has 14 to 640 thousand cells,
 and the line under the field names it. A file block for a year weighs
 40-50 MB at any pixel, and while it loads, the status line counts the
 blocks.
+
+The Source list selects where the features of a cell come from -
+AlphaEarth embeddings or a QGIS project raster read from a file. For a
+raster, each band is a feature, the Year field is unavailable and no
+network is needed. The raster is resampled from the layer coordinate
+system to the area grid in UTM. Bands may be in different units, for
+example heights in meters and reflectance in fractions of one.
+Therefore each band is brought to a mean of 0 and a spread of 1 over
+the cells of the area, and the similarity of cells is the Euclidean
+distance. A band without spread over the area is ignored. A cell
+without data in at least one band gets no class, an alpha band is not a
+feature. A point on such a cell does not vote, and the line under the
+fields gives the number of such points. The votes of a class are
+divided by the number of its points, so classes may have different
+numbers of points.
+
+The Auto pixel for a raster is the pixel of the raster itself if the
+area has no more than 640 thousand cells, otherwise it is larger. A 10,
+20, 40 or 80 m pixel sets the area grid as it is. If the raster covers
+the area partly, the line under the fields gives the covered share. An
+area outside the raster extent gives no classes, and the line reports
+it.
 
 The Opacity slider changes the transparency of the classes. OK writes
 the classes as a raster in UTM to the calculation subgroup, with the

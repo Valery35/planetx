@@ -13,11 +13,17 @@ AlphaEarth участка на выбранный год и относит ка�
 «viewshed», общий с видимостью из точки: карта изменений на слое
 «emag» остаётся видна. Участок - многоугольник (ui/area.py), образец
 общего участка окон анализа.
+
+Источник клеток - AlphaEarth или растр проекта QGIS, просьба Василия
+Швалёва от 31 октября 2026 года. Каналы растра - признаки клетки
+(core/rasterclass.py). Растр читает рабочий поток через GDAL с пересчётом
+на сетку участка в UTM, дальше всё общее с AlphaEarth: окно тайлов,
+запись растра классов, точки и подгруппа расчёта.
 """
 import math
 
 import numpy as np
-from qgis.core import QgsSettings
+from qgis.core import QgsProject, QgsRasterLayer, QgsSettings
 from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QButtonGroup, QColorDialog, QComboBox,
@@ -26,7 +32,7 @@ from qgis.PyQt.QtWidgets import (QButtonGroup, QColorDialog, QComboBox,
                                  QPushButton, QRadioButton, QSlider,
                                  QToolButton, QVBoxLayout, QWidget)
 
-from ..core import aef, editing
+from ..core import aef, editing, rasterclass
 from ..core.cog import tile_points
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import Shape
@@ -37,6 +43,7 @@ from .aef import _INDEX, _poll_job, _run_job, index_of, open_cog, \
     stop_point, zstd_ready
 from .area import Area
 from .handles import GRAB_PIXELS
+from .inset import warm
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons,
                       result_path, show_layer, write_vector)
@@ -51,6 +58,8 @@ COLORS = ((60, 160, 70), (40, 110, 220), (240, 190, 40), (200, 60, 50),
 OPACITY = 0.6
 CLASS_SIDE = 10.0  # км, наибольшая сторона участка классификации
 AUTO = -1  # пиксель «Авто» в списке
+PIXEL_DEFAULT = 10.0  # м, пиксель «Авто», если растр его не называет
+COVERED = 0.995  # доля участка, ниже которой итог называет покрытие
 
 
 class ClassTiles(ThreadTiles):
@@ -91,6 +100,31 @@ class ClassTiles(ThreadTiles):
         rgba = palette[np.where(code >= 0, code, len(result["colors"]))]
         rgba = rgba.reshape(lon.shape + (4,))
         return rgba, mip_chain(rgba)
+
+
+class SourceBox(QComboBox):
+    """Список источников: AlphaEarth и растры проекта. Заполняется при
+    открытии списка - слежения за проектом у закрытого окна нет."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.refill()
+
+    def refill(self):
+        chosen = self.currentData()
+        self.blockSignals(True)
+        self.clear()
+        self.addItem(tr("Эмбеддинги AlphaEarth"), "")
+        for layer in project_rasters():
+            self.addItem(layer.name(), layer.id())
+        self.setCurrentIndex(max(0, self.findData(chosen)))
+        self.blockSignals(False)
+        if self.currentData() != (chosen or ""):
+            self.currentIndexChanged.emit(self.currentIndex())
+
+    def showPopup(self):
+        self.refill()
+        super().showPopup()
 
 
 class ClassRow(QWidget):
@@ -153,12 +187,19 @@ class ClassDialog(QDialog):
     build = pyqtSignal()
     changed = pyqtSignal()
     opacity = pyqtSignal(float)
+    source_changed = pyqtSignal()
 
     def __init__(self, window):
         super().__init__(window)
         self.setWindowTitle(tr("Классификация"))
         self.point = None
         settings = QgsSettings()
+        self.source = SourceBox(self)
+        self.source.setToolTip(tr(
+            "Откуда берутся признаки клетки. Эмбеддинги AlphaEarth "
+            "загружаются из сети. У растра проекта каждый канал - признак, "
+            "каналы приводятся к одному разбросу, поэтому их единицы могут "
+            "быть разными."))
         self.place = QLabel(self)
         self.status = QLabel(self)
         self.status.setWordWrap(True)
@@ -183,7 +224,8 @@ class ClassDialog(QDialog):
             "Пиксель классификации. Блок файла за год - 40-50 МБ при "
             "любом пикселе. Блок пикселя 10 м покрывает 10 км, 80 м - "
             "82 км. «Авто» берёт пиксель с наименьшей загрузкой, при котором "
-            "на участке от 14 до 640 тысяч клеток."))
+            "на участке от 14 до 640 тысяч клеток. У растра проекта «Авто» - "
+            "пиксель растра, если на участке клеток не больше 640 тысяч."))
         self.volume = QLabel(self)
         self.rows_box = QVBoxLayout()
         self.group = QButtonGroup(self)
@@ -203,6 +245,7 @@ class ClassDialog(QDialog):
         hint.setWordWrap(True)
         form = QFormLayout()
         form.addRow(tr("Точка"), self.place)
+        form.addRow(tr("Источник"), self.source)
         form.addRow(tr("Год"), self.year)
         form.addRow(tr("Участок"), self.area.widget)
         form.addRow(tr("Пиксель"), self.level)
@@ -213,7 +256,7 @@ class ClassDialog(QDialog):
         run.setDefault(True)
         run.setToolTip(tr(
             "Каждая клетка участка относится к классу ближайших "
-            "контрольных точек по векторам AlphaEarth."))
+            "контрольных точек по векторам AlphaEarth или каналам растра."))
         run.clicked.connect(self.build)
         buttons.addButton(run, enum(QDialogButtonBox, "ButtonRole",
                                     "ActionRole"))
@@ -233,7 +276,21 @@ class ClassDialog(QDialog):
         for box in (self.year, self.level):
             box.currentIndexChanged.connect(lambda _: self._remember())
         self.alpha.valueChanged.connect(lambda _: self._remember())
+        self.source.currentIndexChanged.connect(lambda _: self._source())
         self.set_ready(False)
+
+    def raster_id(self):
+        """Номер слоя растра в списке, пусто у AlphaEarth."""
+        return self.source.currentData() or ""
+
+    def raster(self):
+        """Выбранный растр проекта, None - AlphaEarth или слоя уже нет."""
+        return QgsProject.instance().mapLayer(self.raster_id())
+
+    def _source(self):
+        self.year.setEnabled(not self.raster_id())
+        self.volume_changed()
+        self.source_changed.emit()
 
     def add_class(self, name=None):
         color = COLORS[len(self.rows) % len(COLORS)]
@@ -283,6 +340,11 @@ class ClassDialog(QDialog):
         problem = self.area.check()
         if problem:
             self.volume.setText(problem)
+            return
+        if self.raster_id():
+            layer = self.raster()
+            self.volume.setText("" if layer is None else tr(
+                "Каналов растра: {n}", n=layer.bandCount()))
             return
         lat, lon = self.point
         index = _INDEX.get(aef.zone_of(lon, lat))
@@ -336,19 +398,30 @@ class ClassTool(QObject):
             dialog.changed.connect(self._update_shapes)
             dialog.opacity.connect(self.set_opacity)
             dialog.finished.connect(self._closed)
+            dialog.source_changed.connect(self._want_index)
             dialog.area.point_under = self.point_under
             self.dialog = dialog
+        dialog.source.refill()
         dialog.point = (lat, lon)
         dialog.place.setText(self.window._point_title(lat, lon, None))
         dialog.status.setText("")
-        zone = aef.zone_of(lon, lat)
-        _run_job(self, lambda: index_of(zone),
-                 lambda _: dialog.volume_changed())
+        self._want_index()
         dialog.show()
         dialog.raise_()
         dialog.area.open_at(lat, lon)
         self._update_shapes()
         return dialog
+
+    def _want_index(self):
+        """Указатель зоны - только для оценки загрузки AlphaEarth, у растра
+        проекта сеть не нужна."""
+        dialog = self.dialog
+        if dialog.raster_id() or dialog.point is None or self.job is not None:
+            return
+        lat, lon = dialog.point
+        zone = aef.zone_of(lon, lat)
+        _run_job(self, lambda: index_of(zone),
+                 lambda _: dialog.volume_changed())
 
     def _closed(self, code=0):
         """Окно закрыто: OK - классы растром в проект QGIS, иначе
@@ -431,7 +504,11 @@ class ClassTool(QObject):
         dialog = self.dialog
         if dialog is None or dialog.point is None:
             return
-        if not zstd_ready():
+        layer = dialog.raster()
+        if dialog.raster_id() and layer is None:
+            dialog.status.setText(tr("Растра больше нет в проекте."))
+            return
+        if layer is None and not zstd_ready():
             dialog.status.setText(tr(
                 "Нет библиотеки zstd, файлы AlphaEarth не прочитать."))
             return
@@ -455,6 +532,10 @@ class ClassTool(QObject):
         points = [(n, p) for n, row in enumerate(rows) for p in row.points]
         colors = [row.rgb() for row in rows]
         names = [row.name.text() for row in rows]
+        if layer is not None:
+            self._build_raster(layer, ring, box, side, level, zone, points,
+                               colors, names)
+            return
         key = (box, year, level)
         cached = self.grid if self.grid and self.grid[0] == key else None
         progress = self.progress = [0, 0]
@@ -498,12 +579,71 @@ class ClassTool(QObject):
         _run_job(self, work, lambda out: self._built(
             out, key, box, year, colors, names), tr("Классификация"))
 
-    def _built(self, out, key, box, year, colors, names):
+    def _build_raster(self, layer, ring, box, side, level, zone, points,
+                      colors, names):
+        """Классы по каналам растра проекта. Слой QGIS остаётся в главном
+        потоке, рабочий поток читает файл через GDAL."""
+        dialog = self.dialog
+        crs = layer.crs()
+        if not crs.isValid():
+            dialog.status.setText(tr(
+                "У растра не задана система координат."))
+            return
+        warm()
+        path, wkt, name = layer.source(), crs.toWkt(), layer.name()
+        pixel = None if level == AUTO else float(
+            dict(aef.DETAIL_LEVELS)[level])
+        key = (layer.id(), path, box, pixel)
+        cached = self.grid if self.grid and self.grid[0] == key else None
+        index = aef.ZoneIndex(zone, [])
+
+        def count(done, total):
+            stop_point(self)
+
+        def work():
+            found = cached[1] if cached else read_raster(
+                path, wkt, index, box, side, pixel)
+            if isinstance(found, str):
+                return {"problem": found}
+            stop_point(self)
+            x0, y0, step, grid = found
+            inside = aef.ring_mask(index, x0, y0, step, grid.shape[1:], ring)
+            share = rasterclass.covered(grid, inside)
+            if share <= 0.0:
+                return {"problem": "outside"}
+            samples, labels, outside = [], [], 0
+            for label, (plat, plon) in points:
+                r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
+                if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2] \
+                        and np.isfinite(grid[:, r, c]).all():
+                    samples.append(grid[:, r, c])
+                    labels.append(label)
+                else:
+                    outside += 1
+            if len(set(labels)) < aef.MIN_CLASSES:
+                return {"problem": "points", "found": found}
+            classes, _ = rasterclass.classify(
+                grid, np.stack(samples, axis=1), labels, inside,
+                progress=count)
+            if not (classes >= 0).any():
+                return {"problem": "flat", "found": found}
+            return {"index": index, "found": found, "outside": outside,
+                    "classes": classes, "covered": share}
+
+        dialog.status.setText(tr("Читается растр участка…"))
+        _run_job(self, work, lambda out: self._built(
+            out, key, box, None, colors, names, name), tr("Классификация"))
+
+    def _built(self, out, key, box, year, colors, names, raster=None):
         dialog = self.dialog
         if out is None:
             dialog.status.setText(tr("Для участка нет данных."))
             return
-        self.grid = (key, out["found"])
+        if out.get("found") is not None:
+            self.grid = (key, out["found"])
+        if out.get("problem"):
+            dialog.status.setText(problem_text(out["problem"]))
+            return
         if out["classes"] is None:
             dialog.status.setText(tr("Все точки вне участка."))
             return
@@ -512,13 +652,26 @@ class ClassTool(QObject):
         self.result = {"index": out["index"], "x0": x0, "y0": y0,
                        "step": step, "classes": classes, "colors": colors,
                        "names": names, "box": box, "year": year,
+                       "raster": raster, "label": raster or str(year),
                        "ring": list(self.dialog.area.ring)}
         counts = [int((classes == n).sum()) for n in range(len(colors))]
         total = max(sum(counts), 1)
         parts = ", ".join("{} {:.0f}%".format(name, 100.0 * c / total)
                           for name, c in zip(names, counts))
-        text = tr("Классы {year} года: {parts}.", year=year, parts=parts)
-        if out["outside"]:
+        if raster is None:
+            text = tr("Классы {year} года: {parts}.", year=year, parts=parts)
+        else:
+            text = tr("Классы растра «{name}»: {parts}. Пиксель {pixel} м.",
+                      name=raster, parts=parts,
+                      pixel="{:.3g}".format(step))
+            if out["covered"] < COVERED:
+                text += " " + tr("Растр покрывает {share} % участка.",
+                                 share="{:.0f}".format(
+                                     100.0 * out["covered"]))
+        if out["outside"] and raster is not None:
+            text += " " + tr("Точек без данных растра: {n}.",
+                             n=out["outside"])
+        elif out["outside"]:
             text += " " + tr("Точек вне участка: {n}.", n=out["outside"])
         dialog.status.setText(text + " " + built_text())
         dialog.set_ready(True)
@@ -600,38 +753,40 @@ class ClassTool(QObject):
         result = self.result
         if result is None:
             return None
+        tag = result["year"] or "raster"
         if path is None:
-            path = result_path("classes_{}".format(result["year"]))
+            path = result_path("classes_{}".format(tag))
         if not write_classes(path, result):
             self.dialog.status.setText(tr("Растр не записан в «{path}».",
                                           path=path))
             return None
         group = self.session.group_for(result["ring"])
         layer = add_classes(path, tr("Классификация {year}",
-                                     year=result["year"]), result, group)
+                                     year=result["label"]), result, group)
         if layer is not None:
             layer.setOpacity(self.dialog.alpha.value() / 100.0)
         show_layer(self.window, layer)
-        self._export_points(result["year"], group)
+        self._export_points(tag, result["label"], group)
         self.dialog.status.setText(tr("Растр классов в проекте."))
         return path
 
-    def _export_points(self, year, group):
+    def _export_points(self, tag, label, group):
         """Контрольные точки слоем GeoPackage в подгруппу расчёта: поля
-        class (номер с 1) и name, цвет точки - цвет класса."""
+        class (номер с 1) и name, цвет точки - цвет класса. tag - часть
+        имени файла, label - подпись слоя."""
         rows = [row for row in self.dialog.rows if row.points]
         items = [([point], {"class": n, "name": row.name.text()})
                  for n, row in enumerate(self.dialog.rows, 1)
                  for point in row.points]
         if not items:
             return None
-        path = result_path("class_points_{}".format(year), ".gpkg")
+        path = result_path("class_points_{}".format(tag), ".gpkg")
         if not write_vector(path, "points", "point", items,
                             [("class", "int"), ("name", "str")]):
             return None
         return add_vector(
             self.window, path, "points",
-            tr("Контрольные точки {year}", year=year), group,
+            tr("Контрольные точки {year}", year=label), group,
             rows[0].rgb(), classes=("class", [
                 (n, row.rgb(), row.name.text())
                 for n, row in enumerate(self.dialog.rows, 1)
@@ -644,10 +799,92 @@ class ClassTool(QObject):
             self.dialog.close()
 
 
+def project_rasters():
+    """Растры проекта, которые GDAL читает из файла, в порядке имён."""
+    layers = QgsProject.instance().mapLayers().values()
+    return sorted((layer for layer in layers
+                   if isinstance(layer, QgsRasterLayer)
+                   and layer.providerType() == "gdal"
+                   and layer.isValid()),
+                  key=lambda layer: layer.name().lower())
+
+
+def problem_text(code):
+    """Текст строки итога для кода отказа расчёта по растру."""
+    return {"unreadable": tr("Растр не прочитан."),
+            "big": tr("Сетка участка не помещается в память, возьмите "
+                      "пиксель крупнее."),
+            "outside": tr("Участок вне охвата растра."),
+            "points": tr("Нужно хотя бы два класса с точками на клетках "
+                         "растра с данными."),
+            "flat": tr("Каналы растра на участке не меняются, классы "
+                       "различить нельзя.")}[code]
+
+
+def _warp_target(data, wkt, index):
+    """Растр в системе UTM зоны: система файла берётся у слоя QGIS."""
+    from osgeo import gdal, osr
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG((32700 if index.south else 32600) + index.number)
+    utm = srs.ExportToWkt()
+    return utm, gdal.AutoCreateWarpedVRT(data, wkt, utm)
+
+
+def read_raster(path, wkt, index, box, side, pixel):
+    """Каналы растра на сетке участка box в метрах UTM. Рабочий поток.
+    path - файл, wkt - система слоя, pixel - шаг метров, None - «Авто».
+    Итог - (x0, y0 - левый верхний угол, шаг м, float32 (каналы, строки
+    с севера, столбцы), NaN без данных) или код отказа (problem_text).
+    Значения «нет данных» каналов учитываются порознь, канал прозрачности
+    признаком не считается: прозрачная клетка остаётся без данных."""
+    from osgeo import gdal
+    gdal.PushErrorHandler("CPLQuietErrorHandler")
+    try:
+        try:
+            data = gdal.Open(path)
+            if data is None:
+                return "unreadable"
+            utm, warped = _warp_target(data, wkt, index)
+            if pixel is None:
+                native = PIXEL_DEFAULT if warped is None \
+                    else abs(warped.GetGeoTransform()[1])
+                pixel = rasterclass.auto_pixel(native, side)
+            warped = None
+            x0, y0, cols, rows = aef.grid_frame(index, box, pixel)
+            if rasterclass.too_big(rows, cols, data.RasterCount):
+                return "big"
+            out = gdal.Warp(
+                "", data, format="MEM", srcSRS=wkt, dstSRS=utm,
+                outputBounds=(x0, y0 - rows * pixel, x0 + cols * pixel, y0),
+                width=cols, height=rows, resampleAlg="bilinear",
+                outputType=gdal.GDT_Float32, dstNodata="nan",
+                warpOptions=["UNIFIED_SRC_NODATA=NO"])
+        except RuntimeError:
+            return "unreadable"
+        if out is None:
+            return "unreadable"
+        bands, clear = [], None
+        for number in range(1, out.RasterCount + 1):
+            band = out.GetRasterBand(number)
+            values = band.ReadAsArray().astype(np.float32)
+            if band.GetColorInterpretation() == gdal.GCI_AlphaBand:
+                clear = ~(values > 0.0)
+            else:
+                bands.append(values)
+        out = None
+    finally:
+        gdal.PopErrorHandler()
+    if not bands:
+        return "unreadable"
+    grid = np.stack(bands)
+    if clear is not None:
+        grid[:, clear] = np.nan
+    return x0, y0, float(pixel), grid
+
+
 def write_classes(path, result):
     """Классы GeoTIFF Byte в UTM: номер класса + 1, 0 - нет данных."""
     from osgeo import gdal, osr
-    from .inset import warm
     warm()
     index = result["index"]
     srs = osr.SpatialReference()
@@ -683,7 +920,8 @@ def add_classes(path, title, result, group):
                                               result["names"]))]
     layer.setRenderer(QgsPalettedRasterRenderer(layer.dataProvider(), 1,
                                                 classes))
-    meta = layer.metadata()
-    meta.setRights([aef.CREDIT])
-    layer.setMetadata(meta)
+    if result["raster"] is None:
+        meta = layer.metadata()
+        meta.setRights([aef.CREDIT])
+        layer.setMetadata(meta)
     return _to_group(layer, group)

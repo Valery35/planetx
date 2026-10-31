@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.21.0
+version=1.22.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.21.0 All analysis tools are in the Site analysis submenu
+changelog=1.22.0 The Classification window also divides a site into
+      classes by a project raster, without network access. Each band
+      of the raster is a feature of a cell, and bands may be in
+      different units. Cells without data stay without a class, and
+      classes may have different numbers of control points.
+      1.21.0 All analysis tools are in the Site analysis submenu
       of the globe menu, flooding, water flow and sea level included.
       A site drawn once is shared by the analysis windows - a window
       opened inside it takes the same site, and an edit of its

@@ -5993,6 +5993,32 @@ EN = {
         "submenu of the globe menu.",
     # Классификация участка (ui/aefclass.py).
     "Классы {year} года: {parts}.": "Classes of {year}: {parts}.",
+    "Классы растра «{name}»: {parts}. Пиксель {pixel} м.":
+        "Classes of the raster {name}: {parts}. Pixel {pixel} m.",
+    "Растр покрывает {share} % участка.":
+        "The raster covers {share} % of the area.",
+    "Точек без данных растра: {n}.": "Points without raster data: {n}.",
+    "Эмбеддинги AlphaEarth": "AlphaEarth embeddings",
+    "Откуда берутся признаки клетки. Эмбеддинги AlphaEarth загружаются "
+    "из сети. У растра проекта каждый канал - признак, каналы приводятся "
+    "к одному разбросу, поэтому их единицы могут быть разными.":
+        "Where the features of a cell come from. AlphaEarth embeddings are "
+        "downloaded. Each band of a project raster is a feature, bands are "
+        "brought to one spread, so their units may differ.",
+    "Каналов растра: {n}": "Raster bands: {n}",
+    "Растра больше нет в проекте.": "The raster is no longer in the project.",
+    "У растра не задана система координат.":
+        "The raster has no coordinate reference system.",
+    "Читается растр участка…": "Reading the raster of the area…",
+    "Растр не прочитан.": "The raster was not read.",
+    "Сетка участка не помещается в память, возьмите пиксель крупнее.":
+        "The area grid does not fit in memory, choose a larger pixel.",
+    "Участок вне охвата растра.": "The area is outside the raster extent.",
+    "Нужно хотя бы два класса с точками на клетках растра с данными.":
+        "At least two classes need points on raster cells with data.",
+    "Каналы растра на участке не меняются, классы различить нельзя.":
+        "The raster bands do not change over the area, classes cannot be "
+        "told apart.",
     "Щелчок по глобусу ставит точку этого класса.":
         "A click on the globe places a point of this class.",
     "Цвет класса на глобусе и в растре.":
@@ -6020,11 +6046,13 @@ EN = {
     "Пиксель классификации. Блок файла за год - 40-50 МБ при любом "
     "пикселе. Блок пикселя 10 м покрывает 10 км, 80 м - 82 км. «Авто» "
     "берёт пиксель с наименьшей загрузкой, при котором на участке от "
-    "14 до 640 тысяч клеток.":
+    "14 до 640 тысяч клеток. У растра проекта «Авто» - пиксель растра, "
+    "если на участке клеток не больше 640 тысяч.":
         "Classification pixel. A file block for a year is 40-50 MB at any "
         "pixel. A 10 m block covers 10 km, an 80 m block covers 82 km. "
         "Auto takes the pixel with the smallest download at which the "
-        "area has 14 to 640 thousand cells.",
+        "area has 14 to 640 thousand cells. For a project raster, Auto is "
+        "the raster pixel if the area has no more than 640 thousand cells.",
     "Авто": "Auto",
     "Убрать результат с глобуса и закрыть окно.":
         "Remove the result from the globe and close the window.",
@@ -6053,9 +6081,9 @@ EN = {
         "two classes with three points each are needed.",
     "Пиксель": "Pixel",
     "Каждая клетка участка относится к классу ближайших контрольных точек "
-    "по векторам AlphaEarth.":
+    "по векторам AlphaEarth или каналам растра.":
         "Each cell of the area goes to the class of the nearest control "
-        "points by AlphaEarth vectors.",
+        "points by AlphaEarth vectors or raster bands.",
     "Убрать точку": "Remove point",
     "Загружаются векторы участка…": "Loading the area vectors…",
     "Классификация {year}": "Classification {year}",

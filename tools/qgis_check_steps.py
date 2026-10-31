@@ -18104,6 +18104,203 @@ def class_wait():
     window.set_extra("aef_change", False)
 
 
+def _class_raster(path, rgba=False):
+    """Пробный растр у CHANGE_POINT в EPSG:3857, сторона 4 км, пиксель
+    25 м. Запад и восток - разные классы только в канале 2 (отражение),
+    канал 1 - высоты 2000 м с шумом. В канале 2 дыра «нет данных» -9999
+    в 700 м к северо-западу. rgba - вместо дыры четвёртый канал
+    прозрачности."""
+    import math
+    import numpy as np
+    from osgeo import gdal, osr
+    lat, lon = CHANGE_POINT
+    x = 6378137.0 * math.radians(lon)
+    y = 6378137.0 * math.log(math.tan(math.radians(45.0 + lat / 2.0)))
+    # Метров Меркатора на метр местности на этой широте.
+    stretch = 1.0 / math.cos(math.radians(lat))
+    side = 320
+    step = 25.0 * stretch
+    bands = 4 if rgba else 2
+    kind = gdal.GDT_Byte if rgba else gdal.GDT_Float32
+    data = gdal.GetDriverByName("GTiff").Create(path, side, side, bands,
+                                                kind)
+    data.SetGeoTransform((x - side / 2 * step, step, 0.0,
+                          y + side / 2 * step, 0.0, -step))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(3857)
+    data.SetProjection(srs.ExportToWkt())
+    random = np.random.default_rng(3)
+    east = np.zeros((side, side), dtype=bool)
+    east[:, side // 2:] = True
+    if rgba:
+        red = np.where(east, 200, 40).astype(np.uint8)
+        data.GetRasterBand(1).WriteArray(red)
+        data.GetRasterBand(2).WriteArray(255 - red)
+        data.GetRasterBand(3).WriteArray(np.full(east.shape, 90,
+                                                 dtype=np.uint8))
+        alpha = np.full(east.shape, 255, dtype=np.uint8)
+        alpha[120:150, 120:150] = 0
+        data.GetRasterBand(4).WriteArray(alpha)
+        data.GetRasterBand(4).SetColorInterpretation(gdal.GCI_AlphaBand)
+    else:
+        height = 2000.0 + 3.0 * random.normal(size=east.shape)
+        light = np.where(east, 0.4, 0.1) \
+            + 0.01 * random.normal(size=east.shape)
+        light[120:150, 120:150] = -9999.0
+        data.GetRasterBand(1).WriteArray(height.astype(np.float32))
+        data.GetRasterBand(2).WriteArray(light.astype(np.float32))
+        data.GetRasterBand(2).SetNoDataValue(-9999.0)
+    data = None
+    return lat, lon
+
+
+@check(1000)
+def class_raster():
+    # Классификация по растру проекта: сеть не нужна. Растр в EPSG:3857,
+    # каналы в разных единицах, дыра «нет данных» в одном канале.
+    from qgis.core import QgsProject, QgsRasterLayer
+    _aef_local()
+    window = state["window"]
+    path = os.path.join(TEMP, "planetx_class_raster.tif")
+    lat, lon = _class_raster(path)
+    layer = QgsRasterLayer(path, "probe raster", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["class_layer"] = layer.id()
+    out = result.setdefault("class_raster", {"layer_valid": layer.isValid()})
+    from planetx.core.navigation import Pose
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 6000.0, 0.0, 0.0))
+    window.view.update()
+    tool = window.class_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    out["year_off"] = not dialog.year.isEnabled()
+    out["volume"] = dialog.volume.text()
+    dialog.area.reset_square()
+    dialog.area.side.setValue(3.0)
+    dialog.level.setCurrentIndex(0)
+    dialog.rows[0].set_points([(lat + d, lon - 0.012)
+                               for d in (-0.005, 0.0, 0.005)])
+    dialog.rows[1].set_points([(lat + d, lon + 0.012)
+                               for d in (-0.005, 0.0, 0.005)])
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+
+
+@check(500)
+def class_raster_wait():
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 120.0:
+        return 500
+    # Картинки тайлов классов - после расчёта, кадр снимается с ними.
+    textures = window.view.gibs["viewshed"].textures
+    if tool.result is not None and len(textures) < 4 \
+            and time.monotonic() - state["class_started"] < 30.0:
+        window.view.update()
+        return 500
+    import numpy as np
+    out = result["class_raster"]
+    out["build_s"] = round(time.monotonic() - state["class_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    res = tool.result
+    out["built"] = res is not None
+    if res is None:
+        return None
+    classes = res["classes"]
+    out["grid"] = [list(classes.shape), res["step"]]
+    # Запад - класс 0, восток - класс 1 по настоящему положению клеток.
+    from planetx.core.coords import from_utm
+    index = res["index"]
+    middle = res["y0"] - classes.shape[0] / 2.0 * res["step"]
+    lons = np.array([from_utm(index.number, index.south,
+                              res["x0"] + (col + 0.5) * res["step"],
+                              middle)[1]
+                     for col in range(classes.shape[1])])
+    cell_lon = np.tile(lons, (classes.shape[0], 1))
+    lat, lon = CHANGE_POINT
+    margin = 0.002
+    has = classes >= 0
+    out["west_right"] = round(float(
+        (classes[(cell_lon < lon - margin) & has] == 0).mean()), 4)
+    out["east_right"] = round(float(
+        (classes[(cell_lon > lon + margin) & has] == 1).mean()), 4)
+    # Дыра одного канала - клетки без класса.
+    out["holes"] = int((~has).sum())
+    window.view.update()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_class_raster.png"))
+    path = os.path.join(TEMP, "planetx_class_raster_out.tif")
+    out["exported"] = bool(tool.export(path))
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    if nodes:
+        raster = nodes[0].layer()
+        out["crs"] = raster.crs().authid()
+        out["renderer"] = raster.renderer().type()
+        out["rights"] = list(raster.metadata().rights())
+    out["subgroups"] = _subgroups()
+    _drop_group()
+    # Отказы: растр без охвата участка, растр с прозрачностью и
+    # смена на AlphaEarth возвращает год.
+    tool.dialog.area.set_square(lat + 1.0, lon, 2000.0)
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+    return None
+
+
+@check(500)
+def class_raster_outside():
+    tool = state["window"].class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 60.0:
+        return 500
+    from qgis.core import QgsProject, QgsRasterLayer
+    out = result["class_raster"]
+    out["outside_status"] = tool.dialog.status.text()
+    path = os.path.join(TEMP, "planetx_class_rgba.tif")
+    lat, lon = _class_raster(path, rgba=True)
+    layer = QgsRasterLayer(path, "probe rgba", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["class_rgba"] = layer.id()
+    dialog = tool.dialog
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    out["rgba_volume"] = dialog.volume.text()
+    dialog.area.set_square(lat, lon, 3000.0)
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def class_raster_rgba():
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 60.0:
+        return 500
+    from qgis.core import QgsProject
+    out = result["class_raster"]
+    dialog = tool.dialog
+    out["rgba_status"] = dialog.status.text()
+    res = tool.result
+    if res is not None:
+        out["rgba_holes"] = int((res["classes"] < 0).sum())
+        out["rgba_channels"] = int(tool.grid[1][3].shape[0])
+    dialog.source.setCurrentIndex(0)
+    out["year_back"] = dialog.year.isEnabled()
+    dialog.reject()
+    for key in ("class_layer", "class_rgba"):
+        QgsProject.instance().removeMapLayer(state[key])
+    dialog.close()
+    return None
+
+
 @check(2000)
 def busy_stop():
     # Долгие расчёты - на значке загрузки, меню значка их останавливает.

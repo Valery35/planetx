@@ -472,6 +472,18 @@ def auto_level(index, box, side, most=AUTO_CELLS, few=AUTO_FEW):
     return DETAIL_LEVELS[-1][0] if best is None else best[1]
 
 
+def grid_frame(index, box, step):
+    """Сетка участка box в метрах UTM зоны с шагом step, кратная шагу:
+    (x0, y0 - левый верхний угол, столбцов, строк)."""
+    west, south, east, north = box
+    xs, ys = index.project(np.array([west, east, west, east]),
+                           np.array([south, south, north, north]))
+    x0 = math.floor(xs.min() / step) * step
+    y0 = math.ceil(ys.max() / step) * step
+    return (x0, y0, int(math.ceil((xs.max() - x0) / step)),
+            int(math.ceil((y0 - ys.min()) / step)))
+
+
 def vectors(open_cog, index, box, level, year, progress=None):
     """Векторы года на участке box: (x0, y0 - левый верхний угол, шаг м,
     Int8 (каналы, строки с севера, столбцы)) или None. Сетка - как
@@ -496,14 +508,8 @@ def vectors(open_cog, index, box, level, year, progress=None):
                        y0 + row * image.tile_h * dy, (dx, dy), tile))
     if not pieces:
         return None
-    west, south, east, north = box
-    xs, ys = index.project(np.array([west, east, west, east]),
-                           np.array([south, south, north, north]))
     step = abs(pieces[0][2][0])
-    x0 = math.floor(xs.min() / step) * step
-    y1 = math.ceil(ys.max() / step) * step
-    width = int(math.ceil((xs.max() - x0) / step))
-    height = int(math.ceil((y1 - ys.min()) / step))
+    x0, y1, width, height = grid_frame(index, box, step)
     bands = pieces[0][3].shape[0]
     out = np.full((bands, height, width), NODATA, dtype=np.int8)
     cx = x0 + (np.arange(width) + 0.5) * step
