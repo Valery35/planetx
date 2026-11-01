@@ -883,6 +883,7 @@ class ClassTool(QObject):
         self._drop_tiles()
         if result is None:
             return
+        window.similar_tool.clear()  # слой вида один
         window._show_viewshed(None)
         tiles = ClassTiles(result, parent=self)
         tiles.loaded.connect(lambda key, rgba, levels:
@@ -1129,8 +1130,9 @@ def write_classes(path, result):
 
 def write_objects(path, result):
     """Объекты слоем objects файла GeoPackage в UTM: поля object, class
-    (номер с 1), name, area_ha, у растра проекта mean_N и sd_N каналов.
-    Объект связный, поэтому один объект - один многоугольник."""
+    (номер с 1), name, area_ha, у растра проекта mean_N и sd_N каналов,
+    у похожих областей similar в процентах. Объект связный, поэтому один
+    объект - один многоугольник."""
     from osgeo import gdal, ogr, osr
     warm()
     index = result["index"]
@@ -1155,6 +1157,9 @@ def write_objects(path, result):
     layer.CreateField(ogr.FieldDefn("class", ogr.OFTInteger))
     layer.CreateField(ogr.FieldDefn("name", ogr.OFTString))
     layer.CreateField(ogr.FieldDefn("area_ha", ogr.OFTReal))
+    alike = result.get("similar")
+    if alike is not None:
+        layer.CreateField(ogr.FieldDefn("similar", ogr.OFTReal))
     table = result["table"][:, 0]
     bands = 0 if result["raster"] is None else table.shape[0] // 2
     half = table.shape[0] // 2
@@ -1176,6 +1181,9 @@ def write_objects(path, result):
             feature.SetField("name", result["names"][kind])
         feature.SetField("area_ha", float(sizes[number]) * step * step
                          / 1e4)
+        if alike is not None:
+            feature.SetField("similar", round(100.0 * float(alike[number]),
+                                              1))
         for band_n in range(bands):
             feature.SetField("mean_{}".format(band_n + 1),
                              float(table[band_n, number]))

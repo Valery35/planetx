@@ -1793,7 +1793,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Route start, Route end | The start and the end of a route, see Route |
 | Point details | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification… (the last four only on the Earth), Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification and Flooding |
+| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas… (the last five only on the Earth), Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas and Flooding |
 | Satellite images… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
@@ -3012,6 +3012,46 @@ number and name. The points and classes of the window stay until the window open
 Classes and the viewshed from a point are one layer of the
 globe, a new viewshed removes the classes. The land change map stays
 visible together with the classes.
+
+### Similar areas
+
+The Similar areas… item of the Site analysis submenu of the globe menu opens
+the search by a sample for the point under the cursor. A sample shows what to
+look for, such as a clearing, a quarry, a field or a bog, and the plugin finds
+objects of the site similar to it by color and texture.
+
+The source, the site, the pixel and the division into objects are the same as
+in the Classification window. The source is AlphaEarth embeddings or a project
+raster, and the site is shared with the other analysis windows.
+
+The sample is outlined with clicks on the globe while the window is open. A
+click on the first vertex closes the outline, and the Close shape hint appears
+at it. There may be several outlines, and an object is compared with the
+nearest sample. The Remove samples button removes all outlines. The outline
+need not be exact. A sample consists of the objects that take at least a quarter
+of the outline, not of separate cells, so the edge of a neighboring forest
+inside an outline around a field does not affect the search. An outline across
+the border of two objects gives two samples.
+
+The Build button divides the site into objects and compares each of them with
+the samples by the mean values of the bands and the spread inside the object.
+Texture share sets the weight of the spread next to color. The found objects
+appear on the globe in orange, and the line under the fields gives their number,
+area and share of the site.
+
+The Similarity slider changes the selection at once, without a new
+calculation. An object matching a sample has a similarity of 100 %, two random
+objects of a site have about 14 %. Similarity is relative to the site. The more
+diverse the site, the closer objects of one kind appear to each other. The Merge
+neighboring found objects check box joins neighbors into one area.
+
+OK writes the found objects as a polygon layer Similar areas with the fields
+area_ha and similar (similarity in percent) and the outlines as a layer Samples
+to the calculation subgroup. The search compares an image of one day, so on an
+ordinary image the result depends on the season and the light. AlphaEarth
+embeddings combine a year of images and are less sensitive to this. This globe
+layer is shared with classification and the viewshed from a point, a new
+calculation of any of them removes the previous one.
 
 ### Flooding
 

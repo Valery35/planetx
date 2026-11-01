@@ -216,6 +216,10 @@ def relief_items(window, menu, lat, lon):
                       tr("Классы участка по контрольным точкам на глобусе - "
                          "по эмбеддингам AlphaEarth, клетка 10 м."),
                       lambda *a: window.class_tool.open_here(lat, lon)))
+        items.append((tr("Похожие области…"),
+                      tr("Обведите образец, модуль найдёт на участке объекты, "
+                         "похожие на него по цвету и текстуре."),
+                      lambda *a: window.similar_tool.open_here(lat, lon)))
     for text, tip, slot in items:
         action = sub.addAction(text)
         action.setToolTip(tip)

@@ -14754,6 +14754,144 @@ def post_class_shot():
     return None
 
 
+def _ground_click(window, lat, lon):
+    """Щелчок по глобусу в точке: тот же путь, что у мыши."""
+    import numpy as np
+    from planetx.core.ellipsoid import geodetic_to_ecef
+    view = window.view
+    xyz = geodetic_to_ecef(np.array([lat]), np.array([lon]),
+                           view.label_heights(np.array([lat]),
+                                              np.array([lon])))
+    return view.camera.project(xyz)[0][0]
+
+
+@check(1500)
+def similar_open():
+    # Образец обводится щелчками по глобусу, щелчок по первой вершине
+    # замыкает контур, участок окна при этом не меняется.
+    import math
+    from qgis.core import QgsProject, QgsRasterLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    path = os.path.join(TEMP, "planetx_similar.tif")
+    lat, lon, points, span = _objects_raster(path)
+    layer = QgsRasterLayer(path, "probe image", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["similar_layer"] = layer.id()
+    side = span * math.cos(math.radians(lat)) * 0.95
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(lat, lon, side * 1.3, 0.0, 0.0))
+    view.update()
+    view.grabFramebuffer()
+    tool = window.similar_tool
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    dialog.area.set_square(lat, lon, side)
+    state["similar_site"] = list(dialog.area.ring)
+    size = 0.0009
+    plat, plon = points["meadow"][0]
+    ring = [(plat + size, plon - size), (plat + size, plon + size),
+            (plat - size, plon + size), (plat - size, plon - size)]
+    out = result.setdefault("similar", {})
+    out["taking"] = tool.taking()
+    for point in ring:
+        window._clicked(*_ground_click(window, *point))
+    out["vertices"] = len(dialog.sample.ring)
+    handles = window.handles.tool
+    px, py = _ground_click(window, *ring[0])
+    handles.hover(px, py)
+    out["hint"] = handles.hint()
+    handles.grab(px, py)
+    handles.drop()
+    out["samples"] = len(dialog.sample.rings)
+    out["samples_text"] = dialog.samples.text()
+    out["site_same"] = dialog.area.ring == state["similar_site"] \
+        and window.site == state["similar_site"]
+    out["site_tool_back"] = window.handles.tool.edit.area is dialog.area
+    dialog.scale.setValue(15)
+    dialog.limit.setValue(70)
+    dialog.level.setCurrentIndex(0)
+    dialog.build.emit()
+    state["similar_started"] = time.monotonic()
+
+
+@check(500)
+def similar_wait():
+    window = state["window"]
+    tool = window.similar_tool
+    if tool.job is not None \
+            and time.monotonic() - state["similar_started"] < 120.0:
+        return 500
+    view = window.view
+    if tool.tiles is not None and not view.gibs["viewshed"].textures \
+            and time.monotonic() - state["similar_started"] < 60.0:
+        view.update()
+        return 500
+    out = result["similar"]
+    out["build_s"] = round(time.monotonic() - state["similar_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    out["ok_ready"] = dialog.to_project.isEnabled()
+    res = tool.result
+    if res is None:
+        return None
+    out["objects"] = int(tool.base["parts"].max()) + 1
+    out["found"] = len(res["similar"])
+    out["best"] = round(float(tool.base["score"].max()), 3)
+    view.update()
+    window.copy_view().save(os.path.join(TEMP, "planetx_similar.png"))
+    start = time.monotonic()
+    shown = tool.base["parts"]
+    dialog.limit.setValue(30)
+    tool.apply()
+    out["apply_ms"] = round(1000.0 * (time.monotonic() - start), 1)
+    out["same_objects"] = tool.base["parts"] is shown
+    out["found_wide"] = len(tool.result["similar"])
+    out["cells_wide"] = int((tool.result["parts"] >= 0).sum())
+    dialog.limit.setValue(95)
+    tool.apply()
+    out["cells_tight"] = int((tool.result["parts"] >= 0).sum())
+    dialog.join.setChecked(False)
+    tool.apply()
+    out["found_apart"] = len(tool.result["similar"])
+    dialog.join.setChecked(True)
+    dialog.limit.setValue(50)
+    tool.apply()
+    return None
+
+
+@check(1500)
+def similar_done():
+    from osgeo import ogr
+    from qgis.core import QgsProject
+    window = state["window"]
+    tool = window.similar_tool
+    dialog = tool.dialog
+    out = result["similar"]
+    if tool.result is not None:
+        path = os.path.join(TEMP, "planetx_similar_{}.gpkg".format(
+            int(time.time())))
+        out["exported"] = bool(tool.export(path))
+        data = ogr.Open(path)
+        layer = data.GetLayerByName("objects")
+        out["features"] = layer.GetFeatureCount()
+        out["fields"] = [layer.GetLayerDefn().GetFieldDefn(n).GetName()
+                         for n in range(layer.GetLayerDefn().GetFieldCount())]
+        values = [f.GetField("similar") for f in layer]
+        out["similar_range"] = [min(values), max(values)]
+        data = None
+    dialog.reject()
+    out["left"] = tool.result is None
+    out["taking_closed"] = tool.taking()
+    out["layer_off"] = not window.view.gibs["viewshed"].loader
+    dialog.sample.forget()
+    QgsProject.instance().removeMapLayer(state["similar_layer"])
+    node = QgsProject.instance().layerTreeRoot()
+    out["group"] = node.findGroup("PlanetX - анализ участка") is not None
+
+
 @check(1000, manual=True)
 def post_objects_shot():
     """Кадры статьи 1.24: снимок у Камы (PLANETX_SEG_SRC) делится на

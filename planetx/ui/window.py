@@ -71,6 +71,7 @@ from .relief import ReliefTool
 from .aef import ChangeTool
 from .fieldmap import FieldTool
 from .aefclass import ClassTool
+from .similar import SimilarTool
 from .netlink import NetLinks
 from .superoverlay import SuperOverlays
 from .watermask import WaterTiles
@@ -727,6 +728,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.change_tool = ChangeTool(self)
         self.field_tool = FieldTool(self)
         self.class_tool = ClassTool(self)
+        self.similar_tool = SimilarTool(self)
         self.class_shapes = []
         self.extruder = ExtrudeManager(self)
         self.viewshed_timer = QTimer(self)
@@ -1138,6 +1140,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.change_tool.close()
             self.field_tool.close()
             self.class_tool.close()
+            self.similar_tool.close()
             if getattr(self, "oam_dialog", None) is not None:
                 self.oam_dialog.close()
             if self.section_dialog is not None:

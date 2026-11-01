@@ -306,6 +306,10 @@ def _tools(window, add, earth):
         lambda: window.class_tool.open_here(*_here(window)),
         ("классификация", "классы", "классифицировать", "лес и поле",
          "классы покрова", "classification", "classify", "land cover"))
+    add("here:similar", tr("Похожие области"), open_,
+        lambda: window.similar_tool.open_here(*_here(window)),
+        ("похожие области", "найти похожее", "похожие участки", "по образцу",
+         "образец", "similar areas", "find similar", "sample"))
     add("here:etomesto", tr("Старые карты «Это Место»"), open_,
         lambda: window.etomesto_here(*_here(window)),
         ("это место", "etomesto", "старые карты", "межевые", "пгм",

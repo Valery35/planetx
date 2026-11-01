@@ -40,6 +40,7 @@ class Area(QObject):
     или замыкание. У окна должно быть поле status."""
 
     changed = pyqtSignal()
+    shared = True  # участок общий с другими окнами, не контур образца
 
     def __init__(self, window, dialog, side, most, key=None):
         super().__init__(dialog)
@@ -164,7 +165,8 @@ class Area(QObject):
         и окна, которые откроются внутри него."""
         self.window.site = list(self.ring)
         for other in self.window.areas:
-            if other is not self and other.visible() and not other.drawing:
+            if other is not self and other.shared and other.visible() \
+                    and not other.drawing:
                 other.ring = list(self.ring)
                 other.changed.emit()
 

@@ -6214,6 +6214,70 @@ EN = {
     "Все точки вне участка.": "All points are outside the area.",
     "Точек вне участка: {n}.": "Points outside the area: {n}.",
     "Классификация…": "Classification…",
+    # Похожие области (ui/similar.py).
+    "Похожие области": "Similar areas",
+    "Похожие области…": "Similar areas…",
+    "Похожие области {year}": "Similar areas {year}",
+    "Похожесть": "Similarity",
+    "Образцы": "Samples",
+    "Контуров: {n}": "Outlines: {n}",
+    "Убрать образцы": "Remove samples",
+    "Убрать все контуры образцов.": "Remove all sample outlines.",
+    "Обведите образец на глобусе.": "Outline a sample on the globe.",
+    "Ищутся похожие объекты…": "Looking for similar objects…",
+    "В контурах образцов нет объектов участка.":
+        "The sample outlines hold no objects of the area.",
+    "Контуров вне объектов участка: {n}.":
+        "Outlines outside the objects of the area: {n}.",
+    "Найдено объектов {n}, {area} га, {share} % участка.":
+        "Found {n} objects, {area} ha, {share} % of the area.",
+    "Сливать соседние найденные объекты":
+        "Merge neighboring found objects",
+    "Соседние найденные объекты становятся одной областью. Без "
+    "флажка каждый объект остаётся отдельным многоугольником.":
+        "Neighboring found objects become one area. Without the check box "
+        "each object stays a separate polygon.",
+    "Щелчками по глобусу обведите образец, щелчок по первой вершине "
+    "замыкает контур. Образцов может быть несколько.":
+        "Outline a sample with clicks on the globe, a click on the first "
+        "vertex closes the outline. There may be several samples.",
+    "Участок делится на объекты, каждый объект сравнивается "
+    "с образцами по цвету и текстуре.":
+        "The area is divided into objects, each object is compared with "
+        "the samples by color and texture.",
+    "Насколько объект должен походить на образец. Выборка меняется "
+    "сразу, расчёт заново не идёт. Вправо - только очень похожие, "
+    "влево - шире.":
+        "How close an object must be to a sample. The selection changes at "
+        "once without a new calculation. To the right only very similar "
+        "objects stay, to the left the selection widens.",
+    "Откуда берутся цвет и текстура. Эмбеддинги AlphaEarth "
+    "загружаются из сети, у растра проекта каждый канал - признак.":
+        "Where color and texture come from. AlphaEarth embeddings are "
+        "loaded from the network, each band of a project raster is a "
+        "feature.",
+    "Год векторов AlphaEarth. Образец обводится по снимку глобуса, "
+    "он может быть другого года.":
+        "The year of the AlphaEarth vectors. The sample is outlined on the "
+        "globe image, which may be from another year.",
+    "Пиксель сетки участка. «Авто» берёт пиксель растра или, "
+    "у AlphaEarth, пиксель с наименьшей загрузкой.":
+        "The pixel of the area grid. Auto takes the raster pixel or, for "
+        "AlphaEarth, the pixel with the smallest download.",
+    "Доля текстуры в делении на объекты и в сравнении с образцом, "
+    "остальное - цвет.":
+        "The share of texture in dividing into objects and in comparing "
+        "with a sample, the rest is color.",
+    "Обведите образец, модуль найдёт на участке объекты, похожие на него "
+    "по цвету и текстуре.":
+        "Outline a sample and the plugin finds objects of the area similar "
+        "to it by color and texture.",
+    "Окно поиска по образцу у точки взгляда - образец обводится "
+    "на глобусе, объекты участка, похожие на него по цвету "
+    "и текстуре, ложатся многоугольниками в проект QGIS.":
+        "Window searching by a sample at the view point - the sample is "
+        "outlined on the globe, objects of the area similar to it by color "
+        "and texture go to the QGIS project as polygons.",
     "Классы участка по контрольным точкам на глобусе - по эмбеддингам "
     "AlphaEarth, клетка 10 м.":
         "Area classes by control points on the globe, from AlphaEarth "

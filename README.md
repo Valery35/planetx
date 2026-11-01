@@ -107,6 +107,10 @@ The plugin is free and open source. [Support development](https://github.com/Val
   release, the steps go through the releases in which the image at the
   centre of the view changed, the swipe compares two releases. Point details names the capture date, the provider and the resolution of the
   image.
+- **Similar areas.** Outline a sample on the globe, such as a clearing or
+  a quarry, and the plugin finds objects of the site similar to it by color
+  and texture. A slider changes the selection at once, and the result goes
+  to the QGIS project as polygons.
 - **Land change and classification.** AlphaEarth Foundations
   embeddings, 10 m cells for each year of 2017-2025, show where the
   land changed between two years - construction, logging, quarries,

@@ -99,6 +99,12 @@ class IdentifyMixin:
             if found is not None:
                 self.class_tool.click(px, py, found[0], found[1])
             return
+        if self.similar_tool.taking():
+            # Окно «Похожие области» открыто - щелчок обводит образец.
+            found = self._ground(px, py)
+            if found is not None:
+                self.similar_tool.click(found[0], found[1])
+            return
         if not self.identifying:
             place = self._place_under(px, py)
             if place is not None:
