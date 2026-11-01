@@ -15119,6 +15119,67 @@ def earthwork_quarry():
     tool.dialog.reject()
 
 
+@check(1000)
+def scene_export_on():
+    # Выгрузка вида: здания центра Перми и выдавленный многоугольник.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.set_extra("buildings", True)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.0105, 56.2294, 1500.0, 0.0, 60.0))
+    window.view.update()
+    state["scene_started"] = time.monotonic()
+    result["scene_export"] = {}
+
+
+@check(1000)
+def scene_export_wait():
+    from qgis.core import QgsProject, QgsTiledSceneLayer
+    from planetx.ui import sceneexport as ui
+    window = state["window"]
+    view = window.view
+    buildings = view.buildings
+    if len(buildings.buffers) < 6 \
+            and time.monotonic() - state["scene_started"] < 60.0:
+        view.update()
+        return 1000
+    out = result["scene_export"]
+    items = ui.collect(window)
+    out["items"] = len(items)
+    out["vertices"] = sum(len(i.positions) for i in items)
+    stamp = int(time.time())
+    glb = os.path.join(TEMP, "planetx_scene_{}.glb".format(stamp))
+    out["glb"] = bool(window.export_scene(glb))
+    out["glb_mb"] = round(os.path.getsize(glb) / 1e6, 2)
+    from planetx.core import gltf
+    with open(glb, "rb") as fh:
+        parts = gltf.read(fh.read(), lambda ref: None)
+    out["read_parts"] = len(parts) if hasattr(parts, "__len__") else str(
+        type(parts))
+    json_path = os.path.join(TEMP, "planetx_scene_{}.json".format(stamp))
+    main = window.export_scene(json_path)
+    out["tileset"] = bool(main)
+    out["files"] = len(os.listdir(os.path.dirname(main)))
+    layer = QgsTiledSceneLayer(main, "tiles", "cesiumtiles")
+    out["layer_valid"] = layer.isValid()
+    out["layer_error"] = layer.error().summary() if not layer.isValid() \
+        else ""
+    if layer.isValid():
+        extent = layer.extent()
+        out["layer_crs"] = layer.crs().authid()
+        out["extent"] = [round(extent.xMinimum(), 3),
+                         round(extent.yMinimum(), 3),
+                         round(extent.xMaximum(), 3),
+                         round(extent.yMaximum(), 3)]
+        QgsProject.instance().addMapLayer(layer)
+        out["in_project"] = True
+        QgsProject.instance().removeMapLayer(layer.id())
+    out["answer"] = window.panel.answer.text() \
+        if hasattr(window.panel, "answer") else ""
+    window.set_extra("buildings", False)
+
+
 @check(1000, manual=True)
 def post_objects_shot():
     """Кадры статьи 1.24: снимок у Камы (PLANETX_SEG_SRC) делится на

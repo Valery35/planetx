@@ -65,6 +65,7 @@ class ViewToolbar(QFrame):
     scene_save_requested = pyqtSignal()
     scene_open_requested = pyqtSignal()
     share_requested = pyqtSignal()
+    scene_export_requested = pyqtSignal()
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
     fullscreen_clicked = pyqtSignal()
@@ -183,6 +184,12 @@ class ViewToolbar(QFrame):
             "QGIS. На ней камера этого вида, рельеф, основа "
             "OpenStreetMap и выделенные в «Моих метках» метки с облётом."))
         share.triggered.connect(self.share_requested)
+        export = menu.addAction(tr("Выгрузить в glTF или 3D Tiles…"))
+        export.setToolTip(tr(
+            "3D-здания вида, выдавленные слои, подземная модель "
+            "и неподвижные 3D-модели файлом GLB или набором 3D Tiles "
+            "для других программ. Рельеф и снимки в файл не идут."))
+        export.triggered.connect(self.scene_export_requested)
         scene.setMenu(menu)
         self.layout().addWidget(scene)
         self.scene = scene

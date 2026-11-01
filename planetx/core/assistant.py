@@ -244,7 +244,7 @@ ACTION_SKIP = ("tool:assistant",)
 # давали совсем, круг вызовов ждал бы ответа окна. Разрешение даёт
 # человек, который смотрит на окно, ждать его можно.
 ACTION_GATED = ("tool:record", "tool:scene_save", "tool:scene_open",
-                "tool:share", "tool:crust")
+                "tool:share", "tool:scene_export", "tool:crust")
 # Инструменты, каждый вызов которых разрешает пользователь.
 GATED_TOOLS = ("list_project_layers", "read_features")
 FEATURE_LIMIT = 200  # строк слоя за один read_features, не больше

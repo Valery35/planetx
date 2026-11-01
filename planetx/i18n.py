@@ -6215,6 +6215,23 @@ EN = {
     "Точек вне участка: {n}.": "Points outside the area: {n}.",
     "Классификация…": "Classification…",
     "Показано {shown} из {total}.": "Showing {shown} of {total}.",
+    # Выгрузка сцены (ui/sceneexport.py).
+    "Выгрузить в glTF или 3D Tiles": "Export to glTF or 3D Tiles",
+    "Выгрузить в glTF или 3D Tiles…": "Export to glTF or 3D Tiles…",
+    "3D-здания вида, выдавленные слои, подземная модель и неподвижные "
+    "3D-модели файлом GLB или набором 3D Tiles для других программ. Рельеф "
+    "и снимки в файл не идут.":
+        "3D buildings of the view, extruded layers, the subsurface model and "
+        "static 3D models as a GLB file or a 3D Tiles set for other programs. "
+        "Relief and imagery do not go to the file.",
+    "В виде нет объектов для выгрузки: 3D-зданий, выдавленных слоёв, "
+    "подземной модели или 3D-моделей.":
+        "The view has nothing to export - no 3D buildings, extruded layers, "
+        "subsurface model or 3D models.",
+    "Выгружено кусков {count}. Масштаб рельефа {scale} вошёл в высоты.":
+        "Exported pieces - {count}. The relief scale {scale} is in the "
+        "heights.",
+    "Выгружено кусков {count}.": "Exported pieces - {count}.",
     # Земляные работы (ui/earthwork.py).
     "Земляные работы": "Earthwork",
     "Земляные работы…": "Earthwork…",

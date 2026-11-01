@@ -63,6 +63,7 @@ class Subsurface:
         self.locations = {}
         self.buffers = {}  # имя - _Buffers
         self.pending = {}  # имя - Mesh или None (убрать)
+        self.meshes = {}  # имя - Mesh для выгрузки сцены
         self.drawn = 0
 
     @property
@@ -94,10 +95,15 @@ class Subsurface:
     def set_mesh(self, name, mesh):
         """Новая сетка name или None - убрать. В видеокарту - в кадре."""
         self.pending[name] = mesh
+        if mesh is None:
+            self.meshes.pop(name, None)
+        else:
+            self.meshes[name] = mesh
 
     def clear(self):
         for name in list(self.buffers) + list(self.pending):
             self.pending[name] = None
+        self.meshes = {}
 
     def vertex_count(self):
         return sum(item.vertices for item in self.buffers.values())

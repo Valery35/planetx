@@ -825,6 +825,11 @@ class PlacesMixin:
         self._show_state()
         return True
 
+    def export_scene(self, path=None):
+        """Объекты вида файлом GLB или набором 3D Tiles (ui/sceneexport.py)."""
+        from ..sceneexport import export_scene
+        return export_scene(self, path)
+
     def share_view(self, path=None, show=True):
         """Страница HTML вида, ui/share.py."""
         from ..share import share_view

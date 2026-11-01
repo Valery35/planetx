@@ -75,6 +75,9 @@ class _Buffers:
         # Копия для попадания луча в здание, 3D-линейка.
         self.positions = np.array(vertices["position"], dtype=np.float32)
         self.triangles = indices.reshape(-1, 3)
+        # Копии для выгрузки сцены (core/sceneexport.py).
+        self.normals = np.array(vertices["normal"], dtype=np.int8)
+        self.colors = np.array(vertices["color"], dtype=np.uint8)
         self.radius = float(np.linalg.norm(self.positions, axis=1).max()) \
             if len(self.positions) else 0.0
         gl = gpu.gl

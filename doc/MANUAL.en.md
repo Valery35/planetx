@@ -3952,6 +3952,28 @@ globe. The places of the scene come in as a new folder, and the camera
 flies to the scene pose. The status line lists the layers that were not
 found and did not open.
 
+### Export to glTF and 3D Tiles
+
+The Export to glTF or 3D Tiles… item of the Scene icon menu writes the
+volumetric objects of the view to a file. It takes the 3D buildings of
+the frame, extruded layers, the subsurface model and fixed 3D models.
+Terrain, imagery, placemarks, animation, models on tracks and live
+objects do not go to the file.
+
+The file type is chosen in the save window:
+
+- glTF (.glb) - one file for Blender and other modelling programs. The
+  unit is the metre, the origin is the look-at point, the Y axis points
+  up, X points east. The latitude and longitude of the origin are
+  stored in the file information.
+- 3D Tiles (.json) - a folder named after the file, with `tileset.json`
+  and a file for each piece of the scene. The objects stand in their
+  place on the Earth, the set opens in QGIS, Cesium and other 3D Tiles
+  programs.
+
+Heights are taken from the view, so the terrain exaggeration enters
+them. The line under the search box names it when it differs from 1.
+
 ### Share view
 
 The Share View… item of the Scene icon menu writes an HTML page. It

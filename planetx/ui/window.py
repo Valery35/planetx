@@ -851,6 +851,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.toolbar.scene_save_requested.connect(self.save_scene)
         self.toolbar.scene_open_requested.connect(self.open_scene)
         self.toolbar.share_requested.connect(self.share_view)
+        self.toolbar.scene_export_requested.connect(self.export_scene)
         self.toolbar.demo_requested.connect(self.open_demo)
         self.tour.message.connect(
             lambda text: setattr(self, "message", (text, time.monotonic())))

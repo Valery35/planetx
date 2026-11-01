@@ -264,6 +264,10 @@ def _tools(window, add, earth):
         window.crust_to_project,
         ("кора", "crust1.0", "crust", "осадочный чехол", "фундамент",
          "мохо", "поверхности коры", "moho", "sediments"))
+    add("tool:scene_export", tr("Выгрузить в glTF или 3D Tiles"), open_,
+        window.export_scene,
+        ("gltf", "glb", "3d tiles", "выгрузить сцену", "выгрузка моделей",
+         "export scene"))
     add("tool:share", tr("Поделиться видом"), open_, window.share_view,
         ("html", "страница", "браузер", "отправить", "share", "web",
          "page", "browser"))
