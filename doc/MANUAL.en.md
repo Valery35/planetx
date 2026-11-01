@@ -3974,6 +3974,19 @@ The file type is chosen in the save window:
 Heights are taken from the view, so the terrain exaggeration enters
 them. The line under the search box names it when it differs from 1.
 
+### QGIS globe
+
+Since version 3.44 the QGIS 3D views have a globe mode. It shows the
+project layers by QGIS itself. The Open view in QGIS globe item of the
+Scene icon menu opens such a view with the PlanetX camera - the same
+look-at point, distance, heading and tilt. If the view is already open,
+the camera moves in it. The Take view from QGIS globe item flies
+PlanetX to the view of the open QGIS globe.
+
+The project must hold at least one layer. The item does not work on
+other bodies and in the sky view. In QGIS before 3.44 the line under
+the search box names the required version.
+
 ### Share view
 
 The Share View… item of the Scene icon menu writes an HTML page. It

@@ -825,6 +825,16 @@ class PlacesMixin:
         self._show_state()
         return True
 
+    def open_qgis_globe(self):
+        """Вид во встроенном глобусе QGIS."""
+        from ..qgisglobe import open_view
+        return open_view(self)
+
+    def take_qgis_globe(self):
+        """Вид из встроенного глобуса QGIS."""
+        from ..qgisglobe import take_view
+        return take_view(self)
+
     def export_scene(self, path=None):
         """Объекты вида файлом GLB или набором 3D Tiles (ui/sceneexport.py)."""
         from ..sceneexport import export_scene

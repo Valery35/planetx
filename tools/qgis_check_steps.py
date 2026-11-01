@@ -15180,6 +15180,113 @@ def scene_export_wait():
     window.set_extra("buildings", False)
 
 
+def _bridge_shot(name):
+    # Кадр глобуса QGIS с экрана: красный и синий многоугольники.
+    from qgis.PyQt.QtGui import QGuiApplication
+    import numpy as np
+    canvas = state["bridge"]
+    origin = canvas.mapToGlobal(canvas.geometry().topLeft() * 0)
+    shot = QGuiApplication.primaryScreen().grabWindow(
+        0, origin.x(), origin.y(), canvas.width(), canvas.height())
+    file = os.path.join(TEMP, "planetx_bridge_{}.png".format(name))
+    shot.save(file)
+    image = shot.toImage().convertToFormat(shot.toImage().Format.Format_RGB32)
+    data = np.frombuffer(bytes(image.constBits().asarray(image.sizeInBytes()))
+                         if hasattr(image.constBits(), "asarray")
+                         else image.constBits().asstring(image.sizeInBytes()),
+                         dtype=np.uint8).reshape(image.height(), -1, 4)
+    blue, green, red = (data[:, :, i].astype(int) for i in range(3))
+    out = {}
+    for key, mask in (("red", (red > 120) & (green < 40) & (blue < 40)),
+                      ("blue", (blue > 120) & (green < 40) & (red < 40))):
+        rows, cols = np.nonzero(mask)
+        out[key] = [len(rows), round(float(cols.mean()) - image.width() / 2),
+                    round(float(rows.mean()) - image.height() / 2)] \
+            if len(rows) else [0]
+    return out
+
+
+@check(9000)
+def qgis_globe_on():
+    from planetx.core.navigation import Pose
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPointXY, QgsProject,
+                           QgsVectorLayer)
+    from qgis.PyQt.QtGui import QColor
+    window = state["window"]
+    out = result["bridge"] = {}
+    out["layers_before"] = len(QgsProject.instance().mapLayers())
+    out["empty_project"] = window.open_qgis_globe() is None
+    out["empty_answer"] = window.panel.answer.text()
+    for name, color, x, y in (("north", "#ff0000", 56.2, 60.0),
+                              ("east", "#0000ff", 60.0, 58.0)):
+        layer = QgsVectorLayer("Polygon?crs=EPSG:4326", name, "memory")
+        feature = QgsFeature()
+        feature.setGeometry(QgsGeometry.fromPolygonXY([[
+            QgsPointXY(x - 1.0, y - 0.5), QgsPointXY(x + 1.0, y - 0.5),
+            QgsPointXY(x + 1.0, y + 0.5), QgsPointXY(x - 1.0, y + 0.5)]]))
+        layer.dataProvider().addFeatures([feature])
+        layer.updateExtents()
+        symbol = layer.renderer().symbol()
+        symbol.setColor(QColor(color))
+        symbol.symbolLayer(0).setStrokeColor(QColor(color))
+        QgsProject.instance().addMapLayer(layer)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(58.0, 56.2, 900000.0, 90.0, 0.0))
+    canvas = window.open_qgis_globe()
+    out["available"] = canvas is not None
+    state["bridge"] = canvas
+    if canvas is None:
+        out["answer"] = window.panel.answer.text()
+        for name in ("north", "east"):
+            for layer in QgsProject.instance().mapLayersByName(name):
+                QgsProject.instance().removeMapLayer(layer.id())
+        return
+    canvas.requestActivate()
+    out["read"] = [round(v, 2) for v in __import__(
+        "planetx.ui.qgisglobe", fromlist=["x"]).read_pose(canvas)]
+
+
+@check(5000)
+def qgis_globe_shot():
+    from planetx.core.navigation import Pose
+    from planetx.ui import qgisglobe
+    window = state["window"]
+    out = result["bridge"]
+    if state.get("bridge") is None:
+        return
+    out["heading_90"] = _bridge_shot("h90")
+    window.view.navigator.show(Pose(58.0, 56.2, 900000.0, 0.0, 50.0))
+    qgisglobe.open_view(window)
+    out["same_view"] = len(iface.mapCanvases3D())
+
+
+@check(5000)
+def qgis_globe_back():
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    out = result["bridge"]
+    if state.get("bridge") is None:
+        return
+    out["tilt_50"] = _bridge_shot("t50")
+    window.view.navigator.show(Pose(10.0, 10.0, 5000000.0, 0.0, 0.0))
+    out["taken"] = window.take_qgis_globe()
+
+
+@check(1000)
+def qgis_globe_done():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["bridge"]
+    pose = window.view.navigator.pose
+    out["pose_back"] = [round(v, 2) for v in (
+        pose.lat, pose.lon, pose.distance, pose.heading, pose.tilt)]
+    for canvas in list(iface.mapCanvases3D()):
+        iface.closeMapCanvas3D(canvas.objectName())
+    for name in ("north", "east"):
+        for layer in QgsProject.instance().mapLayersByName(name):
+            QgsProject.instance().removeMapLayer(layer.id())
+
+
 @check(1000, manual=True)
 def post_objects_shot():
     """Кадры статьи 1.24: снимок у Камы (PLANETX_SEG_SRC) делится на

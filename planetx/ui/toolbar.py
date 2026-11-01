@@ -66,6 +66,8 @@ class ViewToolbar(QFrame):
     scene_open_requested = pyqtSignal()
     share_requested = pyqtSignal()
     scene_export_requested = pyqtSignal()
+    qgis_globe_requested = pyqtSignal()
+    qgis_globe_back_requested = pyqtSignal()
     demo_requested = pyqtSignal(str)
     layout_clicked = pyqtSignal()
     fullscreen_clicked = pyqtSignal()
@@ -190,6 +192,18 @@ class ViewToolbar(QFrame):
             "и неподвижные 3D-модели файлом GLB или набором 3D Tiles "
             "для других программ. Рельеф и снимки в файл не идут."))
         export.triggered.connect(self.scene_export_requested)
+        menu.addSeparator()
+        bridge = menu.addAction(tr("Открыть вид в глобусе QGIS"))
+        bridge.setToolTip(tr(
+            "Трёхмерный вид QGIS в режиме глобуса с камерой этого вида. "
+            "Показывает слои проекта средствами QGIS. Нужен QGIS 3.44 "
+            "или новее."))
+        bridge.triggered.connect(self.qgis_globe_requested)
+        back = menu.addAction(tr("Взять вид из глобуса QGIS"))
+        back.setToolTip(tr(
+            "Перелёт к точке взгляда открытого глобуса QGIS с его "
+            "расстоянием, азимутом и наклоном."))
+        back.triggered.connect(self.qgis_globe_back_requested)
         scene.setMenu(menu)
         self.layout().addWidget(scene)
         self.scene = scene

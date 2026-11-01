@@ -852,6 +852,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.toolbar.scene_open_requested.connect(self.open_scene)
         self.toolbar.share_requested.connect(self.share_view)
         self.toolbar.scene_export_requested.connect(self.export_scene)
+        self.toolbar.qgis_globe_requested.connect(self.open_qgis_globe)
+        self.toolbar.qgis_globe_back_requested.connect(self.take_qgis_globe)
         self.toolbar.demo_requested.connect(self.open_demo)
         self.tour.message.connect(
             lambda text: setattr(self, "message", (text, time.monotonic())))

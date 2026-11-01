@@ -268,6 +268,12 @@ def _tools(window, add, earth):
         window.export_scene,
         ("gltf", "glb", "3d tiles", "выгрузить сцену", "выгрузка моделей",
          "export scene"))
+    add("tool:qgis_globe", tr("Открыть вид в глобусе QGIS"), open_,
+        window.open_qgis_globe,
+        ("глобус qgis", "встроенный глобус", "3d вид qgis", "qgis globe"))
+    add("tool:qgis_globe_back", tr("Взять вид из глобуса QGIS"), open_,
+        window.take_qgis_globe,
+        ("вид из глобуса qgis", "from qgis globe"))
     add("tool:share", tr("Поделиться видом"), open_, window.share_view,
         ("html", "страница", "браузер", "отправить", "share", "web",
          "page", "browser"))

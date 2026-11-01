@@ -6217,6 +6217,25 @@ EN = {
     "Показано {shown} из {total}.": "Showing {shown} of {total}.",
     # Выгрузка сцены (ui/sceneexport.py).
     "Выгрузить в glTF или 3D Tiles": "Export to glTF or 3D Tiles",
+    "Открыть вид в глобусе QGIS": "Open view in QGIS globe",
+    "Взять вид из глобуса QGIS": "Take view from QGIS globe",
+    "Трёхмерный вид QGIS в режиме глобуса с камерой этого вида. "
+    "Показывает слои проекта средствами QGIS. Нужен QGIS 3.44 или новее.":
+    "A QGIS 3D view in globe mode with the camera of this view. It shows "
+    "the project layers by QGIS itself. Needs QGIS 3.44 or newer.",
+    "Перелёт к точке взгляда открытого глобуса QGIS с его расстоянием, "
+    "азимутом и наклоном.":
+    "A flight to the look-at point of the open QGIS globe with its "
+    "distance, heading and tilt.",
+    "Глобус трёхмерных видов есть в QGIS с версии 3.44.":
+    "The 3D view globe exists in QGIS since version 3.44.",
+    "Глобус QGIS показывает только Землю.":
+    "The QGIS globe shows only the Earth.",
+    "Глобус QGIS не открывается в пустом проекте. Добавьте слой.":
+    "The QGIS globe does not open in an empty project. Add a layer.",
+    "QGIS не открыл глобус. Причина - в полосе сообщений QGIS.":
+    "QGIS did not open the globe. The reason is in the QGIS message bar.",
+    "Глобус QGIS не открыт.": "The QGIS globe is not open.",
     "Выгрузить в glTF или 3D Tiles…": "Export to glTF or 3D Tiles…",
     "3D-здания вида, выдавленные слои, подземная модель и неподвижные "
     "3D-модели файлом GLB или набором 3D Tiles для других программ. Рельеф "
