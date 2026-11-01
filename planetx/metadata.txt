@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.22.1
+version=1.23.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.22.1 A classification site by a project raster is up to
+changelog=1.23.0 Field boundaries of the world from Fields of the World
+      for 2024 and 2025 appear on the globe close up, colored by the model
+      score. The OpenAerialMap images window lists open drone and aerial
+      images in the view with the licence of each image and adds them to
+      the project.
+      1.22.1 A classification site by a project raster is up to
       1000 km, by AlphaEarth embeddings it stays up to 10 km. A too fine
       pixel on a large site is refused before the raster is read.
       1.22.0 The Classification window also divides a site into
