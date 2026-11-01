@@ -255,6 +255,31 @@ def decode_png(data, size=None, crop=None):
     return image_to_rgba(image)
 
 
+def source_request(source, url, cache=True):
+    """Запрос файла источника: заголовки, вход и политика кэша."""
+    request = QNetworkRequest(QUrl(url))
+    request.setAttribute(MARK, True)
+    request.setAttribute(REDIRECT, SAFE_REDIRECT)
+    if cache:
+        request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
+    else:
+        request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
+        request.setAttribute(CACHE_SAVE, False)
+    for name, value in source.headers.items():
+        request.setRawHeader(name.encode(), value.encode())
+    if source.username:
+        pair = "{}:{}".format(source.username, source.password)
+        request.setRawHeader(b"Authorization", b"Basic "
+                             + base64.b64encode(pair.encode()))
+    if source.authcfg:
+        # В PyQGIS запрос возвращается вторым значением.
+        result = QgsApplication.authManager().updateNetworkRequest(
+            request, source.authcfg)
+        if isinstance(result, tuple):
+            request = result[1]
+    return request
+
+
 class _Decoded(QObject):
     """Живёт в главном потоке. Сигнал из рабочего потока идёт очередью."""
 
@@ -527,28 +552,7 @@ class TileLoader(QObject):
         return self._request_url(self.source.tile_url(z, x, y))
 
     def _request_url(self, url):
-        source = self.source
-        request = QNetworkRequest(QUrl(url))
-        request.setAttribute(MARK, True)
-        request.setAttribute(REDIRECT, SAFE_REDIRECT)
-        if self.cache:
-            request.setAttribute(CACHE_CONTROL, PREFER_CACHE)
-        else:
-            request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
-            request.setAttribute(CACHE_SAVE, False)
-        for name, value in source.headers.items():
-            request.setRawHeader(name.encode(), value.encode())
-        if source.username:
-            pair = "{}:{}".format(source.username, source.password)
-            request.setRawHeader(b"Authorization", b"Basic "
-                                 + base64.b64encode(pair.encode()))
-        if source.authcfg:
-            # В PyQGIS запрос возвращается вторым значением.
-            result = QgsApplication.authManager().updateNetworkRequest(
-                request, source.authcfg)
-            if isinstance(result, tuple):
-                request = result[1]
-        return request
+        return source_request(self.source, url, self.cache)
 
     def _finished(self, key, reply):
         self.replies.pop(key, None)

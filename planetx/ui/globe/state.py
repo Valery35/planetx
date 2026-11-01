@@ -209,6 +209,32 @@ class StateMixin:
         box.exec()
         return box.clickedButton() is add
 
+    def accept_basemap_use(self, source):
+        """Окно перед расчётом по тайлам подложки, один раз на подложку:
+        условия разных подложек такое использование разрешают по-разному.
+        Истина - пользователь согласился."""
+        key = "analysis:" + source.url
+        accepted = settings_list(ACCEPTED_KEY)
+        if key in accepted:
+            return True
+        box = QMessageBox(self)
+        box.setIcon(enum(QMessageBox, "Icon", "Warning"))
+        box.setWindowTitle(tr("Условия источника"))
+        box.setText(tr(
+            "Расчёт соберёт тайлы подложки «{name}» под участком в картинку "
+            "в памяти, файл снимка не записывается. Условия подложки могут "
+            "не разрешать такое использование, особенно у коммерческих "
+            "служб. Расчёт идёт по вашему решению, ответственность за его "
+            "результат и использование несёте вы.", name=source.name))
+        run = box.addButton(tr("Считать"),
+                            enum(QMessageBox, "ButtonRole", "AcceptRole"))
+        box.addButton(enum(QMessageBox, "StandardButton", "Cancel"))
+        box.exec()
+        if box.clickedButton() is not run:
+            return False
+        QgsSettings().setValue(ACCEPTED_KEY, accepted + [key])
+        return True
+
     def set_line_groups(self, groups):
         """Включить группы векторной основы, остальные выключить.
 

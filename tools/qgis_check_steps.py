@@ -14998,6 +14998,201 @@ def similar_done():
 
 
 @check(1500)
+def base_class():
+    # Источник «Подложка глобуса»: окно условий один раз на подложку,
+    # классы у Камы по Esri World Imagery. Сверка с тайлами того же места,
+    # снятыми заранее (PLANETX_SEG_SRC): мозаика ложится на своё место.
+    import math
+    from qgis.core import QgsSettings
+    from qgis.PyQt.QtWidgets import QMessageBox
+    from planetx.core.navigation import Pose
+    from planetx.qt_compat import enum
+    from planetx.ui import aefclass
+    from planetx.ui.globe.base import ACCEPTED_KEY
+    window = state["window"]
+    path = os.path.join(TEMP, "planetx_base_probe.tif")
+    lat, lon, points, span = _objects_raster(path)
+    state["base_probe"] = (path, lat, lon, points, span)
+    window.choose_basemap(0)
+    source = window._earth_source()
+    out = result.setdefault("base_class", {"source": source.name})
+    key = "analysis:" + source.url
+    settings = QgsSettings()
+    settings.setValue(ACCEPTED_KEY, [
+        k for k in (settings.value(ACCEPTED_KEY) or []) if k != key])
+    side = span * math.cos(math.radians(lat)) * 0.95
+    state["base_side"] = side
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, side * 1.3, 0.0, 0.0))
+    window.view.update()
+    tool = window.class_tool
+    tool.grid = tool.pieces = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.setCurrentIndex(dialog.source.findData(aefclass.BASEMAP))
+    out["year_off"] = not dialog.year.isEnabled()
+    out["volume"] = dialog.volume.text()
+    dialog.split.setChecked(False)
+    dialog.area.set_square(lat, lon, side)
+    dialog.level.setCurrentIndex(0)
+    while len(dialog.rows) < 3:
+        dialog.add_class()
+    for row, name in zip(dialog.rows, ("water", "forest", "meadow")):
+        row.name.setText(name)
+        row.set_points(points[name])
+    asked = []
+
+    def refuse(box):
+        asked.append(box.text())
+        box.button(enum(QMessageBox, "StandardButton", "Cancel")).click()
+
+    original = QMessageBox.exec
+    QMessageBox.exec = refuse
+    try:
+        tool.build()
+    finally:
+        QMessageBox.exec = original
+    out["refused_status"] = dialog.status.text()
+    out["refused_no_job"] = tool.job is None
+    out["asked"] = len(asked)
+    settings.setValue(ACCEPTED_KEY,
+                      list(settings.value(ACCEPTED_KEY) or []) + [key])
+    tool.build()
+    out["started"] = tool.job is not None
+    state["class_started"] = time.monotonic()
+
+
+@check(500)
+def base_class_wait():
+    import numpy as np
+    from qgis.core import QgsCoordinateReferenceSystem
+    from planetx.ui import aefclass
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 120.0:
+        return 500
+    textures = window.view.gibs["viewshed"].textures
+    if tool.result is not None and len(textures) < 4 \
+            and time.monotonic() - state["class_started"] < 30.0:
+        window.view.update()
+        return 500
+    out = result["base_class"]
+    out["build_s"] = round(time.monotonic() - state["class_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    res = tool.result
+    out["built"] = res is not None
+    if res is None:
+        return None
+    grid = tool.grid[1][3]
+    step = res["step"]
+    out["grid"] = [list(res["classes"].shape), step, grid.shape[0]]
+    out["cover"] = round(float(np.isfinite(grid[0]).mean()), 3)
+    out["shares"] = [round(float((res["classes"] == n).mean()), 3)
+                     for n in range(3)]
+    probe, lat, lon, points, _ = state["base_probe"]
+    out["points_own_class"] = [
+        [int(res["classes"][tool.result_pixel(*p)]) for p in points[name]]
+        for name in ("water", "forest", "meadow")]
+    wkt = QgsCoordinateReferenceSystem("EPSG:3857").toWkt()
+    same = aefclass.read_raster(probe, wkt, res["index"], res["box"],
+                                state["base_side"], step)
+    if not isinstance(same, str) and same[3].shape == grid.shape:
+        a, b = same[3][0].ravel(), grid[0].ravel()
+        good = np.isfinite(a) & np.isfinite(b)
+        out["probe_corr"] = round(float(np.corrcoef(a[good], b[good])[0, 1]),
+                                  3)
+    window.view.update()
+    window.copy_view().save(os.path.join(TEMP, "planetx_base_class.png"))
+    path = os.path.join(TEMP, "planetx_base_class_{}.tif".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    out["rights"] = [list(n.layer().metadata().rights()) for n in nodes
+                     if n.layer().name().startswith("Классификация")]
+    _drop_group()
+    dialog.split.setChecked(True)
+    dialog.split_scale.setValue(15)
+    state["base_grid"] = tool.grid[1]
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+    return None
+
+
+@check(500)
+def base_class_objects():
+    tool = state["window"].class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 120.0:
+        return 500
+    out = result["base_class"]
+    out["objects_s"] = round(time.monotonic() - state["class_started"], 2)
+    out["objects_status"] = tool.dialog.status.text()
+    out["grid_reused"] = tool.grid[1] is state["base_grid"]
+    if tool.result is not None:
+        out["objects"] = int(tool.result["parts"].max()) + 1
+    tool.dialog.split.setChecked(False)
+    tool.dialog.reject()
+    return None
+
+
+@check(1500)
+def base_similar():
+    from planetx.ui import aefclass
+    window = state["window"]
+    _, lat, lon, points, _ = state["base_probe"]
+    tool = window.similar_tool
+    tool.grid = tool.pieces = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.setCurrentIndex(dialog.source.findData(aefclass.BASEMAP))
+    dialog.area.set_square(lat, lon, state["base_side"])
+    size = 0.0009
+    plat, plon = points["meadow"][0]
+    dialog.sample.rings.append([
+        (plat + size, plon - size), (plat + size, plon + size),
+        (plat - size, plon + size), (plat - size, plon - size)])
+    dialog.sample.changed.emit()
+    dialog.scale.setValue(15)
+    dialog.limit.setValue(70)
+    dialog.level.setCurrentIndex(0)
+    dialog.build.emit()
+    state["similar_started"] = time.monotonic()
+    result.setdefault("base_similar", {})
+
+
+@check(500)
+def base_similar_wait():
+    window = state["window"]
+    tool = window.similar_tool
+    if tool.job is not None \
+            and time.monotonic() - state["similar_started"] < 120.0:
+        return 500
+    if tool.tiles is not None and len(window.view.gibs["viewshed"].textures) \
+            < 4 and time.monotonic() - state["similar_started"] < 30.0:
+        window.view.update()
+        return 500
+    out = result["base_similar"]
+    out["build_s"] = round(time.monotonic() - state["similar_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    res = tool.result
+    if res is not None:
+        out["found"] = len(res["similar"])
+        window.view.update()
+        window.copy_view().save(os.path.join(
+            TEMP, "planetx_base_similar.png"))
+        out["exported"] = bool(tool.export(os.path.join(
+            TEMP, "planetx_base_similar_{}.gpkg".format(int(time.time())))))
+        nodes = _result_layers()
+        out["rights"] = [list(n.layer().metadata().rights()) for n in nodes
+                         if n.layer().name().startswith("Похожие")]
+        _drop_group()
+    dialog.sample.forget()
+    dialog.reject()
+    return None
+
+@check(1500)
 def earthwork_open():
     # Земляные работы: высоты у Терскола, отметка равных объёмов, своя
     # отметка без загрузки, оговорка об открытых высотах.

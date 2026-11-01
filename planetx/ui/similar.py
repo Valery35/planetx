@@ -24,11 +24,10 @@ from ..i18n import tr
 from ..qt_compat import enum
 from .aef import _poll_job, _run_job, index_of, open_cog, stop_point, \
     zstd_ready
-from .aefclass import (AUTO, CLASS_SIDE, LAYER, RASTER_SIDE, ClassTiles,
-                       SourceBox, _flag, problem_text, read_raster,
-                       write_objects)
+from .aefclass import (AUTO, BASEMAP, CLASS_SIDE, LAYER, RASTER_SIDE,
+                       ClassTiles, SourceBox, _flag, problem_text,
+                       raster_reader, set_credit, write_objects)
 from .area import Area
-from .inset import warm
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons, result_path, write_vector)
 from .viewshed import fit_status
@@ -104,7 +103,9 @@ class SimilarDialog(QDialog):
         self.source = SourceBox(self)
         self.source.setToolTip(tr(
             "Откуда берутся цвет и текстура. Эмбеддинги AlphaEarth "
-            "загружаются из сети, у растра проекта каждый канал - признак."))
+            "загружаются из сети, у растра проекта каждый канал - признак. "
+            "Подложка глобуса - картинка текущей подложки под участком: "
+            "снимок собран из разных съёмок, на их границах цвет меняется."))
         self.area = Area(window, self, 3.0, CLASS_SIDE, SETTINGS + "side")
         self.sample = Sample(window, self, self.area)
         self.year = QComboBox(self)
@@ -317,10 +318,11 @@ class SimilarTool(QObject):
         if dialog is None or dialog.point is None or self.job is not None:
             return
         layer = dialog.raster()
-        if dialog.raster_id() and layer is None:
+        if dialog.raster_id() and layer is None \
+                and dialog.raster_id() != BASEMAP:
             dialog.status.setText(tr("Растра больше нет в проекте."))
             return
-        if layer is None and not zstd_ready():
+        if not dialog.raster_id() and not zstd_ready():
             dialog.status.setText(tr(
                 "Нет библиотеки zstd, файлы AlphaEarth не прочитать."))
             return
@@ -341,19 +343,14 @@ class SimilarTool(QObject):
         zone = aef.zone_of(lon, lat)
         weight = dialog.weight.value() / 100.0
         scale, least = dialog.scale.value(), dialog.least.value()
-        if layer is not None:
-            crs = layer.crs()
-            if not crs.isValid():
-                dialog.status.setText(tr(
-                    "У растра не задана система координат."))
+        reader = None
+        if dialog.raster_id():
+            reader = raster_reader(self, layer, box, side, level)
+            if reader is None:
                 return
-            warm()
-            path, wkt, name = layer.source(), crs.toWkt(), layer.name()
-            pixel = None if level == AUTO else float(
-                dict(aef.DETAIL_LEVELS)[level])
-            key = (layer.id(), path, box, pixel)
+            read, key, name, credit = reader
         else:
-            name = None
+            name, credit = None, None
             key = (box, year, level)
         cached = self.grid if self.grid and self.grid[0] == key else None
         split_key = (key, tuple(ring), scale, weight, least)
@@ -364,10 +361,9 @@ class SimilarTool(QObject):
             stop_point(self)
 
         def fetch():
-            if layer is not None:
+            if reader is not None:
                 index = aef.ZoneIndex(zone, [])
-                found = cached[1] if cached else read_raster(
-                    path, wkt, index, box, side, pixel)
+                found = cached[1] if cached else read(index)
                 return index, found, None if isinstance(found, str) \
                     else found[3]
             index = index_of(zone)
@@ -423,10 +419,11 @@ class SimilarTool(QObject):
 
         dialog.status.setText(tr("Ищутся похожие объекты…"))
         _run_job(self, work, lambda out: self._built(
-            out, key, split_key, box, year, name, rings, ring),
+            out, key, split_key, box, year, name, rings, ring, credit),
             tr("Похожие области"))
 
-    def _built(self, out, key, split_key, box, year, raster, rings, ring):
+    def _built(self, out, key, split_key, box, year, raster, rings, ring,
+               credit=None):
         dialog = self.dialog
         if out is None:
             dialog.status.setText(tr("Для участка нет данных."))
@@ -446,7 +443,8 @@ class SimilarTool(QObject):
                      "parts": out["parts"], "values": out["values"],
                      "score": out["score"], "lost": out["lost"],
                      "cells": out["cells"], "box": box, "year": year,
-                     "raster": raster, "label": raster or str(year),
+                     "raster": raster, "credit": credit,
+                     "label": raster or str(year),
                      "ring": ring, "samples": rings}
         self.apply()
 
@@ -544,10 +542,7 @@ class SimilarTool(QObject):
                            tr("Похожие области {year}", year=result["label"]),
                            group, FOUND_COLOR, width=0.4,
                            fill=FOUND_COLOR + (150,))
-        if layer is not None and result["raster"] is None:
-            meta = layer.metadata()
-            meta.setRights([aef.CREDIT])
-            layer.setMetadata(meta)
+        set_credit(layer, result)
         samples = result_path("similar_samples_{}".format(tag), ".gpkg")
         if write_vector(samples, "samples", "polygon",
                         [(ring, {}) for ring in result["samples"]], []):

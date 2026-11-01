@@ -2963,9 +2963,9 @@ and the line under the field names it. A file block for a year weighs
 blocks.
 
 The Source list selects where the features of a cell come from -
-AlphaEarth embeddings or a QGIS project raster read from a file. For a
-raster, each band is a feature, the Year field is unavailable and no
-network is needed. The raster is resampled from the layer coordinate
+AlphaEarth embeddings, the globe basemap or a QGIS project raster read
+from a file. For a raster, each band is a feature, the Year field is
+unavailable and no network is needed. The raster is resampled from the layer coordinate
 system to the area grid in UTM. Bands may be in different units, for
 example heights in meters and reflectance in fractions of one.
 Therefore each band is brought to a mean of 0 and a spread of 1 over
@@ -2985,6 +2985,25 @@ larger pixel or Auto. If the raster covers
 the area partly, the line under the fields gives the covered share. An
 area outside the raster extent gives no classes, and the line reports
 it.
+
+The Globe basemap source takes the current basemap of the Base map row, so
+the image need not be added to the project. The tiles under the area are
+assembled into a picture in memory, no image file is written, and the
+features are red, green and blue. The tile level follows the pixel, and
+a tile without imagery is replaced by its enlarged ancestor. The Auto
+pixel is the pixel of the most detailed basemap level if the area has no
+more than 640 thousand cells, otherwise it is larger. The mosaic has no
+more than 1024 tiles, otherwise the line under the fields asks for a
+larger pixel or Auto. Before the first calculation with each basemap a
+window reminds that its terms may not allow such use, and the decision
+and responsibility are the user's. The source credit is written to the
+rights of the result layer.
+
+Basemap imagery is assembled from different surveys. Color, season and
+lighting change at their borders, so classes may follow a survey border
+rather than the terrain. The basemap features are only the visible
+color. For precise work a project raster is suitable - one scene from
+the Satellite images window.
 
 The Divide into objects check box works both with a project raster,
 usually an image, and with AlphaEarth embeddings. The site is first
@@ -3027,8 +3046,9 @@ look for, such as a clearing, a quarry, a field or a bog, and the plugin finds
 objects of the site similar to it by color and texture.
 
 The source, the site, the pixel and the division into objects are the same as
-in the Classification window. The source is AlphaEarth embeddings or a project
-raster, and the site is shared with the other analysis windows.
+in the Classification window. The source is AlphaEarth embeddings, the globe
+basemap or a project raster, and the site is shared with the other analysis
+windows.
 
 The sample is outlined with clicks on the globe while the window is open. A
 click on the first vertex closes the outline, and the Close shape hint appears

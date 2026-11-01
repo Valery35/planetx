@@ -6073,10 +6073,36 @@ EN = {
     "Эмбеддинги AlphaEarth": "AlphaEarth embeddings",
     "Откуда берутся признаки клетки. Эмбеддинги AlphaEarth загружаются "
     "из сети. У растра проекта каждый канал - признак, каналы приводятся "
-    "к одному разбросу, поэтому их единицы могут быть разными.":
+    "к одному разбросу, поэтому их единицы могут быть разными. Подложка "
+    "глобуса - картинка текущей подложки под участком: снимок собран из "
+    "разных съёмок, классы могут идти по их границам.":
         "Where the features of a cell come from. AlphaEarth embeddings are "
         "downloaded. Each band of a project raster is a feature, bands are "
-        "brought to one spread, so their units may differ.",
+        "brought to one spread, so their units may differ. Globe basemap - "
+        "the picture of the current basemap under the area: imagery is "
+        "assembled from different surveys, classes may follow their "
+        "borders.",
+    "Подложка глобуса": "Globe basemap",
+    "Классы подложки «{name}»: {parts}. Пиксель {pixel} м.":
+        "Classes of the basemap {name}: {parts}. Pixel {pixel} m.",
+    "Подложка покрывает {share} % участка.":
+        "The basemap covers {share} % of the area.",
+    "Точек без данных подложки: {n}.": "Points without basemap data: {n}.",
+    "Расчёт по подложке не запущен.":
+        "The calculation from the basemap was not started.",
+    "Загружаются тайлы подложки…": "Loading basemap tiles…",
+    "Тайлы подложки не получены.": "The basemap tiles were not received.",
+    "Считать": "Calculate",
+    "Расчёт соберёт тайлы подложки «{name}» под участком в картинку "
+    "в памяти, файл снимка не записывается. Условия подложки могут "
+    "не разрешать такое использование, особенно у коммерческих служб. "
+    "Расчёт идёт по вашему решению, ответственность за его результат "
+    "и использование несёте вы.":
+        "The calculation will assemble the tiles of the basemap {name} "
+        "under the area into a picture in memory, no image file is "
+        "written. The terms of the basemap may not allow such use, "
+        "especially for commercial services. The calculation runs at your "
+        "decision, and you are responsible for its result and use.",
     "Каналов растра: {n}": "Raster bands: {n}",
     "Делить на объекты": "Divide into objects",
     "Участок сначала делится на объекты, похожие по цвету "
@@ -6328,10 +6354,14 @@ EN = {
         "once without a new calculation. To the right only very similar "
         "objects stay, to the left the selection widens.",
     "Откуда берутся цвет и текстура. Эмбеддинги AlphaEarth "
-    "загружаются из сети, у растра проекта каждый канал - признак.":
+    "загружаются из сети, у растра проекта каждый канал - признак. "
+    "Подложка глобуса - картинка текущей подложки под участком: снимок "
+    "собран из разных съёмок, на их границах цвет меняется.":
         "Where color and texture come from. AlphaEarth embeddings are "
         "loaded from the network, each band of a project raster is a "
-        "feature.",
+        "feature. Globe basemap - the picture of the current basemap under "
+        "the area: imagery is assembled from different surveys, the color "
+        "changes at their borders.",
     "Год векторов AlphaEarth. Образец обводится по снимку глобуса, "
     "он может быть другого года.":
         "The year of the AlphaEarth vectors. The sample is outlined on the "

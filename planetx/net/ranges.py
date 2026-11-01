@@ -13,12 +13,14 @@
 кэш знает адрес без Range и отдал бы чужую часть.
 """
 import threading
+import time
 
 from qgis.PyQt.QtCore import QObject, QUrl, pyqtSignal
 from qgis.PyQt.QtNetwork import QNetworkRequest
 
 from .loader import (ALWAYS_NETWORK, CACHE_CONTROL, CACHE_SAVE, HTTP_STATUS,
-                     MARK, NO_ERROR, REDIRECT, SAFE_REDIRECT, network)
+                     MARK, NO_ERROR, REDIRECT, SAFE_REDIRECT, network,
+                     source_request)
 
 TIMEOUT = 60.0  # с ожидания одной части
 
@@ -41,10 +43,13 @@ class _Bridge(QObject):
         self.replies = set()
 
     def _ask(self, job):
-        request = QNetworkRequest(QUrl(job["url"]))
-        request.setAttribute(MARK, True)
-        request.setAttribute(REDIRECT, SAFE_REDIRECT)
         start, length = job["start"], job["length"]
+        if job.get("source") is not None:
+            request = source_request(job["source"], job["url"])
+        else:
+            request = QNetworkRequest(QUrl(job["url"]))
+            request.setAttribute(MARK, True)
+            request.setAttribute(REDIRECT, SAFE_REDIRECT)
         if length is not None:
             request.setAttribute(CACHE_CONTROL, ALWAYS_NETWORK)
             request.setAttribute(CACHE_SAVE, False)
@@ -98,6 +103,31 @@ def fetch_many(url, spans, timeout=TIMEOUT):
                 raise Missing(job["error"], job["status"])
             raise OSError(job.get("error") or "network")
         out.append(job["data"])
+    return out
+
+
+def fetch_source(source, urls, tick=None, timeout=TIMEOUT):
+    """Тайлы подложки source через дисковый кэш QGIS, пакетами по
+    source.parallel запросов: правила серверов те же, что у загрузчика
+    глобуса. Рабочий поток. Итог - {адрес: байты или None без файла}.
+    tick зовётся перед пакетом, им расчёт останавливается. OSError -
+    срок ответа."""
+    urls = list(urls)
+    out = {}
+    for first in range(0, len(urls), source.parallel):
+        if tick is not None:
+            tick()
+        if first and source.gap:
+            time.sleep(source.gap)
+        jobs = [{"url": url, "start": 0, "length": None, "source": source,
+                 "event": threading.Event()}
+                for url in urls[first:first + source.parallel]]
+        for job in jobs:
+            bridge().ask.emit(job)
+        for job in jobs:
+            if not job["event"].wait(timeout):
+                raise OSError("timeout: " + job["url"])
+            out[job["url"]] = job.get("data")
     return out
 
 
