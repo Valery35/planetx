@@ -18899,20 +18899,123 @@ def class_objects_wait():
 
 @check(500)
 def class_objects_again():
+    tool = state["window"].class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 60.0:
+        return 500
+    out = result["class_objects"]
+    out["again_s"] = round(time.monotonic() - state["class_started"], 2)
+    out["same_objects"] = tool.pieces[1] is state["class_cached"]
+    return None
+
+
+@check(500)
+def class_objects_join():
+    # Те же объекты, соседи одного класса - одним многоугольником.
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None:
+        return 500
+    out = result["class_objects"]
+    state["class_cached"] = tool.pieces[1]
+    out["before_join"] = int(tool.result["parts"].max()) + 1
+    tool.dialog.split_join.setChecked(True)
+    tool.dialog.build.emit()
+    state["class_started"] = time.monotonic()
+
+
+@check(500)
+def class_objects_join_wait():
     window = state["window"]
     tool = window.class_tool
     if tool.job is not None \
             and time.monotonic() - state["class_started"] < 60.0:
         return 500
-    from qgis.core import QgsProject
+    import numpy as np
     out = result["class_objects"]
-    out["again_s"] = round(time.monotonic() - state["class_started"], 2)
-    out["same_objects"] = tool.pieces[1] is state["class_cached"]
-    # Без флажка - снова растр классов по клеткам.
+    res = tool.result
+    out["after_join"] = int(res["parts"].max()) + 1
+    out["join_same_segments"] = tool.pieces[1] is state["class_cached"]
+    out["join_per_class"] = len(set(res["kinds"].tolist()))
+    # Рядом с другим классом границы остаются, внутри класса их нет.
+    a = res["parts"][:, :-1]
+    b = res["parts"][:, 1:]
+    both = (a >= 0) & (b >= 0) & (a != b)
+    out["join_borders_same_class"] = int(np.count_nonzero(
+        res["kinds"][a[both]] == res["kinds"][b[both]]))
+    tool.dialog.split_join.setChecked(False)
+    return None
+
+
+def _objects_done():
+    """Окно закрыто, пробный растр убран."""
+    from qgis.core import QgsProject
+    tool = state["window"].class_tool
     tool.dialog.split.setChecked(False)
     tool.dialog.close()
     QgsProject.instance().removeMapLayer(state["objects_layer"])
-    out["left"] = tool.result is None
+    result["class_objects"]["left"] = tool.result is None
+
+
+@check(1000)
+def class_objects_net():
+    # Деление на объекты по эмбеддингам AlphaEarth, точки - те же, что
+    # у class_open.
+    window = state["window"]
+    tool = window.class_tool
+    dialog = tool.dialog
+    out = result.setdefault("class_objects_net", {})
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(0)
+    dialog.split.setChecked(True)
+    dialog.area.set_square(CHANGE_POINT[0], CHANGE_POINT[1], 3000.0)
+    dialog.level.setCurrentIndex(dialog.level.findData(3))
+    dialog.year.setCurrentIndex(dialog.year.findData(2025))
+    while len(dialog.rows) > 2:
+        dialog._remove(dialog.rows[-1])
+    dialog.rows[0].set_points([(CHANGE_POINT[0] - 0.008,
+                                CHANGE_POINT[1] + d)
+                               for d in (-0.0005, 0.0, 0.0005)])
+    dialog.rows[1].set_points([(CHANGE_POINT[0] + 0.008,
+                                CHANGE_POINT[1] + d)
+                               for d in (-0.0005, 0.0, 0.0005)])
+    out["split_on_for_alphaearth"] = dialog.split.isEnabled()
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+
+
+@check(1000)
+def class_objects_net_wait():
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 280.0:
+        return 1000
+    from osgeo import ogr
+    out = result["class_objects_net"]
+    out["build_s"] = round(time.monotonic() - state["class_started"], 1)
+    out["status"] = tool.dialog.status.text()
+    res = tool.result
+    out["built"] = res is not None
+    if res is None:
+        _objects_done()
+        return None
+    out["objects"] = int(res["parts"].max()) + 1
+    path = os.path.join(TEMP, "planetx_class_net_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    data = ogr.Open(path)
+    layer = data.GetLayerByName("objects")
+    out["features"] = layer.GetFeatureCount()
+    out["fields"] = [layer.GetLayerDefn().GetFieldDefn(n).GetName()
+                     for n in range(layer.GetLayerDefn().GetFieldCount())]
+    data = None
+    nodes = _result_layers()
+    if nodes:
+        out["rights"] = list(nodes[0].layer().metadata().rights())
+    _drop_group()
+    _objects_done()
+    return None
 
 
 @check(1000)

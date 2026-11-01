@@ -15,7 +15,10 @@ n1 n2 / (n1 + n2) · |m1 - m2|² (мера Уорда) плюс прирост �
 не нужно, ядро переносится в PlanetX Lite без изменений.
 
 Каналы приводятся к разбросу 1 (core/rasterclass.py) и делятся на корень
-из их количества: масштаб не зависит от количества каналов. Текстура -
+из их количества: масштаб не зависит от количества каналов. Каналов
+больше PARTS (64 эмбеддинга AlphaEarth, съёмка многих каналов) сводятся
+к главным компонентам: иначе каждый проход шёл бы по всем каналам
+миллиона рёбер. Текстура -
 местный разброс яркости в окне клетки, ещё один признак с долей weight.
 """
 import math
@@ -33,7 +36,18 @@ LEAST = 16  # клеток в наименьшем объекте
 RADIUS = 2  # окно текстуры 5 × 5 клеток
 SHAPE = 0.2  # вес неровности формы в цене слияния
 STAGES = 4  # ступеней роста порога, каждая вчетверо ниже следующей
+PARTS = 8  # главных компонент у многоканальной сетки
+SAMPLE = 200000  # клеток для оценки компонент
+SCALE_CELLS = 800 * 800  # клеток участка, к которым отнесён масштаб окна
 MAX_CELLS = 2000 * 2000  # клеток участка: рёбер вдвое больше, память
+
+
+def site_scale(scale, cells):
+    """Масштаб расчёта по масштабу окна: цена слияния растёт с клетками
+    объекта, поэтому при другом пикселе тот же масштаб окна даёт объекты
+    той же доли участка. Иначе на сетке 40 × 40 весь участок сливался
+    в один объект."""
+    return float(scale) * math.sqrt(cells / SCALE_CELLS)
 
 
 def too_big(rows, cols):
@@ -63,6 +77,17 @@ def texture(bright, good, radius=RADIUS):
     return np.sqrt(np.maximum(second - first * first, 0.0))
 
 
+def _reduce(data):
+    """Главные компоненты признаков (признаки, клетки): первые PARTS,
+    сумма разбросов итога - 1. Оценка - по части клеток."""
+    part = data[:, ::max(1, data.shape[1] // SAMPLE)]
+    part = part - part.mean(axis=1, keepdims=True)
+    values, vectors = np.linalg.eigh(part @ part.T / part.shape[1])
+    kept = float(values[-PARTS:].sum())
+    return vectors[:, -PARTS:].T.astype(np.float32) @ data \
+        / math.sqrt(max(kept, 1e-12))
+
+
 def features(grid, good, weight=WEIGHT, radius=RADIUS):
     """Признаки клеток good: float32 (признаки, клетки). Сумма разбросов
     цветовых признаков - 1 - weight, текстуры - weight."""
@@ -77,8 +102,11 @@ def features(grid, good, weight=WEIGHT, radius=RADIUS):
         value = np.where(good, value, 0.0)
         bright += value
         rows.append(value[good].astype(np.float32))
-    colour = math.sqrt((1.0 - weight) / len(used))
-    out = [row * colour for row in rows]
+    if len(rows) > PARTS:
+        out = list(_reduce(np.stack(rows)) * math.sqrt(1.0 - weight))
+    else:
+        colour = math.sqrt((1.0 - weight) / len(used))
+        out = [row * colour for row in rows]
     if weight > 0.0:
         rough = texture(bright / len(used), good, radius)[good]
         spread = rough.std()
@@ -233,6 +261,37 @@ def table(grid, labels):
         out[band + bands, 0] = np.sqrt(np.maximum(second - first * first,
                                                   0.0))
     return out
+
+
+def dissolve(labels, kinds):
+    """Соседние объекты одного класса - один объект: (новые номера
+    клеток, классы новых объектов). kinds - классы объектов, -1 без
+    класса, такие объекты не сливаются."""
+    a = np.concatenate((labels[:, :-1].ravel(), labels[:-1, :].ravel()))
+    b = np.concatenate((labels[:, 1:].ravel(), labels[1:, :].ravel()))
+    keep = (a >= 0) & (b >= 0) & (a != b)
+    a, b = a[keep], b[keep]
+    same = (kinds[a] == kinds[b]) & (kinds[a] >= 0)
+    a, b = a[same], b[same]
+    parent = np.arange(len(kinds), dtype=np.int64)
+    while True:
+        pa, pb = parent[a], parent[b]
+        apart = pa != pb
+        if not apart.any():
+            break
+        low = np.minimum(pa[apart], pb[apart])
+        high = np.maximum(pa[apart], pb[apart])
+        # Последнее присваивание - наименьший номер: цикла не будет.
+        order = np.argsort(-low, kind="stable")
+        parent[high[order]] = low[order]
+        while True:
+            up = parent[parent]
+            if (up == parent).all():
+                break
+            parent = up
+    roots, numbers = np.unique(parent, return_inverse=True)
+    out = np.where(labels >= 0, numbers[np.maximum(labels, 0)], -1)
+    return out.astype(np.int32), kinds[roots]
 
 
 def areas(labels):

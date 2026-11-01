@@ -9,7 +9,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.23.0.
+A 3D globe inside QGIS. PlanetX version 1.24.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -111,7 +111,10 @@ The plugin is free and open source. [Support development](https://github.com/Val
   embeddings, 10 m cells for each year of 2017-2025, show where the
   land changed between two years - construction, logging, quarries,
   floods. Classification divides an area into classes by control
-  points clicked on the globe. Both go to the QGIS project as rasters.
+  points clicked on the globe. Both go to the QGIS project as rasters. A
+  site of a project raster or of the embeddings can first be divided into
+  objects similar in color and texture, then the result is polygons with
+  a class and an area.
 - **Paleogeography.** The Paleogeography layer shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.

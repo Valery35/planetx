@@ -116,6 +116,57 @@ class TestSegment(unittest.TestCase):
             segments.segment(scene(), progress=stop)
 
 
+class TestManyBands(unittest.TestCase):
+    def test_embedding_bands_reduce_and_find_parts(self):
+        # 64 канала: две части сцены различаются смесью всех каналов.
+        random = np.random.default_rng(7)
+        mix = random.normal(size=64)
+        side = np.ones((80, 80), dtype=np.float32)
+        side[:, 40:] = -1.0
+        grid = mix[:, None, None].astype(np.float32) * side \
+            + 0.3 * random.normal(size=(64, 80, 80)).astype(np.float32)
+        good = np.ones((80, 80), dtype=bool)
+        data = segments.features(grid, good, weight=0.0)
+        self.assertEqual(data.shape[0], segments.PARTS)
+        self.assertAlmostEqual(float(data.var(axis=1).sum()), 1.0, delta=0.05)
+        labels = segments.segment(grid, scale=15, weight=0.0)
+        self.assertNotEqual(int(np.median(labels[:, :30])),
+                            int(np.median(labels[:, 50:])))
+
+
+class TestDissolve(unittest.TestCase):
+    def test_neighbors_of_one_class_merge(self):
+        labels = np.array([[0, 0, 1, 1, 2],
+                           [0, 0, 1, 1, 2],
+                           [3, 3, 3, -1, 2]], dtype=np.int32)
+        kinds = np.array([0, 0, 1, 0])
+        out, joined = segments.dissolve(labels, kinds)
+        # 0, 1 и 3 связаны, 2 - другой класс.
+        self.assertEqual(int(out.max()) + 1, 2)
+        self.assertEqual(out[0, 0], out[0, 2])
+        self.assertEqual(out[0, 0], out[2, 0])
+        self.assertNotEqual(out[0, 0], out[0, 4])
+        self.assertEqual(out[2, 3], -1)
+        self.assertEqual(sorted(joined.tolist()), [0, 1])
+
+    def test_far_objects_of_one_class_stay_apart(self):
+        labels = np.array([[0, 1, 2]], dtype=np.int32)
+        out, joined = segments.dissolve(labels, np.array([0, 1, 0]))
+        self.assertEqual(int(out.max()) + 1, 3)
+        self.assertEqual(joined.tolist(), [0, 1, 0])
+
+    def test_no_class_does_not_merge(self):
+        labels = np.array([[0, 1]], dtype=np.int32)
+        out, _ = segments.dissolve(labels, np.array([-1, -1]))
+        self.assertEqual(int(out.max()) + 1, 2)
+
+    def test_long_chain_joins(self):
+        labels = np.arange(500, dtype=np.int32).reshape(1, -1)[:, ::-1]
+        out, joined = segments.dissolve(labels.copy(), np.zeros(500, int))
+        self.assertTrue((out == 0).all())
+        self.assertEqual(joined.tolist(), [0])
+
+
 class TestPairs(unittest.TestCase):
     def test_each_region_in_one_pair_on_equal_costs(self):
         a = np.array([0, 1, 2, 3])
@@ -177,6 +228,16 @@ class TestClasses(unittest.TestCase):
         self.assertTrue(edge[0, 1])
         self.assertFalse(edge[0, 0])
         self.assertFalse(edge[2, 0])
+
+    def test_site_scale_keeps_share_of_site(self):
+        # Та же сцена на сетке вчетверо грубее: объекты те же.
+        grid = scene(2.0)
+        fine = segments.segment(
+            grid, scale=segments.site_scale(600, grid[0].size), least=4)
+        coarse = grid[:, ::4, ::4]
+        rough = segments.segment(
+            coarse, scale=segments.site_scale(600, coarse[0].size), least=4)
+        self.assertEqual(int(fine.max()), int(rough.max()))
 
     def test_too_big(self):
         self.assertFalse(segments.too_big(800, 800))

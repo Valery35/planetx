@@ -2980,14 +2980,17 @@ the area partly, the line under the fields gives the covered share. An
 area outside the raster extent gives no classes, and the line reports
 it.
 
-The Divide into objects check box works with a project raster, usually
-an image. The site is first divided into objects - connected pieces
+The Divide into objects check box works both with a project raster,
+usually an image, and with AlphaEarth embeddings. The site is first
+divided into objects - connected pieces
 similar in color and texture, for example a field, a clear-cut, a block
 or a lake surface. The division merges neighboring regions starting from
 single cells, the choice of a pair takes into account heterogeneity and
 smoothness of the border. The Object scale field sets the allowed
-heterogeneity - the larger it is, the larger the objects. An object is
-measured in cells, so another pixel needs another scale. Texture share is
+heterogeneity - the larger it is, the larger the objects. The scale refers
+to the site, so another pixel hardly changes the size of the objects. If
+the whole site comes out as one object, the line under the fields asks to
+reduce the scale. Texture share is
 the share of the spread of brightness around a cell among the features,
 it separates a forest from a meadow of the same color. An object smaller
 than Smallest object merges with its most similar neighbor. A control
@@ -2995,8 +2998,11 @@ point takes the features of its object, and a whole object gets a class
 by the means and spreads of the bands inside it. On the globe dark lines
 show the object borders, the line under the fields gives their number.
 OK writes, instead of a raster, a polygon layer Objects with the fields
-class, name, area_ha, mean_N and sd_N. Neighboring objects of one class
-stay separate. The grid is not larger than 4 million cells.
+class, name, area_ha, mean_N and sd_N, AlphaEarth has no band fields.
+Neighboring objects of one class stay separate, the Merge neighboring
+objects of one class check box joins them into one polygon. Changing the
+division settings computes the objects again, changing the points computes
+only the classes. The grid is not larger than 4 million cells.
 
 The Opacity slider changes the transparency of the classes. OK writes
 the classes as a raster in UTM to the calculation subgroup, with the

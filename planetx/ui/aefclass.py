@@ -251,18 +251,26 @@ class ClassDialog(QDialog):
         self.split.setChecked(_flag(settings.value(SETTINGS + "split",
                                                    False)))
         self.split.setToolTip(tr(
-            "Участок снимка сначала делится на объекты, похожие по цвету "
+            "Участок сначала делится на объекты, похожие по цвету "
             "и текстуре, класс получает объект целиком. Итог - "
-            "многоугольники. Только для растра проекта."))
+            "многоугольники."))
+        self.split_join = QCheckBox(
+            tr("Сливать соседние объекты одного класса"), self)
+        self.split_join.setChecked(_flag(settings.value(
+            SETTINGS + "split_join", False)))
+        self.split_join.setToolTip(tr(
+            "Соседние объекты одного класса становятся одним "
+            "многоугольником. Без флажка каждое поле или выдел остаётся "
+            "отдельным объектом со своими значениями."))
         self.split_scale = QSpinBox(self)
         self.split_scale.setRange(1, 500)
         self.split_scale.setValue(int(settings.value(
             SETTINGS + "split_scale", segments.SCALE)))
         self.split_scale.setToolTip(tr(
             "Допустимая разнородность объекта. Чем больше, тем крупнее "
-            "объекты и тем больше несхожего они объединяют. Объект "
-            "считается в клетках, поэтому при другом пикселе масштаб "
-            "подбирается заново."))
+            "объекты и тем больше несхожего они объединяют. Масштаб "
+            "отнесён к участку, поэтому смена пикселя размер объектов "
+            "почти не меняет."))
         self.split_weight = QSpinBox(self)
         self.split_weight.setRange(0, 100)
         self.split_weight.setSuffix(" %")
@@ -306,6 +314,7 @@ class ClassDialog(QDialog):
         form.addRow(tr("Масштаб объектов"), self.split_scale)
         form.addRow(tr("Доля текстуры"), self.split_weight)
         form.addRow(tr("Наименьший объект, клеток"), self.split_least)
+        form.addRow("", self.split_join)
         form.addRow(tr("Непрозрачность"), self.alpha)
         buttons = QDialogButtonBox(self)
         run = QPushButton(tr("Построить"), self)
@@ -334,6 +343,7 @@ class ClassDialog(QDialog):
         self.alpha.valueChanged.connect(lambda _: self._remember())
         self.source.currentIndexChanged.connect(lambda _: self._source())
         self.split.toggled.connect(lambda _: self._split_changed())
+        self.split_join.toggled.connect(lambda _: self._remember())
         for box in (self.split_scale, self.split_weight, self.split_least):
             box.valueChanged.connect(lambda _: self._remember())
         self._split_changed()
@@ -355,20 +365,20 @@ class ClassDialog(QDialog):
         self.source_changed.emit()
 
     def _split_changed(self):
-        raster = bool(self.raster_id())
-        self.split.setEnabled(raster)
-        for box in (self.split_scale, self.split_weight, self.split_least):
-            box.setEnabled(raster and self.split.isChecked())
+        on = self.split.isChecked()
+        for box in (self.split_scale, self.split_weight, self.split_least,
+                    self.split_join):
+            box.setEnabled(on)
         self._remember()
 
     def split_params(self):
-        """Масштаб, доля текстуры и наименьший объект, None - деления
-        на объекты нет."""
-        if not (self.raster_id() and self.split.isChecked()):
+        """Масштаб, доля текстуры, наименьший объект и слияние соседей,
+        None - деления на объекты нет."""
+        if not self.split.isChecked():
             return None
         return (self.split_scale.value(),
                 self.split_weight.value() / 100.0,
-                self.split_least.value())
+                self.split_least.value(), self.split_join.isChecked())
 
     def add_class(self, name=None):
         color = COLORS[len(self.rows) % len(COLORS)]
@@ -411,6 +421,8 @@ class ClassDialog(QDialog):
                           self.split_weight.value())
         settings.setValue(SETTINGS + "split_least",
                           self.split_least.value())
+        settings.setValue(SETTINGS + "split_join",
+                          self.split_join.isChecked())
         self.volume_changed()
 
     # --- участок ---------------------------------------------------------
@@ -624,6 +636,9 @@ class ClassTool(QObject):
             return
         key = (box, year, level)
         cached = self.grid if self.grid and self.grid[0] == key else None
+        params = dialog.split_params()
+        split_key = self._split_key(key, ring, params)
+        pieces = self._pieces(split_key)
         progress = self.progress = [0, 0]
 
         def count(done, total):
@@ -641,6 +656,15 @@ class ClassTool(QObject):
             if found is None:
                 return None
             x0, y0, step, grid = found
+            if params is not None:
+                values = aef.LUT[grid.astype(np.int16) + 128]
+                inside = aef.ring_mask(index, x0, y0, step, grid.shape[1:],
+                                       ring)
+                share = rasterclass.covered(values, inside)
+                if share <= 0.0:
+                    return None
+                return self._objects(found, values, inside, share, index,
+                                     points, params, pieces)
             samples, labels, outside = [], [], 0
             for label, (plat, plon) in points:
                 r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
@@ -663,7 +687,61 @@ class ClassTool(QObject):
 
         dialog.status.setText(tr("Загружаются векторы участка…"))
         _run_job(self, work, lambda out: self._built(
-            out, key, box, year, colors, names), tr("Классификация"))
+            out, key, box, year, colors, names, None, split_key),
+            tr("Классификация"))
+
+    @staticmethod
+    def _split_key(key, ring, params):
+        """Ключ готовых объектов: участок и настройки деления."""
+        return (key, tuple(ring), params[:3] if params else None)
+
+    def _pieces(self, split_key):
+        return self.pieces[1] if self.pieces \
+            and self.pieces[0] == split_key else None
+
+    def _objects(self, found, grid, inside, share, index, points, params,
+                 pieces):
+        """Объекты участка и их классы: контрольная точка берёт
+        признаки своего объекта. grid - float32 с NaN без данных,
+        рабочий поток."""
+        x0, y0, step, _ = found
+        if segments.too_big(*grid.shape[1:]):
+            return {"problem": "pieces", "found": found}
+        parts = pieces
+        if parts is None:
+            scale, weight, least = params[:3]
+            cells = int((rasterclass.usable(grid) & inside).sum())
+            parts = segments.segment(
+                grid, inside, segments.site_scale(scale, cells), weight,
+                least, progress=lambda _: stop_point(self))
+        stop_point(self)
+        if int(parts.max()) < 1:
+            return {"problem": "whole", "found": found, "parts": parts}
+        table = segments.table(grid, parts)
+        samples, labels, outside = [], [], 0
+        for label, (plat, plon) in points:
+            r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
+            if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2] \
+                    and parts[r, c] >= 0:
+                samples.append(table[:, 0, parts[r, c]])
+                labels.append(label)
+            else:
+                outside += 1
+        if len(set(labels)) < aef.MIN_CLASSES:
+            return {"problem": "points", "found": found, "parts": parts}
+        kinds = rasterclass.classify(
+            table, np.stack(samples, axis=1), labels,
+            progress=lambda done, total: stop_point(self))[0][0]
+        if not (kinds >= 0).any():
+            return {"problem": "flat", "found": found, "parts": parts}
+        classes = np.where(parts >= 0, kinds[np.maximum(parts, 0)], -1)
+        shown = parts
+        if params[3]:
+            shown, kinds = segments.dissolve(parts, kinds)
+            table = segments.table(grid, shown)
+        return {"index": index, "found": found, "outside": outside,
+                "classes": classes, "covered": share, "parts": parts,
+                "shown": shown, "kinds": kinds, "table": table}
 
     def _build_raster(self, layer, ring, box, side, level, zone, points,
                       colors, names):
@@ -683,50 +761,11 @@ class ClassTool(QObject):
         cached = self.grid if self.grid and self.grid[0] == key else None
         index = aef.ZoneIndex(zone, [])
         params = dialog.split_params()
-        split_key = (key, tuple(ring), params)
-        pieces = self.pieces[1] if self.pieces \
-            and self.pieces[0] == split_key else None
+        split_key = self._split_key(key, ring, params)
+        pieces = self._pieces(split_key)
 
         def count(done, total):
             stop_point(self)
-
-        def objects(found, inside, share):
-            """Объекты участка и их классы: контрольная точка берёт
-            признаки своего объекта."""
-            x0, y0, step, grid = found
-            if segments.too_big(*grid.shape[1:]):
-                return {"problem": "pieces", "found": found}
-            parts = pieces
-            if parts is None:
-                scale, weight, least = params
-                parts = segments.segment(
-                    grid, inside, scale, weight, least,
-                    progress=lambda _: stop_point(self))
-            stop_point(self)
-            table = segments.table(grid, parts)
-            samples, labels, outside = [], [], 0
-            for label, (plat, plon) in points:
-                r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
-                if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2] \
-                        and parts[r, c] >= 0:
-                    samples.append(table[:, 0, parts[r, c]])
-                    labels.append(label)
-                else:
-                    outside += 1
-            if len(set(labels)) < aef.MIN_CLASSES:
-                return {"problem": "points", "found": found,
-                        "parts": parts}
-            kinds = rasterclass.classify(
-                table, np.stack(samples, axis=1), labels,
-                progress=count)[0][0]
-            if not (kinds >= 0).any():
-                return {"problem": "flat", "found": found,
-                        "parts": parts}
-            return {"index": index, "found": found, "outside": outside,
-                    "classes": np.where(parts >= 0,
-                                        kinds[np.maximum(parts, 0)], -1),
-                    "covered": share, "parts": parts, "kinds": kinds,
-                    "table": table}
 
         def work():
             found = cached[1] if cached else read_raster(
@@ -740,7 +779,8 @@ class ClassTool(QObject):
             if share <= 0.0:
                 return {"problem": "outside"}
             if params is not None:
-                return objects(found, inside, share)
+                return self._objects(found, grid, inside, share, index,
+                                     points, params, pieces)
             samples, labels, outside = [], [], 0
             for label, (plat, plon) in points:
                 r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
@@ -789,7 +829,7 @@ class ClassTool(QObject):
                        "raster": raster, "label": raster or str(year),
                        "ring": list(self.dialog.area.ring)}
         if out.get("parts") is not None:
-            self.result.update(parts=out["parts"], kinds=out["kinds"],
+            self.result.update(parts=out["shown"], kinds=out["kinds"],
                                table=out["table"])
         counts = [int((classes == n).sum()) for n in range(len(colors))]
         total = max(sum(counts), 1)
@@ -806,7 +846,7 @@ class ClassTool(QObject):
                                  share="{:.0f}".format(
                                      100.0 * out["covered"]))
         if out.get("parts") is not None:
-            sizes = segments.areas(out["parts"])
+            sizes = segments.areas(out["shown"])
             mean = float(sizes.mean()) * step * step / 1e4
             text += " " + tr(
                 "Объектов {n}, средний {area} га.", n=len(sizes),
@@ -934,6 +974,10 @@ class ClassTool(QObject):
                     zip(result["colors"], result["names"]))]))
         if layer is not None:
             layer.setOpacity(self.dialog.alpha.value() / 100.0)
+            if result["raster"] is None:
+                meta = layer.metadata()
+                meta.setRights([aef.CREDIT])
+                layer.setMetadata(meta)
         self._export_points(tag, result["label"], group)
         self.dialog.status.setText(tr("Объекты в проекте."))
         return path
@@ -987,11 +1031,13 @@ def problem_text(code):
     return {"unreadable": tr("Растр не прочитан."),
             "big": tr("Сетка участка слишком велика, возьмите пиксель "
                       "крупнее или «Авто»."),
+            "whole": tr("Весь участок вышел одним объектом, уменьшите "
+                        "масштаб объектов."),
             "pieces": tr("Для объектов сетка участка слишком велика, "
                          "возьмите пиксель крупнее или «Авто»."),
             "outside": tr("Участок вне охвата растра."),
             "points": tr("Нужно хотя бы два класса с точками на клетках "
-                         "растра с данными."),
+                         "с данными."),
             "flat": tr("Каналы растра на участке не меняются, классы "
                        "различить нельзя.")}[code]
 
@@ -1083,8 +1129,8 @@ def write_classes(path, result):
 
 def write_objects(path, result):
     """Объекты слоем objects файла GeoPackage в UTM: поля object, class
-    (номер с 1), name, area_ha, mean_N и sd_N каналов растра. Объект
-    связный, поэтому один объект - один многоугольник."""
+    (номер с 1), name, area_ha, у растра проекта mean_N и sd_N каналов.
+    Объект связный, поэтому один объект - один многоугольник."""
     from osgeo import gdal, ogr, osr
     warm()
     index = result["index"]
@@ -1110,7 +1156,8 @@ def write_objects(path, result):
     layer.CreateField(ogr.FieldDefn("name", ogr.OFTString))
     layer.CreateField(ogr.FieldDefn("area_ha", ogr.OFTReal))
     table = result["table"][:, 0]
-    bands = table.shape[0] // 2
+    bands = 0 if result["raster"] is None else table.shape[0] // 2
+    half = table.shape[0] // 2
     for number in range(1, bands + 1):
         layer.CreateField(ogr.FieldDefn("mean_{}".format(number),
                                         ogr.OFTReal))
@@ -1133,7 +1180,7 @@ def write_objects(path, result):
             feature.SetField("mean_{}".format(band_n + 1),
                              float(table[band_n, number]))
             feature.SetField("sd_{}".format(band_n + 1),
-                             float(table[band_n + bands, number]))
+                             float(table[band_n + half, number]))
         layer.SetFeature(feature)
     layer.CommitTransaction()
     data = None

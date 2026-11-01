@@ -6079,20 +6079,30 @@ EN = {
         "brought to one spread, so their units may differ.",
     "Каналов растра: {n}": "Raster bands: {n}",
     "Делить на объекты": "Divide into objects",
-    "Участок снимка сначала делится на объекты, похожие по цвету "
+    "Участок сначала делится на объекты, похожие по цвету "
     "и текстуре, класс получает объект целиком. Итог - "
-    "многоугольники. Только для растра проекта.":
-        "The image site is first divided into objects similar in color and "
+    "многоугольники.":
+        "The site is first divided into objects similar in color and "
         "texture, a class goes to a whole object. The result is "
-        "polygons. For a project raster only.",
+        "polygons.",
+    "Сливать соседние объекты одного класса":
+        "Merge neighboring objects of one class",
+    "Соседние объекты одного класса становятся одним "
+    "многоугольником. Без флажка каждое поле или выдел остаётся "
+    "отдельным объектом со своими значениями.":
+        "Neighboring objects of one class become one polygon. Without "
+        "the check box each field or stand stays a separate object "
+        "with its own values.",
+    "Весь участок вышел одним объектом, уменьшите масштаб объектов.":
+        "The whole site came out as one object, reduce the object scale.",
     "Допустимая разнородность объекта. Чем больше, тем крупнее "
-    "объекты и тем больше несхожего они объединяют. Объект "
-    "считается в клетках, поэтому при другом пикселе масштаб "
-    "подбирается заново.":
+    "объекты и тем больше несхожего они объединяют. Масштаб "
+    "отнесён к участку, поэтому смена пикселя размер объектов "
+    "почти не меняет.":
         "The allowed heterogeneity of an object. The larger it is, the "
-        "larger the objects and the more unlike cells they unite. An "
-        "object is measured in cells, so another pixel needs another "
-        "scale.",
+        "larger the objects and the more unlike cells they unite. The "
+        "scale refers to the site, so another pixel hardly changes the "
+        "size of the objects.",
     "Доля текстуры среди признаков, остальное - цвет. Текстура "
     "- разброс яркости вокруг клетки, она отделяет лес от луга "
     "того же цвета.":
@@ -6121,8 +6131,8 @@ EN = {
     "Сетка участка слишком велика, возьмите пиксель крупнее или «Авто».":
         "The area grid is too large, choose a larger pixel or Auto.",
     "Участок вне охвата растра.": "The area is outside the raster extent.",
-    "Нужно хотя бы два класса с точками на клетках растра с данными.":
-        "At least two classes need points on raster cells with data.",
+    "Нужно хотя бы два класса с точками на клетках с данными.":
+        "At least two classes need points on cells with data.",
     "Каналы растра на участке не меняются, классы различить нельзя.":
         "The raster bands do not change over the area, classes cannot be "
         "told apart.",
