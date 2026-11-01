@@ -15405,6 +15405,251 @@ def post_objects_shot():
     return None
 
 
+def _post_126_similar(look):
+    # Снимок у Камы, контур образца на лугу щелчками по глобусу.
+    import math
+    from qgis.core import QgsProject, QgsRasterLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    path = os.path.join(TEMP, "planetx_post_126.tif")
+    lat, lon, points, span = _objects_raster(path)
+    raster = QgsRasterLayer(path, "Снимок", "gdal")
+    QgsProject.instance().addMapLayer(raster, False)
+    look["layer"] = raster.id()
+    side = span * math.cos(math.radians(lat)) * 0.95
+    view.navigator.stop()
+    view.navigator.set_pose(Pose(lat, lon, side * 1.15, 0.0, 0.0))
+    view.update()
+    view.grabFramebuffer()
+    tool = window.similar_tool
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(raster.id()))
+    dialog.area.set_square(lat, lon, side)
+    size = 0.0009
+    plat, plon = points["meadow"][0]
+    ring = [(plat + size, plon - size), (plat + size, plon + size),
+            (plat - size, plon + size), (plat - size, plon - size)]
+    for point in ring + ring[:1]:
+        px, py = _ground_click(window, *point)
+        if point == ring[0] and len(dialog.sample.ring) == len(ring):
+            handles = window.handles.tool
+            handles.hover(px, py)
+            handles.grab(px, py)
+            handles.drop()
+        else:
+            window._clicked(px, py)
+    dialog.scale.setValue(15)
+    dialog.limit.setValue(70)
+    dialog.level.setCurrentIndex(0)
+    dialog.build.emit()
+
+
+def _post_126_relations():
+    # Скважина и пробы таблицей: карточка объекта со связанными записями.
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPointXY, QgsProject,
+                           QgsRelation, QgsVectorLayer)
+    window = state["window"]
+    project = QgsProject.instance()
+    parent = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=uid:integer&field=name:string"
+        "&field=depth:double", "Скважины", "memory")
+    child = QgsVectorLayer("None?field=hole:integer&field=name:string"
+                           "&field=KCl:double", "Пробы", "memory")
+    item = QgsFeature(parent.fields())
+    item.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(56.88, 59.45)))
+    item.setAttributes([7, "Скв. 7", 412.0])
+    parent.dataProvider().addFeatures([item])
+    rows = []
+    for n, grade in enumerate((21.4, 26.8, 24.1)):
+        row = QgsFeature(child.fields())
+        row.setAttributes([7, "Проба {}".format(n + 1), grade])
+        rows.append(row)
+    child.dataProvider().addFeatures(rows)
+    parent.setDisplayExpression('"name"')
+    child.setDisplayExpression('"name"')
+    project.addMapLayers([parent, child])
+    relation = QgsRelation()
+    relation.setId("planetx_post")
+    relation.setName("Пробы скважины")
+    relation.setReferencedLayer(parent.id())
+    relation.setReferencingLayer(child.id())
+    relation.addFieldPair("hole", "uid")
+    project.relationManager().addRelation(relation)
+    feature = next(parent.getFeatures())
+    window.side.close_dialog()
+    window.open_feature_card(parent, "Скв. 7",
+                             [("uid", 7), ("depth", 412.0)], feature.id(),
+                             59.45, 56.88)
+    return relation, parent, child
+
+
+@check(1000, manual=True)
+def post_126_shot():
+    """Кадры статьи 1.26: похожие области у Камы (PLANETX_SEG_SRC), земляные
+    работы у Терскола, карточка со связанными записями, вид в глобусе QGIS
+    рядом с PlanetX. TEMP planetx_post_126_*.png."""
+    from qgis.core import QgsProject, QgsRasterLayer
+    from qgis.PyQt.QtCore import QRect
+    from qgis.PyQt.QtGui import QImage, QPainter
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_126", {"stage": 0})
+    out = result.setdefault("post_126", {})
+    stage = look["stage"]
+    tool = window.similar_tool
+    work = window.earthwork
+    project = QgsProject.instance()
+
+    def save(image, name):
+        image.save(os.path.join(TEMP, "planetx_post_126_{}.png".format(name)))
+
+    if stage == 0:
+        window.set_body("earth")
+        _post_clean(window)
+        look.update(stage=70 if os.environ.get("PLANETX_POST_BRIDGE") else 1)
+        return 8000
+    if stage == 1:
+        _post_126_similar(look)
+        look.update(stage=2, since=time.monotonic())
+        return 3000
+    if stage == 2:
+        if (tool.job is not None or view.load_missing
+                or not view.gibs["viewshed"].textures) \
+                and time.monotonic() - look["since"] < 120:
+            view.update()
+            return 1000
+        look["stage"] = 3
+        return 6000
+    if stage == 3:
+        dialog = tool.dialog
+        out["similar"] = {"status": dialog.status.text(),
+                          "samples": len(dialog.sample.rings),
+                          "objects": int(tool.base["parts"].max()) + 1
+                          if tool.base else None,
+                          "found": len(tool.result["similar"])
+                          if tool.result else None}
+        save(window.copy_view(), "similar")
+        dialog.raise_()
+        save(dialog.grab().toImage(), "similar_dialog")
+        dialog.reject()
+        dialog.sample.forget()
+        project.removeMapLayer(look["layer"])
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(HYDRO_BAKSAN[0], HYDRO_BAKSAN[1],
+                                     3600.0, 20.0, 50.0))
+        view.update()
+        look["stage"] = 4
+        return 4000
+    if stage == 4:
+        dialog = work.open_here(*HYDRO_BAKSAN)
+        dialog.area.side.setValue(1.0)
+        dialog.build.emit()
+        look.update(stage=5, since=time.monotonic())
+        return 2000
+    if stage == 5:
+        if (work.job is not None or work.state is None or view.load_missing
+                or not view.gibs["viewshed"].textures) \
+                and time.monotonic() - look["since"] < 120:
+            view.update()
+            return 1000
+        look["stage"] = 6
+        return 5000
+    if stage == 6:
+        dialog = work.dialog
+        out["earthwork"] = dialog.status.text()
+        save(window.copy_view(), "earthwork")
+        dialog.raise_()
+        save(dialog.grab().toImage(), "earthwork_dialog")
+        dialog.reject()
+        look["links"] = _post_126_relations()
+        look["stage"] = 7
+        return 1500
+    if stage == 7:
+        card = window.side.dialog
+        out["card"] = card.text.toPlainText()
+        save(card.grab().toImage(), "card")
+        relation, parent, child = look.pop("links")
+        window.side.close_dialog()
+        project.relationManager().removeRelation(relation)
+        project.removeMapLayers([parent.id(), child.id()])
+        look["stage"] = 70
+        return 500
+    if stage == 70:
+        layer = QgsRasterLayer(
+            "type=xyz&zmax=17&url=https://server.arcgisonline.com/ArcGIS/"
+            "rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            "Esri", "wms")
+        project.addMapLayer(layer)
+        look["esri"] = layer.id()
+        view.navigator.stop()
+        view.navigator.show(Pose(58.0, 56.25, 300000.0, 0.0, 40.0))
+        view.update()
+        look["canvas"] = window.open_qgis_globe()
+        out["bridge"] = look["canvas"] is not None
+        if look["canvas"] is None:
+            look["stage"] = 9
+            return 500
+        look["canvas"].requestActivate()
+        look["stage"] = 8
+        return 25000
+    if stage == 8:
+        # Кадр берёт сам вид QGIS: снимок экрана захватил бы чужие окна.
+        canvas = look["canvas"]
+        out["api"] = [n for n in dir(canvas) if any(
+            w in n.lower() for w in ("image", "save", "capture", "grab"))]
+        look["file"] = os.path.join(TEMP, "planetx_post_126_globe.png")
+        if os.path.exists(look["file"]):
+            os.remove(look["file"])
+        if not hasattr(canvas, "saveAsImage"):
+            for item in list(iface.mapCanvases3D()):
+                iface.closeMapCanvas3D(item.objectName())
+            look["stage"] = 9
+            return 500
+        canvas.saveAsImage(look["file"], "PNG")
+        look["stage"] = 80
+        return 15000
+    if stage == 80:
+        canvas = look["canvas"]
+        right = QImage(look["file"])
+        out["globe_size"] = [right.width(), right.height()]
+        if right.isNull():
+            for item in list(iface.mapCanvases3D()):
+                iface.closeMapCanvas3D(item.objectName())
+            look["stage"] = 9
+            return 500
+        left = window.copy_view()
+        high = 900
+        left = left.scaledToHeight(high, _smooth())
+        right = right.scaledToHeight(high, _smooth())
+        joined = QImage(left.width() + right.width() + 12, high,
+                        QImage.Format.Format_RGB32 if hasattr(
+                            QImage, "Format") else QImage.Format_RGB32)
+        joined.fill(0xffffffff)
+        painter = QPainter(joined)
+        painter.drawImage(QRect(0, 0, left.width(), high), left)
+        painter.drawImage(QRect(left.width() + 12, 0, right.width(), high),
+                          right)
+        painter.end()
+        save(joined, "bridge")
+        for item in list(iface.mapCanvases3D()):
+            iface.closeMapCanvas3D(item.objectName())
+        look["stage"] = 9
+        return 500
+    if look.get("esri"):
+        project.removeMapLayer(look["esri"])
+    _post_restore(window)
+    return None
+
+
+def _smooth():
+    from planetx.qt_compat import enum
+    from qgis.PyQt.QtCore import Qt
+    return enum(Qt, "TransformationMode", "SmoothTransformation")
+
+
 @check(1000, manual=True)
 def post_raster_class_shot():
     """Кадр объявления 1.22: классы по растру проекта у Перми. Растр и
