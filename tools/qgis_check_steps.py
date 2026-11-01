@@ -15483,6 +15483,105 @@ def qgis_globe_done():
 
 
 @check(1000, manual=True)
+def post_128_shot():
+    """Кадры статьи 1.27 и 1.28: классы снимка подложки у Камы на участке
+    из многоугольника слоя. TEMP planetx_post_128_*.png."""
+    import math
+    from qgis.core import (QgsCoordinateReferenceSystem,
+                           QgsCoordinateTransform, QgsFeature, QgsGeometry,
+                           QgsPointXY, QgsProject, QgsSettings,
+                           QgsVectorLayer)
+    from qgis.PyQt.QtGui import QColor
+    from planetx.core.navigation import Pose
+    from planetx.ui import aefclass
+    from planetx.ui.globe.base import ACCEPTED_KEY
+    window = state["window"]
+    view = window.view
+    tool = window.class_tool
+    look = state.setdefault("post_128", {"stage": 0})
+    stage = look["stage"]
+    if stage == 0:
+        window.set_body("earth")
+        _post_clean(window)
+        window.myplaces.set_visible_many(
+            {n.key: False for n in window.myplaces.nodes()})
+        path = os.path.join(TEMP, "planetx_post_128.tif")
+        lat, lon, points, span = _objects_raster(path)
+        side = span * math.cos(math.radians(lat)) * 0.95
+        half = side / 2.0 / 111320.0
+        ring = _post_ring(lat, lon, [half * k for k in (
+            0.95, 0.8, 1.05, 0.85, 0.98, 0.78, 1.02, 0.82, 0.96, 0.84)])
+        layer = QgsVectorLayer("Polygon?crs=EPSG:3857", "Участки", "memory")
+        project = QgsProject.instance()
+        geometry = QgsGeometry.fromPolygonXY(
+            [[QgsPointXY(x, y) for y, x in ring]])
+        geometry.transform(QgsCoordinateTransform(
+            QgsCoordinateReferenceSystem("EPSG:4326"), layer.crs(), project))
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(geometry)
+        layer.dataProvider().addFeatures([feature])
+        layer.updateExtents()
+        project.addMapLayer(layer, False)
+        look["layer"] = layer
+        window.view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, side * 1.4, 0.0, 0.0))
+        view.update()
+        tool.grid = tool.pieces = None
+        dialog = tool.open_here(lat, lon)
+        dialog.source.setCurrentIndex(dialog.source.findData(aefclass.BASEMAP))
+        dialog.split.setChecked(False)
+        dialog.level.setCurrentIndex(0)
+        while len(dialog.rows) < 3:
+            dialog.add_class()
+        names = {"water": ("Вода", (40, 110, 220)),
+                 "forest": ("Лес", (30, 120, 60)),
+                 "meadow": ("Луга и застройка", (240, 200, 60))}
+        for row, key in zip(dialog.rows, ("water", "forest", "meadow")):
+            row.name.setText(names[key][0])
+            row.color = QColor(*names[key][1])
+            row._paint()
+            row.set_points(points[key])
+        layer.selectAll()
+        dialog.area.from_layer(layer)
+        look["taken"] = dialog.status.text()
+        dialog.alpha.setValue(55)
+        settings = QgsSettings()
+        settings.setValue(ACCEPTED_KEY, list(
+            settings.value(ACCEPTED_KEY) or []) + [
+                "analysis:" + window._earth_source().url])
+        look.update(stage=1, since=time.monotonic())
+        return 6000
+    if stage == 1:
+        tool.build()
+        look.update(stage=2, since=time.monotonic())
+        return 2000
+    if stage == 2:
+        wait = tool.job is not None or view.load_missing \
+            or not view.gibs["viewshed"].textures
+        if wait and time.monotonic() - look["since"] < 120:
+            view.update()
+            return 1000
+        look["stage"] = 3
+        return 8000
+    dialog = tool.dialog
+    window.copy_view().save(os.path.join(TEMP, "planetx_post_128_view.png"))
+    dialog.raise_()
+    dialog.grab().save(os.path.join(TEMP, "planetx_post_128_dialog.png"))
+    res = tool.result
+    result["post_128"] = {
+        "taken": look["taken"], "status": dialog.status.text(),
+        "shares": None if res is None else [
+            round(float((res["classes"] == n).mean()), 3) for n in range(3)],
+        "ring": len(dialog.area.ring)}
+    dialog.reject()
+    dialog.close()
+    QgsProject.instance().removeMapLayer(look["layer"])
+    look["layer"] = None
+    _post_restore(window)
+    return None
+
+
+@check(1000, manual=True)
 def post_objects_shot():
     """Кадры статьи 1.24: снимок у Камы (PLANETX_SEG_SRC) делится на
     объекты, объекты получают классы, соседи одного класса сливаются.
