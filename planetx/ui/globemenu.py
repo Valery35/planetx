@@ -220,6 +220,10 @@ def relief_items(window, menu, lat, lon):
                       tr("Обведите образец, модуль найдёт на участке объекты, "
                          "похожие на него по цвету и текстуре."),
                       lambda *a: window.similar_tool.open_here(lat, lon)))
+    items.append((tr("Земляные работы…"),
+                  tr("Выемка и насыпь участка до ровной площадки: объёмы, "
+                     "раскраска, растр разности."),
+                  lambda *a: window.earthwork.open_here(lat, lon)))
     for text, tip, slot in items:
         action = sub.addAction(text)
         action.setToolTip(tip)

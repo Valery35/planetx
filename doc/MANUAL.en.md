@@ -1793,7 +1793,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Route start, Route end | The start and the end of a route, see Route |
 | Point details | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas… (the last five only on the Earth), Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas and Flooding |
+| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas… (the last five only on the Earth), Earthwork…, Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas, Earthwork and Flooding |
 | Satellite images… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
@@ -3052,6 +3052,32 @@ ordinary image the result depends on the season and the light. AlphaEarth
 embeddings combine a year of images and are less sensitive to this. This globe
 layer is shared with classification and the viewshed from a point, a new
 calculation of any of them removes the previous one.
+
+### Earthwork
+
+The Earthwork… item of the Site analysis submenu calculates how much soil has
+to be excavated and placed for a site to become a level pad. The site is shared
+with the other analysis windows, and it can be drawn as a polygon.
+
+The Build button loads the heights of the site and sets the elevation at which
+cut equals fill. On the globe cut is red and fill is blue, and the color gets
+stronger farther from the pad. The Pad elevation field sets another elevation,
+and the volumes and colors change at once. The Equal volumes button returns the
+elevation of equal volumes. The pad is horizontal, and slopes are not calculated.
+
+Open height models are off by meters. On one hectare an error of 3 m is
+30,000 m³, so without your own relief the window calls the result an estimate
+and says how much it may change. A calculation without this note uses your own
+survey, a raster with the Globe relief item. If the raster covers a part of the
+site, the window gives its share.
+
+OK writes the raster "pad elevation minus relief" to the calculation subgroup.
+Plus is fill, minus is cut, and the volumes are in the layer description. This
+globe layer is shared with the viewshed from a point, classification and similar
+areas.
+
+The difference of two surveys is calculated by an item of the raster menu, see
+Cut and fill.
 
 ### Flooding
 

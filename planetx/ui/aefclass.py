@@ -884,6 +884,7 @@ class ClassTool(QObject):
         if result is None:
             return
         window.similar_tool.clear()  # слой вида один
+        window.earthwork.clear()
         window._show_viewshed(None)
         tiles = ClassTiles(result, parent=self)
         tiles.loaded.connect(lambda key, rgba, levels:

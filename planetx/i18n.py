@@ -6214,6 +6214,45 @@ EN = {
     "Все точки вне участка.": "All points are outside the area.",
     "Точек вне участка: {n}.": "Points outside the area: {n}.",
     "Классификация…": "Classification…",
+    # Земляные работы (ui/earthwork.py).
+    "Земляные работы": "Earthwork",
+    "Земляные работы…": "Earthwork…",
+    "Отметка площадки": "Pad elevation",
+    "Равные объёмы": "Equal volumes",
+    "Отметка ровной площадки над уровнем моря. Всё выше неё - выемка, ниже "
+    "- насыпь. Смена отметки считается сразу, без загрузки высот.":
+        "Elevation of the level pad above sea level. Everything above it is "
+        "cut, everything below is fill. A new elevation is calculated at "
+        "once, without loading heights.",
+    "Высоты участка, выемка и насыпь до отметки площадки - раскраска на "
+    "глобусе и объёмы. Первый расчёт ставит отметку равных объёмов.":
+        "Heights of the site, cut and fill to the pad elevation - colors on "
+        "the globe and volumes. The first calculation sets the elevation "
+        "of equal volumes.",
+    "Отметка, при которой вынутого грунта хватает на насыпь.":
+        "The elevation at which the excavated soil is enough for the fill.",
+    "Выемка {cut} м³ на {cut_area} га, насыпь {fill} м³ на {fill_area} га. "
+    "Разность насыпи и выемки {net} м³.":
+        "Cut {cut} m³ on {cut_area} ha, fill {fill} m³ on {fill_area} ha. "
+        "Fill minus cut {net} m³.",
+    "Высоты участка - открытые модели с ошибкой в метры. Ошибка ±{metres} м "
+    "меняет объём на ±{error} м³, итог - только оценка. Для расчёта нужен "
+    "свой рельеф, пункт «Рельеф глобуса» меню растра.":
+        "The heights of the site are open models with an error of meters. "
+        "An error of ±{metres} m changes the volume by ±{error} m³, so the "
+        "result is only an estimate. A calculation needs your own relief, "
+        "the Globe relief item of the raster menu.",
+    "Свой рельеф покрывает {share} % участка, остальное - открытые модели. "
+    "Ошибка ±{metres} м меняет объём на ±{error} м³, итог - только оценка.":
+        "Your own relief covers {share} % of the site, the rest is open "
+        "models. An error of ±{metres} m changes the volume by ±{error} m³, "
+        "so the result is only an estimate.",
+    "Выемка и насыпь до отметки {level} м":
+        "Cut and fill to the elevation {level} m",
+    "Выемка и насыпь участка до ровной площадки: объёмы, раскраска, растр "
+    "разности.":
+        "Cut and fill of the site to a level pad - volumes, colors and a "
+        "difference raster.",
     # Похожие области (ui/similar.py).
     "Похожие области": "Similar areas",
     "Похожие области…": "Similar areas…",

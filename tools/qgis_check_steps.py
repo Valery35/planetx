@@ -14892,6 +14892,128 @@ def similar_done():
     out["group"] = node.findGroup("PlanetX - анализ участка") is not None
 
 
+@check(1500)
+def earthwork_open():
+    # Земляные работы: высоты у Терскола, отметка равных объёмов, своя
+    # отметка без загрузки, оговорка об открытых высотах.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(HYDRO_BAKSAN[0], HYDRO_BAKSAN[1], 5000.0, 0.0, 0.0))
+    window.view.update()
+    tool = window.earthwork
+    dialog = tool.open_here(*HYDRO_BAKSAN)
+    dialog.area.side.setValue(1.0)
+    state["earthwork_started"] = time.monotonic()
+    result["earthwork"] = {}
+    dialog.build.emit()
+
+
+@check(500)
+def earthwork_wait():
+    window = state["window"]
+    tool = window.earthwork
+    layer = window.view.gibs["viewshed"]
+    if (tool.job is not None or tool.state is None or not layer.textures) \
+            and time.monotonic() - state["earthwork_started"] < 60.0:
+        window.view.update()
+        return 500
+    if window.view.load_missing \
+            and time.monotonic() - state["earthwork_started"] < 90.0:
+        window.view.update()
+        return 500
+    if "earthwork_seen" not in state:
+        state["earthwork_seen"] = True
+        return 2000
+    out = result["earthwork"]
+    dialog = tool.dialog
+    data = tool.state
+    balance = data["out"]
+    out["level"] = dialog.level.value()
+    out["cut"] = round(balance["cut"])
+    out["fill"] = round(balance["fill"])
+    out["net_share"] = round(abs(balance["net"]) / balance["cut"], 4)
+    out["status"] = dialog.status.text()
+    out["estimate_note"] = tr_note(dialog.status.text())
+    out["textures"] = len(layer.textures)
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_earthwork.png"))
+    dialog.level.setValue(dialog.level.value() + 20.0)
+    tool.pause.stop()
+    tool._apply()
+    out["raised"] = [round(data["out"]["cut"]), round(data["out"]["fill"])]
+    path = os.path.join(TEMP, "planetx_earthwork_{}.tif".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    layers = _result_layers()
+    out["layers"] = [n.name() for n in layers]
+    if layers:
+        stats = layers[0].layer().dataProvider().bandStatistics(1)
+        out["range"] = [round(stats.minimumValue, 1),
+                        round(stats.maximumValue, 1)]
+        out["abstract"] = layers[0].layer().metadata().abstract()
+    out["subgroups"] = _subgroups()
+    _drop_group()
+    # Видимость занимает слой вида и снимает земляные работы.
+    window._show_viewshed(None)
+    dialog.reject()
+    out["left"] = tool.state is None
+    out["layer_off"] = not window.view.gibs["viewshed"].loader
+
+
+def tr_note(text):
+    return "оценка" in text or "estimate" in text
+
+
+@check(1000)
+def earthwork_quarry():
+    # Демо «Карьер»: участок внутри растра своего рельефа идёт без
+    # оговорки, участок за его краем называет долю и оценку.
+    import numpy as np
+    from planetx.core import volumes
+    window = state["window"]
+    tool = window.earthwork
+    wait = _quarry_wait(60)
+    if wait:
+        return wait
+    look = state.setdefault("earthwork_q", {"stage": 0})
+    out = result.setdefault("earthwork_q", {})
+    if look["stage"] == 0:
+        dialog = tool.open_here(59.490, 56.970)
+        dialog.area.side.setValue(0.8)
+        dialog.area.set_square(59.490, 56.970, 800.0)
+        look["stage"] = 1
+        look["since"] = time.monotonic()
+        dialog.build.emit()
+        return 1000
+    if tool.job is not None or tool.state is None:
+        if time.monotonic() - look["since"] < 60.0:
+            return 500
+        out["failed"] = tool.dialog.status.text()
+        tool.dialog.reject()
+        return None
+    data = tool.state
+    if look["stage"] == 1:
+        out["inside_share"] = round(data["share"], 3)
+        out["inside_note"] = tr_note(tool.dialog.status.text())
+        out["inside"] = [round(data["out"]["cut"]), round(data["out"]["fill"]),
+                         round(float(np.nanmin(data["z"])), 1)]
+        window.view.grabFramebuffer().save(os.path.join(
+            TEMP, "planetx_earthwork_quarry.png"))
+        dialog = tool.dialog
+        dialog.area.set_square(59.490, 56.970, 6000.0)
+        look["stage"] = 2
+        look["since"] = time.monotonic()
+        tool.state = None
+        dialog.build.emit()
+        return 1000
+    out["edge_share"] = round(data["share"], 3)
+    out["edge_note"] = tr_note(tool.dialog.status.text())
+    out["edge_error"] = round(volumes.open_error(data["work"], data["share"]))
+    tool.dialog.reject()
+
+
 @check(1000, manual=True)
 def post_objects_shot():
     """Кадры статьи 1.24: снимок у Камы (PLANETX_SEG_SRC) делится на

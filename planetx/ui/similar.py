@@ -489,6 +489,7 @@ class SimilarTool(QObject):
         if not keep:
             # Смена порога - поверх прежних картинок, без мигания.
             window.class_tool.clear()
+            window.earthwork.clear()
             window._show_viewshed(None)
         tiles = ClassTiles(result, parent=self)
         tiles.loaded.connect(lambda key, rgba, levels:
