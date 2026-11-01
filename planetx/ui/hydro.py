@@ -669,7 +669,6 @@ class HydroTool(GridHeights):
             dialog.status.setText(tr("К метке вода не стекает: водосбора "
                                      "нет."))
             return None
-        window = self.window
         name = tr("Водосбор «{name}»", name=item.name or tr("Без названия"))
         rep = result.report
         text = tr("Площадь {area} км², высоты {low}-{high} м, средняя "
