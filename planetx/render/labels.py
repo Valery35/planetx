@@ -169,6 +169,39 @@ ROUND_DOT = 4.5  # полуразмер кружка метки
 
 # Пределы размеров значка и подписи из KML, доли обычного.
 SCALE_RANGE = (0.25, 4.0)
+PICTURE_SIDE = 512  # наибольшая сторона значка-картинки, пикселей
+
+
+# Значки-картинки: откуда брать байты (MyPlaces.image), готовые QImage.
+_picture_source = None
+_pictures = {}
+
+
+def set_picture_source(getter):
+    """Источник байтов значков-картинок: getter(номер) - байты или None."""
+    global _picture_source
+    _picture_source = getter
+
+
+def picture_image(icon):
+    """QImage значка-картинки icon, большие картинки уменьшаются до
+    PICTURE_SIDE. None - картинки нет."""
+    number = icons.picture_number(icon)
+    if number is None or _picture_source is None:
+        return None
+    if number not in _pictures:
+        image = QImage()
+        data = _picture_source(number)
+        if data and image.loadFromData(data):
+            if max(image.width(), image.height()) > PICTURE_SIDE:
+                image = image.scaled(
+                    PICTURE_SIDE, PICTURE_SIDE,
+                    enum(Qt, "AspectRatioMode", "KeepAspectRatio"),
+                    enum(Qt, "TransformationMode", "SmoothTransformation"))
+        else:
+            image = None
+        _pictures[number] = image
+    return _pictures[number]
 
 
 def _clamp_scale(value):
@@ -233,6 +266,19 @@ def _draw_icon(painter, marker, cx, cy, r, halo):
     parts = marker.split(":")
     icon, rgba = parts[1], parts[2]
     turn = float(parts[3]) if len(parts) > 3 else 0.0
+    picture = picture_image(icon)
+    if picture is not None:
+        scale = r / ICON_DOT
+        painter.save()
+        painter.setRenderHint(enum(QPainter, "RenderHint",
+                                   "SmoothPixmapTransform"))
+        painter.translate(cx, cy)
+        painter.rotate(turn)
+        painter.scale(scale, scale)
+        painter.drawImage(QPointF(-picture.width() / 2.0,
+                                  -picture.height() / 2.0), picture)
+        painter.restore()
+        return
     color = QColor(*(int(v) for v in rgba.split(",")))
     path = svg_file(icons.svg(icon)) if icon != icons.DEFAULT else None
     if path is not None:
@@ -291,9 +337,18 @@ class _Style:
         self.halo = HALO_WIDTH * ratio
         self.gap = 3.0 * ratio
         self.pad = 3.0 * ratio  # поле таблички вокруг текста
+        self.picture = None
+        if str(marker).startswith("icon:"):
+            self.picture = picture_image(marker.split(":")[1])
 
     def layout(self, text):
         """Размер картинки надписи и точка привязки в ней."""
+        if self.picture is not None and self.dot:
+            # Картинка значка стоит серединой на точке, как в KML.
+            scale = self.dot / ICON_DOT
+            w = int(math.ceil(self.picture.width() * scale))
+            h = int(math.ceil(self.picture.height() * scale))
+            return w, h, (w / 2.0, h / 2.0)
         width = self.metrics.horizontalAdvance(text)
         height = self.metrics.ascent() + self.metrics.descent()
         halo = self.halo

@@ -40,6 +40,7 @@ from ..i18n import tr
 from ..net.loader import set_moving
 from ..net.overlay import VECTOR_GROUPS
 from ..qt_compat import QAction, enum
+from ..render.labels import set_picture_source
 from ..render.view import GlobeView, start_keys
 from .about import show_about
 from .snapshot import BRAND_HEIGHT, brand_image
@@ -651,6 +652,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.toolbar.save_view_requested.connect(self.save_view)
         # «Мои метки»: общий файл профиля QGIS, объекты на глобусе.
         self.myplaces = MyPlaces(parent=self)
+        set_picture_source(self.myplaces.image)
         self.netlinks = NetLinks(self)
         # Суперналожения - ссылки onRegion, тайлы в памяти.
         self.superoverlays = SuperOverlays(self)

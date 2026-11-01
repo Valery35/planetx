@@ -19,21 +19,31 @@
 - Цвета - символ каждого объекта по стилю слоя, так переносятся
   правила и градуированные стили: цвет точки, цвет и толщина линии,
   заливка и контур многоугольника.
-- Подпись точки - цвет и размер шрифта простых подписей QGIS
-  (LabelStyle). У точечного слоя без подписей подписи на глобусе нет,
-  название остаётся в списке.
+- Подпись точки - текст, цвет и размер шрифта подписи QGIS (LabelStyle),
+  простой или по правилам: правило берётся первое подходящее, как
+  у QGIS, вложенные и ELSE учитываются. У точки без подписи подписи на
+  глобусе нет, название остаётся в списке.
+- Подпись с обводкой, подложкой или тенью KML не описывает. Такая точка
+  получает значок-картинку PNG (LabelStyle размером 0): символ слоя
+  в середине, подпись справа от него, как рисует QGIS. Левая половина
+  картинки пустая, поэтому точка метки стоит на символе и без hotSpot.
+  Разных картинок на слой не больше PICTURE_LIMIT, дальше - обычная
+  подпись. Масштаб видимости подписей не учитывается.
 - Время - поля начала и конца временных свойств слоя (TimeStamp,
   TimeSpan).
 """
-from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsExpression, QgsExpressionContext,
-                       QgsExpressionContextUtils, QgsFeatureRequest,
-                       QgsGeometry, QgsProject, QgsRenderContext,
+from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
+                       QgsCoordinateTransform, QgsExpression,
+                       QgsExpressionContext, QgsExpressionContextUtils,
+                       QgsFeatureRequest, QgsGeometry, QgsProject,
+                       QgsRenderContext, QgsRuleBasedLabeling, QgsTextRenderer,
                        QgsVectorLayerSimpleLabeling, QgsWkbTypes)
+from qgis.PyQt.QtCore import QBuffer, QByteArray, QPointF, QSize
+from qgis.PyQt.QtGui import QImage, QPainter
 
 from ..core import when
 from ..core.kml import KFolder, KPlace
-from ..qt_compat import enum_int
+from ..qt_compat import enum, enum_int
 from .myplaces import DEFAULT_FILL
 from .track import seconds
 
@@ -44,6 +54,11 @@ LABEL_PIXELS = 12.0
 # Объектов слоя, после которых окно спрашивает, брать ли только
 # видимую часть.
 FEATURE_LIMIT = 5000
+# Разных картинок подписей на слой, дальше - обычная подпись.
+PICTURE_LIMIT = 2000
+PICTURE_PAD = 10  # поле картинки под обводку и подложку, пикселей
+PICTURE_GAP = 3  # от символа до подписи, пикселей
+SYMBOL_PIXELS = (6, 48)  # пределы символа точки на картинке, пикселей
 
 
 def _rgba(color):
@@ -56,6 +71,75 @@ def _pixels(context, size, unit):
         return float(context.convertToPainterUnits(size, unit))
     except (TypeError, ValueError):
         return float(size) * PIXELS_PER_MM
+
+
+class _Label:
+    """Вид подписи: выражение текста, цвет, размер, формат QGIS."""
+
+    def __init__(self, settings, look):
+        text = settings.fieldName
+        self.expression = None
+        if text:
+            self.expression = QgsExpression(
+                text if settings.isExpression
+                else QgsExpression.quotedColumnRef(text))
+            self.expression.prepare(look.context.expressionContext())
+        self.format = settings.format()
+        self.color = _rgba(self.format.color())
+        self.scale = round(_pixels(look.context, self.format.size(),
+                                   self.format.sizeUnit()) / LABEL_PIXELS, 2)
+        # Обводку, подложку и тень KML не описывает.
+        self.rich = bool(self.format.buffer().enabled()
+                         or self.format.background().enabled()
+                         or self.format.shadow().enabled())
+
+
+def _encode(image):
+    """Байты PNG картинки."""
+    data = QByteArray()
+    buffer = QBuffer(data)
+    buffer.open(enum(QBuffer, "OpenModeFlag", "WriteOnly"))
+    image.save(buffer, "PNG")
+    buffer.close()
+    return bytes(data)
+
+
+def label_picture(text, label, symbol, context):
+    """Картинка подписи с символом точки: байты PNG, символ в середине.
+    symbol - символ объекта или None."""
+    probe = QImage(1, 1, enum(QImage, "Format",
+                              "Format_ARGB32_Premultiplied"))
+    painter = QPainter(probe)
+    render = QgsRenderContext.fromQPainter(painter)
+    render.setScaleFactor(PIXELS_PER_MM)
+    text_width = QgsTextRenderer.textWidth(render, label.format, [text])
+    text_height = QgsTextRenderer.textHeight(render, label.format, [text])
+    painter.end()
+    side = 0
+    mark = None
+    if symbol is not None:
+        size = _pixels(context, symbol.size(), symbol.sizeUnit()) \
+            if hasattr(symbol, "size") else 0.0
+        side = int(round(min(max(size, SYMBOL_PIXELS[0]), SYMBOL_PIXELS[1])))
+        mark = symbol.asImage(QSize(side, side))
+    half = int(side / 2.0 + PICTURE_GAP + text_width + PICTURE_PAD + 1.0)
+    height = int(max(text_height, side) + 2 * PICTURE_PAD + 1.0)
+    image = QImage(2 * half, height, enum(QImage, "Format",
+                                          "Format_ARGB32_Premultiplied"))
+    image.fill(0)
+    painter = QPainter(image)
+    render = QgsRenderContext.fromQPainter(painter)
+    render.setScaleFactor(PIXELS_PER_MM)
+    render.setFlag(enum(Qgis, "RenderContextFlag", "Antialiasing"), True)
+    if mark is not None:
+        painter.drawImage(QPointF(half - side / 2.0,
+                                  (height - side) / 2.0), mark)
+    left = half + side / 2.0 + PICTURE_GAP
+    QgsTextRenderer.drawText(
+        QPointF(left, (height + text_height) / 2.0), 0.0,
+        Qgis.TextHorizontalAlignment.Left, [text], render, label.format)
+    painter.end()
+    return _encode(image)
 
 
 class _Look:
@@ -71,26 +155,86 @@ class _Look:
             if layer.renderer() is not None else None
         if self.renderer is not None:
             self.renderer.startRender(self.context, layer.fields())
-        self.label = None  # выражение подписи
-        self.label_color = None
-        self.label_scale = 1.0
+        self.root = None  # корень правил подписей
+        self.simple = None  # простая подпись
+        self.rule_labels = {}  # ключ правила - _Label
+        self.filters = {}  # ключ правила - выражение отбора
+        self.pictures = {}  # (вид, текст, цвет) - байты PNG
+        self.plain = 0  # подписей без картинки сверх PICTURE_LIMIT
         labeling = layer.labeling()
-        if layer.labelsEnabled() \
-                and isinstance(labeling, QgsVectorLayerSimpleLabeling):
-            settings = labeling.settings()
-            text = settings.fieldName
-            if text:
-                self.label = QgsExpression(
-                    text if settings.isExpression
-                    else QgsExpression.quotedColumnRef(text))
-            fmt = settings.format()
-            self.label_color = _rgba(fmt.color())
-            self.label_scale = round(_pixels(
-                self.context, fmt.size(), fmt.sizeUnit()) / LABEL_PIXELS, 2)
-        self.labelled = self.label is not None
-        if self.label is None:
-            self.label = QgsExpression(layer.displayExpression() or "$id")
-        self.label.prepare(self.context.expressionContext())
+        if layer.labelsEnabled():
+            if isinstance(labeling, QgsVectorLayerSimpleLabeling):
+                self.simple = _Label(labeling.settings(), self)
+            elif isinstance(labeling, QgsRuleBasedLabeling):
+                self.root = labeling.rootRule()
+        self.display = QgsExpression(layer.displayExpression() or "$id")
+        self.display.prepare(self.context.expressionContext())
+
+    def _passes(self, rule):
+        text = rule.filterExpression()
+        if not text:
+            return True
+        key = rule.ruleKey()
+        expression = self.filters.get(key)
+        if expression is None:
+            expression = self.filters[key] = QgsExpression(text)
+            expression.prepare(self.context.expressionContext())
+        return bool(expression.evaluate(self.context.expressionContext()))
+
+    def _rule_for(self, parent):
+        """Первое подходящее правило с подписью под parent или None."""
+        matched = False
+        for rule in parent.children():
+            if not rule.active():
+                continue
+            if rule.isElse():
+                passes = not matched
+            else:
+                passes = self._passes(rule)
+            if not passes:
+                continue
+            matched = True
+            if rule.settings() is not None:
+                return rule
+            found = self._rule_for(rule)
+            if found is not None:
+                return found
+        return None
+
+    def label_of(self, feature):
+        """Вид подписи объекта (_Label) или None."""
+        if self.root is None:
+            return self.simple
+        self.context.expressionContext().setFeature(feature)
+        rule = self._rule_for(self.root)
+        if rule is None:
+            return None
+        key = rule.ruleKey()
+        if key not in self.rule_labels:
+            self.rule_labels[key] = _Label(rule.settings(), self)
+        return self.rule_labels[key]
+
+    def label_text(self, label, feature):
+        """Текст подписи объекта, пустая строка - подписи нет."""
+        if label is None or label.expression is None:
+            return ""
+        self.context.expressionContext().setFeature(feature)
+        value = label.expression.evaluate(self.context.expressionContext())
+        return "" if value is None or str(value) == "NULL" else str(value)
+
+    def picture(self, label, text, feature):
+        """Байты PNG подписи с символом объекта, None - сверх предела."""
+        self.context.expressionContext().setFeature(feature)
+        symbol = self.renderer.symbolForFeature(feature, self.context) \
+            if self.renderer is not None else None
+        key = (id(label), text, _rgba(symbol.color()) if symbol else None)
+        if key not in self.pictures:
+            if len(self.pictures) >= PICTURE_LIMIT:
+                self.plain += 1
+                return None
+            self.pictures[key] = label_picture(text, label, symbol,
+                                               self.context)
+        return self.pictures[key]
 
     def close(self):
         if self.renderer is not None:
@@ -98,7 +242,7 @@ class _Look:
 
     def name(self, feature):
         self.context.expressionContext().setFeature(feature)
-        value = self.label.evaluate(self.context.expressionContext())
+        value = self.display.evaluate(self.context.expressionContext())
         return "" if value is None or str(value) == "NULL" else str(value)
 
     def colors(self, feature, kind):
@@ -219,19 +363,28 @@ def layer_tree(layer, ids=None, rect=None):
             if not parts:
                 continue
             count += 1
-            name = look.name(feature)
+            label = look.label_of(feature)
+            text = look.label_text(label, feature)
+            name = text or look.name(feature)
             data = [(n, _value(feature[n])) for n in names]
             time = _time(layer, feature)
             for kind, points, holes in parts:
                 color, width, fill = look.colors(feature, kind)
                 vertices += len(points) + sum(len(h) for h in holes or ())
+                picture = None
+                label_color, label_scale = None, 1.0
+                if kind == "point":
+                    if text and label.rich:
+                        picture = look.picture(label, text, feature)
+                    if picture is not None or not text:
+                        label_scale = 0.0
+                    else:
+                        label_color, label_scale = label.color, label.scale
                 children.append(KPlace(
                     name, kind, points, color=color, width=width, fill=fill,
                     time=time, holes=holes, data=data or None,
-                    label_color=look.label_color if kind == "point"
-                    else None,
-                    label_scale=(look.label_scale if look.labelled else 0.0)
-                    if kind == "point" else 1.0))
+                    label_color=label_color, label_scale=label_scale,
+                    picture=picture))
     finally:
         look.close()
     return KFolder(layer.name(), True, children), count, vertices

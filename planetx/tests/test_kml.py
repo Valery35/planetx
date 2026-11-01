@@ -556,6 +556,62 @@ TRACKS = """<kml xmlns="http://www.opengis.net/kml/2.2"
 </Placemark></Document></kml>""".encode("utf-8")
 
 
+class TestPictures(unittest.TestCase):
+    """Значки-картинки в KMZ: файл архива, один на одинаковые метки."""
+
+    PNG = b"\x89PNG\r\n\x1a\n" + b"label"
+
+    def _tree(self):
+        tree = kml.KFolder("t")
+        for n, data in enumerate((self.PNG, self.PNG, self.PNG + b"2")):
+            tree.children.append(kml.KPlace(
+                "P{}".format(n), "point", [(58.0, 56.0 + n)], picture=data,
+                label_scale=0.0))
+        tree.children.append(kml.KPlace("Plain", "point", [(58.0, 60.0)]))
+        return tree
+
+    def test_kmz_round_trip(self):
+        back = kml.read_kmz(kml.write_kmz(self._tree()), "t")
+        places = {p.name: p for p in kml.point_places(back)}
+        self.assertEqual(places["P0"].picture, self.PNG)
+        self.assertEqual(places["P1"].picture, self.PNG)
+        self.assertEqual(places["P2"].picture, self.PNG + b"2")
+        self.assertIsNone(places["Plain"].picture)
+        self.assertEqual(places["P0"].label_scale, 0.0)
+
+    def test_same_picture_is_one_file(self):
+        tree = self._tree()
+        files = kml.picture_files(tree, "files/")
+        self.assertEqual(len(files), 2)
+        points = kml.point_places(tree)
+        self.assertEqual(points[0].picture_href, points[1].picture_href)
+        self.assertTrue(points[0].picture_href.endswith(".png"))
+
+    def test_picture_number_round_trip(self):
+        import icons
+        self.assertEqual(icons.picture_number(icons.picture_icon(12)), 12)
+        self.assertIsNone(icons.picture_number("flag"))
+        self.assertEqual(icons.normal("picture-3"), "picture-3")
+        self.assertEqual(icons.normal("picture-x"), icons.DEFAULT)
+
+    def test_picture_is_not_tinted(self):
+        tree = self._tree()
+        kml.picture_files(tree, "files/")
+        text = kml.write_kml(tree)
+        self.assertIn("<color>ffffffff</color>", text)
+        self.assertIn("<href>files/icon1.png</href>", text)
+
+    def test_set_icon_stays_set_icon(self):
+        text = """<kml xmlns="http://www.opengis.net/kml/2.2"><Placemark>
+          <Style><IconStyle><Icon><href>
+          http://maps.google.com/mapfiles/kml/shapes/flag.png
+          </href></Icon></IconStyle></Style>
+          <Point><coordinates>56,58</coordinates></Point></Placemark></kml>"""
+        place = kml.point_places(kml.read_kml(text.encode("utf-8")))[0]
+        self.assertEqual(place.picture_href, "")
+        self.assertEqual(place.icon, "flag")
+
+
 class TestTrack(unittest.TestCase):
     """gx:Track - линия с промежутком времени от первого момента до
     последнего. Модель помощника иногда отдаёт пути треками."""

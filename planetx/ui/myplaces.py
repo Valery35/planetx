@@ -36,7 +36,7 @@ from ..core import (ellipsoid, icons, lookat, overlays, placetree,
                     region, when)
 from ..core import tour as tour_core
 from ..core.features import Shape
-from ..core.kml import KFolder, KOverlay, KPlace
+from ..core.kml import KFolder, KOverlay, KPlace, point_places
 from ..i18n import tr
 from ..qt_compat import enum
 
@@ -985,6 +985,14 @@ class MyPlaces(QObject):
         # Картинки удалённых наложений уходят из файла вместе с ними.
         images = [item.image for item in self.overlays
                   if item.key in keys and item.image is not None]
+        # Картинка значка уходит с последней меткой, которая её носит.
+        used = {}
+        for place in self.places:
+            number = icons.picture_number(place.shape.icon)
+            if number is not None:
+                used.setdefault(number, []).append(place.key)
+        images += [number for number, owners in used.items()
+                   if all(key in keys for key in owners)]
         for layer, fids in per_layer.values():
             layer.dataProvider().deleteFeatures(fids)
         if images and self.image_layer is not None:
@@ -1026,6 +1034,25 @@ class MyPlaces(QObject):
             except ValueError:
                 self._images[fid] = None
         return self._images[fid]
+
+    def _place_icon(self, place, pictures):
+        """Значок метки при записи: картинка значка ложится в таблицу
+        картинок один раз."""
+        data = getattr(place, "picture", None)
+        if not data:
+            return place.icon
+        number = pictures.get(data)
+        if number is None:
+            number = pictures[data] = self._add_image(data, "icon")
+        return place.icon if number is None else icons.picture_icon(number)
+
+    def _attach_pictures(self, tree):
+        """Байты значков-картинок дерева core.kml для записи KML."""
+        for place in point_places(tree):
+            number = icons.picture_number(place.icon)
+            if number is not None:
+                place.picture = self.image(number)
+        return tree
 
     def _add_image(self, data, name=""):
         """Записать картинку, вернуть её номер или None."""
@@ -1187,6 +1214,7 @@ class MyPlaces(QObject):
             features = []
             fields = layer.fields()
             cols = _columns(layer)
+            pictures = {}  # байты картинки значка - её номер
             for place, key, position in items:
                 feature = QgsFeature(fields)
                 feature.setGeometry(_geometry(
@@ -1203,7 +1231,8 @@ class MyPlaces(QObject):
                     "height": float(place.height or 0.0),
                     "extrude": int(bool(place.extrude)),
                     "altmode": getattr(place, "mode", "") or "",
-                    "icon": place.icon, "time": when.pack(place.time),
+                    "icon": self._place_icon(place, pictures),
+                    "time": when.pack(place.time),
                     "view_time": when.pack(place.view_time),
                     "tour": tour_text(place.tour),
                     "alts": alts_text(getattr(place, "alts", None)),
@@ -1260,7 +1289,7 @@ class MyPlaces(QObject):
                 else:
                     target.children.append(_kplace(node))
         fill(root, self.tree(folder))
-        return root
+        return self._attach_pictures(root)
 
     def export_keys(self, keys, name="PlanetX"):
         """Выделенные метки и папки деревом core.kml для буфера обмена.

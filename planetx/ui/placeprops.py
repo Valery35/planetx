@@ -87,7 +87,9 @@ def icon_image(icon, color, size=20):
     pixmap.fill(QColor(0, 0, 0, 0))
     painter = QPainter(pixmap)
     painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
-    path = svg_file(icons.svg(icon)) if icon != icons.DEFAULT else None
+    # У кружка и значка-картинки своего SVG нет, в списке они кружком.
+    svg = icons.svg(icon)
+    path = svg_file(svg) if svg else None
     image = None
     if path is not None:
         image, _ = QgsApplication.svgCache().svgAsImage(
@@ -259,8 +261,13 @@ class PlaceProperties(QDialog):
             for icon in icons.IDS:
                 self.icon.addItem(icon_image(icon, shape.color),
                                   names[icon], icon)
-            self.icon.setCurrentIndex(icons.IDS.index(
-                icons.normal(shape.icon)))
+            if icons.is_picture(shape.icon):
+                # Картинка значка из KMZ или сложной подписи слоя QGIS.
+                self.icon.addItem(tr("Картинка"), shape.icon)
+                self.icon.setCurrentIndex(self.icon.count() - 1)
+            else:
+                self.icon.setCurrentIndex(icons.IDS.index(
+                    icons.normal(shape.icon)))
             self.icon.setToolTip(tr(
                 "Значок точки на глобусе и в списке. В KML он уходит "
                 "адресом стандартного значка той же темы."))

@@ -257,7 +257,12 @@ class KPlace:
                  layers=None, pace=None, mode="", holes=None,
                  data=None, icon_scale=1.0, label_color=None,
                  label_scale=1.0, icon_heading=0.0, balloon="",
-                 kml_id="", tour_extra=None, highlight=None):
+                 kml_id="", tour_extra=None, highlight=None, picture=None,
+                 picture_href=""):
+        # Значок-картинка: байты PNG или JPEG и адрес файла в архиве
+        # KMZ. Цвет к такой картинке не применяется.
+        self.picture = picture
+        self.picture_href = picture_href or ""
         # Вид точки под курсором - вариант highlight StyleMap: словарь
         # color, icon, scale, label, label_scale или None.
         self.highlight = highlight
@@ -802,8 +807,19 @@ def _placemark(node, styles, inherited=None):
                           balloon=style.get("balloon", ""),
                           kml_id=node.get("id") or "",
                           highlight=_highlight(style)
-                          if kind == "point" else None))
+                          if kind == "point" else None,
+                          picture_href=_picture_href(style)
+                          if kind == "point" else ""))
     return out
+
+
+def _picture_href(style):
+    """Адрес своей картинки значка: файл, а не значок набора и не адрес
+    в сети."""
+    href = (style.get("href") or "").strip()
+    if not href or icons.known_href(href) or "://" in href:
+        return ""
+    return href
 
 
 FLOW_DATA = "planetx:flow"
@@ -1329,6 +1345,11 @@ def read_kmz(data, name=""):
                      for n in archive.namelist()}
             base = names[0].rsplit("/", 1)[0] + "/" \
                 if "/" in names[0] else ""
+            for place in point_places(tree):
+                found = _in_archive(files, base, place.picture_href) \
+                    if place.picture_href else None
+                if found is not None:
+                    place.picture = archive.read(found)
             for item in tree.overlays():
                 found = _in_archive(files, base, item.href)
                 if found is None:
@@ -1350,6 +1371,17 @@ def read_kmz(data, name=""):
             return tree
     except zipfile.BadZipFile as error:
         raise KmlError(str(error)) from error
+
+
+def point_places(folder):
+    """Точечные метки дерева."""
+    out = []
+    for child in folder.children:
+        if isinstance(child, KFolder):
+            out.extend(point_places(child))
+        elif isinstance(child, KPlace) and child.kind == "point":
+            out.append(child)
+    return out
 
 
 def _in_archive(files, base, href):
@@ -1442,13 +1474,14 @@ def _placemark_kml(place, indent):
     if place.kind == "point":
         scale = float(getattr(place, "icon_scale", 1.0))
         heading = float(getattr(place, "icon_heading", 0.0) or 0.0)
+        picture = getattr(place, "picture_href", "")
         style = "<IconStyle><color>{}</color>{}{}<Icon><href>{}</href>" \
             "</Icon></IconStyle>".format(
-                color_kml(place.color),
+                "ffffffff" if picture else color_kml(place.color),
                 "<scale>{:g}</scale>".format(scale) if scale != 1.0 else "",
                 "<heading>{:g}</heading>".format(heading) if heading
                 else "",
-                escape(icons.href(place.icon)))
+                escape(picture or icons.href(place.icon)))
         label = getattr(place, "label_color", None)
         label_scale = float(getattr(place, "label_scale", 1.0))
         if label is not None or label_scale != 1.0:
@@ -1872,11 +1905,30 @@ def write_kml(folder, hrefs=None):
     return "\n".join(lines) + "\n"
 
 
+def picture_files(folder, prefix):
+    """Значки-картинки дерева: одинаковые - один файл. Ставит метке
+    адрес picture_href, возвращает [(имя файла, байты)]."""
+    names = {}
+    files = []
+    for place in point_places(folder):
+        data = getattr(place, "picture", None)
+        if not data:
+            continue
+        name = names.get(data)
+        if name is None:
+            name = "{}icon{}.{}".format(prefix, len(files) + 1,
+                                        image_ext(data))
+            names[data] = name
+            files.append((name, data))
+        place.picture_href = name
+    return files
+
+
 def write_kmz(folder):
     """Байты KMZ: архив с doc.kml, картинками наложений в files/
     и файлами моделей в models/."""
     hrefs = {}
-    files = []
+    files = picture_files(folder, "files/")
     for n, item in enumerate(folder.overlays()):
         if item.image and item.kind == "model":
             href, aliases, found = model_files(

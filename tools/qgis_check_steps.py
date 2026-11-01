@@ -9987,6 +9987,111 @@ def layer_places():
     out["gl"] = dict(window.view.gl_errors)
 
 
+@check(1000)
+def labels_png():
+    """Подписи по правилам в «Мои метки»: текст и цвет своего правила,
+    ELSE, подпись с обводкой - значок-картинка, KMZ туда и обратно."""
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPalLayerSettings,
+                           QgsRuleBasedLabeling, QgsTextBufferSettings,
+                           QgsTextFormat, QgsVectorLayer)
+    from qgis.PyQt.QtGui import QColor
+    from planetx.core import icons, kml
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    store = window.myplaces
+    out = result["labels_png"] = {}
+    layer = QgsVectorLayer("Point?crs=EPSG:4326&field=code:string"
+                           "&field=kind:string", "Скважины правил", "memory")
+    rows = []
+    for n, (code, kind) in enumerate((("B-1", "bore"), ("W-1", "well"),
+                                      ("W-1", "well"), ("X-1", "other"))):
+        item = QgsFeature(layer.fields())
+        item.setAttributes([code, kind])
+        item.setGeometry(QgsGeometry.fromWkt("POINT({} 58.0)".format(
+            56.20 + 0.01 * n)))
+        rows.append(item)
+    layer.dataProvider().addFeatures(rows)
+
+    def settings(color, size, buffer=False):
+        one = QgsPalLayerSettings()
+        one.fieldName = "code"
+        fmt = QgsTextFormat()
+        fmt.setColor(QColor(*color))
+        fmt.setSize(size)
+        if buffer:
+            halo = QgsTextBufferSettings()
+            halo.setEnabled(True)
+            halo.setSize(1.5)
+            halo.setColor(QColor(255, 255, 0))
+            fmt.setBuffer(halo)
+        one.setFormat(fmt)
+        return one
+
+    root = QgsRuleBasedLabeling.Rule(None)
+    plain = QgsRuleBasedLabeling.Rule(settings((0, 0, 255), 18.0))
+    plain.setFilterExpression('"kind" = \'bore\'')
+    root.appendChild(plain)
+    rich = QgsRuleBasedLabeling.Rule(settings((200, 0, 0), 12.0, True))
+    rich.setFilterExpression('"kind" = \'well\'')
+    root.appendChild(rich)
+    rest = QgsRuleBasedLabeling.Rule(settings((0, 128, 0), 9.0))
+    rest.setFilterExpression("ELSE")
+    root.appendChild(rest)
+    layer.setLabeling(QgsRuleBasedLabeling(root))
+    layer.setLabelsEnabled(True)
+    QgsProject.instance().addMapLayer(layer)
+    key = window.layer_to_places(layer, ask=False)
+    state["labels_key"] = key
+    state["labels_layer"] = layer.id()
+    places = store.places_in(key)
+    out["places"] = sorted((p.name, p.shape.icon, p.shape.label_color,
+                            p.shape.label_scale) for p in places)
+    numbers = {icons.picture_number(p.shape.icon) for p in places}
+    numbers.discard(None)
+    out["pictures"] = len(numbers)
+    if numbers:
+        data = store.image(sorted(numbers)[0])
+        path = os.path.join(TEMP, "planetx_label.png")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        out["png"] = data[:4] == b"\x89PNG"
+    tree = store.export_tree(key)
+    back = kml.read_kmz(kml.write_kmz(tree), "t")
+    out["kmz"] = sorted((p.name, bool(p.picture), p.label_scale)
+                        for p in kml.point_places(back))
+    state["labels_numbers"] = numbers
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(Pose(58.0, 56.215, 3000.0, 0.0, 0.0))
+    view.update()
+
+
+@check(2500)
+def labels_png_check():
+    from qgis.core import QgsProject
+    window = state["window"]
+    out = result["labels_png"]
+    started = state.setdefault("labels_seen", time.monotonic())
+    if window.view.load_missing and time.monotonic() - started < 45.0:
+        window.view.update()
+        return 500
+    if time.monotonic() - started < 6.0:
+        window.view.update()
+        return 500
+    view = window.view
+    out["own_marks"] = sorted({m.name for m in view._own_marks()})
+    out["icons"] = view.labels.icons
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_labels_png.png"))
+    store = window.myplaces
+    store.remove_many([state["labels_key"]])
+    out["images_left"] = [n for n in state["labels_numbers"]
+                          if store.image(n) is not None]
+    QgsProject.instance().removeMapLayer(state["labels_layer"])
+    out["gl"] = dict(window.view.gl_errors)
+
+
 KML_SPEC = """<kml xmlns="http://www.opengis.net/kml/2.2"><Document>
   <name>Проверка KML</name>
   <Placemark><name>Поле с озером</name>

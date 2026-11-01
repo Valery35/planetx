@@ -2451,6 +2451,11 @@ the globe. Carried over:
 - attributes - object fields.
 - name - the QGIS layer label, without labels - the display
   expression of the layer.
+- point label - the text, color and size of the QGIS label, simple or
+  rule based. A label with a buffer, background or shadow becomes a
+  PNG picture icon with the point symbol. In KMZ the picture is a file,
+  next to KML it goes to the `<name>_files` folder. A layer gets at most
+  2000 different pictures, the rest are ordinary labels.
 - colours - the symbol of each feature by the layer style, rules and
   categories included.
 - point label - the colour and font size of the simple QGIS labels.

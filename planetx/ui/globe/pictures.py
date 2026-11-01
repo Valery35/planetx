@@ -24,7 +24,8 @@ from ...core.features import Shape
 from ...core.flight import fit_view, lon_span
 from ...core.kml import (KOverlay, KmlError, image_ext as kml_image_ext,
                          read_file as read_kml_file, read_kml, write_kml,
-                         write_kmz, drop_empty_models, model_files)
+                         write_kmz, drop_empty_models, model_files,
+                         picture_files)
 from ...core.models import package_file as model_package
 from ...core.tour import PathStop, RecordedStop, Stop, clock, thin
 from ...i18n import tr
@@ -812,6 +813,15 @@ class PicturesMixin:
         kmz = path.lower().endswith(".kmz")
         hrefs = {}
         try:
+            if not kmz:
+                # Значки-картинки - в папку рядом с KML.
+                stem = os.path.splitext(os.path.basename(path))[0]
+                for name, data in picture_files(tree, stem + "_files/"):
+                    target = os.path.join(os.path.dirname(path),
+                                          *name.split("/"))
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    with open(target, "wb") as fh:
+                        fh.write(data)
             for n, item in enumerate(tree.overlays()):
                 if item.kind == "model":
                     if item.image is None and kmz:

@@ -12,11 +12,16 @@
 
 Геодезическому пункту и карьеру точной пары в Google Earth нет, им
 отданы «треугольник» и «падающие камни».
+
+Значок-картинка - номер картинки файла меток, запись picture-<номер>.
+Такой значок приходит из KMZ или со сложной подписью слоя QGIS
+(ui/layer_places.py), в KML он уходит файлом архива.
 """
 import posixpath
 
 GE_BASE = "http://maps.google.com/mapfiles/kml/"
 DEFAULT = "dot"
+PICTURE = "picture-"
 
 # Номер значка, путь SVG в библиотеке QGIS и значок Google Earth.
 # У кружка SVG нет, его рисует система надписей.
@@ -88,6 +93,32 @@ def from_href(link):
     return DEFAULT
 
 
+def known_href(link):
+    """Узнан ли адрес как значок набора. Незнакомый файл архива KMZ -
+    значок-картинка."""
+    name = posixpath.basename((link or "").strip().split("?")[0]).lower()
+    return name in _BY_FILE or name.endswith("-pushpin.png")
+
+
+def is_picture(icon):
+    return str(icon).startswith(PICTURE)
+
+
+def picture_icon(number):
+    """Значок-картинка по номеру картинки файла меток."""
+    return "{}{}".format(PICTURE, number)
+
+
+def picture_number(icon):
+    """Номер картинки значка или None."""
+    text = str(icon)
+    if text.startswith(PICTURE) and text[len(PICTURE):].isdigit():
+        return int(text[len(PICTURE):])
+    return None
+
+
 def normal(icon):
-    """Известный номер значка или кружок."""
+    """Известный номер значка, значок-картинка или кружок."""
+    if picture_number(icon) is not None:
+        return icon
     return icon if icon in _SVG else DEFAULT
