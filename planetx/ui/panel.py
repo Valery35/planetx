@@ -51,6 +51,7 @@ from ..net.overlay import (AIRPORTS, BORDERS, PARKS, PEAKS, PLACES,
                            RAILWAYS, RIVERS, ROAD_REFS, ROADS, WATER,
                            WATER_NAMES)
 from ..qt_compat import QAction, enum, enum_int
+from . import style
 from .placeprops import icon_image
 from .pointcloud import class_names
 from .spinner import BusySpinner
@@ -1134,7 +1135,7 @@ class LayerPanel(QWidget):
         if talk:
             body += ' <a href="assistant">{}</a>'.format(
                 html.escape(tr("Разговор…")))
-        self.answer.setText(body)
+        self.answer.setText(style.link_html(body))
         self.answer.setVisible(True)
 
     def set_found(self, texts):

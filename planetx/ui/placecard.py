@@ -32,6 +32,7 @@ from qgis.PyQt.QtWidgets import (QDialog, QHBoxLayout, QLabel, QPushButton,
 
 from ..core import balloon, deepsky
 from ..core.flight import lon_span, wrap_lon
+from . import style
 from ..i18n import tr
 
 # Наибольшая длина описания в вопросе помощнику, знаков.
@@ -79,6 +80,7 @@ class Card(QDialog):
         self.text.setOpenLinks(False)
         self.text.anchorClicked.connect(self._link)
         self.text.setMinimumHeight(160)
+        style.link_text(self.text)
         layout.addWidget(self.text)
         # Ответ помощника на «Объясни это» - под текстом.
         self.answer = QLabel(self)

@@ -34,6 +34,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
 from ..core import assistant as ai
 from ..i18n import tr
 from ..net.overlay import post_json, post_stream
+from . import style
 from ..qt_compat import enum
 
 SETTINGS = "PlanetX/assistant/"
@@ -344,6 +345,7 @@ class AssistantDialog(QDialog):
         top.addWidget(setup)
         self.history = QTextBrowser(self)
         self.history.setOpenExternalLinks(True)
+        style.link_text(self.history)
         self.history.setPlaceholderText(tr(
             "Здесь идёт разговор: ваши вопросы, действия помощника на "
             "глобусе и его ответы. Вопрос задаётся в поле ниже или "

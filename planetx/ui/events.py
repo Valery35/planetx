@@ -27,6 +27,7 @@ from ..i18n import tr
 from ..net import ranges
 from ..net.overlay import fetch_bytes
 from ..qt_compat import enum
+from . import style
 from .overlays import image_rgba
 from .threadtiles import ThreadTiles
 
@@ -290,6 +291,7 @@ class EventsDialog(QDialog):
         layout.addWidget(self.tree, 2)
         self.details = QTextBrowser()
         self.details.setOpenExternalLinks(True)
+        style.link_text(self.details)
         layout.addWidget(self.details, 1)
         self.status = QLabel()
         self.status.setWordWrap(True)

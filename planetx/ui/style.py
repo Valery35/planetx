@@ -32,9 +32,10 @@ import os
 import sys
 
 from qgis.PyQt.QtCore import QEvent, QObject, QPointF, QRectF, QSize, Qt
-from qgis.PyQt.QtGui import (QColor, QIcon, QImage, QPainter, QPainterPath,
-                             QPen, QPixmap, QPolygonF)
-from qgis.PyQt.QtWidgets import QAbstractButton, QWidget
+from qgis.PyQt.QtGui import (QColor, QGuiApplication, QIcon, QImage, QPainter,
+                             QPainterPath, QPalette, QPen, QPixmap, QPolygonF,
+                             QTextCharFormat, QTextCursor)
+from qgis.PyQt.QtWidgets import QAbstractButton, QTextBrowser, QWidget
 
 from ..qt_compat import QAction, enum
 
@@ -95,10 +96,12 @@ PLATES = {QGIS: _DARK_PLATES, LIGHT: _LIGHT_PLATES, DARK: _DARK_PLATES}
 WINDOWS = {
     LIGHT: {"back": "#eef0f3", "text": "#1f2329", "field": "#ffffff",
             "border": "#bfc5cd", "button": "#e1e5ea", "hover": "#d4d9e0",
-            "select": "#2f6fbf", "muted": "#7b828c", "alt": "#f5f6f8"},
+            "select": "#2f6fbf", "muted": "#7b828c", "alt": "#f5f6f8",
+            "link": "#1a68cc"},
     DARK: {"back": "#262a30", "text": "#e3e7ec", "field": "#1d2025",
            "border": "#454b54", "button": "#353a42", "hover": "#3f454e",
-           "select": "#2f6fbf", "muted": "#7f8690", "alt": "#22262c"}}
+           "select": "#2f6fbf", "muted": "#7f8690", "alt": "#22262c",
+           "link": "#6db3ff"}}
 # Части окна глобуса, которые перекрашивает window_style: окна свойств
 # и прочие QDialog, левая панель, панель свойств справа, каталог.
 WINDOW_PARTS = ("QDialog", "#planetxPanel", "#planetxSide",
@@ -327,6 +330,66 @@ def dress(dialog):
     name = name if name in THEMES else DARK
     dialog.setStyleSheet(window_style(name))
     title_bar(dialog, name == DARK)
+    for browser in dialog.findChildren(QTextBrowser):
+        link_text(browser, name)
+
+
+def link_color(name=None):
+    """Цвет ссылок окон модуля, у «Как в QGIS» - цвет приложения."""
+    w = WINDOWS.get(current() if name is None else name)
+    if w is not None:
+        return QColor(w["link"])
+    return QGuiApplication.palette().color(enum(QPalette, "ColorRole", "Link"))
+
+
+def link_html(text):
+    """Цвет ссылок прямо в разметке подписи QLabel."""
+    if WINDOWS.get(current()) is None:
+        return text
+    return text.replace("<a ", '<a style="color: {};" '.format(
+        link_color().name()))
+
+
+def recolor_links(browser, name=None):
+    """Ссылки документа цветом оформления. Цвет ссылки разбор HTML
+    и Markdown берёт из палитры приложения, а не окна, и палитра окна
+    его не меняет - замечание автора от 1 ноября 2026 года, тёмно-синие
+    ссылки на тёмной карточке объекта."""
+    color = link_color(name)
+    doc = browser.document()
+    spans = []
+    block = doc.begin()
+    while block.isValid():
+        found = block.begin()
+        while not found.atEnd():
+            part = found.fragment()
+            form = part.charFormat()
+            if form.isAnchor() and form.foreground().color() != color:
+                spans.append((part.position(), part.length()))
+            found += 1
+        block = block.next()
+    cursor = QTextCursor(doc)
+    paint = QTextCharFormat()
+    paint.setForeground(color)
+    keep = enum(QTextCursor, "MoveMode", "KeepAnchor")
+    for start, length in spans:
+        cursor.setPosition(start)
+        cursor.setPosition(start + length, keep)
+        cursor.mergeCharFormat(paint)
+
+
+def link_text(browser, name=None):
+    """Ссылки browser цветом оформления и после новой записи текста."""
+    busy = []
+
+    def changed():
+        if not busy:
+            busy.append(True)
+            recolor_links(browser, name)
+            busy.clear()
+    browser.document().setUndoRedoEnabled(False)
+    browser.textChanged.connect(changed)
+    changed()
 
 
 def plate(widget, name, kind="QFrame", label=False):
@@ -360,6 +423,8 @@ def restyle(root):
                                               label == "1"))
         if isinstance(widget, QAbstractButton):
             _reicon(widget)
+        if isinstance(widget, QTextBrowser):
+            recolor_links(widget)
         for action in widget.actions():
             _reicon(action)
         widget.update()

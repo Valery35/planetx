@@ -23117,9 +23117,14 @@ def feature_card_check():
     QgsApplication.processEvents()
     cam = view.camera
     window.side.close_dialog()
+    # Метки прежних прогонов профиля перехватили бы щелчок.
+    tops = [n for n in window.myplaces.nodes() if not n.parent]
+    shown = {n.key: window.myplaces.find(n.key).visible for n in tops}
+    window.myplaces.set_visible_many({key: False for key in shown})
     window._clicked(cam.width / 2.0, cam.height / 2.0)
     card = window.side.dialog
     out["card"] = isinstance(card, FeatureCard)
+    out["opened"] = [type(card).__name__, card.windowTitle()] if card else []
     if isinstance(card, FeatureCard):
         out["title"] = card.windowTitle()
         out["text"] = card.text.toPlainText()
@@ -23138,6 +23143,7 @@ def feature_card_check():
     window._clicked(cam.width / 2.0, cam.height / 2.0)
     out["hidden_layer"] = window.side.dialog is None
     window.side.close_dialog()
+    window.myplaces.set_visible_many(shown)
     QgsProject.instance().removeMapLayer(state.pop("card_layer").id())
     window.panel.set_answer("")
     out["gl"] = dict(view.gl_errors)
@@ -23200,6 +23206,77 @@ def relations_card():
     window.side.close_dialog()
     project.relationManager().removeRelation(relation)
     project.removeMapLayers([parent.id(), child.id()])
+
+
+def _link_colors(browser):
+    # Цвета ссылок документа.
+    found = set()
+    block = browser.document().begin()
+    while block.isValid():
+        part = block.begin()
+        while not part.atEnd():
+            form = part.fragment().charFormat()
+            if form.isAnchor():
+                found.add(form.foreground().color().name())
+            part += 1
+        block = block.next()
+    return sorted(found)
+
+
+def _contrast(one, two):
+    # Отношение яркостей двух цветов по WCAG.
+    from qgis.PyQt.QtGui import QColor
+
+    def light(name):
+        color = QColor(name)
+        rgb = [(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
+               for c in (color.redF(), color.greenF(), color.blueF())]
+        return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2]
+    high, low = sorted((light(one), light(two)), reverse=True)
+    return round((high + 0.05) / (low + 0.05), 2)
+
+
+@check(500)
+def link_colors():
+    # Ссылки текстовых окон читаются в тёмном и светлом оформлении, смена
+    # оформления красит открытую карточку. Цвет приложения - прежний код.
+    from qgis.PyQt.QtGui import QGuiApplication, QPalette
+    from planetx.qt_compat import enum
+    from planetx.ui import style
+    from planetx.ui.manualcard import ManualCard, load_index
+    from planetx.ui.placecard import Card
+    window = state["window"]
+    out = result["link_colors"] = {}
+    before = style.current()
+    app = QGuiApplication.palette().color(
+        enum(QPalette, "ColorRole", "Link")).name()
+    field = style.WINDOWS[style.DARK]["field"]
+    out["app_link"] = app
+    out["app_on_dark"] = _contrast(app, field)
+    window.set_ui_theme(style.DARK)
+    card = Card("k", "t", False, "", window)
+    card.text.setHtml(
+        "<p>x <a href='#a'>one</a></p><table><tr><td><a href='#b'>two</a>"
+        "</td></tr></table>")
+    out["dark"] = _link_colors(card.text)
+    out["dark_contrast"] = _contrast(out["dark"][0], field)
+    out["anchors_kept"] = card.text.toHtml().count("#a") > 0
+    window.set_ui_theme(style.LIGHT)
+    out["light_open"] = _link_colors(card.text)
+    out["light_contrast"] = _contrast(
+        out["light_open"][0], style.WINDOWS[style.LIGHT]["field"])
+    window.set_ui_theme(style.DARK)
+    manual = ManualCard(load_index(), 0, "", window)
+    manual.text.setMarkdown("[one](#a) text")
+    out["markdown"] = _link_colors(manual.text)
+    window.panel.set_answer("x", talk=True)
+    out["label"] = style.link_color().name() in window.panel.answer.text()
+    window.panel.set_answer("")
+    window.set_ui_theme(style.QGIS)
+    out["qgis"] = _link_colors(card.text)
+    card.deleteLater()
+    manual.deleteLater()
+    window.set_ui_theme(before)
 
 
 @check(500)
