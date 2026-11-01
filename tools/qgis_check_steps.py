@@ -14755,6 +14755,124 @@ def post_class_shot():
 
 
 @check(1000, manual=True)
+def post_objects_shot():
+    """Кадры статьи 1.24: снимок у Камы (PLANETX_SEG_SRC) делится на
+    объекты, объекты получают классы, соседи одного класса сливаются.
+    «Копия вида» - TEMP planetx_post_objects_*.png."""
+    import math
+    from qgis.core import QgsProject, QgsRasterLayer
+    from qgis.PyQt.QtGui import QColor
+    from planetx.core.navigation import Pose
+    from planetx.ui import aefclass
+    window = state["window"]
+    view = window.view
+    tool = window.class_tool
+    look = state.setdefault("post_objects", {"stage": 0})
+    layer = view.gibs["viewshed"]
+    stage = look["stage"]
+    if stage == 0:
+        window.set_body("earth")
+        _post_clean(window)
+        window.myplaces.set_visible_many(
+            {n.key: False for n in window.myplaces.nodes()})
+        path = os.path.join(TEMP, "planetx_post_objects.tif")
+        lat, lon, points, span = _objects_raster(path)
+        raster = QgsRasterLayer(path, "Снимок", "gdal")
+        QgsProject.instance().addMapLayer(raster, False)
+        look["layer"] = raster.id()
+        side = span * math.cos(math.radians(lat)) * 0.95
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, side * 1.15, 0.0, 0.0))
+        view.update()
+        view.grabFramebuffer()
+        tool.grid = None
+        tool.pieces = None
+        dialog = tool.open_here(lat, lon)
+        dialog.source.refill()
+        dialog.source.setCurrentIndex(dialog.source.findData(raster.id()))
+        dialog.split.setChecked(True)
+        dialog.split_join.setChecked(False)
+        dialog.split_scale.setValue(15)
+        dialog.area.reset_square()
+        dialog.area.side.setValue(side / 1000.0)
+        dialog.level.setCurrentIndex(0)
+        while len(dialog.rows) < 3:
+            dialog.add_class()
+        names = {"water": ("Вода", (40, 110, 220)),
+                 "forest": ("Лес", (30, 120, 60)),
+                 "meadow": ("Луга и застройка", (240, 200, 60))}
+        for row, key in zip(dialog.rows, ("water", "forest", "meadow")):
+            row.name.setText(names[key][0])
+            row.color = QColor(*names[key][1])
+            row._paint()
+            row.set_points(points[key])
+        dialog.alpha.setValue(55)
+        dialog.build.emit()
+        look.update(stage=1, since=time.monotonic())
+        return 2000
+    if tool.job is not None or view.load_missing or not layer.textures:
+        if time.monotonic() - look["since"] < 120:
+            view.update()
+            return 1000
+    if stage == 1:
+        # Только границы объектов: заливка классов прозрачна.
+        import numpy as np
+        look["work"] = aefclass.ClassTiles.work
+
+        def edges(tiles, key):
+            rgba, _ = look["work"](tiles, key)
+            if rgba is None:
+                return None, None
+            rim = (rgba == np.array(aefclass.BORDER,
+                                    dtype=np.uint8)).all(axis=2)
+            out = np.zeros_like(rgba)
+            out[rim] = (255, 230, 60, 255)
+            return out, aefclass.mip_chain(out)
+        aefclass.ClassTiles.work = edges
+        look["objects"] = int(tool.result["parts"].max()) + 1
+        look["status"] = tool.dialog.status.text()
+        tool.show()
+        tool.set_opacity(1.0)
+        look.update(stage=2, since=time.monotonic())
+        return 8000
+    if stage == 2:
+        window.copy_view().save(os.path.join(
+            TEMP, "planetx_post_objects_edges.png"))
+        aefclass.ClassTiles.work = look["work"]
+        tool.show()
+        look.update(stage=3, since=time.monotonic())
+        return 8000
+    if stage == 3:
+        window.copy_view().save(os.path.join(
+            TEMP, "planetx_post_objects_classes.png"))
+        dialog = tool.dialog
+        dialog.raise_()
+        dialog.grab().save(os.path.join(
+            TEMP, "planetx_post_objects_dialog.png"))
+        dialog.split_join.setChecked(True)
+        dialog.build.emit()
+        look.update(stage=4, since=time.monotonic())
+        return 2000
+    if stage == 4:
+        look["stage"] = 5
+        return 8000
+    window.copy_view().save(os.path.join(
+        TEMP, "planetx_post_objects_joined.png"))
+    dialog = tool.dialog
+    result["post_objects"] = {
+        "objects": look["objects"], "status": look["status"],
+        "joined": int(tool.result["parts"].max()) + 1,
+        "joined_status": dialog.status.text()}
+    dialog.split_join.setChecked(False)
+    dialog.split.setChecked(False)
+    dialog.reject()
+    dialog.close()
+    QgsProject.instance().removeMapLayer(look["layer"])
+    _post_restore(window)
+    return None
+
+
+@check(1000, manual=True)
 def post_raster_class_shot():
     """Кадр объявления 1.22: классы по растру проекта у Перми. Растр и
     точки готовит внешний сценарий: PLANETX_POST_RASTER - GeoTIFF, рядом
