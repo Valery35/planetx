@@ -17937,6 +17937,82 @@ def _aef_local():
         ui_aef.INDEX_BASE = QUrl.fromLocalFile(folder).toString() + "/"
 
 
+OAM_POINT = (-8.417, 120.128)  # Флорес, снимок дрона 2026 года
+
+
+@check(1000)
+def oam_open():
+    # Действие строки «Поиск» и окно: поиск в рамке вида, рамки снимков.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(OAM_POINT[0], OAM_POINT[1], 20000.0, 0.0, 0.0))
+    window.view.update()
+    window.oam_here()
+    result["oam"] = {"dialog": window.oam_dialog.isVisible()}
+    state["oam_started"] = time.monotonic()
+
+
+@check(1000)
+def oam_wait():
+    window = state["window"]
+    dialog = window.oam_dialog
+    waited = time.monotonic() - state["oam_started"]
+    if not dialog.images and waited < 40.0:
+        return 1000
+    out = result["oam"]
+    out["wait_s"] = round(waited, 1)
+    out["found"] = dialog.found
+    out["rows"] = dialog.list.topLevelItemCount()
+    out["status"] = dialog.status.text()
+    out["licenses"] = sorted({i.license for i in dialog.images})
+    out["footprints"] = window.rumsey_footprints is not None \
+        and window.rumsey_footprints.featureCount()
+    small = min(dialog.images, key=lambda i: i.size)
+    row = dialog.images.index(small)
+    dialog.list.setCurrentItem(dialog.list.topLevelItem(row))
+    out["chosen"] = [small.title, small.day, small.gsd, small.size,
+                     small.license]
+    out["selected_box"] = window.rumsey_footprints.featureCount()
+    started = time.monotonic()
+    dialog._add()
+    out["add_s"] = round(time.monotonic() - started, 2)
+    out["add_status"] = dialog.status.text()
+    state["oam_added"] = time.monotonic()
+
+
+@check(1000)
+def oam_check():
+    from qgis.core import QgsProject
+    from planetx.core import oam as core
+    window = state["window"]
+    dialog = window.oam_dialog
+    out = result["oam"]
+    layers = [layer for layer in QgsProject.instance().mapLayers().values()
+              if core.is_layer(layer.source())]
+    if not getattr(window, "_applied_layers", None) \
+            and time.monotonic() - state["oam_added"] < 30.0:
+        return 1000
+    if time.monotonic() - state["oam_added"] < 25.0:
+        return 1000
+    out["layers"] = [[l.name(), l.isValid(), l.crs().authid(),
+                      l.extent().toString(0), l.metadata().rights()]
+                     for l in layers]
+    out["shown"] = [l.id() in window._shown for l in layers]
+    out["credit"] = "OpenAerialMap" in window.attribution.text()
+    out["picture"] = dialog.picture.pixmap() is not None \
+        and not dialog.picture.pixmap().isNull()
+    dialog._add()  # тот же файл второго слоя не даёт
+    out["layers_after_repeat"] = len(
+        [l for l in QgsProject.instance().mapLayers().values()
+         if core.is_layer(l.source())])
+    window.view.grabFramebuffer().save(os.path.join(TEMP, "planetx_oam.png"))
+    dialog.close()
+    out["footprints_off"] = window.rumsey_footprints is None
+    QgsProject.instance().removeMapLayers([l.id() for l in layers])
+
+
 FTW_POINT = (45.3, 39.5)  # Кубань
 
 

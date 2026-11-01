@@ -270,6 +270,8 @@ The plugin is free and open source. [Support development](https://github.com/Val
   elevations. The colour follows the survey image, the class, the height
   or the intensity, only ground points can be kept. PDAL shipped with
   QGIS is needed.
+- **OpenAerialMap images.** Open drone and aerial images in the view
+  go to the project as layers with the licence of each image.
 - **Own terrain.** A height raster of the project, for example a
   quarry survey, becomes the globe terrain within its extent, more
   detailed than the common terrain, down to the raster pixel.

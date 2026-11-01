@@ -31,7 +31,8 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import aef, fieldmap, hips, polar, tileoverlays, wikipedia
+from ...core import (aef, fieldmap, hips, oam, polar, tileoverlays,
+                     wikipedia)
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
@@ -1246,6 +1247,8 @@ class LayersMixin:
             parts.append(link_html(*faults_core.ATTRIBUTION))
         if self.planet.earth and self._rumsey_shown():
             parts.append(link_html(*rumsey_core.ATTRIBUTION))
+        if self.planet.earth and self._oam_shown():
+            parts.append(link_html(oam.ATTRIBUTION, oam.TERMS))
         if self.planet.earth \
                 and getattr(self, "extras", {}).get("currents") \
                 and getattr(self, "flow", None) is not None \

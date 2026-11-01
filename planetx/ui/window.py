@@ -1138,6 +1138,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.change_tool.close()
             self.field_tool.close()
             self.class_tool.close()
+            if getattr(self, "oam_dialog", None) is not None:
+                self.oam_dialog.close()
             if self.section_dialog is not None:
                 self.section_dialog.close()
             if self.assistant_dialog is not None:

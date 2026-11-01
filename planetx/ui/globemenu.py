@@ -159,6 +159,8 @@ def show(window, px, py):
                 .triggered.connect(lambda *a: window.sentinel_here(lat, lon))
             menu.addAction(tr("Облака точек лидара")).triggered.connect(
                 lambda *a: window.lidar_here(lat, lon))
+            menu.addAction(tr("Снимки OpenAerialMap…")).triggered.connect(
+                lambda *a: window.oam_here(lat, lon))
             menu.addSeparator()
             menu.addAction(tr("Исторические карты Рамсея…")) \
                 .triggered.connect(lambda *a: window.rumsey_here(lat, lon))

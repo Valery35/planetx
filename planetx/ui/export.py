@@ -229,14 +229,17 @@ def add_raster(path, title, stops=None, rights="", group=None, copy=None,
     return _to_group(layer, group, copy)
 
 
-def add_xyz(url, title, max_level, rights="", group=None):
+def add_xyz(url, title, max_level, rights="", group=None, extent=None):
     """Слой тайлов XYZ по шаблону url в проект, группа - как у
-    add_raster. Без файла, тайлы читает QGIS."""
+    add_raster. Без файла, тайлы читает QGIS. extent - рамка слоя
+    в метрах EPSG:3857: вне неё тайлы не просятся."""
     uri = "type=xyz&url={}&zmin=0&zmax={}".format(
         url.replace("&", "%26"), int(max_level))
     layer = QgsRasterLayer(uri, title, "wms")
     if not layer.isValid():
         return None
+    if extent is not None:
+        layer.setExtent(QgsRectangle(*extent))
     if rights:
         meta = layer.metadata()
         meta.setRights([rights])

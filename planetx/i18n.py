@@ -931,10 +931,55 @@ EN = {
         "USGS mineral deposits, mining areas mapped from imagery, mines "
         "and quarries from OpenStreetMap.",
     "Снимки у точки": "Imagery at a point",
-    "Окна поиска снимков Sentinel-2, Landsat, MODIS, ASTER "
-    "и облаков точек лидара у точки взгляда.":
-        "Windows that search Sentinel-2, Landsat, MODIS and ASTER imagery "
-        "and lidar point clouds at the look point.",
+    "Окна поиска снимков Sentinel-2, Landsat, MODIS, ASTER, "
+    "OpenAerialMap и облаков точек лидара у точки взгляда.":
+        "Windows that search Sentinel-2, Landsat, MODIS, ASTER and "
+        "OpenAerialMap imagery and lidar point clouds at the look point.",
+    # Снимки OpenAerialMap (ui/oam.py).
+    "Снимки OpenAerialMap": "OpenAerialMap images",
+    "Снимки OpenAerialMap…": "OpenAerialMap images…",
+    "PlanetX - снимки OpenAerialMap": "PlanetX - OpenAerialMap images",
+    "{value} см": "{value} cm",
+    "{value} МБ": "{value} MB",
+    "{value} ГБ": "{value} GB",
+    "Название или поставщик": "Title or provider",
+    "Лицензия": "Licence",
+    "Искать в виде": "Search the view",
+    "Снимки в нынешней рамке вида глобуса, новые первыми.":
+        "Images in the current view of the globe, newest first.",
+    "Ещё": "More",
+    "Следующие снимки той же рамки, более старые.":
+        "The next, older images of the same view.",
+    "Снимок ложится слоем тайлов в проект и отмечается на глобусе. Файл "
+    "не скачивается.":
+        "The image goes to the project as a tile layer and is checked on "
+        "the globe. The file is not downloaded.",
+    "Перелёт к рамке выбранного снимка.":
+        "Flight to the frame of the selected image.",
+    "Снимки загружены участниками Open Imagery Network. У каждого снимка "
+    "своя лицензия, она показана в списке и записывается в права слоя. "
+    "Снимки с NC - только для некоммерческого использования.":
+        "The images are uploaded by contributors of Open Imagery Network. "
+        "Each image has its own licence, shown in the list and written to "
+        "the layer rights. Images with NC are for non-commercial use only.",
+    "Поиск снимков…": "Searching images…",
+    "Служба OpenAerialMap не ответила.":
+        "The OpenAerialMap service did not answer.",
+    "В рамке вида снимков нет. Снимки покрывают мир неравномерно, отдалите "
+    "вид и нажмите «Искать в виде».":
+        "No images in the view. Images cover the world unevenly, zoom out "
+        "and press Search the view.",
+    "Снимков в рамке вида: {found}, в списке {count}.":
+        "Images in the view: {found}, in the list {count}.",
+    "Снимок не открылся: {title}.":
+        "The image did not open: {title}.",
+    "Снимок в проекте: {title}.": "Image in the project: {title}.",
+    "Открытые снимки с дронов и самолётов в рамке вида, новые первыми, с "
+    "пикселем, размером файла и лицензией снимка. Снимок ложится слоем "
+    "тайлов в проект.":
+        "Open drone and aerial images in the view, newest first, with the "
+        "pixel, file size and licence of each image. An image goes to the "
+        "project as a tile layer.",
     "Исторические карты": "Historical maps",
     "Окна каталогов исторических карт у точки взгляда - "
     "коллекция Рамсея и сайт «Это Место».":

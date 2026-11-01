@@ -14,7 +14,7 @@ from qgis.PyQt.QtGui import QKeySequence
 from qgis.PyQt.QtWidgets import QApplication
 
 from ... import journal
-from ...core import lidarnet, oldmaps, weather as weather_core
+from ...core import lidarnet, oam, oldmaps, weather as weather_core
 from ...core.flight import Spin
 from ...core.geocode import (SEARCH_INTERVAL, link_zoom, parse_reverse,
                              reverse_url)
@@ -26,6 +26,7 @@ from ...net.overlay import fetch_json
 from ...qt_compat import QT_MAJOR, QAction, enum
 from ..themes import theme_names
 from ..draw import PlaceDialog
+from ..export import add_xyz
 from .. import globemenu
 from ..project import (read_map_years, set_visible_on_map, write_map_years,
                        write_shown)
@@ -344,6 +345,66 @@ class ActionsMixin:
                                t.name for t in tiles)), time.monotonic())
         self._show_state()
         return ids
+
+    def oam_box(self):
+        """Рамка вида для поиска снимков OpenAerialMap."""
+        pose = self.view.navigator.pose
+        camera = self.view.camera
+        width, height = ground_size(pose.distance, camera.fov_y,
+                                    camera.aspect)
+        return view_box(pose.lat, pose.lon, width, height, 1.0)
+
+    def oam_here(self, lat=None, lon=None):
+        """«Снимки OpenAerialMap…»: снимки с дронов и самолётов в рамке
+        вида. Окно одно. Поиск идёт по виду, поэтому точка не нужна."""
+        from ..oam import OamDialog
+        dialog = getattr(self, "oam_dialog", None)
+        if dialog is None:
+            dialog = OamDialog(self)
+            self.oam_dialog = dialog
+        dialog.show()
+        dialog.raise_()
+        dialog.search_view()
+        return dialog
+
+    def _oam_shown(self):
+        """Виден ли на глобусе снимок OpenAerialMap."""
+        project = QgsProject.instance()
+        for layer_id in getattr(self, "_applied_layers", None) or ():
+            layer = project.mapLayer(layer_id)
+            if layer is not None and oam.is_layer(layer.source()):
+                return True
+        return False
+
+    def add_oam_image(self, image):
+        """Снимок слоем в группе «PlanetX - снимки OpenAerialMap» вверху
+        проекта, отмечен на глобусе. Тот же файл заново не добавляется."""
+        if not image.tiles:
+            return None
+        title = tr("PlanetX - снимки OpenAerialMap")
+        layer_id = None
+        group = QgsProject.instance().layerTreeRoot().findGroup(title)
+        for node in group.findLayers() if group is not None else ():
+            if node.layer() is not None and node.layer().customProperty(
+                    "planetx/oam") == image.url:
+                layer_id = node.layerId()
+        if layer_id is None:
+            name = " ".join(p for p in (image.day, image.title) if p)
+            layer = add_xyz(image.tiles, name[:100] or image.url,
+                            oam.max_level(image),
+                            rights=oam.rights(image), group=title,
+                            extent=oam.mercator_box(image.box))
+            if layer is None:
+                return None
+            layer.setCustomProperty("planetx/oam", image.url)
+            layer_id = layer.id()
+        self._shown.add(layer_id)
+        if self.follow:
+            set_visible_on_map(layer_id, True)
+        write_shown(self._shown)
+        self._show_layers()
+        self.refresh()
+        return layer_id
 
     def etomesto_here(self, lat, lon):
         """«Старые карты «Это Место»…» меню на глобусе: каталог

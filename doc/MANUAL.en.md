@@ -498,7 +498,7 @@ The search field looks for a name and a description across the whole
 catalogue.
 
 The Windows at the look point rows are Satellite images, Lidar point
-clouds, Rumsey historical maps and Eto Mesto old maps.
+clouds, OpenAerialMap images, Rumsey historical maps and Eto Mesto old maps.
 They have no check box. The Open the window button and a double click
 open the window of the source at the look point, as the same items of
 the globe menu do.
@@ -1403,6 +1403,24 @@ The right-click menu:
 - Point colour, Point size, Point classes - for point clouds, see
   [Point clouds](#point-clouds).
 - Layer Properties… - the standard QGIS layer properties window.
+
+### OpenAerialMap images
+
+The OpenAerialMap images… item of the menu on the globe opens a window
+with drone and aerial images from the open OpenAerialMap catalogue. The
+search runs in the view, newest images first, the Search the view button
+repeats it for the current view, More adds older images. The frames of
+the images are visible on the globe, the frame of the selected image is
+brighter. Images cover the world unevenly, a small view often has none.
+
+The list shows the date, title, pixel, file size and licence. Each image
+has its own licence - CC BY 4.0, CC BY-SA 4.0 or CC BY-NC 4.0, images with
+NC are for non-commercial use only. The To QGIS project button puts
+the image as a tile layer into the PlanetX - OpenAerialMap images group
+and checks it on the globe, the provider and licence go to the layer
+rights. The image file is not downloaded, so such a layer does not serve
+as a source for raster calculations. Some images have a white field
+outside the survey, this is how they were uploaded to the catalogue.
 
 ### Point clouds
 

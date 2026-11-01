@@ -293,6 +293,10 @@ def _tools(window, add, earth):
     add("here:lidar", tr("Облака точек лидара"), open_,
         lambda: window.lidar_here(*_here(window)),
         ("лидар", "облако точек", "lidar", "point cloud", "ign", "3dep"))
+    add("here:oam", tr("Снимки OpenAerialMap"), open_,
+        lambda: window.oam_here(),
+        ("openaerialmap", "снимки с дрона", "аэросъёмка", "ортофото",
+         "дрон", "беспилотник", "aerial imagery", "drone imagery", "oam"))
     add("here:change", tr("Окно «Изменения местности»"), open_,
         lambda: window.change_tool.open_here(*_here(window)),
         ("изменения местности", "обнаружить изменения", "что изменилось",
