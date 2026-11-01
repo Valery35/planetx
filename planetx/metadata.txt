@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.26.1
+version=1.27.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.26.1 Links in the text windows of the module take the
+changelog=1.27.0 The Classification and Similar areas windows take
+      the imagery straight from the globe basemap. The Source list has a
+      Globe basemap row, the image does not have to be in the project.
+      Before the first run on a basemap a window names the terms of its
+      service, and the source credit goes into the result layer.
+      1.26.1 Links in the text windows of the module take the
       color of the theme and stay readable in the dark theme.
       1.26.0 The Earthwork window calculates cut and fill of a
       site down to a level pad, with an error estimate for open heights.
