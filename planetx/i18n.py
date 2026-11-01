@@ -6214,6 +6214,7 @@ EN = {
     "Все точки вне участка.": "All points are outside the area.",
     "Точек вне участка: {n}.": "Points outside the area: {n}.",
     "Классификация…": "Classification…",
+    "Показано {shown} из {total}.": "Showing {shown} of {total}.",
     # Земляные работы (ui/earthwork.py).
     "Земляные работы": "Earthwork",
     "Земляные работы…": "Earthwork…",

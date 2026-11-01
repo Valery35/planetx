@@ -22626,6 +22626,65 @@ def feature_card_check():
 
 
 @check(500)
+def relations_card():
+    # Связи объекта по отношениям проекта QGIS: дочерние записи в карточке
+    # родителя, родитель в карточке записи, щелчок открывает запись.
+    from qgis.core import (QgsFeature, QgsGeometry, QgsPointXY, QgsProject,
+                           QgsRelation, QgsVectorLayer)
+    from qgis.PyQt.QtCore import QUrl
+    from planetx.ui.placecard import FeatureCard
+    window = state["window"]
+    project = QgsProject.instance()
+    parent = QgsVectorLayer(
+        "Point?crs=EPSG:4326&field=uid:integer&field=name:string",
+        "Скважины", "memory")
+    child = QgsVectorLayer(
+        "None?field=hole:integer&field=name:string", "Пробы", "memory")
+    item = QgsFeature(parent.fields())
+    item.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(56.23, 58.01)))
+    item.setAttributes([7, "Скв. 7"])
+    parent.dataProvider().addFeatures([item])
+    rows = []
+    for n in range(3):
+        row = QgsFeature(child.fields())
+        row.setAttributes([7, "Проба {}".format(n + 1)])
+        rows.append(row)
+    child.dataProvider().addFeatures(rows)
+    parent.setDisplayExpression('"name"')
+    child.setDisplayExpression('"name"')
+    project.addMapLayers([parent, child])
+    relation = QgsRelation()
+    relation.setId("planetx_check")
+    relation.setName("Пробы скважины")
+    relation.setReferencedLayer(parent.id())
+    relation.setReferencingLayer(child.id())
+    relation.addFieldPair("hole", "uid")
+    project.relationManager().addRelation(relation)
+    out = result["relations"] = {"valid": relation.isValid()}
+    feature = next(parent.getFeatures())
+    window.side.close_dialog()
+    window.open_feature_card(parent, "Скв. 7", [("uid", 7)], feature.id(),
+                             58.01, 56.23)
+    card = window.side.dialog
+    out["card"] = isinstance(card, FeatureCard)
+    out["text"] = card.text.toPlainText()
+    out["targets"] = len(card.targets)
+    window._open_related(card.targets[1], card.point)
+    card = window.side.dialog
+    out["child_title"] = card.windowTitle()
+    out["child_text"] = card.text.toPlainText()
+    out["child_targets"] = len(card.targets)
+    card._link(QUrl("#rel0"))
+    QgsApplication.processEvents()
+    QgsApplication.processEvents()
+    card = window.side.dialog
+    out["back_title"] = card.windowTitle() if card is not None else None
+    window.side.close_dialog()
+    project.relationManager().removeRelation(relation)
+    project.removeMapLayers([parent.id(), child.id()])
+
+
+@check(500)
 def manual_search():
     """Разделы руководства в подсказках строки «Поиск» и карточка
     раздела, 20 октября 2026 года."""

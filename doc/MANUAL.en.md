@@ -2214,6 +2214,7 @@ Identify features mode. The card buttons:
 | Explain this | Asks the assistant what this object is and why the place is of interest. The answer stands in the card and under the Search box |
 | Fly to | Flight to the extent of the object |
 | Select on map | Selects the object in the QGIS layer - on the map, in the attribute table and on the globe |
+| Related records | Records by QGIS project relations follow the fields, a click opens the card of a record and brings the globe to it. Relations are set in the QGIS project properties |
 | Close | Closes the card |
 
 Explain this gives the assistant the layer name, the name, description

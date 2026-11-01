@@ -7,8 +7,9 @@
 import time
 
 import numpy as np
-from qgis.core import QgsProject, QgsRectangle, QgsVectorLayer
-from qgis.PyQt.QtCore import Qt
+from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+                       QgsGeometry, QgsProject, QgsRectangle, QgsVectorLayer)
+from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.utils import iface
 
@@ -33,6 +34,7 @@ from ..manualcard import load_index
 from ..myplaces import Place
 from ..placecard import (Card, FeatureCard, PlaceCard, explain_question,
                          feature_question)
+from ..relations import feature_title, related
 from ..tilesource import save_connection
 from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
                    all_sources, distance_text, parcel_labels)
@@ -214,15 +216,41 @@ class IdentifyMixin:
         held = self.side.dialog
         if held is not None and not isinstance(held, Card):
             return
+        _, feature = self._feature_of(layer.id(), fid)
+        links = related(layer, feature) if feature is not None else ()
         card = FeatureCard(layer.id(), fid, layer.name(), title, values,
-                           (lat, lon), ready(current_provider()), self)
+                           (lat, lon), ready(current_provider()), self,
+                           links=links)
         card.setAttribute(enum(Qt, "WidgetAttribute", "WA_DeleteOnClose"))
         card.explain.connect(lambda key, c=card: self.explain_feature(c))
         card.fly.connect(lambda key: self._fly_feature(*key))
         card.select.connect(lambda key: self._select_feature(*key))
+        card.related.connect(lambda key, c=card: QTimer.singleShot(
+            0, lambda: self._open_related(key, c.point)))
         self._place_card = card
         card.finished.connect(lambda *a, c=card: self._card_closed(c))
         self.side.host(card)
+
+    def _open_related(self, key, point):
+        """Карточка связанной записи и перелёт к ней. Запись без
+        геометрии остаётся у точки прежней карточки."""
+        layer, feature = self._feature_of(*key)
+        if feature is None:
+            return
+        names = layer.fields().names()
+        values = [(n, feature[n]) for n in names]
+        title = feature_title(layer, feature)
+        lat, lon = point
+        geometry = feature.geometry()
+        if not geometry.isEmpty():
+            place = QgsGeometry(geometry)
+            place.transform(QgsCoordinateTransform(
+                layer.crs(), QgsCoordinateReferenceSystem("EPSG:4326"),
+                QgsProject.instance()))
+            centre = place.boundingBox().center()
+            lat, lon = centre.y(), centre.x()
+            self._fly_feature(*key)
+        self.open_feature_card(layer, title, values, feature.id(), lat, lon)
 
     def _feature_of(self, layer_id, fid):
         layer = QgsProject.instance().mapLayer(layer_id)

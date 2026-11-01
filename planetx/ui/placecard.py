@@ -194,12 +194,14 @@ class FeatureCard(Card):
     """Карточка объекта слоя проекта - просьба автора от 20 октября
     2026 года, хвост пакета «баллоны». Поле описания (DESCRIPTION_FIELDS)
     стоит текстом над таблицей прочих полей. Ключ сигналов - (номер слоя,
-    номер объекта)."""
+    номер объекта). links - связи объекта по отношениям проекта QGIS
+    (ui/relations.py), щелчок по записи даёт сигнал related."""
 
     select = pyqtSignal(object)
+    related = pyqtSignal(object)
 
     def __init__(self, layer_id, fid, layer_name, title, values, point,
-                 can_explain, parent=None):
+                 can_explain, parent=None, links=()):
         super().__init__((layer_id, fid), title, can_explain, tr(
             "Спросить помощника, что это за объект и чем интересно место. "
             "Помощнику уходят название слоя, название и поля этого объекта, "
@@ -213,13 +215,42 @@ class FeatureCard(Card):
         head = "<p style='color:gray'>{}</p>".format(html.escape(tr(
             "Слой «{name}»", name=layer_name)))
         body = description_html(text) if text else ""
-        self.text.setHtml(head + body + fields_html(rest))
+        self.targets = []  # записи ссылок #rel<номер>: (слой, объект)
+        self.text.setHtml(head + body + fields_html(rest)
+                          + self._links_html(links))
         pick = QPushButton(tr("Выделить на карте"), self)
         pick.setToolTip(tr("Выделить объект в слое QGIS. Выделение видно "
                            "на карте, в таблице атрибутов и на глобусе."))
         pick.clicked.connect(lambda: self.select.emit(self.key))
         self.buttons.addWidget(pick)
         self.finish_buttons()
+
+    def _links_html(self, links):
+        """Связанные записи: отношение заголовком, записи ссылками."""
+        parts = []
+        for name, layer, rows, total in links:
+            items = []
+            for fid, label in rows:
+                items.append("<a href='#rel{}'>{}</a>".format(
+                    len(self.targets), html.escape(label)))
+                self.targets.append((layer.id(), fid))
+            more = ""
+            if total > len(rows):
+                more = "<br>" + html.escape(tr(
+                    "Показано {shown} из {total}.", shown=len(rows),
+                    total=total))
+            parts.append("<p><b>{}</b><br>{}{}</p>".format(
+                html.escape(name), "<br>".join(items), more))
+        return "".join(parts)
+
+    def _link(self, url):
+        fragment = url.fragment()
+        if fragment.startswith("rel") and fragment[3:].isdigit():
+            number = int(fragment[3:])
+            if number < len(self.targets):
+                self.related.emit(self.targets[number])
+            return
+        super()._link(url)
 
 
 class DeepSkyCard(Card):
