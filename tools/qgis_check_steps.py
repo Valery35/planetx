@@ -18724,6 +18724,197 @@ def ruler_close():
     out["handles_after"] = type(window.handles.tool).__name__
 
 
+
+def _objects_raster(path):
+    """Пробный снимок в EPSG:3857: PLANETX_SEG_SRC - мозаика тайлов z15
+    (строки, столбцы, 3 канала), иначе запад, восток и пруд с шумом.
+    Итог - (широта, долгота середины, точки классов [(широта, долгота)])."""
+    import math
+    import numpy as np
+    from osgeo import gdal, osr
+    source = os.environ.get("PLANETX_SEG_SRC")
+    half = 20037508.342789244
+    if source:
+        rgb = np.load(source)
+        tile = 2.0 * half / (1 << 15) / 256.0
+        step = tile
+        left = -half + 21440 * 256 * tile
+        top = half - 9880 * 256 * tile
+        cells = {"water": ((500, 150), (700, 100), (300, 300)),
+                 "forest": ((880, 520), (200, 900), (450, 880)),
+                 "meadow": ((400, 700), (480, 600), (700, 950))}
+    else:
+        lat, lon = CHANGE_POINT
+        stretch = 1.0 / math.cos(math.radians(lat))
+        step = 25.0 * stretch
+        side = 320
+        left = half * lon / 180.0 - side / 2 * step
+        top = 6378137.0 * math.log(math.tan(math.radians(
+            45.0 + lat / 2.0))) + side / 2 * step
+        random = np.random.default_rng(4)
+        rgb = np.zeros((side, side, 3), dtype=np.float32)
+        rgb[:, :160] = (40, 90, 50)
+        rgb[:, 160:] = (190, 170, 110)
+        rgb[60:140, 200:280] = (30, 30, 60)
+        rgb = np.clip(rgb + 5.0 * random.normal(size=rgb.shape), 0, 255)
+        rgb = rgb.astype(np.uint8)
+        cells = {"water": ((80, 220), (100, 240), (120, 260)),
+                 "forest": ((80, 60), (160, 80), (240, 100)),
+                 "meadow": ((200, 220), (240, 240), (280, 260))}
+    rows, cols = rgb.shape[:2]
+    data = gdal.GetDriverByName("GTiff").Create(path, cols, rows, 3,
+                                                gdal.GDT_Byte)
+    data.SetGeoTransform((left, step, 0.0, top, 0.0, -step))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(3857)
+    data.SetProjection(srs.ExportToWkt())
+    for band in range(3):
+        data.GetRasterBand(band + 1).WriteArray(rgb[:, :, band])
+    data = None
+
+    def place(row, col):
+        x, y = left + (col + 0.5) * step, top - (row + 0.5) * step
+        return (math.degrees(2.0 * math.atan(math.exp(y / 6378137.0))
+                             - math.pi / 2.0),
+                math.degrees(x / 6378137.0))
+    lat, lon = place(rows / 2.0, cols / 2.0)
+    return lat, lon, {name: [place(*cell) for cell in found]
+                      for name, found in cells.items()}, \
+        (rows + cols) / 2 * step
+
+
+@check(1000)
+def class_objects():
+    # Сегментация снимка: участок делится на объекты, классы получают
+    # объекты, итог - многоугольники. Сеть не нужна.
+    import math
+    from qgis.core import QgsProject, QgsRasterLayer
+    _aef_local()
+    window = state["window"]
+    path = os.path.join(TEMP, "planetx_class_objects.tif")
+    lat, lon, points, span = _objects_raster(path)
+    layer = QgsRasterLayer(path, "probe image", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["objects_layer"] = layer.id()
+    out = result.setdefault("class_objects", {"layer_valid": layer.isValid()})
+    from planetx.core.navigation import Pose
+    side = span * math.cos(math.radians(lat)) * 0.95
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, side * 1.3, 0.0, 0.0))
+    window.view.update()
+    tool = window.class_tool
+    tool.grid = None
+    tool.pieces = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    out["split_off_for_alphaearth"] = (dialog.source.setCurrentIndex(0),
+                                       dialog.split.isEnabled())[1] is False
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    out["split_on_for_raster"] = dialog.split.isEnabled()
+    dialog.split.setChecked(True)
+    dialog.split_scale.setValue(15)
+    dialog.area.reset_square()
+    dialog.area.side.setValue(side / 1000.0)
+    dialog.level.setCurrentIndex(0)
+    while len(dialog.rows) < 3:
+        dialog.add_class()
+    for row, name in zip(dialog.rows, ("water", "forest", "meadow")):
+        row.name.setText(name)
+        row.set_points(points[name])
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+
+
+@check(500)
+def class_objects_wait():
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 120.0:
+        return 500
+    textures = window.view.gibs["viewshed"].textures
+    if tool.result is not None and len(textures) < 4 \
+            and time.monotonic() - state["class_started"] < 30.0:
+        window.view.update()
+        return 500
+    from osgeo import ogr
+    out = result["class_objects"]
+    out["build_s"] = round(time.monotonic() - state["class_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    res = tool.result
+    out["built"] = res is not None
+    if res is None:
+        return None
+    parts = res["parts"]
+    out["grid"] = [list(parts.shape), res["step"]]
+    out["objects"] = int(parts.max()) + 1
+    kinds = res["classes"]
+    # Класс один на объект: границы классов идут по границам объектов.
+    one = [len(set(kinds[parts == n].tolist())) == 1
+           for n in range(min(out["objects"], 200))]
+    out["one_class_per_object"] = all(one)
+    window.view.update()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_class_objects.png"))
+    path = os.path.join(TEMP, "planetx_class_objects_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    data = ogr.Open(path)
+    layer = data.GetLayerByName("objects")
+    out["features"] = layer.GetFeatureCount()
+    out["fields"] = [layer.GetLayerDefn().GetFieldDefn(n).GetName()
+                     for n in range(layer.GetLayerDefn().GetFieldCount())]
+    area = 0.0
+    numbers = set()
+    invalid = 0
+    named = {}
+    for feature in layer:
+        area += feature.GetField("area_ha")
+        numbers.add(feature.GetField("object"))
+        named[feature.GetField("name")] = named.get(
+            feature.GetField("name"), 0) + 1
+        invalid += not feature.GetGeometryRef().IsValid()
+    out["named"] = named
+    out["invalid"] = invalid
+    out["one_polygon_per_object"] = len(numbers) == out["features"]
+    cells = float((parts >= 0).sum()) * res["step"] ** 2 / 1e4
+    out["area_ha"] = [round(area, 2), round(cells, 2)]
+    data = None
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    out["subgroups"] = _subgroups()
+    if nodes:
+        out["crs"] = nodes[0].layer().crs().authid()
+        out["renderer"] = nodes[0].layer().renderer().type()
+    _drop_group()
+    # Только смена точки: объекты берутся готовые, срок - без сегментации.
+    row = dialog.rows[2]
+    row.set_points(row.points[:-1] + row.points[-1:])
+    dialog.build.emit()
+    state["class_started"] = time.monotonic()
+    state["class_cached"] = tool.pieces[1]
+    return None
+
+
+@check(500)
+def class_objects_again():
+    window = state["window"]
+    tool = window.class_tool
+    if tool.job is not None \
+            and time.monotonic() - state["class_started"] < 60.0:
+        return 500
+    from qgis.core import QgsProject
+    out = result["class_objects"]
+    out["again_s"] = round(time.monotonic() - state["class_started"], 2)
+    out["same_objects"] = tool.pieces[1] is state["class_cached"]
+    # Без флажка - снова растр классов по клеткам.
+    tool.dialog.split.setChecked(False)
+    tool.dialog.close()
+    QgsProject.instance().removeMapLayer(state["objects_layer"])
+    out["left"] = tool.result is None
+
+
 @check(1000)
 def class_area():
     # Участок многоугольником: квадрат при открытии с ручками, затем

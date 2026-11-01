@@ -6078,6 +6078,41 @@ EN = {
         "downloaded. Each band of a project raster is a feature, bands are "
         "brought to one spread, so their units may differ.",
     "Каналов растра: {n}": "Raster bands: {n}",
+    "Делить на объекты": "Divide into objects",
+    "Участок снимка сначала делится на объекты, похожие по цвету "
+    "и текстуре, класс получает объект целиком. Итог - "
+    "многоугольники. Только для растра проекта.":
+        "The image site is first divided into objects similar in color and "
+        "texture, a class goes to a whole object. The result is "
+        "polygons. For a project raster only.",
+    "Допустимая разнородность объекта. Чем больше, тем крупнее "
+    "объекты и тем больше несхожего они объединяют. Объект "
+    "считается в клетках, поэтому при другом пикселе масштаб "
+    "подбирается заново.":
+        "The allowed heterogeneity of an object. The larger it is, the "
+        "larger the objects and the more unlike cells they unite. An "
+        "object is measured in cells, so another pixel needs another "
+        "scale.",
+    "Доля текстуры среди признаков, остальное - цвет. Текстура "
+    "- разброс яркости вокруг клетки, она отделяет лес от луга "
+    "того же цвета.":
+        "The share of texture among the features, the rest is color. "
+        "Texture is the spread of brightness around a cell, it separates "
+        "a forest from a meadow of the same color.",
+    "Объект меньше этого количества клеток сливается с самым "
+    "похожим соседом.":
+        "An object with fewer cells merges with its most similar neighbor.",
+    "Масштаб объектов": "Object scale",
+    "Доля текстуры": "Texture share",
+    "Наименьший объект, клеток": "Smallest object, cells",
+    "Для объектов сетка участка слишком велика, "
+    "возьмите пиксель крупнее или «Авто».":
+        "The site grid is too large for objects, take a larger pixel or "
+        "Auto.",
+    "Объектов {n}, средний {area} га.":
+        "{n} objects, {area} ha on average.",
+    "Объекты {year}": "Objects {year}",
+    "Объекты в проекте.": "The objects are in the project.",
     "Растра больше нет в проекте.": "The raster is no longer in the project.",
     "У растра не задана система координат.":
         "The raster has no coordinate reference system.",

@@ -19,6 +19,11 @@ AlphaEarth участка на выбранный год и относит ка�
 (core/rasterclass.py). Растр читает рабочий поток через GDAL с пересчётом
 на сетку участка в UTM, дальше всё общее с AlphaEarth: окно тайлов,
 запись растра классов, точки и подгруппа расчёта.
+
+Флажок «Делить на объекты» - просьба автора от 1 ноября 2026 года.
+Участок растра сначала делится на объекты, похожие по цвету и текстуре
+(core/segments.py), класс получает объект по средним и разбросам
+каналов, итог - многоугольники GeoPackage.
 """
 import math
 
@@ -26,13 +31,14 @@ import numpy as np
 from qgis.core import QgsProject, QgsRasterLayer, QgsSettings
 from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QColor
-from qgis.PyQt.QtWidgets import (QButtonGroup, QColorDialog, QComboBox,
-                                 QDialog, QDialogButtonBox, QFormLayout,
-                                 QHBoxLayout, QLabel, QLineEdit,
-                                 QPushButton, QRadioButton, QSlider,
-                                 QToolButton, QVBoxLayout, QWidget)
+from qgis.PyQt.QtWidgets import (QButtonGroup, QCheckBox, QColorDialog,
+                                 QComboBox, QDialog, QDialogButtonBox,
+                                 QFormLayout, QHBoxLayout, QLabel,
+                                 QLineEdit, QPushButton, QRadioButton,
+                                 QSlider, QSpinBox, QToolButton,
+                                 QVBoxLayout, QWidget)
 
-from ..core import aef, editing, rasterclass
+from ..core import aef, editing, rasterclass, segments
 from ..core.cog import tile_points
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import Shape
@@ -62,6 +68,7 @@ RASTER_SIDE = 1000.0
 AUTO = -1  # пиксель «Авто» в списке
 PIXEL_DEFAULT = 10.0  # м, пиксель «Авто», если растр его не называет
 COVERED = 0.995  # доля участка, ниже которой итог называет покрытие
+BORDER = (20, 20, 20, 255)  # граница объектов на глобусе
 
 
 class ClassTiles(ThreadTiles):
@@ -95,11 +102,22 @@ class ClassTiles(ThreadTiles):
             & (rows < classes.shape[0])
         code = np.full(cols.shape, -1, dtype=np.int16)
         code[ok] = classes[rows[ok], cols[ok]]
-        palette = np.zeros((len(result["colors"]) + 1, 4), dtype=np.uint8)
+        count = len(result["colors"])
+        palette = np.zeros((count + 2, 4), dtype=np.uint8)
+        palette[count + 1] = BORDER
         for n_, color in enumerate(result["colors"]):
             # Непрозрачность - у слоя вида (ClassTool.set_opacity).
             palette[n_] = tuple(color[:3]) + (255,)
-        rgba = palette[np.where(code >= 0, code, len(result["colors"]))]
+        code = np.where(code >= 0, code, count)
+        parts = result.get("parts")
+        if parts is not None:
+            # Граница - по пикселям тайла: клетка границы на редкой выборке
+            # дала бы пунктир.
+            found = np.full(cols.shape, -1, dtype=np.int32)
+            found[ok] = parts[rows[ok], cols[ok]]
+            code[segments.borders(found.reshape(lon.shape)).ravel()] = \
+                count + 1
+        rgba = palette[code]
         rgba = rgba.reshape(lon.shape + (4,))
         return rgba, mip_chain(rgba)
 
@@ -229,6 +247,38 @@ class ClassDialog(QDialog):
             "на участке от 14 до 640 тысяч клеток. У растра проекта «Авто» - "
             "пиксель растра, если на участке клеток не больше 640 тысяч."))
         self.volume = QLabel(self)
+        self.split = QCheckBox(tr("Делить на объекты"), self)
+        self.split.setChecked(_flag(settings.value(SETTINGS + "split",
+                                                   False)))
+        self.split.setToolTip(tr(
+            "Участок снимка сначала делится на объекты, похожие по цвету "
+            "и текстуре, класс получает объект целиком. Итог - "
+            "многоугольники. Только для растра проекта."))
+        self.split_scale = QSpinBox(self)
+        self.split_scale.setRange(1, 500)
+        self.split_scale.setValue(int(settings.value(
+            SETTINGS + "split_scale", segments.SCALE)))
+        self.split_scale.setToolTip(tr(
+            "Допустимая разнородность объекта. Чем больше, тем крупнее "
+            "объекты и тем больше несхожего они объединяют. Объект "
+            "считается в клетках, поэтому при другом пикселе масштаб "
+            "подбирается заново."))
+        self.split_weight = QSpinBox(self)
+        self.split_weight.setRange(0, 100)
+        self.split_weight.setSuffix(" %")
+        self.split_weight.setValue(int(settings.value(
+            SETTINGS + "split_weight", 100 * segments.WEIGHT)))
+        self.split_weight.setToolTip(tr(
+            "Доля текстуры среди признаков, остальное - цвет. Текстура "
+            "- разброс яркости вокруг клетки, она отделяет лес от луга "
+            "того же цвета."))
+        self.split_least = QSpinBox(self)
+        self.split_least.setRange(1, 100000)
+        self.split_least.setValue(int(settings.value(
+            SETTINGS + "split_least", segments.LEAST)))
+        self.split_least.setToolTip(tr(
+            "Объект меньше этого количества клеток сливается с самым "
+            "похожим соседом."))
         self.rows_box = QVBoxLayout()
         self.group = QButtonGroup(self)
         self.rows = []
@@ -252,6 +302,10 @@ class ClassDialog(QDialog):
         form.addRow(tr("Участок"), self.area.widget)
         form.addRow(tr("Пиксель"), self.level)
         form.addRow("", self.volume)
+        form.addRow("", self.split)
+        form.addRow(tr("Масштаб объектов"), self.split_scale)
+        form.addRow(tr("Доля текстуры"), self.split_weight)
+        form.addRow(tr("Наименьший объект, клеток"), self.split_least)
         form.addRow(tr("Непрозрачность"), self.alpha)
         buttons = QDialogButtonBox(self)
         run = QPushButton(tr("Построить"), self)
@@ -279,6 +333,10 @@ class ClassDialog(QDialog):
             box.currentIndexChanged.connect(lambda _: self._remember())
         self.alpha.valueChanged.connect(lambda _: self._remember())
         self.source.currentIndexChanged.connect(lambda _: self._source())
+        self.split.toggled.connect(lambda _: self._split_changed())
+        for box in (self.split_scale, self.split_weight, self.split_least):
+            box.valueChanged.connect(lambda _: self._remember())
+        self._split_changed()
         self.set_ready(False)
 
     def raster_id(self):
@@ -293,7 +351,24 @@ class ClassDialog(QDialog):
         self.year.setEnabled(not self.raster_id())
         self.area.set_most(RASTER_SIDE if self.raster_id() else CLASS_SIDE)
         self.volume_changed()
+        self._split_changed()
         self.source_changed.emit()
+
+    def _split_changed(self):
+        raster = bool(self.raster_id())
+        self.split.setEnabled(raster)
+        for box in (self.split_scale, self.split_weight, self.split_least):
+            box.setEnabled(raster and self.split.isChecked())
+        self._remember()
+
+    def split_params(self):
+        """Масштаб, доля текстуры и наименьший объект, None - деления
+        на объекты нет."""
+        if not (self.raster_id() and self.split.isChecked()):
+            return None
+        return (self.split_scale.value(),
+                self.split_weight.value() / 100.0,
+                self.split_least.value())
 
     def add_class(self, name=None):
         color = COLORS[len(self.rows) % len(COLORS)]
@@ -329,6 +404,13 @@ class ClassDialog(QDialog):
         settings.setValue(SETTINGS + "year", self.year.currentData())
         settings.setValue(SETTINGS + "pixel", self.level.currentData())
         settings.setValue(SETTINGS + "opacity", self.alpha.value() / 100.0)
+        settings.setValue(SETTINGS + "split", self.split.isChecked())
+        settings.setValue(SETTINGS + "split_scale",
+                          self.split_scale.value())
+        settings.setValue(SETTINGS + "split_weight",
+                          self.split_weight.value())
+        settings.setValue(SETTINGS + "split_least",
+                          self.split_least.value())
         self.volume_changed()
 
     # --- участок ---------------------------------------------------------
@@ -383,6 +465,7 @@ class ClassTool(QObject):
         self.tiles = None
         self.result = None
         self.grid = None  # (ключ участка, данные vectors)
+        self.pieces = None  # (ключ участка и настроек, объекты)
         self.job = None
         self.progress = [0, 0]  # блоков загружено, всего
         self.timer = QTimer(self)
@@ -599,9 +682,51 @@ class ClassTool(QObject):
         key = (layer.id(), path, box, pixel)
         cached = self.grid if self.grid and self.grid[0] == key else None
         index = aef.ZoneIndex(zone, [])
+        params = dialog.split_params()
+        split_key = (key, tuple(ring), params)
+        pieces = self.pieces[1] if self.pieces \
+            and self.pieces[0] == split_key else None
 
         def count(done, total):
             stop_point(self)
+
+        def objects(found, inside, share):
+            """Объекты участка и их классы: контрольная точка берёт
+            признаки своего объекта."""
+            x0, y0, step, grid = found
+            if segments.too_big(*grid.shape[1:]):
+                return {"problem": "pieces", "found": found}
+            parts = pieces
+            if parts is None:
+                scale, weight, least = params
+                parts = segments.segment(
+                    grid, inside, scale, weight, least,
+                    progress=lambda _: stop_point(self))
+            stop_point(self)
+            table = segments.table(grid, parts)
+            samples, labels, outside = [], [], 0
+            for label, (plat, plon) in points:
+                r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
+                if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2] \
+                        and parts[r, c] >= 0:
+                    samples.append(table[:, 0, parts[r, c]])
+                    labels.append(label)
+                else:
+                    outside += 1
+            if len(set(labels)) < aef.MIN_CLASSES:
+                return {"problem": "points", "found": found,
+                        "parts": parts}
+            kinds = rasterclass.classify(
+                table, np.stack(samples, axis=1), labels,
+                progress=count)[0][0]
+            if not (kinds >= 0).any():
+                return {"problem": "flat", "found": found,
+                        "parts": parts}
+            return {"index": index, "found": found, "outside": outside,
+                    "classes": np.where(parts >= 0,
+                                        kinds[np.maximum(parts, 0)], -1),
+                    "covered": share, "parts": parts, "kinds": kinds,
+                    "table": table}
 
         def work():
             found = cached[1] if cached else read_raster(
@@ -614,6 +739,8 @@ class ClassTool(QObject):
             share = rasterclass.covered(grid, inside)
             if share <= 0.0:
                 return {"problem": "outside"}
+            if params is not None:
+                return objects(found, inside, share)
             samples, labels, outside = [], [], 0
             for label, (plat, plon) in points:
                 r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
@@ -635,15 +762,19 @@ class ClassTool(QObject):
 
         dialog.status.setText(tr("Читается растр участка…"))
         _run_job(self, work, lambda out: self._built(
-            out, key, box, None, colors, names, name), tr("Классификация"))
+            out, key, box, None, colors, names, name, split_key),
+            tr("Классификация"))
 
-    def _built(self, out, key, box, year, colors, names, raster=None):
+    def _built(self, out, key, box, year, colors, names, raster=None,
+               split_key=None):
         dialog = self.dialog
         if out is None:
             dialog.status.setText(tr("Для участка нет данных."))
             return
         if out.get("found") is not None:
             self.grid = (key, out["found"])
+        if out.get("parts") is not None:
+            self.pieces = (split_key, out["parts"])
         if out.get("problem"):
             dialog.status.setText(problem_text(out["problem"]))
             return
@@ -657,6 +788,9 @@ class ClassTool(QObject):
                        "names": names, "box": box, "year": year,
                        "raster": raster, "label": raster or str(year),
                        "ring": list(self.dialog.area.ring)}
+        if out.get("parts") is not None:
+            self.result.update(parts=out["parts"], kinds=out["kinds"],
+                               table=out["table"])
         counts = [int((classes == n).sum()) for n in range(len(colors))]
         total = max(sum(counts), 1)
         parts = ", ".join("{} {:.0f}%".format(name, 100.0 * c / total)
@@ -671,6 +805,13 @@ class ClassTool(QObject):
                 text += " " + tr("Растр покрывает {share} % участка.",
                                  share="{:.0f}".format(
                                      100.0 * out["covered"]))
+        if out.get("parts") is not None:
+            sizes = segments.areas(out["parts"])
+            mean = float(sizes.mean()) * step * step / 1e4
+            text += " " + tr(
+                "Объектов {n}, средний {area} га.", n=len(sizes),
+                area="{:.0f}".format(mean) if mean >= 10.0
+                else "{:.2g}".format(mean))
         if out["outside"] and raster is not None:
             text += " " + tr("Точек без данных растра: {n}.",
                              n=out["outside"])
@@ -757,6 +898,8 @@ class ClassTool(QObject):
         if result is None:
             return None
         tag = result["year"] or "raster"
+        if result.get("parts") is not None:
+            return self._export_objects(path, tag)
         if path is None:
             path = result_path("classes_{}".format(tag))
         if not write_classes(path, result):
@@ -771,6 +914,28 @@ class ClassTool(QObject):
         show_layer(self.window, layer)
         self._export_points(tag, result["label"], group)
         self.dialog.status.setText(tr("Растр классов в проекте."))
+        return path
+
+    def _export_objects(self, path, tag):
+        """Объекты многоугольниками GeoPackage в подгруппу расчёта:
+        цвета по классу, в полях средние и разбросы каналов."""
+        result = self.result
+        path = path or result_path("objects_{}".format(tag), ".gpkg")
+        if not write_objects(path, result):
+            self.dialog.status.setText(tr("Слой не записан в «{path}».",
+                                          path=path))
+            return None
+        group = self.session.group_for(result["ring"])
+        layer = add_vector(
+            self.window, path, "objects",
+            tr("Объекты {year}", year=result["label"]), group,
+            result["colors"][0], classes=("class", [
+                (n + 1, tuple(rgb), name) for n, (rgb, name) in enumerate(
+                    zip(result["colors"], result["names"]))]))
+        if layer is not None:
+            layer.setOpacity(self.dialog.alpha.value() / 100.0)
+        self._export_points(tag, result["label"], group)
+        self.dialog.status.setText(tr("Объекты в проекте."))
         return path
 
     def _export_points(self, tag, label, group):
@@ -802,6 +967,11 @@ class ClassTool(QObject):
             self.dialog.close()
 
 
+def _flag(value):
+    """Логическая настройка: в QGIS 3 она приходит строкой."""
+    return value in (True, "true", 1, "1")
+
+
 def project_rasters():
     """Растры проекта, которые GDAL читает из файла, в порядке имён."""
     layers = QgsProject.instance().mapLayers().values()
@@ -817,6 +987,8 @@ def problem_text(code):
     return {"unreadable": tr("Растр не прочитан."),
             "big": tr("Сетка участка слишком велика, возьмите пиксель "
                       "крупнее или «Авто»."),
+            "pieces": tr("Для объектов сетка участка слишком велика, "
+                         "возьмите пиксель крупнее или «Авто»."),
             "outside": tr("Участок вне охвата растра."),
             "points": tr("Нужно хотя бы два класса с точками на клетках "
                          "растра с данными."),
@@ -905,6 +1077,65 @@ def write_classes(path, result):
     band = data.GetRasterBand(1)
     band.SetNoDataValue(0)
     band.WriteArray((classes + 1).astype(np.uint8))
+    data = None
+    return True
+
+
+def write_objects(path, result):
+    """Объекты слоем objects файла GeoPackage в UTM: поля object, class
+    (номер с 1), name, area_ha, mean_N и sd_N каналов растра. Объект
+    связный, поэтому один объект - один многоугольник."""
+    from osgeo import gdal, ogr, osr
+    warm()
+    index = result["index"]
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG((32700 if index.south else 32600) + index.number)
+    parts = result["parts"]
+    rows, cols = parts.shape
+    step = result["step"]
+    grid = gdal.GetDriverByName("MEM").Create("", cols, rows, 1,
+                                              gdal.GDT_Int32)
+    grid.SetGeoTransform((result["x0"], step, 0.0, result["y0"], 0.0,
+                          -step))
+    grid.SetProjection(srs.ExportToWkt())
+    band = grid.GetRasterBand(1)
+    band.SetNoDataValue(-1)
+    band.WriteArray(parts)
+    data = ogr.GetDriverByName("GPKG").CreateDataSource(path)
+    if data is None:
+        return False
+    layer = data.CreateLayer("objects", srs, ogr.wkbPolygon)
+    layer.CreateField(ogr.FieldDefn("object", ogr.OFTInteger))
+    layer.CreateField(ogr.FieldDefn("class", ogr.OFTInteger))
+    layer.CreateField(ogr.FieldDefn("name", ogr.OFTString))
+    layer.CreateField(ogr.FieldDefn("area_ha", ogr.OFTReal))
+    table = result["table"][:, 0]
+    bands = table.shape[0] // 2
+    for number in range(1, bands + 1):
+        layer.CreateField(ogr.FieldDefn("mean_{}".format(number),
+                                        ogr.OFTReal))
+        layer.CreateField(ogr.FieldDefn("sd_{}".format(number),
+                                        ogr.OFTReal))
+    if gdal.Polygonize(band, band.GetMaskBand(), layer, 0) != 0:
+        return False
+    kinds = result["kinds"]
+    sizes = segments.areas(parts)
+    layer.StartTransaction()
+    for feature in list(layer):
+        number = feature.GetField("object")
+        kind = int(kinds[number])
+        feature.SetField("class", kind + 1)
+        if kind >= 0:
+            feature.SetField("name", result["names"][kind])
+        feature.SetField("area_ha", float(sizes[number]) * step * step
+                         / 1e4)
+        for band_n in range(bands):
+            feature.SetField("mean_{}".format(band_n + 1),
+                             float(table[band_n, number]))
+            feature.SetField("sd_{}".format(band_n + 1),
+                             float(table[band_n + bands, number]))
+        layer.SetFeature(feature)
+    layer.CommitTransaction()
     data = None
     return True
 
