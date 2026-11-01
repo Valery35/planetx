@@ -433,6 +433,7 @@ class IdentifyMixin:
         groups += self._identify_field()
         groups += self._identify_geology()
         groups += self._identify_tilemap()
+        groups += self._identify_fieldmap(lat, lon)
         groups += self._identify_wayback()
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:

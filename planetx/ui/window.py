@@ -69,6 +69,7 @@ from .contours import ContourExport
 from .hydro import HydroTool
 from .relief import ReliefTool
 from .aef import ChangeTool
+from .fieldmap import FieldTool
 from .aefclass import ClassTool
 from .netlink import NetLinks
 from .superoverlay import SuperOverlays
@@ -724,6 +725,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Уклон, экспозиция, вершины и ямы квадрата (ui/relief.py).
         self.relief = ReliefTool(self)
         self.change_tool = ChangeTool(self)
+        self.field_tool = FieldTool(self)
         self.class_tool = ClassTool(self)
         self.class_shapes = []
         self.extruder = ExtrudeManager(self)
@@ -1010,7 +1012,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.class_legend.closer = lambda: self._tilemap_shown and \
             self.set_extra(self._tilemap_shown, False)
         self.field_legend.closer = lambda: self.set_extra(
-            self._field_shown or self._tilemap_shown or "aef_change", False)
+            self._field_shown or self._tilemap_shown or self.field_tool.key
+            or "aef_change", False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
         self.grid_shapes = []
@@ -1133,6 +1136,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.relief.timer.stop()
             self.relief._drop_tiles()
             self.change_tool.close()
+            self.field_tool.close()
             self.class_tool.close()
             if self.section_dialog is not None:
                 self.section_dialog.close()

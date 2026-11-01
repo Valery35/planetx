@@ -5919,6 +5919,33 @@ EN = {
         "Degree of change {before}-{after}",
     "Изменения {before}-{after}": "Change {before}-{after}",
     "Изменения местности": "Land change",
+    # Границы полей Fields of the World (ui/fieldmap.py).
+    "Границы полей": "Field boundaries",
+    "Границы полей 2025": "Field boundaries 2025",
+    "Границы полей 2024": "Field boundaries 2024",
+    "Оценка границ полей {year}": "Field boundary score {year}",
+    "Оценка модели": "Model score",
+    "{score} из 100": "{score} of 100",
+    "Что это": "What this is",
+    "Оценка модели по снимкам Sentinel-2, не кадастровый участок.":
+        "A model estimate from Sentinel-2 imagery, not a cadastral parcel.",
+    "Поле {year} года": "Field of {year}",
+    "Границы сельскохозяйственных полей мира за 2025 год - оценка модели "
+    "по снимкам Sentinel-2, а не кадастр. Цвет - оценка модели от "
+    "оранжевого к зелёному, поля с оценкой ниже 69 не показаны. Поля "
+    "видны вблизи, с высоты около 70 км и ниже. Щелчок в режиме "
+    "«Определить объекты» показывает оценку.":
+        "Agricultural field boundaries of the world for 2025 - a model "
+        "estimate from Sentinel-2 imagery, not a cadastre. The color is the "
+        "model score from orange to green, fields scoring below 69 are not "
+        "shown. Fields appear close up, from a height of about 70 km and "
+        "below. A click in Identify features mode shows the score.",
+    "Границы сельскохозяйственных полей мира за 2024 год, тот же набор и "
+    "та же оценка модели, что у строки за 2025 год. Поля видны вблизи, "
+    "с высоты около 70 км и ниже.":
+        "Agricultural field boundaries of the world for 2024, the same "
+        "dataset and model score as the 2025 row. Fields appear close up, "
+        "from a height of about 70 km and below.",
     "Пиксель подробного участка. Файлы набора хранят блоки 1024 × 1024 "
     "пикселя, блок за год - 40-50 МБ при любом пикселе: 10 м покрывают "
     "10 км блоком, 80 м - 82 км.":

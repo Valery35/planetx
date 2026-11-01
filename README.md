@@ -79,8 +79,8 @@ The plugin is free and open source. [Support development](https://github.com/Val
   Holocene volcanoes. A click on the globe shows the value at the point.
 - **Geology, water and soils.** The Macrostrat geological map, the GLiM
   lithological map, GEM active faults, earthquakes since 1904 from the
-  ISC-GEM catalogue, ESA WorldCover land cover, JRC surface water
-  occurrence and transitions 1984-2021 and SoilGrids soil properties.
+  ISC-GEM catalogue, ESA WorldCover land cover, Fields of the World
+  field boundaries, JRC surface water occurrence and transitions 1984-2021 and SoilGrids soil properties.
   A click shows the class or the value at the point.
 - **Subsurface mode.** Drill holes along their survey, bed roofs,
   sections with images and tunnels from project layers go under the

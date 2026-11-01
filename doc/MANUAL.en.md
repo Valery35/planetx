@@ -846,6 +846,8 @@ in the QGIS profile. The catalogue licence is CC BY-SA 3.0.
 
 The Land cover layer of the Earth and life group shows the ESA WorldCover map for 2021 from Sentinel-1 and Sentinel-2 images with a 10 m pixel. There are 11 classes - forest, shrubland, grassland, cropland, built-up, bare and sparse vegetation, snow and ice, permanent water bodies, herbaceous wetland, mangroves, moss and lichen. The class legend sits in the lower left corner of the view. From afar the map comes from the planetx-terrain repository, close up from the Microsoft Planetary Computer service. A click in the Identify mode shows the class at the point. The map licence is CC BY 4.0.
 
+The Field boundaries 2025 and Field boundaries 2024 layers of the Earth and life group show the agricultural fields of the world from the Fields of the World dataset. This is a model estimate from Sentinel-2 images with a 10 m pixel, not cadastral parcels. The color runs from orange to green by the model score from 69 to 100, fields scoring below 69 are not shown as the dataset recommends. Fields appear only close up, from a height of about 70 km and below, from afar the layer is empty because tiles of coarse levels weigh hundreds of megabytes. The globe shows one such map, together with value maps and land change. A click on a field in the Identify mode shows its score. These layers have no export to the QGIS project. The dataset licence is CC BY 4.0.
+
 The Water occurrence and Water transitions layers of the Planet of
 water group show the JRC Global Surface Water dataset (Pekel et al.,
 2016) from Landsat images of 1984-2021 with a 30 m pixel. Occurrence

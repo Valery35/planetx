@@ -31,7 +31,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import aef, hips, polar, tileoverlays, wikipedia
+from ...core import aef, fieldmap, hips, polar, tileoverlays, wikipedia
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
 from ...core.coords import FORMATS as COORD_FORMATS
@@ -824,7 +824,7 @@ class LayersMixin:
                     self.set_extra(other, False)
         elif self._field_shown is not None \
                 or self._tilemap_shown is not None \
-                or self.change_tool.shown:
+                or self.change_tool.shown or self.field_tool.year:
             # Слой вида занят другой картой.
             self._drop_geology()
             return
@@ -973,11 +973,45 @@ class LayersMixin:
         """Строка «Изменения местности»: обзор вида и подробный участок
         окна. Включение снимает прежнюю карту слоя вида."""
         if on:
-            for other in fields.KEYS + ("geology",) + tilemaps.KEYS:
-                if self.extras.get(other):
+            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
+                if other != "aef_change" and self.extras.get(other):
                     self.set_extra(other, False)
         self.change_tool.set_shown(on and self.planet.earth)
         self._mark_gallery()
+
+    # Границы полей Fields of the World (ui/fieldmap.py) - тот же слой
+    # вида «emag», на глобусе одна карта.
+
+    def _set_fieldmap(self, key, on):
+        """Строка «Поля»: год строки на слое вида. Включение снимает
+        прежнюю карту слоя, выключение - только свой год."""
+        tool = self.field_tool
+        if on:
+            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
+                if other != key and self.extras.get(other):
+                    self.set_extra(other, False)
+            year = next(y for y, k in fieldmap.KEYS.items() if k == key)
+            tool.set_year(year if self.planet.earth else None)
+        elif tool.key == key:
+            tool.set_year(None)
+        else:
+            return  # слой вида занят другой картой
+        self._show_attribution()
+        self._place_attribution()
+        self._mark_gallery()
+
+    def _identify_fieldmap(self, lat, lon):
+        """Группа окна «Объекты»: оценка поля под щелчком."""
+        tool = self.field_tool
+        score = tool.under(lat, lon)
+        if score is None:
+            return []
+        values = [(tr("Оценка модели"), tr("{score} из 100",
+                                           score=int(score + 0.5))),
+                  (tr("Что это"), tr("Оценка модели по снимкам Sentinel-2, "
+                                     "не кадастровый участок."))]
+        title = tr("Поле {year} года", year=tool.year)
+        return [(Group(tr("Границы полей")), [(title, values, None)])]
 
     def _ask_tilemap(self, lat, lon):
         """Значение карты под щелчком: запрос GetFeatureInfo службы или
@@ -1139,6 +1173,8 @@ class LayersMixin:
                 *tilemaps.MAPS[self._tilemap_shown].attribution))
         elif "emag" in self.gibs_loaders and self.change_tool.shown:
             parts.append(link_html(aef.ATTRIBUTION, aef.TERMS))
+        elif "emag" in self.gibs_loaders and self.field_tool.year:
+            parts.append(link_html(fieldmap.ATTRIBUTION, fieldmap.TERMS))
         if self._geoid_on():
             parts.append(link_html(*geoid.ATTRIBUTION))
         overture = self.buildings_loader is not None \

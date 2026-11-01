@@ -123,7 +123,9 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "hiking": ((200, 30, 30), (240, 240, 240)),
               "cycling": ((120, 60, 200), (240, 240, 240)),
               "wiki": ((45, 110, 205), (245, 245, 245), (205, 228, 255)),
-              "aef_change": ((0, 0, 0), (70, 60, 10), (255, 245, 30))}
+              "aef_change": ((0, 0, 0), (70, 60, 10), (255, 245, 30)),
+              "ftw_2025": ((254, 195, 121), (243, 250, 187), (51, 160, 44)),
+              "ftw_2024": ((254, 195, 121), (243, 250, 187), (51, 160, 44))}
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
@@ -154,7 +156,9 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sea_marks": "OpenSeaMap",
            "hiking": "Waymarked Trails", "cycling": "Waymarked Trails",
            "wiki": "Wikipedia",
-           "aef_change": "AlphaEarth Foundations, Google DeepMind"}
+           "aef_change": "AlphaEarth Foundations, Google DeepMind",
+           "ftw_2025": "Fields of the World",
+           "ftw_2024": "Fields of the World"}
 # Слои витрины: ключ строки окна глобуса и группа.
 # Недра с 27 октября 2026 года - четыре подгруппы вместо 21 строки
 # подряд, решение автора.
@@ -174,6 +178,7 @@ LAYERS = (("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("trains", "transport"), ("vessels", "transport"),
           ("aircraft", "transport"),
           ("currents", "water"), ("worldcover", "life"),
+          ("ftw_2025", "life"), ("ftw_2024", "life"),
           ("water_occurrence", "water"),
           ("water_transitions", "water"), ("soil_clay", "soil"),
           ("soil_sand", "soil"), ("soil_soc", "soil"), ("soil_ph", "soil"),
@@ -513,6 +518,17 @@ def layer_names():
             "луга, пашня, застройка, голые земли, снег и лёд, вода, "
             "болота, мангры, мхи и лишайники. Щелчок в режиме "
             "«Определить объекты» показывает класс.")),
+        "ftw_2025": (tr("Границы полей 2025"), tr(
+            "Границы сельскохозяйственных полей мира за 2025 год - оценка "
+            "модели по снимкам Sentinel-2, а не кадастр. Цвет - оценка "
+            "модели от оранжевого к зелёному, поля с оценкой ниже 69 "
+            "не показаны. Поля видны вблизи, с высоты около 70 км и "
+            "ниже. Щелчок в режиме «Определить объекты» показывает "
+            "оценку.")),
+        "ftw_2024": (tr("Границы полей 2024"), tr(
+            "Границы сельскохозяйственных полей мира за 2024 год, тот же "
+            "набор и та же оценка модели, что у строки за 2025 год. Поля "
+            "видны вблизи, с высоты около 70 км и ниже.")),
         "aef_change": (tr("Изменения местности"), tr(
             "Степень изменения местности между двумя годами по эмбеддингам "
             "AlphaEarth Foundations - описаниям каждой клетки 10 м за год "

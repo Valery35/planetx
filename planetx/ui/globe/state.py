@@ -324,6 +324,8 @@ class StateMixin:
             self._set_tilemap(key, on)
         elif key == "aef_change":
             self._set_change(on)
+        elif key in ("ftw_2025", "ftw_2024"):
+            self._set_fieldmap(key, on)
         elif key == "iscgem":
             self._set_history(on)
         elif key == "magpoles":

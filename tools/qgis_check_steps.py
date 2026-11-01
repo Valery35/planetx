@@ -17937,6 +17937,88 @@ def _aef_local():
         ui_aef.INDEX_BASE = QUrl.fromLocalFile(folder).toString() + "/"
 
 
+FTW_POINT = (45.3, 39.5)  # Кубань
+
+
+@check(1000)
+def ftw_on():
+    # Строка «Границы полей 2025»: карта слоя «emag» снимает прежнюю.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    nav = window.view.navigator
+    nav.stop()
+    nav.set_pose(Pose(FTW_POINT[0], FTW_POINT[1],
+                      float(os.environ.get("PLANETX_FTW_HEIGHT", 25000.0)),
+                      0.0, 0.0))
+    window.view.update()
+    window.set_extra("geology", True)
+    window.set_extra(os.environ.get("PLANETX_FTW", "ftw_2025"), True)
+    result["ftw"] = {"geology_off": not window.extras.get("geology")}
+    state["ftw_started"] = time.monotonic()
+
+
+@check(1000)
+def ftw_wait():
+    from planetx.core import fieldmap
+    window = state["window"]
+    layer = window.view.gibs["emag"]
+    tiles = window.field_tool.tiles
+    waited = time.monotonic() - state["ftw_started"]
+    if len(layer.textures) < 6 and waited < 90.0:
+        return 1000
+    if tiles.busy() and waited < 90.0:
+        return 1000
+    out = result["ftw"]
+    out["waited_s"] = round(waited, 1)
+    out["loader"] = type(layer.loader).__name__
+    out["min_level"] = layer.min_level
+    out["textures"] = len(layer.textures)
+    out["levels"] = sorted({k[0] for k in layer.textures})
+    out["empty"] = len(layer.empty)
+    out["legend"] = [window.field_legend.isVisible(),
+                     window.field_legend.title]
+    out["credit"] = fieldmap.ATTRIBUTION in window.attribution.text()
+    out["tiles_read"] = len(tiles.found)
+    out["fields_read"] = sum(len(f) for f in tiles.found.values())
+    hit = None
+    for key, found in tiles.found.items():
+        if found:
+            ring = found[len(found) // 2].rings[0]
+            z, x, y = key
+            mx, my = ring.mean(axis=0)
+            n = 2 ** z
+            lon = (x + mx) / n * 360.0 - 180.0
+            lat = math.degrees(math.atan(math.sinh(
+                math.pi * (1 - 2 * (y + my) / n))))
+            hit = (lat, lon)
+            break
+    if hit is not None:
+        out["score"] = window.field_tool.under(*hit)
+        out["group"] = bool(window._identify_fieldmap(*hit))
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_fields.png"))
+
+
+@check(1000)
+def ftw_close():
+    # Год сменяется, другая карта снимает поля, слой вида свободен.
+    window = state["window"]
+    out = result["ftw"]
+    window.set_extra("ftw_2024", True)
+    out["year"] = [window.field_tool.year,
+                   window.extras.get("ftw_2025"),
+                   window.field_tool.tiles.year]
+    window.set_extra("geology", True)
+    out["taken"] = [window.field_tool.year, window.extras.get("ftw_2024"),
+                    type(window.view.gibs["emag"].loader).__name__]
+    window.set_extra("geology", False)
+    window.set_extra("ftw_2025", True)
+    window.set_extra("ftw_2025", False)
+    layer = window.view.gibs["emag"]
+    out["off"] = [window.field_tool.year, layer.min_level,
+                  layer.loader is None, window.field_legend.isVisible()]
+
+
 @check(1000)
 def change_open():
     # Подменю «Анализ участка» - пункт изменений, окно включает строку.
