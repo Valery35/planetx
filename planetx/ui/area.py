@@ -16,14 +16,25 @@
 Участок общий, слово автора от 30 октября 2026 года - нарисовал один
 раз и считаешь по нему разными окнами. Его хранит окно глобуса
 (GlobeWindow.site), смена тела его снимает.
+
+Вопрос автора от 2 ноября 2026 года - участком служит многоугольник слоя
+проекта. «Из слоя» берёт выделенные объекты, у слоя из одного объекта -
+его, иначе многоугольник под щелчком по глобусу. Участок - одно кольцо
+вершин: из составного объекта берётся крупнейшая часть, дыры не
+учитываются, вершин не больше RING_POINTS, контур сложнее HANDLES_MOST
+вершин идёт без ручек.
 """
 import math
 
 import numpy as np
-from qgis.core import QgsSettings
+from qgis.core import (Qgis, QgsCoordinateReferenceSystem,
+                       QgsCoordinateTransform, QgsCsException,
+                       QgsFeatureRequest, QgsGeometry, QgsPointXY,
+                       QgsProject, QgsRectangle, QgsSettings,
+                       QgsVectorLayer, QgsWkbTypes)
 from qgis.PyQt.QtCore import QObject, pyqtSignal
-from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QHBoxLayout, QPushButton,
-                                 QWidget)
+from qgis.PyQt.QtWidgets import (QDoubleSpinBox, QHBoxLayout, QMenu,
+                                 QPushButton, QWidget)
 
 from ..core import aef, editing
 from ..core.features import Shape
@@ -31,6 +42,66 @@ from ..i18n import tr
 from .handles import PropVertices
 
 COLOR = (255, 255, 255, 255)  # контур участка на глобусе
+RING_POINTS = 500  # вершин участка из слоя
+HANDLES_MOST = 100  # вершин с ручками, сотни кружков закрыли бы контур
+THIN_STEPS = 40  # попыток упростить кольцо
+THIN_FIRST = 1e-5  # первый допуск упрощения, градусы
+THIN_GROWTH = 1.5  # рост допуска с каждой попыткой
+
+
+def polygon_layers():
+    """Слои проекта с многоугольниками по названию."""
+    layers = [layer for layer in QgsProject.instance().mapLayers().values()
+              if isinstance(layer, QgsVectorLayer) and layer.isValid()
+              and layer.geometryType() == Qgis.GeometryType.Polygon]
+    return sorted(layers, key=lambda layer: layer.name().lower())
+
+
+def _thin(part):
+    """Кольца многоугольника part, у наружного не больше RING_POINTS
+    вершин."""
+    rings = part.asPolygon()
+    tolerance = THIN_FIRST
+    for _ in range(THIN_STEPS):
+        if len(rings[0]) <= RING_POINTS + 1:
+            break
+        thin = part.simplify(tolerance).asPolygon()
+        if thin:
+            rings = thin
+        tolerance *= THIN_GROWTH
+    return rings
+
+
+def ring_of(geometries, crs):
+    """Участок из геометрий слоя в системе crs: (вершины (широта, долгота),
+    сколько частей отброшено, сколько дыр не учтено) или None."""
+    whole = geometries[0] if len(geometries) == 1 \
+        else QgsGeometry.unaryUnion(geometries)
+    if whole is None or whole.isNull():
+        return None
+    whole = QgsGeometry(whole)
+    if QgsWkbTypes.isCurvedType(whole.wkbType()):
+        whole = QgsGeometry(whole.constGet().segmentize())
+    wgs = QgsCoordinateReferenceSystem("EPSG:4326")
+    try:
+        done = whole.transform(
+            QgsCoordinateTransform(crs, wgs, QgsProject.instance()))
+    except QgsCsException:
+        return None
+    if done != Qgis.GeometryOperationResult.Success:
+        return None
+    parts = [part for part in (whole.asGeometryCollection()
+                               if whole.isMultipart() else [whole])
+             if part.type() == Qgis.GeometryType.Polygon]
+    if not parts:
+        return None
+    rings = _thin(max(parts, key=lambda part: part.area()))
+    points = [(point.y(), point.x()) for point in rings[0]]
+    if len(points) > 1 and points[0] == points[-1]:
+        points = points[:-1]
+    if len(points) < 3:
+        return None
+    return points, len(parts) - 1, len(rings) - 1
 
 
 class Area(QObject):
@@ -51,6 +122,7 @@ class Area(QObject):
         self.point = None  # середина квадрата (широта, долгота)
         self.ring = []  # вершины участка (широта, долгота)
         self.drawing = False  # участок рисуется щелчками
+        self.picking = None  # номер слоя, щелчок берёт его многоугольник
         # Точка у курсора, которую щелчок убирает, - у классификации
         # точки классов (ui/aefclass.py): функция (px, py) -> что-то
         # или None, подсказка - point_hint.
@@ -73,12 +145,22 @@ class Area(QObject):
             "Щелчок по первой вершине замыкает его. Результат считается "
             "только внутри участка."))
         draw.clicked.connect(self.start_drawing)
+        layered = QPushButton(tr("Из слоя"), dialog)
+        layered.setToolTip(tr(
+            "Участок - многоугольник слоя проекта: выделенные объекты, "
+            "у слоя из одного объекта - он, иначе многоугольник под "
+            "щелчком по глобусу. Из составного объекта берётся крупнейшая "
+            "часть, дыры не учитываются."))
+        menu = QMenu(layered)
+        menu.aboutToShow.connect(lambda: self._fill_layers(menu))
+        layered.setMenu(menu)
         self.widget = QWidget(dialog)
         row = QHBoxLayout(self.widget)
         row.setContentsMargins(0, 0, 0, 0)
         row.addWidget(self.side, 1)
         row.addWidget(square)
         row.addWidget(draw)
+        row.addWidget(layered)
         self.side.valueChanged.connect(self._side_changed)
         areas = getattr(window, "areas", None)
         if areas is not None:
@@ -110,6 +192,7 @@ class Area(QObject):
         внутри прежнего участка берёт его, иначе новый квадрат. Вершины
         на виде."""
         self.point = (lat, lon)
+        self.picking = None
         site = self.window.site
         if site and aef.ring_inside(np.array([lat]), np.array([lon]),
                                     site)[0]:
@@ -139,6 +222,7 @@ class Area(QObject):
         self.ring = aef.square_ring(self.point[0], self.point[1],
                                     self.side.value() * 1000.0)
         self.drawing = False
+        self.picking = None
         self.edited()
         self.begin()
 
@@ -146,11 +230,112 @@ class Area(QObject):
         """Участок рисуется заново щелчками по глобусу."""
         self.ring = []
         self.drawing = True
+        self.picking = None
         self.dialog.status.setText(tr(
             "Щёлкайте по глобусу вершины участка. Щелчок по первой "
             "вершине замыкает его."))
         self.edited()
         self.begin()
+
+    def _fill_layers(self, menu):
+        """Меню «Из слоя»: слои с многоугольниками на момент открытия."""
+        menu.clear()
+        layers = polygon_layers()
+        if not layers:
+            menu.addAction(tr("В проекте нет слоёв с многоугольниками")
+                           ).setEnabled(False)
+        for layer in layers:
+            count = layer.selectedFeatureCount()
+            text = tr("{name}, выделено {count}", name=layer.name(),
+                      count=count) if count else layer.name()
+            menu.addAction(text).triggered.connect(
+                lambda checked=False, item=layer: self.from_layer(item))
+
+    def from_layer(self, layer):
+        """Участок из слоя: выделенные объекты, единственный объект или
+        многоугольник под следующим щелчком."""
+        features = layer.selectedFeatures()
+        if not features and layer.featureCount() == 1:
+            features = list(layer.getFeatures())
+        shapes = [feature.geometry() for feature in features
+                  if feature.hasGeometry()]
+        if shapes:
+            if self._take(shapes, layer):
+                self._show_ring()
+            return
+        self.drawing = False
+        self.picking = layer.id()
+        self.dialog.status.setText(tr(
+            "Щёлкните по глобусу внутри многоугольника слоя «{name}».",
+            name=layer.name()))
+
+    def _pick(self, lat, lon):
+        """Многоугольник выбранного слоя под щелчком."""
+        layer = QgsProject.instance().mapLayer(self.picking)
+        if layer is None:
+            self.picking = None
+            return
+        point = QgsGeometry.fromPointXY(QgsPointXY(lon, lat))
+        wgs = QgsCoordinateReferenceSystem("EPSG:4326")
+        try:
+            point.transform(QgsCoordinateTransform(wgs, layer.crs(),
+                                                   QgsProject.instance()))
+        except QgsCsException:
+            return
+        spot = point.asPoint()
+        request = QgsFeatureRequest().setFilterRect(
+            QgsRectangle(spot.x(), spot.y(), spot.x(), spot.y()))
+        for feature in layer.getFeatures(request):
+            if feature.hasGeometry() and feature.geometry().contains(point):
+                self._take([feature.geometry()], layer)
+                return
+        self.dialog.status.setText(tr(
+            "Под щелчком нет многоугольника этого слоя."))
+
+    def _take(self, shapes, layer):
+        """Геометрии слоя становятся участком. Точка окна вне участка
+        переходит внутрь него: от неё считают затопление и сток."""
+        taken = ring_of(shapes, layer.crs())
+        if taken is None:
+            self.dialog.status.setText(tr(
+                "Многоугольник слоя не удалось прочитать."))
+            return False
+        ring, parts, holes = taken
+        self.picking = None
+        self.drawing = False
+        self.ring = ring
+        spot = self.point
+        moved = spot is None or not self.inside(
+            np.array([spot[0]]), np.array([spot[1]]))[0]
+        if moved:
+            inner = QgsGeometry.fromPolygonXY([[
+                QgsPointXY(lon, lat) for lat, lon in ring]]
+            ).pointOnSurface().asPoint()
+            self.point = (inner.y(), inner.x())
+            if getattr(self.dialog, "point", None) is not None:
+                self.dialog.point = self.point
+        self.edited()
+        self.begin()
+        notes = [tr("Участок взят из слоя «{name}».", name=layer.name())]
+        if parts:
+            notes.append(tr("Отброшено частей: {count}, взята крупнейшая.",
+                            count=parts))
+        if holes:
+            notes.append(tr("Дыр не учтено: {count}.", count=holes))
+        if moved:
+            notes.append(tr("Точка окна перенесена внутрь участка."))
+        problem = self.check()
+        if problem:
+            notes.append(problem)
+        self.dialog.status.setText(" ".join(notes))
+        return True
+
+    def _show_ring(self):
+        """Перелёт к участку: выделенный объект может быть вне вида."""
+        west, south, east, north = self.box()
+        self.window._fly_extent(
+            QgsRectangle(west, south, east, north),
+            QgsCoordinateReferenceSystem("EPSG:4326"))
 
     def edited(self):
         self.changed.emit()
@@ -221,9 +406,13 @@ class Area(QObject):
 
     def taking(self):
         """Щелчок по глобусу - вершина рисуемого участка."""
-        return self.drawing and self.visible()
+        return (self.drawing or self.picking is not None) \
+            and self.visible()
 
     def add(self, lat, lon):
+        if self.picking is not None:
+            self._pick(lat, lon)
+            return
         self.ring.append((lat, lon))
         self.edited()
 
@@ -252,6 +441,7 @@ class Area(QObject):
     def end(self):
         """Окно закрыто: ручки и контур снимаются."""
         self.drawing = False
+        self.picking = None
         self.window._end_prop_vertices(self.dialog)
         self.window._refresh_shapes()
 
@@ -319,6 +509,12 @@ class AreaVertices(PropVertices):
 
     def closed(self):
         return self.edit.finished and len(self.edit.points) >= 3
+
+    def screen(self):
+        """Контур из слоя сложнее HANDLES_MOST вершин идёт без ручек."""
+        if len(self.edit.points) > HANDLES_MOST:
+            return self._project([]) + self._project([])
+        return super().screen()
 
     def hover(self, px, py):
         """Подсказка у вершины участка или у точки, которую щелчок

@@ -18838,6 +18838,114 @@ def site_shared():
     window.site = None
 
 
+@check(25000)
+def area_layer():
+    # Участок - многоугольник слоя: меню, выделение, щелчок, составной
+    # объект с дырой, упрощение, точка окна вне участка.
+    from qgis.core import (QgsCoordinateReferenceSystem,
+                           QgsCoordinateTransform, QgsFeature, QgsGeometry,
+                           QgsPointXY, QgsVectorLayer)
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import area as area_module
+    window = state["window"]
+    window.set_body("earth")
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(HYDRO_BAKSAN[0], HYDRO_BAKSAN[1],
+                                        12000.0, 0.0, 0.0))
+    window.view.update()
+    project = QgsProject.instance()
+    lat, lon = HYDRO_BAKSAN
+    out = result.setdefault("area_layer", {})
+    window.site = None
+    layer = QgsVectorLayer("MultiPolygon?crs=EPSG:3857", "Участки", "memory")
+    wgs = QgsCoordinateReferenceSystem("EPSG:4326")
+    to_web = QgsCoordinateTransform(wgs, layer.crs(), project)
+
+    def web(rings):
+        geometry = QgsGeometry.fromPolygonXY(
+            [[QgsPointXY(x, y) for y, x in ring] for ring in rings])
+        geometry.transform(to_web)
+        return geometry
+
+    def box(y, x, half):
+        return [(y - half, x - half), (y - half, x + half),
+                (y + half, x + half), (y + half, x - half)]
+
+    holed = web([box(lat, lon, 0.02), box(lat, lon + 0.01, 0.003)])
+    far = web([box(lat + 0.5, lon, 0.01)])
+    small = web([box(lat - 0.5, lon, 0.002)])
+    many = 2000
+    dense = web([[(lat + 0.5 + 0.02 * math.sin(2 * math.pi * k / many)
+                   * (1 + 0.1 * math.sin(40 * math.pi * k / many)),
+                   lon + 1.0 + 0.03 * math.cos(2 * math.pi * k / many))
+                  for k in range(many)]])
+    features = []
+    multi = QgsGeometry.unaryUnion([far, small])
+    for geometry in (holed, multi, dense):
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(geometry)
+        features.append(feature)
+    layer.dataProvider().addFeatures(features)
+    layer.updateExtents()
+    project.addMapLayer(layer, False)
+    state["area_layer"] = layer
+    dialog = window.hydro.flood_here(lat - 0.01, lon - 0.01)
+    area = dialog.area
+    menu = QMenu()
+    area._fill_layers(menu)
+    out["menu"] = [action.text() for action in menu.actions()]
+    area.from_layer(layer)
+    out["picking"] = [area.picking == layer.id(), area.taking(),
+                      dialog.status.text()]
+    before = list(area.ring)
+    area.add(lat + 3.0, lon)
+    out["miss"] = [area.ring == before, area.taking(), dialog.status.text()]
+    area.add(lat, lon - 0.015)
+    out["clicked"] = [len(area.ring), area.taking(), dialog.status.text()]
+    out["shared"] = window.site == area.ring
+    out["point_kept"] = dialog.point == (lat - 0.01, lon - 0.01)
+    ids = [feature.id() for feature in layer.getFeatures()]
+    layer.selectByIds([ids[1]])
+    area.from_layer(layer)
+    west, south, east, north = area.box()
+    out["multi"] = [len(area.ring), round(south, 3), round(north, 3),
+                    dialog.status.text()]
+    out["point_moved"] = [round(dialog.point[0], 3), round(dialog.point[1], 3)]
+    layer.selectByIds([ids[2]])
+    area.from_layer(layer)
+    out["dense"] = [len(area.ring), area.check()]
+    started = time.time()
+    window.handles.sync()
+    window.handles.repaint()
+    out["handles_ms"] = round((time.time() - started) * 1000.0, 1)
+    out["handles_shown"] = list(window.handles.shown[:2])
+    layer.selectByIds(ids[:1])
+    menu.clear()
+    area._fill_layers(menu)
+    out["menu_selected"] = [action.text() for action in menu.actions()]
+    area.from_layer(layer)
+    out["chosen"] = [len(area.ring), dialog.status.text()]
+    state["area_dialog"] = dialog
+    out["polygon_layers"] = [item.name()
+                             for item in area_module.polygon_layers()]
+    dialog.point = (lat, lon)
+    dialog.build.emit()
+
+
+@check(500)
+def area_layer_done():
+    # Расчёт затопления идёт по участку из слоя.
+    window = state["window"]
+    dialog = state["area_dialog"]
+    out = result["area_layer"]
+    out["build"] = dialog.status.text()
+    dialog.reject()
+    QgsProject.instance().removeMapLayer(state["area_layer"])
+    out["taking_closed"] = dialog.area.taking()
+    window.site = None
+
+
 @check(500)
 def relief_open():
     # Уклон и экспозиция квадрата у Терскола: подменю «Анализ рельефа»,

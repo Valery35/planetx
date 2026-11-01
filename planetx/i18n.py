@@ -6177,6 +6177,30 @@ EN = {
     "Участок - квадрат стороной из поля слева.":
         "The area is a square with the side from the field on the left.",
     "Нарисовать": "Draw",
+    "Из слоя": "From layer",
+    "Участок - многоугольник слоя проекта: выделенные объекты, у слоя из "
+    "одного объекта - он, иначе многоугольник под щелчком по глобусу. Из "
+    "составного объекта берётся крупнейшая часть, дыры не учитываются.":
+        "The site is a polygon of a project layer: the selected features, "
+        "the only feature of a layer with one feature, otherwise the "
+        "polygon under a click on the globe. The largest part of a "
+        "multipart feature is taken, holes are not counted.",
+    "В проекте нет слоёв с многоугольниками":
+        "The project has no polygon layers",
+    "{name}, выделено {count}": "{name}, {count} selected",
+    "Щёлкните по глобусу внутри многоугольника слоя «{name}».":
+        "Click on the globe inside a polygon of the layer {name}.",
+    "Под щелчком нет многоугольника этого слоя.":
+        "There is no polygon of this layer under the click.",
+    "Многоугольник слоя не удалось прочитать.":
+        "The polygon of the layer could not be read.",
+    "Участок взят из слоя «{name}».": "The site is taken from the layer "
+        "{name}.",
+    "Отброшено частей: {count}, взята крупнейшая.":
+        "Parts left out: {count}, the largest one is taken.",
+    "Дыр не учтено: {count}.": "Holes not counted: {count}.",
+    "Точка окна перенесена внутрь участка.":
+        "The window point is moved inside the site.",
     "Щёлкайте по глобусу вершины участка. Щелчок по первой вершине "
     "замыкает его.":
         "Click the area vertices on the globe. A click on the first "

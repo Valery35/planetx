@@ -2743,6 +2743,17 @@ over the frame of the site, there are no results outside the polygon.
 Each window has its own largest site size, the field tooltip names it.
 The viewshed is computed in a circle around the observer.
 
+The From layer button makes a polygon of a project layer the site. The
+menu names the polygon layers. The chosen layer gives its selected
+features, a layer with one feature gives that feature. Without a
+selection, a click on the globe takes the polygon under the cursor. The
+site is one outline. The largest part of a multipart feature is taken,
+holes are not counted, an outline of more than 500 vertices is
+simplified. An outline of up to 100 vertices is dragged with the mouse
+as usual, a more complex outline has no handles. The result line names
+what was left out. If the window point falls outside the site, it is
+moved inside.
+
 All these windows share the site. A site set in one window is taken by
 the windows open at that moment and by the windows opened later for a
 point inside it. So one site is computed by different tools. The result
