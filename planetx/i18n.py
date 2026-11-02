@@ -291,7 +291,6 @@ EN = {
         "seen in the QGIS layer properties.",
     "Ранние снимки Landsat 1972-1993":
         "Early Landsat images 1972-1993",
-    "Снимки ASTER": "ASTER images",
     "Landsat 1-5 MSS Collection 2 Level-1 (USGS), файлы и каталог "
     "Microsoft Planetary Computer. Значения - отражение на верху "
     "атмосферы, без поправки на атмосферу. Слои несут подпись «Landsat "
@@ -6603,12 +6602,6 @@ EN = {
     "Искусственные материалы": "Artificial materials",
     "Вода, снег и жидкости": "Water, snow and liquids",
     "мкм": "µm",
-    "Многоканальный растр проекта в отражении, например «Все каналы сцены» "
-    "окна «Космоснимки». Каналы узнаются по их подписям, тепловые каналы "
-    "не участвуют.":
-        "A multiband project raster in reflectance, for example All bands "
-        "of the scene from the Satellite images window. The bands are "
-        "recognized by their labels, thermal bands do not take part.",
     "Датчик, на каналы которого пересчитаны эталоны. «Авто» узнаёт его по "
     "длинам волн в подписях каналов растра. Если подписей нет, датчик "
     "выбирается вручную, каналы берутся по номерам в подписях или по "
@@ -6652,8 +6645,6 @@ EN = {
     "между спектрами.":
         "Each cell of the area gets the checked reference with the smallest "
         "angle between the spectra.",
-    "В проекте нет растров с тремя каналами и больше.":
-        "The project has no rasters with three or more bands.",
     "Отмечено эталонов: {n}": "References checked: {n}",
     "Спектр точки {lat}, {lon}. Ближайший эталон - {name}, {angle}°.":
         "Spectrum of the point {lat}, {lon}. The nearest reference is "
@@ -6670,6 +6661,67 @@ EN = {
         "There are few bands, different minerals give the same spectrum - "
         "take an All scene bands image of the Satellite images window.",
     "Классы участка": "Site classes",
+    "Растр проекта в отражении с шестью каналами и больше, например "
+    "снимок ASTER из списка ниже. Каналы узнаются по их подписям, "
+    "тепловые каналы не участвуют.":
+        "A project raster in reflectance with six bands or more, for "
+        "example an ASTER image from the list below. Bands are recognized "
+        "by their labels, thermal bands are not used.",
+    "Снимки ASTER 2000-2006 годов над участком, годные для минералов: "
+    "днём, с каналами SWIR, облачностью до 10 % и данными не меньше "
+    "половины участка. Сверху - малооблачные.":
+        "ASTER images of 2000-2006 over the site that suit minerals. They "
+        "are daytime, with SWIR bands, cloud cover up to 10 % and data on "
+        "at least half of the site. The least cloudy are on top.",
+    "Найти подходящие снимки ASTER участка.":
+        "Find suitable ASTER images of the site.",
+    "Загрузить": "Load",
+    "Снимки ASTER": "ASTER images",
+    "Все каналы выбранного снимка по участку - слоем проекта в группу "
+    "«ASTER». Снимок встаёт в поле «Растр».":
+        "All bands of the selected image over the site become a project "
+        "layer in the ASTER group. The image is put in the Raster field.",
+    "В проекте нет снимков с шестью каналами и больше - найдите и "
+    "загрузите снимок ASTER участка.":
+        "The project has no images with six bands or more. Find and load "
+        "an ASTER image of the site.",
+    "{when} · облачность {cloud} % · участка {valid} % · солнце {sun}°":
+        "{when} · cloud {cloud} % · site {valid} % · sun {sun}°",
+    "Снимок «{name}» загружен. Щёлкните по нему на глобусе.":
+        "The image {name} is loaded. Click it on the globe.",
+    "Поиск снимков ASTER участка…": "Searching ASTER images of the site…",
+    "Подходящих снимков ASTER нет: нужны сцены 2000-2006 годов с каналами "
+    "SWIR, днём, облачностью до {cloud} %.":
+        "No suitable ASTER images. Scenes of 2000-2006 with SWIR bands, "
+        "daytime, with cloud cover up to {cloud} % are needed.",
+    "Сцен {count}, проверяется покрытие участка…":
+        "{count} scenes, the site coverage is being checked…",
+    "Загрузка каналов снимка {when}…":
+        "Loading the bands of the {when} image…",
+    "Подходящих снимков ASTER: {count}. Выберите снимок и нажмите "
+    "«Загрузить».":
+        "Suitable ASTER images: {count}. Select an image and press Load.",
+    "Подходящих снимков ASTER над участком нет: у сцен меньше {valid} % "
+    "участка.":
+        "No suitable ASTER images over the site. The scenes cover less "
+        "than {valid} % of it.",
+    "Снимок не открылся слоем.": "The image did not open as a layer.",
+    "Найти подходящие сцены EMIT участка.":
+        "Find suitable EMIT scenes of the site.",
+    "Сцены EMIT с 2022 года над участком, годные для минералов: облачность "
+    "до 30 % и сцена над половиной участка или больше. Сверху - "
+    "малооблачные и шире покрывающие участок.":
+        "EMIT scenes since 2022 over the site that suit minerals. They have "
+        "cloud cover up to 30 % and cover half of the site or more. The "
+        "least cloudy and the widest covering are on top.",
+    "{when} · облачность {cloud} % · участка {share} %":
+        "{when} · cloud {cloud} % · site {share} %",
+    "Подходящих сцен EMIT: {n}. Выберите сцену и нажмите «Построить».":
+        "Suitable EMIT scenes: {n}. Select a scene and press Build.",
+    "Подходящих сцен EMIT нет: у сцен над участком облачность больше "
+    "{cloud} % или под сценой меньше половины участка.":
+        "No suitable EMIT scenes. The scenes over the site have cloud cover "
+        "above {cloud} % or cover less than half of the site.",
     "Ещё классов: {n}": "More classes: {n}",
     "{sensor}: каналов {n} из {total}": "{sensor}: {n} bands of {total}",
     "Точка вне растра или без данных.": "The point is outside the raster "
@@ -6688,15 +6740,6 @@ EN = {
         "Group 1 - iron-bearing minerals, 0.4-1.3 µm",
     "Группа 2 - глины, слюда, карбонаты, сульфаты, 2.0-2.5 мкм":
         "Group 2 - clays, mica, carbonates, sulfates, 2.0-2.5 µm",
-    "Наибольшая облачность сцены по каталогу NASA. Облака закрывают "
-    "минералы, клетки под ними остаются без класса.":
-        "The largest cloud cover of a scene by the NASA catalogue. Clouds "
-        "hide minerals, cells under them stay without a class.",
-    "Найти сцены": "Find scenes",
-    "Сцены EMIT над участком, новые первыми: дата, облачность, доля "
-    "участка под сценой.":
-        "EMIT scenes over the site, newest first: date, cloud cover, share "
-        "of the site under the scene.",
     "Группа 1 - полосы поглощения железа в видимом и ближнем инфракрасном "
     "диапазоне, группа 2 - полосы связей Al-OH, Mg-OH и карбонатов "
     "в коротковолновом инфракрасном. В одной клетке бывают минералы обеих "
@@ -6704,8 +6747,6 @@ EN = {
         "Group 1 - iron absorption bands in the visible and near infrared, "
         "group 2 - bands of Al-OH, Mg-OH and carbonate bonds in the "
         "shortwave infrared. One cell may hold minerals of both groups.",
-    "Даты": "Dates",
-    "Облачность до": "Cloud cover up to",
     "Сцены": "Scenes",
     "Карты минералов NASA по снимкам спектрометра EMIT на МКС, пиксель "
     "60 м, засушливые области с 2022 года. Файлы сцен NASA отдаёт по ключу "
@@ -6729,9 +6770,6 @@ EN = {
     "Минералы EMIT {name}": "EMIT minerals {name}",
     "Минералы и глубина полосы в проекте.":
         "Minerals and band depth are in the project.",
-    "{when}, облачность {cloud} %, участка {share} %":
-        "{when}, cloud cover {cloud} %, site {share} %",
-    "Сцен над участком: {n}.": "Scenes over the site: {n}.",
     "Выберите сцену в списке.": "Select a scene in the list.",
     "Глубина полосы поглощения EMIT": "EMIT absorption band depth",
     "Каталог NASA не ответил: {error}":

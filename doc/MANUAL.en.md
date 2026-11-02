@@ -3113,8 +3113,20 @@ soils and mixtures, vegetation, coatings, artificial materials, water and
 snow. USGS has resampled the reference values to the bands of ASTER,
 Sentinel-2 and Landsat 8.
 
-The source is a multiband project raster in reflectance, for example All
-scene bands of the Satellite images window. The module recognizes the
+The window finds an image itself. The ASTER images list shows only scenes
+that suit minerals - ASTER of 2000-2006 with SWIR bands, taken in daytime
+with the sun at 25° or higher, with cloud cover up to 10 % and data on at
+least half of the site. The least cloudy are on top. If the project has no
+suitable image, the search starts when the window opens, the Find button
+repeats it for a new site. Load or a double click on a row puts all bands of
+the image over the site as a project layer in the ASTER group and sets it in
+the Raster field. The SWIR bands of ASTER worked until 2008, the open copy of
+the images ends in 2006.
+
+The Raster field lists only project rasters with six bands or more,
+three-band combinations, basemaps and elevation are not shown there. An own
+image in reflectance also fits, for example All scene bands of Sentinel-2
+from the Satellite images window. The module recognizes the
 bands by the wavelengths in the band descriptions, for example "B3N 0.82 um"
 of ASTER or "B8A nir08" of Sentinel-2, thermal bands do not take part. The
 line under the Bands list names the sensor and the number of recognized
@@ -3127,7 +3139,7 @@ the spectra. The reference curves are scaled to the pixel brightness, so the
 shape of the spectrum is compared. The check box of a reference in the
 Nearest list or in the main list marks it as a class. The main list is
 filtered by group and by words of the English name, for example kaolinite or
-alunite.
+alunite. The default group is Minerals, the choice is remembered.
 
 The measure of similarity is the angle between spectra (Spectral Angle
 Mapper). The angle does not depend on the overall brightness, so a slope in
@@ -3138,11 +3150,10 @@ class. The site and the pixel are the same as in the Classification window.
 A legend in the corner of the globe shows the color, the name and the share
 of the site of each class, the cross of the legend removes the result.
 
-The more bands, the better the substances differ. The window marks an image
-of fewer than six bands, for example the Shortwave infrared (4 6 8) combination,
-with a warning - by three bands different minerals give the same spectrum.
-For this window the All scene bands product of the Satellite images window
-is taken.
+The more bands, the better the substances differ. By three bands different
+minerals give the same spectrum, so band combinations do not get into the
+Raster field. An image without band descriptions, with the sensor chosen by
+hand and fewer than six recognized bands, gets a warning.
 
 OK writes to the calculation subgroup a class raster with the reference names
 and the raster Angle to the reference, °. A small angle is a close match of the
@@ -3165,10 +3176,14 @@ ISS builds them from images with a 60 m pixel by the Tetracorder method - the
 spectrum of a cell is compared with USGS references. The images are taken
 since August 2022 over arid regions - deserts, semi-deserts and steppes.
 
-The window searches the NASA catalogue for scenes over the site. A line of
-the list names the date, cloud cover and share of the site under the scene. On the right
-is the picture of the selected scene. The site is shared with the other
-analysis windows.
+The window searches the NASA catalogue for scenes over the site for all
+years of the survey when it opens, the Find button repeats the search for
+a new site. The list shows only suitable scenes - cloud cover up to 30 %
+and the scene over half of the site or more, at most 30 rows. The least
+cloudy and the widest covering are on top. A line of the list names the
+date, cloud cover and share of the site under the scene. Below is the
+picture of the selected scene. The site is shared with the other analysis
+windows.
 
 Minerals are identified in two groups. Group 1 - iron-bearing minerals by
 absorption bands of 0.4-1.3 µm, for example goethite and hematite. Group 2 -

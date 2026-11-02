@@ -33,6 +33,7 @@ from .aefclass import (AUTO, COLORS, PIXELS, RASTER_SIDE, ClassTiles,
                        add_classes, fill_pixels, pixel_text, problem_text,
                        project_rasters, read_raster, write_classes)
 from .area import Area
+from .asterscenes import AsterScenes
 from .export import add_raster
 from .results import Session, accepted, built_text, keep_buttons, \
     result_path, show_layer
@@ -83,8 +84,19 @@ def band_labels(path):
             for n in range(1, data.RasterCount + 1)]
 
 
+def fits(layer):
+    """Растр годен для спектра: каналов по подписям не меньше FEW_BANDS,
+    а без узнанных подписей - не меньше FEW_BANDS каналов в файле.
+    Сочетания трёх каналов, подложки и рельеф в список не идут."""
+    if layer.bandCount() < FEW_BANDS:
+        return False
+    sensor, pairs = spectra.pairs_for(library(), band_labels(layer.source()))
+    return sensor is None or len(pairs) >= FEW_BANDS
+
+
 class RasterBox(QComboBox):
-    """Многоканальные растры проекта. Заполняется при открытии списка."""
+    """Подходящие многоканальные растры проекта (fits). Заполняется при
+    открытии списка."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,7 +107,7 @@ class RasterBox(QComboBox):
         self.blockSignals(True)
         self.clear()
         for layer in project_rasters():
-            if layer.bandCount() >= spectra.MIN_BANDS:
+            if fits(layer):
                 self.addItem(layer.name(), layer.id())
         self.setCurrentIndex(max(0, self.findData(chosen)))
         self.blockSignals(False)
@@ -182,9 +194,32 @@ class SpectralDialog(QDialog):
         self.status.setWordWrap(True)
         self.source = RasterBox(self)
         self.source.setToolTip(tr(
-            "Многоканальный растр проекта в отражении, например «Все "
-            "каналы сцены» окна «Космоснимки». Каналы узнаются по их "
-            "подписям, тепловые каналы не участвуют."))
+            "Растр проекта в отражении с шестью каналами и больше, например "
+            "снимок ASTER из списка ниже. Каналы узнаются по их подписям, "
+            "тепловые каналы не участвуют."))
+        self.finder = AsterScenes(self)
+        self.scenes = QListWidget(self)
+        self.scenes.setMaximumHeight(96)
+        self.scenes.setToolTip(tr(
+            "Снимки ASTER 2000-2006 годов над участком, годные для "
+            "минералов: днём, с каналами SWIR, облачностью до 10 % и "
+            "данными не меньше половины участка. Сверху - малооблачные."))
+        find = QPushButton(tr("Найти"), self)
+        find.setToolTip(tr("Найти подходящие снимки ASTER участка."))
+        find.clicked.connect(self.find_scenes)
+        self.take = QPushButton(tr("Загрузить"), self)
+        self.take.setToolTip(tr(
+            "Все каналы выбранного снимка по участку - слоем проекта "
+            "в группу «ASTER». Снимок встаёт в поле «Растр»."))
+        self.take.setEnabled(False)
+        self.take.clicked.connect(self.load_scene)
+        self.scenes.currentItemChanged.connect(
+            lambda item, _: self.take.setEnabled(
+                item is not None and not self.finder.busy()))
+        self.scenes.itemDoubleClicked.connect(lambda _: self.load_scene())
+        self.finder.status.connect(self.status.setText)
+        self.finder.found.connect(self._scenes_found)
+        self.finder.loaded.connect(self._scene_loaded)
         self.sensor = QComboBox(self)
         self.sensor.addItem(tr("Авто"), "")
         for key in ("aster", "sentinel2", "landsat8"):
@@ -208,6 +243,10 @@ class SpectralDialog(QDialog):
         self.group = QComboBox(self)
         for key, name in group_names():
             self.group.addItem(name, key)
+        # По умолчанию - минералы, растения и материалы остаются в списке
+        # групп.
+        self.group.setCurrentIndex(max(0, self.group.findData(
+            str(settings.value(SETTINGS + "group", "minerals")))))
         self.search_box = QLineEdit(self)
         self.search_box.setPlaceholderText(tr("Слова названия, например "
                                         "kaolinite"))
@@ -238,7 +277,15 @@ class SpectralDialog(QDialog):
         picked_row = QHBoxLayout()
         picked_row.addWidget(self.picked, 1)
         picked_row.addWidget(forget)
+        scene_buttons = QVBoxLayout()
+        scene_buttons.addWidget(find)
+        scene_buttons.addWidget(self.take)
+        scene_buttons.addStretch(1)
+        scene_row = QHBoxLayout()
+        scene_row.addWidget(self.scenes, 1)
+        scene_row.addLayout(scene_buttons)
         form = QFormLayout()
+        form.addRow(tr("Снимки ASTER"), scene_row)
         form.addRow(tr("Растр"), self.source)
         form.addRow(tr("Каналы"), self.sensor)
         form.addRow("", self.bands)
@@ -277,7 +324,8 @@ class SpectralDialog(QDialog):
         self.sensor.currentIndexChanged.connect(lambda _: self._source())
         self.level.currentIndexChanged.connect(lambda _: self._pixel())
         self.area.changed.connect(self._volume)
-        self.group.currentIndexChanged.connect(lambda _: self._fill())
+        self.group.currentIndexChanged.connect(lambda _: (
+            self._fill(), self._remember()))
         self.search_box.textChanged.connect(lambda _: self._fill())
         self.list.itemChanged.connect(self._item)
         self.near.itemChanged.connect(self._item)
@@ -301,7 +349,8 @@ class SpectralDialog(QDialog):
                                        self.sensor.currentData() or None)
         sensor, pairs = self.pairs
         if layer is None:
-            text = tr("В проекте нет растров с тремя каналами и больше.")
+            text = tr("В проекте нет снимков с шестью каналами и больше - "
+                      "найдите и загрузите снимок ASTER участка.")
         elif sensor is None:
             text = tr("Каналы не узнаны по подписям, выберите датчик.")
         else:
@@ -406,10 +455,58 @@ class SpectralDialog(QDialog):
             self.near.addItem(item)
         self.near.blockSignals(False)
 
+    # --- снимки ASTER --------------------------------------------------
+
+    def find_scenes(self):
+        problem = self.area.check()
+        if problem:
+            self.status.setText(problem)
+            return
+        self.scenes.clear()
+        self.take.setEnabled(False)
+        self.finder.search(self.area.ring)
+
+    def _scenes_found(self, found):
+        self.scenes.clear()
+        for scene, valid in found:
+            text = tr("{when} · облачность {cloud} % · участка {valid} % "
+                      "· солнце {sun}°", when=scene.when[:10],
+                      cloud="{:.0f}".format(scene.cloud),
+                      valid="{:.0f}".format(valid),
+                      sun="{:.0f}".format(scene.sun))
+            item = QListWidgetItem(text)
+            item.setData(enum(Qt, "ItemDataRole", "UserRole"), scene)
+            self.scenes.addItem(item)
+        if found:
+            self.scenes.setCurrentRow(0)
+
+    def load_scene(self):
+        item = self.scenes.currentItem()
+        problem = self.area.check()
+        if item is None or problem:
+            if problem:
+                self.status.setText(problem)
+            return
+        self.take.setEnabled(False)
+        self.finder.load(item.data(enum(Qt, "ItemDataRole", "UserRole")),
+                         self.area.ring)
+
+    def _scene_loaded(self, layer):
+        self.take.setEnabled(self.scenes.currentItem() is not None)
+        self.parent().set_layer_shown(layer.id(), True)
+        self.source.refill()
+        self.source.setCurrentIndex(max(0, self.source.findData(
+            layer.id())))
+        self._source()
+        self.status.setText(tr(
+            "Снимок «{name}» загружен. Щёлкните по нему на глобусе.",
+            name=layer.name()))
+
     def _remember(self):
         settings = QgsSettings()
         settings.setValue(SETTINGS + "pixel", self.wanted_pixel)
         settings.setValue(SETTINGS + "limit", self.limit.value())
+        settings.setValue(SETTINGS + "group", self.group.currentData())
 
 
 class SpectralTool(SiteTool, QObject):
@@ -447,9 +544,13 @@ class SpectralTool(SiteTool, QObject):
         dialog.area.open_at(lat, lon)
         dialog._source()
         self.window._refresh_shapes()
+        if dialog.raster() is None and not dialog.finder.busy():
+            # Подходящего снимка в проекте нет - сразу свой поиск.
+            dialog.find_scenes()
         return dialog
 
     def _closed(self, code=0):
+        self.dialog.finder.stop()
         if accepted(code) and self.result is not None:
             self.export()
         self.clear()

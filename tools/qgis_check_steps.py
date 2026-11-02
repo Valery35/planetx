@@ -19784,6 +19784,84 @@ def spectral_wait():
     return None
 
 
+ASTER_POINT = (37.53, -117.22)  # Куприт, Невада
+
+
+@check(500)
+def spectral_aster():
+    # Свой поиск подходящих снимков ASTER окна «Минералы по спектру»:
+    # без растра в проекте поиск идёт сам, в списке - только сцены с SWIR,
+    # днём, малооблачные, «Загрузить» ставит снимок в поле «Растр».
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    lat, lon = ASTER_POINT
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 20000.0, 0.0, 0.0))
+    window.view.update()
+    tool = window.spectral_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.area.reset_square()
+    dialog.area.side.setValue(3.0)
+    out = result.setdefault("spectral_aster", {})
+    out["empty_source"] = dialog.source.count()
+    out["searching"] = dialog.finder.busy()
+    out["group"] = dialog.group.currentData()
+    state["aster_started"] = time.monotonic()
+
+
+@check(1000)
+def spectral_aster_wait():
+    window = state["window"]
+    dialog = window.spectral_tool.dialog
+    spent = time.monotonic() - state["aster_started"]
+    if dialog.finder.busy() and spent < 180.0:
+        return 1000
+    out = result["spectral_aster"]
+    out["search_s"] = round(spent, 1)
+    out["scenes"] = dialog.scenes.count()
+    out["first"] = dialog.scenes.item(0).text() if dialog.scenes.count() \
+        else dialog.status.text()
+    from planetx.qt_compat import enum
+    from planetx.ui import asterscenes
+    from qgis.PyQt.QtCore import Qt
+    role = enum(Qt, "ItemDataRole", "UserRole")
+    scenes = [dialog.scenes.item(n).data(role)
+              for n in range(dialog.scenes.count())]
+    out["all_suitable"] = all(asterscenes.suitable(s) for s in scenes)
+    if not scenes:
+        return None
+    dialog.load_scene()
+    state["aster_loading"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def spectral_aster_load():
+    window = state["window"]
+    dialog = window.spectral_tool.dialog
+    out = result["spectral_aster"]
+    if "aster_loading" not in state:
+        return None
+    spent = time.monotonic() - state["aster_loading"]
+    if dialog.finder.busy() and spent < 240.0:
+        return 1000
+    out["load_s"] = round(spent, 1)
+    layer = dialog.raster()
+    out["status"] = dialog.status.text()
+    out["layer"] = layer.name() if layer else None
+    out["bands"] = dialog.bands.text()
+    out["pairs"] = len(dialog.pairs[1])
+    lat, lon = ASTER_POINT
+    window.spectral_tool.click(lat, lon)
+    out["click_status"] = dialog.status.text()
+    dialog.reject()
+    if layer is not None:
+        from qgis.core import QgsProject
+        QgsProject.instance().removeMapLayer(layer.id())
+    return None
+
+
 @check(1000)
 def preview_on_top():
     # Предпросмотр анализа виден над растром проекта на глобусе. До
@@ -19977,6 +20055,27 @@ def _fake_emit(folder, lat, lon):
                                      "Longitude": lon - d}]}}]}}},
                         "RelatedUrls": [{
                             "URL": "https://fake/" + name,
+                            "Type": "GET DATA"}]}})
+                    # Сцена у края - под ней около 13 % участка, в список
+                    # подходящих она не идёт.
+                    items.append({"umm": {
+                        "GranuleUR": EMIT_NAME.replace("T1830", "T1700"),
+                        "TemporalExtent": {"RangeDateTime": {
+                            "BeginningDateTime": "2025-06-12T17:00:00Z"}},
+                        "CloudCover": 0,
+                        "SpatialExtent": {"HorizontalSpatialDomain": {
+                            "Geometry": {"GPolygons": [{"Boundary": {
+                                "Points": [
+                                    {"Latitude": lat + 0.01,
+                                     "Longitude": lon - d},
+                                    {"Latitude": lat + 0.01,
+                                     "Longitude": lon + d},
+                                    {"Latitude": lat + d,
+                                     "Longitude": lon + d},
+                                    {"Latitude": lat + d,
+                                     "Longitude": lon - d}]}}]}}},
+                        "RelatedUrls": [{
+                            "URL": "https://fake/edge.nc",
                             "Type": "GET DATA"}]}})
                 self._send(200, json.dumps({"items": items}).encode())
                 return

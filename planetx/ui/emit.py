@@ -19,10 +19,10 @@ import numpy as np
 from qgis.core import QgsApplication, QgsSettings
 from qgis.PyQt.QtCore import QDate, QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QPixmap
-from qgis.PyQt.QtWidgets import (QComboBox, QDateEdit, QDialog,
-                                 QDialogButtonBox, QFormLayout, QHBoxLayout,
-                                 QLabel, QListWidget, QListWidgetItem,
-                                 QPushButton, QSpinBox, QVBoxLayout)
+from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
+                                 QFormLayout, QHBoxLayout, QLabel,
+                                 QListWidget, QListWidgetItem, QPushButton,
+                                 QVBoxLayout)
 
 from ..core import aef, emit
 from ..i18n import tr
@@ -44,6 +44,13 @@ SIDE = 10.0  # км, участок по умолчанию
 MOST_SIDE = 200.0  # км, наибольшая сторона участка
 OPACITY = 0.7
 PREVIEW = 220  # пикселей, картинка сцены
+# Подходящая сцена - облачность по каталогу не больше CLOUD_MAX, участок
+# под сценой не меньше SHARE_MIN, в списке не больше SHOWN лучших. Выбор
+# помощника по слову автора «EMIT тоже переделай» от 2 ноября 2026 года,
+# утверждает автор.
+CLOUD_MAX = 30
+SHARE_MIN = 0.5
+SHOWN = 30
 # Шкала глубины полосы поглощения в проекте: малая - светлее.
 DEPTH_STOPS = [(0.0, (255, 255, 204)), (0.1, (253, 141, 60)),
                (0.25, (189, 0, 38)), (0.5, (60, 0, 30))]
@@ -204,36 +211,21 @@ class EmitDialog(QDialog):
         self.status = QLabel(self)
         self.status.setWordWrap(True)
         self.area = Area(window, self, SIDE, MOST_SIDE, SETTINGS + "side")
-        today = QDate.currentDate()
-        self.start = QDateEdit(self)
-        self.start.setCalendarPopup(True)
-        self.start.setDisplayFormat("yyyy-MM-dd")
-        self.start.setMinimumDate(QDate.fromString(emit.FIRST_DAY,
-                                                   "yyyy-MM-dd"))
-        self.start.setDate(QDate.fromString(emit.FIRST_DAY, "yyyy-MM-dd"))
-        self.end = QDateEdit(self)
-        self.end.setCalendarPopup(True)
-        self.end.setDisplayFormat("yyyy-MM-dd")
-        self.end.setDate(today)
-        self.cloud = QSpinBox(self)
-        self.cloud.setRange(0, 100)
-        self.cloud.setSuffix(" %")
-        self.cloud.setValue(int(settings.value(SETTINGS + "cloud", 30)))
-        self.cloud.setToolTip(tr(
-            "Наибольшая облачность сцены по каталогу NASA. Облака "
-            "закрывают минералы, клетки под ними остаются без класса."))
-        find = QPushButton(tr("Найти сцены"), self)
+        find = QPushButton(tr("Найти"), self)
+        find.setToolTip(tr("Найти подходящие сцены EMIT участка."))
         find.clicked.connect(self.search)
-        dates = QHBoxLayout()
-        dates.addWidget(self.start)
-        dates.addWidget(QLabel("-", self))
-        dates.addWidget(self.end)
-        dates.addWidget(find)
         self.list = QListWidget(self)
         self.list.setMinimumHeight(120)
         self.list.setToolTip(tr(
-            "Сцены EMIT над участком, новые первыми: дата, облачность, доля "
-            "участка под сценой."))
+            "Сцены EMIT с 2022 года над участком, годные для минералов: "
+            "облачность до 30 % и сцена над половиной участка или больше. "
+            "Сверху - малооблачные и шире покрывающие участок."))
+        scenes = QHBoxLayout()
+        scenes.addWidget(self.list, 1)
+        side = QVBoxLayout()
+        side.addWidget(find)
+        side.addStretch(1)
+        scenes.addLayout(side)
         self.preview = QLabel(self)
         self.preview.setFixedSize(PREVIEW, PREVIEW)
         self.preview.setAlignment(enum(Qt, "AlignmentFlag", "AlignCenter"))
@@ -250,9 +242,7 @@ class EmitDialog(QDialog):
         self.group.currentIndexChanged.connect(self._remember)
         form = QFormLayout()
         form.addRow(tr("Участок"), self.area.widget)
-        form.addRow(tr("Даты"), dates)
-        form.addRow(tr("Облачность до"), self.cloud)
-        form.addRow(tr("Сцены"), self.list)
+        form.addRow(tr("Сцены"), scenes)
         form.addRow("", self.preview)
         form.addRow(tr("Группа"), self.group)
         hint = QLabel(tr(
@@ -276,12 +266,10 @@ class EmitDialog(QDialog):
         layout.addWidget(self.status)
         layout.addWidget(buttons)
         fit_status(self, layout)
-        self.cloud.valueChanged.connect(lambda _: self._remember())
         self.to_project.setEnabled(False)
 
     def _remember(self):
         settings = QgsSettings()
-        settings.setValue(SETTINGS + "cloud", self.cloud.value())
         settings.setValue(SETTINGS + "group", self.group.currentData())
 
     def scene(self):
@@ -296,7 +284,7 @@ class EmitDialog(QDialog):
         self.list.clear()
         for n, s in enumerate(scenes):
             item = QListWidgetItem(tr(
-                "{when}, облачность {cloud} %, участка {share} %",
+                "{when} · облачность {cloud} % · участка {share} %",
                 when=s["when"][:16], cloud="{:.0f}".format(s["cloud"]),
                 share="{:.0f}".format(100.0 * s["share"])))
             item.setData(enum(Qt, "ItemDataRole", "UserRole"), n)
@@ -367,15 +355,14 @@ class EmitTool(SiteTool, QObject):
         self.request += 1
         request = self.request
         ring = list(dialog.area.ring)
-        start = dialog.start.date().toString("yyyy-MM-dd")
-        end = dialog.end.date().toString("yyyy-MM-dd")
+        start = emit.FIRST_DAY
+        end = QDate.currentDate().toString("yyyy-MM-dd")
         answers = {}
         dialog.set_scenes([])
         dialog.status.setText(tr("Поиск сцен EMIT…"))
         self.replies = []
         for collection, version in emit.COLLECTIONS:
-            url = self.search_url(ring, start, end, dialog.cloud.value(),
-                                  collection)
+            url = self.search_url(ring, start, end, CLOUD_MAX, collection)
             self.replies.append(fetch_bytes(
                 url, lambda data, error, v=version:
                 self._found(request, v, data, error, answers),
@@ -398,9 +385,15 @@ class EmitTool(SiteTool, QObject):
         scenes = emit.merge(lists)
         self._shares(scenes)
         dialog = self.dialog
-        if scenes:
-            dialog.status.setText(tr("Сцен над участком: {n}.",
-                                     n=len(scenes)))
+        if dialog.scenes:
+            dialog.status.setText(tr(
+                "Подходящих сцен EMIT: {n}. Выберите сцену и нажмите "
+                "«Построить».", n=len(dialog.scenes)))
+        elif scenes:
+            dialog.status.setText(tr(
+                "Подходящих сцен EMIT нет: у сцен над участком облачность "
+                "больше {cloud} % или под сценой меньше половины участка.",
+                cloud=CLOUD_MAX))
         elif "error" in answers:
             dialog.status.setText(tr("Каталог NASA не ответил: {error}",
                                      error=answers["error"]))
@@ -417,8 +410,7 @@ class EmitTool(SiteTool, QObject):
         ring = list(dialog.area.ring)
         for s in scenes:
             s["share"] = emit.coverage(s["polygon"], ring)
-        scenes = [s for s in scenes if s["share"] > 0.0]
-        dialog.set_scenes(scenes)
+        dialog.set_scenes(suitable(scenes))
 
     def _preview(self):
         dialog = self.dialog
@@ -634,3 +626,15 @@ class EmitTool(SiteTool, QObject):
         self.replies = []
         if self.dialog is not None:
             self.dialog.close()
+
+
+def suitable(scenes):
+    """Подходящие сцены по порядку списка: облачность не больше CLOUD_MAX,
+    участок под сценой не меньше SHARE_MIN, малооблачные и шире
+    покрывающие участок первыми, при равенстве - новые."""
+    kept = [s for s in scenes if s["share"] >= SHARE_MIN
+            and (s["cloud"] is None or s["cloud"] <= CLOUD_MAX)]
+    kept.sort(key=lambda s: s["when"], reverse=True)
+    kept.sort(key=lambda s: (round(s["cloud"] or 0.0),
+                             -round(10.0 * s["share"])))
+    return kept[:SHOWN]
