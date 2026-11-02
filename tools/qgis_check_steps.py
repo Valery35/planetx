@@ -19762,6 +19762,12 @@ def spectral_wait():
     angle = res["angle"]
     out["angle_median"] = round(float(np.nanmedian(angle)), 2)
     out["textures"] = len(textures)
+    # Шкала классов на глобусе и окно Qt во всё окно Windows.
+    legend = window.site_legend
+    out["legend"] = [legend.isVisible(), legend.title,
+                     [text for _, text, _, _ in legend.rows()]]
+    handle = dialog.windowHandle()
+    out["dialog_heights"] = [dialog.height(), handle.height()]
     window.view.update()
     window.view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_spectral.png"))
@@ -19772,6 +19778,7 @@ def spectral_wait():
     _drop_group()
     dialog.reject()
     out["closed_tiles"] = tool.tiles is None
+    out["legend_after"] = legend.isVisible()
     from qgis.core import QgsProject
     QgsProject.instance().removeMapLayer(state["spectral_layer"])
     return None

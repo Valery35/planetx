@@ -6665,6 +6665,12 @@ EN = {
     "Щёлкните по снимку на глобусе": "Click the image on the globe",
     "Каналы не узнаны по подписям, выберите датчик.":
         "The bands are not recognized by their labels, choose a sensor.",
+    "Каналов мало, разные минералы дадут одинаковый спектр - возьмите "
+    "снимок «Все каналы сцены» окна «Космоснимки».":
+        "There are few bands, different minerals give the same spectrum - "
+        "take an All scene bands image of the Satellite images window.",
+    "Классы участка": "Site classes",
+    "Ещё классов: {n}": "More classes: {n}",
     "{sensor}: каналов {n} из {total}": "{sensor}: {n} bands of {total}",
     "Точка вне растра или без данных.": "The point is outside the raster "
                                         "or has no data.",

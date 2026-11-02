@@ -3135,6 +3135,14 @@ shadow and in sun gives the same answer. The Build button assigns each cell
 of the site to the marked reference with the smallest angle. A cell whose
 angle to all references is larger than the Angle up to field stays without a
 class. The site and the pixel are the same as in the Classification window.
+A legend in the corner of the globe shows the color, the name and the share
+of the site of each class, the cross of the legend removes the result.
+
+The more bands, the better the substances differ. The window marks an image
+of fewer than six bands, for example the Shortwave infrared (4 6 8) combination,
+with a warning - by three bands different minerals give the same spectrum.
+For this window the All scene bands product of the Satellite images window
+is taken.
 
 OK writes to the calculation subgroup a class raster with the reference names
 and the raster Angle to the reference, °. A small angle is a close match of the

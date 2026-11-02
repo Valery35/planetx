@@ -309,6 +309,10 @@ class EmitDialog(QDialog):
 class EmitTool(SiteTool, QObject):
     """Минеральные карты EMIT у окна глобуса."""
 
+    @property
+    def legend_title(self):
+        return tr("Минералы EMIT")
+
     def __init__(self, window):
         super().__init__(window)
         self.window = window

@@ -44,6 +44,7 @@ DATA = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data",
                     "spectra.json")
 OPACITY = 0.6
 NEAREST = 5  # ближайших эталонов под графиком
+FEW_BANDS = 6  # меньше каналов - предупреждение, спектр слишком груб
 # Цвета линий графика: спектр пикселя и ближайшие эталоны - выбор
 # помощника.
 PIXEL_COLOR = QColor(250, 250, 250)
@@ -307,6 +308,11 @@ class SpectralDialog(QDialog):
             text = tr("{sensor}: каналов {n} из {total}",
                       sensor=library().sensors[sensor]["name"],
                       n=len(pairs), total=len(self.labels))
+            if len(pairs) < FEW_BANDS:
+                text += ". " + tr(
+                    "Каналов мало, разные минералы дадут одинаковый "
+                    "спектр - возьмите снимок «Все каналы сцены» окна "
+                    "«Космоснимки».")
         self.bands.setText(text)
         self._volume()
         self.changed.emit()
@@ -408,6 +414,10 @@ class SpectralDialog(QDialog):
 
 class SpectralTool(SiteTool, QObject):
     """Минералы по спектру у окна глобуса."""
+
+    @property
+    def legend_title(self):
+        return tr("Минералы по спектру")
 
     def __init__(self, window):
         super().__init__(window)

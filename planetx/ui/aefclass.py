@@ -538,6 +538,10 @@ class ClassDialog(QDialog):
 class ClassTool(SiteTool, QObject):
     """Классификация участка у окна глобуса."""
 
+    @property
+    def legend_title(self):
+        return tr("Классификация")
+
     def __init__(self, window):
         super().__init__(window)
         self.window = window

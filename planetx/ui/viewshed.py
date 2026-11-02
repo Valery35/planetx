@@ -13,6 +13,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
+from qgis.PyQt import sip
 from qgis.PyQt.QtCore import QEvent, QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (QCheckBox, QDialog, QDialogButtonBox,
                                  QDoubleSpinBox, QFormLayout, QLabel,
@@ -127,15 +128,36 @@ class _StatusFit(QObject):
         super().__init__(dialog)
         self.status = dialog.status
         self.lowest = lowest
+        self.dialog = dialog
         dialog.installEventFilter(self)
 
     def eventFilter(self, watched, event):
-        if event.type() == enum(QEvent, "Type", "LayoutRequest"):
+        kind = event.type()
+        if kind == enum(QEvent, "Type", "LayoutRequest"):
             need = max(self.lowest,
                        self.status.heightForWidth(self.status.width()))
             if need != self.status.minimumHeight():
                 self.status.setMinimumHeight(need)
+        elif kind in (enum(QEvent, "Type", "Resize"),
+                      enum(QEvent, "Type", "Show")):
+            QTimer.singleShot(0, self._match)
         return False
+
+    def _match(self):
+        """Окно Qt не меньше окна Windows. Окно «Минералы по спектру»
+        у автора 2 ноября 2026 года стояло 760 точек при окне Windows
+        927: Windows не дал окну сжаться, а низ окна без Qt оставался
+        белым прямоугольником."""
+        dialog = self.dialog
+        if sip.isdeleted(dialog):
+            return
+        handle = dialog.windowHandle()
+        if handle is None or not dialog.isVisible():
+            return
+        if handle.height() > dialog.height() \
+                or handle.width() > dialog.width():
+            dialog.resize(max(handle.width(), dialog.width()),
+                          max(handle.height(), dialog.height()))
 
 
 def fit_status(dialog, layout):

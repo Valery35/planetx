@@ -52,7 +52,7 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, CurrentLegend, FaultLegend, FieldLegend,
-                     InfraLegend, PointCloudLegend,
+                     InfraLegend, PointCloudLegend, SiteLegend,
                      PlantLegend, TrainLegend, VolcanoLegend,
                      VesselLegend, AircraftLegend)
 from .overlays import GroundLayers, ScreenOverlays
@@ -1029,6 +1029,12 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.legend_panel.add(self.class_legend)
         self.class_legend.closer = lambda: self._tilemap_shown and \
             self.set_extra(self._tilemap_shown, False)
+        self.site_legend = SiteLegend(self.view)
+        self.site_legend.hide()
+        self.legend_panel.add(self.site_legend)
+        self.site_legend.closer = lambda: self.site_layer.owner is not None \
+            and hasattr(self.site_layer.owner, "clear") \
+            and self.site_layer.owner.clear()
         self.field_legend.closer = lambda: self.set_extra(
             self._field_shown or self._tilemap_shown or self.field_tool.key
             or "aef_change", False)

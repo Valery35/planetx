@@ -15,7 +15,27 @@ SiteTool - общая основа показа результата инстр�
 """
 import math
 
+import numpy as np
+
+try:  # внутри плагина QGIS
+    from ..i18n import tr
+except ImportError:  # тесты без пакета
+    def tr(text, **values):
+        return text.format(**values)
+
 LAYER = "viewshed"  # слой вида, общий у окон анализа участка
+LEGEND_ROWS = 12  # строк шкалы классов, остальные - одной строкой
+
+
+def class_rows(classes, colors, names):
+    """Классы с клетками по убыванию доли: [(цвет, «имя N %»)]."""
+    classes = np.asarray(classes)
+    counts = np.bincount(classes[classes >= 0].ravel().astype(np.int64),
+                         minlength=len(names))[:len(names)]
+    total = max(int(counts.sum()), 1)
+    return [(colors[n], "{} {:.0f} %".format(names[n],
+                                             100.0 * counts[n] / total))
+            for n in np.argsort(-counts, kind="stable") if counts[n]]
 
 
 def result_level(result):
@@ -72,7 +92,39 @@ class SiteTool:
         layer.empty.clear()
         view.set_gibs(LAYER, True, tiles, keep=keep)
         layer.fade = 0.0 if opacity is None else 1.0 - opacity
+        self._show_legend()
         view.update()
+
+    def legend_rows(self):
+        """Строки шкалы классов [(цвет, подпись)] по результату
+        с полями classes, colors и names - по убыванию доли участка.
+        Наследник без классов отвечает пустым списком."""
+        result = getattr(self, "result", None)
+        if not result or "names" not in result \
+                or "classes" not in result:
+            return []
+        return class_rows(result["classes"], result["colors"],
+                          result["names"])
+
+    def _show_legend(self):
+        legend = getattr(self.window, "site_legend", None)
+        if legend is None:
+            return
+        rows = self.legend_rows()
+        if not rows:
+            legend.hide()
+            return
+        shown, more = rows[:LEGEND_ROWS], len(rows) - LEGEND_ROWS
+        legend.set_rows(getattr(self, "legend_title", ""), shown,
+                        tr("Ещё классов: {n}", n=more) if more > 0 else "")
+        legend.show()
+
+    def _hide_legend(self):
+        legend = getattr(self.window, "site_legend", None)
+        # Шкала своя, пока свои картинки на слое: снятый раньше
+        # инструмент не прячет шкалу нового хозяина.
+        if legend is not None and self.tiles is not None:
+            legend.hide()
 
     def set_opacity(self, value):
         """Непрозрачность результата - доля прозрачности слоя вида, без
@@ -83,6 +135,7 @@ class SiteTool:
         self.window.view.update()
 
     def _drop_tiles(self):
+        self._hide_legend()
         if self.tiles is not None:
             # Прозрачность слоя у видимости своя.
             self.window.view.gibs[LAYER].fade = 0.0

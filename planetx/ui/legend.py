@@ -790,6 +790,36 @@ class ClassLegend(_RowsLegend):
         self.update()
 
 
+class SiteLegend(_RowsLegend):
+    """Шкала классов результата окна анализа на общем слое вида
+    (ui/sitelayer.py) - классификация, минералы по спектру, EMIT.
+    Строки ставит хозяин слоя."""
+
+    def __init__(self, parent=None):
+        self._rows = []
+        self.title = tr("Классы участка")
+        super().__init__(parent)
+
+    def rows(self):
+        return self._rows
+
+    def set_rows(self, title, rows, footer=""):
+        """rows - [(цвет RGB, подпись)]."""
+        self.title = title
+        self.footer = footer
+        self._rows = [(tuple(color[:3]), text, "dot", 0.0)
+                      for color, text in rows]
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
+        texts = [self.title, self.footer] + [r[1] for r in self._rows]
+        width = max(_text_width(metrics, text) for text in texts if text)
+        self.setFixedSize(max(BAR_WIDTH + 2 * PAD + 8,
+                              width + PAD + 26 + PAD + 16),
+                          line * (len(self._rows) + 1
+                                  + (1 if footer else 0)) + PAD)
+        self.update()
+
+
 def mine_kind_names():
     """Виды шахт и карьеров OSM по ключам core.mining.KINDS."""
     return {"mine": tr("Шахта или рудник"),
