@@ -325,6 +325,11 @@ def _tools(window, add, earth):
         ("минералы", "спектр", "спектральная библиотека", "породы",
          "полезные ископаемые", "каолинит", "spectral angle", "sam",
          "minerals", "spectral library", "usgs"))
+    add("here:emit", tr("Минералы EMIT"), open_,
+        lambda: window.emit_tool.open_here(*_here(window)),
+        ("emit", "минеральные карты", "минералы nasa", "спектрометр",
+         "глины", "карбонаты", "оксиды железа", "mineral maps",
+         "imaging spectrometer"))
     add("here:earthwork", tr("Земляные работы"), open_,
         lambda: window.earthwork.open_here(*_here(window)),
         ("земляные работы", "выемка", "насыпь", "площадка", "планировка",

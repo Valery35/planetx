@@ -590,6 +590,7 @@ class SpectralTool(QObject):
             return
         window.class_tool.clear()
         window.similar_tool.clear()
+        window.emit_tool.clear()
         window.earthwork.clear()
         window._show_viewshed(None)
         tiles = ClassTiles(result, parent=self)

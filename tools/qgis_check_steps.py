@@ -19777,6 +19777,283 @@ def spectral_wait():
     return None
 
 
+EMIT_NAME = "EMIT_L2B_MIN_002_20250610T183000"
+
+
+def _emit_file(path, lat, lon):
+    """Синтетический файл EMIT L2B MIN многомерным интерфейсом GDAL:
+    полоса 90 × 70 клеток, сетка GLT 80 × 100 с шагом 0.0006° вокруг
+    точки, полоса повёрнута на четверть оборота (столбец сетки - строка
+    полосы). Группа 2: запад - минерал 5 (каолинит), восток - 9
+    (кальцит), глубина 0.2, в углу сетки нет данных (GLT 0)."""
+    import numpy as np
+    from osgeo import gdal
+    rows, cols = 80, 100  # сетка широт и долгот
+    step = 0.0006
+    swath = np.zeros((cols, rows), dtype=np.int16)  # полоса строк = cols
+    ids = np.full((cols + 10, rows + 5), -9999, dtype=np.int16)
+    depth = np.full(ids.shape, -9999.0, dtype=np.float32)
+    glt_x = np.zeros((rows, cols), dtype=np.int32)
+    glt_y = np.zeros((rows, cols), dtype=np.int32)
+    for r in range(rows):
+        for c in range(cols):
+            if r < 8 and c < 8:
+                continue  # нет данных
+            sy, sx = c, r  # полоса повёрнута
+            glt_x[r, c] = sx + 1
+            glt_y[r, c] = sy + 1
+            ids[sy, sx] = 5 if c < cols // 2 else 9
+            depth[sy, sx] = 0.2
+    del swath
+    driver = gdal.GetDriverByName("netCDF")
+    data = driver.CreateMultiDimensional(path)
+    root = data.GetRootGroup()
+    down = root.CreateDimension("downtrack", None, None, ids.shape[0])
+    across = root.CreateDimension("crosstrack", None, None, ids.shape[1])
+    oy = root.CreateDimension("ortho_y", None, None, rows)
+    ox = root.CreateDimension("ortho_x", None, None, cols)
+    short = gdal.ExtendedDataType.Create(gdal.GDT_Int16)
+    single = gdal.ExtendedDataType.Create(gdal.GDT_Float32)
+    whole = gdal.ExtendedDataType.Create(gdal.GDT_Int32)
+    for number in (1, 2):
+        values = ids if number == 2 else np.full(ids.shape, -9999,
+                                                  dtype=np.int16)
+        root.CreateMDArray("group_{}_mineral_id".format(number),
+                           [down, across], short).Write(values)
+        root.CreateMDArray("group_{}_band_depth".format(number),
+                           [down, across], single).Write(
+            depth if number == 2 else np.full(ids.shape, -9999.0,
+                                              dtype=np.float32))
+    location = root.CreateGroup("location")
+    location.CreateMDArray("glt_x", [oy, ox], whole).Write(glt_x)
+    location.CreateMDArray("glt_y", [oy, ox], whole).Write(glt_y)
+    west = lon - cols / 2 * step
+    north = lat + rows / 2 * step
+    attr = root.CreateAttribute("geotransform", [6],
+                                gdal.ExtendedDataType.Create(
+                                    gdal.GDT_Float64))
+    attr.Write([west, step, 0.0, north, 0.0, -step])
+    meta = root.CreateGroup("mineral_metadata")
+    count = meta.CreateDimension("index", None, None, 3)
+    uint = gdal.ExtendedDataType.Create(gdal.GDT_UInt32)
+    text = gdal.ExtendedDataType.CreateString()
+    meta.CreateMDArray("index", [count], uint).Write(
+        np.array([5, 9, 3], dtype=np.uint32))
+    meta.CreateMDArray("group", [count], uint).Write(
+        np.array([2, 2, 1], dtype=np.uint32))
+    meta.CreateMDArray("name", [count], text).Write(
+        ["s07_Kaolinite_CM9.txt", "s07_Calcite_WS272.txt",
+         "s07_Goethite_WS222.txt"])
+    meta.CreateMDArray("sample_name", [count], text).Write(
+        ["Kaolinite CM9", "Calcite WS272", "Goethite WS222"])
+    data = None
+    return west, north, step, rows, cols
+
+
+def _fake_emit(folder, lat, lon):
+    """Поддельные каталог CMR и хранилище NASA на 127.0.0.1: /cmr - сцена
+    над точкой, /protected/ с ключом FAKE_KEY - переадресация 307 на
+    файл, иначе 303 на страницу входа."""
+    import http.server
+    import json
+    import threading
+    os.makedirs(folder, exist_ok=True)
+    name = EMIT_NAME + ".nc"
+    _emit_file(os.path.join(folder, name), lat, lon)
+    requests = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return None
+
+        def _send(self, code, body=b"", kind="application/json",
+                  where=None):
+            self.send_response(code)
+            if where:
+                self.send_header("Location", where)
+            self.send_header("Content-Type", kind)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            requests.append((self.path, self.headers.get("Authorization")))
+            port = self.server.server_address[1]
+            if self.path.startswith("/cmr"):
+                items = []
+                if "C4079846859" in self.path:
+                    d = 0.05
+                    items.append({"umm": {
+                        "GranuleUR": EMIT_NAME,
+                        "TemporalExtent": {"RangeDateTime": {
+                            "BeginningDateTime": "2025-06-10T18:30:00Z"}},
+                        "CloudCover": 5,
+                        "SpatialExtent": {"HorizontalSpatialDomain": {
+                            "Geometry": {"GPolygons": [{"Boundary": {
+                                "Points": [
+                                    {"Latitude": lat - d,
+                                     "Longitude": lon - d},
+                                    {"Latitude": lat - d,
+                                     "Longitude": lon + d},
+                                    {"Latitude": lat + d,
+                                     "Longitude": lon + d},
+                                    {"Latitude": lat + d,
+                                     "Longitude": lon - d}]}}]}}},
+                        "RelatedUrls": [{
+                            "URL": "https://fake/" + name,
+                            "Type": "GET DATA"}]}})
+                self._send(200, json.dumps({"items": items}).encode())
+                return
+            if self.path.startswith("/protected/"):
+                if self.headers.get("Authorization") == "Bearer " + FAKE_KEY:
+                    self._send(307, where="http://127.0.0.1:{}/files/{}"
+                               "?X-Amz-Signature=fake".format(
+                                   port, self.path[11:]))
+                else:
+                    self._send(303, where="https://urs.earthdata.nasa.gov/"
+                               "oauth/authorize?client_id=fake")
+                return
+            path = os.path.join(folder, self.path.split("?")[0][7:])
+            if not os.path.isfile(path):
+                self._send(404)
+                return
+            self._send(200, open(path, "rb").read(),
+                       "application/octet-stream")
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, requests
+
+
+@check(1000)
+def emit_open():
+    # Минералы EMIT: поддельные каталог и хранилище, синтетический файл
+    # с таблицей GLT. Запад участка - каолинит, восток - кальцит.
+    from qgis.core import QgsSettings
+    from planetx.core.navigation import Pose
+    from planetx.ui import emit as ui
+    from planetx.ui import sentinel
+    window = state["window"]
+    lat, lon = CHANGE_POINT
+    server, requests = _fake_emit(os.path.join(TEMP, "planetx_emit"),
+                                  lat, lon)
+    state["fake_emit"] = (server, requests)
+    port = server.server_address[1]
+    cached = os.path.join(ui.folder(), EMIT_NAME + ".nc")
+    if os.path.isfile(cached):
+        os.remove(cached)
+    QgsSettings().setValue(sentinel.EARTHDATA_KEY, FAKE_KEY)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 6000.0, 0.0, 0.0))
+    window.view.update()
+    tool = window.emit_tool
+    tool.search_url = lambda ring, start, end, cloud, collection: \
+        "http://127.0.0.1:{}/cmr?c={}".format(port, collection)
+    tool.open_here(lat, lon)
+    tool.dialog.area.reset_square()
+    tool.dialog.area.side.setValue(3.0)
+    tool.dialog.group.setCurrentIndex(tool.dialog.group.findData(2))
+    tool.search()
+    state["emit_port"] = port
+    state["emit_started"] = time.monotonic()
+    result["emit"] = {}
+
+
+@check(500)
+def emit_wait():
+    window = state["window"]
+    tool = window.emit_tool
+    dialog = tool.dialog
+    out = result["emit"]
+    if not dialog.scenes and time.monotonic() - state["emit_started"] < 30:
+        return 500
+    if "scenes" not in out:
+        out["scenes"] = len(dialog.scenes)
+        out["share"] = round(dialog.scenes[0]["share"], 3) \
+            if dialog.scenes else None
+        out["search_status"] = dialog.status.text()
+        if not dialog.scenes:
+            return None
+        dialog.scenes[0]["url"] = "http://127.0.0.1:{}/protected/{}".format(
+            state["emit_port"], EMIT_NAME + ".nc")
+        tool.build()
+        state["emit_started"] = time.monotonic()
+        return 500
+    if (tool.job is not None or tool.result is None) \
+            and time.monotonic() - state["emit_started"] < 60:
+        return 500
+    textures = window.view.gibs["viewshed"].textures
+    if tool.result is not None and len(textures) < 4 \
+            and time.monotonic() - state["emit_started"] < 30:
+        window.view.update()
+        return 500
+    import numpy as np
+    from planetx.core.coords import from_utm
+    out["status"] = dialog.status.text()
+    res = tool.result
+    out["built"] = res is not None
+    out["requests"] = [p.split("?")[0] for p, _ in state["fake_emit"][1]]
+    if res is None:
+        return None
+    classes = res["classes"]
+    out["names"] = res["names"]
+    out["grid"] = [list(classes.shape), res["step"]]
+    index = res["index"]
+    middle = res["y0"] - classes.shape[0] / 2.0 * res["step"]
+    lons = np.array([from_utm(index.number, index.south,
+                              res["x0"] + (col + 0.5) * res["step"],
+                              middle)[1]
+                     for col in range(classes.shape[1])])
+    cell_lon = np.tile(lons, (classes.shape[0], 1))
+    lat, lon = CHANGE_POINT
+    margin = 0.002
+    has = classes >= 0
+    west = res["names"].index("Kaolinite CM9")
+    east = res["names"].index("Calcite WS272")
+    out["west_right"] = round(float(
+        (classes[(cell_lon < lon - margin) & has] == west).mean()), 4)
+    out["east_right"] = round(float(
+        (classes[(cell_lon > lon + margin) & has] == east).mean()), 4)
+    out["cells"] = int(has.sum())
+    out["textures"] = len(textures)
+    window.view.update()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_emit.png"))
+    out["cached"] = os.path.isfile(os.path.join(
+        __import__("planetx.ui.emit", fromlist=["folder"]).folder(),
+        EMIT_NAME + ".nc"))
+    out["exported"] = bool(tool.export(
+        os.path.join(TEMP, "planetx_emit_out.tif")))
+    out["layers"] = [n.name() for n in _result_layers()]
+    _drop_group()
+    # Группа 1 того же файла: минералов нет, файл не скачивается снова.
+    dialog.group.setCurrentIndex(dialog.group.findData(1))
+    before = len(state["fake_emit"][1])
+    tool.build()
+    state["emit_before"] = before
+    state["emit_started"] = time.monotonic()
+    return None
+
+
+@check(500)
+def emit_again():
+    from qgis.core import QgsSettings
+    from planetx.ui import sentinel
+    tool = state["window"].emit_tool
+    if tool.job is not None \
+            and time.monotonic() - state["emit_started"] < 30:
+        return 500
+    out = result["emit"]
+    out["group1_status"] = tool.dialog.status.text()
+    out["group1_requests"] = len(state["fake_emit"][1]) \
+        - state["emit_before"]
+    tool.dialog.reject()
+    out["closed_tiles"] = tool.tiles is None
+    QgsSettings().remove(sentinel.EARTHDATA_KEY)
+    state["fake_emit"][0].shutdown()
+    return None
+
+
 def _class_raster(path, rgba=False):
     """Пробный растр у CHANGE_POINT в EPSG:3857, сторона 4 км, пиксель
     25 м. Запад и восток - разные классы только в канале 2 (отражение),

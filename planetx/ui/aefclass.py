@@ -961,6 +961,7 @@ class ClassTool(QObject):
             return
         window.similar_tool.clear()  # слой вида один
         window.spectral_tool.clear()
+        window.emit_tool.clear()
         window.earthwork.clear()
         window._show_viewshed(None)
         tiles = ClassTiles(result, parent=self)

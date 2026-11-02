@@ -224,6 +224,10 @@ def relief_items(window, menu, lat, lon):
                       tr("Спектр пикселя снимка и классы участка по "
                          "эталонам минералов и пород библиотеки USGS."),
                       lambda *a: window.spectral_tool.open_here(lat, lon)))
+        items.append((tr("Минералы EMIT…"),
+                      tr("Карты минералов NASA по снимкам спектрометра "
+                         "EMIT, пиксель 60 м, засушливые области."),
+                      lambda *a: window.emit_tool.open_here(lat, lon)))
     items.append((tr("Земляные работы…"),
                   tr("Выемка и насыпь участка до ровной площадки: объёмы, "
                      "раскраска, растр разности."),

@@ -518,6 +518,7 @@ class SimilarTool(QObject):
             # Смена порога - поверх прежних картинок, без мигания.
             window.class_tool.clear()
             window.spectral_tool.clear()
+            window.emit_tool.clear()
             window.earthwork.clear()
             window._show_viewshed(None)
         tiles = ClassTiles(result, parent=self)

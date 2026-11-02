@@ -230,6 +230,7 @@ class EarthworkTool(GridHeights):
             window.class_tool.clear()
             window.similar_tool.clear()
             window.spectral_tool.clear()
+            window.emit_tool.clear()
             window._show_viewshed(None)
         tiles = ResultTiles(work, ellipsoid.A, volumes.tile_rgba,
                             parent=self)

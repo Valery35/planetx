@@ -188,6 +188,27 @@ def warm():
     warm_gdal()
 
 
+def earthdata_token(parent, ask=True):
+    """Ключ Earthdata из настроек, при ask и пустом - окно ввода.
+    Пустая строка - ключа нет. Ключ общий у ASTER после 2006 года
+    и минеральных карт EMIT."""
+    token = str(QgsSettings().value(EARTHDATA_KEY, "") or "").strip()
+    if token or not ask:
+        return token
+    text, ok = QInputDialog.getText(
+        parent, tr("Ключ NASA Earthdata"),
+        tr("Снимки ASTER после 2006 года и минеральные карты EMIT NASA "
+           "отдаёт только по ключу Earthdata. Учётная запись бесплатная - "
+           "urs.earthdata.nasa.gov, ключ создаёт раздел «Generate "
+           "Token» профиля, он живёт 60 дней. Ключ хранится "
+           "в настройках QGIS этого компьютера.\n\nКлюч:"),
+        enum(QLineEdit, "EchoMode", "Password"))
+    token = str(text or "").strip() if ok else ""
+    if token:
+        QgsSettings().setValue(EARTHDATA_KEY, token)
+    return token
+
+
 def read_window(href, box, res=None, size=None, nearest=False, count=1,
                 srs=None):
     """Окно файла в сети по рамке box системы файла или системы srs
@@ -1629,23 +1650,7 @@ class SentinelDialog(QDialog):
     # ASTER NASA после 2006 года: ключ Earthdata и подписанные адреса.
 
     def earthdata_token(self, ask=True):
-        """Ключ Earthdata из настроек, при ask и пустом - окно ввода.
-        Пустая строка - ключа нет."""
-        token = str(QgsSettings().value(EARTHDATA_KEY, "") or "").strip()
-        if token or not ask:
-            return token
-        text, ok = QInputDialog.getText(
-            self, tr("Ключ NASA Earthdata"),
-            tr("Снимки ASTER после 2006 года NASA отдаёт только по ключу "
-               "Earthdata. Учётная запись бесплатная - "
-               "urs.earthdata.nasa.gov, ключ создаёт раздел «Generate "
-               "Token» профиля, он живёт 60 дней. Ключ хранится "
-               "в настройках QGIS этого компьютера.\n\nКлюч:"),
-            enum(QLineEdit, "EchoMode", "Password"))
-        token = str(text or "").strip() if ok else ""
-        if token:
-            QgsSettings().setValue(EARTHDATA_KEY, token)
-        return token
+        return earthdata_token(self, ask)
 
     def _start_nasa_build(self, s, products, folder, whole=False):
         products = aster.available(products, s.assets)

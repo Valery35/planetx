@@ -1793,7 +1793,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Route start, Route end | The start and the end of a route, see Route |
 | Point details | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas…, Minerals by spectrum… (the last six only on the Earth), Earthwork…, Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas, Minerals by spectrum, Earthwork and Flooding |
+| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas…, Minerals by spectrum…, EMIT minerals… (the last seven only on the Earth), Earthwork…, Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas, Minerals by spectrum, EMIT minerals, Earthwork and Flooding |
 | Satellite images… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
@@ -3148,6 +3148,37 @@ with an error. ASTER bands 1 and 2 of some scenes were taken at high gain,
 this shows as too high reflectance of the visible bands. The ASTER mineral
 ratios of the Satellite images window complement this window - they pick out
 mineral groups without a choice of references.
+
+### EMIT minerals
+
+The EMIT minerals… item of the Site analysis submenu of the globe menu opens
+a window of ready NASA mineral maps. The team of the EMIT spectrometer on the
+ISS builds them from images with a 60 m pixel by the Tetracorder method - the
+spectrum of a cell is compared with USGS references. The images are taken
+since August 2022 over arid regions - deserts, semi-deserts and steppes.
+
+The window searches the NASA catalogue for scenes over the site. A line of
+the list names the date, cloud cover and share of the site under the scene. On the right
+is the picture of the selected scene. The site is shared with the other
+analysis windows.
+
+Minerals are identified in two groups. Group 1 - iron-bearing minerals by
+absorption bands of 0.4-1.3 µm, for example goethite and hematite. Group 2 -
+clays, mica, carbonates and sulfates by bands of 2.0-2.5 µm, for example
+kaolinite, montmorillonite and calcite. One cell may hold minerals of both
+groups.
+
+The Build button downloads the scene file and colors the site by the
+minerals of the selected group. NASA gives the files by an Earthdata key,
+the same as for ASTER images after 2006, see NASA Earthdata key. The scene
+file is downloaded once and kept in the PlanetX/emit folder of the QGIS
+profile, a change of group does not download it again. The line under the
+fields names the minerals of the site with their shares.
+
+OK writes to the calculation subgroup a mineral raster with their names and
+the raster EMIT absorption band depth. The band depth grows with the share
+of the mineral in the cell, but it also depends on grain size, so it is not
+taken as a share.
 
 ### Earthwork
 

@@ -333,11 +333,13 @@ EN = {
         "urs.earthdata.nasa.gov. After 2008 only the VNIR and TIR bands. "
         "The values are for the normal band gain.",
     "Ключ NASA Earthdata": "NASA Earthdata key",
-    "Снимки ASTER после 2006 года NASA отдаёт только по ключу Earthdata. "
-    "Учётная запись бесплатная - urs.earthdata.nasa.gov, ключ создаёт раздел "
-    "«Generate Token» профиля, он живёт 60 дней. Ключ хранится в настройках "
-    "QGIS этого компьютера.\n\nКлюч:":
-        "NASA gives ASTER images after 2006 only by an Earthdata key. The "
+    "Снимки ASTER после 2006 года и минеральные карты EMIT NASA отдаёт "
+    "только по ключу Earthdata. Учётная запись бесплатная - "
+    "urs.earthdata.nasa.gov, ключ создаёт раздел «Generate Token» профиля, "
+    "он живёт 60 дней. Ключ хранится в настройках QGIS этого компьютера."
+    "\n\nКлюч:":
+        "NASA gives ASTER images after 2006 and EMIT mineral maps only by "
+        "an Earthdata key. The "
         "account is free - urs.earthdata.nasa.gov, the key is made by the "
         "Generate Token section of the profile, it lives 60 days. The key "
         "is kept in the QGIS settings of this computer.\n\nKey:",
@@ -6672,6 +6674,72 @@ EN = {
     "Угол до эталона, °": "Angle to the reference, °",
     "Классы: {list}. Без класса {none} %.":
         "Classes: {list}. Without a class {none} %.",
+    # Минералы EMIT (ui/emit.py).
+    "Минералы EMIT": "EMIT minerals",
+    "Минералы EMIT…": "EMIT minerals…",
+    "{when}, группа {group}": "{when}, group {group}",
+    "Группа 1 - железистые минералы, 0.4-1.3 мкм":
+        "Group 1 - iron-bearing minerals, 0.4-1.3 µm",
+    "Группа 2 - глины, слюда, карбонаты, сульфаты, 2.0-2.5 мкм":
+        "Group 2 - clays, mica, carbonates, sulfates, 2.0-2.5 µm",
+    "Наибольшая облачность сцены по каталогу NASA. Облака закрывают "
+    "минералы, клетки под ними остаются без класса.":
+        "The largest cloud cover of a scene by the NASA catalogue. Clouds "
+        "hide minerals, cells under them stay without a class.",
+    "Найти сцены": "Find scenes",
+    "Сцены EMIT над участком, новые первыми: дата, облачность, доля "
+    "участка под сценой.":
+        "EMIT scenes over the site, newest first: date, cloud cover, share "
+        "of the site under the scene.",
+    "Группа 1 - полосы поглощения железа в видимом и ближнем инфракрасном "
+    "диапазоне, группа 2 - полосы связей Al-OH, Mg-OH и карбонатов "
+    "в коротковолновом инфракрасном. В одной клетке бывают минералы обеих "
+    "групп.":
+        "Group 1 - iron absorption bands in the visible and near infrared, "
+        "group 2 - bands of Al-OH, Mg-OH and carbonate bonds in the "
+        "shortwave infrared. One cell may hold minerals of both groups.",
+    "Даты": "Dates",
+    "Облачность до": "Cloud cover up to",
+    "Сцены": "Scenes",
+    "Карты минералов NASA по снимкам спектрометра EMIT на МКС, пиксель "
+    "60 м, засушливые области с 2022 года. Файлы сцен NASA отдаёт по ключу "
+    "Earthdata.":
+        "NASA mineral maps from images of the EMIT spectrometer on the ISS, "
+        "pixel 60 m, arid regions since 2022. NASA gives the scene files "
+        "by an Earthdata key.",
+    "Загружает файл выбранной сцены (один раз) и раскрашивает участок "
+    "минералами выбранной группы.":
+        "Downloads the file of the selected scene (once) and colors the "
+        "site by the minerals of the selected group.",
+    "Поиск сцен EMIT…": "Searching EMIT scenes…",
+    "Адрес файла NASA…": "NASA file address…",
+    "Загрузка файла сцены {when}…": "Downloading the scene file {when}…",
+    "Минералы сцены {when}…": "Minerals of the scene {when}…",
+    "Минералы: {list}. Клеток с минералом {share} % участка, {area} км².":
+        "Minerals: {list}. Cells with a mineral {share} % of the site, "
+        "{area} km².",
+    "Минералов этой группы на участке не найдено.":
+        "No minerals of this group were found on the site.",
+    "Минералы EMIT {name}": "EMIT minerals {name}",
+    "Минералы и глубина полосы в проекте.":
+        "Minerals and band depth are in the project.",
+    "{when}, облачность {cloud} %, участка {share} %":
+        "{when}, cloud cover {cloud} %, site {share} %",
+    "Сцен над участком: {n}.": "Scenes over the site: {n}.",
+    "Выберите сцену в списке.": "Select a scene in the list.",
+    "Глубина полосы поглощения EMIT": "EMIT absorption band depth",
+    "Каталог NASA не ответил: {error}":
+        "The NASA catalogue did not answer: {error}",
+    "Над участком сцен EMIT нет. EMIT снимает засушливые области - "
+    "пустыни, полупустыни, степи.":
+        "There are no EMIT scenes over the site. EMIT images arid regions - "
+        "deserts, semi-deserts, steppes.",
+    "Файл сцены не прочитан.": "The scene file was not read.",
+    "Участок вне сцены.": "The site is outside the scene.",
+    "Карты минералов NASA по снимкам спектрометра EMIT, пиксель 60 м, "
+    "засушливые области.":
+        "NASA mineral maps from images of the EMIT spectrometer, pixel "
+        "60 m, arid regions.",
 }
 
 _language = None
