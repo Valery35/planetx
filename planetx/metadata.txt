@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.28.0
+version=1.29.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.28.0 A polygon of a project layer serves as the site of
+changelog=1.29.0 Objects of an image get their pattern in the
+      Classification and Similar areas windows - the brightness step
+      between neighbor cells, its grain and its direction, so clear-cut
+      rows differ from grass of the same color. A project raster and the
+      globe basemap have 1, 2 and 5 m pixels, and the line under the
+      Pixel field gives the grid step and the number of cells.
+      1.28.0 A polygon of a project layer serves as the site of
       the analysis windows. The From layer button takes the selected
       features, a layer with one feature or the polygon under a click on
       the globe. The largest part of a multipart feature is taken, holes
