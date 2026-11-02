@@ -33,6 +33,8 @@ CLOUD_MAX = 10.0  # облачность сцены, %
 SUN_MIN = 25.0  # высота солнца, градусы
 VALID_MIN = 50.0  # участка с данными, %
 SHOWN = 30  # снимков в списке
+SEARCH_TRIES = 3  # повторов поиска при отказе каталога
+SEARCH_PAUSE = 3000  # мс, пауза перед повтором, растёт с номером
 
 
 def suitable(scene):
@@ -66,6 +68,8 @@ class AsterScenes(QObject):
         super().__init__(parent)
         self.generation = 0
         self.reply = None
+        self.tries = 0
+        self.retrying = False
         self.scenes = []
         self.jobs = []
         self.result = []
@@ -81,19 +85,22 @@ class AsterScenes(QObject):
 
     def busy(self):
         return bool(self.jobs) or self.reply is not None \
-            or self.load_job is not None or bool(self.sas_waiting)
+            or self.load_job is not None or bool(self.sas_waiting) \
+            or self.retrying
 
     def stop(self):
         self.generation += 1
         self.jobs = []
         self.load_job = None
         self.sas_waiting = []
+        self.retrying = False
         self.timer.stop()
 
     # --- поиск ----------------------------------------------------------
 
     def search(self, ring):
         self.stop()
+        self.tries = 0
         self.ring = list(ring)
         self.scenes = []
         self.result = []
@@ -108,17 +115,35 @@ class AsterScenes(QObject):
             s2.SEARCHES[aster.MISSION],
             {"Content-Type": "application/json",
              "Accept": "application/geo+json"}, body,
-            lambda data, error, g=generation: self._page(data, error, g))
+            lambda data, error, g=generation, b=body:
+            self._page(data, error, g, b))
 
-    def _page(self, data, error, generation):
+    def _again(self, body, generation):
+        self.retrying = False
+        if generation == self.generation:
+            self._ask(body, generation)
+
+    def _page(self, data, error, generation, body):
         self.reply = None
         if generation != self.generation:
             return
         if data is None or error:
+            # Planetary Computer под нагрузкой отвечает 502-504, повтор
+            # обычно проходит - замечание автора от 2 ноября 2026 года.
+            if self.tries < SEARCH_TRIES:
+                self.tries += 1
+                self.retrying = True
+                self.status.emit(tr(
+                    "Каталог занят, повтор поиска {n} из {total}…",
+                    n=self.tries, total=SEARCH_TRIES))
+                QTimer.singleShot(SEARCH_PAUSE * self.tries,
+                                  lambda: self._again(body, generation))
+                return
             self.status.emit(tr("Каталог не ответил: {error}",
                                 error=error or "-"))
             self.found.emit([])
             return
+        self.tries = 0
         scenes, following = s2.parse_page(data)
         self.scenes += [s for s in scenes if suitable(s)]
         if following and len(self.scenes) < s2.MAX_SCENES:

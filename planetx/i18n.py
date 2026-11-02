@@ -6706,6 +6706,8 @@ EN = {
         "No suitable ASTER images over the site. The scenes cover less "
         "than {valid} % of it.",
     "Снимок не открылся слоем.": "The image did not open as a layer.",
+    "Каталог занят, повтор поиска {n} из {total}…":
+        "The catalogue is busy, search retry {n} of {total}…",
     "Найти подходящие сцены EMIT участка.":
         "Find suitable EMIT scenes of the site.",
     "Сцены EMIT с 2022 года над участком, годные для минералов: облачность "

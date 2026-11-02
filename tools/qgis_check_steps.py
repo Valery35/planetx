@@ -19788,6 +19788,66 @@ ASTER_POINT = (37.53, -117.22)  # Куприт, Невада
 
 
 @check(500)
+def spectral_aster_retry():
+    # Отказ 504 каталога Planetary Computer - снимок автора от 2 ноября
+    # 2026 года. Поддельный каталог дважды отвечает 504, потом пустым
+    # списком: окно повторяет поиск, а не сдаётся с первого отказа.
+    import http.server
+    import json
+    import threading
+    from planetx.core import aster
+    from planetx.core import sentinel as s2
+    from planetx.ui.asterscenes import AsterScenes
+    calls = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            return None
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length") or 0))
+            calls.append(self.path)
+            body = b"" if len(calls) < 3 else json.dumps(
+                {"features": [], "links": []}).encode()
+            self.send_response(504 if len(calls) < 3 else 200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    state["aster_retry"] = (server, calls, s2.SEARCHES[aster.MISSION])
+    s2.SEARCHES[aster.MISSION] = "http://127.0.0.1:{}/search".format(
+        server.server_address[1])
+    finder = AsterScenes()
+    texts = []
+    finder.status.connect(texts.append)
+    state["aster_finder"] = (finder, texts)
+    lat, lon = ASTER_POINT
+    finder.search(s2.square(lat, lon, 3000.0))
+    state["aster_retry_started"] = time.monotonic()
+
+
+@check(500)
+def spectral_aster_retry_check():
+    from planetx.core import aster
+    from planetx.core import sentinel as s2
+    finder, texts = state["aster_finder"]
+    server, calls, url = state["aster_retry"]
+    if finder.busy() and \
+            time.monotonic() - state["aster_retry_started"] < 40:
+        return 500
+    s2.SEARCHES[aster.MISSION] = url
+    server.shutdown()
+    result["spectral_aster_retry"] = {
+        "requests": len(calls), "busy": finder.busy(),
+        "retries_shown": sum("повтор" in t for t in texts),
+        "last": texts[-1] if texts else None}
+    return None
+
+
+@check(500)
 def spectral_aster():
     # Свой поиск подходящих снимков ASTER окна «Минералы по спектру»:
     # без растра в проекте поиск идёт сам, в списке - только сцены с SWIR,
