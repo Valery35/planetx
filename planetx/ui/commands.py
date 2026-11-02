@@ -320,6 +320,11 @@ def _tools(window, add, earth):
         lambda: window.similar_tool.open_here(*_here(window)),
         ("похожие области", "найти похожее", "похожие участки", "по образцу",
          "образец", "similar areas", "find similar", "sample"))
+    add("here:spectral", tr("Минералы по спектру"), open_,
+        lambda: window.spectral_tool.open_here(*_here(window)),
+        ("минералы", "спектр", "спектральная библиотека", "породы",
+         "полезные ископаемые", "каолинит", "spectral angle", "sam",
+         "minerals", "spectral library", "usgs"))
     add("here:earthwork", tr("Земляные работы"), open_,
         lambda: window.earthwork.open_here(*_here(window)),
         ("земляные работы", "выемка", "насыпь", "площадка", "планировка",

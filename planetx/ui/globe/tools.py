@@ -513,6 +513,7 @@ class ToolsMixin:
         if result is not None and getattr(self, "class_tool", None):
             self.class_tool.drop()  # слой вида один на всех
             self.similar_tool.drop()
+            self.spectral_tool.drop()
             self.earthwork.drop()
         if result is None:
             self.view.set_gibs("viewshed", False)

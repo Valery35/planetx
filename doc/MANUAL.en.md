@@ -1793,7 +1793,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Route start, Route end | The start and the end of a route, see Route |
 | Point details | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas… (the last five only on the Earth), Earthwork…, Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas, Earthwork and Flooding |
+| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas…, Minerals by spectrum… (the last six only on the Earth), Earthwork…, Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas, Minerals by spectrum, Earthwork and Flooding |
 | Satellite images… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
@@ -3103,6 +3103,51 @@ ordinary image the result depends on the season and the light. AlphaEarth
 embeddings combine a year of images and are less sensitive to this. This globe
 layer is shared with classification and the viewshed from a point, a new
 calculation of any of them removes the previous one.
+
+### Minerals by spectrum
+
+The Minerals by spectrum… item of the Site analysis submenu of the globe menu
+opens a window that compares image spectra with the references of the USGS
+Spectral Library Version 7. The module carries 1657 references - minerals,
+soils and mixtures, vegetation, coatings, artificial materials, water and
+snow. USGS has resampled the reference values to the bands of ASTER,
+Sentinel-2 and Landsat 8.
+
+The source is a multiband project raster in reflectance, for example All
+scene bands of the Satellite images window. The module recognizes the
+bands by the wavelengths in the band descriptions, for example "B3N 0.82 um"
+of ASTER or "B8A nir08" of Sentinel-2, thermal bands do not take part. The
+line under the Bands list names the sensor and the number of recognized
+bands. Without descriptions the sensor is chosen by hand, then the bands are
+taken by the numbers in the descriptions or in their order.
+
+A click on the image on the globe while the window is open shows the pixel
+spectrum on the chart and the five nearest references with the angle between
+the spectra. The reference curves are scaled to the pixel brightness, so the
+shape of the spectrum is compared. The check box of a reference in the
+Nearest list or in the main list marks it as a class. The main list is
+filtered by group and by words of the English name, for example kaolinite or
+alunite.
+
+The measure of similarity is the angle between spectra (Spectral Angle
+Mapper). The angle does not depend on the overall brightness, so a slope in
+shadow and in sun gives the same answer. The Build button assigns each cell
+of the site to the marked reference with the smallest angle. A cell whose
+angle to all references is larger than the Angle up to field stays without a
+class. The site and the pixel are the same as in the Classification window.
+
+OK writes to the calculation subgroup a class raster with the reference names
+and the raster Angle to the reference, °. A small angle is a close match of the
+spectrum shape.
+
+The references were measured in the laboratory on pure samples. An ASTER
+pixel of 15-30 m mixes several materials, so a class tells about the
+similarity of the spectrum, not about the composition of the rock. The raster
+must be in reflectance. Images of radiance or digital numbers give angles
+with an error. ASTER bands 1 and 2 of some scenes were taken at high gain,
+this shows as too high reflectance of the visible bands. The ASTER mineral
+ratios of the Satellite images window complement this window - they pick out
+mineral groups without a choice of references.
 
 ### Earthwork
 

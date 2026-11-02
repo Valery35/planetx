@@ -6586,6 +6586,92 @@ EN = {
         "What the area shows on the globe, the steepness of the slope or the "
         "direction it faces. The Slope and Aspect rows of the Layers section "
         "switch off meanwhile.",
+    # Минералы по спектру (ui/spectral.py).
+    "Минералы по спектру": "Minerals by spectrum",
+    "Минералы по спектру…": "Minerals by spectrum…",
+    "Спектр пикселя снимка и классы участка по эталонам минералов и пород "
+    "библиотеки USGS.":
+        "The spectrum of an image pixel and classes of the area by the "
+        "reference spectra of minerals and rocks of the USGS library.",
+    "Все группы": "All groups",
+    "Минералы": "Minerals",
+    "Почвы и смеси": "Soils and mixtures",
+    "Растения": "Vegetation",
+    "Покрытия": "Coatings",
+    "Искусственные материалы": "Artificial materials",
+    "Вода, снег и жидкости": "Water, snow and liquids",
+    "мкм": "µm",
+    "Многоканальный растр проекта в отражении, например «Все каналы сцены» "
+    "окна «Космоснимки». Каналы узнаются по их подписям, тепловые каналы "
+    "не участвуют.":
+        "A multiband project raster in reflectance, for example All bands "
+        "of the scene from the Satellite images window. The bands are "
+        "recognized by their labels, thermal bands do not take part.",
+    "Датчик, на каналы которого пересчитаны эталоны. «Авто» узнаёт его по "
+    "длинам волн в подписях каналов растра. Если подписей нет, датчик "
+    "выбирается вручную, каналы берутся по номерам в подписях или по "
+    "порядку.":
+        "The sensor whose bands the reference spectra are resampled to. "
+        "Auto recognizes it by the wavelengths in the band labels of the "
+        "raster. Without labels the sensor is chosen by hand, and the bands "
+        "are taken by the numbers in the labels or in order.",
+    "Пиксель сетки участка. «Авто» - пиксель растра, если на участке клеток "
+    "не больше 640 тысяч.":
+        "The pixel of the area grid. Auto is the raster pixel if the area "
+        "has no more than 640 thousand cells.",
+    "Слова названия, например kaolinite": "Words of the name, for example "
+                                          "kaolinite",
+    "Названия эталонов - по-английски, как в библиотеке USGS. Все слова "
+    "должны быть в названии.":
+        "The names of the reference spectra are in English, as in the USGS "
+        "library. All the words must be in the name.",
+    "Снять все": "Clear all",
+    "Наибольший угол между спектрами клетки и эталона. Клетка дальше от всех "
+    "отмеченных эталонов остаётся без класса. Меньше - строже.":
+        "The largest angle between the spectra of a cell and a reference. "
+        "A cell farther from all checked references stays without a class. "
+        "Smaller is stricter.",
+    "Эталоны, ближайшие к спектру пикселя под щелчком, с углом до него. "
+    "Флажок добавляет эталон в классы.":
+        "The references nearest to the spectrum of the clicked pixel, with "
+        "the angle to it. The check box adds a reference to the classes.",
+    "Растр": "Raster",
+    "Каналы": "Bands",
+    "Эталоны": "References",
+    "Угол до": "Angle up to",
+    "Спектр": "Spectrum",
+    "Ближайшие": "Nearest",
+    "Щёлкните по снимку на глобусе - график покажет спектр пикселя "
+    "и ближайшие эталоны. Отмеченные эталоны становятся классами участка.":
+        "Click the image on the globe - the chart shows the spectrum of the "
+        "pixel and the nearest references. The checked references become "
+        "the classes of the area.",
+    "Каждая клетка участка получает отмеченный эталон с наименьшим углом "
+    "между спектрами.":
+        "Each cell of the area gets the checked reference with the smallest "
+        "angle between the spectra.",
+    "В проекте нет растров с тремя каналами и больше.":
+        "The project has no rasters with three or more bands.",
+    "Отмечено эталонов: {n}": "References checked: {n}",
+    "Спектр точки {lat}, {lon}. Ближайший эталон - {name}, {angle}°.":
+        "Spectrum of the point {lat}, {lon}. The nearest reference is "
+        "{name}, {angle}°.",
+    "Считаются углы между спектрами…": "Calculating angles between "
+                                       "spectra…",
+    "Минералы по спектру {name}": "Minerals by spectrum {name}",
+    "Классы и угол в проекте.": "Classes and angle are in the project.",
+    "Щёлкните по снимку на глобусе": "Click the image on the globe",
+    "Каналы не узнаны по подписям, выберите датчик.":
+        "The bands are not recognized by their labels, choose a sensor.",
+    "{sensor}: каналов {n} из {total}": "{sensor}: {n} bands of {total}",
+    "Точка вне растра или без данных.": "The point is outside the raster "
+                                        "or has no data.",
+    "В проекте нет подходящего растра.": "The project has no suitable "
+                                         "raster.",
+    "Отметьте хотя бы один эталон.": "Check at least one reference.",
+    "Угол до эталона, °": "Angle to the reference, °",
+    "Классы: {list}. Без класса {none} %.":
+        "Classes: {list}. Without a class {none} %.",
 }
 
 _language = None

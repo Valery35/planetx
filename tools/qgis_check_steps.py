@@ -19636,6 +19636,147 @@ def class_wait():
     window.set_extra("aef_change", False)
 
 
+def _spectral_raster(path):
+    """Пробный снимок ASTER у CHANGE_POINT в EPSG:3857, 9 каналов
+    с подписями «B1 0.556 um»: запад - спектр первого эталона, восток -
+    второго, яркость меняется по строкам, шум 1 %. Итог - (lat, lon,
+    id запада, id востока)."""
+    import math
+    import numpy as np
+    from osgeo import gdal, osr
+    from planetx.ui.spectral import library
+    lib = library()
+    ids = []
+    for word in ("Kaolinite", "Calcite"):
+        ids.append(next(s["id"] for s in lib.spectra
+                        if s["name"].startswith(word) and "aster" in s))
+    um = lib.sensors["aster"]["um"]
+    lat, lon = CHANGE_POINT
+    x = 6378137.0 * math.radians(lon)
+    y = 6378137.0 * math.log(math.tan(math.radians(45.0 + lat / 2.0)))
+    stretch = 1.0 / math.cos(math.radians(lat))
+    side = 160
+    step = 25.0 * stretch
+    data = gdal.GetDriverByName("GTiff").Create(path, side, side, len(um),
+                                                gdal.GDT_Float32)
+    data.SetGeoTransform((x - side / 2 * step, step, 0.0,
+                          y + side / 2 * step, 0.0, -step))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(3857)
+    data.SetProjection(srs.ExportToWkt())
+    random = np.random.default_rng(5)
+    shade = np.linspace(0.6, 1.4, side)[:, None]
+    for n, wave in enumerate(um):
+        west, east = (lib.by_id[i]["aster"][n] for i in ids)
+        band = np.where(np.arange(side)[None, :] < side // 2, west, east)
+        band = band * shade * (1.0 + 0.01 * random.normal(
+            size=(side, side)))
+        out = data.GetRasterBand(n + 1)
+        out.WriteArray(band.astype(np.float32))
+        out.SetDescription("B{} {:.3f} um".format(n + 1, wave))
+    data = None
+    return lat, lon, ids[0], ids[1]
+
+
+@check(1000)
+def spectral_open():
+    # Минералы по спектру: снимок ASTER с подписями каналов, щелчок даёт
+    # спектр и ближайший эталон, два эталона - классы запада и востока.
+    from qgis.core import QgsProject, QgsRasterLayer
+    window = state["window"]
+    path = os.path.join(TEMP, "planetx_spectral.tif")
+    lat, lon, west, east = _spectral_raster(path)
+    layer = QgsRasterLayer(path, "probe aster", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["spectral_layer"] = layer.id()
+    out = result.setdefault("spectral", {"layer_valid": layer.isValid()})
+    from planetx.core.navigation import Pose
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 6000.0, 0.0, 0.0))
+    window.view.update()
+    tool = window.spectral_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    out["bands"] = dialog.bands.text()
+    out["sensor"] = dialog.pairs[0]
+    out["taking"] = tool.taking()
+    dialog.area.reset_square()
+    dialog.area.side.setValue(3.0)
+    tool.click(lat, lon - 0.012)
+    out["click_status"] = dialog.status.text()
+    out["near"] = dialog.near.count()
+    first = dialog.near.item(0) if dialog.near.count() else None
+    from planetx.qt_compat import enum
+    from qgis.PyQt.QtCore import Qt
+    role = enum(Qt, "ItemDataRole", "UserRole")
+    out["nearest_is_west"] = bool(first is not None
+                                  and first.data(role) == west)
+    tool.click(lat + 1.0, lon)
+    out["outside_status"] = dialog.status.text()
+    dialog.chosen = [west, east]
+    out["picked"] = len(dialog.chosen)
+    dialog.build.emit()
+    state["spectral_started"] = time.monotonic()
+
+
+@check(500)
+def spectral_wait():
+    window = state["window"]
+    tool = window.spectral_tool
+    if tool.job is not None \
+            and time.monotonic() - state["spectral_started"] < 120.0:
+        return 500
+    textures = window.view.gibs["viewshed"].textures
+    if tool.result is not None and len(textures) < 4 \
+            and time.monotonic() - state["spectral_started"] < 30.0:
+        window.view.update()
+        return 500
+    import numpy as np
+    out = result["spectral"]
+    out["build_s"] = round(time.monotonic() - state["spectral_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    res = tool.result
+    out["built"] = res is not None
+    if res is None:
+        return None
+    classes = res["classes"]
+    out["grid"] = [list(classes.shape), res["step"]]
+    from planetx.core.coords import from_utm
+    index = res["index"]
+    middle = res["y0"] - classes.shape[0] / 2.0 * res["step"]
+    lons = np.array([from_utm(index.number, index.south,
+                              res["x0"] + (col + 0.5) * res["step"],
+                              middle)[1]
+                     for col in range(classes.shape[1])])
+    cell_lon = np.tile(lons, (classes.shape[0], 1))
+    lat, lon = CHANGE_POINT
+    margin = 0.002
+    has = classes >= 0
+    out["west_right"] = round(float(
+        (classes[(cell_lon < lon - margin) & has] == 0).mean()), 4)
+    out["east_right"] = round(float(
+        (classes[(cell_lon > lon + margin) & has] == 1).mean()), 4)
+    angle = res["angle"]
+    out["angle_median"] = round(float(np.nanmedian(angle)), 2)
+    out["textures"] = len(textures)
+    window.view.update()
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_spectral.png"))
+    out["exported"] = bool(tool.export(
+        os.path.join(TEMP, "planetx_spectral_out.tif")))
+    out["layers"] = [n.name() for n in _result_layers()]
+    out["subgroups"] = _subgroups()
+    _drop_group()
+    dialog.reject()
+    out["closed_tiles"] = tool.tiles is None
+    from qgis.core import QgsProject
+    QgsProject.instance().removeMapLayer(state["spectral_layer"])
+    return None
+
+
 def _class_raster(path, rgba=False):
     """Пробный растр у CHANGE_POINT в EPSG:3857, сторона 4 км, пиксель
     25 м. Запад и восток - разные классы только в канале 2 (отражение),

@@ -73,6 +73,7 @@ from .aef import ChangeTool
 from .fieldmap import FieldTool
 from .aefclass import ClassTool
 from .similar import SimilarTool
+from .spectral import SpectralTool
 from .earthwork import EarthworkTool
 from .netlink import NetLinks
 from .superoverlay import SuperOverlays
@@ -732,6 +733,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.field_tool = FieldTool(self)
         self.class_tool = ClassTool(self)
         self.similar_tool = SimilarTool(self)
+        self.spectral_tool = SpectralTool(self)
         self.earthwork = EarthworkTool(self)
         self.class_shapes = []
         self.extruder = ExtrudeManager(self)
@@ -1148,6 +1150,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.field_tool.close()
             self.class_tool.close()
             self.similar_tool.close()
+            self.spectral_tool.close()
             self.earthwork.close()
             if getattr(self, "oam_dialog", None) is not None:
                 self.oam_dialog.close()

@@ -107,6 +107,12 @@ class IdentifyMixin:
             if found is not None:
                 self.similar_tool.click(found[0], found[1])
             return
+        if self.spectral_tool.taking():
+            # Окно «Минералы по спектру» открыто - щелчок даёт спектр.
+            found = self._ground(px, py)
+            if found is not None:
+                self.spectral_tool.click(found[0], found[1])
+            return
         if not self.identifying:
             place = self._place_under(px, py)
             if place is not None:

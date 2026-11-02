@@ -220,6 +220,10 @@ def relief_items(window, menu, lat, lon):
                       tr("Обведите образец, модуль найдёт на участке объекты, "
                          "похожие на него по цвету и текстуре."),
                       lambda *a: window.similar_tool.open_here(lat, lon)))
+        items.append((tr("Минералы по спектру…"),
+                      tr("Спектр пикселя снимка и классы участка по "
+                         "эталонам минералов и пород библиотеки USGS."),
+                      lambda *a: window.spectral_tool.open_here(lat, lon)))
     items.append((tr("Земляные работы…"),
                   tr("Выемка и насыпь участка до ровной площадки: объёмы, "
                      "раскраска, растр разности."),
