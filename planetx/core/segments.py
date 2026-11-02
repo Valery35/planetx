@@ -40,6 +40,7 @@ PARTS = 8  # главных компонент у многоканальной �
 SAMPLE = 200000  # клеток для оценки компонент
 SCALE_CELLS = 800 * 800  # клеток участка, к которым отнесён масштаб окна
 MAX_CELLS = 2000 * 2000  # клеток участка: рёбер вдвое больше, память
+PATTERN = 4  # признаков рисунка объекта (pattern)
 
 
 def site_scale(scale, cells):
@@ -260,6 +261,77 @@ def table(grid, labels):
         out[band, 0] = first
         out[band + bands, 0] = np.sqrt(np.maximum(second - first * first,
                                                   0.0))
+    return out
+
+
+def pattern(grid, labels):
+    """Рисунок объектов: float32 (PATTERN, 1, объекты). Разброс цвета
+    внутри объекта (table) не отличает ряды вырубки от пятен леса или
+    травы с тем же разбросом. Здесь яркость (каналы, приведённые
+    к разбросу 1) даёт четыре числа по клеткам самого объекта, соседние
+    объекты в них не входят:
+    - перепад - средний модуль перепада яркости между соседними клетками;
+    - зерно - перепад, делённый на разброс яркости по объекту: мелкий
+      рисунок - около 1, крупные пятна и плавный переход - меньше;
+    - направленность - согласованность направлений перепадов по объекту
+      (тензор структуры): ряды и полосы - ближе к 1, кроны и трава - к 0;
+    - доля перепадов - доля пар соседних клеток с перепадом больше
+      разброса по участку: редкие резкие края против частой ряби."""
+    count = int(labels.max()) + 1
+    out = np.zeros((PATTERN, 1, max(count, 0)), dtype=np.float32)
+    has = labels >= 0
+    if count <= 0:
+        return out
+    mean, spread = rasterclass.scales(grid, has)
+    used = np.nonzero(spread > 0.0)[0]
+    if not len(used):
+        return out
+    bright = np.zeros(labels.shape, dtype=np.float64)
+    for band in used:
+        bright += (np.nan_to_num(grid[band].astype(np.float64))
+                   - mean[band]) / spread[band]
+    bright /= len(used)
+    bright[~has] = 0.0
+    size = np.maximum(np.bincount(labels[has], minlength=count), 1.0)
+    # Перепады между соседями одного объекта: по строке и по столбцу.
+    gx = np.zeros(labels.shape)
+    gy = np.zeros(labels.shape)
+    same_x = (labels[:, 1:] == labels[:, :-1]) & has[:, 1:]
+    same_y = (labels[1:, :] == labels[:-1, :]) & has[1:, :]
+    gx[:, 1:] = np.where(same_x, bright[:, 1:] - bright[:, :-1], 0.0)
+    gy[1:, :] = np.where(same_y, bright[1:, :] - bright[:-1, :], 0.0)
+    pairs = np.zeros(labels.shape)
+    pairs[:, 1:] += same_x
+    pairs[1:, :] += same_y
+    numbers = labels[has]
+    links = np.maximum(np.bincount(numbers, pairs[has], count), 1.0)
+    step = np.abs(gx) + np.abs(gy)
+    out[0, 0] = np.bincount(numbers, step[has], count) / links
+    # Зерно - перепад соседей, делённый на разброс по объекту: у шума
+    # около 1.1, у пятен в несколько клеток и плавного перехода меньше.
+    first = np.bincount(numbers, bright[has], count) / size
+    second = np.bincount(numbers, bright[has] ** 2, count) / size
+    whole = np.sqrt(np.maximum(second - first * first, 0.0))
+    out[1, 0] = np.where(whole > 1e-6, np.minimum(
+        out[0, 0] / np.maximum(whole, 1e-6), 2.0), 0.0)
+    # Направленность - по центральным разностям: у прямых разностей по
+    # строке и столбцу общая клетка, и у шума выходило бы 0.5, а не 0.
+    cx = np.zeros(labels.shape)
+    cy = np.zeros(labels.shape)
+    cx[:, 1:-1] = np.where(same_x[:, 1:] & same_x[:, :-1],
+                           bright[:, 2:] - bright[:, :-2], 0.0)
+    cy[1:-1, :] = np.where(same_y[1:, :] & same_y[:-1, :],
+                           bright[2:, :] - bright[:-2, :], 0.0)
+    xx = np.bincount(numbers, (cx * cx)[has], count)
+    yy = np.bincount(numbers, (cy * cy)[has], count)
+    xy = np.bincount(numbers, (cx * cy)[has], count)
+    energy = xx + yy
+    out[2, 0] = np.where(energy > 0.0, np.sqrt(
+        (xx - yy) ** 2 + 4.0 * xy * xy) / np.maximum(energy, 1e-12), 0.0)
+    sharp = float(np.sqrt(bright[has].var())) if has.any() else 0.0
+    edges = (np.abs(gx) > sharp).astype(np.float64) \
+        + (np.abs(gy) > sharp)
+    out[3, 0] = np.bincount(numbers, edges[has], count) / links
     return out
 
 

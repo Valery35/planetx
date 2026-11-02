@@ -25,8 +25,9 @@ from ..qt_compat import enum
 from .aef import _poll_job, _run_job, index_of, open_cog, stop_point, \
     zstd_ready
 from .aefclass import (AUTO, BASEMAP, CLASS_SIDE, LAYER, RASTER_SIDE,
-                       ClassTiles, SourceBox, _flag, problem_text,
-                       raster_reader, set_credit, write_objects)
+                       ClassTiles, SourceBox, _flag, fill_pixels,
+                       pixel_text, problem_text, raster_reader, set_credit,
+                       write_objects)
 from .area import Area
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons, result_path, write_vector)
@@ -117,14 +118,16 @@ class SimilarDialog(QDialog):
             "Год векторов AlphaEarth. Образец обводится по снимку глобуса, "
             "он может быть другого года."))
         self.level = QComboBox(self)
-        self.level.addItem(tr("Авто"), AUTO)
-        for level, pixel in aef.DETAIL_LEVELS:
-            self.level.addItem(tr("{pixel} м", pixel=pixel), level)
-        self.level.setCurrentIndex(max(0, self.level.findData(int(
-            settings.value(SETTINGS + "pixel", AUTO)))))
+        self.wanted_pixel = int(settings.value(SETTINGS + "pixel", AUTO))
+        fill_pixels(self.level, True, self.wanted_pixel)
         self.level.setToolTip(tr(
-            "Пиксель сетки участка. «Авто» берёт пиксель растра или, "
-            "у AlphaEarth, пиксель с наименьшей загрузкой."))
+            "Пиксель сетки участка. «Авто» берёт пиксель растра или "
+            "верхнего уровня подложки, если на участке клеток не больше "
+            "640 тысяч, у AlphaEarth - пиксель с наименьшей загрузкой. "
+            "У растра и подложки есть пиксели 1, 2 и 5 м, деление на "
+            "объекты принимает до 4 млн клеток."))
+        self.volume = QLabel(self)
+        self.volume.setWordWrap(True)
         self.scale = QSpinBox(self)
         self.scale.setRange(1, 500)
         self.scale.setValue(int(settings.value(SETTINGS + "scale",
@@ -183,6 +186,7 @@ class SimilarDialog(QDialog):
         form.addRow(tr("Год"), self.year)
         form.addRow(tr("Участок"), self.area.widget)
         form.addRow(tr("Пиксель"), self.level)
+        form.addRow("", self.volume)
         form.addRow(tr("Масштаб объектов"), self.scale)
         form.addRow(tr("Доля текстуры"), self.weight)
         form.addRow(tr("Наименьший объект, клеток"), self.least)
@@ -206,8 +210,9 @@ class SimilarDialog(QDialog):
         layout.addWidget(buttons)
         fit_status(self, layout)
         self.source.currentIndexChanged.connect(lambda _: self._source())
-        for box in (self.year, self.level):
-            box.currentIndexChanged.connect(lambda _: self._remember())
+        self.year.currentIndexChanged.connect(lambda _: self._remember())
+        self.level.currentIndexChanged.connect(lambda _: self._pixel())
+        self.area.changed.connect(self._volume)
         for box in (self.scale, self.weight, self.least):
             box.valueChanged.connect(lambda _: self._remember())
         self.limit.valueChanged.connect(lambda _: self._limit())
@@ -227,6 +232,26 @@ class SimilarDialog(QDialog):
     def _source(self):
         self.year.setEnabled(not self.raster_id())
         self.area.set_most(RASTER_SIDE if self.raster_id() else CLASS_SIDE)
+        fill_pixels(self.level, bool(self.raster_id()), self.wanted_pixel)
+        self._volume()
+
+    def _pixel(self):
+        """Пиксель выбран вручную: он вернётся и после смены источника."""
+        self.wanted_pixel = self.level.currentData()
+        self._remember()
+        self._volume()
+
+    def _volume(self):
+        """Пиксель и клетки участка у растра и подложки."""
+        source = self.raster_id()
+        layer = None if source == BASEMAP else self.raster()
+        if not source or self.point is None or self.area.check() \
+                or (source != BASEMAP and layer is None):
+            self.volume.setText("")
+            return
+        self.volume.setText(pixel_text(
+            self.area.window, source, layer, self.level.currentData(),
+            self.area.box(), self.area.size()))
 
     def _samples_text(self):
         self.samples.setText(tr("Контуров: {n}",
@@ -243,7 +268,7 @@ class SimilarDialog(QDialog):
     def _remember(self):
         settings = QgsSettings()
         settings.setValue(SETTINGS + "year", self.year.currentData())
-        settings.setValue(SETTINGS + "pixel", self.level.currentData())
+        settings.setValue(SETTINGS + "pixel", self.wanted_pixel)
         settings.setValue(SETTINGS + "scale", self.scale.value())
         settings.setValue(SETTINGS + "weight", self.weight.value())
         settings.setValue(SETTINGS + "least", self.least.value())
@@ -287,6 +312,7 @@ class SimilarTool(QObject):
         dialog.show()
         dialog.raise_()
         dialog.area.open_at(lat, lon)
+        dialog._volume()
         self.window._refresh_shapes()
         return dialog
 
@@ -402,6 +428,9 @@ class SimilarTool(QObject):
             if int(parts.max()) < 1:
                 return {"problem": "whole", "found": found, "parts": parts}
             table = segments.table(values, parts)
+            if reader is not None:  # рисунок - у снимка, не у эмбеддингов
+                table = np.concatenate(
+                    (table, segments.pattern(values, parts)))
             rows = [similar.sample_rows(
                 table, parts,
                 aef.ring_mask(index, x0, y0, step, shape, sample))
@@ -410,7 +439,8 @@ class SimilarTool(QObject):
             if lost == len(rows):
                 return {"problem": "samples", "found": found, "parts": parts}
             score = similar.scores(table, segments.areas(parts),
-                                   np.concatenate(rows), weight)
+                                   np.concatenate(rows), weight,
+                                   values.shape[0])
             if score is None:
                 return {"problem": "flat", "found": found, "parts": parts}
             return {"index": index, "found": found, "parts": parts,

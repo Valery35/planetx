@@ -6210,16 +6210,27 @@ EN = {
         "The area is larger than {km} km, make it smaller.",
     "Замкните участок щелчком по его первой вершине.":
         "Close the area with a click on its first vertex.",
-    "Пиксель классификации. Блок файла за год - 40-50 МБ при любом "
-    "пикселе. Блок пикселя 10 м покрывает 10 км, 80 м - 82 км. «Авто» "
-    "берёт пиксель с наименьшей загрузкой, при котором на участке от "
-    "14 до 640 тысяч клеток. У растра проекта «Авто» - пиксель растра, "
-    "если на участке клеток не больше 640 тысяч.":
-        "Classification pixel. A file block for a year is 40-50 MB at any "
-        "pixel. A 10 m block covers 10 km, an 80 m block covers 82 km. "
-        "Auto takes the pixel with the smallest download at which the "
-        "area has 14 to 640 thousand cells. For a project raster, Auto is "
-        "the raster pixel if the area has no more than 640 thousand cells.",
+    "Пиксель классификации. У AlphaEarth блок файла за год - "
+    "40-50 МБ при любом пикселе, блок пикселя 10 м покрывает 10 км, "
+    "80 м - 82 км, «Авто» берёт пиксель с наименьшей загрузкой, при "
+    "котором на участке от 14 до 640 тысяч клеток. У растра проекта "
+    "и подложки есть пиксели 1, 2 и 5 м, «Авто» - пиксель растра "
+    "или верхнего уровня подложки, если на участке клеток не больше "
+    "640 тысяч. Деление на объекты принимает до 4 млн клеток.":
+        "Classification pixel. For AlphaEarth a file block for a year is "
+        "40-50 MB at any pixel, a 10 m block covers 10 km, an 80 m block "
+        "covers 82 km, and Auto takes the pixel with the smallest download "
+        "at which the area has 14 to 640 thousand cells. A project raster "
+        "and the basemap also have 1, 2 and 5 m pixels, and Auto is the "
+        "pixel of the raster or of the top basemap level if the area has "
+        "no more than 640 thousand cells. Division into objects accepts up "
+        "to 4 million cells.",
+    "Пиксель {pixel} м, клеток около {cells} тыс.":
+        "Pixel {pixel} m, about {cells} thousand cells.",
+    "На объекты участок не разделится, нужен пиксель "
+    "крупнее или участок меньше.":
+        "The area will not be divided into objects - take a larger pixel "
+        "or a smaller area.",
     "Авто": "Auto",
     "Убрать результат с глобуса и закрыть окно.":
         "Remove the result from the globe and close the window.",
@@ -6390,10 +6401,16 @@ EN = {
     "он может быть другого года.":
         "The year of the AlphaEarth vectors. The sample is outlined on the "
         "globe image, which may be from another year.",
-    "Пиксель сетки участка. «Авто» берёт пиксель растра или, "
-    "у AlphaEarth, пиксель с наименьшей загрузкой.":
-        "The pixel of the area grid. Auto takes the raster pixel or, for "
-        "AlphaEarth, the pixel with the smallest download.",
+    "Пиксель сетки участка. «Авто» берёт пиксель растра или "
+    "верхнего уровня подложки, если на участке клеток не больше "
+    "640 тысяч, у AlphaEarth - пиксель с наименьшей загрузкой. "
+    "У растра и подложки есть пиксели 1, 2 и 5 м, деление на "
+    "объекты принимает до 4 млн клеток.":
+        "The pixel of the area grid. Auto takes the pixel of the raster or "
+        "of the top basemap level if the area has no more than 640 "
+        "thousand cells, and for AlphaEarth the pixel with the smallest "
+        "download. A raster and the basemap also have 1, 2 and 5 m pixels, "
+        "division into objects accepts up to 4 million cells.",
     "Доля текстуры в делении на объекты и в сравнении с образцом, "
     "остальное - цвет.":
         "The share of texture in dividing into objects and in comparing "

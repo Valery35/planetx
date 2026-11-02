@@ -44,12 +44,16 @@ def sample_rows(table, parts, mask):
         keep = np.array([counts.argmax()])
     return table[:, 0, keep].T
 
-def scores(table, sizes, samples, weight=segments.WEIGHT):
-    """Похожесть объектов от 0 до 1. table - segments.table, sizes -
-    клеток в объектах, samples - признаки образцов (образцы, признаки),
-    weight - доля текстуры. None - признаки на участке не меняются."""
+def scores(table, sizes, samples, weight=segments.WEIGHT, bands=None):
+    """Похожесть объектов от 0 до 1. table - segments.table, за ней могут
+    идти строки segments.pattern, sizes - клеток в объектах, samples -
+    признаки образцов (образцы, признаки), weight - доля текстуры, bands -
+    каналов (строк цвета), без него - половина строк. Текстура - разброс
+    каналов внутри объекта и рисунок. None - признаки на участке
+    не меняются."""
     rows = table[:, 0].astype(np.float64)
-    bands = rows.shape[0] // 2
+    if bands is None:
+        bands = rows.shape[0] // 2
     share = np.asarray(sizes, dtype=np.float64)
     share = share / share.sum()
     mean = rows @ share

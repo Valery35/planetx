@@ -98,6 +98,40 @@ class TestScores(unittest.TestCase):
         self.assertIsNone(similar.scores(table, segments.areas(parts),
                                          table[:, 0, :1].T))
 
+    def test_drawing_tells_rows_from_grass(self):
+        # Вырубка рядами и трава одного цвета и разброса: по одному
+        # table они одинаково похожи на образец вырубки, с рисунком
+        # (segments.pattern) трава отпадает.
+        random = np.random.default_rng(4)
+        n = 40
+        rows = np.sin(np.arange(n) * 2 * np.pi / 6)[None, :] \
+            * np.ones((n, 1))
+        parts = []
+        for k in range(4):
+            if k % 2:
+                part = random.normal(size=(n, n))
+            else:
+                part = rows / rows.std() * 0.8 \
+                    + 0.6 * random.normal(size=(n, n))
+            parts.append(part / part.std())
+        # Пятый объект - тёмный лес: участок не из одного цвета.
+        parts.append(random.normal(size=(n, n)) - 4.0)
+        bright = np.concatenate(parts, axis=1)
+        grid = np.stack([100 + 20 * bright, 90 + 18 * bright]) \
+            .astype(np.float32)
+        labels = np.repeat(np.arange(5, dtype=np.int32), n)[None, :] \
+            .repeat(n, axis=0)
+        sizes = segments.areas(labels)
+        plain = segments.table(grid, labels)
+        full = np.concatenate((plain, segments.pattern(grid, labels)))
+        before = similar.scores(plain, sizes, plain[:, 0, :1].T, 0.5)
+        after = similar.scores(full, sizes, full[:, 0, :1].T, 0.5,
+                               grid.shape[0])
+        self.assertGreater(float(before[1]), 0.7)
+        self.assertGreater(float(after[2]), 0.7)
+        self.assertLess(float(after[1]), 0.3)
+        self.assertLess(float(after[3]), 0.3)
+
     def test_area_weight_keeps_small_objects_from_scale(self):
         # Тысяча мелких объектов не сжимает различие двух больших частей.
         table = np.zeros((2, 1, 1002), dtype=np.float32)

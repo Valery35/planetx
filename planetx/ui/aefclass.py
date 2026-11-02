@@ -76,6 +76,50 @@ BASEMAP = "@basemap"  # источник «Подложка глобуса» в 
 PIXEL_DEFAULT = 10.0  # м, пиксель «Авто», если растр его не называет
 COVERED = 0.995  # доля участка, ниже которой итог называет покрытие
 BORDER = (20, 20, 20, 255)  # граница объектов на глобусе
+# Пиксели снимка мельче 10 м - только у растра проекта и подложки: у
+# AlphaEarth мельче 10 м данных нет. Номера ниже AUTO, уровни AlphaEarth
+# с 0.
+FINE_PIXELS = ((-4, 1), (-3, 2), (-2, 5))
+PIXELS = dict(FINE_PIXELS + aef.DETAIL_LEVELS)
+
+
+def fill_pixels(box, raster, wanted=None):
+    """Список «Пиксель»: «Авто», у растра и подложки - ещё 1, 2 и 5 м,
+    затем 10-80 м. Выбор wanted (иначе прежний) остаётся, если он есть
+    в новом списке, иначе «Авто». Сигналы списка на время молчат."""
+    if wanted is None:
+        wanted = box.currentData()
+    box.blockSignals(True)
+    box.clear()
+    box.addItem(tr("Авто"), AUTO)
+    for level, pixel in (FINE_PIXELS if raster else ()) + aef.DETAIL_LEVELS:
+        box.addItem(tr("{pixel} м", pixel=pixel), level)
+    box.setCurrentIndex(max(0, box.findData(wanted)))
+    box.blockSignals(False)
+
+
+def pixel_text(window, source, layer, level, box, side):
+    """Строка под полем «Пиксель» у растра и подложки: шаг сетки, у «Авто» -
+    каким он выйдет, и количество клеток участка."""
+    lat = (box[1] + box[3]) / 2.0
+    if level != AUTO:
+        pixel = PIXELS[level]
+    elif source == BASEMAP:
+        pixel = rasterclass.auto_pixel(tilemosaic.tile_pixel(
+            lat, window._earth_source().max_level), side)
+    else:
+        native = layer.rasterUnitsPerPixelX()
+        if layer.crs().isGeographic():
+            native *= 111320.0 * math.cos(math.radians(lat))
+        pixel = rasterclass.auto_pixel(native or PIXEL_DEFAULT, side)
+    cells = (side / pixel) ** 2
+    text = tr("Пиксель {pixel} м, клеток около {cells} тыс.",
+              pixel="{:.3g}".format(pixel),
+              cells=int(round(cells / 1000.0)))
+    if cells > segments.MAX_CELLS:
+        text += " " + tr("На объекты участок не разделится, нужен пиксель "
+                         "крупнее или участок меньше.")
+    return text
 
 
 class ClassTiles(ThreadTiles):
@@ -246,17 +290,16 @@ class ClassDialog(QDialog):
             "Год, по векторам которого клетки делятся на классы. Точки "
             "ставятся по снимку глобуса, он может быть другого года."))
         self.level = QComboBox(self)
-        self.level.addItem(tr("Авто"), AUTO)
-        for level, pixel in aef.DETAIL_LEVELS:
-            self.level.addItem(tr("{pixel} м", pixel=pixel), level)
-        self.level.setCurrentIndex(max(0, self.level.findData(int(
-            settings.value(SETTINGS + "pixel", AUTO)))))
+        self.wanted_pixel = int(settings.value(SETTINGS + "pixel", AUTO))
+        fill_pixels(self.level, True, self.wanted_pixel)
         self.level.setToolTip(tr(
-            "Пиксель классификации. Блок файла за год - 40-50 МБ при "
-            "любом пикселе. Блок пикселя 10 м покрывает 10 км, 80 м - "
-            "82 км. «Авто» берёт пиксель с наименьшей загрузкой, при котором "
-            "на участке от 14 до 640 тысяч клеток. У растра проекта «Авто» - "
-            "пиксель растра, если на участке клеток не больше 640 тысяч."))
+            "Пиксель классификации. У AlphaEarth блок файла за год - "
+            "40-50 МБ при любом пикселе, блок пикселя 10 м покрывает 10 км, "
+            "80 м - 82 км, «Авто» берёт пиксель с наименьшей загрузкой, при "
+            "котором на участке от 14 до 640 тысяч клеток. У растра проекта "
+            "и подложки есть пиксели 1, 2 и 5 м, «Авто» - пиксель растра "
+            "или верхнего уровня подложки, если на участке клеток не больше "
+            "640 тысяч. Деление на объекты принимает до 4 млн клеток."))
         self.volume = QLabel(self)
         self.split = QCheckBox(tr("Делить на объекты"), self)
         self.split.setChecked(_flag(settings.value(SETTINGS + "split",
@@ -349,8 +392,8 @@ class ClassDialog(QDialog):
         for _ in range(2):
             self.add_class()
         self.rows[0].pick.setChecked(True)
-        for box in (self.year, self.level):
-            box.currentIndexChanged.connect(lambda _: self._remember())
+        self.level.currentIndexChanged.connect(lambda _: self._pixel())
+        self.year.currentIndexChanged.connect(lambda _: self._remember())
         self.alpha.valueChanged.connect(lambda _: self._remember())
         self.source.currentIndexChanged.connect(lambda _: self._source())
         self.split.toggled.connect(lambda _: self._split_changed())
@@ -371,9 +414,15 @@ class ClassDialog(QDialog):
     def _source(self):
         self.year.setEnabled(not self.raster_id())
         self.area.set_most(RASTER_SIDE if self.raster_id() else CLASS_SIDE)
+        fill_pixels(self.level, bool(self.raster_id()), self.wanted_pixel)
         self.volume_changed()
         self._split_changed()
         self.source_changed.emit()
+
+    def _pixel(self):
+        """Пиксель выбран вручную: он вернётся и после смены источника."""
+        self.wanted_pixel = self.level.currentData()
+        self._remember()
 
     def _split_changed(self):
         on = self.split.isChecked()
@@ -423,7 +472,7 @@ class ClassDialog(QDialog):
     def _remember(self):
         settings = QgsSettings()
         settings.setValue(SETTINGS + "year", self.year.currentData())
-        settings.setValue(SETTINGS + "pixel", self.level.currentData())
+        settings.setValue(SETTINGS + "pixel", self.wanted_pixel)
         settings.setValue(SETTINGS + "opacity", self.alpha.value() / 100.0)
         settings.setValue(SETTINGS + "split", self.split.isChecked())
         settings.setValue(SETTINGS + "split_scale",
@@ -449,13 +498,18 @@ class ClassDialog(QDialog):
         if problem:
             self.volume.setText(problem)
             return
-        if self.raster_id() == BASEMAP:
-            self.volume.setText(self.area.window._earth_source().name)
-            return
-        if self.raster_id():
-            layer = self.raster()
-            self.volume.setText("" if layer is None else tr(
-                "Каналов растра: {n}", n=layer.bandCount()))
+        source = self.raster_id()
+        if source:
+            layer = None if source == BASEMAP else self.raster()
+            if source != BASEMAP and layer is None:
+                self.volume.setText("")
+                return
+            head = self.area.window._earth_source().name \
+                if layer is None else tr("Каналов растра: {n}",
+                                         n=layer.bandCount())
+            self.volume.setText(head + ". " + pixel_text(
+                self.area.window, source, layer, self.level.currentData(),
+                self.area.box(), self.area.size()))
             return
         lat, lon = self.point
         index = _INDEX.get(aef.zone_of(lon, lat))
@@ -715,10 +769,11 @@ class ClassTool(QObject):
             and self.pieces[0] == split_key else None
 
     def _objects(self, found, grid, inside, share, index, points, params,
-                 pieces):
+                 pieces, drawing=False):
         """Объекты участка и их классы: контрольная точка берёт
         признаки своего объекта. grid - float32 с NaN без данных,
-        рабочий поток."""
+        drawing - у снимка к признакам добавляется рисунок объекта
+        (segments.pattern), у эмбеддингов его нет. Рабочий поток."""
         x0, y0, step, _ = found
         if segments.too_big(*grid.shape[1:]):
             return {"problem": "pieces", "found": found}
@@ -733,19 +788,21 @@ class ClassTool(QObject):
         if int(parts.max()) < 1:
             return {"problem": "whole", "found": found, "parts": parts}
         table = segments.table(grid, parts)
+        signs = np.concatenate((table, segments.pattern(grid, parts))) \
+            if drawing else table
         samples, labels, outside = [], [], 0
         for label, (plat, plon) in points:
             r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
             if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2] \
                     and parts[r, c] >= 0:
-                samples.append(table[:, 0, parts[r, c]])
+                samples.append(signs[:, 0, parts[r, c]])
                 labels.append(label)
             else:
                 outside += 1
         if len(set(labels)) < aef.MIN_CLASSES:
             return {"problem": "points", "found": found, "parts": parts}
         kinds = rasterclass.classify(
-            table, np.stack(samples, axis=1), labels,
+            signs, np.stack(samples, axis=1), labels,
             progress=lambda done, total: stop_point(self))[0][0]
         if not (kinds >= 0).any():
             return {"problem": "flat", "found": found, "parts": parts}
@@ -788,7 +845,7 @@ class ClassTool(QObject):
                 return {"problem": "outside"}
             if params is not None:
                 return self._objects(found, grid, inside, share, index,
-                                     points, params, pieces)
+                                     points, params, pieces, drawing=True)
             samples, labels, outside = [], [], 0
             for label, (plat, plon) in points:
                 r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
@@ -1175,7 +1232,7 @@ def raster_reader(tool, layer, box, side, level):
     название, подпись прав) или None - отказ, причина в строке итога.
     Главный поток, read идёт в рабочем."""
     dialog = tool.dialog
-    pixel = None if level == AUTO else float(dict(aef.DETAIL_LEVELS)[level])
+    pixel = None if level == AUTO else float(PIXELS[level])
     warm()
     if dialog.raster_id() == BASEMAP:
         source = tool.window._earth_source()

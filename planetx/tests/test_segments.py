@@ -222,6 +222,45 @@ class TestClasses(unittest.TestCase):
         self.assertEqual(kinds[0, east], 1)
         self.assertEqual(kinds[0, pond], 2)
 
+    def test_pattern_tells_rows_from_grass_of_same_spread(self):
+        # Трава - мелкий шум, вырубка - ряды, лес - пятна крон 3 × 3.
+        # Цвет и разброс внутри объекта у всех трёх одни, table их
+        # не различает. Сторож замечания Василия Швалёва от 2 ноября
+        # 2026 года.
+        random = np.random.default_rng(3)
+        n = 60
+        grass = random.normal(size=(n, n))
+        rows = np.sin(np.arange(n) * 2 * np.pi / 6)[None, :] \
+            * np.ones((n, 1))
+        cut = rows / rows.std() * 0.8 + 0.6 * random.normal(size=(n, n))
+        crowns = np.kron(random.normal(size=(n // 3, n // 3)),
+                         np.ones((3, 3)))
+        bright = np.concatenate([part / part.std()
+                                 for part in (grass, cut, crowns)], axis=1)
+        grid = np.stack([100 + 20 * bright, 90 + 18 * bright,
+                         70 + 14 * bright]).astype(np.float32)
+        labels = np.repeat(np.arange(3, dtype=np.int32), n)[None, :] \
+            .repeat(n, axis=0)
+        spread = segments.table(grid, labels)[3:, 0]
+        self.assertLess(float(np.ptp(spread, axis=1).max()), 0.5)
+        drawing = segments.pattern(grid, labels)[:, 0]
+        self.assertEqual(drawing.shape[0], segments.PATTERN)
+        # Направленность: ряды - высокая, шум и кроны - около нуля.
+        self.assertGreater(drawing[2, 1], 0.4)
+        self.assertLess(drawing[2, 0], 0.1)
+        self.assertLess(drawing[2, 2], 0.1)
+        # Зерно: кроны крупнее травы.
+        self.assertLess(drawing[1, 2], drawing[1, 0] - 0.2)
+
+    def test_pattern_ignores_neighbour_objects(self):
+        # Резкая граница двух ровных объектов не даёт им перепадов.
+        grid = np.zeros((1, 10, 20), np.float32)
+        grid[:, :, 10:] = 100.0
+        labels = np.zeros((10, 20), np.int32)
+        labels[:, 10:] = 1
+        self.assertLess(float(np.abs(segments.pattern(grid,
+                                                      labels)).max()), 1e-6)
+
     def test_borders(self):
         labels = np.array([[0, 0, 1], [0, 0, 1], [-1, -1, 1]])
         edge = segments.borders(labels)

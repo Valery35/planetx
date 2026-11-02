@@ -2989,8 +2989,11 @@ divided by the number of its points, so classes may have different
 numbers of points.
 
 The Auto pixel for a raster is the pixel of the raster itself if the
-area has no more than 640 thousand cells, otherwise it is larger. A 10,
-20, 40 or 80 m pixel sets the area grid as it is. The grid has no more
+area has no more than 640 thousand cells, otherwise it is larger. A 1, 2,
+5, 10, 20, 40 or 80 m pixel sets the area grid as it is, pixels finer than
+10 m exist only for a raster and the basemap. The line under the field
+gives the grid step and the number of cells, for Auto - the step it will
+take. The grid has no more
 than 16 million cells, otherwise the line under the fields asks for a
 larger pixel or Auto. If the raster covers
 the area partly, the line under the fields gives the covered share. An
@@ -3003,7 +3006,10 @@ assembled into a picture in memory, no image file is written, and the
 features are red, green and blue. The tile level follows the pixel, and
 a tile without imagery is replaced by its enlarged ancestor. The Auto
 pixel is the pixel of the most detailed basemap level if the area has no
-more than 640 thousand cells, otherwise it is larger. The mosaic has no
+more than 640 thousand cells, otherwise it is larger. On a 3 km area it is
+about 3.75 m. The pattern of crowns and clear-cut rows shows at a 1-2 m
+pixel, and on an area up to 2 km such a pixel fits into the 4 million
+cells of division into objects. The mosaic has no
 more than 1024 tiles, otherwise the line under the fields asks for a
 larger pixel or Auto. Before the first calculation with each basemap a
 window reminds that its terms may not allow such use, and the decision
@@ -3031,7 +3037,13 @@ the share of the spread of brightness around a cell among the features,
 it separates a forest from a meadow of the same color. An object smaller
 than Smallest object merges with its most similar neighbor. A control
 point takes the features of its object, and a whole object gets a class
-by the means and spreads of the bands inside it. On the globe dark lines
+by the means and spreads of the bands inside it. For a raster and the
+basemap the pattern of the object is added - the mean brightness step
+between neighbor cells, its grain and its direction. Clear-cut rows and
+plough strips give steps of one direction, crowns and grass give steps of
+all directions, so a clear-cut differs from a meadow of the same color and
+spread. The pattern is taken only from the cells of the object itself.
+On the globe dark lines
 show the object borders, the line under the fields gives their number.
 OK writes, instead of a raster, a polygon layer Objects with the fields
 class, name, area_ha, mean_N and sd_N, AlphaEarth has no band fields.
@@ -3071,8 +3083,10 @@ inside an outline around a field does not affect the search. An outline across
 the border of two objects gives two samples.
 
 The Build button divides the site into objects and compares each of them with
-the samples by the mean values of the bands and the spread inside the object.
-Texture share sets the weight of the spread next to color. The found objects
+the samples by the mean values of the bands, the spread inside the object and,
+for a raster and the basemap, the pattern of the object, as in
+classification. Texture share sets the weight of the spread and the pattern
+next to color. The found objects
 appear on the globe in orange, and the line under the fields gives their number,
 area and share of the site.
 
