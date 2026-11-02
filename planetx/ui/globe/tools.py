@@ -502,23 +502,28 @@ class ToolsMixin:
         self.viewshed_dialog.status.setText(text + " " + built_text())
         self.viewshed_dialog.ok.setEnabled(True)
 
-    def _show_viewshed(self, result):
-        """Слой видимости по результату result, None убирает слой."""
+    def _drop_viewshed(self):
+        """Картинки видимости сняты, слой вида не выключается: его занял
+        другой инструмент анализа (ui/sitelayer.py)."""
         old = self.viewshed_tiles
         if old is not None:
             old.abort()
             old.deleteLater()
         self.viewshed_tiles = None
+        self.viewshed_result = None
+
+    def _show_viewshed(self, result):
+        """Слой видимости по результату result, None убирает слой."""
+        self._drop_viewshed()
         self.viewshed_result = result
-        if result is not None and getattr(self, "class_tool", None):
-            self.class_tool.drop()  # слой вида один на всех
-            self.similar_tool.drop()
-            self.spectral_tool.drop()
-            self.emit_tool.drop()
-            self.earthwork.drop()
         if result is None:
-            self.view.set_gibs("viewshed", False)
+            # Слой выключается, только если он у видимости: результат
+            # другого окна анализа остаётся.
+            if self.site_layer.owner in (None, self.viewshed_owner):
+                self.site_layer.release(self.viewshed_owner)
+                self.view.set_gibs("viewshed", False)
             return
+        self.site_layer.claim(self.viewshed_owner)  # слой вида один
         tiles = ResultTiles(result, ellipsoid.A, parent=self)
         tiles.loaded.connect(lambda key, rgba, levels:
                              self.view.add_gibs("viewshed", key, levels))

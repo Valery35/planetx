@@ -26,9 +26,8 @@ from .inset import DemSource
 from .relief import write_grid
 from .results import (Session, accepted, built_text, keep_buttons,
                       result_path, show_layer)
+from .sitelayer import SiteTool
 from .viewshed import ResultTiles, display_level, fit_status
-
-LAYER = "viewshed"  # слой вида, общий с видимостью и классификацией
 SIDE = 1.0  # км, сторона участка по умолчанию
 MOST = 20.0  # км, наибольший участок
 PAUSE = 150  # мс, пауза смены отметки перед новой раскраской
@@ -129,7 +128,7 @@ class EarthworkDialog(QDialog):
         self.level.blockSignals(False)
 
 
-class EarthworkTool(GridHeights):
+class EarthworkTool(SiteTool, GridHeights):
     """Выемка и насыпь участка до площадки."""
 
     def __init__(self, window):
@@ -220,49 +219,16 @@ class EarthworkTool(GridHeights):
     # --- показ на глобусе --------------------------------------------------
 
     def _show(self, work, keep):
-        window = self.window
-        old = self.tiles
-        self.tiles = None
-        if old is not None:
-            old.abort()
-            old.deleteLater()
-        if not keep:
-            window.class_tool.clear()
-            window.similar_tool.clear()
-            window.spectral_tool.clear()
-            window.emit_tool.clear()
-            window._show_viewshed(None)
-        tiles = ResultTiles(work, ellipsoid.A, volumes.tile_rgba,
-                            parent=self)
-        tiles.loaded.connect(lambda key, rgba, levels:
-                             window.view.add_gibs(LAYER, key, levels))
-        self.tiles = tiles
-        layer = window.view.gibs[LAYER]
-        layer.max_level = display_level(work.grid.cell, work.lat,
-                                        ellipsoid.A)
-        layer.empty.clear()
-        window.view.set_gibs(LAYER, True, tiles, keep=keep)
-        window.view.update()
+        self.put_tiles(ResultTiles(work, ellipsoid.A, volumes.tile_rgba,
+                                   parent=self),
+                       display_level(work.grid.cell, work.lat, ellipsoid.A),
+                       keep=keep)
 
-    def _drop_tiles(self):
-        if self.tiles is not None:
-            self.tiles.abort()
-            self.tiles.deleteLater()
-            self.tiles = None
-
-    def drop(self):
-        """Слой вида занимает другой инструмент."""
+    def forget(self):
         self.pause.stop()
-        self._drop_tiles()
         self.state = None
         if self.dialog is not None:
             self.dialog.set_ready(False)
-
-    def clear(self):
-        shown = self.tiles is not None
-        self.drop()
-        if shown:
-            self.window.view.set_gibs(LAYER, False)
 
     # --- выгрузка ----------------------------------------------------------
 

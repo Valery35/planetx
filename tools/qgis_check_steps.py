@@ -19777,6 +19777,75 @@ def spectral_wait():
     return None
 
 
+@check(1000)
+def preview_on_top():
+    # Предпросмотр анализа виден над растром проекта на глобусе. До
+    # 2 ноября 2026 года слой «viewshed» лежал под наложением проекта,
+    # исходный снимок закрывал классы, замечание Василия Швалёва.
+    import numpy as np
+    from osgeo import gdal, osr
+    from qgis.core import QgsProject, QgsRasterLayer
+    window = state["window"]
+    lat, lon = CHANGE_POINT
+    path = os.path.join(TEMP, "planetx_red_cover.tif")
+    data = gdal.GetDriverByName("GTiff").Create(path, 200, 200, 3,
+                                                gdal.GDT_Byte)
+    data.SetGeoTransform((lon - 0.1, 0.001, 0.0, lat + 0.1, 0.0, -0.001))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+    data.SetProjection(srs.ExportToWkt())
+    for n, v in enumerate((255, 0, 0)):
+        data.GetRasterBand(n + 1).WriteArray(np.full((200, 200), v,
+                                                     dtype=np.uint8))
+    data = None
+    layer = QgsRasterLayer(path, "red cover", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    window.set_layer_shown(layer.id(), True)
+    state["red_cover"] = layer.id()
+    spectral_open()
+    state["preview_started"] = time.monotonic()
+
+
+@check(500)
+def preview_on_top_check():
+    window = state["window"]
+    tool = window.spectral_tool
+    textures = window.view.gibs["viewshed"].textures
+    spent = time.monotonic() - state["preview_started"]
+    # Картинка наложения проекта рисуется QGIS несколько секунд.
+    if (tool.job is not None or tool.result is None or len(textures) < 4
+            or spent < 10) and spent < 60:
+        window.view.update()
+        return 500
+    from qgis.core import QgsProject
+    window.view.update()
+    image = window.view.grabFramebuffer()
+    image.save(os.path.join(TEMP, "planetx_preview_on_top.png"))
+    reds = 0
+    total = 0
+    w, h = image.width(), image.height()
+    for fx in (0.42, 0.46, 0.54, 0.58):
+        for fy in (0.42, 0.5, 0.58):
+            c = image.pixelColor(int(w * fx), int(h * fy))
+            total += 1
+            if c.red() > 200 and c.green() < 60 and c.blue() < 60:
+                reds += 1
+    # Хозяин общего слоя (ui/sitelayer.py): снятие видимости не трогает
+    # результат другого окна.
+    owner = window.site_layer.owner is tool
+    window._show_viewshed(None)
+    result["preview_on_top"] = {"pure_red": reds, "probes": total,
+                                "textures": len(textures),
+                                "built": tool.result is not None,
+                                "owner": owner,
+                                "kept_after_viewshed_off":
+                                    tool.tiles is not None
+                                    and window.site_layer.owner is tool}
+    tool.dialog.reject()
+    QgsProject.instance().removeMapLayer(state["red_cover"])
+    return None
+
+
 EMIT_NAME = "EMIT_L2B_MIN_002_20250610T183000"
 
 

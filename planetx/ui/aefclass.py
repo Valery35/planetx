@@ -58,11 +58,11 @@ from .inset import warm
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons,
                       result_path, show_layer, write_vector)
+from .sitelayer import SiteTool, result_level
 from .threadtiles import ThreadTiles
 from .tilemosaic import dataset as tile_dataset
 from .viewshed import fit_status
 
-LAYER = "viewshed"  # слой вида, общий с видимостью из точки
 SETTINGS = "PlanetX/aef_class/"
 # Цвета новых классов по порядку - выбор помощника.
 COLORS = ((60, 160, 70), (40, 110, 220), (240, 190, 40), (200, 60, 50),
@@ -535,7 +535,7 @@ class ClassDialog(QDialog):
         self.to_project.setEnabled(ready)
 
 
-class ClassTool(QObject):
+class ClassTool(SiteTool, QObject):
     """Классификация участка у окна глобуса."""
 
     def __init__(self, window):
@@ -954,60 +954,19 @@ class ClassTool(QObject):
     # --- показ ----------------------------------------------------------
 
     def show(self):
-        window = self.window
         result = self.result
         self._drop_tiles()
         if result is None:
             return
-        window.similar_tool.clear()  # слой вида один
-        window.spectral_tool.clear()
-        window.emit_tool.clear()
-        window.earthwork.clear()
-        window._show_viewshed(None)
-        tiles = ClassTiles(result, parent=self)
-        tiles.loaded.connect(lambda key, rgba, levels:
-                             window.view.add_gibs(LAYER, key, levels))
-        self.tiles = tiles
-        layer = window.view.gibs[LAYER]
-        lat = (result["box"][1] + result["box"][3]) / 2.0
-        pixel = 2 * math.pi * 6378137.0 * math.cos(math.radians(lat)) / 256
-        layer.max_level = max(1, min(18, int(math.ceil(
-            math.log2(pixel / result["step"])))))
-        layer.empty.clear()
-        window.view.set_gibs(LAYER, True, tiles)
-        self.set_opacity(self.dialog.alpha.value() / 100.0 if self.dialog
-                         else OPACITY)
+        self.put_tiles(ClassTiles(result, parent=self),
+                       result_level(result),
+                       self.dialog.alpha.value() / 100.0 if self.dialog
+                       else OPACITY)
 
-    def set_opacity(self, value):
-        """Непрозрачность классов - доля прозрачности слоя вида, без
-        пересборки картинок тайлов."""
-        if self.tiles is None:
-            return
-        self.window.view.gibs[LAYER].fade = 1.0 - value
-        self.window.view.update()
-
-    def _drop_tiles(self):
-        if self.tiles is not None:
-            # Слой вида общий с видимостью из точки, её прозрачность своя.
-            self.window.view.gibs[LAYER].fade = 0.0
-        if self.tiles is not None:
-            self.tiles.abort()
-            self.tiles.deleteLater()
-            self.tiles = None
-
-    def drop(self):
-        """Слой вида занимает видимость - классы снимаются без снятия
-        слоя."""
-        self._drop_tiles()
+    def forget(self):
         self.result = None
         if self.dialog is not None:
             self.dialog.set_ready(False)
-
-    def clear(self):
-        shown = self.tiles is not None
-        self.drop()
-        if shown:
-            self.window.view.set_gibs(LAYER, False)
 
     # --- выгрузка -------------------------------------------------------
 

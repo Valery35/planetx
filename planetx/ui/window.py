@@ -75,6 +75,7 @@ from .aefclass import ClassTool
 from .similar import SimilarTool
 from .spectral import SpectralTool
 from .emit import EmitTool
+from .sitelayer import SiteLayer, ViewshedOwner
 from .earthwork import EarthworkTool
 from .netlink import NetLinks
 from .superoverlay import SuperOverlays
@@ -721,6 +722,10 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.viewshed_job = None
         self.viewshed_tiles = None
         self.viewshed_result = None
+        # Общий слой вида окон анализа участка и его хозяин
+        # (ui/sitelayer.py).
+        self.site_layer = SiteLayer()
+        self.viewshed_owner = ViewshedOwner(self)
         self.contour_export = ContourExport(self)
         # Участки окон анализа участка (ui/area.py): контуры на глобусе,
         # вершины щелчками.

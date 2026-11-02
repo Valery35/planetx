@@ -29,14 +29,14 @@ from ..i18n import tr
 from ..net.overlay import fetch_bytes, resolve_redirect
 from ..qt_compat import enum
 from .aef import _poll_job, _run_job, stop_point, write_utm
-from .aefclass import LAYER, ClassTiles, add_classes, write_classes
+from .aefclass import ClassTiles, add_classes, write_classes
 from .area import Area
 from .export import add_raster
 from .inset import warm
 from .results import Session, accepted, built_text, keep_buttons, \
     result_path, show_layer
 from .sentinel import EARTHDATA_KEY, earthdata_token
-from .similar import aef_level
+from .sitelayer import SiteTool, result_level
 from .viewshed import fit_status
 
 SETTINGS = "PlanetX/emit/"
@@ -306,7 +306,7 @@ class EmitDialog(QDialog):
             self.list.setCurrentRow(0)
 
 
-class EmitTool(QObject):
+class EmitTool(SiteTool, QObject):
     """Минеральные карты EMIT у окна глобуса."""
 
     def __init__(self, window):
@@ -585,46 +585,17 @@ class EmitTool(QObject):
     # --- показ ----------------------------------------------------------
 
     def show(self):
-        window = self.window
         result = self.result
         self._drop_tiles()
         if result is None:
             return
-        window.class_tool.clear()  # слой вида один
-        window.similar_tool.clear()
-        window.spectral_tool.clear()
-        window.earthwork.clear()
-        window._show_viewshed(None)
-        tiles = ClassTiles(result, parent=self)
-        tiles.loaded.connect(lambda key, rgba, levels:
-                             window.view.add_gibs(LAYER, key, levels))
-        self.tiles = tiles
-        layer = window.view.gibs[LAYER]
-        layer.max_level = aef_level(result)
-        layer.empty.clear()
-        window.view.set_gibs(LAYER, True, tiles)
-        layer.fade = 1.0 - OPACITY
-        window.view.update()
+        self.put_tiles(ClassTiles(result, parent=self), result_level(result),
+                       OPACITY)
 
-    def _drop_tiles(self):
-        if self.tiles is not None:
-            self.window.view.gibs[LAYER].fade = 0.0
-            self.tiles.abort()
-            self.tiles.deleteLater()
-            self.tiles = None
-
-    def drop(self):
-        """Слой вида занимает другой инструмент."""
-        self._drop_tiles()
+    def forget(self):
         self.result = None
         if self.dialog is not None:
             self.dialog.to_project.setEnabled(False)
-
-    def clear(self):
-        shown = self.tiles is not None
-        self.drop()
-        if shown:
-            self.window.view.set_gibs(LAYER, False)
 
     # --- выгрузка -------------------------------------------------------
 

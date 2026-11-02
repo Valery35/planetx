@@ -573,9 +573,6 @@ void main() {
         base = texture(u_texture, v_uv, u_fade.x).rgb;
         base = lay(base, u_sea, u_sea_uv, u_sea_fx);
         base = lay(base, u_land, u_land_uv, u_land_fx);
-        base = lay(base, u_slope, u_slope_uv, u_slope_fx);
-        base = lay(base, u_viewshed, u_viewshed_uv, u_viewshed_fx);
-        base = lay(base, u_insolation, u_insolation_uv, u_insolation_fx);
         float edge = gl_FragCoord.x - u_swipe * u_viewport.x;
         bool left = u_swipe >= 0.0 && edge < 0.0;
         bool maps = u_swipe_maps > 0.5;
@@ -595,6 +592,13 @@ void main() {
             fx.y = 1.0 - (1.0 - fx.y) * overlay_keep();
             base = lay(base, u_overlay, u_overlay_uv, fx);
         }
+        // Результаты анализа участка - уклон, видимость, классы, похожие
+        // области, минералы, инсоляция и тени - над слоями проекта:
+        // исходный снимок проекта иначе закрывал предпросмотр, замечание
+        // Василия Швалёва от 2 ноября 2026 года.
+        base = lay(base, u_slope, u_slope_uv, u_slope_fx);
+        base = lay(base, u_viewshed, u_viewshed_uv, u_viewshed_fx);
+        base = lay(base, u_insolation, u_insolation_uv, u_insolation_fx);
         base = lay(base, u_clouds, u_clouds_uv, u_clouds_fx);
         if (u_swipe >= 0.0 && abs(edge) < SWIPE_LINE) {
             base = vec3(1.0);

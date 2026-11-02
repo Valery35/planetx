@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.29.0
+version=1.30.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.29.0 Objects of an image get their pattern in the
+changelog=1.30.0 The Minerals by spectrum window compares an image spectrum with
+      1657 references of the USGS Spectral Library 7, a click shows the
+      pixel spectrum and the nearest references, and the marked references
+      become classes of the site. The EMIT minerals window shows NASA
+      mineral maps of the EMIT spectrometer, 60 m, arid regions since 2022,
+      by an Earthdata key. Analysis results lie above project layers.
+      1.29.0 Objects of an image get their pattern in the
       Classification and Similar areas windows - the brightness step
       between neighbor cells, its grain and its direction, so clear-cut
       rows differ from grass of the same color. A project raster and the

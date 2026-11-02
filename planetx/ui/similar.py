@@ -24,11 +24,12 @@ from ..i18n import tr
 from ..qt_compat import enum
 from .aef import _poll_job, _run_job, index_of, open_cog, stop_point, \
     zstd_ready
-from .aefclass import (AUTO, BASEMAP, CLASS_SIDE, LAYER, RASTER_SIDE,
+from .aefclass import (AUTO, BASEMAP, CLASS_SIDE, RASTER_SIDE,
                        ClassTiles, SourceBox, _flag, fill_pixels,
                        pixel_text, problem_text, raster_reader, set_credit,
                        write_objects)
 from .area import Area
+from .sitelayer import SiteTool, result_level
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons, result_path, write_vector)
 from .viewshed import fit_status
@@ -276,7 +277,7 @@ class SimilarDialog(QDialog):
         settings.setValue(SETTINGS + "join", self.join.isChecked())
 
 
-class SimilarTool(QObject):
+class SimilarTool(SiteTool, QObject):
     """Поиск похожих областей у окна глобуса."""
 
     def __init__(self, window):
@@ -508,50 +509,20 @@ class SimilarTool(QObject):
     # --- показ ----------------------------------------------------------
 
     def show(self):
-        window = self.window
         result = self.result
+        # Смена порога - поверх прежних картинок, без мигания.
         keep = self.tiles is not None
-        self._drop_tiles()
         if result is None:
+            self._drop_tiles()
             return
-        if not keep:
-            # Смена порога - поверх прежних картинок, без мигания.
-            window.class_tool.clear()
-            window.spectral_tool.clear()
-            window.emit_tool.clear()
-            window.earthwork.clear()
-            window._show_viewshed(None)
-        tiles = ClassTiles(result, parent=self)
-        tiles.loaded.connect(lambda key, rgba, levels:
-                             window.view.add_gibs(LAYER, key, levels))
-        self.tiles = tiles
-        layer = window.view.gibs[LAYER]
-        layer.max_level = aef_level(result)
-        layer.empty.clear()
-        window.view.set_gibs(LAYER, True, tiles, keep=keep)
-        layer.fade = 1.0 - OPACITY
-        window.view.update()
+        self.put_tiles(ClassTiles(result, parent=self), result_level(result),
+                       OPACITY, keep=keep)
 
-    def _drop_tiles(self):
-        if self.tiles is not None:
-            self.window.view.gibs[LAYER].fade = 0.0
-            self.tiles.abort()
-            self.tiles.deleteLater()
-            self.tiles = None
-
-    def drop(self):
-        """Слой вида занимает другой инструмент."""
-        self._drop_tiles()
+    def forget(self):
         self.base = None
         self.result = None
         if self.dialog is not None:
             self.dialog.to_project.setEnabled(False)
-
-    def clear(self):
-        shown = self.tiles is not None
-        self.drop()
-        if shown:
-            self.window.view.set_gibs(LAYER, False)
 
     # --- выгрузка -------------------------------------------------------
 
@@ -588,11 +559,3 @@ class SimilarTool(QObject):
         self._drop_tiles()
         if self.dialog is not None:
             self.dialog.close()
-
-
-def aef_level(result):
-    """Глубина тайлов слоя вида по шагу сетки."""
-    import math
-    lat = (result["box"][1] + result["box"][3]) / 2.0
-    pixel = 2 * math.pi * 6378137.0 * math.cos(math.radians(lat)) / 256
-    return max(1, min(18, int(math.ceil(math.log2(pixel / result["step"])))))
