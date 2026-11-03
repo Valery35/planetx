@@ -41,23 +41,37 @@ LEVEL_OFFSET = 2
 # Класс «value» - число поля прогноза погоды, core/weather.py.
 # Класс «wiki» - статья Википедии рядом, core/wikipedia.py, после
 # пунктов основы: статья подписывается там, где остаётся место.
+# Класс «suburb» - район города, «river» - река или канал подписью
+# вдоль русла, как у Google Earth, решение автора от 4 ноября 2026 года.
 # Класса у каждого стиля render/labels.py требует test_label_kinds.
 CLASSES = ("search", "mark", "ruler", "layer", "circle", "grid", "plate",
            "value",
            "country",
            "capital",
            "city", "state",
-           "water", "town", "park", "peak", "airport", "road_ref",
-           "village", "wiki")
+           "water", "town", "river", "suburb", "park", "peak", "airport",
+           "road_ref", "village", "wiki")
 KIND = {name: index for index, name in enumerate(CLASSES)}
-PLACE_CLASSES = {"country", "capital", "city", "state", "town", "village"}
+PLACE_CLASSES = {"country", "capital", "city", "state", "town", "village",
+                 "suburb"}
 
 # Слои векторного тайла с пунктами и нужные атрибуты.
 LAYERS = {"place", "mountain_peak", "water_name", "park",
-          "aerodrome_label", "transportation_name"}
+          "aerodrome_label", "transportation_name", "waterway"}
 WANTED = {"class", "capital", "rank", "name", "ele", "ref"}
 # Слои, где пункт берётся и с линии. В остальных только точки.
-LINE_LAYERS = {"water_name", "transportation_name"}
+LINE_LAYERS = {"water_name", "transportation_name", "waterway"}
+# Реки и каналы слоя waterway, ранг по классу. Ручьи не подписываются.
+RIVER_RANK = {"river": 1, "canal": 2}
+# Направление подписи реки - хорда между вершинами линии на столько
+# вершин по обе стороны от места подписи, но не дальше края.
+RIVER_SPAN = 3
+# Места подписи реки - доли длины каждой линии тайла. Подпись встаёт
+# на первое свободное, река одного названия подписывается в кадре один
+# раз (render/labels.py). Важнее река, длиннее в кадре вся, по всем
+# тайлам (PlaceStore.collect), - так Кама обходит свои притоки.
+RIVER_SHARES = (0.5, 0.25, 0.75)
+EARTH_KM = 40075.0
 # Ранги классов, у которых в тайле ранга нет. Меньше - важнее.
 WATER_RANK = {"ocean": 1, "sea": 2, "bay": 4, "strait": 4, "lake": 5}
 PARK_CLASSES = {"national_park", "nature_reserve", "protected_area",
@@ -77,7 +91,8 @@ MIN_LEVEL = {"state": 3}
 # в кадре одни и те же уровни 5 и 6. Величины назначил автор
 # 27 сентября 2026 года.
 MAX_HEIGHT = {"peak": 4.0e5, "airport": 1.0e6, "road_ref": 1.0e6,
-              "park": 3.0e6}
+              "park": 3.0e6, "suburb": 8.0e4, "river": 4.0e5,
+              "village": 3.0e5}
 
 
 def kinds_at(kinds, height):
@@ -92,7 +107,9 @@ Place.__doc__ = """Подписываемый пункт: населённый �
 
 id - номер объекта в тайле или 0. kind - класс из CLASSES. rank - ранг
 OpenMapTiles, меньше - важнее, без ранга 99. lat, lon в градусах.
-info - высота вершины в метрах, у остальных None. lift - подъём
+info - высота вершины в метрах, у реки - направление русла (широта,
+долгота до, широта, долгота после) и длина реки этого названия в тайле,
+км, у остальных None. lift - подъём
 надписи над рельефом в метрах, у своих поднятых меток. base - от чего
 отсчитан подъём своей метки: None - поверхность, "floor" - рельеф
 с дном моря, "abs" - уровень моря (подъём уже с масштабом рельефа).
@@ -401,6 +418,9 @@ def _read_place(layer, attrs, languages):
     if layer == "aerodrome_label":
         rank = AIRPORT_RANK.get(attrs.get("class"), 5)
         return ("airport", place_name(attrs, languages), rank, None)
+    if layer == "waterway":
+        rank = RIVER_RANK.get(attrs.get("class"))
+        return rank and ("river", place_name(attrs, languages), rank, None)
     if layer == "transportation_name":
         ref = str(attrs.get("ref") or "").split(";")[0].strip()
         rank = ROAD_RANK.get(attrs.get("class"))
@@ -419,6 +439,7 @@ def decode_places(key, data, languages=("en",)):
     for language in languages:
         wanted |= {"name:" + language, "name_" + language}
     out = []
+    rivers = {}
     for layer, (features, extent) in decode_layers(
             data, LAYERS, wanted).items():
         for fid, kind, attrs, points in features:
@@ -427,6 +448,10 @@ def decode_places(key, data, languages=("en",)):
             found = _read_place(layer, attrs, languages)
             if not found or not found[1] or not points:
                 continue
+            if found[0] == "river":
+                rivers.setdefault(found[1], []).append(
+                    (fid, found[2], points, extent))
+                continue
             px, py = points[len(points) // 2] if kind == 2 else points[0]
             # Точки в полосе за краем тайла повторяют соседей.
             if not (0 <= px < extent and 0 <= py < extent):
@@ -434,7 +459,72 @@ def decode_places(key, data, languages=("en",)):
             lat, lon = tile_point(z, x, y, px, py, extent)
             place_class, name, rank, info = found
             out.append(Place(fid, name, place_class, rank, lat, lon, info))
+    for name, lines in rivers.items():
+        out += river_places(key, name, lines)
     return out
+
+
+def river_places(key, name, lines):
+    """Места подписи реки name в тайле key по её линиям lines - кортежам
+    (номер, ранг класса, вершины, размер тайла)."""
+    z, x, y = key
+    km = EARTH_KM / (1 << z)
+    total = sum(_length(points) / extent for _, _, points, extent in lines)
+    out = []
+    for fid, rank, points, extent in lines:
+        for k, share in enumerate(RIVER_SHARES):
+            n = _vertex_at(points, share)
+            px, py = points[n]
+            if not (0 <= px < extent and 0 <= py < extent):
+                continue
+            course = river_course(z, x, y, points, extent, n)
+            if course is None:
+                continue
+            lat, lon = tile_point(z, x, y, px, py, extent)
+            # Номер места свой у тайла, линии и доли: одна линия OSM
+            # идёт через соседние тайлы, места каждого нужны.
+            ident = hash((z, x, y, fid, k)) & 0x7fffffff or 1
+            out.append(Place(ident, name, "river", rank, lat, lon,
+                             course + (total * km,)))
+    return out
+
+
+def _length(points):
+    return sum(math.hypot(b[0] - a[0], b[1] - a[1])
+               for a, b in zip(points, points[1:]))
+
+
+def _vertex_at(points, share):
+    """Номер вершины линии на доле share её длины."""
+    goal = share * _length(points)
+    run = 0.0
+    for n, (a, b) in enumerate(zip(points, points[1:])):
+        run += math.hypot(b[0] - a[0], b[1] - a[1])
+        if run >= goal:
+            return n + 1 if run - goal < goal - run + math.hypot(
+                b[0] - a[0], b[1] - a[1]) else n
+    return len(points) // 2
+
+
+def river_course(z, x, y, points, extent, middle=None):
+    """Направление русла у вершины middle линии (по умолчанию средней):
+    (широта, долгота до, широта, долгота после) или None, если линия -
+    точка."""
+    if middle is None:
+        middle = len(points) // 2
+    a = points[max(0, middle - RIVER_SPAN)]
+    b = points[min(len(points) - 1, middle + RIVER_SPAN)]
+    if a == b:
+        return None
+    return tile_point(z, x, y, a[0], a[1], extent) \
+        + tile_point(z, x, y, b[0], b[1], extent)
+
+
+def river_rank(place, total):
+    """Пункт реки с рангом по длине total, км, всей реки в кадре: ранг
+    класса впереди, длиннее - важнее."""
+    return place._replace(
+        rank=place.rank * 100000 + 99999 - min(99999, int(total)))
 
 
 def label_level(z, max_level=MAX_LEVEL):
@@ -500,14 +590,21 @@ class PlaceStore:
         if memo == self._collected[0]:
             return self._collected[1]
         seen = {}
+        totals = {}
         for key in sorted(memo[0], reverse=True):
+            counted = set()
             for place in self.tiles[key]:
                 if key[0] < MIN_LEVEL.get(place.kind, 0):
                     continue
                 if kinds is not None and place.kind not in kinds:
                     continue
+                if place.kind == "river" and place.name not in counted:
+                    counted.add(place.name)
+                    totals[place.name] = \
+                        totals.get(place.name, 0.0) + place.info[4]
                 seen.setdefault(identity(place), place)
-        out = sorted(seen.values(), key=importance)
+        out = sorted((river_rank(p, totals[p.name]) if p.kind == "river"
+                      else p for p in seen.values()), key=importance)
         self._collected = (memo, out)
         return out
 

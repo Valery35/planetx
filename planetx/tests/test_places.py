@@ -119,11 +119,13 @@ class TestDecode(unittest.TestCase):
         key = (8, 170, 76)
         out = pl.decode_places(key, TILE, languages=("ru",))
         names = [p.name for p in out]
-        # Пригород не показывается, точка за краем тайла - дубль соседа.
-        self.assertEqual(names, ["Пермь", "Kultayevo", "Moscow"])
+        # Район города подписывается (как у Google Earth, 4 ноября 2026
+        # года), точка за краем тайла - дубль соседа.
+        self.assertEqual(names, ["Пермь", "Kultayevo", "Motovilikha",
+                                 "Moscow"])
         self.assertEqual([p.kind for p in out],
-                         ["city", "village", "capital"])
-        self.assertEqual([p.rank for p in out], [4, 12, 99])
+                         ["city", "village", "suburb", "capital"])
+        self.assertEqual([p.rank for p in out], [4, 12, 99, 99])
         lat, lon = pl.tile_point(*key, 1000, 2000, 4096)
         self.assertAlmostEqual(out[0].lat, lat)
         english = pl.decode_places(key, TILE, languages=("en",))
@@ -201,6 +203,46 @@ class TestOtherLayers(unittest.TestCase):
         lat, lon = pl.tile_point(8, 170, 76, 80, 80, 4096)
         self.assertAlmostEqual(found["Р-243"].lat, lat)
 
+    def test_river_along_course(self):
+        # Река слоя waterway - подпись у средней вершины, направление -
+        # хорда между вершинами по обе стороны. Ручей не подписывается.
+        tile = layer("waterway", [
+            (31, 2, {"class": "river", "name": "Kama", "name:ru": "Кама"},
+             [(100, 100), (200, 100), (300, 100), (400, 100), (500, 100),
+              (600, 100), (700, 100)]),
+            (32, 2, {"class": "stream", "name": "Brook"},
+             [(10, 10), (20, 20)])])
+        out = pl.decode_places((8, 170, 76), tile, languages=("ru",))
+        self.assertEqual([p.name for p in out], ["Кама"] * 3)
+        river = out[0]
+        self.assertEqual(river.kind, "river")
+        lat, lon = pl.tile_point(8, 170, 76, 400, 100, 4096)
+        self.assertAlmostEqual(river.lat, lat)
+        a = pl.tile_point(8, 170, 76, 100, 100, 4096)
+        b = pl.tile_point(8, 170, 76, 700, 100, 4096)
+        self.assertEqual(river.info[:4], a + b)
+
+    def test_long_river_outranks_tributaries(self):
+        # Места подписи - середина и четверти линии. Важнее река, длиннее
+        # в кадре вся: Кама в двух тайлах обходит приток длиннее её
+        # в одном тайле.
+        def tile(lines):
+            return layer("waterway", [
+                (fid, 2, {"class": "river", "name": name}, points)
+                for fid, name, points in lines])
+        line = [(i * 400, 2000) for i in range(10)]
+        store = pl.PlaceStore()
+        for x in (170, 171):
+            got = pl.decode_places((8, x, 76), tile(
+                [(7, "Kama", line)] + ([(9, "Mulyanka", [
+                    (100, i * 450) for i in range(10)])] if x == 170
+                    else [])))
+            self.assertEqual(sum(p.name == "Kama" for p in got), 3)
+            store.add((8, x, 76), got)
+        out = [p for p in store.collect([(10, 680, 304), (10, 684, 304)])
+               if p.kind == "river"]
+        self.assertEqual(out[0].name, "Kama")
+        self.assertEqual(len({p.id for p in out}), len(out))
     def test_collect_by_kinds(self):
         store = pl.PlaceStore()
         store.add((6, 42, 18), list(self.places().values()))

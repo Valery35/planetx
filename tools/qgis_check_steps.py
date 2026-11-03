@@ -21612,6 +21612,49 @@ def recognize_areas_wait():
     return None
 
 
+LABELS_LOOK = (58.02615, 56.20146, 33860.0, 0.0, 35.0)  # ракурс Google Earth
+
+
+@check(1000)
+def labels_look():
+    # Подписи по образцу Google Earth: Пермь с 34 км под 35°, как ссылка
+    # автора от 4 ноября 2026 года. Названия, воды и реки основы.
+    from planetx.core.navigation import Pose
+    from planetx.net.overlay import PLACES, WATER_NAMES
+    window = state["window"]
+    window.set_body("earth")
+    window.choose_basemap(0)
+    state["labels_groups"] = window.line_groups()
+    window.set_line_groups({PLACES, WATER_NAMES})
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(Pose(*LABELS_LOOK))
+    view.update()
+    state["labels_started"] = time.monotonic()
+    result["labels_look"] = {}
+
+
+@check(2000)
+def labels_look_wait():
+    window = state["window"]
+    view = window.view
+    spent = time.monotonic() - state["labels_started"]
+    labels = view.labels
+    if (view.load_missing or labels.pending or spent < 12.0) \
+            and spent < 90.0:
+        view.update()
+        return 2000
+    out = result["labels_look"]
+    shown = [view.labels._places[view.labels._row[key]]
+             for key in labels.shown if key in labels._row]
+    out["shown"] = sorted("{}:{}".format(p.kind, p.name) for p in shown)
+    out["rivers"] = [p.name for p in shown if p.kind == "river"]
+    out["count"] = labels.count
+    window.copy_view().save(os.path.join(TEMP, "planetx_labels_look.png"))
+    window.set_line_groups(state["labels_groups"])
+    return None
+
+
 POST135 = tuple(map(float, os.environ.get(
     "PLANETX_POST135", "58.005,56.175").split(",")))  # Черняевский лес
 POST135_SIDE = float(os.environ.get("PLANETX_POST135_SIDE", "5"))

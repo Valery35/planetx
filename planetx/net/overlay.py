@@ -75,8 +75,9 @@ PLACES, WATER_NAMES, PEAKS, ROAD_REFS = (
 LINE_GROUPS = (BORDERS, RIVERS, WATER, ROADS, RAILWAYS, PARKS, AIRPORTS)
 # Группы, у которых есть надписи, и их классы из core/places.py.
 LABEL_KINDS = {
-    PLACES: ("country", "capital", "city", "state", "town", "village"),
-    WATER_NAMES: ("water",),
+    PLACES: ("country", "capital", "city", "state", "town", "village",
+             "suburb"),
+    WATER_NAMES: ("water", "river"),
     PEAKS: ("peak",),
     ROAD_REFS: ("road_ref",),
     PARKS: ("park",),

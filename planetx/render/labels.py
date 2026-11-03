@@ -3,9 +3,10 @@
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
 """Надписи населённых пунктов, как в Google Earth.
 
-Надпись стоит на экране ровно и не поворачивается вместе с Землёй.
-Текст с тёмной обводкой растрируется один раз в картинку и кладётся
-в атлас - общую текстуру всех надписей. Каждый кадр надписи ставятся
+Надпись стоит на экране ровно и не поворачивается вместе с Землёй,
+кроме реки - её подпись идёт вдоль русла. Светлый текст на мягкой
+размытой тени растрируется один раз в картинку и кладётся в атлас -
+общую текстуру всех надписей. Каждый кадр надписи ставятся
 прямоугольниками одним вызовом отрисовки.
 
 Какие надписи видны:
@@ -41,7 +42,8 @@ from OpenGL import GL
 from qgis.core import QgsApplication
 from qgis.PyQt.QtCore import QPointF, QRectF, Qt
 from qgis.PyQt.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QImage,
-                             QPainter, QPainterPath, QPen, QPolygonF)
+                             QPainter, QPainterPath, QPen, QPolygonF,
+                             QTransform)
 
 from ..core import icons
 from ..core.ellipsoid import geodetic_to_ecef, surface_normal
@@ -85,6 +87,21 @@ PADDING = 10.0
 # обводка читается на снимках и не делает текст громким.
 HALO = QColor(0, 0, 0, 140)
 HALO_WIDTH = 1.4
+# Мягкая тень светлых надписей вместо обводки, как у Google Earth,
+# решение автора от 4 ноября 2026 года: тёмный след текста толщиной
+# SHADOW_SPREAD размывается на SHADOW_BLUR логических пикселей,
+# непрозрачность тени SHADOW_ALPHA. Тёмные подписи слоёв проекта
+# остаются со светлой обводкой. Величины - выбор помощника.
+SHADOW_SPREAD = 1.0
+SHADOW_BLUR = 2.0
+SHADOW_ALPHA = 0.85
+# Прописные с разрядкой - страны, области и районы города, разрядка
+# в логических пикселях.
+CAPS = {"country", "state", "suburb"}
+SPACING = 1.0
+# Подпись реки поворачивается шагами TURN_STEP градусов: на каждый шаг
+# своя картинка в атласе.
+TURN_STEP = 5.0
 # Надпись гаснет, когда пункт уходит к горизонту. Мера - синус угла
 # между лучом зрения и касательной плоскостью в пункте. Ниже FADE_LOW
 # надписи нет, выше FADE_HIGH она целиком.
@@ -108,25 +125,28 @@ HOP_HEIGHT = 3.0
 # треугольник вершины «peak», квадрат аэропорта «square», табличка
 # номера дороги «shield», метка найденного места «pin» или жёлтая
 # метка своего объекта «yellow». Без значка
-# надпись стоит серединой на пункте.
+# надпись стоит серединой на пункте. Населённые пункты - без точек,
+# ранг виден по кеглю, как у Google Earth, 4 ноября 2026 года.
 STYLES = {
     "search": (13, False, False, QColor(255, 255, 255, 250), 5.0,
                "pin"),
     "mark": (12, False, False, QColor(255, 255, 255, 245), 4.5,
              "yellow"),
-    "country": (14, False, False, QColor(255, 244, 214, 235), 0.0, None),
-    "capital": (13, False, False, QColor(255, 255, 255, 240), 3.0, "dot"),
-    "city": (13, False, False, QColor(255, 255, 255, 235), 2.5, "dot"),
-    "state": (11, False, True, QColor(230, 230, 230, 200), 0.0, None),
-    "water": (12, False, True, QColor(165, 210, 255, 230), 0.0, None),
-    "town": (12, False, False, QColor(255, 255, 255, 225), 2.2, "dot"),
+    "country": (15, False, False, QColor(255, 248, 230, 240), 0.0, None),
+    "capital": (17, False, False, QColor(255, 255, 255, 250), 0.0, None),
+    "city": (15, False, False, QColor(255, 255, 255, 245), 0.0, None),
+    "state": (12, False, False, QColor(235, 235, 235, 215), 0.0, None),
+    "water": (13, False, True, QColor(190, 222, 255, 235), 0.0, None),
+    "town": (13, False, False, QColor(255, 255, 255, 240), 0.0, None),
+    "suburb": (11, False, False, QColor(245, 245, 245, 230), 0.0, None),
+    "river": (12, False, False, QColor(205, 228, 255, 240), 0.0, None),
     "park": (11, False, True, QColor(160, 225, 150, 220), 0.0, None),
     "peak": (11, False, False, QColor(255, 236, 205, 225), 3.2, "peak"),
     "airport": (11, False, False, QColor(255, 255, 255, 225), 2.6,
                 "square"),
     "road_ref": (10, True, False, QColor(255, 255, 255, 245), 0.0,
                  "shield"),
-    "village": (11, False, False, QColor(240, 240, 240, 210), 1.8, "dot"),
+    "village": (12, False, False, QColor(240, 240, 240, 225), 0.0, None),
     # Подпись линии координатной сетки, без значка.
     "grid": (11, False, False, QColor(255, 255, 255, 235), 0.0, None),
     # Подпись слоя проекта по умолчанию. Цвет и кегль подписи слоя
@@ -151,12 +171,19 @@ PIN = QColor(219, 50, 54, 255)  # метка найденного места
 MARK = QColor(255, 214, 0, 255)  # метка своего объекта, как в Google Earth
 WIKI = QColor(45, 110, 205, 255)  # кружок статьи Википедии
 # Крупный город - город или столица с рангом OpenMapTiles не больше
-# BIG_RANK. Его надпись на BIG_STEP пикселей крупнее и полужирная,
-# иначе Пермь терялась среди окрестных деревень. Жирный шрифт
-# и шаг 3 пикселя автор счёл слишком громкими.
+# BIG_RANK. Его надпись на BIG_STEP пикселей крупнее, иначе Пермь
+# терялась среди окрестных деревень. С 4 ноября 2026 года, по образцу
+# Google Earth, - крупнее на 5 пикселей обычным начертанием, прежде
+# на 2 пикселя полужирным. Жирный шрифт автор счёл слишком громким.
 BIG_RANK = 4
-BIG_STEP = 2
-MEDIUM = enum(QFont, "Weight", "Medium")
+BIG_STEP = 7
+# Подписей класса в кадре, не больше, на кадр 1920 × 1080 логических
+# пикселей, у другого кадра - в долю его площади. Google Earth над
+# Пермью с 34 км даёт город, несколько районов и посёлков и Каму,
+# 4 ноября 2026 года. Река одного названия подписывается в кадре один
+# раз. Величины - выбор помощника.
+KIND_CAPS = {"suburb": 6, "river": 3, "village": 8, "town": 12}
+CAP_AREA = 1920.0 * 1080.0
 PREMULTIPLIED = enum(QImage, "Format", "Format_RGBA8888_Premultiplied")
 ROUND_JOIN = enum(Qt, "PenJoinStyle", "RoundJoin")
 
@@ -324,25 +351,48 @@ class _Style:
         self.font = QFont()
         self.font.setPixelSize(max(1, int(round(size * ratio))))
         self.font.setBold(bold)
-        if big:
-            self.font.setWeight(MEDIUM)
         self.font.setItalic(italic)
+        self.caps = kind in CAPS
+        if self.caps:
+            self.font.setLetterSpacing(enum(QFont, "SpacingType",
+                                            "AbsoluteSpacing"),
+                                       SPACING * ratio)
         self.metrics = QFontMetricsF(self.font)
         self.color = color
-        # Тёмная подпись слоя проекта - со светлой обводкой.
-        self.halo_color = HALO_LIGHT if dark(
-            (color.red(), color.green(), color.blue())) else HALO
+        # Тёмная подпись слоя проекта - со светлой обводкой, светлые -
+        # на мягкой тени.
+        light_halo = dark((color.red(), color.green(), color.blue()))
+        self.halo_color = HALO_LIGHT if light_halo else HALO
         self.marker = marker
         self.dot = dot * ratio if marker not in (None, "shield") else 0.0
-        self.halo = HALO_WIDTH * ratio
+        self.soft = not light_halo and marker != "shield"
+        self.blur = int(round(SHADOW_BLUR * ratio)) if self.soft else 0
+        self.spread = SHADOW_SPREAD * ratio
+        # Поле вокруг текста: обводка или тень с размытием.
+        self.halo = (self.spread + 2.0 * self.blur) if self.soft \
+            else HALO_WIDTH * ratio
         self.gap = 3.0 * ratio
         self.pad = 3.0 * ratio  # поле таблички вокруг текста
         self.picture = None
         if str(marker).startswith("icon:"):
             self.picture = picture_image(marker.split(":")[1])
 
-    def layout(self, text):
-        """Размер картинки надписи и точка привязки в ней."""
+    def text(self, text):
+        """Текст картинки: прописные у CAPS."""
+        return text.upper() if self.caps else text
+
+    def layout(self, text, turn=0.0):
+        """Размер картинки надписи и точка привязки в ней. turn - поворот
+        подписи реки, градусы: размер повёрнутой картинки, привязка -
+        середина."""
+        if turn:
+            w, h, _ = self.layout(text)
+            a = math.radians(turn)
+            c, s = abs(math.cos(a)), abs(math.sin(a))
+            rw = int(math.ceil(w * c + h * s)) + 1
+            rh = int(math.ceil(w * s + h * c)) + 1
+            return rw, rh, (rw / 2.0, rh / 2.0)
+        text = self.text(text)
         if self.picture is not None and self.dot:
             # Картинка значка стоит серединой на точке, как в KML.
             scale = self.dot / ICON_DOT
@@ -366,9 +416,21 @@ class _Style:
             anchor = (w / 2.0, h / 2.0)
         return int(math.ceil(w)), int(math.ceil(h)), anchor
 
-    def raster(self, text):
-        """Картинка надписи, массив (h, w, 4) с премноженной альфой."""
+    def raster(self, text, turn=0.0):
+        """Картинка надписи, массив (h, w, 4) с премноженной альфой.
+        turn - поворот подписи реки, градусы по часовой стрелке."""
+        if turn:
+            rgba = self.raster(text)
+            h, w = rgba.shape[:2]
+            data = rgba.tobytes()  # буфер живёт, пока жива картинка
+            image = QImage(data, w, h, 4 * w, PREMULTIPLIED)
+            image = image.transformed(
+                QTransform().rotate(turn),
+                enum(Qt, "TransformationMode", "SmoothTransformation"))
+            image = image.convertToFormat(PREMULTIPLIED)
+            return _array(image)
         w, h, anchor = self.layout(text)
+        text = self.text(text)
         image = QImage(w, h, PREMULTIPLIED)
         image.fill(0)
         painter = QPainter(image)
@@ -385,22 +447,37 @@ class _Style:
                          self.font, text)
             painter.fillPath(path, QBrush(self.color))
         else:
-            halo = QPen(self.halo_color, 2.0 * self.halo)
-            halo.setJoinStyle(ROUND_JOIN)
             x = self.halo + (2.0 * self.dot + self.gap if self.dot else 0.0)
             path = QPainterPath()
             path.addText(QPointF(x, top + self.metrics.ascent()), self.font,
                          text)
-            painter.strokePath(path, halo)
+            if not self.soft:
+                halo = QPen(self.halo_color, 2.0 * self.halo)
+                halo.setJoinStyle(ROUND_JOIN)
+                painter.strokePath(path, halo)
             painter.fillPath(path, QBrush(self.color))
             if self.dot:
                 self._marker(painter, anchor)
         painter.end()
-        ptr = image.constBits()
-        ptr.setsize(image.sizeInBytes())
-        rows = np.frombuffer(ptr, dtype=np.uint8).reshape(
-            h, image.bytesPerLine())
-        return rows[:, :w * 4].reshape(h, w, 4).copy()
+        rgba = _array(image)
+        if self.soft and self.marker != "shield":
+            rgba = _over(rgba, self._shadow(path, w, h))
+        return rgba
+
+    def _shadow(self, path, w, h):
+        """Мягкая тень текста: след path с полями spread, размытый
+        на blur пикселей, альфа 0-1."""
+        image = QImage(w, h, PREMULTIPLIED)
+        image.fill(0)
+        painter = QPainter(image)
+        painter.setRenderHint(enum(QPainter, "RenderHint", "Antialiasing"))
+        pen = QPen(QColor(0, 0, 0, 255), 2.0 * self.spread)
+        pen.setJoinStyle(ROUND_JOIN)
+        painter.strokePath(path, pen)
+        painter.fillPath(path, QBrush(QColor(0, 0, 0, 255)))
+        painter.end()
+        alpha = _array(image)[:, :, 3].astype(np.float32) / 255.0
+        return box_blur(alpha, self.blur) * SHADOW_ALPHA
 
     def _marker(self, painter, anchor):
         if self.marker == "gap":
@@ -435,6 +512,54 @@ class _Style:
                                     1.6 * r, 1.6 * r))
         else:
             painter.drawEllipse(QRectF(cx - r, cy - r, 2.0 * r, 2.0 * r))
+
+
+def _array(image):
+    """Пиксели QImage RGBA8888 с премноженной альфой, массив (h, w, 4)."""
+    w, h = image.width(), image.height()
+    ptr = image.constBits()
+    ptr.setsize(image.sizeInBytes())
+    rows = np.frombuffer(ptr, dtype=np.uint8).reshape(
+        h, image.bytesPerLine())
+    return rows[:, :w * 4].reshape(h, w, 4).copy()
+
+
+def box_blur(alpha, radius, passes=2):
+    """Размытие альфы окном (2 radius + 1) по строкам и столбцам, passes
+    проходов - почти гауссово."""
+    if radius < 1:
+        return alpha
+    out = alpha
+    size = 2 * radius + 1
+    for _ in range(passes):
+        for axis in (0, 1):
+            pad = [(0, 0), (0, 0)]
+            pad[axis] = (radius + 1, radius)
+            summed = np.cumsum(np.pad(out, pad), axis=axis)
+            if axis == 0:
+                out = (summed[size:] - summed[:-size]) / size
+            else:
+                out = (summed[:, size:] - summed[:, :-size]) / size
+    return out
+
+
+def _over(rgba, shadow):
+    """Текст поверх чёрной тени: премноженная альфа, тень - доля 0-1."""
+    text_a = rgba[:, :, 3:4].astype(np.float32) / 255.0
+    out = rgba.astype(np.float32)
+    out[:, :, 3:4] += shadow[:, :, None] * 255.0 * (1.0 - text_a)
+    return np.clip(out, 0.0, 255.0).astype(np.uint8)
+
+
+def screen_points(camera, xyz):
+    """Точки ECEF на экране кадра: x, y в пикселях и перед ли камерой."""
+    cam = (np.asarray(xyz, dtype=np.float64) - camera.eye) @ camera.rotation
+    front = cam[:, 2] < 0.0
+    clip_w = np.where(front, -cam[:, 2], 1.0)
+    t = math.tan(math.radians(camera.fov_y) / 2.0)
+    x = (cam[:, 0] / clip_w / (t * camera.aspect) + 1.0) * 0.5 * camera.width
+    y = (1.0 - cam[:, 1] / clip_w / t) * 0.5 * camera.height
+    return x, y, front
 
 
 def label_text(place):
@@ -605,8 +730,8 @@ class Labels:
             style = self.styles[key] = _Style(key[0], self.ratio, key[1])
         return style
 
-    def _layout(self, place):
-        w, h, (ax, ay) = self._style(place).layout(label_text(place))
+    def _layout(self, place, turn=0.0):
+        w, h, (ax, ay) = self._style(place).layout(label_text(place), turn)
         return (w, h, ax, ay)
 
     def _grow(self, need):
@@ -783,13 +908,14 @@ class Labels:
 
     # Отбор и отрисовка.
 
-    def _entry(self, place):
-        """Место надписи в атласе, растрирует новую."""
-        key = (place.kind, label_text(place))
+    def _entry(self, place, turn=0.0):
+        """Место надписи в атласе, растрирует новую. turn - поворот
+        подписи реки, градусы."""
+        key = (place.kind, label_text(place), turn)
         entry = self.entries.get(key)
         if entry is not None:
             return entry
-        rgba = self._style(place).raster(label_text(place))
+        rgba = self._style(place).raster(label_text(place), turn)
         h, w = rgba.shape[:2]
         spot = self.atlas.place(w, h)
         if spot is None:
@@ -804,7 +930,10 @@ class Labels:
         gl.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 4)
         gl.tex_region(x, y, w, h, rgba)
         gl.glBindTexture(GL.GL_TEXTURE_2D, 0)
-        _, _, ax, ay = self._layout(place)
+        if turn:
+            ax, ay = w / 2.0, h / 2.0
+        else:
+            _, _, ax, ay = self._layout(place)
         entry = (x / ATLAS, y / ATLAS, (x + w) / ATLAS, (y + h) / ATLAS,
                  w, h, ax, ay)
         self.entries[key] = entry
@@ -889,14 +1018,18 @@ class Labels:
         alpha = np.clip((rise[index[keep]] - FADE_LOW)
                         / (FADE_HIGH - FADE_LOW), 0.0, 1.0)
         pad = PADDING * ratio
-        size = self._size[chosen_rows]
+        size = self._size[chosen_rows].copy()
+        turns = self._turns(chosen_rows, camera)
+        for n, turn in turns.items():
+            size[n] = self._layout(self._places[chosen_rows[n]], turn)
         x0 = x - size[:, 2]
         y0 = y - size[:, 3]
         boxes = np.stack([x0 - pad, y0 - pad, x0 + size[:, 0] + pad,
                           y0 + size[:, 1] + pad], axis=1).tolist()
         tiers = self._tier[chosen_rows].tolist()
         previous = [n for n, key in enumerate(keys) if key in self.shown]
-        chosen = select_labels(boxes, tiers, previous)
+        chosen = self._thin(select_labels(boxes, tiers, previous),
+                            chosen_rows, camera, ratio)
         quads = []
         shown = set()
         boxes = []
@@ -911,13 +1044,14 @@ class Labels:
                  if e is not None and e[0]}
         for n in chosen:
             place = self._places[chosen_rows[n]]
-            if (place.kind, label_text(place)) not in self.entries:
+            turn = turns.get(n, 0.0)
+            if (place.kind, label_text(place), turn) not in self.entries:
                 if new >= NEW_PER_FRAME or new and time.perf_counter() \
                         - raster_start > RASTER_TIME:
                     self.pending = True
                     continue
                 new += 1
-            entry = self._entry(place)
+            entry = self._entry(place, turn)
             if entry is None:
                 continue
             u0, v0, u1, v1, w, h, ax, ay = entry
@@ -967,6 +1101,50 @@ class Labels:
         self.count = len(quads)
         self.icons = 0 if icons is None else len(icons)
         return self.count
+
+    def _thin(self, chosen, rows, camera, ratio):
+        """Поставленные надписи без лишних мелких: не больше KIND_CAPS
+        на класс в долю площади кадра, река одного названия один раз."""
+        share = camera.width * camera.height / (ratio * ratio) / CAP_AREA
+        counts = {}
+        rivers = set()
+        out = []
+        for n in chosen:
+            place = self._places[rows[n]]
+            cap = KIND_CAPS.get(place.kind)
+            if cap is not None:
+                if counts.get(place.kind, 0) >= max(1, round(cap * share)):
+                    continue
+                if place.kind == "river":
+                    if place.name in rivers:
+                        continue
+                    rivers.add(place.name)
+                counts[place.kind] = counts.get(place.kind, 0) + 1
+            out.append(n)
+        return out
+
+    def _turns(self, rows, camera):
+        """Повороты подписей рек по строкам rows: {номер в rows: градусы}
+        по руслу на экране, текст не вверх ногами, шагами TURN_STEP."""
+        found = [(n, self._places[row].info) for n, row in enumerate(rows)
+                 if self._places[row].kind == "river"
+                 and self._places[row].info]
+        if not found:
+            return {}
+        course = np.array([info[:4] for _, info in found],
+                          dtype=np.float64)
+        ends = geodetic_to_ecef(np.concatenate((course[:, 0], course[:, 2])),
+                                np.concatenate((course[:, 1], course[:, 3])),
+                                np.zeros(2 * len(found)))
+        x, y, front = screen_points(camera, ends)
+        a, b = slice(0, len(found)), slice(len(found), None)
+        angle = np.degrees(np.arctan2(y[b] - y[a], x[b] - x[a]))
+        angle = (angle + 90.0) % 180.0 - 90.0
+        out = {}
+        for (n, _), turn, seen in zip(found, angle, front[a] & front[b]):
+            if seen:
+                out[n] = float(round(turn / TURN_STEP) * TURN_STEP) or 0.0
+        return out
 
     def hover_at(self, x, y):
         """Курсор в точке кадра (x, y), None - ушёл с вида. Возвращает
