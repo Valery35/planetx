@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.37.0
+version=1.38.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,17 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.37.0 The Refine with points button of the Object extraction window
+changelog=1.38.0 The Recognition window of the Site analysis submenu
+      splits the site into classes by a summer Sentinel-2 image and an
+      image with snow from March or April. Classes are set by points or by
+      outlined sample areas. The window finds and loads the images itself
+      on Build, when the site and the samples are already set. A project
+      image covering the site is taken without loading. Basemap labels
+      look like map labels - a soft shadow instead of a halo, a large city
+      larger, city districts in spaced capitals. Rivers are labelled along
+      their course, a large river before its tributaries. There are fewer
+      small labels, and only residential districts are labelled.
+      1.37.0 The Refine with points button of the Object extraction window
       opens the Classification window with the same image, site and classes.
       The Classification and Object extraction items stand next to each
       other in the Site analysis submenu.
