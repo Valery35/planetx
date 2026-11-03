@@ -14,7 +14,9 @@
 import os
 
 import numpy as np
-from qgis.core import QgsProject, QgsSettings
+from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
+                       QgsCsException, QgsGeometry, QgsPointXY, QgsProject,
+                       QgsSettings)
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QFormLayout,
                                  QHBoxLayout, QLabel, QListWidget,
@@ -35,6 +37,31 @@ from .tracing import TraceDialog, TraceTool, raster_roles
 
 SETTINGS = "PlanetX/objects/"
 SUMMER = range(5, 10)  # месяцы, когда хвоя и листва различаются лучше
+# Доля участка под снимком. Ниже WHOLE_COVER строка о снимке называет
+# долю, ниже MIN_COVER «Построить» отказывает. Нашлось 3 ноября 2026 года
+# у автора - снимок прежнего участка накрывал треть нового, классы легли
+# на треть без единого слова. Доли - выбор помощника.
+WHOLE_COVER = 0.99
+MIN_COVER = 0.9
+
+
+def cover_share(layer, ring):
+    """Доля площади участка (вершины широта, долгота) внутри охвата растра
+    или None, если считать не по чему. Доля - по градусам, участок мал."""
+    if layer is None or len(ring) < 3 or not layer.crs().isValid():
+        return None
+    site = QgsGeometry.fromPolygonXY([[QgsPointXY(lon, lat)
+                                       for lat, lon in ring]])
+    if site.isEmpty() or site.area() <= 0:
+        return None
+    try:
+        extent = QgsCoordinateTransform(
+            layer.crs(), QgsCoordinateReferenceSystem("EPSG:4326"),
+            QgsProject.instance()).transformBoundingBox(layer.extent())
+    except QgsCsException:
+        return None
+    inner = site.intersection(QgsGeometry.fromRect(extent))
+    return 0.0 if inner.isEmpty() else inner.area() / site.area()
 
 
 _ROLES = {}  # {слой: (источник, роли, день)} - подписи файла читаются раз
@@ -271,6 +298,8 @@ class TaskDialog(TraceDialog):
         self.find_second.clicked.connect(lambda: self._find("second"))
         self.scenes.itemDoubleClicked.connect(self._load)
         self.source.currentIndexChanged.connect(lambda _: self._note())
+        self.second.currentIndexChanged.connect(lambda _: self._note())
+        self.area.changed.connect(self._note)
         self.lines.toggled.connect(lambda _: self._remember_lines())
         self.line_width.valueChanged.connect(lambda _: self._remember_lines())
         self.more.toggled.connect(lambda _: self._show_more())
@@ -326,6 +355,13 @@ class TaskDialog(TraceDialog):
             if int(day[5:7]) not in SUMMER:
                 text += " " + tr("Снимок не летний, хвоя и листва "
                                  "различаются хуже.")
+        for which, image in self._images(layer):
+            share = cover_share(image, self.area.ring)
+            if share is not None and share < WHOLE_COVER:
+                text += " " + tr(
+                    "{which} накрывает {share} % участка, классы будут "
+                    "только там.", which=which,
+                    share="{:.0f}".format(100 * share))
         self.note.setText(text)
 
     def _find(self, target):
@@ -376,6 +412,25 @@ class TaskDialog(TraceDialog):
         settings = QgsSettings()
         settings.setValue(SETTINGS + "lines", self.lines.isChecked())
         settings.setValue(SETTINGS + "line_width", self.line_width.value())
+
+    def _images(self, layer):
+        """Снимки, которые идут в расчёт: (как назвать, слой)."""
+        out = [(tr("Снимок"), layer)]
+        if self.scenario() != "fallow":
+            out.append((tr("Второй снимок"), self.second_raster()))
+        return out
+
+    def short_cover(self):
+        """Текст отказа, если снимок накрывает меньше MIN_COVER участка."""
+        for which, image in self._images(self.raster()):
+            share = cover_share(image, self.area.ring)
+            if share is not None and share < MIN_COVER:
+                return tr(
+                    "{which} накрывает только {share} % участка. «Найти "
+                    "снимок» загрузит снимок всего участка, или обведите "
+                    "участок внутри снимка.", which=which,
+                    share="{:.0f}".format(100 * share))
+        return None
 
     def second_raster(self):
         """Второй снимок, None - «Нет» или слоя уже нет."""
@@ -571,6 +626,10 @@ class TaskTool(TraceTool):
             dialog.status.setText(tr(
                 "У растра не узнать ближний ИК и красный или SWIR - нужен "
                 "снимок окна «Космоснимки» с подписями каналов."))
+            return
+        short = dialog.short_cover()
+        if short:
+            dialog.status.setText(short)
             return
         self.split = len(self.roles) \
             if dialog.scenario() == "fallow" else None

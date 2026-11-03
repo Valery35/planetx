@@ -21127,6 +21127,37 @@ def _task_raster(path, labels, spectra=None, road=False):
 
 
 @check(1000)
+def task_cover():
+    # Снимок накрывает часть участка: строка о снимке называет долю,
+    # «Построить» отказывает. Находка автора от 3 ноября 2026 года.
+    from qgis.core import QgsProject, QgsRasterLayer
+    window = state["window"]
+    folder = os.path.join(TEMP, "planetx_cover_{}".format(int(time.time())))
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, "S2_20240715_40VDK_agriculture.tif")
+    lat, lon = _task_raster(path, ["B11 swir16", "B8 nir", "B2 blue"])
+    layer = QgsRasterLayer(path, "agriculture", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    tool = window.task_tool
+    dialog = tool.open_here(lat, lon)
+    dialog.task.setCurrentIndex(dialog.task.findData("fields"))
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    out = result.setdefault("task_cover", {})
+    dialog.area.set_square(lat, lon, 4000.0)
+    out["note_inside"] = dialog.note.text()
+    # Участок к югу: снимок кончается на 58.005° с. ш.
+    dialog.area.set_square(lat - 0.045, lon, 4000.0)
+    out["note_half"] = dialog.note.text()
+    dialog.build.emit()
+    out["started"] = tool.job is not None
+    out["status"] = dialog.status.text()
+    dialog.reject()
+    QgsProject.instance().removeMapLayer(layer.id())
+    return None
+
+
+@check(1000)
 def task_open():
     # Выделение объектов «Леса и рубки» по сочетанию «Сельское хозяйство».
     from qgis.core import QgsProject, QgsRasterLayer

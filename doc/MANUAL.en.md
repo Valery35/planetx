@@ -3232,7 +3232,10 @@ module versions the bands are recognized by the file name. The globe basemap,
 a single-band index such as NDVI and a raster without band labels are not in
 the list - the rules have nothing to rely on in them. The line under the list
 says whether the image is suitable, which bands the window recognized and the
-day of the image. The Find image button loads the Agriculture combination of
+day of the image. If the image or the second image covers only part of the
+site, the line gives the share of the site under it. Below 90 % Build does
+not run - the classes would cover only part of the site. The Find image
+button loads the Agriculture combination of
 the site into the Sentinel-2 group of the project, as the Satellite images
 window does.
 

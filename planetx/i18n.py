@@ -6588,6 +6588,13 @@ EN = {
         "{day} - cloud over the site {cloud} %",
     "Сначала «Подобрать снимки»": "Pick images first",
     "Без снимка": "No image",
+    "{which} накрывает {share} % участка, классы будут только там.":
+        "{which} covers {share} % of the site, the classes will be only "
+        "there.",
+    "{which} накрывает только {share} % участка. «Найти снимок» загрузит "
+    "снимок всего участка, или обведите участок внутри снимка.":
+        "{which} covers only {share} % of the site. Find image loads an "
+        "image of the whole site, or outline the site inside the image.",
     "Снимка нет": "No image here",
     "Двойной щелчок загружает снимок.": "A double click loads the image.",
     "Дополнительно": "More settings",
