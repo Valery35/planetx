@@ -666,6 +666,7 @@ class PlacesMixin:
         shapes += getattr(self, "grid_shapes", [])
         shapes += getattr(self, "parcel_shapes", [])
         shapes += getattr(self, "class_shapes", [])
+        shapes += getattr(self, "recognize_shapes", [])
         for area in getattr(self, "areas", ()):
             shapes += area.shapes()
         shapes += self._pole_shapes()

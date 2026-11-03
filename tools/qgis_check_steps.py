@@ -21457,6 +21457,75 @@ def task_find_shot():
     return None
 
 
+@check(1000)
+def recognize_open():
+    # Окно «Распознавание»: при открытии снимки не ищутся, по «Построить»
+    # после точек - подбор, загрузка лета и марта - апреля, классы.
+    # Сеть - Earth Search.
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.open_here(*POST133)
+    dialog.area.set_square(POST133[0], POST133[1], 3000.0)
+    out = result["recognize"] = {}
+    out["idle_on_open"] = not dialog.picker.busy()
+    out["rows_before"] = [[dialog.shots.item(r, c).text() for c in range(3)]
+                          for r in range(dialog.shots.rowCount())]
+    out["hidden"] = all(not w.isVisible() for w in (
+        dialog.source, dialog.level, dialog.split, dialog.alpha,
+        dialog.year))
+    dialog.build.emit()
+    out["too_few"] = dialog.status.text()
+    lat, lon = POST133
+    for n, row in enumerate(dialog.rows[:2]):
+        row.pick.setChecked(True)
+        for k in range(3):
+            tool.add_point(lat + 0.004 * (k - 1),
+                           lon + (-0.012 if n == 0 else 0.012))
+    dialog.build.emit()
+    out["busy_after_build"] = dialog.picker.busy()
+    state["recognize_started"] = time.monotonic()
+
+
+@check(1000)
+def recognize_wait():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["recognize_started"]
+    if (dialog.picker.busy() or tool.job is not None or tool.pending) \
+            and spent < 600.0:
+        return 1000
+    out = result["recognize"]
+    out["spent_s"] = round(spent, 1)
+    out["rows_after"] = [[dialog.shots.item(r, c).text() for c in range(3)]
+                         for r in range(dialog.shots.rowCount())]
+    out["status"] = dialog.status.text()
+    out["built"] = tool.result is not None
+    if tool.result is not None:
+        out["bands"] = int(tool.grid[1][3].shape[0])
+        out["settings"] = tool.result["settings"]
+    dialog.grab().save(os.path.join(TEMP, "planetx_recognize.png"))
+    # Второе «Построить» берёт снимки проекта без загрузки.
+    dialog.build.emit()
+    out["second_busy"] = dialog.picker.busy()
+    state["recognize_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def recognize_done():
+    window = state["window"]
+    tool = window.recognize_tool
+    spent = time.monotonic() - state["recognize_started"]
+    if tool.job is not None and spent < 120.0:
+        return 1000
+    out = result["recognize"]
+    out["second_status"] = tool.dialog.status.text()
+    tool.dialog.reject()
+    out["shapes_after_close"] = len(window.recognize_shapes)
+    return None
+
+
 POST135 = tuple(map(float, os.environ.get(
     "PLANETX_POST135", "58.005,56.175").split(",")))  # Черняевский лес
 POST135_SIDE = float(os.environ.get("PLANETX_POST135_SIDE", "5"))

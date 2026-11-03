@@ -312,6 +312,10 @@ def _tools(window, add, earth):
         ("изменения местности", "обнаружить изменения", "что изменилось",
          "alphaearth", "эмбеддинги", "change detection", "detect change",
          "стройка", "вырубка"))
+    add("here:recognize", tr("Распознавание"), open_,
+        lambda: window.recognize_tool.open_here(*_here(window)),
+        ("распознавание", "распознать", "распознать лес", "классы по точкам",
+         "породы леса", "хвоя и листва", "recognition", "recognize"))
     add("here:classify", tr("Классификация"), open_,
         lambda: window.class_tool.open_here(*_here(window)),
         ("классификация", "классы", "классифицировать", "лес и поле",

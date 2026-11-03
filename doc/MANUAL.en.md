@@ -2811,6 +2811,7 @@ it.
 |---|---|---|---|
 | Slope and aspect, viewshed, insolation, shadows, flooding, water flow, earthwork | Heights | Open terrain comes by itself. Own terrain is a project raster with the Globe terrain item | Own terrain is more accurate than the open 30 m one |
 | Land change | AlphaEarth embeddings 2017-2025 | Loaded by themselves | Network is needed |
+| Recognition | A summer image, if possible also a snow image | The window finds and loads Sentinel-2 images of the site itself on «Build» | Nothing to search for |
 | Classification, similar areas | Any image or AlphaEarth | Globe basemap, project raster, AlphaEarth | For accurate work - one scene of the Satellite images window, the basemap is made of different surveys |
 | Tracing | An image with color | Globe basemap or project raster | The Esri or Google basemap is the most detailed |
 | Object extraction | An image with near infrared and red or SWIR | The Find image button of the window, the Satellite images window - a band combination or All scene bands of Sentinel-2 and Landsat | Summer for conifers and broadleaf, the second image - March or April with snow |
@@ -2979,6 +2980,39 @@ Land change, the geophysics value maps, the geological map, lithology,
 water and soils are one layer of the globe with one map on it. A map
 turned on removes the previous one, the cross of the scale turns the
 row off. Land change is computed only for the Earth.
+
+### Recognition
+
+The «Recognition…» item of the «Site analysis» submenu opens the
+«Recognition» window for the point under the cursor. It is the simplest
+way to site classes. You set the site, add classes and place their
+points, and the window finds the images itself.
+
+1. Site - a square at the point, «Draw» or «From layer», up to 20 km.
+2. Classes - a name and a colour, the circle picks a class, a click on
+   the globe places its point, a click on a point removes it. At least
+   two classes of three points are needed.
+3. «Build» first checks the site and the points, then finds the images
+   and only after that computes the classes.
+
+The «Images» table shows what the window takes - a summer image and
+a March - April image with snow. Each is the clearest Sentinel-2 image
+over the site in three years, the «Agriculture» combination (B11 B8 B2)
+cut to the site. A project image with band labels that covers the site
+is taken without loading, so the second «Build» starts at once. On snow
+conifers are dark, bare broadleaf forest and fields are light, so the
+snow image helps to tell conifers from broadleaf. If there is no clear
+snow image, the classes are computed from the summer one. A click on
+a table row gives other dates, a project image or «No image».
+
+Finding and loading two images of a 3 km site takes about three
+minutes, most of it is the cloud cover over the site of catalogue
+scenes.
+
+OK writes the class raster and the control points to the computation
+subgroup, «Cancel» removes the classes from the globe. Fine settings -
+the pixel, splitting into objects, the AlphaEarth source - are in the
+«Classification» window.
 
 ### Classification
 

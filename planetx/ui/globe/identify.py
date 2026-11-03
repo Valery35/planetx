@@ -94,6 +94,12 @@ class IdentifyMixin:
                 if found is not None:
                     area.add(found[0], found[1])
                 return
+        if self.recognize_tool.taking():
+            # Окно «Распознавание» открыто - так же, как «Классификация».
+            found = self._ground(px, py)
+            if found is not None:
+                self.recognize_tool.click(px, py, found[0], found[1])
+            return
         if self.class_tool.taking():
             # Окно «Классификация» открыто - щелчок ставит вершину участка
             # или точку класса, по точке класса - убирает её.

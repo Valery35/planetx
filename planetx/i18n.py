@@ -6765,6 +6765,44 @@ EN = {
         "Site classes by your own control points on the globe - from "
         "a project image, the basemap or AlphaEarth embeddings.",
     "Уточнить точками": "Refine with points",
+    "Распознавание": "Recognition",
+    "Распознавание…": "Recognition…",
+    "Классы участка по своим точкам на глобусе. Снимки Sentinel-2 участка "
+    "окно подбирает и загружает само по «Построить».":
+        "Site classes by your own points on the globe. The window finds and "
+        "loads Sentinel-2 images of the site itself on «Build».",
+    "Лето": "Summer",
+    "Март - апрель, снег": "March - April, snow",
+    "Снимки Sentinel-2 участка подбираются и загружаются сами по "
+    "«Построить»: самый чистый над участком за три года. Снимок проекта, "
+    "который накрывает участок, берётся без загрузки. Щелчок по строке - "
+    "другие даты, снимок из проекта или «Без снимка».":
+        "Sentinel-2 images of the site are found and loaded on «Build»: the "
+        "clearest over the site in three years. A project image that covers "
+        "the site is taken without loading. A click on a row gives other "
+        "dates, a project image or «No image».",
+    "Загрузка снимка «{row}» {day}…": "Loading the «{row}» image {day}…",
+    "Снимок из проекта": "Project image",
+    "Снимки": "Images",
+    "Состояние": "State",
+    ", облака {cloud} %": ", clouds {cloud} %",
+    "поиск…": "searching…",
+    "не загрузился": "not loaded",
+    "Летнего снимка участка нет: у сцен Sentinel-2 за три года облачность "
+    "над участком больше 5 %. Щелчок по строке «Лето» - снимок из "
+    "проекта.":
+        "No summer image of the site: Sentinel-2 scenes of three years have "
+        "more than 5 % clouds over the site. A click on the «Summer» row "
+        "gives a project image.",
+    "Снимки ещё загружаются.": "Images are still loading.",
+    "Нет летнего снимка. Щелчок по строке «Лето» - другая дата или снимок "
+    "из проекта.":
+        "No summer image. A click on the «Summer» row gives another date or "
+        "a project image.",
+    "готов": "ready",
+    "подберётся по «Построить»": "found on «Build»",
+    "чистого снимка нет": "no clear image",
+    "нет, классы по летнему": "none, classes by summer",
     "Открывает окно «Классификация» с тем же снимком, участком и классами "
     "этого окна. Там классы уточняются своими контрольными точками "
     "щелчками по глобусу.":

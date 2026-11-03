@@ -72,6 +72,7 @@ from .relief import ReliefTool
 from .aef import ChangeTool
 from .fieldmap import FieldTool
 from .aefclass import ClassTool
+from .recognize import RecognizeTool
 from .similar import SimilarTool
 from .objecttasks import TaskTool
 from .tracing import TraceTool
@@ -740,6 +741,9 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.change_tool = ChangeTool(self)
         self.field_tool = FieldTool(self)
         self.class_tool = ClassTool(self)
+        # Распознавание по точкам со своими снимками (ui/recognize.py).
+        self.recognize_tool = RecognizeTool(self)
+        self.recognize_shapes = []
         self.similar_tool = SimilarTool(self)
         self.trace_tool = TraceTool(self)
         # Типовые задачи выделения объектов поверх трассировки.
@@ -1167,6 +1171,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.change_tool.close()
             self.field_tool.close()
             self.class_tool.close()
+            self.recognize_tool.close()
             self.similar_tool.close()
             self.trace_tool.close()
             self.task_tool.close()

@@ -571,11 +571,24 @@ class ClassDialog(QDialog):
 
 
 class ClassTool(SiteTool, QObject):
-    """Классификация участка у окна глобуса."""
+    """Классификация участка у окна глобуса. Наследник (ui/recognize.py)
+    задаёт dialog_class, shapes_attr, tool_title и more_bands."""
+
+    dialog_class = None  # ClassDialog, ставится после класса окна
+    shapes_attr = "class_shapes"  # поле окна глобуса с точками классов
+
+    def tool_title(self):
+        return tr("Классификация")
 
     @property
     def legend_title(self):
-        return tr("Классификация")
+        return self.tool_title()
+
+    def more_bands(self, box, side):
+        """Каналы второго снимка на сетке первого, как у трассировки:
+        (ключ, add(index, found)), None - нет, False - отказ, причина
+        в строке итога. Главный поток, add - в рабочем."""
+        return None
 
     def __init__(self, window):
         super().__init__(window)
@@ -592,14 +605,14 @@ class ClassTool(SiteTool, QObject):
         self.timer.timeout.connect(self._poll)
         self.shapes = []
         self.settings = []  # настройки последнего «Построить» для слоя
-        self.session = Session(window, tr("Классификация"))
+        self.session = Session(window, self.tool_title())
 
     def open_here(self, lat, lon):
         """Окно «Классификация» для точки - пункт подменю «Анализ
         участка» меню на глобусе."""
         dialog = self.dialog
         if dialog is None:
-            dialog = ClassDialog(self.window)
+            dialog = self.dialog_class(self.window)
             dialog.build.connect(self.build)
             dialog.changed.connect(self._update_shapes)
             dialog.opacity.connect(self.set_opacity)
@@ -700,7 +713,7 @@ class ClassTool(SiteTool, QObject):
                                         color=row.rgb() + (255,),
                                         width=10.0))
         self.shapes = shapes
-        self.window.class_shapes = shapes
+        setattr(self.window, self.shapes_attr, shapes)
         self.window._refresh_shapes()
         self.window.handles.sync()
 
@@ -866,6 +879,12 @@ class ClassTool(SiteTool, QObject):
         if reader is None:
             return
         read, key, name, credit = reader
+        more = self.more_bands(box, side)
+        if more is False:
+            return
+        add = None
+        if more:
+            key, add = key + (more[0],), more[1]
         cached = self.grid if self.grid and self.grid[0] == key else None
         index = aef.ZoneIndex(zone, [])
         params = dialog.split_params()
@@ -879,6 +898,10 @@ class ClassTool(SiteTool, QObject):
             found = cached[1] if cached else read(index)
             if isinstance(found, str):
                 return {"problem": found}
+            if add is not None and not cached:
+                found = add(index, found)
+                if isinstance(found, str):
+                    return {"problem": found}
             stop_point(self)
             x0, y0, step, grid = found
             inside = aef.ring_mask(index, x0, y0, step, grid.shape[1:], ring)
@@ -912,7 +935,7 @@ class ClassTool(SiteTool, QObject):
                               else tr("Читается растр участка…"))
         _run_job(self, work, lambda out: self._built(
             out, key, box, None, colors, names, name, split_key, credit),
-            tr("Классификация"))
+            self.tool_title())
 
     def _built(self, out, key, box, year, colors, names, raster=None,
                split_key=None, credit=None):
@@ -1094,6 +1117,9 @@ class ClassTool(SiteTool, QObject):
         self._drop_tiles()
         if self.dialog is not None:
             self.dialog.close()
+
+
+ClassTool.dialog_class = ClassDialog
 
 
 def class_settings(classes, points, params):
