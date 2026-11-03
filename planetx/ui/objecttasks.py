@@ -14,12 +14,16 @@
 import numpy as np
 from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QLabel,
+                                 QSpinBox)
 
+from ..core import linear
 from ..core import objecttasks as ot
 from ..i18n import tr
 from ..qt_compat import enum
 from .aefclass import BASEMAP, project_rasters, read_raster
+from .inset import warm
+from .results import add_vector, result_path, titled
 from .tracing import TraceDialog, TraceTool, raster_roles
 
 SETTINGS = "PlanetX/objects/"
@@ -101,10 +105,31 @@ class TaskDialog(TraceDialog):
             "участка и идут в раскладку на цвета вместе с первыми. Хвоя "
             "отделяется от листвы и трав по ближнему ИК: у хвои на двух "
             "датах он почти не меняется."))
+        settings = QgsSettings()
+        self.lines = QCheckBox(tr("Линейные объекты"), self)
+        self.lines.setChecked(settings.value(SETTINGS + "lines", False)
+                              in (True, "true"))
+        self.lines.setToolTip(tr(
+            "Дороги и просеки, реки и каналы, лесополосы - осевыми линиями "
+            "отдельным слоем. Линия - узкая часть почвы, воды или "
+            "растительности, связный кусок линии не короче 200 м."))
+        self.line_width = QSpinBox(self)
+        self.line_width.setRange(5, 500)
+        self.line_width.setSuffix(tr(" м"))
+        self.line_width.setValue(int(settings.value(SETTINGS + "line_width",
+                                                    linear.WIDTH)))
+        self.line_width.setToolTip(tr(
+            "Объект уже этого - линия. Ширина не меньше двух пикселей "
+            "сетки, иначе линия рвётся."))
         form = QFormLayout()
         form.addRow(tr("Задача"), self.task)
         form.addRow("", self.about)
         form.addRow(tr("Второй снимок"), self.second)
+        form.addRow("", self.lines)
+        form.addRow(tr("Ширина линий до"), self.line_width)
+        self.lines.toggled.connect(lambda _: self._remember_lines())
+        self.line_width.valueChanged.connect(lambda _: self._remember_lines())
+        self._remember_lines()
         self.layout().insertLayout(0, form)
         self.layout().insertWidget(1, self.need)
         chosen = QgsSettings().value(SETTINGS + "task", "forest")
@@ -114,6 +139,12 @@ class TaskDialog(TraceDialog):
 
     def scenario(self):
         return self.task.currentData()
+
+    def _remember_lines(self):
+        self.line_width.setEnabled(self.lines.isChecked())
+        settings = QgsSettings()
+        settings.setValue(SETTINGS + "lines", self.lines.isChecked())
+        settings.setValue(SETTINGS + "line_width", self.line_width.value())
 
     def second_raster(self):
         """Второй снимок, None - «Нет» или слоя уже нет."""
@@ -146,6 +177,7 @@ class TaskTool(TraceTool):
         self.rules = None  # названия цветов по правилам
         self.more_roles = None  # роли каналов второго снимка
         self.more_name = ""
+        self.lines = {}  # осевые линии {группа: [ломаные в клетках]}
 
     def tool_title(self):
         return tr("Выделение объектов")
@@ -267,7 +299,27 @@ class TaskTool(TraceTool):
             cells = int(np.isin(base["parts"], self.clearing).sum())
             self.notes.append(tr("Рубки и гари - {area} га.", area="{:.0f}"
                                  .format(cells * base["step"] ** 2 / 1e4)))
+        self.lines = {}
+        if self.dialog.lines.isChecked():
+            self._find_lines(regions)
         return target
+
+    def _find_lines(self, regions):
+        """Осевые линии узких частей почвы, воды и растительности
+        (core/linear.py), {группа: [ломаные в клетках]}."""
+        base = self.base
+        step = base["step"]
+        width = self.dialog.line_width.value() / step
+        least = linear.LENGTH / step
+        for group, mask in ot.line_masks(base["parts"], regions).items():
+            found = linear.lines(mask, width, least)
+            if found:
+                self.lines[group] = found
+        km = sum(linear.length_m(p, step) for paths in self.lines.values()
+                 for p in paths) / 1000.0
+        self.notes.append(tr("Линий {km} км.", km="{:.1f}".format(km))
+                          if self.lines else
+                          tr("Линейных объектов не найдено."))
 
     def _built(self, *args, **kwargs):
         self.notes = []
@@ -280,17 +332,97 @@ class TaskTool(TraceTool):
         """Классы таблицы плюс рубки - области почвы среди хвои, отдельным
         классом после классов таблицы."""
         super()._apply_classes()
-        clearing = self.clearing
-        if clearing is None or not len(clearing):
-            return
         result = self.result
-        kinds = np.array(result["kinds"], dtype=np.int64)
-        extra = len(result["colors"])
-        kinds[clearing] = extra
-        parts = self.base["parts"]
-        classes = np.where(parts >= 0, kinds[np.maximum(parts, 0)], -1)
-        color = ot.KIND_COLORS[ot.CLEARING]
-        result.update(kinds=kinds, classes=classes,
-                      colors=result["colors"] + [color],
-                      hexes=result["hexes"] + ["#%02x%02x%02x" % color],
-                      names=result["names"] + [kind_name(ot.CLEARING)])
+        clearing = self.clearing
+        if clearing is not None and len(clearing):
+            kinds = np.array(result["kinds"], dtype=np.int64)
+            kinds[clearing] = len(result["colors"])
+            parts = self.base["parts"]
+            classes = np.where(parts >= 0, kinds[np.maximum(parts, 0)], -1)
+            color = ot.KIND_COLORS[ot.CLEARING]
+            result.update(kinds=kinds, classes=classes,
+                          colors=result["colors"] + [color],
+                          hexes=result["hexes"] + ["#%02x%02x%02x" % color],
+                          names=result["names"] + [kind_name(ot.CLEARING)])
+        # Линии - только на глобусе поверх классов: области слоя прежние.
+        result["areas"] = len(result["colors"])
+        lines = getattr(self, "lines", None) or {}
+        if lines:
+            classes = np.array(result["classes"])
+            for group, paths in lines.items():
+                cells = linear.cells_of(paths, classes.shape) \
+                    & (classes >= 0)
+                classes[cells] = len(result["colors"])
+                result["colors"] = result["colors"] + [ot.LINE_COLORS[group]]
+                result["names"] = result["names"] + [line_name(group)]
+            result["classes"] = classes
+
+    def export(self, path=None):
+        """Многоугольники, как у трассировки, рядом - линии слоем lines
+        с полями kind, name и length_m."""
+        result = self.result
+        if result is None:
+            return None
+        count = result.get("areas", len(result["colors"]))
+        self.result = dict(result, colors=result["colors"][:count],
+                           names=result["names"][:count])
+        try:
+            done = super().export(path)
+        finally:
+            self.result = result
+        lines = getattr(self, "lines", None) or {}
+        if done and lines:
+            self._export_lines(lines)
+        return done
+
+    def _export_lines(self, lines):
+        result = self.result
+        path = result_path("lines", ".gpkg")
+        if not write_lines(path, result, lines):
+            return None
+        group = self.session.group_for(result["ring"])
+        values = [(group_key, ot.LINE_COLORS[group_key],
+                   line_name(group_key)) for group_key in lines]
+        title = "{} {}".format(tr("Линии"), result["raster"] or "")
+        return add_vector(self.window, path, "lines",
+                          titled(title, result["settings"]), group,
+                          (255, 255, 255), width=0.6,
+                          classes=("kind", values))
+
+
+def line_name(group):
+    return {"roads": tr("Дороги и просеки"), "water": tr("Реки и каналы"),
+            "belts": tr("Лесополосы и просеки")}[group]
+
+
+def write_lines(path, result, lines):
+    """Осевые линии GeoPackage в UTM: поля kind, name, length_m."""
+    from osgeo import ogr, osr
+    warm()
+    index = result["index"]
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG((32700 if index.south else 32600) + index.number)
+    data = ogr.GetDriverByName("GPKG").CreateDataSource(path)
+    if data is None:
+        return False
+    layer = data.CreateLayer("lines", srs, ogr.wkbLineString)
+    for name, kind in (("kind", ogr.OFTString), ("name", ogr.OFTString),
+                       ("length_m", ogr.OFTReal)):
+        layer.CreateField(ogr.FieldDefn(name, kind))
+    x0, y0, step = result["x0"], result["y0"], result["step"]
+    defn = layer.GetLayerDefn()
+    layer.StartTransaction()
+    for group, paths in lines.items():
+        for points in paths:
+            line = ogr.Geometry(ogr.wkbLineString)
+            for x, y in points:
+                line.AddPoint_2D(x0 + x * step, y0 - y * step)
+            feature = ogr.Feature(defn)
+            feature.SetGeometry(line)
+            feature.SetField("kind", group)
+            feature.SetField("name", line_name(group))
+            feature.SetField("length_m", line.Length())
+            layer.CreateFeature(feature)
+    layer.CommitTransaction()
+    data = None
+    return True

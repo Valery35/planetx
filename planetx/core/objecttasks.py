@@ -272,6 +272,23 @@ def region_kinds(parts, region_colors, kinds, scenario):
     return scenario_kinds(out, scenario)
 
 
+# Линейные объекты по видам: группа - виды областей, из которых линии.
+LINE_GROUPS = (("roads", (SOIL, CLEARING)), ("water", (WATER,)),
+               ("belts", (BROADLEAF, VEGETATION)))
+LINE_COLORS = {"roads": (255, 255, 255), "water": (120, 220, 255),
+               "belts": (255, 225, 60)}
+
+
+def line_masks(parts, region_list):
+    """Маски видов для линий: {группа: маска клеток}. region_list[n] -
+    вид области n (region_kinds)."""
+    parts = np.asarray(parts)
+    kinds = np.array(list(region_list) + [OTHER], dtype=object)
+    cell = kinds[np.where(parts >= 0, parts, len(region_list))]
+    return {group: np.isin(cell, list(members))
+            for group, members in LINE_GROUPS}
+
+
 def classes_of(region_list, scenario):
     """Классы слоя: виды областей по порядку KIND_ORDER, которые
     встретились. Итог - (виды классов, номер класса каждой области)."""

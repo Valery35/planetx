@@ -6528,6 +6528,25 @@ EN = {
         "Conifers are separated from broadleaf by two images.",
     "Второй снимок не прочитан или не накрывает участок.":
         "The second image is not read or does not cover the site.",
+    # Линейные объекты окна «Выделение объектов» (core/linear.py).
+    "Линейные объекты": "Linear objects",
+    "Дороги и просеки, реки и каналы, лесополосы - осевыми линиями "
+    "отдельным слоем. Линия - узкая часть почвы, воды или растительности, "
+    "связный кусок линии не короче 200 м.":
+        "Roads and cuttings, rivers and canals, shelterbelts - as center "
+        "lines in a separate layer. A line is a narrow part of soil, water "
+        "or vegetation, a connected piece of line is at least 200 m long.",
+    "Объект уже этого - линия. Ширина не меньше двух пикселей сетки, иначе "
+    "линия рвётся.":
+        "An object narrower than this is a line. The width is at least two "
+        "grid pixels, otherwise the line breaks.",
+    "Ширина линий до": "Line width up to",
+    "Линий {km} км.": "Lines {km} km.",
+    "Линейных объектов не найдено.": "No linear objects found.",
+    "Линии": "Lines",
+    "Дороги и просеки": "Roads and cuttings",
+    "Реки и каналы": "Rivers and canals",
+    "Лесополосы и просеки": "Shelterbelts and cuttings",
     # Названия классов от помощника (ui/tracing.py, core/classnames.py).
     "Названия от помощника": "Names from the assistant",
     "ИИ-помощник предлагает названия классов по таблице - средним значениям "

@@ -21085,7 +21085,7 @@ def trace_wait():
     return None
 
 
-def _task_raster(path, labels, spectra=None):
+def _task_raster(path, labels, spectra=None, road=False):
     """Синтетическое сочетание «Сельское хозяйство» (B11 B8 B2) у Перми:
     слева хвоя с вырубкой, справа лиственный лес сверху и пашня снизу,
     между ними полоса воды. Отражение с шумом 0.005. spectra - свои
@@ -21101,6 +21101,8 @@ def _task_raster(path, labels, spectra=None):
     plan[:150, 170:] = "broadleaf"
     plan[150:, 170:] = "soil"
     plan[:, 150:170] = "water"
+    if road:
+        plan[230:232, :150] = "soil"  # дорога в хвое, два пикселя
     rng = np.random.default_rng(3)
     values = np.zeros((3, rows, cols), dtype=np.float32)
     for name, spectrum in kinds.items():
@@ -21256,6 +21258,87 @@ def task_names():
     nodes = _result_layers()
     out["layers"] = [n.name() for n in nodes]
     _drop_group()
+    dialog.reject()
+    from qgis.core import QgsProject
+    QgsProject.instance().removeMapLayers(state["task_layers"])
+    return None
+
+
+@check(1000)
+def task_lines_open():
+    # Линейные объекты: дорога в два пикселя через хвою - линия, поле
+    # и вырубка - нет.
+    from qgis.core import QgsProject, QgsRasterLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    folder = os.path.join(TEMP, "planetx_tasks3_{}".format(int(time.time())))
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, "S2_20240715_40VDK_agriculture.tif")
+    lat, lon = _task_raster(path, ["B11 swir16", "B8 nir", "B2 blue"],
+                            road=True)
+    layer = QgsRasterLayer(path, "roads", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["task_layers"] = [layer.id()]
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 14000.0, 0.0, 0.0))
+    tool = window.task_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    dialog.second.setCurrentIndex(0)
+    dialog.area.set_square(lat, lon, 8000.0)
+    dialog.level.setCurrentIndex(0)
+    dialog.lines.setChecked(True)
+    dialog.line_width.setValue(80)
+    dialog.build.emit()
+    state["task_started"] = time.monotonic()
+    result["task_lines"] = {}
+
+
+@check(500)
+def task_lines_wait():
+    from osgeo import ogr
+    window = state["window"]
+    tool = window.task_tool
+    if tool.job is not None \
+            and time.monotonic() - state["task_started"] < 120.0:
+        return 500
+    out = result["task_lines"]
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    step = tool.base["step"] if tool.base else None
+    from planetx.core import linear
+    out["groups"] = {g: round(sum(linear.length_m(p, step) for p in paths))
+                     for g, paths in tool.lines.items()}
+    # Дорога идёт по строкам 230-232 растра - широта 58.095 - 231 *
+    # 0.0003; концы линий почвы около этой широты.
+    out["legend"] = [text for _, text in tool.legend_rows()]
+    window.view.update()
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_task_lines.png"))
+    path = os.path.join(TEMP, "planetx_task_lines_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    lines = [n.layer() for n in nodes if n.layer().name().startswith(
+        "Линии")]
+    if lines:
+        data = ogr.Open(lines[0].source().split("|")[0])
+        layer = data.GetLayerByName("lines")
+        out["features"] = layer.GetFeatureCount()
+        out["lengths"] = sorted(round(f.GetField("length_m"))
+                                for f in layer)[-5:]
+        data = None
+    polygons = [n.layer() for n in nodes if n.layer().name().startswith(
+        "Выделение")]
+    if polygons:
+        out["polygon_categories"] = [
+            c.label() for c in polygons[0].renderer().categories()]
+    _drop_group()
+    dialog.lines.setChecked(False)
     dialog.reject()
     from qgis.core import QgsProject
     QgsProject.instance().removeMapLayers(state["task_layers"])

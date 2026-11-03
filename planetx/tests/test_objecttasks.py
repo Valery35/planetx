@@ -167,6 +167,12 @@ class TestClearing(unittest.TestCase):
                               [ot.CONIFER, ot.SOIL, ot.BROADLEAF], "forest")
         self.assertEqual(out[1], ot.CLEARING)
 
+    def test_line_masks(self):
+        masks = ot.line_masks(self.parts, [ot.CONIFER, ot.SOIL, ot.WATER])
+        self.assertTrue(masks["roads"][4, 4])
+        self.assertTrue(masks["water"][0, 15])
+        self.assertFalse(masks["belts"].any())
+
     def test_classes_in_order(self):
         used, numbers = ot.classes_of([ot.WATER, ot.CONIFER, ot.WATER],
                                       "forest")

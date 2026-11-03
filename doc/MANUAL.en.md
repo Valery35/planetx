@@ -3220,7 +3220,19 @@ infrared reflectance in another season. Clear-cuts are bare soil only among
 conifers with depth - a piece where at least half of the cells are inner.
 Mixed pixels along the edge of a field may look like conifers and would
 otherwise give a thin ring of "forest" around the field. The second image is
-named in the layer settings. The class
+named in the layer settings.
+
+The Linear objects check box adds center lines - roads and cuttings (narrow
+strips of soil), rivers and canals (water), shelterbelts and cuttings
+(vegetation). A line is the part of a kind narrower than the Line width up to
+field, 40 m by default, removed by a morphological opening of the mask with a
+square of this width. The rest is thinned to a one-cell line, spurs shorter
+than three widths are dropped, and so is a connected piece of line shorter than
+200 m. The width must be at least two grid pixels, otherwise the line breaks.
+On the globe the lines show above the classes, and OK writes the Lines layer
+with the fields kind, name and length_m next to the polygon layer. The
+polygons do not change, so a narrow road in a forest stays a soil polygon as
+well and may come out a clear-cut. The class
 names and merges can be corrected in the Classes table, and clear-cuts are a
 separate class after the classes of the table. OK writes a layer as in
 tracing, and the task is the first of the settings in the layer name.
