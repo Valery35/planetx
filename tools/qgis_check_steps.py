@@ -21612,6 +21612,124 @@ def recognize_areas_wait():
     return None
 
 
+POST138 = tuple(map(float, os.environ.get(
+    "PLANETX_POST138", "58.005,56.175").split(",")))
+POST138_SIDE = float(os.environ.get("PLANETX_POST138_SIDE", "5"))
+
+
+@check(2000, manual=True)
+def post138_photo():
+    """Кадр статьи 1.38: участок на подложке и сетка широт и долгот
+    пикселей кадра для выбора образцов. PLANETX_POST138 - точка,
+    PLANETX_POST138_SIDE - участок, км."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    if "p138" not in state:
+        window.set_body("earth")
+        window.choose_basemap(0)
+        view.navigator.stop()
+        view.navigator.show(Pose(POST138[0], POST138[1],
+                                 POST138_SIDE * 1700.0, 0.0, 0.0))
+        view.update()
+        state["p138"] = time.monotonic()
+        return 2000
+    if view.load_missing and time.monotonic() - state["p138"] < 60:
+        view.update()
+        return 2000
+    image = window.copy_view()
+    image.save(os.path.join(TEMP, "planetx_p138_photo.png"))
+    ratio = image.width() / max(1, view.width())
+    grid = []
+    for fy in (0.1, 0.5, 0.9):
+        for fx in (0.1, 0.5, 0.9):
+            px, py = view.width() * fx, view.height() * fy
+            grid.append([round(px * ratio), round(py * ratio),
+                         window._ground(px, py)])
+    result["post138"] = {"size": [image.width(), image.height()],
+                         "grid": grid}
+    state.pop("p138")
+    return None
+
+
+def _post138_samples():
+    """Образцы классов статьи: [(название, [кольцо (широта, долгота)])]
+    из PLANETX_POST138_SAMPLES - JSON."""
+    return json.loads(os.environ.get("PLANETX_POST138_SAMPLES", "[]"))
+
+
+@check(1000, manual=True)
+def post138_build():
+    """Распознавание участка образцами областями из
+    PLANETX_POST138_SAMPLES ([название, кольцо, цвет #rrggbb]), кадр
+    контуров, потом «Построить» - снимки подбирает окно."""
+    from qgis.PyQt.QtGui import QColor
+    window = state["window"]
+    tool = window.recognize_tool
+    view = window.view
+    if "p138s" in state:
+        if view.load_missing and time.monotonic() - state["p138s"] < 30:
+            view.update()
+            return 2000
+        window.copy_view().save(os.path.join(TEMP,
+                                             "planetx_p138_samples.png"))
+        state.pop("p138s")
+        tool.dialog.build.emit()
+        state["p138"] = time.monotonic()
+        return None
+    dialog = tool.open_here(*POST138)
+    dialog.area.set_square(POST138[0], POST138[1], POST138_SIDE * 1000.0)
+    dialog.by_areas.setChecked(True)
+    samples = _post138_samples()
+    while len(dialog.rows) < len(samples):
+        dialog.add_class()
+    far = -1e6
+    for row, sample in zip(dialog.rows, samples):
+        name, ring = sample[0], sample[1]
+        row.set_points([])
+        row.set_rings([])
+        row.name.setText(name)
+        if len(sample) > 2:
+            row.color = QColor(sample[2])
+            row._paint()
+        row.pick.setChecked(True)
+        tool.click(far, far, *ring[0])
+        for point in ring[1:]:
+            dialog.sample.add(*point)
+        dialog.sample.drawing = False
+        dialog.sample.edited()
+    result["post138_build"] = {"counts": [r.count.text()
+                                          for r in dialog.rows]}
+    view.update()
+    state["p138s"] = time.monotonic()
+    return 3000
+
+
+@check(2000, manual=True)
+def post138_shot():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    view = window.view
+    spent = time.monotonic() - state["p138"]
+    if (dialog.picker.busy() or tool.job is not None or tool.pending
+            or view.load_missing) and spent < 900:
+        view.update()
+        return 2000
+    if not state.get("p138_settle"):
+        state["p138_settle"] = True
+        return 3000
+    state["p138_settle"] = False
+    out = result["post138_build"]
+    out["spent_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()
+    out["shots"] = [[dialog.shots.item(r, c).text() for c in range(3)]
+                    for r in range(dialog.shots.rowCount())]
+    out["legend"] = [t for _, t in tool.legend_rows()]
+    window.copy_view().save(os.path.join(TEMP, "planetx_p138_classes.png"))
+    dialog.grab().save(os.path.join(TEMP, "planetx_p138_dialog.png"))
+    return None
+
 LABELS_LOOK = (58.02615, 56.20146, 33860.0, 0.0, 35.0)  # ракурс Google Earth
 
 
