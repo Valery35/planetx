@@ -6412,6 +6412,42 @@ EN = {
     "Трассировка {source}": "Tracing {source}",
     "Цветов {colors}, областей {regions}.":
         "Colors {colors}, areas {regions}.",
+    # Таблица классов и настройки в названии слоя (ui/tracing.py,
+    # ui/aefclass.py).
+    "Цвет {n}": "Color {n}",
+    "Название класса - в поле name слоя и в шкале на глобусе.":
+        "The class name goes to the name field of the layer and to the "
+        "legend on the globe.",
+    "Доля участка.": "Share of the site.",
+    "Слить этот цвет с другим: области обоих цветов станут одним "
+    "классом с названием и цветом того, с которым слит.":
+        "Merge this color into another one. The areas of both colors become "
+        "one class with the name and color of the one it is merged into.",
+    "Свой класс": "Own class",
+    "Слить с «{name}»": "Merge into “{name}”",
+    "цветов {n}": "{n} colors",
+    "сглаживание {n}": "smoothing {n}",
+    "области от {n} клеток": "areas from {n} cells",
+    "скругление {v}": "rounding {v}",
+    "пиксель {pixel} м": "pixel {pixel} m",
+    "Источник - {source}.": "Source - {source}.",
+    "Настройки - {settings}.": "Settings - {settings}.",
+    "Классы - {rows}.": "Classes - {rows}.",
+    "классов {n}": "{n} classes",
+    "точек {n}": "{n} points",
+    "объекты: масштаб {scale}, текстура {weight} %, от {least} клеток":
+        "objects: scale {scale}, texture {weight} %, from {least} cells",
+    "соседи слиты": "neighbors merged",
+    "Классы из трассировки": "Classes from tracing",
+    "Классы с названиями и цветами из окна «Трассировка» после "
+    "«Построить». Классы без точек заменяются, точки ставятся "
+    "щелчками по глобусу.":
+        "Classes with names and colors from the Tracing window after Build. "
+        "Classes without points are replaced, points are placed by clicks on "
+        "the globe.",
+    "В окне «Трассировка» нет построенных классов.":
+        "The Tracing window has no built classes.",
+    "Классов из трассировки: {n}.": "Classes from tracing: {n}.",
     # Похожие области (ui/similar.py).
     "Похожие области": "Similar areas",
     "Похожие области…": "Similar areas…",

@@ -56,9 +56,9 @@ from .area import Area
 from .handles import GRAB_PIXELS
 from .inset import warm
 from .results import (Session, accepted, add_vector, built_text,
-                      keep_buttons,
-                      result_path, show_layer, write_vector)
-from .sitelayer import SiteTool, result_level
+                      keep_buttons, result_path, set_abstract, show_layer,
+                      titled, write_vector)
+from .sitelayer import SiteTool, class_rows, result_level
 from .threadtiles import ThreadTiles
 from .tilemosaic import dataset as tile_dataset
 from .viewshed import fit_status
@@ -346,6 +346,12 @@ class ClassDialog(QDialog):
         self.rows = []
         add = QPushButton(tr("Добавить класс"), self)
         add.clicked.connect(lambda: self.add_class())
+        self.from_trace = QPushButton(tr("Классы из трассировки"), self)
+        self.from_trace.setToolTip(tr(
+            "Классы с названиями и цветами из окна «Трассировка» после "
+            "«Построить». Классы без точек заменяются, точки ставятся "
+            "щелчками по глобусу."))
+        self.from_trace.clicked.connect(self.take_traced)
         self.alpha = QSlider(enum(Qt, "Orientation", "Horizontal"), self)
         self.alpha.setRange(0, 100)
         self.alpha.setValue(int(round(100 * float(settings.value(
@@ -384,7 +390,10 @@ class ClassDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(QLabel(tr("Классы"), self))
         layout.addLayout(self.rows_box)
-        layout.addWidget(add)
+        adding = QHBoxLayout()
+        adding.addWidget(add)
+        adding.addWidget(self.from_trace)
+        layout.addLayout(adding)
         layout.addWidget(hint)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
@@ -451,6 +460,31 @@ class ClassDialog(QDialog):
         self.rows_box.addWidget(row)
         row.pick.setChecked(True)
         return row
+
+    def take_traced(self):
+        """Классы трассировки вместо классов без точек: названия и цвета
+        окна «Трассировка» (решение автора от 3 ноября 2026 года - таблица
+        классов общая у окон)."""
+        tool = getattr(self.parent(), "trace_tool", None)
+        pairs = tool.class_pairs() if tool is not None else []
+        if not pairs:
+            self.status.setText(tr(
+                "В окне «Трассировка» нет построенных классов."))
+            return
+        for row in [row for row in self.rows if not row.points]:
+            self._remove(row)
+        have = {row.name.text() for row in self.rows}
+        for rgb, name in pairs:
+            if name in have:
+                continue
+            row = self.add_class(name)
+            row.color = QColor(*rgb)
+            row._paint()
+        if self.rows and self.active() is None:
+            self.rows[0].pick.setChecked(True)
+        self.changed.emit()
+        self.status.setText(tr("Классов из трассировки: {n}.",
+                               n=len(pairs)))
 
     def _remove(self, row):
         if row not in self.rows:
@@ -556,6 +590,7 @@ class ClassTool(SiteTool, QObject):
         self.timer.setInterval(100)
         self.timer.timeout.connect(self._poll)
         self.shapes = []
+        self.settings = []  # настройки последнего «Построить» для слоя
         self.session = Session(window, tr("Классификация"))
 
     def open_here(self, lat, lon):
@@ -703,6 +738,8 @@ class ClassTool(SiteTool, QObject):
         points = [(n, p) for n, row in enumerate(rows) for p in row.points]
         colors = [row.rgb() for row in rows]
         names = [row.name.text() for row in rows]
+        self.settings = class_settings(len(rows), len(points),
+                                       dialog.split_params())
         if dialog.raster_id():
             self._build_raster(layer, ring, box, side, level, zone, points,
                                colors, names)
@@ -899,7 +936,10 @@ class ClassTool(SiteTool, QObject):
                        "names": names, "box": box, "year": year,
                        "raster": raster, "credit": credit,
                        "label": raster or str(year),
-                       "ring": list(self.dialog.area.ring)}
+                       "ring": list(self.dialog.area.ring),
+                       "settings": self.settings + [tr(
+                           "пиксель {pixel} м",
+                           pixel="{:.3g}".format(step))]}
         if out.get("parts") is not None:
             self.result.update(parts=out["shown"], kinds=out["kinds"],
                                table=out["table"])
@@ -990,10 +1030,12 @@ class ClassTool(SiteTool, QObject):
                                           path=path))
             return None
         group = self.session.group_for(result["ring"])
-        layer = add_classes(path, tr("Классификация {year}",
-                                     year=result["label"]), result, group)
+        layer = add_classes(path, titled(
+            tr("Классификация {year}", year=result["label"]),
+            result["settings"]), result, group)
         if layer is not None:
             layer.setOpacity(self.dialog.alpha.value() / 100.0)
+            set_abstract(layer, class_abstract(result))
         show_layer(self.window, layer)
         self._export_points(tag, result["label"], group)
         self.dialog.status.setText(tr("Растр классов в проекте."))
@@ -1011,12 +1053,14 @@ class ClassTool(SiteTool, QObject):
         group = self.session.group_for(result["ring"])
         layer = add_vector(
             self.window, path, "objects",
-            tr("Объекты {year}", year=result["label"]), group,
+            titled(tr("Объекты {year}", year=result["label"]),
+                   result["settings"]), group,
             result["colors"][0], classes=("class", [
                 (n + 1, tuple(rgb), name) for n, (rgb, name) in enumerate(
                     zip(result["colors"], result["names"]))]))
         if layer is not None:
             layer.setOpacity(self.dialog.alpha.value() / 100.0)
+            set_abstract(layer, class_abstract(result))
         set_credit(layer, result)
         self._export_points(tag, result["label"], group)
         self.dialog.status.setText(tr("Объекты в проекте."))
@@ -1049,6 +1093,30 @@ class ClassTool(SiteTool, QObject):
         self._drop_tiles()
         if self.dialog is not None:
             self.dialog.close()
+
+
+def class_settings(classes, points, params):
+    """Настройки классификации строками для названия слоя: классов,
+    точек, деление на объекты (params - split_params окна)."""
+    out = [tr("классов {n}", n=classes), tr("точек {n}", n=points)]
+    if params is not None:
+        scale, weight, least, join = params
+        out.append(tr("объекты: масштаб {scale}, текстура {weight} %, от "
+                      "{least} клеток", scale=scale,
+                      weight=int(round(100 * weight)), least=least))
+        if join:
+            out.append(tr("соседи слиты"))
+    return out
+
+
+def class_abstract(result):
+    """Описание слоя классификации: источник, настройки, классы с долей."""
+    return [tr("Источник - {source}.", source=result["label"]),
+            tr("Настройки - {settings}.",
+               settings=", ".join(result["settings"])),
+            tr("Классы - {rows}.", rows=", ".join(
+                text for _, text in class_rows(
+                    result["classes"], result["colors"], result["names"])))]
 
 
 def _flag(value):

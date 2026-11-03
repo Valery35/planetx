@@ -9,13 +9,21 @@
 (ui/aefclass.py), только растр проекта или подложка глобуса. Ядро -
 core/tracing.py. На глобусе - цвета клеток, OK записывает гладкие
 многоугольники областей слоем GeoPackage в подгруппу расчёта.
+
+Таблица классов - мысль Василия Швалёва от 3 ноября 2026 года, решение
+автора того же дня: после «Построить» цвета идут списком по доле
+участка, их можно переименовать и слить один с другим. Названия идут
+в поле name слоя и в шкалу, слитые цвета - один класс. Название слоя
+несёт настройки расчёта (results.titled), классы трассировки берёт окно
+«Классификация» кнопкой «Классы из трассировки».
 """
+import numpy as np
 from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
-                                 QDoubleSpinBox,
-                                 QFormLayout, QLabel, QPushButton, QSpinBox,
-                                 QVBoxLayout)
+                                 QDoubleSpinBox, QFormLayout, QHBoxLayout,
+                                 QLabel, QLineEdit, QPushButton, QScrollArea,
+                                 QSpinBox, QVBoxLayout, QWidget)
 
 from ..core import aef, rasterclass, segments, tracing
 from ..i18n import tr
@@ -27,12 +35,122 @@ from .aefclass import (AUTO, BASEMAP, RASTER_SIDE, ClassTiles, SourceBox,
 from .area import Area
 from .inset import warm
 from .results import (Session, accepted, add_vector, built_text,
-                      keep_buttons, result_path)
-from .sitelayer import SiteTool, result_level
+                      keep_buttons, result_path, set_abstract, titled)
+from .sitelayer import SiteTool, class_rows, result_level
 from .viewshed import fit_status
 
 SETTINGS = "PlanetX/tracing/"
 OPACITY = 0.8  # непрозрачность цветов на глобусе - выбор помощника
+TABLE_ROWS = 6  # строк таблицы классов без прокрутки - выбор помощника
+
+
+def default_name(rank):
+    """Название класса до переименования: номер по доле участка с 1."""
+    return tr("Цвет {n}", n=rank)
+
+
+def trace_settings(colors, smooth, least, corner, step):
+    """Настройки расчёта строками для названия слоя: step - пиксель
+    сетки, м."""
+    return [tr("цветов {n}", n=colors),
+            tr("сглаживание {n}", n=smooth),
+            tr("области от {n} клеток", n=least),
+            tr("скругление {v}", v="{:.2f}".format(corner)),
+            tr("пиксель {pixel} м", pixel="{:.3g}".format(step))]
+
+
+def shares(classes, count):
+    """Доли участка цветов 0..count-1 по клеткам classes."""
+    classes = np.asarray(classes)
+    found = np.bincount(classes[classes >= 0].ravel().astype(np.int64),
+                        minlength=count)[:count]
+    return found / max(int(found.sum()), 1)
+
+
+class ColorRow(QWidget):
+    """Строка таблицы классов: цвет, название, доля, слияние."""
+
+    def __init__(self, number, rgb, name, share, parent=None):
+        super().__init__(parent)
+        self.number = number
+        swatch = QLabel(self)
+        swatch.setFixedSize(18, 18)
+        swatch.setStyleSheet("background: #%02x%02x%02x;" % tuple(rgb))
+        self.name = QLineEdit(name, self)
+        self.name.setToolTip(tr(
+            "Название класса - в поле name слоя и в шкале на глобусе."))
+        self.share = QLabel("{:.0f} %".format(100.0 * share), self)
+        self.share.setToolTip(tr("Доля участка."))
+        self.join = QComboBox(self)
+        self.join.setToolTip(tr(
+            "Слить этот цвет с другим: области обоих цветов станут одним "
+            "классом с названием и цветом того, с которым слит."))
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(swatch)
+        layout.addWidget(self.name, 1)
+        layout.addWidget(self.share)
+        layout.addWidget(self.join)
+
+
+class ColorTable(QWidget):
+    """Таблица классов трассировки. Сигнал changed(joined): joined -
+    сменилось слияние, иначе только названия."""
+
+    changed = pyqtSignal(bool)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.rows = []
+        self.box = QVBoxLayout(self)
+        self.box.setContentsMargins(0, 0, 0, 0)
+
+    def set_colors(self, colors, names, parts):
+        """Строки по убыванию доли parts. names - названия цветов."""
+        for row in self.rows:
+            row.setParent(None)
+            row.deleteLater()
+        self.rows = []
+        for n in np.argsort(-np.asarray(parts), kind="stable"):
+            n = int(n)
+            row = ColorRow(n, colors[n], names[n], float(parts[n]), self)
+            row.name.textEdited.connect(lambda _: self._renamed())
+            self.rows.append(row)
+            self.box.addWidget(row)
+        self._fill_joins()
+        for row in self.rows:
+            row.join.currentIndexChanged.connect(
+                lambda _: self.changed.emit(True))
+
+    def _fill_joins(self):
+        for row in self.rows:
+            chosen = row.join.currentData()
+            row.join.blockSignals(True)
+            row.join.clear()
+            row.join.addItem(tr("Свой класс"), -1)
+            for other in self.rows:
+                if other is not row:
+                    row.join.addItem(tr("Слить с «{name}»",
+                                        name=other.name.text()),
+                                     other.number)
+            row.join.setCurrentIndex(max(0, row.join.findData(chosen)))
+            row.join.blockSignals(False)
+
+    def _renamed(self):
+        self._fill_joins()
+        self.changed.emit(False)
+
+    def names(self, count):
+        out = [""] * count
+        for row in self.rows:
+            out[row.number] = row.name.text().strip()
+        return out
+
+    def target(self, count):
+        out = [-1] * count
+        for row in self.rows:
+            out[row.number] = int(row.join.currentData())
+        return out
 
 
 class TraceSource(SourceBox):
@@ -123,6 +241,11 @@ class TraceDialog(QDialog):
             "многоугольники областей в проект, у соседних областей граница "
             "общая."), self)
         hint.setWordWrap(True)
+        self.table = ColorTable(self)
+        self.table_box = QScrollArea(self)
+        self.table_box.setWidgetResizable(True)
+        self.table_box.setWidget(self.table)
+        self.table_title = QLabel(tr("Классы"), self)
         buttons = QDialogButtonBox(self)
         run = QPushButton(tr("Построить"), self)
         run.setDefault(True)
@@ -136,9 +259,12 @@ class TraceDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.addLayout(form)
         layout.addWidget(hint)
+        layout.addWidget(self.table_title)
+        layout.addWidget(self.table_box)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
         fit_status(self, layout)
+        self.show_table(0)
         self.source.currentIndexChanged.connect(lambda _: self._volume())
         self.level.currentIndexChanged.connect(lambda _: self._pixel())
         self.area.changed.connect(self._volume)
@@ -151,6 +277,18 @@ class TraceDialog(QDialog):
 
     def raster(self):
         return QgsProject.instance().mapLayer(self.raster_id())
+
+    def show_table(self, count):
+        """Таблица классов видна, когда есть цвета: высота - до TABLE_ROWS
+        строк, дальше прокрутка."""
+        self.table_title.setVisible(count > 0)
+        self.table_box.setVisible(count > 0)
+        if count:
+            line = self.table.rows[0].sizeHint().height() + \
+                self.table.box.spacing()
+            self.table_box.setFixedHeight(
+                line * min(count, TABLE_ROWS) + 2 * self.table_box.frameWidth()
+                + 4)
 
     def _pixel(self):
         self.wanted_pixel = self.level.currentData()
@@ -186,6 +324,7 @@ class TraceTool(SiteTool, QObject):
         self.dialog = None
         self.tiles = None
         self.result = None
+        self.base = None  # результат до слияния цветов таблицей классов
         self.grid = None  # (ключ сетки, сетка) - смена настроек без загрузки
         self.job = None
         self.timer = QTimer(self)
@@ -203,6 +342,7 @@ class TraceTool(SiteTool, QObject):
             dialog = TraceDialog(self.window)
             dialog.build.connect(self.build)
             dialog.finished.connect(self._closed)
+            dialog.table.changed.connect(self._classes_changed)
             self.dialog = dialog
         dialog.source.refill()
         dialog.point = (lat, lon)
@@ -267,10 +407,12 @@ class TraceTool(SiteTool, QObject):
             return dict(out, index=index, found=found)
 
         dialog.status.setText(tr("Снимок раскладывается на цвета…"))
+        values = (colors, smooth, least, corner)
         _run_job(self, work, lambda out: self._built(
-            out, key, box, name, ring, credit), tr("Трассировка"))
+            out, key, box, name, ring, credit, values), tr("Трассировка"))
 
-    def _built(self, out, key, box, raster, ring, credit=None):
+    def _built(self, out, key, box, raster, ring, credit=None,
+               values=None):
         dialog = self.dialog
         if out is None:
             dialog.status.setText(tr("Для участка нет данных."))
@@ -282,38 +424,85 @@ class TraceTool(SiteTool, QObject):
             return
         x0, y0, step, _ = out["found"]
         colors = tracing.display_colors(out["centers"])
-        names = ["#%02x%02x%02x" % rgb for rgb in colors]
-        self.result = {"index": out["index"], "x0": x0, "y0": y0,
-                       "step": step, "box": box, "classes": out["classes"],
-                       "kinds": out["kinds"], "shapes": out["shapes"],
-                       "colors": colors, "names": names, "raster": raster,
-                       "credit": credit, "ring": ring}
+        hexes = ["#%02x%02x%02x" % rgb for rgb in colors]
+        parts = shares(out["classes"], len(colors))
+        ranks = np.empty(len(colors), dtype=np.int64)
+        ranks[np.argsort(-parts, kind="stable")] = np.arange(1, len(colors)
+                                                              + 1)
+        names = [default_name(int(r)) for r in ranks]
+        self.base = {"index": out["index"], "x0": x0, "y0": y0,
+                     "step": step, "box": box, "classes": out["classes"],
+                     "kinds": out["kinds"], "shapes": out["shapes"],
+                     "colors": colors, "names": names, "hexes": hexes,
+                     "raster": raster, "credit": credit, "ring": ring,
+                     "settings": trace_settings(*(values + (step,)))
+                     if values else []}
+        dialog.table.set_colors(colors, names, parts)
+        dialog.show_table(len(colors))
         dialog.status.setText(tr(
             "Цветов {colors}, областей {regions}.",
             colors=len(colors), regions=len(out["shapes"]))
             + " " + built_text())
         dialog.to_project.setEnabled(bool(out["shapes"]))
+        self._apply_classes()
         self.show()
+
+    def _apply_classes(self):
+        """Результат по таблице классов: слитые цвета - один класс с цветом
+        и названием того, с которым слиты."""
+        base, table = self.base, self.dialog.table
+        count = len(base["colors"])
+        lookup, keep = tracing.join_colors(table.target(count))
+        names = table.names(count)
+        classes, kinds = tracing.joined(base["classes"], base["kinds"],
+                                        lookup)
+        self.result = dict(
+            base, classes=classes, kinds=kinds,
+            colors=[base["colors"][k] for k in keep],
+            hexes=[base["hexes"][k] for k in keep],
+            names=[names[k] or base["names"][k] for k in keep])
+
+    def _classes_changed(self, joined):
+        if self.base is None or self.result is None:
+            return
+        self._apply_classes()
+        if joined:
+            self.show(keep=True)
+        else:
+            self._show_legend()
+
+    def class_pairs(self):
+        """Классы трассировки [(цвет, название)] по убыванию доли - для
+        окна «Классификация». Пусто, если результата нет."""
+        result = self.result
+        if result is None:
+            return []
+        parts = shares(result["classes"], len(result["colors"]))
+        return [(result["colors"][n], result["names"][n])
+                for n in np.argsort(-parts, kind="stable") if parts[n] > 0]
 
     # --- показ ----------------------------------------------------------
 
-    def show(self):
+    def show(self, keep=False):
         if self.result is None:
             self._drop_tiles()
             return
         self.put_tiles(ClassTiles(self.result, parent=self),
-                       result_level(self.result), OPACITY)
+                       result_level(self.result), OPACITY, keep=keep)
 
     def forget(self):
         self.result = None
+        self.base = None
         if self.dialog is not None:
             self.dialog.to_project.setEnabled(False)
+            self.dialog.show_table(0)
 
     # --- выгрузка -------------------------------------------------------
 
     def export(self, path=None):
         """Многоугольники областей слоем traced GeoPackage в подгруппу
-        расчёта: поля cls (номер цвета с 1), color и area_ha."""
+        расчёта: поля cls (номер класса с 1), name, color и area_ha.
+        Название слоя - источник и настройки, описание - ещё классы."""
         result = self.result
         if result is None or not result["shapes"]:
             return None
@@ -325,13 +514,21 @@ class TraceTool(SiteTool, QObject):
         group = self.session.group_for(result["ring"])
         values = [(n + 1, rgb, name) for n, (rgb, name) in enumerate(
             zip(result["colors"], result["names"]))]
+        title = tr("Трассировка {source}", source=result["raster"] or "")
         layer = add_vector(self.window, path, "traced",
-                           tr("Трассировка {source}",
-                              source=result["raster"] or ""),
+                           titled(title, result["settings"]),
                            group, (0, 0, 0), width=0.0,
                            classes=("cls", values))
         if layer is not None:
             _stroke_as_fill(layer)
+            set_abstract(layer, [
+                tr("Источник - {source}.", source=result["raster"] or ""),
+                tr("Настройки - {settings}.",
+                   settings=", ".join(result["settings"])),
+                tr("Классы - {rows}.", rows=", ".join(
+                    text for _, text in class_rows(
+                        result["classes"], result["colors"],
+                        result["names"])))])
             set_credit(layer, result)
         return path
 
@@ -381,8 +578,8 @@ def _write_traced(path, result):
     if data is None:
         return False
     layer = data.CreateLayer("traced", srs, ogr.wkbMultiPolygon)
-    for name, kind in (("cls", ogr.OFTInteger), ("color", ogr.OFTString),
-                       ("area_ha", ogr.OFTReal)):
+    for name, kind in (("cls", ogr.OFTInteger), ("name", ogr.OFTString),
+                       ("color", ogr.OFTString), ("area_ha", ogr.OFTReal)):
         layer.CreateField(ogr.FieldDefn(name, kind))
     x0, y0, step = result["x0"], result["y0"], result["step"]
     defn = layer.GetLayerDefn()
@@ -404,7 +601,8 @@ def _write_traced(path, result):
         feature = ogr.Feature(defn)
         feature.SetGeometry(shape)
         feature.SetField("cls", kind + 1)
-        feature.SetField("color", result["names"][kind])
+        feature.SetField("name", result["names"][kind])
+        feature.SetField("color", result.get("hexes", result["names"])[kind])
         feature.SetField("area_ha", shape.GetArea() / 1e4)
         layer.CreateFeature(feature)
     layer.CommitTransaction()

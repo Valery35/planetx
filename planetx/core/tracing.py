@@ -505,6 +505,38 @@ def trace(grid, good, colors=COLORS, smooth=SMOOTH, least=LEAST,
             "centers": centers, "shapes": shapes}
 
 
+def join_colors(target):
+    """Цвета трассировки в классы: target[n] - цвет, с которым слит цвет
+    n, сам n или -1 - не слит. Цепочка слияний доходит до цвета, который
+    не слит, у круга слияний класс - наименьший цвет круга. Итог -
+    (lookup, keep): lookup[n] - номер класса цвета n, keep - цвета-классы
+    по порядку."""
+    count = len(target)
+    roots = []
+    for n in range(count):
+        path = [n]
+        m = n
+        while 0 <= target[m] < count and target[m] != m:
+            m = int(target[m])
+            if m in path:
+                m = min(path[path.index(m):])
+                break
+            path.append(m)
+        roots.append(m)
+    keep = sorted(set(roots))
+    lookup = np.array([keep.index(r) for r in roots], dtype=np.int64)
+    return lookup, keep
+
+
+def joined(classes, kinds, lookup):
+    """Цвета клеток и областей после слияния в классы, -1 остаётся."""
+    classes = np.asarray(classes)
+    kinds = np.asarray(kinds)
+    lookup = np.asarray(lookup)
+    return (np.where(classes >= 0, lookup[np.maximum(classes, 0)], -1),
+            np.where(kinds >= 0, lookup[np.maximum(kinds, 0)], -1))
+
+
 def display_colors(centers):
     """Цвета RGB 0-255 цветов трассировки: первые три канала (один канал -
     серый). Значения 0-255 берутся как есть, отражение 0-1 и прочие -

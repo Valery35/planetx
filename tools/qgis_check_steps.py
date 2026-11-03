@@ -21014,12 +21014,34 @@ def trace_wait():
     window.view.update()
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_trace.png"))
+    # Таблица классов: первый цвет переименован, второй слит с первым.
+    table = dialog.table
+    out["table_rows"] = len(table.rows)
+    out["table_shown"] = dialog.table_box.isVisible()
+    first, second = table.rows[0], table.rows[1]
+    first.name.setText("Вода")
+    first.name.textEdited.emit("Вода")
+    out["legend_named"] = any("Вода" in text for _, text
+                              in tool.legend_rows())
+    second.join.setCurrentIndex(second.join.findData(first.number))
+    res = tool.result
+    out["classes_after_join"] = len(res["colors"])
+    joined = res["names"].index("Вода")
+    out["join_share"] = round(float((res["classes"] == joined).mean()), 3)
+    # Окно «Классификация» берёт классы трассировки.
+    from planetx.ui.aefclass import ClassDialog
+    probe = ClassDialog(window)
+    probe.take_traced()
+    out["class_names"] = [row.name.text() for row in probe.rows]
+    probe.deleteLater()
     path = os.path.join(TEMP, "planetx_trace_{}.gpkg".format(
         int(time.time())))
     out["exported"] = bool(tool.export(path))
     data = ogr.Open(path)
     layer = data.GetLayerByName("traced")
     out["features"] = layer.GetFeatureCount()
+    out["field_names"] = sorted({f.GetField("name") for f in layer})
+    layer.ResetReading()
     area, invalid, vertices = 0.0, 0, 0
     for feature in layer:
         area += feature.GetField("area_ha")
@@ -21041,6 +21063,8 @@ def trace_wait():
         out["renderer"] = nodes[0].layer().renderer().type()
         cat = nodes[0].layer().renderer().categories()
         out["categories"] = len(cat)
+        out["category_labels"] = [c.label() for c in cat]
+        out["abstract"] = nodes[0].layer().metadata().abstract()
     _drop_group()
     dialog.reject()
     from qgis.core import QgsProject

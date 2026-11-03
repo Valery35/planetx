@@ -2966,7 +2966,10 @@ it, and a click on the globe places a point of this class. A point is a
 sample of the class, for example forest, field, buildings or water. At
 least two classes with three points each are needed, there may be more
 points. A click on a point of any class removes it, the hint Remove
-point appears at the cursor.
+point appears at the cursor. The Classes from tracing button takes the
+classes with their names and colors from the Tracing window after Build,
+and the classes without points are replaced. The points of the new classes
+are placed by clicks on the globe.
 
 The Build button assigns each cell of the area to the class of the five
 nearest control points by the similarity of the vectors of the selected
@@ -3063,7 +3066,10 @@ The Opacity slider changes the transparency of the classes. OK writes
 the classes as a raster in UTM to the calculation subgroup, with the
 colors, the names of the classes and the same opacity, and
 next to it the training points as a GeoPackage layer with the class
-number and name. The points and classes of the window stay until the window opens again.
+number and name. The name of the class layer and of the Objects layer carries
+the calculation settings - the number of classes and points, the division into
+objects and the pixel. The layer description holds the source, the settings
+and the classes with their share of the site. The points and classes of the window stay until the window opens again.
 Classes and the viewshed from a point are one layer of the
 globe, a new viewshed removes the classes. The land change map stays
 visible together with the classes.
@@ -3133,9 +3139,21 @@ The fields of the window:
   the more corners become smooth arcs.
 
 The Build button shows the colors of the site cells on the globe, and the line
-under the fields gives the number of colors and areas. OK writes a polygon
-layer Tracing with the fields cls (color number), color and area_ha to the
-calculation subgroup, and the areas are drawn in their colors. Neighboring
+under the fields gives the number of colors and areas. The Classes table under
+the fields lists the colors by their share of the site, Color 1 takes the most.
+The name of a color can be rewritten, for example Conifers or Bare soil, and it
+goes to the legend on the globe and to the layer. The list to the right of the
+name merges the color into another one, and the areas of both colors become one
+class with the name and color of the one it is merged into. A new Build sets
+the colors and names anew.
+
+OK writes a polygon layer with the fields cls (class number), name (class
+name), color and area_ha to the calculation subgroup, and the areas are drawn
+in their colors. The layer name carries the source and the calculation
+settings, for example "Tracing image (8 colors, smoothing 1, areas from 25
+cells, rounding 1.00, pixel 10 m)". The layer description (QGIS layer
+properties, Metadata) holds the source, the settings and the classes with
+their share of the site. Neighboring
 areas share their border, so there are no gaps or overlaps between the
 polygons. This globe layer is shared with classification, similar areas and the
 viewshed from a point, a new calculation of any of them removes the previous

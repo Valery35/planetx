@@ -145,5 +145,29 @@ class TestDisplay(unittest.TestCase):
         self.assertEqual(out, [(0, 0, 0), (255, 255, 255)])
 
 
+class TestJoin(unittest.TestCase):
+    def test_untouched_colors_stay(self):
+        lookup, keep = trace.join_colors([-1, -1, -1])
+        self.assertEqual(list(lookup), [0, 1, 2])
+        self.assertEqual(keep, [0, 1, 2])
+
+    def test_chain_goes_to_free_color(self):
+        # 0 слит с 2, 2 - с 3: оба уходят в 3.
+        lookup, keep = trace.join_colors([2, -1, 3, -1])
+        self.assertEqual(keep, [1, 3])
+        self.assertEqual(list(lookup), [1, 0, 1, 1])
+
+    def test_circle_is_one_class(self):
+        lookup, keep = trace.join_colors([1, 2, 0, -1])
+        self.assertEqual(keep, [0, 3])
+        self.assertEqual(list(lookup), [0, 0, 0, 1])
+
+    def test_cells_and_regions_follow(self):
+        lookup, _ = trace.join_colors([-1, 0, -1])
+        classes, kinds = trace.joined([[0, 1], [2, -1]], [1, 2, 0], lookup)
+        self.assertEqual(classes.tolist(), [[0, 0], [1, -1]])
+        self.assertEqual(kinds.tolist(), [0, 1, 0])
+
+
 if __name__ == "__main__":
     unittest.main()

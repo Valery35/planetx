@@ -59,6 +59,24 @@ def stats_text(title, values, unit=""):
               unit=unit)
 
 
+def titled(title, settings):
+    """Название слоя результата с настройками расчёта: «Название (a, b)».
+    Мысль Василия Швалёва от 3 ноября 2026 года - по названию видно, при
+    каких настройках получен слой."""
+    settings = [part for part in settings if part]
+    return "{} ({})".format(title, ", ".join(settings)) if settings \
+        else title
+
+
+def set_abstract(layer, lines):
+    """Описание слоя результата - строки lines: настройки, классы."""
+    if layer is None:
+        return
+    meta = layer.metadata()
+    meta.setAbstract("\n".join(line for line in lines if line))
+    layer.setMetadata(meta)
+
+
 def root_name():
     """Общая группа результатов анализа участка."""
     return tr("PlanetX - анализ участка")
