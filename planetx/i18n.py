@@ -6786,6 +6786,30 @@ EN = {
         "inside the outline, one outline per class is enough. A click "
         "inside an outline removes it.",
     "Убрать область": "Remove area",
+    "Свои образцы": "Own samples",
+    "Классы и образцы задаются вручную, нужно хотя бы два класса.":
+        "Classes and samples are set manually, at least two classes are "
+        "needed.",
+    "Задача сама заводит классы и считает их правилами по снимкам "
+    "лета и снега, образцы не нужны. Образец точкой или областью "
+    "поправляет свой класс, «Построить» считает заново с ним.":
+        "The task creates its classes and computes them by rules from the "
+        "summer and snow images, no samples are needed. A point or area "
+        "sample corrects its class, Build computes again with it.",
+    "Классы задачи считаются правилами по снимкам, образцы не "
+    "нужны. Если класс лёг неверно, поставьте его образец - "
+    "{how} - и нажмите «Построить».":
+        "Task classes are computed by rules from the images, no samples "
+        "are needed. If a class is wrong, set its sample - {how} - and "
+        "press Build.",
+    "контур": "an outline",
+    "точку": "a point",
+    "У задачи нужно хотя бы два класса.":
+        "The task needs at least two classes.",
+    "У летнего снимка не узнать ближний ИК и красный или SWIR - "
+    "правилам задачи нужен снимок окна «Космоснимки».":
+        "The summer image has no recognisable near IR and red or SWIR - "
+        "the task rules need an image of the Satellite images window.",
     "областей {n}": "areas {n}",
     "Образцы классов": "Class samples",
     "Обведите на глобусе образец выбранного класса - щелчками по вершинам, "

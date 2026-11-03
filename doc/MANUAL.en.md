@@ -3015,6 +3015,23 @@ Finding and loading two images of a 3 km site takes about three
 minutes, most of it is the cloud cover over the site of catalogue
 scenes.
 
+The «Task» list removes the need for samples. «Own samples» - classes
+and samples are set manually, as described above. «Forests and
+clear-cuts», «Fields» and «Water» create their own classes and compute
+them by the rules of the «Object extraction» window from the same
+summer and snow images. For example, the classes of «Forests and
+clear-cuts» are coniferous forest, broadleaf forest and grass,
+clear-cuts and burns, bare soil, water. «Build» needs no samples. If
+a class is wrong, it gets a sample - a point or an outline, and «Build»
+computes again: each rule class gets up to 60 of its cells as samples,
+the user samples are added to them, and cells go to the class of the
+nearest samples. An own class the task does not have is added with
+«Add class» and gets cells by its own samples only. This is the way
+for built-up areas - by reflectance they look like bare soil, and among
+conifers the rules take them for clear-cuts. The «Overgrown
+fields» task is not in the list - it needs a series of spring and
+autumn images over 4 years, it is in the «Object extraction» window.
+
 OK writes the class raster, the control points and the sample
 outlines to the computation subgroup, «Cancel» removes the classes from the globe. Fine settings -
 the pixel, splitting into objects, the AlphaEarth source - are in the

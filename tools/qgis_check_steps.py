@@ -21457,6 +21457,10 @@ def task_find_shot():
     return None
 
 
+RECOGNIZE_AT = tuple(map(float, os.environ.get(
+    "PLANETX_RECOGNIZE", "59.99,57.43").split(",")))
+
+
 @check(1000)
 def recognize_open():
     # Окно «Распознавание»: при открытии снимки не ищутся, по «Построить»
@@ -21464,8 +21468,8 @@ def recognize_open():
     # Сеть - Earth Search.
     window = state["window"]
     tool = window.recognize_tool
-    dialog = tool.open_here(*POST133)
-    dialog.area.set_square(POST133[0], POST133[1], 3000.0)
+    dialog = tool.open_here(*RECOGNIZE_AT)
+    dialog.area.set_square(RECOGNIZE_AT[0], RECOGNIZE_AT[1], 3000.0)
     out = result["recognize"] = {}
     out["idle_on_open"] = not dialog.picker.busy()
     out["rows_before"] = [[dialog.shots.item(r, c).text() for c in range(3)]
@@ -21475,7 +21479,7 @@ def recognize_open():
         dialog.year))
     dialog.build.emit()
     out["too_few"] = dialog.status.text()
-    lat, lon = POST133
+    lat, lon = RECOGNIZE_AT
     for n, row in enumerate(dialog.rows[:2]):
         row.pick.setChecked(True)
         for k in range(3):
@@ -21538,15 +21542,15 @@ def recognize_areas():
     # готового контура убирает его.
     window = state["window"]
     tool = window.recognize_tool
-    dialog = tool.open_here(*POST133)
-    dialog.area.set_square(POST133[0], POST133[1], 3000.0)
+    dialog = tool.open_here(*RECOGNIZE_AT)
+    dialog.area.set_square(RECOGNIZE_AT[0], RECOGNIZE_AT[1], 3000.0)
     out = result["recognize_areas"] = {}
     for row in dialog.rows:
         row.set_points([])
         row.set_rings([])
     dialog.by_areas.setChecked(True)
     out["hint"] = dialog.hint.text()
-    lat, lon = POST133
+    lat, lon = RECOGNIZE_AT
     far = -1e6
     for n, row in enumerate(dialog.rows[:2]):
         row.pick.setChecked(True)
@@ -21608,6 +21612,97 @@ def recognize_areas_wait():
         dialog.accept()
         out["layers"] = [n.name() for n in _result_layers()]
         _drop_group()
+    out["shapes_after_close"] = len(window.recognize_shapes)
+    return None
+
+
+@check(1000)
+def recognize_task():
+    # Третья ступень: задача «Леса и рубки» - классы правилами без
+    # образцов. Снимки - из проекта после recognize_*.
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.open_here(*RECOGNIZE_AT)
+    dialog.area.set_square(RECOGNIZE_AT[0], RECOGNIZE_AT[1], 3000.0)
+    out = result["recognize_task"] = {}
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    out["rows"] = [row.name.text() for row in dialog.rows]
+    out["samples"] = sum(len(r.points) + len(r.rings) for r in dialog.rows)
+    out["hint"] = dialog.hint.text()
+    dialog.build.emit()
+    out["busy"] = dialog.picker.busy() or tool.job is not None
+    state["recognize_started"] = time.monotonic()
+
+
+def _task_shares(tool):
+    classes = tool.result["classes"]
+    have = max(1, int((classes >= 0).sum()))
+    return [round(float((classes == n).sum()) / have, 3)
+            for n in range(len(tool.dialog.rows))]
+
+
+@check(1000)
+def recognize_task_wait():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["recognize_started"]
+    if (dialog.picker.busy() or tool.job is not None or tool.pending) \
+            and spent < 600.0:
+        return 1000
+    out = result["recognize_task"]
+    out["spent_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()
+    out["built"] = tool.result is not None
+    if tool.result is None:
+        return None
+    out["settings"] = tool.result["settings"]
+    out["shares"] = _task_shares(tool)
+    dialog.grab().save(os.path.join(TEMP, "planetx_recognize_task.png"))
+    # Образец поправляет класс: контур в середине участка - класс,
+    # которого там меньше всего среди найденных правилами.
+    from planetx.core import aef
+    lat, lon = RECOGNIZE_AT
+    ring = _square_ring(lat, lon, 0.002)
+    res = tool.result
+    inside = aef.ring_mask(res["index"], res["x0"], res["y0"], res["step"],
+                           res["classes"].shape, ring)
+    there = res["classes"][inside]
+    counts = [int((there == n).sum()) for n in range(len(dialog.rows))]
+    found = [n for n, share in enumerate(out["shares"]) if share > 0]
+    target = min(found, key=lambda n: counts[n])
+    out["fix_class"] = dialog.rows[target].name.text()
+    out["fix_before"] = round(counts[target] / max(1, len(there)), 3)
+    state["recognize_fix"] = (target, ring)
+    dialog.by_areas.setChecked(True)
+    dialog.rows[target].set_rings([ring])
+    dialog.build.emit()
+    state["recognize_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def recognize_task_fix():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["recognize_started"]
+    if tool.job is not None and spent < 120.0:
+        return 1000
+    out = result["recognize_task"]
+    if "recognize_fix" in state and tool.result is not None:
+        from planetx.core import aef
+        target, ring = state.pop("recognize_fix")
+        res = tool.result
+        inside = aef.ring_mask(res["index"], res["x0"], res["y0"],
+                               res["step"], res["classes"].shape, ring)
+        out["fix_after"] = round(float(
+            (res["classes"][inside] == target).mean()), 3)
+        out["shares_after"] = _task_shares(tool)
+        out["fix_status"] = dialog.status.text()
+    dialog.task.setCurrentIndex(0)
+    out["own_rows"] = len(dialog.rows)
+    dialog.reject()
     out["shapes_after_close"] = len(window.recognize_shapes)
     return None
 

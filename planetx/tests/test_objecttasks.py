@@ -218,5 +218,33 @@ class TestClearing(unittest.TestCase):
         self.assertEqual(numbers.tolist(), [1, 0, 1])
 
 
+class TestCellKinds(unittest.TestCase):
+    def test_task_kinds_without_snow(self):
+        self.assertEqual(ot.task_kinds("forest"),
+                         [ot.CONIFER, ot.BROADLEAF, ot.CLEARING, ot.SOIL,
+                          ot.WATER])
+        self.assertEqual(ot.task_kinds("water"), [ot.WATER, ot.OTHER])
+
+    def test_cells_by_rules(self):
+        # Хвоя кругом, в ней вырубка, справа листва, внизу вода.
+        rng = np.random.default_rng(1)
+        kinds = np.zeros((60, 60), dtype=np.int64)
+        kinds[:, 40:] = 1
+        kinds[45:, :] = 3
+        kinds[10:30, 10:30] = 2
+        means = np.array([CONIFER, BROADLEAF, SOIL, WATER]).T
+        grid = means[:, kinds] + rng.normal(0, 0.002, (3, 60, 60))
+        good = np.ones((60, 60), dtype=bool)
+        good[0, 0] = False
+        cells = ot.cell_kinds(grid.astype(np.float32), AGRI, None, good,
+                              "forest")
+        order = ot.KIND_ORDER
+        self.assertEqual(cells[0, 0], -1)
+        self.assertEqual(order[cells[5, 5]], ot.CONIFER)
+        self.assertEqual(order[cells[20, 20]], ot.CLEARING)
+        self.assertEqual(order[cells[20, 50]], ot.BROADLEAF)
+        self.assertEqual(order[cells[55, 30]], ot.WATER)
+
+
 if __name__ == "__main__":
     unittest.main()

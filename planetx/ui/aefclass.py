@@ -759,9 +759,8 @@ class ClassTool(SiteTool, QObject):
             dialog.status.setText(tr(
                 "Нет библиотеки zstd, файлы AlphaEarth не прочитать."))
             return
-        rows = [row for row in dialog.rows if row.samples()]
-        if len(rows) < aef.MIN_CLASSES or not all(
-                row.enough() for row in rows):
+        rows = self.used_rows()
+        if rows is None:
             dialog.status.setText(self.too_few_text())
             return
         problem = dialog.area.check()
@@ -900,6 +899,20 @@ class ClassTool(SiteTool, QObject):
     def too_few_text(self):
         return tr("Нужно хотя бы два класса по три точки.")
 
+    def used_rows(self):
+        """Классы расчёта - строки с образцами, None - образцов мало."""
+        rows = [row for row in self.dialog.rows if row.samples()]
+        if len(rows) < aef.MIN_CLASSES or not all(
+                row.enough() for row in rows):
+            return None
+        return rows
+
+    def rules_job(self):
+        """Классы правилами вместо образцов: функция рабочего потока
+        (каналы, участок, образцы, номера классов образцов) -> классы
+        клеток. Без правил - None, классы по образцам."""
+        return None
+
     def _build_raster(self, layer, ring, box, side, level, zone, points,
                       colors, names, rings=()):
         """Классы по каналам растра проекта или подложки. Слой QGIS
@@ -922,6 +935,7 @@ class ClassTool(SiteTool, QObject):
         params = dialog.split_params()
         split_key = self._split_key(key, ring, params)
         pieces = self._pieces(split_key)
+        rules = self.rules_job()
 
         def count(done, total):
             stop_point(self)
@@ -967,6 +981,12 @@ class ClassTool(SiteTool, QObject):
                     for cell in take:
                         samples.append(flat[:, cell])
                         labels.append(label)
+            if rules is not None:
+                classes = rules(grid, inside, samples, labels)
+                if classes is None or not (classes >= 0).any():
+                    return {"problem": "flat", "found": found}
+                return {"index": index, "found": found, "outside": outside,
+                        "classes": classes, "covered": share}
             if len(set(labels)) < aef.MIN_CLASSES:
                 return {"problem": "points", "found": found}
             classes, _ = rasterclass.classify(

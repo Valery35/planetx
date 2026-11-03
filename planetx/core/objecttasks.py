@@ -25,10 +25,11 @@ import re
 import numpy as np
 
 try:  # внутри плагина QGIS
-    from . import segments
+    from . import segments, tracing
     from .sentinel import COMPOSITES
 except ImportError:  # headless-тесты
     import segments
+    import tracing
     from sentinel import COMPOSITES
 
 # Роли каналов: ключи каталога Earth Search и Planetary Computer.
@@ -356,3 +357,50 @@ def classes_of(region_list, scenario):
     used = [k for k in KIND_ORDER if k in set(region_list)]
     index = {k: n for n, k in enumerate(used)}
     return used, np.array([index[k] for k in region_list], dtype=np.int64)
+
+
+def task_kinds(scenario):
+    """Классы задачи окна «Распознавание» по порядку слоя: виды
+    сценария без снега - на летнем снимке его не бывает."""
+    spec = SCENARIOS[scenario]
+    return [k for k in KIND_ORDER if k in spec["kinds"] and k != SNOW]
+
+
+def cell_kinds(grid, roles, more_roles, good, scenario):
+    """Вид каждой клетки участка правилами задачи scenario - окно
+    «Распознавание», третья ступень. grid - каналы летнего снимка
+    (roles) и за ними снимка со снегом (more_roles, может не быть), good -
+    клетки участка с данными летнего снимка. Цвета - k-средние летних
+    каналов после сглаживания, как у трассировки, виды цветов -
+    color_kinds и two_dates по средним всех каналов, рубки - region_kinds
+    по связным областям. Итог - номер вида в KIND_ORDER у клетки, -1 вне
+    good."""
+    spec = SCENARIOS[scenario]
+    first = len(roles)
+    summer = tracing.blur(grid[:first], good, spec["smooth"])
+    labels, _ = tracing.quantize(summer, good, spec["colors"])
+    out = np.full(good.shape, -1, dtype=np.int64)
+    count = int(labels.max()) + 1 if (labels >= 0).any() else 0
+    if not count:
+        return out
+    flat = labels.ravel()
+    keep = flat >= 0
+    centers = np.full((count, grid.shape[0]), np.nan)
+    data = grid.reshape(grid.shape[0], -1)[:, keep].astype(np.float64)
+    for band in range(grid.shape[0]):
+        values = data[band]
+        fine = np.isfinite(values)
+        sums = np.bincount(flat[keep][fine], values[fine], minlength=count)
+        sizes = np.bincount(flat[keep][fine], minlength=count)
+        centers[:, band] = np.where(sizes > 0, sums / np.maximum(sizes, 1),
+                                    np.nan)
+    raw = color_kinds(centers[:, :first], roles)
+    if more_roles and grid.shape[0] > first:
+        raw = two_dates(raw, centers, roles, more_roles)
+    parts, region_colors, _ = tracing.merge_small(labels, spec["least"])
+    regions = region_kinds(parts, region_colors, raw, scenario)
+    codes = np.array([KIND_ORDER.index(k) for k in regions] + [-1],
+                     dtype=np.int64)
+    out[:] = codes[np.where(parts >= 0, parts, len(regions))]
+    out[~good] = -1
+    return out

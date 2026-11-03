@@ -22,31 +22,46 @@
 (ClassSample, как контур образца «Похожих областей»), щелчок по первой
 вершине замыкает его, щелчок внутри готового контура убирает. Образцы
 класса - клетки внутри контура (ui/aefclass.py, RING_CELLS).
+
+Третья ступень - задачи, слово автора того же дня «давай дальше по
+распознаванию, третью ступень», выбор - список «Задача». Задача («Леса
+и рубки», «Поля», «Вода») сама заводит свои классы и считает их
+правилами «Выделения объектов» по тем же снимкам лета и снега
+(core.objecttasks.cell_kinds), образцы не нужны. Образец точкой или
+областью поправляет класс: «Построить» берёт до TASK_SAMPLES клеток
+каждого класса правил образцами, добавляет образцы пользователя
+и считает классы ближайшими образцами. Заросших полей в списке нет -
+им нужен ряд снимков весны и осени за 4 года.
 """
 import numpy as np
 from qgis.core import QgsProject, QgsSettings
-from qgis.PyQt.QtCore import QObject, pyqtSignal
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QButtonGroup,
+from qgis.PyQt.QtCore import QObject, Qt, pyqtSignal
+from qgis.PyQt.QtGui import QColor
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QButtonGroup, QComboBox,
                                  QHBoxLayout, QHeaderView, QMenu,
                                  QRadioButton, QTableWidget,
                                  QTableWidgetItem, QWidget)
 
-from ..core import aef
+from ..core import aef, rasterclass
+from ..core import objecttasks as ot
 from ..core.features import Shape
 from ..i18n import tr
 from ..qt_compat import enum
 from . import s2finder
+from .aef import stop_point
 from .aefclass import AUTO, ClassDialog, ClassTool, read_raster
 from .area import Area
 from .results import add_vector, result_path, write_vector
-from .objecttasks import (WHOLE_COVER, cover_share, layer_roles,
-                          suitable_rasters)
+from .objecttasks import (WHOLE_COVER, cover_share, kind_color, kind_name,
+                          layer_roles, scenario_names, suitable_rasters)
 from .s2finder import SceneFinder
 from .tracing import raster_roles
 
 SETTINGS = "PlanetX/recognize/"
 SIDE_MOST = 20.0  # км, наибольшая сторона участка - загрузка по участку
 CHOICES = 12  # дат в меню строки
+TASKS = ("forest", "fields", "water")  # задачи списка «Задача»
+TASK_SAMPLES = 60  # клеток класса правил образцами, если есть свои
 # Строки таблицы: ключ, месяцы по порядку предпочтения. Снег - март
 # и апрель, как у второго снимка «Выделения объектов».
 ROWS = (("summer", s2finder.SUMMER), ("snow", (3, 4)))
@@ -410,6 +425,24 @@ class RecognizeDialog(ClassDialog):
         row.addWidget(self.by_areas)
         row.addStretch(1)
         form.insertRow(3, tr("Образцы"), holder)
+        self.task = QComboBox(self)
+        tip_role = enum(Qt, "ItemDataRole", "ToolTipRole")
+        self.task.addItem(tr("Свои образцы"), "")
+        self.task.setItemData(0, tr(
+            "Классы и образцы задаются вручную, нужно хотя бы два класса."),
+            tip_role)
+        for key, name, tip in scenario_names():
+            if key in TASKS:
+                self.task.addItem(name, key)
+                self.task.setItemData(self.task.count() - 1, tip, tip_role)
+        self.task.setToolTip(tr(
+            "Задача сама заводит классы и считает их правилами по снимкам "
+            "лета и снега, образцы не нужны. Образец точкой или областью "
+            "поправляет свой класс, «Построить» считает заново с ним."))
+        form.insertRow(3, tr("Задача"), self.task)
+        wanted = QgsSettings().value(SETTINGS + "task", "") or ""
+        self.task.setCurrentIndex(max(0, self.task.findData(wanted)))
+        self.task.currentIndexChanged.connect(lambda _: self._task())
         areas = QgsSettings().value(SETTINGS + "areas", False) \
             in (True, "true")
         (self.by_areas if areas else self.by_points).setChecked(True)
@@ -417,6 +450,33 @@ class RecognizeDialog(ClassDialog):
         self.sample = ClassSample(window, self, self.area)
         self.sample.changed.connect(self.changed)
         self._mode()
+        if self.task_key():
+            self._task()
+
+    def task_key(self):
+        """Ключ задачи, пусто - свои образцы."""
+        return self.task.currentData() or ""
+
+    def _task(self):
+        """Классы задачи вместо прежних, у своих образцов - снова два
+        пустых класса."""
+        key = self.task_key()
+        QgsSettings().setValue(SETTINGS + "task", key)
+        for row in list(self.rows):
+            self._remove(row)
+        if key:
+            for kind in ot.task_kinds(key):
+                row = self.add_class(kind_name(kind))
+                row.kind = kind
+                row.color = QColor(*kind_color(kind))
+                row._paint()
+        else:
+            for _ in range(2):
+                self.add_class()
+        if self.rows:
+            self.rows[0].pick.setChecked(True)
+        self._mode()
+        self.changed.emit()
 
     def areas_mode(self):
         return self.by_areas.isChecked()
@@ -424,15 +484,25 @@ class RecognizeDialog(ClassDialog):
     def _mode(self):
         on = self.areas_mode()
         QgsSettings().setValue(SETTINGS + "areas", on)
+        if self.task_key():
+            self.hint.setText(tr(
+                "Классы задачи считаются правилами по снимкам, образцы не "
+                "нужны. Если класс лёг неверно, поставьте его образец - "
+                "{how} - и нажмите «Построить».",
+                how=tr("контур") if on else tr("точку")))
+        else:
+            self._own_hint(on)
+        if not on and self.sample.drawing:
+            self.sample.stop()
+            self.area.begin()
+
+    def _own_hint(self, on):
         self.hint.setText(tr(
             "Обведите на глобусе образец выбранного класса - щелчками по "
             "вершинам, щелчок по первой замыкает контур. Нужно хотя бы два "
             "класса, у каждого контур или три точки.") if on else tr(
             "Щёлкните по глобусу, чтобы поставить точку выбранного "
             "класса. Нужно хотя бы два класса по три точки."))
-        if not on and self.sample.drawing:
-            self.sample.stop()
-            self.area.begin()
 
     def raster_id(self):
         layer = self.shots.layer("summer")
@@ -480,8 +550,17 @@ class RecognizeTool(ClassTool):
         """Указатель AlphaEarth окну не нужен."""
 
     def too_few_text(self):
+        if self.dialog.task_key():
+            return tr("У задачи нужно хотя бы два класса.")
         return tr("Нужно хотя бы два класса, у каждого контур или три "
                   "точки.")
+
+    def used_rows(self):
+        """У задачи - все её классы: образцы не обязательны."""
+        if not self.dialog.task_key():
+            return super().used_rows()
+        rows = list(self.dialog.rows)
+        return rows if len(rows) >= aef.MIN_CLASSES else None
 
     def build(self):
         """«Построить»: сначала условия - участок, классы и образцы, потом
@@ -492,9 +571,7 @@ class RecognizeTool(ClassTool):
         if dialog.picker.busy():
             dialog.status.setText(tr("Снимки ещё загружаются."))
             return
-        rows = [row for row in dialog.rows if row.samples()]
-        if len(rows) < aef.MIN_CLASSES or not all(
-                row.enough() for row in rows):
+        if self.used_rows() is None:
             dialog.status.setText(self.too_few_text())
             return
         problem = dialog.area.check()
@@ -511,7 +588,65 @@ class RecognizeTool(ClassTool):
                 "Нет летнего снимка. Щелчок по строке «Лето» - другая дата "
                 "или снимок из проекта."))
             return
+        task = dialog.task_key()
+        if task and not ot.usable(raster_roles(dialog.raster())[0]):
+            dialog.status.setText(tr(
+                "У летнего снимка не узнать ближний ИК и красный или SWIR - "
+                "правилам задачи нужен снимок окна «Космоснимки»."))
+            return
         super().build()
+        if task and self.job is not None:
+            self.settings = [tr("задача «{task}»",
+                                task=dialog.task.currentText())] \
+                + list(self.settings)
+
+    def rules_job(self):
+        """Классы задачи правилами, с образцами - ближайшими образцами:
+        до TASK_SAMPLES клеток каждого класса правил плюс образцы
+        пользователя. Без задачи - None."""
+        dialog = self.dialog
+        scenario = dialog.task_key()
+        if not scenario:
+            return None
+        roles = raster_roles(dialog.raster())[0]
+        snow = dialog.snow()
+        snow_roles = raster_roles(snow)[0] if snow is not None else None
+        codes = [ot.KIND_ORDER.index(row.kind) if getattr(row, "kind", None)
+                 else -1 for row in self.used_rows()]
+        first = len(roles)
+
+        def run(grid, inside, samples, labels):
+            good = inside & np.isfinite(grid[:first]).all(axis=0)
+            more = snow_roles if grid.shape[0] > first else None
+            cells = ot.cell_kinds(grid, roles, more, good, scenario)
+            stop_point(self)
+            out = np.full(cells.shape, -1, dtype=np.int64)
+            for n, code in enumerate(codes):
+                if code >= 0:
+                    out[cells == code] = n
+            if not samples:
+                return out
+            samples, labels = list(samples), list(labels)
+            flat = grid.reshape(grid.shape[0], -1)
+            usable = rasterclass.usable(grid).ravel()
+            for n in range(len(codes)):
+                place = np.flatnonzero((out.ravel() == n) & usable)
+                if not len(place):
+                    continue
+                take = place[np.linspace(
+                    0, len(place) - 1, min(TASK_SAMPLES, len(place)))
+                    .astype(np.int64)]
+                for cell in take:
+                    samples.append(flat[:, cell])
+                    labels.append(n)
+            if len(set(labels)) < aef.MIN_CLASSES:
+                return out
+            classes, _ = rasterclass.classify(
+                grid, np.stack(samples, axis=1), labels, inside,
+                progress=lambda done, total: stop_point(self))
+            return classes
+
+        return run
 
     def _shots_done(self):
         """Снимки подобраны - «Построить» идёт дальше сам."""
