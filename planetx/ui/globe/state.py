@@ -35,7 +35,7 @@ from .base import (ACCEPTED_KEY, ACTIVE_ORDER, BASEMAP_KEY, EARTH_EXTRAS,
                    EXTRA_KEY, FLOW_LAYERS, GIBS_FADES, LANGUAGE_KEY, LINES_KEY,
                    OPACITY_KEY, PICTURE_LAYERS, POINT_LAYERS, QGIS_LAYERS,
                    READY_KEY, SURFACE_EXTRAS, SYNC_KEY, all_sources,
-                   settings_list)
+                   ready_keys, settings_list)
 
 
 class StateMixin:
@@ -99,10 +99,30 @@ class StateMixin:
             self._start_place_loader()
 
     def choose_basemap(self, index):
+        """Подложка по номеру в списке. Готовый источник с
+        предупреждением при первом выборе спрашивает согласие, отказ
+        оставляет прежнюю подложку. Истина - подложка поставлена."""
+        if not self._terms_accepted(self.sources[index]):
+            self._fill_basemaps()
+            return False
         self._basemap = index
         QgsSettings().setValue(BASEMAP_KEY, self.sources[index].name)
         self._fill_basemaps()
         self._changed()
+        return True
+
+    def _terms_accepted(self, source):
+        """Согласие с условиями готового источника: есть, не нужно или
+        получено сейчас окном предупреждения."""
+        key = getattr(source, "ready", "")
+        row = basemap.ready_entry(key) if key else None
+        accepted = settings_list(ACCEPTED_KEY)
+        if row is None or not row[7] or key in accepted:
+            return True
+        if not self._accept_terms(source.name, row[6]):
+            return False
+        QgsSettings().setValue(ACCEPTED_KEY, accepted + [key])
+        return True
 
     def _fill_basemaps(self):
         """Группа «Основа» панели: источники Земли или снимки тела."""
@@ -116,7 +136,8 @@ class StateMixin:
     def _panel_basemap(self, index):
         """Подложка выбрана в панели - сразу на глобус, как флажки
         раздела «Слои»."""
-        self.choose_basemap(index)
+        if not self.choose_basemap(index):
+            return
         self._sync_properties()
         self.refresh()
 
@@ -153,7 +174,7 @@ class StateMixin:
             if ask and not self._accept_terms(source.name, row[6]):
                 return False
             QgsSettings().setValue(ACCEPTED_KEY, accepted + [key])
-        chosen = settings_list(READY_KEY)
+        chosen = ready_keys()
         if key not in chosen:
             QgsSettings().setValue(READY_KEY, chosen + [key])
         self.sources = all_sources()
@@ -186,7 +207,7 @@ class StateMixin:
     def remove_ready_source(self, key):
         """Убрать готовый источник из списка подложек."""
         QgsSettings().setValue(READY_KEY, [
-            k for k in settings_list(READY_KEY) if k != key])
+            k for k in ready_keys() if k != key])
 
     def _accept_terms(self, name, terms):
         """Окно предупреждения перед источником без разрешения на такой

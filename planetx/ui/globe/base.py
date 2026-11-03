@@ -141,6 +141,12 @@ BASEMAP_KEY = "PlanetX/basemap"  # имя выбранной подложки в
 # пользователем, и источники, чьё предупреждение он принял.
 READY_KEY = "PlanetX/ready_sources"
 ACCEPTED_KEY = "PlanetX/ready_accepted"
+# Начальный набор готовых подложек, пока пользователь его не менял, -
+# набор автора от 3 ноября 2026 года. Источники с предупреждением
+# спрашивают согласие при первом выборе (state.choose_basemap).
+READY_DEFAULT = ("google_satellite", "yandex_satellite", "dgis_map",
+                 "esri_physical", "esri_hillshade", "nasa_blue_marble",
+                 "usgs_imagery")
 SIDEBAR_KEY = "PlanetX/sidebar"  # видна ли левая панель окна
 CONSTELLATIONS_KEY = "PlanetX/constellations"  # линии созвездий на небе
 DEEPSKY_KEY = "PlanetX/deep_sky"  # подписи объектов глубокого неба
@@ -459,10 +465,17 @@ def cadastre_source():
     return source
 
 
+def ready_keys():
+    """Ключи готовых подложек меню «Основа». Пока пользователь список
+    не менял, это начальный набор READY_DEFAULT."""
+    if not QgsSettings().contains(READY_KEY):
+        return list(READY_DEFAULT)
+    return settings_list(READY_KEY)
+
+
 def ready_sources():
-    """Готовые подложки меню «Основа», которые пользователь добавил,
-    в порядке basemap.READY."""
-    chosen = settings_list(READY_KEY)
+    """Готовые подложки меню «Основа» в порядке basemap.READY."""
+    chosen = ready_keys()
     return [basemap.ready_source(key, is_russian())
             for key in basemap.READY_KEYS if key in chosen]
 

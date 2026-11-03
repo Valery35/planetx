@@ -1114,6 +1114,13 @@ browser, the chosen base map is checked. A choice changes the base map
 on the globe at once. On other bodies the row shows the imagery of the
 body, there is no choice.
 
+From the first opening the menu already has Google Satellite, Yandex
+Satellite, 2GIS Map, Esri Physical, Esri World Hillshade, NASA Blue
+Marble and USGS Imagery (USA). The terms of Google, Yandex and 2GIS do
+not allow taking their tiles in third-party programs, so the first
+choice of such a base map shows a warning with a link to the terms of
+the service. Without consent the base map does not change.
+
 All base maps with previews are gathered in the Base maps category of
 the Add data catalog, a click on a row sets the base map of the globe.
 The More base maps… item of the Base map menu opens the catalog on

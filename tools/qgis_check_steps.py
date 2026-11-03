@@ -15780,6 +15780,98 @@ def _post_126_relations():
 
 
 @check(1000, manual=True)
+def post_132_shot():
+    """Кадры статьи 1.32: трассировка подложки Esri у Перми - цвета клеток
+    на глобусе, окно, многоугольники слоем проекта издалека и вблизи.
+    TEMP planetx_post_132_*.png."""
+    import math
+    from qgis.core import QgsSettings
+    from planetx.core.navigation import Pose
+    from planetx.ui import aefclass
+    from planetx.ui.globe.base import ACCEPTED_KEY
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_132", {"stage": 0})
+    out = result.setdefault("post_132", {})
+    tool = window.trace_tool
+    stage = look["stage"]
+
+    def save(image, name):
+        image.save(os.path.join(TEMP, "planetx_post_132_{}.png".format(name)))
+
+    def settled():
+        return not (view.load_missing or view.data_pending) \
+            or time.monotonic() - look["since"] > 90
+
+    if stage == 0:
+        window.set_body("earth")
+        _post_clean(window)
+        look["stage"] = 1
+        return 8000
+    if stage == 1:
+        lat, lon, _, span = _objects_raster(os.path.join(
+            TEMP, "planetx_trace.tif"))
+        side = span * math.cos(math.radians(lat)) * 0.95
+        look.update(lat=lat, lon=lon, side=side)
+        window.choose_basemap(0)
+        source = window._earth_source()
+        settings = QgsSettings()
+        settings.setValue(ACCEPTED_KEY, list(
+            settings.value(ACCEPTED_KEY) or []) + ["analysis:" + source.url])
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat, lon, side * 1.15, 0.0, 0.0))
+        view.update()
+        dialog = tool.open_here(lat, lon)
+        dialog.source.setCurrentIndex(dialog.source.findData(
+            aefclass.BASEMAP))
+        dialog.area.set_square(lat, lon, side)
+        dialog.level.setCurrentIndex(0)
+        dialog.colors.setValue(8)
+        dialog.smooth.setValue(1)
+        dialog.least.setValue(25)
+        dialog.corner.setValue(1.0)
+        dialog.build.emit()
+        look.update(stage=2, since=time.monotonic())
+        return 3000
+    if stage == 2:
+        if (tool.job is not None or not view.gibs["viewshed"].textures
+                or not settled()) and time.monotonic() - look["since"] < 150:
+            view.update()
+            return 1000
+        look["stage"] = 3
+        return 5000
+    if stage == 3:
+        dialog = tool.dialog
+        out["status"] = dialog.status.text()
+        save(window.copy_view(), "colors")
+        dialog.raise_()
+        save(dialog.grab().toImage(), "dialog")
+        dialog.accept()
+        look.update(stage=4, since=time.monotonic())
+        return 5000
+    if stage == 4:
+        if not settled():
+            view.update()
+            return 1000
+        save(window.copy_view(), "polygons")
+        lat, lon = look["lat"], look["lon"]
+        view.navigator.stop()
+        view.navigator.set_pose(Pose(lat + 0.004, lon + 0.012,
+                                     look["side"] * 0.3, 0.0, 0.0))
+        view.update()
+        look.update(stage=5, since=time.monotonic())
+        return 5000
+    if stage == 5:
+        if not settled():
+            view.update()
+            return 1000
+        save(window.copy_view(), "zoom")
+        out["layers"] = [n.name() for n in _result_layers()]
+        return None
+    return None
+
+
+@check(1000, manual=True)
 def post_126_shot():
     """Кадры статьи 1.26: похожие области у Камы (PLANETX_SEG_SRC), земляные
     работы у Терскола, карточка со связанными записями, вид в глобусе QGIS
@@ -23097,6 +23189,21 @@ def ready_menu():
         out["more_ready"] = sum(1 for k in shown if k.startswith("base:"))
         window.close_gallery()
     menu.deleteLater()
+    # Начальный набор без настройки, источник с предупреждением
+    # спрашивает согласие при выборе в списке «Основа».
+    window.sources = wmod.all_sources()
+    out["default_ready"] = [s.ready for s in window.sources if s.ready]
+    google = next(n for n, s in enumerate(window.sources)
+                  if s.ready == "google_satellite")
+    before = window.source.name
+    asked = []
+    window._accept_terms = lambda name, terms: asked.append(name) or False
+    out["choose_declined"] = window.choose_basemap(google)
+    out["source_kept"] = window.source.name == before
+    window._accept_terms = lambda name, terms: asked.append(name) or True
+    out["choose_accepted"] = window.choose_basemap(google)
+    out["choose_asked"] = list(asked)
+    settings.remove(wmod.ACCEPTED_KEY)
     asked = []
     window._accept_terms = lambda name, terms: asked.append(name) or False
     out["declined"] = window.add_ready_source("yandex_satellite")
