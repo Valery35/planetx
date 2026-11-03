@@ -9,7 +9,7 @@
 
 <img src="planetx/icon.svg" width="96" align="right" alt="PlanetX">
 
-A 3D globe inside QGIS. PlanetX version 1.32.0.
+A 3D globe inside QGIS. PlanetX version 1.33.0.
 
 The globe opens in its own window and shows the whole Earth with terrain
 and atmosphere, from space down to single streets.
@@ -114,7 +114,13 @@ The plugin is free and open source. [Support development](https://github.com/Val
 - **Tracing.** The image of a site, a project raster or the globe
   basemap, is split into colors, and the areas of one color are outlined
   with smooth polygons, as Trace Bitmap of Inkscape. Neighboring areas
-  share their border, without gaps or overlaps.
+  share their border, without gaps or overlaps. The colors can be renamed
+  and merged in a table, and the AI assistant suggests names by it.
+- **Object extraction.** Typical tasks - forests and clear-cuts, fields,
+  water. A Sentinel-2 or Landsat image is traced, and the classes are named
+  by reflectance - coniferous and broadleaf forest, bare soil, water,
+  clear-cuts. A second image of another season separates conifers by near
+  infrared, and roads, rivers and shelterbelts come out as center lines.
 - **Land change and classification.** AlphaEarth Foundations
   embeddings, 10 m cells for each year of 2017-2025, show where the
   land changed between two years - construction, logging, quarries,

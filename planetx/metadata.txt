@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.32.0
+version=1.33.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,15 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.32.0 The Tracing window splits the image of a site into
+changelog=1.33.0 The Object extraction window solves typical tasks -
+      forests and clear-cuts, fields, water. A Sentinel-2 or Landsat image
+      is traced and the classes are named by reflectance, a second image
+      of another season separates conifers, roads, rivers and
+      shelterbelts come out as center lines. Tracing lists the colors in
+      a table to rename and merge, the AI assistant suggests names, and
+      the layer name carries the calculation settings. The Basemap menu
+      holds ready basemaps from the first start.
+      1.32.0 The Tracing window splits the image of a site into
       colors and outlines the areas with smooth polygons, as Trace Bitmap
       of Inkscape, neighboring areas share their border. The legend of
       the underground mode takes the name of the layer group.
