@@ -15,22 +15,36 @@
 в проекте и накрывает участок, берётся без загрузки. Классы по точкам -
 окно «Классификация» (ui/aefclass.py) без выбора источника: каналы
 летнего снимка и снимка со снегом - признаки клетки.
+
+Вторая ступень - образцы областями, слово автора того же дня «делай
+вторую ступень, по областям». Переключатель «Образцы» - точки или
+области. В областях щелчок по глобусу начинает контур выбранного класса
+(ClassSample, как контур образца «Похожих областей»), щелчок по первой
+вершине замыкает его, щелчок внутри готового контура убирает. Образцы
+класса - клетки внутри контура (ui/aefclass.py, RING_CELLS).
 """
 import numpy as np
-from qgis.core import QgsProject
+from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QObject, pyqtSignal
-from qgis.PyQt.QtWidgets import (QAbstractItemView, QHeaderView, QMenu,
-                                 QTableWidget, QTableWidgetItem)
+from qgis.PyQt.QtWidgets import (QAbstractItemView, QButtonGroup,
+                                 QHBoxLayout, QHeaderView, QMenu,
+                                 QRadioButton, QTableWidget,
+                                 QTableWidgetItem, QWidget)
 
+from ..core import aef
+from ..core.features import Shape
 from ..i18n import tr
 from ..qt_compat import enum
 from . import s2finder
 from .aefclass import AUTO, ClassDialog, ClassTool, read_raster
+from .area import Area
+from .results import add_vector, result_path, write_vector
 from .objecttasks import (WHOLE_COVER, cover_share, layer_roles,
                           suitable_rasters)
 from .s2finder import SceneFinder
 from .tracing import raster_roles
 
+SETTINGS = "PlanetX/recognize/"
 SIDE_MOST = 20.0  # км, наибольшая сторона участка - загрузка по участку
 CHOICES = 12  # дат в меню строки
 # Строки таблицы: ключ, месяцы по порядку предпочтения. Снег - март
@@ -308,6 +322,46 @@ def _covers(layer, ring):
     return share is None or share >= WHOLE_COVER
 
 
+class ClassSample(Area):
+    """Контур образца класса: вершины рисуются, как у участка, замкнутый
+    контур уходит строке класса row. Участка окон анализа не трогает."""
+
+    shared = False
+
+    def __init__(self, window, dialog, site):
+        super().__init__(window, dialog, 1.0, SIDE_MOST)
+        self.site = site
+        self.row = None
+        self.widget.hide()
+
+    def start(self, row):
+        self.row = row
+        self.ring = []
+        self.drawing = True
+        self.begin()
+
+    def edited(self):
+        if self.closed():
+            row, ring = self.row, list(self.ring)
+            self.ring = []
+            if row is not None:
+                row.set_rings(row.rings + [ring])
+            self.changed.emit()
+            self.site.begin()
+        self.window._refresh_shapes()
+        self.window.handles.sync()
+
+    def stop(self):
+        self.ring = []
+        self.drawing = False
+
+    def shapes(self):
+        if not self.visible() or len(self.ring) < 2 or self.row is None:
+            return []
+        return [Shape("line", list(self.ring), color=self.row.rgb() + (255,),
+                      width=2.0)]
+
+
 class RecognizeDialog(ClassDialog):
     """Окно «Распознавание»: участок, снимки, классы по точкам. Слово
     автора от 4 ноября 2026 года - «пользователя ни разу не грузим лишним,
@@ -336,6 +390,49 @@ class RecognizeDialog(ClassDialog):
                 label.setVisible(False)
         self.from_trace.setVisible(False)
         form.insertRow(1, tr("Снимки"), self.shots)
+        self.by_points = QRadioButton(tr("Точки"), self)
+        self.by_points.setToolTip(tr(
+            "Щелчок по глобусу ставит точку выбранного класса. Нужно три "
+            "точки на класс."))
+        self.by_areas = QRadioButton(tr("Области"), self)
+        self.by_areas.setToolTip(tr(
+            "Щелчок по глобусу начинает контур выбранного класса, щелчок по "
+            "первой вершине его замыкает. Образцы класса - клетки внутри "
+            "контура, одного контура на класс хватает. Щелчок внутри "
+            "контура убирает его."))
+        modes = QButtonGroup(self)
+        modes.addButton(self.by_points)
+        modes.addButton(self.by_areas)
+        holder = QWidget(self)
+        row = QHBoxLayout(holder)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(self.by_points)
+        row.addWidget(self.by_areas)
+        row.addStretch(1)
+        form.insertRow(3, tr("Образцы"), holder)
+        areas = QgsSettings().value(SETTINGS + "areas", False) \
+            in (True, "true")
+        (self.by_areas if areas else self.by_points).setChecked(True)
+        self.by_areas.toggled.connect(lambda _: self._mode())
+        self.sample = ClassSample(window, self, self.area)
+        self.sample.changed.connect(self.changed)
+        self._mode()
+
+    def areas_mode(self):
+        return self.by_areas.isChecked()
+
+    def _mode(self):
+        on = self.areas_mode()
+        QgsSettings().setValue(SETTINGS + "areas", on)
+        self.hint.setText(tr(
+            "Обведите на глобусе образец выбранного класса - щелчками по "
+            "вершинам, щелчок по первой замыкает контур. Нужно хотя бы два "
+            "класса, у каждого контур или три точки.") if on else tr(
+            "Щёлкните по глобусу, чтобы поставить точку выбранного "
+            "класса. Нужно хотя бы два класса по три точки."))
+        if not on and self.sample.drawing:
+            self.sample.stop()
+            self.area.begin()
 
     def raster_id(self):
         layer = self.shots.layer("summer")
@@ -382,8 +479,12 @@ class RecognizeTool(ClassTool):
     def _want_index(self):
         """Указатель AlphaEarth окну не нужен."""
 
+    def too_few_text(self):
+        return tr("Нужно хотя бы два класса, у каждого контур или три "
+                  "точки.")
+
     def build(self):
-        """«Построить»: сначала условия - участок, классы и точки, потом
+        """«Построить»: сначала условия - участок, классы и образцы, потом
         подбор и загрузка снимков, потом классы."""
         dialog = self.dialog
         if dialog is None or dialog.point is None or self.job is not None:
@@ -391,10 +492,10 @@ class RecognizeTool(ClassTool):
         if dialog.picker.busy():
             dialog.status.setText(tr("Снимки ещё загружаются."))
             return
-        rows = [row for row in dialog.rows if row.points]
-        if len(rows) < 2 or any(len(row.points) < 3 for row in rows):
-            dialog.status.setText(tr(
-                "Нужно хотя бы два класса по три точки."))
+        rows = [row for row in dialog.rows if row.samples()]
+        if len(rows) < aef.MIN_CLASSES or not all(
+                row.enough() for row in rows):
+            dialog.status.setText(self.too_few_text())
             return
         problem = dialog.area.check()
         if problem:
@@ -445,11 +546,96 @@ class RecognizeTool(ClassTool):
 
         return (layer.id(), path, len(roles or ())), add
 
+    # --- образцы областями ----------------------------------------------
+
+    def ring_under(self, lat, lon):
+        """Контур образца с точкой внутри: (строка класса, номер) или
+        None, последний нарисованный - первым."""
+        for row in reversed(self.dialog.rows):
+            for n in range(len(row.rings) - 1, -1, -1):
+                if aef.ring_inside([lat], [lon], row.rings[n])[0]:
+                    return row, n
+        return None
+
+    def point_under(self, px, py):
+        """Точка класса у курсора или, в областях, контур под курсором -
+        подсказка участка меняется по тому, что убирает щелчок."""
+        dialog = self.dialog
+        found = super().point_under(px, py)
+        if found is not None:
+            dialog.area.point_hint = tr("Убрать точку")
+            return found
+        if not dialog.areas_mode():
+            return None
+        ground = self.window._ground(px, py)
+        hit = self.ring_under(*ground) if ground is not None else None
+        if hit is not None:
+            dialog.area.point_hint = tr("Убрать область")
+        return hit
+
+    def click(self, px, py, lat, lon):
+        dialog = self.dialog
+        if not dialog.areas_mode() \
+                or super().point_under(px, py) is not None:
+            super().click(px, py, lat, lon)
+            return
+        hit = self.ring_under(lat, lon)
+        if hit is not None:
+            row, n = hit
+            row.set_rings(row.rings[:n] + row.rings[n + 1:])
+            self._update_shapes()
+            return
+        row = dialog.active()
+        if row is None:
+            return
+        dialog.sample.start(row)
+        dialog.sample.add(lat, lon)
+
+    def _update_shapes(self):
+        super()._update_shapes()
+        dialog = self.dialog
+        if dialog is None or not dialog.isVisible():
+            return
+        for row in dialog.rows:
+            for ring in row.rings:
+                self.shapes.append(Shape(
+                    "polygon", list(ring), color=row.rgb() + (255,),
+                    fill=row.rgb() + (70,), width=2.0))
+        setattr(self.window, self.shapes_attr, self.shapes)
+        self.window._refresh_shapes()
+
+    def export(self, path=None):
+        """Классы, как у «Классификации», рядом - контуры образцов слоем
+        многоугольников с классом и названием."""
+        done = super().export(path)
+        if done and self.result is not None:
+            self._export_rings()
+        return done
+
+    def _export_rings(self):
+        rows = self.dialog.rows
+        items = [(ring, {"class": n, "name": row.name.text()})
+                 for n, row in enumerate(rows, 1) for ring in row.rings]
+        if not items:
+            return None
+        path = result_path("class_areas", ".gpkg")
+        if not write_vector(path, "areas", "polygon", items,
+                            [("class", "int"), ("name", "str")]):
+            return None
+        group = self.session.group_for(self.result["ring"])
+        return add_vector(
+            self.window, path, "areas", tr("Образцы классов"), group,
+            rows[0].rgb(), width=0.6, fill=(255, 255, 255, 0),
+            classes=("class", [(n, row.rgb(), row.name.text())
+                               for n, row in enumerate(rows, 1)
+                               if row.rings]))
+
     def _closed(self, code=0):
         if self.pending:
             self.pending = False
             self.dialog.picker.done.disconnect(self._shots_done)
         self.dialog.picker.stop()
+        self.dialog.sample.stop()
         super()._closed(code)
 
     def close(self):

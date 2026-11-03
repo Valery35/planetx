@@ -134,6 +134,22 @@ class TestClassify(unittest.TestCase):
         self.assertTrue((parts == whole).all())
         self.assertEqual(seen[:2], [0, 97])
 
+    def test_many_samples_shrink_chunk(self):
+        # Образцы контуров - сотни точек: шаг расчёта меньше, итог тот же.
+        grid, _ = scene()
+        whole, _ = self.run_scene(grid)
+        self.assertEqual(rasterclass.chunk_for(1), rasterclass.CHUNK)
+        saved = rasterclass.CHUNK_CELLS
+        rasterclass.CHUNK_CELLS = 6 * 50
+        seen = []
+        try:
+            parts, _ = self.run_scene(
+                grid, progress=lambda done, total: seen.append(done))
+        finally:
+            rasterclass.CHUNK_CELLS = saved
+        self.assertTrue((parts == whole).all())
+        self.assertEqual(seen[:2], [0, 50])
+
 
 class TestSize(unittest.TestCase):
 

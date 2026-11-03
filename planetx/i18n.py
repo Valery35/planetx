@@ -6766,6 +6766,34 @@ EN = {
         "a project image, the basemap or AlphaEarth embeddings.",
     "Уточнить точками": "Refine with points",
     "Распознавание": "Recognition",
+    "{points} т., {rings} о.": "{points} pt, {rings} ar",
+    "Точек и областей образцов класса.":
+        "Sample points and areas of the class.",
+    "Нужно хотя бы два класса, у каждого контур или три точки.":
+        "At least two classes are needed, each with an outline or three "
+        "points.",
+    "Точки": "Points",
+    "Щелчок по глобусу ставит точку выбранного класса. Нужно три точки на "
+    "класс.":
+        "A click on the globe places a point of the chosen class. Three "
+        "points per class are needed.",
+    "Области": "Areas",
+    "Щелчок по глобусу начинает контур выбранного класса, щелчок по первой "
+    "вершине его замыкает. Образцы класса - клетки внутри контура, одного "
+    "контура на класс хватает. Щелчок внутри контура убирает его.":
+        "A click on the globe starts an outline of the chosen class, a click "
+        "on the first vertex closes it. The class samples are the cells "
+        "inside the outline, one outline per class is enough. A click "
+        "inside an outline removes it.",
+    "Убрать область": "Remove area",
+    "областей {n}": "areas {n}",
+    "Образцы классов": "Class samples",
+    "Обведите на глобусе образец выбранного класса - щелчками по вершинам, "
+    "щелчок по первой замыкает контур. Нужно хотя бы два класса, у каждого "
+    "контур или три точки.":
+        "Outline a sample of the chosen class on the globe by clicking its "
+        "vertices, a click on the first one closes the outline. At least "
+        "two classes are needed, each with an outline or three points.",
     "Распознавание…": "Recognition…",
     "Классы участка по своим точкам на глобусе. Снимки Sentinel-2 участка "
     "окно подбирает и загружает само по «Построить».":

@@ -2989,11 +2989,17 @@ way to site classes. You set the site, add classes and place their
 points, and the window finds the images itself.
 
 1. Site - a square at the point, «Draw» or «From layer», up to 20 km.
-2. Classes - a name and a colour, the circle picks a class, a click on
-   the globe places its point, a click on a point removes it. At least
-   two classes of three points are needed.
-3. «Build» first checks the site and the points, then finds the images
-   and only after that computes the classes.
+2. Classes - a name and a colour, the circle picks a class.
+3. Samples - points or areas. With «Points» a click on the globe places
+   a point of the class, a click on a point removes it, three points
+   per class are needed. With «Areas» a click starts an outline of the
+   class, a click on the first vertex closes it, a click inside the
+   outline removes it. One outline per class is enough, the class
+   samples are the cells inside the outline. Points and outlines of one
+   class work together.
+4. «Build» first checks the site and the samples, then finds the images
+   and only after that computes the classes. At least two classes are
+   needed.
 
 The «Images» table shows what the window takes - a summer image and
 a March - April image with snow. Each is the clearest Sentinel-2 image
@@ -3009,8 +3015,8 @@ Finding and loading two images of a 3 km site takes about three
 minutes, most of it is the cloud cover over the site of catalogue
 scenes.
 
-OK writes the class raster and the control points to the computation
-subgroup, «Cancel» removes the classes from the globe. Fine settings -
+OK writes the class raster, the control points and the sample
+outlines to the computation subgroup, «Cancel» removes the classes from the globe. Fine settings -
 the pixel, splitting into objects, the AlphaEarth source - are in the
 «Classification» window.
 

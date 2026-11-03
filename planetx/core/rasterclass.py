@@ -24,6 +24,9 @@ import numpy as np
 
 KNN = 5  # контрольных точек голосуют за клетку, как у AlphaEarth
 CHUNK = 128 * 1024  # клеток за шаг расчёта
+# Наибольшая матрица клеток × образцов за шаг: с образцами контуров их
+# сотни, и шаг CHUNK занял бы гигабайты.
+CHUNK_CELLS = 1 << 24
 AUTO_CELLS = 800 * 800  # клеток участка при пикселе «Авто»
 NEAR = 1e-3  # добавка к расстоянию: точка на самой клетке даёт конечный голос
 MAX_CELLS = 4000 * 4000  # клеток сетки участка
@@ -74,6 +77,12 @@ def scales(grid, inside=None):
     return mean, spread
 
 
+def chunk_for(samples):
+    """Клеток за шаг расчёта при samples образцах: матрица клеток ×
+    образцов не больше CHUNK_CELLS."""
+    return max(1, min(CHUNK, CHUNK_CELLS // max(1, samples)))
+
+
 def classify(grid, samples, labels, inside=None, k=KNN, progress=None):
     """Классы клеток растра: grid - float32 (каналы, строки, столбцы),
     NaN без данных, samples - значения точек (каналы, точек), labels -
@@ -102,10 +111,11 @@ def classify(grid, samples, labels, inside=None, k=KNN, progress=None):
         cells = cells & inside
     cells = np.nonzero(cells.ravel())[0]
     flat = grid.reshape(grid.shape[0], -1)[used]
-    for start in range(0, len(cells), CHUNK):
+    step = chunk_for(len(train))
+    for start in range(0, len(cells), step):
         if progress is not None:
             progress(start, len(cells))
-        part = cells[start:start + CHUNK]
+        part = cells[start:start + step]
         values = ((flat[:, part].T - mean[used]) / spread[used]).astype(
             np.float32)
         # Квадрат расстояния через скалярное произведение: матрица

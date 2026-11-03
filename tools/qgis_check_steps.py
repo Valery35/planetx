@@ -21526,6 +21526,92 @@ def recognize_done():
     return None
 
 
+def _square_ring(lat, lon, half):
+    return [(lat - half, lon - half), (lat - half, lon + half),
+            (lat + half, lon + half), (lat + half, lon - half)]
+
+
+@check(1000)
+def recognize_areas():
+    # Вторая ступень: образцы контурами. Снимки - из проекта после
+    # recognize_*, загрузки нет. Контур рисуется щелчками, щелчок внутри
+    # готового контура убирает его.
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.open_here(*POST133)
+    dialog.area.set_square(POST133[0], POST133[1], 3000.0)
+    out = result["recognize_areas"] = {}
+    for row in dialog.rows:
+        row.set_points([])
+        row.set_rings([])
+    dialog.by_areas.setChecked(True)
+    out["hint"] = dialog.hint.text()
+    lat, lon = POST133
+    far = -1e6
+    for n, row in enumerate(dialog.rows[:2]):
+        row.pick.setChecked(True)
+        ring = _square_ring(lat, lon + (-0.011 if n == 0 else 0.011), 0.002)
+        tool.click(far, far, *ring[0])
+        out.setdefault("drawing", []).append(dialog.sample.drawing)
+        for point in ring[1:]:
+            dialog.sample.add(*point)
+        dialog.sample.drawing = False
+        dialog.sample.edited()
+    out["counts"] = [row.count.text() for row in dialog.rows]
+    # Третий контур первому классу и его снятие щелчком внутри.
+    dialog.rows[0].pick.setChecked(True)
+    extra = _square_ring(lat + 0.006, lon, 0.001)
+    tool.click(far, far, *extra[0])
+    for point in extra[1:]:
+        dialog.sample.add(*point)
+    dialog.sample.drawing = False
+    dialog.sample.edited()
+    out["rings_with_extra"] = len(dialog.rows[0].rings)
+    tool.click(far, far, lat + 0.006, lon)
+    out["rings_after_remove"] = len(dialog.rows[0].rings)
+    out["polygons_on_globe"] = sum(
+        1 for s in window.recognize_shapes if s.kind == "polygon")
+    dialog.build.emit()
+    out["busy"] = dialog.picker.busy()
+    state["recognize_started"] = time.monotonic()
+
+
+@check(1000)
+def recognize_areas_wait():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["recognize_started"]
+    if (dialog.picker.busy() or tool.job is not None or tool.pending) \
+            and spent < 600.0:
+        return 1000
+    out = result["recognize_areas"]
+    out["spent_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()
+    out["built"] = tool.result is not None
+    if tool.result is not None:
+        classes = tool.result["classes"]
+        step = tool.result["step"]
+        index = tool.result["index"]
+        x0, y0 = tool.result["x0"], tool.result["y0"]
+        from planetx.core import aef
+        own = []
+        for n, row in enumerate(dialog.rows[:2]):
+            inside = aef.ring_mask(index, x0, y0, step, classes.shape,
+                                   row.rings[0])
+            own.append(round(float((classes[inside] == n).mean()), 3))
+        out["own_class_in_sample"] = own
+        out["classes_share"] = [
+            round(float((classes == n).sum()) / max(1, (classes >= 0).sum()),
+                  3) for n in range(2)]
+        dialog.grab().save(os.path.join(TEMP, "planetx_recognize_areas.png"))
+        dialog.accept()
+        out["layers"] = [n.name() for n in _result_layers()]
+        _drop_group()
+    out["shapes_after_close"] = len(window.recognize_shapes)
+    return None
+
+
 POST135 = tuple(map(float, os.environ.get(
     "PLANETX_POST135", "58.005,56.175").split(",")))  # Черняевский лес
 POST135_SIDE = float(os.environ.get("PLANETX_POST135_SIDE", "5"))

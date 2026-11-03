@@ -80,6 +80,9 @@ BORDER = (20, 20, 20, 255)  # граница объектов на глобус�
 # AlphaEarth мельче 10 м данных нет. Номера ниже AUTO, уровни AlphaEarth
 # с 0.
 FINE_PIXELS = ((-4, 1), (-3, 2), (-2, 5))
+# Клеток образца с контура: поровну по клеткам внутри, голос класса
+# делится на количество его образцов (core/rasterclass.py). Выбор помощника.
+RING_CELLS = 40
 PIXELS = dict(FINE_PIXELS + aef.DETAIL_LEVELS)
 
 
@@ -230,6 +233,7 @@ class ClassRow(QWidget):
                        remove):
             layout.addWidget(widget)
         self.points = []
+        self.rings = []  # контуры образцов - у окна «Распознавание»
         self._paint()
 
     def rgb(self):
@@ -249,7 +253,29 @@ class ClassRow(QWidget):
 
     def set_points(self, points):
         self.points = points
-        self.count.setText(str(len(points)))
+        self._count()
+
+    def set_rings(self, rings):
+        self.rings = rings
+        self._count()
+
+    def samples(self):
+        """Есть ли у класса образцы - точки или контуры."""
+        return bool(self.points or self.rings)
+
+    def enough(self):
+        """Образцов хватает: три точки или контур."""
+        return len(self.points) >= aef.MIN_POINTS or bool(self.rings)
+
+    def _count(self):
+        if self.rings:
+            self.count.setText(tr("{points} т., {rings} о.",
+                                  points=len(self.points),
+                                  rings=len(self.rings)))
+            self.count.setToolTip(tr("Точек и областей образцов класса."))
+        else:
+            self.count.setText(str(len(self.points)))
+            self.count.setToolTip(tr("Контрольных точек класса."))
 
 
 class ClassDialog(QDialog):
@@ -363,6 +389,7 @@ class ClassDialog(QDialog):
             "Щёлкните по глобусу, чтобы поставить точку выбранного "
             "класса. Нужно хотя бы два класса по три точки."), self)
         hint.setWordWrap(True)
+        self.hint = hint
         form = QFormLayout()
         form.addRow(tr("Точка"), self.place)
         form.addRow(tr("Источник"), self.source)
@@ -732,11 +759,10 @@ class ClassTool(SiteTool, QObject):
             dialog.status.setText(tr(
                 "Нет библиотеки zstd, файлы AlphaEarth не прочитать."))
             return
-        rows = [row for row in dialog.rows if row.points]
-        if len(rows) < aef.MIN_CLASSES or any(
-                len(row.points) < aef.MIN_POINTS for row in rows):
-            dialog.status.setText(tr(
-                "Нужно хотя бы два класса по три точки."))
+        rows = [row for row in dialog.rows if row.samples()]
+        if len(rows) < aef.MIN_CLASSES or not all(
+                row.enough() for row in rows):
+            dialog.status.setText(self.too_few_text())
             return
         problem = dialog.area.check()
         if problem:
@@ -750,13 +776,14 @@ class ClassTool(SiteTool, QObject):
         lat, lon = dialog.point
         zone = aef.zone_of(lon, lat)
         points = [(n, p) for n, row in enumerate(rows) for p in row.points]
+        rings = [(n, r) for n, row in enumerate(rows) for r in row.rings]
         colors = [row.rgb() for row in rows]
         names = [row.name.text() for row in rows]
         self.settings = class_settings(len(rows), len(points),
-                                       dialog.split_params())
+                                       dialog.split_params(), len(rings))
         if dialog.raster_id():
             self._build_raster(layer, ring, box, side, level, zone, points,
-                               colors, names)
+                               colors, names, rings)
             return
         key = (box, year, level)
         cached = self.grid if self.grid and self.grid[0] == key else None
@@ -870,10 +897,15 @@ class ClassTool(SiteTool, QObject):
                 "classes": classes, "covered": share, "parts": parts,
                 "shown": shown, "kinds": kinds, "table": table}
 
+    def too_few_text(self):
+        return tr("Нужно хотя бы два класса по три точки.")
+
     def _build_raster(self, layer, ring, box, side, level, zone, points,
-                      colors, names):
+                      colors, names, rings=()):
         """Классы по каналам растра проекта или подложки. Слой QGIS
-        остаётся в главном потоке, рабочий поток читает файл через GDAL."""
+        остаётся в главном потоке, рабочий поток читает файл через GDAL.
+        rings - контуры образцов [(класс, вершины)], у каждого - не больше
+        RING_CELLS клеток поровну по контуру."""
         dialog = self.dialog
         reader = raster_reader(self, layer, box, side, level)
         if reader is None:
@@ -920,6 +952,21 @@ class ClassTool(SiteTool, QObject):
                     labels.append(label)
                 else:
                     outside += 1
+            if rings:
+                good = rasterclass.usable(grid)
+                for label, sample in rings:
+                    cells = np.flatnonzero(aef.ring_mask(
+                        index, x0, y0, step, grid.shape[1:], sample) & good)
+                    if not len(cells):
+                        outside += 1
+                        continue
+                    take = cells[np.linspace(
+                        0, len(cells) - 1, min(RING_CELLS, len(cells)))
+                        .astype(np.int64)]
+                    flat = grid.reshape(grid.shape[0], -1)
+                    for cell in take:
+                        samples.append(flat[:, cell])
+                        labels.append(label)
             if len(set(labels)) < aef.MIN_CLASSES:
                 return {"problem": "points", "found": found}
             classes, _ = rasterclass.classify(
@@ -1122,10 +1169,15 @@ class ClassTool(SiteTool, QObject):
 ClassTool.dialog_class = ClassDialog
 
 
-def class_settings(classes, points, params):
+def class_settings(classes, points, params, areas=0):
     """Настройки классификации строками для названия слоя: классов,
-    точек, деление на объекты (params - split_params окна)."""
-    out = [tr("классов {n}", n=classes), tr("точек {n}", n=points)]
+    точек, областей образцов, деление на объекты (params - split_params
+    окна)."""
+    out = [tr("классов {n}", n=classes)]
+    if points or not areas:
+        out.append(tr("точек {n}", n=points))
+    if areas:
+        out.append(tr("областей {n}", n=areas))
     if params is not None:
         scale, weight, least, join = params
         out.append(tr("объекты: масштаб {scale}, текстура {weight} %, от "
