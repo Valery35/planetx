@@ -21085,15 +21085,17 @@ def trace_wait():
     return None
 
 
-def _task_raster(path, labels):
+def _task_raster(path, labels, spectra=None):
     """Синтетическое сочетание «Сельское хозяйство» (B11 B8 B2) у Перми:
     слева хвоя с вырубкой, справа лиственный лес сверху и пашня снизу,
-    между ними полоса воды. Отражение с шумом 0.005."""
+    между ними полоса воды. Отражение с шумом 0.005. spectra - свои
+    отражения видов."""
     import numpy as np
     from osgeo import gdal, osr
     rows = cols = 300
     kinds = {"conifer": (0.08, 0.20, 0.02), "broadleaf": (0.17, 0.38, 0.03),
              "soil": (0.30, 0.22, 0.08), "water": (0.01, 0.02, 0.04)}
+    kinds.update(spectra or {})
     plan = np.full((rows, cols), "conifer", dtype=object)
     plan[100:160, 50:110] = "soil"
     plan[:150, 170:] = "broadleaf"
@@ -21254,6 +21256,81 @@ def task_names():
     nodes = _result_layers()
     out["layers"] = [n.name() for n in nodes]
     _drop_group()
+    dialog.reject()
+    from qgis.core import QgsProject
+    QgsProject.instance().removeMapLayers(state["task_layers"])
+    return None
+
+
+@check(1000)
+def task_two_open():
+    # Два снимка: летом хвоя и листва одной яркости ИК, осенью листва
+    # теряет ИК. Одним летним снимком хвою не отделить, двумя - да.
+    from qgis.core import QgsProject, QgsRasterLayer
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    folder = os.path.join(TEMP, "planetx_tasks2_{}".format(int(time.time())))
+    os.makedirs(folder, exist_ok=True)
+    labels = ["B11 swir16", "B8 nir", "B2 blue"]
+    summer = os.path.join(folder, "S2_20240715_40VDK_agriculture.tif")
+    autumn = os.path.join(folder, "S2_20241010_40VDK_agriculture.tif")
+    lat, lon = _task_raster(summer, labels, {
+        "conifer": (0.17, 0.32, 0.03), "broadleaf": (0.17, 0.33, 0.03)})
+    _task_raster(autumn, labels, {
+        "conifer": (0.15, 0.29, 0.03), "broadleaf": (0.20, 0.14, 0.04)})
+    one = QgsRasterLayer(summer, "summer", "gdal")
+    two = QgsRasterLayer(autumn, "autumn", "gdal")
+    QgsProject.instance().addMapLayers([one, two])
+    state["task_layers"] = [one.id(), two.id()]
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 14000.0, 0.0, 0.0))
+    tool = window.task_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(one.id()))
+    dialog.area.set_square(lat, lon, 8000.0)
+    dialog.level.setCurrentIndex(0)
+    dialog.second.refill()
+    dialog.second.setCurrentIndex(0)
+    dialog.build.emit()
+    state["task_started"] = time.monotonic()
+    state["task_step"] = "one"
+    result["task_two"] = {}
+
+
+@check(500)
+def task_two_wait():
+    window = state["window"]
+    tool = window.task_tool
+    if tool.job is not None \
+            and time.monotonic() - state["task_started"] < 120.0:
+        return 500
+    out = result["task_two"]
+    dialog = tool.dialog
+    res = tool.result
+    names = sorted(set(res["names"])) if res else None
+    if state["task_step"] == "one":
+        out["one_names"] = names
+        out["one_status"] = dialog.status.text()
+        dialog.second.setCurrentIndex(dialog.second.findData(
+            state["task_layers"][1]))
+        dialog.build.emit()
+        state["task_started"] = time.monotonic()
+        state["task_step"] = "two"
+        return 500
+    out["two_names"] = names
+    out["two_status"] = dialog.status.text()
+    out["bands"] = int(tool.base["centers"].shape[1]) if tool.base else None
+    out["roles"] = tool.channel_roles()[0]
+    out["clearings"] = len(tool.clearing) if tool.clearing is not None \
+        else None
+    out["settings"] = tool.base["settings"][:2] if tool.base else None
+    dialog.second.setCurrentIndex(dialog.second.findData(
+        state["task_layers"][0]))
+    dialog.build.emit()
+    out["same_refused"] = tool.job is None
     dialog.reject()
     from qgis.core import QgsProject
     QgsProject.instance().removeMapLayers(state["task_layers"])

@@ -12,18 +12,41 @@
 файлу окна «Космоснимки».
 """
 import numpy as np
-from qgis.core import QgsSettings
+from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import Qt
 from qgis.PyQt.QtWidgets import QComboBox, QFormLayout, QLabel
 
 from ..core import objecttasks as ot
 from ..i18n import tr
 from ..qt_compat import enum
-from .aefclass import BASEMAP
+from .aefclass import BASEMAP, project_rasters, read_raster
 from .tracing import TraceDialog, TraceTool, raster_roles
 
 SETTINGS = "PlanetX/objects/"
 SUMMER = range(5, 10)  # месяцы, когда хвоя и листва различаются лучше
+
+
+class SecondBox(QComboBox):
+    """Список «Второй снимок»: «Нет» и растры проекта, заполняется при
+    открытии списка."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.refill()
+
+    def refill(self):
+        chosen = self.currentData()
+        self.blockSignals(True)
+        self.clear()
+        self.addItem(tr("Нет"), "")
+        for layer in project_rasters():
+            self.addItem(layer.name(), layer.id())
+        self.setCurrentIndex(max(0, self.findData(chosen)))
+        self.blockSignals(False)
+
+    def showPopup(self):
+        self.refill()
+        super().showPopup()
 
 
 def scenario_names():
@@ -71,9 +94,17 @@ class TaskDialog(TraceDialog):
             "окно узнаёт ближний ИК, красный и SWIR. Хвоя от листвы лучше "
             "отделяется на летнем снимке."), self)
         self.need.setWordWrap(True)
+        self.second = SecondBox(self)
+        self.second.setToolTip(tr(
+            "Снимок того же места другой даты, лучше другого сезона, тоже "
+            "из окна «Космоснимки». Его каналы ложатся на ту же сетку "
+            "участка и идут в раскладку на цвета вместе с первыми. Хвоя "
+            "отделяется от листвы и трав по ближнему ИК: у хвои на двух "
+            "датах он почти не меняется."))
         form = QFormLayout()
         form.addRow(tr("Задача"), self.task)
         form.addRow("", self.about)
+        form.addRow(tr("Второй снимок"), self.second)
         self.layout().insertLayout(0, form)
         self.layout().insertWidget(1, self.need)
         chosen = QgsSettings().value(SETTINGS + "task", "forest")
@@ -83,6 +114,11 @@ class TaskDialog(TraceDialog):
 
     def scenario(self):
         return self.task.currentData()
+
+    def second_raster(self):
+        """Второй снимок, None - «Нет» или слоя уже нет."""
+        return QgsProject.instance().mapLayer(self.second.currentData()
+                                              or "")
 
     def _task(self, first=False):
         key = self.scenario()
@@ -108,12 +144,55 @@ class TaskTool(TraceTool):
         self.clearing = None  # номера областей-рубок
         self.notes = []  # замечания правил к строке итога
         self.rules = None  # названия цветов по правилам
+        self.more_roles = None  # роли каналов второго снимка
+        self.more_name = ""
 
     def tool_title(self):
         return tr("Выделение объектов")
 
     def rule_names(self):
         return self.rules
+
+    def channel_roles(self):
+        roles, month = super().channel_roles()
+        if self.more_roles is None or roles is None:
+            return roles, month
+        return list(roles) + [r and r + "@2" for r in self.more_roles], month
+
+    def more_bands(self, box, side):
+        """Каналы второго снимка на сетке первого: тот же шаг и рамка."""
+        dialog = self.dialog
+        self.more_roles = None
+        layer = dialog.second_raster()
+        if layer is None:
+            return None
+        if layer.id() == dialog.raster_id():
+            dialog.status.setText(tr("Второй снимок совпадает с первым."))
+            return False
+        roles, _ = raster_roles(layer)
+        if not roles or "nir" not in roles:
+            dialog.status.setText(tr(
+                "У второго снимка не узнать ближний ИК - нужен снимок окна "
+                "«Космоснимки» с подписями каналов."))
+            return False
+        if not layer.crs().isValid():
+            dialog.status.setText(tr("У второго снимка не задана система "
+                                     "координат."))
+            return False
+        self.more_roles = roles
+        self.more_name = layer.name()
+        path, wkt = layer.source().split("|")[0], layer.crs().toWkt()
+
+        def add(index, found):
+            x0, y0, step, grid = found
+            other = read_raster(path, wkt, index, box, side, step)
+            if isinstance(other, str) \
+                    or other[3].shape[1:] != grid.shape[1:] \
+                    or not np.isfinite(other[3]).any():
+                return "second"
+            return x0, y0, step, np.concatenate((grid, other[3]))
+
+        return (layer.id(), path), add
 
     def build(self):
         dialog = self.dialog
@@ -148,7 +227,10 @@ class TaskTool(TraceTool):
                 "названы."))
             return [-1] * count
         scenario = self.dialog.scenario()
-        raw = ot.color_kinds(centers, self.roles)
+        first = len(self.roles)
+        raw = ot.color_kinds(centers[:, :first], self.roles)
+        if self.more_roles is not None:
+            raw = ot.two_dates(raw, centers, self.roles, self.more_roles)
         kinds = ot.scenario_kinds(raw, scenario)
         regions = ot.region_kinds(base["parts"], base["kinds"], raw,
                                   scenario)
@@ -172,8 +254,12 @@ class TaskTool(TraceTool):
         base["hexes"] = ["#%02x%02x%02x" % c for c in base["colors"]]
         task = self.dialog.task.currentText()
         base["settings"] = [tr("задача «{task}»", task=task)] \
-            + base["settings"]
-        if self.month is not None and self.month not in SUMMER \
+            + ([tr("второй снимок «{name}»", name=self.more_name)]
+               if self.more_roles is not None else []) + base["settings"]
+        if self.more_roles is not None:
+            self.notes.append(tr("Хвоя отделена от листвы по двум "
+                                 "снимкам."))
+        elif self.month is not None and self.month not in SUMMER \
                 and ot.CONIFER in ot.SCENARIOS[scenario]["kinds"]:
             self.notes.append(tr(
                 "Снимок не летний, хвоя и листва различаются хуже."))

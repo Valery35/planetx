@@ -6504,6 +6504,30 @@ EN = {
     "Снимок не летний, хвоя и листва различаются хуже.":
         "The image is not a summer one, conifers and broadleaf differ less.",
     "Рубки и гари - {area} га.": "Clear-cuts and burns - {area} ha.",
+    # Второй снимок окна «Выделение объектов».
+    "Второй снимок": "Second image",
+    "Снимок того же места другой даты, лучше другого сезона, тоже из окна "
+    "«Космоснимки». Его каналы ложатся на ту же сетку участка и идут "
+    "в раскладку на цвета вместе с первыми. Хвоя отделяется от листвы "
+    "и трав по ближнему ИК: у хвои на двух датах он почти не меняется.":
+        "An image of the same place of another date, better of another "
+        "season, also from the Satellite images window. Its bands go to the "
+        "same site grid and into the split into colors together with the "
+        "first ones. Conifers separate from broadleaf and grass by near "
+        "infrared, which conifers keep almost unchanged on both dates.",
+    "Второй снимок совпадает с первым.":
+        "The second image is the same as the first one.",
+    "У второго снимка не узнать ближний ИК - нужен снимок окна "
+    "«Космоснимки» с подписями каналов.":
+        "The second image gives no near infrared - an image of the "
+        "Satellite images window with band labels is needed.",
+    "У второго снимка не задана система координат.":
+        "The second image has no coordinate system.",
+    "второй снимок «{name}»": "second image “{name}”",
+    "Хвоя отделена от листвы по двум снимкам.":
+        "Conifers are separated from broadleaf by two images.",
+    "Второй снимок не прочитан или не накрывает участок.":
+        "The second image is not read or does not cover the site.",
     # Названия классов от помощника (ui/tracing.py, core/classnames.py).
     "Названия от помощника": "Names from the assistant",
     "ИИ-помощник предлагает названия классов по таблице - средним значениям "

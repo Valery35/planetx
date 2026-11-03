@@ -48,9 +48,11 @@ SNOW_VIS = 0.35  # снег ярок в видимом и тёмен в SWIR
 SNOW_SWIR = 0.15
 CONIFER_SHARE = 0.4  # нижняя доля размаха ближнего ИК растительности
 CONIFER_SPREAD = 0.05  # размах ниже этого - хвою не отделить
+EVERGREEN = 0.75  # ИК меньшей даты к большей у хвои по двум снимкам
 REFLECTANCE_MAX = 1.5  # значения выше - не отражение
 NEAR_FOREST = 0.25  # доля хвои вокруг почвы, с которой это рубка
 RIM = 3  # клеток, ширина полосы вокруг куска почвы
+THICK = 0.5  # доля внутренних клеток куска хвои, с которой это лес
 
 # Виды цветов.
 WATER, CONIFER, BROADLEAF, VEGETATION, SOIL, CLEARING, SNOW, OTHER = (
@@ -149,6 +151,29 @@ def color_kinds(centers, roles):
     return kinds
 
 
+def two_dates(kinds, centers, roles, more_roles):
+    """Виды цветов по двум снимкам: centers - средние каналов первого
+    снимка и за ними второго, roles и more_roles - их роли. Растительность
+    первого снимка, у которой ближний ИК на двух датах почти не меняется
+    (меньшее к большему не ниже EVERGREEN), - хвоя, остальная - листва и
+    травы: листва и травы в другой сезон теряют отражение ИК, хвоя нет.
+    Без ближнего ИК у второго снимка виды остаются прежними."""
+    more_roles = list(more_roles or ())
+    if "nir" not in more_roles:
+        return list(kinds)
+    centers = np.asarray(centers, dtype=np.float64)
+    first = centers[:, list(roles).index("nir")]
+    second = centers[:, len(roles) + more_roles.index("nir")]
+    out = []
+    for kind, a, b in zip(kinds, first, second):
+        if kind in (CONIFER, BROADLEAF, VEGETATION):
+            high = max(a, b)
+            keep = min(a, b) / high if high > 0 else 0.0
+            kind = CONIFER if keep >= EVERGREEN else BROADLEAF
+        out.append(kind)
+    return out
+
+
 def scenario_kinds(kinds, scenario):
     """Виды цветов, которые различает сценарий: прочие - в замену."""
     spec = SCENARIOS[scenario]
@@ -157,6 +182,22 @@ def scenario_kinds(kinds, scenario):
         kind = spec["merge"].get(kind, kind)
         out.append(kind if kind in spec["kinds"] else OTHER)
     return out
+
+
+def inner_shares(pieces):
+    """Доля внутренних клеток каждого куска: все соседи в сетке - тот же
+    кусок, край сетки не в счёт. У кольца в одну-две клетки доля близка
+    к нулю."""
+    pieces = np.asarray(pieces)
+    count = int(pieces.max()) + 1 if pieces.size else 0
+    inner = pieces >= 0
+    inner[1:] &= pieces[1:] == pieces[:-1]
+    inner[:-1] &= pieces[:-1] == pieces[1:]
+    inner[:, 1:] &= pieces[:, 1:] == pieces[:, :-1]
+    inner[:, :-1] &= pieces[:, :-1] == pieces[:, 1:]
+    total = np.bincount(pieces[pieces >= 0], minlength=count)
+    found = np.bincount(pieces[inner], minlength=count)
+    return found / np.maximum(total, 1)
 
 
 def ring_shares(pieces, piece_kinds, target, wanted, width):
@@ -212,6 +253,12 @@ def region_kinds(parts, region_colors, kinds, scenario):
             parts, np.array([codes[k] for k in out], dtype=np.int64))
         names = {n: k for k, n in codes.items()}
         piece_kinds = [names[int(c)] for c in whole_kinds]
+        # Лес - только хвоя с толщей: смешанные пиксели края поля бывают
+        # похожи на хвою и дают тонкое кольцо вокруг поля.
+        thick = inner_shares(whole) >= THICK
+        piece_kinds = [CONIFER if k == CONIFER and thick[n]
+                       else OTHER if k == CONIFER else k
+                       for n, k in enumerate(piece_kinds)]
         shares = ring_shares(whole, piece_kinds, CONIFER,
                              [n for n, k in enumerate(piece_kinds)
                               if k == SOIL], RIM)

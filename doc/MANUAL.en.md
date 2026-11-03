@@ -3207,7 +3207,20 @@ The rules:
 
 The thresholds are typical reflectances, and they are worth checking on your
 own image. Conifers separate from broadleaf better on a summer image, and for
-an image of another season the line under the fields reminds of it. The class
+an image of another season the line under the fields reminds of it.
+
+One image may be not enough - in summer conifers and broadleaf may have the
+same near infrared brightness. The Second image list takes an image of the
+same place of another date, better of another season, also from the Satellite
+images window with band labels. Its bands go to the same site grid and into
+the split into colors together with the first ones. Vegetation whose near
+infrared hardly changes between the dates (the smaller value to the larger one
+not below 0.75) is conifers, the rest is broadleaf and grass, which lose
+infrared reflectance in another season. Clear-cuts are bare soil only among
+conifers with depth - a piece where at least half of the cells are inner.
+Mixed pixels along the edge of a field may look like conifers and would
+otherwise give a thin ring of "forest" around the field. The second image is
+named in the layer settings. The class
 names and merges can be corrected in the Classes table, and clear-cuts are a
 separate class after the classes of the table. OK writes a layer as in
 tracing, and the task is the first of the settings in the layer name.

@@ -28,6 +28,13 @@ class TestQuestion(unittest.TestCase):
         self.assertIn("Класс 2 - 0.300, 0.220, 0.080, доля участка 21 %, "
                       "областей 3, средняя область 44.0 га.", text)
 
+    def test_second_image_bands(self):
+        rows = [{"means": [0.1, 0.2, 0.3, 0.4], "share": 1.0, "regions": 1,
+                 "area_ha": 1.0}]
+        text = cn.question(rows, ["nir", "red", "nir@2", None], "отражение")
+        self.assertIn("ближний ИК, красный, ближний ИК второго снимка, "
+                      "канал 4", text)
+
     def test_unknown_bands_numbered(self):
         text = cn.question(ROWS, None, "яркость 0-255")
         self.assertIn("канал 1, канал 2, канал 3", text)

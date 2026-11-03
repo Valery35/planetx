@@ -404,6 +404,20 @@ class TraceTool(SiteTool, QObject):
         свой класс. Названия и цвета наследник меняет в self.base."""
         return [-1] * len(self.base["colors"])
 
+    def more_bands(self, box, side):
+        """Каналы второго источника на той же сетке - у наследника:
+        (ключ, add(index, found) в рабочем потоке - found с добавленными
+        каналами или код отказа), None - нет, False - отказ, причина
+        в строке итога. Главный поток."""
+        return None
+
+    def channel_roles(self):
+        """Роли каналов сетки и месяц съёмки для вопроса помощнику."""
+        layer = self.dialog.raster()
+        if self.dialog.raster_id() == BASEMAP or layer is None:
+            return ["red", "green", "blue"], None
+        return raster_roles(layer)
+
     def open_here(self, lat, lon):
         dialog = self.dialog
         if dialog is None:
@@ -454,6 +468,11 @@ class TraceTool(SiteTool, QObject):
         if reader is None:
             return
         read, key, name, credit = reader
+        more = self.more_bands(box, side)
+        if more is False:
+            return
+        if more is not None:
+            key = (key, more[0])
         cached = self.grid if self.grid and self.grid[0] == key else None
         colors, smooth = dialog.colors.value(), dialog.smooth.value()
         least, corner = dialog.least.value(), dialog.corner.value()
@@ -463,6 +482,10 @@ class TraceTool(SiteTool, QObject):
             found = cached[1] if cached else read(index)
             if isinstance(found, str):
                 return {"problem": found}
+            if more is not None and not cached:
+                found = more[1](index, found)
+                if isinstance(found, str):
+                    return {"problem": found}
             stop_point(self)
             x0, y0, step, grid = found
             inside = aef.ring_mask(index, x0, y0, step, grid.shape[1:], ring)
@@ -558,11 +581,10 @@ class TraceTool(SiteTool, QObject):
         count = len(base["colors"])
         centers = np.asarray(base["centers"], dtype=np.float64)
         layer = dialog.raster()
+        roles, month = self.channel_roles()
         if dialog.raster_id() == BASEMAP or layer is None:
-            roles, month = ["red", "green", "blue"], None
             units = tr("яркость 0-255")
         else:
-            roles, month = raster_roles(layer)
             units = tr("отражение 0-1") \
                 if np.nanmax(centers) <= objecttasks.REFLECTANCE_MAX \
                 else tr("значения растра")

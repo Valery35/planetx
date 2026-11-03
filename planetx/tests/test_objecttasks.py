@@ -68,6 +68,24 @@ class TestKinds(unittest.TestCase):
                          [ot.OTHER, ot.OTHER, ot.OTHER, ot.WATER])
 
 
+class TestTwoDates(unittest.TestCase):
+    def test_leaf_off_tells_conifer(self):
+        # Лето: хвоя и листва одной яркости ИК (одним снимком не
+        # различить), осень: листва потеряла ИК, хвоя нет.
+        summer = [[0.17, 0.32, 0.03], [0.17, 0.33, 0.03], SOIL]
+        autumn = [[0.15, 0.29, 0.03], [0.20, 0.14, 0.04], SOIL]
+        centers = np.hstack([summer, autumn])
+        kinds = ot.color_kinds(np.array(summer), AGRI)
+        self.assertEqual(kinds, [ot.VEGETATION, ot.VEGETATION, ot.SOIL])
+        both = ot.two_dates(kinds, centers, AGRI, AGRI)
+        self.assertEqual(both, [ot.CONIFER, ot.BROADLEAF, ot.SOIL])
+
+    def test_second_without_nir_changes_nothing(self):
+        kinds = [ot.VEGETATION, ot.SOIL]
+        self.assertEqual(ot.two_dates(kinds, np.zeros((2, 6)), AGRI,
+                                      ["red", "green", "blue"]), kinds)
+
+
 class TestClearing(unittest.TestCase):
     def setUp(self):
         # Слева лес (0), в нём вырубка (1), справа поле (2) среди пашни
@@ -110,6 +128,23 @@ class TestClearing(unittest.TestCase):
         out = ot.region_kinds(parts, [0, 1, 2],
                               [ot.SOIL, ot.BROADLEAF, ot.CONIFER], "forest")
         self.assertEqual(out[0], ot.SOIL)
+
+    def test_thin_conifer_rim_is_not_forest(self):
+        # Поле (1) в кольце смешанных пикселей «хвои» (2) шириной
+        # в клетку среди листвы (0) - не рубка.
+        parts = np.zeros((30, 30), dtype=np.int64)
+        parts[9:21, 9:21] = 2
+        parts[10:20, 10:20] = 1
+        out = ot.region_kinds(parts, [0, 1, 2],
+                              [ot.BROADLEAF, ot.SOIL, ot.CONIFER], "forest")
+        self.assertEqual(out[1], ot.SOIL)
+
+    def test_inner_shares(self):
+        parts = np.zeros((10, 10), dtype=np.int64)
+        parts[0] = 1
+        shares = ot.inner_shares(parts)
+        self.assertEqual(shares[1], 0.0)
+        self.assertAlmostEqual(shares[0], 80.0 / 90.0)
 
     def test_water_scenario_has_no_clearing(self):
         out = ot.region_kinds(self.parts, [0, 1, 1],

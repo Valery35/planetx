@@ -41,6 +41,13 @@ def system_text(language):
         "в том же порядке, без пояснений.".format(lang))
 
 
+def _role_name(role):
+    """Название роли канала, «nir@2» - канал второго снимка."""
+    base, _, more = role.partition("@")
+    name = ROLE_NAMES.get(base, base)
+    return name + " второго снимка" if more else name
+
+
 def _number(value):
     if abs(value) >= 10:
         return "{:.1f}".format(value)
@@ -60,7 +67,7 @@ def question(rows, roles, units, place=None, month=None):
     if month is not None:
         lines.append("Месяц съёмки - {}.".format(month))
     count = len(rows[0]["means"]) if rows else 0
-    names = [ROLE_NAMES.get(r, r) if r else "канал {}".format(n + 1)
+    names = [_role_name(r) if r else "канал {}".format(n + 1)
              for n, r in enumerate((roles or [None] * count)[:count])]
     names += ["канал {}".format(n + 1) for n in range(len(names), count)]
     lines.append("Каналы - {}. Значения - {}.".format(", ".join(names),
