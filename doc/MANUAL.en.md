@@ -3313,6 +3313,10 @@ If the result is not the expected one:
   the number of colors and the smallest area.
 - Clouds and shadows come out as their own classes. Take another image, Find
   image shows only images without cloud over the site.
+- Built-up areas come out as soil or clear-cuts. Roofs, asphalt and yards
+  reflect like bare soil, and yards with trees next to a forest look like
+  clear-cuts. The task has no built-up class. Outline a site without
+  settlements with Draw or correct the class in the Classes table.
 
 The class names and merges can be corrected in the Classes table, and
 clear-cuts and lines are separate classes after the classes of the table. The

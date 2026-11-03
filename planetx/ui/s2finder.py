@@ -39,7 +39,7 @@ LOAD_PAUSE = 3000  # мс между ними
 # решение автора от 3 ноября 2026 года «у нас снег сходит в конце
 # апреля»: на снегу хвоя тёмная, голый лиственный лес и поля светлые
 # (core.objecttasks.two_dates), а солнце уже не ниже SUN_MIN.
-SUMMER = (6, 7, 8)
+SUMMER = (7, 6, 8)  # по порядку - июль лучше всего
 OFF_SEASON = (3, 4)
 
 
@@ -49,10 +49,15 @@ def folder():
                         or os.path.expanduser("~"), "sentinel")
 
 
-def order(found):
-    """[(сцена, облачность, данные)]: облачность, новые раньше."""
-    return sorted(found, key=lambda p: (round(p[1]),
-                                        [-ord(c) for c in p[0].when]))
+def order(found, months=SUMMER):
+    """[(сцена, облачность, данные)]: облачность, месяц по порядку months
+    (у второго снимка март раньше апреля - в Перми к середине апреля снег
+    в городе и на открытых местах уже сходит, прогон 3 ноября 2026 года),
+    новые раньше."""
+    return sorted(found, key=lambda p: (
+        round(p[1]), months.index(int(p[0].when[5:7]))
+        if int(p[0].when[5:7]) in months else len(months),
+        [-ord(c) for c in p[0].when]))
 
 
 class SceneFinder(QObject):
@@ -196,7 +201,7 @@ class SceneFinder(QObject):
         counting = bool(self.jobs)
         self.jobs = pending
         if counting and not pending:
-            found = order(self.result)[:SHOWN]
+            found = order(self.result, self.months)[:SHOWN]
             self.status.emit(
                 tr("Подходящих снимков: {count}. Двойной щелчок по снимку "
                    "загружает его.", count=len(found)) if found

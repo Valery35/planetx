@@ -21395,6 +21395,162 @@ def task_find_shot():
     return None
 
 
+POST135 = tuple(map(float, os.environ.get(
+    "PLANETX_POST135", "58.005,56.175").split(",")))  # Черняевский лес
+POST135_SIDE = float(os.environ.get("PLANETX_POST135_SIDE", "5"))
+
+
+def _post135_wait(dialog, key, spent_max=240.0):
+    return dialog.finder.busy() and \
+        time.monotonic() - state[key] < spent_max
+
+
+@check(1000, manual=True)
+def post135_open():
+    """Кадры статьи 1.35: лес у Перми - снимок Esri, лето, лето + апрель.
+    PLANETX_POST135 - точка, PLANETX_POST135_SIDE - участок, км."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.choose_basemap(0)
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(Pose(POST135[0], POST135[1],
+                             POST135_SIDE * 1700.0, 0.0, 0.0))
+    view.update()
+    tool = window.task_tool
+    tool.grid = None
+    dialog = tool.open_here(*POST135)
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    dialog.area.set_square(POST135[0], POST135[1], POST135_SIDE * 1000.0)
+    dialog.lines.setChecked(True)
+    dialog.more.setChecked(False)
+    dialog._find("source")
+    state["p135"] = time.monotonic()
+    result["post135"] = {}
+
+
+@check(2000, manual=True)
+def post135_photo():
+    window = state["window"]
+    dialog = window.task_tool.dialog
+    view = window.view
+    if _post135_wait(dialog, "p135") or view.load_missing:
+        view.update()
+        return 2000
+    out = result["post135"]
+    out["summer_found"] = [dialog.scenes.item(n).text()
+                           for n in range(dialog.scenes.count())]
+    window.copy_view().save(os.path.join(TEMP, "planetx_p135_photo.png"))
+    if dialog.scenes.count():
+        dialog._load(dialog.scenes.item(0))
+    state["p135"] = time.monotonic()
+    return None
+
+
+@check(1000, manual=True)
+def post135_summer():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    if _post135_wait(dialog, "p135"):
+        return 1000
+    out = result["post135"]
+    out["summer"] = dialog.raster().name() if dialog.raster() else None
+    dialog.second.setCurrentIndex(0)
+    tool.grid = None
+    dialog.build.emit()
+    state["p135"] = time.monotonic()
+    return None
+
+
+@check(2000, manual=True)
+def post135_summer_shot():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    view = window.view
+    if (tool.job is not None or view.load_missing) \
+            and time.monotonic() - state["p135"] < 180:
+        view.update()
+        return 2000
+    if not state.get("p135_settle"):
+        state["p135_settle"] = True
+        return 3000
+    state["p135_settle"] = False
+    out = result["post135"]
+    out["summer_status"] = dialog.status.text()
+    out["summer_legend"] = [t for _, t in tool.legend_rows()]
+    window.copy_view().save(os.path.join(TEMP, "planetx_p135_summer.png"))
+    dialog._find("second")
+    state["p135"] = time.monotonic()
+    return None
+
+
+@check(1000, manual=True)
+def post135_winter():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    if _post135_wait(dialog, "p135"):
+        return 1000
+    out = result["post135"]
+    if "winter_found" not in out:
+        out["winter_found"] = [dialog.scenes.item(n).text()
+                               for n in range(dialog.scenes.count())]
+        if dialog.scenes.count():
+            dialog._load(dialog.scenes.item(0))
+            state["p135"] = time.monotonic()
+            return 1000
+    out["second"] = dialog.second_raster().name() \
+        if dialog.second_raster() else None
+    tool.grid = None
+    dialog.build.emit()
+    state["p135"] = time.monotonic()
+    return None
+
+
+@check(2000, manual=True)
+def post135_winter_shot():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    view = window.view
+    if (tool.job is not None or view.load_missing) \
+            and time.monotonic() - state["p135"] < 180:
+        view.update()
+        return 2000
+    if not state.get("p135_settle"):
+        state["p135_settle"] = True
+        return 3000
+    out = result["post135"]
+    out["winter_status"] = dialog.status.text()
+    out["winter_legend"] = [t for _, t in tool.legend_rows()]
+    window.copy_view().save(os.path.join(TEMP, "planetx_p135_winter.png"))
+    dialog.grab().save(os.path.join(TEMP, "planetx_p135_dialog.png"))
+    path = os.path.join(TEMP, "planetx_p135_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    from qgis.core import QgsMapRendererSequentialJob, QgsMapSettings
+    from qgis.PyQt.QtCore import QSize
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    drawn = [n.layer() for n in nodes
+             if not n.layer().name().startswith("Участок")]
+    if drawn:
+        settings = QgsMapSettings()
+        settings.setLayers(drawn)
+        settings.setDestinationCrs(drawn[-1].crs())
+        settings.setExtent(drawn[-1].extent())
+        settings.setOutputSize(QSize(1400, 1400))
+        job = QgsMapRendererSequentialJob(settings)
+        job.start()
+        job.waitForFinished()
+        job.renderedImage().save(os.path.join(TEMP,
+                                              "planetx_p135_layers.png"))
+    return None
+
+
 POST133 = tuple(map(float, os.environ.get(
     "PLANETX_POST133", "59.99,57.43").split(",")))  # вырубки в тайге
 
