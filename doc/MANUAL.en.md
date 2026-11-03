@@ -3104,6 +3104,36 @@ embeddings combine a year of images and are less sensitive to this. This globe
 layer is shared with classification and the viewshed from a point, a new
 calculation of any of them removes the previous one.
 
+### Tracing
+
+The Tracing… item of the Site analysis submenu of the globe menu opens the
+window of image vectorization for the point under the cursor. The image of the
+site is split into colors, and the areas of one color are outlined with smooth
+polygons, as Trace Bitmap of Inkscape does with the Potrace method.
+
+The source is the globe basemap or a project raster, the site is shared with
+the other analysis windows, and the pixel is the same as in the Classification
+window. For a raster with many bands the colors are found by all bands, and the
+first three give the layer colors.
+
+The fields of the window:
+- Colors - how many colors the image is split into, from 2 to 32.
+- Image smoothing - passes of 3 × 3 smoothing before the split, it removes
+  noise and small details.
+- Smallest area, cells - a smaller area merges with the neighbor along the
+  longest shared border.
+- Corner rounding - 0 gives a broken line with corners, the larger the value,
+  the more corners become smooth arcs.
+
+The Build button shows the colors of the site cells on the globe, and the line
+under the fields gives the number of colors and areas. OK writes a polygon
+layer Tracing with the fields cls (color number), color and area_ha to the
+calculation subgroup, and the areas are drawn in their colors. Neighboring
+areas share their border, so there are no gaps or overlaps between the
+polygons. This globe layer is shared with classification, similar areas and the
+viewshed from a point, a new calculation of any of them removes the previous
+one.
+
 ### Minerals by spectrum
 
 The Minerals by spectrum… item of the Site analysis submenu of the globe menu

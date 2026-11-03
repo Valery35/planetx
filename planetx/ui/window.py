@@ -73,6 +73,7 @@ from .aef import ChangeTool
 from .fieldmap import FieldTool
 from .aefclass import ClassTool
 from .similar import SimilarTool
+from .tracing import TraceTool
 from .spectral import SpectralTool
 from .emit import EmitTool
 from .sitelayer import SiteLayer, ViewshedOwner
@@ -739,6 +740,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.field_tool = FieldTool(self)
         self.class_tool = ClassTool(self)
         self.similar_tool = SimilarTool(self)
+        self.trace_tool = TraceTool(self)
         self.spectral_tool = SpectralTool(self)
         self.emit_tool = EmitTool(self)
         self.earthwork = EarthworkTool(self)
@@ -1163,6 +1165,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.field_tool.close()
             self.class_tool.close()
             self.similar_tool.close()
+            self.trace_tool.close()
             self.spectral_tool.close()
             self.emit_tool.close()
             self.earthwork.close()

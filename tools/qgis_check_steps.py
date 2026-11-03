@@ -20862,6 +20862,205 @@ def class_objects_again():
     return None
 
 
+@check(1000)
+def trace_open():
+    # Трассировка снимка: цвета участка, гладкие многоугольники без щелей.
+    # Тот же снимок, что у сегментации, сеть не нужна.
+    import math
+    from qgis.core import QgsProject, QgsRasterLayer
+    window = state["window"]
+    path = os.path.join(TEMP, "planetx_trace.tif")
+    lat, lon, _, span = _objects_raster(path)
+    layer = QgsRasterLayer(path, "trace image", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["trace_layer"] = layer.id()
+    out = result.setdefault("trace", {"layer_valid": layer.isValid()})
+    from planetx.core.navigation import Pose
+    side = span * math.cos(math.radians(lat)) * 0.95
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, side * 1.3, 0.0, 0.0))
+    window.view.update()
+    tool = window.trace_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    out["no_alphaearth"] = dialog.source.findData("") < 0
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    dialog.area.reset_square()
+    dialog.area.side.setValue(side / 1000.0)
+    dialog.level.setCurrentIndex(0)
+    dialog.colors.setValue(4)
+    dialog.build.emit()
+    state["trace_started"] = time.monotonic()
+
+
+@check(500)
+def trace_wait():
+    window = state["window"]
+    tool = window.trace_tool
+    if tool.job is not None \
+            and time.monotonic() - state["trace_started"] < 120.0:
+        return 500
+    textures = window.view.gibs["viewshed"].textures
+    if tool.result is not None and len(textures) < 4 \
+            and time.monotonic() - state["trace_started"] < 30.0:
+        window.view.update()
+        return 500
+    from osgeo import ogr
+    out = result["trace"]
+    out["build_s"] = round(time.monotonic() - state["trace_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    res = tool.result
+    out["built"] = res is not None
+    if res is None:
+        return None
+    out["grid"] = [list(res["classes"].shape), res["step"]]
+    out["colors"] = res["names"]
+    out["regions"] = len(res["shapes"])
+    out["legend"] = window.site_legend.isVisible()
+    window.view.update()
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_trace.png"))
+    path = os.path.join(TEMP, "planetx_trace_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    data = ogr.Open(path)
+    layer = data.GetLayerByName("traced")
+    out["features"] = layer.GetFeatureCount()
+    area, invalid, vertices = 0.0, 0, 0
+    for feature in layer:
+        area += feature.GetField("area_ha")
+        geometry = feature.GetGeometryRef()
+        invalid += not geometry.IsValid()
+        vertices += sum(geometry.GetGeometryRef(n).GetGeometryRef(0)
+                        .GetPointCount()
+                        for n in range(geometry.GetGeometryCount()))
+    out["invalid"] = invalid
+    out["vertices"] = vertices
+    # Области закрывают участок: сумма площадей - клетки участка.
+    cells = float((res["classes"] >= 0).sum()) * res["step"] ** 2 / 1e4
+    out["area_ha"] = [round(area, 3), round(cells, 3)]
+    data = None
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    if nodes:
+        out["crs"] = nodes[0].layer().crs().authid()
+        out["renderer"] = nodes[0].layer().renderer().type()
+        cat = nodes[0].layer().renderer().categories()
+        out["categories"] = len(cat)
+    _drop_group()
+    dialog.reject()
+    from qgis.core import QgsProject
+    QgsProject.instance().removeMapLayer(state["trace_layer"])
+    return None
+
+
+@check(1500)
+def trace_base():
+    # Трассировка подложки глобуса - настоящий снимок Esri того же места.
+    import math
+    from qgis.core import QgsSettings
+    from planetx.ui import aefclass
+    from planetx.ui.globe.base import ACCEPTED_KEY
+    window = state["window"]
+    lat, lon, _, span = _objects_raster(os.path.join(TEMP,
+                                                     "planetx_trace.tif"))
+    window.choose_basemap(0)
+    source = window._earth_source()
+    settings = QgsSettings()
+    key = "analysis:" + source.url
+    settings.setValue(ACCEPTED_KEY, list(
+        settings.value(ACCEPTED_KEY) or []) + [key])
+    from planetx.core.navigation import Pose
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, span * 0.6, 0.0, 0.0))
+    window.view.update()
+    tool = window.trace_tool
+    tool.grid = None
+    tool.result = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.setCurrentIndex(dialog.source.findData(aefclass.BASEMAP))
+    dialog.area.set_square(lat, lon, span * math.cos(math.radians(lat))
+                           * 0.95)
+    dialog.level.setCurrentIndex(0)
+    dialog.colors.setValue(8)
+    dialog.build.emit()
+    result["trace_base"] = {"source": source.name}
+    state["trace_started"] = time.monotonic()
+
+
+@check(500)
+def trace_base_wait():
+    from osgeo import ogr
+    window = state["window"]
+    tool = window.trace_tool
+    if tool.job is not None \
+            and time.monotonic() - state["trace_started"] < 180.0:
+        return 500
+    out = result["trace_base"]
+    out["build_s"] = round(time.monotonic() - state["trace_started"], 2)
+    out["status"] = tool.dialog.status.text()
+    res = tool.result
+    if res is None:
+        return None
+    out["grid"] = [list(res["classes"].shape), res["step"]]
+    out["regions"] = len(res["shapes"])
+    path = os.path.join(TEMP, "planetx_trace_base.gpkg")
+    if os.path.exists(path):
+        os.remove(path)
+    started = time.monotonic()
+    out["exported"] = bool(tool.export(path))
+    out["export_s"] = round(time.monotonic() - started, 2)
+    data = ogr.Open(path)
+    layer = data.GetLayerByName("traced")
+    out["features"] = layer.GetFeatureCount()
+    area, invalid = 0.0, 0
+    for feature in layer:
+        area += feature.GetField("area_ha")
+        invalid += not feature.GetGeometryRef().IsValid()
+    out["invalid"] = invalid
+    cells = float((res["classes"] >= 0).sum()) * res["step"] ** 2 / 1e4
+    out["area_ha"] = [round(area, 3), round(cells, 3)]
+    data = None
+    # Картинка слоя многоугольников - QGIS рисует его сам.
+    from qgis.core import QgsMapRendererSequentialJob, QgsMapSettings
+    from qgis.PyQt.QtCore import QSize
+    nodes = _result_layers()
+    traced = [n.layer() for n in nodes if n.layer().name().startswith(
+        "Трассировка")]
+    if traced:
+        settings = QgsMapSettings()
+        settings.setLayers(traced)
+        settings.setDestinationCrs(traced[0].crs())
+        settings.setExtent(traced[0].extent())
+        settings.setOutputSize(QSize(1400, 1400))
+        job = QgsMapRendererSequentialJob(settings)
+        job.start()
+        job.waitForFinished()
+        job.renderedImage().save(os.path.join(TEMP,
+                                              "planetx_trace_layer.png"))
+    # Снять картинки вместе со слоем вида: голый _drop_tiles оставил бы
+    # слою удалённый загрузчик.
+    tool.clear()
+    window.view.update()
+    state["trace_shot_at"] = time.monotonic()
+    return None
+
+
+@check(500)
+def trace_base_shot():
+    window = state["window"]
+    if time.monotonic() - state["trace_shot_at"] < 12.0:
+        window.view.update()
+        return 500
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_trace_base.png"))
+    _drop_group()
+    window.trace_tool.dialog.reject()
+    return None
+
+
 @check(500)
 def class_objects_join():
     # Те же объекты, соседи одного класса - одним многоугольником.

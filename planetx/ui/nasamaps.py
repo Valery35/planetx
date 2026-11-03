@@ -191,7 +191,8 @@ LAYERS = (("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
 # только в меню на глобусе, решение автора от 27 октября 2026 года.
 TOOL = "tool:"
 TOOLS = (("here:change", "change"), ("here:classify", "change"),
-         ("here:similar", "change"), ("here:sentinel", "survey"),
+         ("here:similar", "change"), ("here:trace", "change"),
+         ("here:sentinel", "survey"),
          ("here:lidar", "survey"), ("here:oam", "survey"),
          ("here:rumsey", "oldmaps"),
          ("here:etomesto", "oldmaps"))
@@ -318,6 +319,10 @@ def tool_names():
             "Окно поиска по образцу у точки взгляда - образец обводится "
             "на глобусе, объекты участка, похожие на него по цвету "
             "и текстуре, ложатся многоугольниками в проект QGIS.")),
+        TOOL + "here:trace": (tr("Трассировка"), tr(
+            "Окно трассировки участка у точки взгляда - снимок "
+            "раскладывается на цвета, области ложатся гладкими "
+            "многоугольниками в проект QGIS.")),
         TOOL + "here:lidar": (tr("Облака точек лидара"), tr(
             "Плитки облаков точек IGN LiDAR HD во Франции и USGS 3DEP "
             "в США у точки взгляда слоями проекта, точки на глобусе.")),

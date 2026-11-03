@@ -320,6 +320,10 @@ def _tools(window, add, earth):
         lambda: window.similar_tool.open_here(*_here(window)),
         ("похожие области", "найти похожее", "похожие участки", "по образцу",
          "образец", "similar areas", "find similar", "sample"))
+    add("here:trace", tr("Трассировка"), open_,
+        lambda: window.trace_tool.open_here(*_here(window)),
+        ("трассировка", "векторизация", "векторизовать", "в вектор",
+         "potrace", "trace", "vectorize", "trace bitmap"))
     add("here:spectral", tr("Минералы по спектру"), open_,
         lambda: window.spectral_tool.open_here(*_here(window)),
         ("минералы", "спектр", "спектральная библиотека", "породы",

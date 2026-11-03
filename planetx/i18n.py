@@ -6352,6 +6352,66 @@ EN = {
     "разности.":
         "Cut and fill of the site to a level pad - volumes, colors and a "
         "difference raster.",
+    # Трассировка (ui/tracing.py).
+    "Трассировка": "Tracing",
+    "Трассировка…": "Tracing…",
+    "Снимок участка раскладывается на цвета, области обводятся гладкими "
+    "многоугольниками.":
+        "The image of the site is split into colors, the areas are outlined "
+        "with smooth polygons.",
+    "Окно трассировки участка у точки взгляда - снимок раскладывается на "
+    "цвета, области ложатся гладкими многоугольниками в проект QGIS.":
+        "The tracing window of the site at the view point - the image is "
+        "split into colors, the areas go into the QGIS project as smooth "
+        "polygons.",
+    "Снимок, который раскладывается на цвета. Подложка глобуса - картинка "
+    "текущей подложки под участком, растр проекта - его каналы, первые три "
+    "дают цвета слоя.":
+        "The image that is split into colors. The globe basemap is the "
+        "picture of the current basemap under the site, a project raster "
+        "gives its bands, the first three give the colors of the layer.",
+    "Пиксель сетки участка. «Авто» берёт пиксель растра или верхнего уровня "
+    "подложки, если на участке клеток не больше 640 тысяч. Трассировка "
+    "принимает до 4 млн клеток.":
+        "The pixel of the site grid. Auto takes the pixel of the raster or "
+        "of the top basemap level if the site has no more than 640 thousand "
+        "cells. Tracing takes up to 4 million cells.",
+    "На сколько цветов раскладывается снимок. Больше цветов - подробнее "
+    "области и больше многоугольников.":
+        "How many colors the image is split into. More colors give more "
+        "detailed areas and more polygons.",
+    "Проходов сглаживания снимка окном 3 × 3 перед раскладкой на цвета. "
+    "Сглаживание убирает шум, границы выходят ровнее, мелкие детали "
+    "пропадают.":
+        "Passes of 3 × 3 smoothing of the image before it is split into "
+        "colors. Smoothing removes noise, the borders come out smoother, "
+        "small details disappear.",
+    "Область меньше этого количества клеток сливается с соседом по самой "
+    "длинной общей границе.":
+        "An area with fewer cells merges with the neighbor along the "
+        "longest shared border.",
+    "Скругление углов контуров, как у Potrace. 0 - одни углы, ломаная. Чем "
+    "больше, тем больше углов становится плавными дугами.":
+        "Rounding of the outline corners, as in Potrace. 0 gives only "
+        "corners, a broken line. The larger the value, the more corners "
+        "become smooth arcs.",
+    "Цветов": "Colors",
+    "Сглаживание снимка": "Image smoothing",
+    "Наименьшая область, клеток": "Smallest area, cells",
+    "Скругление углов": "Corner rounding",
+    "На глобусе - цвета клеток участка. OK записывает гладкие "
+    "многоугольники областей в проект, у соседних областей граница общая.":
+        "The globe shows the colors of the site cells. OK writes smooth "
+        "polygons of the areas to the project, neighboring areas share "
+        "their border.",
+    "Снимок участка раскладывается на цвета, области одного цвета "
+    "обводятся гладкими контурами.":
+        "The image of the site is split into colors, the areas of one color "
+        "are outlined with smooth outlines.",
+    "Снимок раскладывается на цвета…": "Splitting the image into colors…",
+    "Трассировка {source}": "Tracing {source}",
+    "Цветов {colors}, областей {regions}.":
+        "Colors {colors}, areas {regions}.",
     # Похожие области (ui/similar.py).
     "Похожие области": "Similar areas",
     "Похожие области…": "Similar areas…",
