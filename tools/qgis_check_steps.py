@@ -21551,6 +21551,257 @@ def post135_winter_shot():
     return None
 
 
+FALLOW = tuple(map(float, os.environ.get(
+    "PLANETX_FALLOW", "57.43,56.80").split(",")))  # поля под Кунгуром
+FALLOW_SIDE = float(os.environ.get("PLANETX_FALLOW_SIDE", "4"))
+FALLOW_SEASONS = (("spring", (5,)), ("autumn", (9, 10)),
+                  ("summer", (7, 6, 8)))
+
+
+@check(1000, manual=True)
+def fallow_probe_open():
+    """Проба заросших полей: весенние и осенние снимки Sentinel-2 участка
+    за 4 года всеми каналами на одной сетке в TEMP/planetx_fallow.npz.
+    PLANETX_FALLOW - точка, PLANETX_FALLOW_SIDE - участок, км. Ручной."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.choose_basemap(0)
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(Pose(FALLOW[0], FALLOW[1], FALLOW_SIDE * 1700.0,
+                             0.0, 0.0))
+    view.update()
+    tool = window.task_tool
+    dialog = tool.open_here(*FALLOW)
+    dialog.area.set_square(FALLOW[0], FALLOW[1], FALLOW_SIDE * 1000.0)
+    state["fallow"] = {"season": 0, "found": {}, "queue": None,
+                       "layers": [], "t": time.monotonic()}
+    dialog.finder.loaded.connect(
+        lambda layer: state["fallow"]["layers"].append(layer))
+    name, months = FALLOW_SEASONS[0]
+    dialog.finder.search(dialog.area.ring, months, years=4, shown=60)
+    result["fallow_probe"] = {}
+
+
+@check(1000, manual=True)
+def fallow_probe_search():
+    window = state["window"]
+    dialog = window.task_tool.dialog
+    probe = state["fallow"]
+    out = result["fallow_probe"]
+    if dialog.finder.busy() and time.monotonic() - probe["t"] < 300:
+        return 1000
+    name, months = FALLOW_SEASONS[probe["season"]]
+    found = [(s, c, v) for s, c, v in dialog.finder.result]
+    probe["found"][name] = found
+    out[name] = sorted("{} {:.0f}%".format(s.when[:10], c)
+                       for s, c, v in found)
+    probe["season"] += 1
+    if probe["season"] < len(FALLOW_SEASONS):
+        name, months = FALLOW_SEASONS[probe["season"]]
+        dialog.finder.search(dialog.area.ring, months, years=4, shown=60)
+        probe["t"] = time.monotonic()
+        return 1000
+    window.copy_view().save(os.path.join(TEMP, "planetx_fallow_photo.png"))
+    # По лучшему снимку на сезон и год, лето - один, самый чистый.
+    queue = []
+    for name, _ in FALLOW_SEASONS:
+        best = {}
+        for scene, cloud, valid in probe["found"][name]:
+            year = scene.when[:4]
+            if year not in best or cloud < best[year][1]:
+                best[year] = (scene, cloud)
+        picks = sorted(best.items())
+        if name == "summer":
+            picks = sorted(picks, key=lambda p: p[1][1])[:1]
+        queue += [(name, s) for _, (s, _) in picks]
+    probe["queue"] = queue
+    probe["names"] = []
+    out["queue"] = ["{} {}".format(n, s.when[:10]) for n, s in queue]
+    return None
+
+
+@check(1500, manual=True)
+def fallow_probe_load():
+    window = state["window"]
+    dialog = window.task_tool.dialog
+    probe = state["fallow"]
+    out = result["fallow_probe"]
+    if dialog.finder.busy():
+        return 1500
+    if probe["queue"]:
+        name, scene = probe["queue"].pop(0)
+        probe["names"].append("{} {}".format(name, scene.when[:10]))
+        dialog.finder.load(scene, dialog.area.ring, products=("all_bands",))
+        return 1500
+    from osgeo import gdal
+    import numpy as np
+    from planetx.core.coords import to_utm
+    from planetx.ui.tracing import raster_roles
+    zone, _, x, y = to_utm(FALLOW[0], FALLOW[1])
+    half = FALLOW_SIDE * 500.0
+    epsg = (32700 if FALLOW[0] < 0 else 32600) + zone
+    stack, roles = [], []
+    for layer in probe["layers"]:
+        warped = gdal.Warp("", layer.source(), format="MEM",
+                           dstSRS="EPSG:{}".format(epsg), xRes=10, yRes=10,
+                           outputBounds=(x - half, y - half, x + half,
+                                         y + half), resampleAlg="bilinear")
+        stack.append(warped.ReadAsArray().astype(np.float32))
+        roles.append(raster_roles(layer)[0])
+    np.savez_compressed(os.path.join(TEMP, "planetx_fallow.npz"),
+                        stack=np.array(stack, dtype=object),
+                        names=np.array(probe["names"]),
+                        roles=np.array(roles, dtype=object),
+                        layers=np.array([l.name() for l in probe["layers"]]))
+    out["loaded"] = [l.name() for l in probe["layers"]]
+    out["names"] = probe["names"]
+    out["roles"] = roles
+    out["shapes"] = [list(a.shape) for a in stack]
+    return None
+
+
+@check(1000)
+def fallow_open():
+    # Задача «Заросшие поля» окна «Выделение объектов» на настоящем Earth
+    # Search: летний снимок, подбор весны и осени за 4 года, классы полей.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.choose_basemap(0)
+    view = window.view
+    view.navigator.stop()
+    view.navigator.show(Pose(FALLOW[0], FALLOW[1], FALLOW_SIDE * 1700.0,
+                             0.0, 0.0))
+    view.update()
+    tool = window.task_tool
+    tool.grid = None
+    dialog = tool.open_here(*FALLOW)
+    dialog.task.setCurrentIndex(dialog.task.findData("fallow"))
+    dialog.area.set_square(FALLOW[0], FALLOW[1], FALLOW_SIDE * 1000.0)
+    out = result["fallow"] = {
+        "season_rows_visible": dialog.seasons.isVisibleTo(dialog),
+        "second_hidden": not dialog.second_row.isVisibleTo(dialog),
+        "years": dialog.seasons.years}
+    dialog._find("source")
+    state["fallow_t"] = time.monotonic()
+    out["about"] = dialog.about.text()[:60]
+
+
+@check(1000)
+def fallow_summer():
+    dialog = state["window"].task_tool.dialog
+    if dialog.finder.busy() and time.monotonic() - state["fallow_t"] < 300:
+        return 1000
+    out = result["fallow"]
+    if "summer_found" not in out:
+        out["summer_found"] = dialog.scenes.count()
+        if dialog.scenes.count():
+            dialog._load(dialog.scenes.item(0))
+            state["fallow_t"] = time.monotonic()
+            return 1000
+    out["source"] = dialog.raster().name() if dialog.raster() else None
+    dialog._pick_seasons()
+    state["fallow_t"] = time.monotonic()
+    return None
+
+
+@check(2000)
+def fallow_picked():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    if dialog.picker.busy() and time.monotonic() - state["fallow_t"] < 900:
+        return 2000
+    out = result["fallow"]
+    out["pick_s"] = round(time.monotonic() - state["fallow_t"], 1)
+    out["pick_status"] = dialog.status.text()
+    out["count"] = dialog.season_count.text()
+    out["cells"] = {"{} {}".format(*k): v.name()
+                    for k, v in ((k, dialog.seasons.layer(k))
+                                 for k in dialog.seasons.keys()) if v}
+    out["choices"] = {"{} {}".format(*k): len(v)
+                      for k, v in dialog.picker.choices.items()}
+    # Повторное открытие не грузит заново - клетки берут снимки проекта.
+    before = len(dialog.seasons.chosen())
+    dialog.seasons.cells.clear()
+    dialog._take_seasons()
+    out["retaken"] = [before, len(dialog.seasons.chosen())]
+    dialog.grab().save(os.path.join(TEMP, "planetx_fallow_dialog.png"))
+    tool.grid = None
+    dialog.build.emit()
+    state["fallow_t"] = time.monotonic()
+    return None
+
+
+@check(2000)
+def fallow_built():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    view = window.view
+    if (tool.job is not None or view.load_missing) \
+            and time.monotonic() - state["fallow_t"] < 240:
+        view.update()
+        return 2000
+    if not state.get("fallow_settle"):
+        state["fallow_settle"] = True
+        return 3000
+    state["fallow_settle"] = False
+    import numpy as np
+    out = result["fallow"]
+    out["built"] = dialog.status.text()
+    out["legend"] = [t for _, t in tool.legend_rows()]
+    out["table_hidden"] = not dialog.table_box.isVisibleTo(dialog)
+    fields = tool.fields
+    if fields:
+        last = np.array(fields["last"])
+        out["last_years"] = {int(y): int((last == y).sum())
+                             for y in np.unique(last)}
+        # Числа крупных областей - для порогов.
+        if os.environ.get("PLANETX_FALLOW_DEBUG"):
+            grid = tool.grid[1][3]
+            roles = list(tool.roles)
+            nir = grid[roles.index("nir")].astype(float)
+            sw = grid[roles.index("swir1")].astype(float)
+            ndmi = (nir - sw) / (nir + sw)
+            parts = np.asarray(tool.base["parts"])
+            size = np.bincount(parts[parts >= 0])
+            rows = []
+            for n in np.argsort(-size)[:30]:
+                cells = ndmi[parts == n]
+                rows.append([int(n), int(size[n]), fields["kinds"][n],
+                             int(fields["last"][n]),
+                             round(float(fields["woody"][n]), 2),
+                             [round(float(v), 2) for v in
+                              np.nanpercentile(cells, [10, 50, 90])],
+                             round(float(np.nanmean(nir[parts == n])), 3)])
+            out["regions"] = rows
+            np.savez_compressed(os.path.join(TEMP, "planetx_fallow_grid.npz"),
+                                grid=grid, parts=parts)
+    window.copy_view().save(os.path.join(TEMP, "planetx_fallow_globe.png"))
+    dialog.grab().save(os.path.join(TEMP, "planetx_fallow_built.png"))
+    path = os.path.join(TEMP, "planetx_fallow_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    data = ogr.Open(path)
+    layer = data.GetLayerByName("traced")
+    names, fieldset = {}, [layer.GetLayerDefn().GetFieldDefn(n).GetName()
+                           for n in range(layer.GetLayerDefn()
+                                          .GetFieldCount())]
+    for feature in layer:
+        name = feature.GetField("name")
+        names[name] = names.get(name, 0.0) + feature.GetField("area_ha")
+    out["fields"] = fieldset
+    out["area_ha"] = {k: round(v, 1) for k, v in names.items()}
+    data = None
+    out["layers"] = [n.name() for n in _result_layers()]
+    _drop_group()
+    dialog.reject()
+    return None
+
+
 POST133 = tuple(map(float, os.environ.get(
     "PLANETX_POST133", "59.99,57.43").split(",")))  # вырубки в тайге
 

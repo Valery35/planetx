@@ -69,6 +69,11 @@ SCENARIOS = {
     "fields": {"colors": 8, "smooth": 1, "least": 50,
                "kinds": (VEGETATION, SOIL, CLEARING, WATER, SNOW),
                "merge": {CONIFER: VEGETATION, BROADLEAF: VEGETATION}},
+    # Заросшие поля (core/fallow.py): летние виды - основа, вид поля
+    # даёт ряд снимков весны и осени.
+    "fallow": {"colors": 8, "smooth": 1, "least": 50,
+               "kinds": (CONIFER, BROADLEAF, SOIL, WATER, SNOW),
+               "merge": {VEGETATION: BROADLEAF}},
     "water": {"colors": 4, "smooth": 1, "least": 25,
               "kinds": (WATER, OTHER),
               "merge": {CONIFER: OTHER, BROADLEAF: OTHER, VEGETATION: OTHER,

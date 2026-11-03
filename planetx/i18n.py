@@ -6526,13 +6526,69 @@ EN = {
     "Хвоя отделена от листвы по снегу второго снимка.":
         "Conifers are separated from broadleaf by the snow of the second "
         "image.",
-    "Снимки Sentinel-2 участка в марте и апреле за три года, пока лежит "
-    "снег. На снегу хвоя тёмная, голый лиственный лес и поля светлые. "
-    "Двойной щелчок загружает снимок и ставит его вторым.":
-        "Sentinel-2 images of the site in March and April for three years, "
-        "while the snow lies. On snow conifers are dark, bare broadleaf "
-        "forest and fields are light. A double click loads the image and "
+    "Снимки Sentinel-2 участка в марте, апреле и октябре за три года. На "
+    "снегу хвоя тёмная, голый лиственный лес и поля светлые. В октябре без "
+    "снега лиственный лес теряет ближний ИК, хвоя нет. Двойной щелчок "
+    "загружает снимок и ставит его вторым.":
+        "Sentinel-2 images of the site in March, April and October for "
+        "three years. On snow conifers are dark, bare broadleaf forest and "
+        "fields are light. In October without snow broadleaf forest loses "
+        "near infrared, conifers do not. A double click loads the image and "
         "sets it as the second one.",
+    "Заросшие поля": "Overgrown fields",
+    "Обрабатываемые поля, заброшенные 1-2 года, залежь и луга, зарастающие "
+    "деревьями, лес. По снимкам весны и осени за 4 года видно, в каком году "
+    "на поле последний раз была голая почва. Границы полей - по летнему "
+    "снимку.":
+        "Cultivated fields, fields abandoned for 1-2 years, fallow land and "
+        "meadows, land overgrowing with trees, forest. Spring and autumn "
+        "images for 4 years show in which year a field last had bare soil. "
+        "Field boundaries come from the summer image.",
+    "Пашня, обрабатывается": "Arable land, cultivated",
+    "Заброшено 1-2 года": "Abandoned 1-2 years",
+    "Залежь или луг": "Fallow land or meadow",
+    "Зарастает деревьями": "Overgrowing with trees",
+    "Подобрать снимки": "Pick images",
+    "Ищет снимки Sentinel-2 участка весны и осени за 4 года, в каждую "
+    "пустую клетку берёт самый чистый и загружает его. Снимки, которые уже "
+    "есть в проекте, загружаются заново не будут.":
+        "Searches Sentinel-2 images of the site for spring and autumn of "
+        "4 years, takes the clearest one into each empty cell and loads it. "
+        "Images already in the project are not loaded again.",
+    "Весна и осень": "Spring and autumn",
+    "Снимков {count} из {total}": "{count} of {total} images",
+    "Нет снимков весны и осени. «Подобрать снимки» найдёт и загрузит их для "
+    "участка.":
+        "No spring and autumn images. Pick images finds and loads them for "
+        "the site.",
+    "снимков весны и осени {count}": "spring and autumn images {count}",
+    "Снимки весны и осени не легли на участок, классы - по летнему снимку.":
+        "The spring and autumn images do not cover the site, the classes "
+        "come from the summer image.",
+    "Снимков весны и осени {count}, годы {first}-{last}.":
+        "{count} spring and autumn images, years {first}-{last}.",
+    "Снимки весны (апрель - май) и осени (сентябрь - октябрь) по годам. "
+    "Пашня в это время - голая почва, залежь - старая трава и кустарник. "
+    "Щелчок по клетке - другие даты сезона.":
+        "Spring (April - May) and autumn (September - October) images by "
+        "year. Arable land is bare soil at this time, fallow land is old "
+        "grass and shrubs. A click on a cell shows other dates of the "
+        "season.",
+    "Загрузка снимка {season} {year}: {day}…":
+        "Loading the image of {season} {year}: {day}…",
+    "Весна": "Spring",
+    "Осень": "Autumn",
+    "Снимков сезонов {count} из {total}. Пустые клетки - сезоны без чистого "
+    "снимка над участком, расчёт обходится без них.":
+        "{count} of {total} season images. Empty cells are seasons without "
+        "a clear image over the site, the calculation does without them.",
+    "Чистых весенних и осенних снимков над участком не нашлось.":
+        "No clear spring or autumn images over the site.",
+    "{day} - облачность над участком {cloud} %":
+        "{day} - cloud over the site {cloud} %",
+    "Сначала «Подобрать снимки»": "Pick images first",
+    "Без снимка": "No image",
+    "Снимка нет": "No image here",
     "Двойной щелчок загружает снимок.": "A double click loads the image.",
     "Дополнительно": "More settings",
     "Тонкие настройки: пиксель, цвета, сглаживание, наименьшая область, "

@@ -413,6 +413,12 @@ class TraceTool(SiteTool, QObject):
         в строке итога. Главный поток."""
         return None
 
+    def traced_bands(self):
+        """Сколько первых каналов сетки раскладывается на цвета, None -
+        все. Остальные каналы - снимки сезонов у наследника, они идут
+        в out["found"] к prepare. Главный поток."""
+        return None
+
     def channel_roles(self):
         """Роли каналов сетки и месяц съёмки для вопроса помощнику."""
         layer = self.dialog.raster()
@@ -478,6 +484,7 @@ class TraceTool(SiteTool, QObject):
         cached = self.grid if self.grid and self.grid[0] == key else None
         colors, smooth = dialog.colors.value(), dialog.smooth.value()
         least, corner = dialog.least.value(), dialog.corner.value()
+        split = self.traced_bands()
 
         def work():
             index = aef.ZoneIndex(zone, [])
@@ -490,6 +497,8 @@ class TraceTool(SiteTool, QObject):
                     return {"problem": found}
             stop_point(self)
             x0, y0, step, grid = found
+            if split is not None:
+                grid = grid[:split]
             inside = aef.ring_mask(index, x0, y0, step, grid.shape[1:], ring)
             good = rasterclass.usable(grid) & inside
             if not good.any():
@@ -737,9 +746,15 @@ def _write_traced(path, result):
     if data is None:
         return False
     layer = data.CreateLayer("traced", srs, ogr.wkbMultiPolygon)
+    # Свои поля областей у наследника: [(имя, "int" или "real", значения
+    # по номерам областей)].
+    extra = result.get("region_fields") or []
+    types = {"int": ogr.OFTInteger, "real": ogr.OFTReal}
     for name, kind in (("cls", ogr.OFTInteger), ("name", ogr.OFTString),
                        ("color", ogr.OFTString), ("area_ha", ogr.OFTReal)):
         layer.CreateField(ogr.FieldDefn(name, kind))
+    for name, kind, _ in extra:
+        layer.CreateField(ogr.FieldDefn(name, types[kind]))
     x0, y0, step = result["x0"], result["y0"], result["step"]
     defn = layer.GetLayerDefn()
     layer.StartTransaction()
@@ -763,6 +778,10 @@ def _write_traced(path, result):
         feature.SetField("name", result["names"][kind])
         feature.SetField("color", result.get("hexes", result["names"])[kind])
         feature.SetField("area_ha", shape.GetArea() / 1e4)
+        for name, kind, values in extra:
+            value = values[region]
+            feature.SetField(name, int(value) if kind == "int"
+                             else float(value))
         layer.CreateFeature(feature)
     layer.CommitTransaction()
     data = None

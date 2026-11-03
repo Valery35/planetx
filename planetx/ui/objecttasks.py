@@ -21,7 +21,7 @@ from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QFormLayout,
                                  QListWidgetItem, QPushButton, QSpinBox,
                                  QWidget)
 
-from ..core import classnames, linear
+from ..core import classnames, fallow, linear
 from ..core import objecttasks as ot
 from ..i18n import tr
 from ..qt_compat import enum
@@ -30,6 +30,7 @@ from . import s2finder
 from .inset import warm
 from .results import add_vector, result_path, titled
 from .s2finder import SceneFinder
+from .seasons import SeasonPicker, SeasonTable
 from .tracing import TraceDialog, TraceTool, raster_roles
 
 SETTINGS = "PlanetX/objects/"
@@ -126,6 +127,11 @@ def scenario_names():
             "остаются отдельными многоугольниками, наименьшая область "
             "крупнее.")),
         ("water", tr("Вода"), tr("Вода и всё остальное - суша.")),
+        ("fallow", tr("Заросшие поля"), tr(
+            "Обрабатываемые поля, заброшенные 1-2 года, залежь и луга, "
+            "зарастающие деревьями, лес. По снимкам весны и осени за "
+            "4 года видно, в каком году на поле последний раз была голая "
+            "почва. Границы полей - по летнему снимку.")),
     )
 
 
@@ -134,7 +140,22 @@ def kind_name(kind):
             ot.BROADLEAF: tr("Лиственный лес и травы"),
             ot.VEGETATION: tr("Растительность"),
             ot.SOIL: tr("Открытая почва"), ot.CLEARING: tr("Рубки и гари"),
-            ot.SNOW: tr("Снег и лёд"), ot.OTHER: tr("Прочее")}[kind]
+            ot.SNOW: tr("Снег и лёд"), ot.OTHER: tr("Прочее"),
+            fallow.TILLED: tr("Пашня, обрабатывается"),
+            fallow.FALLOW_NEW: tr("Заброшено 1-2 года"),
+            fallow.FALLOW_OLD: tr("Залежь или луг"),
+            fallow.OVERGROWN: tr("Зарастает деревьями"),
+            fallow.FOREST: tr("Лес")}[kind]
+
+
+def kind_color(kind):
+    return fallow.COLORS.get(kind) or ot.KIND_COLORS[kind]
+
+
+# Порядок классов слоя заросших полей.
+FALLOW_ORDER = fallow.KINDS + (ot.CONIFER, ot.BROADLEAF, ot.VEGETATION,
+                               ot.CLEARING, ot.SOIL, ot.WATER, ot.SNOW,
+                               ot.OTHER)
 
 
 class TaskDialog(TraceDialog):
@@ -180,10 +201,23 @@ class TaskDialog(TraceDialog):
             "тёмным, без снега - то, у чего ближний ИК почти не изменился."))
         self.find_second = QPushButton(tr("Найти"), self)
         self.find_second.setToolTip(tr(
-            "Снимки Sentinel-2 участка в марте и апреле за три года, пока "
-            "лежит снег. На снегу хвоя тёмная, голый лиственный лес и поля "
-            "светлые. Двойной щелчок загружает снимок и ставит его "
+            "Снимки Sentinel-2 участка в марте, апреле и октябре за три "
+            "года. На снегу хвоя тёмная, голый лиственный лес и поля "
+            "светлые. В октябре без снега лиственный лес теряет ближний "
+            "ИК, хвоя нет. Двойной щелчок загружает снимок и ставит его "
             "вторым."))
+        self.seasons = SeasonTable(self)
+        self.pick_seasons = QPushButton(tr("Подобрать снимки"), self)
+        self.pick_seasons.setToolTip(tr(
+            "Ищет снимки Sentinel-2 участка весны и осени за 4 года, в "
+            "каждую пустую клетку берёт самый чистый и загружает его. "
+            "Снимки, которые уже есть в проекте, загружаются заново не "
+            "будут."))
+        self.season_count = QLabel(self)
+        self.picker = SeasonPicker(self.seasons, self)
+        self.picker.status.connect(self.status.setText)
+        self.picker.done.connect(self._season_count)
+        self.pick_seasons.clicked.connect(self._pick_seasons)
         self.scenes = QListWidget(self)
         self.scenes.setVisible(False)
         self.scenes.setMaximumHeight(130)
@@ -217,8 +251,11 @@ class TaskDialog(TraceDialog):
         form = self.form
         form.insertRow(1, "", self._row(self.note, self.find))
         form.insertRow(2, "", self.scenes)
-        form.insertRow(3, tr("Второй снимок"),
-                       self._row(self.second, self.find_second))
+        self.second_row = self._row(self.second, self.find_second)
+        form.insertRow(3, tr("Второй снимок"), self.second_row)
+        self.season_row = self._row(self.season_count, self.pick_seasons)
+        form.insertRow(4, tr("Весна и осень"), self.season_row)
+        form.insertRow(5, "", self.seasons)
         bottom = QFormLayout()
         bottom.addRow("", self.lines)
         bottom.addRow(tr("Ширина линий до"), self.line_width)
@@ -349,11 +386,60 @@ class TaskDialog(TraceDialog):
         super().showEvent(event)
         self._show_more()
         self._note()
+        self._take_seasons()
+
+    def _show_row(self, widget, on):
+        widget.setVisible(on)
+        label = self.form.labelForField(widget)
+        if label is not None:
+            label.setVisible(on)
+
+    def show_table(self, count):
+        """У заросших полей классы задаёт ряд снимков, таблицы цветов
+        нет."""
+        fields = getattr(self, "task", None) is not None \
+            and self.scenario() == "fallow"
+        super().show_table(0 if fields else count)
+
+    def _take_seasons(self):
+        """Клетки таблицы сезонов берут снимки проекта с красным и ближним
+        ИК - то, что уже загружено, заново не грузится."""
+        layers = []
+        for layer in suitable_rasters(False):
+            roles, day = layer_roles(layer)
+            if "red" in roles and layer.id() != self.raster_id():
+                layers.append((layer, day))
+        self.seasons.take_project(layers)
+        self._season_count()
+
+    def _season_count(self):
+        self.season_count.setText(tr(
+            "Снимков {count} из {total}", count=len(self.seasons.chosen()),
+            total=len(self.seasons.keys())))
+
+    def _pick_seasons(self):
+        problem = self.area.check()
+        if problem:
+            self.status.setText(problem)
+            return
+        if self.picker.busy():
+            return
+        self._take_seasons()
+        self.picker.search(self.area.ring)
+
+    def season_layers(self):
+        """[(год, сезон, слой)] таблицы сезонов, кроме источника."""
+        return [row for row in self.seasons.chosen()
+                if row[2].id() != self.raster_id()]
 
     def _task(self, first=False):
         key = self.scenario()
         self.about.setText(dict((k, t) for k, _, t in scenario_names())[key])
         QgsSettings().setValue(SETTINGS + "task", key)
+        fields = key == "fallow"
+        self._show_row(self.second_row, not fields)
+        self._show_row(self.season_row, fields)
+        self._show_row(self.seasons, fields)
         if first:
             return
         spec = ot.SCENARIOS[key]
@@ -377,6 +463,9 @@ class TaskTool(TraceTool):
         self.more_roles = None  # роли каналов второго снимка
         self.more_name = ""
         self.lines = {}  # осевые линии {группа: [ломаные в клетках]}
+        self.split = None  # каналов летнего снимка в сетке заросших полей
+        self.season_meta = []  # [(год, сезон, роли, каналов)] снимков ряда
+        self.fields = None  # виды областей заросших полей и их поля слоя
 
     def tool_title(self):
         return tr("Выделение объектов")
@@ -390,10 +479,52 @@ class TaskTool(TraceTool):
             return roles, month
         return list(roles) + [r and r + "@2" for r in self.more_roles], month
 
+    def traced_bands(self):
+        return self.split
+
+    def _season_bands(self, box, side):
+        """Снимки весны и осени на сетке летнего: каналы за каналами
+        летнего, на цвета не раскладываются. Снимок, который не лёг на
+        сетку, - пустые каналы, расчёт обходится без него."""
+        rows = []
+        self.season_meta = []
+        for year, season, layer in self.dialog.season_layers():
+            roles, _ = raster_roles(layer)
+            if not roles or "red" not in roles or "nir" not in roles \
+                    or not layer.crs().isValid():
+                continue
+            rows.append((layer.source().split("|")[0], layer.crs().toWkt()))
+            self.season_meta.append((year, season, roles,
+                                     layer.bandCount()))
+        if not rows:
+            self.dialog.status.setText(tr(
+                "Нет снимков весны и осени. «Подобрать снимки» найдёт "
+                "и загрузит их для участка."))
+            return False
+        meta = list(self.season_meta)
+
+        def add(index, found):
+            x0, y0, step, grid = found
+            parts = [grid]
+            for (path, wkt), (_, _, _, bands) in zip(rows, meta):
+                other = read_raster(path, wkt, index, box, side, step)
+                if isinstance(other, str) \
+                        or other[3].shape[1:] != grid.shape[1:]:
+                    other = (0, 0, 0, np.full((bands,) + grid.shape[1:],
+                                              np.nan, dtype=grid.dtype))
+                parts.append(other[3][:bands])
+            return x0, y0, step, np.concatenate(parts)
+
+        key = tuple(layer.id() for _, _, layer in self.dialog
+                    .season_layers())
+        return ("seasons",) + key, add
+
     def more_bands(self, box, side):
         """Каналы второго снимка на сетке первого: тот же шаг и рамка."""
         dialog = self.dialog
         self.more_roles = None
+        if dialog.scenario() == "fallow":
+            return self._season_bands(box, side)
         layer = dialog.second_raster()
         if layer is None:
             return None
@@ -441,6 +572,8 @@ class TaskTool(TraceTool):
                 "У растра не узнать ближний ИК и красный или SWIR - нужен "
                 "снимок окна «Космоснимки» с подписями каналов."))
             return
+        self.split = len(self.roles) \
+            if dialog.scenario() == "fallow" else None
         super().build()
 
     def prepare(self, out):
@@ -458,6 +591,10 @@ class TaskTool(TraceTool):
                 "названы."))
             return [-1] * count
         scenario = self.dialog.scenario()
+        self.fields = None
+        if scenario == "fallow":
+            self._fallow(out, centers)
+            return [-1] * count
         first = len(self.roles)
         raw = ot.color_kinds(centers[:, :first], self.roles)
         if self.more_roles is not None:
@@ -507,6 +644,70 @@ class TaskTool(TraceTool):
             self._find_lines(regions)
         return target
 
+    def _fallow(self, out, centers):
+        """Заросшие поля: летние виды областей, по снимкам весны и осени -
+        год последней голой почвы каждой области (core/fallow.py)."""
+        base = self.base
+        raw = ot.color_kinds(centers, self.roles)
+        summer = ot.region_kinds(base["parts"], base["kinds"], raw,
+                                 "fallow")
+        grid = out["found"][3]
+        parts = np.asarray(base["parts"])
+        count = len(summer)
+        scenes, stacks, at = [], [], self.split
+        for year, season, roles, bands in self.season_meta:
+            cells = fallow.bare_cells(grid[at:at + bands], roles)
+            stacks.append((grid[at:at + bands], roles))
+            at += bands
+            if cells is not None and np.isfinite(cells).any():
+                scenes.append((year, cells))
+        trees = fallow.season_woody(stacks)
+        if trees is None:
+            trees = fallow.woody_cells(grid[:self.split], self.roles)
+        woody = fallow.woody_shares(parts, trees, count)
+        years, bare, seen = fallow.tilled_years(parts, scenes, count)
+        newest = max((y for y, _ in scenes), default=0)
+        kinds, last = fallow.field_kinds(summer, years, bare, seen, woody,
+                                         newest)
+        self.fields = {"kinds": kinds, "last": last, "woody": woody}
+        task = self.dialog.task.currentText()
+        span = sorted({y for y, _ in scenes})
+        base["settings"] = [tr("задача «{task}»", task=task), tr(
+            "снимков весны и осени {count}", count=len(scenes))] \
+            + base["settings"]
+        if not scenes:
+            self.notes.append(tr("Снимки весны и осени не легли на участок, "
+                                 "классы - по летнему снимку."))
+        else:
+            self.notes.append(tr(
+                "Снимков весны и осени {count}, годы {first}-{last}.",
+                count=len(scenes), first=span[0], last=span[-1]))
+        self.lines = {}
+        if self.dialog.lines.isChecked():
+            self._find_lines(summer)
+
+    def _fallow_classes(self):
+        """Классы слоя заросших полей по видам областей, поля слоя -
+        последний год голой почвы и доля деревьев."""
+        base, fields = self.base, self.fields
+        kinds = fields["kinds"]
+        used = [k for k in FALLOW_ORDER if k in set(kinds)]
+        index = {k: n for n, k in enumerate(used)}
+        region = np.array([index[k] for k in kinds], dtype=np.int64)
+        parts = base["parts"]
+        classes = np.where(parts >= 0, region[np.maximum(parts, 0)], -1) \
+            if len(region) else np.full(parts.shape, -1)
+        colors = [kind_color(k) for k in used]
+        woody = fields["woody"]
+        self.result = dict(
+            base, kinds=region, classes=classes, colors=colors,
+            hexes=["#%02x%02x%02x" % c for c in colors],
+            names=[kind_name(k) for k in used],
+            region_fields=[
+                ("last_bare", "int", fields["last"]),
+                ("woody_pct", "real", (woody * 100.0) if woody is not None
+                 else np.zeros(len(kinds)))])
+
     def _find_lines(self, regions):
         """Осевые линии узких частей почвы, воды и растительности
         (core/linear.py), {группа: [ломаные в клетках]}."""
@@ -534,7 +735,10 @@ class TaskTool(TraceTool):
     def _apply_classes(self):
         """Классы таблицы плюс рубки - области почвы среди хвои, отдельным
         классом после классов таблицы."""
-        super()._apply_classes()
+        if self.fields is not None:
+            self._fallow_classes()
+        else:
+            super()._apply_classes()
         result = self.result
         clearing = self.clearing
         if clearing is not None and len(clearing):

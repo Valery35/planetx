@@ -3212,7 +3212,8 @@ bare soil among conifers comes out as clear-cuts.
 Step by step:
 1. Right-click a place on the globe, the Site analysis submenu - Object
    extraction….
-2. Choose the task - Forests and clear-cuts, Fields or Water.
+2. Choose the task - Forests and clear-cuts, Fields, Water or Overgrown
+   fields.
 3. Set the site - a square with the Site field, your own outline with the
    Draw button or a layer polygon with the From layer button.
 4. If the Source list has no image, press Find image. The window finds summer
@@ -3241,13 +3242,17 @@ The tasks:
 - Fields - vegetation, bare soil and arable land, clear-cuts, water. The
   smallest area is larger, and fields stay separate polygons.
 - Water - water and land.
+- Overgrown fields - arable land, fields abandoned 1-2 years, fallow land and
+  meadows, fields overgrowing with trees, forest. A series of spring and
+  autumn images is needed, see the Overgrown fields section below.
 
 Second image. In summer conifers and broadleaf may have the same near
 infrared brightness, and one image does not separate them. A winter - summer
 pair does it most simply. On snow coniferous forest stays dark, while bare
 broadleaf forest and fields under snow are light. The Find button at the
 Second image list searches images of the site in March and April, while the
-snow lies and the sun is already high enough, and a double click loads the
+snow lies and the sun is already high enough, and in October, when broadleaf
+forest is already bare and there is no snow yet. A double click loads the
 image as the second one. In December and January at the latitude of the Urals
 the sun is too low for the images. The Second image list holds only images
 with near infrared. The bands of the second image go to the same site grid and
@@ -3323,6 +3328,69 @@ clear-cuts and lines are separate classes after the classes of the table. The
 Names from the assistant button asks the AI assistant for names, see the
 Tracing section. OK writes a layer as in tracing, and the task is the first of
 the settings in the layer name.
+
+#### Overgrown fields
+
+The Overgrown fields task finds fields that are no longer cultivated. Arable
+land in spring before the shoots and in autumn after the harvest and autumn
+ploughing is bare soil. Fallow land has old grass in spring and autumn, and
+after several years shrubs and young forest. So the window looks through a
+series of spring and autumn images for 4 years and finds for every field of
+the summer image the year when it last had bare soil.
+
+Step by step:
+1. Choose the Overgrown fields task and a summer image in the Source list.
+   The summer image splits the site into fields, forest and water.
+2. Press Pick images in the Spring and autumn row. The window searches
+   Sentinel-2 images of the site for 4 years and puts into every empty cell
+   of the table the image with the least cloud over the site. At equal cloud
+   the image closer to the end of May in spring and to the beginning of
+   October in autumn is taken. At the end of May arable land is still bare,
+   while fallow land is already green. At the beginning of October the harvest
+   is in and there is no snow yet. An image of 1 September finds fields under
+   unharvested grain. The images load one by one as the Shortwave infrared
+   (B12 B8A B4) combination into the Sentinel-2 group of the project. Images
+   already in the project are not loaded again.
+3. The table has rows by year and the Spring and Autumn columns, and a cell
+   holds the day of the image. A click on a cell opens a menu with other days
+   of the same season and the No image item. The line above the table counts
+   the images, for example "8 of 8 images".
+4. Press Build, then OK.
+
+The classes:
+- Arable land, cultivated - bare soil in the last year of the series.
+- Abandoned 1-2 years - the last bare soil one or two years ago.
+- Fallow land or meadow - no bare soil for three years and more, trees on less
+  than a quarter of the field.
+- Overgrowing with trees - trees on a quarter of the field and more, but less
+  than 70 %.
+- Forest - trees on 70 % of the area and more.
+- bare soil in summer and on nearly all season images is built-up land, roads
+  or a quarry, not a field.
+
+The rules:
+- bare soil has (NIR - red) / (NIR + red) below 0.3 on a spring or autumn
+  image. On the images near Shadeyka (57.43° N, 56.80° E) of 2023-2026 arable
+  land has 0.10-0.25, and the dry old grass of fallow land 0.35-0.5. Water and
+  snow do not count.
+- a field was cultivated in a year if bare cells cover at least a quarter of
+  its area on one image of that year. An image counts for a field if half of
+  its cells have data.
+- trees have the median SWIR 2.2 µm of the spring and autumn images below
+  0.09. Near Shadeyka forest has 0.03-0.08, meadows and fallow land
+  0.10-0.20, arable land 0.15-0.30. If the season images have no SWIR, the
+  trees are taken from the summer image.
+
+The polygon layer gets the fields last_bare (the year of the last bare soil,
+0 - never) and woody_pct (the share of trees in percent). The result line
+gives the number of spring and autumn images and the years of the series.
+
+Limitations. Perennial hay grasses and winter crops sown before the autumn
+image are never bare during the series and come out as fallow land or as a
+field abandoned 1-2 years. A year without a single cloudless image is
+skipped. A field merged with a neighboring meadow into one area of the summer
+image gets one class for both. In that case decrease the smallest area in
+More settings.
 
 ### Minerals by spectrum
 

@@ -40,7 +40,9 @@ LOAD_PAUSE = 3000  # мс между ними
 # апреля»: на снегу хвоя тёмная, голый лиственный лес и поля светлые
 # (core.objecttasks.two_dates), а солнце уже не ниже SUN_MIN.
 SUMMER = (7, 6, 8)  # по порядку - июль лучше всего
-OFF_SEASON = (3, 4)
+# Осень - октябрь без снега: голый лиственный лес теряет ближний ИК, хвоя
+# нет (мысль Василия Швалёва от 3 ноября 2026 года «осень - весна»).
+OFF_SEASON = (3, 4, 10)
 
 
 def folder():
@@ -65,6 +67,7 @@ class SceneFinder(QObject):
 
     found = pyqtSignal(list)  # [(сцена, облачность над участком, данные)]
     loaded = pyqtSignal(object)  # слой QgsRasterLayer
+    failed = pyqtSignal()  # снимок не загрузился и после повторов
     status = pyqtSignal(str)
 
     def __init__(self, parent=None):
@@ -81,6 +84,7 @@ class SceneFinder(QObject):
         self.load_ring = []
         self.ring = None
         self.months = SUMMER
+        self.shown = SHOWN
         self.timer = QTimer(self)
         self.timer.setInterval(150)
         self.timer.timeout.connect(self._poll)
@@ -96,18 +100,19 @@ class SceneFinder(QObject):
         self.retrying = False
         self.timer.stop()
 
-    def search(self, ring, months):
+    def search(self, ring, months, years=YEARS, shown=SHOWN):
         self.stop()
         self.tries = 0
         self.ring = list(ring)
         self.months = tuple(months)
+        self.shown = shown
         self.scenes = []
         self.result = []
         self.status.emit(tr("Поиск снимков Sentinel-2 участка…"))
         today = QDate.currentDate()
         body = s2.search_body(
             s2.geojson(self.ring),
-            today.addYears(-YEARS).toString("yyyy-MM-dd"),
+            today.addYears(-years).toString("yyyy-MM-dd"),
             today.toString("yyyy-MM-dd"), SCENE_CLOUD, mission=MISSION)
         self._ask(body, self.generation)
 
@@ -163,7 +168,7 @@ class SceneFinder(QObject):
                      for s in self.scenes]
         self.timer.start()
 
-    def load(self, scene, ring, again=False):
+    def load(self, scene, ring, again=False, products=(PRODUCT,)):
         """Сочетание «Сельское хозяйство» сцены по участку ring слоем.
         Отказ сервера повторяется LOAD_TRIES раз: каналы Sentinel-2
         на AWS изредка не отдаются с первого раза (прогоны 3 ноября
@@ -171,6 +176,7 @@ class SceneFinder(QObject):
         if self.load_job is not None:
             return
         self.retrying = False
+        self.products = list(products)
         self.load_tries = self.load_tries + 1 if again else 1
         self.load_ring = list(ring)
         self.status.emit(tr("Загрузка снимка {when}…", when=scene.when[:10])
@@ -180,7 +186,7 @@ class SceneFinder(QObject):
         warm()
         self.load_job = (self.generation, scene, executor(
             "scenes", CLOUD_WORKERS).submit(
-                build, scene, list(ring), [PRODUCT], folder(), False))
+                build, scene, list(ring), self.products, folder(), False))
         self.timer.start()
 
     def _poll(self):
@@ -201,7 +207,7 @@ class SceneFinder(QObject):
         counting = bool(self.jobs)
         self.jobs = pending
         if counting and not pending:
-            found = order(self.result, self.months)[:SHOWN]
+            found = order(self.result, self.months)[:self.shown]
             self.status.emit(
                 tr("Подходящих снимков: {count}. Двойной щелчок по снимку "
                    "загружает его.", count=len(found)) if found
@@ -225,26 +231,29 @@ class SceneFinder(QObject):
             if self.load_tries < LOAD_TRIES:
                 self.retrying = True
                 QTimer.singleShot(LOAD_PAUSE, lambda: self.load(
-                    scene, self.load_ring, again=True))
+                    scene, self.load_ring, again=True,
+                    products=self.products))
                 return
             self.status.emit(tr(
                 "Снимок не загружен - сервер не отдал каналы {error}. "
                 "Повторите двойной щелчок позже или возьмите другой снимок.",
                 error=str(error)))
+            self.failed.emit()
             return
-        layer = add_layer(scene, made[0])
+        layer = add_layer(scene, made[0], self.products[0])
         if layer is None:
             self.status.emit(tr("Снимок не открылся слоем."))
+            self.failed.emit()
             return
         self.loaded.emit(layer)
 
 
-def add_layer(scene, made):
+def add_layer(scene, made, product=PRODUCT):
     """Слой сочетания в группу дня внутри группы «Sentinel-2», показ -
     как у окна «Космоснимки»."""
     _, path, ranges, _ = made
     layer = QgsRasterLayer(path, "{} - {}".format(
-        titles(MISSION)[PRODUCT], scene.when[:10]), "gdal")
+        titles(MISSION)[product], scene.when[:10]), "gdal")
     if not layer.isValid():
         return None
     style_composite(layer, ranges)
