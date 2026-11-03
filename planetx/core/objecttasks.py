@@ -102,8 +102,26 @@ def channels(descriptions, file_stem):
 
 def month_of(file_stem):
     """Месяц съёмки по имени файла «Космоснимков», None - не узнать."""
-    match = FILE.match(file_stem or "")
-    return int(match.group(2)[4:6]) if match else None
+    day = day_of(file_stem)
+    return int(day[5:7]) if day else None
+
+
+def day_of(file_stem):
+    """День съёмки «ГГГГ-ММ-ДД» по имени файла «Космоснимков» или None."""
+    match = FILE.match(re.sub(r"_\d+$", "", file_stem or ""))
+    if not match:
+        return None
+    raw = match.group(2)
+    return "{}-{}-{}".format(raw[:4], raw[4:6], raw[6:])
+
+
+def role_names(roles):
+    """Роли каналов, которые узнало окно, по порядку без повторов."""
+    seen = []
+    for role in roles or ():
+        if role and role not in seen:
+            seen.append(role)
+    return seen
 
 
 def usable(roles):

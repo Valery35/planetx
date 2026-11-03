@@ -21159,15 +21159,23 @@ def task_open():
     out["colors_set"] = dialog.colors.value()
     dialog.area.set_square(lat, lon, 8000.0)
     dialog.level.setCurrentIndex(0)
-    # Подложка и растр без подписей каналов - отказ без расчёта.
-    dialog.source.setCurrentIndex(dialog.source.findData(aefclass.BASEMAP))
-    dialog.build.emit()
-    out["basemap_refused"] = tool.job is None and bool(dialog.status.text())
-    dialog.source.setCurrentIndex(dialog.source.findData(bare.id()))
-    dialog.build.emit()
-    out["plain_refused"] = tool.job is None
-    out["plain_status"] = dialog.status.text()
+    # В списках только подходящие снимки: подложки и растра без подписей
+    # каналов нет, тонкие настройки свёрнуты.
+    dialog.source.refill()
+    dialog.second.refill()
+    out["source_items"] = [dialog.source.itemText(n)
+                           for n in range(dialog.source.count())]
+    out["no_basemap"] = dialog.source.findData(aefclass.BASEMAP) < 0
+    out["no_plain"] = dialog.source.findData(bare.id()) < 0 \
+        and dialog.second.findData(bare.id()) < 0
+    dialog.more.setChecked(False)
+    out["more_hidden"] = dialog.colors.isHidden() \
+        and dialog.line_width.isHidden()
+    dialog.more.setChecked(True)
+    out["more_shown"] = not dialog.colors.isHidden()
+    dialog.more.setChecked(False)
     dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    out["note"] = dialog.note.text()
     dialog.build.emit()
     out["started"] = tool.job is not None
     state["task_started"] = time.monotonic()
@@ -21261,6 +21269,53 @@ def task_names():
     dialog.reject()
     from qgis.core import QgsProject
     QgsProject.instance().removeMapLayers(state["task_layers"])
+    return None
+
+
+@check(1000)
+def task_find():
+    # «Найти снимок» окна «Выделение объектов»: летние сцены Sentinel-2
+    # участка, загрузка сочетания и источник окна. Сеть - Earth Search.
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.open_here(*POST133)
+    dialog.area.set_square(POST133[0], POST133[1], 3000.0)
+    dialog._find("source")
+    state["find_started"] = time.monotonic()
+    result["task_find"] = {}
+
+
+@check(1000)
+def task_find_wait():
+    dialog = state["window"].task_tool.dialog
+    spent = time.monotonic() - state["find_started"]
+    if dialog.finder.busy() and spent < 240.0:
+        return 1000
+    out = result["task_find"]
+    out["search_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()
+    out["found"] = [dialog.scenes.item(n).text()
+                    for n in range(dialog.scenes.count())]
+    if dialog.scenes.count():
+        dialog._load(dialog.scenes.item(0))
+        state["find_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def task_find_load():
+    dialog = state["window"].task_tool.dialog
+    spent = time.monotonic() - state["find_started"]
+    if dialog.finder.busy() and spent < 240.0:
+        return 1000
+    out = result["task_find"]
+    out["load_s"] = round(spent, 1)
+    out["load_status"] = dialog.status.text()
+    layer = dialog.raster()
+    out["source"] = layer.name() if layer is not None else None
+    out["note"] = dialog.note.text()
+    dialog.grab().save(os.path.join(TEMP, "planetx_task_find.png"))
+    dialog.reject()
     return None
 
 

@@ -34,6 +34,11 @@ class TestChannels(unittest.TestCase):
                                      "L9_20250923_166-020_infrared_2"),
                          ["nir", "red", "green"])
         self.assertEqual(ot.month_of("S2_20240701_40VDK_agriculture"), 7)
+        self.assertEqual(ot.day_of("S2_20240701_40VDK_agriculture_2"),
+                         "2024-07-01")
+        self.assertIsNone(ot.day_of("ortho"))
+        self.assertEqual(ot.role_names(["nir", None, "red", "nir"]),
+                         ["nir", "red"])
 
     def test_unknown_raster_has_no_roles(self):
         self.assertIsNone(ot.channels(["Band 1"], "ortho"))

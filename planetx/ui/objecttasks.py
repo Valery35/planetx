@@ -11,28 +11,61 @@
 меняется. Правила работают только по снимку с известными каналами -
 файлу окна «Космоснимки».
 """
+import os
+
 import numpy as np
 from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import Qt
-from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QLabel,
-                                 QSpinBox)
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QFormLayout,
+                                 QHBoxLayout, QLabel, QListWidget,
+                                 QListWidgetItem, QPushButton, QSpinBox,
+                                 QWidget)
 
-from ..core import linear
+from ..core import classnames, linear
 from ..core import objecttasks as ot
 from ..i18n import tr
 from ..qt_compat import enum
 from .aefclass import BASEMAP, project_rasters, read_raster
+from . import s2finder
 from .inset import warm
 from .results import add_vector, result_path, titled
+from .s2finder import SceneFinder
 from .tracing import TraceDialog, TraceTool, raster_roles
 
 SETTINGS = "PlanetX/objects/"
 SUMMER = range(5, 10)  # месяцы, когда хвоя и листва различаются лучше
 
 
-class SecondBox(QComboBox):
-    """Список «Второй снимок»: «Нет» и растры проекта, заполняется при
-    открытии списка."""
+_ROLES = {}  # {слой: (источник, роли, день)} - подписи файла читаются раз
+
+
+def layer_roles(layer):
+    """Роли каналов и день съёмки растра проекта, с памятью по источнику."""
+    known = _ROLES.get(layer.id())
+    if known is None or known[0] != layer.source():
+        roles, _ = raster_roles(layer)
+        stem = os.path.splitext(os.path.basename(
+            layer.source().split("|")[0]))[0]
+        known = (layer.source(), roles, ot.day_of(stem))
+        _ROLES[layer.id()] = known
+    return known[1], known[2]
+
+
+def suitable_rasters(need_red_or_swir=True):
+    """Растры проекта, годные для правил: ближний ИК и, если нужно,
+    красный или SWIR."""
+    out = []
+    for layer in project_rasters():
+        roles, _ = layer_roles(layer)
+        if roles and "nir" in roles and (
+                not need_red_or_swir or ot.usable(roles)):
+            out.append(layer)
+    return out
+
+
+class TaskSource(QComboBox):
+    """Список «Источник» окна задач: только подходящие снимки проекта.
+    Заполняется при открытии списка."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -42,9 +75,37 @@ class SecondBox(QComboBox):
         chosen = self.currentData()
         self.blockSignals(True)
         self.clear()
-        self.addItem(tr("Нет"), "")
-        for layer in project_rasters():
+        for layer in suitable_rasters():
             self.addItem(layer.name(), layer.id())
+        if not self.count():
+            self.addItem(tr("В проекте нет подходящего снимка"), "")
+        self.setCurrentIndex(max(0, self.findData(chosen)))
+        self.blockSignals(False)
+        if self.currentData() != chosen:
+            self.currentIndexChanged.emit(self.currentIndex())
+
+    def showPopup(self):
+        self.refill()
+        super().showPopup()
+
+
+class SecondBox(QComboBox):
+    """Список «Второй снимок»: «Нет» и снимки проекта с ближним ИК,
+    кроме выбранного источником."""
+
+    def __init__(self, source, parent=None):
+        super().__init__(parent)
+        self.source = source
+        self.refill()
+
+    def refill(self):
+        chosen = self.currentData()
+        self.blockSignals(True)
+        self.clear()
+        self.addItem(tr("Нет"), "")
+        for layer in suitable_rasters(False):
+            if layer.id() != self.source.currentData():
+                self.addItem(layer.name(), layer.id())
         self.setCurrentIndex(max(0, self.findData(chosen)))
         self.blockSignals(False)
 
@@ -77,11 +138,18 @@ def kind_name(kind):
 
 
 class TaskDialog(TraceDialog):
-    """Окно «Выделение объектов»: список «Задача» над полями трассировки."""
+    """Окно «Выделение объектов». На виду - задача, снимок, второй снимок,
+    участок и линейные объекты, тонкие настройки свёрнуты под
+    «Дополнительно» - просьба автора от 3 ноября 2026 года «система
+    громоздкая, упрости». Списки снимков - только подходящие, кнопки
+    «Найти снимок» ищут сцены Sentinel-2 участка сами (ui/s2finder.py)."""
+
+    source_class = TaskSource
 
     def __init__(self, window):
         super().__init__(window)
         self.setWindowTitle(tr("Выделение объектов"))
+        settings = QgsSettings()
         self.task = QComboBox(self)
         for key, name, tip in scenario_names():
             self.task.addItem(name, key)
@@ -92,20 +160,33 @@ class TaskDialog(TraceDialog):
             "и после «Построить» называет классы по отражению снимка."))
         self.about = QLabel(self)
         self.about.setWordWrap(True)
-        self.need = QLabel(tr(
-            "Нужен снимок окна «Космоснимки» - сочетание каналов "
-            "или «Все каналы» Sentinel-2 или Landsat: по подписям каналов "
-            "окно узнаёт ближний ИК, красный и SWIR. Хвоя от листвы лучше "
-            "отделяется на летнем снимке."), self)
-        self.need.setWordWrap(True)
-        self.second = SecondBox(self)
+        self.source.setToolTip(tr(
+            "Снимок Sentinel-2 или Landsat окна «Космоснимки» - сочетание "
+            "каналов или «Все каналы сцены». В списке только снимки, у "
+            "которых окно узнало по подписям ближний ИК и красный или "
+            "SWIR."))
+        self.note = QLabel(self)
+        self.note.setWordWrap(True)
+        self.find = QPushButton(tr("Найти снимок"), self)
+        self.find.setToolTip(tr(
+            "Летние снимки Sentinel-2 участка за три года, облачность над "
+            "участком до 5 %. Двойной щелчок по снимку загружает сочетание "
+            "«Сельское хозяйство» (B11 B8 B2) и ставит его источником."))
+        self.second = SecondBox(self.source, self)
         self.second.setToolTip(tr(
-            "Снимок того же места другой даты, лучше другого сезона, тоже "
-            "из окна «Космоснимки». Его каналы ложатся на ту же сетку "
-            "участка и идут в раскладку на цвета вместе с первыми. Хвоя "
-            "отделяется от листвы и трав по ближнему ИК: у хвои на двух "
-            "датах он почти не меняется."))
-        settings = QgsSettings()
+            "Снимок того же места другого сезона. Его каналы ложатся на ту "
+            "же сетку участка и идут в раскладку на цвета вместе с первыми. "
+            "Хвоя отделяется от листвы и трав по ближнему ИК - у хвои на "
+            "двух датах он почти не меняется."))
+        self.find_second = QPushButton(tr("Найти"), self)
+        self.find_second.setToolTip(tr(
+            "Снимки Sentinel-2 участка весной (апрель, май) и осенью "
+            "(сентябрь, октябрь) за три года. Двойной щелчок загружает "
+            "снимок и ставит его вторым."))
+        self.scenes = QListWidget(self)
+        self.scenes.setVisible(False)
+        self.scenes.setMaximumHeight(130)
+        self.scenes.setToolTip(tr("Двойной щелчок загружает снимок."))
         self.lines = QCheckBox(tr("Линейные объекты"), self)
         self.lines.setChecked(settings.value(SETTINGS + "lines", False)
                               in (True, "true"))
@@ -121,24 +202,136 @@ class TaskDialog(TraceDialog):
         self.line_width.setToolTip(tr(
             "Объект уже этого - линия. Ширина не меньше двух пикселей "
             "сетки, иначе линия рвётся."))
-        form = QFormLayout()
-        form.addRow(tr("Задача"), self.task)
-        form.addRow("", self.about)
-        form.addRow(tr("Второй снимок"), self.second)
-        form.addRow("", self.lines)
-        form.addRow(tr("Ширина линий до"), self.line_width)
+        self.more = QCheckBox(tr("Дополнительно"), self)
+        self.more.setToolTip(tr(
+            "Тонкие настройки: пиксель, цвета, сглаживание, наименьшая "
+            "область, скругление углов, ширина линий. Задача ставит их "
+            "сама."))
+        self.more.setChecked(settings.value(SETTINGS + "more", False)
+                             in (True, "true"))
+        top = QFormLayout()
+        top.addRow(tr("Задача"), self.task)
+        top.addRow("", self.about)
+        self.layout().insertLayout(0, top)
+        form = self.form
+        form.insertRow(1, "", self._row(self.note, self.find))
+        form.insertRow(2, "", self.scenes)
+        form.insertRow(3, tr("Второй снимок"),
+                       self._row(self.second, self.find_second))
+        bottom = QFormLayout()
+        bottom.addRow("", self.lines)
+        bottom.addRow(tr("Ширина линий до"), self.line_width)
+        bottom.addRow("", self.more)
+        self.layout().insertLayout(2, bottom)
+        self.bottom = bottom
+        self.finder = SceneFinder(self)
+        self.finder.found.connect(self._found)
+        self.finder.status.connect(self.status.setText)
+        self.finder.loaded.connect(self._loaded)
+        self.find_for = "source"
+        self.find.clicked.connect(lambda: self._find("source"))
+        self.find_second.clicked.connect(lambda: self._find("second"))
+        self.scenes.itemDoubleClicked.connect(self._load)
+        self.source.currentIndexChanged.connect(lambda _: self._note())
         self.lines.toggled.connect(lambda _: self._remember_lines())
         self.line_width.valueChanged.connect(lambda _: self._remember_lines())
+        self.more.toggled.connect(lambda _: self._show_more())
         self._remember_lines()
-        self.layout().insertLayout(0, form)
-        self.layout().insertWidget(1, self.need)
-        chosen = QgsSettings().value(SETTINGS + "task", "forest")
+        chosen = settings.value(SETTINGS + "task", "forest")
         self.task.setCurrentIndex(max(0, self.task.findData(chosen)))
         self.task.currentIndexChanged.connect(lambda _: self._task())
         self._task(first=True)
+        self._note()
+
+    def _row(self, *widgets):
+        holder = QWidget(self)
+        row = QHBoxLayout(holder)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(widgets[0], 1)
+        for widget in widgets[1:]:
+            row.addWidget(widget)
+        return holder
 
     def scenario(self):
         return self.task.currentData()
+
+    def _show_more(self):
+        """Тонкие настройки видны с флажком «Дополнительно»."""
+        on = self.more.isChecked()
+        for form, widget in ((self.form, self.level),
+                             (self.form, self.volume),
+                             (self.form, self.colors),
+                             (self.form, self.smooth),
+                             (self.form, self.least),
+                             (self.form, self.corner),
+                             (self.bottom, self.line_width)):
+            widget.setVisible(on)
+            label = form.labelForField(widget)
+            if label is not None:
+                label.setVisible(on)
+        QgsSettings().setValue(SETTINGS + "more", on)
+
+    def _note(self):
+        """Строка под «Источником»: подходит ли снимок и что окно узнало."""
+        layer = self.raster()
+        if layer is None:
+            self.note.setText(tr(
+                "В проекте нет снимка с ближним ИК и красным или SWIR. "
+                "«Найти снимок» найдёт летний снимок Sentinel-2 участка."))
+            return
+        roles, day = layer_roles(layer)
+        names = ", ".join(classnames.ROLE_NAMES.get(r, r)
+                          for r in ot.role_names(roles))
+        text = tr("Подходит. Каналы - {names}.", names=names)
+        if day:
+            text += " " + tr("Снимок {day}.", day=day)
+            if int(day[5:7]) not in SUMMER:
+                text += " " + tr("Снимок не летний, хвоя и листва "
+                                 "различаются хуже.")
+        self.note.setText(text)
+
+    def _find(self, target):
+        """Поиск сцен Sentinel-2 участка: летних для источника, другого
+        сезона для второго снимка."""
+        problem = self.area.check()
+        if problem:
+            self.status.setText(problem)
+            return
+        self.find_for = target
+        self.scenes.clear()
+        self.scenes.setVisible(False)
+        self.finder.search(self.area.ring, s2finder.SUMMER
+                           if target == "source" else s2finder.OFF_SEASON)
+
+    def _found(self, found):
+        self.scenes.clear()
+        for scene, cloud, valid in found:
+            item = QListWidgetItem(tr(
+                "{day} - облачность над участком {cloud} %, данных "
+                "{valid} %", day=scene.when[:10],
+                cloud="{:.0f}".format(cloud), valid="{:.0f}".format(valid)))
+            item.setData(enum(Qt, "ItemDataRole", "UserRole"), scene)
+            self.scenes.addItem(item)
+        self.scenes.setVisible(bool(found))
+
+    def _load(self, item):
+        scene = item.data(enum(Qt, "ItemDataRole", "UserRole"))
+        if scene is not None and not self.finder.busy():
+            self.finder.load(scene, self.area.ring)
+
+    def _loaded(self, layer):
+        """Загруженный снимок встаёт источником или вторым снимком."""
+        if self.find_for == "second":
+            self.second.refill()
+            self.second.setCurrentIndex(self.second.findData(layer.id()))
+            self.status.setText(tr("Второй снимок загружен: {name}.",
+                                   name=layer.name()))
+        else:
+            self.source.refill()
+            self.source.setCurrentIndex(self.source.findData(layer.id()))
+            self.status.setText(tr("Снимок загружен и стоит источником: "
+                                   "{name}.", name=layer.name()))
+        self.scenes.setVisible(False)
 
     def _remember_lines(self):
         self.line_width.setEnabled(self.lines.isChecked())
@@ -150,6 +343,11 @@ class TaskDialog(TraceDialog):
         """Второй снимок, None - «Нет» или слоя уже нет."""
         return QgsProject.instance().mapLayer(self.second.currentData()
                                               or "")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._show_more()
+        self._note()
 
     def _task(self, first=False):
         key = self.scenario()
@@ -233,8 +431,8 @@ class TaskTool(TraceTool):
         layer = dialog.raster()
         if dialog.raster_id() == BASEMAP or layer is None:
             dialog.status.setText(tr(
-                "Правилам нужны каналы снимка, у подложки глобуса их нет. "
-                "Возьмите снимок окна «Космоснимки»."))
+                "Нет снимка. Кнопка «Найти снимок» найдёт и загрузит летний "
+                "снимок Sentinel-2 участка."))
             return
         self.roles, self.month = raster_roles(layer)
         if not ot.usable(self.roles):

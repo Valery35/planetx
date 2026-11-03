@@ -216,6 +216,7 @@ class TraceDialog(QDialog):
     многоугольники в проект QGIS, «Отмена» убирает показ."""
 
     build = pyqtSignal()
+    source_class = TraceSource  # у окна задач - только подходящие снимки
 
     def __init__(self, window):
         super().__init__(window)
@@ -224,7 +225,7 @@ class TraceDialog(QDialog):
         settings = QgsSettings()
         self.status = QLabel(self)
         self.status.setWordWrap(True)
-        self.source = TraceSource(self)
+        self.source = self.source_class(self)
         self.source.setToolTip(tr(
             "Снимок, который раскладывается на цвета. Подложка глобуса - "
             "картинка текущей подложки под участком, растр проекта - его "
@@ -280,6 +281,7 @@ class TraceDialog(QDialog):
         form.addRow(tr("Сглаживание снимка"), self.smooth)
         form.addRow(tr("Наименьшая область, клеток"), self.least)
         form.addRow(tr("Скругление углов"), self.corner)
+        self.form = form
         hint = QLabel(tr(
             "На глобусе - цвета клеток участка. OK записывает гладкие "
             "многоугольники областей в проект, у соседних областей граница "

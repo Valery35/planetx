@@ -6481,18 +6481,7 @@ EN = {
     "«Построить» называет классы по отражению снимка.":
         "A typical task sets the number of colors and the smallest area and "
         "after Build names the classes by the image reflectance.",
-    "Нужен снимок окна «Космоснимки» - сочетание каналов или «Все каналы» "
-    "Sentinel-2 или Landsat: по подписям каналов окно узнаёт ближний ИК, "
-    "красный и SWIR. Хвоя от листвы лучше отделяется на летнем снимке.":
-        "An image of the Satellite images window is needed - a band "
-        "combination or All bands of Sentinel-2 or Landsat. The window "
-        "recognizes near infrared, red and SWIR by the band labels. Conifers "
-        "separate from broadleaf better on a summer image.",
     "Задача": "Task",
-    "Правилам нужны каналы снимка, у подложки глобуса их нет. Возьмите "
-    "снимок окна «Космоснимки».":
-        "The rules need image bands, the globe basemap has none. Take an "
-        "image of the Satellite images window.",
     "У растра не узнать ближний ИК и красный или SWIR - нужен снимок окна "
     "«Космоснимки» с подписями каналов.":
         "The raster gives no near infrared and red or SWIR - an image of the "
@@ -6506,15 +6495,71 @@ EN = {
     "Рубки и гари - {area} га.": "Clear-cuts and burns - {area} ha.",
     # Второй снимок окна «Выделение объектов».
     "Второй снимок": "Second image",
-    "Снимок того же места другой даты, лучше другого сезона, тоже из окна "
-    "«Космоснимки». Его каналы ложатся на ту же сетку участка и идут "
-    "в раскладку на цвета вместе с первыми. Хвоя отделяется от листвы "
-    "и трав по ближнему ИК: у хвои на двух датах он почти не меняется.":
-        "An image of the same place of another date, better of another "
-        "season, also from the Satellite images window. Its bands go to the "
+    # Упрощённое окно «Выделение объектов» (ui/objecttasks.py,
+    # ui/s2finder.py).
+    "Нет снимка. Кнопка «Найти снимок» найдёт и загрузит летний снимок "
+    "Sentinel-2 участка.":
+        "No image. The Find image button finds and loads a summer Sentinel-2 "
+        "image of the site.",
+    "Снимок Sentinel-2 или Landsat окна «Космоснимки» - сочетание каналов "
+    "или «Все каналы сцены». В списке только снимки, у которых окно узнало по "
+    "подписям ближний ИК и красный или SWIR.":
+        "A Sentinel-2 or Landsat image of the Satellite images window - a "
+        "band combination or All bands. The list holds only images whose "
+        "near infrared and red or SWIR the window recognized by the band "
+        "labels.",
+    "Найти снимок": "Find image",
+    "Летние снимки Sentinel-2 участка за три года, облачность над участком "
+    "до 5 %. Двойной щелчок по снимку загружает сочетание «Сельское "
+    "хозяйство» (B11 B8 B2) и ставит его источником.":
+        "Summer Sentinel-2 images of the site for three years, cloud over the "
+        "site up to 5 %. A double click on an image loads the Agriculture "
+        "combination (B11 B8 B2) and sets it as the source.",
+    "Снимок того же места другого сезона. Его каналы ложатся на ту же сетку "
+    "участка и идут в раскладку на цвета вместе с первыми. Хвоя отделяется "
+    "от листвы и трав по ближнему ИК - у хвои на двух датах он почти "
+    "не меняется.":
+        "An image of the same place of another season. Its bands go to the "
         "same site grid and into the split into colors together with the "
         "first ones. Conifers separate from broadleaf and grass by near "
         "infrared, which conifers keep almost unchanged on both dates.",
+    "Снимки Sentinel-2 участка весной (апрель, май) и осенью (сентябрь, "
+    "октябрь) за три года. Двойной щелчок загружает снимок и ставит его "
+    "вторым.":
+        "Sentinel-2 images of the site in spring (April, May) and autumn "
+        "(September, October) for three years. A double click loads the "
+        "image and sets it as the second one.",
+    "Двойной щелчок загружает снимок.": "A double click loads the image.",
+    "Дополнительно": "More settings",
+    "Тонкие настройки: пиксель, цвета, сглаживание, наименьшая область, "
+    "скругление углов, ширина линий. Задача ставит их сама.":
+        "Fine settings - pixel, colors, smoothing, smallest area, corner "
+        "rounding, line width. The task sets them itself.",
+    "В проекте нет снимка с ближним ИК и красным или SWIR. «Найти снимок» "
+    "найдёт летний снимок Sentinel-2 участка.":
+        "The project has no image with near infrared and red or SWIR. Find "
+        "image finds a summer Sentinel-2 image of the site.",
+    "Подходит. Каналы - {names}.": "Suitable. Bands - {names}.",
+    "Снимок {day}.": "Image of {day}.",
+    "{day} - облачность над участком {cloud} %, данных {valid} %":
+        "{day} - cloud over the site {cloud} %, data {valid} %",
+    "Второй снимок загружен: {name}.": "Second image loaded: {name}.",
+    "Снимок загружен и стоит источником: {name}.":
+        "The image is loaded and set as the source: {name}.",
+    "В проекте нет подходящего снимка": "No suitable image in the project",
+    "Поиск снимков Sentinel-2 участка…": "Searching Sentinel-2 images of "
+                                         "the site…",
+    "Сцен Sentinel-2 нужного сезона над участком нет.":
+        "No Sentinel-2 scenes of the season over the site.",
+    "Сцен {count}, считается облачность над участком…":
+        "Scenes {count}, cloud over the site is being counted…",
+    "Загрузка снимка {when}…": "Loading the image of {when}…",
+    "Подходящих снимков: {count}. Двойной щелчок по снимку загружает его.":
+        "Suitable images: {count}. A double click on an image loads it.",
+    "Подходящих снимков нет: у сцен над участком облачность больше "
+    "{cloud} % или данных меньше {valid} %.":
+        "No suitable images - the scenes have more than {cloud} % cloud over "
+        "the site or less than {valid} % data.",
     "Второй снимок совпадает с первым.":
         "The second image is the same as the first one.",
     "У второго снимка не узнать ближний ИК - нужен снимок окна "

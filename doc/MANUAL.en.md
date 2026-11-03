@@ -2800,6 +2800,37 @@ the icon bar turns, and its tooltip names the calculation. A click on
 the icon opens the Stop menu. The calculation is interrupted, the
 earlier result stays.
 
+### Which image the analysis windows need
+
+The site analysis windows take different data. Some work by the terrain and
+ask for nothing but the site. Others work with an image, and the result
+depends on the image. The table lists what each window needs and where to get
+it.
+
+| Window | What is needed | Where to get it | Hint |
+|---|---|---|---|
+| Slope and aspect, viewshed, insolation, shadows, flooding, water flow, earthwork | Heights | Open terrain comes by itself. Own terrain is a project raster with the Globe terrain item | Own terrain is more accurate than the open 30 m one |
+| Land change | AlphaEarth embeddings 2017-2025 | Loaded by themselves | Network is needed |
+| Classification, similar areas | Any image or AlphaEarth | Globe basemap, project raster, AlphaEarth | For accurate work - one scene of the Satellite images window, the basemap is made of different surveys |
+| Tracing | An image with color | Globe basemap or project raster | The Esri or Google basemap is the most detailed |
+| Object extraction | An image with near infrared and red or SWIR | The Find image button of the window, the Satellite images window - a band combination or All scene bands of Sentinel-2 and Landsat | Summer for conifers and broadleaf, the second image in spring or autumn |
+| Minerals by spectrum | An image with six bands or more | The window finds ASTER images of 2000-2006 with SWIR bands itself, the Load button | By three bands different minerals give one spectrum |
+| EMIT minerals | NASA EMIT mineral maps | The window finds scenes itself, files by a NASA Earthdata key | Arid regions, since 2022 |
+| Series by dates, trend map | Scenes of one place for many dates | The Satellite images window | A year or more for the trend |
+
+Band combinations of the Satellite images window for the eye:
+- Natural colour (B4 B3 B2) - as a photo.
+- False colour, near infrared (B8 B4 B3) - vegetation is red, the brighter the
+  denser.
+- Agriculture (B11 B8 B2) - conifers are dark green, broadleaf and grass light
+  green, bare soil pink. The Find image button of the Object extraction window
+  takes it.
+- All scene bands - the scene bands in one file, for rules, spectra and
+  classification.
+
+Single-band indices - NDVI, NDMI and others - are handy for the eye and for
+the series by dates, but they do not suit the windows that need several bands.
+
 ### Slope and aspect of a site
 
 The Slope and aspect… item of the Site analysis submenu opens the
@@ -3173,23 +3204,72 @@ one.
 
 The Object extraction… item of the Site analysis submenu of the globe menu
 opens the window of typical tasks for the point under the cursor. The window
-is tracing with rules. After Build the image colors get names by reflectance,
-and the colors of one kind merge into one class.
+is tracing with rules. The image of the site is split into colors, and the
+colors get names by reflectance - coniferous forest, broadleaf forest and
+grass, bare soil, water, snow. Colors of one kind merge into one class, and
+bare soil among conifers comes out as clear-cuts.
 
-The Task list:
+Step by step:
+1. Right-click a place on the globe, the Site analysis submenu - Object
+   extraction….
+2. Choose the task - Forests and clear-cuts, Fields or Water.
+3. Set the site - a square with the Site field, your own outline with the
+   Draw button or a layer polygon with the From layer button.
+4. If the Source list has no image, press Find image. The window finds summer
+   Sentinel-2 images of the site for three years without cloud over the site.
+   A double click on an image loads it, and the image becomes the source.
+5. Press Build. The classes go to the globe, and the line under the fields
+   gives the area of clear-cuts and the length of lines.
+6. Correct the names in the Classes table and press OK - the polygon layer
+   goes to the QGIS project.
+
+The Source list shows only suitable images - those whose near infrared and
+red or SWIR 1.6 µm the window recognized by the band labels. These are images
+of the Satellite images window of Sentinel-2 or Landsat - a band combination,
+for example Agriculture (B11 B8 B2), or All scene bands. For files of earlier
+module versions the bands are recognized by the file name. The globe basemap,
+a single-band index such as NDVI and a raster without band labels are not in
+the list - the rules have nothing to rely on in them. The line under the list
+says whether the image is suitable, which bands the window recognized and the
+day of the image. The Find image button loads the Agriculture combination of
+the site into the Sentinel-2 group of the project, as the Satellite images
+window does.
+
+The tasks:
 - Forests and clear-cuts - coniferous forest, broadleaf forest and grass,
   clear-cuts and burns, bare soil, water.
 - Fields - vegetation, bare soil and arable land, clear-cuts, water. The
   smallest area is larger, and fields stay separate polygons.
 - Water - water and land.
 
-The task sets the number of colors, the smoothing and the smallest area, and
-they can be corrected. The source is an image of the Satellite images window
-of Sentinel-2 or Landsat, a band combination, for example Agriculture (B11 B8
-B2), or All bands. The window recognizes the bands by the band labels of the
-file, and for files of earlier module versions by the file name. Near infrared
-and red or SWIR 1.6 µm are needed. The globe basemap and a raster without band
-labels have no rules, and the line under the fields says so.
+Second image. In summer conifers and broadleaf may have the same near
+infrared brightness, and one image does not separate them. The Find button at
+the Second image list searches images of the site in spring (April, May) and
+autumn (September, October), and a double click loads the image as the second
+one. The Second image list also holds only images with near infrared. The
+bands of the second image go to the same site grid and into the split into
+colors together with the first ones. Vegetation whose near infrared hardly
+changes between the dates (the smaller value to the larger one not below
+0.75) is conifers, the rest is broadleaf and grass. Broadleaf and grass lose
+infrared reflectance in another season, conifers do not. The second image is
+named in the layer settings.
+
+The Linear objects check box adds center lines - roads and cuttings (narrow
+strips of soil), rivers and canals (water), shelterbelts and cuttings
+(vegetation). On the globe the lines show above the classes, and OK writes the
+Lines layer with the fields kind, name and length_m next to the polygon layer.
+The polygons do not change, so a narrow road in a forest stays a soil polygon
+as well and may come out a clear-cut.
+
+The More settings check box shows the fine settings - pixel, number of
+colors, image smoothing, smallest area, corner rounding and line width. The
+task sets them itself, and without the check box they are hidden. Line width
+means that an object narrower than this is a line, 40 m by default. The width
+must be at least two grid pixels, otherwise the line breaks. A line is made
+this way. A morphological opening with a square of this width removes the
+narrow part of the mask, and the rest is thinned to a one-cell line. Spurs
+shorter than three widths are dropped, and so is a connected piece of line
+shorter than 200 m.
 
 The rules:
 - water is dark in near infrared and SWIR.
@@ -3200,42 +3280,31 @@ The rules:
 - snow and ice are bright in the visible and dark in SWIR.
 - the rest is bare soil.
 - clear-cuts and burns are connected pieces of bare soil with at least a
-  quarter of coniferous forest in the three-cell band around them. A band and
-  not the border alone is used because mixed pixels similar to broadleaf lie
-  along the edge of a clear-cut. Light vegetation may be a crop as well, so
-  arable land next to it is not taken for a clear-cut.
+  quarter of deep coniferous forest in the three-cell band around them, deep
+  meaning that at least half of the forest cells are inner. Mixed pixels along
+  the edge of a clear-cut or a field look now like broadleaf, now like
+  conifers, and the band and the depth guard against them. Light vegetation
+  may be a crop as well, so arable land next to it is not taken for a
+  clear-cut.
 
-The thresholds are typical reflectances, and they are worth checking on your
-own image. Conifers separate from broadleaf better on a summer image, and for
-an image of another season the line under the fields reminds of it.
+If the result is not the expected one:
+- No clear-cuts, though clear-cuts are seen in the image. Old clear-cuts grow
+  over with grass and young broadleaf forest and come out as the Broadleaf
+  forest and grass class, light patches among conifers. A clear-cut is only
+  bare soil. Look for fresh clear-cuts on an image of the same summer or the
+  spring after the cutting.
+- Conifers and broadleaf are mixed. Take a second image of another season or a
+  summer image instead of a spring one.
+- Classes break up or stick together. In More settings increase or decrease
+  the number of colors and the smallest area.
+- Clouds and shadows come out as their own classes. Take another image, Find
+  image shows only images without cloud over the site.
 
-One image may be not enough - in summer conifers and broadleaf may have the
-same near infrared brightness. The Second image list takes an image of the
-same place of another date, better of another season, also from the Satellite
-images window with band labels. Its bands go to the same site grid and into
-the split into colors together with the first ones. Vegetation whose near
-infrared hardly changes between the dates (the smaller value to the larger one
-not below 0.75) is conifers, the rest is broadleaf and grass, which lose
-infrared reflectance in another season. Clear-cuts are bare soil only among
-conifers with depth - a piece where at least half of the cells are inner.
-Mixed pixels along the edge of a field may look like conifers and would
-otherwise give a thin ring of "forest" around the field. The second image is
-named in the layer settings.
-
-The Linear objects check box adds center lines - roads and cuttings (narrow
-strips of soil), rivers and canals (water), shelterbelts and cuttings
-(vegetation). A line is the part of a kind narrower than the Line width up to
-field, 40 m by default, removed by a morphological opening of the mask with a
-square of this width. The rest is thinned to a one-cell line, spurs shorter
-than three widths are dropped, and so is a connected piece of line shorter than
-200 m. The width must be at least two grid pixels, otherwise the line breaks.
-On the globe the lines show above the classes, and OK writes the Lines layer
-with the fields kind, name and length_m next to the polygon layer. The
-polygons do not change, so a narrow road in a forest stays a soil polygon as
-well and may come out a clear-cut. The class
-names and merges can be corrected in the Classes table, and clear-cuts are a
-separate class after the classes of the table. OK writes a layer as in
-tracing, and the task is the first of the settings in the layer name.
+The class names and merges can be corrected in the Classes table, and
+clear-cuts and lines are separate classes after the classes of the table. The
+Names from the assistant button asks the AI assistant for names, see the
+Tracing section. OK writes a layer as in tracing, and the task is the first of
+the settings in the layer name.
 
 ### Minerals by spectrum
 
