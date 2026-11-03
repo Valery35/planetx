@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.31.0
+version=1.32.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,11 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.31.0 The Minerals by spectrum window finds suitable ASTER
+changelog=1.32.0 The Tracing window splits the image of a site into
+      colors and outlines the areas with smooth polygons, as Trace Bitmap
+      of Inkscape, neighboring areas share their border. The legend of
+      the underground mode takes the name of the layer group.
+      1.31.0 The Minerals by spectrum window finds suitable ASTER
       images of the site itself and loads all their bands, the Raster
       field lists only images with six bands or more. The EMIT minerals
       window lists only scenes with little cloud that cover the site.
