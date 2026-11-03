@@ -21264,6 +21264,144 @@ def task_names():
     return None
 
 
+POST133 = tuple(map(float, os.environ.get(
+    "PLANETX_POST133", "59.99,57.43").split(",")))  # вырубки в тайге
+
+
+@check(1000, manual=True)
+def post133_open():
+    """Кадры статьи 1.33: Sentinel-2 лета 2025 года, сочетание «Сельское
+    хозяйство», окно «Выделение объектов» с рубками и линиями. Ручной."""
+    from qgis.PyQt.QtCore import QDate
+    window = state["window"]
+    window.set_body("earth")
+    dialog = window.sentinel_here(*POST133)
+    dialog.side.setValue(float(os.environ.get("PLANETX_POST133_SIDE", "6")))
+    dialog.start.setDate(QDate(2025, 6, 1))
+    dialog.end.setDate(QDate(2025, 8, 31))
+    dialog.mission.setCurrentIndex(dialog.mission.findData("sentinel2"))
+    dialog.search()
+    state["s2_started"] = time.monotonic()
+    result["post133"] = {}
+
+
+@check(500, manual=True)
+def post133_wait():
+    from qgis.PyQt.QtCore import Qt
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["s2_started"]
+    if (dialog.reply is not None or dialog.cloud_jobs) and spent < 240.0:
+        return 500
+    out = result["post133"]
+    shown = [dialog.list.topLevelItem(n)
+             for n in range(dialog.list.topLevelItemCount())
+             if not dialog.list.topLevelItem(n).isHidden()]
+    out["scenes"] = [[i.text(c) for c in range(3)] for i in shown[:6]]
+    if not shown:
+        return None
+
+    def cloud(item, column):
+        text = item.text(column).rstrip(" %")
+        return float(text) if text.replace(".", "").isdigit() else 100.0
+
+    best = min(shown, key=lambda i: (cloud(i, 1) + cloud(i, 2)))
+    out["scene"] = best.text(0)
+    dialog.list.setCurrentItem(best)
+    for n in range(dialog.products.count()):
+        item = dialog.products.item(n)
+        item.setCheckState(
+            Qt.CheckState.Checked
+            if item.data(Qt.ItemDataRole.UserRole) == "agriculture"
+            else Qt.CheckState.Unchecked)
+    folder = os.path.join(TEMP, "planetx_post133_{}".format(int(time.time())))
+    dialog.mode.setCurrentIndex(0)
+    dialog.add(folder=folder)
+    state["s2_build"] = time.monotonic()
+    return None
+
+
+@check(500, manual=True)
+def post133_task():
+    from qgis.core import QgsProject
+    window = state["window"]
+    dialog = window.sentinel_dialog
+    spent = time.monotonic() - state["s2_build"]
+    if dialog.build_job is not None and spent < 300.0:
+        return 500
+    out = result["post133"]
+    out["build"] = dialog.status.text()
+    group = QgsProject.instance().layerTreeRoot().findGroup("Sentinel-2")
+    layers = [n.layer() for n in group.findLayers()] if group else []
+    if not layers:
+        return None
+    layer = layers[-1]
+    out["layer"] = layer.name()
+    dialog.close()
+    tool = window.task_tool
+    tool.grid = None
+    task = tool.open_here(*POST133)
+    task.task.setCurrentIndex(task.task.findData("forest"))
+    task.source.refill()
+    task.source.setCurrentIndex(task.source.findData(layer.id()))
+    task.second.setCurrentIndex(0)
+    task.area.set_square(POST133[0], POST133[1], 1000.0 * float(
+        os.environ.get("PLANETX_POST133_SIDE", "6")) * 0.95)
+    task.level.setCurrentIndex(0)
+    task.lines.setChecked(True)
+    task.line_width.setValue(40)
+    from planetx.core.navigation import Pose
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(POST133[0], POST133[1], 9000.0, 0.0,
+                                    0.0))
+    task.build.emit()
+    state["task_started"] = time.monotonic()
+    return None
+
+
+@check(1000, manual=True)
+def post133_shots():
+    window = state["window"]
+    tool = window.task_tool
+    view = window.view
+    if "task_started" not in state:
+        return None
+    waited = time.monotonic() - state["task_started"]
+    if (tool.job is not None or view.load_missing) and waited < 180:
+        view.update()
+        return 1000
+    if not state.get("post133_settle"):
+        state["post133_settle"] = True
+        return 4000
+    out = result["post133"]
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    out["legend"] = [text for _, text in tool.legend_rows()]
+    dialog.grab().save(os.path.join(TEMP, "planetx_post_133_dialog.png"))
+    window.copy_view().save(os.path.join(TEMP, "planetx_post_133_globe.png"))
+    path = os.path.join(TEMP, "planetx_post133_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    from qgis.core import QgsMapRendererSequentialJob, QgsMapSettings
+    from qgis.PyQt.QtCore import QSize
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    drawn = [n.layer() for n in nodes if not n.layer().name().startswith(
+        "Участок")]
+    if drawn:
+        settings = QgsMapSettings()
+        settings.setLayers(drawn)
+        settings.setDestinationCrs(drawn[0].crs())
+        settings.setExtent(drawn[0].extent())
+        settings.setOutputSize(QSize(1400, 1400))
+        job = QgsMapRendererSequentialJob(settings)
+        job.start()
+        job.waitForFinished()
+        job.renderedImage().save(os.path.join(TEMP,
+                                              "planetx_post_133_layers.png"))
+    return None
+
+
 @check(1000)
 def task_lines_open():
     # Линейные объекты: дорога в два пикселя через хвою - линия, поле
