@@ -16,6 +16,7 @@ Mapbox Vector Tile 2. Здесь раскодируется только сло�
 """
 import gzip
 import math
+import re
 import struct
 import zlib
 from collections import namedtuple
@@ -54,6 +55,15 @@ CLASSES = ("search", "mark", "ruler", "layer", "circle", "grid", "plate",
 KIND = {name: index for index, name in enumerate(CLASSES)}
 PLACE_CLASSES = {"country", "capital", "city", "state", "town", "village",
                  "suburb"}
+
+# Начала слов в названии нежилого района - промзоны, кампуса, комплекса.
+# Признака жилья в тайлах подписей нет, слоя landuse на их уровнях тоже,
+# поэтому район без жилья узнаётся по названию. Решение автора от
+# 4 ноября 2026 года - в районах только жилые. Состав - выбор помощника.
+NOT_LIVING = ("промзон", "промучаст", "промплощад", "промузел",
+              "промышленная зона", "комплекс", "кампус", "технопарк",
+              "индустриальн", "industrial", "campus", "complex",
+              "business park", "technopark")
 
 # Слои векторного тайла с пунктами и нужные атрибуты.
 LAYERS = {"place", "mountain_peak", "water_name", "park",
@@ -332,6 +342,21 @@ def decode_layer(data, name=LAYER, wanted=None):
             if kind == 1], extent
 
 
+def living(*names):
+    """Жилой ли район с такими названиями - ни одно слово названий
+    не начинается с NOT_LIVING."""
+    for name in names:
+        text = " ".join(re.findall(r"\w+", str(name or "").lower()))
+        words = text.split()
+        for start in NOT_LIVING:
+            if " " in start:
+                if start in text:
+                    return False
+            elif any(word.startswith(start) for word in words):
+                return False
+    return True
+
+
 def place_kind(attrs):
     """Класс пункта из CLASSES или None, если пункт не показывается."""
     kind = attrs.get("class")
@@ -402,8 +427,10 @@ def _read_place(layer, attrs, languages):
     """
     if layer == "place":
         kind = place_kind(attrs)
-        return kind and (kind, place_name(attrs, languages),
-                         _rank(attrs), None)
+        name = place_name(attrs, languages)
+        if kind == "suburb" and not living(name, attrs.get("name")):
+            return None
+        return kind and (kind, name, _rank(attrs), None)
     if layer == "mountain_peak":
         ele = attrs.get("ele")
         ele = int(ele) if isinstance(ele, (int, float)) else None

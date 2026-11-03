@@ -222,6 +222,16 @@ class TestOtherLayers(unittest.TestCase):
         b = pl.tile_point(8, 170, 76, 700, 100, 4096)
         self.assertEqual(river.info[:4], a + b)
 
+    def test_only_living_suburbs(self):
+        # Район промзоны или кампуса не подписывается, жилой - да, даже
+        # с «завод» в названии.
+        self.assertTrue(pl.living("Судозавод", "Sudozavod"))
+        self.assertTrue(pl.living("Бахаревка"))
+        self.assertFalse(pl.living("Комплекс ПГТУ"))
+        self.assertFalse(pl.living("Промучасток"))
+        self.assertFalse(pl.living("Мотовилиха", "Industrial Park"))
+        self.assertFalse(pl.living("Северная промзона"))
+
     def test_long_river_outranks_tributaries(self):
         # Места подписи - середина и четверти линии. Важнее река, длиннее
         # в кадре вся: Кама в двух тайлах обходит приток длиннее её
