@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.38.0
+version=1.39.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.38.0 The Recognition window of the Site analysis submenu
+changelog=1.39.0 The Task list of the Recognition window - Forests and
+      clear-cuts, Fields and Water. A task creates its own classes and
+      computes them by rules from the summer and snow images, no samples
+      are needed. If a class is wrong, it gets a point or outline sample,
+      and Build computes again with it.
+      1.38.0 The Recognition window of the Site analysis submenu
       splits the site into classes by a summer Sentinel-2 image and an
       image with snow from March or April. Classes are set by points or by
       outlined sample areas. The window finds and loads the images itself
