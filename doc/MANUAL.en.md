@@ -3504,7 +3504,9 @@ the shape of the place changes the model at once. So a cut and a
 section are drawn on the globe with the New placemark tool.
 
 The Beds legend in the bottom left corner of the view shows the beds
-of the model from top to bottom in their colours and the tunnels.
+of the model from top to bottom in their colours and the tunnels. When
+the layer of collars, tunnels, intervals or beds lies in a group of the
+project layers, the name of that group is the title of the legend.
 
 In the Identify mode a click on a drill hole shows its number, the
 bed, the depth along the hole and below the collar, the elevation

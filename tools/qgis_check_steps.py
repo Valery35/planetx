@@ -17143,6 +17143,8 @@ def subsurface_check():
     out["images"] = len(model.images) if model else None
     out["legend"] = [window.beds_legend.isVisible(),
                      len(window.beds_legend.items)]
+    # Заголовок шкалы - группа слоёв демо, а не «Пласты».
+    out["legend_title"] = window.beds_legend.heading()
     out["beds"] = list(model.beds) if model else None
     out["source"] = window.subsurface.settings.get("source")
     window.grab().save(os.path.join(TEMP, "planetx_subsurface_window.png"))

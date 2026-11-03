@@ -1066,6 +1066,7 @@ class BedsLegend(QWidget):
         self.setAttribute(enum(Qt, "WidgetAttribute",
                                "WA_TransparentForMouseEvents"))
         self.items = []
+        self.title = ""
         self.hide()
 
     def _layout(self):
@@ -1074,12 +1075,19 @@ class BedsLegend(QWidget):
         columns = (len(self.items) + rows - 1) // rows or 1
         return rows, columns
 
-    def set_items(self, items):
+    def heading(self):
+        """Заголовок - название группы слоёв, без неё «Пласты»."""
+        return self.title or tr("Пласты")
+
+    def set_items(self, items, title=""):
         self.items = list(items)
-        line = QFontMetrics(self.font()).height()
+        self.title = title
+        metrics = QFontMetrics(self.font())
+        line = metrics.height()
         rows, columns = self._layout()
-        self.setFixedSize(columns * self.COLUMN + 2 * PAD,
-                          line * (rows + 1) + PAD)
+        width = max(columns * self.COLUMN,
+                    metrics.horizontalAdvance(self.heading()))
+        self.setFixedSize(width + 2 * PAD, line * (rows + 1) + PAD)
         self.update()
 
     def paintEvent(self, event):
@@ -1090,7 +1098,7 @@ class BedsLegend(QWidget):
         line = metrics.height()
         top = PAD // 2
         painter.setPen(TEXT)
-        painter.drawText(PAD, top + metrics.ascent(), tr("Пласты"))
+        painter.drawText(PAD, top + metrics.ascent(), self.heading())
         rows, _ = self._layout()
         for n, (rgb, label) in enumerate(self.items):
             x = PAD + (n // rows) * self.COLUMN

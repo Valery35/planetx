@@ -619,6 +619,7 @@ class Model:
         self.hole_labels = {}  # номер скважины - подпись из настроек QGIS
         self.skipped = {}
         self.missing = []  # не найденные таблицы и растры
+        self.title = ""  # заголовок шкалы - группа слоёв в проекте
 
     def color(self, code):
         if not code:
@@ -870,6 +871,23 @@ def project_roles(layers):
     return roles, roofs
 
 
+TITLE_ROLES = ("collar", "tunnels", "interval", "beds")
+
+
+def group_title(layers):
+    """Название группы дерева слоёв, в которой лежит слой устьев, тоннелей,
+    интервалов или пластов - по этому порядку. Слой без группы - пусто."""
+    root = QgsProject.instance().layerTreeRoot()
+    for role in TITLE_ROLES:
+        layer = layers.get(role)
+        node = root.findLayer(layer.id()) if layer is not None else None
+        parent = node.parent() if node is not None else None
+        if parent is not None and parent.parent() is not None \
+                and parent.name():
+            return parent.name()
+    return ""
+
+
 def load(settings):
     """Модель по настройкам окна. Таблиц может не быть, кроме устьев
     или кровель - нужно хотя бы что-то одно."""
@@ -886,6 +904,7 @@ def load(settings):
         if isinstance(layer, QgsRasterLayer):
             rasters.append((layer.name(), layer.source()))
             raster_layers[layer.source()] = layer
+    model.title = group_title(layers)
     base = project.homePath()
     if layers["images"] is not None:
         # Картинки разрезов - от папки файла слоя.
@@ -1876,7 +1895,7 @@ class SubsurfaceManager(QObject):
                 names.append(name)
                 items.append((color, name or tr("Тоннель")))
         legend = self.window.beds_legend
-        legend.set_items(items)
+        legend.set_items(items, model.title)
         legend.setVisible(bool(items))
         self.window._place_attribution()
 
