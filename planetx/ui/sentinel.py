@@ -533,8 +533,12 @@ def build(scene, ring, products, folder, clear_clouds, sas="",
     for name in products:
         values = s2.product(name, bands, scene.mission)
         path = free_path(folder, s2.file_name(scene, name), ".tif")
+        # Подписи каналов узнаёт окно «Выделение объектов»
+        # (core/objecttasks.py).
         labels = [s2.band_label(scene, k) for k in s2.all_keys(scene)] \
-            if name in MULTI else None
+            if name in MULTI else \
+            [s2.band_label(scene, k) for k in s2.COMPOSITES[name]] \
+            if name in s2.COMPOSITES else None
         _write(gdal, path, values, box, res, scene.epsg, labels)
         if name in s2.COMPOSITES or name in MULTI:
             ranges = [s2.stretch(band) for band in values]

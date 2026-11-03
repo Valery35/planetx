@@ -192,6 +192,7 @@ LAYERS = (("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
 TOOL = "tool:"
 TOOLS = (("here:change", "change"), ("here:classify", "change"),
          ("here:similar", "change"), ("here:trace", "change"),
+         ("here:objects", "change"),
          ("here:sentinel", "survey"),
          ("here:lidar", "survey"), ("here:oam", "survey"),
          ("here:rumsey", "oldmaps"),
@@ -323,6 +324,10 @@ def tool_names():
             "Окно трассировки участка у точки взгляда - снимок "
             "раскладывается на цвета, области ложатся гладкими "
             "многоугольниками в проект QGIS.")),
+        TOOL + "here:objects": (tr("Выделение объектов"), tr(
+            "Окно типовых задач у точки взгляда - леса и рубки, поля, "
+            "вода. Снимок окна «Космоснимки» трассируется, классы "
+            "называются по отражению.")),
         TOOL + "here:lidar": (tr("Облака точек лидара"), tr(
             "Плитки облаков точек IGN LiDAR HD во Франции и USGS 3DEP "
             "в США у точки взгляда слоями проекта, точки на глобусе.")),

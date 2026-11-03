@@ -6409,7 +6409,6 @@ EN = {
         "The image of the site is split into colors, the areas of one color "
         "are outlined with smooth outlines.",
     "Снимок раскладывается на цвета…": "Splitting the image into colors…",
-    "Трассировка {source}": "Tracing {source}",
     "Цветов {colors}, областей {regions}.":
         "Colors {colors}, areas {regions}.",
     # Таблица классов и настройки в названии слоя (ui/tracing.py,
@@ -6448,6 +6447,63 @@ EN = {
     "В окне «Трассировка» нет построенных классов.":
         "The Tracing window has no built classes.",
     "Классов из трассировки: {n}.": "Classes from tracing: {n}.",
+    # Выделение объектов (ui/objecttasks.py).
+    "Выделение объектов": "Object extraction",
+    "Выделение объектов…": "Object extraction…",
+    "Типовые задачи - леса и рубки, поля, вода. Трассировка снимка "
+    "«Космоснимков» с названиями классов по отражению.":
+        "Typical tasks - forests and clear-cuts, fields, water. Tracing of a "
+        "Satellite imagery image with class names by reflectance.",
+    "Окно типовых задач у точки взгляда - леса и рубки, поля, вода. Снимок "
+    "окна «Космоснимки» трассируется, классы называются по отражению.":
+        "The window of typical tasks at the view point - forests and "
+        "clear-cuts, fields, water. An image of the Satellite images window "
+        "is traced, the classes are named by reflectance.",
+    "Леса и рубки": "Forests and clear-cuts",
+    "Хвойный лес, лиственный лес и травы, рубки и гари, открытая почва, "
+    "вода. Рубка - открытая почва, вокруг которой в полосе трёх клеток "
+    "не меньше четверти - хвойный лес.":
+        "Coniferous forest, broadleaf forest and grass, clear-cuts and burns, "
+        "bare soil, water. A clear-cut is bare soil with at least a quarter "
+        "of coniferous forest in the three-cell band around it.",
+    "Растительность, открытая почва и пашня, рубки, вода. Поля остаются "
+    "отдельными многоугольниками, наименьшая область крупнее.":
+        "Vegetation, bare soil and arable land, clear-cuts, water. Fields "
+        "stay separate polygons, the smallest area is larger.",
+    "Вода и всё остальное - суша.": "Water, and everything else is land.",
+    "Поля": "Fields",
+    "Прочее": "Other",
+    "Хвойный лес": "Coniferous forest",
+    "Лиственный лес и травы": "Broadleaf forest and grass",
+    "Открытая почва": "Bare soil",
+    "Рубки и гари": "Clear-cuts and burns",
+    "Типовая задача ставит количество цветов и наименьшую область и после "
+    "«Построить» называет классы по отражению снимка.":
+        "A typical task sets the number of colors and the smallest area and "
+        "after Build names the classes by the image reflectance.",
+    "Нужен снимок окна «Космоснимки» - сочетание каналов или «Все каналы» "
+    "Sentinel-2 или Landsat: по подписям каналов окно узнаёт ближний ИК, "
+    "красный и SWIR. Хвоя от листвы лучше отделяется на летнем снимке.":
+        "An image of the Satellite images window is needed - a band "
+        "combination or All bands of Sentinel-2 or Landsat. The window "
+        "recognizes near infrared, red and SWIR by the band labels. Conifers "
+        "separate from broadleaf better on a summer image.",
+    "Задача": "Task",
+    "Правилам нужны каналы снимка, у подложки глобуса их нет. Возьмите "
+    "снимок окна «Космоснимки».":
+        "The rules need image bands, the globe basemap has none. Take an "
+        "image of the Satellite images window.",
+    "У растра не узнать ближний ИК и красный или SWIR - нужен снимок окна "
+    "«Космоснимки» с подписями каналов.":
+        "The raster gives no near infrared and red or SWIR - an image of the "
+        "Satellite images window with band labels is needed.",
+    "Значения растра не похожи на отражение, классы не названы.":
+        "The raster values do not look like reflectance, the classes are not "
+        "named.",
+    "задача «{task}»": "task “{task}”",
+    "Снимок не летний, хвоя и листва различаются хуже.":
+        "The image is not a summer one, conifers and broadleaf differ less.",
+    "Рубки и гари - {area} га.": "Clear-cuts and burns - {area} ha.",
     # Похожие области (ui/similar.py).
     "Похожие области": "Similar areas",
     "Похожие области…": "Similar areas…",

@@ -73,6 +73,7 @@ from .aef import ChangeTool
 from .fieldmap import FieldTool
 from .aefclass import ClassTool
 from .similar import SimilarTool
+from .objecttasks import TaskTool
 from .tracing import TraceTool
 from .spectral import SpectralTool
 from .emit import EmitTool
@@ -741,6 +742,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.class_tool = ClassTool(self)
         self.similar_tool = SimilarTool(self)
         self.trace_tool = TraceTool(self)
+        # Типовые задачи выделения объектов поверх трассировки.
+        self.task_tool = TaskTool(self)
         self.spectral_tool = SpectralTool(self)
         self.emit_tool = EmitTool(self)
         self.earthwork = EarthworkTool(self)
@@ -1166,6 +1169,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.class_tool.close()
             self.similar_tool.close()
             self.trace_tool.close()
+            self.task_tool.close()
             self.spectral_tool.close()
             self.emit_tool.close()
             self.earthwork.close()

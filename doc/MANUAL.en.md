@@ -3159,6 +3159,49 @@ polygons. This globe layer is shared with classification, similar areas and the
 viewshed from a point, a new calculation of any of them removes the previous
 one.
 
+### Object extraction
+
+The Object extraction… item of the Site analysis submenu of the globe menu
+opens the window of typical tasks for the point under the cursor. The window
+is tracing with rules. After Build the image colors get names by reflectance,
+and the colors of one kind merge into one class.
+
+The Task list:
+- Forests and clear-cuts - coniferous forest, broadleaf forest and grass,
+  clear-cuts and burns, bare soil, water.
+- Fields - vegetation, bare soil and arable land, clear-cuts, water. The
+  smallest area is larger, and fields stay separate polygons.
+- Water - water and land.
+
+The task sets the number of colors, the smoothing and the smallest area, and
+they can be corrected. The source is an image of the Satellite images window
+of Sentinel-2 or Landsat, a band combination, for example Agriculture (B11 B8
+B2), or All bands. The window recognizes the bands by the band labels of the
+file, and for files of earlier module versions by the file name. Near infrared
+and red or SWIR 1.6 µm are needed. The globe basemap and a raster without band
+labels have no rules, and the line under the fields says so.
+
+The rules:
+- water is dark in near infrared and SWIR.
+- vegetation has the index (NIR - red) / (NIR + red) above 0.35, without a red
+  band (NIR - SWIR) / (NIR + SWIR) above 0.05.
+- conifers are the part of the image vegetation dark in near infrared, if the
+  infrared range of vegetation is over 0.05, otherwise vegetation is one class.
+- snow and ice are bright in the visible and dark in SWIR.
+- the rest is bare soil.
+- clear-cuts and burns are connected pieces of bare soil with at least a
+  quarter of coniferous forest in the three-cell band around them. A band and
+  not the border alone is used because mixed pixels similar to broadleaf lie
+  along the edge of a clear-cut. Light vegetation may be a crop as well, so
+  arable land next to it is not taken for a clear-cut.
+
+The thresholds are typical reflectances, and they are worth checking on your
+own image. Conifers separate from broadleaf better on a summer image, and for
+an image of another season the line under the fields reminds of it. The class
+names and merges can be corrected in the Classes table, and clear-cuts are a
+separate class after the classes of the table. OK writes a layer as in
+tracing, and the task is the first of the settings in the layer name.
+
 ### Minerals by spectrum
 
 The Minerals by spectrum… item of the Site analysis submenu of the globe menu

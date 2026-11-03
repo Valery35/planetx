@@ -21033,7 +21033,8 @@ def trace_wait():
     probe = ClassDialog(window)
     probe.take_traced()
     out["class_names"] = [row.name.text() for row in probe.rows]
-    probe.deleteLater()
+    # Окно не удаляется: его участок стоит в общем списке участков окна.
+    state["class_probe"] = probe
     path = os.path.join(TEMP, "planetx_trace_{}.gpkg".format(
         int(time.time())))
     out["exported"] = bool(tool.export(path))
@@ -21069,6 +21070,140 @@ def trace_wait():
     dialog.reject()
     from qgis.core import QgsProject
     QgsProject.instance().removeMapLayer(state["trace_layer"])
+    return None
+
+
+def _task_raster(path, labels):
+    """Синтетическое сочетание «Сельское хозяйство» (B11 B8 B2) у Перми:
+    слева хвоя с вырубкой, справа лиственный лес сверху и пашня снизу,
+    между ними полоса воды. Отражение с шумом 0.005."""
+    import numpy as np
+    from osgeo import gdal, osr
+    rows = cols = 300
+    kinds = {"conifer": (0.08, 0.20, 0.02), "broadleaf": (0.17, 0.38, 0.03),
+             "soil": (0.30, 0.22, 0.08), "water": (0.01, 0.02, 0.04)}
+    plan = np.full((rows, cols), "conifer", dtype=object)
+    plan[100:160, 50:110] = "soil"
+    plan[:150, 170:] = "broadleaf"
+    plan[150:, 170:] = "soil"
+    plan[:, 150:170] = "water"
+    rng = np.random.default_rng(3)
+    values = np.zeros((3, rows, cols), dtype=np.float32)
+    for name, spectrum in kinds.items():
+        for band in range(3):
+            values[band][plan == name] = spectrum[band]
+    values += rng.normal(0.0, 0.005, values.shape).astype(np.float32)
+    data = gdal.GetDriverByName("GTiff").Create(path, cols, rows, 3,
+                                                gdal.GDT_Float32)
+    lat, lon = 58.05, 56.20
+    data.SetGeoTransform((lon - 0.09, 0.0006, 0.0, lat + 0.045, 0.0,
+                          -0.0003))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+    data.SetProjection(srs.ExportToWkt())
+    for band in range(3):
+        target = data.GetRasterBand(band + 1)
+        if labels:
+            target.SetDescription(labels[band])
+        target.WriteArray(values[band])
+    data = None
+    return lat, lon
+
+
+@check(1000)
+def task_open():
+    # Выделение объектов «Леса и рубки» по сочетанию «Сельское хозяйство».
+    from qgis.core import QgsProject, QgsRasterLayer
+    from planetx.core.navigation import Pose
+    from planetx.ui import aefclass
+    window = state["window"]
+    # Своя папка на прогон: файл прежнего прогона может держать QGIS.
+    folder = os.path.join(TEMP, "planetx_tasks_{}".format(int(time.time())))
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, "S2_20240715_40VDK_agriculture.tif")
+    plain = os.path.join(folder, "plain.tif")
+    lat, lon = _task_raster(path, ["B11 swir16", "B8 nir", "B2 blue"])
+    _task_raster(plain, None)
+    layer = QgsRasterLayer(path, "agriculture", "gdal")
+    bare = QgsRasterLayer(plain, "plain", "gdal")
+    QgsProject.instance().addMapLayers([layer, bare])
+    state["task_layers"] = [layer.id(), bare.id()]
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 14000.0, 0.0, 0.0))
+    window.view.update()
+    tool = window.task_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    out = result.setdefault("task", {})
+    out["title"] = dialog.windowTitle()
+    out["tasks"] = [dialog.task.itemText(n)
+                    for n in range(dialog.task.count())]
+    dialog.task.setCurrentIndex(dialog.task.findData("fields"))
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    out["colors_set"] = dialog.colors.value()
+    dialog.area.set_square(lat, lon, 8000.0)
+    dialog.level.setCurrentIndex(0)
+    # Подложка и растр без подписей каналов - отказ без расчёта.
+    dialog.source.setCurrentIndex(dialog.source.findData(aefclass.BASEMAP))
+    dialog.build.emit()
+    out["basemap_refused"] = tool.job is None and bool(dialog.status.text())
+    dialog.source.setCurrentIndex(dialog.source.findData(bare.id()))
+    dialog.build.emit()
+    out["plain_refused"] = tool.job is None
+    out["plain_status"] = dialog.status.text()
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    dialog.build.emit()
+    out["started"] = tool.job is not None
+    state["task_started"] = time.monotonic()
+
+
+@check(500)
+def task_wait():
+    import numpy as np
+    from osgeo import ogr
+    window = state["window"]
+    tool = window.task_tool
+    if tool.job is not None \
+            and time.monotonic() - state["task_started"] < 120.0:
+        return 500
+    out = result["task"]
+    out["build_s"] = round(time.monotonic() - state["task_started"], 2)
+    dialog = tool.dialog
+    out["status"] = dialog.status.text()
+    res = tool.result
+    if res is None:
+        return None
+    out["roles"] = tool.roles
+    out["month"] = tool.month
+    out["names"] = res["names"]
+    counts = np.bincount(res["classes"][res["classes"] >= 0].ravel(),
+                         minlength=len(res["names"]))
+    total = max(int(counts.sum()), 1)
+    out["shares"] = {name: round(float(c) / total, 3)
+                     for name, c in zip(res["names"], counts) if c}
+    out["table_rows"] = len(dialog.table.rows)
+    out["clearings"] = int(len(tool.clearing))
+    out["legend"] = [text for _, text in tool.legend_rows()]
+    window.view.update()
+    window.view.grabFramebuffer().save(os.path.join(TEMP,
+                                                    "planetx_task.png"))
+    path = os.path.join(TEMP, "planetx_task_{}.gpkg".format(
+        int(time.time())))
+    out["exported"] = bool(tool.export(path))
+    data = ogr.Open(path)
+    layer = data.GetLayerByName("traced")
+    names = {}
+    for feature in layer:
+        name = feature.GetField("name")
+        names[name] = names.get(name, 0.0) + feature.GetField("area_ha")
+    out["field_area_ha"] = {k: round(v, 1) for k, v in names.items()}
+    data = None
+    nodes = _result_layers()
+    out["layers"] = [n.name() for n in nodes]
+    _drop_group()
+    dialog.reject()
+    from qgis.core import QgsProject
+    QgsProject.instance().removeMapLayers(state["task_layers"])
     return None
 
 

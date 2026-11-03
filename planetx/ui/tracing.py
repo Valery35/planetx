@@ -140,6 +140,15 @@ class ColorTable(QWidget):
         self._fill_joins()
         self.changed.emit(False)
 
+    def set_joins(self, target):
+        """Слияние цветов без сигнала: target[n] - цвет, с которым слит
+        цвет n, -1 - свой класс."""
+        for row in self.rows:
+            join = target[row.number] if row.number < len(target) else -1
+            row.join.blockSignals(True)
+            row.join.setCurrentIndex(max(0, row.join.findData(join)))
+            row.join.blockSignals(False)
+
     def names(self, count):
         out = [""] * count
         for row in self.rows:
@@ -316,7 +325,11 @@ class TraceDialog(QDialog):
 
 
 class TraceTool(SiteTool, QObject):
-    """Трассировка участка у окна глобуса."""
+    """Трассировка участка у окна глобуса. Наследник (ui/objecttasks.py)
+    задаёт dialog_class, tool_title и prepare - названия и слияние цветов
+    до таблицы классов."""
+
+    dialog_class = TraceDialog
 
     def __init__(self, window):
         super().__init__(window)
@@ -330,16 +343,24 @@ class TraceTool(SiteTool, QObject):
         self.timer = QTimer(self)
         self.timer.setInterval(100)
         self.timer.timeout.connect(lambda: _poll_job(self))
-        self.session = Session(window, tr("Трассировка"))
+        self.session = Session(window, self.tool_title())
+
+    def tool_title(self):
+        return tr("Трассировка")
 
     @property
     def legend_title(self):
-        return tr("Трассировка")
+        return self.tool_title()
+
+    def prepare(self, out):
+        """Слияние цветов до таблицы классов: target для join_colors, -1 -
+        свой класс. Названия и цвета наследник меняет в self.base."""
+        return [-1] * len(self.base["colors"])
 
     def open_here(self, lat, lon):
         dialog = self.dialog
         if dialog is None:
-            dialog = TraceDialog(self.window)
+            dialog = self.dialog_class(self.window)
             dialog.build.connect(self.build)
             dialog.finished.connect(self._closed)
             dialog.table.changed.connect(self._classes_changed)
@@ -409,7 +430,7 @@ class TraceTool(SiteTool, QObject):
         dialog.status.setText(tr("Снимок раскладывается на цвета…"))
         values = (colors, smooth, least, corner)
         _run_job(self, work, lambda out: self._built(
-            out, key, box, name, ring, credit, values), tr("Трассировка"))
+            out, key, box, name, ring, credit, values), self.tool_title())
 
     def _built(self, out, key, box, raster, ring, credit=None,
                values=None):
@@ -435,9 +456,13 @@ class TraceTool(SiteTool, QObject):
                      "kinds": out["kinds"], "shapes": out["shapes"],
                      "colors": colors, "names": names, "hexes": hexes,
                      "raster": raster, "credit": credit, "ring": ring,
+                     "parts": out["parts"],
                      "settings": trace_settings(*(values + (step,)))
                      if values else []}
-        dialog.table.set_colors(colors, names, parts)
+        target = self.prepare(out)
+        dialog.table.set_colors(self.base["colors"], self.base["names"],
+                                parts)
+        dialog.table.set_joins(target)
         dialog.show_table(len(colors))
         dialog.status.setText(tr(
             "Цветов {colors}, областей {regions}.",
@@ -514,7 +539,7 @@ class TraceTool(SiteTool, QObject):
         group = self.session.group_for(result["ring"])
         values = [(n + 1, rgb, name) for n, (rgb, name) in enumerate(
             zip(result["colors"], result["names"]))]
-        title = tr("Трассировка {source}", source=result["raster"] or "")
+        title = "{} {}".format(self.tool_title(), result["raster"] or "")
         layer = add_vector(self.window, path, "traced",
                            titled(title, result["settings"]),
                            group, (0, 0, 0), width=0.0,

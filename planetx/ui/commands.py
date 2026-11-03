@@ -324,6 +324,11 @@ def _tools(window, add, earth):
         lambda: window.trace_tool.open_here(*_here(window)),
         ("трассировка", "векторизация", "векторизовать", "в вектор",
          "potrace", "trace", "vectorize", "trace bitmap"))
+    add("here:objects", tr("Выделение объектов"), open_,
+        lambda: window.task_tool.open_here(*_here(window)),
+        ("выделение объектов", "типовые задачи", "леса и рубки", "рубки",
+         "вырубки", "гари", "хвоя", "поля", "пашня", "object extraction",
+         "clear-cuts", "forest"))
     add("here:spectral", tr("Минералы по спектру"), open_,
         lambda: window.spectral_tool.open_here(*_here(window)),
         ("минералы", "спектр", "спектральная библиотека", "породы",
