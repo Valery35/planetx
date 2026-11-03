@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.35.0
+version=1.36.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.35.0 The Object extraction window separates conifers by
+changelog=1.36.0 The Object extraction window has the Overgrown fields task.
+      A table of spring and autumn images for 4 years is filled by the Pick
+      images button, and every field gets the year of its last bare soil -
+      arable land, abandoned 1-2 years, fallow land or meadow, overgrowing
+      with trees, forest. The window tells how much of the site an image
+      covers and does not build below 90 percent.
+      1.35.0 The Object extraction window separates conifers by
       a winter - summer pair. The second image is searched in March and
       April while the snow lies, conifers are dark on snow and not light
       in summer near infrared. A failed image load is retried.
