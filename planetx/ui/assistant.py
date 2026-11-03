@@ -625,6 +625,36 @@ class AssistantDialog(QDialog):
         """Строка модуля в разговоре, от окна глобуса."""
         self._say("note", text)
 
+    def complete(self, system, text, done):
+        """Один запрос без инструментов и разговора: ответ модели текстом
+        в done(text, error). Ложь - ждётся прежний ответ или нет ключа,
+        тогда открываются настройки. Так названия классов трассировки
+        (core/classnames.py) не трогают разговор с помощником."""
+        if self.busy() or self.waiting():
+            return False
+        provider = self.provider_key()
+        if not ready(provider):
+            self._say("note", tr("Нет ключа API. Его вводят в окне "
+                                 "«Настройки помощника»."))
+            self.open_settings()
+            return False
+        url, headers, body = ai.request(
+            provider, provider_base(provider), provider_model(provider),
+            load_key(provider), system, [{"role": "user", "text": text}],
+            tools=False)
+        self.asked = provider
+        self.reply = post_json(url, headers, body, lambda data, error:
+                               self._completed(done, data, error))
+        self.busy_changed.emit(True)
+        return True
+
+    def _completed(self, done, data, error):
+        self.reply = None
+        self.busy_changed.emit(False)
+        answer = ai.parse(self.asked or self.provider_key(), data)
+        done(answer.text if not answer.error else "",
+             answer.error or (error if data is None else ""))
+
     def _ask(self):
         provider = self.provider_key()
         base = provider_base(provider)

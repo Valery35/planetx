@@ -11,8 +11,6 @@
 меняется. Правила работают только по снимку с известными каналами -
 файлу окна «Космоснимки».
 """
-import os
-
 import numpy as np
 from qgis.core import QgsSettings
 from qgis.PyQt.QtCore import Qt
@@ -22,8 +20,7 @@ from ..core import objecttasks as ot
 from ..i18n import tr
 from ..qt_compat import enum
 from .aefclass import BASEMAP
-from .inset import warm
-from .tracing import TraceDialog, TraceTool
+from .tracing import TraceDialog, TraceTool, raster_roles
 
 SETTINGS = "PlanetX/objects/"
 SUMMER = range(5, 10)  # месяцы, когда хвоя и листва различаются лучше
@@ -50,22 +47,6 @@ def kind_name(kind):
             ot.VEGETATION: tr("Растительность"),
             ot.SOIL: tr("Открытая почва"), ot.CLEARING: tr("Рубки и гари"),
             ot.SNOW: tr("Снег и лёд"), ot.OTHER: tr("Прочее")}[kind]
-
-
-def raster_roles(layer):
-    """Роли каналов растра проекта и месяц съёмки по подписям каналов
-    и имени файла: (роли или None, месяц или None). Главный поток, файл
-    открывается только для подписей."""
-    from osgeo import gdal
-    warm()
-    path = layer.source().split("|")[0]
-    stem = os.path.splitext(os.path.basename(path))[0]
-    data = gdal.Open(path)
-    names = [] if data is None else [
-        data.GetRasterBand(n).GetDescription()
-        for n in range(1, data.RasterCount + 1)]
-    data = None
-    return ot.channels(names, stem), ot.month_of(stem)
 
 
 class TaskDialog(TraceDialog):
@@ -126,9 +107,13 @@ class TaskTool(TraceTool):
         self.month = None
         self.clearing = None  # номера областей-рубок
         self.notes = []  # замечания правил к строке итога
+        self.rules = None  # названия цветов по правилам
 
     def tool_title(self):
         return tr("Выделение объектов")
+
+    def rule_names(self):
+        return self.rules
 
     def build(self):
         dialog = self.dialog
@@ -155,6 +140,7 @@ class TaskTool(TraceTool):
         count = len(base["colors"])
         self.clearing = None
         self.notes = []
+        self.rules = None
         centers = np.asarray(out["centers"], dtype=np.float64)
         if count == 0 or np.nanmax(centers) > ot.REFLECTANCE_MAX:
             self.notes.append(tr(
@@ -181,6 +167,7 @@ class TaskTool(TraceTool):
             else:
                 first[kind] = n
         base["names"] = [kind_name(k) for k in kinds]
+        self.rules = list(base["names"])
         base["colors"] = [ot.KIND_COLORS[k] for k in kinds]
         base["hexes"] = ["#%02x%02x%02x" % c for c in base["colors"]]
         task = self.dialog.task.currentText()

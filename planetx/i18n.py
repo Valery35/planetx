@@ -6504,6 +6504,27 @@ EN = {
     "Снимок не летний, хвоя и листва различаются хуже.":
         "The image is not a summer one, conifers and broadleaf differ less.",
     "Рубки и гари - {area} га.": "Clear-cuts and burns - {area} ha.",
+    # Названия классов от помощника (ui/tracing.py, core/classnames.py).
+    "Названия от помощника": "Names from the assistant",
+    "ИИ-помощник предлагает названия классов по таблице - средним значениям "
+    "каналов, доле участка, размеру областей, месту и месяцу съёмки. Снимок "
+    "и названия слоёв в модель не уходят, нажатие кнопки - согласие "
+    "отправить таблицу. Названия можно поправить.":
+        "The AI assistant suggests class names by the table - mean band "
+        "values, share of the site, area size, place and month of the image. "
+        "The image and layer names do not go to the model, pressing the "
+        "button is consent to send the table. The names can be corrected.",
+    "Сначала нажмите «Построить».": "Press Build first.",
+    "яркость 0-255": "brightness 0-255",
+    "отражение 0-1": "reflectance 0-1",
+    "значения растра": "raster values",
+    "Помощник не дал названий: {error}":
+        "The assistant gave no names: {error}",
+    "пустой ответ": "empty answer",
+    "Названия предложил помощник, их можно поправить. Классы с одинаковым "
+    "названием слиты.":
+        "The names are suggested by the assistant and can be corrected. "
+        "Classes with the same name are merged.",
     # Похожие области (ui/similar.py).
     "Похожие области": "Similar areas",
     "Похожие области…": "Similar areas…",

@@ -3147,6 +3147,16 @@ name merges the color into another one, and the areas of both colors become one
 class with the name and color of the one it is merged into. A new Build sets
 the colors and names anew.
 
+The Names from the assistant button above the table sends the AI assistant the
+class table - the mean band values with their roles, the share of the site,
+the number and mean size of the areas, the site point and the image month, and
+in the Object extraction window also the names by the rules. The image, layer
+and file names do not go to the model, and pressing the button is consent to
+send the table. The assistant answers with a name for each color, the names go
+into the table, and colors with the same name merge. The names can be
+corrected. The assistant is connected in the Assistant settings window, see
+the [Assistant](#assistant) section.
+
 OK writes a polygon layer with the fields cls (class number), name (class
 name), color and area_ha to the calculation subgroup, and the areas are drawn
 in their colors. The layer name carries the source and the calculation

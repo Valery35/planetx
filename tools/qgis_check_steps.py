@@ -4236,7 +4236,19 @@ def _fake_model():
             if self.path.endswith("/messages"):
                 last = body["messages"][-1]["content"]
                 first = body["messages"][0]["content"]
-                if isinstance(first, str) and "течения" in first:
+                import re
+                if '"names"' in str(body.get("system", "")):
+                    # Названия классов трассировки: первый - хвоя, прочие
+                    # попеременно «Вода» и «Пашня», одинаковые сольются.
+                    count = len(re.findall(r"^Класс \d+ - ", first, re.M))
+                    names = ["Хвойный лес"] + [
+                        "Вода" if n % 2 else "Пашня"
+                        for n in range(1, count)]
+                    answer = {"content": [{"type": "text", "text":
+                                           "Вот:\n" + json.dumps(
+                                               {"names": names},
+                                               ensure_ascii=False)}]}
+                elif isinstance(first, str) and "течения" in first:
                     answer = self.actions(len(body["messages"]))
                 elif isinstance(first, str) and "слоях проекта" in first:
                     answer = self.gate(len(body["messages"]))
@@ -21187,6 +21199,47 @@ def task_wait():
     window.view.update()
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_task.png"))
+    # Названия от помощника - поддельный сервер модели, ответ JSON.
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    server, seen = _fake_model()
+    state["names_model"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    _use_service(window._assistant(), ai.ANTHROPIC,
+                 "http://127.0.0.1:%d" % server.server_port)
+    window.assistant_dialog.settings.close()
+    state["names_before"] = list(res["names"])
+    tool.ask_names()
+    out["names_asking"] = dialog.status.text()
+    state["names_started"] = time.monotonic()
+    return None
+
+
+@check(300)
+def task_names():
+    from osgeo import ogr
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    out = result["task"]
+    server, seen = state["names_model"]
+    if window.assistant_dialog.busy() \
+            and time.monotonic() - state["names_started"] < 20.0:
+        return 300
+    out["names_status"] = dialog.status.text()
+    out["names_after"] = tool.result["names"]
+    out["table_names"] = [row.name.text() for row in dialog.table.rows]
+    if seen:
+        body = seen[-1][1]
+        question = body["messages"][0]["content"]
+        out["question_head"] = question[:300]
+        out["no_tools"] = "tools" not in body
+        out["no_layer_name"] = "agriculture" not in question \
+            and "S2_" not in question
+    server.shutdown()
+    ui_ai.load_key = state["real_load_key"]
     path = os.path.join(TEMP, "planetx_task_{}.gpkg".format(
         int(time.time())))
     out["exported"] = bool(tool.export(path))

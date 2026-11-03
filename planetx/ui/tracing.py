@@ -17,6 +17,8 @@ core/tracing.py. На глобусе - цвета клеток, OK записы�
 несёт настройки расчёта (results.titled), классы трассировки берёт окно
 «Классификация» кнопкой «Классы из трассировки».
 """
+import os
+
 import numpy as np
 from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
@@ -25,8 +27,9 @@ from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
                                  QLabel, QLineEdit, QPushButton, QScrollArea,
                                  QSpinBox, QVBoxLayout, QWidget)
 
-from ..core import aef, rasterclass, segments, tracing
-from ..i18n import tr
+from ..core import aef, classnames, objecttasks, rasterclass, segments, \
+    tracing
+from ..i18n import is_russian, tr
 from ..qt_compat import enum
 from .aef import _poll_job, _run_job, stop_point
 from .aefclass import (AUTO, BASEMAP, RASTER_SIDE, ClassTiles, SourceBox,
@@ -47,6 +50,23 @@ TABLE_ROWS = 6  # строк таблицы классов без прокрут
 def default_name(rank):
     """Название класса до переименования: номер по доле участка с 1."""
     return tr("Цвет {n}", n=rank)
+
+
+def raster_roles(layer):
+    """Роли каналов растра проекта и месяц съёмки по подписям каналов
+    и имени файла «Космоснимков» (core/objecttasks.py): (роли или None,
+    месяц или None). Главный поток, файл открывается только ради
+    подписей."""
+    from osgeo import gdal
+    warm()
+    path = layer.source().split("|")[0]
+    stem = os.path.splitext(os.path.basename(path))[0]
+    data = gdal.Open(path)
+    names = [] if data is None else [
+        data.GetRasterBand(n).GetDescription()
+        for n in range(1, data.RasterCount + 1)]
+    data = None
+    return objecttasks.channels(names, stem), objecttasks.month_of(stem)
 
 
 def trace_settings(colors, smooth, least, corner, step):
@@ -139,6 +159,21 @@ class ColorTable(QWidget):
     def _renamed(self):
         self._fill_joins()
         self.changed.emit(False)
+
+    def set_names(self, names):
+        """Названия цветов без сигнала, цвета с одинаковым названием
+        сливаются с самым крупным из них (строки идут по доле)."""
+        first = {}
+        target = [-1] * len(names)
+        for row in self.rows:
+            name = names[row.number]
+            row.name.setText(name)
+            if name in first:
+                target[row.number] = first[name]
+            else:
+                first[name] = row.number
+        self._fill_joins()
+        self.set_joins(target)
 
     def set_joins(self, target):
         """Слияние цветов без сигнала: target[n] - цвет, с которым слит
@@ -254,7 +289,19 @@ class TraceDialog(QDialog):
         self.table_box = QScrollArea(self)
         self.table_box.setWidgetResizable(True)
         self.table_box.setWidget(self.table)
-        self.table_title = QLabel(tr("Классы"), self)
+        self.table_title = QWidget(self)
+        title_row = QHBoxLayout(self.table_title)
+        title_row.setContentsMargins(0, 0, 0, 0)
+        title_row.addWidget(QLabel(tr("Классы"), self.table_title), 1)
+        self.ask_names = QPushButton(tr("Названия от помощника"),
+                                     self.table_title)
+        self.ask_names.setToolTip(tr(
+            "ИИ-помощник предлагает названия классов по таблице - средним "
+            "значениям каналов, доле участка, размеру областей, месту "
+            "и месяцу съёмки. Снимок и названия слоёв в модель не уходят, "
+            "нажатие кнопки - согласие отправить таблицу. Названия можно "
+            "поправить."))
+        title_row.addWidget(self.ask_names)
         buttons = QDialogButtonBox(self)
         run = QPushButton(tr("Построить"), self)
         run.setDefault(True)
@@ -364,6 +411,7 @@ class TraceTool(SiteTool, QObject):
             dialog.build.connect(self.build)
             dialog.finished.connect(self._closed)
             dialog.table.changed.connect(self._classes_changed)
+            dialog.ask_names.clicked.connect(self.ask_names)
             self.dialog = dialog
         dialog.source.refill()
         dialog.point = (lat, lon)
@@ -456,7 +504,7 @@ class TraceTool(SiteTool, QObject):
                      "kinds": out["kinds"], "shapes": out["shapes"],
                      "colors": colors, "names": names, "hexes": hexes,
                      "raster": raster, "credit": credit, "ring": ring,
-                     "parts": out["parts"],
+                     "parts": out["parts"], "centers": out["centers"],
                      "settings": trace_settings(*(values + (step,)))
                      if values else []}
         target = self.prepare(out)
@@ -495,6 +543,68 @@ class TraceTool(SiteTool, QObject):
             self.show(keep=True)
         else:
             self._show_legend()
+
+    def rule_names(self):
+        """Названия цветов по правилам - у наследника, для помощника."""
+        return None
+
+    def ask_names(self):
+        """«Названия от помощника»: таблица классов - в модель одним
+        запросом (core/classnames.py), ответ - названия в таблице."""
+        base, dialog = self.base, self.dialog
+        if base is None:
+            dialog.status.setText(tr("Сначала нажмите «Построить»."))
+            return
+        count = len(base["colors"])
+        centers = np.asarray(base["centers"], dtype=np.float64)
+        layer = dialog.raster()
+        if dialog.raster_id() == BASEMAP or layer is None:
+            roles, month = ["red", "green", "blue"], None
+            units = tr("яркость 0-255")
+        else:
+            roles, month = raster_roles(layer)
+            units = tr("отражение 0-1") \
+                if np.nanmax(centers) <= objecttasks.REFLECTANCE_MAX \
+                else tr("значения растра")
+        cells = np.bincount(
+            base["classes"][base["classes"] >= 0].ravel().astype(np.int64),
+            minlength=count)[:count]
+        regions = np.bincount(np.asarray(base["kinds"], dtype=np.int64),
+                              minlength=count)[:count]
+        total = max(int(cells.sum()), 1)
+        rules = self.rule_names()
+        rows = [{"means": [float(v) for v in centers[n]],
+                 "share": cells[n] / total, "regions": int(regions[n]),
+                 "area_ha": cells[n] * base["step"] ** 2 / 1e4
+                 / max(int(regions[n]), 1),
+                 "rule": rules[n] if rules else None}
+                for n in range(count)]
+        text = classnames.question(rows, roles, units, dialog.point, month)
+        asked = base
+        system = classnames.system_text("ru" if is_russian() else "en")
+        if self.window._assistant().complete(
+                system, text, lambda answer, error:
+                self._names_came(asked, answer, error)):
+            dialog.status.setText(tr("Помощник думает…"))
+        else:
+            dialog.status.setText(tr("Помощник занят прежним вопросом или "
+                                     "не подключён."))
+
+    def _names_came(self, asked, answer, error):
+        dialog = self.dialog
+        if dialog is None or self.base is not asked:
+            return  # новое «Построить» - ответ к прежним цветам
+        names = classnames.parse_names(answer, len(asked["colors"]))
+        if names is None:
+            dialog.status.setText(tr(
+                "Помощник не дал названий: {error}",
+                error=error or (answer or "")[:200] or tr("пустой ответ")))
+            return
+        dialog.table.set_names(names)
+        self._classes_changed(True)
+        dialog.status.setText(tr("Названия предложил помощник, их можно "
+                                 "поправить. Классы с одинаковым названием "
+                                 "слиты."))
 
     def class_pairs(self):
         """Классы трассировки [(цвет, название)] по убыванию доли - для
