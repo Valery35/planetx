@@ -21827,6 +21827,94 @@ def post138_shot():
     dialog.grab().save(os.path.join(TEMP, "planetx_p138_dialog.png"))
     return None
 
+
+def _post139_wait(key):
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    view = window.view
+    spent = time.monotonic() - state[key]
+    if (dialog.picker.busy() or tool.job is not None or tool.pending
+            or view.load_missing) and spent < 900:
+        view.update()
+        return 2000
+    if not state.get(key + "_settle"):
+        state[key + "_settle"] = True
+        return 3000
+    return None
+
+
+def _post139_save(name):
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    out = result.setdefault("post139", {})
+    out[name] = {"status": dialog.status.text(),
+                 "legend": [t for _, t in tool.legend_rows()]}
+    window.copy_view().save(os.path.join(
+        TEMP, "planetx_p139_{}.png".format(name)))
+    dialog.grab().save(os.path.join(
+        TEMP, "planetx_p139_{}_dialog.png".format(name)))
+
+
+@check(1000, manual=True)
+def post139_task():
+    """Кадры статьи о задачах распознавания: участок POST138, задача
+    «Леса и рубки» без образцов."""
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    window.set_body("earth")
+    window.choose_basemap(0)
+    window.view.navigator.stop()
+    window.view.navigator.show(Pose(POST138[0], POST138[1],
+                                    POST138_SIDE * 1700.0, 0.0, 0.0))
+    window.view.update()
+    tool = window.recognize_tool
+    dialog = tool.open_here(*POST138)
+    dialog.area.set_square(POST138[0], POST138[1], POST138_SIDE * 1000.0)
+    dialog.by_areas.setChecked(True)
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    dialog.build.emit()
+    state["p139a"] = time.monotonic()
+
+
+@check(2000, manual=True)
+def post139_rules():
+    """Кадр классов правилами, затем свой класс «Застройка» контуром
+    из PLANETX_POST139_RING и «Построить» заново."""
+    from qgis.PyQt.QtGui import QColor
+    wait = _post139_wait("p139a")
+    if wait:
+        return wait
+    _post139_save("rules")
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    ring = json.loads(os.environ.get("PLANETX_POST139_RING", "[]"))
+    row = dialog.add_class(os.environ.get("PLANETX_POST139_NAME",
+                                          "Застройка"))
+    row.color = QColor("#e0a030")
+    row._paint()
+    row.pick.setChecked(True)
+    far = -1e6
+    tool.click(far, far, *ring[0])
+    for point in ring[1:]:
+        dialog.sample.add(*point)
+    dialog.sample.drawing = False
+    dialog.sample.edited()
+    dialog.build.emit()
+    state["p139b"] = time.monotonic()
+    return None
+
+
+@check(2000, manual=True)
+def post139_fixed():
+    wait = _post139_wait("p139b")
+    if wait:
+        return wait
+    _post139_save("fixed")
+    return None
+
 LABELS_LOOK = (58.02615, 56.20146, 33860.0, 0.0, 35.0)  # ракурс Google Earth
 
 
