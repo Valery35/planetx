@@ -85,6 +85,39 @@ class TestTwoDates(unittest.TestCase):
         both = ot.two_dates(kinds, centers, AGRI, AGRI)
         self.assertEqual(both, [ot.CONIFER, ot.BROADLEAF, ot.SOIL])
 
+    def test_snow_tells_conifer(self):
+        # Март: хвоя тёмная на снегу, голый лиственный лес светлый, поле -
+        # снег. У снега ближний ИК высокий - правило ИК дало бы хвою и
+        # листве.
+        summer = [[0.17, 0.32, 0.03], [0.17, 0.33, 0.03], SOIL]
+        march = [[0.10, 0.22, 0.12], [0.18, 0.55, 0.45],
+                 [0.08, 0.80, 0.85]]
+        centers = np.hstack([summer, march])
+        kinds = ot.color_kinds(np.array(summer), AGRI)
+        self.assertIsNotNone(ot.winter(centers, AGRI, AGRI))
+        both = ot.two_dates(kinds, centers, AGRI, AGRI)
+        self.assertEqual(both, [ot.CONIFER, ot.BROADLEAF, ot.SOIL])
+
+    def test_snow_and_summer_nir_together(self):
+        # Числа снимков 21 июля 2025 и 17 апреля 2026 года у 59.99,
+        # 57.43. Голый лиственный лес тёмный на снегу, но летом ярок
+        # в ИК - листва. Тёмный летом и светлый на снегу - не хвоя.
+        summer = [[0.134, 0.329, 0.027], [0.114, 0.279, 0.026],
+                  [0.093, 0.216, 0.026], [0.203, 0.468, 0.035],
+                  [0.09, 0.21, 0.03]]
+        april = [[0.082, 0.22, 0.11], [0.068, 0.188, 0.053],
+                 [0.056, 0.159, 0.02], [0.056, 0.531, 0.532],
+                 [0.06, 0.6, 0.55]]
+        centers = np.hstack([summer, april])
+        kinds = ot.color_kinds(np.array(summer), AGRI)
+        both = ot.two_dates(kinds, centers, AGRI, AGRI)
+        self.assertEqual(both, [ot.BROADLEAF, ot.CONIFER, ot.CONIFER,
+                                ot.BROADLEAF, ot.BROADLEAF])
+
+    def test_no_snow_keeps_nir_rule(self):
+        centers = np.hstack([[[0.17, 0.32, 0.03]], [[0.15, 0.29, 0.03]]])
+        self.assertIsNone(ot.winter(centers, AGRI, AGRI))
+
     def test_second_without_nir_changes_nothing(self):
         kinds = [ot.VEGETATION, ot.SOIL]
         self.assertEqual(ot.two_dates(kinds, np.zeros((2, 6)), AGRI,

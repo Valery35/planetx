@@ -49,6 +49,7 @@ SNOW_SWIR = 0.15
 CONIFER_SHARE = 0.4  # нижняя доля размаха ближнего ИК растительности
 CONIFER_SPREAD = 0.05  # размах ниже этого - хвою не отделить
 EVERGREEN = 0.75  # ИК меньшей даты к большей у хвои по двум снимкам
+WINTER_DARK = 0.25  # видимая яркость хвои на снежном снимке не выше
 REFLECTANCE_MAX = 1.5  # значения выше - не отражение
 NEAR_FOREST = 0.25  # доля хвои вокруг почвы, с которой это рубка
 RIM = 3  # клеток, ширина полосы вокруг куска почвы
@@ -169,14 +170,51 @@ def color_kinds(centers, roles):
     return kinds
 
 
+def winter(centers, roles, more_roles):
+    """Видимая яркость второго снимка по цветам, если на нём лежит снег,
+    иначе None. Снег - хотя бы у одного цвета видимые каналы ярче
+    SNOW_VIS, а SWIR, если он есть, темнее SNOW_SWIR."""
+    more_roles = list(more_roles or ())
+    visible = [len(roles) + n for n, r in enumerate(more_roles)
+               if r in ("blue", "green", "red")]
+    if not visible:
+        return None
+    centers = np.asarray(centers, dtype=np.float64)
+    bright = centers[:, visible].min(axis=1)
+    if "swir1" in more_roles:
+        swir = centers[:, len(roles) + more_roles.index("swir1")]
+        snowy = (bright > SNOW_VIS) & (swir < SNOW_SWIR)
+    else:
+        snowy = bright > SNOW_VIS
+    return bright if snowy.any() else None
+
+
 def two_dates(kinds, centers, roles, more_roles):
     """Виды цветов по двум снимкам: centers - средние каналов первого
-    снимка и за ними второго, roles и more_roles - их роли. Растительность
-    первого снимка, у которой ближний ИК на двух датах почти не меняется
-    (меньшее к большему не ниже EVERGREEN), - хвоя, остальная - листва и
-    травы: листва и травы в другой сезон теряют отражение ИК, хвоя нет.
-    Без ближнего ИК у второго снимка виды остаются прежними."""
+    снимка и за ними второго, roles и more_roles - их роли.
+
+    Второй снимок со снегом (зима - лето, просьба автора от 3 ноября
+    2026 года): хвоя - растительность, которая на снегу осталась тёмной
+    в видимых каналах (темнее WINTER_DARK) и летом не светлая в ближнем
+    ИК (вид первого снимка - хвоя или растительность без разделения).
+    Остальная растительность - листва и травы. Голый лиственный лес
+    на снегу бывает тёмным от стволов и теней - его отличает яркий летний
+    ИК, тёмный луг или болото летом похожи на хвою - их отличает снег.
+    Снимок 17 апреля 2026 года у 59.99, 57.43 по одному снегу дал хвои
+    90 % участка, вместе с летним ИК - 47 %. У снега ближний ИК высокий,
+    поэтому правило ИК на снегу не годится.
+
+    Без снега: растительность, у которой ближний ИК на двух датах почти
+    не меняется (меньшее к большему не ниже EVERGREEN), - хвоя, остальная -
+    листва и травы, они в другой сезон теряют отражение ИК. Без ближнего
+    ИК у второго снимка виды остаются прежними."""
     more_roles = list(more_roles or ())
+    veg = (CONIFER, BROADLEAF, VEGETATION)
+    snow = winter(centers, roles, more_roles)
+    if snow is not None:
+        return [(CONIFER if b < WINTER_DARK and k != BROADLEAF
+                 else BROADLEAF) if k in veg else k
+                for k, b in zip(kinds, snow)]
     if "nir" not in more_roles:
         return list(kinds)
     centers = np.asarray(centers, dtype=np.float64)
@@ -184,7 +222,7 @@ def two_dates(kinds, centers, roles, more_roles):
     second = centers[:, len(roles) + more_roles.index("nir")]
     out = []
     for kind, a, b in zip(kinds, first, second):
-        if kind in (CONIFER, BROADLEAF, VEGETATION):
+        if kind in veg:
             high = max(a, b)
             keep = min(a, b) / high if high > 0 else 0.0
             kind = CONIFER if keep >= EVERGREEN else BROADLEAF

@@ -6515,20 +6515,24 @@ EN = {
         "Summer Sentinel-2 images of the site for three years, cloud over the "
         "site up to 5 %. A double click on an image loads the Agriculture "
         "combination (B11 B8 B2) and sets it as the source.",
-    "Снимок того же места другого сезона. Его каналы ложатся на ту же сетку "
-    "участка и идут в раскладку на цвета вместе с первыми. Хвоя отделяется "
-    "от листвы и трав по ближнему ИК - у хвои на двух датах он почти "
-    "не меняется.":
-        "An image of the same place of another season. Its bands go to the "
-        "same site grid and into the split into colors together with the "
-        "first ones. Conifers separate from broadleaf and grass by near "
-        "infrared, which conifers keep almost unchanged on both dates.",
-    "Снимки Sentinel-2 участка весной (апрель, май) и осенью (сентябрь, "
-    "октябрь) за три года. Двойной щелчок загружает снимок и ставит его "
-    "вторым.":
-        "Sentinel-2 images of the site in spring (April, May) and autumn "
-        "(September, October) for three years. A double click loads the "
-        "image and sets it as the second one.",
+    "Снимок того же места другого сезона, лучше со снегом. Его каналы "
+    "ложатся на ту же сетку участка и идут в раскладку на цвета вместе "
+    "с первыми. На снегу хвоя - то, что осталось тёмным, без снега - то, "
+    "у чего ближний ИК почти не изменился.":
+        "An image of the same place of another season, better with snow. Its "
+        "bands go to the same site grid and into the split into colors "
+        "together with the first ones. On snow conifers are what stays dark, "
+        "without snow - what keeps its near infrared almost unchanged.",
+    "Хвоя отделена от листвы по снегу второго снимка.":
+        "Conifers are separated from broadleaf by the snow of the second "
+        "image.",
+    "Снимки Sentinel-2 участка в марте и апреле за три года, пока лежит "
+    "снег. На снегу хвоя тёмная, голый лиственный лес и поля светлые. "
+    "Двойной щелчок загружает снимок и ставит его вторым.":
+        "Sentinel-2 images of the site in March and April for three years, "
+        "while the snow lies. On snow conifers are dark, bare broadleaf "
+        "forest and fields are light. A double click loads the image and "
+        "sets it as the second one.",
     "Двойной щелчок загружает снимок.": "A double click loads the image.",
     "Дополнительно": "More settings",
     "Тонкие настройки: пиксель, цвета, сглаживание, наименьшая область, "
@@ -6554,6 +6558,12 @@ EN = {
     "Сцен {count}, считается облачность над участком…":
         "Scenes {count}, cloud over the site is being counted…",
     "Загрузка снимка {when}…": "Loading the image of {when}…",
+    "Сервер не отдал снимок, повтор {n} из {total}…":
+        "The server gave no image, retry {n} of {total}…",
+    "Снимок не загружен - сервер не отдал каналы {error}. Повторите "
+    "двойной щелчок позже или возьмите другой снимок.":
+        "The image is not loaded - the server gave no bands {error}. Repeat "
+        "the double click later or take another image.",
     "Подходящих снимков: {count}. Двойной щелчок по снимку загружает его.":
         "Suitable images: {count}. A double click on an image loads it.",
     "Подходящих снимков нет: у сцен над участком облачность больше "

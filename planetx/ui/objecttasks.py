@@ -174,15 +174,16 @@ class TaskDialog(TraceDialog):
             "«Сельское хозяйство» (B11 B8 B2) и ставит его источником."))
         self.second = SecondBox(self.source, self)
         self.second.setToolTip(tr(
-            "Снимок того же места другого сезона. Его каналы ложатся на ту "
-            "же сетку участка и идут в раскладку на цвета вместе с первыми. "
-            "Хвоя отделяется от листвы и трав по ближнему ИК - у хвои на "
-            "двух датах он почти не меняется."))
+            "Снимок того же места другого сезона, лучше со снегом. Его "
+            "каналы ложатся на ту же сетку участка и идут в раскладку на "
+            "цвета вместе с первыми. На снегу хвоя - то, что осталось "
+            "тёмным, без снега - то, у чего ближний ИК почти не изменился."))
         self.find_second = QPushButton(tr("Найти"), self)
         self.find_second.setToolTip(tr(
-            "Снимки Sentinel-2 участка весной (апрель, май) и осенью "
-            "(сентябрь, октябрь) за три года. Двойной щелчок загружает "
-            "снимок и ставит его вторым."))
+            "Снимки Sentinel-2 участка в марте и апреле за три года, пока "
+            "лежит снег. На снегу хвоя тёмная, голый лиственный лес и поля "
+            "светлые. Двойной щелчок загружает снимок и ставит его "
+            "вторым."))
         self.scenes = QListWidget(self)
         self.scenes.setVisible(False)
         self.scenes.setMaximumHeight(130)
@@ -486,7 +487,11 @@ class TaskTool(TraceTool):
         base["settings"] = [tr("задача «{task}»", task=task)] \
             + ([tr("второй снимок «{name}»", name=self.more_name)]
                if self.more_roles is not None else []) + base["settings"]
-        if self.more_roles is not None:
+        if self.more_roles is not None and ot.winter(
+                centers, self.roles, self.more_roles) is not None:
+            self.notes.append(tr("Хвоя отделена от листвы по снегу второго "
+                                 "снимка."))
+        elif self.more_roles is not None:
             self.notes.append(tr("Хвоя отделена от листвы по двум "
                                  "снимкам."))
         elif self.month is not None and self.month not in SUMMER \

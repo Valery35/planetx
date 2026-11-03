@@ -2813,7 +2813,7 @@ it.
 | Land change | AlphaEarth embeddings 2017-2025 | Loaded by themselves | Network is needed |
 | Classification, similar areas | Any image or AlphaEarth | Globe basemap, project raster, AlphaEarth | For accurate work - one scene of the Satellite images window, the basemap is made of different surveys |
 | Tracing | An image with color | Globe basemap or project raster | The Esri or Google basemap is the most detailed |
-| Object extraction | An image with near infrared and red or SWIR | The Find image button of the window, the Satellite images window - a band combination or All scene bands of Sentinel-2 and Landsat | Summer for conifers and broadleaf, the second image in spring or autumn |
+| Object extraction | An image with near infrared and red or SWIR | The Find image button of the window, the Satellite images window - a band combination or All scene bands of Sentinel-2 and Landsat | Summer for conifers and broadleaf, the second image - March or April with snow |
 | Minerals by spectrum | An image with six bands or more | The window finds ASTER images of 2000-2006 with SWIR bands itself, the Load button | By three bands different minerals give one spectrum |
 | EMIT minerals | NASA EMIT mineral maps | The window finds scenes itself, files by a NASA Earthdata key | Arid regions, since 2022 |
 | Series by dates, trend map | Scenes of one place for many dates | The Satellite images window | A year or more for the trend |
@@ -3243,16 +3243,30 @@ The tasks:
 - Water - water and land.
 
 Second image. In summer conifers and broadleaf may have the same near
-infrared brightness, and one image does not separate them. The Find button at
-the Second image list searches images of the site in spring (April, May) and
-autumn (September, October), and a double click loads the image as the second
-one. The Second image list also holds only images with near infrared. The
-bands of the second image go to the same site grid and into the split into
-colors together with the first ones. Vegetation whose near infrared hardly
-changes between the dates (the smaller value to the larger one not below
-0.75) is conifers, the rest is broadleaf and grass. Broadleaf and grass lose
-infrared reflectance in another season, conifers do not. The second image is
-named in the layer settings.
+infrared brightness, and one image does not separate them. A winter - summer
+pair does it most simply. On snow coniferous forest stays dark, while bare
+broadleaf forest and fields under snow are light. The Find button at the
+Second image list searches images of the site in March and April, while the
+snow lies and the sun is already high enough, and a double click loads the
+image as the second one. In December and January at the latitude of the Urals
+the sun is too low for the images. The Second image list holds only images
+with near infrared. The bands of the second image go to the same site grid and
+into the split into colors together with the first ones.
+
+If the second image has snow, conifers are the vegetation that stayed dark in
+the visible bands on snow (not brighter than 0.25) and is not light in summer
+near infrared. The rest of the vegetation is broadleaf and grass. Both signs
+are needed. Bare broadleaf forest on snow may be dark from trunks and shadows,
+and its bright summer infrared tells it apart. A meadow or bog dark in summer
+looks like conifers, and the snow tells it apart. At the site at 59.99° N,
+57.43° E by the images of 21 July 2025 and 17 April 2026 the snow alone would
+give 90 % conifers, both signs give 47 %. The result line
+says "Conifers are separated from broadleaf by the snow of the second image".
+Without snow, for example on an autumn image, conifers are the vegetation
+whose near infrared hardly changes between the dates (the smaller value to the
+larger one not below 0.75). Broadleaf and grass lose infrared reflectance in
+another season, conifers do not. Near infrared cannot be judged on snow - snow
+has it high. The second image is named in the layer settings.
 
 The Linear objects check box adds center lines - roads and cuttings (narrow
 strips of soil), rivers and canals (water), shelterbelts and cuttings
@@ -3293,8 +3307,8 @@ If the result is not the expected one:
   forest and grass class, light patches among conifers. A clear-cut is only
   bare soil. Look for fresh clear-cuts on an image of the same summer or the
   spring after the cutting.
-- Conifers and broadleaf are mixed. Take a second image of another season or a
-  summer image instead of a spring one.
+- Conifers and broadleaf are mixed. Take a second image of March or April with
+  snow or a summer image instead of a spring one.
 - Classes break up or stick together. In More settings increase or decrease
   the number of colors and the smallest area.
 - Clouds and shadows come out as their own classes. Take another image, Find

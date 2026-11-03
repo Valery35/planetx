@@ -33,10 +33,14 @@ SUN_MIN = 20.0  # высота солнца, градусы
 SHOWN = 8  # снимков в списке
 SEARCH_TRIES = 3
 SEARCH_PAUSE = 3000  # мс, растёт с номером повтора
-# Сезоны: лето - хвоя и листва в листе, другой сезон - листва без листьев
-# или жёлтая, у хвои ближний ИК прежний. Выбор помощника.
+LOAD_TRIES = 3  # попыток загрузки снимка
+LOAD_PAUSE = 3000  # мс между ними
+# Сезоны: лето - хвоя и листва в листе. Второй снимок - март и апрель,
+# решение автора от 3 ноября 2026 года «у нас снег сходит в конце
+# апреля»: на снегу хвоя тёмная, голый лиственный лес и поля светлые
+# (core.objecttasks.two_dates), а солнце уже не ниже SUN_MIN.
 SUMMER = (6, 7, 8)
-OFF_SEASON = (4, 5, 9, 10)
+OFF_SEASON = (3, 4)
 
 
 def folder():
@@ -68,6 +72,8 @@ class SceneFinder(QObject):
         self.jobs = []
         self.result = []
         self.load_job = None
+        self.load_tries = 0
+        self.load_ring = []
         self.ring = None
         self.months = SUMMER
         self.timer = QTimer(self)
@@ -152,11 +158,20 @@ class SceneFinder(QObject):
                      for s in self.scenes]
         self.timer.start()
 
-    def load(self, scene, ring):
-        """Сочетание «Сельское хозяйство» сцены по участку ring слоем."""
+    def load(self, scene, ring, again=False):
+        """Сочетание «Сельское хозяйство» сцены по участку ring слоем.
+        Отказ сервера повторяется LOAD_TRIES раз: каналы Sentinel-2
+        на AWS изредка не отдаются с первого раза (прогоны 3 ноября
+        2026 года)."""
         if self.load_job is not None:
             return
-        self.status.emit(tr("Загрузка снимка {when}…", when=scene.when[:10]))
+        self.retrying = False
+        self.load_tries = self.load_tries + 1 if again else 1
+        self.load_ring = list(ring)
+        self.status.emit(tr("Загрузка снимка {when}…", when=scene.when[:10])
+                         if not again else
+                         tr("Сервер не отдал снимок, повтор {n} из {total}…",
+                            n=self.load_tries - 1, total=LOAD_TRIES - 1))
         warm()
         self.load_job = (self.generation, scene, executor(
             "scenes", CLOUD_WORKERS).submit(
@@ -202,8 +217,15 @@ class SceneFinder(QObject):
         try:
             made = job.result()
         except (RuntimeError, ValueError, OSError) as error:
-            self.status.emit(tr("Снимок не загружен: {error}",
-                                error=str(error)))
+            if self.load_tries < LOAD_TRIES:
+                self.retrying = True
+                QTimer.singleShot(LOAD_PAUSE, lambda: self.load(
+                    scene, self.load_ring, again=True))
+                return
+            self.status.emit(tr(
+                "Снимок не загружен - сервер не отдал каналы {error}. "
+                "Повторите двойной щелчок позже или возьмите другой снимок.",
+                error=str(error)))
             return
         layer = add_layer(scene, made[0])
         if layer is None:

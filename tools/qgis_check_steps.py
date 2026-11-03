@@ -21315,7 +21315,83 @@ def task_find_load():
     out["source"] = layer.name() if layer is not None else None
     out["note"] = dialog.note.text()
     dialog.grab().save(os.path.join(TEMP, "planetx_task_find.png"))
-    dialog.reject()
+    # Второй снимок - март и апрель со снегом.
+    dialog._find("second")
+    state["find_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def task_find_second():
+    dialog = state["window"].task_tool.dialog
+    spent = time.monotonic() - state["find_started"]
+    if dialog.finder.busy() and spent < 240.0:
+        return 1000
+    out = result["task_find"]
+    out["second_status"] = dialog.status.text()
+    out["second_found"] = [dialog.scenes.item(n).text()
+                           for n in range(dialog.scenes.count())]
+    if dialog.scenes.count():
+        dialog._load(dialog.scenes.item(0))
+        state["find_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def task_find_build():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["find_started"]
+    if dialog.finder.busy() and spent < 240.0:
+        return 1000
+    out = result["task_find"]
+    out["second_load"] = dialog.status.text()
+    out["second_items"] = [dialog.second.itemText(n)
+                           for n in range(dialog.second.count())]
+    second = dialog.second_raster()
+    out["second"] = second.name() if second is not None else None
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    tool.grid = None
+    dialog.build.emit()
+    state["find_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def task_find_built():
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    view = window.view
+    spent = time.monotonic() - state["find_started"]
+    if (tool.job is not None or view.load_missing) and spent < 180.0:
+        view.update()
+        return 1000
+    out = result["task_find"]
+    out["built"] = dialog.status.text()
+    out["legend"] = [text for _, text in tool.legend_rows()]
+    import numpy as np
+    base = tool.base
+    cells = np.bincount(base["classes"][base["classes"] >= 0].ravel(),
+                        minlength=len(base["colors"]))
+    out["colors"] = [
+        [base["names"][n], round(float(cells[n]) / cells.sum(), 3)]
+        + [round(float(v), 3) for v in base["centers"][n]]
+        for n in range(len(base["colors"]))]
+    state["find_started"] = time.monotonic()
+    return None
+
+
+@check(2000, manual=True)
+def task_find_shot():
+    window = state["window"]
+    view = window.view
+    if view.load_missing and time.monotonic() - state["find_started"] < 60:
+        view.update()
+        return 2000
+    window.copy_view().save(os.path.join(TEMP, "planetx_task_winter.png"))
+    window.task_tool.dialog.reject()
     return None
 
 
