@@ -21693,11 +21693,13 @@ def post138_build():
             row.color = QColor(sample[2])
             row._paint()
         row.pick.setChecked(True)
-        tool.click(far, far, *ring[0])
-        for point in ring[1:]:
-            dialog.sample.add(*point)
-        dialog.sample.drawing = False
-        dialog.sample.edited()
+        # Кольцо или список колец - несколько контуров класса.
+        for one in (ring if isinstance(ring[0][0], list) else [ring]):
+            tool.click(far, far, *one[0])
+            for point in one[1:]:
+                dialog.sample.add(*point)
+            dialog.sample.drawing = False
+            dialog.sample.edited()
     result["post138_build"] = {"counts": [r.count.text()
                                           for r in dialog.rows]}
     view.update()
