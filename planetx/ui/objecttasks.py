@@ -289,6 +289,14 @@ class TaskDialog(TraceDialog):
         bottom.addRow("", self.more)
         self.layout().insertLayout(2, bottom)
         self.bottom = bottom
+        self.refine = QPushButton(tr("Уточнить точками"), self.table_title)
+        self.refine.setToolTip(tr(
+            "Открывает окно «Классификация» с тем же снимком, участком "
+            "и классами этого окна. Там классы уточняются своими "
+            "контрольными точками щелчками по глобусу."))
+        self.table_title.layout().insertWidget(1, self.refine)
+        self.refine.clicked.connect(
+            lambda: self.parent().task_tool.refine())
         self.finder = SceneFinder(self)
         self.finder.found.connect(self._found)
         self.finder.status.connect(self.status.setText)
@@ -610,6 +618,33 @@ class TaskTool(TraceTool):
             return x0, y0, step, np.concatenate((grid, other[3]))
 
         return (layer.id(), path), add
+
+    def refine(self):
+        """«Уточнить точками»: окно «Классификация» с тем же снимком,
+        участком и классами. Просьба автора от 3 ноября 2026 года - окна
+        близкие, но остаются разными: правила здесь, свои образцы там."""
+        dialog = self.dialog
+        if dialog is None or self.result is None:
+            if dialog is not None:
+                dialog.status.setText(tr("Сначала «Построить»."))
+            return
+        ring = list(dialog.area.ring)
+        if len(ring) < 3:
+            return
+        window = self.window
+        window.site = ring
+        lat = sum(p[0] for p in ring) / len(ring)
+        lon = sum(p[1] for p in ring) / len(ring)
+        target = window.class_tool.open_here(lat, lon)
+        target.source.refill()
+        index = target.source.findData(dialog.raster_id())
+        if index >= 0:
+            target.source.setCurrentIndex(index)
+        target.take_traced(self)
+        target.status.setText(tr(
+            "Классы из окна «Выделение объектов». Выберите класс кружком "
+            "и щёлкайте по глобусу его образцы, не меньше трёх точек на "
+            "класс, затем «Построить»."))
 
     def build(self):
         dialog = self.dialog

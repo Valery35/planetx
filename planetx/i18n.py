@@ -6760,10 +6760,24 @@ EN = {
         "Window searching by a sample at the view point - the sample is "
         "outlined on the globe, objects of the area similar to it by color "
         "and texture go to the QGIS project as polygons.",
-    "Классы участка по контрольным точкам на глобусе - по эмбеддингам "
-    "AlphaEarth, клетка 10 м.":
-        "Area classes by control points on the globe, from AlphaEarth "
-        "embeddings, 10 m cells.",
+    "Классы участка по своим контрольным точкам на глобусе - по снимку "
+    "проекта, подложке или эмбеддингам AlphaEarth.":
+        "Site classes by your own control points on the globe - from "
+        "a project image, the basemap or AlphaEarth embeddings.",
+    "Уточнить точками": "Refine with points",
+    "Открывает окно «Классификация» с тем же снимком, участком и классами "
+    "этого окна. Там классы уточняются своими контрольными точками "
+    "щелчками по глобусу.":
+        "Opens the Classification window with the same image, site and "
+        "classes as this window. There the classes are refined with your "
+        "own control points clicked on the globe.",
+    "Сначала «Построить».": "Press Build first.",
+    "Классы из окна «Выделение объектов». Выберите класс кружком и "
+    "щёлкайте по глобусу его образцы, не меньше трёх точек на класс, "
+    "затем «Построить».":
+        "Classes from the Object extraction window. Choose a class with "
+        "its circle and click its samples on the globe, at least three "
+        "points per class, then press Build.",
     "Окно классификации участка у точки взгляда - классы с цветом "
     "и названием, контрольные точки щелчком по глобусу, год, растр "
     "классов в проект QGIS.":

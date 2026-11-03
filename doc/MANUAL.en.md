@@ -3332,6 +3332,13 @@ Names from the assistant button asks the AI assistant for names, see the
 Tracing section. OK writes a layer as in tracing, and the task is the first of
 the settings in the layer name.
 
+The Refine with points button above the table opens the Classification window
+with the same image, site and classes. Here the classes are given by rules,
+there they are refined with your own control points - for example, when the
+rules mixed conifers and broadleaf or a class the task does not have is
+needed. The Classification… and Object extraction… items stand next to each
+other in the submenu.
+
 #### Overgrown fields
 
 The Overgrown fields task finds fields that are no longer cultivated. Arable

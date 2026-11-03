@@ -21259,6 +21259,37 @@ def task_wait():
     return None
 
 
+@check(500)
+def task_refine():
+    # «Уточнить точками» открывает «Классификацию» с тем же снимком,
+    # участком и классами. Меню - «Классификация…» и «Выделение
+    # объектов…» рядом.
+    window = state["window"]
+    tool = window.task_tool
+    dialog = tool.dialog
+    out = result.setdefault("task_refine", {})
+    out["button"] = dialog.refine.isVisible()
+    tool.refine()
+    target = window.class_tool.dialog
+    out["source_same"] = target.raster_id() == dialog.raster_id()
+    out["ring_same"] = target.area.ring == dialog.area.ring
+    out["classes"] = [row.name.text() for row in target.rows]
+    out["task_names"] = [name for _, name in tool.class_pairs()]
+    out["status"] = target.status.text()
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.ui import globemenu
+    lat, lon = dialog.point
+    menu = QMenu()
+    globemenu.relief_items(window, menu, lat, lon)
+    names = [a.text() for m in [menu] + [a.menu() for a in menu.actions()
+                                          if a.menu()]
+             for a in m.actions() if a.text()]
+    at = names.index("Классификация…")
+    out["menu_next"] = names[at + 1]
+    target.reject()
+    return None
+
+
 @check(300)
 def task_names():
     from osgeo import ogr

@@ -461,11 +461,12 @@ class ClassDialog(QDialog):
         row.pick.setChecked(True)
         return row
 
-    def take_traced(self):
+    def take_traced(self, tool=None):
         """Классы трассировки вместо классов без точек: названия и цвета
         окна «Трассировка» (решение автора от 3 ноября 2026 года - таблица
-        классов общая у окон)."""
-        tool = getattr(self.parent(), "trace_tool", None)
+        классов общая у окон). tool - другое окно трассировки, например
+        «Выделение объектов»; сигнал clicked даёт сюда False."""
+        tool = tool or getattr(self.parent(), "trace_tool", None)
         pairs = tool.class_pairs() if tool is not None else []
         if not pairs:
             self.status.setText(tr(
