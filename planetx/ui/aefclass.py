@@ -433,6 +433,7 @@ class ClassDialog(QDialog):
         adding = QHBoxLayout()
         adding.addWidget(add)
         adding.addWidget(self.from_trace)
+        self.adding = adding
         layout.addLayout(adding)
         layout.addWidget(hint)
         layout.addWidget(self.status)

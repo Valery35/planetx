@@ -7303,6 +7303,19 @@ EN = {
     "Снимки весны и осени не легли на участок, классы - по летнему.":
         "Spring and autumn images did not fall on the site, classes are by "
         "the summer one.",
+    # Названия от помощника окна «Распознавание».
+    "После «Построить» отправляет помощнику таблицу классов - средние "
+    "каналов, доли участка, количество и размер областей, место и месяц "
+    "съёмки. Снимок, названия слоёв и файлов не уходят. Ответ - названия "
+    "классов, их можно поправить.":
+        "After «Build» sends the class table to the assistant - band means, "
+        "site shares, number and size of areas, place and month of the image."
+        " The image, layer and file names are not sent. The answer is class "
+        "names, they can be corrected.",
+    "Названия предложил помощник, их можно поправить.":
+        "The names were suggested by the assistant, they can be corrected.",
+    "Цвета с одинаковым названием сольются по «Построить».":
+        "Colors with the same name are merged on «Build».",
 }
 
 _language = None

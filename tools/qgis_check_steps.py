@@ -21862,7 +21862,6 @@ def recognize_unite():
 
 @check(1000)
 def recognize_unite_wait():
-    from qgis.core import QgsVectorLayer
     window = state["window"]
     tool = window.recognize_tool
     dialog = tool.dialog
@@ -21881,7 +21880,58 @@ def recognize_unite_wait():
     out["dialog_height"] = dialog.height()
     out["shapes"] = len(tool.result.get("shapes") or {})
     out["lines"] = {k: len(v) for k, v in tool.lines.items()}
+    # Линии на глобусе - классы показа после классов результата.
+    shown = tool.tiles.result if tool.tiles is not None else None
+    real = len(tool.result["colors"])
+    out["line_cells_shown"] = int((shown["classes"] >= real).sum()) \
+        if shown is not None else None
+    out["result_classes_max"] = int(tool.result["classes"].max())
+    out["legend"] = [text for _, text in tool.legend_rows()]
     dialog.grab().save(os.path.join(TEMP, "planetx_recognize_unite.png"))
+    window.view.update()
+    # Названия от помощника - поддельный сервер модели.
+    from planetx.core import assistant as ai
+    from planetx.ui import assistant as ui_ai
+    server, seen = _fake_model()
+    state["names_model"] = (server, seen)
+    state.setdefault("real_load_key", ui_ai.load_key)
+    ui_ai.load_key = lambda provider: "test-key"
+    _use_service(window._assistant(), ai.ANTHROPIC,
+                 "http://127.0.0.1:%d" % server.server_port)
+    window.assistant_dialog.settings.close()
+    out["names_button"] = dialog.names_button.isVisible()
+    tool.ask_names()
+    out["names_asking"] = dialog.status.text()
+    state["names_started"] = time.monotonic()
+    return None
+
+
+@check(300)
+def recognize_unite_names():
+    from qgis.core import QgsVectorLayer
+    from planetx.ui import assistant as ui_ai
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    out = result["recognize_unite"]
+    server, seen = state["names_model"]
+    if window.assistant_dialog.busy() \
+            and time.monotonic() - state["names_started"] < 20.0:
+        return 300
+    out["names_status"] = dialog.status.text()
+    out["names_after"] = list(tool.result["names"])
+    out["row_names"] = [row.name.text() for row in dialog.rows]
+    if seen:
+        body = seen[-1][1]
+        question = body["messages"][0]["content"]
+        out["question_head"] = question[:400]
+        out["no_tools"] = "tools" not in body
+        out["no_layer_name"] = "agriculture" not in question \
+            and "S2_" not in question
+    server.shutdown()
+    ui_ai.load_key = state["real_load_key"]
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_recognize_lines.png"))
     dialog.accept()
     layers = []
     for node in _result_layers():

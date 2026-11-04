@@ -3182,8 +3182,9 @@ image is skipped.
 
 The «Linear objects» checkbox of the rule tasks adds center lines -
 roads and cuttings (narrow strips of soil), rivers and canals (water),
-shelter belts and cuttings (vegetation). The result line gives their
-length, OK writes the «Lines» layer with the kind, name and length_m
+shelter belts and cuttings (vegetation). The lines are shown on the
+globe over the classes and in the legend as their own rows, the result
+line gives their length, OK writes the «Lines» layer with the kind, name and length_m
 fields. The narrow part of the mask is removed by a morphological
 opening with a square of the «Line width up to» width, the rest is
 thinned to a one-cell line. Spurs shorter than three widths are
@@ -3238,6 +3239,19 @@ to place on the image. The computation and the layers written to the
 project do not depend on these checkboxes. Classes and the viewshed
 share one layer of the globe, a new viewshed computation removes the
 classes.
+
+#### Names from the assistant
+
+The «Names from the assistant» button next to «Add class» sends the
+class table to the assistant after «Build» - the image band means per
+class, the share of the site, the number and mean size of areas, the
+place and month of the image, for tasks also the names given by rules.
+The image, layer and file names are not sent, pressing the button is
+consent to send the table. The answer is names of the class rows, they
+can be corrected. For «Image colors» colors with the same name are
+merged on «Build». There is no button for AlphaEarth embeddings and for
+«Similar to sample». A connected assistant is needed, see
+[Assistant](#assistant).
 
 ### Minerals by spectrum
 

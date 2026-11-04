@@ -65,18 +65,18 @@ from qgis.PyQt.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox,
                                  QSpinBox, QTableWidget, QTableWidgetItem,
                                  QWidget)
 
-from ..core import aef, fallow, linear, rasterclass, segments, similar, \
-    tracing
+from ..core import aef, classnames, fallow, linear, rasterclass, segments, \
+    similar, tracing
 from ..core import objecttasks as ot
 from ..core.features import Shape
-from ..i18n import tr
+from ..i18n import is_russian, tr
 from ..qt_compat import enum
 from . import s2finder
 from .aef import stop_point
 from .aefclass import (BASEMAP, CLASS_SIDE, RASTER_SIDE, ClassDialog,
-                       ClassTool, SourceBox, add_classes, class_abstract,
-                       fill_pixels, project_rasters, read_raster, set_credit,
-                       write_classes, write_objects)
+                       ClassTiles, ClassTool, SourceBox, add_classes,
+                       class_abstract, fill_pixels, project_rasters,
+                       read_raster, set_credit, write_classes, write_objects)
 from .area import Area
 from .results import (add_vector, result_path, set_abstract, show_layer,
                       titled, write_vector)
@@ -86,6 +86,7 @@ from .objecttasks import (WHOLE_COVER, cover_share, kind_color, kind_name,
 from .s2finder import SceneFinder
 from .seasons import SeasonPicker, SeasonTable
 from .similar import FOUND_COLOR
+from .sitelayer import result_level
 from .tracing import _stroke_as_fill, raster_roles, write_traced
 
 SETTINGS = "PlanetX/recognize/"
@@ -552,6 +553,13 @@ class RecognizeDialog(ClassDialog):
             "Тонкие настройки: пиксель, наименьшая область многоугольников, "
             "деление на объекты, ширина линий, непрозрачность."))
         self.from_trace.setVisible(False)
+        self.names_button = QPushButton(tr("Названия от помощника"), self)
+        self.names_button.setToolTip(tr(
+            "После «Построить» отправляет помощнику таблицу классов - "
+            "средние каналов, доли участка, количество и размер областей, "
+            "место и месяц съёмки. Снимок, названия слоёв и файлов не "
+            "уходят. Ответ - названия классов, их можно поправить."))
+        self.adding.addWidget(self.names_button)
         self._arrange()
         wanted = settings.value(SETTINGS + "task", "") or ""
         self.task.setCurrentIndex(max(0, self.task.findData(wanted)))
@@ -758,6 +766,9 @@ class RecognizeDialog(ClassDialog):
         self._show_row(self.modes_row, task != SIMILAR_TASK)
         self._show_row(self.lines, task in LINE_TASKS)
         self.add_button.setVisible(task != SIMILAR_TASK)
+        # У эмбеддингов нет каналов снимка - помощнику не по чему судить.
+        self.names_button.setVisible(task != SIMILAR_TASK
+                                     and self.source_key() != "")
         self.more_box.setVisible(more)
         self._show_row(self.line_width, task in LINE_TASKS
                        and self.lines.isChecked())
@@ -946,6 +957,7 @@ class RecognizeTool(ClassTool):
         if not getattr(dialog, "_limit_linked", False):
             dialog.limit.valueChanged.connect(
                 lambda _: self.repick_timer.start())
+            dialog.names_button.clicked.connect(self.ask_names)
             dialog._limit_linked = True
         return dialog
 
@@ -1288,6 +1300,138 @@ class RecognizeTool(ClassTool):
             area=hectares(found * step * step / 1e4),
             share="{:.0f}".format(100.0 * found / total)))
 
+    # --- линии и названия -----------------------------------------------
+
+    def show(self, keep=False):
+        """Классы и, поверх них, осевые линии - классами показа после
+        классов результата. Растр, многоугольники и шкала классов линий
+        не получают, линии пишутся своим слоем по OK."""
+        result = self.result
+        if result is None or not self.lines:
+            super().show(keep)
+            return
+        if not keep:
+            self._drop_tiles()
+        if self.dialog is not None:
+            result["hidden"] = {row.rgb() for row in self.dialog.rows
+                                if not row.visible.isChecked()}
+        classes = result["classes"].copy()
+        colors, names = list(result["colors"]), list(result["names"])
+        for group, paths in self.lines.items():
+            cells = linear.cells_of(paths, classes.shape) & (classes >= 0)
+            classes[cells] = len(colors)
+            colors.append(tuple(ot.LINE_COLORS[group]))
+            names.append(line_name(group))
+        shown = dict(result, classes=classes, colors=colors, names=names)
+        self.put_tiles(ClassTiles(shown, parent=self), result_level(result),
+                       self.dialog.alpha.value() / 100.0 if self.dialog
+                       else 1.0, keep=keep)
+
+    def legend_rows(self):
+        rows = super().legend_rows()
+        return rows + [(tuple(ot.LINE_COLORS[group]), line_name(group))
+                       for group in self.lines]
+
+    def ask_names(self):
+        """«Названия от помощника»: таблица классов - средние каналов,
+        доля участка, количество и средняя площадь областей - в модель
+        одним запросом (core/classnames.py), ответ - названия строк.
+        Снимок, названия слоёв и файлов в модель не уходят, нажатие -
+        согласие отправить таблицу, как у «Объясни это»."""
+        dialog, result = self.dialog, self.result
+        if dialog is None:
+            return
+        if result is None or not self.grid:
+            dialog.status.setText(tr("Сначала нажмите «Построить»."))
+            return
+        grid = np.asarray(self.grid[1][3])
+        classes = result["classes"]
+        if grid.shape[1:] != classes.shape:
+            dialog.status.setText(tr("Сначала нажмите «Построить»."))
+            return
+        roles, month = self.name_roles(grid.shape[0])
+        grid = grid[:len(roles)]
+        count = len(result["names"])
+        means = class_means(grid, classes, count)
+        if dialog.source_key() == BASEMAP:
+            units = tr("яркость 0-255")
+        else:
+            units = tr("отражение 0-1") \
+                if np.isfinite(means).any() \
+                and np.nanmax(np.abs(means)) <= ot.REFLECTANCE_MAX \
+                else tr("значения растра")
+        cells = np.bincount(classes[classes >= 0].ravel().astype(np.int64),
+                            minlength=count)[:count]
+        kinds = result.get("shape_kinds")
+        regions = np.bincount(np.asarray(kinds, dtype=np.int64),
+                              minlength=count)[:count] \
+            if kinds is not None and len(kinds) else np.ones(count, int)
+        total = max(int(cells.sum()), 1)
+        task = dialog.task_key()
+        rows = self.used_rows() or []
+        rules = [row.name.text() if task not in ("", COLORS_TASK)
+                 and getattr(row, "kind", None) else None for row in rows]
+        table = [{"means": [float(v) for v in means[n]],
+                  "share": cells[n] / total, "regions": int(regions[n]),
+                  "area_ha": cells[n] * result["step"] ** 2 / 1e4
+                  / max(int(regions[n]), 1),
+                  "rule": rules[n] if n < len(rules) else None}
+                 for n in range(count) if cells[n]]
+        order = [n for n in range(count) if cells[n]]
+        if len(order) < 1:
+            dialog.status.setText(tr("Сначала нажмите «Построить»."))
+            return
+        text = classnames.question(table, roles, units, dialog.point, month)
+        system = classnames.system_text("ru" if is_russian() else "en")
+        asked = result
+        if self.window._assistant().complete(
+                system, text, lambda answer, error:
+                self._names_came(asked, rows, order, answer, error)):
+            dialog.status.setText(tr("Помощник думает…"))
+        else:
+            dialog.status.setText(tr("Помощник занят прежним вопросом или "
+                                     "не подключён."))
+
+    def name_roles(self, bands):
+        """Роли каналов сетки и месяц для вопроса помощнику: летний снимок,
+        за ним снимок со снегом («nir@2»). Снимки весны и осени
+        заросших полей не входят."""
+        dialog = self.dialog
+        layer = dialog.raster()
+        if dialog.source_key() == BASEMAP or layer is None:
+            return ["red", "green", "blue"][:bands], None
+        roles, month = raster_roles(layer)
+        roles = list(roles or [None] * layer.bandCount())
+        snow = dialog.snow()
+        if snow is not None and dialog.task_key() != FALLOW_TASK:
+            more = raster_roles(snow)[0] or [None] * snow.bandCount()
+            if len(roles) + len(more) <= bands:
+                roles += [r and r + "@2" for r in more]
+        return roles[:bands], month
+
+    def _names_came(self, asked, rows, order, answer, error):
+        dialog = self.dialog
+        if dialog is None or self.result is not asked:
+            return  # новое «Построить» - ответ к прежним классам
+        names = classnames.parse_names(answer, len(order))
+        if names is None:
+            dialog.status.setText(tr(
+                "Помощник не дал названий: {error}",
+                error=error or (answer or "")[:200] or tr("пустой ответ")))
+            return
+        asked["names"] = list(asked["names"])
+        for n, name in zip(order, names):
+            if n < len(rows):
+                rows[n].name.setText(name)
+                asked["names"][n] = name
+        self._show_legend()
+        text = tr("Названия предложил помощник, их можно поправить.")
+        if dialog.task_key() == COLORS_TASK \
+                and len(set(names)) < len(names):
+            text += " " + tr("Цвета с одинаковым названием сольются по "
+                             "«Построить».")
+        dialog.status.setText(text)
+
     # --- образцы областями ----------------------------------------------
 
     def ring_under(self, lat, lon):
@@ -1470,6 +1614,21 @@ def similar_classes(parts, score, limit):
     меньше limit, 1 - остальное, -1 вне объектов."""
     picked = np.where(np.asarray(score) >= limit, 0, 1)
     return np.where(parts >= 0, picked[np.maximum(parts, 0)], -1)
+
+
+def class_means(grid, classes, count):
+    """Средние каналов по классам: массив count × каналов, NaN у класса
+    без клеток с данными."""
+    flat = grid.reshape(grid.shape[0], -1)
+    labels = np.asarray(classes).ravel()
+    out = np.full((count, grid.shape[0]), np.nan)
+    for band in range(grid.shape[0]):
+        good = (labels >= 0) & np.isfinite(flat[band])
+        sums = np.bincount(labels[good], flat[band][good], minlength=count)
+        cells = np.bincount(labels[good], minlength=count)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            out[:, band] = (sums / cells)[:count]
+    return out
 
 
 def find_lines(parts, regions, step, width):
