@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.39.0
+version=1.40.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,23 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.39.0 The Task list of the Recognition window - Forests and
+changelog=1.40.0 One Recognition window instead of six. Classification,
+      object extraction, tracing and similar areas became tasks of this
+      window, the former items of the Site analysis submenu are removed.
+      The source is Sentinel-2 images of the site, the globe base map,
+      a project raster or AlphaEarth. OK puts a class raster and smoothed
+      class polygons into the project, the forest, field and water tasks
+      also give center lines of roads, rivers and cuttings. The Image
+      colors task splits the image into a set number of colors, as
+      tracing does. The Names from the assistant button suggests class
+      names by band means, share and size of areas, the image and layer
+      names are not sent. The Shown check box of a class hides it on the
+      globe, the Show on the globe check box hides the whole preview of an
+      analysis window. A project raster can get a second image, winter
+      with snow or spring and autumn. Image smoothing and corner rounding
+      are under More, overgrown field polygons carry the last bare soil
+      year and the tree share.
+      1.39.0 The Task list of the Recognition window - Forests and
       clear-cuts, Fields and Water. A task creates its own classes and
       computes them by rules from the summer and snow images, no samples
       are needed. If a class is wrong, it gets a point or outline sample,
