@@ -32,8 +32,62 @@ Plugin - https://plugins.qgis.org/plugins/planetx/
 
 PlanetX 1.40 for QGIS: one Recognition window instead of six, plus slope, viewshed, shadows, hydrology, land change, minerals and earthworks on a 3D globe. Free, GPL. What should come next? https://github.com/Valery35/planetx/releases/tag/v1.40.0 #QGIS #GIS
 
-## Reddit r/QGIS (публикует автор)
+## Reddit r/QGIS (публикует автор, редактор в режиме Markdown)
 
-Заголовок: PlanetX 1.40 - site analysis toolkit on a 3D globe in QGIS. What would you want next?
+Заголовок: PlanetX 1.40 – a free 3D globe plugin for QGIS, now with one Recognition window for site analysis. What would you want next?
 
-Текст - блок EN выше.
+PlanetX is a free (GPL) 3D globe plugin for QGIS 3.36+ and QGIS 4. Version 1.40 merges six classification windows into one **Recognition** window.
+
+**Recognition – classes of a site**
+
+- Source: Sentinel-2 images of the site (the window finds a summer image and a snow image itself), the globe base map, a project raster or Google AlphaEarth embeddings.
+- Tasks: own samples (points or outlined areas), image colors, similar to a sample, forests and clear-cuts, fields, water, overgrown fields (spring and autumn images over 4 years).
+- Rule-based classes can be corrected with samples. A "Names from the assistant" button suggests class names from band means.
+- OK puts a class raster and smoothed class polygons into the project, plus center lines of roads, rivers and cuttings.
+
+**The rest of the Site analysis submenu**
+
+- slope and aspect, viewshed with OSM buildings, insolation, shadows for any moment
+- flooding, flow lines, catchments, stream order, sea level from -130 to +100 m
+- land change 2017-2025 (AlphaEarth), minerals by spectrum (USGS library) and NASA EMIT maps
+- earthworks: cut and fill to a flat pad
+
+All data are open; only EMIT files need a free NASA Earthdata token.
+
+**Question:** what should come next?
+
+1. Accuracy check – control points, error matrix
+2. Time series of images instead of two dates
+3. Sentinel-1 radar (works through clouds)
+4. Batch runs over all polygons of a layer
+5. Own class rules by index thresholds
+6. A one-document site report
+7. Simplify – there are already enough tools
+
+Examples of your real tasks are most welcome.
+
+- Plugin: https://plugins.qgis.org/plugins/planetx/
+- Release and manual (RU/EN PDF): https://github.com/Valery35/planetx/releases/tag/v1.40.0
+
+## Reddit r/gis (публикует автор, флэр Discussion или Open Source)
+
+Заголовок: Free site-analysis toolkit on a 3D globe inside QGIS: land cover from Sentinel-2, hydrology, shadows, change detection. Looking for feedback on what to build next
+
+We develop PlanetX, a free open-source (GPL) 3D globe plugin for QGIS. Over the last weeks it grew a set of site-analysis tools, and in 1.40 we merged six classification windows into one. Before going further we'd like to hear what is actually useful.
+
+**How it works:** right-click on the globe – Site analysis. A site is drawn once (square, polygon or a layer polygon) and is shared by all tools. Every tool has Build (preview on the globe), OK (results go to the QGIS project as a subgroup) and Cancel.
+
+**What is there now**
+
+- **Recognition** – land classes from Sentinel-2 (summer + snow image picked automatically), a base map, your raster or AlphaEarth embeddings. Own samples, image colors, "similar to a sample", rule-based forests / clear-cuts / fields / water, overgrown fields from 4 years of spring and autumn images. Output: class raster, smoothed polygons, center lines.
+- **Terrain** – slope and aspect with stats, viewshed with buildings, earthworks (cut/fill volumes).
+- **Sun** – insolation hours per day, shadows following the time slider.
+- **Water** – flooding to a level, flow lines, catchments, Strahler stream network, sea level.
+- **Change and minerals** – AlphaEarth change 2017-2025, spectral matching against the USGS library, NASA EMIT mineral maps.
+
+Data: Copernicus Sentinel-2, Copernicus DEM / ALOS / NASADEM / 3DEP, AlphaEarth, USGS and NASA, OSM and Overture buildings. No accounts needed except a free Earthdata token for EMIT.
+
+**What next?** Accuracy assessment, image time series, Sentinel-1 radar, batch runs over layer polygons, own index rules, a site report – or simplify? Tell us your use case.
+
+Plugin: https://plugins.qgis.org/plugins/planetx/
+Release, manual and source: https://github.com/Valery35/planetx/releases/tag/v1.40.0
