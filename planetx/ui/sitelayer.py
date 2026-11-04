@@ -38,6 +38,27 @@ def class_rows(classes, colors, names):
             for n in np.argsort(-counts, kind="stable") if counts[n]]
 
 
+def add_preview(dialog, layout, buttons):
+    """Флажок «Показывать на глобусе» слева от кнопок окна инструмента:
+    dialog.preview. layout - раскладка окна, buttons - QDialogButtonBox
+    в ней."""
+    from qgis.PyQt.QtWidgets import QCheckBox, QHBoxLayout
+    box = QCheckBox(tr("Показывать на глобусе"), dialog)
+    box.setChecked(True)
+    box.setToolTip(tr(
+        "Снятый флажок прячет результат на глобусе, под ним виден снимок, "
+        "по которому удобно ставить образцы. Результат и кнопка OK "
+        "остаются."))
+    index = layout.indexOf(buttons)
+    layout.removeWidget(buttons)
+    row = QHBoxLayout()
+    row.addWidget(box)
+    row.addWidget(buttons, 1)
+    layout.insertLayout(index, row)
+    dialog.preview = box
+    return box
+
+
 def result_level(result):
     """Глубина тайлов слоя вида по шагу сетки результата."""
     lat = (result["box"][1] + result["box"][3]) / 2.0
@@ -71,6 +92,7 @@ class SiteTool:
 
     window = None
     tiles = None
+    shown_opacity = 1.0  # непрозрачность показанного предпросмотра
 
     def put_tiles(self, tiles, level, opacity=None, keep=False):
         """Картинки тайлов tiles на общем слое: занять слой, глубина
@@ -91,9 +113,31 @@ class SiteTool:
         layer.max_level = level
         layer.empty.clear()
         view.set_gibs(LAYER, True, tiles, keep=keep)
-        layer.fade = 0.0 if opacity is None else 1.0 - opacity
+        self.shown_opacity = 1.0 if opacity is None else opacity
+        box = self._preview_box()
+        layer.fade = 1.0 - self.shown_opacity \
+            if box is None or box.isChecked() else 1.0
         self._show_legend()
         view.update()
+
+    def _preview_box(self):
+        """Флажок «Показывать на глобусе» окна инструмента (add_preview),
+        связь с ним заводится при первом показе."""
+        box = getattr(getattr(self, "dialog", None), "preview", None)
+        if box is not None and not getattr(box, "planetx_linked", False):
+            box.toggled.connect(self.set_preview)
+            box.planetx_linked = True
+        return box
+
+    def set_preview(self, on):
+        """Предпросмотр виден или спрятан: под ним виден снимок, результат
+        и кнопка OK остаются. Просьба Василия Швалёва от 4 ноября 2026
+        года - образцы ставятся по снимку."""
+        if self.tiles is None:
+            return
+        self.window.view.gibs[LAYER].fade = \
+            1.0 - self.shown_opacity if on else 1.0
+        self.window.view.update()
 
     def legend_rows(self):
         """Строки шкалы классов [(цвет, подпись)] по результату
@@ -129,10 +173,13 @@ class SiteTool:
     def set_opacity(self, value):
         """Непрозрачность результата - доля прозрачности слоя вида, без
         пересборки картинок тайлов."""
+        self.shown_opacity = value
         if self.tiles is None:
             return
-        self.window.view.gibs[LAYER].fade = 1.0 - value
-        self.window.view.update()
+        box = self._preview_box()
+        if box is None or box.isChecked():
+            self.window.view.gibs[LAYER].fade = 1.0 - value
+            self.window.view.update()
 
     def _drop_tiles(self):
         self._hide_legend()

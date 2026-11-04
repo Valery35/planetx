@@ -6169,6 +6169,23 @@ EN = {
         "Class color on the globe and in the raster.",
     "Контрольных точек класса.": "Control points of the class.",
     "Убрать класс и его точки.": "Remove the class and its points.",
+    "Класс виден на глобусе. Снятый флажок открывает местность под "
+    "классом, класс остаётся в расчёте и в проекте.":
+        "The class is shown on the globe. Cleared, it uncovers the terrain "
+        "under the class, the class stays in the computation and the "
+        "project.",
+    "Класс виден на глобусе. Снятый флажок открывает местность под "
+    "классом, по ней видно, что это за объект. Класс остаётся "
+    "в слое.":
+        "The class is shown on the globe. Cleared, it uncovers the terrain "
+        "under the class, which tells what the object is. The class stays "
+        "in the layer.",
+    "Показывать на глобусе": "Show on the globe",
+    "Снятый флажок прячет результат на глобусе, под ним виден снимок, "
+    "по которому удобно ставить образцы. Результат и кнопка OK "
+    "остаются.":
+        "Cleared, it hides the result on the globe and uncovers the image "
+        "to place samples on. The result and the OK button stay.",
     "Классификация": "Classification",
     "Год, по векторам которого клетки делятся на классы. Точки ставятся "
     "по снимку глобуса, он может быть другого года.":

@@ -3037,6 +3037,14 @@ outlines to the computation subgroup, «Cancel» removes the classes from the gl
 the pixel, splitting into objects, the AlphaEarth source - are in the
 «Classification» window.
 
+The checkbox to the left of a class name hides the class on the globe
+and uncovers the image under it. The «Show on the globe» checkbox to
+the left of the buttons hides all classes at once, so samples are easy
+to place on the image. The computation and the layers written to the
+project do not depend on these checkboxes. The same checkboxes are in
+the «Classification», «Tracing» and «Object extraction» windows, and
+«Show on the globe» is in every window that shows its result before OK.
+
 ### Classification
 
 The Classification… item of the Site analysis submenu of the globe
@@ -3232,8 +3240,10 @@ the fields lists the colors by their share of the site, Color 1 takes the most.
 The name of a color can be rewritten, for example Conifers or Bare soil, and it
 goes to the legend on the globe and to the layer. The list to the right of the
 name merges the color into another one, and the areas of both colors become one
-class with the name and color of the one it is merged into. A new Build sets
-the colors and names anew.
+class with the name and color of the one it is merged into. The checkbox to
+the left of a color hides it on the globe and uncovers the terrain, which
+tells what the object is. The class goes to the layer with the checkbox
+cleared too. A new Build sets the colors and names anew.
 
 The Names from the assistant button above the table sends the AI assistant the
 class table - the mean band values with their roles, the share of the site,

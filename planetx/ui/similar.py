@@ -29,7 +29,7 @@ from .aefclass import (AUTO, BASEMAP, CLASS_SIDE, RASTER_SIDE,
                        pixel_text, problem_text, raster_reader, set_credit,
                        write_objects)
 from .area import Area
-from .sitelayer import SiteTool, result_level
+from .sitelayer import SiteTool, add_preview, result_level
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons, result_path, write_vector)
 from .viewshed import fit_status
@@ -209,6 +209,7 @@ class SimilarDialog(QDialog):
         layout.addWidget(hint)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
+        add_preview(self, layout, buttons)
         fit_status(self, layout)
         self.source.currentIndexChanged.connect(lambda _: self._source())
         self.year.currentIndexChanged.connect(lambda _: self._remember())

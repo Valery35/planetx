@@ -36,7 +36,7 @@ from .inset import warm
 from .results import Session, accepted, built_text, keep_buttons, \
     result_path, show_layer
 from .sentinel import EARTHDATA_KEY, earthdata_token
-from .sitelayer import SiteTool, result_level
+from .sitelayer import SiteTool, add_preview, result_level
 from .viewshed import fit_status
 
 SETTINGS = "PlanetX/emit/"
@@ -265,6 +265,7 @@ class EmitDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
+        add_preview(self, layout, buttons)
         fit_status(self, layout)
         self.to_project.setEnabled(False)
 

@@ -58,7 +58,7 @@ from .inset import warm
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons, result_path, set_abstract, show_layer,
                       titled, write_vector)
-from .sitelayer import SiteTool, class_rows, result_level
+from .sitelayer import SiteTool, add_preview, class_rows, result_level
 from .threadtiles import ThreadTiles
 from .tilemosaic import dataset as tile_dataset
 from .viewshed import fit_status
@@ -159,9 +159,12 @@ class ClassTiles(ThreadTiles):
         count = len(result["colors"])
         palette = np.zeros((count + 2, 4), dtype=np.uint8)
         palette[count + 1] = BORDER
+        hidden = result.get("hidden") or ()
         for n_, color in enumerate(result["colors"]):
-            # Непрозрачность - у слоя вида (ClassTool.set_opacity).
-            palette[n_] = tuple(color[:3]) + (255,)
+            # Непрозрачность - у слоя вида (ClassTool.set_opacity), класс
+            # со снятым флажком «Видно» прозрачен.
+            palette[n_] = tuple(color[:3]) + (
+                0 if tuple(color[:3]) in hidden else 255,)
         code = np.where(code >= 0, code, count)
         parts = result.get("parts")
         if parts is not None:
@@ -209,6 +212,7 @@ class ClassRow(QWidget):
 
     removed = pyqtSignal(object)
     edited = pyqtSignal()
+    seen = pyqtSignal()  # флажок «Видно»
 
     def __init__(self, color, name, parent=None):
         super().__init__(parent)
@@ -216,6 +220,12 @@ class ClassRow(QWidget):
         self.pick = QRadioButton(self)
         self.pick.setToolTip(tr("Щелчок по глобусу ставит точку этого "
                                 "класса."))
+        self.visible = QCheckBox(self)
+        self.visible.setChecked(True)
+        self.visible.setToolTip(tr(
+            "Класс виден на глобусе. Снятый флажок открывает местность под "
+            "классом, класс остаётся в расчёте и в проекте."))
+        self.visible.toggled.connect(lambda _: self.seen.emit())
         self.swatch = QToolButton(self)
         self.swatch.setToolTip(tr("Цвет класса на глобусе и в растре."))
         self.swatch.clicked.connect(self._choose)
@@ -229,8 +239,8 @@ class ClassRow(QWidget):
         remove.clicked.connect(lambda: self.removed.emit(self))
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        for widget in (self.pick, self.swatch, self.name, self.count,
-                       remove):
+        for widget in (self.pick, self.visible, self.swatch, self.name,
+                       self.count, remove):
             layout.addWidget(widget)
         self.points = []
         self.rings = []  # контуры образцов - у окна «Распознавание»
@@ -287,6 +297,7 @@ class ClassDialog(QDialog):
     changed = pyqtSignal()
     opacity = pyqtSignal(float)
     source_changed = pyqtSignal()
+    seen = pyqtSignal()  # флажок «Видно» класса
 
     def __init__(self, window):
         super().__init__(window)
@@ -424,6 +435,7 @@ class ClassDialog(QDialog):
         layout.addWidget(hint)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
+        add_preview(self, layout, buttons)
         fit_status(self, layout)
         for _ in range(2):
             self.add_class()
@@ -482,6 +494,7 @@ class ClassDialog(QDialog):
                        self)
         row.removed.connect(self._remove)
         row.edited.connect(self.changed)
+        row.seen.connect(self.seen)
         self.group.addButton(row.pick)
         self.rows.append(row)
         self.rows_box.addWidget(row)
@@ -643,6 +656,7 @@ class ClassTool(SiteTool, QObject):
             dialog.build.connect(self.build)
             dialog.changed.connect(self._update_shapes)
             dialog.opacity.connect(self.set_opacity)
+            dialog.seen.connect(lambda: self.show(keep=True))
             dialog.finished.connect(self._closed)
             dialog.source_changed.connect(self._want_index)
             dialog.area.point_under = self.point_under
@@ -1088,15 +1102,21 @@ class ClassTool(SiteTool, QObject):
 
     # --- показ ----------------------------------------------------------
 
-    def show(self):
+    def show(self, keep=False):
+        """keep - перерисовка классов поверх прежних картинок, флажок
+        «Видно» строки класса."""
         result = self.result
-        self._drop_tiles()
+        if not keep:
+            self._drop_tiles()
         if result is None:
             return
+        if self.dialog is not None:
+            result["hidden"] = {row.rgb() for row in self.dialog.rows
+                                if not row.visible.isChecked()}
         self.put_tiles(ClassTiles(result, parent=self),
                        result_level(result),
                        self.dialog.alpha.value() / 100.0 if self.dialog
-                       else OPACITY)
+                       else OPACITY, keep=keep)
 
     def forget(self):
         self.result = None

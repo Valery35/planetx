@@ -37,7 +37,7 @@ from .asterscenes import AsterScenes
 from .export import add_raster
 from .results import Session, accepted, built_text, keep_buttons, \
     result_path, show_layer
-from .sitelayer import SiteTool, result_level
+from .sitelayer import SiteTool, add_preview, result_level
 from .viewshed import fit_status
 
 SETTINGS = "PlanetX/spectral/"
@@ -319,6 +319,7 @@ class SpectralDialog(QDialog):
         layout.addWidget(hint)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
+        add_preview(self, layout, buttons)
         fit_status(self, layout)
         self.source.currentIndexChanged.connect(lambda _: self._source())
         self.sensor.currentIndexChanged.connect(lambda _: self._source())

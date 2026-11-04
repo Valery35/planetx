@@ -26,7 +26,7 @@ from .inset import DemSource
 from .relief import write_grid
 from .results import (Session, accepted, built_text, keep_buttons,
                       result_path, show_layer)
-from .sitelayer import SiteTool
+from .sitelayer import SiteTool, add_preview
 from .viewshed import ResultTiles, display_level, fit_status
 SIDE = 1.0  # км, сторона участка по умолчанию
 MOST = 20.0  # км, наибольший участок
@@ -114,6 +114,7 @@ class EarthworkDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
+        add_preview(self, layout, buttons)
         fit_status(self, layout)
         self.set_ready(False)
 

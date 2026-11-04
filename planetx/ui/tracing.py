@@ -22,7 +22,8 @@ import os
 import numpy as np
 from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QObject, QTimer, pyqtSignal
-from qgis.PyQt.QtWidgets import (QComboBox, QDialog, QDialogButtonBox,
+from qgis.PyQt.QtWidgets import (QCheckBox, QComboBox, QDialog,
+                                 QDialogButtonBox,
                                  QDoubleSpinBox, QFormLayout, QHBoxLayout,
                                  QLabel, QLineEdit, QPushButton, QScrollArea,
                                  QSpinBox, QVBoxLayout, QWidget)
@@ -39,7 +40,7 @@ from .area import Area
 from .inset import warm
 from .results import (Session, accepted, add_vector, built_text,
                       keep_buttons, result_path, set_abstract, titled)
-from .sitelayer import SiteTool, class_rows, result_level
+from .sitelayer import SiteTool, add_preview, class_rows, result_level
 from .viewshed import fit_status
 
 SETTINGS = "PlanetX/tracing/"
@@ -88,11 +89,18 @@ def shares(classes, count):
 
 
 class ColorRow(QWidget):
-    """Строка таблицы классов: цвет, название, доля, слияние."""
+    """Строка таблицы классов: видно ли на глобусе, цвет, название, доля,
+    слияние."""
 
     def __init__(self, number, rgb, name, share, parent=None):
         super().__init__(parent)
         self.number = number
+        self.visible = QCheckBox(self)
+        self.visible.setChecked(True)
+        self.visible.setToolTip(tr(
+            "Класс виден на глобусе. Снятый флажок открывает местность под "
+            "классом, по ней видно, что это за объект. Класс остаётся "
+            "в слое."))
         swatch = QLabel(self)
         swatch.setFixedSize(18, 18)
         swatch.setStyleSheet("background: #%02x%02x%02x;" % tuple(rgb))
@@ -107,6 +115,7 @@ class ColorRow(QWidget):
             "классом с названием и цветом того, с которым слит."))
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.visible)
         layout.addWidget(swatch)
         layout.addWidget(self.name, 1)
         layout.addWidget(self.share)
@@ -115,9 +124,10 @@ class ColorRow(QWidget):
 
 class ColorTable(QWidget):
     """Таблица классов трассировки. Сигнал changed(joined): joined -
-    сменилось слияние, иначе только названия."""
+    сменилось слияние, иначе только названия. seen - флажок «Видно»."""
 
     changed = pyqtSignal(bool)
+    seen = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -135,6 +145,7 @@ class ColorTable(QWidget):
             n = int(n)
             row = ColorRow(n, colors[n], names[n], float(parts[n]), self)
             row.name.textEdited.connect(lambda _: self._renamed())
+            row.visible.toggled.connect(lambda _: self.seen.emit())
             self.rows.append(row)
             self.box.addWidget(row)
         self._fill_joins()
@@ -189,6 +200,11 @@ class ColorTable(QWidget):
         for row in self.rows:
             out[row.number] = row.name.text().strip()
         return out
+
+    def hidden(self):
+        """Номера цветов со снятым флажком «Видно»."""
+        return {row.number for row in self.rows
+                if not row.visible.isChecked()}
 
     def target(self, count):
         out = [-1] * count
@@ -321,6 +337,7 @@ class TraceDialog(QDialog):
         layout.addWidget(self.table_box)
         layout.addWidget(self.status)
         layout.addWidget(buttons)
+        add_preview(self, layout, buttons)
         fit_status(self, layout)
         self.show_table(0)
         self.source.currentIndexChanged.connect(lambda _: self._volume())
@@ -433,6 +450,7 @@ class TraceTool(SiteTool, QObject):
             dialog.build.connect(self.build)
             dialog.finished.connect(self._closed)
             dialog.table.changed.connect(self._classes_changed)
+            dialog.table.seen.connect(lambda: self._classes_changed(True))
             dialog.ask_names.clicked.connect(self.ask_names)
             self.dialog = dialog
         dialog.source.refill()
@@ -567,7 +585,9 @@ class TraceTool(SiteTool, QObject):
             base, classes=classes, kinds=kinds,
             colors=[base["colors"][k] for k in keep],
             hexes=[base["hexes"][k] for k in keep],
-            names=[names[k] or base["names"][k] for k in keep])
+            names=[names[k] or base["names"][k] for k in keep],
+            hidden={tuple(base["colors"][k][:3]) for k in keep
+                    if k in table.hidden()})
 
     def _classes_changed(self, joined):
         if self.base is None or self.result is None:

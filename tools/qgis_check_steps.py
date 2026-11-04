@@ -20504,6 +20504,24 @@ def class_raster_wait():
         return None
     classes = res["classes"]
     out["grid"] = [list(classes.shape), res["step"]]
+    # Флажок «Видно» класса 0: его цвет не рисуется, флажок
+    # «Показывать на глобусе» прячет слой вида.
+    from planetx.ui.aefclass import ClassTiles
+    row = dialog.rows[0]
+    row.visible.setChecked(False)
+    left = 0
+    for probe_key in list(textures)[:8]:
+        rgba, _ = ClassTiles(tool.result).work(probe_key)
+        if rgba is not None:
+            left += int((np.all(rgba[..., :3] == np.array(
+                row.rgb(), np.uint8), axis=-1) & (rgba[..., 3] > 0)).sum())
+    out["hidden_pixels_left"] = left
+    row.visible.setChecked(True)
+    dialog.preview.setChecked(False)
+    out["preview_off_fade"] = window.view.gibs["viewshed"].fade
+    dialog.preview.setChecked(True)
+    out["preview_on_fade"] = round(window.view.gibs["viewshed"].fade, 3)
+    res = tool.result
     # Запад - класс 0, восток - класс 1 по настоящему положению клеток.
     from planetx.core.coords import from_utm
     index = res["index"]
@@ -21031,6 +21049,30 @@ def trace_wait():
     out["table_rows"] = len(table.rows)
     out["table_shown"] = dialog.table_box.isVisible()
     first, second = table.rows[0], table.rows[1]
+    # Флажок «Видно» первого цвета: его клетки прозрачны в тайле.
+    from planetx.ui.aefclass import ClassTiles
+    import numpy as np
+    rgb = tuple(tool.base["colors"][first.number][:3])
+    first.visible.setChecked(False)
+    out["hidden_colors"] = len(tool.result.get("hidden", ()))
+    seen, clear = 0, 0
+    for probe_key in list(textures)[:8]:
+        rgba, _ = ClassTiles(tool.result).work(probe_key)
+        if rgba is None:
+            continue
+        mine = np.all(rgba[..., :3] == np.array(rgb, np.uint8), axis=-1)
+        seen += int((mine & (rgba[..., 3] > 0)).sum())
+        clear += int((rgba[..., 3] == 0).sum())
+    out["hidden_pixels_left"] = seen  # 0 - цвет не рисуется
+    out["clear_pixels"] = clear
+    first.visible.setChecked(True)
+    out["hidden_after"] = len(tool.result.get("hidden", ()))
+    # Флажок «Показывать на глобусе»: слой вида прозрачен и обратно.
+    layer = window.view.gibs["viewshed"]
+    dialog.preview.setChecked(False)
+    out["preview_off_fade"] = layer.fade
+    dialog.preview.setChecked(True)
+    out["preview_on_fade"] = round(layer.fade, 3)
     first.name.setText("Вода")
     first.name.textEdited.emit("Вода")
     out["legend_named"] = any("Вода" in text for _, text
