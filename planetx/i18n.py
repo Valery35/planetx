@@ -6181,6 +6181,24 @@ EN = {
         "under the class, which tells what the object is. The class stays "
         "in the layer.",
     "Показывать на глобусе": "Show on the globe",
+    "Цвета снимка": "Image colors",
+    "Летний снимок раскладывается на цвета, как в окне "
+    "«Трассировка», образцы не нужны. Название цвета можно "
+    "переписать, цвета с одинаковым названием сливаются.":
+        "The summer image is split into colors, as in the Tracing window, "
+        "no samples are needed. A color name can be rewritten, colors with "
+        "the same name are merged.",
+    "На сколько цветов раскладывается снимок. Больше цветов - "
+    "подробнее классы, их проще слить одинаковыми названиями.":
+        "How many colors the image is split into. More colors give finer "
+        "classes, they are merged by giving them the same name.",
+    "«Построить» раскладывает летний снимок на цвета. Цвета "
+    "с одинаковым названием сливаются. Если цвет лёг неверно, "
+    "поставьте его образец - {how} - и нажмите «Построить».":
+        "Build splits the summer image into colors. Colors with the same "
+        "name are merged. If a color is wrong, place its sample - {how} - "
+        "and press Build.",
+    "цвета снимка, цветов {n}": "image colors, {n} colors",
     "Снятый флажок прячет результат на глобусе, под ним виден снимок, "
     "по которому удобно ставить образцы. Результат и кнопка OK "
     "остаются.":

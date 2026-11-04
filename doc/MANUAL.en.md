@@ -3032,6 +3032,15 @@ conifers the rules take them for clear-cuts. The «Overgrown
 fields» task is not in the list - it needs a series of spring and
 autumn images over 4 years, it is in the «Object extraction» window.
 
+«Image colors» in the same list splits the summer image into colors,
+as the «Tracing» window does, no samples are needed. The «Colors» field
+sets their number. Each color is a class row «Color N» by its share of
+the site, after «Build» the row gets the color of the image. A color
+name can be rewritten, for example «Forest» or «Field». Rows with the
+same name are merged into one class. If a color is wrong, it gets
+a sample - a point or an outline, and «Build» computes again, as with
+a task.
+
 OK writes the class raster, the control points and the sample
 outlines to the computation subgroup, «Cancel» removes the classes from the globe. Fine settings -
 the pixel, splitting into objects, the AlphaEarth source - are in the

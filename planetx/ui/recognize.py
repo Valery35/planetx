@@ -32,6 +32,13 @@
 каждого класса правил образцами, добавляет образцы пользователя
 и считает классы ближайшими образцами. Заросших полей в списке нет -
 им нужен ряд снимков весны и осени за 4 года.
+
+Источник «Цвета снимка» - слово автора от 4 ноября 2026 года
+«объединяй, делай источник «Цвета снимка»» на просьбу Василия Швалёва
+объединить окно с «Трассировкой». Летний снимок раскладывается на цвета,
+как у трассировки (core.tracing.ranked_colors), образцы не нужны, цвета -
+строки классов по убыванию доли участка. Строки с одинаковым названием
+сливаются, образец точкой или областью поправляет цвет, как у задачи.
 """
 import numpy as np
 from qgis.core import QgsProject, QgsSettings
@@ -39,10 +46,10 @@ from qgis.PyQt.QtCore import QObject, Qt, pyqtSignal
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QButtonGroup, QComboBox,
                                  QHBoxLayout, QHeaderView, QMenu,
-                                 QRadioButton, QTableWidget,
+                                 QRadioButton, QSpinBox, QTableWidget,
                                  QTableWidgetItem, QWidget)
 
-from ..core import aef, rasterclass
+from ..core import aef, rasterclass, tracing
 from ..core import objecttasks as ot
 from ..core.features import Shape
 from ..i18n import tr
@@ -61,6 +68,7 @@ SETTINGS = "PlanetX/recognize/"
 SIDE_MOST = 20.0  # км, наибольшая сторона участка - загрузка по участку
 CHOICES = 12  # дат в меню строки
 TASKS = ("forest", "fields", "water")  # задачи списка «Задача»
+COLORS_TASK = "colors"  # строка «Цвета снимка» списка «Задача»
 TASK_SAMPLES = 60  # клеток класса правил образцами, если есть свои
 # Строки таблицы: ключ, месяцы по порядку предпочтения. Снег - март
 # и апрель, как у второго снимка «Выделения объектов».
@@ -74,6 +82,22 @@ def row_name(key):
 def day_text(day):
     """«2025-07-21» - «21.07.2025»."""
     return "{}.{}.{}".format(day[8:10], day[5:7], day[:4]) if day else ""
+
+
+def colors_codes(rows):
+    """Номера цветов снимка у строк классов «Цветов снимка» [[номера]]:
+    строка с тем же названием, что у строки выше, отдаёт свой цвет ей -
+    так цвета сливаются. Свой класс без цвета - пустой список."""
+    out = [[] for _ in rows]
+    first = {}
+    for n, row in enumerate(rows):
+        rank = getattr(row, "rank", None)
+        if rank is None:
+            continue
+        name = row.name.text().strip()
+        target = first.setdefault(name, n) if name else n
+        out[target].append(rank)
+    return out
 
 
 class ShotTable(QTableWidget):
@@ -431,6 +455,12 @@ class RecognizeDialog(ClassDialog):
         self.task.setItemData(0, tr(
             "Классы и образцы задаются вручную, нужно хотя бы два класса."),
             tip_role)
+        self.task.addItem(tr("Цвета снимка"), COLORS_TASK)
+        self.task.setItemData(1, tr(
+            "Летний снимок раскладывается на цвета, как в окне "
+            "«Трассировка», образцы не нужны. Название цвета можно "
+            "переписать, цвета с одинаковым названием сливаются."),
+            tip_role)
         for key, name, tip in scenario_names():
             if key in TASKS:
                 self.task.addItem(name, key)
@@ -440,6 +470,15 @@ class RecognizeDialog(ClassDialog):
             "лета и снега, образцы не нужны. Образец точкой или областью "
             "поправляет свой класс, «Построить» считает заново с ним."))
         form.insertRow(3, tr("Задача"), self.task)
+        self.color_count = QSpinBox(self)
+        self.color_count.setRange(2, 16)
+        self.color_count.setValue(int(QgsSettings().value(
+            SETTINGS + "colors", tracing.COLORS)))
+        self.color_count.setToolTip(tr(
+            "На сколько цветов раскладывается снимок. Больше цветов - "
+            "подробнее классы, их проще слить одинаковыми названиями."))
+        form.insertRow(4, tr("Цветов"), self.color_count)
+        self.color_count.valueChanged.connect(lambda _: self._task())
         wanted = QgsSettings().value(SETTINGS + "task", "") or ""
         self.task.setCurrentIndex(max(0, self.task.findData(wanted)))
         self.task.currentIndexChanged.connect(lambda _: self._task())
@@ -462,9 +501,20 @@ class RecognizeDialog(ClassDialog):
         пустых класса."""
         key = self.task_key()
         QgsSettings().setValue(SETTINGS + "task", key)
+        QgsSettings().setValue(SETTINGS + "colors",
+                               self.color_count.value())
+        form = self.layout().itemAt(0).layout()
+        self.color_count.setVisible(key == COLORS_TASK)
+        label = form.labelForField(self.color_count)
+        if label is not None:
+            label.setVisible(key == COLORS_TASK)
         for row in list(self.rows):
             self._remove(row)
-        if key:
+        if key == COLORS_TASK:
+            for n in range(self.color_count.value()):
+                row = self.add_class(tr("Цвет {n}", n=n + 1))
+                row.rank = n
+        elif key:
             for kind in ot.task_kinds(key):
                 row = self.add_class(kind_name(kind))
                 row.kind = kind
@@ -484,7 +534,13 @@ class RecognizeDialog(ClassDialog):
     def _mode(self):
         on = self.areas_mode()
         QgsSettings().setValue(SETTINGS + "areas", on)
-        if self.task_key():
+        if self.task_key() == COLORS_TASK:
+            self.hint.setText(tr(
+                "«Построить» раскладывает летний снимок на цвета. Цвета "
+                "с одинаковым названием сливаются. Если цвет лёг неверно, "
+                "поставьте его образец - {how} - и нажмите «Построить».",
+                how=tr("контур") if on else tr("точку")))
+        elif self.task_key():
             self.hint.setText(tr(
                 "Классы задачи считаются правилами по снимкам, образцы не "
                 "нужны. Если класс лёг неверно, поставьте его образец - "
@@ -542,6 +598,7 @@ class RecognizeTool(ClassTool):
     def __init__(self, window):
         super().__init__(window)
         self.pending = False  # «Построить» ждёт подбора снимков
+        self.found_rgb = None  # цвета снимка последнего «Построить»
 
     def tool_title(self):
         return tr("Распознавание")
@@ -589,13 +646,18 @@ class RecognizeTool(ClassTool):
                 "или снимок из проекта."))
             return
         task = dialog.task_key()
-        if task and not ot.usable(raster_roles(dialog.raster())[0]):
+        if task and task != COLORS_TASK \
+                and not ot.usable(raster_roles(dialog.raster())[0]):
             dialog.status.setText(tr(
                 "У летнего снимка не узнать ближний ИК и красный или SWIR - "
                 "правилам задачи нужен снимок окна «Космоснимки»."))
             return
         super().build()
-        if task and self.job is not None:
+        if task == COLORS_TASK and self.job is not None:
+            self.settings = [tr("цвета снимка, цветов {n}",
+                                n=dialog.color_count.value())] \
+                + list(self.settings)
+        elif task and self.job is not None:
             self.settings = [tr("задача «{task}»",
                                 task=dialog.task.currentText())] \
                 + list(self.settings)
@@ -611,19 +673,32 @@ class RecognizeTool(ClassTool):
         roles = raster_roles(dialog.raster())[0]
         snow = dialog.snow()
         snow_roles = raster_roles(snow)[0] if snow is not None else None
-        codes = [ot.KIND_ORDER.index(row.kind) if getattr(row, "kind", None)
-                 else -1 for row in self.used_rows()]
-        first = len(roles)
+        rows = self.used_rows()
+        colors = scenario == COLORS_TASK
+        if colors:
+            codes = colors_codes(rows)
+        else:
+            codes = [[ot.KIND_ORDER.index(row.kind)]
+                     if getattr(row, "kind", None) else [] for row in rows]
+        count = dialog.color_count.value()
+        first = len(roles) or None
+        self.found_rgb = None
 
         def run(grid, inside, samples, labels):
-            good = inside & np.isfinite(grid[:first]).all(axis=0)
-            more = snow_roles if grid.shape[0] > first else None
-            cells = ot.cell_kinds(grid, roles, more, good, scenario)
+            top = first or grid.shape[0]
+            good = inside & np.isfinite(grid[:top]).all(axis=0)
+            if colors:
+                cells, centers = tracing.ranked_colors(grid[:top], good,
+                                                       count)
+                self.found_rgb = tracing.display_colors(centers)
+            else:
+                more = snow_roles if grid.shape[0] > top else None
+                cells = ot.cell_kinds(grid, roles, more, good, scenario)
             stop_point(self)
             out = np.full(cells.shape, -1, dtype=np.int64)
             for n, code in enumerate(codes):
-                if code >= 0:
-                    out[cells == code] = n
+                if code:
+                    out[np.isin(cells, code)] = n
             if not samples:
                 return out
             samples, labels = list(samples), list(labels)
@@ -647,6 +722,21 @@ class RecognizeTool(ClassTool):
             return classes
 
         return run
+
+    def _built(self, out, key, box, year, colors, names, *rest, **more):
+        """Цвета снимка - строкам классов: цвет строки - цвет снимка
+        под её номером."""
+        found, self.found_rgb = self.found_rgb, None
+        if found and self.dialog.task_key() == COLORS_TASK:
+            colors = list(colors)
+            for n, row in enumerate(self.dialog.rows):
+                rank = getattr(row, "rank", None)
+                if rank is not None and rank < len(found) \
+                        and n < len(colors):
+                    row.color = QColor(*found[rank])
+                    row._paint()
+                    colors[n] = tuple(found[rank])
+        super()._built(out, key, box, year, colors, names, *rest, **more)
 
     def _shots_done(self):
         """Снимки подобраны - «Построить» идёт дальше сам."""

@@ -54,6 +54,20 @@ class TestColors(unittest.TestCase):
         classes, _ = trace.quantize(grid, good, 3)
         self.assertTrue((classes[:, :10] == -1).all())
 
+    def test_ranked_colors_by_share(self):
+        # Источник «Цвета снимка» окна «Распознавание»: цвет 0 - фон,
+        # самый крупный, средние каналов - в том же порядке.
+        grid = picture()
+        good = np.ones(grid.shape[1:], dtype=bool)
+        good[:, :5] = False
+        cells, centers = trace.ranked_colors(grid, good, 3)
+        self.assertTrue((cells[:, :5] == -1).all())
+        sizes = [int((cells == n).sum()) for n in range(len(centers))]
+        self.assertEqual(sizes, sorted(sizes, reverse=True))
+        self.assertEqual(cells[2, 10], 0)
+        self.assertGreater(centers[0, 0], 150.0)
+        self.assertLess(centers[cells[30, 20], 0], 80.0)
+
 
 class TestMerge(unittest.TestCase):
     def test_small_spots_join_neighbour(self):

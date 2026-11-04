@@ -537,6 +537,36 @@ def joined(classes, kinds, lookup):
             np.where(kinds >= 0, lookup[np.maximum(kinds, 0)], -1))
 
 
+def ranked_colors(grid, good, count=COLORS, smooth=SMOOTH, least=LEAST):
+    """Цвета снимка окна «Распознавание», источник «Цвета снимка» -
+    сглаживание, k-средние и слияние мелких областей, как у трассировки.
+    Цвета идут по убыванию доли участка. Итог - (номер цвета клетки,
+    -1 вне good, средние каналов цветов в том же порядке)."""
+    labels, _ = quantize(blur(grid, good, smooth), good, count)
+    _, _, labels = merge_small(labels, least)
+    cells = np.full(good.shape, -1, dtype=np.int64)
+    has = labels >= 0
+    if not has.any():
+        return cells, np.zeros((0, grid.shape[0]))
+    sizes = np.bincount(labels[has])
+    used = np.flatnonzero(sizes)
+    order = used[np.argsort(-sizes[used], kind="stable")]
+    rank = np.full(len(sizes), -1, dtype=np.int64)
+    rank[order] = np.arange(len(order))
+    cells[has] = rank[labels[has]]
+    data = grid[:, has].astype(np.float64)
+    centers = np.full((len(order), grid.shape[0]), np.nan)
+    for band in range(grid.shape[0]):
+        values = data[band]
+        fine = np.isfinite(values)
+        sums = np.bincount(cells[has][fine], values[fine],
+                           minlength=len(order))
+        found = np.bincount(cells[has][fine], minlength=len(order))
+        centers[:, band] = np.where(found > 0,
+                                    sums / np.maximum(found, 1), np.nan)
+    return cells, centers
+
+
 def display_colors(centers):
     """Цвета RGB 0-255 цветов трассировки: первые три канала (один канал -
     серый). Значения 0-255 берутся как есть, отражение 0-1 и прочие -

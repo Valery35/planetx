@@ -21749,6 +21749,63 @@ def recognize_task_fix():
     return None
 
 
+@check(1000)
+def recognize_colors():
+    # Источник «Цвета снимка»: летний снимок раскладывается на цвета,
+    # строки классов - цвета по доле участка.
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.open_here(*RECOGNIZE_AT)
+    dialog.area.set_square(RECOGNIZE_AT[0], RECOGNIZE_AT[1], 3000.0)
+    out = result["recognize_colors"] = {}
+    dialog.task.setCurrentIndex(dialog.task.findData("colors"))
+    dialog.color_count.setValue(6)
+    out["rows"] = [row.name.text() for row in dialog.rows]
+    out["count_shown"] = dialog.color_count.isVisible()
+    out["placeholder"] = [row.rgb() for row in dialog.rows]
+    out["hint"] = dialog.hint.text()
+    dialog.build.emit()
+    state["recognize_started"] = time.monotonic()
+
+
+@check(1000)
+def recognize_colors_wait():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["recognize_started"]
+    if (dialog.picker.busy() or tool.job is not None or tool.pending) \
+            and spent < 600.0:
+        return 1000
+    out = result["recognize_colors"]
+    out["spent_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()
+    if tool.result is None:
+        out["built"] = False
+        return None
+    if "colors_merged" not in state:
+        out["settings"] = tool.result["settings"]
+        out["shares"] = _task_shares(tool)
+        out["recolored"] = [row.rgb() for row in dialog.rows]
+        dialog.grab().save(os.path.join(TEMP,
+                                        "planetx_recognize_colors.png"))
+        # Второй цвет с названием первого сливается с ним.
+        state["colors_merged"] = out["shares"][:2]
+        dialog.rows[1].name.setText(dialog.rows[0].name.text())
+        dialog.build.emit()
+        state["recognize_started"] = time.monotonic()
+        return 1000
+    before = state.pop("colors_merged")
+    out["merged_shares"] = _task_shares(tool)
+    out["merged_ok"] = abs(out["merged_shares"][0] - sum(before)) < 0.01 \
+        and out["merged_shares"][1] == 0
+    dialog.task.setCurrentIndex(0)
+    out["own_rows"] = len(dialog.rows)
+    out["count_hidden"] = not dialog.color_count.isVisible()
+    dialog.reject()
+    return None
+
+
 POST138 = tuple(map(float, os.environ.get(
     "PLANETX_POST138", "58.005,56.175").split(",")))
 POST138_SIDE = float(os.environ.get("PLANETX_POST138_SIDE", "5"))
