@@ -22014,7 +22014,199 @@ def recognize_similar_wait():
     return None
 
 
-POST138 = tuple(map(float, os.environ.get(
+def _band_raster(path, labels, halves, lat=58.05, lon=56.20, size=300):
+    """Синтетический растр у Перми: левая и правая половины - свои
+    значения каналов halves = (левые, правые), шум 0.004."""
+    import numpy as np
+    from osgeo import gdal, osr
+    rng = np.random.default_rng(len(path))
+    values = np.zeros((len(labels), size, size), dtype=np.float32)
+    for band in range(len(labels)):
+        values[band, :, :size // 2] = halves[0][band]
+        values[band, :, size // 2:] = halves[1][band]
+    values += rng.normal(0.0, 0.004, values.shape).astype(np.float32)
+    data = gdal.GetDriverByName("GTiff").Create(path, size, size,
+                                                len(labels), gdal.GDT_Float32)
+    data.SetGeoTransform((lon - 0.09, 0.0006, 0.0, lat + 0.045, 0.0,
+                          -0.0003))
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+    data.SetProjection(srs.ExportToWkt())
+    for band, label in enumerate(labels):
+        target = data.GetRasterBand(band + 1)
+        target.SetDescription(label)
+        target.WriteArray(values[band])
+    data = None
+    return lat, lon
+
+
+@check(1000)
+def recognize_second():
+    # Перенесённое из прежних окон: второй снимок растра проекта (летом
+    # хвоя и листва одной яркости ИК, осенью листва теряет ИК),
+    # сглаживание снимка и скругление углов под «Дополнительно».
+    from qgis.core import QgsProject, QgsRasterLayer
+    window = state["window"]
+    folder = os.path.join(TEMP, "planetx_second_{}".format(int(time.time())))
+    os.makedirs(folder, exist_ok=True)
+    labels = ["B11 swir16", "B8 nir", "B2 blue"]
+    summer = os.path.join(folder, "S2_20240715_40VDK_agriculture.tif")
+    autumn = os.path.join(folder, "S2_20241010_40VDK_agriculture.tif")
+    lat, lon = _task_raster(summer, labels, {
+        "conifer": (0.17, 0.32, 0.03), "broadleaf": (0.17, 0.33, 0.03)})
+    _task_raster(autumn, labels, {
+        "conifer": (0.15, 0.29, 0.03), "broadleaf": (0.20, 0.14, 0.04)})
+    one = QgsRasterLayer(summer, "summer", "gdal")
+    two = QgsRasterLayer(autumn, "autumn", "gdal")
+    QgsProject.instance().addMapLayers([one, two])
+    state["second_layers"] = [one.id(), two.id()]
+    tool = window.recognize_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(one.id()))
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    dialog.lines.setChecked(False)
+    dialog.area.set_square(lat, lon, 8000.0)
+    out = result["recognize_second"] = {}
+    out["second_shown"] = not dialog.second.isHidden()
+    out["second_items"] = [dialog.second.itemText(n)
+                           for n in range(dialog.second.count())]
+    dialog.more.setChecked(True)
+    out["smooth_shown"] = not dialog.smooth.isHidden()
+    out["corner_shown"] = not dialog.corner.isHidden()
+    dialog.smooth.setValue(-1)
+    dialog.corner.setValue(1.0)
+    dialog.second.setCurrentIndex(0)
+    dialog.build.emit()
+    state["second_step"] = "one"
+    state["unite_started"] = time.monotonic()
+
+
+@check(1000)
+def recognize_second_wait():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["unite_started"]
+    if tool.job is not None and spent < 180.0:
+        return 1000
+    out = result["recognize_second"]
+    stage = state["second_step"]
+    if tool.result is None:
+        out[stage] = {"built": False, "status": dialog.status.text()}
+        dialog.reject()
+        return None
+    names = [r.name.text() for r in dialog.rows]
+    out[stage] = {"shares": dict(zip(names, _task_shares(tool))),
+                  "shapes": len(tool.result.get("shapes") or {}),
+                  "status": dialog.status.text()[:160]}
+    if stage == "one":
+        dialog.second.setCurrentIndex(dialog.second.findData(
+            state["second_layers"][1]))
+        state["second_step"] = "two"
+    elif stage == "two":
+        # Сглаживание 0 и одни углы - областей и вершин больше.
+        state["corner_vertices"] = _shape_vertices(tool.result)
+        dialog.smooth.setValue(0)
+        dialog.corner.setValue(0.0)
+        state["second_step"] = "sharp"
+    else:
+        out["vertices_round"] = state.pop("corner_vertices")
+        out["vertices_sharp"] = _shape_vertices(tool.result)
+        out["settings"] = tool.result["settings"]
+        dialog.smooth.setValue(-1)
+        dialog.corner.setValue(1.0)
+        dialog.second.setCurrentIndex(0)
+        dialog.reject()
+        from qgis.core import QgsProject
+        QgsProject.instance().removeMapLayers(state.pop("second_layers"))
+        return None
+    dialog.build.emit()
+    state["unite_started"] = time.monotonic()
+    return 1000
+
+
+def _shape_vertices(found):
+    shapes = found.get("shapes") or {}
+    return sum(len(outer) + sum(len(h) for h in holes)
+               for outer, holes in shapes.values())
+
+
+@check(1000)
+def recognize_fallow():
+    # Заросшие поля: слой многоугольников получает поля last_bare
+    # и woody_pct, как у прежнего окна. Левое поле голое весной каждый
+    # год, правое - только в 2023 году. Снимки - растры проекта.
+    from qgis.core import QgsProject, QgsRasterLayer
+    window = state["window"]
+    folder = os.path.join(TEMP, "planetx_fallow_{}".format(int(time.time())))
+    os.makedirs(folder, exist_ok=True)
+    labels = ["B12 swir22", "B8A nir08", "B4 red"]
+    meadow, grass = (0.12, 0.30, 0.05), (0.15, 0.26, 0.07)
+    bare = (0.25, 0.17, 0.12)
+    summer = os.path.join(folder, "S2_20260715_40VDK_swir.tif")
+    lat, lon = _band_raster(summer, labels, (meadow, grass))
+    layers = [QgsRasterLayer(summer, "fallow_summer", "gdal")]
+    for year in (2023, 2024, 2025, 2026):
+        path = os.path.join(folder, "S2_{}0520_40VDK_swir.tif".format(year))
+        _band_raster(path, labels, (bare, bare if year == 2023 else meadow))
+        layers.append(QgsRasterLayer(path, "spring_{}".format(year), "gdal"))
+    QgsProject.instance().addMapLayers(layers)
+    state["fallow_layers"] = [layer.id() for layer in layers]
+    tool = window.recognize_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(layers[0].id()))
+    dialog.task.setCurrentIndex(dialog.task.findData("fallow"))
+    dialog.lines.setChecked(False)
+    dialog.area.set_square(lat, lon, 8000.0)
+    dialog._take_seasons()
+    out = result["recognize_fallow"] = {}
+    out["seasons"] = len(dialog.season_layers())
+    dialog.build.emit()
+    state["unite_started"] = time.monotonic()
+
+
+@check(1000)
+def recognize_fallow_wait():
+    from qgis.core import QgsProject, QgsVectorLayer
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["unite_started"]
+    if (tool.job is not None or dialog.season_picker.busy()) \
+            and spent < 180.0:
+        return 1000
+    out = result["recognize_fallow"]
+    out["spent_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()[:200]
+    if tool.result is None:
+        out["built"] = False
+        dialog.reject()
+        QgsProject.instance().removeMapLayers(state.pop("fallow_layers"))
+        return None
+    out["shares"] = dict(zip([r.name.text() for r in dialog.rows],
+                             _task_shares(tool)))
+    dialog.accept()
+    fields = []
+    for node in _result_layers():
+        found = node.layer()
+        if isinstance(found, QgsVectorLayer) \
+                and found.fields().indexOf("last_bare") >= 0:
+            for feature in found.getFeatures():
+                fields.append((feature["name"], feature["last_bare"],
+                               round(feature["woody_pct"], 1),
+                               round(feature["area_ha"], 1)))
+    fields.sort(key=lambda f: -f[3])
+    out["fields"] = fields[:8]
+    _drop_group()
+    QgsProject.instance().removeMapLayers(state.pop("fallow_layers"))
+    return None
+
+
+POST138 =tuple(map(float, os.environ.get(
     "PLANETX_POST138", "58.005,56.175").split(",")))
 POST138_SIDE = float(os.environ.get("PLANETX_POST138_SIDE", "5"))
 

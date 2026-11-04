@@ -928,6 +928,7 @@ class ClassTool(SiteTool, QObject):
         if not self.vectorize:
             return work
         least = self.dialog.least_cells()
+        corner = self.dialog.corner_value()
 
         def run():
             out = work()
@@ -936,7 +937,7 @@ class ClassTool(SiteTool, QObject):
                     and not out.get("problem"):
                 stop_point(self)
                 out["shapes"] = tracing.class_shapes(
-                    out["classes"], least,
+                    out["classes"], least, corner,
                     progress=lambda: stop_point(self))
             return out
 
@@ -1062,7 +1063,8 @@ class ClassTool(SiteTool, QObject):
                                table=out["table"])
         if out.get("shapes") is not None:
             self.result.update(shapes=out["shapes"]["shapes"],
-                               shape_kinds=out["shapes"]["kinds"])
+                               shape_kinds=out["shapes"]["kinds"],
+                               shape_parts=out["shapes"]["parts"])
         counts = [int((classes == n).sum()) for n in range(len(colors))]
         total = max(sum(counts), 1)
         parts = ", ".join("{} {:.0f}%".format(name, 100.0 * c / total)

@@ -199,15 +199,19 @@ ROWS = KINDS + (ot.CONIFER, ot.BROADLEAF, ot.VEGETATION, ot.CLEARING,
                 ot.SOIL, ot.WATER, ot.SNOW, ot.OTHER)
 
 
-def field_cells(grid, roles, good, seasons):
+def field_cells(grid, roles, good, seasons, smooth=None, details=None):
     """Заросшие поля окна «Распознавание»: grid - каналы летнего снимка
     (roles), за ними снимки весны и осени seasons [(год, роли, каналов)].
     Области - по летнему снимку (objecttasks.summer_regions), вид поля -
     по годам голой почвы. Итог - (номер класса ROWS у клетки, -1 вне
-    good, области клеток, летние виды областей, учтённых снимков)."""
+    good, области клеток, летние виды областей, учтённых снимков).
+    details - словарь, в него ложатся по клеткам последний год голой
+    почвы "last" (0 - не было) и доля деревьев области "woody" (NaN -
+    неизвестно)."""
     first = len(roles)
     out = np.full(good.shape, -1, dtype=np.int64)
-    found = ot.summer_regions(grid[:first], roles, None, good, "fallow")
+    found = ot.summer_regions(grid[:first], roles, None, good, "fallow",
+                              smooth=smooth)
     if found is None:
         return out, None, [], 0
     parts, summer = found
@@ -226,11 +230,40 @@ def field_cells(grid, roles, good, seasons):
     woody = woody_shares(parts, trees, count)
     years, bare, seen = tilled_years(parts, scenes, count)
     newest = max((y for y, _ in scenes), default=0)
-    kinds, _ = field_kinds(summer, years, bare, seen, woody, newest)
+    kinds, last = field_kinds(summer, years, bare, seen, woody, newest)
     codes = np.array([ROWS.index(k) for k in kinds] + [-1], dtype=np.int64)
-    out[:] = codes[np.where(parts >= 0, parts, count)]
+    at = np.where(parts >= 0, parts, count)
+    out[:] = codes[at]
     out[~good] = -1
+    if details is not None:
+        years_ = np.array(list(last) + [0], dtype=np.int64)
+        shares = np.full(count + 1, np.nan)
+        if woody is not None:
+            shares[:count] = woody
+        details["last"] = np.where(good, years_[at], 0)
+        details["woody"] = np.where(good, shares[at], np.nan)
     return out, parts, summer, len(scenes)
+
+
+def shape_fields(parts, last, woody, count):
+    """Поля многоугольников заросших полей: по областям parts
+    многоугольников - самый частый у клеток последний год голой почвы
+    и средняя доля деревьев в процентах (0 - неизвестно)."""
+    parts = np.asarray(parts).ravel()
+    last = np.asarray(last).ravel()
+    woody = np.asarray(woody, dtype=np.float64).ravel()
+    inside = parts >= 0
+    years = np.unique(last[inside]) if inside.any() else np.zeros(1, int)
+    rank = np.searchsorted(years, last[inside])
+    votes = np.bincount(parts[inside] * len(years) + rank,
+                        minlength=count * len(years))[:count * len(years)]
+    common = years[votes.reshape(count, len(years)).argmax(axis=1)]
+    good = inside & np.isfinite(woody)
+    total = np.bincount(parts[good], weights=woody[good], minlength=count)
+    known = np.bincount(parts[good], minlength=count)
+    share = np.where(known[:count] > 0,
+                     total[:count] / np.maximum(known[:count], 1), 0.0)
+    return common.astype(np.int64), share * 100.0
 
 
 # Лучший день сезона: конец мая - пашня ещё голая, залежь уже зелёная,

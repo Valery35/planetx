@@ -59,7 +59,8 @@ from qgis.core import QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox,
-                                 QComboBox, QFormLayout, QHBoxLayout,
+                                 QComboBox, QDoubleSpinBox, QFormLayout,
+                                 QHBoxLayout,
                                  QHeaderView, QLabel,
                                  QMenu, QPushButton, QRadioButton, QSlider,
                                  QSpinBox, QTableWidget, QTableWidgetItem,
@@ -547,6 +548,28 @@ class RecognizeDialog(ClassDialog):
             "Многоугольник меньше этого количества клеток сливается с "
             "соседом по самой длинной общей границе. Растр классов не "
             "меняется."))
+        self.smooth = QSpinBox(self)
+        self.smooth.setRange(-1, 5)
+        self.smooth.setSpecialValueText(tr("По задаче"))
+        self.smooth.setValue(int(settings.value(SETTINGS + "smooth", -1)))
+        self.smooth.setToolTip(tr(
+            "Проходов сглаживания снимка перед разложением на цвета. Больше "
+            "- крупнее и проще области, мелкие детали пропадают, 0 - без "
+            "сглаживания."))
+        self.corner = QDoubleSpinBox(self)
+        self.corner.setRange(0.0, 1.3)
+        self.corner.setSingleStep(0.1)
+        self.corner.setDecimals(1)
+        self.corner.setValue(float(settings.value(SETTINGS + "corner",
+                                                  tracing.CORNER)))
+        self.corner.setToolTip(tr(
+            "Насколько скругляются углы многоугольников. 0 - одни углы, "
+            "больше - плавнее границы."))
+        self.second = QComboBox(self)
+        self.second.setToolTip(tr(
+            "Снимок того же участка в другое время - зимний со снегом или "
+            "весенний и осенний. Каналы второго снимка помогают отличить хвою "
+            "от листвы. Нужен ближний ИК."))
         self.more = QCheckBox(tr("Дополнительно"), self)
         self.more.setChecked(_flag(settings.value(SETTINGS + "more")))
         self.more.setToolTip(tr(
@@ -577,6 +600,9 @@ class RecognizeDialog(ClassDialog):
         self.lines.toggled.connect(lambda _: self._options())
         self.line_width.valueChanged.connect(lambda _: self._options())
         self.least.valueChanged.connect(lambda _: self._options())
+        self.smooth.valueChanged.connect(lambda _: self._options())
+        self.corner.valueChanged.connect(lambda _: self._options())
+        self.second.currentIndexChanged.connect(lambda _: self._second())
         self.more.toggled.connect(lambda _: self._options())
         self.split.toggled.connect(lambda _: self._options())
         self._limit()
@@ -623,7 +649,9 @@ class RecognizeDialog(ClassDialog):
         self.more_form = inner
         for text, widget in ((tr("Пиксель"), self.level),
                              ("", self.volume),
+                             (tr("Сглаживание снимка"), self.smooth),
                              (tr("Наименьшая область, клеток"), self.least),
+                             (tr("Скругление углов"), self.corner),
                              (tr("Ширина линий до"), self.line_width),
                              ("", self.split),
                              (tr("Масштаб объектов"), self.split_scale),
@@ -638,6 +666,7 @@ class RecognizeDialog(ClassDialog):
                 (tr("Снимки"), self.shots),
                 (tr("Год"), self.year),
                 (tr("Задача"), self.task),
+                (tr("Второй снимок"), self.second),
                 (tr("Цветов"), self.color_count),
                 (tr("Похожесть"), self.limit_row),
                 (tr("Весна и осень"), self.season_row),
@@ -701,6 +730,7 @@ class RecognizeDialog(ClassDialog):
             self.task.setCurrentIndex(0)
         if key in (SHOTS, BASEMAP, ""):
             QgsSettings().setValue(SETTINGS + "source", key)
+        self._fill_second()
         self.volume_changed()
         self._options()
         self.source_changed.emit()
@@ -765,6 +795,9 @@ class RecognizeDialog(ClassDialog):
         self._show_row(self.seasons, task == FALLOW_TASK)
         self._show_row(self.modes_row, task != SIMILAR_TASK)
         self._show_row(self.lines, task in LINE_TASKS)
+        self._show_row(self.second, self.second_wanted())
+        self._show_row(self.smooth, task in LINE_TASKS + (COLORS_TASK,))
+        self._show_row(self.corner, not (not task and self.split.isChecked()))
         self.add_button.setVisible(task != SIMILAR_TASK)
         # У эмбеддингов нет каналов снимка - помощнику не по чему судить.
         self.names_button.setVisible(task != SIMILAR_TASK
@@ -782,6 +815,44 @@ class RecognizeDialog(ClassDialog):
         settings.setValue(SETTINGS + "lines", self.lines.isChecked())
         settings.setValue(SETTINGS + "line_width", self.line_width.value())
         settings.setValue(SETTINGS + "least", self.least.value())
+        settings.setValue(SETTINGS + "smooth", self.smooth.value())
+        settings.setValue(SETTINGS + "corner", self.corner.value())
+
+    def smooth_value(self, default):
+        """Проходов сглаживания снимка: своё значение или default задачи
+        (None - по задаче)."""
+        value = self.smooth.value()
+        return default if value < 0 else value
+
+    def corner_value(self):
+        return self.corner.value()
+
+    def second_wanted(self):
+        """Второй снимок выбирается у растра проекта в задачах лесов,
+        полей и воды. У снимков Sentinel-2 его роль - снимок со снегом."""
+        return self.source_key() not in (SHOTS, BASEMAP, "") \
+            and self.task_key() in TASKS
+
+    def _fill_second(self):
+        """Растры проекта с ближним ИК, кроме источника, - список
+        «Второй снимок»."""
+        box = self.second
+        wanted = box.currentData() or QgsSettings().value(
+            SETTINGS + "second", "")
+        source = self.source_key()
+        box.blockSignals(True)
+        box.clear()
+        box.addItem(tr("Без второго снимка"), "")
+        for layer in suitable_rasters(False):
+            if layer.id() != source:
+                box.addItem(layer.name(), layer.id())
+        box.setCurrentIndex(max(0, box.findData(wanted)))
+        box.blockSignals(False)
+
+    def _second(self):
+        QgsSettings().setValue(SETTINGS + "second",
+                               self.second.currentData() or "")
+        self.changed.emit()
 
     def _limit(self):
         self.limit_text.setText("{} %".format(self.limit.value()))
@@ -848,6 +919,11 @@ class RecognizeDialog(ClassDialog):
         return super().raster()
 
     def snow(self):
+        """Второй снимок: у снимков Sentinel-2 - со снегом, у растра
+        проекта - выбранный в списке «Второй снимок»."""
+        if self.second_wanted():
+            key = self.second.currentData()
+            return QgsProject.instance().mapLayer(key) if key else None
         if self.source_key() != SHOTS or self.task_key() == FALLOW_TASK:
             return None
         return self.shots.layer("snow")
@@ -1094,6 +1170,8 @@ class RecognizeTool(ClassTool):
                   dialog.split_weight.value() / 100.0,
                   dialog.split_least.value())
         self.found_rgb = None
+        self.fallow_cells = None
+        smooth = dialog.smooth_value(None)
 
         def run(grid, inside, samples, labels, place):
             top = first or grid.shape[0]
@@ -1103,12 +1181,15 @@ class RecognizeTool(ClassTool):
                                      drawing, params)
             regions = None
             if colors:
-                cells, centers = tracing.ranked_colors(grid[:top], good,
-                                                       count)
+                cells, centers = tracing.ranked_colors(
+                    grid[:top], good, count,
+                    tracing.SMOOTH if smooth is None else smooth)
                 self.found_rgb = tracing.display_colors(centers)
             elif scenario == FALLOW_TASK:
+                details = {}
                 cells, parts, summer, scenes = fallow.field_cells(
-                    grid, roles, good, meta)
+                    grid, roles, good, meta, smooth, details)
+                self.fallow_cells = details or None
                 regions = (parts, summer) if parts is not None else None
                 self.notes.append(tr(
                     "Снимков весны и осени {count}.", count=scenes)
@@ -1116,7 +1197,8 @@ class RecognizeTool(ClassTool):
                                       "участок, классы - по летнему."))
             else:
                 more = snow_roles if grid.shape[0] > top else None
-                found = ot.summer_regions(grid, roles, more, good, scenario)
+                found = ot.summer_regions(grid, roles, more, good, scenario,
+                                          smooth=smooth)
                 cells = np.full(good.shape, -1, dtype=np.int64)
                 if found is not None:
                     regions = found
@@ -1274,10 +1356,13 @@ class RecognizeTool(ClassTool):
                     row.color = QColor(*found[rank])
                     row._paint()
                     colors[n] = tuple(found[rank])
+        fields, self.fallow_cells = getattr(self, "fallow_cells", None), None
         super()._built(out, key, box, year, colors, names, *rest, **more)
         dialog = self.dialog
         if self.result is None or dialog is None:
             return
+        if fields is not None and dialog.task_key() == FALLOW_TASK:
+            self.result["fallow"] = fields
         notes = list(self.notes)
         if self.lines:
             km = sum(linear.length_m(p, self.result["step"])
@@ -1539,13 +1624,16 @@ class RecognizeTool(ClassTool):
         else:
             if result.get("shapes") is None:
                 found = tracing.class_shapes(result["classes"],
-                                             self.dialog.least_cells())
+                                             self.dialog.least_cells(),
+                                             self.dialog.corner_value())
                 result.update(shapes=found["shapes"],
-                              shape_kinds=found["kinds"])
+                              shape_kinds=found["kinds"],
+                              shape_parts=found["parts"])
             if not result["shapes"]:
                 return None
             path = result_path("areas_{}".format(tag), ".gpkg")
-            data = dict(result, kinds=result["shape_kinds"], hexes=hexes)
+            data = dict(result, kinds=result["shape_kinds"], hexes=hexes,
+                        region_fields=fallow_fields(result))
             if not write_traced(path, data):
                 return None
             layer = add_vector(self.window, path, "traced", title, group,
@@ -1602,6 +1690,19 @@ class RecognizeTool(ClassTool):
             self.dialog.stop_pickers()
         self.repick_timer.stop()
         super().close()
+
+
+def fallow_fields(result):
+    """Поля слоя заросших полей - последний год голой почвы last_bare
+    и доля деревьев woody_pct по многоугольникам, как у прежнего окна
+    «Выделение объектов». Без заросших полей - пусто."""
+    cells, parts = result.get("fallow"), result.get("shape_parts")
+    if not cells or parts is None or not result.get("shapes"):
+        return []
+    count = int(np.asarray(parts).max()) + 1
+    last, woody = fallow.shape_fields(parts, cells["last"], cells["woody"],
+                                      count)
+    return [("last_bare", "int", last), ("woody_pct", "real", woody)]
 
 
 def hectares(value):

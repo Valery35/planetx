@@ -7316,6 +7316,25 @@ EN = {
         "The names were suggested by the assistant, they can be corrected.",
     "Цвета с одинаковым названием сольются по «Построить».":
         "Colors with the same name are merged on «Build».",
+    # Второй снимок, сглаживание и скругление окна «Распознавание».
+    "По задаче":
+        "By task",
+    "Проходов сглаживания снимка перед разложением на цвета. Больше - крупнее"
+    " и проще области, мелкие детали пропадают, 0 - без сглаживания.":
+        "Image smoothing passes before splitting into colors. More - larger "
+        "and simpler areas, small details disappear, 0 - no smoothing.",
+    "Насколько скругляются углы многоугольников. 0 - одни углы, больше - "
+    "плавнее границы.":
+        "How much polygon corners are rounded. 0 - corners only, more - "
+        "smoother borders.",
+    "Снимок того же участка в другое время - зимний со снегом или весенний и "
+    "осенний. Каналы второго снимка помогают отличить хвою от листвы. Нужен "
+    "ближний ИК.":
+        "An image of the same site at another time - a winter one with snow "
+        "or a spring or autumn one. Its bands help tell conifers from "
+        "broadleaf trees. Near IR is needed.",
+    "Без второго снимка":
+        "No second image",
 }
 
 _language = None

@@ -3121,7 +3121,10 @@ If the result is not right:
   clear-cuts grow over with grass and young broadleaf forest and come
   out as «Broadleaf forest and grass». A clear-cut is bare soil only.
 - Conifers and broadleaf are mixed. A March or April image with snow is
-  needed.
+  needed. For a project raster the second image is chosen in the
+  «Second image» list - a winter one with snow or a spring or autumn
+  one of the same site. Without snow conifers are vegetation that
+  stayed bright in near IR on the second image.
 - Clouds and shadows come out as their own classes. A click on the
   «Summer» row of the «Images» table gives another date.
 - Built-up areas came out as soil or clear-cuts. Add an own class
@@ -3200,6 +3203,10 @@ The «More settings» checkbox shows the fine settings:
   than 640 thousand cells, otherwise larger. Pixels finer than 10 m are
   only for rasters and the basemap. The line under the field gives the
   grid step and the number of cells.
+- «Image smoothing» - for tasks with rules and «Image colors», image
+  smoothing passes before splitting into colors. «By task» - each
+  task has its own, 0 - no smoothing.
+- «Corner rounding» - from 0 (corners only) to 1.3, 1.0 by default.
 - «Smallest area, cells» - a polygon smaller than this is merged with
   the neighbour along the longest common border. The class raster does
   not change.
@@ -3227,6 +3234,10 @@ OK writes to the computation subgroup:
   with the class, name, area_ha, mean_N and sd_N fields.
 - control points and sample outlines, if there were any.
 - lines, if the «Linear objects» checkbox is set.
+
+For overgrown fields the polygons also get the fields last_bare - the
+last year of bare soil (0 - none) and woody_pct - the share of trees
+in percent.
 
 The layer names carry the source and the computation settings, the
 layer description gives the source, the settings and the classes with

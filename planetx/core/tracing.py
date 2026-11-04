@@ -509,13 +509,14 @@ def class_shapes(classes, least=LEAST, corner=CORNER, progress=None):
     """Сглаженные многоугольники классов окна «Распознавание»: области
     меньше least клеток сливаются с соседом, границы - цепочки, общие
     у соседних областей, сглаживание Potrace. Итог - {"kinds": класс
-    области, "shapes": {область: кольца}}, классы растра не меняются."""
+    области, "parts": области клеток, "shapes": {область: кольца}},
+    классы растра не меняются."""
     parts, kinds, _ = merge_small(np.asarray(classes, dtype=np.int64), least)
     if progress is not None:
         progress()
     found = chains(parts)
-    return {"kinds": kinds, "shapes": rings(found, corner,
-                                            progress=progress)}
+    return {"kinds": kinds, "parts": parts,
+            "shapes": rings(found, corner, progress=progress)}
 
 
 def join_colors(target):

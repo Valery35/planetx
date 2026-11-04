@@ -93,6 +93,28 @@ class TestFieldCells(unittest.TestCase):
         right = fallow.ROWS[int(np.bincount(cells[:, 30:].ravel()).argmax())]
         self.assertEqual(left, fallow.TILLED)
         self.assertIn(right, (fallow.FALLOW_OLD, fallow.OVERGROWN))
+        # Поля слоя: последний год голой почвы по клеткам и по
+        # многоугольникам классов.
+        details = {}
+        cells, parts, _, _ = fallow.field_cells(grid, ROLES, good, meta,
+                                                details=details)
+        self.assertEqual(int(np.median(details["last"][:, :30])), 2026)
+        self.assertEqual(int(np.median(details["last"][:, 30:])), 2023)
+        halves = np.zeros(cells.shape, dtype=np.int64)
+        halves[:, 30:] = 1
+        last, woody = fallow.shape_fields(halves, details["last"],
+                                          details["woody"], 2)
+        self.assertEqual(list(last), [2026, 2023])
+        self.assertTrue(((woody >= 0) & (woody <= 100)).all())
+
+    def test_shape_fields_most_common_year(self):
+        parts = np.array([[0, 0, 0, 1], [0, 1, 1, -1]])
+        last = np.array([[2024, 2024, 2020, 0], [2024, 0, 0, 2026]])
+        woody = np.array([[0.2, 0.4, np.nan, 1.0], [0.0, 0.5, np.nan, 0.9]])
+        years, share = fallow.shape_fields(parts, last, woody, 2)
+        self.assertEqual(list(years), [2024, 0])
+        self.assertAlmostEqual(share[0], 20.0)
+        self.assertAlmostEqual(share[1], 75.0)
 
 
 class TestYears(unittest.TestCase):

@@ -387,13 +387,15 @@ def cell_kinds(grid, roles, more_roles, good, scenario):
     return out
 
 
-def summer_regions(grid, roles, more_roles, good, scenario):
+def summer_regions(grid, roles, more_roles, good, scenario, smooth=None):
     """Связные области летнего снимка и их виды по правилам задачи -
-    основа cell_kinds, линий и заросших полей. Итог - (номера областей
+    основа cell_kinds, линий и заросших полей. smooth - проходов
+    сглаживания снимка, None - по задаче. Итог - (номера областей
     клеток, виды областей) или None, если клеток нет."""
     spec = SCENARIOS[scenario]
     first = len(roles)
-    summer = tracing.blur(grid[:first], good, spec["smooth"])
+    summer = tracing.blur(grid[:first], good,
+                          spec["smooth"] if smooth is None else smooth)
     labels, _ = tracing.quantize(summer, good, spec["colors"])
     count = int(labels.max()) + 1 if (labels >= 0).any() else 0
     if not count:
