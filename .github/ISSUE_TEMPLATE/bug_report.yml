@@ -1,0 +1,55 @@
+name: Ошибка / Bug report
+description: Что-то работает не так, как описано в руководстве / Something does not work as the manual says
+title: "[Ошибка / Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что сообщаете об ошибке. Писать можно по-русски или по-английски.
+        Thank you for the report. Russian or English are both fine.
+
+        Журнал работы модуля открывает кнопка «Журнал работы» окна «О модуле» (Модули - PlanetX - О модуле). Его конец очень помогает найти причину.
+        The plugin log opens with the Log button of the About window (Plugins - PlanetX - About). Its last lines help a lot.
+  - type: input
+    id: version
+    attributes:
+      label: Версия PlanetX / PlanetX version
+      description: Окно «О модуле» или Модули - Управление модулями / About window or Plugins - Manage plugins
+      placeholder: "1.40.0"
+    validations:
+      required: true
+  - type: input
+    id: qgis
+    attributes:
+      label: Версия QGIS и система / QGIS version and OS
+      placeholder: "QGIS 4.0.3, Windows 10"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Что вы делали / Steps to reproduce
+      description: По шагам - какое окно, какое место на глобусе, какие слои / Step by step - which window, which place on the globe, which layers
+      placeholder: |
+        1. Правая кнопка на глобусе - Анализ участка - Распознавание…
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Что ожидали и что получили / Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Журнал и сообщения об ошибке / Log and error messages
+      description: Конец журнала работы, текст окна ошибки Python / Last lines of the plugin log, Python error window text
+      render: text
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Снимки экрана / Screenshots
+      description: Перетащите картинку сюда / Drag an image here

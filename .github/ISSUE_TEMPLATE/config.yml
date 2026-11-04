@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Руководство / Manual
+    url: https://github.com/Valery35/planetx/blob/main/doc/MANUAL.md
+    about: Описание всех окон модуля по-русски / All plugin windows explained (Russian). English - doc/MANUAL.en.md
+  - name: Бот PlanetX в Telegram / PlanetX Telegram bot
+    url: https://t.me/PlanetXQgisBot
+    about: Ответы по руководству и сообщение автору / Answers from the manual and a message to the author
+  - name: Группа ВКонтакте / VK group
+    url: https://vk.ru/qgismodules
+    about: Новости модулей и обсуждение / Plugin news and discussion

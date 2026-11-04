@@ -1,0 +1,51 @@
+name: Пожелание / Feature request
+description: Новая возможность или улучшение / A new feature or an improvement
+title: "[Пожелание / Idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо за пожелание. Писать можно по-русски или по-английски.
+        Thank you for the idea. Russian or English are both fine.
+
+        Лучше всего помогает пример вашей задачи - участок, данные и что нужно получить в итоге.
+        An example of your real task helps most - the site, the data and the result you need.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Раздел модуля / Plugin area
+      options:
+        - Анализ участка, распознавание / Site analysis, recognition
+        - Рельеф, вода, солнце / Terrain, water, sun
+        - Снимки и карты / Imagery and maps
+        - Недра и геофизика / Subsurface and geophysics
+        - Метки, KML, туры / Places, KML, tours
+        - Слои проекта QGIS / QGIS project layers
+        - 3D-модели и облака точек / 3D models and point clouds
+        - Интерфейс, навигация / Interface, navigation
+        - Другое / Other
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: Ваша задача / Your task
+      description: Что вы хотите сделать и зачем / What you want to do and why
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Как это могло бы работать / How it could work
+      description: Окно, кнопка, результат в проекте QGIS / Window, button, result in the QGIS project
+  - type: textarea
+    id: data
+    attributes:
+      label: Данные и источники / Data and sources
+      description: Какие снимки, растры или службы нужны, ссылки на открытые данные / Which images, rasters or services, links to open data
+  - type: textarea
+    id: examples
+    attributes:
+      label: Примеры и снимки экрана / Examples and screenshots
+      description: Как это сделано в других программах, картинки / How other software does it, images
