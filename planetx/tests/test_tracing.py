@@ -68,6 +68,22 @@ class TestColors(unittest.TestCase):
         self.assertGreater(centers[0, 0], 150.0)
         self.assertLess(centers[cells[30, 20], 0], 80.0)
 
+    def test_class_shapes_cover_classes(self):
+        # Многоугольники классов окна «Распознавание»: пятно меньше least
+        # уходит соседу, площади колец - все клетки участка.
+        classes = np.full((30, 40), -1, dtype=np.int64)
+        classes[:, :20] = 0
+        classes[:, 20:] = 1
+        classes[5, 5] = 1
+        found = trace.class_shapes(classes, least=5)
+        kinds = list(found["kinds"])
+        self.assertEqual(sorted(kinds), [0, 1])
+        total = sum(abs(trace.ring_area(outer))
+                    - sum(abs(trace.ring_area(h)) for h in holes)
+                    for outer, holes in found["shapes"].values())
+        self.assertAlmostEqual(total, 30 * 40, delta=30 * 40 * 0.02)
+        self.assertEqual(classes[5, 5], 1)  # растр классов прежний
+
 
 class TestMerge(unittest.TestCase):
     def test_small_spots_join_neighbour(self):

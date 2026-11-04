@@ -107,28 +107,18 @@ The plugin is free and open source. [Support development](https://github.com/Val
   release, the steps go through the releases in which the image at the
   centre of the view changed, the swipe compares two releases. Point details names the capture date, the provider and the resolution of the
   image.
-- **Similar areas.** Outline a sample on the globe, such as a clearing or
-  a quarry, and the plugin finds objects of the site similar to it by color
-  and texture. A slider changes the selection at once, and the result goes
-  to the QGIS project as polygons.
-- **Tracing.** The image of a site, a project raster or the globe
-  basemap, is split into colors, and the areas of one color are outlined
-  with smooth polygons, as Trace Bitmap of Inkscape. Neighboring areas
-  share their border, without gaps or overlaps. The colors can be renamed
-  and merged in a table, and the AI assistant suggests names by it.
-- **Object extraction.** Typical tasks - forests and clear-cuts, fields,
-  water. A Sentinel-2 or Landsat image is traced, and the classes are named
-  by reflectance - coniferous and broadleaf forest, bare soil, water,
-  clear-cuts. A second image of another season separates conifers by near
-  infrared, and roads, rivers and shelterbelts come out as center lines.
-- **Land change and classification.** AlphaEarth Foundations
-  embeddings, 10 m cells for each year of 2017-2025, show where the
-  land changed between two years - construction, logging, quarries,
-  floods. Classification divides an area into classes by control
-  points clicked on the globe. Both go to the QGIS project as rasters. A
-  site of a project raster or of the embeddings can first be divided into
-  objects similar in color and texture, then the result is polygons with
-  a class and an area.
+- **Recognition.** One window for the classes of a site. The source is
+  Sentinel-2 images that the window finds and loads itself, a project
+  raster, the globe basemap or AlphaEarth embeddings. Classes are computed
+  by own samples - points and outlines on the globe, by image colors, by
+  an outlined sample or by task rules - forests and clear-cuts, fields,
+  water, overgrown fields by spring and autumn images over 4 years. The
+  result is a class raster and smoothed polygons without gaps or
+  overlaps, roads, rivers and shelterbelts come out as center lines.
+- **Land change.** AlphaEarth Foundations embeddings, 10 m cells for
+  each year of 2017-2025, show where the land changed between two years -
+  construction, logging, quarries, floods. The result goes to the QGIS
+  project as a raster.
 - **Paleogeography.** The Paleogeography layer shows land relief and sea
   depths of the past, up to 540 million years ago, after the PALEOMAP
   PaleoDEM maps. A slider in the corner of the view sets the age.

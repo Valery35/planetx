@@ -21806,6 +21806,164 @@ def recognize_colors_wait():
     return None
 
 
+@check(1000)
+def recognize_unite():
+    # Одно окно вместо шести (решение автора от 4 ноября 2026 года):
+    # источник - растр проекта, задача «Леса и рубки» с линиями, по OK
+    # растр классов, многоугольники и линии. Синтетический снимок без сети.
+    from qgis.core import QgsProject, QgsRasterLayer
+    from qgis.PyQt.QtWidgets import QMenu
+    from planetx.core.navigation import Pose
+    from planetx.ui import globemenu
+    window = state["window"]
+    folder = os.path.join(TEMP, "planetx_unite_{}".format(int(time.time())))
+    os.makedirs(folder, exist_ok=True)
+    path = os.path.join(folder, "S2_20240715_40VDK_agriculture.tif")
+    lat, lon = _task_raster(path, ["B11 swir16", "B8 nir", "B2 blue"],
+                            road=True)
+    layer = QgsRasterLayer(path, "agriculture", "gdal")
+    QgsProject.instance().addMapLayer(layer)
+    state["unite_layer"] = layer.id()
+    state["unite_at"] = (lat, lon)
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 14000.0, 0.0, 0.0))
+    window.view.update()
+    out = result["recognize_unite"] = {}
+    menu = QMenu()
+    globemenu.relief_items(window, menu, lat, lon)
+    names = [a.text() for m in [menu] + [a.menu() for a in menu.actions()
+                                          if a.menu()]
+             for a in m.actions() if a.text()]
+    out["menu_old"] = [n for n in ("Классификация…", "Выделение объектов…",
+                                   "Трассировка…", "Похожие области…")
+                       if n in names]
+    out["menu_recognize"] = "Распознавание…" in names
+    tool = window.recognize_tool
+    tool.grid = None
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    out["sources"] = [dialog.source.itemText(n)
+                      for n in range(dialog.source.count())]
+    dialog.source.setCurrentIndex(dialog.source.findData(layer.id()))
+    out["shots_hidden"] = dialog.shots.isHidden()
+    out["year_hidden"] = dialog.year.isHidden()
+    out["tasks"] = [dialog.task.itemText(n)
+                    for n in range(dialog.task.count())]
+    dialog.task.setCurrentIndex(dialog.task.findData("forest"))
+    dialog.lines.setChecked(True)
+    dialog.more.setChecked(False)
+    out["more_hidden"] = dialog.more_box.isHidden()
+    dialog.area.set_square(lat, lon, 8000.0)
+    dialog.build.emit()
+    out["started"] = tool.job is not None
+    out["status_start"] = dialog.status.text()
+    state["unite_started"] = time.monotonic()
+
+
+@check(1000)
+def recognize_unite_wait():
+    from qgis.core import QgsVectorLayer
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["unite_started"]
+    if tool.job is not None and spent < 180.0:
+        return 1000
+    out = result["recognize_unite"]
+    out["spent_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()
+    if tool.result is None:
+        out["built"] = False
+        dialog.reject()
+        return None
+    out["shares"] = dict(zip([r.name.text() for r in dialog.rows],
+                             _task_shares(tool)))
+    out["dialog_height"] = dialog.height()
+    out["shapes"] = len(tool.result.get("shapes") or {})
+    out["lines"] = {k: len(v) for k, v in tool.lines.items()}
+    dialog.grab().save(os.path.join(TEMP, "planetx_recognize_unite.png"))
+    dialog.accept()
+    layers = []
+    for node in _result_layers():
+        found = node.layer()
+        count = found.featureCount() \
+            if isinstance(found, QgsVectorLayer) else None
+        layers.append((node.name()[:40], count))
+    out["layers"] = layers
+    _drop_group()
+    return None
+
+
+@check(1000)
+def recognize_similar():
+    # Задача «Похожие на образец»: контур на вырубке, объекты участка,
+    # похожие на неё, класс 0; ползунок меняет выборку без расчёта.
+    window = state["window"]
+    tool = window.recognize_tool
+    lat, lon = state["unite_at"]
+    dialog = tool.open_here(lat, lon)
+    dialog.source.refill()
+    dialog.source.setCurrentIndex(dialog.source.findData(
+        state["unite_layer"]))
+    dialog.task.setCurrentIndex(dialog.task.findData("similar"))
+    dialog.area.set_square(lat, lon, 8000.0)
+    out = result["recognize_similar"] = {}
+    out["rows"] = [(r.name.text(), r.visible.isChecked())
+                   for r in dialog.rows]
+    out["modes_hidden"] = dialog.modes_row.isHidden()
+    out["limit_shown"] = not dialog.limit_row.isHidden()
+    dialog.build.emit()
+    out["no_sample"] = dialog.status.text()
+    # Вырубка - строки 100-160, столбцы 50-110 растра (_task_raster).
+    clat, clon = 58.095 - 130 * 0.0003, 56.11 + 80 * 0.0006
+    ring = _square_ring(clat, clon, 0.004)
+    far = -1e6
+    tool.click(far, far, *ring[0])
+    for point in ring[1:]:
+        dialog.sample.add(*point)
+    dialog.sample.drawing = False
+    dialog.sample.edited()
+    out["rings"] = len(dialog.rows[0].rings)
+    dialog.build.emit()
+    out["started"] = tool.job is not None
+    state["unite_started"] = time.monotonic()
+
+
+@check(1000)
+def recognize_similar_wait():
+    window = state["window"]
+    tool = window.recognize_tool
+    dialog = tool.dialog
+    spent = time.monotonic() - state["unite_started"]
+    if tool.job is not None and spent < 180.0:
+        return 1000
+    out = result["recognize_similar"]
+    out["spent_s"] = round(spent, 1)
+    out["status"] = dialog.status.text()
+    if tool.result is None:
+        out["built"] = False
+        dialog.reject()
+        return None
+    if "similar_low" not in state:
+        out["shares"] = _task_shares(tool)
+        state["similar_low"] = out["shares"][0]
+        dialog.limit.setValue(5)
+        tool.repick()
+        return 500
+    out["shares_low_limit"] = _task_shares(tool)
+    out["repick_more"] = out["shares_low_limit"][0] \
+        > state.pop("similar_low")
+    out["status_low"] = dialog.status.text()
+    dialog.limit.setValue(70)
+    tool.repick()
+    dialog.accept()
+    out["layers"] = [n.name()[:40] for n in _result_layers()]
+    _drop_group()
+    from qgis.core import QgsProject
+    QgsProject.instance().removeMapLayer(state.pop("unite_layer"))
+    return None
+
+
 POST138 = tuple(map(float, os.environ.get(
     "PLANETX_POST138", "58.005,56.175").split(",")))
 POST138_SIDE = float(os.environ.get("PLANETX_POST138_SIDE", "5"))

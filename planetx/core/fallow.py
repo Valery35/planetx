@@ -194,6 +194,45 @@ def field_kinds(summer, years, bare, seen, woody, newest):
     return kinds, last
 
 
+# Классы заросших полей окна «Распознавание» по порядку слоя.
+ROWS = KINDS + (ot.CONIFER, ot.BROADLEAF, ot.VEGETATION, ot.CLEARING,
+                ot.SOIL, ot.WATER, ot.SNOW, ot.OTHER)
+
+
+def field_cells(grid, roles, good, seasons):
+    """Заросшие поля окна «Распознавание»: grid - каналы летнего снимка
+    (roles), за ними снимки весны и осени seasons [(год, роли, каналов)].
+    Области - по летнему снимку (objecttasks.summer_regions), вид поля -
+    по годам голой почвы. Итог - (номер класса ROWS у клетки, -1 вне
+    good, области клеток, летние виды областей, учтённых снимков)."""
+    first = len(roles)
+    out = np.full(good.shape, -1, dtype=np.int64)
+    found = ot.summer_regions(grid[:first], roles, None, good, "fallow")
+    if found is None:
+        return out, None, [], 0
+    parts, summer = found
+    count = len(summer)
+    scenes, stacks, at = [], [], first
+    for year, season_roles, bands in seasons:
+        block = grid[at:at + bands]
+        at += bands
+        stacks.append((block, season_roles))
+        cells = bare_cells(block, season_roles)
+        if cells is not None and np.isfinite(cells).any():
+            scenes.append((year, cells))
+    trees = season_woody(stacks)
+    if trees is None:
+        trees = woody_cells(grid[:first], roles)
+    woody = woody_shares(parts, trees, count)
+    years, bare, seen = tilled_years(parts, scenes, count)
+    newest = max((y for y, _ in scenes), default=0)
+    kinds, _ = field_kinds(summer, years, bare, seen, woody, newest)
+    codes = np.array([ROWS.index(k) for k in kinds] + [-1], dtype=np.int64)
+    out[:] = codes[np.where(parts >= 0, parts, count)]
+    out[~good] = -1
+    return out, parts, summer, len(scenes)
+
+
 # Лучший день сезона: конец мая - пашня ещё голая, залежь уже зелёная,
 # начало октября - урожай убран, зябь вспахана, снега ещё нет. Прогон
 # у Шадейки 3 ноября 2026 года: снимок 1 сентября 2026 года застал поля

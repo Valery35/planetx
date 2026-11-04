@@ -65,6 +65,36 @@ class TestWoody(unittest.TestCase):
             [(scene(0.1, 0.3)[1:], ["nir", "red"])]))
 
 
+class TestFieldCells(unittest.TestCase):
+    def test_tilled_and_abandoned_fields(self):
+        # Окно «Распознавание», задача «Заросшие поля»: два поля лета
+        # одного цвета, весной и осенью левое голое каждый год, правое -
+        # только в первый год ряда.
+        rng = np.random.default_rng(1)
+        summer = scene(0.05, 0.30, 0.12, shape=(40, 60))
+        summer += rng.normal(0.0, 0.002, summer.shape)
+        good = np.ones((40, 60), dtype=bool)
+        bands, meta = [summer], []
+        for year in (2023, 2024, 2025, 2026):
+            bare = scene(0.12, 0.17, 0.25, shape=(40, 60))
+            grass = scene(0.06, 0.30, 0.15, shape=(40, 60))
+            block = grass.copy()
+            block[:, :, :30] = bare[:, :, :30]
+            if year == 2023:
+                block[:, :, 30:] = bare[:, :, 30:]
+            bands.append(block)
+            meta.append((year, ROLES, 3))
+        grid = np.concatenate(bands)
+        cells, parts, summer_kinds, scenes = fallow.field_cells(
+            grid, ROLES, good, meta)
+        self.assertEqual(scenes, 4)
+        self.assertIsNotNone(parts)
+        left = fallow.ROWS[int(np.bincount(cells[:, :30].ravel()).argmax())]
+        right = fallow.ROWS[int(np.bincount(cells[:, 30:].ravel()).argmax())]
+        self.assertEqual(left, fallow.TILLED)
+        self.assertIn(right, (fallow.FALLOW_OLD, fallow.OVERGROWN))
+
+
 class TestYears(unittest.TestCase):
     def setUp(self):
         # Четыре поля по 10 клеток: 0 - пашня каждый год, 1 - брошено

@@ -1800,7 +1800,7 @@ A right click on the globe opens a menu.
 | Orbit around | Flies to the point and circles it slowly, one turn a minute. Any mouse or key movement stops it |
 | Route start, Route end | The start and the end of a route, see Route |
 | Point details | The Identify window for the point under the cursor without the Identify features mode. The Site group holds the address from Nominatim, the OpenStreetMap geocoder |
-| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Classification…, Similar areas…, Minerals by spectrum…, EMIT minerals… (the last seven only on the Earth), Earthwork…, Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Classification, Similar areas, Minerals by spectrum, EMIT minerals, Earthwork and Flooding |
+| Site analysis | A submenu with Slope and aspect…, Viewshed…, Insolation…, Shadows…, Land change…, Recognition…, Minerals by spectrum…, EMIT minerals… (the last six only on the Earth), Earthwork…, Flooding…, Water flow… and Sea level… for the point under the cursor, see Slope and aspect of a square, Viewshed from a point, Insolation, Shadows, Land change, Recognition, Minerals by spectrum, EMIT minerals, Earthwork and Flooding |
 | Satellite images… | The Satellite images window for an area around the point under the cursor - Sentinel-2, Landsat, ASTER and MODIS, the satellite is chosen in the window, see Satellite images |
 | Open in browser | A submenu of sites. An item opens in the browser the site at the point under the cursor, for example Google Maps or the weather forecast on windy.com. The Add or edit sites… item opens the list window. The Add site button puts a ready site - Google Maps, Yandex Maps, 2GIS, OpenStreetMap, Windy - or an empty row for your own address, a double click on a cell changes the name or the address. In the address `{lat}` and `{lon}` are the latitude and longitude in degrees, `{zoom}` is the map scale by the view. The address starts with https:// or http://, the list is kept in the QGIS settings |
 | Map sheet designation | A submenu with map sheet numbers at the point. The International Map of the World 1:1,000,000 (IMW), the Russian designation at 1:1,000,000, 1:500,000 and 1:200,000, the NATO JOG 1:250,000 sheet and the MGRS 100 km square. A click on a row copies the number. The All numbers in a window… item opens a window with the same numbers |
@@ -2811,10 +2811,7 @@ it.
 |---|---|---|---|
 | Slope and aspect, viewshed, insolation, shadows, flooding, water flow, earthwork | Heights | Open terrain comes by itself. Own terrain is a project raster with the Globe terrain item | Own terrain is more accurate than the open 30 m one |
 | Land change | AlphaEarth embeddings 2017-2025 | Loaded by themselves | Network is needed |
-| Recognition | A summer image, if possible also a snow image | The window finds and loads Sentinel-2 images of the site itself on «Build» | Nothing to search for |
-| Classification, similar areas | Any image or AlphaEarth | Globe basemap, project raster, AlphaEarth | For accurate work - one scene of the Satellite images window, the basemap is made of different surveys |
-| Tracing | An image with color | Globe basemap or project raster | The Esri or Google basemap is the most detailed |
-| Object extraction | An image with near infrared and red or SWIR | The Find image button of the window, the Satellite images window - a band combination or All scene bands of Sentinel-2 and Landsat | Summer for conifers and broadleaf, the second image - March or April with snow |
+| Recognition | A summer image, if possible also a snow image, for overgrown fields spring and autumn images over 4 years | The window finds and loads Sentinel-2 images of the site itself on «Build», the source may also be a project raster, the basemap or AlphaEarth | Task rules need near IR and red or SWIR, the basemap is made of different surveys |
 | Minerals by spectrum | An image with six bands or more | The window finds ASTER images of 2000-2006 with SWIR bands itself, the Load button | By three bands different minerals give one spectrum |
 | EMIT minerals | NASA EMIT mineral maps | The window finds scenes itself, files by a NASA Earthdata key | Arid regions, since 2022 |
 | Series by dates, trend map | Scenes of one place for many dates | The Satellite images window | A year or more for the trend |
@@ -2824,8 +2821,7 @@ Band combinations of the Satellite images window for the eye:
 - False colour, near infrared (B8 B4 B3) - vegetation is red, the brighter the
   denser.
 - Agriculture (B11 B8 B2) - conifers are dark green, broadleaf and grass light
-  green, bare soil pink. The Find image button of the Object extraction window
-  takes it.
+  green, bare soil pink. The Recognition window loads it.
 - All scene bands - the scene bands in one file, for rules, spectra and
   classification.
 
@@ -2984,499 +2980,264 @@ row off. Land change is computed only for the Earth.
 ### Recognition
 
 The «Recognition…» item of the «Site analysis» submenu opens the
-«Recognition» window for the point under the cursor. It is the simplest
-way to site classes. You set the site, add classes and place their
-points, and the window finds the images itself.
+«Recognition» window for the point under the cursor. It is one window
+for site classes. Classes are computed by own samples, image colors,
+a sample or task rules, and OK always writes the same result - a class
+raster and smoothed class polygons.
 
-1. Site - a square at the point, «Draw» or «From layer», up to 20 km.
-2. Classes - a name and a colour, the circle picks a class.
-3. Samples - points or areas. With «Points» a click on the globe places
-   a point of the class, a click on a point removes it, three points
-   per class are needed. With «Areas» a click starts an outline of the
-   class, a click on the first vertex closes it, a click inside the
-   outline removes it. One outline per class is enough, the class
-   samples are the cells inside the outline. Points and outlines of one
-   class work together.
-4. «Build» first checks the site and the samples, then finds the images
-   and only after that computes the classes. At least two classes are
-   needed.
+Step by step:
+1. Site - a square at the point, «Draw» or «From layer».
+2. Source - where the cell features come from.
+3. Task - how the classes are computed.
+4. Samples, if the task needs them - points or outlines on the globe.
+5. «Build» shows the classes on the globe, OK writes them to the
+   project.
 
-The «Images» table shows what the window takes - a summer image and
-a March - April image with snow. Each is the clearest Sentinel-2 image
-over the site in three years, the «Agriculture» combination (B11 B8 B2)
-cut to the site. A project image with band labels that covers the site
-is taken without loading, so the second «Build» starts at once. On snow
-conifers are dark, bare broadleaf forest and fields are light, so the
-snow image helps to tell conifers from broadleaf. If there is no clear
-snow image, the classes are computed from the summer one. A click on
-a table row gives other dates, a project image or «No image».
+#### Source
 
-Finding and loading two images of a 3 km site takes about three
-minutes, most of it is the cloud cover over the site of catalogue
-scenes.
+- «Sentinel-2 images of the site» - the window finds and loads the
+  images itself on «Build». The «Images» table shows a summer image and
+  a March - April image with snow. Each is the clearest image over the
+  site in three years, the «Agriculture» combination (B11 B8 B2) cut to
+  the site. A project image with band labels that covers the site is
+  taken without loading, so the second «Build» starts at once. A click
+  on a table row gives other dates, a project image or «No image».
+  Finding and loading two images of a 3 km site takes about three
+  minutes. The site is up to 20 km.
+- «Globe basemap» - the current basemap of the «Base» row. The tiles
+  under the site are assembled into a picture in memory, the features
+  are red, green and blue. Before the first computation on each
+  basemap the window reminds that its terms may not allow such use, the
+  decision and the responsibility are the user's. A basemap image is
+  assembled from different surveys, classes may follow their borders.
+- A project raster - any raster read from a file. Each band is
+  a feature, the bands are brought to mean 0 and spread 1 over the site
+  cells, so their units may differ. The site is up to 1000 km, the grid
+  is not larger than 16 million cells.
+- «AlphaEarth embeddings» - vectors of 64 numbers per 10 m cell for the
+  chosen year, loaded from the network, the «Year» field is shown only
+  for them. The site is up to 10 km.
 
-The «Task» list removes the need for samples. «Own samples» - classes
-and samples are set manually, as described above. «Forests and
-clear-cuts», «Fields» and «Water» create their own classes and compute
-them by the rules of the «Object extraction» window from the same
-summer and snow images. For example, the classes of «Forests and
-clear-cuts» are coniferous forest, broadleaf forest and grass,
-clear-cuts and burns, bare soil, water. «Build» needs no samples. If
-a class is wrong, it gets a sample - a point or an outline, and «Build»
-computes again: each rule class gets up to 60 of its cells as samples,
-the user samples are added to them, and cells go to the class of the
-nearest samples. An own class the task does not have is added with
-«Add class» and gets cells by its own samples only. This is the way
-for built-up areas - by reflectance they look like bare soil, and among
-conifers the rules take them for clear-cuts. The «Overgrown
-fields» task is not in the list - it needs a series of spring and
-autumn images over 4 years, it is in the «Object extraction» window.
+The task rules («Forests and clear-cuts», «Fields», «Water», «Overgrown
+fields») need an image with near IR and red or SWIR - Sentinel-2 images
+of the site or an image of the «Satellite images» window with band
+labels. With the basemap and AlphaEarth these tasks are not available.
 
-«Image colors» in the same list splits the summer image into colors,
-as the «Tracing» window does, no samples are needed. The «Colors» field
-sets their number. Each color is a class row «Color N» by its share of
-the site, after «Build» the row gets the color of the image. A color
-name can be rewritten, for example «Forest» or «Field». Rows with the
-same name are merged into one class. If a color is wrong, it gets
-a sample - a point or an outline, and «Build» computes again, as with
-a task.
+#### Tasks
 
-OK writes the class raster, the control points and the sample
-outlines to the computation subgroup, «Cancel» removes the classes from the globe. Fine settings -
-the pixel, splitting into objects, the AlphaEarth source - are in the
-«Classification» window.
+- «Own samples» - classes and samples are set manually.
+- «Image colors» - the image is split into colors, no samples are
+  needed.
+- «Similar to sample» - site objects similar to an outlined sample.
+- «Forests and clear-cuts» - coniferous forest, broadleaf forest and
+  grass, clear-cuts and burns, bare soil, water.
+- «Fields» - vegetation, bare soil and arable land, clear-cuts, water.
+- «Water» - water and land.
+- «Overgrown fields» - arable land, fields abandoned 1-2 years, fallow
+  land and meadows, overgrowing with trees, forest.
+
+#### Own samples
+
+A class has a color and a name, «Add class» adds a new one, ✕ removes
+a class with its samples. The circle at a class picks it. The «Samples»
+switch is points or areas. With «Points» a click on the globe places
+a point of the class, a click on a point removes it, three points per
+class are needed. With «Areas» a click starts an outline of the class,
+a click on the first vertex closes it, a click inside the outline
+removes it. One outline per class is enough, the class samples are up
+to 40 cells inside the outline. Points and outlines of one class work
+together. At least two classes are needed.
+
+Each cell goes to the class of the nearest samples. For images and
+rasters the similarity is the Euclidean distance of the bands, for
+AlphaEarth it is the similarity of the vectors of the five nearest
+points. The votes of a class are divided by the number of its samples,
+so the classes may have different numbers of samples. A cell without
+data in at least one band gets no class.
+
+#### Image colors
+
+The image is split into colors by smoothing and k-means, as Potrace
+tracing does. The «Colors» field sets their number. Each color is
+a class row «Color N» by its share of the site, after «Build» the row
+gets the color of the image. A color name can be rewritten, for example
+«Forest» or «Field». Rows with the same name are merged into one class.
+If a color is wrong, it gets a sample - a point or an outline, and
+«Build» computes again.
+
+#### Similar to sample
+
+The sample shows what to look for, for example a clear-cut, a quarry,
+a field or a bog. It is outlined by clicks on the globe, a click on the
+first vertex closes the outline, a click inside an outline removes it.
+There may be several outlines, an object is compared with the nearest
+sample. The outline need not be exact. The sample is the objects that
+take at least a quarter of the outline, so the edge of a neighbouring
+forest in an outline around a field does not affect the search.
+
+«Build» divides the site into objects - connected pieces similar in
+color and texture, and compares each with the samples by the band
+means, the spread inside the object and, for images and rasters, the
+object pattern. The classes are «Similar to the sample» and «The rest»,
+the «Visible» checkbox of the second class is cleared and the terrain
+is seen under it. The «Similarity» slider changes the selection at
+once, without a new computation. An object that matches the sample has
+similarity 100 %, two random objects of the site about 14 %.
+
+#### Forests and clear-cuts, fields, water
+
+The task creates its own classes and computes them by rules from the
+image, no samples are needed. The summer image is split into colors,
+the colors get a kind by reflectance, connected bare soil among
+conifers becomes a clear-cut. The snow image tells conifers from
+broadleaf - on snow conifers are dark, bare broadleaf forest and fields
+are light. If there is no clear snow image, the classes are computed
+from the summer one.
+
+If a class is wrong, it gets a sample - a point or an outline, and
+«Build» computes again. Each rule class gets up to 60 of its cells as
+samples, the user samples are added to them, and cells go to the class
+of the nearest samples. An own class the task does not have is added
+with «Add class» and gets cells by its own samples only. This is the
+way for built-up areas - by reflectance they look like bare soil, and
+among conifers the rules take them for clear-cuts.
+
+Rules:
+- water - dark in near IR and SWIR.
+- vegetation - the index (IR - red) / (IR + red) above 0.35, without
+  a red band (IR - SWIR) / (IR + SWIR) above 0.05.
+- conifers - the part of the vegetation of the image dark in near IR,
+  if the IR range of the vegetation is more than 0.05. With snow
+  conifers are the vegetation that stayed dark in the visible bands on
+  snow (not brighter than 0.25) and is not light in near IR in summer.
+- snow and ice - bright in the visible and dark in SWIR.
+- the rest is bare soil.
+- clear-cuts and burns - a connected piece of bare soil with at least
+  a quarter of coniferous forest with depth in a three-cell band around
+  it, where at least half of the cells are inner ones.
+
+If the result is not right:
+- There are no clear-cuts, though they are seen on the image. Old
+  clear-cuts grow over with grass and young broadleaf forest and come
+  out as «Broadleaf forest and grass». A clear-cut is bare soil only.
+- Conifers and broadleaf are mixed. A March or April image with snow is
+  needed.
+- Clouds and shadows come out as their own classes. A click on the
+  «Summer» row of the «Images» table gives another date.
+- Built-up areas came out as soil or clear-cuts. Add an own class
+  «Built-up» with a sample.
+
+#### Overgrown fields
+
+The task finds fields that are no longer cultivated. Arable land in
+spring before shoots and in autumn after harvest and ploughing is bare
+soil. Fallow land has old grass in spring and autumn, and in a few
+years shrubs and young forest. So the window looks at a series of
+spring and autumn images over 4 years and finds for each field of the
+summer image the year when it was last bare soil.
+
+The «Spring and autumn» table has years in rows and «Spring» and
+«Autumn» in columns, the cell shows the image day. «Build» without
+images in the table finds them itself, the «Pick images» button does it
+in advance. Each empty cell gets the Sentinel-2 image of the site with
+the least cloud cover over the site, at equal cover the one closer to
+the end of May in spring and to the beginning of October in autumn. At
+the end of May arable land is still bare and fallow land is already
+green. At the beginning of October the harvest is in and there is no
+snow yet. The images are loaded as the «Shortwave infrared (B12 B8A
+B4)» combination into the «Sentinel-2» group of the project, images
+already in the project are not loaded again. A click on a cell gives
+other days of the season and «No image».
+
+Classes:
+- «Arable land, cultivated» - bare soil in the last year of the series.
+- «Abandoned 1-2 years» - the last bare soil one or two years ago.
+- «Fallow land or meadow» - no bare soil for three years and more,
+  trees on less than a quarter of the field.
+- «Overgrowing with trees» - trees on a quarter of the field and more,
+  but less than 70 %.
+- «Forest» - trees on 70 % of the area and more.
+- bare soil in summer and on almost all season images is built-up area,
+  roads or a quarry, not a field.
+
+Rules:
+- bare soil - on a spring or autumn image (IR - red) / (IR + red) below
+  0.3. On the images near Shadeyka (57.43° N, 56.80° E) of 2023-2026
+  arable land has 0.10-0.25, dry old grass of fallow land 0.35-0.5.
+  Water and snow do not count.
+- a field was cultivated in a year if bare cells are on at least
+  a quarter of its area on one image of that year. An image counts for
+  a field if it has data on half of its cells.
+- trees - the median of SWIR 2.2 µm of the spring and autumn images
+  below 0.09. Near Shadeyka forest has 0.03-0.08, meadows and fallow
+  land 0.10-0.20, arable land 0.15-0.30. If the season images have no
+  SWIR, the trees are taken from the summer image.
+
+Limits. Perennial grass on hayfields and winter crops sown before the
+autumn image are never bare over the series and come out as fallow land
+or a field abandoned 1-2 years. A year without a single cloud-free
+image is skipped.
+
+#### Linear objects
+
+The «Linear objects» checkbox of the rule tasks adds center lines -
+roads and cuttings (narrow strips of soil), rivers and canals (water),
+shelter belts and cuttings (vegetation). The result line gives their
+length, OK writes the «Lines» layer with the kind, name and length_m
+fields. The narrow part of the mask is removed by a morphological
+opening with a square of the «Line width up to» width, the rest is
+thinned to a one-cell line. Spurs shorter than three widths are
+dropped, and so is a connected piece of line shorter than 200 m. The
+width must be at least two pixels of the grid, otherwise the line
+breaks.
+
+#### More settings
+
+The «More settings» checkbox shows the fine settings:
+- «Pixel» - «Auto» or 1, 2, 5, 10, 20, 40, 80 m. «Auto» for images and
+  rasters is the pixel of the raster itself if the site has not more
+  than 640 thousand cells, otherwise larger. Pixels finer than 10 m are
+  only for rasters and the basemap. The line under the field gives the
+  grid step and the number of cells.
+- «Smallest area, cells» - a polygon smaller than this is merged with
+  the neighbour along the longest common border. The class raster does
+  not change.
+- «Line width up to» - for linear objects, 40 m by default.
+- «Divide into objects» - for own samples. The site is first divided
+  into objects similar in color and texture, for example a field,
+  a clear-cut, a block or a lake, and a class gets a whole object by
+  its means, spreads and pattern. «Object scale» sets the allowed
+  diversity, «Texture share» - the weight of the brightness spread next
+  to the color, an object smaller than «Smallest object» is merged with
+  the most similar neighbour. The «Merge neighboring objects of one
+  class» checkbox joins them into one polygon. The grid is not larger
+  than 4 million cells.
+- «Opacity» - the transparency of the classes on the globe and in the
+  raster.
+
+#### Result
+
+OK writes to the computation subgroup:
+- a class raster in UTM with the colors and names of the classes.
+- class polygons with the cls, name, color and area_ha fields. The
+  borders are smoothed as in Potrace tracing, neighbouring polygons
+  share the border, so there are no gaps and overlaps between them.
+  With division into objects the polygons are the objects themselves
+  with the class, name, area_ha, mean_N and sd_N fields.
+- control points and sample outlines, if there were any.
+- lines, if the «Linear objects» checkbox is set.
+
+The layer names carry the source and the computation settings, the
+layer description gives the source, the settings and the classes with
+their share of the site. «Cancel» removes the classes from the globe.
 
 The checkbox to the left of a class name hides the class on the globe
 and uncovers the image under it. The «Show on the globe» checkbox to
 the left of the buttons hides all classes at once, so samples are easy
 to place on the image. The computation and the layers written to the
-project do not depend on these checkboxes. The same checkboxes are in
-the «Classification», «Tracing» and «Object extraction» windows, and
-«Show on the globe» is in every window that shows its result before OK.
-
-### Classification
-
-The Classification… item of the Site analysis submenu of the globe
-menu opens the Classification window for the point under the cursor.
-Classification divides the cells of the area into classes by the same
-AlphaEarth vectors as land change or by the bands of a project raster.
-
-A site by AlphaEarth embeddings is not larger than 10 km, a site by a
-project raster is up to 1000 km. Classes are computed only inside the
-site.
-
-A class has a color and a name, the Add class button adds a new one,
-✕ removes a class with its points. The round button of a class selects
-it, and a click on the globe places a point of this class. A point is a
-sample of the class, for example forest, field, buildings or water. At
-least two classes with three points each are needed, there may be more
-points. A click on a point of any class removes it, the hint Remove
-point appears at the cursor. The Classes from tracing button takes the
-classes with their names and colors from the Tracing window after Build,
-and the classes without points are replaced. The points of the new classes
-are placed by clicks on the globe.
-
-The Build button assigns each cell of the area to the class of the five
-nearest control points by the similarity of the vectors of the selected
-year. The classes appear on the globe in their colors, the line under
-the fields gives the share of each class. Points are placed on the
-globe imagery, and the year of the imagery may differ from the year in
-the window. The 10, 20, 40 or 80 m pixel and the download estimate work
-as for the land change detail area. The Auto pixel takes the pixel with
-the smallest download at which the area has 14 to 640 thousand cells,
-and the line under the field names it. A file block for a year weighs
-40-50 MB at any pixel, and while it loads, the status line counts the
-blocks.
-
-The Source list selects where the features of a cell come from -
-AlphaEarth embeddings, the globe basemap or a QGIS project raster read
-from a file. For a raster, each band is a feature, the Year field is
-unavailable and no network is needed. The raster is resampled from the layer coordinate
-system to the area grid in UTM. Bands may be in different units, for
-example heights in meters and reflectance in fractions of one.
-Therefore each band is brought to a mean of 0 and a spread of 1 over
-the cells of the area, and the similarity of cells is the Euclidean
-distance. A band without spread over the area is ignored. A cell
-without data in at least one band gets no class, an alpha band is not a
-feature. A point on such a cell does not vote, and the line under the
-fields gives the number of such points. The votes of a class are
-divided by the number of its points, so classes may have different
-numbers of points.
-
-The Auto pixel for a raster is the pixel of the raster itself if the
-area has no more than 640 thousand cells, otherwise it is larger. A 1, 2,
-5, 10, 20, 40 or 80 m pixel sets the area grid as it is, pixels finer than
-10 m exist only for a raster and the basemap. The line under the field
-gives the grid step and the number of cells, for Auto - the step it will
-take. The grid has no more
-than 16 million cells, otherwise the line under the fields asks for a
-larger pixel or Auto. If the raster covers
-the area partly, the line under the fields gives the covered share. An
-area outside the raster extent gives no classes, and the line reports
-it.
-
-The Globe basemap source takes the current basemap of the Base map row, so
-the image need not be added to the project. The tiles under the area are
-assembled into a picture in memory, no image file is written, and the
-features are red, green and blue. The tile level follows the pixel, and
-a tile without imagery is replaced by its enlarged ancestor. The Auto
-pixel is the pixel of the most detailed basemap level if the area has no
-more than 640 thousand cells, otherwise it is larger. On a 3 km area it is
-about 3.75 m. The pattern of crowns and clear-cut rows shows at a 1-2 m
-pixel, and on an area up to 2 km such a pixel fits into the 4 million
-cells of division into objects. The mosaic has no
-more than 1024 tiles, otherwise the line under the fields asks for a
-larger pixel or Auto. Before the first calculation with each basemap a
-window reminds that its terms may not allow such use, and the decision
-and responsibility are the user's. The source credit is written to the
-rights of the result layer.
-
-Basemap imagery is assembled from different surveys. Color, season and
-lighting change at their borders, so classes may follow a survey border
-rather than the terrain. The basemap features are only the visible
-color. For precise work a project raster is suitable - one scene from
-the Satellite images window.
-
-The Divide into objects check box works both with a project raster,
-usually an image, and with AlphaEarth embeddings. The site is first
-divided into objects - connected pieces
-similar in color and texture, for example a field, a clear-cut, a block
-or a lake surface. The division merges neighboring regions starting from
-single cells, the choice of a pair takes into account heterogeneity and
-smoothness of the border. The Object scale field sets the allowed
-heterogeneity - the larger it is, the larger the objects. The scale refers
-to the site, so another pixel hardly changes the size of the objects. If
-the whole site comes out as one object, the line under the fields asks to
-reduce the scale. Texture share is
-the share of the spread of brightness around a cell among the features,
-it separates a forest from a meadow of the same color. An object smaller
-than Smallest object merges with its most similar neighbor. A control
-point takes the features of its object, and a whole object gets a class
-by the means and spreads of the bands inside it. For a raster and the
-basemap the pattern of the object is added - the mean brightness step
-between neighbor cells, its grain and its direction. Clear-cut rows and
-plough strips give steps of one direction, crowns and grass give steps of
-all directions, so a clear-cut differs from a meadow of the same color and
-spread. The pattern is taken only from the cells of the object itself.
-On the globe dark lines
-show the object borders, the line under the fields gives their number.
-OK writes, instead of a raster, a polygon layer Objects with the fields
-class, name, area_ha, mean_N and sd_N, AlphaEarth has no band fields.
-Neighboring objects of one class stay separate, the Merge neighboring
-objects of one class check box joins them into one polygon. Changing the
-division settings computes the objects again, changing the points computes
-only the classes. The grid is not larger than 4 million cells.
-
-The Opacity slider changes the transparency of the classes. OK writes
-the classes as a raster in UTM to the calculation subgroup, with the
-colors, the names of the classes and the same opacity, and
-next to it the training points as a GeoPackage layer with the class
-number and name. The name of the class layer and of the Objects layer carries
-the calculation settings - the number of classes and points, the division into
-objects and the pixel. The layer description holds the source, the settings
-and the classes with their share of the site. The points and classes of the window stay until the window opens again.
-Classes and the viewshed from a point are one layer of the
-globe, a new viewshed removes the classes. The land change map stays
-visible together with the classes.
-
-### Similar areas
-
-The Similar areas… item of the Site analysis submenu of the globe menu opens
-the search by a sample for the point under the cursor. A sample shows what to
-look for, such as a clearing, a quarry, a field or a bog, and the plugin finds
-objects of the site similar to it by color and texture.
-
-The source, the site, the pixel and the division into objects are the same as
-in the Classification window. The source is AlphaEarth embeddings, the globe
-basemap or a project raster, and the site is shared with the other analysis
-windows.
-
-The sample is outlined with clicks on the globe while the window is open. A
-click on the first vertex closes the outline, and the Close shape hint appears
-at it. There may be several outlines, and an object is compared with the
-nearest sample. The Remove samples button removes all outlines. The outline
-need not be exact. A sample consists of the objects that take at least a quarter
-of the outline, not of separate cells, so the edge of a neighboring forest
-inside an outline around a field does not affect the search. An outline across
-the border of two objects gives two samples.
-
-The Build button divides the site into objects and compares each of them with
-the samples by the mean values of the bands, the spread inside the object and,
-for a raster and the basemap, the pattern of the object, as in
-classification. Texture share sets the weight of the spread and the pattern
-next to color. The found objects
-appear on the globe in orange, and the line under the fields gives their number,
-area and share of the site.
-
-The Similarity slider changes the selection at once, without a new
-calculation. An object matching a sample has a similarity of 100 %, two random
-objects of a site have about 14 %. Similarity is relative to the site. The more
-diverse the site, the closer objects of one kind appear to each other. The Merge
-neighboring found objects check box joins neighbors into one area.
-
-OK writes the found objects as a polygon layer Similar areas with the fields
-area_ha and similar (similarity in percent) and the outlines as a layer Samples
-to the calculation subgroup. The search compares an image of one day, so on an
-ordinary image the result depends on the season and the light. AlphaEarth
-embeddings combine a year of images and are less sensitive to this. This globe
-layer is shared with classification and the viewshed from a point, a new
-calculation of any of them removes the previous one.
-
-### Tracing
-
-The Tracing… item of the Site analysis submenu of the globe menu opens the
-window of image vectorization for the point under the cursor. The image of the
-site is split into colors, and the areas of one color are outlined with smooth
-polygons, as Trace Bitmap of Inkscape does with the Potrace method.
-
-The source is the globe basemap or a project raster, the site is shared with
-the other analysis windows, and the pixel is the same as in the Classification
-window. For a raster with many bands the colors are found by all bands, and the
-first three give the layer colors.
-
-The fields of the window:
-- Colors - how many colors the image is split into, from 2 to 32.
-- Image smoothing - passes of 3 × 3 smoothing before the split, it removes
-  noise and small details.
-- Smallest area, cells - a smaller area merges with the neighbor along the
-  longest shared border.
-- Corner rounding - 0 gives a broken line with corners, the larger the value,
-  the more corners become smooth arcs.
-
-The Build button shows the colors of the site cells on the globe, and the line
-under the fields gives the number of colors and areas. The Classes table under
-the fields lists the colors by their share of the site, Color 1 takes the most.
-The name of a color can be rewritten, for example Conifers or Bare soil, and it
-goes to the legend on the globe and to the layer. The list to the right of the
-name merges the color into another one, and the areas of both colors become one
-class with the name and color of the one it is merged into. The checkbox to
-the left of a color hides it on the globe and uncovers the terrain, which
-tells what the object is. The class goes to the layer with the checkbox
-cleared too. A new Build sets the colors and names anew.
-
-The Names from the assistant button above the table sends the AI assistant the
-class table - the mean band values with their roles, the share of the site,
-the number and mean size of the areas, the site point and the image month, and
-in the Object extraction window also the names by the rules. The image, layer
-and file names do not go to the model, and pressing the button is consent to
-send the table. The assistant answers with a name for each color, the names go
-into the table, and colors with the same name merge. The names can be
-corrected. The assistant is connected in the Assistant settings window, see
-the [Assistant](#assistant) section.
-
-OK writes a polygon layer with the fields cls (class number), name (class
-name), color and area_ha to the calculation subgroup, and the areas are drawn
-in their colors. The layer name carries the source and the calculation
-settings, for example "Tracing image (8 colors, smoothing 1, areas from 25
-cells, rounding 1.00, pixel 10 m)". The layer description (QGIS layer
-properties, Metadata) holds the source, the settings and the classes with
-their share of the site. Neighboring
-areas share their border, so there are no gaps or overlaps between the
-polygons. This globe layer is shared with classification, similar areas and the
-viewshed from a point, a new calculation of any of them removes the previous
-one.
-
-### Object extraction
-
-The Object extraction… item of the Site analysis submenu of the globe menu
-opens the window of typical tasks for the point under the cursor. The window
-is tracing with rules. The image of the site is split into colors, and the
-colors get names by reflectance - coniferous forest, broadleaf forest and
-grass, bare soil, water, snow. Colors of one kind merge into one class, and
-bare soil among conifers comes out as clear-cuts.
-
-Step by step:
-1. Right-click a place on the globe, the Site analysis submenu - Object
-   extraction….
-2. Choose the task - Forests and clear-cuts, Fields, Water or Overgrown
-   fields.
-3. Set the site - a square with the Site field, your own outline with the
-   Draw button or a layer polygon with the From layer button.
-4. If the Source list has no image, press Find image. The window finds summer
-   Sentinel-2 images of the site for three years without cloud over the site.
-   A double click on an image loads it, and the image becomes the source.
-5. Press Build. The classes go to the globe, and the line under the fields
-   gives the area of clear-cuts and the length of lines.
-6. Correct the names in the Classes table and press OK - the polygon layer
-   goes to the QGIS project.
-
-The Source list shows only suitable images - those whose near infrared and
-red or SWIR 1.6 µm the window recognized by the band labels. These are images
-of the Satellite images window of Sentinel-2 or Landsat - a band combination,
-for example Agriculture (B11 B8 B2), or All scene bands. For files of earlier
-module versions the bands are recognized by the file name. The globe basemap,
-a single-band index such as NDVI and a raster without band labels are not in
-the list - the rules have nothing to rely on in them. The line under the list
-says whether the image is suitable, which bands the window recognized and the
-day of the image. If the image or the second image covers only part of the
-site, the line gives the share of the site under it. Below 90 % Build does
-not run - the classes would cover only part of the site. The Find image
-button loads the Agriculture combination of
-the site into the Sentinel-2 group of the project, as the Satellite images
-window does.
-
-The tasks:
-- Forests and clear-cuts - coniferous forest, broadleaf forest and grass,
-  clear-cuts and burns, bare soil, water.
-- Fields - vegetation, bare soil and arable land, clear-cuts, water. The
-  smallest area is larger, and fields stay separate polygons.
-- Water - water and land.
-- Overgrown fields - arable land, fields abandoned 1-2 years, fallow land and
-  meadows, fields overgrowing with trees, forest. A series of spring and
-  autumn images is needed, see the Overgrown fields section below.
-
-Second image. In summer conifers and broadleaf may have the same near
-infrared brightness, and one image does not separate them. A winter - summer
-pair does it most simply. On snow coniferous forest stays dark, while bare
-broadleaf forest and fields under snow are light. The Find button at the
-Second image list searches images of the site in March and April, while the
-snow lies and the sun is already high enough, and in October, when broadleaf
-forest is already bare and there is no snow yet. A double click loads the
-image as the second one. In December and January at the latitude of the Urals
-the sun is too low for the images. The Second image list holds only images
-with near infrared. The bands of the second image go to the same site grid and
-into the split into colors together with the first ones.
-
-If the second image has snow, conifers are the vegetation that stayed dark in
-the visible bands on snow (not brighter than 0.25) and is not light in summer
-near infrared. The rest of the vegetation is broadleaf and grass. Both signs
-are needed. Bare broadleaf forest on snow may be dark from trunks and shadows,
-and its bright summer infrared tells it apart. A meadow or bog dark in summer
-looks like conifers, and the snow tells it apart. At the site at 59.99° N,
-57.43° E by the images of 21 July 2025 and 17 April 2026 the snow alone would
-give 90 % conifers, both signs give 47 %. The result line
-says "Conifers are separated from broadleaf by the snow of the second image".
-Without snow, for example on an autumn image, conifers are the vegetation
-whose near infrared hardly changes between the dates (the smaller value to the
-larger one not below 0.75). Broadleaf and grass lose infrared reflectance in
-another season, conifers do not. Near infrared cannot be judged on snow - snow
-has it high. The second image is named in the layer settings.
-
-The Linear objects check box adds center lines - roads and cuttings (narrow
-strips of soil), rivers and canals (water), shelterbelts and cuttings
-(vegetation). On the globe the lines show above the classes, and OK writes the
-Lines layer with the fields kind, name and length_m next to the polygon layer.
-The polygons do not change, so a narrow road in a forest stays a soil polygon
-as well and may come out a clear-cut.
-
-The More settings check box shows the fine settings - pixel, number of
-colors, image smoothing, smallest area, corner rounding and line width. The
-task sets them itself, and without the check box they are hidden. Line width
-means that an object narrower than this is a line, 40 m by default. The width
-must be at least two grid pixels, otherwise the line breaks. A line is made
-this way. A morphological opening with a square of this width removes the
-narrow part of the mask, and the rest is thinned to a one-cell line. Spurs
-shorter than three widths are dropped, and so is a connected piece of line
-shorter than 200 m.
-
-The rules:
-- water is dark in near infrared and SWIR.
-- vegetation has the index (NIR - red) / (NIR + red) above 0.35, without a red
-  band (NIR - SWIR) / (NIR + SWIR) above 0.05.
-- conifers are the part of the image vegetation dark in near infrared, if the
-  infrared range of vegetation is over 0.05, otherwise vegetation is one class.
-- snow and ice are bright in the visible and dark in SWIR.
-- the rest is bare soil.
-- clear-cuts and burns are connected pieces of bare soil with at least a
-  quarter of deep coniferous forest in the three-cell band around them, deep
-  meaning that at least half of the forest cells are inner. Mixed pixels along
-  the edge of a clear-cut or a field look now like broadleaf, now like
-  conifers, and the band and the depth guard against them. Light vegetation
-  may be a crop as well, so arable land next to it is not taken for a
-  clear-cut.
-
-If the result is not the expected one:
-- No clear-cuts, though clear-cuts are seen in the image. Old clear-cuts grow
-  over with grass and young broadleaf forest and come out as the Broadleaf
-  forest and grass class, light patches among conifers. A clear-cut is only
-  bare soil. Look for fresh clear-cuts on an image of the same summer or the
-  spring after the cutting.
-- Conifers and broadleaf are mixed. Take a second image of March or April with
-  snow or a summer image instead of a spring one.
-- Classes break up or stick together. In More settings increase or decrease
-  the number of colors and the smallest area.
-- Clouds and shadows come out as their own classes. Take another image, Find
-  image shows only images without cloud over the site.
-- Built-up areas come out as soil or clear-cuts. Roofs, asphalt and yards
-  reflect like bare soil, and yards with trees next to a forest look like
-  clear-cuts. The task has no built-up class. Outline a site without
-  settlements with Draw or correct the class in the Classes table.
-
-The class names and merges can be corrected in the Classes table, and
-clear-cuts and lines are separate classes after the classes of the table. The
-Names from the assistant button asks the AI assistant for names, see the
-Tracing section. OK writes a layer as in tracing, and the task is the first of
-the settings in the layer name.
-
-The Refine with points button above the table opens the Classification window
-with the same image, site and classes. Here the classes are given by rules,
-there they are refined with your own control points - for example, when the
-rules mixed conifers and broadleaf or a class the task does not have is
-needed. The Classification… and Object extraction… items stand next to each
-other in the submenu.
-
-#### Overgrown fields
-
-The Overgrown fields task finds fields that are no longer cultivated. Arable
-land in spring before the shoots and in autumn after the harvest and autumn
-ploughing is bare soil. Fallow land has old grass in spring and autumn, and
-after several years shrubs and young forest. So the window looks through a
-series of spring and autumn images for 4 years and finds for every field of
-the summer image the year when it last had bare soil.
-
-Step by step:
-1. Choose the Overgrown fields task and a summer image in the Source list.
-   The summer image splits the site into fields, forest and water.
-2. Press Pick images in the Spring and autumn row. The window searches
-   Sentinel-2 images of the site for 4 years and puts into every empty cell
-   of the table the image with the least cloud over the site. At equal cloud
-   the image closer to the end of May in spring and to the beginning of
-   October in autumn is taken. At the end of May arable land is still bare,
-   while fallow land is already green. At the beginning of October the harvest
-   is in and there is no snow yet. An image of 1 September finds fields under
-   unharvested grain. The images load one by one as the Shortwave infrared
-   (B12 B8A B4) combination into the Sentinel-2 group of the project. Images
-   already in the project are not loaded again.
-3. The table has rows by year and the Spring and Autumn columns, and a cell
-   holds the day of the image. A click on a cell opens a menu with other days
-   of the same season and the No image item. The line above the table counts
-   the images, for example "8 of 8 images".
-4. Press Build, then OK.
-
-The classes:
-- Arable land, cultivated - bare soil in the last year of the series.
-- Abandoned 1-2 years - the last bare soil one or two years ago.
-- Fallow land or meadow - no bare soil for three years and more, trees on less
-  than a quarter of the field.
-- Overgrowing with trees - trees on a quarter of the field and more, but less
-  than 70 %.
-- Forest - trees on 70 % of the area and more.
-- bare soil in summer and on nearly all season images is built-up land, roads
-  or a quarry, not a field.
-
-The rules:
-- bare soil has (NIR - red) / (NIR + red) below 0.3 on a spring or autumn
-  image. On the images near Shadeyka (57.43° N, 56.80° E) of 2023-2026 arable
-  land has 0.10-0.25, and the dry old grass of fallow land 0.35-0.5. Water and
-  snow do not count.
-- a field was cultivated in a year if bare cells cover at least a quarter of
-  its area on one image of that year. An image counts for a field if half of
-  its cells have data.
-- trees have the median SWIR 2.2 µm of the spring and autumn images below
-  0.09. Near Shadeyka forest has 0.03-0.08, meadows and fallow land
-  0.10-0.20, arable land 0.15-0.30. If the season images have no SWIR, the
-  trees are taken from the summer image.
-
-The polygon layer gets the fields last_bare (the year of the last bare soil,
-0 - never) and woody_pct (the share of trees in percent). The result line
-gives the number of spring and autumn images and the years of the series.
-
-Limitations. Perennial hay grasses and winter crops sown before the autumn
-image are never bare during the series and come out as fallow land or as a
-field abandoned 1-2 years. A year without a single cloudless image is
-skipped. A field merged with a neighboring meadow into one area of the summer
-image gets one class for both. In that case decrease the smallest area in
-More settings.
+project do not depend on these checkboxes. Classes and the viewshed
+share one layer of the globe, a new viewshed computation removes the
+classes.
 
 ### Minerals by spectrum
 
@@ -3520,7 +3281,7 @@ Mapper). The angle does not depend on the overall brightness, so a slope in
 shadow and in sun gives the same answer. The Build button assigns each cell
 of the site to the marked reference with the smallest angle. A cell whose
 angle to all references is larger than the Angle up to field stays without a
-class. The site and the pixel are the same as in the Classification window.
+class. The site and the pixel are the same as in the Recognition window.
 A legend in the corner of the globe shows the color, the name and the share
 of the site of each class, the cross of the legend removes the result.
 
@@ -3597,8 +3358,7 @@ site, the window gives its share.
 
 OK writes the raster "pad elevation minus relief" to the calculation subgroup.
 Plus is fill, minus is cut, and the volumes are in the layer description. This
-globe layer is shared with the viewshed from a point, classification and similar
-areas.
+globe layer is shared with the viewshed from a point and recognition.
 
 The difference of two surveys is calculated by an item of the raster menu, see
 Cut and fill.

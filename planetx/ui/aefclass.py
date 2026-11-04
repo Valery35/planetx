@@ -42,7 +42,7 @@ from qgis.PyQt.QtWidgets import (QButtonGroup, QCheckBox, QColorDialog,
                                  QSlider, QSpinBox, QToolButton,
                                  QVBoxLayout, QWidget)
 
-from ..core import aef, editing, rasterclass, segments, tilemosaic
+from ..core import aef, editing, rasterclass, segments, tilemosaic, tracing
 from ..core.cog import tile_points
 from ..core.ellipsoid import geodetic_to_ecef
 from ..core.features import Shape
@@ -298,13 +298,14 @@ class ClassDialog(QDialog):
     opacity = pyqtSignal(float)
     source_changed = pyqtSignal()
     seen = pyqtSignal()  # флажок «Видно» класса
+    source_class = None  # SourceBox, у наследника свой список
 
     def __init__(self, window):
         super().__init__(window)
         self.setWindowTitle(tr("Классификация"))
         self.point = None
         settings = QgsSettings()
-        self.source = SourceBox(self)
+        self.source = (self.source_class or SourceBox)(self)
         self.source.setToolTip(tr(
             "Откуда берутся признаки клетки. Эмбеддинги AlphaEarth "
             "загружаются из сети. У растра проекта каждый канал - признак, "
@@ -383,6 +384,7 @@ class ClassDialog(QDialog):
         self.rows = []
         add = QPushButton(tr("Добавить класс"), self)
         add.clicked.connect(lambda: self.add_class())
+        self.add_button = add
         self.from_trace = QPushButton(tr("Классы из трассировки"), self)
         self.from_trace.setToolTip(tr(
             "Классы с названиями и цветами из окна «Трассировка» после "
@@ -616,6 +618,7 @@ class ClassTool(SiteTool, QObject):
 
     dialog_class = None  # ClassDialog, ставится после класса окна
     shapes_attr = "class_shapes"  # поле окна глобуса с точками классов
+    vectorize = False  # многоугольники классов - у «Распознавания»
 
     def tool_title(self):
         return tr("Классификация")
@@ -804,6 +807,7 @@ class ClassTool(SiteTool, QObject):
         split_key = self._split_key(key, ring, params)
         pieces = self._pieces(split_key)
         progress = self.progress = [0, 0]
+        rules = self.rules_job()
 
         def count(done, total):
             stop_point(self)  # остановка меню значка - перед блоком
@@ -829,14 +833,20 @@ class ClassTool(SiteTool, QObject):
                     return None
                 return self._objects(found, values, inside, share, index,
                                      points, params, pieces)
-            samples, labels, outside = [], [], 0
-            for label, (plat, plon) in points:
-                r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
-                if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2]:
-                    samples.append(grid[:, r, c])
-                    labels.append(label)
-                else:
-                    outside += 1
+            if rules is not None:
+                values = aef.LUT[grid.astype(np.int16) + 128]
+                inside = aef.ring_mask(index, x0, y0, step, grid.shape[1:],
+                                       ring)
+                samples, labels, outside = ring_samples(
+                    index, found, values, points, rings)
+                classes = rules(values, inside, samples, labels,
+                                (index, x0, y0, step))
+                if classes is None or not (classes >= 0).any():
+                    return {"problem": "flat", "found": found}
+                return {"index": index, "found": found, "outside": outside,
+                        "classes": classes}
+            samples, labels, outside = ring_samples(index, found, grid,
+                                                    points, rings)
             if not samples:
                 return {"index": index, "found": found, "outside": outside,
                         "classes": None}
@@ -850,7 +860,7 @@ class ClassTool(SiteTool, QObject):
                     "classes": classes, "score": score}
 
         dialog.status.setText(tr("Загружаются векторы участка…"))
-        _run_job(self, work, lambda out: self._built(
+        _run_job(self, self._with_shapes(work), lambda out: self._built(
             out, key, box, year, colors, names, None, split_key),
             tr("Классификация"))
 
@@ -910,6 +920,27 @@ class ClassTool(SiteTool, QObject):
                 "classes": classes, "covered": share, "parts": parts,
                 "shown": shown, "kinds": kinds, "table": table}
 
+    def _with_shapes(self, work):
+        """work рабочего потока с многоугольниками классов: у окна
+        «Распознавание» (vectorize) классы клеток без деления на объекты
+        ещё и сглаживаются в многоугольники (tracing.class_shapes)."""
+        if not self.vectorize:
+            return work
+        least = self.dialog.least_cells()
+
+        def run():
+            out = work()
+            if isinstance(out, dict) and out.get("classes") is not None \
+                    and out.get("parts") is None \
+                    and not out.get("problem"):
+                stop_point(self)
+                out["shapes"] = tracing.class_shapes(
+                    out["classes"], least,
+                    progress=lambda: stop_point(self))
+            return out
+
+        return run
+
     def too_few_text(self):
         return tr("Нужно хотя бы два класса по три точки.")
 
@@ -924,7 +955,8 @@ class ClassTool(SiteTool, QObject):
     def rules_job(self):
         """Классы правилами вместо образцов: функция рабочего потока
         (каналы, участок, образцы, номера классов образцов) -> классы
-        клеток. Без правил - None, классы по образцам."""
+        клеток. Без правил - None, классы по образцам. Пятый аргумент -
+        место сетки (указатель зоны, x0, y0, шаг)."""
         return None
 
     def _build_raster(self, layer, ring, box, side, level, zone, points,
@@ -971,32 +1003,11 @@ class ClassTool(SiteTool, QObject):
             if params is not None:
                 return self._objects(found, grid, inside, share, index,
                                      points, params, pieces, drawing=True)
-            samples, labels, outside = [], [], 0
-            for label, (plat, plon) in points:
-                r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
-                if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2] \
-                        and np.isfinite(grid[:, r, c]).all():
-                    samples.append(grid[:, r, c])
-                    labels.append(label)
-                else:
-                    outside += 1
-            if rings:
-                good = rasterclass.usable(grid)
-                for label, sample in rings:
-                    cells = np.flatnonzero(aef.ring_mask(
-                        index, x0, y0, step, grid.shape[1:], sample) & good)
-                    if not len(cells):
-                        outside += 1
-                        continue
-                    take = cells[np.linspace(
-                        0, len(cells) - 1, min(RING_CELLS, len(cells)))
-                        .astype(np.int64)]
-                    flat = grid.reshape(grid.shape[0], -1)
-                    for cell in take:
-                        samples.append(flat[:, cell])
-                        labels.append(label)
+            samples, labels, outside = ring_samples(index, found, grid,
+                                                    points, rings)
             if rules is not None:
-                classes = rules(grid, inside, samples, labels)
+                classes = rules(grid, inside, samples, labels,
+                                (index, x0, y0, step))
                 if classes is None or not (classes >= 0).any():
                     return {"problem": "flat", "found": found}
                 return {"index": index, "found": found, "outside": outside,
@@ -1014,7 +1025,7 @@ class ClassTool(SiteTool, QObject):
         dialog.status.setText(tr("Загружаются тайлы подложки…")
                               if dialog.raster_id() == BASEMAP
                               else tr("Читается растр участка…"))
-        _run_job(self, work, lambda out: self._built(
+        _run_job(self, self._with_shapes(work), lambda out: self._built(
             out, key, box, None, colors, names, name, split_key, credit),
             self.tool_title())
 
@@ -1048,6 +1059,9 @@ class ClassTool(SiteTool, QObject):
         if out.get("parts") is not None:
             self.result.update(parts=out["shown"], kinds=out["kinds"],
                                table=out["table"])
+        if out.get("shapes") is not None:
+            self.result.update(shapes=out["shapes"]["shapes"],
+                               shape_kinds=out["shapes"]["kinds"])
         counts = [int((classes == n).sum()) for n in range(len(colors))]
         total = max(sum(counts), 1)
         parts = ", ".join("{} {:.0f}%".format(name, 100.0 * c / total)
@@ -1207,6 +1221,41 @@ class ClassTool(SiteTool, QObject):
 
 
 ClassTool.dialog_class = ClassDialog
+
+
+def ring_samples(index, found, grid, points, rings):
+    """Образцы классов по сетке grid: клетки контрольных точек и до
+    RING_CELLS клеток каждого контура поровну по клеткам внутри. Итог -
+    (векторы образцов, номера классов, образцов вне данных). Рабочий
+    поток."""
+    x0, y0, step = found[:3]
+    samples, labels, outside = [], [], 0
+    fine = np.issubdtype(grid.dtype, np.floating)
+    for label, (plat, plon) in points:
+        r, c = aef.pixel_of(index, x0, y0, step, plat, plon)
+        if 0 <= r < grid.shape[1] and 0 <= c < grid.shape[2] \
+                and (not fine or np.isfinite(grid[:, r, c]).all()):
+            samples.append(grid[:, r, c])
+            labels.append(label)
+        else:
+            outside += 1
+    if rings:
+        good = rasterclass.usable(grid) if fine \
+            else np.ones(grid.shape[1:], dtype=bool)
+        flat = grid.reshape(grid.shape[0], -1)
+        for label, sample in rings:
+            cells = np.flatnonzero(aef.ring_mask(
+                index, x0, y0, step, grid.shape[1:], sample) & good)
+            if not len(cells):
+                outside += 1
+                continue
+            take = cells[np.linspace(
+                0, len(cells) - 1, min(RING_CELLS, len(cells)))
+                .astype(np.int64)]
+            for cell in take:
+                samples.append(flat[:, cell])
+                labels.append(label)
+    return samples, labels, outside
 
 
 def class_settings(classes, points, params, areas=0):

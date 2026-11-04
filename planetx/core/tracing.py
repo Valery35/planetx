@@ -505,6 +505,19 @@ def trace(grid, good, colors=COLORS, smooth=SMOOTH, least=LEAST,
             "centers": centers, "shapes": shapes}
 
 
+def class_shapes(classes, least=LEAST, corner=CORNER, progress=None):
+    """Сглаженные многоугольники классов окна «Распознавание»: области
+    меньше least клеток сливаются с соседом, границы - цепочки, общие
+    у соседних областей, сглаживание Potrace. Итог - {"kinds": класс
+    области, "shapes": {область: кольца}}, классы растра не меняются."""
+    parts, kinds, _ = merge_small(np.asarray(classes, dtype=np.int64), least)
+    if progress is not None:
+        progress()
+    found = chains(parts)
+    return {"kinds": kinds, "shapes": rings(found, corner,
+                                            progress=progress)}
+
+
 def join_colors(target):
     """Цвета трассировки в классы: target[n] - цвет, с которым слит цвет
     n, сам n или -1 - не слит. Цепочка слияний доходит до цвета, который

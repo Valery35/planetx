@@ -375,14 +375,29 @@ def cell_kinds(grid, roles, more_roles, good, scenario):
     color_kinds и two_dates по средним всех каналов, рубки - region_kinds
     по связным областям. Итог - номер вида в KIND_ORDER у клетки, -1 вне
     good."""
+    out = np.full(good.shape, -1, dtype=np.int64)
+    found = summer_regions(grid, roles, more_roles, good, scenario)
+    if found is None:
+        return out
+    parts, regions = found
+    codes = np.array([KIND_ORDER.index(k) for k in regions] + [-1],
+                     dtype=np.int64)
+    out[:] = codes[np.where(parts >= 0, parts, len(regions))]
+    out[~good] = -1
+    return out
+
+
+def summer_regions(grid, roles, more_roles, good, scenario):
+    """Связные области летнего снимка и их виды по правилам задачи -
+    основа cell_kinds, линий и заросших полей. Итог - (номера областей
+    клеток, виды областей) или None, если клеток нет."""
     spec = SCENARIOS[scenario]
     first = len(roles)
     summer = tracing.blur(grid[:first], good, spec["smooth"])
     labels, _ = tracing.quantize(summer, good, spec["colors"])
-    out = np.full(good.shape, -1, dtype=np.int64)
     count = int(labels.max()) + 1 if (labels >= 0).any() else 0
     if not count:
-        return out
+        return None
     flat = labels.ravel()
     keep = flat >= 0
     centers = np.full((count, grid.shape[0]), np.nan)
@@ -398,9 +413,4 @@ def cell_kinds(grid, roles, more_roles, good, scenario):
     if more_roles and grid.shape[0] > first:
         raw = two_dates(raw, centers, roles, more_roles)
     parts, region_colors, _ = tracing.merge_small(labels, spec["least"])
-    regions = region_kinds(parts, region_colors, raw, scenario)
-    codes = np.array([KIND_ORDER.index(k) for k in regions] + [-1],
-                     dtype=np.int64)
-    out[:] = codes[np.where(parts >= 0, parts, len(regions))]
-    out[~good] = -1
-    return out
+    return parts, region_kinds(parts, region_colors, raw, scenario)

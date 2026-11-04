@@ -6182,22 +6182,10 @@ EN = {
         "in the layer.",
     "Показывать на глобусе": "Show on the globe",
     "Цвета снимка": "Image colors",
-    "Летний снимок раскладывается на цвета, как в окне "
-    "«Трассировка», образцы не нужны. Название цвета можно "
-    "переписать, цвета с одинаковым названием сливаются.":
-        "The summer image is split into colors, as in the Tracing window, "
-        "no samples are needed. A color name can be rewritten, colors with "
-        "the same name are merged.",
     "На сколько цветов раскладывается снимок. Больше цветов - "
     "подробнее классы, их проще слить одинаковыми названиями.":
         "How many colors the image is split into. More colors give finer "
         "classes, they are merged by giving them the same name.",
-    "«Построить» раскладывает летний снимок на цвета. Цвета "
-    "с одинаковым названием сливаются. Если цвет лёг неверно, "
-    "поставьте его образец - {how} - и нажмите «Построить».":
-        "Build splits the summer image into colors. Colors with the same "
-        "name are merged. If a color is wrong, place its sample - {how} - "
-        "and press Build.",
     "цвета снимка, цветов {n}": "image colors, {n} colors",
     "Снятый флажок прячет результат на глобусе, под ним виден снимок, "
     "по которому удобно ставить образцы. Результат и кнопка OK "
@@ -6310,7 +6298,6 @@ EN = {
         "At least two classes with three points each are needed.",
     "Все точки вне участка.": "All points are outside the area.",
     "Точек вне участка: {n}.": "Points outside the area: {n}.",
-    "Классификация…": "Classification…",
     "Показано {shown} из {total}.": "Showing {shown} of {total}.",
     # Выгрузка сцены (ui/sceneexport.py).
     "Выгрузить в glTF или 3D Tiles": "Export to glTF or 3D Tiles",
@@ -6389,16 +6376,6 @@ EN = {
         "difference raster.",
     # Трассировка (ui/tracing.py).
     "Трассировка": "Tracing",
-    "Трассировка…": "Tracing…",
-    "Снимок участка раскладывается на цвета, области обводятся гладкими "
-    "многоугольниками.":
-        "The image of the site is split into colors, the areas are outlined "
-        "with smooth polygons.",
-    "Окно трассировки участка у точки взгляда - снимок раскладывается на "
-    "цвета, области ложатся гладкими многоугольниками в проект QGIS.":
-        "The tracing window of the site at the view point - the image is "
-        "split into colors, the areas go into the QGIS project as smooth "
-        "polygons.",
     "Снимок, который раскладывается на цвета. Подложка глобуса - картинка "
     "текущей подложки под участком, растр проекта - его каналы, первые три "
     "дают цвета слоя.":
@@ -6484,16 +6461,6 @@ EN = {
     "Классов из трассировки: {n}.": "Classes from tracing: {n}.",
     # Выделение объектов (ui/objecttasks.py).
     "Выделение объектов": "Object extraction",
-    "Выделение объектов…": "Object extraction…",
-    "Типовые задачи - леса и рубки, поля, вода. Трассировка снимка "
-    "«Космоснимков» с названиями классов по отражению.":
-        "Typical tasks - forests and clear-cuts, fields, water. Tracing of a "
-        "Satellite imagery image with class names by reflectance.",
-    "Окно типовых задач у точки взгляда - леса и рубки, поля, вода. Снимок "
-    "окна «Космоснимки» трассируется, классы называются по отражению.":
-        "The window of typical tasks at the view point - forests and "
-        "clear-cuts, fields, water. An image of the Satellite images window "
-        "is traced, the classes are named by reflectance.",
     "Леса и рубки": "Forests and clear-cuts",
     "Хвойный лес, лиственный лес и травы, рубки и гари, открытая почва, "
     "вода. Рубка - открытая почва, вокруг которой в полосе трёх клеток "
@@ -6723,7 +6690,6 @@ EN = {
         "Classes with the same name are merged.",
     # Похожие области (ui/similar.py).
     "Похожие области": "Similar areas",
-    "Похожие области…": "Similar areas…",
     "Похожие области {year}": "Similar areas {year}",
     "Похожесть": "Similarity",
     "Образцы": "Samples",
@@ -6785,20 +6751,6 @@ EN = {
     "остальное - цвет.":
         "The share of texture in dividing into objects and in comparing "
         "with a sample, the rest is color.",
-    "Обведите образец, модуль найдёт на участке объекты, похожие на него "
-    "по цвету и текстуре.":
-        "Outline a sample and the plugin finds objects of the area similar "
-        "to it by color and texture.",
-    "Окно поиска по образцу у точки взгляда - образец обводится "
-    "на глобусе, объекты участка, похожие на него по цвету "
-    "и текстуре, ложатся многоугольниками в проект QGIS.":
-        "Window searching by a sample at the view point - the sample is "
-        "outlined on the globe, objects of the area similar to it by color "
-        "and texture go to the QGIS project as polygons.",
-    "Классы участка по своим контрольным точкам на глобусе - по снимку "
-    "проекта, подложке или эмбеддингам AlphaEarth.":
-        "Site classes by your own control points on the globe - from "
-        "a project image, the basemap or AlphaEarth embeddings.",
     "Уточнить точками": "Refine with points",
     "Распознавание": "Recognition",
     "{points} т., {rings} о.": "{points} pt, {rings} ar",
@@ -6825,12 +6777,6 @@ EN = {
     "Классы и образцы задаются вручную, нужно хотя бы два класса.":
         "Classes and samples are set manually, at least two classes are "
         "needed.",
-    "Задача сама заводит классы и считает их правилами по снимкам "
-    "лета и снега, образцы не нужны. Образец точкой или областью "
-    "поправляет свой класс, «Построить» считает заново с ним.":
-        "The task creates its classes and computes them by rules from the "
-        "summer and snow images, no samples are needed. A point or area "
-        "sample corrects its class, Build computes again with it.",
     "Классы задачи считаются правилами по снимкам, образцы не "
     "нужны. Если класс лёг неверно, поставьте его образец - "
     "{how} - и нажмите «Построить».":
@@ -6854,10 +6800,6 @@ EN = {
         "vertices, a click on the first one closes the outline. At least "
         "two classes are needed, each with an outline or three points.",
     "Распознавание…": "Recognition…",
-    "Классы участка по своим точкам на глобусе. Снимки Sentinel-2 участка "
-    "окно подбирает и загружает само по «Построить».":
-        "Site classes by your own points on the globe. The window finds and "
-        "loads Sentinel-2 images of the site itself on «Build».",
     "Лето": "Summer",
     "Март - апрель, снег": "March - April, snow",
     "Снимки Sentinel-2 участка подбираются и загружаются сами по "
@@ -6903,12 +6845,6 @@ EN = {
         "Classes from the Object extraction window. Choose a class with "
         "its circle and click its samples on the globe, at least three "
         "points per class, then press Build.",
-    "Окно классификации участка у точки взгляда - классы с цветом "
-    "и названием, контрольные точки щелчком по глобусу, год, растр "
-    "классов в проект QGIS.":
-        "Window classifying the area at the view point - classes with a "
-        "color and a name, control points by a click on the globe, the "
-        "year, a class raster to the QGIS project.",
     'В проект добавлен слой «{name}». {text}':
         'Layer “{name}” added to the project. {text}',
     'В проект добавлено вершин {peaks} и ям {pits}.':
@@ -7259,6 +7195,114 @@ EN = {
     "засушливые области.":
         "NASA mineral maps from images of the EMIT spectrometer, pixel "
         "60 m, arid regions.",
+    # Окно «Распознавание» одно на все задачи (ui/recognize.py).
+    "Распознавание - похожие на образец":
+        "Recognition - similar to sample",
+    "Распознавание - цвета снимка":
+        "Recognition - image colors",
+    "Распознавание - леса и рубки":
+        "Recognition - forests and clear-cuts",
+    "Классы участка растром и многоугольниками: по своим образцам, цветам "
+    "снимка, образцу или правилам задач - леса, поля, вода, заросшие поля.":
+        "Site classes as a raster and polygons: by own samples, image colors,"
+        " a sample or task rules - forests, fields, water, overgrown fields.",
+    "Окно распознавания участка у точки взгляда - свои образцы, цвета снимка,"
+    " похожие на образец, леса, поля, вода, заросшие поля. Классы растром и "
+    "многоугольниками в проект QGIS.":
+        "Site recognition window at the look point - own samples, image "
+        "colors, similar to sample, forests, fields, water, overgrown fields."
+        " Classes as a raster and polygons in the QGIS project.",
+    "Снимки Sentinel-2 участка":
+        "Sentinel-2 images of the site",
+    "Откуда берутся признаки клетки. Снимки Sentinel-2 участка окно подбирает"
+    " и загружает само по «Построить» - летний и мартовский со снегом. У "
+    "растра проекта каждый канал - признак. Подложка - картинка текущей "
+    "подложки под участком. Эмбеддинги AlphaEarth загружаются из сети на "
+    "выбранный год.":
+        "Where the cell features come from. Sentinel-2 images of the site are"
+        " found and loaded by the window itself on «Build» - a summer one and"
+        " a March one with snow. Each band of a project raster is a feature. "
+        "Basemap is the picture of the current basemap under the site. "
+        "AlphaEarth embeddings are loaded from the network for the chosen "
+        "year.",
+    "Насколько объект участка должен быть похож на образец по цвету и "
+    "рисунку. Ниже - находится больше, в том числе непохожее.":
+        "How similar a site object must be to the sample in color and "
+        "pattern. Lower finds more, including dissimilar objects.",
+    "Ищет снимки Sentinel-2 участка весны и осени за 4 года, в каждую пустую "
+    "клетку берёт самый чистый и загружает его. «Построить» делает это само, "
+    "если снимков нет.":
+        "Searches Sentinel-2 images of the site for spring and autumn over 4 "
+        "years, takes the clearest one into each empty cell and loads it. "
+        "«Build» does this itself if there are no images.",
+    "Многоугольник меньше этого количества клеток сливается с соседом по "
+    "самой длинной общей границе. Растр классов не меняется.":
+        "A polygon smaller than this number of cells is merged with the "
+        "neighbour along the longest common border. The class raster does not"
+        " change.",
+    "Тонкие настройки: пиксель, наименьшая область многоугольников, деление "
+    "на объекты, ширина линий, непрозрачность.":
+        "Fine settings: pixel, smallest polygon area, splitting into objects,"
+        " line width, opacity.",
+    "Что распознать. Задачи с правилами (леса, поля, вода, заросшие поля) "
+    "сами заводят классы и считают их по снимку, образцы не нужны, образец "
+    "точкой или областью поправляет свой класс.":
+        "What to recognize. Tasks with rules (forests, fields, water, "
+        "overgrown fields) create their classes and compute them from the "
+        "image, no samples are needed, a point or area sample corrects its "
+        "class.",
+    "Похоже на образец {area} га, {share} % участка.":
+        "Similar to the sample {area} ha, {share} % of the site.",
+    "Распознавание {source}":
+        "Recognition {source}",
+    "Классы растром и многоугольниками в проекте.":
+        "Classes as a raster and polygons are in the project.",
+    "Снимок раскладывается на цвета, образцы не нужны. Название цвета можно "
+    "переписать, цвета с одинаковым названием сливаются.":
+        "The image is split into colors, no samples are needed. A color name "
+        "can be rewritten, colors with the same name are merged.",
+    "Похожие на образец":
+        "Similar to sample",
+    "Обведите образец на глобусе, окно найдёт на участке объекты, похожие на "
+    "него по цвету и рисунку.":
+        "Outline a sample on the globe, the window finds site objects similar"
+        " to it in color and pattern.",
+    "Пиксель - по летнему снимку, 10 м.":
+        "Pixel - by the summer image, 10 m.",
+    "«Построить» раскладывает снимок на цвета. Цвета с одинаковым названием "
+    "сливаются. Если цвет лёг неверно, поставьте его образец - {how} - и "
+    "нажмите «Построить».":
+        "«Build» splits the image into colors. Colors with the same name are "
+        "merged. If a color is wrong, put its sample - {how} - and press "
+        "«Build».",
+    "Правилам задачи нужен снимок с ближним ИК и красным или SWIR - снимки "
+    "Sentinel-2 участка или снимок окна «Космоснимки».":
+        "The task rules need an image with near IR and red or SWIR - "
+        "Sentinel-2 images of the site or an image of the «Satellite images» "
+        "window.",
+    "Линий {km} км, слой - по OK.":
+        "Lines {km} km, the layer - on OK.",
+    "Похоже на образец":
+        "Similar to the sample",
+    "Остальное":
+        "The rest",
+    "Обведите на глобусе образец - щелчками по вершинам, щелчок по первой "
+    "замыкает контур, щелчок внутри контура убирает его. Образцов может быть "
+    "несколько.":
+        "Outline a sample on the globe - click the vertices, a click on the "
+        "first one closes the outline, a click inside an outline removes it. "
+        "There may be several samples.",
+    "похожие на образец":
+        "similar to sample",
+    "Границы полей - по летнему снимку, вид поля - по снимкам весны и осени "
+    "за 4 года. «Построить» подберёт снимки сам.":
+        "Field borders come from the summer image, the field kind from spring"
+        " and autumn images over 4 years. «Build» finds the images itself.",
+    "Снимков весны и осени {count}.":
+        "Spring and autumn images {count}.",
+    "Снимки весны и осени не легли на участок, классы - по летнему.":
+        "Spring and autumn images did not fall on the site, classes are by "
+        "the summer one.",
 }
 
 _language = None

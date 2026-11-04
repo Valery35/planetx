@@ -312,27 +312,27 @@ def _tools(window, add, earth):
         ("изменения местности", "обнаружить изменения", "что изменилось",
          "alphaearth", "эмбеддинги", "change detection", "detect change",
          "стройка", "вырубка"))
+    # Классификация, трассировка, похожие области и выделение объектов -
+    # задачи окна «Распознавание», решение автора от 4 ноября 2026 года.
     add("here:recognize", tr("Распознавание"), open_,
         lambda: window.recognize_tool.open_here(*_here(window)),
         ("распознавание", "распознать", "распознать лес", "классы по точкам",
-         "породы леса", "хвоя и листва", "recognition", "recognize"))
-    add("here:classify", tr("Классификация"), open_,
-        lambda: window.class_tool.open_here(*_here(window)),
-        ("классификация", "классы", "классифицировать", "лес и поле",
-         "классы покрова", "classification", "classify", "land cover"))
-    add("here:similar", tr("Похожие области"), open_,
-        lambda: window.similar_tool.open_here(*_here(window)),
+         "классификация", "классы", "классифицировать", "классы покрова",
+         "породы леса", "хвоя и листва", "recognition", "recognize",
+         "classification", "classify", "land cover"))
+    add("here:similar", tr("Распознавание - похожие на образец"), open_,
+        lambda: window.recognize_tool.open_here(*_here(window), "similar"),
         ("похожие области", "найти похожее", "похожие участки", "по образцу",
          "образец", "similar areas", "find similar", "sample"))
-    add("here:trace", tr("Трассировка"), open_,
-        lambda: window.trace_tool.open_here(*_here(window)),
+    add("here:trace", tr("Распознавание - цвета снимка"), open_,
+        lambda: window.recognize_tool.open_here(*_here(window), "colors"),
         ("трассировка", "векторизация", "векторизовать", "в вектор",
-         "potrace", "trace", "vectorize", "trace bitmap"))
-    add("here:objects", tr("Выделение объектов"), open_,
-        lambda: window.task_tool.open_here(*_here(window)),
+         "цвета снимка", "potrace", "trace", "vectorize", "trace bitmap"))
+    add("here:objects", tr("Распознавание - леса и рубки"), open_,
+        lambda: window.recognize_tool.open_here(*_here(window), "forest"),
         ("выделение объектов", "типовые задачи", "леса и рубки", "рубки",
-         "вырубки", "гари", "хвоя", "поля", "пашня", "object extraction",
-         "clear-cuts", "forest"))
+         "вырубки", "гари", "хвоя", "поля", "пашня", "заросшие поля",
+         "object extraction", "clear-cuts", "forest"))
     add("here:spectral", tr("Минералы по спектру"), open_,
         lambda: window.spectral_tool.open_here(*_here(window)),
         ("минералы", "спектр", "спектральная библиотека", "породы",
