@@ -25376,6 +25376,49 @@ def ready_new_wait():
                                    credits=window.attribution.text())
     window.view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_ready_bluemarble.png"))
+    # Районная карта 6 ноября 2026 года - swisstopo над Берном.
+    from planetx.core.navigation import Pose
+    out["swiss"] = window.add_ready_source("swiss_map")
+    window.view.navigator.show(Pose(46.95, 7.44, 30000.0, 0.0, 0.0))
+    window.view.update()
+    state["ready_seen"] = _watch_loader(window.loader, "ready_seen")
+    state["ls_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def ready_national_wait():
+    """swisstopo пришла своими тайлами у Берна, кадр в файл. Потом вид
+    из космоса - вокруг Швейцарии подложка Esri, а не белое."""
+    window = state["window"]
+    seen = state["ready_seen"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 30.0 and (window.view.load_missing or seen["loaded"] < 10):
+        return 1000
+    out = result["ready"]
+    out["swiss_seen"] = dict(seen, seconds=round(spent, 1),
+                             source=window.source.name,
+                             credits=window.attribution.text())
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_ready_swiss.png"))
+    from planetx.core.navigation import Pose
+    window.view.navigator.show(Pose(46.95, 7.44, 4000000.0, 0.0, 0.0))
+    window.view.update()
+    state["ready_seen"] = _watch_loader(window.loader, "ready_seen")
+    state["ls_started"] = time.monotonic()
+    return None
+
+
+@check(1000)
+def ready_national_far():
+    window = state["window"]
+    seen = state["ready_seen"]
+    spent = time.monotonic() - state["ls_started"]
+    if spent < 25.0 and (window.view.load_missing or seen["loaded"] < 10):
+        return 1000
+    result["ready"]["swiss_far"] = dict(seen, seconds=round(spent, 1))
+    window.view.grabFramebuffer().save(os.path.join(
+        TEMP, "planetx_ready_swiss_far.png"))
     return None
 
 

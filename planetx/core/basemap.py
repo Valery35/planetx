@@ -371,6 +371,90 @@ READY = READY + (
      USGS_TILES.format("USGSShadedReliefOnly"), 16, USGS_CREDIT,
      USGS_TERMS, False, "xyz"),
 )
+# Открытые национальные карты по списку opengeos/qgis-basemaps (MIT),
+# просьба автора от 6 ноября 2026 года «делай, добавляй, публикуй».
+# Адреса и уровни проверены тайлами Берлина, Берна и Амстердама 6 ноября
+# 2026 года, условия - doc/SOURCES.md. CARTO не взят - с ноября 2026 года
+# вместо тайла картинка «API KEY REQUIRED», OpenSnowMap - условий
+# пользования тайлами на сайте нет, OpenFireMap - сервер отвечает 404.
+# Районная карта (вид «regional», REGIONS) вне своего района и мельче
+# своего уровня берёт тайл base - иначе мир вокруг страны был бы белым.
+BASEMAPDE_TILES = ("https://sgx.geodatenzentrum.de/wmts_basemapde/tile/"
+                   "1.0.0/de_basemapde_web_raster_{}/default/"
+                   "GLOBAL_WEBMERCATOR/{{z}}/{{y}}/{{x}}.png")
+BASEMAPDE_CREDIT = "© GeoBasis-DE / BKG (2026) CC BY 4.0"
+BASEMAPDE_TERMS = "https://basemap.de/open-data/"
+TOPPLUS_TILES = ("https://sgx.geodatenzentrum.de/wmts_topplus_open/tile/"
+                 "1.0.0/{}/default/WEBMERCATOR/{{z}}/{{y}}/{{x}}.png")
+TOPPLUS_CREDIT = "© BKG (2026) dl-de/by-2-0"
+TOPPLUS_TERMS = ("https://gdz.bkg.bund.de/index.php/default/"
+                 "wmts-topplusopen-wmts-topplus-open.html")
+SWISS_TILES = ("https://wmts.geo.admin.ch/1.0.0/ch.swisstopo.{}/default/"
+               "current/3857/{{z}}/{{x}}/{{y}}.jpeg")
+SWISS_CREDIT = "© swisstopo"
+SWISS_TERMS = "https://www.geo.admin.ch/en/general-terms-of-use-fsdi"
+PDOK_TILES = ("https://service.pdok.nl/brt/achtergrondkaart/wmts/v2_0/{}/"
+              "EPSG:3857/{{z}}/{{x}}/{{y}}.png")
+PDOK_CREDIT = "© Kadaster, PDOK, CC BY 4.0"
+PDOK_TERMS = "https://www.pdok.nl/copyright"
+ESRI_TOPO = ESRI_TILES.format("World_Topo_Map")
+READY = READY + (
+    ("topplus", "TopPlusOpen (BKG)", "TopPlusOpen (BKG)",
+     TOPPLUS_TILES.format("web"), 18, TOPPLUS_CREDIT, TOPPLUS_TERMS, False,
+     "xyz"),
+    ("topplus_grey", "TopPlusOpen серая (BKG)", "TopPlusOpen Grey (BKG)",
+     TOPPLUS_TILES.format("web_grau"), 18, TOPPLUS_CREDIT, TOPPLUS_TERMS,
+     False, "xyz"),
+    ("basemapde", "basemap.de (Германия)", "basemap.de (Germany)",
+     BASEMAPDE_TILES.format("farbe"), 19, BASEMAPDE_CREDIT,
+     BASEMAPDE_TERMS, False, "regional"),
+    ("basemapde_grey", "basemap.de серая (Германия)",
+     "basemap.de Grey (Germany)", BASEMAPDE_TILES.format("grau"), 19,
+     BASEMAPDE_CREDIT, BASEMAPDE_TERMS, False, "regional"),
+    ("swiss_map", "swisstopo Карта (Швейцария)",
+     "swisstopo National Map (Switzerland)",
+     SWISS_TILES.format("pixelkarte-farbe"), 19, SWISS_CREDIT, SWISS_TERMS,
+     False, "regional"),
+    ("swiss_grey", "swisstopo Карта серая (Швейцария)",
+     "swisstopo National Map Grey (Switzerland)",
+     SWISS_TILES.format("pixelkarte-grau"), 19, SWISS_CREDIT, SWISS_TERMS,
+     False, "regional"),
+    ("swissimage", "SWISSIMAGE (Швейцария)", "SWISSIMAGE (Switzerland)",
+     SWISS_TILES.format("swissimage"), 19, SWISS_CREDIT, SWISS_TERMS, False,
+     "regional"),
+    ("pdok_map", "PDOK Карта (Нидерланды)", "PDOK Map (Netherlands)",
+     PDOK_TILES.format("standaard"), 19, PDOK_CREDIT, PDOK_TERMS, False,
+     "regional"),
+    ("pdok_grey", "PDOK Карта серая (Нидерланды)",
+     "PDOK Map Grey (Netherlands)", PDOK_TILES.format("grijs"), 19,
+     PDOK_CREDIT, PDOK_TERMS, False, "regional"),
+    ("pdok_pastel", "PDOK Карта пастель (Нидерланды)",
+     "PDOK Map Pastel (Netherlands)", PDOK_TILES.format("pastel"), 19,
+     PDOK_CREDIT, PDOK_TERMS, False, "regional"),
+    ("pdok_photo", "PDOK Аэрофото (Нидерланды)",
+     "PDOK Aerial Photo (Netherlands)",
+     "https://service.pdok.nl/hwh/luchtfotorgb/wmts/v1_0/Actueel_ortho25/"
+     "EPSG:3857/{z}/{x}/{y}.jpeg", 19,
+     "© Beeldmateriaal Nederland, PDOK, CC BY 4.0", PDOK_TERMS, False,
+     "regional"),
+)
+# Районы районных карт: запад, юг, восток, север в градусах, уровень,
+# с которого берётся сама карта, и подложка вокруг. Рамки - охваты стран
+# с запасом, уровни - тайл не шире района вдвое.
+_GERMANY = (5.5, 47.2, 15.6, 55.1, 7)
+_SWISS = (5.9, 45.8, 10.5, 47.85, 8)
+_HOLLAND = (3.2, 50.7, 7.3, 53.6, 7)
+REGIONS = {
+    "basemapde": _GERMANY + (ESRI_TOPO,),
+    "basemapde_grey": _GERMANY + (ESRI_TOPO,),
+    "swiss_map": _SWISS + (ESRI_TOPO,),
+    "swiss_grey": _SWISS + (ESRI_TOPO,),
+    "swissimage": _SWISS + (ESRI_URL,),
+    "pdok_map": _HOLLAND + (ESRI_TOPO,),
+    "pdok_grey": _HOLLAND + (ESRI_TOPO,),
+    "pdok_pastel": _HOLLAND + (ESRI_TOPO,),
+    "pdok_photo": _HOLLAND + (ESRI_URL,),
+}
 READY_KEYS = tuple(r[0] for r in READY)
 # Подменю «Готовых источников»: ключ группы и ключи источников по
 # порядку. Названия групп даёт окно (перевод).
@@ -381,6 +465,9 @@ READY_GROUPS = (
               "esri_shaded", "esri_physical", "esri_hillshade")),
     ("nasa_usgs", ("nasa_blue_marble", "usgs_imagery", "usgs_imagery_topo",
                    "usgs_topo", "usgs_relief")),
+    ("national", ("topplus", "topplus_grey", "basemapde", "basemapde_grey",
+                  "swiss_map", "swiss_grey", "swissimage", "pdok_map",
+                  "pdok_grey", "pdok_pastel", "pdok_photo")),
     ("warned", ("google_satellite", "google_hybrid", "google_map",
                 "google_terrain", "bing_aerial", "bing_map",
                 "yandex_satellite", "yandex_map", "dgis_map")),
@@ -401,10 +488,27 @@ def ready_source(key, russian=True):
     if row is None:
         raise KeyError(key)
     key, ru, en, url, top, credit, terms, _, kind = row
-    cls = EllipticSource if kind == "ellipsoidal" else Source
-    source = cls(ru if russian else en, url, top, (credit, terms))
+    name = ru if russian else en
+    if kind == "regional":
+        west, south, east, north, level, base = REGIONS[key]
+        source = RegionalXyz(name, url, mercator_box(west, south, east,
+                                                     north),
+                             base, level, top, (credit, terms))
+    else:
+        cls = EllipticSource if kind == "ellipsoidal" else Source
+        source = cls(name, url, top, (credit, terms))
     source.ready = key
     return source
+
+
+def mercator_box(west, south, east, north):
+    """Рамка в градусах - рамка в метрах EPSG:3857."""
+    def y(lat):
+        lat = max(min(lat, 85.0511), -85.0511)
+        return MERCATOR_HALF / math.pi * math.log(
+            math.tan(math.pi / 4.0 + math.radians(lat) / 2.0))
+    k = MERCATOR_HALF / 180.0
+    return west * k, y(south), east * k, y(north)
 
 
 # Эксцентриситет эллипсоида WGS84 - эллиптический Меркатор EPSG:3395.
@@ -555,3 +659,37 @@ class RegionalWms(WmsSource):
 
     def assemble(self, z, x, y, images):
         return over(images[0], images[1])
+
+
+class RegionalXyz(Source):
+    """Районная карта XYZ (REGIONS): в районе и не мельче min_level -
+    свои тайлы, вокруг - тайлы base. Тайлы карты непрозрачны, поэтому
+    без сборки двух картинок, как у RegionalWms."""
+
+    __slots__ = ("box", "base", "min_level")
+
+    def __init__(self, name, url, box, base, min_level, *args, **kwargs):
+        super().__init__(name, url, *args, **kwargs)
+        self.box = box
+        self.base = base
+        self.min_level = min_level
+
+    def inside(self, z, x, y):
+        if z < self.min_level:
+            return False
+        w, s, e, n = tile_bbox(z, x, y)
+        return w < self.box[2] and e > self.box[0] \
+            and s < self.box[3] and n > self.box[1]
+
+    def tile_url(self, z, x, y):
+        if not self.inside(z, x, y):
+            return tile_url(self.base, z, x, y)
+        return super().tile_url(z, x, y)
+
+    def preview_tile(self):
+        """Тайл уровня min_level в середине района - превью каталога."""
+        z = self.min_level
+        side = 2.0 * MERCATOR_HALF / (1 << z)
+        x = int(((self.box[0] + self.box[2]) / 2.0 + MERCATOR_HALF) / side)
+        y = int((MERCATOR_HALF - (self.box[1] + self.box[3]) / 2.0) / side)
+        return z, x, y

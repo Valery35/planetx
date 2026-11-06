@@ -122,6 +122,9 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "sea_marks": ((230, 40, 40), (40, 160, 60), (250, 220, 40)),
               "hiking": ((200, 30, 30), (240, 240, 240)),
               "cycling": ((120, 60, 200), (240, 240, 240)),
+              "mtb": ((200, 120, 30), (240, 240, 240)),
+              "slopes": ((40, 90, 200), (220, 30, 30), (240, 240, 240)),
+              "riding": ((150, 90, 40), (240, 240, 240)),
               "wiki": ((45, 110, 205), (245, 245, 245), (205, 228, 255)),
               "aef_change": ((0, 0, 0), (70, 60, 10), (255, 245, 30)),
               "ftw_2025": ((254, 195, 121), (243, 250, 187), (51, 160, 44)),
@@ -155,6 +158,8 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "worldcover": "ESA WorldCover 2021",
            "sea_marks": "OpenSeaMap",
            "hiking": "Waymarked Trails", "cycling": "Waymarked Trails",
+           "mtb": "Waymarked Trails", "slopes": "Waymarked Trails",
+           "riding": "Waymarked Trails",
            "wiki": "Wikipedia",
            "aef_change": "AlphaEarth Foundations, Google DeepMind",
            "ftw_2025": "Fields of the World",
@@ -185,7 +190,8 @@ LAYERS = (("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("slope", "terrain"),
           ("aspect", "terrain"), ("sea_marks", "tiles"),
           ("hiking", "tiles"),
-          ("cycling", "tiles"), ("wiki", "wiki"), ("aef_change", "change"))
+          ("cycling", "tiles"), ("mtb", "tiles"), ("slopes", "tiles"),
+          ("riding", "tiles"), ("wiki", "wiki"), ("aef_change", "change"))
 # Строки-окна: источник данных у точки взгляда открывает своё окно
 # (действие строки «Поиск» GlobeWindow._actions). Прежде их было видно
 # только в меню на глобусе, решение автора от 27 октября 2026 года.
@@ -254,8 +260,8 @@ def layer_group_names():
             "света склона, включается одна из двух. Горизонтали "
             "рельефа поверх них.")),
         ("tiles", tr("Наложения карт"), tr(
-            "Прозрачные карты поверх подложки - морские знаки, пешие "
-            "и велосипедные маршруты. "
+            "Прозрачные карты поверх подложки - морские знаки, пешие, "
+            "велосипедные и конные маршруты, горнолыжные трассы. "
             "Включать можно несколько сразу.")),
         ("wiki", tr("Энциклопедия"), tr(
             "Статьи Википедии с координатами у точки взгляда. Щелчок "
@@ -441,6 +447,16 @@ def layer_names():
             "Размеченные велосипедные маршруты из OpenStreetMap по "
             "Waymarked Trails - от международных веломаршрутов до "
             "местных.")),
+        "mtb": (tr("Маршруты для горного велосипеда"), tr(
+            "Размеченные маршруты для горного велосипеда из OpenStreetMap "
+            "по Waymarked Trails.")),
+        "slopes": (tr("Горнолыжные трассы"), tr(
+            "Горнолыжные трассы и лыжные маршруты из OpenStreetMap по "
+            "Waymarked Trails - спуски цветом сложности и равнинные "
+            "лыжни.")),
+        "riding": (tr("Конные маршруты"), tr(
+            "Размеченные конные маршруты из OpenStreetMap по Waymarked "
+            "Trails.")),
         "cables": (tr("Подводные кабели"), tr(
             "Подводные линии связи (бирюзовые) и силовые кабели "
             "(лиловые) из OpenStreetMap, видны с любой высоты. В OSM "
@@ -1039,6 +1055,9 @@ def base_name(key):
         tip = tr("Подложка глобуса до уровня {level}. Подпись на "
                  "глобусе - {credit}.", level=source.max_level,
                  credit=source.attribution[0])
+        if isinstance(source, basemap.RegionalXyz):
+            tip += " " + tr("Карта одной страны. Вокруг неё и издалека "
+                            "глобус показывает подложку Esri.")
     return source.name, tip
 
 
@@ -1062,7 +1081,11 @@ def base_url(key):
     row = basemap.ready_entry(name)
     if row is not None and row[7]:
         return None
-    return _base_source(key).tile_url(*themes.THUMB_TILE)
+    source = _base_source(key)
+    if isinstance(source, basemap.RegionalXyz):
+        # Превью районной карты - тайл её района, а не мира.
+        return source.tile_url(*source.preview_tile())
+    return source.tile_url(*themes.THUMB_TILE)
 
 
 def day_text(day):

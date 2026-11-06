@@ -2027,10 +2027,11 @@ EN = {
         "Base map of the globe up to level {level}. The credit on the "
         "globe is {credit}.",
     "Наложения карт": "Map overlays",
-    "Прозрачные карты поверх подложки - морские знаки, пешие "
-    "и велосипедные маршруты. Включать можно несколько сразу.":
-        "Transparent maps over the base map - sea marks, hiking and "
-        "cycling routes. Several can be on at once.",
+    "Прозрачные карты поверх подложки - морские знаки, пешие, "
+    "велосипедные и конные маршруты, горнолыжные трассы. Включать можно "
+    "несколько сразу.":
+        "Transparent maps over the base map - sea marks, hiking, cycling "
+        "and riding routes, ski slopes. Several can be on at once.",
     "Морские знаки": "Sea marks",
     "Морские навигационные знаки OpenSeaMap - буи, маяки, створы, "
     "фарватеры и якорные стоянки. Знаки видны вблизи, с уровня карты "
@@ -2051,6 +2052,25 @@ EN = {
     "Trails - от международных веломаршрутов до местных.":
         "Waymarked cycling routes from OpenStreetMap by Waymarked Trails - "
         "from international cycle routes to local ones.",
+    "Маршруты для горного велосипеда": "Mountain bike routes",
+    "Размеченные маршруты для горного велосипеда из OpenStreetMap по "
+    "Waymarked Trails.":
+        "Waymarked mountain bike routes from OpenStreetMap by Waymarked "
+        "Trails.",
+    "Горнолыжные трассы": "Ski slopes",
+    "Горнолыжные трассы и лыжные маршруты из OpenStreetMap по Waymarked "
+    "Trails - спуски цветом сложности и равнинные лыжни.":
+        "Ski slopes and ski routes from OpenStreetMap by Waymarked Trails - "
+        "downhill runs in the colour of their difficulty and cross-country "
+        "tracks.",
+    "Конные маршруты": "Riding routes",
+    "Размеченные конные маршруты из OpenStreetMap по Waymarked Trails.":
+        "Waymarked horse riding routes from OpenStreetMap by Waymarked "
+        "Trails.",
+    "Карта одной страны. Вокруг неё и издалека глобус показывает "
+    "подложку Esri.":
+        "A map of one country. Around it and from afar the globe shows an "
+        "Esri base map.",
     "Наложение «{title}» не открыто.":
         "The overlay \"{title}\" is not opened.",
     "Условия сервиса не разрешают брать тайлы по прямому адресу. Перед "

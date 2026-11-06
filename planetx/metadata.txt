@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.40.0
+version=1.41.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,13 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.40.0 One Recognition window instead of six. Classification,
+changelog=1.41.0 Open national maps in the Base maps catalog - TopPlusOpen
+      world map, basemap.de of Germany, swisstopo maps and SWISSIMAGE of
+      Switzerland, PDOK maps and aerial photos of the Netherlands. Around
+      the country and from afar the globe shows an Esri base map. Map
+      overlays add Waymarked Trails mountain bike and riding routes and
+      ski slopes.
+      1.40.0 One Recognition window instead of six. Classification,
       object extraction, tracing and similar areas became tasks of this
       window, the former items of the Site analysis submenu are removed.
       The source is Sentinel-2 images of the site, the globe base map,

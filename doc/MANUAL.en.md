@@ -1144,6 +1144,15 @@ The ready sources of the Base maps category are set with one click:
 | OSM Humanitarian, OSM France, CyclOSM | maps from OpenStreetMap - humanitarian, French and cycling | no |
 | NASA Blue Marble | cloud-free image of the Earth with shaded relief and depths, up to level 8 | no |
 | USGS Imagery, Imagery Topo, Topo, Shaded Relief | maps of the US National Map, the USA only, up to level 16 | no |
+| TopPlusOpen, TopPlusOpen Grey | BKG world map, detailed in Europe, up to level 18 | no |
+| basemap.de, basemap.de Grey | official map of Germany by BKG | no |
+| swisstopo National Map, National Map Grey, SWISSIMAGE | national map and aerial photos of Switzerland | no |
+| PDOK Map, Map Grey, Map Pastel, Aerial Photo | topographic map and aerial photos of the Netherlands | no |
+
+The basemap.de, swisstopo and PDOK maps show one country. Around it
+and from afar, while the country is smaller than a tile, the globe
+shows an Esri base map - the topographic map under maps and imagery
+under aerial photos.
 
 The terms of Google, Bing, Yandex and 2GIS do not allow taking their
 tiles into third-party programs by the direct address. Before the first
@@ -1164,8 +1173,9 @@ source goes through the same warning, an address of your own is first
 shown to the user and added only after the Yes answer.
 
 The Map overlays category of the Add data catalog lays transparent
-maps over the base map - OpenSeaMap sea marks, Waymarked Trails hiking
-and cycling routes. Several can be on at once, the opacity is in the ⋯
+maps over the base map - OpenSeaMap sea marks, Waymarked Trails hiking,
+cycling, riding and mountain bike routes and ski slopes. Several can
+be on at once, the opacity is in the ⋯
 menu of the row, To QGIS project… adds an XYZ tile layer. Sea marks are
 seen close up, from the scale of about 1:500 000.
 

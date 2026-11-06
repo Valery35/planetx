@@ -330,6 +330,27 @@ Web Mercator, они лежат в хранилище
 OpenStreetMap France идёт не больше двух запросов сразу, как к
 серверам OpenStreetMap.
 
+Открытые национальные карты добавлены 6 ноября 2026 года по списку
+opengeos/qgis-basemaps (лицензия MIT). Адреса и уровни проверены
+тайлами Берлина, Берна и Амстердама в тот же день, условия сверены
+на сайтах владельцев.
+
+| Источник | Условия | Подпись |
+|---|---|---|
+| TopPlusOpen BKG | [Datenlizenz Deutschland Namensnennung 2.0](https://gdz.bkg.bund.de/index.php/default/wmts-topplusopen-wmts-topplus-open.html), бесплатно, без регистрации | © BKG (2026) dl-de/by-2-0 |
+| basemap.de BKG | [открытые данные basemap.de](https://basemap.de/open-data/), CC BY 4.0 | © GeoBasis-DE / BKG (2026) CC BY 4.0 |
+| swisstopo - карта, серая карта, SWISSIMAGE | [условия FSDI](https://www.geo.admin.ch/en/general-terms-of-use-fsdi) - бесплатно, без регистрации, настольные программы - честное использование | © swisstopo |
+| PDOK - карта, серая, пастель, аэрофото | [PDOK](https://www.pdok.nl/copyright), CC BY 4.0 | © Kadaster, PDOK, © Beeldmateriaal Nederland |
+
+Карты basemap.de, swisstopo и PDOK - районные. Вне своей страны и
+мельче уровня, где страна не меньше половины тайла, модуль берёт
+тайлы Esri World Topo Map, у аэрофото - World Imagery. CARTO
+(Positron, Dark Matter, Voyager) не взят - с ноября 2026 года
+вместо тайла приходит картинка «API KEY REQUIRED». OpenSnowMap не взят -
+условий пользования тайлами на сайте нет. OpenFireMap не взят - сервер
+отвечает 404. Strava требует входа, OpenAIP - некоммерческая лицензия,
+OneMapSG v3 закрыт, Gaode - китайские координаты GCJ-02 со сдвигом.
+
 ## Наложения карт
 
 Категория «Наложения карт» каталога «Добавить данные» с 18 октября
@@ -339,7 +360,7 @@ OpenStreetMap France идёт не больше двух запросов сра
 | Наложение | Условия | Подпись |
 |---|---|---|
 | Морские знаки OpenSeaMap | [OpenSeaMap](https://openseamap.org/), данные CC-BY-SA | © OpenSeaMap contributors |
-| Пешие и велосипедные маршруты Waymarked Trails | [условия Waymarked Trails](https://hiking.waymarkedtrails.org/#help-legal), стиль CC-BY-SA, данные ODbL | © OpenStreetMap contributors, © waymarkedtrails.org |
+| Пешие, велосипедные, конные маршруты, маршруты для горного велосипеда и горнолыжные трассы Waymarked Trails (последние три - с 6 ноября 2026 года) | [условия Waymarked Trails](https://hiking.waymarkedtrails.org/#help-legal), стиль CC-BY-SA, данные ODbL | © OpenStreetMap contributors, © waymarkedtrails.org |
 
 OpenRailwayMap не взят, решение автора от 18 октября 2026 года.
 Железные дороги уже есть строкой векторной основы OpenFreeMap,

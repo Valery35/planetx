@@ -183,6 +183,22 @@ class TestReady(unittest.TestCase):
         self.assertEqual(bm.ready_source("esri_ocean").parallel,
                          bm.OTHER_PARALLEL)
 
+    def test_regional_map_shows_esri_around_country(self):
+        regional = {r[0] for r in bm.READY if r[8] == "regional"}
+        self.assertEqual(regional, set(bm.REGIONS))
+        src = bm.ready_source("swiss_map")
+        self.assertIsInstance(src, bm.RegionalXyz)
+        # Берн, уровень 12 - своя карта, Пермь и мелкий уровень - Esri.
+        self.assertIn("geo.admin.ch", src.tile_url(12, 2132, 1447))
+        self.assertIn("World_Topo_Map", src.tile_url(12, 2688, 1233))
+        self.assertIn("World_Topo_Map", src.tile_url(5, 16, 11))
+        self.assertIn("World_Imagery",
+                      bm.ready_source("swissimage").tile_url(3, 2, 2))
+        for key in regional:
+            src = bm.ready_source(key)
+            z, x, y = src.preview_tile()
+            self.assertTrue(src.inside(z, x, y), key)
+
     def test_bing_uses_quadkey(self):
         src = bm.ready_source("bing_aerial")
         self.assertIn("/a030.jpeg", src.tile_url(3, 2, 2))

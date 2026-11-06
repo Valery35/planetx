@@ -38,6 +38,20 @@ OVERLAYS = {o.key: o for o in (
             "https://tile.waymarkedtrails.org/cycling/{z}/{x}/{y}.png", 18,
             "© OpenStreetMap contributors, © waymarkedtrails.org (CC-BY-SA)",
             WAYMARKED_TERMS),
+    # Ещё три карты Waymarked Trails по списку opengeos/qgis-basemaps,
+    # просьба автора от 6 ноября 2026 года. Проверены тайлом у Церматта.
+    Overlay("mtb",
+            "https://tile.waymarkedtrails.org/mtb/{z}/{x}/{y}.png", 18,
+            "© OpenStreetMap contributors, © waymarkedtrails.org (CC-BY-SA)",
+            WAYMARKED_TERMS),
+    Overlay("slopes",
+            "https://tile.waymarkedtrails.org/slopes/{z}/{x}/{y}.png", 18,
+            "© OpenStreetMap contributors, © waymarkedtrails.org (CC-BY-SA)",
+            WAYMARKED_TERMS),
+    Overlay("riding",
+            "https://tile.waymarkedtrails.org/riding/{z}/{x}/{y}.png", 18,
+            "© OpenStreetMap contributors, © waymarkedtrails.org (CC-BY-SA)",
+            WAYMARKED_TERMS),
 )}
 KEYS = tuple(OVERLAYS)
 
