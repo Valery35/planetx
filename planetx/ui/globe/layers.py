@@ -31,7 +31,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import (aef, hips, oam, polar, tileoverlays,
+from ...core import (hips, oam, polar, tileoverlays,
                      wikipedia)
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
@@ -826,7 +826,7 @@ class LayersMixin:
                     self.set_extra(other, False)
         elif self._field_shown is not None \
                 or self._tilemap_shown is not None \
-                or self.change_tool.shown or self._row_map_shown():
+                or self._row_map_shown():
             # Слой вида занят другой картой.
             self._drop_geology()
             return
@@ -966,19 +966,6 @@ class LayersMixin:
             self.class_legend.set_map(tmap)
         self.class_legend.setVisible(bool(on and tmap.classes))
         self._place_attribution()
-        self._mark_gallery()
-
-    # Изменения местности по эмбеддингам AlphaEarth (ui/aef.py) - тот же
-    # слой вида «emag», на глобусе одна карта.
-
-    def _set_change(self, on):
-        """Строка «Изменения местности»: обзор вида и подробный участок
-        окна. Включение снимает прежнюю карту слоя вида."""
-        if on:
-            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
-                if other != "aef_change" and self.extras.get(other):
-                    self.set_extra(other, False)
-        self.change_tool.set_shown(on and self.planet.earth)
         self._mark_gallery()
 
     # Строки реестра каталога (core/rows.py, ui/registry.py): исполнитель
@@ -1182,8 +1169,6 @@ class LayersMixin:
         elif "emag" in self.gibs_loaders and self._tilemap_shown:
             parts.append(link_html(
                 *tilemaps.MAPS[self._tilemap_shown].attribution))
-        elif "emag" in self.gibs_loaders and self.change_tool.shown:
-            parts.append(link_html(aef.ATTRIBUTION, aef.TERMS))
         elif "emag" in self.gibs_loaders and self._row_map_shown():
             parts.append(link_html(*self.row_tool(
                 self._row_map_shown()).credit()))

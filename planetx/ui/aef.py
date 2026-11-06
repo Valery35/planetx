@@ -33,6 +33,7 @@ from .. import journal
 from ..core import aef, cog
 from ..core.coords import from_utm
 from ..core.mipmap import mip_chain
+from ..core.rows import Row
 from ..i18n import tr
 from ..net import ranges
 from ..qt_compat import enum
@@ -365,6 +366,22 @@ class ChangeTool(QObject):
         settings = QgsSettings()
         return (float(settings.value(SETTINGS + "low", 0.0)),
                 float(settings.value(SETTINGS + "high", 1.0)))
+
+    # Исполнитель строки реестра (core/rows.py).
+
+    @property
+    def shown_key(self):
+        return KEY if self.shown else None
+
+    def turn(self, key, on):
+        self.set_shown(on and self.window.planet.earth)
+        return True
+
+    def identify(self, lat, lon):
+        return []
+
+    def credit(self):
+        return (aef.ATTRIBUTION, aef.TERMS) if self.shown else None
 
     def set_shown(self, on):
         """Строка раздела «Слои»: обзор вида на слое «emag» или ничего."""
@@ -717,3 +734,19 @@ def write_utm(path, index, x0, y0, step, values):
     band.WriteArray(np.asarray(values, dtype=np.float32))
     data = None
     return True
+
+
+# Строка каталога (core/rows.py, ui/registry.py).
+ROWS = (
+    Row(KEY, "change", lambda: (tr("Изменения местности"), tr(
+        "Степень изменения местности между двумя годами по эмбеддингам "
+        "AlphaEarth Foundations - описаниям каждой клетки 10 м за год "
+        "по снимкам и радару. Чёрные - без изменений, жёлтые - "
+        "стройка, вырубка, карьер, разлив. Глобус показывает обзор "
+        "с пикселем 160 м и крупнее, подробный участок и годы - окно "
+        "«Изменения местности» подменю «Анализ участка» меню на "
+        "глобусе.")), ChangeTool,
+        source="AlphaEarth Foundations, Google DeepMind",
+        colors=((0, 0, 0), (70, 60, 10), (255, 245, 30)),
+        fades=("emag",), view_map="emag"),
+)

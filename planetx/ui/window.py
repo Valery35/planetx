@@ -69,7 +69,6 @@ from .inset import DeepSource
 from .contours import ContourExport
 from .hydro import HydroTool
 from .relief import ReliefTool
-from .aef import ChangeTool
 from .aefclass import ClassTool
 from .recognize import RecognizeTool
 from .similar import SimilarTool
@@ -737,8 +736,8 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.hydro = HydroTool(self)
         # Уклон, экспозиция, вершины и ямы квадрата (ui/relief.py).
         self.relief = ReliefTool(self)
-        self.change_tool = ChangeTool(self)
         self._make_row_tools()  # строки реестра каталога
+        self.change_tool = self.row_tool("aef_change")
         self.class_tool = ClassTool(self)
         # Распознавание по точкам со своими снимками (ui/recognize.py).
         self.recognize_tool = RecognizeTool(self)
