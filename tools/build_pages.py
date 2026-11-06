@@ -353,7 +353,28 @@ def page_main(img):
          "Isoliner3D shows geology in three dimensions, PlanetX shows the "
          "whole Earth. All plugins work independently."),
         family() + buttons(main=False))
-    return "\n".join([hero, tasks, idea, controls, worlds, fam])
+    # Ролики YouTube, запись с экрана модуля, загружены 7 ноября 2026 года
+    # по слову автора «Делай» о разделе «Видео».
+    films = (
+        ("SBZWGNFucAQ", "Поезда Финляндии на трёхмерном глобусе",
+         "Finnish trains on the 3D globe"),
+        ("_ZUuWo_Lwng", "Полёт из кабины к Маттерхорну",
+         "A cockpit flight to the Matterhorn"),
+        ("Hmk7zt7aBzk", "Самосвалы в карьере Качканара",
+         "Haul trucks in the Kachkanar open pit"),
+    )
+    video = section(
+        "video", ("Видео", "Video"),
+        ("PlanetX в работе", "PlanetX at work"),
+        ("Запись с экрана QGIS, без монтажа.",
+         "Screen recordings of QGIS, no editing."),
+        trio(*('<figure><iframe class="film" src="https://www.youtube-nocookie'
+               '.com/embed/%s" title="%s" loading="lazy" allow="encrypted-'
+               'media; picture-in-picture; fullscreen" allowfullscreen>'
+               '</iframe>\n<figcaption data-i18n="%s"></figcaption></figure>'
+               % (vid, ru, t("video.%d" % n, ru, en))
+               for n, (vid, ru, en) in enumerate(films, 1))))
+    return "\n".join([hero, video, tasks, idea, controls, worlds, fam])
 
 
 def pair(left, right):
@@ -1301,6 +1322,8 @@ figure.narrow{max-width:620px}
 .release ul{margin:0;padding-left:20px;color:var(--ink-soft);font-size:16px}
 .release li + li{margin-top:6px}
 .release div p{color:var(--ink-soft);font-size:16px}
+.film{width:100%;aspect-ratio:16/9;display:block;border:1px solid var(--line);
+  border-radius:6px;background:#000}
 """
 
 
