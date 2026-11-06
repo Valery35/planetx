@@ -324,6 +324,10 @@ parks. Rivers and lakes are off by default.
 The vector base comes from OpenFreeMap tiles. On the first opening
 borders, places, terrain and stars are on. The tooltip of each row
 tells how the feature is drawn and from what height it is visible.
+From afar the base map names are smaller. Up to a height of 300 km
+the size is full, toward 6000 km it shrinks to 70 percent, and the
+number of labels in the view stays the same. Own placemarks, the
+ruler and project layer labels keep their size.
 
 The grid step follows the camera height, from 30° from space to
 seconds near the ground. The stars stand where they stand over the

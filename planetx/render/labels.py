@@ -48,7 +48,8 @@ from qgis.PyQt.QtGui import (QBrush, QColor, QFont, QFontMetricsF, QImage,
 from ..core import icons
 from ..core.ellipsoid import geodetic_to_ecef, surface_normal
 from ..core.layer_labels import dark
-from ..core.places import KIND, identity, select_labels
+from ..core import ellipsoid
+from ..core.places import KIND, SHRINK, identity, label_scale, select_labels
 from ..i18n import tr
 from ..qt_compat import enum
 from . import gpu
@@ -605,6 +606,7 @@ class Labels:
         self.vbo = None
         self.texture = None
         self.ratio = 1.0
+        self.shrink = 1.0  # доля кегля подписей основы по высоте глаза
         self.styles = {}
         self.entries = {}  # (класс, текст) -> (u0, v0, u1, v1, w, h, ax, ay)
         self.atlas = _Atlas()
@@ -727,7 +729,9 @@ class Labels:
                and place.rank <= BIG_RANK)
         style = self.styles.get(key)
         if style is None:
-            style = self.styles[key] = _Style(key[0], self.ratio, key[1])
+            scale = self.shrink if key[0] in SHRINK else 1.0
+            style = self.styles[key] = _Style(key[0], self.ratio * scale,
+                                              key[1])
         return style
 
     def _layout(self, place, turn=0.0):
@@ -953,10 +957,14 @@ class Labels:
         if self.program is None or not places:
             self.shown = set()
             return 0
-        if ratio != self.ratio:
+        shrink = label_scale(float(np.linalg.norm(camera.eye))
+                             - ellipsoid.A)
+        if ratio != self.ratio or shrink != self.shrink:
             self.ratio = ratio
+            self.shrink = shrink
             self.styles = {}
             self._clear_atlas()
+            self._table_ratio = None  # размеры надписей заново
         self._collect()
         rows = self._rows_of(places)
         if not len(rows):
@@ -1024,8 +1032,18 @@ class Labels:
             size[n] = self._layout(self._places[chosen_rows[n]], turn)
         x0 = x - size[:, 2]
         y0 = y - size[:, 3]
-        boxes = np.stack([x0 - pad, y0 - pad, x0 + size[:, 0] + pad,
-                          y0 + size[:, 1] + pad], axis=1).tolist()
+        # Уменьшенная издалека подпись основы при отборе занимает место
+        # прежнего кегля, иначе на освободившемся месте вставали новые
+        # мелкие подписи и кадр не становился чище.
+        grow = np.zeros((len(chosen_rows), 2))
+        if self.shrink < 1.0:
+            small = np.array([self._places[row].kind in SHRINK
+                              for row in chosen_rows])
+            grow[small] = size[small, :2] * (0.5 / self.shrink - 0.5)
+        boxes = np.stack([x0 - pad - grow[:, 0], y0 - pad - grow[:, 1],
+                          x0 + size[:, 0] + pad + grow[:, 0],
+                          y0 + size[:, 1] + pad + grow[:, 1]],
+                         axis=1).tolist()
         tiers = self._tier[chosen_rows].tolist()
         previous = [n for n, key in enumerate(keys) if key in self.shown]
         chosen = self._thin(select_labels(boxes, tiers, previous),

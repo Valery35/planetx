@@ -357,6 +357,24 @@ class TestMaxHeight(unittest.TestCase):
                          {"city", "country"})
 
 
+class TestLabelScale(unittest.TestCase):
+    """Подписи основы издалека мельче, ступенями."""
+
+    def test_full_near_smaller_far(self):
+        self.assertEqual(pl.label_scale(34e3), 1.0)
+        self.assertEqual(pl.label_scale(pl.LABEL_NEAR), 1.0)
+        self.assertEqual(pl.label_scale(20000e3), pl.LABEL_SMALLEST)
+        steps = [pl.label_scale(h) for h in (500e3, 1000e3, 3000e3, 6000e3)]
+        self.assertEqual(steps, sorted(steps, reverse=True))
+        self.assertLess(steps[-1], 1.0)
+        self.assertTrue(all(round(s * 10) == s * 10 for s in steps))
+
+    def test_own_labels_keep_size(self):
+        for kind in ("mark", "search", "ruler", "layer", "grid", "value"):
+            self.assertNotIn(kind, pl.SHRINK)
+        self.assertTrue(pl.SHRINK <= set(pl.CLASSES))
+
+
 class TestSelect(unittest.TestCase):
 
     def test_overlap_keeps_first(self):

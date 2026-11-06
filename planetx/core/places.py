@@ -56,6 +56,32 @@ KIND = {name: index for index, name in enumerate(CLASSES)}
 PLACE_CLASSES = {"country", "capital", "city", "state", "town", "village",
                  "suburb"}
 
+# Подписи основы издалека мельче. Замечание автора от 7 ноября 2026
+# года - «подписи на экране слишком крупные на удалении», прежде кегль
+# не зависел от высоты. До LABEL_NEAR метров высоты глаза кегль полный,
+# к LABEL_FAR уменьшается до доли LABEL_SMALLEST по логарифму высоты,
+# ступенями LABEL_STEP - на каждой ступени надписи растрируются заново.
+# Свои метки, линейка, подписи слоёв, сетки и погоды не уменьшаются.
+# Величины - выбор помощника, утверждает автор.
+LABEL_NEAR = 300e3
+LABEL_FAR = 6000e3
+LABEL_SMALLEST = 0.7
+LABEL_STEP = 0.1
+SHRINK = {"country", "capital", "city", "state", "water", "town",
+          "river", "suburb", "park", "peak", "airport", "road_ref",
+          "village", "wiki", "plate"}
+
+
+def label_scale(altitude):
+    """Доля кегля подписей основы при высоте глаза altitude, метры."""
+    if not altitude > LABEL_NEAR:
+        return 1.0
+    share = min(1.0, math.log(altitude / LABEL_NEAR)
+                / math.log(LABEL_FAR / LABEL_NEAR))
+    value = 1.0 - (1.0 - LABEL_SMALLEST) * share
+    return round(round(value / LABEL_STEP) * LABEL_STEP, 2)
+
+
 # Начала слов в названии нежилого района - промзоны, кампуса, комплекса.
 # Признака жилья в тайлах подписей нет, слоя landuse на их уровнях тоже,
 # поэтому район без жилья узнаётся по названию. Решение автора от

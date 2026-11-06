@@ -22492,6 +22492,67 @@ def labels_look_wait():
     return None
 
 
+LABELS_FAR = [float(h) for h in os.environ.get(
+    "PLANETX_LABELS_FAR", "34000,1500000,6000000").split(",")]
+
+
+@check(1000)
+def labels_far():
+    # Подписи основы издалека мельче, замечание автора от 7 ноября
+    # 2026 года. Кадры над Европой с нескольких высот, в каждом - доля
+    # кегля и высота надписи крупного города в пикселях кадра.
+    # PLANETX_LABELS_OLD=1 - прежний кегль без уменьшения, для сравнения.
+    from planetx.net.overlay import PLACES, WATER_NAMES
+    from planetx.render import labels as labels_module
+    if os.environ.get("PLANETX_LABELS_OLD"):
+        labels_module.label_scale = lambda altitude: 1.0
+    window = state["window"]
+    window.set_body("earth")
+    window.choose_basemap(0)
+    state["far_groups"] = window.line_groups()
+    window.set_line_groups({PLACES, WATER_NAMES})
+    state["far_heights"] = list(LABELS_FAR)
+    result["labels_far"] = []
+    _labels_far_pose()
+
+
+def _labels_far_pose():
+    from planetx.core.navigation import Pose
+    view = state["window"].view
+    view.navigator.stop()
+    view.navigator.show(Pose(55.0, 37.6, state["far_heights"][0], 0.0,
+                             0.0))
+    view.update()
+    state["far_started"] = time.monotonic()
+
+
+@check(2000)
+def labels_far_wait():
+    window = state["window"]
+    view = window.view
+    labels = view.labels
+    spent = time.monotonic() - state["far_started"]
+    if (view.load_missing or labels.pending or spent < 10.0) \
+            and spent < 90.0:
+        view.update()
+        return 2000
+    height = state["far_heights"].pop(0)
+    big = [labels._style(labels._places[labels._row[key]])
+           for key in labels.shown if key in labels._row
+           and labels._places[labels._row[key]].kind in ("city", "capital")]
+    result["labels_far"].append({
+        "height_km": round(height / 1000.0),
+        "shrink": labels.shrink, "count": labels.count,
+        "city_px": max((s.font.pixelSize() for s in big), default=None)})
+    window.copy_view().save(os.path.join(
+        TEMP, "planetx_labels_far_{}.png".format(round(height / 1000.0))))
+    if state["far_heights"]:
+        _labels_far_pose()
+        return 2000
+    window.set_line_groups(state["far_groups"])
+    return None
+
+
 POST135 = tuple(map(float, os.environ.get(
     "PLANETX_POST135", "58.005,56.175").split(",")))  # Черняевский лес
 POST135_SIDE = float(os.environ.get("PLANETX_POST135_SIDE", "5"))
