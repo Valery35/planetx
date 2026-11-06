@@ -579,6 +579,14 @@ class TestPictures(unittest.TestCase):
         self.assertIsNone(places["Plain"].picture)
         self.assertEqual(places["P0"].label_scale, 0.0)
 
+    def test_picture_needs_kmz(self):
+        # Сцена с одними значками-картинками без наложений писалась
+        # KML и теряла картинки.
+        self.assertTrue(kml.needs_kmz(self._tree()))
+        plain = kml.KFolder("p")
+        plain.children.append(kml.KPlace("Plain", "point", [(58.0, 60.0)]))
+        self.assertFalse(kml.needs_kmz(plain))
+
     def test_same_picture_is_one_file(self):
         tree = self._tree()
         files = kml.picture_files(tree, "files/")

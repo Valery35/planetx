@@ -1924,6 +1924,15 @@ def picture_files(folder, prefix):
     return files
 
 
+def needs_kmz(folder):
+    """Нужен ли дереву архив KMZ: есть файл наложения или модели или
+    своя картинка значка точки. Без архива такие файлы терялись бы."""
+    if any(item.image for item in folder.overlays()):
+        return True
+    return any(getattr(place, "picture", None)
+               for place in point_places(folder))
+
+
 def write_kmz(folder):
     """Байты KMZ: архив с doc.kml, картинками наложений в files/
     и файлами моделей в models/."""

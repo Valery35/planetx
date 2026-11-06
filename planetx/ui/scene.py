@@ -23,7 +23,7 @@ from qgis.PyQt.QtCore import QDateTime, Qt
 
 from ..core import when
 from ..core import models
-from ..core.kml import read_file, write_kml, write_kmz
+from ..core.kml import needs_kmz, read_file, write_kml, write_kmz
 from ..core.places import LABEL_LANGUAGES, LOCAL, AS_QGIS
 from ..core.scene import Scene
 from .project import read_insets
@@ -141,9 +141,9 @@ def capture(window, folder=None, name=""):
             if item.kind == "model" and item.image is None and item.href:
                 # Модель по ссылке едет в сцене своими файлами.
                 item.image = models.package_file(item.href)
-        # Картинки наложений и файлы моделей едут в сцене архивом KMZ.
-        files = any(item.image for item in tree.overlays())
-        kml = write_kmz(tree) if files else write_kml(tree)
+        # Картинки наложений, файлы моделей и свои картинки значков
+        # едут в сцене архивом KMZ.
+        kml = write_kmz(tree) if needs_kmz(tree) else write_kml(tree)
     scene = Scene((pose.lat, pose.lon, pose.distance, pose.heading,
                    pose.tilt), time, layers, view, places, name,
                   body=window.planet.key)
