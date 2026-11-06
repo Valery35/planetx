@@ -32,8 +32,10 @@ class TestAddress(unittest.TestCase):
                          "planetx/main/x/demos.kml")
         self.assertEqual(nl.resolve("https://a.org/b.kml", BASE),
                          "https://a.org/b.kml")
-        self.assertEqual(nl.resolve("sub/b.kml", r"C:\data\link.kml"),
-                         os.path.normpath(r"C:\data\sub\b.kml"))
+        if os.name == "nt":
+            # Путь Windows с буквой диска разбирается только на Windows.
+            self.assertEqual(nl.resolve("sub/b.kml", r"C:\data\link.kml"),
+                             os.path.normpath(r"C:\data\sub\b.kml"))
 
     def test_tree_links_resolved(self):
         tree = kml.KFolder("t", children=[
