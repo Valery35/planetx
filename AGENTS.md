@@ -10468,20 +10468,20 @@ Search, QGIS 4.0.3.
 источников XYZ, модуль брал по более короткому списку RustGIS. Взяты
 TopPlusOpen BKG (мир, Европа подробно) и серая, basemap.de Германии,
 swisstopo карта, серая и SWISSIMAGE, PDOK карта, серая, пастель
-и аэрофото - группа 
-ational в asemap.READY_GROUPS, строки
-«Подосновы». Районные карты - вид «regional», REGIONS и
-RegionalXyz: в рамке страны и не мельче своего уровня (7-8, тайл не
+и аэрофото - группа `national` в `basemap.READY_GROUPS`, строки
+«Подосновы». Районные карты - вид «regional», `REGIONS` и
+`RegionalXyz`: в рамке страны и не мельче своего уровня (7-8, тайл не
 шире района вдвое) - свои тайлы, иначе Esri World Topo Map, у
 аэрофото World Imagery - без этого мир вокруг страны был белым. Превью
-каталога - тайл района (preview_tile). Наложения Waymarked Trails -
-mtb, slopes, iding в core/tileoverlays.py. Не взяты - CARTO
+каталога - тайл района (`preview_tile`). Наложения Waymarked Trails -
+`mtb`, `slopes`, `riding` в `core/tileoverlays.py`. Не взяты - CARTO
 (с ноября 2026 года тайл «API KEY REQUIRED»), OpenSnowMap (условий нет),
 OpenFireMap (404), Strava (вход), OpenAIP (некоммерческая), OneMapSG,
 Gaode, HikeBike. Рамки, уровни и подложка вокруг - выбор помощника,
 утверждает автор. Проверка - тест
-	est_basemap.test_regional_map_shows_esri_around_country, шаги
-eady_*, eady_national_wait, eady_national_far, gallery_bases*,
-catalog_layout*, 	ile_overlays_*, QGIS 4.0.3 - 41 строка «Подосновы»,
+`test_basemap.test_regional_map_shows_esri_around_country`, шаги
+`ready_*`, `ready_national_wait`, `ready_national_far`, `gallery_bases*`,
+`catalog_layout*`, `tile_overlays_*`, QGIS 4.0.3 - 41 строка «Подосновы»,
 у Берна 278 тайлов swisstopo без отказов, с 4000 км вокруг Швейцарии
-Esri, кадры смотрены, ошибок 0.
+Esri, кадры смотрены, ошибок 0. Кадр для постов - ручной шаг
+`post_national_shot`.
