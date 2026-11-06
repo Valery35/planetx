@@ -1,0 +1,103 @@
+# -*- coding: utf-8 -*-
+# PlanetX - трёхмерный глобус для QGIS.
+# Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
+"""Реестр строк каталога «Добавить данные» и раздела «Слои».
+
+Строка описывает себя одной записью Row в своём файле ui/<строка>.py:
+ключ, группа каталога, источник, цвета превью, слова строки «Поиск», слои
+вида, которые гасит ползунок непрозрачности, общий слой вида одной карты,
+название и подсказка, исполнитель у окна глобуса. Каталог, строка «Поиск»
+и окно глобуса обходят реестр и не знают строку по имени. Решение автора
+от 7 ноября 2026 года, правило «Как снять перегруз» doc/PLAN.md Lite.
+
+Исполнитель - класс, его экземпляр один на окно и на все строки с этим
+классом. Он даёт turn(key, on), shown_key (ключ показанной строки или
+None), identify(lat, lon) - группы окна «Объекты», credit() - (текст,
+адрес) подписи источников или None, close().
+"""
+
+
+class RowError(ValueError):
+    """Ошибка описания строки или повтор ключа."""
+
+
+class Row:
+    """Описание строки каталога."""
+
+    def __init__(self, key, group, names, tool=None, source="",
+                 colors=(), words=(), fades=(), view_map=None,
+                 default=False, earth=True):
+        if not key or not group:
+            raise RowError("row needs key and group")
+        if not callable(names):
+            raise RowError("names of {} must be callable".format(key))
+        self.key = key
+        self.group = group
+        self.names = names  # () -> (название, подсказка), через tr
+        self.tool = tool
+        self.source = source
+        self.colors = tuple(colors)
+        self.words = tuple(words)
+        self.fades = tuple(fades)
+        self.view_map = view_map  # общий слой вида, на глобусе одна карта
+        self.default = bool(default)
+        self.earth = bool(earth)
+
+
+class Registry:
+    """Строки по порядку регистрации."""
+
+    def __init__(self):
+        self.rows = []
+        self.by_key = {}
+
+    def add(self, *rows):
+        for row in rows:
+            if row.key in self.by_key:
+                raise RowError("repeated row key {}".format(row.key))
+            self.rows.append(row)
+            self.by_key[row.key] = row
+        return self
+
+    def get(self, key):
+        return self.by_key.get(key)
+
+    def keys(self):
+        return tuple(row.key for row in self.rows)
+
+    def defaults(self):
+        return {row.key: row.default for row in self.rows}
+
+    def earth_keys(self):
+        return tuple(row.key for row in self.rows if row.earth)
+
+    def fades(self):
+        return {row.key: row.fades for row in self.rows if row.fades}
+
+    def view_maps(self, layer):
+        """Ключи строк, которые делят слой вида layer."""
+        return tuple(row.key for row in self.rows if row.view_map == layer)
+
+    def groups(self):
+        """Пары (ключ, группа каталога) по порядку."""
+        return tuple((row.key, row.group) for row in self.rows)
+
+    def sources(self):
+        return {row.key: row.source for row in self.rows}
+
+    def colors(self):
+        return {row.key: row.colors for row in self.rows if row.colors}
+
+    def words(self):
+        return {row.key: row.words for row in self.rows if row.words}
+
+    def names(self):
+        return {row.key: row.names() for row in self.rows}
+
+    def tools(self):
+        """Классы исполнителей без повторов, по порядку."""
+        out = []
+        for row in self.rows:
+            if row.tool is not None and row.tool not in out:
+                out.append(row.tool)
+        return out

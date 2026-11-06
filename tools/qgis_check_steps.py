@@ -19477,7 +19477,7 @@ def ftw_wait():
     from planetx.core import fieldmap
     window = state["window"]
     layer = window.view.gibs["emag"]
-    tiles = window.field_tool.tiles
+    tiles = window.row_tool("ftw_2025").tiles
     waited = time.monotonic() - state["ftw_started"]
     if len(layer.textures) < 6 and waited < 90.0:
         return 1000
@@ -19508,8 +19508,8 @@ def ftw_wait():
             hit = (lat, lon)
             break
     if hit is not None:
-        out["score"] = window.field_tool.under(*hit)
-        out["group"] = bool(window._identify_fieldmap(*hit))
+        out["score"] = window.row_tool("ftw_2025").under(*hit)
+        out["group"] = bool(window.row_tool("ftw_2025").identify(*hit))
     window.view.grabFramebuffer().save(os.path.join(TEMP,
                                                     "planetx_fields.png"))
 
@@ -19520,17 +19520,18 @@ def ftw_close():
     window = state["window"]
     out = result["ftw"]
     window.set_extra("ftw_2024", True)
-    out["year"] = [window.field_tool.year,
+    out["year"] = [window.row_tool("ftw_2025").year,
                    window.extras.get("ftw_2025"),
-                   window.field_tool.tiles.year]
+                   window.row_tool("ftw_2025").tiles.year]
     window.set_extra("geology", True)
-    out["taken"] = [window.field_tool.year, window.extras.get("ftw_2024"),
+    out["taken"] = [window.row_tool("ftw_2025").year,
+                    window.extras.get("ftw_2024"),
                     type(window.view.gibs["emag"].loader).__name__]
     window.set_extra("geology", False)
     window.set_extra("ftw_2025", True)
     window.set_extra("ftw_2025", False)
     layer = window.view.gibs["emag"]
-    out["off"] = [window.field_tool.year, layer.min_level,
+    out["off"] = [window.row_tool("ftw_2025").year, layer.min_level,
                   layer.loader is None, window.field_legend.isVisible()]
 
 

@@ -31,6 +31,7 @@ from ..handles import CLICK_PIXELS, DrawVertices
 from ..measure import GRAB_PIXELS
 from ..inset import apply as apply_insets
 from ..nasamaps import LAYERS as GALLERY_LAYERS
+from ..registry import ROWS
 
 
 # Папка модуля planetx: части окна лежат в ui/globe.
@@ -67,7 +68,7 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "water_transitions": ("emag",), "soil_clay": ("emag",),
               "soil_sand": ("emag",), "soil_soc": ("emag",),
               "soil_ph": ("emag",), "aef_change": ("emag",),
-              "ftw_2025": ("emag",), "ftw_2024": ("emag",)}
+              **ROWS.fades()}
 QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm",
                "cables") + tileoverlays.KEYS
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
@@ -200,7 +201,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "water_transitions": False, "soil_clay": False,
                   "soil_sand": False, "soil_soc": False, "soil_ph": False,
                   "wiki": False, "aef_change": False,
-                  "ftw_2025": False, "ftw_2024": False,
+                  **ROWS.defaults(),
                   **{key: False for key in tileoverlays.KEYS}}
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
@@ -216,11 +217,11 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "faults", "geology", "iscgem", "glim", "worldcover",
                 "water_occurrence",
                 "water_transitions", "soil_clay", "soil_sand", "soil_soc",
-                "soil_ph", "wiki", "aef_change", "ftw_2025",
-                "ftw_2024") + tileoverlays.KEYS
+                "soil_ph", "wiki", "aef_change") + tileoverlays.KEYS \
+    + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.
-EMAG_MAPS = ("geology", "aef_change", "ftw_2025", "ftw_2024")
+EMAG_MAPS = ("geology", "aef_change") + ROWS.view_maps("emag")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}

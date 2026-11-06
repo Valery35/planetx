@@ -19,6 +19,7 @@ from qgis.PyQt.QtGui import QColor, QImage, QPainter, QPainterPath, QPen
 from ..core import fieldmap, pmtiles, watermask
 from ..core.mipmap import mip_chain
 from ..core.places import DecodeError
+from ..core.rows import Row
 from ..i18n import tr
 from ..net import ranges
 from ..qt_compat import enum
@@ -121,7 +122,8 @@ class _Scale:
 
 
 class FieldTool(QObject):
-    """Строки «Поля» у окна глобуса: показанный год или None."""
+    """Строки «Поля» у окна глобуса: показанный год или None.
+    Исполнитель строк реестра (core/rows.py)."""
 
     def __init__(self, window):
         super().__init__(window)
@@ -132,6 +134,38 @@ class FieldTool(QObject):
     @property
     def key(self):
         return fieldmap.KEYS.get(self.year)
+
+    shown_key = key
+
+    def turn(self, key, on):
+        """Строка реестра: год строки на слое вида или снять его. Ложь -
+        слой вида занят другой картой, снимать нечего."""
+        if on:
+            year = next(y for y, k in fieldmap.KEYS.items() if k == key)
+            self.set_year(year if self.window.planet.earth else None)
+        elif self.key == key:
+            self.set_year(None)
+        else:
+            return False
+        return True
+
+    def identify(self, lat, lon):
+        """Группа окна «Объекты»: оценка поля под щелчком."""
+        from .identify import Group
+        score = self.under(lat, lon)
+        if score is None:
+            return []
+        values = [(tr("Оценка модели"), tr("{score} из 100",
+                                           score=int(score + 0.5))),
+                  (tr("Что это"), tr("Оценка модели по снимкам Sentinel-2, "
+                                     "не кадастровый участок."))]
+        title = tr("Поле {year} года", year=self.year)
+        return [(Group(tr("Границы полей")), [(title, values, None)])]
+
+    def credit(self):
+        if self.year:
+            return fieldmap.ATTRIBUTION, fieldmap.TERMS
+        return None
 
     def set_year(self, year):
         """Показать поля года на слое «emag» или снять их, year None."""
@@ -177,3 +211,26 @@ class FieldTool(QObject):
 
     def close(self):
         self._drop_tiles()
+
+
+# Строки каталога (core/rows.py, ui/registry.py).
+COLORS = ((254, 195, 121), (243, 250, 187), (51, 160, 44))
+SOURCE = "Fields of the World"
+ROWS = (
+    Row("ftw_2025", "life", lambda: (tr("Границы полей 2025"), tr(
+        "Границы сельскохозяйственных полей мира за 2025 год - оценка "
+        "модели по снимкам Sentinel-2, а не кадастр. Цвет - оценка "
+        "модели от оранжевого к зелёному, поля с оценкой ниже 69 "
+        "не показаны. Поля видны вблизи, с высоты около 70 км и "
+        "ниже. Щелчок в режиме «Определить объекты» показывает "
+        "оценку.")), FieldTool, source=SOURCE, colors=COLORS,
+        words=("границы полей", "поля", "пашня 2025", "fields of the world",
+               "field boundaries"), fades=(LAYER,), view_map=LAYER),
+    Row("ftw_2024", "life", lambda: (tr("Границы полей 2024"), tr(
+        "Границы сельскохозяйственных полей мира за 2024 год, тот же "
+        "набор и та же оценка модели, что у строки за 2025 год. Поля "
+        "видны вблизи, с высоты около 70 км и ниже.")), FieldTool,
+        source=SOURCE, colors=COLORS,
+        words=("границы полей 2024", "поля 2024", "пашня 2024",
+               "field boundaries 2024"), fades=(LAYER,), view_map=LAYER),
+)

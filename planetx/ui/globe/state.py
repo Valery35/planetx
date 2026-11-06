@@ -27,6 +27,7 @@ from ...i18n import is_russian, tr
 from ...net.overlay import VECTOR_GROUPS, fetch_bytes
 from ...qt_compat import enum
 from ..tilesource import TileSourceDialog
+from ..registry import ROWS
 from ..nasamaps import ANY_BODY, RELIEF_BODY, layer_names, map_names
 from .. import export as layer_export
 from .. import style
@@ -300,7 +301,10 @@ class StateMixin:
             # Облака, температура, здания и солнце - земные. Флажок
             # помнится и действует после возврата на Землю.
             on = False
-        if key == "grid":
+        row = ROWS.get(key)
+        if row is not None:
+            self._turn_row(row, on)
+        elif key == "grid":
             self._grid_key = None
             self._update_grid()
         elif key == "stars":
@@ -371,8 +375,6 @@ class StateMixin:
             self._set_tilemap(key, on)
         elif key == "aef_change":
             self._set_change(on)
-        elif key in ("ftw_2025", "ftw_2024"):
-            self._set_fieldmap(key, on)
         elif key == "iscgem":
             self._set_history(on)
         elif key == "magpoles":

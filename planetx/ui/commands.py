@@ -19,6 +19,7 @@ from ..core import basemap
 from ..core.searchbar import Suggestion
 from ..i18n import is_russian, tr
 from .nasamaps import ANY_BODY, LAYERS, RELIEF_BODY, layer_names, map_names
+from .registry import ROWS
 
 # Строки группы «Карта» раздела «Слои»: ключ - название.
 MAP_ROWS = ("grid", "buildings", "contours", "cadastre", "infra_osm",
@@ -27,6 +28,7 @@ MAP_ROWS = ("grid", "buildings", "contours", "cadastre", "infra_osm",
 ANY_PLANET = ANY_BODY + RELIEF_BODY + ("grid", "contours")
 # Другие слова слоёв и карт: ключ - слова.
 WORDS = {
+    **ROWS.words(),
     "stars": ("звёзды", "небо", "млечный путь", "stars", "milky way"),
     "air": ("атмосфера", "воздух", "дымка", "гало", "atmosphere", "haze",
             "air"),
@@ -55,10 +57,6 @@ WORDS = {
     "worldcover": ("покрытие земель", "растительность", "лес", "пашня",
                    "застройка", "землепользование", "worldcover",
                    "land cover"),
-    "ftw_2025": ("границы полей", "поля", "пашня 2025", "fields of the world",
-                 "field boundaries"),
-    "ftw_2024": ("границы полей 2024", "поля 2024", "пашня 2024",
-                 "field boundaries 2024"),
     "water_occurrence": ("повторяемость воды", "поверхностные воды",
                          "вода landsat", "jrc", "surface water",
                          "water occurrence"),

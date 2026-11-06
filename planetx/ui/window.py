@@ -70,7 +70,6 @@ from .contours import ContourExport
 from .hydro import HydroTool
 from .relief import ReliefTool
 from .aef import ChangeTool
-from .fieldmap import FieldTool
 from .aefclass import ClassTool
 from .recognize import RecognizeTool
 from .similar import SimilarTool
@@ -739,7 +738,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Уклон, экспозиция, вершины и ямы квадрата (ui/relief.py).
         self.relief = ReliefTool(self)
         self.change_tool = ChangeTool(self)
-        self.field_tool = FieldTool(self)
+        self._make_row_tools()  # строки реестра каталога
         self.class_tool = ClassTool(self)
         # Распознавание по точкам со своими снимками (ui/recognize.py).
         self.recognize_tool = RecognizeTool(self)
@@ -1045,7 +1044,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             and hasattr(self.site_layer.owner, "clear") \
             and self.site_layer.owner.clear()
         self.field_legend.closer = lambda: self.set_extra(
-            self._field_shown or self._tilemap_shown or self.field_tool.key
+            self._field_shown or self._tilemap_shown or self._row_map_shown()
             or "aef_change", False)
         self.route_manager.finished.connect(self._route_done)
         self.panel.route_link.connect(self.route_manager.link)
@@ -1169,7 +1168,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.relief.timer.stop()
             self.relief._drop_tiles()
             self.change_tool.close()
-            self.field_tool.close()
+            self._close_rows()
             self.class_tool.close()
             self.recognize_tool.close()
             self.similar_tool.close()

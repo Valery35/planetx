@@ -31,7 +31,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import (aef, fieldmap, hips, oam, polar, tileoverlays,
+from ...core import (aef, hips, oam, polar, tileoverlays,
                      wikipedia)
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
@@ -49,6 +49,7 @@ from ...net.overlay import (LINE_GROUPS, RAIL_FROM, RAILWAYS, label_kinds,
 from ...qt_compat import enum
 from ...render.view import start_keys
 from ..identify import Group
+from ..registry import ROWS
 from ..legend import class_names, class_titles, field_titles
 from ..layer_labels import range_key
 from ..project import (AUTO_REFRESH, FOLLOW, SIDE_SWIPE, is_copy,
@@ -825,7 +826,7 @@ class LayersMixin:
                     self.set_extra(other, False)
         elif self._field_shown is not None \
                 or self._tilemap_shown is not None \
-                or self.change_tool.shown or self.field_tool.year:
+                or self.change_tool.shown or self._row_map_shown():
             # Слой вида занят другой картой.
             self._drop_geology()
             return
@@ -980,39 +981,48 @@ class LayersMixin:
         self.change_tool.set_shown(on and self.planet.earth)
         self._mark_gallery()
 
-    # Границы полей Fields of the World (ui/fieldmap.py) - тот же слой
-    # вида «emag», на глобусе одна карта.
+    # Строки реестра каталога (core/rows.py, ui/registry.py): исполнитель
+    # строки один на окно, окно обходит строки и не знает их по имени.
 
-    def _set_fieldmap(self, key, on):
-        """Строка «Поля»: год строки на слое вида. Включение снимает
-        прежнюю карту слоя, выключение - только свой год."""
-        tool = self.field_tool
-        if on:
+    def _make_row_tools(self):
+        self.row_tools = {cls: cls(self) for cls in ROWS.tools()}
+
+    def row_tool(self, key):
+        row = ROWS.get(key)
+        tools = getattr(self, "row_tools", {})  # до _make_row_tools
+        return None if row is None else tools.get(row.tool)
+
+    def _row_map_shown(self, layer="emag"):
+        """Ключ строки реестра, чья карта на слое вида layer, или None."""
+        for key in ROWS.view_maps(layer):
+            tool = self.row_tool(key)
+            if tool is not None and tool.shown_key == key:
+                return key
+        return None
+
+    def _turn_row(self, row, on):
+        """Включить или снять строку реестра. Карта общего слоя вида
+        снимает прежнюю карту этого слоя."""
+        if on and row.view_map == "emag":
             for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
-                if other != key and self.extras.get(other):
+                if other != row.key and self.extras.get(other):
                     self.set_extra(other, False)
-            year = next(y for y, k in fieldmap.KEYS.items() if k == key)
-            tool.set_year(year if self.planet.earth else None)
-        elif tool.key == key:
-            tool.set_year(None)
-        else:
+        tool = self.row_tool(row.key)
+        if tool is None or not tool.turn(row.key, on):
             return  # слой вида занят другой картой
         self._show_attribution()
         self._place_attribution()
         self._mark_gallery()
 
-    def _identify_fieldmap(self, lat, lon):
-        """Группа окна «Объекты»: оценка поля под щелчком."""
-        tool = self.field_tool
-        score = tool.under(lat, lon)
-        if score is None:
-            return []
-        values = [(tr("Оценка модели"), tr("{score} из 100",
-                                           score=int(score + 0.5))),
-                  (tr("Что это"), tr("Оценка модели по снимкам Sentinel-2, "
-                                     "не кадастровый участок."))]
-        title = tr("Поле {year} года", year=tool.year)
-        return [(Group(tr("Границы полей")), [(title, values, None)])]
+    def _identify_rows(self, lat, lon):
+        groups = []
+        for tool in getattr(self, "row_tools", {}).values():
+            groups += tool.identify(lat, lon)
+        return groups
+
+    def _close_rows(self):
+        for tool in self.row_tools.values():
+            tool.close()
 
     def _ask_tilemap(self, lat, lon):
         """Значение карты под щелчком: запрос GetFeatureInfo службы или
@@ -1174,8 +1184,9 @@ class LayersMixin:
                 *tilemaps.MAPS[self._tilemap_shown].attribution))
         elif "emag" in self.gibs_loaders and self.change_tool.shown:
             parts.append(link_html(aef.ATTRIBUTION, aef.TERMS))
-        elif "emag" in self.gibs_loaders and self.field_tool.year:
-            parts.append(link_html(fieldmap.ATTRIBUTION, fieldmap.TERMS))
+        elif "emag" in self.gibs_loaders and self._row_map_shown():
+            parts.append(link_html(*self.row_tool(
+                self._row_map_shown()).credit()))
         if self._geoid_on():
             parts.append(link_html(*geoid.ATTRIBUTION))
         overture = self.buildings_loader is not None \
