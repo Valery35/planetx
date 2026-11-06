@@ -14435,6 +14435,41 @@ def many_marks():
 
 
 @check(1000)
+def post_national_shot():
+    """Кадр для поста 1.41: карта swisstopo на рельефе у Юнгфрау,
+    «Копией вида». Источник ставится без записи в настройки - шаг
+    ready_cleanup или прежняя подложка возвращает своё. Файл - TEMP."""
+    from planetx.core import basemap
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    view = window.view
+    look = state.setdefault("post_nat", {"since": None})
+    if look["since"] is None:
+        window.set_body("earth")
+        look["before"] = window.source
+        key = os.environ.get("PLANETX_POST_BASE", "swiss_map")
+        window._switch_basemap(basemap.ready_source(key))
+        view.navigator.show(Pose(46.62, 7.93, 26000.0, 0.0, 55.0))
+        view.update()
+        look["since"] = time.monotonic()
+        return 3000
+    waited = time.monotonic() - look["since"]
+    if view.load_missing and waited < 90:
+        view.update()
+        return 1000
+    if not look.get("settle"):
+        look["settle"] = True
+        return 4000
+    image = window.copy_view()
+    path = os.path.join(TEMP, "planetx_post_national.png")
+    image.save(path)
+    result["post_national"] = {"path": path, "waited": round(waited, 1),
+                               "source": window.source.name}
+    window._switch_basemap(look["before"])
+    return None
+
+
+@check(1000)
 def post_insolation_shot():
     """Кадр для поста 1.7: инсоляция центра Перми со зданиями
     21 декабря, круг PLANETX_POST_RADIUS км, кадр «Копией вида» -
