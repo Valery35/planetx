@@ -33,6 +33,18 @@ SETTINGS = {
 }
 
 
+class TestSceneKey(unittest.TestCase):
+    """Ключ подложки сцены planetx-scene, DECISIONS.md пункт 7."""
+
+    def test_keys(self):
+        self.assertEqual(bm.basemap_key(bm.esri_imagery()), "esri")
+        self.assertEqual(bm.basemap_key(bm.osm()), "osm")
+        key = bm.READY_KEYS[0]
+        self.assertEqual(bm.basemap_key(bm.ready_source(key)), key)
+        own = bm.Source("Моя", "https://example.org/{z}/{x}/{y}.png")
+        self.assertEqual(bm.basemap_key(own), "")
+
+
 class TestUrl(unittest.TestCase):
 
     def test_xyz(self):

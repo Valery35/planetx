@@ -23,6 +23,7 @@ from qgis.PyQt.QtCore import QDateTime, Qt
 
 from ..core import when
 from ..core import models
+from ..core.basemap import basemap_key
 from ..core.kml import needs_kmz, read_file, write_kml, write_kmz
 from ..core.places import LABEL_LANGUAGES, LOCAL, AS_QGIS
 from ..core.scene import Scene
@@ -113,7 +114,8 @@ def capture(window, folder=None, name=""):
     span = window._time_range
     if span is not None and all(math.isfinite(v) for v in span):
         time = {"start": when.text(span[0]), "end": when.text(span[1])}
-    view = {"basemap": window.sources[window._basemap].name,
+    source = window.sources[window._basemap]
+    view = {"basemap": source.name,
             "relief": bool(window._relief), "scale": float(window._scale),
             "groups": sorted(window._groups),
             "language": window._language,
@@ -123,6 +125,10 @@ def capture(window, folder=None, name=""):
             # Сцена знает о врезках своего рельефа. В прежних сценах
             # поля нет, врезки проекта при открытии остаются.
             "insets": len(reliefs)}
+    key = basemap_key(source)
+    if key:
+        # Ключ подложки, planetx-scene DECISIONS.md, пункт 7.
+        view["basemap_key"] = key
     wedge = window.view.wedge
     if wedge is not None:
         # Сектор разреза Земли: запад, восток, юг, север, градусы.
@@ -176,8 +182,11 @@ def apply(window, scene, kml=b""):
     # настройки вида на другом теле остаются выключенными.
     window.set_body(scene.body)
     view = scene.view
+    keys = [basemap_key(source) for source in window.sources]
     names = [source.name for source in window.sources]
-    if view.get("basemap") in names:
+    if view.get("basemap_key") and view["basemap_key"] in keys:
+        window.choose_basemap(keys.index(view["basemap_key"]))
+    elif view.get("basemap") in names:
         window.choose_basemap(names.index(view["basemap"]))
     if "relief" in view:
         window.set_relief(bool(view["relief"]))

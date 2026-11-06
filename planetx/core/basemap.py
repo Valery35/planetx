@@ -163,6 +163,16 @@ def builtins():
     return [esri_imagery(), osm()]
 
 
+def basemap_key(source):
+    """Ключ подложки для сцены (planetx-scene, поле view.basemap_key):
+    ключ READY, esri или osm у встроенной, иначе пустая строка."""
+    if getattr(source, "ready", ""):
+        return source.ready
+    if getattr(source, "builtin", False):
+        return {ESRI_URL: "esri", OSM_URL: "osm"}.get(source.url, "")
+    return ""
+
+
 def quadkey(z, x, y):
     """Номер тайла Bing: цифры 0-3 от уровня 1 до z."""
     digits = []
