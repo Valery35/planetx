@@ -371,8 +371,6 @@ class StateMixin:
             self._set_faults(on)
         elif key == "geology":
             self._set_geology(on)
-        elif key in tilemaps.MAPS:
-            self._set_tilemap(key, on)
         elif key == "iscgem":
             self._set_history(on)
         elif key == "magpoles":

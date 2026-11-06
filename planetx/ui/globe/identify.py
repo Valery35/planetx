@@ -369,7 +369,7 @@ class IdentifyMixin:
         self._ask_parcels(lat, lon)
         self._ask_field(lat, lon)
         self._ask_geology(lat, lon)
-        self._ask_tilemap(lat, lon)
+        self._ask_rows(lat, lon)
         self._ask_wayback(lat, lon)
         self._show_identified()
 
@@ -478,7 +478,6 @@ class IdentifyMixin:
         groups += self._identify_magnetic(lat, lon)
         groups += self._identify_field()
         groups += self._identify_geology()
-        groups += self._identify_tilemap()
         groups += self._identify_rows(lat, lon)
         groups += self._identify_wayback()
         groups += self._identify_site(lat, lon, height)

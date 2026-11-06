@@ -63,11 +63,6 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "emag": ("emag",), "seafloor_age": ("emag",),
               "heatflow": ("emag",), "gravity": ("emag",),
               "bouguer": ("emag",), "geology": ("emag",),
-              "glim": ("emag",), "worldcover": ("emag",),
-              "water_occurrence": ("emag",),
-              "water_transitions": ("emag",), "soil_clay": ("emag",),
-              "soil_sand": ("emag",), "soil_soc": ("emag",),
-              "soil_ph": ("emag",),
               **ROWS.fades()}
 QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm",
                "cables") + tileoverlays.KEYS
@@ -196,10 +191,6 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "platemotion": False,
                   "volcanoes": False, "faults": False,
                   "geology": False, "air": True, "iscgem": False,
-                  "glim": False, "worldcover": False,
-                  "water_occurrence": False,
-                  "water_transitions": False, "soil_clay": False,
-                  "soil_sand": False, "soil_soc": False, "soil_ph": False,
                   "wiki": False,
                   **ROWS.defaults(),
                   **{key: False for key in tileoverlays.KEYS}}
@@ -214,10 +205,8 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cables", "currents", "cadastre", "magpoles", "emag",
                 "geoid", "magdecl", "seafloor_age", "heatflow",
                 "gravity", "bouguer", "platemotion", "volcanoes",
-                "faults", "geology", "iscgem", "glim", "worldcover",
-                "water_occurrence",
-                "water_transitions", "soil_clay", "soil_sand", "soil_soc",
-                "soil_ph", "wiki") + tileoverlays.KEYS \
+                "faults", "geology", "iscgem",
+                "wiki") + tileoverlays.KEYS \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.

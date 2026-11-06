@@ -50,7 +50,6 @@ from ...qt_compat import enum
 from ...render.view import start_keys
 from ..identify import Group
 from ..registry import ROWS
-from ..legend import class_names, class_titles, field_titles
 from ..layer_labels import range_key
 from ..project import (AUTO_REFRESH, FOLLOW, SIDE_SWIPE, is_copy,
                        legend_shown, map_layers, layer_group,
@@ -74,7 +73,7 @@ from .base import (AUTO_DEFAULT, COORDS_KEY, CREDIT_LINK, DATA_DIR, DECL_EAST,
                    POLE_WIDTH, REFRESH_DELAY, SELECTION_DELAY, SKY_ATTRIBUTION,
                    TILE_SIZE, attribution_html, imagery_preparer,
                    label_languages, link_html, places_decoder, prepare_field,
-                   prepare_geology, prepare_tilemap)
+                   prepare_geology)
 
 
 def field_texts():
@@ -927,47 +926,6 @@ class LayersMixin:
                                  or tr("Без названия"), values, None))
         return [(Group(tr("Геология")), features)]
 
-    # Карты картинками (core/tilemaps.py) - литология GLiM, воды JRC,
-    # почвы SoilGrids. Тот же слой вида «emag», на глобусе одна карта.
-
-    def _set_tilemap(self, key, on):
-        """Строка карты картинками: тайлы службы или planetx-terrain,
-        цвет «нет данных» прозрачен, шкала. Включение снимает прежнюю
-        карту слоя вида."""
-        tmap = tilemaps.MAPS[key]
-        if on:
-            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
-                if other != key and self.extras.get(other):
-                    self.set_extra(other, False)
-        elif self._tilemap_shown != key:
-            return  # слой вида занят другой картой
-        on = on and self.planet.earth
-        self._drop_tilemap()
-        made = None
-        if on:
-            self.view.gibs["emag"].max_level = tmap.max_level
-            if tmap.coarse:
-                source = basemap.SplitSource(
-                    key, self.tilemap_urls[key], self.tilemap_coarse[key],
-                    tmap.split, tmap.max_level, tmap.attribution,
-                    builtin=True)
-            else:
-                kind = basemap.WmsSource if tmap.wms else basemap.Source
-                source = kind(key, self.tilemap_urls[key], tmap.max_level,
-                              tmap.attribution, builtin=True)
-            made = (source, partial(prepare_tilemap, key))
-        self._tilemap_shown = key if on else None
-        self._set_gibs("emag", on, made=made, cache=True)
-        ramp = on and tmap.stops is not None
-        if ramp:
-            self.field_legend.set_field(tmap)
-        self.field_legend.setVisible(ramp)
-        if on and tmap.classes:
-            self.class_legend.set_map(tmap)
-        self.class_legend.setVisible(bool(on and tmap.classes))
-        self._place_attribution()
-        self._mark_gallery()
-
     # Строки реестра каталога (core/rows.py, ui/registry.py): исполнитель
     # строки один на окно, окно обходит строки и не знает их по имени.
 
@@ -1001,6 +959,17 @@ class LayersMixin:
         self._place_attribution()
         self._mark_gallery()
 
+    @property
+    def _tilemap_shown(self):
+        tool = self.row_tool("glim")
+        return None if tool is None else tool.shown
+
+    def _ask_rows(self, lat, lon):
+        """Значения строк под щелчком, которые спрашивают службу."""
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "ask"):
+                tool.ask(lat, lon)
+
     def _identify_rows(self, lat, lon):
         groups = []
         for tool in getattr(self, "row_tools", {}).values():
@@ -1010,85 +979,6 @@ class LayersMixin:
     def _close_rows(self):
         for tool in self.row_tools.values():
             tool.close()
-
-    def _ask_tilemap(self, lat, lon):
-        """Значение карты под щелчком: запрос GetFeatureInfo службы или
-        пиксель тайла глубшего уровня из кэша или сети."""
-        self._drop_tilemap()
-        key = self._tilemap_shown
-        if key is None or not self.planet.earth:
-            return
-        tmap = tilemaps.MAPS[key]
-        point = (lat, lon)
-        self._tilemap_value = (key, point, None, "")
-        url = tilemaps.query_url(tmap, lat, lon)
-        if url is not None:
-            self._tilemap_reply = fetch_bytes(
-                url, lambda data, error: self._tilemap_arrived(
-                    key, point, None, data, error))
-            return
-        (x, y), pixel = fields.pixel_of(lat, lon, tmap.max_level)
-        url = self.tilemap_urls[key].format(z=tmap.max_level, x=x, y=y)
-        self._tilemap_reply = fetch_bytes(
-            url, lambda data, error: self._tilemap_arrived(
-                key, point, pixel, data, error))
-
-    def _drop_tilemap(self):
-        reply, self._tilemap_reply = self._tilemap_reply, None
-        self._tilemap_value = None
-        if reply is not None:
-            reply.abort()
-
-    def _tilemap_arrived(self, key, point, pixel, data, error):
-        state = self._tilemap_value
-        if state is None or state[:2] != (key, point):
-            return
-        self._tilemap_reply = None
-        tmap = tilemaps.MAPS[key]
-        value = None
-        if data is not None and pixel is None:
-            value = tilemaps.parse_query(tmap, bytes(data))
-            error = ""
-        elif data is not None:
-            image = QImage.fromData(data)
-            if image.isNull():
-                error = tr("тайл не прочитан")
-            else:
-                color = image.pixelColor(*pixel)
-                value = tilemaps.value_of(tmap, (
-                    color.red(), color.green(), color.blue(),
-                    color.alpha()))
-                error = ""
-        elif error and "404" in str(error):
-            error = ""  # тайла нет - на месте пусто
-        self._tilemap_value = (key, point, value,
-                               "" if value is not None
-                               else error or tr("нет данных"))
-        self._refresh_identified()
-
-    def _identify_tilemap(self):
-        """Группа карты картинками окна «Объекты»."""
-        state = self._tilemap_value
-        if state is None:
-            return []
-        key, _, value, error = state
-        tmap = tilemaps.MAPS[key]
-        title = (class_titles() if tmap.classes else field_titles()).get(
-            key, key)
-        if value is None and not error:
-            values = [(tr("Значение"), tr("загрузка…"))]
-        elif value is None:
-            values = [(tr("Значение"), error)]
-        elif tmap.classes:
-            values = [(tr("Класс"), class_names().get(value, value))]
-        else:
-            number = "{:." + str(tmap.digits) + "f}"
-            values = [(tr("Значение"), "{} {}".format(
-                number.format(value), tmap.unit).strip())]
-        group = {"glim": tr("Литология"), "water_occurrence": tr("Вода"),
-                 "worldcover": tr("Покрытие земель"),
-                 "water_transitions": tr("Вода")}.get(key, tr("Почва"))
-        return [(Group(group), [(title, values, None)])]
 
     def _identify_magnetic(self, lat, lon):
         """Группа «Магнитное поле» окна «Объекты»: поле IGRF-14 в точке
@@ -1166,9 +1056,6 @@ class LayersMixin:
                 *fields.FIELDS[self._field_shown].attribution))
         elif "emag" in self.gibs_loaders and self._geology_shown():
             parts.append(link_html(*geology.ATTRIBUTION))
-        elif "emag" in self.gibs_loaders and self._tilemap_shown:
-            parts.append(link_html(
-                *tilemaps.MAPS[self._tilemap_shown].attribution))
         elif "emag" in self.gibs_loaders and self._row_map_shown():
             parts.append(link_html(*self.row_tool(
                 self._row_map_shown()).credit()))

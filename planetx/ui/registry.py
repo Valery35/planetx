@@ -8,9 +8,10 @@
 глобуса (ui/globe) обходят реестр.
 """
 from ..core.rows import Registry
-from . import aef, fieldmap
+from . import aef, fieldmap, tilemaps
 
 ROWS = Registry().add(
     *fieldmap.ROWS,
     *aef.ROWS,
+    *tilemaps.ROWS,
 )

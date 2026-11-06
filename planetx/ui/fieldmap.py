@@ -225,12 +225,14 @@ ROWS = (
         "ниже. Щелчок в режиме «Определить объекты» показывает "
         "оценку.")), FieldTool, source=SOURCE, colors=COLORS,
         words=("границы полей", "поля", "пашня 2025", "fields of the world",
-               "field boundaries"), fades=(LAYER,), view_map=LAYER),
+               "field boundaries"), fades=(LAYER,), view_map=LAYER,
+        after="worldcover"),
     Row("ftw_2024", "life", lambda: (tr("Границы полей 2024"), tr(
         "Границы сельскохозяйственных полей мира за 2024 год, тот же "
         "набор и та же оценка модели, что у строки за 2025 год. Поля "
         "видны вблизи, с высоты около 70 км и ниже.")), FieldTool,
         source=SOURCE, colors=COLORS,
         words=("границы полей 2024", "поля 2024", "пашня 2024",
-               "field boundaries 2024"), fades=(LAYER,), view_map=LAYER),
+               "field boundaries 2024"), fades=(LAYER,), view_map=LAYER,
+        after="ftw_2025"),
 )

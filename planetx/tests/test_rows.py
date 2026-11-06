@@ -44,6 +44,18 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual(reg.tools(), [Tool])
         self.assertIs(reg.get("b").tool, Tool)
 
+    def test_place_after_keys_and_chains(self):
+        reg = rows.Registry().add(
+            rows.Row("y", "g", names, after="x"),
+            rows.Row("end", "g", names),
+            rows.Row("x", "g", names, after="a"))
+        self.assertEqual(reg.place((("a", "g"), ("b", "g"))),
+                         (("a", "g"), ("x", "g"), ("y", "g"), ("b", "g"),
+                          ("end", "g")))
+        bad = rows.Registry().add(rows.Row("z", "g", names, after="none"))
+        with self.assertRaises(rows.RowError):
+            bad.place(())
+
     def test_repeated_key_refused(self):
         reg = self.make()
         with self.assertRaises(rows.RowError):

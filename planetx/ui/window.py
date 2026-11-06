@@ -462,9 +462,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.tilemap_urls = {key: m.url for key, m in tilemaps.MAPS.items()}
         self.tilemap_coarse = {key: m.coarse
                                for key, m in tilemaps.MAPS.items()}
-        self._tilemap_shown = None
-        self._tilemap_value = None
-        self._tilemap_reply = None
         self.cable_layer = None
         # Наложения тайлов (core/tileoverlays.py): ключ - слой XYZ QGIS.
         self.tile_layers = {}

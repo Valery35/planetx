@@ -26,7 +26,7 @@ class Row:
 
     def __init__(self, key, group, names, tool=None, source="",
                  colors=(), words=(), fades=(), view_map=None,
-                 default=False, earth=True):
+                 default=False, earth=True, after=None):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -42,6 +42,7 @@ class Row:
         self.view_map = view_map  # общий слой вида, на глобусе одна карта
         self.default = bool(default)
         self.earth = bool(earth)
+        self.after = after  # ключ строки, за которой стоит строка каталога
 
 
 class Registry:
@@ -81,6 +82,27 @@ class Registry:
     def groups(self):
         """Пары (ключ, группа каталога) по порядку."""
         return tuple((row.key, row.group) for row in self.rows)
+
+    def place(self, pairs):
+        """Пары (ключ, группа) каталога pairs со строками реестра: строка
+        с after встаёт за своей строкой, в том числе за строкой реестра,
+        прочие - в конец по порядку."""
+        out = list(pairs)
+        pending = list(self.rows)
+        while pending:
+            keys = [key for key, _ in out]
+            ready = [row for row in pending
+                     if row.after is None or row.after in keys]
+            if not ready:
+                raise RowError("rows placed after unknown keys: {}".format(
+                    ", ".join(row.key for row in pending)))
+            for row in ready:
+                keys = [key for key, _ in out]
+                at = len(out) if row.after is None \
+                    else keys.index(row.after) + 1
+                out.insert(at, (row.key, row.group))
+                pending.remove(row)
+        return tuple(out)
 
     def sources(self):
         return {row.key: row.source for row in self.rows}

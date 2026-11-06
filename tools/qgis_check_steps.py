@@ -29595,16 +29595,16 @@ def tilemaps_wait():
         out["credit"] = window.attribution.text()[-160:]
         window.view.grabFramebuffer().save(os.path.join(
             TEMP, "planetx_tilemap_{}.png".format(key)))
-        window._ask_tilemap(case[4], case[5])
+        window.row_tool("glim").ask(case[4], case[5])
         state["tm_phase"] = "value"
         state["ls_started"] = time.monotonic()
         return 1000
-    value = window._tilemap_value
+    value = window.row_tool("glim").value
     if value is not None and value[2] is None and not value[3] \
             and spent < 30.0:
         return 1000
     out["value"] = None if value is None else list(value[2:])
-    groups = window._identify_tilemap()
+    groups = window.row_tool("glim").identify(0, 0)
     out["identify"] = [(f[0], f[1]) for _, fs in groups for f in fs]
     if key in ("soil_clay", "water_transitions"):
         out["exported"] = window.active_export(key)
