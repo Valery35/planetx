@@ -362,13 +362,16 @@ def page_main(img):
          "A cockpit flight to the Matterhorn"),
         ("Hmk7zt7aBzk", "Самосвалы в карьере Качканара",
          "Haul trucks in the Kachkanar open pit"),
+        ("ty_OQzgx3ac", "Ветряки - анимированная 3D-модель",
+         "Wind turbines - an animated 3D model"),
     )
     video = section(
         "video", ("Видео", "Video"),
         ("PlanetX в работе", "PlanetX at work"),
         ("Запись с экрана QGIS, без монтажа.",
          "Screen recordings of QGIS, no editing."),
-        trio(*('<figure><iframe class="film" src="https://www.youtube-nocookie'
+        '<div class="films">%s</div>' % "".join(
+            ('<figure><iframe class="film" src="https://www.youtube-nocookie'
                '.com/embed/%s" title="%s" loading="lazy" allow="encrypted-'
                'media; picture-in-picture; fullscreen" allowfullscreen>'
                '</iframe>\n<figcaption data-i18n="%s"></figcaption></figure>'
@@ -1324,6 +1327,9 @@ figure.narrow{max-width:620px}
 .release div p{color:var(--ink-soft);font-size:16px}
 .film{width:100%;aspect-ratio:16/9;display:block;border:1px solid var(--line);
   border-radius:6px;background:#000}
+.films{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px}
+.films figure{margin:0}
+@media(max-width:860px){.films{grid-template-columns:1fr}}
 """
 
 
