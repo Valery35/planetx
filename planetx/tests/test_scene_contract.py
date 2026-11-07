@@ -25,6 +25,21 @@ ROOT = os.environ.get("PLANETX_SCENE") or os.path.join(
         os.path.abspath(__file__))))), "planetx-scene")
 
 
+class TestSources(unittest.TestCase):
+    """data/sources.json хранилища - каталог подложек и наложений модуля
+    (tools/export_sources.py). Расхождение - пересобрать файл."""
+
+    def test_sources_match_module(self):
+        path = os.path.join(ROOT, "data", "sources.json")
+        if not os.path.isfile(path):
+            self.skipTest("нет " + path)
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))), "tools"))
+        import export_sources
+        with open(path, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh), export_sources.build())
+
+
 def walk(folder, out):
     """Счёт дерева меток, как tools/expected.py хранилища."""
     for child in folder.children:
