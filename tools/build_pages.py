@@ -30,7 +30,7 @@ import build_site  # noqa: E402
 
 ROOT = build_site.ROOT
 OUT = os.path.join(ROOT, "site", "pages")
-SITE = "https://www.informpp.ru/главная-страница/qgis-planetx"
+SITE = "https://www.informpp.ru/главная-страница/planetx/qgis-planetx"
 # Страница: ключ, путь подстраницы, название по-русски и по-английски.
 PAGES = (
     ("main", "", "Главная", "Overview"),
@@ -41,7 +41,7 @@ PAGES = (
     ("news", "news", "Что нового", "What's new"),
 )
 # PlanetX Lite - глобус без QGIS, своя группа страниц, последний пункт меню.
-LITE_URL = "https://www.informpp.ru/главная-страница/planetx-lite"
+LITE_URL = "https://www.informpp.ru/главная-страница/planetx/planetx-lite"
 NEWS_FROM = (0, 93, 0)  # «Что нового» - выпуски с этого номера
 RELEASES = "https://github.com/Valery35/planetx/releases/latest"
 CHANGELOG_URL = "https://github.com/Valery35/planetx/blob/main/CHANGELOG.md"

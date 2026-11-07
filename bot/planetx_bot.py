@@ -85,7 +85,7 @@ WEB_PAGES = {
 }
 # Страницы программ на сайте www.informpp.ru, для /docs.
 SITE_PAGES = {
-    "planetx-lite": "https://www.informpp.ru/главная-страница/planetx-lite",
+    "planetx-lite": "https://www.informpp.ru/главная-страница/planetx/planetx-lite",
 }
 # Что делает модуль, для /docs - по описаниям metadata.txt модулей.
 ABOUT = {
@@ -114,7 +114,7 @@ ABOUT = {
     },
 }
 _REPO = re.compile(r"[A-Za-z0-9_.-]{1,40}")
-SITE = "https://www.informpp.ru/главная-страница/qgis-planetx"
+SITE = "https://www.informpp.ru/главная-страница/planetx/qgis-planetx"
 CONFIG = os.path.join(
     os.environ.get("APPDATA") or os.path.expanduser("~/.config"),
     "PlanetX-bot", "config.json")

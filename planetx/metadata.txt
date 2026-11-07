@@ -90,7 +90,7 @@ about=A 3D globe in its own window inside QGIS. The whole Earth is shown
       Developed with the support of Inform++ LLC (https://www.informpp.ru/).
 tracker=https://github.com/Valery35/planetx/issues
 repository=https://github.com/Valery35/planetx
-homepage=https://www.informpp.ru/главная-страница/qgis-planetx
+homepage=https://www.informpp.ru/главная-страница/planetx/qgis-planetx
 tags=3d,globe,earth,mars,moon,mercury,venus,jupiter,europa,titan,sky,stars,constellations,planets,openstreetmap,osm,terrain,dem,satellite,imagery,atmosphere,navigation,labels,vector tiles,opengl
 category=Web
 icon=icon.png

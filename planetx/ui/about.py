@@ -43,9 +43,9 @@ CELESTIAL = "https://github.com/ofrohn/d3-celestial"
 ESRI_TERMS ="https://www.esri.com/en-us/legal/terms/full-master-agreement"
 SOURCES = REPOSITORY + "/blob/main/doc/SOURCES.md"
 INFORM = "https://www.informpp.ru/"
-PAGE = "https://www.informpp.ru/главная-страница/qgis-planetx"
+PAGE = "https://www.informpp.ru/главная-страница/planetx/qgis-planetx"
 # PlanetX Lite - глобус без QGIS, страница с 28 октября 2026 года.
-LITE = "https://www.informpp.ru/главная-страница/planetx-lite"
+LITE = "https://www.informpp.ru/главная-страница/planetx/planetx-lite"
 # Руководство на языке интерфейса: PDF собирает tools/build_manual.py.
 # С 13 октября 2026 года PDF не входят в архив модуля - его предел в
 # каталоге QGIS 10 МБ - и лежат в выпуске своей версии на GitHub.

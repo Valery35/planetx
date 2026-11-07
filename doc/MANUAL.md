@@ -10,8 +10,8 @@ PlanetX - трёхмерный глобус внутри QGIS. Глобус
 слои текущего проекта, свои метки, пути и многоугольники. Туры облетают
 метки, запись тура даёт кадры для видео.
 
-Страница модуля - [www.informpp.ru](https://www.informpp.ru/главная-страница/qgis-planetx).
-Глобус PlanetX без QGIS, отдельной программой, - [PlanetX Lite](https://www.informpp.ru/главная-страница/planetx-lite).
+Страница модуля - [www.informpp.ru](https://www.informpp.ru/главная-страница/planetx/qgis-planetx).
+Глобус PlanetX без QGIS, отдельной программой, - [PlanetX Lite](https://www.informpp.ru/главная-страница/planetx/planetx-lite).
 
 ---
 
