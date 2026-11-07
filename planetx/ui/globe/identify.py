@@ -367,7 +367,6 @@ class IdentifyMixin:
         self._cloud_hits = self.pointclouds.identify(
             camera, px, py, IDENTIFY_PIXELS * view.devicePixelRatioF())
         self._ask_parcels(lat, lon)
-        self._ask_field(lat, lon)
         self._ask_geology(lat, lon)
         self._ask_rows(lat, lon)
         self._ask_wayback(lat, lon)
@@ -476,7 +475,6 @@ class IdentifyMixin:
         groups += self._identify_faults(lat, lon, tolerance)
         groups += self._identify_cables(lat, lon, tolerance)
         groups += self._identify_magnetic(lat, lon)
-        groups += self._identify_field()
         groups += self._identify_geology()
         groups += self._identify_rows(lat, lon)
         groups += self._identify_wayback()

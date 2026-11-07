@@ -452,10 +452,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.field_urls = {key: fields.url(f)
                            for key, f in fields.FIELDS.items()}
         self.geoid_url = geoid.TILE_URL
-        self._field_shown = None  # ключ карты на глобусе
-        # (ключ, точка, значение или None, ошибка) - значение под щелчком.
-        self._field_value = None
-        self._field_reply = None
         # Карты картинками (core/tilemaps.py): адреса тайлов (шаги
         # проверки ставят локальную копию planetx-terrain), карта на
         # глобусе, значение под щелчком и его запрос.
@@ -1144,7 +1140,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self._parcels = None
             if reply is not None:
                 reply.abort()
-            self._drop_field()
             self.layer_labels.close()
             if self.identified is not None:
                 self.identified.close()

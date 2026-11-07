@@ -28692,6 +28692,17 @@ def air_toggle():
     return None
 
 
+
+def _local_field(window, key, folder, name):
+    """Тайлы карты значений из локальной копии planetx-terrain, если она
+    есть, иначе - из сети по адресу модуля."""
+    from qgis.PyQt.QtCore import QUrl
+    path = os.path.join(folder, name)
+    if os.path.isdir(path):
+        window.field_urls[key] = QUrl.fromLocalFile(path).toString() \
+            + "/{z}/{x}/{y}.png"
+
+
 @check(500)
 def emag_on():
     """Магнитные аномалии над Курской магнитной аномалией: тайлы из
@@ -28702,8 +28713,7 @@ def emag_on():
     window = state["window"]
     window.set_body("earth")
     folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
-    window.field_urls["emag"] = QUrl.fromLocalFile(os.path.join(
-        folder, "emag")).toString() + "/{z}/{x}/{y}.png"
+    _local_field(window, "emag", folder, "emag")
     window.view.navigator.stop()
     window.view.navigator.show(Pose(51.3, 37.0, 1500000.0, 0.0, 0.0))
     window.set_extra("emag", True)
@@ -28736,16 +28746,16 @@ def emag_check():
         window.view.grabFramebuffer().save(os.path.join(
             TEMP, "planetx_emag.png"))
         # Щелчок у Курска - значение из тайла уровня MAX_LEVEL.
-        window._ask_field(51.75, 36.2)
+        window.row_tool("emag").ask(51.75, 36.2)
         state["ls_started"] = time.monotonic()
         return 500
-    value = window._field_value
+    value = window.row_tool("emag").value
     if value is not None and value[2] is None and not value[3] \
             and spent < 15.0:
         return 500
     out["kursk"] = value[2:] if value else None
-    out["group"] = window._identify_field()[0][1][0][1] \
-        if window._identify_field() else None
+    out["group"] = window.row_tool("emag").identify(0, 0)[0][1][0][1] \
+        if window.row_tool("emag").identify(0, 0) else None
     window.set_extra("emag", False)
     out["off"] = "emag" not in window.gibs_loaders \
         and not window.field_legend.isVisible()
@@ -30108,8 +30118,7 @@ def fields_on():
     window = state["window"]
     folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
     for key in ("seafloor_age", "heatflow"):
-        window.field_urls[key] = QUrl.fromLocalFile(os.path.join(
-            folder, key)).toString() + "/{z}/{x}/{y}.png"
+        _local_field(window, key, folder, key)
     window.view.navigator.stop()
     window.view.navigator.show(Pose(35.0, -40.0, 6000000.0, 0.0, 0.0))
     window.set_extra("seafloor_age", True)
@@ -30133,17 +30142,17 @@ def fields_check():
         window.view.grabFramebuffer().save(os.path.join(
             TEMP, "planetx_seafloor_age.png"))
         # Щелчок у Японского жёлоба - около 133 млн лет.
-        window._ask_field(38.0, 146.0)
+        window.row_tool("emag").ask(38.0, 146.0)
         state["ls_started"] = time.monotonic()
         return 500
     if "age_value" not in out:
-        value = window._field_value
+        value = window.row_tool("emag").value
         if value is not None and value[2] is None and not value[3] \
                 and spent < 15.0:
             return 500
         out["age_value"] = value[2:] if value else None
-        out["age_group"] = window._identify_field()[0][1][0][1] \
-            if window._identify_field() else None
+        out["age_group"] = window.row_tool("emag").identify(0, 0)[0][1][0][1] \
+            if window.row_tool("emag").identify(0, 0) else None
         window.set_extra("heatflow", True)
         out["age_off_by_heat"] = not window.extras.get("seafloor_age")
         out["heat_level"] = layer.max_level
@@ -30156,10 +30165,10 @@ def fields_check():
         out["heat_textures"] = len(layer.textures)
         window.view.grabFramebuffer().save(os.path.join(
             TEMP, "planetx_heatflow.png"))
-        window._ask_field(44.6, -110.5)
+        window.row_tool("emag").ask(44.6, -110.5)
         state["ls_started"] = time.monotonic()
         return 500
-    value = window._field_value
+    value = window.row_tool("emag").value
     if value is not None and value[2] is None and not value[3] \
             and spent < 15.0:
         return 500
@@ -30181,9 +30190,7 @@ def gravity_check():
         if not window.extras.get("gravity"):
             folder = os.environ.get("PLANETX_TERRAIN_DIR") \
                 or "C:/Dev/planetx-terrain"
-            window.field_urls["gravity"] = QUrl.fromLocalFile(
-                os.path.join(folder, "gravity")).toString() \
-                + "/{z}/{x}/{y}.png"
+            _local_field(window, "gravity", folder, "gravity")
             window.view.navigator.show(Pose(15.0, 145.0, 6000000.0, 0.0, 0.0))
             window.set_extra("gravity", True)
             state["gravity_started"] = time.monotonic()
@@ -30197,16 +30204,16 @@ def gravity_check():
         out["credit"] = "XGM2019e" in window.attribution.text()
         window.view.grabFramebuffer().save(os.path.join(
             TEMP, "planetx_gravity.png"))
-        window._ask_field(11.35, 142.2)
+        window.row_tool("emag").ask(11.35, 142.2)
         state["gravity_started"] = time.monotonic()
         return 500
-    value = window._field_value
+    value = window.row_tool("emag").value
     spent = time.monotonic() - state["gravity_started"]
     if value is not None and value[2] is None and not value[3] \
             and spent < 15.0:
         return 500
     out["mariana"] = value[2:] if value else None
-    rows = window._identify_field()
+    rows = window.row_tool("emag").identify(0, 0)
     out["group"] = rows[0][0] if rows else None
     window.set_extra("gravity", False)
     out["off"] = not layer.shown
@@ -30230,9 +30237,7 @@ def bouguer_check():
         if not window.extras.get("bouguer"):
             folder = os.environ.get("PLANETX_TERRAIN_DIR") \
                 or "C:/Dev/planetx-terrain"
-            window.field_urls["bouguer"] = QUrl.fromLocalFile(
-                os.path.join(folder, "bouguer")).toString() \
-                + "/{z}/{x}/{y}.png"
+            _local_field(window, "bouguer", folder, "bouguer")
             window.set_extra("gravity", True)
             window.view.navigator.show(Pose(32.0, 88.0, 8000000.0, 0.0, 0.0))
             window.set_extra("bouguer", True)
@@ -30250,7 +30255,7 @@ def bouguer_check():
             TEMP, "planetx_bouguer.png"))
     pending = state["bouguer_points"]
     if "asked" in state:
-        value = window._field_value
+        value = window.row_tool("emag").value
         spent = time.monotonic() - state["bouguer_started"]
         if value is not None and value[2] is None and not value[3] \
                 and spent < 15.0:
@@ -30258,11 +30263,11 @@ def bouguer_check():
         out[state.pop("asked")] = value[2:] if value else None
     if pending:
         name, lat, lon = pending.pop(0)
-        window._ask_field(lat, lon)
+        window.row_tool("emag").ask(lat, lon)
         state["asked"] = name
         state["bouguer_started"] = time.monotonic()
         return 500
-    rows = window._identify_field()
+    rows = window.row_tool("emag").identify(0, 0)
     out["row"] = rows[0][1][0][0] if rows and rows[0][1] else None
     window.set_extra("bouguer", False)
     out["off"] = "emag" not in window.gibs_loaders \

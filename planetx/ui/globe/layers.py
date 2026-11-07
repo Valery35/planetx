@@ -11,12 +11,10 @@ import math
 import os
 import re
 import time
-from functools import partial
 
 import numpy as np
 from qgis.core import QgsApplication, QgsProject, QgsSettings
 from qgis.PyQt.QtCore import QEvent
-from qgis.PyQt.QtGui import QImage
 from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 
 from ... import journal
@@ -72,30 +70,8 @@ from .base import (AUTO_DEFAULT, COORDS_KEY, CREDIT_LINK, DATA_DIR, DECL_EAST,
                    MAGNETIC_ATTRIBUTION, MARGIN, NEW_SHOWN_KEY, POLE_COLORS,
                    POLE_WIDTH, REFRESH_DELAY, SELECTION_DELAY, SKY_ATTRIBUTION,
                    TILE_SIZE, attribution_html, imagery_preparer,
-                   label_languages, link_html, places_decoder, prepare_field,
+                   label_languages, link_html, places_decoder,
                    prepare_geology)
-
-
-def field_texts():
-    """Карта значений: ключ - (группа окна «Объекты», строка, единица,
-    строки пояснений)."""
-    return {
-        "emag": (tr("Магнитная аномалия"), tr("Аномалия поля"), tr("нТл"),
-                 [(tr("Высота сетки"), tr("4 км над эллипсоидом")),
-                  (tr("Набор"), "EMAG2v3, NOAA NCEI")]),
-        "seafloor_age": (tr("Океаническое дно"), tr("Возраст коры"),
-                         tr("млн лет"),
-                         [(tr("Набор"), "Seton et al. 2020, EarthByte")]),
-        "gravity": (tr("Сила тяжести"), tr("Аномалия в свободном воздухе"),
-                    tr("мГал"),
-                    [(tr("Набор"), "XGM2019e, Zingerle et al. 2020")]),
-        "bouguer": (tr("Сила тяжести"), tr("Аномалия Буге"), tr("мГал"),
-                    [(tr("Набор"), "XGM2019e, ETOPO 2022"),
-                     (tr("Плотность породы"), "2670 кг/м³")]),
-        "heatflow": (tr("Тепловой поток"), tr("Поток тепла"),
-                     tr("мВт/м²"),
-                     [(tr("Набор"), "IHFC 2024, Petrunin et al. 2026")]),
-    }
 
 
 class LayersMixin:
@@ -720,94 +696,6 @@ class LayersMixin:
         # Разрез Земли тянется к «измятой» поверхности.
         self.view.wedge_lift = geoid
 
-    # Карты значений геофизики (core/fields.py): магнитные аномалии,
-    # возраст дна, сила тяжести, тепловой поток. Один слой вида «emag».
-
-    def _set_field(self, key, on):
-        """Строка карты значений: тайлы planetx-terrain, раскраска
-        в рабочем потоке, шкала. Включение снимает прежнюю карту."""
-        field = fields.FIELDS[key]
-        if on:
-            for other in fields.KEYS + EMAG_MAPS + tilemaps.KEYS:
-                if other != key and self.extras.get(other):
-                    self.set_extra(other, False)
-        elif self._field_shown != key:
-            # Слой вида занят другой картой.
-            return
-        on = on and self.planet.earth
-        self._drop_field()
-        if on:
-            self.view.gibs["emag"].max_level = field.max_level
-            source = basemap.Source(key, self.field_urls[key],
-                                    field.max_level, field.attribution,
-                                    builtin=True)
-            made = (source, partial(prepare_field, key))
-        else:
-            made = None
-        self._field_shown = key if on else None
-        self._set_gibs("emag", on, made=made, cache=True)
-        self.field_legend.set_field(field)
-        self.field_legend.setVisible(on)
-        self._mark_gallery()
-
-    def _ask_field(self, lat, lon):
-        """Значение карты под щелчком: тайл глубшего уровня из кэша или
-        сети, пиксель точки."""
-        self._drop_field()
-        key = self._field_shown
-        if key is None or not self.planet.earth:
-            return
-        field = fields.FIELDS[key]
-        (x, y), (column, row) = fields.pixel_of(lat, lon, field.max_level)
-        url = self.field_urls[key].format(z=field.max_level, x=x, y=y)
-        point = (lat, lon)
-        self._field_value = (key, point, None, "")
-        self._field_reply = fetch_bytes(
-            url, lambda data, error: self._field_arrived(
-                key, point, column, row, data, error))
-
-    def _drop_field(self):
-        reply, self._field_reply = self._field_reply, None
-        self._field_value = None
-        if reply is not None:
-            reply.abort()
-
-    def _field_arrived(self, key, point, column, row, data, error):
-        state = self._field_value
-        if state is None or state[:2] != (key, point):
-            return
-        self._field_reply = None
-        value = None
-        if data is not None:
-            image = QImage.fromData(data)
-            if not image.isNull():
-                color = image.pixelColor(column, row)
-                value = fields.value_at(fields.FIELDS[key], [[(
-                    color.red(), color.green(), color.blue())]], 0, 0)
-            error = "" if not image.isNull() else tr("тайл не прочитан")
-        self._field_value = (key, point, value, "" if value is not None
-                             else error or tr("нет данных"))
-        self._refresh_identified()
-
-    def _identify_field(self):
-        """Группа карты значений окна «Объекты»."""
-        state = self._field_value
-        if state is None:
-            return []
-        key, _, value, error = state
-        group, title, unit, notes = field_texts()[key]
-        if value is None and not error:
-            values = [(tr("Значение"), tr("загрузка…"))]
-        elif value is None:
-            values = [(tr("Значение"), error)]
-        else:
-            digits = fields.FIELDS[key].digits
-            sign = "+" if fields.FIELDS[key].stops[0][0] < 0 else ""
-            number = "{:" + sign + "." + str(digits) + "f}"
-            values = [(tr("Значение"), "{} {}".format(
-                number.format(value), unit))] + notes
-        return [(Group(group), [(title, values, None)])]
-
     # Геологическая карта Macrostrat (core/geology.py) - тот же слой вида
     # «emag», что у карт значений, на глобусе одна такая карта.
 
@@ -960,6 +848,11 @@ class LayersMixin:
         self._mark_gallery()
 
     @property
+    def _field_shown(self):
+        tool = self.row_tool("emag")
+        return None if tool is None else tool.shown
+
+    @property
     def _tilemap_shown(self):
         tool = self.row_tool("glim")
         return None if tool is None else tool.shown
@@ -1051,10 +944,7 @@ class LayersMixin:
                 parts.append(link_html(*geomag.GUFM_ATTRIBUTION))
         if self._motion_on():
             parts.append(link_html(*platemotion.ATTRIBUTION))
-        if "emag" in self.gibs_loaders and self._field_shown:
-            parts.append(link_html(
-                *fields.FIELDS[self._field_shown].attribution))
-        elif "emag" in self.gibs_loaders and self._geology_shown():
+        if "emag" in self.gibs_loaders and self._geology_shown():
             parts.append(link_html(*geology.ATTRIBUTION))
         elif "emag" in self.gibs_loaders and self._row_map_shown():
             parts.append(link_html(*self.row_tool(

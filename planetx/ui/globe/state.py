@@ -19,7 +19,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import tileoverlays, wms
-from ...core import (basemap, clouds, fields, geology, temperature,
+from ...core import (basemap, clouds, geology, temperature,
                      flow as flow_core, quakes, themes, tilemaps)
 from ...core.sync import ground_size, view_box, inside as in_box
 from ..flow import CURRENTS_ATTRIBUTION
@@ -379,8 +379,6 @@ class StateMixin:
             self._set_magdecl(on)
         elif key == "platemotion":
             self._set_platemotion(on)
-        elif key in fields.FIELDS:
-            self._set_field(key, on)
         elif key == "geoid":
             self._set_geoid(on)
         elif key == "satellites":
