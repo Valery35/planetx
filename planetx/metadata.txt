@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.41.0
+version=1.42.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,12 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.41.0 Open national maps in the Base maps catalog - TopPlusOpen
+changelog=1.42.0 Base map names are smaller from afar - full size up to
+      300 km, 70 percent at 6000 km, as many labels in the frame as before. A
+      scene with own point icon pictures is saved as an archive with the
+      pictures. A scene keeps the base map key, PlanetX Lite and
+      rustPlanetX open a module scene with the same base map.
+      1.41.0 Open national maps in the Base maps catalog - TopPlusOpen
       world map, basemap.de of Germany, swisstopo maps and SWISSIMAGE of
       Switzerland, PDOK maps and aerial photos of the Netherlands. Around
       the country and from afar the globe shows an Esri base map. Map
