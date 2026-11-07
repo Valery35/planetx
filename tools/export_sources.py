@@ -12,7 +12,8 @@ PLANETX_SCENE, иначе planetx-scene рядом с рабочей копие�
 сверяет файл с каталогом модуля и не пишет.
 
 В адресе места {z}, {x}, {y}, у Bing - {q}, quadkey. Поля источника:
-key, name_ru, name_en, url, max_level, credit, terms, group, kind (basemap или overlay), projection (webmercator или
+key, name_ru, name_en, url, max_level, credit, terms, group, kind
+(basemap или overlay), projection (webmercator или
 ellipsoidal - EPSG:3395), warn (окно условий перед добавлением). У
 районной карты ещё bbox [запад, юг, восток, север], from_level - уровень,
 с которого берётся сама карта, и fallback - ключ подложки вне охвата.
