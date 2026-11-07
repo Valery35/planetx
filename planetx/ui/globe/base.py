@@ -60,7 +60,6 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
               "currents": ("currents",), "cadastre": ("cadastre",),
-              "geology": ("emag",),
               **ROWS.fades()}
 QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm",
                "cables") + tileoverlays.KEYS
@@ -187,7 +186,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "magdecl": False,
                   "platemotion": False,
                   "volcanoes": False, "faults": False,
-                  "geology": False, "air": True, "iscgem": False,
+                  "air": True, "iscgem": False,
                   "wiki": False,
                   **ROWS.defaults(),
                   **{key: False for key in tileoverlays.KEYS}}
@@ -202,12 +201,12 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cables", "currents", "cadastre", "magpoles",
                 "geoid", "magdecl",
                 "platemotion", "volcanoes",
-                "faults", "geology", "iscgem",
+                "faults", "iscgem",
                 "wiki") + tileoverlays.KEYS \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.
-EMAG_MAPS = ("geology",) + ROWS.view_maps("emag")
+EMAG_MAPS = ROWS.view_maps("emag")
 # Магнитные полюса: цвета следа и точки, подпись источников. Цвета -
 # выбор помощника, утверждает автор.
 POLE_COLORS = {"north": (235, 70, 60, 255), "south": (70, 130, 235, 255)}

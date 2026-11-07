@@ -100,7 +100,6 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "platemotion": ((255, 225, 60), (60, 60, 60)),
               "volcanoes": ((230, 40, 30), (245, 140, 40), (240, 210, 70)),
               "faults": ((225, 45, 40), (40, 120, 230), (30, 170, 70)),
-              "geology": ((251, 167, 148), (128, 197, 101), (191, 128, 196)),
               "geoid": ((60, 90, 170), (120, 170, 120), (200, 150, 80)),
               "air": ((10, 15, 40), (90, 150, 230), (200, 225, 250)),
               "sea_marks": ((230, 40, 40), (40, 160, 60), (250, 220, 40)),
@@ -128,7 +127,7 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "magdecl": "IGRF-14",
            "platemotion": "NNR-MORVEL56",
            "volcanoes": "Smithsonian GVP",
-           "faults": "GEM Global Active Faults", "geology": "Macrostrat",
+           "faults": "GEM Global Active Faults",
            "geoid": "EGM2008, NGA", "air": "",
            "iscgem": "ISC-GEM",
            "sea_marks": "OpenSeaMap",
@@ -143,7 +142,6 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
 LAYERS = ROWS.place((
           ("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"),
-          ("geology", "geology"),
           ("cutaway", "geology"), ("paleo", "geology"),
           ("quakes", "seismic"), ("iscgem", "seismic"),
           ("plates", "seismic"), ("faults", "seismic"),
@@ -474,14 +472,6 @@ def layer_names():
             "название, вид "
             "смещения, скорость в мм/год, падение и каталог-источник. "
             "Первое включение скачивает около 11 МБ.")),
-        "geology": (tr("Геологическая карта"), tr(
-            "Геологическая карта мира Macrostrat, сведённая из карт разного "
-            "масштаба. Цвет показывает возраст пород. В России и Европе "
-            "самая подробная карта - 1:5 000 000, в США карты намного "
-            "подробнее. Щелчок в режиме «Определить объекты» показывает "
-            "подразделение, литологию, возраст в млн лет и карту-источник. "
-            "На глобусе одна такая карта - геологическая или карта "
-            "значений геофизики.")),
         "iscgem": (tr("Исторические землетрясения"), tr(
             "Сильные землетрясения мира с 1904 по 2024 год по каталогу "
             "ISC-GEM - около 74 тысяч событий магнитудой от 5, места, "

@@ -467,10 +467,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.fault_layer = None
         self._fault_reply = None
         self._fault_job = None
-        # Геологическая карта Macrostrat (core/geology.py): запрос
-        # и ответ о породе под щелчком.
-        self._geology_reply = None
-        self._geology_value = None
         self._slab_replies = {}
         self.slab_errors = {}
         self.slab_base = None

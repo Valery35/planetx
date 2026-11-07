@@ -369,8 +369,6 @@ class StateMixin:
             self._set_plates(on)
         elif key == "faults":
             self._set_faults(on)
-        elif key == "geology":
-            self._set_geology(on)
         elif key == "iscgem":
             self._set_history(on)
         elif key == "magpoles":

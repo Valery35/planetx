@@ -29027,7 +29027,7 @@ def geology_wait():
                        window.view, "drawn_keys", ()) or ()), default=None)}
     window.view.grabFramebuffer().save(os.path.join(
         TEMP, "planetx_geology_near.png"))
-    window._ask_geology(58.0, 56.25)
+    window.row_tool("geology").ask(58.0, 56.25)
     state["ls_started"] = time.monotonic()
     return None
 
@@ -29037,11 +29037,11 @@ def geology_check():
     from qgis.core import QgsProject
     window = state["window"]
     out = result["geology"]
-    value = window._geology_value
+    value = window.row_tool("geology").value
     if value is not None and value[1] is None and not value[2] \
             and time.monotonic() - state["ls_started"] < 30.0:
         return 1000
-    groups = window._identify_geology()
+    groups = window.row_tool("geology").identify(0, 0)
     out["identify"] = [(f[0], f[1]) for _, fs in groups for f in fs]
     out["exported"] = window.active_export("geology")
     root = QgsProject.instance().layerTreeRoot()
