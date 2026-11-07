@@ -472,9 +472,8 @@ class IdentifyMixin:
             groups.append((Group(tr("Подземное")), under))
         groups += self._identify_plates(lat, lon, tolerance)
         groups += self._identify_faults(lat, lon, tolerance)
-        groups += self._identify_cables(lat, lon, tolerance)
         groups += self._identify_magnetic(lat, lon)
-        groups += self._identify_rows(lat, lon)
+        groups += self._identify_rows(lat, lon, tolerance)
         groups += self._identify_wayback()
         groups += self._identify_site(lat, lon, height)
         if self.identified is None:

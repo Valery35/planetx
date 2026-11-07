@@ -61,8 +61,8 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
               "currents": ("currents",), "cadastre": ("cadastre",),
               **ROWS.fades()}
-QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm",
-               "cables") + ROWS.qgis_keys()
+QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm") \
+    + ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
@@ -79,7 +79,7 @@ SECTION_TIME_PAUSE = 400
 WAYBACK_PAUSE = 700
 # Порядок строк «На глобусе»: слои витрины, слои «Карты», карты витрины.
 ACTIVE_ORDER = tuple(key for key, _ in GALLERY_LAYERS) + (
-    "grid", "buildings", "contours", "cadastre", "infra_osm", "cables",
+    "grid", "buildings", "contours", "cadastre", "infra_osm",
     "fires", "temperature")
 # Каталог «Добавить данные» в левой панели: панель не уже, пиксели.
 # Горизонтали тел - на столько уровней глубже уровня высот тела, по
@@ -181,7 +181,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "deposits": False, "mining": False,
                   "osm_mines": False,
                   "plants": False, "infra_osm": False,
-                  "cables": False, "currents": False, "cadastre": False,
+                  "currents": False, "cadastre": False,
                   "magpoles": False, "geoid": False,
                   "magdecl": False,
                   "platemotion": False,
@@ -198,7 +198,7 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "trains", "vessels", "aircraft", "deposits", "mining",
                 "osm_mines", "plants",
                 "infra_osm",
-                "cables", "currents", "cadastre", "magpoles",
+                "currents", "cadastre", "magpoles",
                 "geoid", "magdecl",
                 "platemotion", "volcanoes",
                 "faults", "iscgem",

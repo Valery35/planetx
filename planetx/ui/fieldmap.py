@@ -149,7 +149,7 @@ class FieldTool(QObject):
             return False
         return True
 
-    def identify(self, lat, lon):
+    def identify(self, lat, lon, tolerance=0.0):
         """Группа окна «Объекты»: оценка поля под щелчком."""
         from .identify import Group
         score = self.under(lat, lon)

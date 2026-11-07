@@ -78,7 +78,7 @@ class TileOverlayTool(QObject):
                                      overlay.attribution)
         return None if layer is None else 1
 
-    def identify(self, lat, lon):
+    def identify(self, lat, lon, tolerance=0.0):
         return []
 
     def credit(self):

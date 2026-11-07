@@ -98,7 +98,7 @@ class GeologyTool(QObject):
         self.value = (point, units, error or "")
         self.window._refresh_identified()
 
-    def identify(self, lat, lon):
+    def identify(self, lat, lon, tolerance=0.0):
         """Группа «Геология» окна «Объекты»."""
         from .identify import Group
         state = self.value

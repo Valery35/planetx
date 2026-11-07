@@ -19,7 +19,7 @@ from ...core.measure import surface_level
 from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
-from ...core import (infra, mining, cables as cables_core,
+from ...core import (infra, mining,
                      faults as faults_core,
                      plants as plants_core, platemotion, plates, slabs,
                      volcanoes as volcanoes_core)
@@ -28,7 +28,7 @@ from ..overpass import brief_error
 from ...core.places import Place as MarkPlace
 from ...i18n import tr
 from ...net.gdalnet import executor
-from ...net.overlay import (fetch_bytes, plate_layer, cable_layer,
+from ...net.overlay import (fetch_bytes, plate_layer,
                             fault_layer)
 from ...render.view import OBJECT_BUDGET, start_keys
 from ..identify import Group, point_text
@@ -600,52 +600,6 @@ class ResourcesMixin:
                             time.monotonic())
         self._show_state()
         self._show_attribution()
-
-    def _cable_names(self):
-        return {"telecom": tr("Линия связи"),
-                "power": tr("Силовой кабель")}
-
-    def _set_cables(self, on):
-        """Строка «Подводные кабели» группы «Карта»: линии в наложении.
-        Файл data/cables.json читается при первом включении."""
-        if on and self.cables_data is None:
-            try:
-                with open(os.path.join(DATA_DIR, "cables.json"),
-                          encoding="utf-8") as fh:
-                    self.cables_data = cables_core.Cables.from_text(
-                        fh.read())
-            except (OSError, ValueError) as error:
-                journal.note("cables: {}".format(error))
-                self.message = (tr("Подводные кабели не прочитаны."),
-                                time.monotonic())
-                self._show_state()
-                return
-        if on and self.cable_layer is None:
-            self.cable_layer = cable_layer(self.cables_data,
-                                           self._cable_names())
-        self._update_overlay(keep=True)
-        self._show_attribution()
-        self.view.update()
-
-    def _identify_cables(self, lat, lon, tolerance):
-        """Подводный кабель у точки щелчка, когда строка включена."""
-        if not (self.planet.earth and self.extras.get("cables")
-                and self.cables_data is not None):
-            return []
-        found = cables_core.nearest(self.cables_data, lat, lon, tolerance)
-        if found is None:
-            return []
-        values = [(tr("Вид"), self._cable_names()[found.kind])]
-        if found.operator:
-            values.append((tr("Владелец"), found.operator))
-        kv = infra.kilovolts(found.voltage)
-        if kv is not None:
-            values.append((tr("Напряжение"), tr(
-                "{value} кВ", value="{:g}".format(kv))))
-        values.append((tr("Объект OSM"), "https://www.openstreetmap.org/"
-                       + found.osm))
-        return [(Group(tr("Подводные кабели")), [
-            (found.name or tr("Без названия"), values, None)])]
 
     # Активные разломы GEM (core/faults.py).
 

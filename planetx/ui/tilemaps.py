@@ -121,7 +121,7 @@ class TileMapTool(QObject):
                       "" if value is not None else error or tr("нет данных"))
         self.window._refresh_identified()
 
-    def identify(self, lat, lon):
+    def identify(self, lat, lon, tolerance=0.0):
         """Группа карты картинками окна «Объекты»."""
         from .identify import Group
         from .legend import class_names, class_titles, field_titles

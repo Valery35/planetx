@@ -436,8 +436,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # читаются при первом включении строки.
         self.plates_data = None
         self.plate_layer = None
-        # Подводные кабели OSM (core/cables.py), файл data/cables.json.
-        self.cables_data = None
         self.geomag = None  # (модель IGRF, таблицы полюсов), core/geomag
         # Линии склонения: (год, линии) и подписи.
         self._decl_cache = None
@@ -458,7 +456,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.tilemap_urls = {key: m.url for key, m in tilemaps.MAPS.items()}
         self.tilemap_coarse = {key: m.coarse
                                for key, m in tilemaps.MAPS.items()}
-        self.cable_layer = None
         # Активные разломы GEM (core/faults.py): файл профиля, загрузка,
         # разбор в рабочем потоке, слой наложения.
         self.faults_data = None
@@ -726,6 +723,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._make_row_tools()  # строки реестра каталога
         self.change_tool = self.row_tool("aef_change")
         self.tile_layers = self.row_tool("hiking").layers  # для шагов
+        self.cables = self.row_tool("cables")
         self.class_tool = ClassTool(self)
         # Распознавание по точкам со своими снимками (ui/recognize.py).
         self.recognize_tool = RecognizeTool(self)

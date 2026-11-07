@@ -21,7 +21,7 @@ from ... import journal
 from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      platemotion, sun, tomography,
                      temperature, when, oldmaps, deposits as deposits_core,
-                     mining, cables as cables_core, rumsey as rumsey_core,
+                     mining, rumsey as rumsey_core,
                      plants as plants_core, fires as fires_core, crust, plates,
                      volcanoes as volcanoes_core, faults as faults_core,
                      iscgem, quakes, slabs, themes, tilemaps,
@@ -742,10 +742,10 @@ class LayersMixin:
             if hasattr(tool, "ask"):
                 tool.ask(lat, lon)
 
-    def _identify_rows(self, lat, lon):
+    def _identify_rows(self, lat, lon, tolerance=0.0):
         groups = []
         for tool in getattr(self, "row_tools", {}).values():
-            groups += tool.identify(lat, lon)
+            groups += tool.identify(lat, lon, tolerance)
         return groups
 
     def _close_rows(self):
@@ -904,10 +904,6 @@ class LayersMixin:
                 and getattr(self, "flow", None) is not None \
                 and self.flow.fields["currents"] is not None:
             parts.append(link_html(*CURRENTS_ATTRIBUTION))
-        if self.planet.earth \
-                and getattr(self, "extras", {}).get("cables") \
-                and getattr(self, "cable_layer", None) is not None:
-            parts.append(link_html(*cables_core.ATTRIBUTION))
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "credits"):
                 parts += [link_html(*pair) for pair in tool.credits()]
@@ -1079,10 +1075,6 @@ class LayersMixin:
             for layer in (self.infra_points, self.infra_lines):
                 layer.setOpacity(self._layer_opacity("infra_osm"))
                 layers.append(layer)
-        if self.planet.earth and getattr(self, "extras", {}).get("cables") \
-                and getattr(self, "cable_layer", None) is not None:
-            self.cable_layer.setOpacity(self._layer_opacity("cables"))
-            layers.append(self.cable_layer)
         # Наложения тайлов - над векторной основой, под линиями выше.
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "overlay_layers"):

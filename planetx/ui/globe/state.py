@@ -351,8 +351,6 @@ class StateMixin:
             self._set_wiki(on)
         elif key == "infra_osm":
             self._set_infra(on)
-        elif key == "cables":
-            self._set_cables(on)
         elif key == "currents":
             self._set_currents(on)
         elif key == "cadastre":
@@ -493,7 +491,7 @@ class StateMixin:
                  "mining": [getattr(self, "mining_layer", None)],
                  "infra_osm": [getattr(self, "infra_lines", None),
                                getattr(self, "infra_points", None)],
-                 "cables": [getattr(self, "cable_layer", None)]}
+                 }
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "qgis_layers"):
                 found.update(tool.qgis_layers())
@@ -723,8 +721,8 @@ class StateMixin:
             parts = [("faults", self.fault_layer, title)]
         elif key == "mining":
             parts = [("mining", self.mining_layer, title)]
-        elif key == "cables":
-            parts = [("cables", self.cable_layer, title)]
+        elif hasattr(self.row_tool(key), "export_parts"):
+            parts = self.row_tool(key).export_parts(key, title)
         else:
             parts = [("lines", self.infra_lines, title),
                      ("substations", self.infra_points,

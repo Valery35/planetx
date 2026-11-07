@@ -377,7 +377,7 @@ class ChangeTool(QObject):
         self.set_shown(on and self.window.planet.earth)
         return True
 
-    def identify(self, lat, lon):
+    def identify(self, lat, lon, tolerance=0.0):
         return []
 
     def credit(self):

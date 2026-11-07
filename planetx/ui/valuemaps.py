@@ -116,7 +116,7 @@ class FieldMapTool(QObject):
                       else error or tr("нет данных"))
         self.window._refresh_identified()
 
-    def identify(self, lat, lon):
+    def identify(self, lat, lon, tolerance=0.0):
         """Группа карты значений окна «Объекты»."""
         from .identify import Group
         state = self.value

@@ -7176,7 +7176,8 @@ def cables_on():
     window.set_body("earth")
     window.view.navigator.show(Pose(50.0, -30.0, 6000000.0, 0.0, 0.0))
     window.set_extra("cables", True)
-    result["cables"] = {"map_row": "cables" in window.panel.extra_items}
+    result["cables"] = {"map_row": "cables" in dict(__import__(
+        "planetx.ui.nasamaps", fromlist=["LAYERS"]).LAYERS)}
 
 
 @check(1500)
@@ -7185,16 +7186,16 @@ def cables_check():
     from qgis.core import QgsProject
     window = state["window"]
     out = result["cables"]
-    layer = window.cable_layer
+    layer = window.cables.layer
     out["features"] = 0 if layer is None else layer.featureCount()
     out["in_overlay"] = layer is not None and window.overlay is not None \
         and any(la is layer for la in window.overlay.layers)
-    data = window.cables_data
+    data = window.cables.data
     cable = next(c for c in data.cables if c.name == "TAT13")
     n = len(cable.lats) // 2
     lat = (cable.lats[n - 1] + cable.lats[n]) / 2.0
     lon = (cable.lons[n - 1] + cable.lons[n]) / 2.0
-    found = window._identify_cables(lat, lon, 30000.0)
+    found = window.cables.identify(lat, lon, 30000.0)
     out["identify"] = [f[0] for _, fs in found for f in fs]
     out["row"] = "cables" in window.panel.active_rows
     out["credit"] = "OpenStreetMap" in window.attribution.text()
