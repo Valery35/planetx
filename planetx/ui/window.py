@@ -459,8 +459,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.tilemap_coarse = {key: m.coarse
                                for key, m in tilemaps.MAPS.items()}
         self.cable_layer = None
-        # Наложения тайлов (core/tileoverlays.py): ключ - слой XYZ QGIS.
-        self.tile_layers = {}
         # Активные разломы GEM (core/faults.py): файл профиля, загрузка,
         # разбор в рабочем потоке, слой наложения.
         self.faults_data = None
@@ -727,6 +725,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.relief = ReliefTool(self)
         self._make_row_tools()  # строки реестра каталога
         self.change_tool = self.row_tool("aef_change")
+        self.tile_layers = self.row_tool("hiking").layers  # для шагов
         self.class_tool = ClassTool(self)
         # Распознавание по точкам со своими снимками (ui/recognize.py).
         self.recognize_tool = RecognizeTool(self)

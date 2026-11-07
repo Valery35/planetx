@@ -13,7 +13,7 @@ from qgis.core import QgsSettings
 
 from ...core import (basemap, cadastre, clouds, fields, geology, sun,
                      temperature, cutaway, slabs, themes, tilemaps,
-                     tileoverlays, wms)
+                     wms)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.measure import nearest_vertex
 from ...core.mipmap import mip_chain
@@ -62,7 +62,7 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "currents": ("currents",), "cadastre": ("cadastre",),
               **ROWS.fades()}
 QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm",
-               "cables") + tileoverlays.KEYS
+               "cables") + ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
@@ -189,7 +189,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "air": True, "iscgem": False,
                   "wiki": False,
                   **ROWS.defaults(),
-                  **{key: False for key in tileoverlays.KEYS}}
+                  }
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
@@ -202,7 +202,7 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "geoid", "magdecl",
                 "platemotion", "volcanoes",
                 "faults", "iscgem",
-                "wiki") + tileoverlays.KEYS \
+                "wiki") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.

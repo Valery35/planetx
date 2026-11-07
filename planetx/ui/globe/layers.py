@@ -29,7 +29,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
 from ...core import sources as datasources
-from ...core import (hips, oam, polar, tileoverlays,
+from ...core import (hips, oam, polar,
                      wikipedia)
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.features import Shape
@@ -908,12 +908,9 @@ class LayersMixin:
                 and getattr(self, "extras", {}).get("cables") \
                 and getattr(self, "cable_layer", None) is not None:
             parts.append(link_html(*cables_core.ATTRIBUTION))
-        for key, overlay in tileoverlays.OVERLAYS.items():
-            if self.planet.earth \
-                    and getattr(self, "extras", {}).get(key) \
-                    and key in getattr(self, "tile_layers", {}):
-                parts.append(link_html(overlay.attribution,
-                                       overlay.terms))
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "credits"):
+                parts += [link_html(*pair) for pair in tool.credits()]
         if self.view.wedge_slabs:
             parts.append(link_html(*slabs.ATTRIBUTION))
         if self.view.wedge is not None and self.crust is not None:
@@ -1087,11 +1084,9 @@ class LayersMixin:
             self.cable_layer.setOpacity(self._layer_opacity("cables"))
             layers.append(self.cable_layer)
         # Наложения тайлов - над векторной основой, под линиями выше.
-        for key, layer in getattr(self, "tile_layers", {}).items():
-            if self.planet.earth \
-                    and getattr(self, "extras", {}).get(key):
-                layer.setOpacity(self._layer_opacity(key))
-                layers.append(layer)
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "overlay_layers"):
+                layers += tool.overlay_layers()
         if groups & set(LINE_GROUPS) and self.ofm_layer is not None:
             layers.append(self.ofm_layer)
         min_levels = {}

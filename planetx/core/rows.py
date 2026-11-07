@@ -26,7 +26,7 @@ class Row:
 
     def __init__(self, key, group, names, tool=None, source="",
                  colors=(), words=(), fades=(), view_map=None,
-                 default=False, earth=True, after=None):
+                 default=False, earth=True, after=None, qgis_layer=False):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -43,6 +43,9 @@ class Row:
         self.default = bool(default)
         self.earth = bool(earth)
         self.after = after  # ключ строки, за которой стоит строка каталога
+        # Строка рисуется слоем QGIS в картинке наложения: непрозрачность
+        # меняет слой, «В проект QGIS…» - исполнитель.
+        self.qgis_layer = bool(qgis_layer)
 
 
 class Registry:
@@ -74,6 +77,9 @@ class Registry:
 
     def fades(self):
         return {row.key: row.fades for row in self.rows if row.fades}
+
+    def qgis_keys(self):
+        return tuple(row.key for row in self.rows if row.qgis_layer)
 
     def view_maps(self, layer):
         """Ключи строк, которые делят слой вида layer."""

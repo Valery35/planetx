@@ -5,7 +5,7 @@
 хранилища planetx-scene - общий файл линейки, просьба сессии rustPlanetX
 по слову автора от 7 ноября 2026 года «новые данные из Про раскидай по
 всем модулям». Источник правды - core/basemap.py и core/tileoverlays.py,
-названия наложений - строки каталога ui/nasamaps.py.
+названия наложений - строки реестра ui/tileoverlays.py.
 
 Запуск: export_sources.py [папка planetx-scene] [--check]. Без папки -
 PLANETX_SCENE, иначе planetx-scene рядом с рабочей копией. --check
@@ -38,8 +38,9 @@ TARGET = os.path.join("data", "sources.json")
 
 
 def overlay_names():
-    """Названия наложений по-русски из ui/nasamaps.py, layer_names."""
-    path = os.path.join(PLUGIN, "ui", "nasamaps.py")
+    """Названия наложений по-русски из строк реестра ui/tileoverlays.py
+    (ROW_NAMES)."""
+    path = os.path.join(PLUGIN, "ui", "tileoverlays.py")
     with open(path, encoding="utf-8") as fh:
         tree = ast.parse(fh.read())
     names = {}
@@ -47,6 +48,8 @@ def overlay_names():
         if not isinstance(node, ast.Dict):
             continue
         for key, value in zip(node.keys, node.values):
+            if isinstance(value, ast.Lambda):
+                value = value.body
             if (isinstance(key, ast.Constant)
                     and key.value in tileoverlays.OVERLAYS
                     and isinstance(value, ast.Tuple) and value.elts
