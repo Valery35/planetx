@@ -130,7 +130,7 @@ class SeriesChart(QWidget):
                              QPointF(rect.right(), y))
             painter.setPen(text)
             painter.drawText(QRectF(0, y - 8, MARGIN[0] - 6, 16), RIGHT,
-                             value_text(self.product, value))
+                             self.value_label(value))
             value += step
         for day, label in series.date_ticks(x0, x1):
             x = to_screen(day, y0).x()
@@ -163,12 +163,20 @@ class SeriesChart(QWidget):
             painter.setPen(text)
             painter.drawText(
                 QRectF(rect.left() + 4, 2, rect.width() - 8, 20), LEFT,
-                tr("{when}: медиана {median}, 10-90 % {low} - {high}, "
-                   "без облаков {share} % участка",
-                   when=when, median=value_text(self.product, p.median),
-                   low=value_text(self.product, p.low),
-                   high=value_text(self.product, p.high),
-                   share="{:.0f}".format(p.share)))
+                self.hover_line(when, p))
+
+    def value_label(self, value):
+        """Подпись значения на оси и в строке точки."""
+        return value_text(self.product, value)
+
+    def hover_line(self, when, p):
+        """Строка точки под курсором: when - время, p - Point."""
+        return tr("{when}: медиана {median}, 10-90 % {low} - {high}, "
+                  "без облаков {share} % участка",
+                  when=when, median=self.value_label(p.median),
+                  low=self.value_label(p.low),
+                  high=self.value_label(p.high),
+                  share="{:.0f}".format(p.share))
 
     def _nearest(self, pos):
         if not self.rows:

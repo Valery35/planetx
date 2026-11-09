@@ -228,6 +228,11 @@ def relief_items(window, menu, lat, lon):
                       tr("Карты минералов NASA по снимкам спектрометра "
                          "EMIT, пиксель 60 м, засушливые области."),
                       lambda *a: window.emit_tool.open_here(lat, lon)))
+        items.append((tr("Данные JAXA…"),
+                      tr("Температура, NDVI, осадки, влажность почвы и "
+                         "другие наборы JAXA Earth по месяцам - ряд "
+                         "участка, растр месяца и карта тренда."),
+                      lambda *a: window.jaxa_tool.open_here(lat, lon)))
     items.append((tr("Земляные работы…"),
                   tr("Выемка и насыпь участка до ровной площадки: объёмы, "
                      "раскраска, растр разности."),

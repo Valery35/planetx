@@ -7163,6 +7163,103 @@ EN = {
     "Угол до эталона, °": "Angle to the reference, °",
     "Классы: {list}. Без класса {none} %.":
         "Classes: {list}. Without a class {none} %.",
+    # Данные JAXA (ui/jaxa.py).
+    "Данные JAXA": "JAXA data",
+    "Данные JAXA…": "JAXA data…",
+    "Температура, NDVI, осадки, влажность почвы и другие наборы JAXA Earth "
+    "по месяцам - ряд участка, растр месяца и карта тренда.":
+        "Temperature, NDVI, precipitation, soil moisture and other JAXA "
+        "Earth datasets by month - the area series, a month raster and "
+        "a trend map.",
+    "Данные - {credit}, {url}.": "Data - {credit}, {url}.",
+    "Температура поверхности суши днём, SGLI":
+        "Daytime land surface temperature, SGLI",
+    "Температура поверхности моря днём, SGLI":
+        "Daytime sea surface temperature, SGLI",
+    "Вегетационный индекс NDVI, SGLI": "Vegetation index NDVI, SGLI",
+    "Хлорофилл-а в воде, SGLI": "Chlorophyll-a in water, SGLI",
+    "Осадки GSMaP, средняя интенсивность":
+        "GSMaP precipitation, mean rate",
+    "Влажность почвы, AMSR2": "Soil moisture, AMSR2",
+    "Оптическая толща аэрозоля, MODIS": "Aerosol optical depth, MODIS",
+    "{when}: медиана {median}, 10-90 % {low} - {high}, со значением "
+    "{share} % участка":
+        "{when}: median {median}, 10-90 % {low} - {high}, {share} % of the "
+        "area with a value",
+    "Пикселей с трендом {total}, значимых (p < {p}) {share} %, медиана "
+    "наклона {median} за год.":
+        "Pixels with a trend {total}, significant (p < {p}) {share} %, "
+        "median slope {median} per year.",
+    "Месячные наборы JAXA Earth на весь мир. Пиксель - около 2.8 км "
+    "у наборов SGLI, 5.5 км у аэрозоля, 11 км у осадков и влажности "
+    "почвы.":
+        "Monthly JAXA Earth datasets for the whole world. The pixel is "
+        "about 2.8 km for SGLI datasets, 5.5 km for aerosol, 11 km for "
+        "precipitation and soil moisture.",
+    "Месяцы": "Months",
+    "Наблюдения Земли JAXA по месяцам - медиана участка, разброс и растры "
+    "в проект QGIS. Источник - JAXA Earth, data.earth.jaxa.jp.":
+        "JAXA Earth observations by month - the area median, spread and "
+        "rasters to the QGIS project. Source - JAXA Earth, "
+        "data.earth.jaxa.jp.",
+    "Один месяц года": "One month of the year",
+    "Карта тренда только по месяцам того же месяца года, что у выбранного: "
+    "тренд между годами без сезонного хода.":
+        "Trend map only from months with the same month of the year as the "
+        "chosen one: the trend between years without the seasonal cycle.",
+    "Читает месяцы набора под участком и строит ряд: точка - медиана "
+    "участка, отрезок - от 10-го до 90-го процентиля.":
+        "Reads the dataset months under the area and builds the series: "
+        "the point is the area median, the bar spans the 10th to the 90th "
+        "percentile.",
+    "Тренд набора в каждом пикселе участка по месяцам ряда - наклон "
+    "Тейла-Сена за год и значимость по тесту Манна-Кендалла, растром "
+    "в проект QGIS. Пиксель без {count} месяцев со значением тренда "
+    "не получает.":
+        "The dataset trend in each area pixel over the series months - "
+        "the Theil-Sen slope per year and the Mann-Kendall significance, "
+        "as a raster in the QGIS project. A pixel without {count} months "
+        "with a value gets no trend.",
+    "Записать в проект QGIS растр выбранного месяца и таблицу ряда "
+    "и закрыть окно. Месяц выбирается щелчком по точке графика, без "
+    "щелчка - последний со значением.":
+        "Write the raster of the chosen month and the series table to the "
+        "QGIS project and close the window. A click on a chart point "
+        "chooses the month, without a click it is the last one with "
+        "a value.",
+    "Месяцы набора…": "Dataset months…",
+    "Выбран месяц {date}: медиана {median}. OK запишет его растр.":
+        "Month {date} is chosen: median {median}. OK writes its raster.",
+    "Считается карта тренда по {count} месяцам…":
+        "Computing the trend map from {count} months…",
+    "{name}, {date}": "{name}, {date}",
+    "Ряд «{name}» {first} - {last}": "Series «{name}» {first} - {last}",
+    "мг/м³": "mg/m³",
+    "Месяцы ряда. Один месяц набора - около 0.1-1 МБ под участком.":
+        "Series months. One dataset month is about 0.1-1 MB under the area.",
+    "Каталог JAXA не ответил: {error}":
+        "The JAXA catalogue did not answer: {error}",
+    "Месяцев в наборе: {count}, с {first} по {last}.":
+        "Months in the dataset: {count}, from {first} to {last}.",
+    "Нет месяцев набора.": "No dataset months.",
+    "Чтение месяцев: {done} из {total}…":
+        "Reading months: {done} of {total}…",
+    "Для тренда нужно не меньше {count} месяцев со значением, в ряду "
+    "{have}. Расширьте период или снимите флажок «Один месяц года».":
+        "A trend needs at least {count} months with a value, the series "
+        "has {have}. Widen the period or clear the «One month of the "
+        "year» box.",
+    "Тренда нет ни в одном пикселе.": "No pixel has a trend.",
+    "Месяцев со значением {shown} из {count}. Последний {date} - медиана "
+    "{median}.":
+        "Months with a value {shown} of {count}. The last one {date} - "
+        "median {median}.",
+    "Карта тренда в проекте.": "The trend map is in the project.",
+    "Значений набора на участке нет за {count} месяцев: участок вне "
+    "набора, например суша у набора моря.":
+        "The dataset has no values on the area for {count} months: the "
+        "area is outside the dataset, for example land in a sea dataset.",
+    "Медиана участка {median}.": "Area median {median}.",
     # Минералы EMIT (ui/emit.py).
     "Минералы EMIT": "EMIT minerals",
     "Минералы EMIT…": "EMIT minerals…",

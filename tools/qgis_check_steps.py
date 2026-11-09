@@ -20432,6 +20432,88 @@ def emit_again():
     return None
 
 
+JAXA_POINT = (55.7, 37.6)  # Москва: сезонный ход NDVI виден
+
+
+@check(1000)
+def jaxa_open():
+    # Данные JAXA: настоящий каталог и файлы JAXA Earth, участок 40 км
+    # у Москвы, NDVI за 2025 год.
+    from planetx.core.navigation import Pose
+    window = state["window"]
+    lat, lon = JAXA_POINT
+    window.view.navigator.stop()
+    window.view.navigator.set_pose(Pose(lat, lon, 150000.0, 0.0, 0.0))
+    tool = window.jaxa_tool
+    tool.open_here(lat, lon)
+    dialog = tool.dialog
+    dialog.area.reset_square()
+    dialog.area.side.setValue(40.0)
+    dialog.dataset.setCurrentIndex(dialog.dataset.findData("ndvi"))
+    state["jaxa_started"] = time.monotonic()
+    state["jaxa_phase"] = "dates"
+    result["jaxa"] = {}
+
+
+@check(500)
+def jaxa_wait():
+    tool = state["window"].jaxa_tool
+    dialog = tool.dialog
+    out = result["jaxa"]
+    waited = time.monotonic() - state["jaxa_started"]
+    if state["jaxa_phase"] == "dates":
+        if "ndvi" not in tool.dates and waited < 30:
+            return 500
+        out["dates"] = len(tool.dates.get("ndvi", []))
+        out["dates_status"] = dialog.status.text()
+        if not out["dates"]:
+            return None
+        dialog.first.setCurrentIndex(dialog.first.findData("2025-01"))
+        dialog.last.setCurrentIndex(dialog.last.findData("2025-12"))
+        tool.build()
+        state["jaxa_phase"] = "months"
+        state["jaxa_started"] = time.monotonic()
+        return 500
+    if state["jaxa_phase"] == "months":
+        if tool.job is not None and waited < 120:
+            return 500
+        out["seconds"] = round(waited, 1)
+        out["status"] = dialog.status.text()
+        out["months"] = [m.date for m in tool.months]
+        medians = {m.date: round(m.point.median, 3)
+                   for m in tool.months if m.point is not None}
+        out["medians"] = medians
+        out["summer_above_winter"] = bool(
+            medians.get("2025-07", 0) > 0.5
+            and medians.get("2025-07", 0) > medians.get("2025-03", 1))
+        out["chart_points"] = len(dialog.chart.rows)
+        out["ok_enabled"] = dialog.to_project.isEnabled()
+        out["trend_enabled"] = dialog.trend.isEnabled()
+        tool._pick("2025-07")
+        out["pick_status"] = dialog.status.text()
+        dialog.season.setChecked(False)
+        tool.make_trend()
+        state["jaxa_phase"] = "trend"
+        state["jaxa_started"] = time.monotonic()
+        return 500
+    if tool.trend_job is not None and waited < 60:
+        return 500
+    out["trend_status"] = dialog.status.text()
+    dialog.accept()
+    from qgis.core import QgsProject
+    layers = []
+    for node in _result_layers():
+        layer = QgsProject.instance().mapLayer(node.layerId())
+        kind = type(layer).__name__ if layer is not None else None
+        count = layer.featureCount() if kind == "QgsVectorLayer" else None
+        layers.append([node.name(), kind,
+                       bool(layer is not None and layer.isValid()), count])
+    out["layers"] = layers
+    out["closed"] = not dialog.isVisible()
+    _drop_group()
+    return None
+
+
 def _class_raster(path, rgba=False):
     """Пробный растр у CHANGE_POINT в EPSG:3857, сторона 4 км, пиксель
     25 м. Запад и восток - разные классы только в канале 2 (отражение),

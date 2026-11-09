@@ -76,6 +76,7 @@ from .objecttasks import TaskTool
 from .tracing import TraceTool
 from .spectral import SpectralTool
 from .emit import EmitTool
+from .jaxa import JaxaTool
 from .sitelayer import SiteLayer, ViewshedOwner
 from .earthwork import EarthworkTool
 from .netlink import NetLinks
@@ -734,6 +735,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.task_tool = TaskTool(self)
         self.spectral_tool = SpectralTool(self)
         self.emit_tool = EmitTool(self)
+        self.jaxa_tool = JaxaTool(self)
         self.earthwork = EarthworkTool(self)
         self.class_shapes = []
         self.extruder = ExtrudeManager(self)
@@ -1160,6 +1162,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
             self.task_tool.close()
             self.spectral_tool.close()
             self.emit_tool.close()
+            self.jaxa_tool.close()
             self.earthwork.close()
             if getattr(self, "oam_dialog", None) is not None:
                 self.oam_dialog.close()

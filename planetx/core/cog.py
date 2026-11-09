@@ -372,6 +372,12 @@ class Cog:
         out[inside] = value[inside]
         return out
 
+    def pixels(self, level, c0, r0, c1, r1):
+        """Пиксели c0..c1, r0..r1 обзора level как есть, без
+        пересчёта: float32, NaN без данных и без тайла. Наборы JAXA
+        (core/jaxa.py) берут числа файла пикселями сетки."""
+        return self._block(level, c0, r0, c1, r1)
+
     def _block(self, level, c0, r0, c1, r1):
         """Пиксели c0..c1, r0..r1 обзора level в float32, NaN без данных."""
         image = self.images[level]
