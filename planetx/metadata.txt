@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.42.1
+version=1.43.0
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.42.1 The plugin pages on informpp.ru moved into one PlanetX
+changelog=1.43.0 The JAXA data window of the Site analysis submenu reads
+      seven monthly JAXA Earth datasets over the site. These are land and sea
+      temperature, NDVI, chlorophyll-a, GSMaP precipitation, soil moisture
+      and aerosol. The monthly
+      series - the site median and spread, the month raster and the series
+      table in the QGIS project, a per-pixel trend map over all months or one
+      month of the year.
+      1.42.1 The plugin pages on informpp.ru moved into one PlanetX
       section together with PlanetX Lite. The About window, the manual and
       the catalog description lead to the new addresses. The base map and
       overlay catalog is exported as a file shared with PlanetX Lite and

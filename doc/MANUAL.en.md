@@ -3377,6 +3377,51 @@ the raster EMIT absorption band depth. The band depth grows with the share
 of the mineral in the cell, but it also depends on grain size, so it is not
 taken as a share.
 
+### JAXA data
+
+The JAXA data… item of the Site analysis submenu of the globe menu opens
+a window of monthly JAXA Earth datasets. These are Earth observations of the
+Japan Aerospace Exploration Agency for the whole world, one summary image per
+month. The site is shared with the other analysis windows, the largest is
+1000 km.
+
+There are seven datasets:
+- daytime land surface temperature and daytime sea surface temperature, the
+  GCOM-C satellite, the SGLI instrument, since 2018
+- vegetation index NDVI, SGLI
+- chlorophyll-a in water, SGLI
+- GSMaP precipitation, the mean rate over the month in mm/h, since 2000
+- soil moisture, the GCOM-W satellite, the AMSR2 instrument, since 2012
+- aerosol optical depth, MODIS, since 2002
+
+The pixel is about 2.8 km for SGLI datasets, 5.5 km for aerosol, 11 km for
+precipitation and soil moisture. A site smaller than a pixel takes the pixel
+of its centre.
+
+The Months lists set the series period. On opening the window asks the
+catalogue which months the dataset has and sets the last 36. The Build
+button reads the months under the site, the dataset files are not downloaded
+whole. One month is about 0.1-1 MB.
+
+The chart shows a point for each month with a value - the site median, the
+bar spans the 10th to the 90th percentile. A month without values on the site
+gets no point - for example winter NDVI under snow or land in a sea dataset.
+A click on a point chooses the month, without a click the last one is chosen.
+
+The Trend map… button computes the trend in each site pixel - the Theil-Sen
+slope per year and the Mann-Kendall significance. A raster of three bands -
+slope, p and the count of months - goes to the calculation subgroup. The One
+month of the year box takes for the trend only the months with the same month
+of the year as the chosen one - for example all Julys of the period. So the
+trend runs between years without the seasonal cycle. A pixel needs at least
+6 months with a value.
+
+OK writes to the calculation subgroup the raster of the chosen month in the
+dataset colors and the series table - month, median, 10th and 90th
+percentiles, share of the site with a value. The source credit is JAXA Earth.
+PlanetX Lite shows the datasets on the globe, the plugin window draws only the
+site outline.
+
 ### Earthwork
 
 The Earthwork… item of the Site analysis submenu calculates how much soil has
