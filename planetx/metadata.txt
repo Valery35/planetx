@@ -3,7 +3,7 @@ name=PlanetX
 qgisMinimumVersion=3.36
 qgisMaximumVersion=4.99
 description=3D globe for QGIS: satellite imagery, terrain, atmosphere, borders, roads and labels, project layers on the globe, My Places, ruler, map synchronization, place search and grab-the-Earth navigation
-version=1.43.0
+version=1.43.1
 author=ООО «Информ++»
 email=xbbster@gmail.com
 about=A 3D globe in its own window inside QGIS. The whole Earth is shown
@@ -96,7 +96,14 @@ category=Web
 icon=icon.png
 experimental=False
 deprecated=False
-changelog=1.43.0 The JAXA data window of the Site analysis submenu reads
+changelog=1.43.1 Terrarium heights without spikes. Tiles have pixels
+      thousands of metres above or below their neighbours, single and in
+      bands, near Perm up to 2600 m among heights of about 100 m. The globe
+      raised them as peaks, contours, slope and analysis windows followed
+      them. Such a pixel now gets the median of its 7 x 7 neighbours.
+      Summits, cliffs and canyons stay. The rule is shared with PlanetX
+      Lite.
+      1.43.0 The JAXA data window of the Site analysis submenu reads
       seven monthly JAXA Earth datasets over the site. These are land and sea
       temperature, NDVI, chlorophyll-a, GSMaP precipitation, soil moisture
       and aerosol. The monthly
