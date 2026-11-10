@@ -33,13 +33,15 @@ DEEP_LEVEL = 19 - LEVEL_OFFSET
 # не пересобирают.
 FLAT_LEVEL = DEEP_LEVEL + 1
 
-# Одиночные выбросы (despike): перепад до медианы соседей больше
-# SPIKE_RATIO разбросов соседей, разброс не меньше SPIKE_QUANTUM метров -
+# Выбросы (despike): перепад до медианы соседей больше SPIKE_RATIO
+# разбросов между их четвертями, разброс не меньше SPIKE_QUANTUM метров -
 # шаг высот SRTM и MOLA. Правило и числа - как у PlanetX Lite
-# (crates/terrain/src/lib.rs, коммит 9699646).
+# (crates/terrain/src/lib.rs, коммит 771afc5).
 SPIKE_RATIO = 6.0
 SPIKE_QUANTUM = 1.0
-SPIKE_NEIGHBORS = 5  # соседей внутри тайла, меньше - пиксель не трогается
+SPIKE_REACH = 3  # соседи на столько пикселей, окно 7 × 7
+SPIKE_NEAR_MIN = 15  # соседей внутри тайла, у углового пикселя их 15
+SPIKE_PASSES = 3  # следующий проход добирает ореол скоплений
 
 HeightTile = namedtuple("HeightTile", "z x y heights low high")
 HeightTile.__doc__ = """Тайл высот: массив (256, 256) float32 в метрах,
@@ -67,39 +69,71 @@ def decode(rgba, floor=0.0, encoding="terrarium"):
 
 
 def despike(heights):
-    """Высоты без одиночных выбросов.
+    """Высоты без выбросов.
 
     У Terrarium бывают пиксели на тысячи метров выше или ниже соседей,
-    у рек и на ровном месте. У Перми на уровнях 10-12 найдены 1700 м
-    среди высот 100-200 м, у Lite там же +2600 и -2600 м. Сетка глобуса
-    поднимала их пиками, по ним шли горизонтали, уклон и анализ.
-    Задание сессии Lite от 11 ноября 2026 года. Пиксель, который
-    отличается от медианы восьми соседей больше чем на SPIKE_RATIO их
-    разбросов, получает медиану. Разброс - между вторым и предпоследним
-    по величине соседом: соседний выброс в него не входит. У края тайла
-    берутся соседи внутри тайла, нужно не меньше SPIKE_NEIGHBORS.
-    У настоящей вершины соседи - склоны, их разброс велик, и она
-    остаётся. Возвращает новый массив float32."""
-    h = np.asarray(heights, dtype=np.float32)
+    у рек и на ровном месте, поодиночке и полосами (у Перми полоса около
+    2 × 8 пикселей в 419-1203 м среди высот около 100 м, тайл
+    10/673/308). Сетка глобуса поднимала их пиками, по ним шли
+    горизонтали, уклон и анализ. Задание сессии Lite от 11 ноября 2026
+    года, правило - как у PlanetX Lite.
+
+    Соседи - окно 7 × 7, у края тайла - внутри тайла, нужно не меньше
+    SPIKE_NEAR_MIN. Пиксель, который отличается от медианы соседей
+    больше чем на SPIKE_RATIO разбросов между их четвертями, получает
+    медиану. Четверти не замечают до 12 выбросов в окне, поэтому полоса
+    не прячет сама себя. Окно разбирается только у пикселей дальше
+    SPIKE_RATIO * SPIKE_QUANTUM / 2 от среднего окна. До SPIKE_PASSES
+    проходов, каждый по итогу прежнего, проход без замен - последний.
+    Возвращает новый массив float32."""
+    h = np.asarray(heights, dtype=np.float32).copy()
+    if not np.isfinite(h).all():
+        return h
+    for _ in range(SPIKE_PASSES):
+        h, changed = _despike_pass(h)
+        if not changed:
+            break
+    return h
+
+
+def _despike_pass(h):
+    """Проход despike: (высоты, заменено ли что-то)."""
     rows, cols = h.shape
-    pad = np.full((rows + 2, cols + 2), np.nan, dtype=np.float32)
-    pad[1:-1, 1:-1] = h
-    near = np.stack([pad[1 + dr:rows + 1 + dr, 1 + dc:cols + 1 + dc]
-                     for dr in (-1, 0, 1) for dc in (-1, 0, 1)
-                     if dr or dc])
-    count = np.isfinite(near).sum(axis=0)
-    near = np.sort(near, axis=0)  # NaN за краем тайла - в конце
-    n = np.maximum(count, 2)
-
-    def nth(index):
-        return np.take_along_axis(near, index[None], axis=0)[0]
-
-    median = np.where(n % 2 == 0,
-                      (nth(n // 2 - 1) + nth(n // 2)) / 2.0, nth(n // 2))
-    spread = np.maximum(nth(n - 2) - nth(np.ones_like(n)), SPIKE_QUANTUM)
-    spike = (count >= SPIKE_NEIGHBORS) & np.isfinite(h) \
-        & (np.abs(h - median) > SPIKE_RATIO * spread)
-    return np.where(spike, median, h).astype(np.float32)
+    reach = SPIKE_REACH
+    # Среднее окна по накопленным суммам, окно обрезается краем тайла.
+    sums = np.zeros((rows + 1, cols + 1))
+    sums[1:, 1:] = np.cumsum(np.cumsum(h, axis=0, dtype=np.float64), axis=1)
+    r = np.arange(rows)
+    c = np.arange(cols)
+    r0, r1 = np.maximum(r - reach, 0), np.minimum(r + reach + 1, rows)
+    c0, c1 = np.maximum(c - reach, 0), np.minimum(c + reach + 1, cols)
+    total = (sums[r1][:, c1] - sums[r0][:, c1] - sums[r1][:, c0]
+             + sums[r0][:, c0])
+    mean = total / np.outer(r1 - r0, c1 - c0)
+    far = np.abs(h - mean) > SPIKE_RATIO * SPIKE_QUANTUM / 2.0
+    if not far.any():
+        return h, False
+    pr, pc = np.nonzero(far)
+    pad = np.full((rows + 2 * reach, cols + 2 * reach), np.nan,
+                  dtype=np.float32)
+    pad[reach:-reach, reach:-reach] = h
+    span = range(-reach, reach + 1)
+    near = np.stack([pad[pr + reach + dr, pc + reach + dc]
+                     for dr in span for dc in span if dr or dc], axis=1)
+    count = np.isfinite(near).sum(axis=1)
+    near = np.sort(near, axis=1)  # NaN за краем тайла - в конце
+    n = count[:, None]
+    low, mid, high = (np.take_along_axis(near, k, axis=1)[:, 0]
+                      for k in (n // 4, n // 2, n * 3 // 4))
+    spread = np.maximum(high - low, SPIKE_QUANTUM)
+    here = h[pr, pc]
+    spike = (count >= SPIKE_NEAR_MIN) \
+        & (np.abs(here - mid) > SPIKE_RATIO * spread)
+    if not spike.any():
+        return h, False
+    out = h.copy()
+    out[pr[spike], pc[spike]] = mid[spike]
+    return out, True
 
 
 def make_tile(z, x, y, rgba, floor=0.0, encoding="terrarium"):

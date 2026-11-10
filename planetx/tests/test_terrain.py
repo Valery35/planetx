@@ -68,18 +68,39 @@ class TestDecode(unittest.TestCase):
         for row, col in ((100, 100), (150, 40), (1, 255), (200, 0)):
             self.assertLessEqual(abs(heights[row, col] - slope[row, col]),
                                  1.0, (row, col))
-        self.assertTrue(np.array_equal(heights, slope.astype(np.float32)))
+        # Склон без выбросов не меняется.
+        kept = spiky == slope
+        self.assertTrue(np.array_equal(heights[kept],
+                                       slope[kept].astype(np.float32)))
         # Выброс вниз, тело без моря: впадина не прижимается к нулю.
         dip = slope.copy()
         dip[60, 60] = -1371.0
-        self.assertAlmostEqual(
-            float(tr.decode(encode(dip), floor=None)[60, 60]), 100.0 + 18.0)
+        self.assertLessEqual(
+            abs(float(tr.decode(encode(dip), floor=None)[60, 60]) - 118.0),
+            1.0)
         # Вершина конуса крутизной 30 м на пиксель остаётся.
         r, c = np.mgrid[0:size, 0:size] - 128.0
         cone = 3000.0 - 30.0 * np.sqrt(r * r + c * c)
         self.assertEqual(float(tr.despike(cone)[128, 128]), 3000.0)
         self.assertTrue(np.array_equal(tr.despike(cone),
                                        cone.astype(np.float32)))
+
+    def test_spike_bands_go(self):
+        # Полоса выбросов у Перми, тайл 10/673/308 - столбик в 5 пикселей
+        # 619-1174 м и пятно 2 × 2 среди склона около 100 м. Окно 3 × 3
+        # их не трогало: соседи столбика - тоже выбросы.
+        size = tr.SIZE
+        slope = np.tile(100.0 + np.floor(np.arange(size) * 0.3), (size, 1))
+        spiky = slope.copy()
+        spiky[101:106, 143] = (619.0, 1024.0, 1121.0, 1174.0, 726.0)
+        spiky[30:32, 30:32] = 2600.0
+        heights = tr.despike(spiky)
+        self.assertLessEqual(float(np.abs(heights - slope).max()), 1.0)
+        # Обрыв 300 м и долина в 3 пикселя глубиной 150 м остаются.
+        cliff = np.where(np.arange(size)[None, :] < 128, 400.0, 100.0) \
+            + np.zeros((size, 1))
+        self.assertTrue(np.array_equal(tr.despike(cliff),
+                                       cliff.astype(np.float32)))
 
     def test_small_picture_is_not_despiked(self):
         # Картинки не размером тайла (пробные строки тестов) идут как есть.
