@@ -52,6 +52,40 @@ class TestDecode(unittest.TestCase):
         self.assertEqual(tile.heights.tolist(), values.tolist())
         self.assertEqual(tile.low, -8206.0)
 
+    def test_spikes_go_slopes_and_peaks_stay(self):
+        # Выбросы Terrarium у Перми: 1700 м и +2600 / -2600 м среди высот
+        # около 100 м. Пологий склон в целых метрах, как SRTM, с выбросами
+        # вверх, вниз и у края тайла. Тест сессии Lite, despike.rs.
+        size = tr.SIZE
+        cols = np.floor(np.arange(size) * 0.3)
+        slope = np.tile(100.0 + cols, (size, 1))
+        spiky = slope.copy()
+        spiky[100, 100] = 2594.0
+        spiky[150, 40] = 1371.0
+        spiky[1, 255] = 860.0
+        spiky[200, 0] = 2600.0
+        heights = tr.decode(encode(spiky), floor=None)
+        for row, col in ((100, 100), (150, 40), (1, 255), (200, 0)):
+            self.assertLessEqual(abs(heights[row, col] - slope[row, col]),
+                                 1.0, (row, col))
+        self.assertTrue(np.array_equal(heights, slope.astype(np.float32)))
+        # Выброс вниз, тело без моря: впадина не прижимается к нулю.
+        dip = slope.copy()
+        dip[60, 60] = -1371.0
+        self.assertAlmostEqual(
+            float(tr.decode(encode(dip), floor=None)[60, 60]), 100.0 + 18.0)
+        # Вершина конуса крутизной 30 м на пиксель остаётся.
+        r, c = np.mgrid[0:size, 0:size] - 128.0
+        cone = 3000.0 - 30.0 * np.sqrt(r * r + c * c)
+        self.assertEqual(float(tr.despike(cone)[128, 128]), 3000.0)
+        self.assertTrue(np.array_equal(tr.despike(cone),
+                                       cone.astype(np.float32)))
+
+    def test_small_picture_is_not_despiked(self):
+        # Картинки не размером тайла (пробные строки тестов) идут как есть.
+        values = np.array([[0.0, 5000.0, 0.0]])
+        self.assertEqual(tr.decode(encode(values)).tolist(), values.tolist())
+
     def test_store_depth_follows_lowest_and_scale(self):
         # Подстилка опускается на глубину самой низкой высоты: равнина
         # Исиды -3.3 км при масштабе 3 закрывалась подстилкой на 3 км.
