@@ -51,8 +51,7 @@ REGION_MOVE = 0.02
 TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 # Раздел «На глобусе»: непрозрачность и выгрузка слоёв. Точки - атрибут
 # вида, тайловые слои - слои вида GIBS, слои QGIS - в наложении.
-POINT_LAYERS = {"deposits": "deposits", "osm_mines": "osm_mines",
-                "quakes": "quakes", "fires": "fires",
+POINT_LAYERS = {"quakes": "quakes", "fires": "fires",
                 "iscgem": "history", **ROWS.points()}
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = {"currents": "currents"}
@@ -176,8 +175,6 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "quakes": False, "cutaway": False, "paleo": False,
                   "fires": False, "satellites": False,
                   "trains": False, "vessels": False, "aircraft": False,
-                  "deposits": False,
-                  "osm_mines": False,
                   "currents": False, "cadastre": False,
                   "magpoles": False, "geoid": False,
                   "magdecl": False,
@@ -191,8 +188,7 @@ SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "cutaway", "paleo", "fires", "satellites",
-                "trains", "vessels", "aircraft", "deposits",
-                "osm_mines",
+                "trains", "vessels", "aircraft",
                 "currents", "cadastre", "magpoles",
                 "geoid", "magdecl",
                 "platemotion",

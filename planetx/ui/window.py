@@ -25,14 +25,12 @@ from qgis.PyQt.QtWidgets import (QGraphicsDropShadowEffect, QLabel,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import (ellipsoid, fields, geoid, paleo, mining, themes,
-                    tilemaps)
+from ..core import (ellipsoid, fields, geoid, paleo, themes, tilemaps)
 from ..core.coords import FORMATS as COORD_FORMATS
 from ..core.geocode import SEARCH_INTERVAL
 from ..core.planets import EARTH_PLANET
 from ..core.sync import BOTH, DIRECTIONS
 from ..core.terrain import MAX_LEVEL as TERRAIN_MAX
-from .overpass import OverpassTiles
 from .flow import FlowManager
 from .rumsey import RumseyLoader
 from ..core.places import AS_QGIS, LABEL_LANGUAGES, LOCAL
@@ -48,7 +46,7 @@ from . import guide as guide_ui
 from . import style
 from .sidepanel import SidePanel
 from .layer_labels import LayerLabels
-from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
+from .legend import (BedsLegend, ContourLegend, CutawayLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, CurrentLegend, FieldLegend,
@@ -262,9 +260,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.quake_legend.hide()
         self.fire_legend = FireLegend(self.view)
         self.fire_legend.hide()
-        self.deposit_legend = DepositLegend(self.view)
-        self.deposit_legend.hide()
-        self.deposit_legend.closer = self._close_deposit_legend
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -290,7 +285,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.legend_panel = LegendPanel(self.view)
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
-                       self.fire_legend, self.deposit_legend,
+                       self.fire_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -369,14 +364,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Пожары NASA FIRMS: очаги сводки и ждущий ответ.
         self.fire_data = None
         self._fire_reply = None
-        # Месторождения USGS: данные, ждущие ответы двух архивов, задача
-        # разбора в рабочем потоке.
-        self.deposit_data = None
-        # Шахты и карьеры OSM: объекты по тайлам, очередь тайлов, запрос
-        # Overpass в работе и время последнего запроса.
-        self.osm_mines_tiles = OverpassTiles(
-            self.view, "mines", mining.query, mining.parse,
-            self._place_osm_mines, self._overpass_failed)
         # Википедия рядом (core/wikipedia.py): статьи по тайлам вида,
         # запрос первого абзаца открытой карточки.
         self.wiki_articles = WikiArticles(self.view, self._place_wiki,
@@ -390,9 +377,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._osm_timer.setSingleShot(True)
         self._osm_timer.setInterval(OSM_PAUSE)
         self._osm_timer.timeout.connect(self._want_overpass)
-        self._deposit_replies = {}
-        self._deposit_bytes = {}
-        self._deposit_job = None
         # Плиты Slab2 на разрезах: указатель зон с рамками, пришедшие
         # зоны, ждущие ответы. Зона просится, когда разрез её касается.
         # slab_base - шаблон адреса зоны вместо slabs.URL, для проверки

@@ -15,8 +15,7 @@ from ...core.measure import surface_level
 from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
-from ...core import (mining,
-                     platemotion, slabs)
+from ...core import platemotion, slabs
 from ...core.features import Shape
 from ...core.places import Place as MarkPlace
 from ...i18n import tr
@@ -29,33 +28,18 @@ from .base import (CURSOR_PERIOD, DATA_DIR,
 class ResourcesMixin:
     """Часть окна глобуса GlobeWindow."""
 
-    # Горные разработки и шахты OSM.
-
-    def _deposit_legend_on(self):
-        """Шкала месторождений нужна месторождениям USGS и шахтам OSM."""
-        return bool(self.planet.earth and self.view.sky_view is None
-                    and (self.extras.get("deposits")
-                         or self.extras.get("osm_mines")))
-
-    def _close_deposit_legend(self):
-        """Крестик шкалы убирает месторождения и шахты OSM."""
-        self.set_extra("deposits", False)
-        self.set_extra("osm_mines", False)
-
-    def _set_osm_mines(self, on):
-        """Шахты и карьеры OSM строкой витрины: тайлы вокруг вида."""
-        self._mark_gallery()
-        self.deposit_legend.setVisible(self._deposit_legend_on())
-        if not on:
-            self.osm_mines_tiles.stop()
-        self._place_osm_mines()
-        if on:
-            self._want_overpass()
+    # Объекты OpenStreetMap по тайлам Overpass (ui/overpass.py).
 
     def _overpass_view_changed(self):
         if self.planet.earth and (self.extras.get("osm_mines")
                                   or self.extras.get("infra_osm")):
             self._osm_timer.start()
+
+    def _place_rows(self):
+        """Точки строк реестра - заново по нынешнему масштабу рельефа."""
+        for tool in self.row_tools.values():
+            if hasattr(tool, "relief_changed"):
+                tool.relief_changed()
 
     def _want_overpass(self):
         """Недостающие тайлы у точки взгляда - загрузчикам Overpass
@@ -65,8 +49,6 @@ class ResourcesMixin:
         pose = self.view.navigator.pose
         eye = np.asarray(self.view.camera.eye, dtype=np.float64)
         altitude = float(ecef_to_geodetic(eye)[2])
-        if self.extras.get("osm_mines"):
-            self.osm_mines_tiles.want(pose.lat, pose.lon, altitude)
         for tool in self.row_tools.values():
             if hasattr(tool, "want"):
                 tool.want(pose.lat, pose.lon, altitude)
@@ -77,15 +59,6 @@ class ResourcesMixin:
         self.message = (tr("Сервер OpenStreetMap не ответил, запрос "
                            "повторится сам."), time.monotonic())
         self._show_state()
-
-    def _place_osm_mines(self):
-        on = self.extras.get("osm_mines", False) and self.planet.earth
-        items = self.osm_mines_tiles.all_items()
-        self.view.osm_mines.set_deposits(
-            mining.to_deposits(items) if on and items else None,
-            self.view.store.scale, self._surface_ground)
-        self._show_attribution()
-        self.view.update()
 
     # Скорости плит NNR-MORVEL56 (core/platemotion.py).
 

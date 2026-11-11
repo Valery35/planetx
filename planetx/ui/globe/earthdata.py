@@ -7,7 +7,6 @@
 Часть окна глобуса GlobeWindow (ui/window.py)."""
 import html
 import os
-import zipfile
 import time
 
 import numpy as np
@@ -18,7 +17,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import (basemap, geoid, paleo, dem as dem_model,
-                     deposits as deposits_core, fires as fires_core, crust,
+                     fires as fires_core, crust,
                      cutaway, iscgem, quakes, slabs,
                      sources as datasources, tomography)
 from ...core.sync import ground_size, view_box
@@ -30,7 +29,6 @@ from ...net.overlay import (OPENFREEMAP_ATTRIBUTION, fetch_bytes, fetch_mirror,
 from ...render.view import start_keys
 from ..inset import DeepSource, DemSource, warm as warm_gdal
 from .. import export as layer_export
-from ..deposits import deposits_path, parse_deposits
 from ..overpass import brief_error
 from ..tomo import parse_tomo
 from .base import (DATA_DIR, DEPOSIT_POLL, SEA_KEY, SHADOWS_KEY,
@@ -631,7 +629,7 @@ class EarthDataMixin:
             self._update_water()
             self._place_quakes()
             self._place_fires()
-            self._place_deposits()
+            self._place_rows()
         self._place_attribution()
         if not shown:
             self.paleo_bar.stop()
@@ -707,7 +705,7 @@ class EarthDataMixin:
                 self._fire_reply.abort()
             self._fire_reply = None
             self._place_fires()
-            self._place_deposits()
+            self._place_rows()
             return
         if self._fire_reply is None:
             self._fire_reply = fetch_bytes(fires_core.FEED, self._fires_done,
@@ -726,94 +724,7 @@ class EarthDataMixin:
                                error=error), time.monotonic())
             self._show_state()
         self._place_fires()
-        self._place_deposits()
-
-    def _set_deposits(self, on):
-        """Месторождения USGS - строка витрины. Первое включение
-        скачивает архивы MRDS и крупных месторождений мира, разбор идёт
-        в рабочем потоке, итог ложится файлом в профиль
-        (core/deposits.py). Дальше файл читается без сети."""
-        self._mark_gallery()
-        self.deposit_legend.setVisible(self._deposit_legend_on())
-        if not on:
-            for reply in list(self._deposit_replies.values()):
-                reply.abort()
-            self._deposit_replies.clear()
-            self._place_deposits()
-            return
-        if self.deposit_data is None:
-            path = deposits_path()
-            if os.path.exists(path):
-                try:
-                    self.deposit_data = deposits_core.load(path)
-                except (OSError, ValueError, KeyError) as error:
-                    journal.note("deposits file: {}".format(error))
-        if self.deposit_data is not None:
-            self._place_deposits()
-            return
-        if self._deposit_replies or self._deposit_job is not None:
-            return
-        self._deposit_bytes = {}
-        for key, url in (("mrds", deposits_core.MRDS_URL),
-                         ("major", deposits_core.MAJOR_URL),
-                         ("minfac", deposits_core.MINFAC_URL)):
-            self._deposit_replies[key] = fetch_bytes(
-                url, lambda data, error, key=key:
-                self._deposit_arrived(key, data, error))
-            self.view.data_pending += 1
-        self.message = (tr("Загрузка месторождений USGS, около 25 МБ…"),
-                        time.monotonic())
-        self._show_state()
-
-    def _deposit_arrived(self, key, data, error):
-        if self._deposit_replies.pop(key, None) is not None:
-            self.view.data_pending = max(0, self.view.data_pending - 1)
-        if data is None:
-            for reply in list(self._deposit_replies.values()):
-                reply.abort()
-            self._deposit_replies.clear()
-            self.message = (tr("Месторождения не загрузились: {error}",
-                               error=error), time.monotonic())
-            self._show_state()
-            return
-        self._deposit_bytes[key] = bytes(data)
-        if self._deposit_replies:
-            return
-        mrds = self._deposit_bytes.pop("mrds", None)
-        major = self._deposit_bytes.pop("major", None)
-        minfac = self._deposit_bytes.pop("minfac", None)
-        self._deposit_job = executor("deposits", 1).submit(
-            parse_deposits, mrds, major, minfac, deposits_path())
-        self.view.data_pending += 1
-        QTimer.singleShot(DEPOSIT_POLL, self._deposit_poll)
-
-    def _deposit_poll(self):
-        job = self._deposit_job
-        if job is None:
-            return
-        if not job.done():
-            QTimer.singleShot(DEPOSIT_POLL, self._deposit_poll)
-            return
-        self._deposit_job = None
-        self.view.data_pending = max(0, self.view.data_pending - 1)
-        try:
-            self.deposit_data = job.result()
-        except (OSError, ValueError, KeyError, StopIteration,
-                zipfile.BadZipFile) as error:
-            self.message = (tr("Месторождения не разобраны: {error}",
-                               error=error), time.monotonic())
-            self._show_state()
-            return
-        self._place_deposits()
-
-    def _place_deposits(self):
-        """Месторождения на глобус по нынешнему масштабу рельефа."""
-        on = self.extras.get("deposits", False) and self.planet.earth
-        self.view.deposits.set_deposits(
-            self.deposit_data if on else None, self.view.store.scale,
-            self._surface_ground)
-        self._show_attribution()
-        self.view.update()
+        self._place_rows()
 
     def _place_fires(self):
         """Очаги на глобус по нынешнему масштабу рельефа."""

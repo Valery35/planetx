@@ -337,10 +337,6 @@ class StateMixin:
             self._set_quakes(on)
         elif key == "fires":
             self._set_fires(on)
-        elif key == "deposits":
-            self._set_deposits(on)
-        elif key == "osm_mines":
-            self._set_osm_mines(on)
         elif key == "wiki":
             self._set_wiki(on)
         elif key == "currents":
@@ -565,13 +561,7 @@ class StateMixin:
                                       tzinfo=datetime.timezone.utc)
             return (epoch + datetime.timedelta(seconds=seconds)).strftime(
                 "%Y-%m-%d %H:%M")
-        if key in ("deposits", "osm_mines"):
-            fields = [(name, "str") for name in (
-                "name", "country", "commodities", "type", "status",
-                "record", "operator", "capacity", "precision", "osm")]
-            rows = [(layer.data.text(int(layer.order[n])) + [""] * 10)[:10]
-                    for n in index]
-        elif key in ("quakes", "iscgem"):
+        if key in ("quakes", "iscgem"):
             fields = [("place", "str"), ("mag", "real"),
                       ("depth_km", "real"), ("time", "str"), ("url", "str")]
             rows = [(q.place, q.mag, q.depth, stamp(q.time), q.url)

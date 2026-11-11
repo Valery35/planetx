@@ -100,8 +100,7 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
-           "quakes": "USGS", "deposits": "USGS",
-           "osm_mines": "OpenStreetMap",
+           "quakes": "USGS",
            "currents": "NOAA CoastWatch",
            "trains": "Fintraffic Digitraffic",
            "vessels": "Fintraffic Digitraffic, AIS", "aircraft": "adsb.lol",
@@ -128,8 +127,6 @@ LAYERS = ROWS.place((
           ("platemotion", "seismic"),
           ("magpoles", "geophysics"), ("magdecl", "geophysics"),
           ("geoid", "geophysics"),
-          ("deposits", "resources"),
-          ("osm_mines", "resources"),
           ("trains", "transport"), ("vessels", "transport"),
           ("aircraft", "transport"),
           ("currents", "water"),
@@ -325,21 +322,6 @@ def layer_names():
             "секторе строки «Разрез Земли». "
             "Цвет показывает глубину очага, размер - магнитуду. "
             "Сводка загружается при включении строки.")),
-        "deposits": (tr("Месторождения"), tr(
-            "Месторождения, рудники и проявления полезных ископаемых "
-            "USGS - база MRDS, около 300 тысяч точек, больше всего в США, "
-            "3 тысячи крупных месторождений мира и 6.5 тысячи рудников "
-            "и заводов мира с оператором и мощностью. Цвет - группа "
-            "полезного ископаемого, большая точка - крупное "
-            "месторождение, рудник или завод. Щелчок по точке показывает "
-            "название, ископаемые, тип и ссылку на запись USGS. Первое "
-            "включение скачивает около 25 МБ.")),
-        "osm_mines": (tr("Шахты и карьеры OSM"), tr(
-            "Шахты, рудники, стволы и карьеры из OpenStreetMap с "
-            "названиями и ископаемым. Загружаются по месту вида, когда "
-            "камера ниже 150 км. Цвет - группа ископаемого, как у "
-            "месторождений. Щелчок по точке показывает название, "
-            "оператора и ссылку на объект OpenStreetMap.")),
         "trains": (tr("Поезда Финляндии"), tr(
             "Поезда Финляндии в реальном времени по открытым данным "
             "Fintraffic Digitraffic, положения обновляются раз в 10 с. "

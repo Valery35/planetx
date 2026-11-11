@@ -15,7 +15,7 @@ from qgis.utils import iface
 
 from ... import journal
 from ...core import (basemap, cadastre, when, assistant as assistant_core,
-                     deposits as deposits_core, mining, pick, quakes)
+                     pick, quakes)
 from ...core.ellipsoid import ecef_to_geodetic
 from ...core.features import Shape
 from ...core.navigation import focal, ground_under
@@ -29,7 +29,6 @@ from ..identify import Group, IdentifyDialog, identify, point_text
 from ..assistant import (AssistantDialog, current_provider, ready,
                          search_enabled)
 from .. import projectread
-from ..legend import deposit_group_names, mine_kind_names
 from ..manualcard import load_index
 from ..myplaces import Place
 from ..placecard import (Card, FeatureCard, PlaceCard, explain_question,
@@ -298,9 +297,7 @@ class IdentifyMixin:
         пожара или спутника. Щелчок по такой точке открывает окно
         «Объекты» и без режима опроса - замечание автора от 11 октября
         2026 года «клик по точкам ничего не даёт»."""
-        return bool(self._identify_deposits(px, py)
-                    or self._identify_deposits(px, py, osm=True)
-                    or self._pick_rows(px, py)
+        return bool(self._pick_rows(px, py)
                     or self._lines_under(px, py)
                     or self._identify_quakes(px, py)
                     or self._identify_fires(px, py)
@@ -455,8 +452,6 @@ class IdentifyMixin:
         groups += self._identify_places(lat, lon, tolerance)
         groups += self._identify_quakes(px, py)
         groups += self._identify_fires(px, py)
-        groups += self._identify_deposits(px, py)
-        groups += self._identify_deposits(px, py, osm=True)
         groups += self._pick_rows(px, py)
         groups += self._identify_wiki(px, py)
         groups = self._identify_satellites(px, py) \
@@ -1020,60 +1015,3 @@ class IdentifyMixin:
                                                      data.lon[n]),
                              values, None))
         return [(Group(tr("Пожары")), features)] if features else []
-
-    def _identify_deposits(self, px, py, osm=False):
-        """Месторождения у точки щелчка на экране, не больше 20. osm -
-        шахты и карьеры OpenStreetMap."""
-        layer = self.view.osm_mines if osm else self.view.deposits
-        data = layer.data
-        if data is None:
-            return []
-        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
-        seen = layer.visible(eye)
-        if not len(seen):
-            return []
-        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
-        pixels, front = self.view.camera.project(layer.focus[seen])
-        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
-        near = np.nonzero(front & (gap <= radius))[0]
-        near = near[np.argsort(gap[near])][:20]
-        names = deposit_group_names()
-        keys = [g[0] for g in deposits_core.GROUPS] + ["other"]
-        features = []
-        for n in near:
-            record = int(layer.order[seen[n]])
-            name, country, commodities, kind, status, number, operator, \
-                capacity, precision, osm_id = \
-                (data.text(record) + [""] * 10)[:10]
-            if osm:
-                kind = mine_kind_names().get(kind, kind)
-            values = [(tr("Полезные ископаемые"), commodities),
-                      (tr("Группа"), names[keys[int(data.group[record])]])]
-            if kind:
-                values.append((tr("Тип"), kind))
-            if status:
-                values.append((tr("Стадия или модель"), status))
-            if operator:
-                values.append((tr("Оператор"), operator))
-            if capacity:
-                values.append((tr("Мощность (год сведений)"), capacity))
-            if country:
-                values.append((tr("Страна"), country))
-            if precision == "A":
-                values.append((tr("Место"), tr("примерное, по району")))
-            source = "OpenStreetMap" if osm else tr(
-                "Крупные месторождения мира, USGS OFR 2005-1294") \
-                if data.major[record] else tr(
-                    "Рудники и заводы мира, USGS mineral operations") \
-                if data.facility[record] else "USGS MRDS"
-            values.append((tr("Набор"), source))
-            if osm_id:
-                values.append((tr("Объект OpenStreetMap"),
-                               mining.OSM_PAGE.format(*osm_id.split("/"))))
-            if number:
-                values.append((tr("Запись USGS"),
-                               deposits_core.MRDS_PAGE.format(number)))
-            features.append((name or "{:.4f}, {:.4f}".format(
-                data.lat[record], data.lon[record]), values, None))
-        title = tr("Шахты и карьеры OSM") if osm else tr("Месторождения")
-        return [(Group(title), features)] if features else []

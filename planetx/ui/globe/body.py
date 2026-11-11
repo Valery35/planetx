@@ -149,7 +149,9 @@ class BodyMixin:
         self.insolation_legend.hide()
         self.quake_legend.hide()
         self.fire_legend.hide()
-        self.deposit_legend.hide()
+        for tool in self.row_tools.values():
+            if hasattr(tool, "legend"):
+                tool.legend.hide()
         self.cutaway_legend.hide()
         self.theme_legend.hide()
         self.paleo_bar.hide()
@@ -239,7 +241,6 @@ class BodyMixin:
         self._quake_legend_state()
         self.fire_legend.setVisible(self.extras.get("fires", False)
                                     and self.planet.earth)
-        self.deposit_legend.setVisible(self._deposit_legend_on())
         for tool in self.row_tools.values():
             if hasattr(tool, "sync_legend"):
                 tool.sync_legend()

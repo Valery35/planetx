@@ -20,8 +20,8 @@ from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 from ... import journal
 from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      platemotion, sun, tomography,
-                     temperature, when, oldmaps, deposits as deposits_core,
-                     mining, rumsey as rumsey_core,
+                     temperature, when, oldmaps,
+                     rumsey as rumsey_core,
                      fires as fires_core, crust,
                      iscgem, quakes, slabs, themes, tilemaps,
                      satellites as satellites_core,
@@ -107,7 +107,7 @@ class LayersMixin:
         self.subsurface.relief_changed()
         self._place_quakes()
         self._place_fires()
-        self._place_deposits()
+        self._place_rows()
         self._apply_vector(force=True)
         self._mark_dirty(False)
         self._show_attribution()
@@ -660,7 +660,7 @@ class LayersMixin:
         self._update_water()
         self._place_quakes()
         self._place_fires()
-        self._place_deposits()
+        self._place_rows()
         self._mark_gallery()
         self._show_attribution()
         self.view.update()
@@ -860,10 +860,6 @@ class LayersMixin:
             parts.append(link_html(*iscgem.ATTRIBUTION))
         if self.view.fires.fires is not None:
             parts.append(link_html(*fires_core.ATTRIBUTION))
-        if self.view.deposits.data is not None:
-            parts.append(link_html(*deposits_core.ATTRIBUTION))
-        if self.view.osm_mines.data is not None:
-            parts.append(link_html(*mining.OSM_ATTRIBUTION))
         if self.view.wiki_marks:
             parts.append(link_html(*wikipedia.ATTRIBUTION))
         manager = getattr(self, "satellite_manager", None)

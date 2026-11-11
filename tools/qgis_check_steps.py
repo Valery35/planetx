@@ -6769,11 +6769,11 @@ def deposits_on():
 def deposits_wait():
     window = state["window"]
     spent = time.monotonic() - state["dep_start"]
-    if window.deposit_data is None and spent < 300.0:
+    if window.row_tool("deposits").data is None and spent < 300.0:
         return 1000
     out = result["deposits"]
     out["load_seconds"] = round(spent, 1)
-    data = window.deposit_data
+    data = window.row_tool("deposits").data
     out["records"] = len(data) if data is not None else 0
     out["major"] = int(data.major.sum()) if data is not None else 0
     out["message"] = (getattr(window, "message", None) or ("",))[0]
@@ -6794,14 +6794,14 @@ def deposits_check():
     image.save(os.path.join(TEMP, "planetx_deposits.png"))
     out["drawn_nevada"] = view.deposits.drawn
     out["frame_ms"] = frames
-    out["legend"] = window.deposit_legend.isVisible()
-    window.deposit_legend.grab().save(os.path.join(
+    out["legend"] = window.row_tool("deposits").legend.isVisible()
+    window.row_tool("deposits").legend.grab().save(os.path.join(
         TEMP, "planetx_deposit_legend.png"))
     window.grab().save(os.path.join(TEMP, "planetx_deposits_window.png"))
     out["credit"] = "USGS MRDS" in window.attribution.text()
     ratio = view.devicePixelRatioF()
     px, py = view.width() * ratio / 2.0, view.height() * ratio / 2.0
-    found = window._identify_deposits(px, py)
+    found = window.row_tool("deposits")._pick(px, py, False)
     out["identify"] = [(f[0], dict(f[1]).get("Полезные ископаемые",
                                               dict(f[1]).get("Commodities")))
                        for _, features in found for f in features][:3]
@@ -6829,7 +6829,7 @@ def deposits_click():
     spot = int(np.nonzero(layer.order == record)[0][0])
     pixels, front = view.camera.project(layer.focus[spot:spot + 1])
     px, py = float(pixels[0][0]), float(pixels[0][1])
-    found = window._identify_deposits(px, py)
+    found = window.row_tool("deposits")._pick(px, py, False)
     out["click_debug"] = {
         "pixel": [round(px), round(py)], "front": bool(front[0]),
         "camera": [view.camera.width, view.camera.height],
@@ -6893,8 +6893,8 @@ def mining_wait():
     window = state["window"]
     started = state["mining_started"]
     waiting = window.row_tool("mining")._reply is not None \
-        or window.osm_mines_tiles.reply is not None \
-        or bool(window.osm_mines_tiles.queue) \
+        or window.row_tool("osm_mines").tiles.reply is not None \
+        or bool(window.row_tool("osm_mines").tiles.queue) \
         or window.view.data_pending or (window.overlay is not None
                                         and window.overlay.busy())
     if waiting and time.monotonic() - started < 120.0:
@@ -6912,7 +6912,7 @@ def mining_check():
     out["layer"] = layer is not None and layer.featureCount()
     out["in_overlay"] = layer is not None and window.overlay is not None \
         and any(la is layer for la in window.overlay.layers)
-    out["osm_tiles"] = len(window.osm_mines_tiles.items)
+    out["osm_tiles"] = len(window.row_tool("osm_mines").tiles.items)
     out["osm_points"] = 0 if view.osm_mines.data is None \
         else len(view.osm_mines.data)
     names = [] if view.osm_mines.data is None else [

@@ -1010,7 +1010,7 @@ class ThemesMixin:
         self.subsurface.relief_changed()
         self._place_quakes()
         self._place_fires()
-        self._place_deposits()
+        self._place_rows()
         if self._relief and self.terrain_loader is not None:
             self.terrain_loader.want((0, 0, 0), 1.0)
         self._sync_properties()
