@@ -5153,6 +5153,8 @@ EN = {
     "У темы нет дат в ряду.": "The theme has no dates in its series.",
     "Ряд дат темы не загрузился: {error}":
         "The date series of the theme failed to load: {error}",
+    "Шторка включится, когда загрузится ряд дат темы.":
+        "The swipe turns on once the date series of the theme loads.",
     "Возраст в миллионах лет назад. Карта рельефа и глубин на этот "
     "возраст - PaleoDEM PALEOMAP, Scotese и Wright 2018.":
         "Age in millions of years ago. The map of relief and depths for "

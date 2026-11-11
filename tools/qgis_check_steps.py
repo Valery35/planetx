@@ -29281,10 +29281,31 @@ def wayback_on():
     window.view.navigator.stop()
     window.view.navigator.show(Pose(58.0105, 56.2294, 3000.0, 0.0, 0.0))
     window.view.update()
-    window.set_theme("wayback")
+    # Карта включается щелчком по строке каталога, как у пользователя.
+    gallery = window.open_gallery()
+    result["wayback"] = {"catalog_row": "wayback" in gallery.items}
+    if "wayback" in gallery.items:
+        gallery._clicked(gallery.items["wayback"][0])
+    else:
+        window.set_theme("wayback")
+    result["wayback"]["theme_after_click"] = window.theme_key
+    # Кнопка ⇆ сразу после выбора карты, пока список выпусков в пути,
+    # жалоба пользователя от 11 ноября 2026 года. Из кэша список
+    # приходит сразу, поэтому ряд снимается и просится заново после
+    # нажатия.
+    from planetx.core import themes
+    button = window.timebar.compare
+    window._theme_domains.pop(themes.WAYBACK, None)
+    window._theme_replies.pop((themes.WAYBACK, "domains"), None)
+    early = dict(visible=button.isVisibleTo(window.timebar))
+    button.click()
+    early["checked"] = button.isChecked()
+    early["message"] = window.message[0] if window.message else ""
+    result["wayback"]["early"] = early
+    window._theme_fetch(themes.WAYBACK, "domains",
+                        themes.BY_KEY[themes.WAYBACK].domains_url())
     state["wb_started"] = time.monotonic()
     state.pop("wb_stage", None)
-    result["wayback"] = {}
 
 
 @check(1000)
@@ -29316,6 +29337,12 @@ def wayback_wait():
                    url=themes.BY_KEY["wayback"].url(window.theme_day)[-40:])
         view.grabFramebuffer().save(os.path.join(TEMP,
                                                  "planetx_wayback.png"))
+        # Раннее нажатие ⇆ дождалось ряда - шторка включена. Дальше
+        # она снимается, кнопка проверяется ещё раз на готовом ряду.
+        out["early"]["swipe_after"] = window._compare_at is not None \
+            and view.swipe is not None
+        out["early"]["checked_after"] = window.timebar.compare.isChecked()
+        window.set_compare(False)
         # Шаг шкалы назад - предыдущий выпуск с изменениями.
         moment = window._theme_step(themes.moment(window.theme_day), -1)
         out["step_back"] = moment is not None
@@ -29324,7 +29351,14 @@ def wayback_wait():
             window._time_range = window.timebar.range()
             window._apply_theme()
         out["stepped_day"] = window.theme_day
-        window.set_compare(True)
+        # Шторка включается кнопкой ⇆ шкалы, как у пользователя: прежде
+        # шаг звал set_compare сам и не видел спрятанную кнопку.
+        button = window.timebar.compare
+        out["button"] = dict(visible=button.isVisibleTo(window.timebar),
+                             enabled=button.isEnabled(),
+                             timebar=window.timebar.isVisible())
+        button.click()
+        out["button_checked"] = button.isChecked()
         state["wb_stage"] = "compare"
         state["wb_started"] = time.monotonic()
         return 1000

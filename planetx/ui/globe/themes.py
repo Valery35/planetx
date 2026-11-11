@@ -257,6 +257,13 @@ class ThemesMixin:
             if data is None:
                 self.message = (tr("Ряд дат темы не загрузился: {error}",
                                    error=error), time.monotonic())
+                if key == self.theme_key \
+                        and getattr(self, "_compare_wait", False):
+                    # Шторка ждала ряд дат - ждать нечего, кнопка отжата.
+                    self._compare_wait = False
+                    self.timebar.set_compare(
+                        self.timebar.compare.isVisibleTo(self.timebar),
+                        False)
                 self._show_state()
                 return
             if key == themes.WAYBACK:
@@ -296,7 +303,8 @@ class ThemesMixin:
             bool(theme) and not themes.is_weather(self.theme_key)
             or maps and not theme,
             getattr(self, "_compare_at", None) is not None
-            or getattr(self, "_map_compare_at", None) is not None)
+            or getattr(self, "_map_compare_at", None) is not None
+            or getattr(self, "_compare_wait", False))
         if (theme or not maps) \
                 and getattr(self, "_map_compare_at", None) is not None:
             # Тема включена поверх исторических карт - шторка карт снимается.
@@ -362,6 +370,11 @@ class ThemesMixin:
                                        found[1])
                 self._time_range = self.timebar.range()
                 self._refresh_shapes()
+        if getattr(self, "_compare_wait", False):
+            # Ряд дат пришёл после нажатия ⇆ - шторка включается теперь.
+            self._compare_wait = False
+            self.set_compare(True)
+            return
         day = themes.pick_day(intervals, self.theme_moment())
         if day is None:
             self.message = (tr("У темы нет дат в ряду."), time.monotonic())
@@ -401,6 +414,7 @@ class ThemesMixin:
         день шкалы времени. Поле прогноза GFS шторки не получает. Без
         темы при исторических картах - шторка карт двух лет. Шторка
         слоёв проекта при этом снимается - левая часть у шторок одна."""
+        self._compare_wait = False
         if on and getattr(self, "_side_swipe", False):
             self._side_swipe = False
             write_flag(SIDE_SWIPE, False)
@@ -428,7 +442,19 @@ class ThemesMixin:
         intervals = self._theme_domains.get(self.theme_key) \
             if on and self._theme_on() \
             and not themes.is_weather(self.theme_key) else None
-        if on and intervals:
+        self._compare_wait = False
+        if on and intervals is None and self._theme_on() \
+                and not themes.is_weather(self.theme_key) \
+                and self.theme_key != themes.EVENTS:
+            # Ряд дат темы ещё в пути, у Wayback - список выпусков.
+            # Прежде кнопка ⇆ молча отжималась, жалоба пользователя
+            # от 11 ноября 2026 года. Нажатие помнится, шторка
+            # включается с приходом ряда (_apply_theme).
+            self._compare_wait = True
+            self.message = (tr("Шторка включится, когда загрузится ряд "
+                               "дат темы."), time.monotonic())
+            self._show_state()
+        elif on and intervals:
             before = events.pre_day(self._event_items) \
                 if self.theme_key == themes.EVENTS \
                 and self._event_ready() else None
@@ -447,7 +473,7 @@ class ThemesMixin:
             self.swipe_bar.set_shown(False)
             self._set_gibs("compare", False)
         self.timebar.set_compare(self.timebar.compare.isVisibleTo(
-            self.timebar), self._compare_at is not None)
+            self.timebar), self._compare_at is not None or self._compare_wait)
 
     def _apply_compare(self, theme, intervals, day):
         """День левой части шторки и её слой вида."""
@@ -516,7 +542,17 @@ class ThemesMixin:
             self._wayback_timer = QTimer(self)
             self._wayback_timer.setSingleShot(True)
             self._wayback_timer.timeout.connect(self._wayback_search)
-        if self._wayback_target() != getattr(self, "_wayback_tile", None):
+        target = self._wayback_target()
+        if target == getattr(self, "_wayback_tile", None):
+            self._wayback_timer.stop()
+            self._wayback_next = None
+            return
+        # Вид зовёт это с каждым кадром. Таймер ставится заново только
+        # со сменой тайла поиска: прежде кадры дорисовки, например при
+        # шторке ⇆, сбрасывали его, и поиск не начинался.
+        if target != getattr(self, "_wayback_next", None) \
+                or not self._wayback_timer.isActive():
+            self._wayback_next = target
             self._wayback_timer.start(WAYBACK_PAUSE)
 
     def _wayback_target(self):
@@ -595,6 +631,7 @@ class ThemesMixin:
             timer.stop()
         self._wayback_abort()
         self._wayback_tile = None
+        self._wayback_next = None
 
     def wayback_changes(self):
         """Даты выпусков в ряду темы Wayback - для шагов проверки."""
