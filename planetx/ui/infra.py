@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""ЛЭП, подстанции и трубопроводы OSM слоями QGIS в памяти.
+"""ЛЭП, подстанции и трубопроводы OSM слоями QGIS в памяти. Строка
+реестра каталога (core/rows.py) и исполнитель.
 
 Слои не входят в проект, их рисует наложение глобуса, как границы плит
 (net.overlay.plate_layer). Линии - стиль по классу напряжения или
@@ -9,12 +10,14 @@
 """
 import math
 
+from qgis.PyQt.QtCore import QObject
 from qgis.core import (QgsCategorizedSymbolRenderer, QgsFeature,
                        QgsFeatureRequest, QgsGeometry, QgsLineSymbol,
                        QgsMarkerSymbol, QgsPointXY, QgsRectangle,
                        QgsRendererCategory, QgsVectorLayer)
 
 from ..core import infra
+from ..core.rows import Row
 from ..i18n import tr
 from .legend import infra_names
 
@@ -131,3 +134,120 @@ def nearest_infra(lines, points, lat, lon, tolerance):
     values.append((tr("Объект OSM"), "https://www.openstreetmap.org/"
                    + feature["osm"]))
     return feature["name"], values
+
+
+KEY = "infra_osm"
+
+
+class InfraTool(QObject):
+    """Строка «ЛЭП, кабели и трубопроводы OSM»: тайлы Overpass у вида
+    (ui/overpass.py), слои QGIS в памяти в картинке наложения, шкала
+    классов."""
+
+    shown_key = None
+    # Линии опрашиваются и щелчком без режима опроса.
+    click_lines = True
+
+    def __init__(self, window):
+        from .legend import InfraLegend
+        from .overpass import OverpassTiles
+        super().__init__(window)
+        self.window = window
+        self.lines = None
+        self.points = None
+        self.tiles = OverpassTiles(window.view, "infra", infra.query,
+                                   infra.parse, self._place,
+                                   window._overpass_failed)
+        self.legend = InfraLegend(window.view)
+        self.legend.hide()
+        self.legend.closer = lambda: window.set_extra(KEY, False)
+        window.legend_panel.add(self.legend)
+
+    def on(self):
+        window = self.window
+        return window.planet.earth \
+            and bool(getattr(window, "extras", {}).get(KEY)) \
+            and self.lines is not None
+
+    def sync_legend(self):
+        window = self.window
+        self.legend.setVisible(bool(window.extras.get(KEY))
+                               and window.planet.earth)
+
+    def turn(self, key, on):
+        window = self.window
+        self.legend.setVisible(on and window.planet.earth)
+        if not on:
+            self.tiles.stop()
+            window._update_overlay(keep=True)
+            return True
+        self._place()
+        window._want_overpass()
+        return True
+
+    def want(self, lat, lon, altitude):
+        """Недостающие тайлы у точки взгляда, когда строка включена."""
+        if self.window.extras.get(KEY):
+            self.tiles.want(lat, lon, altitude)
+
+    def _place(self):
+        """Слои QGIS в памяти по всем пришедшим объектам: линии - ЛЭП
+        и трубопроводы, точки - подстанции. Стиль - по классу."""
+        window = self.window
+        items = infra.unique(self.tiles.all_items())
+        self.lines, self.points = infra_layers(items)
+        if window.extras.get(KEY) and window.planet.earth:
+            window._update_overlay(keep=True)
+        window._show_attribution()
+
+    def overlay_layers(self):
+        if not self.on():
+            return []
+        for layer in (self.points, self.lines):
+            layer.setOpacity(self.window._layer_opacity(KEY))
+        return [self.points, self.lines]
+
+    def qgis_layers(self):
+        return {KEY: [self.lines, self.points]}
+
+    def export_parts(self, key, title):
+        return [("lines", self.lines, title),
+                ("substations", self.points,
+                 title + " - " + tr("подстанции"))]
+
+    def credits(self):
+        from ..core import mining
+        return [mining.OSM_ATTRIBUTION] if self.on() else []
+
+    def identify(self, lat, lon, tolerance=0.0):
+        """Линия или подстанция OSM у точки щелчка."""
+        from .identify import Group
+        if not self.on():
+            return []
+        found = nearest_infra(self.lines, self.points, lat, lon, tolerance)
+        if found is None:
+            return []
+        title, values = found
+        return [(Group(tr("ЛЭП, кабели и трубопроводы OSM")),
+                 [(title or tr("Без названия"), values, None)])]
+
+    def credit(self):
+        return None
+
+    def close(self):
+        self.tiles.stop()
+
+
+ROWS = (
+    Row(KEY, "infra", lambda: (tr("ЛЭП, кабели и трубопроводы OSM"), tr(
+        "Линии электропередачи по напряжению, подстанции, кабели "
+        "и трубопроводы газа, нефти и воды из OpenStreetMap. "
+        "Загружаются по месту вида, когда камера ниже 150 км. Щелчок "
+        "по линии показывает напряжение, вещество, оператора и "
+        "ссылку на объект OpenStreetMap.")), InfraTool,
+        source="OpenStreetMap",
+        colors=((220, 60, 60), (240, 150, 40), (90, 90, 200)),
+        words=("лэп", "электросети", "подстанции", "трубопроводы",
+               "газопровод", "нефтепровод", "power lines", "pipelines"),
+        after="plants", qgis_layer=True),
+)

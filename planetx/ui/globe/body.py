@@ -244,8 +244,6 @@ class BodyMixin:
                                      and self.planet.earth)
         self.volcano_legend.setVisible(bool(self.extras.get("volcanoes"))
                                        and self.planet.earth)
-        self.infra_legend.setVisible(bool(self.extras.get("infra_osm"))
-                                     and self.planet.earth)
         for tool in self.row_tools.values():
             if hasattr(tool, "sync_legend"):
                 tool.sync_legend()

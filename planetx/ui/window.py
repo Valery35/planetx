@@ -25,7 +25,7 @@ from qgis.PyQt.QtWidgets import (QGraphicsDropShadowEffect, QLabel,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import (ellipsoid, fields, geoid, paleo, infra, mining, themes,
+from ..core import (ellipsoid, fields, geoid, paleo, mining, themes,
                     tilemaps)
 from ..core.coords import FORMATS as COORD_FORMATS
 from ..core.geocode import SEARCH_INTERVAL
@@ -52,7 +52,7 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, CurrentLegend, FieldLegend,
-                     InfraLegend, PointCloudLegend, SiteLegend,
+                     PointCloudLegend, SiteLegend,
                      PlantLegend, TrainLegend, VolcanoLegend,
                      VesselLegend, AircraftLegend)
 from .overlays import GroundLayers, ScreenOverlays
@@ -272,9 +272,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.volcano_legend.hide()
         self.volcano_legend.closer = \
             lambda: self.set_extra("volcanoes", False)
-        self.infra_legend = InfraLegend(self.view)
-        self.infra_legend.hide()
-        self.infra_legend.closer = lambda: self.set_extra("infra_osm", False)
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -302,7 +299,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.deposit_legend,
                        self.plant_legend, self.volcano_legend,
-                       self.infra_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -389,13 +385,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.osm_mines_tiles = OverpassTiles(
             self.view, "mines", mining.query, mining.parse,
             self._place_osm_mines, self._overpass_failed)
-        # ЛЭП, подстанции и трубопроводы OSM (core/infra.py): тот же
-        # загрузчик, слои QGIS в памяти в картинке тайлов.
-        self.infra_tiles = OverpassTiles(
-            self.view, "infra", infra.query, infra.parse,
-            self._place_infra, self._overpass_failed)
-        self.infra_lines = None
-        self.infra_points = None
         # Википедия рядом (core/wikipedia.py): статьи по тайлам вида,
         # запрос первого абзаца открытой карточки.
         self.wiki_articles = WikiArticles(self.view, self._place_wiki,

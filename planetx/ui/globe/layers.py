@@ -863,9 +863,7 @@ class LayersMixin:
             parts.append(link_html(*fires_core.ATTRIBUTION))
         if self.view.deposits.data is not None:
             parts.append(link_html(*deposits_core.ATTRIBUTION))
-        if self.view.osm_mines.data is not None \
-                or (self.infra_lines is not None
-                    and self.extras.get("infra_osm")):
+        if self.view.osm_mines.data is not None:
             parts.append(link_html(*mining.OSM_ATTRIBUTION))
         if self.view.plants.data is not None:
             parts.append(link_html(*plants_core.ATTRIBUTION))
@@ -1051,13 +1049,8 @@ class LayersMixin:
         if self.planet.earth \
                 and getattr(self, "rumsey_footprints", None) is not None:
             layers.append(self.rumsey_footprints)
-        if self.planet.earth \
-                and getattr(self, "extras", {}).get("infra_osm") \
-                and getattr(self, "infra_lines", None) is not None:
-            for layer in (self.infra_points, self.infra_lines):
-                layer.setOpacity(self._layer_opacity("infra_osm"))
-                layers.append(layer)
-        # Наложения тайлов - над векторной основой, под линиями выше.
+        # Прочие строки реестра (ЛЭП, наложения тайлов, кабели, контуры
+        # разработок) - в порядке реестра, над векторной основой.
         for tool in tools:
             if hasattr(tool, "overlay_layers") \
                     and not getattr(tool, "overlay_top", False):

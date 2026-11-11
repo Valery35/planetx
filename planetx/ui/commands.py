@@ -22,8 +22,7 @@ from .nasamaps import ANY_BODY, LAYERS, RELIEF_BODY, layer_names, map_names
 from .registry import ROWS
 
 # Строки группы «Карта» раздела «Слои»: ключ - название.
-MAP_ROWS = ("grid", "buildings", "contours", "cadastre", "infra_osm",
-            )
+MAP_ROWS = ("grid", "buildings", "contours", "cadastre")
 # Слои, которые есть вне Земли.
 ANY_PLANET = ANY_BODY + RELIEF_BODY + ("grid", "contours")
 # Другие слова слоёв и карт: ключ - слова.
@@ -75,8 +74,6 @@ WORDS = {
     "grid": ("сетка", "градусы", "экватор", "graticule", "grid"),
     "buildings": ("здания", "дома", "3d", "buildings"),
     "contours": ("изолинии", "горизонтали", "изобаты", "contours"),
-    "infra_osm": ("лэп", "электросети", "подстанции", "трубопроводы",
-                  "газопровод", "нефтепровод", "power lines", "pipelines"),
     "cadastre": ("кадастр", "росреестр", "нспд", "участки",
                  "земельные участки", "пкк", "cadastre", "parcels"),
     "fires": ("пожары", "огонь", "fires", "firms"),

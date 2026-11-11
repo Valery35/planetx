@@ -70,7 +70,6 @@ GRID, STARS, CLOUDS = "grid", "stars", "clouds"
 TEMPERATURE = "temperature"
 BUILDINGS = "buildings"
 CONTOURS = "contours"
-INFRA = "infra_osm"
 SUN = "sun"
 SLOPE, ASPECT = "slope", "aspect"
 QUAKES = "quakes"
@@ -760,12 +759,12 @@ class LayerPanel(QWidget):
                 item.setCheckState(0, UNCHECKED)
                 self.geo_items[key] = item
             self.vector_groups.append(group)
-        # Сетка, здания, горизонтали, ЛЭП и кабели включает каталог,
+        # Сетку, здания и горизонтали включает каталог,
         # в списке они - строки включённого. Скрытые строки здесь
         # держат их флажки для set_extras и extra_toggled.
         self.extra_items = {}
         self._extras = {}
-        for key in (GRID, BUILDINGS, CONTOURS, INFRA):
+        for key in (GRID, BUILDINGS, CONTOURS):
             item = QTreeWidgetItem(self.geo, [key])
             item.setData(0, LAYER_ROLE, key)
             item.setFlags(item.flags() | CHECKABLE)
@@ -1179,7 +1178,6 @@ class LayerPanel(QWidget):
             if parent is not None:
                 parent.setDisabled(off)
         self.extra_items[BUILDINGS].setDisabled(not earth)
-        self.extra_items[INFRA].setDisabled(not earth)
         self.project_tree.setDisabled(not earth)
 
     def set_active(self, rows):

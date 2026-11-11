@@ -19,7 +19,7 @@ from ...core.measure import surface_level
 from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
-from ...core import (infra, mining,
+from ...core import (mining,
                      plants as plants_core, platemotion, slabs,
                      volcanoes as volcanoes_core)
 from ...core.features import Shape
@@ -77,8 +77,9 @@ class ResourcesMixin:
         altitude = float(ecef_to_geodetic(eye)[2])
         if self.extras.get("osm_mines"):
             self.osm_mines_tiles.want(pose.lat, pose.lon, altitude)
-        if self.extras.get("infra_osm"):
-            self.infra_tiles.want(pose.lat, pose.lon, altitude)
+        for tool in self.row_tools.values():
+            if hasattr(tool, "want"):
+                tool.want(pose.lat, pose.lon, altitude)
 
     def _overpass_failed(self):
         """Отказ сервера Overpass: пользователю - короткая фраза,
@@ -95,44 +96,6 @@ class ResourcesMixin:
             self.view.store.scale, self._surface_ground)
         self._show_attribution()
         self.view.update()
-
-    # ЛЭП и трубопроводы OSM.
-
-    def _set_infra(self, on):
-        """ЛЭП, подстанции и трубопроводы OSM строкой витрины."""
-        self._mark_gallery()
-        self.infra_legend.setVisible(on and self.planet.earth)
-        if not on:
-            self.infra_tiles.stop()
-            self._update_overlay(keep=True)
-            self._show_attribution()
-            return
-        self._place_infra()
-        self._want_overpass()
-
-    def _place_infra(self):
-        """Слои QGIS в памяти по всем пришедшим объектам: линии - ЛЭП
-        и трубопроводы, точки - подстанции. Стиль - по классу."""
-        from ..infra import infra_layers
-        items = infra.unique(self.infra_tiles.all_items())
-        self.infra_lines, self.infra_points = infra_layers(items)
-        if self.extras.get("infra_osm") and self.planet.earth:
-            self._update_overlay(keep=True)
-        self._show_attribution()
-
-    def _identify_infra(self, lat, lon, tolerance):
-        """Линия или подстанция OSM у точки щелчка."""
-        if not (self.extras.get("infra_osm") and self.planet.earth
-                and self.infra_lines is not None):
-            return []
-        from ..infra import nearest_infra
-        found = nearest_infra(self.infra_lines, self.infra_points, lat, lon,
-                              tolerance)
-        if found is None:
-            return []
-        title, values = found
-        return [(Group(tr("ЛЭП, кабели и трубопроводы OSM")),
-                 [(title or tr("Без названия"), values, None)])]
 
     # Вулканы GVP (core/volcanoes.py).
 

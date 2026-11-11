@@ -347,8 +347,6 @@ class StateMixin:
             self._set_volcanoes(on)
         elif key == "wiki":
             self._set_wiki(on)
-        elif key == "infra_osm":
-            self._set_infra(on)
         elif key == "currents":
             self._set_currents(on)
         elif key == "cadastre":
@@ -480,9 +478,7 @@ class StateMixin:
 
     def _qgis_layers(self, key):
         """Слои QGIS строки key, которые уже собраны."""
-        found = {"infra_osm": [getattr(self, "infra_lines", None),
-                               getattr(self, "infra_points", None)],
-                 }
+        found = {}
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "qgis_layers"):
                 found.update(tool.qgis_layers())
@@ -706,12 +702,7 @@ class StateMixin:
         return None if layer is None else 1
 
     def _export_qgis(self, key, title, path, box):
-        if hasattr(self.row_tool(key), "export_parts"):
-            parts = self.row_tool(key).export_parts(key, title)
-        else:
-            parts = [("lines", self.infra_lines, title),
-                     ("substations", self.infra_points,
-                      title + " - " + tr("подстанции"))]
+        parts = self.row_tool(key).export_parts(key, title)
         total = 0
         for n, (name, source, layer_title) in enumerate(parts):
             if source is None:

@@ -82,9 +82,6 @@ VECTOR = "vector:"
 GIBS = "gibsall"
 GIBS_SEARCH = 3  # знаков поиска, с которых просится каталог GIBS
 MAP_ROWS = ("grid", "buildings", "contours", "cadastre")
-# ЛЭП, трубопроводы и кабели - категория «Энергетика», просьба автора
-# от 12 октября 2026 года.
-ENERGY_ROWS = ("infra_osm",)
 # Цвета превью строк «Карты» - выбор помощника.
 VECTOR_COLORS = (((250, 220, 60), (240, 240, 240)),
                  ((255, 200, 70), (250, 240, 180), (90, 90, 90)),
@@ -93,7 +90,6 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "buildings": ((200, 190, 175), (150, 140, 130)),
               "contours": ((150, 100, 60), (250, 220, 60)),
               "cadastre": ((230, 90, 80), (250, 225, 220)),
-              "infra_osm": ((220, 60, 60), (240, 150, 40), (90, 90, 200)),
               "magpoles": ((235, 70, 60), (70, 130, 235)),
               "magdecl": ((215, 70, 60), (40, 170, 70), (60, 110, 215)),
               "platemotion": ((255, 225, 60), (60, 60, 60)),
@@ -113,7 +109,7 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "cutaway": "PREM, CRUST1.0, Slab2", "paleo": "PALEOMAP",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
-           "contours": "Terrarium", "infra_osm": "OpenStreetMap",
+           "contours": "Terrarium",
            "cadastre": "Rosreestr NSPD",
            "magpoles": "NOAA NCEI, IGRF-14",
            "magdecl": "IGRF-14",
@@ -379,12 +375,6 @@ def layer_names():
             "заливкой скорости. Геострофические течения NOAA CoastWatch по "
             "спутниковой альтиметрии за последние готовые сутки, сетка "
             "0.5°. Первое включение за сеанс скачивает около 4 МБ.")),
-        "infra_osm": (tr("ЛЭП, кабели и трубопроводы OSM"), tr(
-            "Линии электропередачи по напряжению, подстанции, кабели "
-            "и трубопроводы газа, нефти и воды из OpenStreetMap. "
-            "Загружаются по месту вида, когда камера ниже 150 км. Щелчок "
-            "по линии показывает напряжение, вещество, оператора и "
-            "ссылку на объект OpenStreetMap.")),
         "magpoles": (tr("Магнитные полюса"), tr(
             "Северный и южный магнитные полюса - точки, где стрелка "
             "компаса стоит отвесно, - на год шкалы времени и их путь "
@@ -1028,9 +1018,6 @@ class NasaMaps(QWidget):
             self.thumbs[key] = ramp_image(VECTOR_COLORS[n % 3])
         for key in MAP_ROWS:
             self._row(key, MAP, LAYER)
-            self.thumbs[key] = self._layer_thumb(key)
-        for key in ENERGY_ROWS:
-            self._row(key, "infra", LAYER)
             self.thumbs[key] = self._layer_thumb(key)
         for key, group in LAYERS:
             self._row(key, group, LAYER)

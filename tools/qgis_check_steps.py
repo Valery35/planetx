@@ -7012,8 +7012,7 @@ def infra_on():
     from planetx.ui import nasamaps
     # ЛЭП - строка «Карты» раздела «Слои», в витрине только станции.
     result["infra"] = {"gallery": [k for k, _ in nasamaps.LAYERS
-                                   if k in ("plants", "infra_osm")],
-                       "map_row": "infra_osm" in window.panel.extra_items}
+                                   if k in ("plants", "infra_osm")]}
 
 
 @check(2000)
@@ -7022,8 +7021,9 @@ def infra_wait():
     started = state["infra_started"]
     waiting = window._plant_reply is not None \
         or window._plant_job is not None \
-        or window.infra_tiles.reply is not None \
-        or bool(window.infra_tiles.queue) or window.view.data_pending \
+        or window.row_tool("infra_osm").tiles.reply is not None \
+        or bool(window.row_tool("infra_osm").tiles.queue) \
+        or window.view.data_pending \
         or (window.overlay is not None and window.overlay.busy())
     if waiting and time.monotonic() - started < 150.0:
         return 2000
@@ -7054,8 +7054,9 @@ def infra_active():
     out["plants_opacity"] = round(view.plants.opacity, 2)
     panel.active_opacity.emit("infra_osm", 0.5)
     QApplication.processEvents()
-    out["infra_opacity"] = round(window.infra_lines.opacity(), 2) \
-        if window.infra_lines is not None else None
+    lines = window.row_tool("infra_osm").lines
+    out["infra_opacity"] = round(lines.opacity(), 2) \
+        if lines is not None else None
     panel.active_opacity.emit("plants", 1.0)
     panel.active_opacity.emit("infra_osm", 1.0)
     folder = os.path.join(TEMP, "planetx_active")
@@ -7103,10 +7104,11 @@ def infra_check():
     out["plants"] = 0 if window.plant_data is None \
         else len(window.plant_data)
     out["plants_drawn"] = view.plants.drawn
-    lines = window.infra_lines
+    tool = window.row_tool("infra_osm")
+    lines = tool.lines
     out["lines"] = 0 if lines is None else lines.featureCount()
-    out["substations"] = 0 if window.infra_points is None \
-        else window.infra_points.featureCount()
+    out["substations"] = 0 if tool.points is None \
+        else tool.points.featureCount()
     out["styles"] = {} if lines is None else {
         s: sum(1 for f in lines.getFeatures() if f["style"] == s)
         for s in ("v500", "v220", "v110", "v35", "cable", "telecom",
@@ -7114,7 +7116,7 @@ def infra_check():
     out["in_overlay"] = lines is not None and window.overlay is not None \
         and any(la is lines for la in window.overlay.layers)
     out["legends"] = [window.plant_legend.isVisible(),
-                      window.infra_legend.isVisible()]
+                      tool.legend.isVisible()]
     out["server_after_toggle"] = state["infra_server_after_toggle"]
     window.identifying = False
     # Электростанция - щелчок без режима опроса по ближайшей к середине.
@@ -7166,7 +7168,7 @@ def infra_check():
         window.overlay is None
         or not any(la is lines for la in window.overlay.layers)) \
         and not window.plant_legend.isVisible() \
-        and not window.infra_legend.isVisible()
+        and not tool.legend.isVisible()
 
 
 @check(3000)
@@ -29029,9 +29031,8 @@ def faults_check():
         window.view.grabFramebuffer()  # кадр ставит камеру позы
         size = window.view.size()
         ratio = window.view.devicePixelRatioF()
-        out["click"] = bool(window._infra_under(
-            size.width() * ratio / 2.0, size.height() * ratio / 2.0,
-            rows=True))
+        out["click"] = bool(window._lines_under(
+            size.width() * ratio / 2.0, size.height() * ratio / 2.0))
         window.view.navigator.show(Pose(40.0, 33.0, 2500000.0, 0.0, 0.0))
         window.view.grabFramebuffer()
         out["identify"] = [(f[0], f[1]) for _, fs in found for f in fs]

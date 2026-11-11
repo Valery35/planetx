@@ -302,24 +302,19 @@ class IdentifyMixin:
                     or self._identify_deposits(px, py, osm=True)
                     or self._identify_plants(px, py)
                     or self._identify_volcanoes(px, py)
-                    or self._infra_under(px, py)
-                    or self._infra_under(px, py, rows=True)
+                    or self._lines_under(px, py)
                     or self._identify_quakes(px, py)
                     or self._identify_fires(px, py)
                     or self._identify_satellites(px, py)
                     or self._identify_trains(px, py)
                     or self._identify_live(px, py))
 
-    def _infra_under(self, px, py, rows=False):
-        """Линия или подстанция OSM под пикселем кадра, с rows - линии
-        строк реестра с click_lines (активные разломы)."""
+    def _lines_under(self, px, py):
+        """Линии строк реестра с click_lines (ЛЭП OSM, активные разломы)
+        под пикселем кадра."""
         tools = [tool for tool in self.row_tools.values()
                  if getattr(tool, "click_lines", False) and tool.on()]
-        if rows:
-            if not tools:
-                return []
-        elif not (self.extras.get("infra_osm") and self.planet.earth
-                  and self.infra_lines is not None):
+        if not tools:
             return []
         camera = self.view.camera
         point = ground_under(camera, px, py,
@@ -330,10 +325,8 @@ class IdentifyMixin:
         metres = float(((point - camera.eye) ** 2).sum()) ** 0.5 \
             / focal(camera)
         tolerance = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * metres
-        if rows:
-            return [group for tool in tools
-                    for group in tool.identify(lat, lon, tolerance)]
-        return self._identify_infra(lat, lon, tolerance)
+        return [group for tool in tools
+                for group in tool.identify(lat, lon, tolerance)]
 
     def identify_here(self, px, py):
         """Опрос объектов под пикселем кадра: окно «Объекты». Его зовут
@@ -463,7 +456,6 @@ class IdentifyMixin:
         groups += self._identify_plants(px, py)
         groups += self._identify_volcanoes(px, py)
         groups += self._identify_wiki(px, py)
-        groups += self._identify_infra(lat, lon, tolerance)
         groups = self._identify_satellites(px, py) \
             + self._identify_trains(px, py) \
             + self._identify_live(px, py) + groups
