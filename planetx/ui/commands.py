@@ -60,8 +60,6 @@ WORDS = {
     "deposits": ("полезные ископаемые", "руды", "рудники", "usgs", "mrds",
                  "minerals", "deposits"),
     "osm_mines": ("шахты", "карьеры", "mines", "quarries"),
-    "plants": ("электростанции", "энергетика", "тэц", "гэс", "аэс",
-               "power plants"),
     "currents": ("течения", "океан", "гольфстрим", "currents", "ocean"),
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),

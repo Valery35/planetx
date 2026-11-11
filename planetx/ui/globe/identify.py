@@ -300,7 +300,6 @@ class IdentifyMixin:
         2026 года «клик по точкам ничего не даёт»."""
         return bool(self._identify_deposits(px, py)
                     or self._identify_deposits(px, py, osm=True)
-                    or self._identify_plants(px, py)
                     or self._pick_rows(px, py)
                     or self._lines_under(px, py)
                     or self._identify_quakes(px, py)
@@ -458,7 +457,6 @@ class IdentifyMixin:
         groups += self._identify_fires(px, py)
         groups += self._identify_deposits(px, py)
         groups += self._identify_deposits(px, py, osm=True)
-        groups += self._identify_plants(px, py)
         groups += self._pick_rows(px, py)
         groups += self._identify_wiki(px, py)
         groups = self._identify_satellites(px, py) \

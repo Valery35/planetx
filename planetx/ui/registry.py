@@ -9,7 +9,7 @@
 """
 from ..core.rows import Registry
 from . import (aef, cables, faults, fieldmap, geomap, infra, miningareas,
-               plates, tilemaps, tileoverlays, valuemaps, volcanoes)
+               plants, plates, tilemaps, tileoverlays, valuemaps, volcanoes)
 
 ROWS = Registry().add(
     *fieldmap.ROWS,
@@ -25,4 +25,5 @@ ROWS = Registry().add(
     *faults.ROWS,
     *plates.ROWS,
     *volcanoes.ROWS,
+    *plants.ROWS,
 )

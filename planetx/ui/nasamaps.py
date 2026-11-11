@@ -102,7 +102,7 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
            "quakes": "USGS", "deposits": "USGS",
            "osm_mines": "OpenStreetMap",
-           "plants": "WRI", "currents": "NOAA CoastWatch",
+           "currents": "NOAA CoastWatch",
            "trains": "Fintraffic Digitraffic",
            "vessels": "Fintraffic Digitraffic, AIS", "aircraft": "adsb.lol",
            "cutaway": "PREM, CRUST1.0, Slab2", "paleo": "PALEOMAP",
@@ -129,7 +129,7 @@ LAYERS = ROWS.place((
           ("magpoles", "geophysics"), ("magdecl", "geophysics"),
           ("geoid", "geophysics"),
           ("deposits", "resources"),
-          ("osm_mines", "resources"), ("plants", "infra"),
+          ("osm_mines", "resources"),
           ("trains", "transport"), ("vessels", "transport"),
           ("aircraft", "transport"),
           ("currents", "water"),
@@ -340,13 +340,6 @@ def layer_names():
             "камера ниже 150 км. Цвет - группа ископаемого, как у "
             "месторождений. Щелчок по точке показывает название, "
             "оператора и ссылку на объект OpenStreetMap.")),
-        "plants": (tr("Электростанции"), tr(
-            "Около 35 тысяч электростанций мира из базы WRI Global Power "
-            "Plant Database, данные на 2021 год. Цвет - вид топлива, "
-            "размер - мощность. Щелчок по точке показывает название, "
-            "мощность, год ввода и владельца. У части станций место "
-            "в базе указано неверно. Первое включение скачивает около "
-            "4 МБ.")),
         "trains": (tr("Поезда Финляндии"), tr(
             "Поезда Финляндии в реальном времени по открытым данным "
             "Fintraffic Digitraffic, положения обновляются раз в 10 с. "

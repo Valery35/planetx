@@ -53,7 +53,7 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, CurrentLegend, FieldLegend,
                      PointCloudLegend, SiteLegend,
-                     PlantLegend, TrainLegend,
+                     TrainLegend,
                      VesselLegend, AircraftLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
@@ -265,9 +265,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.deposit_legend = DepositLegend(self.view)
         self.deposit_legend.hide()
         self.deposit_legend.closer = self._close_deposit_legend
-        self.plant_legend = PlantLegend(self.view)
-        self.plant_legend.hide()
-        self.plant_legend.closer = lambda: self.set_extra("plants", False)
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -294,7 +291,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.deposit_legend,
-                       self.plant_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -390,11 +386,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._wiki_timer.setSingleShot(True)
         self._wiki_timer.setInterval(OSM_PAUSE)
         self._wiki_timer.timeout.connect(self._want_wiki)
-        # Электростанции WRI (core/plants.py): файл профиля, загрузка
-        # архива и разбор в рабочем потоке.
-        self.plant_data = None
-        self._plant_reply = None
-        self._plant_job = None
         self._osm_timer = QTimer(self)
         self._osm_timer.setSingleShot(True)
         self._osm_timer.setInterval(OSM_PAUSE)

@@ -341,8 +341,6 @@ class StateMixin:
             self._set_deposits(on)
         elif key == "osm_mines":
             self._set_osm_mines(on)
-        elif key == "plants":
-            self._set_plants(on)
         elif key == "wiki":
             self._set_wiki(on)
         elif key == "currents":
@@ -572,13 +570,6 @@ class StateMixin:
                 "name", "country", "commodities", "type", "status",
                 "record", "operator", "capacity", "precision", "osm")]
             rows = [(layer.data.text(int(layer.order[n])) + [""] * 10)[:10]
-                    for n in index]
-        elif key == "plants":
-            fields = [(name, "str") for name in (
-                "name", "country", "fuel", "year", "owner",
-                "source")] + [("capacity_mw", "real")]
-            rows = [(layer.data.text(int(layer.order[n])) + [""] * 6)[:6]
-                    + [float(layer.data.capacity[layer.order[n]])]
                     for n in index]
         elif key in ("quakes", "iscgem"):
             fields = [("place", "str"), ("mag", "real"),

@@ -6,32 +6,23 @@
 
 Часть окна глобуса GlobeWindow (ui/window.py)."""
 import os
-import zipfile
 import time
 
 import numpy as np
-from qgis.core import QgsApplication
-from qgis.PyQt.QtCore import QTimer
 
-from ... import journal
 from ...core.ellipsoid import ecef_to_geodetic, geodetic_to_ecef
 from ...core.measure import surface_level
 from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
 from ...core import (mining,
-                     plants as plants_core, platemotion, slabs)
+                     platemotion, slabs)
 from ...core.features import Shape
-from ..overpass import brief_error
 from ...core.places import Place as MarkPlace
 from ...i18n import tr
-from ...net.gdalnet import executor
-from ...net.overlay import fetch_bytes
 from ...render.view import OBJECT_BUDGET, start_keys
 from ..identify import Group, point_text
-from ..deposits import parse_plants
-from ..legend import fuel_names
-from .base import (CURSOR_PERIOD, DATA_DIR, DEPOSIT_POLL, IDENTIFY_PIXELS,
+from .base import (CURSOR_PERIOD, DATA_DIR,
                    MESSAGE_TIME, MOTION_COLOR, MOTION_WIDTH, distance_text)
 
 
@@ -95,130 +86,6 @@ class ResourcesMixin:
             self.view.store.scale, self._surface_ground)
         self._show_attribution()
         self.view.update()
-
-    # Электростанции WRI.
-
-    def _plants_path(self):
-        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
-                              "PlanetX")
-        os.makedirs(folder, exist_ok=True)
-        return os.path.join(folder, "power_plants.npz")
-
-    def _set_plants(self, on):
-        """Электростанции WRI строкой витрины. Первое включение скачивает
-        архив около 4 МБ, разбор - в рабочем потоке, итог - файл
-        профиля."""
-        self._mark_gallery()
-        self.plant_legend.setVisible(on and self.planet.earth)
-        if not on:
-            if self._plant_reply is not None:
-                reply, self._plant_reply = self._plant_reply, None
-                reply.abort()
-            self._place_plants()
-            return
-        if self.plant_data is None:
-            path = self._plants_path()
-            if os.path.exists(path):
-                try:
-                    self.plant_data = plants_core.load(path)
-                except (OSError, ValueError, KeyError) as error:
-                    journal.note("plants file: {}".format(error))
-        if self.plant_data is not None:
-            self._place_plants()
-            return
-        if self._plant_reply is not None or self._plant_job is not None:
-            return
-        self._plant_reply = fetch_bytes(plants_core.URL, self._plants_arrived)
-        self.view.data_pending += 1
-        self.message = (tr("Загрузка электростанций WRI, около 4 МБ…"),
-                        time.monotonic())
-        self._show_state()
-
-    def _plants_arrived(self, data, error):
-        self.view.data_pending = max(0, self.view.data_pending - 1)
-        if self._plant_reply is None:
-            return  # снят выключением строки
-        self._plant_reply = None
-        if data is None:
-            journal.note("plants: {}".format(brief_error(error)))
-            self.message = (tr("Электростанции не загрузились, проверьте "
-                               "сеть и включите строку снова."),
-                            time.monotonic())
-            self._show_state()
-            return
-        self._plant_job = executor("deposits", 1).submit(
-            parse_plants, bytes(data), self._plants_path())
-        self.view.data_pending += 1
-        QTimer.singleShot(DEPOSIT_POLL, self._plants_poll)
-
-    def _plants_poll(self):
-        job = self._plant_job
-        if job is None:
-            return
-        if not job.done():
-            QTimer.singleShot(DEPOSIT_POLL, self._plants_poll)
-            return
-        self._plant_job = None
-        self.view.data_pending = max(0, self.view.data_pending - 1)
-        try:
-            self.plant_data = job.result()
-        except (OSError, ValueError, KeyError, StopIteration,
-                zipfile.BadZipFile) as error:
-            journal.note("plants parse: {}".format(error))
-            self.message = (tr("Электростанции не разобраны."),
-                            time.monotonic())
-            self._show_state()
-            return
-        self.message = (tr("Электростанций {count}.",
-                           count=len(self.plant_data)), time.monotonic())
-        self._show_state()
-        self._place_plants()
-
-    def _place_plants(self):
-        on = self.extras.get("plants", False) and self.planet.earth
-        self.view.plants.set_plants(self.plant_data if on else None,
-                                    self.view.store.scale,
-                                    self._surface_ground)
-        self._show_attribution()
-        self.view.update()
-
-    def _identify_plants(self, px, py):
-        """Электростанции у точки щелчка на экране, не больше 10."""
-        layer = self.view.plants
-        data = layer.data
-        if data is None:
-            return []
-        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
-        seen = layer.visible(eye)
-        if not len(seen):
-            return []
-        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
-        pixels, front = self.view.camera.project(layer.focus[seen])
-        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
-        near = np.nonzero(front & (gap <= radius))[0]
-        near = near[np.argsort(gap[near])][:10]
-        fuels = fuel_names()
-        keys = [f[0] for f in plants_core.FUELS]
-        features = []
-        for n in near:
-            record = int(layer.order[seen[n]])
-            name, country, fuel, year, owner, url = \
-                (data.text(record) + [""] * 6)[:6]
-            values = [(tr("Мощность"), tr("{value} МВт", value="{:g}".format(
-                round(float(data.capacity[record]), 1)))),
-                      (tr("Топливо"), "{} ({})".format(
-                          fuels[keys[int(data.fuel[record])]], fuel))]
-            if year:
-                values.append((tr("Год ввода"), year))
-            if owner:
-                values.append((tr("Владелец"), owner))
-            if country:
-                values.append((tr("Страна"), country))
-            values.append((tr("Набор"), "WRI Global Power Plant Database"))
-            if url:
-                values.append((tr("Источник"), url))
-            features.append((name, values, None))
-        return [(Group(tr("Электростанции")), features)] if features else []
 
     # Скорости плит NNR-MORVEL56 (core/platemotion.py).
 

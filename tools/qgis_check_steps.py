@@ -7019,8 +7019,7 @@ def infra_on():
 def infra_wait():
     window = state["window"]
     started = state["infra_started"]
-    waiting = window._plant_reply is not None \
-        or window._plant_job is not None \
+    waiting = window.row_tool("plants").busy() \
         or window.row_tool("infra_osm").tiles.reply is not None \
         or bool(window.row_tool("infra_osm").tiles.queue) \
         or window.view.data_pending \
@@ -7101,8 +7100,8 @@ def infra_check():
     window = state["window"]
     view = window.view
     out = result["infra"]
-    out["plants"] = 0 if window.plant_data is None \
-        else len(window.plant_data)
+    plants = window.row_tool("plants")
+    out["plants"] = 0 if plants.data is None else len(plants.data)
     out["plants_drawn"] = view.plants.drawn
     tool = window.row_tool("infra_osm")
     lines = tool.lines
@@ -7115,7 +7114,7 @@ def infra_check():
                   "gas", "oil", "water", "other")}
     out["in_overlay"] = lines is not None and window.overlay is not None \
         and any(la is lines for la in window.overlay.layers)
-    out["legends"] = [window.plant_legend.isVisible(),
+    out["legends"] = [plants.legend.isVisible(),
                       tool.legend.isVisible()]
     out["server_after_toggle"] = state["infra_server_after_toggle"]
     window.identifying = False
@@ -7167,7 +7166,7 @@ def infra_check():
     out["after_off"] = view.plants.data is None and (
         window.overlay is None
         or not any(la is lines for la in window.overlay.layers)) \
-        and not window.plant_legend.isVisible() \
+        and not plants.legend.isVisible() \
         and not tool.legend.isVisible()
 
 
