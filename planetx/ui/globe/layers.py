@@ -873,9 +873,6 @@ class LayersMixin:
             parts.append(link_html(*volcanoes_core.ATTRIBUTION))
         if self.view.wiki_marks:
             parts.append(link_html(*wikipedia.ATTRIBUTION))
-        if self.planet.earth and getattr(self, "extras", {}).get("mining") \
-                and self.mining_layer is not None:
-            parts.append(link_html(*mining.POLYGONS_ATTRIBUTION))
         manager = getattr(self, "satellite_manager", None)
         if manager is not None and manager.on and manager.count():
             parts.append(link_html(*satellites_core.ATTRIBUTION))
@@ -1051,10 +1048,6 @@ class LayersMixin:
         for tool in tools:
             if getattr(tool, "overlay_top", False):
                 layers += tool.overlay_layers()
-        if self.planet.earth and getattr(self, "extras", {}).get("mining") \
-                and getattr(self, "mining_layer", None) is not None:
-            self.mining_layer.setOpacity(self._layer_opacity("mining"))
-            layers.append(self.mining_layer)
         if self.planet.earth \
                 and getattr(self, "rumsey_footprints", None) is not None:
             layers.append(self.rumsey_footprints)

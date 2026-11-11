@@ -339,8 +339,6 @@ class StateMixin:
             self._set_fires(on)
         elif key == "deposits":
             self._set_deposits(on)
-        elif key == "mining":
-            self._set_mining(on)
         elif key == "osm_mines":
             self._set_osm_mines(on)
         elif key == "plants":
@@ -482,8 +480,7 @@ class StateMixin:
 
     def _qgis_layers(self, key):
         """Слои QGIS строки key, которые уже собраны."""
-        found = {"mining": [getattr(self, "mining_layer", None)],
-                 "infra_osm": [getattr(self, "infra_lines", None),
+        found = {"infra_osm": [getattr(self, "infra_lines", None),
                                getattr(self, "infra_points", None)],
                  }
         for tool in getattr(self, "row_tools", {}).values():
@@ -709,9 +706,7 @@ class StateMixin:
         return None if layer is None else 1
 
     def _export_qgis(self, key, title, path, box):
-        if key == "mining":
-            parts = [("mining", self.mining_layer, title)]
-        elif hasattr(self.row_tool(key), "export_parts"):
+        if hasattr(self.row_tool(key), "export_parts"):
             parts = self.row_tool(key).export_parts(key, title)
         else:
             parts = [("lines", self.infra_lines, title),

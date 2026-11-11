@@ -62,7 +62,6 @@ WORDS = {
                 "магнитное склонение", "declination", "isogonic"),
     "deposits": ("полезные ископаемые", "руды", "рудники", "usgs", "mrds",
                  "minerals", "deposits"),
-    "mining": ("карьеры", "отвалы", "горные работы", "mining", "pits"),
     "osm_mines": ("шахты", "карьеры", "mines", "quarries"),
     "plants": ("электростанции", "энергетика", "тэц", "гэс", "аэс",
                "power plants"),

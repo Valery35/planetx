@@ -8,7 +8,7 @@ import time
 
 import numpy as np
 from qgis.core import (QgsCoordinateReferenceSystem, QgsCoordinateTransform,
-                       QgsGeometry, QgsProject, QgsRectangle, QgsVectorLayer)
+                       QgsGeometry, QgsProject, QgsVectorLayer)
 from qgis.PyQt.QtCore import Qt, QTimer
 from qgis.PyQt.QtWidgets import QMessageBox
 from qgis.utils import iface
@@ -460,7 +460,6 @@ class IdentifyMixin:
         groups += self._identify_fires(px, py)
         groups += self._identify_deposits(px, py)
         groups += self._identify_deposits(px, py, osm=True)
-        groups += self._identify_mining(lat, lon)
         groups += self._identify_plants(px, py)
         groups += self._identify_volcanoes(px, py)
         groups += self._identify_wiki(px, py)
@@ -1083,26 +1082,3 @@ class IdentifyMixin:
                 data.lat[record], data.lon[record]), values, None))
         title = tr("Шахты и карьеры OSM") if osm else tr("Месторождения")
         return [(Group(title), features)] if features else []
-
-    def _identify_mining(self, lat, lon):
-        """Контур горной разработки под точкой щелчка."""
-        layer = self.mining_layer
-        if layer is None or not self.extras.get("mining") \
-                or not self.planet.earth:
-            return []
-        from qgis.core import QgsFeatureRequest, QgsGeometry, QgsPointXY
-        point = QgsGeometry.fromPointXY(QgsPointXY(lon, lat))
-        step = 0.0005
-        request = QgsFeatureRequest().setFilterRect(QgsRectangle(
-            lon - step, lat - step, lon + step, lat + step))
-        features = []
-        for feature in layer.getFeatures(request):
-            if not feature.geometry().intersects(point):
-                continue
-            values = [(tr("Страна"), str(feature["COUNTRY_NAME"] or "")),
-                      (tr("Площадь"), tr("{value} км²", value="{:.2f}".format(
-                          float(feature["AREA"] or 0.0)))),
-                      (tr("Набор"), "Maus et al. 2022, PANGAEA")]
-            features.append((tr("Горная разработка"), values, None))
-        return [(Group(tr("Горные разработки")), features)] \
-            if features else []

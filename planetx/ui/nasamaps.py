@@ -106,7 +106,7 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
            "quakes": "USGS", "deposits": "USGS",
-           "mining": "Maus et al. 2022", "osm_mines": "OpenStreetMap",
+           "osm_mines": "OpenStreetMap",
            "plants": "WRI", "currents": "NOAA CoastWatch",
            "trains": "Fintraffic Digitraffic",
            "vessels": "Fintraffic Digitraffic, AIS", "aircraft": "adsb.lol",
@@ -134,7 +134,7 @@ LAYERS = ROWS.place((
           ("platemotion", "seismic"), ("volcanoes", "seismic"),
           ("magpoles", "geophysics"), ("magdecl", "geophysics"),
           ("geoid", "geophysics"),
-          ("deposits", "resources"), ("mining", "resources"),
+          ("deposits", "resources"),
           ("osm_mines", "resources"), ("plants", "infra"),
           ("trains", "transport"), ("vessels", "transport"),
           ("aircraft", "transport"),
@@ -340,12 +340,6 @@ def layer_names():
             "месторождение, рудник или завод. Щелчок по точке показывает "
             "название, ископаемые, тип и ссылку на запись USGS. Первое "
             "включение скачивает около 25 МБ.")),
-        "mining": (tr("Горные разработки"), tr(
-            "Контуры карьеров, отвалов, хвостохранилищ и промплощадок "
-            "мира по снимкам Sentinel-2 2019 года - около 45 тысяч "
-            "участков, Maus и соавторы, 2022. Щелчок по контуру "
-            "показывает страну и площадь. Первое включение скачивает "
-            "около 25 МБ.")),
         "osm_mines": (tr("Шахты и карьеры OSM"), tr(
             "Шахты, рудники, стволы и карьеры из OpenStreetMap с "
             "названиями и ископаемым. Загружаются по месту вида, когда "

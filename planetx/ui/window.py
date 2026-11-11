@@ -384,10 +384,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Месторождения USGS: данные, ждущие ответы двух архивов, задача
         # разбора в рабочем потоке.
         self.deposit_data = None
-        # Контуры горных разработок (core/mining.py): слой QGIS из файла
-        # профиля и его загрузка.
-        self.mining_layer = None
-        self._mining_reply = None
         # Шахты и карьеры OSM: объекты по тайлам, очередь тайлов, запрос
         # Overpass в работе и время последнего запроса.
         self.osm_mines_tiles = OverpassTiles(

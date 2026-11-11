@@ -6892,7 +6892,7 @@ def mining_on():
 def mining_wait():
     window = state["window"]
     started = state["mining_started"]
-    waiting = window._mining_reply is not None \
+    waiting = window.row_tool("mining")._reply is not None \
         or window.osm_mines_tiles.reply is not None \
         or bool(window.osm_mines_tiles.queue) \
         or window.view.data_pending or (window.overlay is not None
@@ -6908,7 +6908,7 @@ def mining_check():
     window = state["window"]
     view = window.view
     out = result["mining"]
-    layer = window.mining_layer
+    layer = window.row_tool("mining").layer
     out["layer"] = layer is not None and layer.featureCount()
     out["in_overlay"] = layer is not None and window.overlay is not None \
         and any(la is layer for la in window.overlay.layers)
@@ -6927,7 +6927,8 @@ def mining_check():
             .QgsFeatureRequest().setFilterRect(box)
         for feature in layer.getFeatures(request):
             point = feature.geometry().pointOnSurface().asPoint()
-            found = window._identify_mining(point.y(), point.x())
+            found = window.row_tool("mining").identify(point.y(),
+                                                       point.x())
             break
     out["polygon_click"] = [f[0] for _, fs in found for f in fs][:2]
     out["polygon_values"] = [dict(f[1]) for _, fs in found for f in fs][:1]
