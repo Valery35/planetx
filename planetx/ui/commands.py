@@ -51,8 +51,6 @@ WORDS = {
     "magpoles": ("магнитный полюс", "магнитные полюса",
                  "компас", "геомагнетизм", "igrf", "magnetic pole",
                  "compass"),
-    "volcanoes": ("вулканы", "вулкан", "извержения", "gvp", "volcanoes",
-                  "volcano"),
     "wiki": ("википедия", "энциклопедия", "статьи", "достопримечательности",
              "wikipedia", "encyclopedia", "articles", "landmarks"),
     "platemotion": ("скорости плит", "движение плит", "дрейф",

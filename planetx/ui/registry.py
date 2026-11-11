@@ -9,7 +9,7 @@
 """
 from ..core.rows import Registry
 from . import (aef, cables, faults, fieldmap, geomap, infra, miningareas,
-               plates, tilemaps, tileoverlays, valuemaps)
+               plates, tilemaps, tileoverlays, valuemaps, volcanoes)
 
 ROWS = Registry().add(
     *fieldmap.ROWS,
@@ -24,4 +24,5 @@ ROWS = Registry().add(
     # Порядок строк с overlay_top - порядок слоёв наложения сверху вниз.
     *faults.ROWS,
     *plates.ROWS,
+    *volcanoes.ROWS,
 )

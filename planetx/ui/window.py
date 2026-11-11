@@ -53,7 +53,7 @@ from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
                      ClassLegend, CurrentLegend, FieldLegend,
                      PointCloudLegend, SiteLegend,
-                     PlantLegend, TrainLegend, VolcanoLegend,
+                     PlantLegend, TrainLegend,
                      VesselLegend, AircraftLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
@@ -268,10 +268,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.plant_legend = PlantLegend(self.view)
         self.plant_legend.hide()
         self.plant_legend.closer = lambda: self.set_extra("plants", False)
-        self.volcano_legend = VolcanoLegend(self.view)
-        self.volcano_legend.hide()
-        self.volcano_legend.closer = \
-            lambda: self.set_extra("volcanoes", False)
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -298,7 +294,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         for legend in (self.theme_legend, self.beds_legend,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.deposit_legend,
-                       self.plant_legend, self.volcano_legend,
+                       self.plant_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -397,9 +393,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Электростанции WRI (core/plants.py): файл профиля, загрузка
         # архива и разбор в рабочем потоке.
         self.plant_data = None
-        # Вулканы GVP (core/volcanoes.py): файл профиля, загрузка.
-        self.volcano_data = None
-        self._volcano_reply = None
         self._plant_reply = None
         self._plant_job = None
         self._osm_timer = QTimer(self)

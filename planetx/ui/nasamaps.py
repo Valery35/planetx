@@ -93,7 +93,6 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
               "magpoles": ((235, 70, 60), (70, 130, 235)),
               "magdecl": ((215, 70, 60), (40, 170, 70), (60, 110, 215)),
               "platemotion": ((255, 225, 60), (60, 60, 60)),
-              "volcanoes": ((230, 40, 30), (245, 140, 40), (240, 210, 70)),
               "geoid": ((60, 90, 170), (120, 170, 120), (200, 150, 80)),
               "air": ((10, 15, 40), (90, 150, 230), (200, 225, 250)),
               "wiki": ((45, 110, 205), (245, 245, 245), (205, 228, 255)),
@@ -114,7 +113,6 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "magpoles": "NOAA NCEI, IGRF-14",
            "magdecl": "IGRF-14",
            "platemotion": "NNR-MORVEL56",
-           "volcanoes": "Smithsonian GVP",
            "geoid": "EGM2008, NGA", "air": "",
            "iscgem": "ISC-GEM",
            "wiki": "Wikipedia",
@@ -127,7 +125,7 @@ LAYERS = ROWS.place((
           ("satellites", "sky"),
           ("cutaway", "geology"), ("paleo", "geology"),
           ("quakes", "seismic"), ("iscgem", "seismic"),
-          ("platemotion", "seismic"), ("volcanoes", "seismic"),
+          ("platemotion", "seismic"),
           ("magpoles", "geophysics"), ("magdecl", "geophysics"),
           ("geoid", "geophysics"),
           ("deposits", "resources"),
@@ -390,13 +388,6 @@ def layer_names():
             "года, gufm1 скачивается при первом показе. Красные - "
             "склонение восточное, синие - западное, зелёная - нулевое. "
             "У магнитных полюсов линии сходятся.")),
-        "volcanoes": (tr("Вулканы"), tr(
-            "Около 1200 вулканов, извергавшихся за последние 12 тысяч лет, "
-            "по списку Global Volcanism Program Смитсоновского института. "
-            "Цвет - время последнего извержения, размер - высота вулкана. "
-            "Щелчок по точке показывает тип вулкана, год последнего "
-            "извержения, тектоническую обстановку и страницу вулкана на "
-            "сайте GVP. Первое включение скачивает около 2 МБ.")),
         "iscgem": (tr("Исторические землетрясения"), tr(
             "Сильные землетрясения мира с 1904 по 2024 год по каталогу "
             "ISC-GEM - около 74 тысяч событий магнитудой от 5, места, "

@@ -30466,7 +30466,8 @@ def volcanoes_on():
     window.view.navigator.stop()
     window.view.navigator.show(Pose(55.0, 159.0, 2500000.0, 0.0, 0.0))
     window.set_extra("volcanoes", True)
-    result["volcanoes"] = {"legend": not window.volcano_legend.isHidden()}
+    result["volcanoes"] = {
+        "legend": not window.row_tool("volcanoes").legend.isHidden()}
     state["ls_started"] = time.monotonic()
 
 
@@ -30477,10 +30478,11 @@ def volcanoes_check():
     window = state["window"]
     view = window.view
     out = result["volcanoes"]
-    if window.volcano_data is None and window._volcano_reply is not None \
+    tool = window.row_tool("volcanoes")
+    if tool.data is None and tool._reply is not None \
             and time.monotonic() - state["ls_started"] < 60.0:
         return 1000
-    data = window.volcano_data
+    data = tool.data
     out["count"] = len(data) if data is not None else 0
     out["drawn_layer"] = view.volcanoes.data is not None
     out["credit"] = "Volcanism" in window.attribution.text()
@@ -30494,13 +30496,29 @@ def volcanoes_check():
         xyz = geodetic_to_ecef(np.array([data.lat[k]]),
                                np.array([data.lon[k]]), np.array([h]))
         pixels, _ = view.camera.project(xyz)
-        found = window._identify_volcanoes(*pixels[0])
+        found = tool.pick(*pixels[0])
         out["click"] = [(name, values[:3]) for name, values, _ in
                         found[0][1]][:2] if found else None
         out["point_under"] = window._point_under(*pixels[0])
+        # «В проект QGIS…» - поля точек даёт исполнитель строки.
+        from qgis.core import QgsProject
+        path = os.path.join(TEMP, "planetx_active", "volcanoes.gpkg")
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if os.path.exists(path):
+            os.remove(path)
+        out["exported"] = window.active_export("volcanoes", path)
+        root = QgsProject.instance().layerTreeRoot()
+        group = root.findGroup("PlanetX - слои глобуса") \
+            or root.findGroup("PlanetX - globe layers")
+        if group is not None:
+            out["fields"] = [f.name() for f in
+                             group.findLayers()[0].layer().fields()][:6]
+            for node in group.findLayers():
+                QgsProject.instance().removeMapLayer(node.layerId())
+            root.removeChildNode(group)
     window.set_extra("volcanoes", False)
     out["off"] = view.volcanoes.data is None \
-        and window.volcano_legend.isHidden()
+        and tool.legend.isHidden()
     out["gl"] = dict(view.gl_errors)
     return None
 

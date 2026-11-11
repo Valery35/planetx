@@ -27,7 +27,7 @@ class TestRegistry(unittest.TestCase):
             rows.Row("a", "life", names, Tool, source="S", colors=[(1, 2, 3)],
                      words=["w"], fades=["emag"], view_map="emag"),
             rows.Row("b", "life", names, Tool, earth=False, default=True),
-            rows.Row("c", "sky", names, qgis_layer=True))
+            rows.Row("c", "sky", names, qgis_layer=True, points="dots"))
 
     def test_tables(self):
         reg = self.make()
@@ -43,6 +43,7 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual(reg.names()["c"], ("A", "a"))
         self.assertEqual(reg.tools(), [Tool])
         self.assertEqual(reg.qgis_keys(), ("c",))
+        self.assertEqual(reg.points(), {"c": "dots"})
         self.assertIs(reg.get("b").tool, Tool)
 
     def test_place_after_keys_and_chains(self):

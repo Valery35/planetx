@@ -343,8 +343,6 @@ class StateMixin:
             self._set_osm_mines(on)
         elif key == "plants":
             self._set_plants(on)
-        elif key == "volcanoes":
-            self._set_volcanoes(on)
         elif key == "wiki":
             self._set_wiki(on)
         elif key == "currents":
@@ -548,7 +546,10 @@ class StateMixin:
         if key in ("quakes", "fires", "iscgem"):
             keep &= quakes.in_window(layer.times, layer.window)
         index = np.nonzero(keep)[0]
-        fields, rows = self._point_rows(key, layer, index)
+        tool = self.row_tool(key)
+        fields, rows = tool.point_rows(layer, index) \
+            if hasattr(tool, "point_rows") \
+            else self._point_rows(key, layer, index)
         count = layer_export.write_points(
             path, key, layer.lats[index], layer.lons[index],
             layer.colors[index] * 255.0, layer.sizes[index], fields, rows)
@@ -578,15 +579,6 @@ class StateMixin:
                 "source")] + [("capacity_mw", "real")]
             rows = [(layer.data.text(int(layer.order[n])) + [""] * 6)[:6]
                     + [float(layer.data.capacity[layer.order[n]])]
-                    for n in index]
-        elif key == "volcanoes":
-            fields = [(name, "str") for name in (
-                "number", "name", "type", "country", "setting",
-                "evidence")] + [("elevation_m", "real"),
-                                ("last_eruption", "real")]
-            rows = [(layer.data.text(int(layer.order[n])) + [""] * 6)[:6]
-                    + [float(layer.data.elevation[layer.order[n]]),
-                       float(layer.data.last[layer.order[n]])]
                     for n in index]
         elif key in ("quakes", "iscgem"):
             fields = [("place", "str"), ("mag", "real"),

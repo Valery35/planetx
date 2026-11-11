@@ -20,8 +20,7 @@ from ...core.flight import Flight
 from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
 from ...core import (mining,
-                     plants as plants_core, platemotion, slabs,
-                     volcanoes as volcanoes_core)
+                     plants as plants_core, platemotion, slabs)
 from ...core.features import Shape
 from ..overpass import brief_error
 from ...core.places import Place as MarkPlace
@@ -96,129 +95,6 @@ class ResourcesMixin:
             self.view.store.scale, self._surface_ground)
         self._show_attribution()
         self.view.update()
-
-    # Вулканы GVP (core/volcanoes.py).
-
-    def _volcanoes_path(self):
-        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
-                              "PlanetX")
-        os.makedirs(folder, exist_ok=True)
-        return os.path.join(folder, "volcanoes.npz")
-
-    def _set_volcanoes(self, on):
-        """Вулканы голоцена строкой каталога. Первое включение скачивает
-        список GVP около 2 МБ, итог - файл профиля."""
-        self._mark_gallery()
-        self.volcano_legend.setVisible(on and self.planet.earth)
-        if not on:
-            if self._volcano_reply is not None:
-                reply, self._volcano_reply = self._volcano_reply, None
-                reply.abort()
-            self._place_volcanoes()
-            return
-        if self.volcano_data is None:
-            path = self._volcanoes_path()
-            if os.path.exists(path):
-                try:
-                    self.volcano_data = volcanoes_core.load(path)
-                except (OSError, ValueError, KeyError) as error:
-                    journal.note("volcanoes file: {}".format(error))
-        if self.volcano_data is not None:
-            self._place_volcanoes()
-            return
-        if self._volcano_reply is not None:
-            return
-        self._volcano_reply = fetch_bytes(volcanoes_core.URL,
-                                          self._volcanoes_arrived)
-        self.view.data_pending += 1
-        self.message = (tr("Загрузка списка вулканов GVP, около 2 МБ…"),
-                        time.monotonic())
-        self._show_state()
-
-    def _volcanoes_arrived(self, data, error):
-        self.view.data_pending = max(0, self.view.data_pending - 1)
-        if self._volcano_reply is None:
-            return  # снят выключением строки
-        self._volcano_reply = None
-        found = None
-        if data is not None:
-            try:
-                # Около 1200 строк - разбор в главном потоке, десятки мс.
-                found = volcanoes_core.parse(bytes(data))
-                volcanoes_core.save(found, self._volcanoes_path())
-            except (OSError, ValueError, KeyError) as problem:
-                error = str(problem)
-                found = None
-        if found is None:
-            journal.note("volcanoes: {}".format(brief_error(error or "")))
-            self.message = (tr("Список вулканов не загрузился, проверьте "
-                               "сеть и включите строку снова."),
-                            time.monotonic())
-            self._show_state()
-            return
-        self.volcano_data = found
-        self.message = (tr("Вулканов {count}.", count=len(found)),
-                        time.monotonic())
-        self._show_state()
-        self._place_volcanoes()
-
-    def _place_volcanoes(self):
-        on = self.extras.get("volcanoes", False) and self.planet.earth
-        self.view.volcanoes.set_volcanoes(
-            self.volcano_data if on else None, self.view.store.scale,
-            self._surface_ground)
-        self._show_attribution()
-        self.view.update()
-
-    def _identify_volcanoes(self, px, py):
-        """Вулканы у точки щелчка на экране, не больше 10."""
-        layer = self.view.volcanoes
-        data = layer.data
-        if data is None:
-            return []
-        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
-        seen = layer.visible(eye)
-        if not len(seen):
-            return []
-        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
-        pixels, front = self.view.camera.project(layer.focus[seen])
-        gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
-        near = np.nonzero(front & (gap <= radius))[0]
-        near = near[np.argsort(gap[near])][:10]
-        features = []
-        for n in near:
-            record = int(layer.order[seen[n]])
-            number, name, kind, country, setting, evidence = \
-                (data.text(record) + [""] * 6)[:6]
-            values = []
-            if kind:
-                values.append((tr("Тип"), kind))
-            year = float(data.last[record])
-            if np.isfinite(year):
-                year = int(year)
-                values.append((tr("Последнее извержение"), str(year)
-                               if year > 0 else tr("{year} до н. э.",
-                                                   year=-year)))
-            else:
-                values.append((tr("Последнее извержение"),
-                               tr("дата неизвестна")))
-            height = float(data.elevation[record])
-            if np.isfinite(height):
-                values.append((tr("Высота"), tr("{value} м",
-                                                value="{:.0f}".format(
-                                                    height))))
-            if country:
-                values.append((tr("Страна"), country))
-            if setting:
-                values.append((tr("Обстановка"), setting))
-            if evidence:
-                values.append((tr("Достоверность"), evidence))
-            values.append((tr("Набор"), "Global Volcanism Program"))
-            if number:
-                values.append((tr("Источник"),
-                               volcanoes_core.PAGE.format(number)))
-            features.append((name, values, None))
-        return [(Group(tr("Вулканы")), features)] if features else []
 
     # Электростанции WRI.
 

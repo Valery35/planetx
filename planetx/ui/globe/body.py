@@ -242,8 +242,6 @@ class BodyMixin:
         self.deposit_legend.setVisible(self._deposit_legend_on())
         self.plant_legend.setVisible(bool(self.extras.get("plants"))
                                      and self.planet.earth)
-        self.volcano_legend.setVisible(bool(self.extras.get("volcanoes"))
-                                       and self.planet.earth)
         for tool in self.row_tools.values():
             if hasattr(tool, "sync_legend"):
                 tool.sync_legend()

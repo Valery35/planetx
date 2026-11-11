@@ -13,7 +13,9 @@
 Исполнитель - класс, его экземпляр один на окно и на все строки с этим
 классом. Он даёт turn(key, on), shown_key (ключ показанной строки или
 None), identify(lat, lon) - группы окна «Объекты», credit() - (текст,
-адрес) подписи источников или None, close().
+адрес) подписи источников или None, close(). Исполнитель точек даёт
+ещё pick(px, py) - группы окна «Объекты» по точкам у пикселя кадра,
+и point_rows(layer, index) - поля и строки выгрузки точек.
 """
 
 
@@ -26,7 +28,8 @@ class Row:
 
     def __init__(self, key, group, names, tool=None, source="",
                  colors=(), words=(), fades=(), view_map=None,
-                 default=False, earth=True, after=None, qgis_layer=False):
+                 default=False, earth=True, after=None, qgis_layer=False,
+                 points=None):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -46,6 +49,9 @@ class Row:
         # Строка рисуется слоем QGIS в картинке наложения: непрозрачность
         # меняет слой, «В проект QGIS…» - исполнитель.
         self.qgis_layer = bool(qgis_layer)
+        # Строка рисуется точками - поле вида points: ползунок меняет их
+        # непрозрачность, «В проект QGIS…» пишет точки рамки вида.
+        self.points = points
 
 
 class Registry:
@@ -80,6 +86,10 @@ class Registry:
 
     def qgis_keys(self):
         return tuple(row.key for row in self.rows if row.qgis_layer)
+
+    def points(self):
+        """Ключ строки - поле вида её точек."""
+        return {row.key: row.points for row in self.rows if row.points}
 
     def view_maps(self, layer):
         """Ключи строк, которые делят слой вида layer."""

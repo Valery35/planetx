@@ -53,7 +53,7 @@ TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 # вида, тайловые слои - слои вида GIBS, слои QGIS - в наложении.
 POINT_LAYERS = {"deposits": "deposits", "osm_mines": "osm_mines",
                 "plants": "plants", "quakes": "quakes", "fires": "fires",
-                "volcanoes": "volcanoes", "iscgem": "history"}
+                "iscgem": "history", **ROWS.points()}
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
@@ -183,7 +183,6 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "magpoles": False, "geoid": False,
                   "magdecl": False,
                   "platemotion": False,
-                  "volcanoes": False,
                   "air": True, "iscgem": False,
                   "wiki": False,
                   **ROWS.defaults(),
@@ -197,7 +196,7 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "osm_mines", "plants",
                 "currents", "cadastre", "magpoles",
                 "geoid", "magdecl",
-                "platemotion", "volcanoes",
+                "platemotion",
                 "iscgem",
                 "wiki") \
     + ROWS.earth_keys()

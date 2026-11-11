@@ -23,7 +23,6 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      temperature, when, oldmaps, deposits as deposits_core,
                      mining, rumsey as rumsey_core,
                      plants as plants_core, fires as fires_core, crust,
-                     volcanoes as volcanoes_core,
                      iscgem, quakes, slabs, themes, tilemaps,
                      satellites as satellites_core,
                      trains as trains_core, vessels as vessels_core,
@@ -867,8 +866,6 @@ class LayersMixin:
             parts.append(link_html(*mining.OSM_ATTRIBUTION))
         if self.view.plants.data is not None:
             parts.append(link_html(*plants_core.ATTRIBUTION))
-        if self.view.volcanoes.data is not None:
-            parts.append(link_html(*volcanoes_core.ATTRIBUTION))
         if self.view.wiki_marks:
             parts.append(link_html(*wikipedia.ATTRIBUTION))
         manager = getattr(self, "satellite_manager", None)

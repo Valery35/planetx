@@ -301,13 +301,18 @@ class IdentifyMixin:
         return bool(self._identify_deposits(px, py)
                     or self._identify_deposits(px, py, osm=True)
                     or self._identify_plants(px, py)
-                    or self._identify_volcanoes(px, py)
+                    or self._pick_rows(px, py)
                     or self._lines_under(px, py)
                     or self._identify_quakes(px, py)
                     or self._identify_fires(px, py)
                     or self._identify_satellites(px, py)
                     or self._identify_trains(px, py)
                     or self._identify_live(px, py))
+
+    def _pick_rows(self, px, py):
+        """Точки строк реестра у пикселя кадра (исполнители с pick)."""
+        return [group for tool in self.row_tools.values()
+                if hasattr(tool, "pick") for group in tool.pick(px, py)]
 
     def _lines_under(self, px, py):
         """Линии строк реестра с click_lines (ЛЭП OSM, активные разломы)
@@ -454,7 +459,7 @@ class IdentifyMixin:
         groups += self._identify_deposits(px, py)
         groups += self._identify_deposits(px, py, osm=True)
         groups += self._identify_plants(px, py)
-        groups += self._identify_volcanoes(px, py)
+        groups += self._pick_rows(px, py)
         groups += self._identify_wiki(px, py)
         groups = self._identify_satellites(px, py) \
             + self._identify_trains(px, py) \
