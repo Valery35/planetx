@@ -22,7 +22,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      platemotion, sun, tomography,
                      temperature, when, oldmaps, deposits as deposits_core,
                      mining, rumsey as rumsey_core,
-                     plants as plants_core, fires as fires_core, crust, plates,
+                     plants as plants_core, fires as fires_core, crust,
                      volcanoes as volcanoes_core, faults as faults_core,
                      iscgem, quakes, slabs, themes, tilemaps,
                      satellites as satellites_core,
@@ -889,9 +889,6 @@ class LayersMixin:
             if manager is not None and manager.on and manager.count() \
                     and self.planet.earth:
                 parts.append(link_html(*core_module.ATTRIBUTION))
-        if self.planet.earth and getattr(self, "extras", {}).get("plates") \
-                and self.plates_data is not None:
-            parts.append(link_html(*plates.ATTRIBUTION))
         if self.planet.earth and getattr(self, "extras", {}).get("faults") \
                 and getattr(self, "fault_layer", None) is not None:
             parts.append(link_html(*faults_core.ATTRIBUTION))
@@ -1050,18 +1047,18 @@ class LayersMixin:
             # Слои проекта и векторная основа - земные.
             layers, groups = [], set()
         # Наложение собирается и при создании окна, до строк «Слоёв».
-        if self.planet.earth and getattr(self, "extras", {}).get("plates") \
-                and self.plate_layer is not None:
-            # Границы плит - над векторной основой.
-            self.plate_layer.setOpacity(self._layer_opacity("plates"))
-            layers.append(self.plate_layer)
+        # Строки реестра с overlay_top (границы плит) - сразу под слоями
+        # проекта, над векторной основой.
+        tools = list(getattr(self, "row_tools", {}).values())
+        start = len(layers)
+        for tool in tools:
+            if getattr(tool, "overlay_top", False):
+                layers += tool.overlay_layers()
         if self.planet.earth and getattr(self, "extras", {}).get("faults") \
                 and getattr(self, "fault_layer", None) is not None:
             # Разломы - над границами плит.
             self.fault_layer.setOpacity(self._layer_opacity("faults"))
-            layers.insert(len(layers) - 1 if layers and layers[-1]
-                          is getattr(self, "plate_layer", None)
-                          else len(layers), self.fault_layer)
+            layers.insert(start, self.fault_layer)
         if self.planet.earth and getattr(self, "extras", {}).get("mining") \
                 and getattr(self, "mining_layer", None) is not None:
             self.mining_layer.setOpacity(self._layer_opacity("mining"))
@@ -1076,8 +1073,9 @@ class LayersMixin:
                 layer.setOpacity(self._layer_opacity("infra_osm"))
                 layers.append(layer)
         # Наложения тайлов - над векторной основой, под линиями выше.
-        for tool in getattr(self, "row_tools", {}).values():
-            if hasattr(tool, "overlay_layers"):
+        for tool in tools:
+            if hasattr(tool, "overlay_layers") \
+                    and not getattr(tool, "overlay_top", False):
                 layers += tool.overlay_layers()
         if groups & set(LINE_GROUPS) and self.ofm_layer is not None:
             layers.append(self.ofm_layer)

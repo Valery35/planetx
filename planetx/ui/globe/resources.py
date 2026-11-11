@@ -21,15 +21,14 @@ from ...core.navigation import ground_under
 from ...core.skyview import ra_dec_text
 from ...core import (infra, mining,
                      faults as faults_core,
-                     plants as plants_core, platemotion, plates, slabs,
+                     plants as plants_core, platemotion, slabs,
                      volcanoes as volcanoes_core)
 from ...core.features import Shape
 from ..overpass import brief_error
 from ...core.places import Place as MarkPlace
 from ...i18n import tr
 from ...net.gdalnet import executor
-from ...net.overlay import (fetch_bytes, plate_layer,
-                            fault_layer)
+from ...net.overlay import fetch_bytes, fault_layer
 from ...render.view import OBJECT_BUDGET, start_keys
 from ..identify import Group, point_text
 from ..deposits import parse_plants
@@ -471,44 +470,6 @@ class ResourcesMixin:
             features.append((name, values, None))
         return [(Group(tr("Электростанции")), features)] if features else []
 
-    def _plate_names(self):
-        """Подписи групп и классов границ плит на языке интерфейса."""
-        return ({"divergent": tr("Раздвиг плит"),
-                 "transform": tr("Сдвиг плит"),
-                 "convergent": tr("Схождение плит")},
-                {"OSR": tr("Океанический спрединговый хребет"),
-                 "CRB": tr("Континентальный рифт"),
-                 "OTF": tr("Океанический трансформный разлом"),
-                 "CTF": tr("Континентальный трансформный разлом"),
-                 "SUB": tr("Зона субдукции"),
-                 "OCB": tr("Океаническая граница схождения"),
-                 "CCB": tr("Континентальная коллизия")})
-
-    def _set_plates(self, on):
-        """Строка «Границы плит»: линии границ в наложении, названия
-        плит надписями глобуса. Файл data/plates.json читается при
-        первом включении."""
-        if on and self.plates_data is None:
-            try:
-                with open(os.path.join(DATA_DIR, "plates.json"),
-                          encoding="utf-8") as fh:
-                    self.plates_data = plates.Plates.from_text(fh.read())
-            except (OSError, ValueError) as error:
-                self.message = (tr("Границы плит не прочитаны: {error}",
-                                   error=str(error)), time.monotonic())
-                self._show_state()
-                return
-        if on and self.plate_layer is None:
-            self.plate_layer = plate_layer(self.plates_data,
-                                           self._plate_names()[0])
-        self.view.plate_marks = [
-            MarkPlace(-300000 - n, p.name, "plate", 1, p.lat, p.lon)
-            for n, p in enumerate(self.plates_data.plates)] \
-            if on and self.plates_data is not None else []
-        self._update_overlay(keep=True)
-        self._show_attribution()
-        self.view.update()
-
     # Скорости плит NNR-MORVEL56 (core/platemotion.py).
 
     def _motion_on(self):
@@ -709,22 +670,6 @@ class ResourcesMixin:
         values.append((tr("Набор"), "GEM Global Active Faults"))
         return [(Group(tr("Активные разломы")), [
             (found.name or tr("Без названия"), values, None)])]
-
-    def _identify_plates(self, lat, lon, tolerance):
-        """Граница плит у точки щелчка, когда строка включена."""
-        if not (self.planet.earth and self.extras.get("plates")
-                and self.plates_data is not None):
-            return []
-        found = plates.nearest(self.plates_data, lat, lon, tolerance)
-        if found is None:
-            return []
-        groups, classes = self._plate_names()
-        values = [(tr("Тип"), classes.get(found.code, found.code)),
-                  (tr("Плиты"), found.pair),
-                  (tr("Скорость"), tr("{value} мм/год",
-                                      value="{:.0f}".format(found.speed)))]
-        return [(Group(tr("Граница плит")), [
-            (groups[plates.group(found.code)], values, None)])]
 
     def _identify_site(self, lat, lon, height):
         """Место под щелчком: высота или глубина, кора CRUST1.0, плита

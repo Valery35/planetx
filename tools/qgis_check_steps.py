@@ -5516,15 +5516,15 @@ def plates_check():
     window = state["window"]
     out = result["plates"]
     overlay = window.overlay
-    out["lines"] = len(window.plates_data.boundaries) \
-        if window.plates_data else None
-    out["layer_features"] = window.plate_layer.featureCount() \
-        if window.plate_layer is not None else None
+    tool = window.row_tool("plates")
+    out["lines"] = len(tool.data.boundaries) if tool.data else None
+    out["layer_features"] = tool.layer.featureCount() \
+        if tool.layer is not None else None
     out["in_overlay"] = overlay is not None \
-        and window.plate_layer in overlay.layers
+        and tool.layer in overlay.layers
     out["marks"] = len(window.view.plate_marks)
     out["attribution"] = "Bird" in window.attribution.text()
-    found = window._identify_plates(38.3, 143.9, 80000.0)
+    found = tool.identify(38.3, 143.9, 80000.0)
     out["identify"] = [(g.name if hasattr(g, "name") else str(g),
                         [(name, values) for name, values, _ in items])
                        for g, items in found]
@@ -5532,7 +5532,7 @@ def plates_check():
         os.path.join(TEMP, "planetx_plates.png"))
     window.set_extra("plates", False)
     out["off_in_overlay"] = window.overlay is not None \
-        and window.plate_layer in window.overlay.layers
+        and tool.layer in window.overlay.layers
     out["off_marks"] = len(window.view.plate_marks)
     out["gl"] = dict(window.view.gl_errors)
 

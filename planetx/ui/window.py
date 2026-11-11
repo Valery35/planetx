@@ -433,10 +433,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # на локальной копии хранилища planetx-terrain.
         self.slab_index = None
         self.slab_zones = {}
-        # Границы плит PB2002 (core/plates.py) и их слой наложения,
-        # читаются при первом включении строки.
-        self.plates_data = None
-        self.plate_layer = None
         self.geomag = None  # (модель IGRF, таблицы полюсов), core/geomag
         # Линии склонения: (год, линии) и подписи.
         self._decl_cache = None

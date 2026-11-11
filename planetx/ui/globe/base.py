@@ -61,7 +61,7 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
               "currents": ("currents",), "cadastre": ("cadastre",),
               **ROWS.fades()}
-QGIS_LAYERS = ("plates", "faults", "mining", "infra_osm") \
+QGIS_LAYERS = ("faults","mining", "infra_osm") \
     + ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -176,7 +176,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False, "contours": False,
                   "quakes": False, "cutaway": False, "paleo": False,
-                  "plates": False, "fires": False, "satellites": False,
+                  "fires": False, "satellites": False,
                   "trains": False, "vessels": False, "aircraft": False,
                   "deposits": False, "mining": False,
                   "osm_mines": False,
@@ -194,7 +194,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
-                "cutaway", "paleo", "plates", "fires", "satellites",
+                "cutaway", "paleo", "fires", "satellites",
                 "trains", "vessels", "aircraft", "deposits", "mining",
                 "osm_mines", "plants",
                 "infra_osm",

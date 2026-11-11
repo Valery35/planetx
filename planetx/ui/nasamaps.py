@@ -106,7 +106,7 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
-           "quakes": "USGS", "plates": "PB2002", "deposits": "USGS",
+           "quakes": "USGS", "deposits": "USGS",
            "mining": "Maus et al. 2022", "osm_mines": "OpenStreetMap",
            "plants": "WRI", "currents": "NOAA CoastWatch",
            "trains": "Fintraffic Digitraffic",
@@ -133,7 +133,7 @@ LAYERS = ROWS.place((
           ("satellites", "sky"),
           ("cutaway", "geology"), ("paleo", "geology"),
           ("quakes", "seismic"), ("iscgem", "seismic"),
-          ("plates", "seismic"), ("faults", "seismic"),
+          ("faults", "seismic"),
           ("platemotion", "seismic"), ("volcanoes", "seismic"),
           ("magpoles", "geophysics"), ("magdecl", "geophysics"),
           ("geoid", "geophysics"),
@@ -394,13 +394,6 @@ def layer_names():
             "Загружаются по месту вида, когда камера ниже 150 км. Щелчок "
             "по линии показывает напряжение, вещество, оператора и "
             "ссылку на объект OpenStreetMap.")),
-        "plates": (tr("Границы плит"), tr(
-            "Границы литосферных плит по модели PB2002. Красные - "
-            "раздвиг плит на хребтах и рифтах, зелёные - сдвиг "
-            "по трансформным разломам, синие - схождение "
-            "в зонах субдукции и коллизии. Названия плит стоят "
-            "надписями. Тип границы и скорость плит показывает "
-            "окно «Объекты».")),
         "magpoles": (tr("Магнитные полюса"), tr(
             "Северный и южный магнитные полюса - точки, где стрелка "
             "компаса стоит отвесно, - на год шкалы времени и их путь "
