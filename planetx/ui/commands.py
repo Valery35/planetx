@@ -44,8 +44,6 @@ WORDS = {
     "aircraft": ("самолёты", "самолеты", "авиация", "рейсы", "ads-b",
                  "flightradar", "aircraft", "planes", "flights"),
     "quakes": ("землетрясения", "сейсмика", "очаги", "earthquakes"),
-    "faults": ("разломы", "активные разломы", "сбросы", "надвиги", "сдвиги",
-               "gem", "faults", "active faults"),
     "iscgem": ("исторические землетрясения", "землетрясения с 1900",
                "старые землетрясения", "каталог землетрясений", "isc-gem",
                "iscgem", "historical earthquakes"),

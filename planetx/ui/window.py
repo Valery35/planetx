@@ -51,7 +51,7 @@ from .layer_labels import LayerLabels
 from .legend import (BedsLegend, ContourLegend, CutawayLegend, DepositLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
-                     ClassLegend, CurrentLegend, FaultLegend, FieldLegend,
+                     ClassLegend, CurrentLegend, FieldLegend,
                      InfraLegend, PointCloudLegend, SiteLegend,
                      PlantLegend, TrainLegend, VolcanoLegend,
                      VesselLegend, AircraftLegend)
@@ -275,9 +275,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.infra_legend = InfraLegend(self.view)
         self.infra_legend.hide()
         self.infra_legend.closer = lambda: self.set_extra("infra_osm", False)
-        self.fault_legend = FaultLegend(self.view)
-        self.fault_legend.hide()
-        self.fault_legend.closer = lambda: self.set_extra("faults", False)
         self.cutaway_legend = CutawayLegend(self.view)
         self.cutaway_legend.hide()
         # Тема NASA GIBS: выбранная тема и показанный день, ряды дат
@@ -305,7 +302,7 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
                        self.cutaway_legend, self.quake_legend,
                        self.fire_legend, self.deposit_legend,
                        self.plant_legend, self.volcano_legend,
-                       self.infra_legend, self.fault_legend,
+                       self.infra_legend,
                        self.insolation_legend,
                        self.slope_legend, self.contour_legend,
                        self.legend):
@@ -453,12 +450,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.tilemap_urls = {key: m.url for key, m in tilemaps.MAPS.items()}
         self.tilemap_coarse = {key: m.coarse
                                for key, m in tilemaps.MAPS.items()}
-        # Активные разломы GEM (core/faults.py): файл профиля, загрузка,
-        # разбор в рабочем потоке, слой наложения.
-        self.faults_data = None
-        self.fault_layer = None
-        self._fault_reply = None
-        self._fault_job = None
         self._slab_replies = {}
         self.slab_errors = {}
         self.slab_base = None

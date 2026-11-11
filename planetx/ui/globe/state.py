@@ -361,8 +361,6 @@ class StateMixin:
             self._set_cutaway(on)
         elif key == "paleo":
             self._set_paleo(on)
-        elif key == "faults":
-            self._set_faults(on)
         elif key == "iscgem":
             self._set_history(on)
         elif key == "magpoles":
@@ -484,8 +482,7 @@ class StateMixin:
 
     def _qgis_layers(self, key):
         """Слои QGIS строки key, которые уже собраны."""
-        found = {"faults": [getattr(self, "fault_layer", None)],
-                 "mining": [getattr(self, "mining_layer", None)],
+        found = {"mining": [getattr(self, "mining_layer", None)],
                  "infra_osm": [getattr(self, "infra_lines", None),
                                getattr(self, "infra_points", None)],
                  }
@@ -712,9 +709,7 @@ class StateMixin:
         return None if layer is None else 1
 
     def _export_qgis(self, key, title, path, box):
-        if key == "faults":
-            parts = [("faults", self.fault_layer, title)]
-        elif key == "mining":
+        if key == "mining":
             parts = [("mining", self.mining_layer, title)]
         elif hasattr(self.row_tool(key), "export_parts"):
             parts = self.row_tool(key).export_parts(key, title)

@@ -61,7 +61,7 @@ GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
               "currents": ("currents",), "cadastre": ("cadastre",),
               **ROWS.fades()}
-QGIS_LAYERS = ("faults","mining", "infra_osm") \
+QGIS_LAYERS = ("mining", "infra_osm") \
     + ROWS.qgis_keys()
 # Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
 PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
@@ -185,7 +185,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "magpoles": False, "geoid": False,
                   "magdecl": False,
                   "platemotion": False,
-                  "volcanoes": False, "faults": False,
+                  "volcanoes": False,
                   "air": True, "iscgem": False,
                   "wiki": False,
                   **ROWS.defaults(),
@@ -201,7 +201,7 @@ EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
                 "currents", "cadastre", "magpoles",
                 "geoid", "magdecl",
                 "platemotion", "volcanoes",
-                "faults", "iscgem",
+                "iscgem",
                 "wiki") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты

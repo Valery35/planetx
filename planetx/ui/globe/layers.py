@@ -23,7 +23,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid, geomag,
                      temperature, when, oldmaps, deposits as deposits_core,
                      mining, rumsey as rumsey_core,
                      plants as plants_core, fires as fires_core, crust,
-                     volcanoes as volcanoes_core, faults as faults_core,
+                     volcanoes as volcanoes_core,
                      iscgem, quakes, slabs, themes, tilemaps,
                      satellites as satellites_core,
                      trains as trains_core, vessels as vessels_core,
@@ -889,9 +889,6 @@ class LayersMixin:
             if manager is not None and manager.on and manager.count() \
                     and self.planet.earth:
                 parts.append(link_html(*core_module.ATTRIBUTION))
-        if self.planet.earth and getattr(self, "extras", {}).get("faults") \
-                and getattr(self, "fault_layer", None) is not None:
-            parts.append(link_html(*faults_core.ATTRIBUTION))
         if self.planet.earth and self._rumsey_shown():
             parts.append(link_html(*rumsey_core.ATTRIBUTION))
         if self.planet.earth and self._oam_shown():
@@ -1047,18 +1044,13 @@ class LayersMixin:
             # Слои проекта и векторная основа - земные.
             layers, groups = [], set()
         # Наложение собирается и при создании окна, до строк «Слоёв».
-        # Строки реестра с overlay_top (границы плит) - сразу под слоями
-        # проекта, над векторной основой.
+        # Строки реестра с overlay_top (разломы над границами плит) -
+        # сразу под слоями проекта, над векторной основой, в порядке
+        # реестра.
         tools = list(getattr(self, "row_tools", {}).values())
-        start = len(layers)
         for tool in tools:
             if getattr(tool, "overlay_top", False):
                 layers += tool.overlay_layers()
-        if self.planet.earth and getattr(self, "extras", {}).get("faults") \
-                and getattr(self, "fault_layer", None) is not None:
-            # Разломы - над границами плит.
-            self.fault_layer.setOpacity(self._layer_opacity("faults"))
-            layers.insert(start, self.fault_layer)
         if self.planet.earth and getattr(self, "extras", {}).get("mining") \
                 and getattr(self, "mining_layer", None) is not None:
             self.mining_layer.setOpacity(self._layer_opacity("mining"))

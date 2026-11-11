@@ -28985,14 +28985,15 @@ def faults_on():
     result["faults"] = {"gallery": "faults" in [
         k for k, _ in __import__("planetx.ui.nasamaps",
                                  fromlist=["LAYERS"]).LAYERS],
-        "cached_file": os.path.exists(window._faults_path())}
+        "cached_file": os.path.exists(__import__(
+            "planetx.ui.faults", fromlist=["file_path"]).file_path())}
     state["ls_started"] = time.monotonic()
 
 
 @check(1000)
 def faults_wait():
     window = state["window"]
-    if window.fault_layer is None \
+    if window.row_tool("faults").layer is None \
             and time.monotonic() - state["ls_started"] < 120.0:
         return 1000
     result["faults"]["load_s"] = round(
@@ -29004,13 +29005,14 @@ def faults_wait():
 def faults_check():
     import os as _os
     from qgis.core import QgsProject
+    from planetx.core.navigation import Pose
     window = state["window"]
     out = result["faults"]
-    layer = window.fault_layer
+    layer = window.row_tool("faults").layer
     out["features"] = 0 if layer is None else layer.featureCount()
     out["in_overlay"] = layer is not None and window.overlay is not None \
         and any(la is layer for la in window.overlay.layers)
-    data = window.faults_data
+    data = window.row_tool("faults").data
     # У разломов Турции (каталог EMME) названий нет.
     named = [f for f in data.faults if 39.0 < f.lats[0] < 42.0
              and 26.0 < f.lons[0] < 42.0] if data is not None else []
@@ -29020,9 +29022,19 @@ def faults_check():
         n = len(fault.lats) // 2
         lat = (fault.lats[n - 1] + fault.lats[n]) / 2.0
         lon = (fault.lons[n - 1] + fault.lons[n]) / 2.0
-        found = window._identify_faults(lat, lon, 5000.0)
+        found = window.row_tool("faults").identify(lat, lon, 5000.0)
+        # Щелчок без режима опроса - линия под пикселем кадра.
+        window.view.navigator.show(Pose(lat, lon, 300000.0, 0.0, 0.0))
+        window.view.grabFramebuffer()  # кадр ставит камеру позы
+        size = window.view.size()
+        ratio = window.view.devicePixelRatioF()
+        out["click"] = bool(window._infra_under(
+            size.width() * ratio / 2.0, size.height() * ratio / 2.0,
+            rows=True))
+        window.view.navigator.show(Pose(40.0, 33.0, 2500000.0, 0.0, 0.0))
+        window.view.grabFramebuffer()
         out["identify"] = [(f[0], f[1]) for _, fs in found for f in fs]
-    out["legend"] = not window.fault_legend.isHidden()
+    out["legend"] = not window.row_tool("faults").legend.isHidden()
     out["credit"] = "GEM" in window.attribution.text()
     out["row"] = "faults" in window.panel.active_rows
     window.view.grabFramebuffer().save(_os.path.join(TEMP,
@@ -29042,7 +29054,7 @@ def faults_check():
     window.set_extra("faults", False)
     out["after_off"] = (window.overlay is None or not any(
         la is layer for la in window.overlay.layers)) \
-        and window.fault_legend.isHidden()
+        and window.row_tool("faults").legend.isHidden()
 
 
 @check(500)
@@ -29842,7 +29854,7 @@ def style_shot():
 @check(1000)
 def style_shot_check():
     window = state["window"]
-    if window.fault_layer is None \
+    if window.row_tool("faults").layer is None \
             and time.monotonic() - state["ls_started"] < 60.0:
         return 1000
     window.navpad.hot = True
@@ -29855,7 +29867,8 @@ def style_shot_check():
     QApplication.processEvents()
     window.grab().save(os.path.join(TEMP, "planetx_style.png"))
     result["style"] = {"timebar": window.timebar.shown(),
-                       "legend": not window.fault_legend.isHidden()}
+                       "legend": not window.row_tool(
+                           "faults").legend.isHidden()}
     window.navpad.hot = False
     window.set_extra("faults", False)
     window.set_extra("sun", False)
