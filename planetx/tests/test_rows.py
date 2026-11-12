@@ -70,6 +70,16 @@ class TestRegistry(unittest.TestCase):
         self.assertEqual(reg.points(), {"fires": "fires"})
         self.assertEqual(reg.defaults(), {"fires": False, "x": False})
 
+    def test_forgotten_rows_and_previews(self):
+        # Палеогеография: выключена при открытии окна, превью - тайл.
+        reg = rows.Registry().add(
+            rows.Row("paleo", "geology", names, Tool, remember=False,
+                     preview="https://t/{z}/{x}/{y}.jpg"),
+            rows.Row("x", "g", names))
+        self.assertEqual(reg.forgotten(), ("paleo",))
+        self.assertEqual(reg.previews(),
+                         {"paleo": "https://t/{z}/{x}/{y}.jpg"})
+
     def test_repeated_key_refused(self):
         reg = self.make()
         with self.assertRaises(rows.RowError):

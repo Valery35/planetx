@@ -152,7 +152,6 @@ class BodyMixin:
                 tool.legend.hide()
         self.cutaway_legend.hide()
         self.theme_legend.hide()
-        self.paleo_bar.hide()
         self.view.plain_base = False
         for button in self._globe_buttons():
             button.setEnabled(False)
@@ -241,8 +240,6 @@ class BodyMixin:
                 tool.sync_legend()
         self.cutaway_legend.setVisible(bool(self.extras.get("cutaway"))
                                        and self.planet.earth)
-        self.paleo_bar.setVisible(self._paleo_on())
-        self.view.plain_base = self._paleo_on()
         self._update_timebar()
         self._show_theme()
         self._set_surface()

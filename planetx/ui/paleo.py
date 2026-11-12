@@ -1,13 +1,15 @@
 # -*- coding: utf-8 -*-
 # PlanetX - трёхмерный глобус для QGIS.
 # Copyright (C) 2026 ООО «Информ++». Лицензия GNU GPL версии 3.
-"""Ползунок возраста палеогеографии: возрасты карт набора, период,
-показ."""
-from qgis.PyQt.QtCore import Qt, QTimer, pyqtSignal
+"""Палеогеография - карты PaleoDEM PALEOMAP подложкой из тайлов
+planetx-terrain: ползунок возраста, период, показ. Строка реестра
+каталога (core/rows.py) и исполнитель."""
+from qgis.PyQt.QtCore import QObject, Qt, QTimer, pyqtSignal
 from qgis.PyQt.QtWidgets import QFrame, QHBoxLayout, QLabel, QSlider, \
     QToolButton
 
-from ..core import paleo
+from ..core import basemap, paleo
+from ..core.rows import Row
 from ..i18n import tr
 from ..qt_compat import enum
 from .style import plate, set_glyph
@@ -15,6 +17,8 @@ from .style import plate, set_glyph
 # Плашка и значки - общий вид элементов поверх глобуса, ui/style.py.
 PLAY_PERIOD = 900  # мс на шаг возраста при показе
 SLIDER_WIDTH = 260
+KEY = "paleo"
+PREVIEW_AGE = 100  # млн лет, возраст карты на превью каталога
 
 
 def period_names():
@@ -114,3 +118,122 @@ class PaleoBar(QFrame):
         # Возраст уходит сразу, без ожидания остановки ползунка.
         self.settle.stop()
         self._emit()
+
+
+class PaleoTool(QObject):
+    """Режим палеогеографии: карта возраста - подложка Земли, рельеф
+    выключен, ползунок возраста над шкалами. Окно берёт подложку
+    (base_source) и масштаб рельефа (flat_relief) у исполнителя."""
+
+    def __init__(self, window):
+        super().__init__(window)
+        self.window = window
+        self.bar = PaleoBar(window.view)
+        self.bar.age_changed.connect(self.set_age)
+        self.bar.ready = self.ready
+        # Ползунок ставит на место раскладка окна (_place_attribution).
+        window.paleo_bar = self.bar
+        self.age = 0
+        # Шаги проверки подменяют адрес на локальную копию хранилища.
+        self.url = paleo.TILE_URL
+        self.sources = {}
+
+    shown_key = None
+
+    def on(self):
+        window = self.window
+        return bool(getattr(window, "extras", {}).get(KEY)) \
+            and window.planet.earth and window.view.sky_view is None
+
+    def turn(self, key, on):
+        """Ползунок возраста, гладкая основа и карта возраста."""
+        window = self.window
+        shown = self.on()
+        self.bar.setVisible(shown)
+        window.view.plain_base = shown
+        if window._relief_target() != window.view.store.scale:
+            window.view.set_relief(window._relief_target())
+            window._update_water()
+            window._place_rows()
+        window._place_attribution()
+        if not shown:
+            self.bar.stop()
+            if window.planet.earth:
+                window._switch_basemap(window._earth_source())
+            window._show_attribution()
+            return True
+        self.set_age(self.bar.age())
+        return True
+
+    def set_age(self, age):
+        """Карта возраста age млн лет - подложка. Уровни 0-2 прежнего
+        возраста стоят на экране, пока не придут новые, глубокие тайлы
+        снимаются сразу (change_source, coarse): кадр не смешивает два
+        возраста, новый встаёт грубым и уточняется."""
+        self.age = age
+        if self.on():
+            window = self.window
+            window._switch_basemap(window._earth_source(), coarse=True)
+
+    def source(self, age):
+        """Источник тайлов карты возраста age, один на возраст: смена
+        источника сравнивается по тождеству."""
+        url = self.url.format(age=age, z="{z}", x="{x}", y="{y}")
+        found = self.sources.get(url)
+        if found is None:
+            found = basemap.Source(tr("{age} млн лет назад", age=age), url,
+                                   paleo.MAX_LEVEL, paleo.ATTRIBUTION,
+                                   builtin=True, missing=(404,))
+            self.sources[url] = found
+        return found
+
+    def base_source(self):
+        """Подложка Земли в режиме или None."""
+        return self.source(self.age) if self.on() else None
+
+    def flat_relief(self):
+        """В палеогеографии рельеф выключен: нынешние горы на берегах
+        прошлого лишние, решение автора от 4 октября 2026 года."""
+        return self.on()
+
+    def ready(self):
+        """Показан ли нынешний возраст: уровни 0-2 его карты на экране
+        и ни одного тайла прежней карты в кадре. Показ ждёт этого, иначе
+        шаги обгоняют загрузку."""
+        from ..render.view import start_keys
+        view = self.window.view
+        keep = view.selection.keep if view.selection else ()
+        return all(key in view.textures and key not in view.stale
+                   for key in start_keys()) \
+            and not any(key in view.stale for key in keep)
+
+    @property
+    def legend(self):
+        return self.bar
+
+    def sync_legend(self):
+        shown = self.on()
+        self.bar.setVisible(shown)
+        self.window.view.plain_base = shown
+
+    def identify(self, lat, lon, tolerance=0.0):
+        return []
+
+    def credit(self):
+        return None
+
+    def close(self):
+        self.bar.stop()
+
+
+ROWS = (
+    Row(KEY, "geology", lambda: (tr("Палеогеография"), tr(
+        "Рельеф суши и глубины моря в прошлом, до 540 млн "
+        "лет назад, по картам PaleoDEM PALEOMAP. Возраст "
+        "задаёт ползунок в левом нижнем углу вида. Снимок, "
+        "границы и подписи на это время убраны.")), PaleoTool,
+        source="PALEOMAP", after="cutaway", remember=False,
+        words=("палеогеография", "пангея", "древняя земля", "paleo",
+               "pangaea"),
+        preview=paleo.TILE_URL.replace("{age}", str(PREVIEW_AGE))),
+)

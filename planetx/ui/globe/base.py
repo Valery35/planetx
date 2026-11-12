@@ -171,7 +171,7 @@ FLOW_REACH = 2.0
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False, "contours": False,
-                  "cutaway": False, "paleo": False,
+                  "cutaway": False,
                   "satellites": False,
                   "currents": False,
                   "geoid": False,
@@ -182,7 +182,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
-                "cutaway", "paleo", "satellites",
+                "cutaway", "satellites",
                 "currents",
                 "geoid") \
     + ROWS.earth_keys()

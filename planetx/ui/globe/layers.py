@@ -669,14 +669,18 @@ class LayersMixin:
         panel = getattr(self, "legend_panel", None)
         if panel is None:
             return
+        # Ползунок палеогеографии заводит её исполнитель, ui/paleo.py.
+        # Имя bar занято: его держит привязка шкалы времени.
+        age_bar = getattr(self, "paleo_bar", None)
         bottom = self.view.height() - MARGIN
-        if self.attribution.x() < MARGIN + max(panel.width(),
-                                               self.paleo_bar.width()):
+        if self.attribution.x() < MARGIN + max(
+                panel.width(), 0 if age_bar is None else age_bar.width()):
             bottom = self.attribution.y() - MARGIN // 2
         panel.move(MARGIN, bottom - panel.height())
         if panel.isVisible():
             bottom = panel.y() - MARGIN // 2
-        self.paleo_bar.move(MARGIN, bottom - self.paleo_bar.height())
+        if age_bar is not None:
+            age_bar.move(MARGIN, bottom - age_bar.height())
 
     def eventFilter(self, watched, event):
         if watched is self.view and event.type() == enum(

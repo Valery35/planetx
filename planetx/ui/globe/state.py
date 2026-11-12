@@ -336,8 +336,6 @@ class StateMixin:
             self._set_currents(on)
         elif key == "cutaway":
             self._set_cutaway(on)
-        elif key == "paleo":
-            self._set_paleo(on)
         elif key == "geoid":
             self._set_geoid(on)
         elif key == "satellites":

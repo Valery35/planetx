@@ -1042,7 +1042,7 @@ class ThemesMixin:
         автора от 4 октября 2026 года. Настройка рельефа не меняется."""
         if not self.planet.earth and self.planet.terrain is None:
             return 0.0
-        if getattr(self, "extras", {}).get("paleo") and self._paleo_on():
+        if self._flat_relief():
             return 0.0
         if self._geoid_on():
             return self.geoid_scale()

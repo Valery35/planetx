@@ -16,6 +16,16 @@ None), identify(lat, lon) - группы окна «Объекты», credit() -
 адрес) подписи источников или None, close(). Исполнитель точек даёт
 ещё pick(px, py) - группы окна «Объекты» по точкам у пикселя кадра,
 и point_rows(layer, index) - поля и строки выгрузки точек.
+
+Необязательные крючки, окно обходит их у всех исполнителей: ask(lat,
+lon) - запрос службы под щелчком, shapes() и marks() - свои линии
+и надписи вида, view_changed(), time_changed(), time_marks(),
+time_events(), wedge_changed(), place_values(lat, lon) - строки группы
+«Место», card_under(px, py) - функция открытия карточки под щелчком,
+pixel_groups(px, py) - группы окна «Объекты» по пикселю, credits() -
+пары подписи источников, legend и sync_legend() - шкала строки,
+base_source() - подложка Земли вместо выбранной, flat_relief() - рельеф
+выключен.
 """
 
 
@@ -29,7 +39,7 @@ class Row:
     def __init__(self, key, group, names, tool=None, source="",
                  colors=(), words=(), fades=(), view_map=None,
                  default=False, earth=True, after=None, qgis_layer=False,
-                 points=None, catalog=True):
+                 points=None, catalog=True, remember=True, preview=None):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -55,8 +65,13 @@ class Row:
         # Строка стоит в каталоге слоёв (place). False - карточку даёт
         # другая часть каталога, как пожарам - общий выбор тем.
         self.catalog = bool(catalog)
-
-
+        # False - строка не переживает закрытие окна: при открытии она
+        # выключена, как палеогеография (решение автора от 3 октября
+        # 2026 года).
+        self.remember = bool(remember)
+        # Шаблон адреса тайла {z}/{x}/{y} превью каталога или None -
+        # превью рисуется цветами colors.
+        self.preview = preview
 class Registry:
     """Строки по порядку регистрации."""
 
@@ -86,6 +101,14 @@ class Registry:
 
     def fades(self):
         return {row.key: row.fades for row in self.rows if row.fades}
+
+    def forgotten(self):
+        """Ключи строк, выключенных при открытии окна."""
+        return tuple(row.key for row in self.rows if not row.remember)
+
+    def previews(self):
+        """Ключ строки - шаблон адреса тайла превью."""
+        return {row.key: row.preview for row in self.rows if row.preview}
 
     def qgis_keys(self):
         return tuple(row.key for row in self.rows if row.qgis_layer)

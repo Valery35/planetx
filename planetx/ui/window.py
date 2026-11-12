@@ -25,7 +25,7 @@ from qgis.PyQt.QtWidgets import (QGraphicsDropShadowEffect, QLabel,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import (ellipsoid, fields, geoid, paleo, themes, tilemaps)
+from ..core import (ellipsoid, fields, geoid, themes, tilemaps)
 from ..core.coords import FORMATS as COORD_FORMATS
 from ..core.geocode import SEARCH_INTERVAL
 from ..core.planets import EARTH_PLANET
@@ -56,7 +56,7 @@ from .spinner import LoadSpinner
 from .handles import DrawVertices, Handles
 from .measure import Ruler
 from .myplaces import MyPlaces
-from .paleo import PaleoBar
+from .registry import ROWS
 from .panel import LayerPanel
 from .project import (AUTO_REFRESH, SIDE_SWIPE, ProjectWatch, read_flag,
                       read_grids, read_map_years, read_swipe_sides,
@@ -338,15 +338,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._ground_timer.setSingleShot(True)
         self._ground_timer.setInterval(GROUND_DELAY)
         self._ground_timer.timeout.connect(self._ground_settled)
-        # Палеогеография: ползунок возраста, карта возраста - подложка
-        # из тайлов planetx-terrain. Шаги подменяют адрес на локальную
-        # копию хранилища.
-        self.paleo_bar = PaleoBar(self.view)
-        self.paleo_bar.age_changed.connect(self._paleo_age)
-        self.paleo_age = 0
-        self.paleo_url = paleo.TILE_URL
-        self._paleo_sources = {}
-        self.paleo_bar.ready = self._paleo_ready
         self._osm_timer = QTimer(self)
         self._osm_timer.setSingleShot(True)
         self._osm_timer.setInterval(OSM_PAUSE)
@@ -836,12 +827,12 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.extras = {key: settings.value(EXTRA_KEY + key, default,
                                            type=bool)
                        for key, default in EXTRA_DEFAULTS.items()}
-        # При открытии окна - нынешняя Земля. Палеогеография - отдельный
-        # режим, она включается строкой и не переживает закрытие окна,
+        # При открытии окна - нынешняя Земля. Строки без remember
+        # (палеогеография - отдельный режим) не переживают закрытие окна,
         # решение автора от 3 октября 2026 года.
-        if "paleo" in self.extras:
-            self.extras["paleo"] = False
-            settings.setValue(EXTRA_KEY + "paleo", False)
+        for key in ROWS.forgotten():
+            self.extras[key] = False
+            settings.setValue(EXTRA_KEY + key, False)
         self.panel.set_extras(self.extras)
         self.panel.extra_toggled.connect(self.set_extra)
         # Раздел «На глобусе».

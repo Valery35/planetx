@@ -16,7 +16,7 @@ from qgis.PyQt.QtWidgets import QFileDialog
 from qgis.utils import iface
 
 from ... import journal
-from ...core import (basemap, geoid, paleo, dem as dem_model,
+from ...core import (basemap, geoid, dem as dem_model,
                      crust,
                      cutaway, slabs,
                      sources as datasources, tomography)
@@ -26,7 +26,6 @@ from ...i18n import tr
 from ...net.gdalnet import executor
 from ...net.overlay import (OPENFREEMAP_ATTRIBUTION, fetch_bytes, fetch_mirror,
                             fetch_json)
-from ...render.view import start_keys
 from ..inset import DeepSource, DemSource, warm as warm_gdal
 from .. import export as layer_export
 from ..overpass import brief_error
@@ -615,66 +614,22 @@ class EarthDataMixin:
             return None
         return lambda depth: cutaway.stretch(depth, gain)
 
-    def _paleo_on(self):
-        return bool(self.extras.get("paleo")) and self.planet.earth \
-            and self.view.sky_view is None
-
-    def _set_paleo(self, on):
-        """Палеогеография строкой раздела «Слои»: ползунок возраста,
-        гладкая основа и берега материков на этот возраст."""
-        shown = self._paleo_on()
-        self.paleo_bar.setVisible(shown)
-        self.view.plain_base = shown
-        if self._relief_target() != self.view.store.scale:
-            self.view.set_relief(self._relief_target())
-            self._update_water()
-            self._place_rows()
-        self._place_attribution()
-        if not shown:
-            self.paleo_bar.stop()
-            if self.planet.earth:
-                self._switch_basemap(self._earth_source())
-            self._show_attribution()
-            return
-        self._paleo_age(self.paleo_bar.age())
-
-    def _paleo_age(self, age):
-        """Карта возраста age млн лет - подложка. Уровни 0-2 прежнего
-        возраста стоят на экране, пока не придут новые, глубокие тайлы
-        снимаются сразу (change_source, coarse): кадр не смешивает два
-        возраста, новый встаёт грубым и уточняется."""
-        self.paleo_age = age
-        if self._paleo_on():
-            self._switch_basemap(self._earth_source(), coarse=True)
-
-    def _paleo_source(self, age):
-        """Источник тайлов карты возраста age, один на возраст: смена
-        источника сравнивается по тождеству."""
-        url = self.paleo_url.format(age=age, z="{z}", x="{x}", y="{y}")
-        found = self._paleo_sources.get(url)
-        if found is None:
-            found = basemap.Source(tr("{age} млн лет назад", age=age), url,
-                                   paleo.MAX_LEVEL, paleo.ATTRIBUTION,
-                                   builtin=True, missing=(404,))
-            self._paleo_sources[url] = found
-        return found
-
     def _earth_source(self):
-        """Подложка Земли: карта возраста в палеогеографии, иначе
-        выбранная в группе «Основа»."""
-        if self._paleo_on():
-            return self._paleo_source(self.paleo_age)
+        """Подложка Земли: подложка строки реестра с base_source
+        (карта возраста палеогеографии), иначе выбранная в группе
+        «Основа»."""
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "base_source"):
+                found = tool.base_source()
+                if found is not None:
+                    return found
         return self.sources[self._basemap]
 
-    def _paleo_ready(self):
-        """Показан ли нынешний возраст: уровни 0-2 его карты на экране
-        и ни одного тайла прежней карты в кадре. Показ ждёт этого, иначе
-        шаги обгоняют загрузку."""
-        view = self.view
-        keep = view.selection.keep if view.selection else ()
-        return all(key in view.textures and key not in view.stale
-                   for key in start_keys()) \
-            and not any(key in view.stale for key in keep)
+    def _flat_relief(self):
+        """Выключила ли рельеф строка реестра (палеогеография)."""
+        return any(tool.flat_relief()
+                   for tool in getattr(self, "row_tools", {}).values()
+                   if hasattr(tool, "flat_relief"))
 
     def _count_pending(self):
         """Ждущие ответы зон плит - в счётчик загрузки вида, его

@@ -5968,7 +5968,7 @@ def paleo_startup_check():
     window = state["window"]
     out = result["paleo_startup"]
     out["source"] = window.source.url
-    out["ready"] = window._paleo_ready()
+    out["ready"] = window.row_tool("paleo").ready()
     out["land"] = _land_share(window.view)
     window.view.grabFramebuffer().save(
         os.path.join(TEMP, "planetx_paleo_startup.png"))
@@ -5982,7 +5982,7 @@ def _paleo_local(window):
     folder = os.environ.get("PLANETX_TERRAIN_DIR")
     if folder:
         from qgis.PyQt.QtCore import QUrl
-        window.paleo_url = QUrl.fromLocalFile(os.path.join(
+        window.row_tool("paleo").url = QUrl.fromLocalFile(os.path.join(
             folder, "paleo", "paleomap")).toString() \
             + "/{age}/{z}/{x}/{y}.jpg"
 
@@ -6004,7 +6004,7 @@ def paleo_on():
 def paleo_wait():
     window = state["window"]
     out = result["paleo"]
-    if not window._paleo_ready() \
+    if not window.row_tool("paleo").ready() \
             and time.monotonic() - out["started"] < 60.0:
         return 1000
     out["wait_s"] = round(time.monotonic() - out["started"], 1)
@@ -6057,7 +6057,7 @@ def paleo_tour():
     relief_before = window.view.store.scale
     window.set_extra("paleo", True)
     window.paleo_bar.set_age(PALEO_FROM)
-    window._paleo_age(PALEO_FROM)
+    window.row_tool("paleo").set_age(PALEO_FROM)
     result["paleo_tour"] = {"started": time.monotonic(),
                             "relief_before": relief_before,
                             "relief_on": window.view.store.scale,
@@ -6071,7 +6071,7 @@ def paleo_tour_run():
     out = result["paleo_tour"]
     waited = time.monotonic() - out["started"]
     if "playing" not in out:
-        if not window._paleo_ready() and waited < 60.0:
+        if not window.row_tool("paleo").ready() and waited < 60.0:
             return 500
         out["first_s"] = round(waited, 1)
         image = window.view.grabFramebuffer()
@@ -6082,8 +6082,8 @@ def paleo_tour_run():
         window.paleo_bar.toggle()
         return 300
     seen = out["seen"]
-    if not seen or seen[-1][0] != window.paleo_age:
-        seen.append((window.paleo_age,
+    if not seen or seen[-1][0] != window.row_tool("paleo").age:
+        seen.append((window.row_tool("paleo").age,
                      round(time.monotonic() - out["playing"], 2)))
     if window.paleo_bar.timer.isActive() \
             and time.monotonic() - out["playing"] < 90.0:
@@ -6175,7 +6175,7 @@ def paleo_close_view():
     from planetx.core.navigation import Pose
     window = state["window"]
     window.paleo_bar.set_age(0)
-    window._paleo_age(0)
+    window.row_tool("paleo").set_age(0)
     window.view.navigator.stop()
     window.view.navigator.set_pose(Pose(36.0, -5.5, 600000.0, 0.0, 0.0))
 

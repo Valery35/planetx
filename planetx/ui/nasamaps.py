@@ -32,7 +32,7 @@ from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
                                  QListWidget, QListWidgetItem, QPushButton,
                                  QVBoxLayout, QWidget)
 
-from ..core import (clouds, cutaway, deposits, fires, flow, paleo,
+from ..core import (clouds, cutaway, deposits, fires, flow,
                     plants, plates, quakes, slope, stars, sun, temperature,
                     themes, trains, vessels, weather)
 from ..core import aircraft
@@ -96,7 +96,7 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
            "currents": "NOAA CoastWatch",
-           "cutaway": "PREM, CRUST1.0, Slab2", "paleo": "PALEOMAP",
+           "cutaway": "PREM, CRUST1.0, Slab2",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
            "contours": "Terrarium",
@@ -108,7 +108,7 @@ SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
 LAYERS = ROWS.place((
           ("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"),
-          ("cutaway", "geology"), ("paleo", "geology"),
+          ("cutaway", "geology"),
           ("geoid", "geophysics"),
           ("currents", "water"),
           ("slope", "terrain"),
@@ -134,7 +134,8 @@ RELIEF_BODY = ("slope", "aspect")
 # Заливка и обвод контуров горных разработок, выбор помощника.
 MINING_FILL = (235, 125, 35, 90)
 MINING_LINE = (205, 85, 20, 255)
-PALEO_AGE = 100  # млн лет, возраст карты на превью палеогеографии
+# Строки реестра с превью тайлом: ключ - шаблон адреса.
+PREVIEWS = ROWS.previews()
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "data")
 
@@ -310,11 +311,6 @@ def layer_names():
             "субдукции, на ней видна погружающаяся плита. "
             "Углы сектора тянутся мышью. Сектор ставится заново "
             "при каждом включении строки.")),
-        "paleo": (tr("Палеогеография"), tr(
-            "Рельеф суши и глубины моря в прошлом, до 540 млн "
-            "лет назад, по картам PaleoDEM PALEOMAP. Возраст "
-            "задаёт ползунок в левом нижнем углу вида. Снимок, "
-            "границы и подписи на это время убраны.")),
         "slope": (tr("Уклон"), tr(
             "Уклон поверхности по высотам рельефа, классами от "
             "ровного до круче 35°. Шкала стоит в левом нижнем "
@@ -650,8 +646,8 @@ def layer_url(key):
     z, x, y = themes.THUMB_TILE
     if key == "clouds":
         template = clouds.url_template(time.time())
-    elif key == "paleo":
-        template = paleo.TILE_URL.replace("{age}", str(PALEO_AGE))
+    elif key in PREVIEWS:
+        template = PREVIEWS[key]
     elif key == "sun":
         template = sun.LIGHTS_URL
     else:
@@ -984,7 +980,8 @@ class NasaMaps(QWidget):
                 tile = _rgba_image(clouds.cloud_rgba(
                     _rgba_array(tile), themes.THUMB_TILE), premultiplied=True)
             return _over(self.base, None if tile.isNull() else tile)
-        if key == "paleo":
+        if key in PREVIEWS:
+            # Превью строки реестра - сам тайл (карта возраста).
             tile = QImage.fromData(data) if data else QImage()
             return _over(None if tile.isNull() else tile, None)
         if key in MAP_COLORS:
