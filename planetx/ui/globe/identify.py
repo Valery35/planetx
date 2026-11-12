@@ -405,7 +405,8 @@ class IdentifyMixin:
             self.identified = IdentifyDialog(self)
         # Высота геоида не высота места - строка точки её не пишет.
         self.identified.show_result(
-            point_text(lat, lon, None if self._geoid_on() else height,
+            point_text(lat, lon,
+                       None if self._heights_replaced() else height,
                        fmt=self.coords), groups)
 
     # ИИ-помощник: контекст вида и инструменты (core/assistant.py).

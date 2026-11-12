@@ -16,7 +16,7 @@ from qgis.PyQt.QtCore import QEvent
 from qgis.PyQt.QtWidgets import QInputDialog, QMessageBox
 
 from ... import journal
-from ...core import (basemap, clouds, fields, geoid,
+from ...core import (basemap, clouds, fields,
                      sun, tomography,
                      temperature, when, oldmaps,
                      rumsey as rumsey_core,
@@ -53,7 +53,7 @@ from ..subsurface import subsurface_ids
 from ..weather import field_attribution
 from ..track import date_range, layer_span, timed_layer
 from .base import (AUTO_DEFAULT, COORDS_KEY, CREDIT_LINK,
-                   EMAG_MAPS, GEOID_SCALE_KEY,
+                   EMAG_MAPS,
                    MARGIN, NEW_SHOWN_KEY,
                    REFRESH_DELAY, SELECTION_DELAY, SKY_ATTRIBUTION,
                    TILE_SIZE, attribution_html, imagery_preparer,
@@ -438,53 +438,29 @@ class LayersMixin:
             if hasattr(tool, "view_changed"):
                 tool.view_changed()
 
-    # Геоид EGM2008 (core/geoid.py).
+    # Высоты Земли строк реестра (геоид EGM2008, ui/geoid.py).
 
-    def _geoid_on(self):
-        return bool(getattr(self, "extras", {}).get("geoid")) \
-            and getattr(self, "planet", None) is not None \
-            and self.planet.earth
+    def _row_hook(self, name, *args):
+        """Первый ответ не None крючка name исполнителей строк."""
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, name):
+                found = getattr(tool, name)(*args)
+                if found is not None:
+                    return found
+        return None
 
-    def _set_geoid(self, on):
-        """Строка «Геоид»: высоты Земли - тайлы геоида с масштабом
-        geoid.SCALE, вода не рисуется - половина геоида ниже нуля.
-        Выключение возвращает рельеф, масштаб и глубины морей."""
-        self._geoid_look()
-        self._body_terrain(self.planet)
-        self.view.reset_heights()
-        self.view.set_relief(self._relief_target())
-        self._update_water()
-        self._place_rows()
-        self._mark_gallery()
-        self._show_attribution()
-        self.view.update()
+    def _heights_replaced(self):
+        """Заменила ли строка реестра высоты Земли (геоид): воды, глубин
+        морей и коры под щелчком тогда нет."""
+        return any(tool.heights_replaced()
+                   for tool in getattr(self, "row_tools", {}).values()
+                   if hasattr(tool, "heights_replaced"))
 
-    def geoid_scale(self):
-        """Масштаб режима «Геоид» - настройка ползунка меню «⋯» его
-        строки, по умолчанию geoid.SCALE."""
-        value = QgsSettings().value(GEOID_SCALE_KEY, geoid.SCALE,
-                                    type=float)
-        return min(geoid.SCALES[-1], max(geoid.SCALES[0], float(value)))
-
-    def set_geoid_scale(self, scale):
-        """Ползунок масштаба геоида: высоты растягиваются заново сразу,
-        разрез Земли следует за поверхностью."""
-        QgsSettings().setValue(GEOID_SCALE_KEY, float(scale))
-        self.panel.geoid_scale = self.geoid_scale()
-        if self._geoid_on():
-            self.view.set_relief(self._relief_target())
-            self.view.update()
-
-    def _geoid_look(self):
-        """Вода и дымка поверхности - их нет в режиме геоида. Половина
-        геоида ниже нуля, а поверхность опущена на сотни километров,
-        воздух над ней заливал впадины белым."""
-        geoid = self._geoid_on()
-        self.view.sea_floor = self.sea_depths and self.planet.earth \
-            and not geoid
-        self.view.surface_air = not geoid
-        # Разрез Земли тянется к «измятой» поверхности.
-        self.view.wedge_lift = geoid
+    def _surface_look(self):
+        """Вода и дымка поверхности по строкам реестра."""
+        for tool in getattr(self, "row_tools", {}).values():
+            if hasattr(tool, "surface_look"):
+                tool.surface_look()
 
     # Строки реестра каталога (core/rows.py, ui/registry.py): исполнитель
     # строки один на окно, окно обходит строки и не знает их по имени.
@@ -583,8 +559,6 @@ class LayersMixin:
         if "emag" in self.gibs_loaders and self._row_map_shown():
             parts.append(link_html(*self.row_tool(
                 self._row_map_shown()).credit()))
-        if self._geoid_on():
-            parts.append(link_html(*geoid.ATTRIBUTION))
         overture = self.buildings_loader is not None \
             and self._overture_on()
         if self.planet.earth and (

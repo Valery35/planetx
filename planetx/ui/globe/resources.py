@@ -81,15 +81,11 @@ class ResourcesMixin:
         по их приходу."""
         if not self.planet.earth:
             return []
-        if self._geoid_on():
-            # В режиме геоида высота под щелчком - высота геоида, не
-            # рельеф и не дно, кора к ней не относится.
-            if height is None:
-                return []
-            return [(Group(tr("Геоид")), [(tr("Геоид EGM2008"), [
-                (tr("Высота геоида"), tr("{value} м", value="{:+.1f}"
-                                         .format(height))),
-                (tr("Над"), tr("эллипсоидом WGS84"))], None)])]
+        # Строка реестра со своими высотами (геоид) даёт свою группу:
+        # высота под щелчком - не рельеф и не дно, кора к ней не относится.
+        replaced = self._row_hook("replace_site", height)
+        if replaced is not None:
+            return replaced
         values = []
         address = self._address_value(lat, lon)
         if address is not None:

@@ -16,7 +16,7 @@ from qgis.PyQt.QtWidgets import QFileDialog
 from qgis.utils import iface
 
 from ... import journal
-from ...core import (basemap, geoid, dem as dem_model,
+from ...core import (basemap, dem as dem_model,
                      crust,
                      cutaway, slabs,
                      sources as datasources, tomography)
@@ -108,7 +108,7 @@ class EarthDataMixin:
         sea = getattr(self, "sea_dem", None)
         if sea is None or not getattr(self, "sea_depths", True):
             return None
-        if self._geoid_on():
+        if self._heights_replaced():
             return None
         return sea
 
@@ -237,7 +237,7 @@ class EarthDataMixin:
         """Глубины морей и океанов: высоты Земли заново, с впадинами
         ниже нуля или без них, и вода над ними."""
         # В режиме геоида воды нет, высоты - геоид, а не дно.
-        self.view.sea_floor = on and not self._geoid_on()
+        self.view.sea_floor = on and not self._heights_replaced()
         if not self.planet.earth:
             return
         self._body_terrain(self.planet)
@@ -651,13 +651,13 @@ class EarthDataMixin:
     def _body_terrain(self, planet):
         """Высоты тела: Terrarium у Земли, архив у Марса и Луны.
         Архив тела скачивается, когда рельеф включён."""
-        if planet.earth and self._geoid_on():
-            # Режим геоида: высоты - тайлы геоида, без врезок и пола.
-            self.view.store.max_level = geoid.MAX_LEVEL
+        found = self._row_hook("terrain_source") if planet.earth else None
+        if found is not None:
+            # Высоты строки реестра (геоид): без врезок и пола.
+            source, top = found
+            self.view.store.max_level = top
             self.view.store.deep = []
-            self._start_terrain(basemap.Source(
-                "EGM2008", self.geoid_url, geoid.MAX_LEVEL, builtin=True),
-                None)
+            self._start_terrain(source, None)
             return
         if planet.earth:
             self.view.store.max_level = TERRAIN_MAX

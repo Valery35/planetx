@@ -1044,8 +1044,9 @@ class ThemesMixin:
             return 0.0
         if self._flat_relief():
             return 0.0
-        if self._geoid_on():
-            return self.geoid_scale()
+        scale = self._row_hook("relief_scale")
+        if scale is not None:
+            return scale
         return self._scale if self._relief else 0.0
 
     def _start_terrain(self, source, floor):
@@ -1071,6 +1072,6 @@ class ThemesMixin:
             self.terrain_loader.loaded.connect(self._heights)
             self.terrain_loader.failed.connect(
                 self.terrain_errors.__setitem__)
-            if self._relief or self._geoid_on():
+            if self._relief or self._heights_replaced():
                 self.terrain_loader.want((0, 0, 0), 1.0)
         self.view.terrain_loader = self.terrain_loader

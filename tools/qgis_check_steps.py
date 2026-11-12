@@ -25686,8 +25686,12 @@ def geoid_on():
     window = state["window"]
     window.set_body("earth")
     folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
-    window.geoid_url = QUrl.fromLocalFile(os.path.join(
-        folder, "geoid")).toString() + "/{z}/{x}/{y}.png"
+    # Локальная копия - если в ней есть тайлы геоида, иначе
+    # сеть: клон planetx-terrain бывает частичным.
+    if os.path.isdir(os.path.join(folder, "geoid", "0")):
+        window.row_tool("geoid").url = QUrl.fromLocalFile(
+            os.path.join(folder, "geoid")).toString() \
+            + "/{z}/{x}/{y}.png"
     result["geoid"] = {"before": {"scale": window.view.store.scale,
                                   "sea_floor": window.view.sea_floor}}
     window.view.navigator.stop()
@@ -25776,8 +25780,12 @@ def geoid_cutaway():
     view = window.view
     window.set_body("earth")
     folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
-    window.geoid_url = QUrl.fromLocalFile(os.path.join(
-        folder, "geoid")).toString() + "/{z}/{x}/{y}.png"
+    # Локальная копия - если в ней есть тайлы геоида, иначе
+    # сеть: клон planetx-terrain бывает частичным.
+    if os.path.isdir(os.path.join(folder, "geoid", "0")):
+        window.row_tool("geoid").url = QUrl.fromLocalFile(
+            os.path.join(folder, "geoid")).toString() \
+            + "/{z}/{x}/{y}.png"
     meshes = state["cut_meshes"] = {}
     original = view.cutaway.set_mesh
 
@@ -25785,7 +25793,7 @@ def geoid_cutaway():
         meshes[name] = mesh
         original(name, mesh)
     view.cutaway.set_mesh = keep
-    window.set_geoid_scale(10000.0)
+    window.row_tool("geoid").set_scale(10000.0)
     view.navigator.stop()
     view.navigator.show(Pose(-5.0, 95.0, 18000000.0, 30.0, 30.0))
     window.set_extra("geoid", True)
@@ -25886,11 +25894,11 @@ def geoid_cutaway_check():
     out["mismatch_without_lift_km"] = _cut_mismatch(view)
     view.wedge_lift = True
     # Ползунок на ×20 000: поверхность и грани вместе.
-    window.set_geoid_scale(20000.0)
+    window.row_tool("geoid").set_scale(20000.0)
     view.grabFramebuffer()
     out["scale_20000"] = view.store.scale
     out["mismatch_20000_km"] = _cut_mismatch(view)
-    window.set_geoid_scale(10000.0)
+    window.row_tool("geoid").set_scale(10000.0)
     window.set_extra("cutaway", False)
     window.set_extra("geoid", False)
     out["lift_after"] = view.wedge_lift
@@ -28729,9 +28737,13 @@ def post_geoid():
     window.set_extra("air", True)
     _post_full(True)
     folder = os.environ.get("PLANETX_TERRAIN_DIR") or "C:/Dev/planetx-terrain"
-    window.geoid_url = QUrl.fromLocalFile(os.path.join(
-        folder, "geoid")).toString() + "/{z}/{x}/{y}.png"
-    window.set_geoid_scale(10000.0)
+    # Локальная копия - если в ней есть тайлы геоида, иначе
+    # сеть: клон planetx-terrain бывает частичным.
+    if os.path.isdir(os.path.join(folder, "geoid", "0")):
+        window.row_tool("geoid").url = QUrl.fromLocalFile(
+            os.path.join(folder, "geoid")).toString() \
+            + "/{z}/{x}/{y}.png"
+    window.row_tool("geoid").set_scale(10000.0)
     window.view.navigator.stop()
     window.view.navigator.show(Pose(5.0, 90.0, 17000000.0, 20.0, 25.0))
     window.set_extra("geoid", True)

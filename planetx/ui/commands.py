@@ -36,8 +36,6 @@ WORDS = {
             "night", "city lights"),
     "satellites": ("мкс", "спутники", "орбиты", "starlink", "iss",
                    "satellites"),
-    "geoid": ("геоид", "картошка", "потсдамская картошка", "egm2008",
-              "фигура земли", "geoid"),
     "currents": ("течения", "океан", "гольфстрим", "currents", "ocean"),
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),

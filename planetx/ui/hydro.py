@@ -576,7 +576,7 @@ class HydroTool(GridHeights):
         view = window.view
         view.sea_level = float(level)
         if level < 0.0 and window.planet.earth and not view.sea_floor \
-                and not window._geoid_on():
+                and not window._heights_replaced():
             window.set_sea_depths(True)
         view.update()
         self._sea_text()

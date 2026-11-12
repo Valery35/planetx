@@ -336,8 +336,6 @@ class StateMixin:
             self._set_currents(on)
         elif key == "cutaway":
             self._set_cutaway(on)
-        elif key == "geoid":
-            self._set_geoid(on)
         elif key == "satellites":
             self.satellite_manager.set_on(on)
             self._update_timebar()

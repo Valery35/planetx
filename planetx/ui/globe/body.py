@@ -75,7 +75,7 @@ class BodyMixin:
         self.view.change_body(source.max_level, planet.air)
         self.loader.want_many((key, -key[0]) for key in start_keys())
         # Вода над впадинами - только у Земли.
-        self._geoid_look()
+        self._surface_look()
         self._body_terrain(planet)
         self.view.set_relief(self._relief_target())
         self._update_water()

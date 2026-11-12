@@ -148,7 +148,6 @@ LINES_KEY = "PlanetX/lines/{}"
 # от 27 сентября 2026 года, рельеф включён отдельно.
 DEFAULT_GROUPS = (BORDERS, PLACES)
 RELIEF_KEY = "PlanetX/relief"  # показывать ли рельеф
-GEOID_SCALE_KEY = "PlanetX/geoid_scale"  # масштаб режима «Геоид»
 # Растягивать ли кору разреза Земли издалека, по умолчанию да.
 STRETCH_KEY = "PlanetX/cutaway_stretch"
 # Тени в кадре при строке «Солнце», по умолчанию да.
@@ -174,7 +173,6 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "cutaway": False,
                   "satellites": False,
                   "currents": False,
-                  "geoid": False,
                   "air": True,
                   **ROWS.defaults(),
                   }
@@ -183,8 +181,7 @@ SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
                 "cutaway", "satellites",
-                "currents",
-                "geoid") \
+                "currents") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.

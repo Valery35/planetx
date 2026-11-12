@@ -25,7 +25,7 @@ from qgis.PyQt.QtWidgets import (QGraphicsDropShadowEffect, QLabel,
 from qgis.utils import iface
 
 from .. import journal
-from ..core import (ellipsoid, fields, geoid, themes, tilemaps)
+from ..core import (ellipsoid, fields, themes, tilemaps)
 from ..core.coords import FORMATS as COORD_FORMATS
 from ..core.geocode import SEARCH_INTERVAL
 from ..core.planets import EARTH_PLANET
@@ -352,7 +352,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # ставят локальную копию planetx-terrain.
         self.field_urls = {key: fields.url(f)
                            for key, f in fields.FIELDS.items()}
-        self.geoid_url = geoid.TILE_URL
         # Карты картинками (core/tilemaps.py): адреса тайлов (шаги
         # проверки ставят локальную копию planetx-terrain), карта на
         # глобусе, значение под щелчком и его запрос.
@@ -843,8 +842,10 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self._parked = {}
         self.panel.active_opacity.connect(self._active_opacity)
         self.panel.active_export.connect(self.active_export)
-        self.panel.geoid_scale = self.geoid_scale()
-        self.panel.geoid_scale_changed.connect(self.set_geoid_scale)
+        # Ползунок масштаба меню «⋯» строки «Геоид» (ui/geoid.py).
+        geoid_tool = self.row_tool("geoid")
+        self.panel.geoid_scale = geoid_tool.scale()
+        self.panel.geoid_scale_changed.connect(geoid_tool.set_scale)
         self.panel.cutaway_stretch = self.cutaway_stretch()
         self.view.wedge_stretch = self.panel.cutaway_stretch
         self.panel.cutaway_stretch_changed.connect(self.set_cutaway_stretch)
