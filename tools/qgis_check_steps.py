@@ -7332,7 +7332,7 @@ def currents_check():
     out["day"] = window.flow.currents_day
     out["error"] = window.flow.error
     out["drawn"] = view.flows["currents"].drawn
-    out["legend"] = window.current_legend.isVisible()
+    out["legend"] = window.row_tool("currents").legend.isVisible()
     out["row"] = "currents" in window.panel.active_rows
     out["credit"] = "CoastWatch" in window.attribution.text()
     # Цена шага частиц и кадра.
@@ -7343,7 +7343,7 @@ def currents_check():
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_currents.png"))
     window.set_extra("currents", False)
     out["after_off"] = view.flows["currents"].particles is None \
-        and not window.current_legend.isVisible()
+        and not window.row_tool("currents").legend.isVisible()
 
 
 @check(1000)

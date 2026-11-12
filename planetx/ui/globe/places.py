@@ -279,14 +279,8 @@ class PlacesMixin:
             if getattr(self, "theme_key", "") and self._theme_on() else None
         if theme_span is not None:
             times += [when.stamp(when.text(t)) for t in theme_span]
-        # Течения - ряд дней NOAA с 2017 года.
-        flow = getattr(self, "flow", None)
-        if flow is not None and self.extras.get("currents") \
-                and flow.currents_span() is not None:
-            times += [when.stamp(when.text(t))
-                      for t in flow.currents_span()]
         # Строки реестра со своим охватом (магнитные полюса - с 1590
-        # года по сегодня).
+        # года по сегодня, течения - ряд дней NOAA с 2017 года).
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "time_marks"):
                 times += tool.time_marks()

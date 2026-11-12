@@ -28,7 +28,6 @@ from ...core import hips, oam, polar
 from ...core.contours import is_imagery as contour_is_imagery
 from ...core.coords import FORMATS as COORD_FORMATS
 from ...core.mipmap import mip_chain
-from ..flow import CURRENTS_ATTRIBUTION
 from ...i18n import tr
 from ...net.loader import TileLoader
 from ...net.overlay import (LINE_GROUPS, RAIL_FROM, RAILWAYS, label_kinds,
@@ -593,11 +592,6 @@ class LayersMixin:
             parts.append(link_html(*rumsey_core.ATTRIBUTION))
         if self.planet.earth and self._oam_shown():
             parts.append(link_html(oam.ATTRIBUTION, oam.TERMS))
-        if self.planet.earth \
-                and getattr(self, "extras", {}).get("currents") \
-                and getattr(self, "flow", None) is not None \
-                and self.flow.fields["currents"] is not None:
-            parts.append(link_html(*CURRENTS_ATTRIBUTION))
         for tool in getattr(self, "row_tools", {}).values():
             if hasattr(tool, "credits"):
                 parts += [link_html(*pair) for pair in tool.credits()]

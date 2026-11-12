@@ -39,7 +39,8 @@ class Row:
     def __init__(self, key, group, names, tool=None, source="",
                  colors=(), words=(), fades=(), view_map=None,
                  default=False, earth=True, after=None, qgis_layer=False,
-                 points=None, catalog=True, remember=True, preview=None):
+                 points=None, catalog=True, remember=True, preview=None,
+                 flow=None):
         if not key or not group:
             raise RowError("row needs key and group")
         if not callable(names):
@@ -72,6 +73,9 @@ class Row:
         # Шаблон адреса тайла {z}/{x}/{y} превью каталога или None -
         # превью рисуется цветами colors.
         self.preview = preview
+        # Струйки строки - поле вида flows: ползунок меняет их
+        # непрозрачность, как у течений.
+        self.flow = flow
 class Registry:
     """Строки по порядку регистрации."""
 
@@ -105,6 +109,10 @@ class Registry:
     def forgotten(self):
         """Ключи строк, выключенных при открытии окна."""
         return tuple(row.key for row in self.rows if not row.remember)
+
+    def flows(self):
+        """Ключ строки - имя струек вида."""
+        return {row.key: row.flow for row in self.rows if row.flow}
 
     def previews(self):
         """Ключ строки - шаблон адреса тайла превью."""

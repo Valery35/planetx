@@ -75,8 +75,9 @@ class TestRegistry(unittest.TestCase):
         reg = rows.Registry().add(
             rows.Row("paleo", "geology", names, Tool, remember=False,
                      preview="https://t/{z}/{x}/{y}.jpg"),
-            rows.Row("x", "g", names))
+            rows.Row("x", "g", names, flow="currents"))
         self.assertEqual(reg.forgotten(), ("paleo",))
+        self.assertEqual(reg.flows(), {"x": "currents"})
         self.assertEqual(reg.previews(),
                          {"paleo": "https://t/{z}/{x}/{y}.jpg"})
 

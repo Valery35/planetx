@@ -19,9 +19,8 @@ from qgis.utils import iface
 from ... import journal
 from ...core import wms
 from ...core import (basemap, clouds, geology, temperature,
-                     flow as flow_core, quakes, themes, tilemaps)
+                     quakes, themes, tilemaps)
 from ...core.sync import ground_size, view_box, inside as in_box
-from ..flow import CURRENTS_ATTRIBUTION
 from ...i18n import is_russian, tr
 from ...net.overlay import VECTOR_GROUPS, fetch_bytes
 from ...qt_compat import enum
@@ -332,8 +331,6 @@ class StateMixin:
             self._update_timebar()
         elif key in SURFACE_EXTRAS or key == "contours":
             self._set_surface()
-        elif key == "currents":
-            self._set_currents(on)
         elif key == "cutaway":
             self._set_cutaway(on)
         elif key == "satellites":
@@ -363,6 +360,7 @@ class StateMixin:
             rows.append((key, title, self._row_opacity(key),
                          key in POINT_LAYERS or key in QGIS_LAYERS
                          or key in PICTURE_LAYERS or key == "geology"
+                         or hasattr(self.row_tool(key), "export_picture")
                          or key in tilemaps.MAPS, on))
         theme = getattr(self, "theme_key", "") or parked.get("map", "")
         if theme and earth and theme in maps:
@@ -522,20 +520,9 @@ class StateMixin:
         GeoTIFF со шкалой, темы NASA, облака и температура - картинка
         WMS GIBS по рамке вида на тот же день, ответ приходит позже
         («wait»)."""
-        if key == "currents":
-            grid = self.flow.fields["currents"]
-            if grid is None:
-                return None
-            speed = np.hypot(grid.u, grid.v)
-            count = layer_export.write_grid(
-                path, [speed, grid.u, grid.v], grid.west, grid.north,
-                grid.step, box)
-            if count is None or layer_export.add_raster(
-                    path, "{} {}".format(title, self.flow.currents_day),
-                    flow_core.CURRENT_STOPS,
-                    CURRENTS_ATTRIBUTION[0]) is None:
-                return None
-            return count
+        tool = self.row_tool(key)
+        if hasattr(tool, "export_picture"):
+            return tool.export_picture(key, title, path, box)
         if key == "map" and themes.is_weather(self.theme_key):
             shown = getattr(self, "_value_field", None)
             if shown is None:

@@ -36,7 +36,6 @@ WORDS = {
             "night", "city lights"),
     "satellites": ("мкс", "спутники", "орбиты", "starlink", "iss",
                    "satellites"),
-    "currents": ("течения", "океан", "гольфстрим", "currents", "ocean"),
     "cutaway": ("разрез земли", "недра", "ядро", "мантия", "кора",
                 "cutaway", "core", "mantle"),
     "slope": ("крутизна", "уклон", "slope"),

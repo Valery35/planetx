@@ -49,7 +49,7 @@ from .layer_labels import LayerLabels
 from .legend import (BedsLegend, ContourLegend, CutawayLegend,
                      FireLegend, InsolationLegend, LegendPanel, QuakeLegend,
                      SlopeLegend, TemperatureLegend, ThemeLegend,
-                     ClassLegend, CurrentLegend, FieldLegend,
+                     ClassLegend, FieldLegend,
                      PointCloudLegend, SiteLegend)
 from .overlays import GroundLayers, ScreenOverlays
 from .spinner import LoadSpinner
@@ -887,11 +887,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         # Карты Рамсея: каталог и сборка карт (ui/rumsey.py).
         self.rumsey_loader = RumseyLoader(self)
         self.flow.changed.connect(self._flow_changed)
-        self.current_legend = CurrentLegend(self.view)
-        self.current_legend.hide()
-        self.legend_panel.add(self.current_legend)
-        self.current_legend.closer = lambda: self.set_extra("currents",
-                                                            False)
         self.field_legend = FieldLegend(self.view)
         self.field_legend.hide()
         self.legend_panel.add(self.field_legend)

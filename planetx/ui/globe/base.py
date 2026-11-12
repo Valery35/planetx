@@ -53,15 +53,15 @@ TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 # вида, тайловые слои - слои вида GIBS, слои QGIS - в наложении.
 POINT_LAYERS = dict(ROWS.points())
 # Струйки: ключ строки - поле вида.
-FLOW_LAYERS = {"currents": "currents"}
+FLOW_LAYERS = dict(ROWS.flows())
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
               "aspect": ("slope",), "contours": ("contours",),
               "temperature": ("sea", "land"), "map": ("theme", "compare"),
-              "currents": ("currents",),
               **ROWS.fades()}
 QGIS_LAYERS = ROWS.qgis_keys()
-# Раскраски: в проект - сеткой значений или картинкой WMS GIBS.
-PICTURE_LAYERS = ("map", "currents", "clouds", "temperature")
+# Раскраски: в проект - сеткой значений или картинкой WMS GIBS. Строки
+# реестра дают свою выгрузку крючком export_picture.
+PICTURE_LAYERS = ("map", "clouds", "temperature")
 OPACITY_KEY = "PlanetX/opacity/"
 # Строки слоёв остановки тура и вида метки проявляются и гаснут за
 # столько секунд, шаг таймера - мс. Выбор помощника, утверждает автор.
@@ -172,7 +172,6 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "slope": False, "aspect": False, "contours": False,
                   "cutaway": False,
                   "satellites": False,
-                  "currents": False,
                   "air": True,
                   **ROWS.defaults(),
                   }
@@ -180,8 +179,7 @@ EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
 EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
-                "cutaway", "satellites",
-                "currents") \
+                "cutaway", "satellites") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты
 # значений, Macrostrat, карты картинками, изменения местности и поля.

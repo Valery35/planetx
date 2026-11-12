@@ -56,15 +56,6 @@ class ResourcesMixin:
                            "повторится сам."), time.monotonic())
         self._show_state()
 
-    def _set_currents(self, on):
-        """Строка «Течения» витрины: струйки течений и шкала."""
-        self._mark_gallery()
-        self.flow.moment = self.theme_moment()
-        self.flow.set_currents(on and self.planet.earth)
-        self.current_legend.setVisible(on and self.planet.earth)
-        self._update_timebar()
-        self._show_attribution()
-
     def _flow_changed(self):
         if self.flow.error:
             self.message = (self.flow.error, time.monotonic())

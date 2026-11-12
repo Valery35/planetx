@@ -32,7 +32,7 @@ from qgis.PyQt.QtWidgets import (QHBoxLayout, QLabel, QLineEdit,
                                  QListWidget, QListWidgetItem, QPushButton,
                                  QVBoxLayout, QWidget)
 
-from ..core import (clouds, cutaway, deposits, fires, flow,
+from ..core import (clouds, cutaway, deposits, fires,
                     plants, plates, quakes, slope, stars, sun, temperature,
                     themes, trains, vessels, weather)
 from ..core import aircraft
@@ -94,7 +94,6 @@ MAP_COLORS = {"grid": ((250, 220, 60), (230, 230, 230)),
 # Вторая строка слоя в каталоге - источник.
 SOURCES = {"stars": "Yale BSC, NASA SVS", "clouds": "NASA GIBS, VIIRS",
            "sun": "NASA Black Marble", "satellites": "CelesTrak",
-           "currents": "NOAA CoastWatch",
            "cutaway": "PREM, CRUST1.0, Slab2",
            "slope": "Terrarium", "aspect": "Terrarium",
            "grid": "", "buildings": "OpenFreeMap",
@@ -108,7 +107,6 @@ LAYERS = ROWS.place((
           ("stars", "sky"), ("air", "sky"), ("clouds", "sky"), ("sun", "sky"),
           ("satellites", "sky"),
           ("cutaway", "geology"),
-          ("currents", "water"),
           ("slope", "terrain"),
           ("aspect", "terrain")))
 # Строки-окна: источник данных у точки взгляда открывает своё окно
@@ -287,11 +285,6 @@ def layer_names():
             "времени, без шкалы - часы компьютера. Группы выбирает "
             "вкладка «Спутники» витрины. Элементы группы обновляются "
             "не чаще раза в 2 часа.")),
-        "currents": (tr("Течения"), tr(
-            "Поверхностные течения океана белыми бегущими струйками над "
-            "заливкой скорости. Геострофические течения NOAA CoastWatch по "
-            "спутниковой альтиметрии за последние готовые сутки, сетка "
-            "0.5°. Первое включение за сеанс скачивает около 4 МБ.")),
         "cutaway": (tr("Разрез Земли"), tr(
             "Вынимает из Земли сектор под точкой взгляда - "
             "четверть полушария шириной 90° по долготе. На его "
@@ -621,8 +614,6 @@ def layer_ramp(key):
     if key == "aircraft":
         return [tuple(int(round(v * 255)) for v in color)
                 for _, _, _, color in aircraft.GROUPS]
-    if key == "currents":
-        return [c for _, c in flow.CURRENT_STOPS]
     if key == "mining":
         return [MINING_FILL[:3], MINING_LINE[:3]]
     if key == "slope":
