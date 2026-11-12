@@ -21,7 +21,7 @@ from ...core import (basemap, cadastre, clouds, fields, geoid,
                      temperature, when, oldmaps,
                      rumsey as rumsey_core,
                      fires as fires_core, crust,
-                     iscgem, quakes, slabs, themes, tilemaps,
+                     slabs, themes, tilemaps,
                      satellites as satellites_core,
                      trains as trains_core, vessels as vessels_core,
                      aircraft as aircraft_core)
@@ -98,7 +98,6 @@ class LayersMixin:
         self.view.set_relief(self._relief_target())
         self._update_water()
         self.subsurface.relief_changed()
-        self._place_quakes()
         self._place_fires()
         self._place_rows()
         self._apply_vector(force=True)
@@ -459,7 +458,6 @@ class LayersMixin:
         self.view.reset_heights()
         self.view.set_relief(self._relief_target())
         self._update_water()
-        self._place_quakes()
         self._place_fires()
         self._place_rows()
         self._mark_gallery()
@@ -621,10 +619,6 @@ class LayersMixin:
             parts.append(link_html(*sun.LIGHTS_ATTRIBUTION))
         if "sea" in self.gibs_loaders:
             parts.append(link_html(*temperature.ATTRIBUTION))
-        if self.view.quakes.events:
-            parts.append(link_html(*quakes.ATTRIBUTION))
-        if self.view.history.events:
-            parts.append(link_html(*iscgem.ATTRIBUTION))
         if self.view.fires.fires is not None:
             parts.append(link_html(*fires_core.ATTRIBUTION))
         if self.view.wiki_marks:

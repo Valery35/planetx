@@ -18,7 +18,7 @@ from qgis.utils import iface
 from ... import journal
 from ...core import (basemap, geoid, paleo, dem as dem_model,
                      fires as fires_core, crust,
-                     cutaway, iscgem, quakes, slabs,
+                     cutaway, slabs,
                      sources as datasources, tomography)
 from ...core.sync import ground_size, view_box
 from ...core.terrain import MAX_LEVEL as TERRAIN_MAX
@@ -292,8 +292,9 @@ class EarthDataMixin:
         """Растяжение коры сменилось: очаги и шкала оболочек следом."""
         self.cutaway_legend.set_gain(self.view.wedge_gain)
         self._place_attribution()
-        if self.view.quakes.events:
-            self._place_quakes()
+        for tool in self.row_tools.values():
+            if hasattr(tool, "wedge_changed"):
+                tool.wedge_changed()
 
     def cutaway_stretch(self):
         """Растягивать ли кору разреза издалека - настройка пункта меню
@@ -627,7 +628,6 @@ class EarthDataMixin:
         if self._relief_target() != self.view.store.scale:
             self.view.set_relief(self._relief_target())
             self._update_water()
-            self._place_quakes()
             self._place_fires()
             self._place_rows()
         self._place_attribution()
@@ -682,14 +682,6 @@ class EarthDataMixin:
         показывает значок загрузки."""
         self.view.data_pending = len(self._slab_replies)
 
-    def _quake_legend_state(self):
-        """Шкала глубины очагов - при очагах на Земле."""
-        on = (self.extras.get("quakes", False)
-              or self.extras.get("iscgem", False)) and self.planet.earth \
-            and self.view.sky_view is None
-        self.quake_legend.setVisible(on)
-        self._place_attribution()
-
     def _set_fires(self, on):
         """Пожары - строка группы «Планета огня» в общем выборе тем.
         Сводка NASA FIRMS за 24 часа загружается при каждом включении.
@@ -736,139 +728,6 @@ class EarthDataMixin:
         self._time_quakes()
         self._show_attribution()
         self.view.update()
-
-    def _set_quakes(self, on):
-        """Землетрясения строкой раздела «Слои». Сводка USGS
-        загружается при каждом включении, кэш QGIS отдаёт её только
-        по заголовкам сервера."""
-        if not on:
-            if self._quake_reply is not None:
-                self._quake_reply.abort()
-            self._quake_reply = None
-            self.view.quakes.set_events([], 0.0, None)
-            self._update_timebar()
-            self._quake_legend_state()
-            self._show_attribution()
-            self.view.update()
-            return
-        self._quake_legend_state()
-        self._want_quakes()
-
-    def _want_quakes(self):
-        """Сводка землетрясений USGS, если её запроса ещё нет."""
-        if self._quake_reply is None:
-            self._quake_reply = fetch_json(quakes.FEED, self._quakes_done,
-                                           prefer_cache=False)
-
-    def _quakes_done(self, data, error):
-        self._quake_reply = None
-        self.quake_error = error
-        if data is not None:
-            self.quake_events = quakes.parse(data)
-        self._place_quakes()
-        self._refresh_section()
-
-    def _place_quakes(self):
-        """События на глобус по нынешнему масштабу рельефа. Эпицентр
-        стоит на рельефе из хранилища высот, грубом вдали от вида."""
-        on = self.extras.get("quakes", False) and self.planet.earth
-        events = self.quake_events if on else []
-        # При разрезе Земли очаги растягиваются по глубине, как кора.
-        self.view.quakes.set_events(events, self.view.store.scale,
-                                    self._surface_ground, self._depth_map())
-        on = self.extras.get("iscgem", False) and self.planet.earth
-        self.view.history.set_events(
-            (self.history_events or []) if on else [],
-            self.view.store.scale, self._surface_ground, self._depth_map())
-        self._update_timebar()
-        self._time_quakes()
-        self._show_attribution()
-        self.view.update()
-
-    # Исторические землетрясения - каталог ISC-GEM (core/iscgem.py).
-
-    def _history_path(self):
-        folder = os.path.join(QgsApplication.qgisSettingsDirPath(),
-                              "PlanetX")
-        os.makedirs(folder, exist_ok=True)
-        return os.path.join(folder, iscgem.FILE)
-
-    def _set_history(self, on):
-        """Строка «Исторические землетрясения». Первое включение собирает
-        каталог запросами ComCat по промежуткам лет, около 74 тысяч
-        событий, итог - файл профиля. Файл старше iscgem.REFETCH_DAYS
-        собирается заново."""
-        self._mark_gallery()
-        self._quake_legend_state()
-        if not on:
-            if self._history_reply is not None:
-                reply, self._history_reply = self._history_reply, None
-                reply.abort()
-                self.view.data_pending = max(0, self.view.data_pending - 1)
-            self._place_quakes()
-            return
-        path = self._history_path()
-        if self.history_events is None and os.path.exists(path):
-            try:
-                self.history_events = iscgem.load(path)
-            except (OSError, ValueError, KeyError) as error:
-                journal.note("iscgem file: {}".format(error))
-            age = (time.time() - os.path.getmtime(path)) / 86400.0
-            if age > iscgem.REFETCH_DAYS and self._history_reply is None:
-                self._history_fetch(quiet=True)
-        if self.history_events is not None:
-            self._place_quakes()
-            return
-        if self._history_reply is None:
-            self._history_fetch()
-
-    def _history_fetch(self, quiet=False):
-        self._history_parts = []
-        self._history_queue = iscgem.periods(time.gmtime().tm_year)
-        self._history_quiet = quiet
-        self.view.data_pending += 1
-        self._history_next()
-
-    def _history_next(self):
-        start, end = self._history_queue[0]
-        if not self._history_quiet:
-            self.message = (tr("Загрузка землетрясений ISC-GEM, {year}…",
-                               year=start[:4]), time.monotonic())
-            self._show_state()
-        self._history_reply = fetch_bytes(iscgem.query_url(start, end),
-                                          self._history_arrived)
-
-    def _history_arrived(self, data, error):
-        if self._history_reply is None:
-            return  # снят выключением строки
-        self._history_reply = None
-        if data is None:
-            self.view.data_pending = max(0, self.view.data_pending - 1)
-            journal.note("iscgem: {}".format(brief_error(error or "")))
-            if not self._history_quiet:
-                self.message = (tr("Каталог ISC-GEM не загрузился, "
-                                   "проверьте сеть и включите строку "
-                                   "снова."), time.monotonic())
-                self._show_state()
-            return
-        self._history_parts.extend(iscgem.parse(bytes(data)))
-        self._history_queue.pop(0)
-        if self._history_queue:
-            self._history_next()
-            return
-        self.view.data_pending = max(0, self.view.data_pending - 1)
-        found = self._history_parts
-        self._history_parts = []
-        try:
-            iscgem.save(found, self._history_path())
-        except OSError as problem:
-            journal.note("iscgem save: {}".format(problem))
-        self.history_events = found
-        if not self._history_quiet:
-            self.message = (tr("Исторических землетрясений {count}.",
-                               count=len(found)), time.monotonic())
-            self._show_state()
-        self._place_quakes()
 
     def _surface_ground(self, lats, lons):
         """Высоты нарисованной поверхности: с дном океана - дно."""

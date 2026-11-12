@@ -38,10 +38,6 @@ from ..tilesource import save_connection
 from .base import (EXTRA_DEFAULTS, IDENTIFY_PIXELS, PARCEL_COLOR, PARCEL_FILL,
                    all_sources, distance_text, parcel_labels)
 
-# Очагов у щелчка в окне «Объекты» не больше: каталог ISC-GEM даёт
-# десятки событий в одной точке. Выбор помощника.
-QUAKES_NEAR = 20
-
 
 class IdentifyMixin:
     """Часть окна глобуса GlobeWindow."""
@@ -299,7 +295,6 @@ class IdentifyMixin:
         2026 года «клик по точкам ничего не даёт»."""
         return bool(self._pick_rows(px, py)
                     or self._lines_under(px, py)
-                    or self._identify_quakes(px, py)
                     or self._identify_fires(px, py)
                     or self._identify_satellites(px, py)
                     or self._identify_trains(px, py)
@@ -450,7 +445,6 @@ class IdentifyMixin:
                            [(tr("Точка облака"), values, None)]))
         groups += self._identify_parcels()
         groups += self._identify_places(lat, lon, tolerance)
-        groups += self._identify_quakes(px, py)
         groups += self._identify_fires(px, py)
         groups += self._pick_rows(px, py)
         groups += self._identify_wiki(px, py)
@@ -801,13 +795,14 @@ class IdentifyMixin:
         return "; ".join("{}: {}".format(k, v) for k, v in values)
 
     def _tool_quakes_summary(self, south, north, west, east):
-        if not self.quake_events:
-            self._want_quakes()
+        feed = self.row_tool("quakes")
+        if not feed.events:
+            feed.fetch_feed()
             return tr("Сводка землетрясений загружается, повтори запрос "
                       "через несколько секунд.")
         return assistant_core.quakes_text(
-            self.quake_events, (float(south), float(north), float(west),
-                                float(east)))
+            feed.events, (float(south), float(north), float(west),
+                          float(east)))
 
     def _tool_add_basemap(self, ready="", url="", name=""):
         """Подложка от помощника. Готовый источник - через окно
@@ -920,46 +915,6 @@ class IdentifyMixin:
             values += list(getattr(p, "data", None) or ())
             features.append((shape.name or tr("Без названия"), values, None))
         return [(Group(tr("Мои метки")), features)] if features else []
-
-    def _identify_quakes(self, px, py):
-        """Очаги землетрясений у точки щелчка на экране - сводки USGS
-        и исторические (ISC-GEM), по группе на слой."""
-        out = []
-        for layer, title in ((self.view.quakes, tr("Землетрясения")),
-                             (self.view.history,
-                              tr("Исторические землетрясения"))):
-            out += self._quakes_near(layer, title, px, py)
-        return out
-
-    def _quakes_near(self, layer, title, px, py):
-        """Очаги слоя layer у точки щелчка, не больше QUAKES_NEAR
-        ближайших."""
-        if not layer.events:
-            return []
-        eye = np.asarray(self.view.camera.eye, dtype=np.float64)
-        shown = quakes.facing(eye, layer.epicenter, layer.lats, layer.lons) \
-            & quakes.in_window(layer.times, layer.window)
-        radius = IDENTIFY_PIXELS * self.view.devicePixelRatioF() * 2.0
-        best = np.full(len(layer.events), np.inf)
-        for points in (layer.focus, layer.epicenter):
-            pixels, front = self.view.camera.project(points)
-            gap = np.hypot(pixels[:, 0] - px, pixels[:, 1] - py)
-            best = np.minimum(best, np.where(front, gap, np.inf))
-        found = np.nonzero((best <= radius) & shown)[0]
-        found = found[np.argsort(best[found])][:QUAKES_NEAR]
-        features = []
-        for n in found:
-            q = layer.events[int(n)]
-            values = [(tr("Магнитуда"), "{:.1f}".format(q.mag)),
-                      (tr("Глубина очага"), tr("{value} км", value=(
-                          "{:.0f}".format(q.depth))))]
-            if q.time is not None:
-                values.append((tr("Время, UTC"), when.text(q.time)))
-            if q.url:
-                values.append((tr("Страница USGS"), q.url))
-            features.append((q.place or "M {:.1f}".format(q.mag), values,
-                             None))
-        return [(Group(title), features)] if features else []
 
     def _identify_satellites(self, px, py):
         """Спутник у точки щелчка на экране, группа окна «Объекты»."""

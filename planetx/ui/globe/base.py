@@ -51,8 +51,7 @@ REGION_MOVE = 0.02
 TERRAIN_MIRRORS = Mirrors(slabs.TERRAIN_REPOS)
 # Раздел «На глобусе»: непрозрачность и выгрузка слоёв. Точки - атрибут
 # вида, тайловые слои - слои вида GIBS, слои QGIS - в наложении.
-POINT_LAYERS = {"quakes": "quakes", "fires": "fires",
-                "iscgem": "history", **ROWS.points()}
+POINT_LAYERS = {"fires": "fires", **ROWS.points()}
 # Струйки: ключ строки - поле вида.
 FLOW_LAYERS = {"currents": "currents"}
 GIBS_FADES = {"clouds": ("clouds",), "slope": ("slope",),
@@ -172,24 +171,23 @@ FLOW_REACH = 2.0
 EXTRA_DEFAULTS = {"grid": False, "stars": True, "clouds": False,
                   "temperature": False, "buildings": False, "sun": False,
                   "slope": False, "aspect": False, "contours": False,
-                  "quakes": False, "cutaway": False, "paleo": False,
+                  "cutaway": False, "paleo": False,
                   "fires": False, "satellites": False,
                   "trains": False, "vessels": False, "aircraft": False,
                   "currents": False, "cadastre": False,
                   "geoid": False,
-                  "air": True, "iscgem": False,
+                  "air": True,
                   "wiki": False,
                   **ROWS.defaults(),
                   }
 # Уклон и экспозиция - один слой вида, включена одна из двух строк.
 SURFACE_EXTRAS = ("slope", "aspect")
 # Строки раздела «Слои», которые есть только у Земли.
-EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun", "quakes",
+EARTH_EXTRAS = ("clouds", "temperature", "buildings", "sun",
                 "cutaway", "paleo", "fires", "satellites",
                 "trains", "vessels", "aircraft",
                 "currents", "cadastre",
                 "geoid",
-                "iscgem",
                 "wiki") \
     + ROWS.earth_keys()
 # Карты на общем слое вида «emag», на глобусе одна из них: карты

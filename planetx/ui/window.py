@@ -353,14 +353,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.paleo_url = paleo.TILE_URL
         self._paleo_sources = {}
         self.paleo_bar.ready = self._paleo_ready
-        # Землетрясения: события сводки и ответ на её запрос.
-        self.quake_events = []
-        self._quake_reply = None
-        # Исторические землетрясения (ISC-GEM): каталог, ждущий ответ
-        # и собранные части каталога, пока идут запросы по промежуткам.
-        self.history_events = None
-        self._history_reply = None
-        self._history_parts = []
         # Пожары NASA FIRMS: очаги сводки и ждущий ответ.
         self.fire_data = None
         self._fire_reply = None
@@ -402,7 +394,6 @@ class GlobeWindow(StateMixin, ThemesMixin, EarthDataMixin, BodyMixin,
         self.crust = None
         self._crust_reply = None
         self.crust_error = ""
-        self.quake_error = ""
         self.view.installEventFilter(self)
         self.view.wedge_gain_changed.connect(self._wedge_gain_changed)
         splitter = QSplitter(self)

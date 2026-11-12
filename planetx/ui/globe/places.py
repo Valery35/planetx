@@ -17,7 +17,7 @@ from qgis.PyQt.QtWidgets import QFileDialog, QMessageBox
 
 from ... import journal
 from ...core import (demofiles, ellipsoid, when, oldmaps, pathflow, region,
-                     fires as fires_core, lookat, placetree, quakes, themes,
+                     fires as fires_core, lookat, placetree, themes,
                      opacity)
 from ...core.ellipsoid import geodetic_to_ecef
 from ...core.features import grown, has_alts
@@ -271,19 +271,6 @@ class PlacesMixin:
     def _update_timebar(self):
         """Охват шкалы времени по видимым меткам со временем."""
         times = [p.time for p in self.myplaces.places if p.visible]
-        # Землетрясения на шкале - моменты первого и последнего события.
-        quake_span = quakes.span(self.view.quakes.events) \
-            if hasattr(self, "view") else None
-        if quake_span is not None:
-            times += [when.stamp(when.text(t)) for t in quake_span]
-        # Исторические землетрясения - по массиву времён слоя, событий
-        # десятки тысяч.
-        history = self.view.history.times if hasattr(self, "view") \
-            else np.zeros(0)
-        history = history[~np.isnan(history)]
-        if len(history):
-            times += [when.stamp(when.text(float(t)))
-                      for t in (history.min(), history.max())]
         # Пожары - так же, первый и последний снимок сводки.
         fire = self.view.fires.fires if hasattr(self, "view") else None
         fire_span = fires_core.span(fire) if fire is not None else None
@@ -359,9 +346,9 @@ class PlacesMixin:
         self._shadows_later()
 
     def _time_quakes(self):
-        """Землетрясения и пожары в промежутке шкалы времени."""
-        self.view.quakes.window = self._time_range
-        self.view.history.window = self._time_range
+        """Пожары в промежутке шкалы времени, разрез следом. Очаги
+        землетрясений берут промежуток у исполнителя строки
+        (time_changed)."""
         self.view.fires.window = self._time_range
         self.view.update()
         self._section_follow_time()

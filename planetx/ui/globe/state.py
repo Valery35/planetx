@@ -333,8 +333,6 @@ class StateMixin:
             self._update_timebar()
         elif key in SURFACE_EXTRAS or key == "contours":
             self._set_surface()
-        elif key == "quakes":
-            self._set_quakes(on)
         elif key == "fires":
             self._set_fires(on)
         elif key == "wiki":
@@ -349,8 +347,6 @@ class StateMixin:
             self._set_cutaway(on)
         elif key == "paleo":
             self._set_paleo(on)
-        elif key == "iscgem":
-            self._set_history(on)
         elif key == "geoid":
             self._set_geoid(on)
         elif key == "satellites":
@@ -531,10 +527,10 @@ class StateMixin:
         if not len(layer.focus):
             return 0
         keep = in_box(layer.lats, layer.lons, box)
-        if key in ("quakes", "fires", "iscgem"):
+        tool = self.row_tool(key)
+        if key == "fires" or getattr(tool, "point_window", False):
             keep &= quakes.in_window(layer.times, layer.window)
         index = np.nonzero(keep)[0]
-        tool = self.row_tool(key)
         fields, rows = tool.point_rows(layer, index) \
             if hasattr(tool, "point_rows") \
             else self._point_rows(key, layer, index)
@@ -555,17 +551,11 @@ class StateMixin:
                                       tzinfo=datetime.timezone.utc)
             return (epoch + datetime.timedelta(seconds=seconds)).strftime(
                 "%Y-%m-%d %H:%M")
-        if key in ("quakes", "iscgem"):
-            fields = [("place", "str"), ("mag", "real"),
-                      ("depth_km", "real"), ("time", "str"), ("url", "str")]
-            rows = [(q.place, q.mag, q.depth, stamp(q.time), q.url)
-                    for q in (layer.events[n] for n in index)]
-        else:
-            fires = layer.fires
-            fields = [("frp_mw", "real"), ("time", "str"),
-                      ("confidence", "str")]
-            rows = [(float(fires.frp[n]), stamp(float(fires.time[n])),
-                     fires.confidence[n]) for n in index]
+        fires = layer.fires
+        fields = [("frp_mw", "real"), ("time", "str"),
+                  ("confidence", "str")]
+        rows = [(float(fires.frp[n]), stamp(float(fires.time[n])),
+                 fires.confidence[n]) for n in index]
         return fields, rows
 
     def _export_picture(self, key, title, path, box):

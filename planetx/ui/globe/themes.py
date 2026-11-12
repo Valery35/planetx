@@ -286,8 +286,9 @@ class ThemesMixin:
         темы. Решение автора от 5 октября 2026 года."""
         theme = getattr(self, "theme_key", "") and self._theme_on()
         events = any(p.visible and p.time for p in self.myplaces.places) \
-            or bool(self.extras.get("quakes")
-                    and self.view.quakes.events) \
+            or any(tool.time_events()
+                   for tool in getattr(self, "row_tools", {}).values()
+                   if hasattr(tool, "time_events")) \
             or bool(self.extras.get("fires")
                     and self.view.fires.fires is not None) \
             or bool(self._data_marks)
@@ -1008,7 +1009,6 @@ class ThemesMixin:
         self.view.set_relief(self._relief_target())
         self._update_water()
         self.subsurface.relief_changed()
-        self._place_quakes()
         self._place_fires()
         self._place_rows()
         if self._relief and self.terrain_loader is not None:

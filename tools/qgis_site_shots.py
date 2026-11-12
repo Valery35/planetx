@@ -170,7 +170,8 @@ def japan_ready():
     w = window()
     dialog = w.section_dialog
     s = dialog.chart.section if dialog is not None else None
-    return (w.crust is not None and w.quake_events and s is not None
+    return (w.crust is not None and w.row_tool("quakes").events
+            and s is not None
             and np.isfinite(s.slab_top).any() and tiles_ready())
 
 

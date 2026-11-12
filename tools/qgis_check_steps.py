@@ -4165,9 +4165,10 @@ def quakes_check():
     window = state["window"]
     view = window.view
     out = result["quakes"]
-    out["events"] = len(window.quake_events)
-    out["error"] = window.quake_error
-    out["depths"] = sorted(round(q.depth) for q in window.quake_events)[-3:]
+    out["events"] = len(window.row_tool("quakes").events)
+    out["error"] = window.row_tool("quakes").error
+    out["depths"] = sorted(round(q.depth) for q in
+                           window.row_tool("quakes").events)[-3:]
     view.grabFramebuffer().save(os.path.join(TEMP, "planetx_quakes.png"))
     out["drawn"] = view.quakes.drawn
     # Без разреза Земли все кружки в эпицентрах на поверхности.
@@ -4488,7 +4489,7 @@ def assistant_tools():
 def assistant_tools_check():
     from planetx.core.assistant import Call
     window = state["window"]
-    if ((window.crust is None or not window.quake_events)
+    if ((window.crust is None or not window.row_tool("quakes").events)
             and time.monotonic() - state["tools_started"] < 60.0):
         return 1000
     out = result.setdefault("assistant", {})
@@ -5810,7 +5811,7 @@ def japan_wait():
     out = result["japan"]
     dialog = window.section_dialog
     s = dialog.chart.section if dialog is not None else None
-    ready = (window.crust is not None and window.quake_events
+    ready = (window.crust is not None and window.row_tool("quakes").events
              and s is not None and np.isfinite(s.slab_top).any()
              and not window.view.load_missing)
     if not ready and time.monotonic() - out["started"] < 90.0:
@@ -5828,7 +5829,7 @@ def japan_check():
         if window.view.wedge is not None else None
     out["extras"] = {k: window.extras.get(k) for k in ("quakes", "cutaway")}
     out["slab_zones"] = sorted(window.slab_zones)
-    out["events"] = len(window.quake_events)
+    out["events"] = len(window.row_tool("quakes").events)
     pose = window.view.navigator.pose
     out["pose"] = [round(pose.lat, 1), round(pose.lon, 1),
                    round(pose.distance / 1000.0)]
@@ -5885,7 +5886,7 @@ def identify_on():
 def identify_wait():
     window = state["window"]
     out = result["identify"]
-    if (not window.quake_events or window.crust is None) \
+    if (not window.row_tool("quakes").events or window.crust is None) \
             and time.monotonic() - out["started"] < 60.0:
         return 1000
     out["wait_s"] = round(time.monotonic() - out["started"], 1)
@@ -16815,7 +16816,7 @@ def section_wait():
     window = state["window"]
     out = result["section"]
     waiting = (window.crust is None and not window.crust_error) \
-        or window._quake_reply is not None or window._slab_replies
+        or window.row_tool("quakes").reply is not None or window._slab_replies
     if waiting and time.monotonic() - out["started"] < 60.0:
         return 1000
     out["wait_s"] = round(time.monotonic() - out["started"], 1)
@@ -16839,11 +16840,11 @@ def section_check():
                       (np.min(-s.bounds[:, -1]), np.max(-s.bounds[:, -1]))] \
         if s.bounds is not None else None
     out["quakes"] = len(s.quakes)
-    out["feed_events"] = len(window.quake_events)
-    out["feed_error"] = window.quake_error
+    out["feed_events"] = len(window.row_tool("quakes").events)
+    out["feed_error"] = window.row_tool("quakes").error
     out["near_line"] = sorted(
         (round(q.lat, 1), round(q.lon, 1), round(q.depth))
-        for q in window.quake_events
+        for q in window.row_tool("quakes").events
         if 36.0 < q.lat < 41.0 and 130.0 < q.lon < 147.0)[:8]
     out["deep_quakes"] = sum(1 for q in s.quakes if q[1] > 70.0)
     out["stats"] = dialog.stats.text()
@@ -29172,10 +29173,10 @@ def section_history_check():
     window = state["window"]
     out = result["section_history"]
     spent = time.monotonic() - state["sh_started"]
-    if not window.history_events and spent < 120.0:
+    if not window.row_tool("quakes").history and spent < 120.0:
         return 1000
     if "opened" not in out:
-        out["events"] = len(window.history_events or [])
+        out["events"] = len(window.row_tool("quakes").history or [])
         window._open_section("ISC-GEM", [(38.5, 146.0), (38.5, 132.0)])
         out["opened"] = True
         state["sh_started"] = time.monotonic()
@@ -29781,7 +29782,8 @@ def iscgem_on():
     window.view.navigator.show(Pose(38.0, 142.0, 6000000.0, 0.0, 0.0))
     window.view.update()
     window.set_extra("iscgem", True)
-    result["iscgem"] = {"from_file": window.history_events is not None}
+    result["iscgem"] = {
+        "from_file": window.row_tool("quakes").history is not None}
     state["ls_started"] = time.monotonic()
 
 
@@ -29791,11 +29793,11 @@ def iscgem_wait():
     window = state["window"]
     out = result["iscgem"]
     spent = time.monotonic() - state["ls_started"]
-    if window.history_events is None and spent < 240.0:
+    if window.row_tool("quakes").history is None and spent < 240.0:
         return 1000
     layer = window.view.history
     out.update(seconds=round(spent, 1),
-               events=len(window.history_events or []),
+               events=len(window.row_tool("quakes").history or []),
                shown=len(layer.events),
                timebar=window.toolbar.time.isEnabled(),
                credit="ISC-GEM" in window.attribution.text(),
@@ -29807,7 +29809,7 @@ def iscgem_wait():
         mags = np.where(facing, [q.mag for q in layer.events], -1.0)
         best = int(np.argmax(mags))
         pixels, _ = window.view.camera.project(layer.focus[best:best + 1])
-        found = window._identify_quakes(pixels[0, 0], pixels[0, 1])
+        found = window.row_tool("quakes").pick(pixels[0, 0], pixels[0, 1])
         out["strongest"] = [layer.events[best].place,
                             layer.events[best].mag]
         out["identify"] = [[f[0] for f in fs][:3] for _, fs in found]

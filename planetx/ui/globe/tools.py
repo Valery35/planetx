@@ -1200,8 +1200,9 @@ class ToolsMixin:
             return None, ""
         _, lats, lons = found
         self._want_crust()
-        if not self.quake_events:
-            self._want_quakes()
+        feed = self.row_tool("quakes")
+        if not feed.events:
+            feed.fetch_feed()
         codes = slabs.touched(self._read_slab_index(), lats, lons)
         self._request_slabs(codes)
         zones = [self.slab_zones[c] for c in codes if c in self.slab_zones]
@@ -1210,19 +1211,19 @@ class ToolsMixin:
             waiting.append(tr("кора CRUST1.0"))
         if any(c in self._slab_replies for c in codes):
             waiting.append(tr("плиты Slab2"))
-        if self._quake_reply is not None:
+        if feed.reply is not None:
             waiting.append(tr("землетрясения"))
         notes = tr("Загружаются: {what}.", what=", ".join(waiting)) \
             if waiting else ""
         # Исторические землетрясения ISC-GEM - в разрез, пока включена
         # их строка. Вопрос автора от 18 октября 2026 года.
-        history = (self.history_events or []) \
+        history = (feed.history or []) \
             if self.extras.get("iscgem") else []
         # Очаги - в промежутке шкалы времени, как на глобусе. Просьба
         # автора от 18 октября 2026 года.
         span = getattr(self, "_time_range", None)
         built = section.build(self._section_points, self.crust, zones,
-                              section.in_time(self.quake_events or [], span),
+                              section.in_time(feed.events or [], span),
                               depth, width,
                               history=section.in_time(history, span))
         # Стенка на глобусе - из того же разреза.
